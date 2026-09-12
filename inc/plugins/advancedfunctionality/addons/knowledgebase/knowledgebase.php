@@ -29,6 +29,9 @@ define('AF_KB_PERPAGE', 20);
 define('AF_KB_REL_RACE_HAS_VARIANT', 'race_has_variant');
 define('AF_KB_TYPE_RACE', 'race');
 define('AF_KB_TYPE_RACE_VARIANT', 'race_variant');
+define('AF_KB_REL_ORIGIN_HAS_VARIANT', 'origin_has_variant');
+define('AF_KB_TYPE_ORIGIN', 'arpg_origin');
+define('AF_KB_TYPE_ORIGIN_VARIANT', 'arpg_origin_variant');
 define('AF_KB_DEFAULT_MECHANIC_KEY', 'dnd');
 
 function af_kb_arpg_supported_types(): array
@@ -40,7 +43,7 @@ function af_kb_arpg_public_top_level_types(): array
 {
     $result = [];
     foreach (af_kb_arpg_type_registry() as $typeKey => $typeDef) {
-        if (empty($typeDef['service'])) {
+        if (empty($typeDef['service']) && ($typeDef['top_level'] ?? true)) {
             $result[] = $typeKey;
         }
     }
@@ -67,6 +70,7 @@ function af_kb_arpg_type_registry(): array
 {
     return [
         'arpg_origin' => ['entity_kind' => 'origin', 'service' => false, 'title_ru' => 'ARPG: Происхождения', 'title_en' => 'ARPG: Origins'],
+        'arpg_origin_variant' => ['entity_kind' => 'origin_variant', 'service' => false, 'top_level' => false, 'title_ru' => 'ARPG: Разновидности происхождений', 'title_en' => 'ARPG: Origin Variants'],
         'arpg_archetype' => ['entity_kind' => 'archetype', 'service' => false, 'title_ru' => 'ARPG: Архетипы', 'title_en' => 'ARPG: Archetypes'],
         'arpg_element' => ['entity_kind' => 'element', 'service' => false, 'title_ru' => 'ARPG: Стихии', 'title_en' => 'ARPG: Elements'],
         'arpg_faction' => ['entity_kind' => 'faction', 'service' => false, 'title_ru' => 'ARPG: Фракции', 'title_en' => 'ARPG: Factions'],
@@ -85,6 +89,7 @@ function af_kb_arpg_character_field_type_contract(): array
         'character_element' => 'arpg_element',
         'character_race' => 'arpg_origin',
         'character_origin' => 'arpg_origin',
+        'character_origin_variant' => 'arpg_origin_variant',
         'character_class' => 'arpg_archetype',
         'character_archetype' => 'arpg_archetype',
         'character_faction' => 'arpg_faction',
@@ -160,6 +165,24 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'racial_bonuses_text' => '',
             'racial_traits_text' => '',
             'starting_notes' => '',
+        ],
+        'arpg_origin_variant' => [
+            'hp_base' => 0,
+            'defense_base' => 0,
+            'attack_power_base' => 0,
+            'crit_damage_base' => 0,
+            'elemental_mastery_base' => 0,
+            'elemental_damage_bonus_base' => 0,
+            'healing_bonus_base' => 0,
+            'shield_bonus_base' => 0,
+            'hp_per_level' => 0,
+            'defense_per_level' => 0,
+            'attack_power_per_level' => 0,
+            'elemental_mastery_per_level' => 0,
+            'racial_bonuses_text' => '',
+            'racial_traits_text' => '',
+            'starting_notes' => '',
+            'inherits_from_origin' => true,
         ],
         'arpg_archetype' => [
             'base_damage_bonus' => 0,
@@ -594,6 +617,7 @@ function af_kb_default_type_definitions(): array
                     'character_element' => '',
                     'character_gen' => '',
                     'character_race' => '',
+                    'character_origin_variant' => '',
                     'character_class' => '',
                     'character_faction' => '',
                     'character_app' => '',
@@ -632,6 +656,7 @@ function af_kb_default_type_definitions(): array
                 ['path' => 'character_profile.character_element', 'type' => 'string', 'default' => ''],
                 ['path' => 'character_profile.character_gen', 'type' => 'string', 'default' => ''],
                 ['path' => 'character_profile.character_race', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_origin_variant', 'type' => 'string', 'default' => ''],
                 ['path' => 'character_profile.character_class', 'type' => 'string', 'default' => ''],
                 ['path' => 'character_profile.character_faction', 'type' => 'string', 'default' => ''],
                 ['path' => 'character_profile.character_app', 'type' => 'textarea', 'default' => ''],
@@ -912,6 +937,23 @@ function af_kb_default_arpg_type_definitions(): array
                     ['path' => 'is_active', 'type' => 'number', 'default' => 1],
                 ]], 'default' => []],
             ],
+        ];
+
+        // Origin variants use the same established ARPG rules envelope and editor
+        // fields as origins, but numeric values are additive deltas by default.
+        $requiredMap['arpg_origin_variant'] = $requiredMap['arpg_origin'];
+        $fieldsMap['arpg_origin_variant'] = array_map(static function (array $field): array {
+            if (($field['type'] ?? '') === 'number') {
+                $field['default'] = 0;
+            }
+            return $field;
+        }, $fieldsMap['arpg_origin']);
+        $fieldsMap['arpg_origin_variant'][] = [
+            'path' => 'rules.inherits_from_origin',
+            'type' => 'bool',
+            'required' => true,
+            'readonly' => true,
+            'default' => true,
         ];
 
         $schema = [
@@ -2949,6 +2991,7 @@ function af_kb_default_relation_types_dictionary(): array
 {
     return [
         AF_KB_REL_RACE_HAS_VARIANT => ['ru' => 'Разновидности', 'en' => 'Variants'],
+        AF_KB_REL_ORIGIN_HAS_VARIANT => ['ru' => 'Разновидности происхождения', 'en' => 'Origin variants'],
     ];
 }
 
@@ -9830,14 +9873,22 @@ function af_kb_arpg_pick_rule_number(array $rules, array $keys): float
 function af_kb_build_arpg_character_stats(array $profile, array $manualStats = []): array
 {
     $originKey = trim((string)($profile['character_origin'] ?? $profile['character_race'] ?? ''));
+    $originVariantKey = trim((string)($profile['character_origin_variant'] ?? ''));
     $archetypeKey = trim((string)($profile['character_archetype'] ?? $profile['character_class'] ?? ''));
     $level = max(1, (int)af_kb_arpg_to_float($profile['character_level'] ?? $profile['level'] ?? 1));
     $levelSteps = max(0, $level - 1);
 
     $originRules = af_kb_arpg_entry_rules_by_key('arpg_origin', $originKey);
+    $originVariantRules = af_kb_arpg_entry_rules_by_key('arpg_origin_variant', $originVariantKey);
+    if ($originVariantKey !== '') {
+        $variantParent = af_kb_get_origin_parent_for_variant($originVariantKey, true);
+        if ((string)(($variantParent['origin'] ?? [])['key'] ?? '') !== $originKey) {
+            $originVariantRules = [];
+        }
+    }
     $archetypeRules = af_kb_arpg_entry_rules_by_key('arpg_archetype', $archetypeKey);
 
-    $buildValue = static function (string $stat) use ($originRules, $archetypeRules, $levelSteps): float {
+    $buildValue = static function (string $stat) use ($originRules, $originVariantRules, $archetypeRules, $levelSteps): float {
         $baseMap = [
             'character_hp' => ['hp_base', 'base_hp'],
             'character_defense' => ['defense_base', 'base_defense'],
@@ -9858,8 +9909,10 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
         ];
 
         $originBase = af_kb_arpg_pick_rule_number($originRules, (array)($baseMap[$stat] ?? []));
+        $originBase += af_kb_arpg_pick_rule_number($originVariantRules, (array)($baseMap[$stat] ?? []));
         $archetypeBase = af_kb_arpg_pick_rule_number($archetypeRules, (array)($baseMap[$stat] ?? []));
         $originGrowth = af_kb_arpg_pick_rule_number($originRules, (array)($growthMap[$stat] ?? []));
+        $originGrowth += af_kb_arpg_pick_rule_number($originVariantRules, (array)($growthMap[$stat] ?? []));
         $archetypeGrowth = af_kb_arpg_pick_rule_number($archetypeRules, (array)($growthMap[$stat] ?? []));
 
         if ($stat === 'character_defense') {
@@ -10479,7 +10532,7 @@ function af_kb_handle_view(): void
         }
 
         $activeMechanicKey = af_kb_get_catalog_active_mechanic_key();
-        $typesWhere = "active=1 AND type<>'" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "'";
+        $typesWhere = "active=1 AND type NOT IN ('" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "','" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "')";
         $mechanicFilter = af_kb_sql_mechanic_filter('mechanic_key', $activeMechanicKey);
         $typesWhere .= " AND ({$mechanicFilter} OR type='character' OR type_key='character')";
         if ($query !== '') {
@@ -10738,6 +10791,10 @@ function af_kb_handle_view(): void
             $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_RACE_VARIANT) . '">Разновидности рас</a>';
         } elseif ($type === AF_KB_TYPE_RACE_VARIANT) {
             $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_RACE) . '">К расам</a>';
+        } elseif ($type === AF_KB_TYPE_ORIGIN) {
+            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_ORIGIN_VARIANT) . '">Разновидности происхождений</a>';
+        } elseif ($type === AF_KB_TYPE_ORIGIN_VARIANT) {
+            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_ORIGIN) . '">К происхождениям</a>';
         }
         if (af_kb_cat_can_manage() && af_kb_categories_enabled()) {
             $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb_manage_categories&type=' . htmlspecialchars_uni($type) . '">Manage categories</a>';
@@ -10946,6 +11003,10 @@ function af_kb_handle_view(): void
     $kb_can_edit = af_kb_can_edit() ? '1' : '0';
     $kb_back_link = af_kb_back_link_html(af_kb_url(['type' => $type]), ['kb']);
     $kb_edit_link = af_kb_can_edit() ? '<a class="af-kb-btn af-kb-btn--edit af-kb-btn-edit" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'&key='.htmlspecialchars_uni($key).'">'.htmlspecialchars_uni($lang->af_kb_edit ?? 'Edit').'</a>' : '';
+    if (af_kb_can_edit() && $type === AF_KB_TYPE_ORIGIN) {
+        $kb_edit_link .= ' <a class="af-kb-btn af-kb-btn--create" href="misc.php?action=kb_edit&amp;type=' . htmlspecialchars_uni(AF_KB_TYPE_ORIGIN_VARIANT)
+            . '&amp;origin_parent_key=' . htmlspecialchars_uni($key) . '">Добавить разновидность</a>';
+    }
     $kb_delete_form = '';
     if (af_kb_can_edit()) {
         $deleteLabel = $lang->af_kb_delete_entry ?? 'Delete entry';
@@ -11323,6 +11384,27 @@ function af_kb_handle_edit(): void
             }
         }
 
+        $originParentKey = '';
+        if ($type === AF_KB_TYPE_ORIGIN_VARIANT) {
+            $originParentKey = trim((string)$mybb->get_input('origin_parent_key'));
+            if ($originParentKey === '') {
+                $errors[] = 'Parent origin is required.';
+            } elseif (!preg_match(AF_KB_KEY_PATTERN, $originParentKey)) {
+                $errors[] = $lang->af_kb_invalid_key ?? 'Invalid key.';
+            }
+            if (!$errors && $originParentKey !== '') {
+                $originExists = $db->fetch_array($db->simple_select(
+                    'af_kb_entries',
+                    'id',
+                    "type='" . $db->escape_string(AF_KB_TYPE_ORIGIN) . "' AND `key`='" . $db->escape_string($originParentKey) . "'",
+                    ['limit' => 1]
+                ));
+                if (!$originExists) {
+                    $errors[] = 'Selected parent origin does not exist.';
+                }
+            }
+        }
+
         $catIds = [];
         $primaryCatId = 0;
         if (af_kb_categories_enabled()) {
@@ -11519,6 +11601,27 @@ function af_kb_handle_edit(): void
                                 'rel_type'  => $db->escape_string(AF_KB_REL_RACE_HAS_VARIANT),
                                 'to_type'   => $db->escape_string(AF_KB_TYPE_RACE_VARIANT),
                                 'to_key'    => $db->escape_string($key),
+                                'meta_json' => $db->escape_string('{}'),
+                                'sortorder' => 0,
+                            ]);
+                        }
+                    }
+
+                    if ($type === AF_KB_TYPE_ORIGIN_VARIANT) {
+                        $db->delete_query(
+                            'af_kb_relations',
+                            "to_type='" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "'"
+                            . " AND to_key='" . $db->escape_string($key) . "'"
+                            . " AND from_type='" . $db->escape_string(AF_KB_TYPE_ORIGIN) . "'"
+                            . " AND rel_type='" . $db->escape_string(AF_KB_REL_ORIGIN_HAS_VARIANT) . "'"
+                        );
+                        if ($originParentKey !== '') {
+                            $db->insert_query('af_kb_relations', [
+                                'from_type' => $db->escape_string(AF_KB_TYPE_ORIGIN),
+                                'from_key' => $db->escape_string($originParentKey),
+                                'rel_type' => $db->escape_string(AF_KB_REL_ORIGIN_HAS_VARIANT),
+                                'to_type' => $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT),
+                                'to_key' => $db->escape_string($key),
                                 'meta_json' => $db->escape_string('{}'),
                                 'sortorder' => 0,
                             ]);
@@ -11796,6 +11899,33 @@ function af_kb_handle_edit(): void
             . '<label>Parent race</label>'
             . '<select name="race_parent_key">' . $raceOptions . '</select>'
             . '<div class="af-kb-help">Для type=race_variant связь сохраняется в af_kb_relations как race → race_variant (rel_type=' . htmlspecialchars_uni(AF_KB_REL_RACE_HAS_VARIANT) . ').</div>'
+            . '</section>';
+    }
+    if ($type === AF_KB_TYPE_ORIGIN_VARIANT) {
+        $selectedOriginParentKey = trim((string)$mybb->get_input('origin_parent_key'));
+        if ($selectedOriginParentKey === '' && !empty($entry['key'])) {
+            $parentRelation = af_kb_get_origin_parent_for_variant((string)$entry['key'], false);
+            if (is_array($parentRelation['origin'] ?? null)) {
+                $selectedOriginParentKey = (string)($parentRelation['origin']['key'] ?? '');
+            }
+        }
+
+        $originOptions = '<option value="">— Без родительского происхождения —</option>';
+        $oq = $db->simple_select(
+            'af_kb_entries',
+            '`key`,title_ru,title_en',
+            "type='" . $db->escape_string(AF_KB_TYPE_ORIGIN) . "'",
+            ['order_by' => 'sortorder, title_ru, title_en, `key`', 'order_dir' => 'ASC']
+        );
+        while ($originRow = $db->fetch_array($oq)) {
+            $originKey = (string)($originRow['key'] ?? '');
+            $originTitle = af_kb_pick_text($originRow, 'title') ?: $originKey;
+            $selectedAttr = ($originKey !== '' && $originKey === $selectedOriginParentKey) ? ' selected="selected"' : '';
+            $originOptions .= '<option value="' . htmlspecialchars_uni($originKey) . '"' . $selectedAttr . '>' . htmlspecialchars_uni($originTitle) . ' (' . htmlspecialchars_uni($originKey) . ')</option>';
+        }
+        $raceParentEditor = '<section><h3>Родительское происхождение</h3>'
+            . '<label>Parent origin</label><select name="origin_parent_key" required="required">' . $originOptions . '</select>'
+            . '<div class="af-kb-help">Связь сохраняется как arpg_origin → arpg_origin_variant (rel_type=' . htmlspecialchars_uni(AF_KB_REL_ORIGIN_HAS_VARIANT) . ').</div>'
             . '</section>';
     }
     $entryUi = af_kb_get_entry_ui($entry);
@@ -12445,8 +12575,8 @@ function af_kb_handle_json_types(): void
     }
 
     $where = af_kb_can_edit()
-        ? "type<>'" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "'"
-        : "active=1 AND type<>'" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "'";
+        ? "type NOT IN ('" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "','" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "')"
+        : "active=1 AND type NOT IN ('" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "','" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "')";
 
     $items = [];
     $seenTypes = [];
@@ -12702,6 +12832,76 @@ function af_kb_get_race_variants(string $raceKey, bool $activeOnly = true): arra
         ];
     }
 
+    return $rows;
+}
+
+function af_kb_get_origin_parent_for_variant(string $variantKey, bool $activeOnly = true): ?array
+{
+    global $db;
+    $variantKey = trim($variantKey);
+    if ($variantKey === '') {
+        return null;
+    }
+
+    $where = "to_type='" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "'"
+        . " AND to_key='" . $db->escape_string($variantKey) . "'"
+        . " AND from_type='" . $db->escape_string(AF_KB_TYPE_ORIGIN) . "'"
+        . " AND rel_type='" . $db->escape_string(AF_KB_REL_ORIGIN_HAS_VARIANT) . "'";
+    $relation = $db->fetch_array($db->simple_select(
+        'af_kb_relations', '*', $where,
+        ['order_by' => 'sortorder, id', 'order_dir' => 'ASC', 'limit' => 1]
+    ));
+    if (!$relation) {
+        return null;
+    }
+
+    $entryWhere = "type='" . $db->escape_string(AF_KB_TYPE_ORIGIN) . "'"
+        . " AND `key`='" . $db->escape_string((string)$relation['from_key']) . "'";
+    if ($activeOnly) {
+        $entryWhere .= ' AND active=1';
+    }
+    $origin = $db->fetch_array($db->simple_select('af_kb_entries', '*', $entryWhere, ['limit' => 1]));
+    if (!$origin) {
+        return null;
+    }
+    return [
+        'relation_id' => (int)($relation['id'] ?? 0),
+        'rel_type' => (string)($relation['rel_type'] ?? ''),
+        'sortorder' => (int)($relation['sortorder'] ?? 0),
+        'origin' => $origin,
+    ];
+}
+
+function af_kb_get_origin_variants(string $originKey, bool $activeOnly = true): array
+{
+    global $db;
+    $originKey = trim($originKey);
+    if ($originKey === '') {
+        return [];
+    }
+
+    $where = "from_type='" . $db->escape_string(AF_KB_TYPE_ORIGIN) . "'"
+        . " AND from_key='" . $db->escape_string($originKey) . "'"
+        . " AND to_type='" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "'"
+        . " AND rel_type='" . $db->escape_string(AF_KB_REL_ORIGIN_HAS_VARIANT) . "'";
+    $rows = [];
+    $query = $db->simple_select('af_kb_relations', '*', $where, ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
+    while ($relation = $db->fetch_array($query)) {
+        $entryWhere = "type='" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "'"
+            . " AND `key`='" . $db->escape_string((string)$relation['to_key']) . "'";
+        if ($activeOnly) {
+            $entryWhere .= ' AND active=1';
+        }
+        $variant = $db->fetch_array($db->simple_select('af_kb_entries', '*', $entryWhere, ['limit' => 1]));
+        if ($variant) {
+            $rows[] = [
+                'relation_id' => (int)($relation['id'] ?? 0),
+                'rel_type' => (string)($relation['rel_type'] ?? ''),
+                'sortorder' => (int)($relation['sortorder'] ?? 0),
+                'variant' => $variant,
+            ];
+        }
+    }
     return $rows;
 }
 
