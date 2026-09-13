@@ -8679,6 +8679,7 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
         'slot' => $isRu ? 'Слот' : 'Slot',
         'damage_type' => $isRu ? 'Тип урона' : 'Damage type',
         'target' => $isRu ? 'Цель' : 'Target',
+        'range' => $isRu ? 'Дальность' : 'Range',
         'formula_profile' => 'Formula Profile',
         'duration_value' => $isRu ? 'Длительность' : 'Duration',
     ];
@@ -8686,6 +8687,9 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
         $rawValue = (string)($row[$key] ?? '');
         if ($key === 'target' && $rawValue === '') {
             $rawValue = (string)($row['targeting'] ?? '');
+        }
+        if ($key === 'range' && (!is_numeric($rawValue) || (float)$rawValue <= 0)) {
+            continue;
         }
         $value = af_kb_arpg_inline_label($key, $rawValue, $isRu);
         if ($value !== '') {
@@ -8717,9 +8721,9 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
     $headerTitle = '#' . (int)($row['slot_index'] ?? 0) . ' ' . htmlspecialchars_uni($name);
 
     return '<article class="af-kb-char-ability">'
-        . '<header class="af-kb-char-ability__header"><span class="af-kb-char-ability__icon">' . $iconHtml . '</span><div class="af-kb-char-ability__head-main"><strong class="af-kb-char-ability__title">' . $headerTitle . '</strong>' . ($chips ? '<div class="af-kb-char-ability__chips">' . implode('', $chips) . '</div>' : '') . '</div></header>'
+        . '<header class="af-kb-char-ability__header"><span class="af-kb-char-ability__icon">' . $iconHtml . '</span><div class="af-kb-char-ability__head-main"><strong class="af-kb-char-ability__title">' . $headerTitle . '</strong></div></header>'
         . ($description !== '' ? '<div>' . af_kb_parse_message($description) . '</div>' : '')
-        . ($rows ? '<ul class="af-kb-char-ability__meta">' . implode('', $rows) . '</ul>' : '')
+        . (($chips || $rows) ? '<details class="af-ability-meta"><summary>' . htmlspecialchars_uni($isRu ? 'Параметры способности' : 'Ability details') . '</summary>' . ($chips ? '<div class="af-kb-char-ability__chips">' . implode('', $chips) . '</div>' : '') . ($rows ? '<ul class="af-kb-char-ability__meta">' . implode('', $rows) . '</ul>' : '') . '</details>' : '')
         . ($kbRef !== '' ? '<footer>arpg_ability: ' . htmlspecialchars_uni($kbRef) . '</footer>' : '')
         . '</article>';
 }

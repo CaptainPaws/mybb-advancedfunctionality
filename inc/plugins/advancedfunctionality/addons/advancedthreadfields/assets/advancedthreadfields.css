@@ -883,6 +883,13 @@ body.af-atf-kb-catalog-modal-open {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 8px;
+}
+
+.af-atf-ability-display-card .af-ability-meta > summary {
+  cursor: pointer;
+  color: var(--af-element-accent);
+  font-weight: 600;
 }
 
 .af-atf-ability-display-chip {
