@@ -1721,7 +1721,7 @@
                     { key: 'slot', label: 'slot', type: 'select', options: enums.abilitySlot, default: 'skill_1' },
                     { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
                     { key: 'targeting', label: 'targeting', type: 'select', options: enums.targeting, default: 'single_enemy' },
-                    { key: 'range', label: 'range', type: 'number', default: 0 },
+                    { key: 'range', label: 'Дальность / Range', type: 'number', default: 0 },
                     { key: 'cast_time', label: 'cast_time', type: 'number', default: 0 },
                     { key: 'cooldown', label: 'cooldown', type: 'number', default: 0 },
                     { key: 'duration', label: 'duration', type: 'number', default: 0 },
@@ -3386,6 +3386,7 @@
                     slot: 'Слот',
                     damage_type: 'Тип урона',
                     target: 'Цель',
+                    range: 'Дальность',
                     formula_profile: 'Formula Profile',
                     duration_value: 'Длительность'
                 }
@@ -3395,6 +3396,7 @@
                     slot: 'Slot',
                     damage_type: 'Damage type',
                     target: 'Target',
+                    range: 'Range',
                     formula_profile: 'Formula Profile',
                     duration_value: 'Duration'
                 };
@@ -3454,9 +3456,16 @@
             title.textContent = String((ability && ability.ability_name) || '').trim() || ((titlePrefix || 'Ability') + ' #' + (idx + 1));
             body.appendChild(title);
 
+            var meta = document.createElement('details');
+            meta.className = 'af-ability-meta';
+            var metaSummary = document.createElement('summary');
+            metaSummary.textContent = isRuUi ? 'Параметры способности' : 'Ability details';
+            meta.appendChild(metaSummary);
+            body.appendChild(meta);
+
             var chips = document.createElement('div');
             chips.className = 'af-kb-inline-ability-summary__chips';
-            body.appendChild(chips);
+            meta.appendChild(chips);
             var addChip = function (label, value, always) {
                 var out = String(value != null ? value : '').trim();
                 if (!always && out === '') return;
@@ -3471,6 +3480,7 @@
                 ['slot', ability ? ability.slot : ''],
                 ['damage_type', ability ? ability.damage_type : ''],
                 ['target', ability ? (ability.target || ability.targeting) : ''],
+                ['range', ability ? ability.range : ''],
                 ['formula_profile', ability ? ability.formula_profile : ''],
                 ['duration_value', ability ? (ability.duration_value || ability.duration) : '']
             ].forEach(function (pair) {
@@ -3486,7 +3496,7 @@
 
             var counters = document.createElement('div');
             counters.className = 'af-kb-inline-ability-summary__counters';
-            body.appendChild(counters);
+            meta.appendChild(counters);
             [
                 ['resources', ability ? ability.resources : []],
                 ['effects', ability ? ability.effects : []],

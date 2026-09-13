@@ -632,6 +632,7 @@
         ability.damage_type = String(source.damage_type || "");
         ability.target = String(source.target || source.targeting || "");
         ability.targeting = ability.target;
+        ability.range = String(source.range ?? "");
         ability.formula_profile = String(source.formula_profile || "");
         ability.duration_value = String(source.duration_value || source.duration || "");
         const abilityDescription = String(source.ability_description || source.description || source.desc || "");
@@ -723,6 +724,7 @@
             slot: AF_ATF.qs(".af-atf-ability-slot", row).value,
             damage_type: AF_ATF.qs(".af-atf-ability-damage-type", row).value,
             target: AF_ATF.qs(".af-atf-ability-targeting", row).value,
+            range: AF_ATF.qs(".af-atf-ability-range", row).value,
             formula_profile: AF_ATF.qs(".af-atf-ability-formula-profile", row).value,
             duration_value: AF_ATF.qs(".af-atf-ability-duration-value", row).value,
             ability_description: descriptionValue,
@@ -779,6 +781,10 @@
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Цель</span>
                   <select class="select af-atf-input af-atf-ability-targeting">${renderSelectOptions("targeting", ability.target)}</select>
+                </label>
+                <label class="af-atf-ability-field">
+                  <span class="af-atf-ability-label">Дальность</span>
+                  <input type="number" min="0" step="any" class="textbox text_input af-atf-input af-atf-ability-range" value="${AF_ATF.escapeAttr(ability.range)}" />
                 </label>
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Formula Profile</span>

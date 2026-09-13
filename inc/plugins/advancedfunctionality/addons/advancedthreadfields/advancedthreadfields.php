@@ -5764,6 +5764,7 @@ function af_atf_format_value_for_display(array $field, string $val): string
             ['key' => 'slot', 'label' => 'Слот', 'set' => 'ability_slot'],
             ['key' => 'damage_type', 'label' => 'Тип урона', 'set' => 'ability_damage_type'],
             ['key' => 'target', 'label' => 'Цель', 'set' => 'ability_targeting'],
+            ['key' => 'range', 'label' => 'Дальность', 'set' => ''],
             ['key' => 'duration_value', 'label' => 'Длительность', 'set' => ''],
         ];
 
@@ -5785,6 +5786,9 @@ function af_atf_format_value_for_display(array $field, string $val): string
                     $rawValue = trim((string)($ability['targeting'] ?? ''));
                 }
                 if ($rawValue === '') {
+                    continue;
+                }
+                if ($meta['key'] === 'range' && is_numeric($rawValue) && (float)$rawValue <= 0) {
                     continue;
                 }
 
@@ -5816,7 +5820,7 @@ function af_atf_format_value_for_display(array $field, string $val): string
                 ? '<div class="af-atf-ability-display-description">' . nl2br(htmlspecialchars_uni($description)) . '</div>'
                 : '';
             $chipsHtml = $chips !== ''
-                ? '<div class="af-atf-ability-display-chips">' . $chips . '</div>'
+                ? '<details class="af-ability-meta"><summary>Параметры способности</summary><div class="af-atf-ability-display-chips">' . $chips . '</div></details>'
                 : '';
 
             $cards .= '<article class="af-atf-ability-display-card">'

@@ -403,6 +403,17 @@ background: #000;
     min-width: 0;
 }
 
+.af-kb-inline-ability-summary .af-ability-meta > summary {
+    cursor: pointer;
+    color: #c9d6ef;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.af-kb-inline-ability-summary .af-ability-meta .af-kb-inline-ability-summary__chips {
+    margin-top: 7px;
+}
+
 .af-kb-inline-ability-summary__chips,
 .af-kb-inline-ability-summary__counters {
     display: flex;
@@ -783,6 +794,9 @@ display: inline-block;
 .af-kb-char-ability__head-main { min-width: 0; flex: 1 1 auto; }
 .af-kb-char-ability__title { display: block; margin-bottom: 6px; line-height: 1.3; }
 .af-kb-char-ability__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.af-kb-char-ability .af-ability-meta { margin-top: 8px; }
+.af-kb-char-ability .af-ability-meta > summary { cursor: pointer; color: #2a3f74; font-weight: 600; }
+.af-kb-char-ability .af-ability-meta .af-kb-char-ability__chips { margin-top: 8px; }
 .af-kb-char-ability__chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1.2; padding: 3px 8px; border-radius: 999px; background: #e9efff; color: #2a3f74; }
 .af-kb-char-ability__meta { margin: 8px 0 0; padding-left: 18px; }
 .af-kb-char-ability__meta ul { margin: 4px 0 0; padding-left: 18px; }
