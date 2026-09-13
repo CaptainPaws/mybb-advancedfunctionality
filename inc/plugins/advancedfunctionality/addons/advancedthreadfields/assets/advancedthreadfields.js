@@ -187,25 +187,34 @@
             title.textContent = entry.title || "";
             body.innerHTML = "";
 
-            if (entry.short_html) {
-              const shortBlock = document.createElement("div");
-              shortBlock.innerHTML = entry.short_html;
-              body.appendChild(shortBlock);
+            if (entry.banner_url) {
+              const banner = document.createElement("img");
+              banner.className = "af-kb-banner";
+              banner.src = entry.banner_url;
+              banner.alt = "";
+              banner.loading = "lazy";
+              body.appendChild(banner);
             }
+
             if (entry.body_html) {
               const bodyBlock = document.createElement("div");
+              bodyBlock.className = "af-kb-modal-main";
               bodyBlock.innerHTML = entry.body_html;
               body.appendChild(bodyBlock);
             }
 
-            if (Array.isArray(entry.blocks)) {
-              entry.blocks.forEach((block) => {
+            // sections_html is rendered by KB itself, including localized labels,
+            // rich text, links and supported embedded media. ATF only places that
+            // canonical display data in its modal; it must not render raw blocks.
+            if (Array.isArray(entry.sections_html)) {
+              entry.sections_html.forEach((block) => {
                 if (!block) return;
-                const blockTitle = String(block.title || "");
-                const blockHtml = String(block.body_html || block.content_html || "");
+                const blockTitle = String(block.label || "");
+                const blockHtml = String(block.html || "");
                 if (!blockTitle && !blockHtml) return;
 
                 const section = document.createElement("section");
+                section.className = "af-kb-modal-block";
                 if (blockTitle) {
                   const h4 = document.createElement("h4");
                   h4.textContent = blockTitle;
