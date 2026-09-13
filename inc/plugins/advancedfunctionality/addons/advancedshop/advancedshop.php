@@ -479,6 +479,42 @@ function af_advancedshop_kb_filter_scope(string $kbType, string $mechanicKey): a
     ];
 }
 
+/**
+ * Return the mechanic assigned to a shop.  settings_json is the existing
+ * per-shop configuration contract; shops created before this option existed
+ * remain DnD unless their code explicitly identifies an ARPG shop.
+ */
+function af_advancedshop_shop_mechanic(array $shop): string
+{
+    $settings = json_decode((string)($shop['settings_json'] ?? ''), true);
+    $mechanic = mb_strtolower(trim((string)($settings['mechanic_key'] ?? '')));
+    if (in_array($mechanic, ['dnd', 'arpg'], true)) {
+        return $mechanic;
+    }
+
+    $code = mb_strtolower(trim((string)($shop['code'] ?? '')));
+    return strpos($code, 'arpg') !== false ? 'arpg' : 'dnd';
+}
+
+function af_advancedshop_kb_mechanic(string $kbType): string
+{
+    $registry = af_advancedshop_kb_type_registry();
+    $kbType = mb_strtolower(trim($kbType));
+    return af_advancedshop_kb_type_mechanic_key($kbType, (array)($registry[$kbType] ?? []));
+}
+
+function af_advancedshop_assert_source_matches_shop(array $shop, array $sourcePayload): void
+{
+    if (($sourcePayload['source_type'] ?? 'kb') !== 'kb') {
+        return;
+    }
+    $shopMechanic = af_advancedshop_shop_mechanic($shop);
+    $itemMechanic = af_advancedshop_kb_mechanic((string)($sourcePayload['kb_type'] ?? 'item'));
+    if ($itemMechanic !== $shopMechanic) {
+        throw new RuntimeException('Item mechanic (' . $itemMechanic . ') does not match shop mechanic (' . $shopMechanic . ').');
+    }
+}
+
 
 function af_advancedshop_normalize_source_type(string $sourceType): string
 {
@@ -1460,6 +1496,7 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
     }
     add_breadcrumb($lang->af_advancedshop_hub_title ?? 'Выбор магазина', af_advancedshop_url('shop'));
     $shopId = (int)$shop['shop_id'];
+    $shopMechanic = af_advancedshop_shop_mechanic($shop);
     $catId = (int)$mybb->get_input('cat');
 
     $flatCats = [];
@@ -1514,6 +1551,11 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
         $slot_currency_symbol = htmlspecialchars_uni(af_advancedshop_currency_symbol((string)$slot['currency']));
 
         $sourceType = af_advancedshop_source_type_from_slot($slot);
+        // Legacy incompatible links are retained for administrators, but are
+        // never exposed for sale on a public shop page.
+        if ($sourceType === 'kb' && af_advancedshop_kb_mechanic((string)($slot['slot_kb_type'] ?? $slot['kb_type'] ?? 'item')) !== $shopMechanic) {
+            continue;
+        }
         $sourceRefId = af_advancedshop_source_ref_id_from_slot($slot);
         $slot_kb_id = (int)$slot['kb_id'];
         $slot_kb_type = (string)($slot['slot_kb_type'] ?? ($slot['kb_type'] ?? 'item'));
@@ -1586,7 +1628,9 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
             . htmlspecialchars_uni(af_advancedshop_currency_symbol($currencySlug)) . '</span>';
     }
     $shop_code = htmlspecialchars_uni((string)$shop['code']);
-    $shop_title = htmlspecialchars_uni($lang->af_advancedshop_shop_title ?? 'Shop');
+    $shop_title = htmlspecialchars_uni(af_advancedshop_pick_lang((string)($shop['title_ru'] ?? ''), (string)($shop['title_en'] ?? '')) ?: ($lang->af_advancedshop_shop_title ?? 'Shop'));
+    $page_title = $shop_title;
+    $bbname = htmlspecialchars_uni((string)($mybb->settings['bbname'] ?? ''));
     $cart_url = af_advancedshop_url('shop_cart', ['shop' => (string)$shop['code']], true);
     $shop_manage_button = '';
     if (af_advancedshop_user_can_manage()) {
@@ -1607,7 +1651,7 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
 
 function af_advancedshop_render_hub(): void
 {
-    global $db, $lang, $headerinclude, $header, $footer;
+    global $db, $mybb, $lang, $headerinclude, $header, $footer;
 
     if (!af_advancedshop_can_view_shop()) {
         error_no_permission();
@@ -1650,6 +1694,8 @@ function af_advancedshop_render_hub(): void
     }
 
     $shop_title = htmlspecialchars_uni($lang->af_advancedshop_hub_title ?? 'Выбор магазина');
+    $page_title = $shop_title;
+    $bbname = htmlspecialchars_uni((string)($mybb->settings['bbname'] ?? ''));
     $assets = af_advancedshop_assets_html();
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_hub_page') . '";');
     eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
@@ -1659,10 +1705,12 @@ function af_advancedshop_render_hub(): void
 
 function af_advancedshop_render_shop_not_found(): void
 {
-    global $headerinclude, $header, $footer;
+    global $mybb, $headerinclude, $header, $footer;
 
     http_response_code(404);
     $shop_home_url = htmlspecialchars_uni(af_advancedshop_url('shop', [], true));
+    $page_title = 'Магазин не найден';
+    $bbname = htmlspecialchars_uni((string)($mybb->settings['bbname'] ?? ''));
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_shop_not_found') . '";');
     eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
     output_page($page);
@@ -1904,6 +1952,8 @@ function af_advancedshop_render_cart(): void
     $currency_symbol = '';
     $balance = htmlspecialchars_uni(implode(' · ', $balancesSummary));
     $total = htmlspecialchars_uni(implode(' · ', $totalsSummary));
+    $page_title = htmlspecialchars_uni($lang->af_advancedshop_cart_title ?? 'Корзина');
+    $bbname = htmlspecialchars_uni((string)($mybb->settings['bbname'] ?? ''));
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_cart') . '";');
     eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
     output_page($page);
@@ -2863,12 +2913,34 @@ function af_advancedshop_render_manage(): void
     }
 
     $assets = af_advancedshop_assets_html();
+    $legacyMismatches = [];
+    $kbCols = af_advancedshop_kb_cols();
+    $kbTypeCol = $kbCols['type'] ?? '`type`';
+    $kbIdCol = $kbCols['id'] ?? 'id';
+    $mismatchQuery = $db->query(
+        'SELECT s.slot_id, s.kb_id, e.' . ($kbTypeCol === 'type' ? '`type`' : $kbTypeCol) . ' AS kb_type '
+        . 'FROM ' . TABLE_PREFIX . 'af_shop_slots s LEFT JOIN ' . af_advancedshop_kb_table() . ' e ON(e.' . $kbIdCol . '=s.kb_id) '
+        . "WHERE s.shop_id=" . (int)$shop['shop_id'] . " AND (s.source_type='kb' OR s.source_type='' OR s.source_type IS NULL)"
+    );
+    $shopMechanic = af_advancedshop_shop_mechanic($shop);
+    while ($mismatch = $db->fetch_array($mismatchQuery)) {
+        $itemMechanic = af_advancedshop_kb_mechanic((string)($mismatch['kb_type'] ?? 'item'));
+        if ($itemMechanic !== $shopMechanic) {
+            $legacyMismatches[] = 'slot #' . (int)$mismatch['slot_id'] . ' → KB #' . (int)$mismatch['kb_id'] . ' (' . $itemMechanic . ')';
+        }
+    }
     $health_block = '<div class="af-shop-health" id="af-shop-health">'
         . '<strong>AF Shop health</strong> '
         . '<span data-health-js>JS loaded: no</span> '
         . '<span data-health-postkey>postKey present: no</span> '
         . '<span data-health-api>API ping: ...</span>'
         . '</div>';
+    if ($legacyMismatches) {
+        $health_block .= '<div class="af-shop-legacy-report" role="status"><strong>Legacy mechanic mismatches (not shown publicly):</strong><ul><li>'
+            . implode('</li><li>', array_map('htmlspecialchars_uni', $legacyMismatches)) . '</li></ul></div>';
+    }
+    $page_title = htmlspecialchars_uni($lang->af_advancedshop_manage_title ?? 'Управление магазином');
+    $bbname = htmlspecialchars_uni((string)($mybb->settings['bbname'] ?? ''));
     eval('$categories_table = "' . af_advancedshop_tpl('advancedshop_manage_categories') . '";');
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_manage') . '";');
     eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
@@ -3053,6 +3125,8 @@ function af_advancedshop_manage_slots(): void
 
         $manage_url = htmlspecialchars_uni(af_advancedshop_manage_url((string)$shop['code']));
         $assets = af_advancedshop_assets_html();
+        $page_title = htmlspecialchars_uni(($lang->af_advancedshop_manage_slots ?? 'Слоты') . ': ' . $category_title_raw);
+        $bbname = htmlspecialchars_uni((string)($mybb->settings['bbname'] ?? ''));
 
         eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_manage_slots') . '";');
         eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
@@ -3188,6 +3262,7 @@ function af_advancedshop_manage_slot_create(): void
             'kb_type' => (string)$mybb->get_input('kb_type'),
             'kb_key' => trim((string)$mybb->get_input('kb_key')),
         ]);
+        af_advancedshop_assert_source_matches_shop($shop, $sourcePayload);
     } catch (RuntimeException $e) {
         af_advancedshop_json_err($e->getMessage(), 422);
     }
@@ -3258,6 +3333,7 @@ function af_advancedshop_manage_slot_update(): void
             'kb_type' => (string)$mybb->get_input('kb_type'),
             'kb_key' => trim((string)$mybb->get_input('kb_key')),
         ], $slot);
+        af_advancedshop_assert_source_matches_shop($shop, $sourcePayload);
     } catch (RuntimeException $e) {
         af_advancedshop_json_err($e->getMessage(), 422);
     }
@@ -3398,17 +3474,19 @@ function af_advancedshop_kb_search(): void
     if ($typeFilter === '' || $typeFilter === 'all') {
         $typeFilter = 'all';
     }
-    $mechanicFilter = mb_strtolower(trim((string)$mybb->get_input('mechanic_key')));
-    if (!in_array($mechanicFilter, ['dnd', 'arpg'], true)) {
-        $mechanicFilter = 'all';
-    }
+    // The shop is authoritative. Do not trust a mechanic supplied by the
+    // browser: the picker must not be bypassable by editing its query string.
+    $shop = af_advancedshop_current_shop(true);
+    if (!$shop) { af_advancedshop_json_err('Shop not found', 404); }
+    $mechanicFilter = af_advancedshop_shop_mechanic($shop);
     $rarityFilter = mb_strtolower(trim((string)$mybb->get_input('rarity')));
     $itemTypeFilter = mb_strtolower(trim((string)$mybb->get_input('item_type')));
     $spellLevelFilter = trim((string)$mybb->get_input('spell_level'));
     $spellSchoolFilter = mb_strtolower(trim((string)$mybb->get_input('spell_school')));
     $typeRegistry = af_advancedshop_kb_type_registry();
-    if ($typeFilter !== 'all' && isset($typeRegistry[$typeFilter])) {
-        $mechanicFilter = (string)($typeRegistry[$typeFilter]['mechanic_key'] ?? $mechanicFilter);
+    if ($typeFilter !== 'all' && isset($typeRegistry[$typeFilter])
+        && (string)($typeRegistry[$typeFilter]['mechanic_key'] ?? '') !== $mechanicFilter) {
+        $typeFilter = 'all';
     }
     $scope = af_advancedshop_kb_filter_scope($typeFilter, $mechanicFilter);
     $limit = (int)$mybb->get_input('limit', MyBB::INPUT_INT);
@@ -4221,6 +4299,9 @@ function af_advancedshop_render_shop_manage_page(): void
             . $rows
             . '</table>'
             . '</div>';
+
+        $page_title = htmlspecialchars_uni($lang->af_advancedshop_manage_title ?? 'Управление магазином');
+        $bbname = htmlspecialchars_uni((string)($mybb->settings['bbname'] ?? ''));
 
         eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
         output_page($page);

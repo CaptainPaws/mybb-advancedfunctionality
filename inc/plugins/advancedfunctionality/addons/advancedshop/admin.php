@@ -95,6 +95,8 @@ class AF_Admin_Advancedshop
                 $iconUrl = trim((string)$mybb->get_input('icon_url'));
                 $enabled = (int)$mybb->get_input('enabled');
                 $sortorder = (int)$mybb->get_input('sortorder');
+                $mechanicKey = strtolower(trim((string)$mybb->get_input('mechanic_key')));
+                if (!in_array($mechanicKey, ['dnd', 'arpg'], true)) { $mechanicKey = 'dnd'; }
 
                 if ($code === '') {
                     flash_message('Shop create failed: code is required.', 'error');
@@ -116,7 +118,7 @@ class AF_Admin_Advancedshop
                         'icon_url' => $db->escape_string($iconUrl),
                         'enabled' => $enabled ? 1 : 0,
                         'sortorder' => $sortorder,
-                        'settings_json' => null,
+                        'settings_json' => $db->escape_string(json_encode(['mechanic_key' => $mechanicKey], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
                     ]);
                 } else {
                     $title = $titleRu !== '' ? $titleRu : ($titleEn !== '' ? $titleEn : $code);
@@ -143,6 +145,8 @@ class AF_Admin_Advancedshop
                 $iconUrl = trim((string)$mybb->get_input('icon_url'));
                 $enabled = (int)$mybb->get_input('enabled') === 1 ? 1 : 0;
                 $sortorder = (int)$mybb->get_input('sortorder');
+                $mechanicKey = strtolower(trim((string)$mybb->get_input('mechanic_key')));
+                if (!in_array($mechanicKey, ['dnd', 'arpg'], true)) { $mechanicKey = 'dnd'; }
 
                 if ($shopId <= 0) {
                     flash_message('Shop update failed: invalid shop.', 'error');
@@ -177,6 +181,10 @@ class AF_Admin_Advancedshop
                         $update['bg_url'] = $db->escape_string($bgUrl);
                         $update['icon_url'] = $db->escape_string($iconUrl);
                         $update['sortorder'] = $sortorder;
+                        $settings = json_decode((string)($existingShop['settings_json'] ?? ''), true);
+                        if (!is_array($settings)) { $settings = []; }
+                        $settings['mechanic_key'] = $mechanicKey;
+                        $update['settings_json'] = $db->escape_string(json_encode($settings, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                     } else {
                         $title = $titleRu !== '' ? $titleRu : ($titleEn !== '' ? $titleEn : $code);
                         $update['title'] = $db->escape_string($title);
@@ -326,6 +334,9 @@ class AF_Admin_Advancedshop
                 if ($shopsTable === 'af_shop_shops') {
                     $html .= '<p>Title RU: <input type="text" name="title_ru" value="' . htmlspecialchars_uni((string)($editShop['title_ru'] ?? '')) . '" maxlength="255" style="width:60%"></p>';
                     $html .= '<p>Title EN: <input type="text" name="title_en" value="' . htmlspecialchars_uni((string)($editShop['title_en'] ?? '')) . '" maxlength="255" style="width:60%"></p>';
+                    $editSettings = json_decode((string)($editShop['settings_json'] ?? ''), true);
+                    $editMechanic = in_array((string)($editSettings['mechanic_key'] ?? ''), ['dnd', 'arpg'], true) ? (string)$editSettings['mechanic_key'] : (strpos(strtolower((string)$editShop['code']), 'arpg') !== false ? 'arpg' : 'dnd');
+                    $html .= '<p>Game mechanic: <select name="mechanic_key"><option value="dnd"' . ($editMechanic === 'dnd' ? ' selected' : '') . '>DnD</option><option value="arpg"' . ($editMechanic === 'arpg' ? ' selected' : '') . '>ARPG</option></select></p>';
                 } else {
                     $title = (string)($editShop['title'] ?? '');
                     $html .= '<p>Title RU: <input type="text" name="title_ru" value="' . htmlspecialchars_uni($title) . '" maxlength="255" style="width:60%"></p>';
@@ -345,6 +356,7 @@ class AF_Admin_Advancedshop
             $html .= '<p>Code: <input type="text" name="code" maxlength="32" required> </p>';
             $html .= '<p>Title RU: <input type="text" name="title_ru" maxlength="255"> </p>';
             $html .= '<p>Title EN: <input type="text" name="title_en" maxlength="255"> </p>';
+            $html .= '<p>Game mechanic: <select name="mechanic_key"><option value="dnd">DnD</option><option value="arpg">ARPG</option></select></p>';
             $html .= '<p>BG URL: <input type="text" name="bg_url" maxlength="255" style="width:60%"> </p>';
             $html .= '<p>Icon URL: <input type="text" name="icon_url" maxlength="255" style="width:60%"> </p>';
             $html .= '<p>Sortorder: <input type="number" name="sortorder" value="0"> Enabled: <label><input type="checkbox" name="enabled" value="1" checked> yes</label></p>';
