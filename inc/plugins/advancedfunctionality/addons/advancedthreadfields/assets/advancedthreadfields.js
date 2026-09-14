@@ -729,8 +729,9 @@
 
         function collectAbilityFromRow(row, index) {
           const descriptionValue = getAbilityDescriptionValue(row);
-          return createAbility({
-            ...(state[index] || {}),
+          const current = state[index] || {};
+          const collected = createAbility({
+            ...current,
             slot_index: AF_ATF.qs(".af-atf-ability-slot-index", row).value,
             title: AF_ATF.qs(".af-atf-ability-name", row).value,
             icon: AF_ATF.qs(".af-atf-ability-icon-url", row).value,
@@ -749,6 +750,13 @@
             ability_description: descriptionValue,
             sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
           });
+          // Preserve object identity: nested-effect callbacks close over this
+          // object. Replacing it made Add/Remove Effect write to a stale object
+          // after any ordinary ability field had been edited.
+          Object.keys(current).forEach((key) => { delete current[key]; });
+          Object.assign(current, collected);
+          state[index] = current;
+          return current;
         }
 
         function syncStateFromDom() {
@@ -860,14 +868,15 @@
                   Object.keys(map).forEach((suffix) => { effect[map[suffix]] = AF_ATF.qs('.af-atf-effect-' + suffix, effectRow).value; });
                   const relevant = {damage:['value','formula','coefficient','target','damage_type','element'], heal:['value','formula','coefficient','target'], shield:['value','formula','coefficient','target','duration'], status:['status','target','duration'], control:['status','target','duration'], stat_modifier:['stat','operation','value','target','duration'], resource:['resource','operation','value','target']};
                   AF_ATF.qsa('[data-for]', effectRow).forEach((field) => { field.style.display = (relevant[effect.effect_type] || []).includes(field.dataset.for) ? '' : 'none'; });
+                  state[index] = ability;
                   sync();
                 };
                 AF_ATF.qsa('input,select,textarea', effectRow).forEach((el) => { el.addEventListener('input', collectEffect); el.addEventListener('change', collectEffect); });
-                AF_ATF.qs('.af-atf-effect-remove', effectRow).addEventListener('click', () => { ability.effects.splice(effectIndex, 1); renderEffects(); sync(); });
+                AF_ATF.qs('.af-atf-effect-remove', effectRow).addEventListener('click', () => { ability.effects.splice(effectIndex, 1); state[index] = ability; renderEffects(); sync(); });
                 effectsList.appendChild(effectRow); collectEffect();
               });
             };
-            AF_ATF.qs('.af-atf-effect-add', row).addEventListener('click', () => { ability.effects.push(createAbility({effects:[{}]}).effects[0]); renderEffects(); sync(); });
+            AF_ATF.qs('.af-atf-effect-add', row).addEventListener('click', () => { ability.effects.push(createAbility({effects:[{}]}).effects[0]); state[index] = ability; renderEffects(); sync(); });
             renderEffects();
 
             const setValue = () => {

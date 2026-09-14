@@ -491,8 +491,18 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         global $mybb;
 
         $base = rtrim((string)$mybb->settings['bburl'], '/');
-        $css  = $base.'/'.AF_ATF_ASSET_CSS;
-        $js   = $base.'/'.AF_ATF_ASSET_JS;
+        // The ability editor lives in this JavaScript asset.  Keep its URL tied
+        // to the deployed file, otherwise browsers can keep the old repeater
+        // indefinitely after a plugin update.
+        $assetVersion = '1';
+        if (defined('MYBB_ROOT')) {
+            $assetMtime = @filemtime(MYBB_ROOT . AF_ATF_ASSET_JS);
+            if (is_int($assetMtime) && $assetMtime > 0) {
+                $assetVersion = (string)$assetMtime;
+            }
+        }
+        $css  = $base.'/'.AF_ATF_ASSET_CSS.'?v='.$assetVersion;
+        $js   = $base.'/'.AF_ATF_ASSET_JS.'?v='.$assetVersion;
 
         $extra = '';
         if (!empty($GLOBALS['af_atf_hide_editor'])) {
@@ -5854,10 +5864,6 @@ function af_atf_format_value_for_display(array $field, string $val): string
             $descriptionHtml = $description !== ''
                 ? '<div class="af-atf-ability-display-description">' . nl2br(htmlspecialchars_uni($description)) . '</div>'
                 : '';
-            $chipsHtml = $chips !== ''
-                ? '<details class="af-ability-meta"><summary>Параметры способности</summary><div class="af-atf-ability-display-chips">' . $chips . '</div></details>'
-                : '';
-            $effectsHtml = '';
             $effectRows = [];
             foreach ((array)($ability['effects'] ?? []) as $effect) {
                 if (!is_array($effect)) continue;
@@ -5874,16 +5880,21 @@ function af_atf_format_value_for_display(array $field, string $val): string
             if (!$effectRows) {
                 foreach (['damage_value' => 'Урон', 'heal_value' => 'Лечение', 'shield_value' => 'Щит'] as $key => $label) {
                     $legacy = trim((string)($ability[$key] ?? ''));
-                    if ($legacy !== '') $effectRows[] = '<li><strong>' . $label . ':</strong> ' . htmlspecialchars_uni($legacy) . '</li>';
+                    if ($legacy !== '' && (!is_numeric($legacy) || (float)$legacy != 0.0)) $effectRows[] = '<li><strong>' . $label . ':</strong> ' . htmlspecialchars_uni($legacy) . '</li>';
                 }
             }
-            if ($effectRows) $effectsHtml = '<details class="af-ability-effects"><summary>Эффекты</summary><ul>' . implode('', $effectRows) . '</ul></details>';
+            $technicalHtml = $chips !== '' ? '<div class="af-atf-ability-display-chips">' . $chips . '</div>' : '';
+            if ($effectRows) {
+                $technicalHtml .= '<div class="af-ability-effects"><strong>Эффекты</strong><ul>' . implode('', $effectRows) . '</ul></div>';
+            }
+            $technicalHtml = $technicalHtml !== ''
+                ? '<details class="af-ability-meta"><summary>Параметры способности</summary>' . $technicalHtml . '</details>'
+                : '';
 
             $cards .= '<article class="af-atf-ability-display-card">'
                 . '<div class="af-atf-ability-display-head">' . $iconHtml . $titleHtml . '</div>'
-                . $chipsHtml
-                . $effectsHtml
                 . $descriptionHtml
+                . $technicalHtml
                 . '</article>';
         }
 
