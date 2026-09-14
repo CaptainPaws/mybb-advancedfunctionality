@@ -442,17 +442,15 @@ function af_charactersheets_arpg_collect_character_contract_abilities(array $abi
         if ($title === '') {
             continue;
         }
-        $abilityType = trim((string)($ability['type'] ?? $ability['ability_type'] ?? 'active'));
         $meta = [];
-        foreach (['subtype', 'slot', 'damage_type', 'target', 'formula_profile'] as $metaKey) {
-            $metaValue = trim((string)($ability[$metaKey] ?? ''));
-            if ($metaValue !== '') {
-                $meta[] = $metaValue;
-            }
+        foreach (af_charactersheets_arpg_build_ability_labels($ability) as $label) {
+            $labelName = trim((string)($label['label'] ?? ''));
+            $labelValue = trim((string)($label['value'] ?? ''));
+            if ($labelValue !== '') $meta[] = ($labelName !== '' ? $labelName . ': ' : '') . $labelValue;
         }
         $description = trim(strip_tags((string)($ability['description'] ?? $ability['ability_description'] ?? $ability['desc'] ?? '')));
         $result[] = [
-            'type' => $abilityType !== '' ? $abilityType : 'active',
+            'type' => '',
             'key' => trim((string)($ability['ability_kb_key'] ?? $title)),
             'label' => $title,
             'qty' => 1,
@@ -491,14 +489,13 @@ function af_charactersheets_arpg_build_ability_labels(array $ability): array
 
     $labels = [];
     $fieldMap = [
-        'type' => ['type', 'ability_type'],
-        'подтип' => ['subtype', 'ability_subtype'],
-        'слот' => ['slot', 'ability_slot'],
-        'тип урона' => ['damage_type', 'ability_damage_type'],
-        'цель' => ['target', 'targeting', 'ability_targeting'],
-        'дальность' => ['range'],
-        'схема расчёта' => ['formula_profile'],
-        'длительность' => ['duration_value', 'duration'],
+        'Тип' => ['type', 'ability_type'],
+        'Подтип' => ['subtype', 'ability_subtype'],
+        'Слот' => ['slot', 'ability_slot'],
+        'Тип урона' => ['damage_type', 'ability_damage_type'],
+        'Цель' => ['target', 'targeting', 'ability_targeting'],
+        'Дальность' => ['range'],
+        'Схема расчёта' => ['formula_profile'],
     ];
     foreach ($fieldMap as $label => $keys) {
         foreach ($keys as $key) {
@@ -527,13 +524,12 @@ function af_charactersheets_arpg_build_ability_labels(array $ability): array
     }
     $cooldown = trim((string)($ability['cooldown_value'] ?? ''));
     if ($cooldown !== '') {
-        $unit = $resolveLabel('duration_unit', (string)($ability['cooldown_unit'] ?? ''));
-        $labels[] = ['label' => 'кулдаун', 'value' => $cooldown . ($unit !== '' ? ' · ' . $unit : '')];
+        $labels[] = ['label' => 'Кулдаун', 'value' => $cooldown . ' ходов персонажа'];
     }
     $cost = trim((string)($ability['cost_value'] ?? ''));
     if ($cost !== '') {
         $resource = $resolveLabel('resource', (string)($ability['cost_resource'] ?? ''));
-        $labels[] = ['label' => 'стоимость', 'value' => $cost . ($resource !== '' ? ' · ' . $resource : '')];
+        $labels[] = ['label' => 'Стоимость', 'value' => $cost . ($resource !== '' ? ' · ' . $resource : '')];
     }
     return $labels;
 }
@@ -562,8 +558,7 @@ function af_charactersheets_arpg_build_effect_lines(array $ability): array
         if ($element !== '') $parts[] = function_exists('af_kb_character_profile_resolved_value') ? af_kb_character_profile_resolved_value('character_element', $element, true) : $element;
         $duration = trim((string)($effect['duration_value'] ?? ''));
         if ($duration !== '') {
-            $unit = function_exists('af_kb_get_arpg_mechanics_option_label') ? af_kb_get_arpg_mechanics_option_label('combat_duration_unit', (string)($effect['duration_unit'] ?? ''), true) : (string)($effect['duration_unit'] ?? '');
-            $parts[] = $duration . ($unit !== '' ? ' · ' . $unit : '');
+            $parts[] = $duration . ' ходов цели';
         }
         if (trim((string)($effect['notes'] ?? '')) !== '') $parts[] = trim((string)$effect['notes']);
         $lines[] = $label . ($parts ? ': ' . implode(' · ', $parts) : '');
@@ -768,7 +763,16 @@ function af_charactersheets_arpg_normalize_ability_card(array $ability, array $c
         $labels = (array)$fallback['labels'];
     }
 
-    $appliedProfile = af_charactersheets_arpg_build_formula_profile_applied($ability, $character_stats, $sheet_view);
+    $hasStructuredEffects = false;
+    foreach ((array)($ability['effects'] ?? []) as $effect) {
+        if (is_array($effect) && trim((string)($effect['effect_type'] ?? $effect['kind'] ?? '')) !== '') {
+            $hasStructuredEffects = true;
+            break;
+        }
+    }
+    // The profile evaluator consumes legacy top-level values. Structured
+    // effects are the source of truth and must not be duplicated by it.
+    $appliedProfile = $hasStructuredEffects ? [] : af_charactersheets_arpg_build_formula_profile_applied($ability, $character_stats, $sheet_view);
 
     return [
         'title' => $title !== '' ? $title : '—',
@@ -1776,7 +1780,7 @@ function af_charactersheets_arpg_render_abilities_group_html(array $items, strin
                 $appliedHtml = '<div class="af-cs-arpg-ability-card__applied">' . $rows . '</div>';
             }
         }
-        $technicalHtml = $labelsHtml . $appliedHtml;
+        $technicalHtml = ($labelsHtml !== '' ? '<div class="af-cs-arpg-ability-card__chips">' . $labelsHtml . '</div>' : '') . $appliedHtml;
         if ($effectLines) {
             $technicalHtml .= '<div class="af-cs-arpg-ability-card__effects"><strong>Эффекты</strong><div>'
                 . implode('</div><div>', array_map('htmlspecialchars_uni', $effectLines)) . '</div></div>';
@@ -1788,7 +1792,7 @@ function af_charactersheets_arpg_render_abilities_group_html(array $items, strin
             . '<h4>' . htmlspecialchars_uni((string)($item['title'] ?? '—')) . '</h4>'
             . '</div></div>'
             . ($description !== '' ? '<p class="af-cs-arpg-ability-card__description">' . htmlspecialchars_uni($description) . '</p>' : '')
-            . ($technicalHtml !== '' ? '<details class="af-ability-meta"><summary>Параметры способности</summary><div class="af-cs-arpg-ability-card__chips">' . $technicalHtml . '</div></details>' : '')
+            . ($technicalHtml !== '' ? '<details class="af-ability-meta"><summary>Параметры способности</summary><div class="af-cs-arpg-ability-card__technical">' . $technicalHtml . '</div></details>' : '')
             . '</article>';
     }
     return $html;
