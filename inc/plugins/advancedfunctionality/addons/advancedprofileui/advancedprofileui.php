@@ -1211,7 +1211,6 @@ function af_apui_member_profile_init_vars(): void
     foreach ([
         'af_apui_character_sheet_tab',
         'af_apui_application_tab',
-        'af_apui_inventory_tab',
         'af_apui_timeline_tab',
         'af_apui_activity_tab',
         'af_apui_forum_info_grid',
@@ -1284,7 +1283,6 @@ function af_apui_member_profile_prepare_layout_vars(): void
 
     $GLOBALS['af_apui_character_sheet_tab'] = af_apui_build_member_profile_sheet_tab($uid, $sheetPayload);
     $GLOBALS['af_apui_application_tab'] = af_apui_build_member_profile_application_tab($uid, $sheetPayload);
-    $GLOBALS['af_apui_inventory_tab'] = af_apui_build_member_profile_inventory_tab($uid);
     $GLOBALS['af_apui_timeline_tab'] = af_apui_build_member_profile_placeholder_tab(
         'Хронология',
         'Здесь появится временная линия персонажа: ключевые эпизоды, квесты и сюжетные вехи.',
@@ -1440,33 +1438,6 @@ function af_apui_build_member_profile_application_tab(int $uid, array $sheetPayl
 
     return af_apui_build_member_profile_tab_shell(
         'Анкета',
-        '',
-        $content
-    );
-}
-
-function af_apui_build_member_profile_inventory_tab(int $uid): string
-{
-    if ($uid <= 0) {
-        return af_apui_build_member_profile_placeholder_tab(
-            'Инвентарь',
-            'Инвентарь пока недоступен.',
-            ''
-        );
-    }
-
-    $content = function_exists('af_advancedinventory_build_inventory_fragment')
-        ? af_advancedinventory_build_inventory_fragment($uid)
-        : '';
-
-    if (trim($content) === '') {
-        $content = '<div class="af-apui-empty">Инвентарь пока недоступен для встроенного отображения.</div>';
-    } else {
-        $content = '<div class="af-apui-inventory-fragment">' . $content . '</div>';
-    }
-
-    return af_apui_build_member_profile_tab_shell(
-        'Инвентарь',
         '',
         $content
     );
