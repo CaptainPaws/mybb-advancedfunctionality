@@ -2159,6 +2159,7 @@ function af_kb_seed_defaults(): void
     af_kb_seed_arpg_types();
     af_kb_seed_arpg_elements();
     af_kb_seed_arpg_mechanics_option_sets();
+    af_kb_fill_arpg_mechanics_documentation();
     af_kb_seed_character_categories();
 }
 
@@ -2628,6 +2629,111 @@ function af_kb_seed_arpg_mechanics_option_sets(): void
             'updated_at' => TIME_NOW,
             'item_kind' => '',
         ]);
+    }
+}
+
+/**
+ * Documentation for the built-in mechanics dictionaries.
+ *
+ * This deliberately is not part of the option-set seed.  A site may translate
+ * or extend rules.entries, so the documentation migration only fills empty text
+ * columns and never writes data_json, meta_json, titles, or labels.
+ */
+function af_kb_arpg_mechanics_documentation(): array
+{
+    $rows = [
+        'ability_type' => ['Тип способности', 'Классифицирует способность как active, passive или ultimate.', 'ATF ability editor; KB Ability; Character Sheet labels', 'NO', 'Пользователь выбирает тип. Значение сохраняется в ability_type/type; справочник является source of truth для допустимых ключей и подписей. Тип не запускает способность и не меняет характеристики.'],
+        'ability_subtype' => ['Подтип способности', 'Задаёт предметную категорию способности: strike, projectile, summon, buff, debuff, mobility, utility, healing, shield или control.', 'ATF ability editor; KB Ability; Character Sheet labels', 'NO', 'Пользователь выбирает подтип. Он хранится как ability_subtype/subtype и используется для формы и отображения; боевой обработчик подтипов не реализован.'],
+        'ability_slot' => ['Слот способности', 'Предоставляет ключи skill_1–skill_4, ultimate, passive, support и special для размещения способности.', 'ATF ability editor; KB Ability; Character Sheet labels', 'NO', 'Пользователь выбирает слот. Справочник определяет ключ и подпись, но не проверяет доступность слота и не исполняет способность.'],
+        'ability_damage_type' => ['Тип урона', 'Предоставляет классификаторы physical, elemental, true, healing и hybrid.', 'ATF ability editor; KB Ability/effects; Character Sheet', 'PARTIAL', 'Ключ хранится в damage_type. Character Sheet показывает подпись; legacy formula pipeline читает damage_type при выборе scaling stat, но для зарегистрированных значений фактическая база урона — Final ATK. Сопротивления, true damage и elemental reactions не рассчитываются.'],
+        'ability_targeting' => ['Таргетинг', 'Описывает допустимую цель или геометрию выбора: self, single target, line, cone, AOE, global или custom.', 'ATF ability editor; KB Ability/effects; Character Sheet display', 'NO', 'Пользователь выбирает target/targeting. Значение сохраняется и отображается; поиск целей, дальность и попадание не исполняются.'],
+        'ability_range' => ['Дальность способности', 'Классифицирует дальность как melee, short, medium, long или global.', 'ATF ability editor; KB Ability UI/display', 'NO', 'Пользователь выбирает range. Это display/schema значение без числовой дистанции и runtime-проверки.'],
+        'combat_duration_unit' => ['Единица длительности', 'Предоставляет own_turn, target_turn и round для сохранения единицы длительности эффекта.', 'ATF ability effects; KB Ability effects', 'NO', 'Пользователь вводит duration_value и выбирает duration_unit. Таймер ходов/раундов не реализован; Character Sheet structured-effect formatter сейчас выводит длительность как ходы цели и не применяет эту единицу.'],
+        'ability_effect_type' => ['Тип эффекта способности', 'Классифицирует элементы effects[]: damage, heal, shield, status, stat_modifier, resource, control, dispel, cleanse, movement и summon.', 'ATF ability editor; KB Ability editor/render; Character Sheet display', 'PARTIAL', 'Тип определяет релевантные поля редактора и подпись. Character Sheet форматирует structured effects, но намеренно не запускает legacy formula evaluator при наличии effects[]; применение урона, щита, статуса и других эффектов отсутствует.'],
+        'ability_effect_operation' => ['Операция эффекта', 'Предоставляет add, subtract, set и percent для structured stat/resource effects.', 'ATF ability effects; KB Ability effects; Character Sheet display', 'NO', 'Пользователь выбирает operation. Ключ сохраняется и показывается, но Character Sheet не применяет операцию к stat/resource; база percent не определена runtime-кодом.'],
+        'ability_resource' => ['Ресурс способности', 'Предоставляет energy, mana и stamina для стоимости и resource effects.', 'ATF ability editor; KB Ability editor/render; Character Sheet labels', 'NO', 'Пользователь выбирает resource key и вводит стоимость/значение. Расход, восстановление и проверка остатка ресурса не реализованы.'],
+        'ability_value_mode' => ['Режим значения', 'Различает flat, percent и text при вводе значения способности.', 'ARPG schema/editor option source', 'NO', 'Пользователь выбирает способ интерпретации ввода. Сам registry ничего не вычисляет; процентная база должна следовать конкретному evaluator, а общего evaluator value_mode нет.'],
+        'character_gender' => ['Пол персонажа', 'Предоставляет male и female для поля профиля персонажа.', 'KB Character editor/filter/display; Character Sheet label resolution', 'NO', 'Пользователь выбирает значение профиля. Это классификатор, не участвующий в stats или формулах.'],
+        'weapon_type' => ['Тип оружия', 'Предоставляет типы sword, greatsword, spear, bow, catalyst и firearm вместе с default_range_profile и optional starter template.', 'KB item/equipment editors and labels', 'NO', 'Пользователь выбирает weapon type. Equipment может дать Character Sheet flat stats из JSON самого предмета, но тип оружия и default_range_profile не рассчитывают урон, дистанцию или поведение оружия.'],
+    ];
+
+    $docs = [];
+    foreach ($rows as $key => $row) {
+        [$name, $purpose, $consumers, $support, $details] = $row;
+        $docs[$key] = [
+            'body_ru' => "## {$name}\n\n{$purpose}\n\nЗапись `arpg_mechanics` служит источником допустимых ключей и подписей для редакторов. Она не заменяет сохранённые данные сущности и не создаёт отдельный runtime.",
+            'tech_ru' => "## Что это?\n{$purpose}\n\n## Где используется?\n{$consumers}.\n\n## Что хранится?\n`rules.service_kind` задаёт вид справочника, а `rules.entries[]` хранит стабильный `key`, локализованные подписи и служебный `sortorder`/поля конкретного вида.\n\n## Что рассчитывается автоматически?\n**{$support}.** {$details}\n\n## Где происходит расчёт?\n" . ($support === 'NO' ? 'Расчёта нет; consumers только сохраняют или форматируют значение.' : 'Поддержанная часть выполняется в Character Sheet; ограничения перечислены выше.') . "\n\n## Что должен вводить пользователь?\n{$details}\n\n## Source of truth\nСуществующий JSON этой записи `arpg_mechanics`; выбранный key сохраняется в JSON соответствующей сущности. Итоговые stats, когда применимо, принадлежат computed VM Character Sheet.\n\n## Ограничения\nНаличие значения в select не доказывает наличие combat runtime. Неизвестные или пользовательские extension keys сохраняются в JSON и не должны заменяться seed-значениями.",
+            'body_en' => "## {$name}\n\n{$purpose}\n\nThis `arpg_mechanics` record supplies stable option keys and labels to editors. It does not create a separate runtime.",
+            'tech_en' => "## What is it?\n{$purpose}\n\n## Consumers\n{$consumers}.\n\n## Stored data\n`rules.service_kind` identifies the dictionary kind; `rules.entries[]` contains stable keys, labels, ordering, and kind-specific metadata.\n\n## Automatic calculation\n**{$support}.** {$details}\n\n## Source of truth and limitations\nThe existing record JSON is the option source of truth. A selectable value is not evidence of combat-runtime support; Character Sheet computed VM is authoritative only where a calculator is explicitly documented.",
+        ];
+    }
+
+    $formulaSummary = 'Справочник содержит 18 профилей: damage_flat, damage_percent, damage_hybrid_flat, damage_hybrid_percent, shield_flat, shield_percent, heal_flat, heal_percent, buff_flat, buff_percent, debuff_flat, debuff_percent, control_fixed, utility_fixed, mobility_fixed, passive_flat, passive_percent и passive_conditional.';
+    $docs['formula_profile'] = [
+        'body_ru' => "## Профили формул\n\n{$formulaSummary}\n\nОни выбираются и сохраняются в ATF/KB Ability. Реальный evaluator существует только в Character Sheet для legacy top-level ability без structured `effects[]`; ATF и KB preview формулы не вычисляют.",
+        'tech_ru' => <<<'FAQ'
+## Что это и где используется?
+Профили доступны в ATF ability editor и KB Ability/effect editor, сохраняются как `formula_profile` способности или эффекта и читаются Character Sheet. `rules.entries[]` хранит `key`, `title`, `group`, `description`, `calc_family`, `duration_supported`, `ui_hint`, `active`.
+
+## Что рассчитывается автоматически?
+**PARTIAL.** `af_charactersheets_arpg_build_formula_profile_applied()` вычисляет только legacy top-level ability. При наличии structured `effects[]` evaluator намеренно отключён, а `af_charactersheets_arpg_build_effect_lines()` лишь отображает данные. ATF preview: NO. KB Character/Ability preview: NO. Combat runtime: NOT IMPLEMENTED.
+
+## Формулы и база
+- `damage_flat`: `(value + FinalATK × 0.20) × (1 + damage_bonus/100)`.
+- `damage_percent`: `(FinalATK × value/100) × (1 + damage_bonus/100)`.
+- `damage_hybrid_flat`: `(value + FinalATK × 0.35) × (1 + damage_bonus/100)`.
+- `damage_hybrid_percent`: `(FinalATK × value/100 + ElementalMastery × 0.25) × (1 + damage_bonus/100)`.
+- `shield_flat`: `(value + base × 0.40) × (1 + shield_bonus/100)`.
+- `shield_percent`: `(base × value/100) × (1 + shield_bonus/100)`. `base` = Final HP, fallback Final DEF, затем Final ATK.
+- `heal_flat`: `(value + base × 0.25) × (1 + healing_bonus/100)`.
+- `heal_percent`: `(base × value/100) × (1 + healing_bonus/100)`. `base` = Final ATK, fallback Final HP.
+- `buff_flat`, `debuff_flat`, `utility_fixed`, `passive_flat`: только форматируют введённое число.
+- `buff_percent`, `debuff_percent`, `passive_percent`: только форматируют введённое число со знаком `%`; процент **ни от чего не вычисляется**, база runtime не реализована.
+- `control_fixed`: показывает `duration_value`, иначе value, в секундах; таймер контроля не исполняется.
+- `mobility_fixed`: текущий renderer только показывает value со знаком `%`, хотя registry задаёт `ui_hint=units`; перемещение не исполняется.
+- `passive_conditional`: показывает описание ability; условие не вычисляется.
+
+Пример подтверждённой формулы: Final ATK = 1000, `damage_percent`, value = 20, damage bonus = 10% → `(1000 × 0.20) × 1.10 = 220`.
+
+## Какие Character Sheet данные участвуют?
+Final stats уже включают base/per-level Origin и Archetype, поддержанные flat Variant modifiers и flat equipment sources. Формулы читают Final HP/ATK/DEF, Elemental Mastery, damage/healing/shield bonus и crit damage. Активные эффекты не применяются. Для damage registered `physical/elemental/true/healing/hybrid` фактически используют ATK; resistance/true-damage semantics отсутствуют.
+
+## Source of truth и ограничения
+JSON `arpg_mechanics/formula_profile` — source of truth для доступных профилей и metadata. Сохранённая ability — source of truth для profile/value. Character Sheet computed stats — база реализованных legacy формул. Профиль в select не гарантирует evaluator для structured effect или combat runtime.
+FAQ,
+        'body_en' => '## Formula profiles\n\nThe registry contains 18 profiles selected and persisted by ATF/KB Ability. Automatic evaluation exists only in Character Sheet for legacy top-level abilities without structured `effects[]`.',
+        'tech_en' => '## Runtime status\n**PARTIAL.** Character Sheet evaluates legacy damage, shield, and healing formulas and formats the remaining profiles. Structured effect profiles are display-only. ATF preview: NO; KB preview: NO; combat runtime: NOT IMPLEMENTED. Final stats include supported Origin/Archetype growth plus flat Variant and equipment modifiers. Percent buff/debuff/passive profiles have no runtime percentage base.',
+    ];
+
+    return $docs;
+}
+
+function af_kb_fill_arpg_mechanics_documentation(): void
+{
+    global $db;
+    if (!$db->table_exists('af_kb_entries')) {
+        return;
+    }
+    foreach (af_kb_arpg_mechanics_documentation() as $key => $documentation) {
+        $existing = $db->fetch_array($db->simple_select(
+            'af_kb_entries',
+            'id,body_ru,body_en,tech_ru,tech_en',
+            "type='arpg_mechanics' AND `key`='" . $db->escape_string($key) . "'",
+            ['limit' => 1]
+        ));
+        if (!$existing) {
+            continue;
+        }
+        $updates = [];
+        foreach (['body_ru', 'body_en', 'tech_ru', 'tech_en'] as $field) {
+            if (trim((string)($existing[$field] ?? '')) === '' && trim((string)($documentation[$field] ?? '')) !== '') {
+                $updates[$field] = $db->escape_string((string)$documentation[$field]);
+            }
+        }
+        if ($updates) {
+            $updates['updated_at'] = TIME_NOW;
+            $db->update_query('af_kb_entries', $updates, 'id=' . (int)$existing['id']);
+        }
     }
 }
 
@@ -11336,6 +11442,7 @@ function af_kb_handle_view(): void
         $actions[] = af_kb_back_link_html(af_kb_url(), ['kb']);
         if (af_kb_can_edit()) {
             $actions[] = '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>';
+            $actions[] = '<a class="af-kb-btn" href="kb.php?type=arpg_mechanics">ARPG Mechanics</a>';
         }
         if ($type === AF_KB_TYPE_RACE) {
             $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_RACE_VARIANT) . '">Разновидности рас</a>';
