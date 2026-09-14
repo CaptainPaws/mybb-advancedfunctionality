@@ -14,6 +14,21 @@ foreach (['cooldown_value', 'cooldown_unit', 'cost_value', 'cost_resource', 'eff
     ability_effect_assert(strpos($atfPhp, "'{$key}'") !== false, "ATF normalizer misses {$key}");
     ability_effect_assert(strpos($kbPhp, "'{$key}'") !== false, "KB contract misses {$key}");
 }
+foreach ([
+    'af-atf-ability-range' => 'Range',
+    'af-atf-ability-cooldown-value' => 'Cooldown',
+    'af-atf-ability-cooldown-unit' => 'Cooldown unit',
+    'af-atf-ability-cost-value' => 'Cost',
+    'af-atf-ability-cost-resource' => 'Cost resource',
+    'af-atf-effect-add' => 'Add Effect button',
+    'af-atf-effect-remove' => 'Remove Effect button',
+] as $control => $label) {
+    ability_effect_assert(strpos($atfJs, $control) !== false, "ATF EDIT misses {$label} control");
+}
+ability_effect_assert(strpos($atfJs, 'Object.assign(current, collected)') !== false, 'ATF ability editing does not preserve nested repeater object identity');
+ability_effect_assert(substr_count($atfJs, 'state[index] = ability;') >= 3, 'ATF nested effect add/edit/remove does not synchronize the owning ability');
+ability_effect_assert(strpos($atfPhp, "'range' => 'ability_range'") !== false, 'ATF Range does not use the shared KB mechanics option set');
+ability_effect_assert(strpos($atfPhp, "filemtime(MYBB_ROOT . AF_ATF_ASSET_JS)") !== false && strpos($atfPhp, "'?v='") !== false, 'ATF editor JavaScript is not cache-busted after deployment');
 foreach (['effect_type', 'value', 'formula_profile', 'coefficient', 'target', 'damage_type', 'element', 'duration_value', 'duration_unit', 'status_key', 'stat_key', 'operation', 'resource_key', 'notes'] as $key) {
     ability_effect_assert(strpos($atfPhp, "'{$key}'") !== false, "ATF effect contract misses {$key}");
     ability_effect_assert(strpos($kbJs, "key: '{$key}'") !== false, "KB effect editor misses {$key}");
@@ -23,5 +38,8 @@ ability_effect_assert(strpos($kbJs, "label: 'Схема расчёта'") !== fa
 ability_effect_assert(strpos($kbPhp, "'af_kb.character.contract.v1'") !== false, 'Character contract identifier changed');
 ability_effect_assert(strpos($sheet, 'af_charactersheets_arpg_build_effect_lines') !== false, 'Character Sheet does not consume effects');
 ability_effect_assert(strpos($sheet, "['damage' => 'Урон', 'heal' => 'Лечение', 'shield' => 'Щит']") !== false, 'Character Sheet lost legacy value fallback');
+ability_effect_assert(strpos($sheet, "(!is_numeric(\$value) || (float)\$value != 0.0)") !== false, 'Character Sheet still presents zero legacy placeholders');
+ability_effect_assert(strpos($sheet, '<summary>Параметры способности</summary>') !== false, 'Character Sheet ability technical spoiler is missing');
+ability_effect_assert(strpos($atfPhp, '<details class="af-ability-effects"><summary>Эффекты</summary>') === false, 'ATF display still puts effects in a separate spoiler');
 
 echo "Character ability effects contract regression checks passed\n";

@@ -567,7 +567,7 @@ function af_charactersheets_arpg_build_effect_lines(array $ability): array
     if (!$lines) {
         foreach (['damage' => 'Урон', 'heal' => 'Лечение', 'shield' => 'Щит'] as $key => $label) {
             $value = trim((string)($ability[$key . '_value'] ?? ''));
-            if ($value !== '') $lines[] = $label . ': ' . $value;
+            if ($value !== '' && (!is_numeric($value) || (float)$value != 0.0)) $lines[] = $label . ': ' . $value;
         }
     }
     return $lines;
@@ -1772,6 +1772,11 @@ function af_charactersheets_arpg_render_abilities_group_html(array $items, strin
                 $appliedHtml = '<div class="af-cs-arpg-ability-card__applied">' . $rows . '</div>';
             }
         }
+        $technicalHtml = $labelsHtml . $appliedHtml;
+        if ($effectLines) {
+            $technicalHtml .= '<div class="af-cs-arpg-ability-card__effects"><strong>Эффекты</strong><div>'
+                . implode('</div><div>', array_map('htmlspecialchars_uni', $effectLines)) . '</div></div>';
+        }
         $html .= '<article class="af-cs-arpg-ability-card">'
             . '<div class="af-cs-arpg-ability-card__head">'
             . ($icon !== '' ? '<div class="af-cs-arpg-ability-card__icon"><img src="' . htmlspecialchars_uni($icon) . '" alt="" loading="lazy" /></div>' : '')
@@ -1779,9 +1784,7 @@ function af_charactersheets_arpg_render_abilities_group_html(array $items, strin
             . '<h4>' . htmlspecialchars_uni((string)($item['title'] ?? '—')) . '</h4>'
             . '</div></div>'
             . ($description !== '' ? '<p class="af-cs-arpg-ability-card__description">' . htmlspecialchars_uni($description) . '</p>' : '')
-            . ($labelsHtml !== '' ? '<details><summary>Характеристики</summary><div class="af-cs-arpg-ability-card__chips">' . $labelsHtml . '</div></details>' : '')
-            . ($effectLines ? '<div class="af-cs-arpg-ability-card__effects"><strong>Эффекты</strong><div>' . implode('</div><div>', array_map('htmlspecialchars_uni', $effectLines)) . '</div></div>' : '')
-            . $appliedHtml
+            . ($technicalHtml !== '' ? '<details class="af-ability-meta"><summary>Параметры способности</summary><div class="af-cs-arpg-ability-card__chips">' . $technicalHtml . '</div></details>' : '')
             . '</article>';
     }
     return $html;
