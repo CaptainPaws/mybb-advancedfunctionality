@@ -11214,6 +11214,9 @@ function af_kb_handle_view(): void
         $kb_create_link = af_kb_can_manage_types()
             ? '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_type_edit">'.htmlspecialchars_uni($lang->af_kb_type_create ?? 'Create category').'</a>'
             : '';
+        $kb_mechanics_link = af_kb_can_edit()
+            ? '<a class="af-kb-btn" href="kb.php?type=arpg_mechanics">ARPG Mechanics</a>'
+            : '';
         $kb_help_link = af_kb_can_edit()
             ? '<a class="af-kb-help-link" href="misc.php?action=kb_help" title="'.htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help').'"><i class="fa-regular fa-circle-question"></i></a>'
             : '';
@@ -11442,7 +11445,6 @@ function af_kb_handle_view(): void
         $actions[] = af_kb_back_link_html(af_kb_url(), ['kb']);
         if (af_kb_can_edit()) {
             $actions[] = '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>';
-            $actions[] = '<a class="af-kb-btn" href="kb.php?type=arpg_mechanics">ARPG Mechanics</a>';
         }
         if ($type === AF_KB_TYPE_RACE) {
             $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_RACE_VARIANT) . '">Разновидности рас</a>';

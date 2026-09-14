@@ -36,8 +36,17 @@ foreach (['data_json', 'meta_json', 'title_ru', 'label_ru'] as $forbidden) {
 }
 arpg_docs_assert(strpos($fillSource, "trim((string)(\$existing[\$field] ?? '')) === ''") !== false, 'Existing non-empty documentation is not protected');
 
-arpg_docs_assert(strpos($source, "if (af_kb_can_edit()) {\n            \$actions[] = '<a class=\"af-kb-btn af-kb-btn--create") !== false, 'Expected moderator action permission block is missing');
-arpg_docs_assert(strpos($source, 'href="kb.php?type=arpg_mechanics">ARPG Mechanics</a>') !== false, 'ARPG Mechanics moderator button is missing');
+$viewStart = strpos($source, 'function af_kb_handle_view(): void');
+$catalogStart = strpos($source, 'if ($type === \'\') {', $viewStart);
+$typeListStart = strpos($source, 'if ($key === \'\') {', $catalogStart);
+$catalogSource = substr($source, $catalogStart, $typeListStart - $catalogStart);
+$typeListEnd = strpos($source, "\n    \$typeRow = af_kb_find_type_row(\$type);", $typeListStart);
+$typeListSource = substr($source, $typeListStart, $typeListEnd - $typeListStart);
+$catalogTemplate = file_get_contents(__DIR__ . '/../inc/plugins/advancedfunctionality/addons/knowledgebase/templates/knowledgebase_catalog.html');
+arpg_docs_assert(strpos($catalogSource, '$kb_mechanics_link = af_kb_can_edit()') !== false, 'ARPG Mechanics button does not reuse the KB moderator permission');
+arpg_docs_assert(strpos($catalogSource, 'href="kb.php?type=arpg_mechanics">ARPG Mechanics</a>') !== false, 'ARPG Mechanics moderator button is missing from the catalog');
+arpg_docs_assert(is_string($catalogTemplate) && strpos($catalogTemplate, '{$kb_mechanics_link}') !== false, 'ARPG Mechanics button is not rendered in catalog actions');
+arpg_docs_assert(strpos($typeListSource, 'href="kb.php?type=arpg_mechanics">ARPG Mechanics</a>') === false, 'ARPG Mechanics self-link remains on its type page');
 arpg_docs_assert(strpos($source, 'Public arpg_mechanics') === false, 'Unexpected public navigation marker found');
 
 echo "ARPG mechanics documentation regression checks passed\n";
