@@ -635,6 +635,21 @@
         ability.range = String(source.range ?? "");
         ability.formula_profile = String(source.formula_profile || "");
         ability.duration_value = String(source.duration_value || source.duration || "");
+        ability.cooldown_value = String(source.cooldown_value ?? "");
+        ability.cooldown_unit = String(source.cooldown_unit || "");
+        ability.cost_value = String(source.cost_value ?? "");
+        ability.cost_resource = String(source.cost_resource || "");
+        ability.effects = Array.isArray(source.effects) ? source.effects.map((effect) => {
+          const item = effect && typeof effect === "object" ? { ...effect } : {};
+          return {
+            effect_type: String(item.effect_type || item.kind || ""), value: String(item.value ?? ""),
+            formula_profile: String(item.formula_profile || item.formula_ref || ""), coefficient: String(item.coefficient ?? ""),
+            target: String(item.target || item.targeting || ""), damage_type: String(item.damage_type || ""), element: String(item.element || ""),
+            duration_value: String(item.duration_value ?? item.duration ?? ""), duration_unit: String(item.duration_unit || ""),
+            status_key: String(item.status_key || ""), stat_key: String(item.stat_key || ""), operation: String(item.operation || ""),
+            resource_key: String(item.resource_key || ""), notes: String(item.notes || "")
+          };
+        }) : [];
         const abilityDescription = String(source.ability_description || source.description || source.desc || "");
         ability.ability_description = abilityDescription;
         ability.description = abilityDescription;
@@ -727,6 +742,10 @@
             range: AF_ATF.qs(".af-atf-ability-range", row).value,
             formula_profile: AF_ATF.qs(".af-atf-ability-formula-profile", row).value,
             duration_value: AF_ATF.qs(".af-atf-ability-duration-value", row).value,
+            cooldown_value: AF_ATF.qs(".af-atf-ability-cooldown-value", row).value,
+            cooldown_unit: AF_ATF.qs(".af-atf-ability-cooldown-unit", row).value,
+            cost_value: AF_ATF.qs(".af-atf-ability-cost-value", row).value,
+            cost_resource: AF_ATF.qs(".af-atf-ability-cost-resource", row).value,
             ability_description: descriptionValue,
             sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
           });
@@ -784,16 +803,20 @@
                 </label>
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Дальность</span>
-                  <input type="number" min="0" step="any" class="textbox text_input af-atf-input af-atf-ability-range" value="${AF_ATF.escapeAttr(ability.range)}" />
+                  <select class="select af-atf-input af-atf-ability-range">${renderSelectOptions("range", ability.range)}</select>
                 </label>
                 <label class="af-atf-ability-field">
-                  <span class="af-atf-ability-label">Formula Profile</span>
+                  <span class="af-atf-ability-label">Схема расчёта</span>
                   <select class="select af-atf-input af-atf-ability-formula-profile">${renderSelectOptions("formula_profile", ability.formula_profile)}</select>
                 </label>
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Длительность</span>
                   <input type="text" class="textbox text_input af-atf-input af-atf-ability-duration-value" placeholder="" value="${AF_ATF.escapeAttr(ability.duration_value)}" />
                 </label>
+                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Кулдаун</span><input type="number" step="any" min="0" class="textbox text_input af-atf-input af-atf-ability-cooldown-value" value="${AF_ATF.escapeAttr(ability.cooldown_value)}" /></label>
+                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Единица кулдауна</span><select class="select af-atf-input af-atf-ability-cooldown-unit">${renderSelectOptions("duration_unit", ability.cooldown_unit)}</select></label>
+                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Стоимость</span><input type="number" step="any" class="textbox text_input af-atf-input af-atf-ability-cost-value" value="${AF_ATF.escapeAttr(ability.cost_value)}" /></label>
+                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Ресурс</span><select class="select af-atf-input af-atf-ability-cost-resource">${renderSelectOptions("resource", ability.cost_resource)}</select></label>
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Порядок</span>
                   <input type="number" class="textbox text_input af-atf-input af-atf-ability-sortorder" placeholder="sortorder" value="${AF_ATF.escapeAttr(ability.sortorder || index + 1)}" />
@@ -803,10 +826,49 @@
                 <span class="af-atf-ability-label">Описание способности</span>
                 <textarea class="textbox textarea af-atf-input af-atf-ability-description" rows="4" placeholder="Описание способности">${AF_ATF.escapeAttr(ability.ability_description)}</textarea>
               </label>
+              <div class="af-atf-effects"><strong>Эффекты</strong><div class="af-atf-effects-list"></div><button type="button" class="button af-atf-effect-add">Добавить эффект</button></div>
               <label style="display:none;">
                 <input type="number" class="textbox text_input af-atf-ability-slot-index" value="${AF_ATF.escapeAttr(ability.slot_index || index + 1)}" />
               </label>
             `;
+
+            const effectsList = AF_ATF.qs(".af-atf-effects-list", row);
+            const renderEffects = () => {
+              effectsList.innerHTML = "";
+              ability.effects.forEach((effect, effectIndex) => {
+                const effectRow = document.createElement("div");
+                effectRow.className = "af-atf-effect-item";
+                effectRow.innerHTML = `<strong>Эффект #${effectIndex + 1}</strong>
+                  <label>Тип эффекта<select class="select af-atf-effect-type">${renderSelectOptions("effect_type", effect.effect_type)}</select></label>
+                  <label data-for="value">Значение<input type="number" step="any" class="textbox af-atf-effect-value" value="${AF_ATF.escapeAttr(effect.value)}"></label>
+                  <label data-for="formula">Схема расчёта<select class="select af-atf-effect-formula">${renderSelectOptions("formula_profile", effect.formula_profile)}</select></label>
+                  <label data-for="coefficient">Коэффициент<input type="number" step="any" class="textbox af-atf-effect-coefficient" value="${AF_ATF.escapeAttr(effect.coefficient)}"></label>
+                  <label data-for="target">Цель<select class="select af-atf-effect-target">${renderSelectOptions("targeting", effect.target)}</select></label>
+                  <label data-for="damage_type">Тип урона<select class="select af-atf-effect-damage-type">${renderSelectOptions("damage_type", effect.damage_type)}</select></label>
+                  <label data-for="element">Стихия<input class="textbox af-atf-effect-element" value="${AF_ATF.escapeAttr(effect.element)}"></label>
+                  <label data-for="duration">Длительность<input type="number" step="any" class="textbox af-atf-effect-duration" value="${AF_ATF.escapeAttr(effect.duration_value)}"></label>
+                  <label data-for="duration">Единица длительности<select class="select af-atf-effect-duration-unit">${renderSelectOptions("duration_unit", effect.duration_unit)}</select></label>
+                  <label data-for="status">Статус<input class="textbox af-atf-effect-status" value="${AF_ATF.escapeAttr(effect.status_key)}"></label>
+                  <label data-for="stat">Характеристика<input class="textbox af-atf-effect-stat" value="${AF_ATF.escapeAttr(effect.stat_key)}"></label>
+                  <label data-for="operation">Операция<select class="select af-atf-effect-operation">${renderSelectOptions("operation", effect.operation)}</select></label>
+                  <label data-for="resource">Ресурс<select class="select af-atf-effect-resource">${renderSelectOptions("resource", effect.resource_key)}</select></label>
+                  <label>Примечание<textarea class="textbox af-atf-effect-notes">${AF_ATF.escapeAttr(effect.notes)}</textarea></label>
+                  <button type="button" class="button af-atf-effect-remove">Удалить эффект</button>`;
+                const collectEffect = () => {
+                  effect.effect_type = AF_ATF.qs('.af-atf-effect-type', effectRow).value;
+                  const map = {value:'value', formula:'formula_profile', coefficient:'coefficient', target:'target', 'damage-type':'damage_type', element:'element', duration:'duration_value', 'duration-unit':'duration_unit', status:'status_key', stat:'stat_key', operation:'operation', resource:'resource_key', notes:'notes'};
+                  Object.keys(map).forEach((suffix) => { effect[map[suffix]] = AF_ATF.qs('.af-atf-effect-' + suffix, effectRow).value; });
+                  const relevant = {damage:['value','formula','coefficient','target','damage_type','element'], heal:['value','formula','coefficient','target'], shield:['value','formula','coefficient','target','duration'], status:['status','target','duration'], control:['status','target','duration'], stat_modifier:['stat','operation','value','target','duration'], resource:['resource','operation','value','target']};
+                  AF_ATF.qsa('[data-for]', effectRow).forEach((field) => { field.style.display = (relevant[effect.effect_type] || []).includes(field.dataset.for) ? '' : 'none'; });
+                  sync();
+                };
+                AF_ATF.qsa('input,select,textarea', effectRow).forEach((el) => { el.addEventListener('input', collectEffect); el.addEventListener('change', collectEffect); });
+                AF_ATF.qs('.af-atf-effect-remove', effectRow).addEventListener('click', () => { ability.effects.splice(effectIndex, 1); renderEffects(); sync(); });
+                effectsList.appendChild(effectRow); collectEffect();
+              });
+            };
+            AF_ATF.qs('.af-atf-effect-add', row).addEventListener('click', () => { ability.effects.push(createAbility({effects:[{}]}).effects[0]); renderEffects(); sync(); });
+            renderEffects();
 
             const setValue = () => {
               state[index] = collectAbilityFromRow(row, index);

@@ -779,6 +779,12 @@ function af_kb_default_type_definitions(): array
                     ['path' => 'target', 'type' => 'string', 'default' => ''],
                     ['path' => 'formula_profile', 'type' => 'string', 'default' => ''],
                     ['path' => 'duration_value', 'type' => 'string', 'default' => ''],
+                    ['path' => 'range', 'type' => 'string', 'default' => ''],
+                    ['path' => 'cooldown_value', 'type' => 'string', 'default' => ''],
+                    ['path' => 'cooldown_unit', 'type' => 'string', 'default' => ''],
+                    ['path' => 'cost_value', 'type' => 'string', 'default' => ''],
+                    ['path' => 'cost_resource', 'type' => 'string', 'default' => ''],
+                    ['path' => 'effects', 'type' => 'array', 'default' => [], 'item' => ['type' => 'object']],
                     ['path' => 'description', 'type' => 'textarea', 'default' => ''],
                     ['path' => 'ability_kb_key', 'type' => 'string', 'default' => ''],
                     ['path' => 'sortorder', 'type' => 'number', 'default' => 0],
@@ -2373,6 +2379,50 @@ function af_kb_arpg_mechanics_option_set_definitions(): array
                 ['key' => 'aoe_around_self', 'label_ru' => 'Вокруг себя', 'label_en' => 'Around self'],
                 ['key' => 'global', 'label_ru' => 'Глобально', 'label_en' => 'Global'],
                 ['key' => 'custom', 'label_ru' => 'Другое', 'label_en' => 'Custom'],
+            ],
+        ],
+        'ability_range' => [
+            'title_ru' => 'ARPG: Дальность способности', 'title_en' => 'ARPG: Ability Range', 'service_kind' => 'snippet',
+            'entries' => [
+                ['key' => 'melee', 'label_ru' => 'Ближняя', 'label_en' => 'Melee'],
+                ['key' => 'short', 'label_ru' => 'Короткая', 'label_en' => 'Short'],
+                ['key' => 'medium', 'label_ru' => 'Средняя', 'label_en' => 'Medium'],
+                ['key' => 'long', 'label_ru' => 'Дальняя', 'label_en' => 'Long'],
+                ['key' => 'global', 'label_ru' => 'Глобальная', 'label_en' => 'Global'],
+            ],
+        ],
+        'combat_duration_unit' => [
+            'title_ru' => 'ARPG: Единицы боевой длительности', 'title_en' => 'ARPG: Combat Duration Units', 'service_kind' => 'snippet',
+            'entries' => [
+                ['key' => 'own_turn', 'label_ru' => 'Собственные ходы', 'label_en' => 'Own turns'],
+                ['key' => 'target_turn', 'label_ru' => 'Ходы цели', 'label_en' => 'Target turns'],
+                ['key' => 'round', 'label_ru' => 'Раунды', 'label_en' => 'Rounds'],
+            ],
+        ],
+        'ability_effect_type' => [
+            'title_ru' => 'ARPG: Тип эффекта способности', 'title_en' => 'ARPG: Ability Effect Type', 'service_kind' => 'snippet',
+            'entries' => [
+                ['key' => 'damage', 'label_ru' => 'Урон', 'label_en' => 'Damage'], ['key' => 'heal', 'label_ru' => 'Лечение', 'label_en' => 'Heal'],
+                ['key' => 'shield', 'label_ru' => 'Щит', 'label_en' => 'Shield'], ['key' => 'status', 'label_ru' => 'Статус', 'label_en' => 'Status'],
+                ['key' => 'stat_modifier', 'label_ru' => 'Модификатор характеристики', 'label_en' => 'Stat modifier'], ['key' => 'resource', 'label_ru' => 'Ресурс', 'label_en' => 'Resource'],
+                ['key' => 'control', 'label_ru' => 'Контроль', 'label_en' => 'Control'], ['key' => 'dispel', 'label_ru' => 'Рассеивание', 'label_en' => 'Dispel'],
+                ['key' => 'cleanse', 'label_ru' => 'Очищение', 'label_en' => 'Cleanse'], ['key' => 'movement', 'label_ru' => 'Перемещение', 'label_en' => 'Movement'],
+                ['key' => 'summon', 'label_ru' => 'Призыв', 'label_en' => 'Summon'],
+            ],
+        ],
+        'ability_effect_operation' => [
+            'title_ru' => 'ARPG: Операция эффекта', 'title_en' => 'ARPG: Effect Operation', 'service_kind' => 'snippet',
+            'entries' => [
+                ['key' => 'add', 'label_ru' => 'Добавить', 'label_en' => 'Add'], ['key' => 'subtract', 'label_ru' => 'Уменьшить', 'label_en' => 'Subtract'],
+                ['key' => 'set', 'label_ru' => 'Установить', 'label_en' => 'Set'], ['key' => 'percent', 'label_ru' => 'Процент', 'label_en' => 'Percent'],
+            ],
+        ],
+        'ability_resource' => [
+            'title_ru' => 'ARPG: Ресурс способности', 'title_en' => 'ARPG: Ability Resource', 'service_kind' => 'snippet',
+            'entries' => [
+                ['key' => 'energy', 'label_ru' => 'Энергия', 'label_en' => 'Energy'],
+                ['key' => 'mana', 'label_ru' => 'Мана', 'label_en' => 'Mana'],
+                ['key' => 'stamina', 'label_ru' => 'Выносливость', 'label_en' => 'Stamina'],
             ],
         ],
         'ability_value_mode' => [
@@ -5980,6 +6030,15 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         }
         return array_values($rows);
     };
+    $effectRows = [];
+    foreach ((array)($row['effects'] ?? []) as $effect) {
+        if (!is_array($effect)) continue;
+        $effect['effect_type'] = (string)($effect['effect_type'] ?? $effect['kind'] ?? '');
+        $effect['target'] = (string)($effect['target'] ?? $effect['targeting'] ?? '');
+        $effect['formula_profile'] = (string)($effect['formula_profile'] ?? $effect['formula_ref'] ?? '');
+        $effect['duration_value'] = (string)($effect['duration_value'] ?? $effect['duration'] ?? '');
+        $effectRows[] = $effect;
+    }
 
     return [
         'slot_index' => $slotIndex,
@@ -5997,7 +6056,11 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         'targeting' => $target,
         'formula_profile' => (string)($row['formula_profile'] ?? ''),
         'value_mode' => (string)($row['value_mode'] ?? 'flat'),
-        'range' => isset($row['range']) ? (float)$row['range'] : 0.0,
+        'range' => (string)($row['range'] ?? ''),
+        'cooldown_value' => (string)($row['cooldown_value'] ?? ''),
+        'cooldown_unit' => (string)($row['cooldown_unit'] ?? ''),
+        'cost_value' => (string)($row['cost_value'] ?? ''),
+        'cost_resource' => (string)($row['cost_resource'] ?? ''),
         'damage_value' => isset($row['damage_value']) ? (float)$row['damage_value'] : 0.0,
         'shield_value' => isset($row['shield_value']) ? (float)$row['shield_value'] : 0.0,
         'heal_value' => isset($row['heal_value']) ? (float)$row['heal_value'] : 0.0,
@@ -6017,16 +6080,20 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
             ['key' => 'duration', 'type' => 'number', 'default' => 0],
             ['key' => 'notes', 'default' => ''],
         ]),
-        'effects' => $normalizeTypedRows($row['effects'] ?? [], [
-            ['key' => 'kind', 'default' => 'damage'],
+        'effects' => $normalizeTypedRows($effectRows, [
+            ['key' => 'effect_type', 'default' => ''],
+            ['key' => 'value', 'default' => ''],
+            ['key' => 'formula_profile', 'default' => ''],
+            ['key' => 'coefficient', 'default' => ''],
+            ['key' => 'target', 'default' => ''],
             ['key' => 'damage_type', 'default' => ''],
-            ['key' => 'targeting', 'default' => ''],
-            ['key' => 'value_mode', 'default' => 'flat'],
-            ['key' => 'value', 'type' => 'number', 'default' => 0],
-            ['key' => 'formula_ref', 'default' => ''],
-            ['key' => 'duration', 'type' => 'number', 'default' => 0],
-            ['key' => 'hit_count', 'type' => 'number', 'default' => 1],
+            ['key' => 'element', 'default' => ''],
+            ['key' => 'duration_value', 'default' => ''],
+            ['key' => 'duration_unit', 'default' => ''],
             ['key' => 'status_key', 'default' => ''],
+            ['key' => 'stat_key', 'default' => ''],
+            ['key' => 'operation', 'default' => ''],
+            ['key' => 'resource_key', 'default' => ''],
             ['key' => 'notes', 'default' => ''],
         ]),
         'modifiers' => $normalizeTypedRows($row['modifiers'] ?? [], [
@@ -6214,6 +6281,15 @@ function af_kb_reduce_embedded_ability_to_application_dto(array $ability, int $f
         'targeting' => trim((string)($normalized['target'] ?? $normalized['targeting'] ?? '')),
         'formula_profile' => trim((string)($normalized['formula_profile'] ?? '')),
         'duration_value' => trim((string)($normalized['duration_value'] ?? $normalized['duration'] ?? '')),
+        'range' => trim((string)($normalized['range'] ?? '')),
+        'cooldown_value' => trim((string)($normalized['cooldown_value'] ?? '')),
+        'cooldown_unit' => trim((string)($normalized['cooldown_unit'] ?? '')),
+        'cost_value' => trim((string)($normalized['cost_value'] ?? '')),
+        'cost_resource' => trim((string)($normalized['cost_resource'] ?? '')),
+        'damage_value' => trim((string)($normalized['damage_value'] ?? '')),
+        'shield_value' => trim((string)($normalized['shield_value'] ?? '')),
+        'heal_value' => trim((string)($normalized['heal_value'] ?? '')),
+        'effects' => (array)($normalized['effects'] ?? []),
         'description' => trim((string)($normalized['description'] ?? $normalized['ability_description'] ?? '')),
         'ability_description' => trim((string)($normalized['description'] ?? $normalized['ability_description'] ?? '')),
         'desc' => trim((string)($normalized['description'] ?? $normalized['ability_description'] ?? '')),
@@ -7922,6 +7998,11 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                         'ability_damage_type' => af_kb_get_arpg_mechanics_options('ability_damage_type'),
                         'ability_targeting' => af_kb_get_arpg_mechanics_options('ability_targeting'),
                         'formula_profile' => af_kb_get_arpg_mechanics_options('formula_profile'),
+                        'ability_range' => af_kb_get_arpg_mechanics_options('ability_range'),
+                        'combat_duration_unit' => af_kb_get_arpg_mechanics_options('combat_duration_unit'),
+                        'ability_effect_type' => af_kb_get_arpg_mechanics_options('ability_effect_type'),
+                        'ability_effect_operation' => af_kb_get_arpg_mechanics_options('ability_effect_operation'),
+                        'ability_resource' => af_kb_get_arpg_mechanics_options('ability_resource'),
                         'character_gender' => af_kb_get_arpg_mechanics_options('character_gender'),
                     ];
                     $arpgPublicTypeUiOptions = [
@@ -8562,6 +8643,10 @@ function af_kb_arpg_inline_label(string $dict, string $key, bool $isRu): string
         'targeting' => 'ability_targeting',
         'formula_profile' => 'formula_profile',
         'value_mode' => 'ability_value_mode',
+        'range' => 'ability_range',
+        'duration_unit' => 'combat_duration_unit',
+        'resource' => 'ability_resource',
+        'effect_type' => 'ability_effect_type',
     ];
     $setKey = (string)($mechanicsMap[$dict] ?? '');
     if ($setKey !== '') {
@@ -8596,13 +8681,15 @@ function af_kb_arpg_inline_number($value): string
 
 function af_kb_render_inline_ability_effect_row(array $effect, bool $isRu): string
 {
-    $kind = af_kb_arpg_inline_label('effect_kind', (string)($effect['kind'] ?? ''), $isRu);
+    $kindKey = (string)($effect['effect_type'] ?? $effect['kind'] ?? '');
+    $kind = af_kb_get_arpg_mechanics_option_label('ability_effect_type', $kindKey, $isRu);
     $value = af_kb_arpg_inline_number($effect['value'] ?? '');
     $damageType = af_kb_arpg_inline_label('damage_type', (string)($effect['damage_type'] ?? ''), $isRu);
-    $targeting = af_kb_arpg_inline_label('targeting', (string)($effect['targeting'] ?? ''), $isRu);
-    $duration = af_kb_arpg_inline_number($effect['duration'] ?? '');
+    $targeting = af_kb_arpg_inline_label('targeting', (string)($effect['target'] ?? $effect['targeting'] ?? ''), $isRu);
+    $duration = af_kb_arpg_inline_number($effect['duration_value'] ?? $effect['duration'] ?? '');
+    $durationUnit = af_kb_get_arpg_mechanics_option_label('combat_duration_unit', (string)($effect['duration_unit'] ?? ''), $isRu);
     $statusKey = trim((string)($effect['status_key'] ?? ''));
-    $formula = trim((string)($effect['formula_ref'] ?? ''));
+    $formula = trim((string)($effect['formula_profile'] ?? $effect['formula_ref'] ?? ''));
     $notes = trim((string)($effect['notes'] ?? ''));
 
     $parts = [];
@@ -8616,7 +8703,7 @@ function af_kb_render_inline_ability_effect_row(array $effect, bool $isRu): stri
         $parts[] = ($isRu ? 'цель: ' : 'target: ') . $targeting;
     }
     if ($duration !== '' && (float)$duration > 0) {
-        $parts[] = ($isRu ? 'длительность: ' : 'duration: ') . $duration;
+        $parts[] = ($isRu ? 'длительность: ' : 'duration: ') . $duration . ($durationUnit !== '' ? ' · ' . $durationUnit : '');
     }
     if ($statusKey !== '') {
         $parts[] = ($isRu ? 'статус: ' : 'status: ') . $statusKey;
@@ -8680,7 +8767,7 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
         'damage_type' => $isRu ? 'Тип урона' : 'Damage type',
         'target' => $isRu ? 'Цель' : 'Target',
         'range' => $isRu ? 'Дальность' : 'Range',
-        'formula_profile' => 'Formula Profile',
+        'formula_profile' => $isRu ? 'Схема расчёта' : 'Formula profile',
         'duration_value' => $isRu ? 'Длительность' : 'Duration',
     ];
     foreach ($fieldMap as $key => $label) {
@@ -8688,13 +8775,17 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
         if ($key === 'target' && $rawValue === '') {
             $rawValue = (string)($row['targeting'] ?? '');
         }
-        if ($key === 'range' && (!is_numeric($rawValue) || (float)$rawValue <= 0)) {
-            continue;
-        }
+        if ($key === 'range' && $rawValue === '') continue;
         $value = af_kb_arpg_inline_label($key, $rawValue, $isRu);
         if ($value !== '') {
             $chips[] = '<span class="af-kb-char-ability__chip"><strong>' . htmlspecialchars_uni($label) . ':</strong> ' . htmlspecialchars_uni($value) . '</span>';
         }
+    }
+    foreach ([['cooldown_value', 'cooldown_unit', $isRu ? 'Кулдаун' : 'Cooldown', 'combat_duration_unit'], ['cost_value', 'cost_resource', $isRu ? 'Стоимость' : 'Cost', 'ability_resource']] as $compound) {
+        $value = trim((string)($row[$compound[0]] ?? ''));
+        if ($value === '') continue;
+        $unit = af_kb_get_arpg_mechanics_option_label($compound[3], (string)($row[$compound[1]] ?? ''), $isRu);
+        $chips[] = '<span class="af-kb-char-ability__chip"><strong>' . htmlspecialchars_uni($compound[2]) . ':</strong> ' . htmlspecialchars_uni($value . ($unit !== '' ? ' · ' . $unit : '')) . '</span>';
     }
 
     $rows = [];
