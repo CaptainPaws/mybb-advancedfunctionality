@@ -2922,6 +2922,7 @@ function af_atf_get_character_ability_select_payload(): array
                 'key' => $key,
                 'label_ru' => $labelRu !== '' ? $labelRu : ($labelEn !== '' ? $labelEn : $key),
                 'label_en' => $labelEn !== '' ? $labelEn : ($labelRu !== '' ? $labelRu : $key),
+                'description' => trim((string)($row['description'] ?? '')),
             ];
         }
         $payload[$target] = $normalized;
@@ -4319,6 +4320,7 @@ function af_atf_normalize_character_ability_row(array $row, int $fallbackSortord
             $value = $effect[$key] ?? ($legacyKey !== '' ? ($effect[$legacyKey] ?? '') : '');
             $normalizedEffect[$key] = is_scalar($value) ? my_substr(trim((string)$value), 0, $key === 'notes' ? 2000 : 128) : '';
         }
+        $normalizedEffect['duration_unit'] = 'target_turn';
         if (implode('', $normalizedEffect) !== '') {
             $effects[] = $normalizedEffect;
         }
@@ -4341,7 +4343,7 @@ function af_atf_normalize_character_ability_row(array $row, int $fallbackSortord
         'duration_value' => my_substr(trim((string)($row['duration_value'] ?? $row['duration'] ?? '')), 0, 64),
         'range' => my_substr(trim((string)($row['range'] ?? '')), 0, 64),
         'cooldown_value' => my_substr(trim((string)($row['cooldown_value'] ?? '')), 0, 64),
-        'cooldown_unit' => my_substr(trim((string)($row['cooldown_unit'] ?? '')), 0, 64),
+        'cooldown_unit' => 'own_turn',
         'cost_value' => my_substr(trim((string)($row['cost_value'] ?? '')), 0, 64),
         'cost_resource' => my_substr(trim((string)($row['cost_resource'] ?? '')), 0, 128),
         'damage_value' => my_substr(trim((string)($row['damage_value'] ?? '')), 0, 64),
@@ -5817,7 +5819,6 @@ function af_atf_format_value_for_display(array $field, string $val): string
             ['key' => 'target', 'label' => 'Цель', 'set' => 'ability_targeting'],
             ['key' => 'range', 'label' => 'Дальность', 'set' => 'ability_range'],
             ['key' => 'formula_profile', 'label' => 'Схема расчёта', 'set' => 'formula_profile'],
-            ['key' => 'duration_value', 'label' => 'Длительность', 'set' => ''],
         ];
 
         foreach ($list as $ability) {
@@ -5859,7 +5860,7 @@ function af_atf_format_value_for_display(array $field, string $val): string
             foreach ([['cooldown_value', 'cooldown_unit', 'Кулдаун', 'combat_duration_unit'], ['cost_value', 'cost_resource', 'Стоимость', 'ability_resource']] as $compound) {
                 $rawValue = trim((string)($ability[$compound[0]] ?? ''));
                 if ($rawValue === '') continue;
-                $unit = af_atf_character_ability_display_label($compound[3], (string)($ability[$compound[1]] ?? ''));
+                $unit = $compound[0] === 'cooldown_value' ? 'ходов персонажа' : af_atf_character_ability_display_label($compound[3], (string)($ability[$compound[1]] ?? ''));
                 $chips .= '<span class="af-atf-ability-display-chip"><span class="af-atf-ability-display-chip-label">'
                     . htmlspecialchars_uni($compound[2]) . ':</span> <span class="af-atf-ability-display-chip-value">'
                     . htmlspecialchars_uni($rawValue . ($unit !== '' ? ' · ' . $unit : '')) . '</span></span>';
@@ -5887,9 +5888,12 @@ function af_atf_format_value_for_display(array $field, string $val): string
                 $label = af_atf_character_ability_display_label('ability_effect_type', $kind);
                 $parts = [];
                 if (array_key_exists('value', $effect) && is_scalar($effect['value']) && trim((string)$effect['value']) !== '') $parts[] = trim((string)$effect['value']);
-                if (trim((string)($effect['status_key'] ?? '')) !== '') $parts[] = trim((string)$effect['status_key']);
+                foreach ([['status_key', 'status_def'], ['target', 'ability_targeting'], ['damage_type', 'ability_damage_type'], ['operation', 'ability_effect_operation'], ['formula_profile', 'formula_profile']] as $spec) {
+                    $raw = trim((string)($effect[$spec[0]] ?? ''));
+                    if ($raw !== '') $parts[] = af_atf_character_ability_display_label($spec[1], $raw);
+                }
                 $duration = trim((string)($effect['duration_value'] ?? ''));
-                if ($duration !== '') $parts[] = $duration . ' · ' . af_atf_character_ability_display_label('combat_duration_unit', (string)($effect['duration_unit'] ?? ''));
+                if ($duration !== '') $parts[] = $duration . ' ходов цели';
                 $effectRows[] = '<li><strong>' . htmlspecialchars_uni($label) . '</strong>' . ($parts ? ': ' . htmlspecialchars_uni(implode(' · ', $parts)) : '') . '</li>';
             }
             if (!$effectRows) {

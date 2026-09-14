@@ -636,7 +636,7 @@
         ability.formula_profile = String(source.formula_profile || "");
         ability.duration_value = String(source.duration_value || source.duration || "");
         ability.cooldown_value = String(source.cooldown_value ?? "");
-        ability.cooldown_unit = String(source.cooldown_unit || "");
+        ability.cooldown_unit = String(source.cooldown_unit || "own_turn");
         ability.cost_value = String(source.cost_value ?? "");
         ability.cost_resource = String(source.cost_resource || "");
         ability.effects = Array.isArray(source.effects) ? source.effects.map((effect) => {
@@ -645,7 +645,7 @@
             effect_type: String(item.effect_type || item.kind || ""), value: String(item.value ?? ""),
             formula_profile: String(item.formula_profile || item.formula_ref || ""), coefficient: String(item.coefficient ?? ""),
             target: String(item.target || item.targeting || ""), damage_type: String(item.damage_type || ""), element: String(item.element || ""),
-            duration_value: String(item.duration_value ?? item.duration ?? ""), duration_unit: String(item.duration_unit || ""),
+            duration_value: String(item.duration_value ?? item.duration ?? ""), duration_unit: String(item.duration_unit || "target_turn"),
             status_key: String(item.status_key || ""), stat_key: String(item.stat_key || ""), operation: String(item.operation || ""),
             resource_key: String(item.resource_key || ""), notes: String(item.notes || "")
           };
@@ -688,7 +688,8 @@
             const key = String(row.key || "").trim();
             if (!key || seen.has(key)) return;
             seen.add(key);
-            html += `<option value="${AF_ATF.escapeAttr(key)}"${String(currentValue) === key ? " selected" : ""}>${AF_ATF.escapeAttr(optionLabel(row) || key)}</option>`;
+            const help = String(row.description || row.description_ru || "");
+            html += `<option value="${AF_ATF.escapeAttr(key)}"${help ? ` title="${AF_ATF.escapeAttr(help)}"` : ""}${String(currentValue) === key ? " selected" : ""}>${AF_ATF.escapeAttr(optionLabel(row) || key)}</option>`;
           });
           const raw = String(currentValue || "").trim();
           if (raw && !seen.has(raw)) {
@@ -742,9 +743,9 @@
             target: AF_ATF.qs(".af-atf-ability-targeting", row).value,
             range: AF_ATF.qs(".af-atf-ability-range", row).value,
             formula_profile: AF_ATF.qs(".af-atf-ability-formula-profile", row).value,
-            duration_value: AF_ATF.qs(".af-atf-ability-duration-value", row).value,
+            duration_value: current.duration_value || current.duration || "",
             cooldown_value: AF_ATF.qs(".af-atf-ability-cooldown-value", row).value,
-            cooldown_unit: AF_ATF.qs(".af-atf-ability-cooldown-unit", row).value,
+            cooldown_unit: "own_turn",
             cost_value: AF_ATF.qs(".af-atf-ability-cost-value", row).value,
             cost_resource: AF_ATF.qs(".af-atf-ability-cost-resource", row).value,
             ability_description: descriptionValue,
@@ -814,16 +815,11 @@
                   <select class="select af-atf-input af-atf-ability-range">${renderSelectOptions("range", ability.range)}</select>
                 </label>
                 <label class="af-atf-ability-field">
-                  <span class="af-atf-ability-label">Схема расчёта</span><small class="af-ability-help">Определяет, от чего масштабируется эффект: фиксированное значение, атака, HP и т.д.</small>
+                  <span class="af-atf-ability-label">Схема расчёта <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Выбирает точную формулу из справочника механик; описание выбранной схемы приведено в подсказке списка.">?</button></span>
                   <select class="select af-atf-input af-atf-ability-formula-profile">${renderSelectOptions("formula_profile", ability.formula_profile)}</select>
                 </label>
-                <label class="af-atf-ability-field">
-                  <span class="af-atf-ability-label">Длительность</span>
-                  <input type="text" class="textbox text_input af-atf-input af-atf-ability-duration-value" placeholder="" value="${AF_ATF.escapeAttr(ability.duration_value)}" />
-                </label>
-                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Кулдаун</span><small class="af-ability-help">Через сколько игровых ходов или раундов способность можно использовать повторно.</small><input type="number" step="any" min="0" class="textbox text_input af-atf-input af-atf-ability-cooldown-value" value="${AF_ATF.escapeAttr(ability.cooldown_value)}" /></label>
-                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Единица кулдауна</span><select class="select af-atf-input af-atf-ability-cooldown-unit">${renderSelectOptions("duration_unit", ability.cooldown_unit)}</select></label>
-                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Стоимость</span><small class="af-ability-help">Количество ресурса, которое тратится при использовании способности.</small><input type="number" step="any" class="textbox text_input af-atf-input af-atf-ability-cost-value" value="${AF_ATF.escapeAttr(ability.cost_value)}" /></label>
+                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Кулдаун <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Количество собственных ходов персонажа до повторного использования способности.">?</button></span><input type="number" step="1" min="0" class="textbox text_input af-atf-input af-atf-ability-cooldown-value" value="${AF_ATF.escapeAttr(ability.cooldown_value)}" /><span class="af-atf-field-suffix">ходов персонажа</span></label>
+                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Стоимость <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Количество выбранного ресурса, которое тратится при использовании способности.">?</button></span><input type="number" step="any" class="textbox text_input af-atf-input af-atf-ability-cost-value" value="${AF_ATF.escapeAttr(ability.cost_value)}" /></label>
                 <label class="af-atf-ability-field"><span class="af-atf-ability-label">Ресурс</span><select class="select af-atf-input af-atf-ability-cost-resource">${renderSelectOptions("resource", ability.cost_resource)}</select></label>
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Порядок</span>
@@ -848,25 +844,24 @@
                 effectRow.className = "af-atf-effect-item";
                 effectRow.innerHTML = `<div class="af-atf-effect-header"><strong>Эффект #${effectIndex + 1}</strong><button type="button" class="button af-atf-effect-remove">Удалить эффект</button></div>
                   <label>Тип эффекта<select class="select af-atf-effect-type">${renderSelectOptions("effect_type", effect.effect_type)}</select></label>
-                  <label data-for="value"><span class="af-atf-effect-value-label">Значение</span><input type="number" step="any" class="textbox af-atf-effect-value" value="${AF_ATF.escapeAttr(effect.value)}"></label>
-                  <label data-for="formula">Схема расчёта<small class="af-ability-help">Определяет, от чего масштабируется эффект: фиксированное значение, атака, HP и т.д.</small><select class="select af-atf-effect-formula">${renderSelectOptions("formula_profile", effect.formula_profile)}</select></label>
-                  <label data-for="coefficient">Коэффициент масштабирования<small class="af-ability-help">Например: 1.2 = 120%, 0.5 = 50%. Если не нужен — оставить пустым.</small><input type="number" step="any" class="textbox af-atf-effect-coefficient" value="${AF_ATF.escapeAttr(effect.coefficient)}"></label>
+                  <label data-for="value"><span><span class="af-atf-effect-value-label">Значение</span> <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Числовое значение, используемое выбранной схемой расчёта.">?</button></span><input type="number" step="any" class="textbox af-atf-effect-value" value="${AF_ATF.escapeAttr(effect.value)}"></label>
+                  <label data-for="formula"><span>Схема расчёта <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Выбирает формулу вычисления эффекта из справочника механик.">?</button></span><select class="select af-atf-effect-formula">${renderSelectOptions("formula_profile", effect.formula_profile)}</select></label>
                   <label data-for="target">Цель<select class="select af-atf-effect-target">${renderSelectOptions("targeting", effect.target)}</select></label>
                   <label data-for="damage_type">Тип урона<select class="select af-atf-effect-damage-type">${renderSelectOptions("damage_type", effect.damage_type)}</select></label>
                   <label data-for="element">Стихия<select class="select af-atf-effect-element">${renderSelectOptions("element", effect.element)}</select></label>
-                  <label data-for="duration">Длительность<input type="number" step="any" class="textbox af-atf-effect-duration" value="${AF_ATF.escapeAttr(effect.duration_value)}"></label>
-                  <label data-for="duration">Единица длительности<select class="select af-atf-effect-duration-unit">${renderSelectOptions("duration_unit", effect.duration_unit)}</select></label>
-                  <label data-for="status">Статус / контроль<select class="select af-atf-effect-status">${renderSelectOptions("status", effect.status_key)}</select></label>
+                  <label data-for="duration"><span>Длительность (ходов цели) <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Количество ходов цели, в течение которых действует эффект.">?</button></span><input type="number" step="1" min="0" class="textbox af-atf-effect-duration" value="${AF_ATF.escapeAttr(effect.duration_value)}"></label>
+                  <label data-for="status"><span>Статус / контроль <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Статус или контроль, накладываемый на выбранную цель.">?</button></span><select class="select af-atf-effect-status">${renderSelectOptions("status", effect.status_key)}</select></label>
                   <label data-for="stat">Характеристика<select class="select af-atf-effect-stat">${renderSelectOptions("stat", effect.stat_key)}</select></label>
-                  <label data-for="operation">Операция<small class="af-ability-help">Определяет, как применяется значение.</small><select class="select af-atf-effect-operation">${renderSelectOptions("operation", effect.operation)}</select></label>
+                  <label data-for="operation"><span>Операция <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Определяет, как указанное значение изменяет текущую характеристику или ресурс.">?</button></span><select class="select af-atf-effect-operation">${renderSelectOptions("operation", effect.operation)}</select></label>
                   <label data-for="resource">Ресурс<select class="select af-atf-effect-resource">${renderSelectOptions("resource", effect.resource_key)}</select></label>
                   <label data-for="notes" style="display:none">Примечание<textarea class="textbox af-atf-effect-notes">${AF_ATF.escapeAttr(effect.notes)}</textarea></label>
                   `;
                 const collectEffect = () => {
                   effect.effect_type = AF_ATF.qs('.af-atf-effect-type', effectRow).value;
-                  const map = {value:'value', formula:'formula_profile', coefficient:'coefficient', target:'target', 'damage-type':'damage_type', element:'element', duration:'duration_value', 'duration-unit':'duration_unit', status:'status_key', stat:'stat_key', operation:'operation', resource:'resource_key', notes:'notes'};
-                  Object.keys(map).forEach((suffix) => { effect[map[suffix]] = AF_ATF.qs('.af-atf-effect-' + suffix, effectRow).value; });
-                  const relevant = {damage:['value','formula','coefficient','target','damage_type','element'], heal:['value','formula','coefficient','target'], shield:['value','formula','coefficient','target','duration'], status:['status','target','duration'], control:['status','target','duration'], stat_modifier:['stat','operation','value','target','duration'], resource:['resource','operation','value','target']};
+                  const map = {value:'value', formula:'formula_profile', target:'target', 'damage-type':'damage_type', element:'element', duration:'duration_value', status:'status_key', stat:'stat_key', operation:'operation', resource:'resource_key', notes:'notes'};
+                  Object.keys(map).forEach((suffix) => { const input = AF_ATF.qs('.af-atf-effect-' + suffix, effectRow); if (input) effect[map[suffix]] = input.value; });
+                  effect.duration_unit = 'target_turn';
+                  const relevant = {damage:['value','formula','target','damage_type','element'], heal:['value','formula','target'], shield:['value','formula','target','duration'], status:['status','target','duration'], control:['status','target','duration'], stat_modifier:['stat','operation','value','target','duration'], resource:['resource','operation','value','target']};
                   const valueLabels = {damage:'Значение урона',heal:'Значение лечения',shield:'Прочность щита',stat_modifier:'Величина модификатора',resource:'Изменение ресурса'};
                   const valueLabel = AF_ATF.qs('.af-atf-effect-value-label', effectRow); if (valueLabel) valueLabel.textContent = valueLabels[effect.effect_type] || 'Значение';
                   AF_ATF.qsa('[data-for]', effectRow).forEach((field) => { field.style.display = (relevant[effect.effect_type] || []).includes(field.dataset.for) ? '' : 'none'; });

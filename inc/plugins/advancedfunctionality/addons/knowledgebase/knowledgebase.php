@@ -2414,7 +2414,7 @@ function af_kb_arpg_mechanics_option_set_definitions(): array
             'title_ru' => 'ARPG: Операция эффекта', 'title_en' => 'ARPG: Effect Operation', 'service_kind' => 'snippet',
             'entries' => [
                 ['key' => 'add', 'label_ru' => 'Добавить', 'label_en' => 'Add'], ['key' => 'subtract', 'label_ru' => 'Уменьшить', 'label_en' => 'Subtract'],
-                ['key' => 'set', 'label_ru' => 'Установить', 'label_en' => 'Set'], ['key' => 'percent', 'label_ru' => 'Процент', 'label_en' => 'Percent'],
+                ['key' => 'set', 'label_ru' => 'Установить', 'label_en' => 'Set'], ['key' => 'percent', 'label_ru' => 'Изменить на %', 'label_en' => 'Percent'],
             ],
         ],
         'ability_resource' => [
@@ -2449,24 +2449,24 @@ function af_kb_arpg_mechanics_option_set_definitions(): array
             'title_en' => 'ARPG: Formula Profiles',
             'service_kind' => 'formula_profile',
             'entries' => [
-                ['key' => 'damage_flat', 'label_ru' => 'Фиксированный урон', 'title' => 'Damage Flat', 'group' => 'damage', 'description' => 'Flat damage value.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'damage_percent', 'label_ru' => 'Урон в процентах', 'title' => 'Damage Percent', 'group' => 'damage', 'description' => 'Percent damage value.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
-                ['key' => 'damage_hybrid_flat', 'label_ru' => 'Смешанный фиксированный урон', 'title' => 'Damage Hybrid Flat', 'group' => 'damage', 'description' => 'Hybrid flat component.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => 'flat+attr', 'active' => 1],
-                ['key' => 'damage_hybrid_percent', 'label_ru' => 'Смешанный процентный урон', 'title' => 'Damage Hybrid Percent', 'group' => 'damage', 'description' => 'Hybrid percent component.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => '%+attr', 'active' => 1],
-                ['key' => 'shield_flat', 'label_ru' => 'Фиксированная прочность щита', 'title' => 'Shield Flat', 'group' => 'shield', 'description' => 'Flat shield amount.', 'calc_family' => 'shield', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'shield_percent', 'label_ru' => 'Прочность щита в процентах', 'title' => 'Shield Percent', 'group' => 'shield', 'description' => 'Percent shield amount.', 'calc_family' => 'shield', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
-                ['key' => 'heal_flat', 'label_ru' => 'Фиксированное лечение', 'title' => 'Heal Flat', 'group' => 'heal', 'description' => 'Flat healing amount.', 'calc_family' => 'heal', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'heal_percent', 'label_ru' => 'Лечение в процентах', 'title' => 'Heal Percent', 'group' => 'heal', 'description' => 'Percent healing amount.', 'calc_family' => 'heal', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
-                ['key' => 'buff_flat', 'label_ru' => 'Фиксированное усиление', 'title' => 'Buff Flat', 'group' => 'buff', 'description' => 'Flat buff modifier.', 'calc_family' => 'buff', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'buff_percent', 'label_ru' => 'Усиление в процентах', 'title' => 'Buff Percent', 'group' => 'buff', 'description' => 'Percent buff modifier.', 'calc_family' => 'buff', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
-                ['key' => 'debuff_flat', 'label_ru' => 'Фиксированное ослабление', 'title' => 'Debuff Flat', 'group' => 'debuff', 'description' => 'Flat debuff modifier.', 'calc_family' => 'debuff', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'debuff_percent', 'label_ru' => 'Ослабление в процентах', 'title' => 'Debuff Percent', 'group' => 'debuff', 'description' => 'Percent debuff modifier.', 'calc_family' => 'debuff', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
-                ['key' => 'control_fixed', 'label_ru' => 'Фиксированный контроль', 'title' => 'Control Fixed', 'group' => 'control', 'description' => 'Fixed control effect.', 'calc_family' => 'control', 'duration_supported' => 1, 'ui_hint' => 'seconds', 'active' => 1],
-                ['key' => 'utility_fixed', 'label_ru' => 'Фиксированный вспомогательный эффект', 'title' => 'Utility Fixed', 'group' => 'utility', 'description' => 'Fixed utility effect.', 'calc_family' => 'utility', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'mobility_fixed', 'label_ru' => 'Фиксированное перемещение', 'title' => 'Mobility Fixed', 'group' => 'mobility', 'description' => 'Fixed mobility effect.', 'calc_family' => 'mobility', 'duration_supported' => 1, 'ui_hint' => 'units', 'active' => 1],
-                ['key' => 'passive_flat', 'label_ru' => 'Фиксированный пассивный эффект', 'title' => 'Passive Flat', 'group' => 'passive', 'description' => 'Flat passive modifier.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'passive_percent', 'label_ru' => 'Пассивный эффект в процентах', 'title' => 'Passive Percent', 'group' => 'passive', 'description' => 'Percent passive modifier.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
-                ['key' => 'passive_conditional', 'label_ru' => 'Условный пассивный эффект', 'title' => 'Passive Conditional', 'group' => 'passive', 'description' => 'Conditional passive modifier.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => 'condition', 'active' => 1],
+                ['key' => 'damage_flat', 'label_ru' => 'Фиксированный урон', 'title' => 'Damage Flat', 'group' => 'damage', 'description' => 'Значение урона плюс 20% характеристики масштабирования, затем бонус урона.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'damage_percent', 'label_ru' => 'Урон в процентах', 'title' => 'Damage Percent', 'group' => 'damage', 'description' => 'Процент от характеристики масштабирования, затем бонус урона.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'damage_hybrid_flat', 'label_ru' => 'Смешанный фиксированный урон', 'title' => 'Damage Hybrid Flat', 'group' => 'damage', 'description' => 'Значение урона плюс 35% характеристики масштабирования, затем бонус урона.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => 'flat+attr', 'active' => 1],
+                ['key' => 'damage_hybrid_percent', 'label_ru' => 'Смешанный процентный урон', 'title' => 'Damage Hybrid Percent', 'group' => 'damage', 'description' => 'Процент от характеристики масштабирования плюс 25% мастерства стихий, затем бонус урона.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => '%+attr', 'active' => 1],
+                ['key' => 'shield_flat', 'label_ru' => 'Фиксированная прочность щита', 'title' => 'Shield Flat', 'group' => 'shield', 'description' => 'Прочность плюс 40% HP; если HP нет — защиты или атаки, затем бонус щита.', 'calc_family' => 'shield', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'shield_percent', 'label_ru' => 'Прочность щита в процентах', 'title' => 'Shield Percent', 'group' => 'shield', 'description' => 'Процент от HP; если HP нет — защиты или атаки, затем бонус щита.', 'calc_family' => 'shield', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'heal_flat', 'label_ru' => 'Фиксированное лечение', 'title' => 'Heal Flat', 'group' => 'heal', 'description' => 'Значение лечения плюс 25% атаки; если атаки нет — HP, затем бонус лечения.', 'calc_family' => 'heal', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'heal_percent', 'label_ru' => 'Лечение в процентах', 'title' => 'Heal Percent', 'group' => 'heal', 'description' => 'Процент от атаки; если атаки нет — HP, затем бонус лечения.', 'calc_family' => 'heal', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'buff_flat', 'label_ru' => 'Фиксированное усиление', 'title' => 'Buff Flat', 'group' => 'buff', 'description' => 'Заданное числовое усиление.', 'calc_family' => 'buff', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'buff_percent', 'label_ru' => 'Усиление в процентах', 'title' => 'Buff Percent', 'group' => 'buff', 'description' => 'Усиление в процентах.', 'calc_family' => 'buff', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'debuff_flat', 'label_ru' => 'Фиксированное ослабление', 'title' => 'Debuff Flat', 'group' => 'debuff', 'description' => 'Заданное числовое ослабление.', 'calc_family' => 'debuff', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'debuff_percent', 'label_ru' => 'Ослабление в процентах', 'title' => 'Debuff Percent', 'group' => 'debuff', 'description' => 'Ослабление в процентах.', 'calc_family' => 'debuff', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'control_fixed', 'label_ru' => 'Фиксированный контроль', 'title' => 'Control Fixed', 'group' => 'control', 'description' => 'Фиксированный эффект контроля; длительность задаётся в эффекте.', 'calc_family' => 'control', 'duration_supported' => 1, 'ui_hint' => 'seconds', 'active' => 1],
+                ['key' => 'utility_fixed', 'label_ru' => 'Фиксированный вспомогательный эффект', 'title' => 'Utility Fixed', 'group' => 'utility', 'description' => 'Заданное числовое значение вспомогательного эффекта.', 'calc_family' => 'utility', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'mobility_fixed', 'label_ru' => 'Фиксированное перемещение', 'title' => 'Mobility Fixed', 'group' => 'mobility', 'description' => 'Заданное числовое значение эффекта перемещения.', 'calc_family' => 'mobility', 'duration_supported' => 1, 'ui_hint' => 'units', 'active' => 1],
+                ['key' => 'passive_flat', 'label_ru' => 'Фиксированный пассивный эффект', 'title' => 'Passive Flat', 'group' => 'passive', 'description' => 'Заданный числовой пассивный бонус.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'passive_percent', 'label_ru' => 'Пассивный эффект в процентах', 'title' => 'Passive Percent', 'group' => 'passive', 'description' => 'Пассивный бонус в процентах.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'passive_conditional', 'label_ru' => 'Условный пассивный эффект', 'title' => 'Passive Conditional', 'group' => 'passive', 'description' => 'Условие и результат пассивного эффекта задаются описанием.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => 'condition', 'active' => 1],
             ],
         ],
         'weapon_type' => [
@@ -6045,6 +6045,7 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         $effect['target'] = (string)($effect['target'] ?? $effect['targeting'] ?? '');
         $effect['formula_profile'] = (string)($effect['formula_profile'] ?? $effect['formula_ref'] ?? '');
         $effect['duration_value'] = (string)($effect['duration_value'] ?? $effect['duration'] ?? '');
+        $effect['duration_unit'] = 'target_turn';
         $effectRows[] = $effect;
     }
 
@@ -6066,7 +6067,7 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         'value_mode' => (string)($row['value_mode'] ?? 'flat'),
         'range' => (string)($row['range'] ?? ''),
         'cooldown_value' => (string)($row['cooldown_value'] ?? ''),
-        'cooldown_unit' => (string)($row['cooldown_unit'] ?? ''),
+        'cooldown_unit' => 'own_turn',
         'cost_value' => (string)($row['cost_value'] ?? ''),
         'cost_resource' => (string)($row['cost_resource'] ?? ''),
         'damage_value' => isset($row['damage_value']) ? (float)$row['damage_value'] : 0.0,
@@ -6097,7 +6098,7 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
             ['key' => 'damage_type', 'default' => ''],
             ['key' => 'element', 'default' => ''],
             ['key' => 'duration_value', 'default' => ''],
-            ['key' => 'duration_unit', 'default' => ''],
+            ['key' => 'duration_unit', 'default' => 'target_turn'],
             ['key' => 'status_key', 'default' => ''],
             ['key' => 'stat_key', 'default' => ''],
             ['key' => 'operation', 'default' => ''],
