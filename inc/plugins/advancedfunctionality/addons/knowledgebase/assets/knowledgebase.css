@@ -853,3 +853,17 @@ display: inline-block;
     font-size: 10px;
   }
 }
+
+/* Ability editor uses the same 4/2/1 compact grid as ATF. */
+.af-ability-editor-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px 10px; }
+.af-ability-editor-grid > div { min-width:0; display:flex; flex-direction:column; gap:4px; }
+.af-ability-editor-grid input,.af-ability-editor-grid select { width:100%; min-height:36px; padding:7px 10px; border:1px solid #c9cfdd; border-radius:7px; box-sizing:border-box; transition:border-color .15s ease,box-shadow .15s ease; }
+.af-ability-editor-grid input:hover,.af-ability-editor-grid select:hover { border-color:#8793aa; }
+.af-ability-editor-grid input:focus,.af-ability-editor-grid select:focus { outline:0; border-color:#5577bb; box-shadow:0 0 0 3px rgba(85,119,187,.18); }
+.af-kb-effect-card { margin:8px 0; padding:10px; border:1px solid #d8deee; border-radius:9px; background:#f8fbff; }
+.af-kb-effect-header { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.af-ability-help { display:block; font-size:11px; line-height:1.3; color:#687087; font-weight:400; }
+.af-ability-meta > summary { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border:1px solid currentColor; border-radius:999px; cursor:pointer; list-style:none; transition:background-color .15s ease,transform .15s ease; }
+.af-ability-meta > summary::-webkit-details-marker { display:none; }.af-ability-meta > summary::before{content:'▸';}.af-ability-meta[open] > summary::before{content:'▾';}.af-ability-meta > summary:hover{background:rgba(42,63,116,.08);}.af-ability-meta > summary:active{transform:translateY(1px);}.af-ability-meta > summary:focus-visible{outline:2px solid currentColor;outline-offset:2px;}
+@media(max-width:900px){.af-ability-editor-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:640px){.af-ability-editor-grid{grid-template-columns:1fr;}}

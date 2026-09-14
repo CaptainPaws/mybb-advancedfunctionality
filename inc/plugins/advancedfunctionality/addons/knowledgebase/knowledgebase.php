@@ -2449,24 +2449,24 @@ function af_kb_arpg_mechanics_option_set_definitions(): array
             'title_en' => 'ARPG: Formula Profiles',
             'service_kind' => 'formula_profile',
             'entries' => [
-                ['key' => 'damage_flat', 'title' => 'Damage Flat', 'group' => 'damage', 'description' => 'Flat damage value.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'damage_percent', 'title' => 'Damage Percent', 'group' => 'damage', 'description' => 'Percent damage value.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
-                ['key' => 'damage_hybrid_flat', 'title' => 'Damage Hybrid Flat', 'group' => 'damage', 'description' => 'Hybrid flat component.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => 'flat+attr', 'active' => 1],
-                ['key' => 'damage_hybrid_percent', 'title' => 'Damage Hybrid Percent', 'group' => 'damage', 'description' => 'Hybrid percent component.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => '%+attr', 'active' => 1],
-                ['key' => 'shield_flat', 'title' => 'Shield Flat', 'group' => 'shield', 'description' => 'Flat shield amount.', 'calc_family' => 'shield', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'shield_percent', 'title' => 'Shield Percent', 'group' => 'shield', 'description' => 'Percent shield amount.', 'calc_family' => 'shield', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
-                ['key' => 'heal_flat', 'title' => 'Heal Flat', 'group' => 'heal', 'description' => 'Flat healing amount.', 'calc_family' => 'heal', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'heal_percent', 'title' => 'Heal Percent', 'group' => 'heal', 'description' => 'Percent healing amount.', 'calc_family' => 'heal', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
-                ['key' => 'buff_flat', 'title' => 'Buff Flat', 'group' => 'buff', 'description' => 'Flat buff modifier.', 'calc_family' => 'buff', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'buff_percent', 'title' => 'Buff Percent', 'group' => 'buff', 'description' => 'Percent buff modifier.', 'calc_family' => 'buff', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
-                ['key' => 'debuff_flat', 'title' => 'Debuff Flat', 'group' => 'debuff', 'description' => 'Flat debuff modifier.', 'calc_family' => 'debuff', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'debuff_percent', 'title' => 'Debuff Percent', 'group' => 'debuff', 'description' => 'Percent debuff modifier.', 'calc_family' => 'debuff', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
-                ['key' => 'control_fixed', 'title' => 'Control Fixed', 'group' => 'control', 'description' => 'Fixed control effect.', 'calc_family' => 'control', 'duration_supported' => 1, 'ui_hint' => 'seconds', 'active' => 1],
-                ['key' => 'utility_fixed', 'title' => 'Utility Fixed', 'group' => 'utility', 'description' => 'Fixed utility effect.', 'calc_family' => 'utility', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'mobility_fixed', 'title' => 'Mobility Fixed', 'group' => 'mobility', 'description' => 'Fixed mobility effect.', 'calc_family' => 'mobility', 'duration_supported' => 1, 'ui_hint' => 'units', 'active' => 1],
-                ['key' => 'passive_flat', 'title' => 'Passive Flat', 'group' => 'passive', 'description' => 'Flat passive modifier.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
-                ['key' => 'passive_percent', 'title' => 'Passive Percent', 'group' => 'passive', 'description' => 'Percent passive modifier.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
-                ['key' => 'passive_conditional', 'title' => 'Passive Conditional', 'group' => 'passive', 'description' => 'Conditional passive modifier.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => 'condition', 'active' => 1],
+                ['key' => 'damage_flat', 'label_ru' => 'Фиксированный урон', 'title' => 'Damage Flat', 'group' => 'damage', 'description' => 'Flat damage value.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'damage_percent', 'label_ru' => 'Урон в процентах', 'title' => 'Damage Percent', 'group' => 'damage', 'description' => 'Percent damage value.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'damage_hybrid_flat', 'label_ru' => 'Смешанный фиксированный урон', 'title' => 'Damage Hybrid Flat', 'group' => 'damage', 'description' => 'Hybrid flat component.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => 'flat+attr', 'active' => 1],
+                ['key' => 'damage_hybrid_percent', 'label_ru' => 'Смешанный процентный урон', 'title' => 'Damage Hybrid Percent', 'group' => 'damage', 'description' => 'Hybrid percent component.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => '%+attr', 'active' => 1],
+                ['key' => 'shield_flat', 'label_ru' => 'Фиксированная прочность щита', 'title' => 'Shield Flat', 'group' => 'shield', 'description' => 'Flat shield amount.', 'calc_family' => 'shield', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'shield_percent', 'label_ru' => 'Прочность щита в процентах', 'title' => 'Shield Percent', 'group' => 'shield', 'description' => 'Percent shield amount.', 'calc_family' => 'shield', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'heal_flat', 'label_ru' => 'Фиксированное лечение', 'title' => 'Heal Flat', 'group' => 'heal', 'description' => 'Flat healing amount.', 'calc_family' => 'heal', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'heal_percent', 'label_ru' => 'Лечение в процентах', 'title' => 'Heal Percent', 'group' => 'heal', 'description' => 'Percent healing amount.', 'calc_family' => 'heal', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'buff_flat', 'label_ru' => 'Фиксированное усиление', 'title' => 'Buff Flat', 'group' => 'buff', 'description' => 'Flat buff modifier.', 'calc_family' => 'buff', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'buff_percent', 'label_ru' => 'Усиление в процентах', 'title' => 'Buff Percent', 'group' => 'buff', 'description' => 'Percent buff modifier.', 'calc_family' => 'buff', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'debuff_flat', 'label_ru' => 'Фиксированное ослабление', 'title' => 'Debuff Flat', 'group' => 'debuff', 'description' => 'Flat debuff modifier.', 'calc_family' => 'debuff', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'debuff_percent', 'label_ru' => 'Ослабление в процентах', 'title' => 'Debuff Percent', 'group' => 'debuff', 'description' => 'Percent debuff modifier.', 'calc_family' => 'debuff', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'control_fixed', 'label_ru' => 'Фиксированный контроль', 'title' => 'Control Fixed', 'group' => 'control', 'description' => 'Fixed control effect.', 'calc_family' => 'control', 'duration_supported' => 1, 'ui_hint' => 'seconds', 'active' => 1],
+                ['key' => 'utility_fixed', 'label_ru' => 'Фиксированный вспомогательный эффект', 'title' => 'Utility Fixed', 'group' => 'utility', 'description' => 'Fixed utility effect.', 'calc_family' => 'utility', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'mobility_fixed', 'label_ru' => 'Фиксированное перемещение', 'title' => 'Mobility Fixed', 'group' => 'mobility', 'description' => 'Fixed mobility effect.', 'calc_family' => 'mobility', 'duration_supported' => 1, 'ui_hint' => 'units', 'active' => 1],
+                ['key' => 'passive_flat', 'label_ru' => 'Фиксированный пассивный эффект', 'title' => 'Passive Flat', 'group' => 'passive', 'description' => 'Flat passive modifier.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'passive_percent', 'label_ru' => 'Пассивный эффект в процентах', 'title' => 'Passive Percent', 'group' => 'passive', 'description' => 'Percent passive modifier.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'passive_conditional', 'label_ru' => 'Условный пассивный эффект', 'title' => 'Passive Conditional', 'group' => 'passive', 'description' => 'Conditional passive modifier.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => 'condition', 'active' => 1],
             ],
         ],
         'weapon_type' => [
@@ -2513,6 +2513,8 @@ function af_kb_normalize_arpg_mechanics_entry_row_by_service_kind($row, string $
         return [
             'key' => $key,
             'title' => trim((string)($source['title'] ?? $key)),
+            'label_ru' => trim((string)($source['label_ru'] ?? '')),
+            'label_en' => trim((string)($source['label_en'] ?? '')),
             'group' => $group !== '' ? $group : 'utility',
             'description' => trim((string)($source['description'] ?? '')),
             'calc_family' => $calcFamily !== '' ? $calcFamily : ($group !== '' ? $group : 'utility'),
@@ -2802,11 +2804,17 @@ function af_kb_get_arpg_mechanics_options(string $entryKey, string $serviceKind 
         $labelRu = (string)($row['label_ru'] ?? '');
         $labelEn = (string)($row['label_en'] ?? '');
         if ($resolvedServiceKind === 'formula_profile' || $resolvedServiceKind === 'weapon_type') {
-            $title = trim((string)($row['title'] ?? ''));
-            if ($title !== '') {
-                $labelRu = $title;
-                $labelEn = $title;
+            if ($labelRu === '' && $resolvedServiceKind === 'formula_profile') {
+                foreach (af_kb_arpg_mechanics_options_fallback($entryKey) as $fallbackRow) {
+                    if ((string)($fallbackRow['key'] ?? '') === (string)($row['key'] ?? '')) {
+                        $labelRu = trim((string)($fallbackRow['label_ru'] ?? ''));
+                        break;
+                    }
+                }
             }
+            $title = trim((string)($row['title'] ?? ''));
+            if ($labelRu === '' && $title !== '') $labelRu = $title;
+            if ($labelEn === '' && $title !== '') $labelEn = $title;
         }
         if ($labelRu === '') {
             $labelRu = (string)($row['key'] ?? '');
@@ -8003,6 +8011,9 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                         'ability_effect_type' => af_kb_get_arpg_mechanics_options('ability_effect_type'),
                         'ability_effect_operation' => af_kb_get_arpg_mechanics_options('ability_effect_operation'),
                         'ability_resource' => af_kb_get_arpg_mechanics_options('ability_resource'),
+                        'status_def' => af_kb_get_arpg_mechanics_options('status_def'),
+                        'resource_def' => af_kb_get_arpg_mechanics_options('resource_def'),
+                        'character_stat' => array_map(static function ($key, $labels) { return ['key' => $key, 'label_ru' => (string)($labels['ru'] ?? $key), 'label_en' => (string)($labels['en'] ?? $key)]; }, array_keys(af_kb_character_stats_labels_dictionary()), array_values(af_kb_character_stats_labels_dictionary())),
                         'character_gender' => af_kb_get_arpg_mechanics_options('character_gender'),
                     ];
                     $arpgPublicTypeUiOptions = [
@@ -8688,8 +8699,12 @@ function af_kb_render_inline_ability_effect_row(array $effect, bool $isRu): stri
     $targeting = af_kb_arpg_inline_label('targeting', (string)($effect['target'] ?? $effect['targeting'] ?? ''), $isRu);
     $duration = af_kb_arpg_inline_number($effect['duration_value'] ?? $effect['duration'] ?? '');
     $durationUnit = af_kb_get_arpg_mechanics_option_label('combat_duration_unit', (string)($effect['duration_unit'] ?? ''), $isRu);
-    $statusKey = trim((string)($effect['status_key'] ?? ''));
-    $formula = trim((string)($effect['formula_profile'] ?? $effect['formula_ref'] ?? ''));
+    $statusKey = af_kb_get_arpg_mechanics_option_label('status_def', (string)($effect['status_key'] ?? ''), $isRu);
+    $statKey = af_kb_character_stat_label((string)($effect['stat_key'] ?? ''), $isRu);
+    $resourceKey = af_kb_get_arpg_mechanics_option_label('ability_resource', (string)($effect['resource_key'] ?? ''), $isRu);
+    $operation = af_kb_get_arpg_mechanics_option_label('ability_effect_operation', (string)($effect['operation'] ?? ''), $isRu);
+    $element = af_kb_character_profile_resolved_value('character_element', (string)($effect['element'] ?? ''), $isRu);
+    $formula = af_kb_get_arpg_mechanics_option_label('formula_profile', (string)($effect['formula_profile'] ?? $effect['formula_ref'] ?? ''), $isRu);
     $notes = trim((string)($effect['notes'] ?? ''));
 
     $parts = [];
@@ -8708,8 +8723,12 @@ function af_kb_render_inline_ability_effect_row(array $effect, bool $isRu): stri
     if ($statusKey !== '') {
         $parts[] = ($isRu ? 'статус: ' : 'status: ') . $statusKey;
     }
+    if ($statKey !== '') $parts[] = ($isRu ? 'характеристика: ' : 'stat: ') . $statKey;
+    if ($resourceKey !== '') $parts[] = ($isRu ? 'ресурс: ' : 'resource: ') . $resourceKey;
+    if ($operation !== '') $parts[] = ($isRu ? 'операция: ' : 'operation: ') . $operation;
+    if ($element !== '') $parts[] = ($isRu ? 'стихия: ' : 'element: ') . $element;
     if ($formula !== '') {
-        $parts[] = ($isRu ? 'формула: ' : 'formula: ') . $formula;
+        $parts[] = ($isRu ? 'схема расчёта: ' : 'formula: ') . $formula;
     }
     if ($notes !== '') {
         $parts[] = $notes;

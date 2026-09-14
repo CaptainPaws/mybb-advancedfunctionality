@@ -2895,6 +2895,7 @@ function af_atf_get_character_ability_select_payload(): array
         'effect_type' => 'ability_effect_type',
         'operation' => 'ability_effect_operation',
         'resource' => 'ability_resource',
+        'status' => 'status_def',
     ];
 
     $payload = [];
@@ -2924,6 +2925,20 @@ function af_atf_get_character_ability_select_payload(): array
             ];
         }
         $payload[$target] = $normalized;
+    }
+
+    if (function_exists('af_kb_get_public_type_options')) {
+        $payload['element'] = [];
+        foreach ((array)af_kb_get_public_type_options('arpg_element') as $row) {
+            $key = trim((string)($row['key'] ?? $row['value'] ?? ''));
+            if ($key === '') continue;
+            $label = trim((string)($row['label_ru'] ?? $row['title'] ?? $row['label'] ?? $key));
+            $payload['element'][] = ['key' => $key, 'label_ru' => $label, 'label_en' => $label];
+        }
+    }
+    $payload['stat'] = [];
+    foreach (af_atf_character_stats_labels() as $key => $label) {
+        $payload['stat'][] = ['key' => $key, 'label_ru' => $label, 'label_en' => $label];
     }
 
     return $payload;
@@ -5800,7 +5815,7 @@ function af_atf_format_value_for_display(array $field, string $val): string
             ['key' => 'slot', 'label' => 'Слот', 'set' => 'ability_slot'],
             ['key' => 'damage_type', 'label' => 'Тип урона', 'set' => 'ability_damage_type'],
             ['key' => 'target', 'label' => 'Цель', 'set' => 'ability_targeting'],
-            ['key' => 'range', 'label' => 'Дальность', 'set' => ''],
+            ['key' => 'range', 'label' => 'Дальность', 'set' => 'ability_range'],
             ['key' => 'formula_profile', 'label' => 'Схема расчёта', 'set' => 'formula_profile'],
             ['key' => 'duration_value', 'label' => 'Длительность', 'set' => ''],
         ];

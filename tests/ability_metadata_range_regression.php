@@ -21,7 +21,7 @@ ability_ui_assert(strpos($kbPhp, "['path' => 'range', 'type' => 'string'") !== f
 
 ability_ui_assert(strpos($atfJs, 'ability.range = String(source.range ?? "")') !== false, 'ATF editor does not reopen a saved range');
 ability_ui_assert(strpos($atfJs, 'range: AF_ATF.qs(".af-atf-ability-range", row).value') !== false, 'ATF editor does not serialize range');
-ability_ui_assert(strpos($atfPhp, "['key' => 'range', 'label' => 'Дальность', 'set' => '']") !== false, 'ATF display metadata omits range');
+ability_ui_assert(strpos($atfPhp, "['key' => 'range', 'label' => 'Дальность', 'set' => 'ability_range']") !== false, 'ATF display metadata omits range');
 ability_ui_assert(strpos($kbPhp, "'range' => \$isRu ? 'Дальность' : 'Range'") !== false, 'KB Character display metadata omits range');
 
 ability_ui_assert(substr_count($atfPhp, '<details class="af-ability-meta">') >= 1, 'ATF ability metadata is not in the shared details contract');

@@ -2114,7 +2114,7 @@
                             card.appendChild(title);
 
                             var coreGrid = document.createElement('div');
-                            coreGrid.className = 'af-kb-row';
+                            coreGrid.className = 'af-kb-row af-ability-editor-grid';
                             [
                                 { key: 'slot_index', label: 'slot_index', type: 'number', default: 1 },
                                 { key: 'ability_name', label: 'ability_name', default: '' },
@@ -2366,6 +2366,7 @@
             var label = document.createElement('label');
             label.textContent = def.label || def.name;
             wrap.appendChild(label);
+            if (def.help) { var help = document.createElement('small'); help.className = 'af-ability-help'; help.textContent = def.help; wrap.appendChild(help); }
 
             var input;
             var value = obj[def.name];
@@ -2415,7 +2416,11 @@
                     input.appendChild(option);
                 });
 
-                input.value = value != null ? String(value) : String((def.options && def.options[0]) || '');
+                var selectedValue = value != null ? String(value) : '';
+                if (selectedValue && !Array.prototype.some.call(input.options, function (opt) { return opt.value === selectedValue; })) {
+                    var legacyOption = document.createElement('option'); legacyOption.value = selectedValue; legacyOption.textContent = selectedValue; input.appendChild(legacyOption);
+                }
+                input.value = selectedValue || (def.allowEmpty ? '' : (input.options[0] ? input.options[0].value : ''));
                 obj[def.name] = input.value;
             } else if (def.type === 'checkbox') {
                 input = document.createElement('input');
@@ -5240,7 +5245,9 @@
                 var durationUnitOptions = optionsFromMechanics('combat_duration_unit', []);
                 var effectTypeOptions = optionsFromMechanics('ability_effect_type', []);
                 var effectOperationOptions = optionsFromMechanics('ability_effect_operation', []);
-                var abilityResourceOptions = optionsFromMechanics('ability_resource', []);
+                var abilityResourceOptions = optionsFromMechanics('ability_resource', []).concat(optionsFromMechanics('resource_def', []));
+                var effectStatusOptions = optionsFromMechanics('status_def', []);
+                var effectStatOptions = optionsFromMechanics('character_stat', []);
                 var characterGenderOptions = optionsFromMechanics('character_gender', []);
                 var characterElementOptions = optionsFromPublicType('arpg_element');
                 var characterRaceOptions = optionsFromPublicType('arpg_origin');
@@ -5354,7 +5361,7 @@
                         card.appendChild(title);
 
                         var coreDefs = [
-                            { name: 'slot_index', label: 'Индекс слота', type: 'number' },
+                            { name: 'sortorder', label: 'Порядок', type: 'number' },
                             { name: 'title', label: 'Название способности', type: 'text' },
                             { name: 'icon', label: 'Иконка', type: 'url' },
                             { name: 'type', label: 'Тип', type: 'select', options: abilityTypeOptions, allowEmpty: true, emptyLabel: '—' },
@@ -5363,11 +5370,11 @@
                             { name: 'damage_type', label: 'Тип урона', type: 'select', options: abilityDamageTypeOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'target', label: 'Цель', type: 'select', options: abilityTargetingOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'range', label: 'Дальность', type: 'select', options: abilityRangeOptions, allowEmpty: true, emptyLabel: '—' },
-                            { name: 'formula_profile', label: 'Схема расчёта', type: 'select', options: abilityFormulaProfileOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'formula_profile', label: 'Схема расчёта', type: 'select', options: abilityFormulaProfileOptions, allowEmpty: true, emptyLabel: '—', help: 'Определяет, от чего масштабируется эффект: фиксированное значение, атака, HP и т.д.' },
                             { name: 'duration_value', label: 'Продолжительность', type: 'text' }
-                            ,{ name: 'cooldown_value', label: 'Кулдаун', type: 'number' }
+                            ,{ name: 'cooldown_value', label: 'Кулдаун', type: 'number', help: 'Через сколько игровых ходов или раундов способность можно использовать повторно.' }
                             ,{ name: 'cooldown_unit', label: 'Единица кулдауна', type: 'select', options: durationUnitOptions, allowEmpty: true, emptyLabel: '—' }
-                            ,{ name: 'cost_value', label: 'Стоимость', type: 'number' }
+                            ,{ name: 'cost_value', label: 'Стоимость', type: 'number', help: 'Количество ресурса, которое тратится при использовании способности.' }
                             ,{ name: 'cost_resource', label: 'Ресурс', type: 'select', options: abilityResourceOptions, allowEmpty: true, emptyLabel: '—' }
                         ];
                         var coreTextareaDefs = [
@@ -5406,19 +5413,32 @@
                         var renderEffects = function () {
                             effectsBox.innerHTML = '<h4>Эффекты</h4>';
                             normalized.effects.forEach(function (effect, effectIndex) {
-                                var effectCard = document.createElement('div'); effectCard.className = 'af-kb-row'; effectsBox.appendChild(effectCard);
-                                [
+                                var effectCard = document.createElement('div'); effectCard.className = 'af-kb-effect-card af-ability-editor-grid'; effectsBox.appendChild(effectCard);
+                                var effectHeader = document.createElement('div'); effectHeader.className = 'af-kb-effect-header';
+                                var effectTitle = document.createElement('strong'); effectTitle.textContent = 'Эффект #' + (effectIndex + 1); effectHeader.appendChild(effectTitle); effectCard.appendChild(effectHeader);
+                                var relevant = {damage:['value','formula_profile','coefficient','target','damage_type','element'],heal:['value','formula_profile','coefficient','target'],shield:['value','formula_profile','coefficient','target','duration_value','duration_unit'],status:['status_key','target','duration_value','duration_unit'],control:['status_key','target','duration_value','duration_unit'],stat_modifier:['stat_key','operation','value','target','duration_value','duration_unit'],resource:['resource_key','operation','value','target']};
+                                var valueLabels = {damage:'Значение урона',heal:'Значение лечения',shield:'Прочность щита',stat_modifier:'Величина модификатора',resource:'Изменение ресурса'};
+                                var defs = [
                                     {name:'effect_type',label:'Тип эффекта',type:'select',options:effectTypeOptions,allowEmpty:true,emptyLabel:'—'},
-                                    {name:'value',label:'Значение',type:'number'}, {name:'formula_profile',label:'Схема расчёта',type:'select',options:abilityFormulaProfileOptions,allowEmpty:true,emptyLabel:'—'},
-                                    {name:'coefficient',label:'Коэффициент',type:'number'}, {name:'target',label:'Цель',type:'select',options:abilityTargetingOptions,allowEmpty:true,emptyLabel:'—'},
-                                    {name:'damage_type',label:'Тип урона',type:'select',options:abilityDamageTypeOptions,allowEmpty:true,emptyLabel:'—'}, {name:'element',label:'Стихия',type:'text'},
-                                    {name:'duration_value',label:'Длительность',type:'number'}, {name:'duration_unit',label:'Единица длительности',type:'select',options:durationUnitOptions,allowEmpty:true,emptyLabel:'—'},
-                                    {name:'status_key',label:'Статус / контроль',type:'text'}, {name:'stat_key',label:'Характеристика',type:'text'},
-                                    {name:'operation',label:'Операция',type:'select',options:effectOperationOptions,allowEmpty:true,emptyLabel:'—'}, {name:'resource_key',label:'Ресурс',type:'select',options:abilityResourceOptions,allowEmpty:true,emptyLabel:'—'},
-                                    {name:'notes',label:'Примечание',type:'textarea'}
-                                ].forEach(function (def) { effectCard.appendChild(createInput(def, effect, syncRawDebounced)); });
+                                    {name:'value',label:valueLabels[effect.effect_type] || 'Значение',type:'number'},
+                                    {name:'formula_profile',label:'Схема расчёта',type:'select',options:abilityFormulaProfileOptions,allowEmpty:true,emptyLabel:'—',help:'Определяет, от чего масштабируется эффект: фиксированное значение, атака, HP и т.д.'},
+                                    {name:'coefficient',label:'Коэффициент масштабирования',type:'number',help:'Например: 1.2 = 120%, 0.5 = 50%. Если не нужен — оставить пустым.'},
+                                    {name:'target',label:'Цель',type:'select',options:abilityTargetingOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'damage_type',label:'Тип урона',type:'select',options:abilityDamageTypeOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'element',label:'Стихия',type:'select',options:characterElementOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'duration_value',label:'Продолжительность',type:'number'},
+                                    {name:'duration_unit',label:'Единица продолжительности',type:'select',options:durationUnitOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'status_key',label:'Статус / контроль',type:'select',options:effectStatusOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'stat_key',label:'Характеристика',type:'select',options:effectStatOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'operation',label:'Операция',type:'select',options:effectOperationOptions,allowEmpty:true,emptyLabel:'—',help:'Определяет, как применяется значение.'},
+                                    {name:'resource_key',label:'Ресурс',type:'select',options:abilityResourceOptions,allowEmpty:true,emptyLabel:'—'}
+                                ];
+                                defs.forEach(function (def) {
+                                    if (def.name !== 'effect_type' && (relevant[String(effect.effect_type || '')] || []).indexOf(def.name) === -1) return;
+                                    effectCard.appendChild(createInput(def, effect, function () { syncRawDebounced(); if (def.name === 'effect_type') renderEffects(); }));
+                                });
                                 var remove = document.createElement('button'); remove.type='button'; remove.className='af-kb-remove'; remove.textContent='Удалить эффект';
-                                remove.addEventListener('click', function(){ normalized.effects.splice(effectIndex,1); renderEffects(); syncRawDebounced(); }); effectCard.appendChild(remove);
+                                remove.addEventListener('click', function(){ normalized.effects.splice(effectIndex,1); renderEffects(); syncRawDebounced(); }); effectHeader.appendChild(remove);
                             });
                             var addEffect = document.createElement('button'); addEffect.type='button'; addEffect.className='af-kb-add'; addEffect.textContent='Добавить эффект';
                             addEffect.addEventListener('click', function(){ normalized.effects.push(normalizeCharacterAbilityRow({effects:[{}]},1).effects[0]); renderEffects(); syncRawDebounced(); }); effectsBox.appendChild(addEffect);

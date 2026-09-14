@@ -551,11 +551,15 @@ function af_charactersheets_arpg_build_effect_lines(array $ability): array
         $parts = [];
         $value = array_key_exists('value', $effect) && is_scalar($effect['value']) ? trim((string)$effect['value']) : '';
         if ($value !== '') $parts[] = $value . ($type === 'shield' ? ' прочности' : '');
-        foreach ([['status_key', ''], ['stat_key', ''], ['resource_key', 'ability_resource'], ['damage_type', 'ability_damage_type'], ['target', 'ability_targeting'], ['element', '']] as $spec) {
+        foreach ([['status_key', 'status_def'], ['resource_key', 'ability_resource'], ['damage_type', 'ability_damage_type'], ['target', 'ability_targeting'], ['operation', 'ability_effect_operation'], ['formula_profile', 'formula_profile']] as $spec) {
             $raw = trim((string)($effect[$spec[0]] ?? ''));
             if ($raw === '') continue;
-            $parts[] = $spec[1] !== '' && function_exists('af_kb_get_arpg_mechanics_option_label') ? af_kb_get_arpg_mechanics_option_label($spec[1], $raw, true) : $raw;
+            $parts[] = function_exists('af_kb_get_arpg_mechanics_option_label') ? af_kb_get_arpg_mechanics_option_label($spec[1], $raw, true) : $raw;
         }
+        $statKey = trim((string)($effect['stat_key'] ?? ''));
+        if ($statKey !== '') $parts[] = function_exists('af_kb_character_stat_label') ? af_kb_character_stat_label($statKey, true) : $statKey;
+        $element = trim((string)($effect['element'] ?? ''));
+        if ($element !== '') $parts[] = function_exists('af_kb_character_profile_resolved_value') ? af_kb_character_profile_resolved_value('character_element', $element, true) : $element;
         $duration = trim((string)($effect['duration_value'] ?? ''));
         if ($duration !== '') {
             $unit = function_exists('af_kb_get_arpg_mechanics_option_label') ? af_kb_get_arpg_mechanics_option_label('combat_duration_unit', (string)($effect['duration_unit'] ?? ''), true) : (string)($effect['duration_unit'] ?? '');
