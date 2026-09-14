@@ -1041,3 +1041,36 @@ body.af-atf-kb-catalog-modal-open {
 .af-atf-kb-catalog-modal-close {
   color: #fff;
 }
+
+/* Unified compact ability/effect editor. */
+.af-atf-ability-field .af-atf-input,
+.af-atf-effect-item input,
+.af-atf-effect-item select {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid rgba(127,127,127,.35);
+  border-radius: 7px;
+  box-sizing: border-box;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.af-atf-ability-field .af-atf-input:hover,
+.af-atf-effect-item input:hover,
+.af-atf-effect-item select:hover { border-color: rgba(127,127,127,.65); }
+.af-atf-ability-field .af-atf-input:focus,
+.af-atf-effect-item input:focus,
+.af-atf-effect-item select:focus { outline: 0; border-color: var(--af-element-accent, #5577bb); box-shadow: 0 0 0 3px rgba(85,119,187,.18); }
+.af-atf-effects { display:grid; gap:8px; margin-top:4px; }
+.af-atf-effects-list { display:grid; gap:8px; }
+.af-atf-effect-item { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px 10px; padding:10px; border:1px solid rgba(127,127,127,.25); border-radius:9px; background:rgba(127,127,127,.045); }
+.af-atf-effect-item label { display:flex; flex-direction:column; gap:4px; min-width:0; font-size:12px; }
+.af-atf-effect-header { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.af-ability-help { display:block; font-size:11px; line-height:1.3; opacity:.7; font-weight:400; }
+.af-ability-meta > summary { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border:1px solid currentColor; border-radius:999px; cursor:pointer; list-style:none; transition:background-color .15s ease, transform .15s ease; }
+.af-ability-meta > summary::-webkit-details-marker { display:none; }
+.af-ability-meta > summary::before { content:'▸'; }
+.af-ability-meta[open] > summary::before { content:'▾'; }
+.af-ability-meta > summary:hover { background:rgba(127,127,127,.1); }
+.af-ability-meta > summary:active { transform:translateY(1px); }
+.af-ability-meta > summary:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+@media (max-width:900px){.af-atf-effect-item{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media (max-width:640px){.af-atf-effect-item{grid-template-columns:1fr;}}

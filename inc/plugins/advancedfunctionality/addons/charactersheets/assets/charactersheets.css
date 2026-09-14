@@ -3057,3 +3057,6 @@
     grid-template-columns: 1fr;
   }
 }
+
+.af-cs-arpg-ability-card .af-ability-meta > summary { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border:1px solid currentColor; border-radius:999px; cursor:pointer; list-style:none; transition:background-color .15s ease,transform .15s ease; }
+.af-cs-arpg-ability-card .af-ability-meta > summary::-webkit-details-marker{display:none}.af-cs-arpg-ability-card .af-ability-meta > summary::before{content:'▸'}.af-cs-arpg-ability-card .af-ability-meta[open] > summary::before{content:'▾'}.af-cs-arpg-ability-card .af-ability-meta > summary:hover{background:rgba(127,127,127,.1)}.af-cs-arpg-ability-card .af-ability-meta > summary:focus-visible{outline:2px solid currentColor;outline-offset:2px}
