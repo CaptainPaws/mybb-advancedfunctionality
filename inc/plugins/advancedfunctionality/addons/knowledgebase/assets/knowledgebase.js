@@ -3286,7 +3286,11 @@
                 targeting: target,
                 formula_profile: String(row.formula_profile || ''),
                 value_mode: String(row.value_mode || ''),
-                range: numberOrZero(row.range != null ? row.range : 0),
+                range: String(row.range != null ? row.range : ''),
+                cooldown_value: String(row.cooldown_value != null ? row.cooldown_value : ''),
+                cooldown_unit: String(row.cooldown_unit || ''),
+                cost_value: String(row.cost_value != null ? row.cost_value : ''),
+                cost_resource: String(row.cost_resource || ''),
                 cast_time: numberOrZero(row.cast_time != null ? row.cast_time : 0),
                 cooldown: numberOrZero(row.cooldown != null ? row.cooldown : 0),
                 duration_value: String(row.duration_value != null ? row.duration_value : (row.duration != null ? row.duration : '')),
@@ -3306,16 +3310,27 @@
                     { key: 'duration', type: 'number', default: 0 },
                     { key: 'notes', default: '' }
                 ]),
-                effects: normalizeRows(row.effects, [
-                    { key: 'kind', default: 'damage' },
+                effects: normalizeRows((Array.isArray(row.effects) ? row.effects : []).map(function (effect) {
+                    effect = effect && typeof effect === 'object' ? Object.assign({}, effect) : {};
+                    effect.effect_type = String(effect.effect_type || effect.kind || '');
+                    effect.target = String(effect.target || effect.targeting || '');
+                    effect.formula_profile = String(effect.formula_profile || effect.formula_ref || '');
+                    effect.duration_value = String(effect.duration_value != null ? effect.duration_value : (effect.duration != null ? effect.duration : ''));
+                    return effect;
+                }), [
+                    { key: 'effect_type', default: '' },
+                    { key: 'value', default: '' },
+                    { key: 'formula_profile', default: '' },
+                    { key: 'coefficient', default: '' },
+                    { key: 'target', default: '' },
                     { key: 'damage_type', default: '' },
-                    { key: 'targeting', default: '' },
-                    { key: 'value_mode', default: 'flat' },
-                    { key: 'value', type: 'number', default: 0 },
-                    { key: 'formula_ref', default: '' },
-                    { key: 'duration', type: 'number', default: 0 },
-                    { key: 'hit_count', type: 'number', default: 1 },
+                    { key: 'element', default: '' },
+                    { key: 'duration_value', default: '' },
+                    { key: 'duration_unit', default: '' },
                     { key: 'status_key', default: '' },
+                    { key: 'stat_key', default: '' },
+                    { key: 'operation', default: '' },
+                    { key: 'resource_key', default: '' },
                     { key: 'notes', default: '' }
                 ]),
                 modifiers: normalizeRows(row.modifiers, [
@@ -3387,7 +3402,7 @@
                     damage_type: 'Тип урона',
                     target: 'Цель',
                     range: 'Дальность',
-                    formula_profile: 'Formula Profile',
+                    formula_profile: 'Схема расчёта',
                     duration_value: 'Длительность'
                 }
                 : {
@@ -3397,7 +3412,7 @@
                     damage_type: 'Damage type',
                     target: 'Target',
                     range: 'Range',
-                    formula_profile: 'Formula Profile',
+                    formula_profile: 'Схема расчёта',
                     duration_value: 'Duration'
                 };
             var resolveEnumLabel = function (dict, key) {
@@ -5221,6 +5236,11 @@
                 var abilityDamageTypeOptions = optionsFromMechanics('ability_damage_type', []);
                 var abilityTargetingOptions = optionsFromMechanics('ability_targeting', []);
                 var abilityFormulaProfileOptions = optionsFromMechanics('formula_profile', []);
+                var abilityRangeOptions = optionsFromMechanics('ability_range', []);
+                var durationUnitOptions = optionsFromMechanics('combat_duration_unit', []);
+                var effectTypeOptions = optionsFromMechanics('ability_effect_type', []);
+                var effectOperationOptions = optionsFromMechanics('ability_effect_operation', []);
+                var abilityResourceOptions = optionsFromMechanics('ability_resource', []);
                 var characterGenderOptions = optionsFromMechanics('character_gender', []);
                 var characterElementOptions = optionsFromPublicType('arpg_element');
                 var characterRaceOptions = optionsFromPublicType('arpg_origin');
@@ -5342,8 +5362,13 @@
                             { name: 'slot', label: 'Слот', type: 'select', options: abilitySlotOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'damage_type', label: 'Тип урона', type: 'select', options: abilityDamageTypeOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'target', label: 'Цель', type: 'select', options: abilityTargetingOptions, allowEmpty: true, emptyLabel: '—' },
-                            { name: 'formula_profile', label: 'Formula Profile', type: 'select', options: abilityFormulaProfileOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'range', label: 'Дальность', type: 'select', options: abilityRangeOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'formula_profile', label: 'Схема расчёта', type: 'select', options: abilityFormulaProfileOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'duration_value', label: 'Продолжительность', type: 'text' }
+                            ,{ name: 'cooldown_value', label: 'Кулдаун', type: 'number' }
+                            ,{ name: 'cooldown_unit', label: 'Единица кулдауна', type: 'select', options: durationUnitOptions, allowEmpty: true, emptyLabel: '—' }
+                            ,{ name: 'cost_value', label: 'Стоимость', type: 'number' }
+                            ,{ name: 'cost_resource', label: 'Ресурс', type: 'select', options: abilityResourceOptions, allowEmpty: true, emptyLabel: '—' }
                         ];
                         var coreTextareaDefs = [
                             { name: 'description', label: 'Описание способности', type: 'textarea', editorPolicy: 'allow', fullWidth: true }
@@ -5374,6 +5399,31 @@
                             syncRawDebounced();
                         })); });
                         card.appendChild(coreTextareaGrid);
+
+                        var effectsBox = document.createElement('div');
+                        effectsBox.className = 'af-kb-rule-card';
+                        card.appendChild(effectsBox);
+                        var renderEffects = function () {
+                            effectsBox.innerHTML = '<h4>Эффекты</h4>';
+                            normalized.effects.forEach(function (effect, effectIndex) {
+                                var effectCard = document.createElement('div'); effectCard.className = 'af-kb-row'; effectsBox.appendChild(effectCard);
+                                [
+                                    {name:'effect_type',label:'Тип эффекта',type:'select',options:effectTypeOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'value',label:'Значение',type:'number'}, {name:'formula_profile',label:'Схема расчёта',type:'select',options:abilityFormulaProfileOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'coefficient',label:'Коэффициент',type:'number'}, {name:'target',label:'Цель',type:'select',options:abilityTargetingOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'damage_type',label:'Тип урона',type:'select',options:abilityDamageTypeOptions,allowEmpty:true,emptyLabel:'—'}, {name:'element',label:'Стихия',type:'text'},
+                                    {name:'duration_value',label:'Длительность',type:'number'}, {name:'duration_unit',label:'Единица длительности',type:'select',options:durationUnitOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'status_key',label:'Статус / контроль',type:'text'}, {name:'stat_key',label:'Характеристика',type:'text'},
+                                    {name:'operation',label:'Операция',type:'select',options:effectOperationOptions,allowEmpty:true,emptyLabel:'—'}, {name:'resource_key',label:'Ресурс',type:'select',options:abilityResourceOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'notes',label:'Примечание',type:'textarea'}
+                                ].forEach(function (def) { effectCard.appendChild(createInput(def, effect, syncRawDebounced)); });
+                                var remove = document.createElement('button'); remove.type='button'; remove.className='af-kb-remove'; remove.textContent='Удалить эффект';
+                                remove.addEventListener('click', function(){ normalized.effects.splice(effectIndex,1); renderEffects(); syncRawDebounced(); }); effectCard.appendChild(remove);
+                            });
+                            var addEffect = document.createElement('button'); addEffect.type='button'; addEffect.className='af-kb-add'; addEffect.textContent='Добавить эффект';
+                            addEffect.addEventListener('click', function(){ normalized.effects.push(normalizeCharacterAbilityRow({effects:[{}]},1).effects[0]); renderEffects(); syncRawDebounced(); }); effectsBox.appendChild(addEffect);
+                        };
+                        renderEffects();
 
                         var del = document.createElement('button');
                         del.type = 'button';

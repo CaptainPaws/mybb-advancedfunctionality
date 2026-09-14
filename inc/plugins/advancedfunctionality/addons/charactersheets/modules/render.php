@@ -496,8 +496,9 @@ function af_charactersheets_arpg_build_ability_labels(array $ability): array
         'слот' => ['slot', 'ability_slot'],
         'тип урона' => ['damage_type', 'ability_damage_type'],
         'цель' => ['target', 'targeting', 'ability_targeting'],
+        'дальность' => ['range'],
+        'схема расчёта' => ['formula_profile'],
         'длительность' => ['duration_value', 'duration'],
-        'value mode' => ['value_mode'],
     ];
     foreach ($fieldMap as $label => $keys) {
         foreach ($keys as $key) {
@@ -524,7 +525,52 @@ function af_charactersheets_arpg_build_ability_labels(array $ability): array
             break;
         }
     }
+    $cooldown = trim((string)($ability['cooldown_value'] ?? ''));
+    if ($cooldown !== '') {
+        $unit = $resolveLabel('duration_unit', (string)($ability['cooldown_unit'] ?? ''));
+        $labels[] = ['label' => 'кулдаун', 'value' => $cooldown . ($unit !== '' ? ' · ' . $unit : '')];
+    }
+    $cost = trim((string)($ability['cost_value'] ?? ''));
+    if ($cost !== '') {
+        $resource = $resolveLabel('resource', (string)($ability['cost_resource'] ?? ''));
+        $labels[] = ['label' => 'стоимость', 'value' => $cost . ($resource !== '' ? ' · ' . $resource : '')];
+    }
     return $labels;
+}
+
+function af_charactersheets_arpg_build_effect_lines(array $ability): array
+{
+    $effects = is_array($ability['effects'] ?? null) ? (array)$ability['effects'] : [];
+    $lines = [];
+    foreach ($effects as $effect) {
+        if (!is_array($effect)) continue;
+        $type = trim((string)($effect['effect_type'] ?? $effect['kind'] ?? ''));
+        if ($type === '') continue;
+        $label = function_exists('af_kb_get_arpg_mechanics_option_label')
+            ? af_kb_get_arpg_mechanics_option_label('ability_effect_type', $type, true) : $type;
+        $parts = [];
+        $value = array_key_exists('value', $effect) && is_scalar($effect['value']) ? trim((string)$effect['value']) : '';
+        if ($value !== '') $parts[] = $value . ($type === 'shield' ? ' прочности' : '');
+        foreach ([['status_key', ''], ['stat_key', ''], ['resource_key', 'ability_resource'], ['damage_type', 'ability_damage_type'], ['target', 'ability_targeting'], ['element', '']] as $spec) {
+            $raw = trim((string)($effect[$spec[0]] ?? ''));
+            if ($raw === '') continue;
+            $parts[] = $spec[1] !== '' && function_exists('af_kb_get_arpg_mechanics_option_label') ? af_kb_get_arpg_mechanics_option_label($spec[1], $raw, true) : $raw;
+        }
+        $duration = trim((string)($effect['duration_value'] ?? ''));
+        if ($duration !== '') {
+            $unit = function_exists('af_kb_get_arpg_mechanics_option_label') ? af_kb_get_arpg_mechanics_option_label('combat_duration_unit', (string)($effect['duration_unit'] ?? ''), true) : (string)($effect['duration_unit'] ?? '');
+            $parts[] = $duration . ($unit !== '' ? ' · ' . $unit : '');
+        }
+        if (trim((string)($effect['notes'] ?? '')) !== '') $parts[] = trim((string)$effect['notes']);
+        $lines[] = $label . ($parts ? ': ' . implode(' · ', $parts) : '');
+    }
+    if (!$lines) {
+        foreach (['damage' => 'Урон', 'heal' => 'Лечение', 'shield' => 'Щит'] as $key => $label) {
+            $value = trim((string)($ability[$key . '_value'] ?? ''));
+            if ($value !== '') $lines[] = $label . ': ' . $value;
+        }
+    }
+    return $lines;
 }
 
 function af_charactersheets_arpg_read_numeric_stat(array $character_stats, array $sheet_view, string $statKey, array $paths = []): float
@@ -727,6 +773,7 @@ function af_charactersheets_arpg_normalize_ability_card(array $ability, array $c
         'icon' => $icon,
         'labels' => $labels,
         'applied_profile' => $appliedProfile,
+        'effects' => af_charactersheets_arpg_build_effect_lines($ability),
     ];
 }
 
@@ -1710,6 +1757,7 @@ function af_charactersheets_arpg_render_abilities_group_html(array $items, strin
         }
         $description = trim((string)($item['description'] ?? $item['desc'] ?? ''));
         $appliedProfile = is_array($item['applied_profile'] ?? null) ? (array)$item['applied_profile'] : [];
+        $effectLines = is_array($item['effects'] ?? null) ? (array)$item['effects'] : [];
         $appliedHtml = '';
         if (!empty($appliedProfile)) {
             $rows = '';
@@ -1729,9 +1777,10 @@ function af_charactersheets_arpg_render_abilities_group_html(array $items, strin
             . ($icon !== '' ? '<div class="af-cs-arpg-ability-card__icon"><img src="' . htmlspecialchars_uni($icon) . '" alt="" loading="lazy" /></div>' : '')
             . '<div class="af-cs-arpg-ability-card__summary">'
             . '<h4>' . htmlspecialchars_uni((string)($item['title'] ?? '—')) . '</h4>'
-            . ($labelsHtml !== '' ? '<div class="af-cs-arpg-ability-card__chips">' . $labelsHtml . '</div>' : '')
             . '</div></div>'
             . ($description !== '' ? '<p class="af-cs-arpg-ability-card__description">' . htmlspecialchars_uni($description) . '</p>' : '')
+            . ($labelsHtml !== '' ? '<details><summary>Характеристики</summary><div class="af-cs-arpg-ability-card__chips">' . $labelsHtml . '</div></details>' : '')
+            . ($effectLines ? '<div class="af-cs-arpg-ability-card__effects"><strong>Эффекты</strong><div>' . implode('</div><div>', array_map('htmlspecialchars_uni', $effectLines)) . '</div></div>' : '')
             . $appliedHtml
             . '</article>';
     }
