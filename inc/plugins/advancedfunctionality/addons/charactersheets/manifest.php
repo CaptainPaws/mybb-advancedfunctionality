@@ -32,7 +32,7 @@ return [
                 'af_charactersheets_description'       => 'Автопринятие анкет и триггер листов персонажей.',
                 'af_charactersheets_accept_button'     => 'Принять анкету',
                 'af_charactersheets_kb_button'         => 'Создать запись в KB',
-                'af_charactersheets_kb_sync_button'    => 'Синхронизировать анкету → KB',
+                'af_charactersheets_kb_sync_button'    => 'Синхронизировать с KB',
                 'af_charactersheets_create_sheet_button'=> 'Создать лист персонажа',
                 'af_charactersheets_accept_done'       => 'Анкета принята.',
                 'af_charactersheets_transfer_button'   => 'Перенести анкету',

@@ -317,8 +317,9 @@ function af_atf_prefill_store_save(string $token, array $payload): bool
         return false;
     }
 
-    $values = (array)($payload['values'] ?? []);
-    $json = json_encode($values, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    // Keep the technical KB identity beside the values. It is never rendered as
+    // an ATF field, and therefore cannot be altered by the applicant.
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($json)) {
         $json = '{}';
     }
@@ -366,17 +367,24 @@ function af_atf_prefill_store_consume(string $token, int $uid, int $fid): array
         return [];
     }
 
-    $values = json_decode((string)($row['payload_json'] ?? '{}'), true);
-    if (!is_array($values)) {
-        $values = [];
+    $payload = json_decode((string)($row['payload_json'] ?? '{}'), true);
+    if (!is_array($payload)) {
+        $payload = [];
+    }
+    // Backwards compatibility with tokens written by the old values-only format.
+    if (!isset($payload['values'])) {
+        $payload = ['values' => $payload];
+    }
+    $payload['mechanic'] = (string)($payload['mechanic'] ?? ($row['mechanic'] ?? ''));
+
+    // GET and preview must not destroy the server-side identity. Consume only on
+    // the successful thread-submission request.
+    $isPost = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) === 'POST';
+    if ($isPost) {
+        $db->delete_query(AF_ATF_TABLE_PREFILL, "token='" . $db->escape_string($token) . "'");
     }
 
-    $db->delete_query(AF_ATF_TABLE_PREFILL, "token='" . $db->escape_string($token) . "'");
-
-    return [
-        'values' => $values,
-        'mechanic' => (string)($row['mechanic'] ?? ''),
-    ];
+    return $payload;
 }
 
 
@@ -2386,6 +2394,11 @@ function af_atf_prepare_input_block(int $fid, int $tid = 0, bool $isEdit = false
     $GLOBALS['af_atf_context_fields'] = $fields;
     $GLOBALS['af_atf_context_values'] = $values;
     $af_atf_input_html = af_atf_render_inputs($fields, $values);
+    $prefillToken = trim((string)$mybb->get_input('af_atf_prefill_token'));
+    if (!$isEdit && preg_match('~^[a-f0-9]{16,128}$~i', $prefillToken)) {
+        $af_atf_input_html .= '<input type="hidden" name="af_atf_prefill_token" value="'
+            . htmlspecialchars_uni($prefillToken) . '" />';
+    }
 }
 
 function af_atf_map_named_values_to_fieldids(array $fields, array $namedValues): array
@@ -2569,10 +2582,12 @@ function af_atf_boot_prefill_from_token(int $fid): void
         $GLOBALS['af_atf_prefill_mechanic'] = $mechanic;
     }
 
-    if (method_exists($cache, 'delete')) {
-        $cache->delete($cacheKey);
-    } else {
-        $cache->update($cacheKey, null);
+    if (strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) === 'POST') {
+        if (method_exists($cache, 'delete')) {
+            $cache->delete($cacheKey);
+        } else {
+            $cache->update($cacheKey, null);
+        }
     }
 }
 
@@ -4770,7 +4785,7 @@ function af_atf_render_character_kb_moderation_button(int $tid, int $uid, array 
     }
     $action = $canSync ? 'af_atf_character_kb_sync' : 'af_atf_character_kb_create';
     $label = $canSync
-        ? ($lang->af_charactersheets_kb_sync_button ?? 'Синхронизировать анкету → KB')
+        ? ($lang->af_charactersheets_kb_sync_button ?? 'Синхронизировать с KB')
         : ($lang->af_charactersheets_kb_button ?? 'Создать запись в KB');
 
     $postKey = trim($postKey);
@@ -4829,8 +4844,55 @@ function af_atf_character_bridge_store_thread_kb_link(int $tid, int $fid, int $u
             'uid' => max(0, $uid),
             'kb_entry_id' => (int)$entry['id'],
         ]);
+        if (function_exists('af_cwf_bind_kb_entry')) {
+            af_cwf_bind_kb_entry($tid, (int)$entry['id']);
+        }
+        af_atf_bridge_update_canon_lifecycle((int)$entry['id'], $tid, $uid, 'pending');
         return;
     }
+}
+
+/** Update the existing Character metadata envelope without introducing storage. */
+function af_atf_bridge_update_canon_lifecycle(int $entryId, int $tid, int $uid, string $status): bool
+{
+    global $db;
+    if ($entryId <= 0 || !is_object($db)) return false;
+    $entry = (array)$db->fetch_array($db->simple_select('af_kb_entries', '*', 'id=' . $entryId . " AND type='character' AND active=1", ['limit' => 1]));
+    if (!$entry) return false;
+    $metaEnvelope = function_exists('af_kb_decode_json') ? af_kb_decode_json((string)($entry['meta_json'] ?? '{}')) : json_decode((string)($entry['meta_json'] ?? '{}'), true);
+    $dataRules = function_exists('af_kb_decode_json') ? af_kb_decode_json((string)($entry['data_json'] ?? '{}')) : json_decode((string)($entry['data_json'] ?? '{}'), true);
+    if (!is_array($metaEnvelope)) $metaEnvelope = [];
+    $rules = isset($metaEnvelope['rules']) && is_array($metaEnvelope['rules']) ? $metaEnvelope['rules'] : (is_array($dataRules) ? $dataRules : []);
+    $characterMeta = (array)($rules['character_meta'] ?? []);
+    $history = is_array($characterMeta['role_history'] ?? null) ? $characterMeta['role_history'] : [];
+    $found = false;
+    foreach ($history as &$event) {
+        if (is_array($event) && (int)($event['tid'] ?? 0) === $tid) {
+            $event['status'] = $status;
+            if ($status === 'occupied' && empty($event['accepted_at'])) $event['accepted_at'] = TIME_NOW;
+            if ($status === 'archived' && empty($event['archived_at'])) $event['archived_at'] = TIME_NOW;
+            $found = true;
+        }
+    }
+    unset($event);
+    if (!$found) $history[] = ['uid' => $uid, 'tid' => $tid, 'source_kb_id' => $entryId, 'status' => $status, 'created_at' => TIME_NOW];
+    $characterMeta['role_history'] = array_slice($history, -100);
+    $characterMeta['active_application_tid'] = $status === 'archived' || $status === 'free' ? 0 : $tid;
+    $characterMeta['source_tid'] = $tid;
+    $characterMeta['source_uid'] = $uid;
+    $characterMeta['sync_source'] = 'af_atf_bridge';
+    $characterMeta['synced_at'] = TIME_NOW;
+    $availability = (array)($characterMeta['availability'] ?? []);
+    $availability['status'] = $status === 'archived' ? 'free' : $status;
+    $availability['updated_at'] = TIME_NOW;
+    $characterMeta['availability'] = $availability;
+    $rules['character_meta'] = $characterMeta;
+    $metaEnvelope['rules'] = $rules;
+    $metaJson = json_encode($metaEnvelope, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $dataJson = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($metaJson) || !is_string($dataJson)) return false;
+    $db->update_query('af_kb_entries', ['meta_json' => $db->escape_string($metaJson), 'data_json' => $db->escape_string($dataJson), 'updated_at' => TIME_NOW], 'id=' . $entryId);
+    return true;
 }
 
 function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [], array $context = []): array
@@ -4888,13 +4950,14 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
 
     if ($isCanon) {
         $entryId = (int)$entryLink['id'];
-        if ($entryId > 0 && function_exists('af_charactersheets_upsert_accept_row')) {
-            af_charactersheets_upsert_accept_row($tid, ['uid' => (int)($thread['uid'] ?? 0), 'kb_entry_id' => $entryId]);
-            $result['ok'] = true;
-            $result['entry_id'] = $entryId;
-            $result['mode'] = 'link';
-            return $result;
+        $validation = function_exists('af_cwf_validate_source_kb')
+            ? af_cwf_validate_source_kb($tid, $thread, function_exists('af_charactersheets_get_accept_row') ? af_charactersheets_get_accept_row($tid) : [])
+            : ['ok' => false, 'reason' => 'workflow_validation_missing'];
+        if (empty($validation['ok'])) {
+            $result['reason'] = (string)($validation['reason'] ?? 'source_kb_invalid');
+            return $result; // Never fall through into the original-character CREATE path.
         }
+        return af_atf_bridge_sync_existing_canon($tid, $thread, $index, (array)$validation['entry'], $context);
     }
 
     if (!function_exists('af_charactersheets_pick_field_value')) {
@@ -5017,6 +5080,52 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
     $result['ok'] = true;
     $result['entry_id'] = $entryId;
     return $result;
+}
+
+function af_atf_bridge_sync_existing_canon(int $tid, array $thread, array $index, array $entry, array $context): array
+{
+    global $db;
+    $entryId = (int)($entry['id'] ?? 0);
+    $metaEnvelope = function_exists('af_kb_decode_json') ? af_kb_decode_json((string)($entry['meta_json'] ?? '{}')) : json_decode((string)($entry['meta_json'] ?? '{}'), true);
+    $dataRules = function_exists('af_kb_decode_json') ? af_kb_decode_json((string)($entry['data_json'] ?? '{}')) : json_decode((string)($entry['data_json'] ?? '{}'), true);
+    if (!is_array($metaEnvelope)) $metaEnvelope = [];
+    $rules = isset($metaEnvelope['rules']) && is_array($metaEnvelope['rules']) ? $metaEnvelope['rules'] : (is_array($dataRules) ? $dataRules : []);
+    $oldProfile = (array)($rules['character_profile'] ?? []);
+    $profile = $oldProfile;
+    foreach (function_exists('af_kb_character_profile_field_contract') ? af_kb_character_profile_field_contract() : [] as $field => $unused) {
+        $value = af_charactersheets_pick_field_value($index, [$field], false);
+        if ($value !== '') $profile[$field] = $value;
+    }
+    // Canonical identity is not an applicant-owned value.
+    $profile['category'] = 'canons';
+    $abilities = af_atf_bridge_extract_oc_abilities($index);
+    $characterMeta = (array)($rules['character_meta'] ?? []);
+    if (!isset($characterMeta['canon_baseline'])) {
+        $characterMeta['canon_baseline'] = [
+            'character_profile' => $oldProfile,
+            'character_abilities' => (array)($rules['character_abilities'] ?? []),
+            'character_links' => (array)($rules['character_links'] ?? []),
+            'created_at' => TIME_NOW,
+        ];
+    }
+    $rules['character_profile'] = $profile;
+    $rules['character_abilities'] = $abilities;
+    $rules['character_meta'] = $characterMeta;
+    $metaEnvelope['rules'] = $rules;
+    $metaJson = json_encode($metaEnvelope, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $dataJson = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($metaJson) || !is_string($dataJson)) return ['ok' => false, 'entry_id' => $entryId, 'mode' => 'skip', 'reason' => 'rules_encode_failed'];
+    $db->update_query('af_kb_entries', [
+        'meta_json' => $db->escape_string($metaJson),
+        'data_json' => $db->escape_string($dataJson),
+        'updated_at' => TIME_NOW,
+    ], 'id=' . $entryId);
+    $uid = (int)($thread['uid'] ?? 0);
+    if (function_exists('af_charactersheets_upsert_accept_row')) {
+        af_charactersheets_upsert_accept_row($tid, ['uid' => $uid, 'kb_entry_id' => $entryId, 'kb_synced_at' => TIME_NOW]);
+    }
+    af_atf_bridge_update_canon_lifecycle($entryId, $tid, $uid, 'occupied');
+    return ['ok' => true, 'entry_id' => $entryId, 'mode' => 'update', 'reason' => ''];
 }
 
 function af_atf_bridge_db_escape_array(array $data): array

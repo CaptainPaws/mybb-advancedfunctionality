@@ -15,6 +15,7 @@ define('AF_CWF_STATE_NEEDS_REVISION', 'needs_revision');
 define('AF_CWF_STATE_APPROVED', 'approved');
 define('AF_CWF_STATE_ACCEPTED', 'accepted');
 define('AF_CWF_STATE_TRANSFERRED', 'transferred');
+define('AF_CWF_STATE_ARCHIVED', 'archived');
 
 function af_characterworkflow_install(): bool
 {
@@ -347,7 +348,9 @@ function af_cwf_can_create_sheet(int $tid, array $thread = [], array $acceptRow 
 function af_cwf_can_create_kb(int $tid, array $thread = [], array $acceptRow = []): bool
 {
     $ctx = af_cwf_get_context($tid, $thread, $acceptRow);
-    if (($ctx['character_kind'] ?? 'original') === 'canon') {
+    // A persisted KB id is an immutable source link. CREATE is forbidden even
+    // when a malformed/deleted source can no longer be classified as a canon.
+    if (!empty($ctx['kb_linked'])) {
         return false;
     }
     return !empty($ctx['is_allowed_forum']) && empty($ctx['kb_linked']);
@@ -356,10 +359,44 @@ function af_cwf_can_create_kb(int $tid, array $thread = [], array $acceptRow = [
 function af_cwf_can_sync_kb(int $tid, array $thread = [], array $acceptRow = []): bool
 {
     $ctx = af_cwf_get_context($tid, $thread, $acceptRow);
-    if (($ctx['character_kind'] ?? 'original') === 'canon') {
-        return false;
-    }
     return !empty($ctx['is_allowed_forum']) && !empty($ctx['kb_linked']);
+}
+
+/** Resolve and validate an application's immutable source_kb_id. */
+function af_cwf_validate_source_kb(int $tid, array $thread = [], array $acceptRow = []): array
+{
+    global $db;
+
+    $workflow = af_cwf_get_row($tid);
+    $sourceKbId = (int)($workflow['kb_entry_id'] ?? ($acceptRow['kb_entry_id'] ?? 0));
+    if ($sourceKbId <= 0 || !is_object($db) || !$db->table_exists('af_kb_entries')) {
+        return ['ok' => false, 'reason' => 'source_kb_id_missing', 'source_kb_id' => $sourceKbId];
+    }
+    $entry = (array)$db->fetch_array($db->simple_select(
+        'af_kb_entries', '*', 'id=' . $sourceKbId . " AND type='character' AND active=1", ['limit' => 1]
+    ));
+    if (empty($entry)) {
+        return ['ok' => false, 'reason' => 'source_kb_invalid', 'source_kb_id' => $sourceKbId];
+    }
+    $contract = function_exists('af_kb_extract_character_contract') ? af_kb_extract_character_contract($entry) : [];
+    $profile = (array)($contract['profile'] ?? []);
+    $meta = (array)($contract['meta'] ?? []);
+    if (trim((string)($profile['category'] ?? '')) !== 'canons') {
+        return ['ok' => false, 'reason' => 'source_kb_not_canon', 'source_kb_id' => $sourceKbId];
+    }
+    $expectedMechanic = function_exists('af_atf_character_active_mechanic') ? af_atf_character_active_mechanic() : '';
+    $actualMechanic = trim((string)($meta['mechanic'] ?? ''));
+    if ($expectedMechanic !== '' && $actualMechanic !== '' && $expectedMechanic !== $actualMechanic) {
+        return ['ok' => false, 'reason' => 'source_kb_mechanic_mismatch', 'source_kb_id' => $sourceKbId];
+    }
+    $activeTid = (int)($meta['active_application_tid'] ?? 0);
+    if ($activeTid > 0 && $activeTid !== $tid) {
+        $other = af_cwf_get_row($activeTid);
+        if (!empty($other) && (string)($other['state'] ?? '') !== AF_CWF_STATE_ARCHIVED) {
+            return ['ok' => false, 'reason' => 'source_kb_already_claimed', 'source_kb_id' => $sourceKbId];
+        }
+    }
+    return ['ok' => true, 'entry' => $entry, 'contract' => $contract, 'source_kb_id' => $sourceKbId];
 }
 
 function af_cwf_can_request_revision(int $tid, array $thread = [], array $acceptRow = []): bool
