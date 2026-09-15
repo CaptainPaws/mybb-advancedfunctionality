@@ -94,6 +94,54 @@ function af_charactersheets_json_encode(array $data): string
     return json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
+/** Project only stable KB selectors into sheet base_json; runtime build/progress stay untouched. */
+function af_charactersheets_refresh_sheet_from_kb(int $tid, int $uid = 0, bool $createIfMissing = false): array
+{
+    global $db;
+
+    $acceptRow = af_charactersheets_get_accept_row($tid);
+    $source = function_exists('af_charactersheets_resolve_character_kb_entry')
+        ? af_charactersheets_resolve_character_kb_entry($tid, $uid, $acceptRow)
+        : [];
+    if (empty(($source['entry'] ?? [])['id'])) {
+        return [];
+    }
+
+    $sheet = af_charactersheets_get_sheet_by_tid($tid);
+    if (empty($sheet) && $createIfMissing) {
+        $thread = (array)$db->fetch_array($db->simple_select('threads', '*', 'tid=' . $tid, ['limit' => 1]));
+        if ($uid <= 0) {
+            $uid = (int)($thread['uid'] ?? ($acceptRow['uid'] ?? 0));
+        }
+        $slug = trim((string)($acceptRow['sheet_slug'] ?? ''));
+        if ($slug === '') {
+            $slug = af_charactersheets_slugify((string)($thread['subject'] ?? ''), $tid);
+        }
+        $sheet = af_charactersheets_ensure_sheet($tid, $uid, $slug);
+    }
+    if (empty($sheet['id'])) {
+        return [];
+    }
+
+    $profile = (array)(($source['payload'] ?? [])['profile'] ?? []);
+    $meta = (array)(($source['payload'] ?? [])['meta'] ?? []);
+    $base = af_charactersheets_json_decode((string)($sheet['base_json'] ?? ''));
+    $base['race_key'] = (string)($profile['character_origin'] ?? $profile['character_race'] ?? '');
+    $base['class_key'] = (string)($profile['character_archetype'] ?? $profile['character_class'] ?? '');
+    $base['theme_key'] = (string)($profile['character_faction'] ?? '');
+    $mechanic = trim((string)($meta['mechanic'] ?? ''));
+    if ($mechanic === 'arpg' || $mechanic === 'dnd') {
+        $base['mechanic'] = $mechanic;
+        $base['sheet_mode'] = $mechanic;
+    }
+    $db->update_query(AF_CS_SHEETS_TABLE, [
+        'base_json' => $db->escape_string(af_charactersheets_json_encode($base)),
+        'updated_at' => TIME_NOW,
+    ], 'id=' . (int)$sheet['id']);
+
+    return af_charactersheets_get_sheet_by_id((int)$sheet['id']);
+}
+
 function af_charactersheets_get_sheet_by_id(int $sheet_id): array
 {
     global $db;
@@ -209,7 +257,21 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
         'attributes_base' => af_charactersheets_default_attributes(),
     ];
 
-    if ($tid > 0) {
+    $characterSource = $tid > 0 && function_exists('af_charactersheets_resolve_character_kb_entry')
+        ? af_charactersheets_resolve_character_kb_entry($tid, $uid, af_charactersheets_get_accept_row($tid))
+        : [];
+    $characterProfile = (array)(($characterSource['payload'] ?? [])['profile'] ?? []);
+    $characterMeta = (array)(($characterSource['payload'] ?? [])['meta'] ?? []);
+    if (!empty(($characterSource['entry'] ?? [])['id'])) {
+        $base['race_key'] = (string)($characterProfile['character_origin'] ?? $characterProfile['character_race'] ?? '');
+        $base['class_key'] = (string)($characterProfile['character_archetype'] ?? $characterProfile['character_class'] ?? '');
+        $base['theme_key'] = (string)($characterProfile['character_faction'] ?? '');
+        $mechanic = trim((string)($characterMeta['mechanic'] ?? ''));
+        if ($mechanic === 'arpg' || $mechanic === 'dnd') {
+            $base['mechanic'] = $mechanic;
+            $base['sheet_mode'] = $mechanic;
+        }
+    } elseif ($tid > 0) {
         $fields = af_charactersheets_get_atf_fields($tid);
         $index = af_charactersheets_index_fields($fields);
         $base['race_key'] = af_charactersheets_pick_field_value($index, ['character_race', 'race'], false);
