@@ -4745,6 +4745,16 @@ function af_atf_handle_character_kb_bridge_action(bool $syncOnly): void
     if ($entryId > 0 && function_exists('af_cwf_bind_kb_entry')) {
         af_cwf_bind_kb_entry($tid, $entryId, (int)($mybb->user['uid'] ?? 0));
     }
+    if ($entryId > 0 && function_exists('af_charactersheets_refresh_sheet_from_kb')) {
+        $accept = function_exists('af_charactersheets_get_accept_row') ? af_charactersheets_get_accept_row($tid) : [];
+        $workflow = function_exists('af_cwf_get_row') ? af_cwf_get_row($tid) : [];
+        $workflowState = (string)($workflow['state'] ?? '');
+        $shouldCreate = !empty($accept['accepted']) || in_array($workflowState, ['approved', 'transferred', 'accepted'], true);
+        $sheet = af_charactersheets_refresh_sheet_from_kb($tid, (int)($thread['uid'] ?? 0), $shouldCreate);
+        if (!empty($sheet['id']) && function_exists('af_cwf_bind_sheet')) {
+            af_cwf_bind_sheet($tid, (int)$sheet['id'], (string)($sheet['slug'] ?? ''), (int)($mybb->user['uid'] ?? 0));
+        }
+    }
     $entryUrl = $showThreadUrl;
     if ($entryId > 0 && function_exists('af_charactersheets_build_kb_entry_url')) {
         $entryUrl = af_charactersheets_build_kb_entry_url($entryId, $tid);
@@ -5024,9 +5034,17 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         return $result;
     }
 
-    $existing = $db->fetch_array(
-        $db->simple_select('af_kb_entries', '*', "type='character' AND `key`='" . $db->escape_string($entryKey) . "'", ['limit' => 1])
-    );
+    $existing = $entryLink;
+    if (!$existing) {
+        $existing = $db->fetch_array(
+            $db->simple_select('af_kb_entries', '*', "type='character' AND `key`='" . $db->escape_string($entryKey) . "'", ['limit' => 1])
+        );
+    }
+    if (!empty($existing['id']) && trim((string)($existing['key'] ?? '')) !== '') {
+        // A linked legacy/original Character keeps its identity; never rename it
+        // to the workflow-generated oc-{tid} key during synchronization.
+        $entryKey = (string)$existing['key'];
+    }
     if (!empty($context['require_existing']) && (!$existing || empty($existing['id']))) {
         $result['reason'] = 'existing_entry_not_found';
         return $result;

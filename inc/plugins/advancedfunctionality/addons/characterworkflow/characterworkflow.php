@@ -301,7 +301,8 @@ function af_cwf_get_context(int $tid, array $thread = [], array $acceptRow = [])
         || (int)($workflow['transferred_at'] ?? 0) > 0;
     $legacyAccepted = function_exists('af_charactersheets_is_accepted') ? af_charactersheets_is_accepted($tid) : false;
     $wasAccepted = $workflowAccepted || $legacyAccepted;
-    $kbLinked = (int)($workflow['kb_entry_id'] ?? ($acceptRow['kb_entry_id'] ?? 0)) > 0;
+    $linkedKb = af_cwf_has_linked_kb_character($tid, $acceptRow);
+    $kbLinked = !empty($linkedKb['ok']);
     $sheetExists = function_exists('af_charactersheets_resolve_existing_sheet_for_thread')
         ? !empty(af_charactersheets_resolve_existing_sheet_for_thread($tid, $uid, $acceptRow))
         : ((int)($workflow['sheet_id'] ?? 0) > 0);
@@ -325,6 +326,61 @@ function af_cwf_get_context(int $tid, array $thread = [], array $acceptRow = [])
         'sheet_exists' => $sheetExists,
         'character_kind' => $kind,
     ];
+}
+
+/**
+ * Return the one active Character explicitly linked to an application.
+ *
+ * This is the shared UI/backend condition.  Name matching is deliberately not
+ * supported: after an explicit link exists it is the immutable identity.
+ */
+function af_cwf_has_linked_kb_character(int $tid, array $acceptRow = []): array
+{
+    global $db;
+
+    $missing = ['ok' => false, 'entry_id' => 0, 'entry' => [], 'source' => 'none'];
+    if ($tid <= 0 || !is_object($db) || !$db->table_exists('af_kb_entries')) {
+        return $missing;
+    }
+    if (empty($acceptRow) && function_exists('af_charactersheets_get_accept_row')) {
+        $acceptRow = af_charactersheets_get_accept_row($tid);
+    }
+
+    $workflow = af_cwf_get_row($tid);
+    $candidates = [
+        'workflow.kb_entry_id' => (int)($workflow['kb_entry_id'] ?? 0),
+        'accept.kb_entry_id' => (int)($acceptRow['kb_entry_id'] ?? 0),
+    ];
+    foreach ($candidates as $source => $entryId) {
+        if ($entryId <= 0) {
+            continue;
+        }
+        $entry = (array)$db->fetch_array($db->simple_select(
+            'af_kb_entries', '*', 'id=' . $entryId . " AND type='character' AND active=1", ['limit' => 1]
+        ));
+        if (!empty($entry['id'])) {
+            return ['ok' => true, 'entry_id' => $entryId, 'entry' => $entry, 'source' => $source];
+        }
+    }
+
+    // Legacy exact link. This is intentionally by source_tid, never by name or uid.
+    $query = $db->simple_select('af_kb_entries', '*', "type='character' AND active=1", [
+        'order_by' => 'updated_at', 'order_dir' => 'DESC', 'limit' => 200,
+    ]);
+    while ($entry = $db->fetch_array($query)) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        $contract = function_exists('af_charactersheets_extract_character_contract_payload')
+            ? af_charactersheets_extract_character_contract_payload($entry)
+            : (function_exists('af_kb_extract_character_contract') ? af_kb_extract_character_contract($entry) : []);
+        $meta = (array)($contract['meta'] ?? []);
+        if ((int)($meta['source_tid'] ?? 0) === $tid) {
+            return ['ok' => true, 'entry_id' => (int)$entry['id'], 'entry' => $entry, 'source' => 'character_meta.source_tid'];
+        }
+    }
+
+    return $missing;
 }
 
 function af_cwf_can_accept(int $tid, array $thread = [], array $acceptRow = []): bool
@@ -367,14 +423,12 @@ function af_cwf_validate_source_kb(int $tid, array $thread = [], array $acceptRo
 {
     global $db;
 
-    $workflow = af_cwf_get_row($tid);
-    $sourceKbId = (int)($workflow['kb_entry_id'] ?? ($acceptRow['kb_entry_id'] ?? 0));
-    if ($sourceKbId <= 0 || !is_object($db) || !$db->table_exists('af_kb_entries')) {
+    $linked = af_cwf_has_linked_kb_character($tid, $acceptRow);
+    $sourceKbId = (int)($linked['entry_id'] ?? 0);
+    if (empty($linked['ok'])) {
         return ['ok' => false, 'reason' => 'source_kb_id_missing', 'source_kb_id' => $sourceKbId];
     }
-    $entry = (array)$db->fetch_array($db->simple_select(
-        'af_kb_entries', '*', 'id=' . $sourceKbId . " AND type='character' AND active=1", ['limit' => 1]
-    ));
+    $entry = (array)$linked['entry'];
     if (empty($entry)) {
         return ['ok' => false, 'reason' => 'source_kb_invalid', 'source_kb_id' => $sourceKbId];
     }
@@ -535,11 +589,14 @@ function af_cwf_bind_kb_entry(int $tid, int $entryId, int $actorUid = 0): void
     if ((int)($current['kb_entry_id'] ?? 0) > 0 && (int)($current['kb_entry_id'] ?? 0) !== $entryId) {
         return;
     }
-    af_cwf_upsert_row($tid, [
-        'state' => AF_CWF_STATE_UNDER_REVIEW,
+    $update = [
         'kb_entry_id' => $entryId > 0 ? $entryId : null,
         'reviewed_by' => $actorUid > 0 ? $actorUid : null,
-    ]);
+    ];
+    if (empty($current['state']) || in_array((string)$current['state'], [AF_CWF_STATE_DRAFT, AF_CWF_STATE_UNDER_REVIEW], true)) {
+        $update['state'] = AF_CWF_STATE_UNDER_REVIEW;
+    }
+    af_cwf_upsert_row($tid, $update);
 }
 
 function af_cwf_bind_sheet(int $tid, int $sheetId, string $sheetSlug, int $actorUid = 0): void
@@ -548,12 +605,15 @@ function af_cwf_bind_sheet(int $tid, int $sheetId, string $sheetSlug, int $actor
     if ((int)($current['sheet_id'] ?? 0) > 0 && (int)($current['sheet_id'] ?? 0) !== $sheetId) {
         return;
     }
-    af_cwf_upsert_row($tid, [
-        'state' => AF_CWF_STATE_UNDER_REVIEW,
+    $update = [
         'sheet_id' => $sheetId > 0 ? $sheetId : null,
         'sheet_slug' => trim($sheetSlug) !== '' ? trim($sheetSlug) : null,
         'reviewed_by' => $actorUid > 0 ? $actorUid : null,
-    ]);
+    ];
+    if (empty($current['state']) || in_array((string)$current['state'], [AF_CWF_STATE_DRAFT, AF_CWF_STATE_UNDER_REVIEW], true)) {
+        $update['state'] = AF_CWF_STATE_UNDER_REVIEW;
+    }
+    af_cwf_upsert_row($tid, $update);
 }
 
 function af_cwf_assign_transfer_groups(int $uid): void

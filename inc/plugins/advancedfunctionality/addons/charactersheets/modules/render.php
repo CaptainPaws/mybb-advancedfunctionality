@@ -205,11 +205,10 @@ function af_charactersheets_resolve_character_kb_entry(int $tid, int $uid, array
         ];
     };
 
-    $entry_id = (int)($accept_row['kb_entry_id'] ?? 0);
-    if ($entry_id > 0) {
-        $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', 'id=' . $entry_id . " AND type='character'", ['limit' => 1]));
-        if (is_array($entry) && !empty($entry['id'])) {
-            return $normalize($entry, 'accept.kb_entry_id');
+    if (function_exists('af_cwf_has_linked_kb_character')) {
+        $linked = af_cwf_has_linked_kb_character($tid, $accept_row);
+        if (!empty($linked['ok']) && !empty($linked['entry'])) {
+            return $normalize((array)$linked['entry'], (string)$linked['source']);
         }
     }
 
@@ -233,19 +232,11 @@ function af_charactersheets_resolve_character_kb_entry(int $tid, int $uid, array
         $payload = af_charactersheets_extract_character_contract_payload($row);
         $meta = (array)($payload['meta'] ?? []);
         $source_tid = (int)($meta['source_tid'] ?? 0);
-        $source_uid = (int)($meta['source_uid'] ?? 0);
         if ($source_tid > 0 && $source_tid === $tid) {
             return [
                 'entry' => $row,
                 'payload' => $payload,
                 'source' => 'character_meta.source_tid',
-            ];
-        }
-        if ($uid > 0 && $source_uid > 0 && $source_uid === $uid) {
-            return [
-                'entry' => $row,
-                'payload' => $payload,
-                'source' => 'character_meta.source_uid',
             ];
         }
     }
@@ -1411,11 +1402,12 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $inventory_items = af_charactersheets_arpg_collect_inventory_items($build);
     $abilities_items = [];
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
+    $has_kb_character = !empty(($character_source['entry'] ?? [])['id']);
     $character_stats = af_charactersheets_arpg_payload_is_canonical($character_source)
         ? (array)(($character_source['payload'] ?? [])['stats'] ?? [])
         : [];
     $character_abilities = (array)(($character_source['payload'] ?? [])['abilities'] ?? []);
-    if ($character_abilities) {
+    if ($has_kb_character) {
         $abilities_items = af_charactersheets_arpg_collect_character_contract_abilities($character_abilities);
     } else {
         $abilities_items = af_charactersheets_arpg_collect_abilities($build, $sheet_view);
@@ -1423,10 +1415,10 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
 
     $identityParts = [];
     foreach ([
-        af_charactersheets_pick_field_value($atf_index, ['character_identity', 'identity', 'origin']),
+        (string)($character_profile['character_identity'] ?? $character_profile['character_origin'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_identity', 'identity', 'origin']))),
         (string)($character_profile['character_class'] ?? ''),
         (string)($character_profile['character_faction'] ?? ''),
-        af_charactersheets_pick_field_value($atf_index, ['character_path', 'path']),
+        (string)($character_profile['character_path'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_path', 'path']))),
     ] as $part) {
         $part = trim((string)$part);
         if ($part !== '') {
@@ -1434,12 +1426,12 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         }
     }
 
-    $rank = trim((string)af_charactersheets_pick_field_value($atf_index, ['rank', 'character_rank']));
-    $path = trim((string)af_charactersheets_pick_field_value($atf_index, ['path', 'character_path']));
+    $rank = trim((string)($character_profile['character_rank'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['rank', 'character_rank']))));
+    $path = trim((string)($character_profile['character_path'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['path', 'character_path']))));
     $level = (int)($sheet_view['level'] ?? 1);
-    $rawOrigin = trim((string)($character_profile['character_origin'] ?? af_charactersheets_pick_field_value($atf_index, ['character_origin', 'character_race', 'race'])));
-    $rawOriginVariant = trim((string)($character_profile['character_origin_variant'] ?? af_charactersheets_pick_field_value($atf_index, ['character_origin_variant', 'origin_variant'])));
-    $rawArchetype = trim((string)($character_profile['character_archetype'] ?? $character_profile['character_class'] ?? af_charactersheets_pick_field_value($atf_index, ['character_archetype', 'character_class', 'archetype', 'class'])));
+    $rawOrigin = trim((string)($character_profile['character_origin'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_origin', 'character_race', 'race']))));
+    $rawOriginVariant = trim((string)($character_profile['character_origin_variant'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_origin_variant', 'origin_variant']))));
+    $rawArchetype = trim((string)($character_profile['character_archetype'] ?? $character_profile['character_class'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_archetype', 'character_class', 'archetype', 'class']))));
 
     $originResolved = af_charactersheets_arpg_resolve_kb_entry_flexible('arpg_origin', $rawOrigin);
     $originRules = af_charactersheets_arpg_extract_entry_rules((array)($originResolved['entry'] ?? []));
@@ -1474,7 +1466,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     }
 
     $primary_stats = af_charactersheets_collect_arpg_primary_stats($sheet_view);
-    $rawElement = trim((string)($character_profile['character_element'] ?? af_charactersheets_pick_field_value($atf_index, ['character_element', 'element'])));
+    $rawElement = trim((string)($character_profile['character_element'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_element', 'element']))));
     $resolvedElement = af_charactersheets_arpg_resolve_profile_option($atf_index, 'character_element', $rawElement);
     $element = trim((string)($resolvedElement['label'] ?? ''));
     if ($element === '') {
@@ -1488,7 +1480,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $weapon = af_charactersheets_arpg_collect_weapon_data($build);
     $artifacts = af_charactersheets_arpg_collect_artifacts_data($build);
     $activeAbilities = [];
-    if ($character_abilities) {
+    if ($has_kb_character) {
         foreach ($character_abilities as $ability) {
             if (!is_array($ability)) {
                 continue;
@@ -1537,7 +1529,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
             'description' => 'Пассивная способность из вычисленного состояния персонажа',
         ];
     }
-    if ($character_abilities) {
+    if ($has_kb_character) {
         $passiveAbilities = [];
         foreach ($character_abilities as $ability) {
             if (!is_array($ability)) {
@@ -1614,17 +1606,17 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         'inventory' => $inventory_items,
         'equipment' => $equipment_items,
         'atf' => [
-            'race' => (string)($character_profile['character_race'] ?? af_charactersheets_pick_field_value($atf_index, ['character_race', 'race'])),
-            'class' => (string)($character_profile['character_class'] ?? $character_profile['character_archetype'] ?? af_charactersheets_pick_field_value($atf_index, ['character_class', 'character_archetype', 'class'])),
-            'theme' => (string)($character_profile['character_faction'] ?? af_charactersheets_pick_field_value($atf_index, ['character_theme', 'character_themes', 'theme'])),
+            'race' => (string)($character_profile['character_race'] ?? $character_profile['character_origin'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_race', 'race']))),
+            'class' => (string)($character_profile['character_class'] ?? $character_profile['character_archetype'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_class', 'character_archetype', 'class']))),
+            'theme' => (string)($character_profile['character_faction'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_theme', 'character_themes', 'theme']))),
         ],
         'atf_profile' => [
-            'character_app' => af_charactersheets_pick_field_value($atf_index, ['character_app', 'character_about', 'character_bio', 'character_description', 'app']),
-            'character_prototype' => af_charactersheets_pick_field_value($atf_index, ['character_prototype', 'prototype']),
-            'character_nicknames' => af_charactersheets_pick_field_value($atf_index, ['character_nicknames', 'character_nickname', 'nickname']),
-            'character_age' => af_charactersheets_pick_field_value($atf_index, ['character_age', 'age']),
-            'character_origin' => af_charactersheets_pick_field_value($atf_index, ['character_origin']),
-            'character_origin_variant' => af_charactersheets_pick_field_value($atf_index, ['character_origin_variant', 'origin_variant']),
+            'character_app' => (string)($character_profile['character_app'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_app', 'character_about', 'character_bio', 'character_description', 'app']))),
+            'character_prototype' => (string)($character_profile['character_prototype'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_prototype', 'prototype']))),
+            'character_nicknames' => (string)($character_profile['character_nicknames'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_nicknames', 'character_nickname', 'nickname']))),
+            'character_age' => (string)($character_profile['character_age'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_age', 'age']))),
+            'character_origin' => (string)($character_profile['character_origin'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_origin']))),
+            'character_origin_variant' => (string)($character_profile['character_origin_variant'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_origin_variant', 'origin_variant']))),
         ],
         'arpg_sources' => [
             'origin' => [
