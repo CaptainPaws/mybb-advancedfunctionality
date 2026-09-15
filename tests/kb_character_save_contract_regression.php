@@ -6,6 +6,7 @@ define('AF_ADDONS', __DIR__ . '/../inc/plugins/advancedfunctionality/addons/');
 
 final class CharacterSaveDbStub
 {
+    public function table_exists(string $table): bool { return false; }
     public function escape_string(string $value): string { return $value; }
     public function simple_select(...$args): array { return ['table' => (string)($args[0] ?? '')]; }
     public function fetch_array($query): array
@@ -29,6 +30,26 @@ final class CharacterSaveDbStub
 $db = new CharacterSaveDbStub();
 require_once AF_ADDONS . 'knowledgebase/knowledgebase.php';
 
+function htmlspecialchars_uni($value): string
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+final class postParser
+{
+    public function parse_message(string $message, array $options): string { return htmlspecialchars_uni($message); }
+}
+
+final class CharacterTemplatesStub
+{
+    public function get(string $name): string
+    {
+        return addslashes((string)file_get_contents(AF_ADDONS . 'knowledgebase/templates/' . $name . '.html'));
+    }
+}
+
+$templates = new CharacterTemplatesStub();
+
 function character_save_assert(bool $condition, string $message): void
 {
     if (!$condition) {
@@ -44,12 +65,15 @@ $manualPayload = [
     'character_profile' => [
         'category' => 'originals',
         'character_pic' => '/uploads/character.webp',
-        'character_name' => 'Manual Character',
+        'character_prototype' => 'Prototype',
+        'character_name' => 'Name Surname',
+        'character_name_ru' => 'Имя Фамилия',
+        'character_nicknames' => 'Nickname',
         'character_element' => 'fire',
         'character_gen' => 'female',
         'character_origin' => 'demihuman',
         'character_origin_variant' => 'demi_bear',
-        'character_archetype' => 'vanguard',
+        'character_class' => 'vanguard',
         'character_faction' => 'guild',
         'character_app' => 'Description',
         'character_weapon' => 'greatsword',
@@ -87,23 +111,48 @@ character_save_assert(!array_key_exists('rules', $saved), 'Manual save added a f
 foreach (['character_profile', 'character_abilities', 'character_links', 'character_meta'] as $key) {
     character_save_assert(isset($saved[$key]) && is_array($saved[$key]), 'Character contract section is missing: ' . $key);
 }
-foreach (['character_name' => 'Manual Character', 'character_origin' => 'demihuman', 'character_origin_variant' => 'demi_bear', 'character_weapon' => 'greatsword', 'character_age' => '27', 'character_height' => '175', 'character_weight' => '70', 'character_activity' => 'Mercenary', 'character_post' => 'Sample post', 'character_userinfo' => 'Player'] as $key => $expected) {
+$expectedProfile = [
+    'character_name' => 'Name Surname', 'character_name_ru' => 'Имя Фамилия',
+    'character_pic' => '/uploads/character.webp', 'character_nicknames' => 'Nickname',
+    'character_prototype' => 'Prototype', 'character_element' => 'fire',
+    'character_gen' => 'female', 'character_origin' => 'demihuman',
+    'character_origin_variant' => 'demi_bear', 'character_class' => 'vanguard',
+    'character_faction' => 'guild', 'character_activity' => 'Mercenary',
+    'character_weapon' => 'greatsword', 'character_age' => '27',
+    'character_height' => '175', 'character_weight' => '70',
+    'character_app' => 'Description', 'character_post' => 'Sample post',
+    'character_userinfo' => 'Player',
+];
+foreach ($expectedProfile as $key => $expected) {
     character_save_assert(($saved['character_profile'][$key] ?? '') === $expected, $key . ' did not survive normalization');
 }
-character_save_assert(($saved['character_profile']['character_archetype'] ?? '') === 'vanguard', 'Archetype did not survive normalization');
+character_save_assert(($saved['character_profile']['character_class'] ?? '') === 'vanguard', 'Class/archetype did not survive normalization');
 character_save_assert(($saved['character_abilities'][0]['effects'][0]['effect_type'] ?? '') === 'damage', 'Structured effects did not survive normalization');
 
 $sheet = af_kb_extract_character_contract(['data_json' => $normalized, 'meta_json' => '{}']);
 character_save_assert(($sheet['profile']['character_origin'] ?? '') === 'demihuman', 'Character Sheet cannot read the manual Character origin');
-character_save_assert(($sheet['profile']['character_archetype'] ?? '') === 'vanguard', 'Character Sheet cannot read the manual Character archetype');
+character_save_assert(($sheet['profile']['character_class'] ?? '') === 'vanguard', 'Character Sheet cannot read the manual Character class/archetype');
 character_save_assert(($sheet['profile']['character_element'] ?? '') === 'fire', 'Character Sheet cannot read the manual Character element');
 character_save_assert(($sheet['abilities'][0]['effects'][0]['effect_type'] ?? '') === 'damage', 'Character Sheet cannot read structured ability effects');
 
 $prefill = af_kb_build_character_application_prefill(['id' => 42, 'type' => 'character', 'key' => 'test-canon', 'data_json' => $normalized, 'meta_json' => '{}']);
 character_save_assert(($prefill['mechanic'] ?? '') === 'arpg', 'KB application prefill lost the ARPG mechanic');
-foreach (['character_name' => 'Manual Character', 'character_origin' => 'demihuman', 'character_origin_variant' => 'demi_bear', 'character_weapon' => 'greatsword', 'character_age' => '27', 'character_height' => '175', 'character_weight' => '70', 'character_activity' => 'Mercenary', 'character_post' => 'Sample post', 'character_userinfo' => 'Player'] as $key => $expected) {
+foreach ($expectedProfile as $key => $expected) {
     character_save_assert(($prefill['values'][$key] ?? '') === $expected, $key . ' was lost in KB to ATF prefill');
 }
+
+$weaponOptions = af_kb_get_arpg_mechanics_options('weapon_type', 'weapon_type');
+character_save_assert(in_array('greatsword', array_column($weaponOptions, 'key'), true), 'Weapon source of truth did not populate greatsword');
+character_save_assert(af_kb_character_profile_resolved_value('character_weapon', 'greatsword', true) !== 'greatsword', 'Weapon display leaked the canonical key');
+
+$rendered = af_kb_render_character_entry(['type' => 'character', 'key' => 'manual', 'data_json' => $normalized, 'meta_json' => '{}'], [], true);
+foreach (['Name Surname', 'Имя Фамилия', 'Женский', 'Greatsword', '27', '175', '70', 'Sample post', 'Player'] as $visible) {
+    character_save_assert(strpos($rendered, $visible) !== false, 'Public Character page omitted: ' . $visible);
+}
+
+$card = af_kb_character_catalog_card(['type' => 'character', 'key' => 'manual', 'data_json' => $normalized, 'meta_json' => '{}'], []);
+character_save_assert(strpos($card, 'Name Surname') !== false, 'Catalog card omitted the EN name');
+character_save_assert(strpos($card, 'Женский') !== false, 'Catalog card omitted the resolved gender');
 
 // Re-validating the stored result exercises the edit path and must remain stable.
 $editErrors = [];
