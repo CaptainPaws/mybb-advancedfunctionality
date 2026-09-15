@@ -14,6 +14,7 @@ define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
 define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
 define('AF_KB_MARK', '<!--af_kb_assets-->');
 define('AF_KB_RULES_SCHEMA', 'af_kb.rules.v1');
+define('AF_KB_CHARACTER_SCHEMA', 'af_kb.character.contract.v1');
 define('AF_KB_ARPG_META_SCHEMA', 'af_kb.arpg.meta.v1');
 define('AF_KB_ARPG_RULES_SCHEMA', 'af_kb.arpg.rules.v1');
 define('AF_KB_ARPG_MECHANICS_SCHEMA', 'af_kb.arpg.mechanics.v1');
@@ -5598,13 +5599,14 @@ function af_kb_normalize_rules_json(string $raw): string
 
 function af_kb_validate_rules_json_by_type_dnd(string $type, string $normalizedJson, array &$errors): string
 {
-    $typeSchema   = af_kb_get_type_schema($type);
-    $rulesEnabled = !empty($typeSchema['rules_enabled']);
-
     $rulesData = af_kb_decode_json($normalizedJson);
     if (!is_array($rulesData)) {
         $rulesData = [];
     }
+
+    $isArpgCharacter = $type === 'character' && af_kb_is_arpg_character_payload($rulesData);
+    $typeSchema = af_kb_get_type_schema($type, $isArpgCharacter ? 'arpg' : 'dnd');
+    $rulesEnabled = !empty($typeSchema['rules_enabled']);
 
     if (!$rulesEnabled) {
         return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
@@ -5612,7 +5614,9 @@ function af_kb_validate_rules_json_by_type_dnd(string $type, string $normalizedJ
 
     $isItem = ($type === 'item');
 
-    $expectedSchema = trim((string)($typeSchema['rules_schema'] ?? ($isItem ? 'af_kb.item.v2' : AF_KB_RULES_SCHEMA)));
+    $expectedSchema = $isArpgCharacter
+        ? AF_KB_CHARACTER_SCHEMA
+        : trim((string)($typeSchema['rules_schema'] ?? ($isItem ? 'af_kb.item.v2' : AF_KB_RULES_SCHEMA)));
     if ($expectedSchema === '') {
         $expectedSchema = $isItem ? 'af_kb.item.v2' : AF_KB_RULES_SCHEMA;
     }
@@ -5635,7 +5639,7 @@ function af_kb_validate_rules_json_by_type_dnd(string $type, string $normalizedJ
         $rulesData['version'] = '1.0';
     }
 
-    if (!$isItem) {
+    if (!$isItem && !$isArpgCharacter) {
         foreach (['traits', 'grants', 'choices'] as $k) {
             if (!isset($rulesData[$k]) || !is_array($rulesData[$k])) {
                 $rulesData[$k] = [];
@@ -5656,7 +5660,7 @@ function af_kb_validate_rules_json_by_type_dnd(string $type, string $normalizedJ
     }
 
     $requiredKeys = (array)($typeSchema['rules_required_keys'] ?? []);
-    if ($type === 'character' && af_kb_is_arpg_character_payload($rulesData)) {
+    if ($isArpgCharacter) {
         unset($rulesData['character_stats']);
         if (isset($defaults['character_stats'])) {
             unset($defaults['character_stats']);
@@ -5680,7 +5684,7 @@ function af_kb_validate_rules_json_by_type_dnd(string $type, string $normalizedJ
         }
     }
 
-    if (!$isItem) {
+    if (!$isItem && !$isArpgCharacter) {
         $rulesData['traits'] = af_kb_normalize_traits_json($rulesData['traits'], $errors);
         $rulesData['grants'] = af_kb_normalize_grants_json($rulesData['grants'], $errors);
     }
@@ -5710,11 +5714,24 @@ function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalized
         }
         $decoded['character_meta'] = is_array($decoded['character_meta'] ?? null) ? $decoded['character_meta'] : [];
         $decoded['character_meta']['mechanic'] = 'arpg';
-        return af_kb_validate_rules_json_by_type_dnd(
+        $normalized = af_kb_validate_rules_json_by_type_dnd(
             $type,
             json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
             $errors
         );
+        $character = af_kb_decode_json($normalized);
+        if (!is_array($character)
+            || ($character['schema'] ?? '') !== AF_KB_CHARACTER_SCHEMA
+            || ($character['type_profile'] ?? '') !== 'character'
+            || !is_array($character['character_profile'] ?? null)
+            || !is_array($character['character_abilities'] ?? null)
+            || !is_array($character['character_links'] ?? null)
+            || !is_array($character['character_meta'] ?? null)
+            || ($character['character_meta']['mechanic'] ?? '') !== 'arpg'
+        ) {
+            $errors[] = 'Character JSON must conform to ' . AF_KB_CHARACTER_SCHEMA . '.';
+        }
+        return $normalized;
     }
 
     $rulesData = af_kb_decode_json($normalizedJson);
@@ -12117,6 +12134,13 @@ function af_kb_handle_edit(): void
             $rulesObject = af_kb_decode_json($entryDataJsonNormalized);
             if (!is_array($rulesObject)) {
                 $errors[] = 'Rules JSON must be an object.';
+            } elseif ($type === 'character') {
+                $expectedMechanic = $mechanicKey === 'arpg' ? 'arpg' : '';
+                if (($rulesObject['type_profile'] ?? '') !== 'character'
+                    || ($expectedMechanic !== '' && ($rulesObject['character_meta']['mechanic'] ?? '') !== $expectedMechanic)
+                ) {
+                    $errors[] = 'Character JSON must conform to ' . AF_KB_CHARACTER_SCHEMA . '.';
+                }
             } elseif ($mechanicKey === 'arpg') {
                 if (empty($rulesObject['schema']) || (($rulesObject['mechanic'] ?? '') !== 'arpg') || !is_array($rulesObject['rules'] ?? null)) {
                     $errors[] = 'ARPG JSON must contain schema, mechanic=arpg and rules object.';
