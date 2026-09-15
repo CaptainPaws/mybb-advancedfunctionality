@@ -186,7 +186,7 @@ foreach ([
 }
 assert_true(strpos($atfJsSource, 'initOriginVariantDependency()') !== false, 'Origin Variant dependency is not initialized');
 assert_true(strpos($atfJsSource, 'originSelect.addEventListener("change", () => load(false))') !== false, 'Origin changes do not clear/reload variants');
-assert_true(strpos($atfJsSource, 'setVisible(variantSelect.options.length > 1)') !== false, 'Empty Origin Variant selector is not hidden');
+assert_true(strpos($atfJsSource, 'load(true)') !== false, 'Initial Origin Variant is not restored after loading dependent options');
 
 echo "origin variant regression checks passed\n";
 echo "stored JSON example: " . $json . "\n";

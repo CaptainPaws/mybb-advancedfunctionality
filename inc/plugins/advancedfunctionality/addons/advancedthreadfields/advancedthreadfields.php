@@ -1505,11 +1505,19 @@ function af_atf_seed_character_contract_fields(): void
         ['name' => 'character_nicknames', 'title' => 'Nicknames', 'type' => 'text', 'sortorder' => 50, 'maxlen' => 500],
         ['name' => 'character_element', 'title' => 'Element', 'type' => 'kb_dynamic', 'sortorder' => 60, 'options' => "provider=character_element\nmechanic=arpg", 'maxlen' => 128],
         ['name' => 'character_gen', 'title' => 'Gender', 'type' => 'select', 'sortorder' => 70, 'options' => "male=Male\nfemale=Female\nnonbinary=Non-binary\nother=Other", 'maxlen' => 64],
+        ['name' => 'character_age', 'title' => 'Age', 'type' => 'text', 'sortorder' => 72, 'maxlen' => 128],
+        ['name' => 'character_height', 'title' => 'Height', 'type' => 'text', 'sortorder' => 74, 'maxlen' => 128],
+        ['name' => 'character_weight', 'title' => 'Weight', 'type' => 'text', 'sortorder' => 76, 'maxlen' => 128],
         ['name' => 'character_race', 'title' => 'Race / Origin', 'type' => 'kb_mechanic', 'sortorder' => 80, 'options' => "provider=character_race", 'maxlen' => 128],
+        ['name' => 'character_origin', 'title' => 'Origin', 'type' => 'kb_dynamic', 'sortorder' => 82, 'options' => "provider=character_origin\nmechanic=arpg", 'maxlen' => 128],
         ['name' => 'character_origin_variant', 'title' => 'Origin Variant / Разновидность происхождения', 'type' => 'kb_dynamic', 'sortorder' => 85, 'options' => "provider=character_origin_variant\nmechanic=arpg", 'maxlen' => 128],
         ['name' => 'character_class', 'title' => 'Class / Archetype', 'type' => 'kb_mechanic', 'sortorder' => 90, 'options' => "provider=character_class", 'maxlen' => 128],
         ['name' => 'character_faction', 'title' => 'Faction', 'type' => 'kb_dynamic', 'sortorder' => 100, 'options' => "provider=character_faction\nmechanic=arpg", 'maxlen' => 128],
+        ['name' => 'character_activity', 'title' => 'Activity', 'type' => 'text', 'sortorder' => 102, 'maxlen' => 255],
+        ['name' => 'character_weapon', 'title' => 'Weapon type', 'type' => 'select', 'sortorder' => 104, 'options' => "sword=Sword\ngreatsword=Greatsword\nspear=Spear\nbow=Bow\ncatalyst=Catalyst\nfirearm=Firearm", 'maxlen' => 128],
         ['name' => 'character_app', 'title' => 'Appearance', 'type' => 'textarea', 'sortorder' => 110],
+        ['name' => 'character_post', 'title' => 'Post', 'type' => 'textarea', 'sortorder' => 120],
+        ['name' => 'character_userinfo', 'title' => 'Additional information', 'type' => 'textarea', 'sortorder' => 130],
         ['name' => 'character_hp', 'title' => 'HP', 'type' => 'number', 'sortorder' => 200, 'maxlen' => 11],
         ['name' => 'character_defense', 'title' => 'Defense', 'type' => 'number', 'sortorder' => 210, 'maxlen' => 11],
         ['name' => 'character_element_damage_bonus', 'title' => 'Element damage bonus', 'type' => 'number', 'sortorder' => 220, 'maxlen' => 11],
@@ -2462,6 +2470,15 @@ function af_atf_map_named_values_to_fieldids(array $fields, array $namedValues):
         $value = null;
         if (array_key_exists($fieldName, $namedValues)) {
             $value = $namedValues[$fieldName];
+        } elseif ($fieldName === 'character_abil' && array_key_exists('character_abilities', $namedValues)) {
+            $value = $namedValues['character_abilities'];
+        } elseif ($fieldName === 'character_weapon_type' && array_key_exists('character_weapon', $namedValues)) {
+            $value = $namedValues['character_weapon'];
+        } elseif ($fieldName === 'weapon_type' && array_key_exists('character_weapon', $namedValues)) {
+            $value = $namedValues['character_weapon'];
+        } elseif ($fieldName === 'character_race' && array_key_exists('character_origin', $namedValues)) {
+            // Compatibility for legacy ARPG forms; canonical forms use character_origin.
+            $value = $namedValues['character_origin'];
         } elseif (strpos($fieldName, 'character_') === 0 && array_key_exists($fieldName, $statsByKey)) {
             $value = $statsByKey[$fieldName];
         }
@@ -2851,9 +2868,8 @@ function af_atf_character_canonical_profile_key(string $fieldName): string
     }
 
     $map = [
-        'character_weapon' => 'weapon_type',
-        'character_weapon_type' => 'weapon_type',
-        'weapon_type' => 'weapon_type',
+        'character_weapon_type' => 'character_weapon',
+        'weapon_type' => 'character_weapon',
     ];
 
     return (string)($map[$fieldName] ?? $fieldName);
@@ -2865,7 +2881,7 @@ function af_atf_character_mechanics_set_for_field(string $fieldName): string
     $map = [
         'character_gen' => 'character_gender',
         'character_gender' => 'character_gender',
-        'weapon_type' => 'weapon_type',
+        'character_weapon' => 'weapon_type',
     ];
     return (string)($map[$canonical] ?? '');
 }
@@ -3330,16 +3346,10 @@ function af_atf_build_input_html(array $field, string $value): string
                 }
             }
         }
-        $knownVariant = false;
-        foreach ($list as $item) {
-            if ((string)($item['key'] ?? '') === $value) {
-                $knownVariant = true;
-                break;
-            }
-        }
-        if (!$knownVariant) {
-            $value = '';
-        }
+        // Keep the submitted/prefilled key in the select until the dependent
+        // endpoint validates it. Clearing it here loses valid values when the
+        // origin field is rendered later or a legacy registry orders it after
+        // the variant.
         $base = rtrim((string)$mybb->settings['bburl'], '/');
         $html = '<div class="af-atf-origin-variant" data-endpoint="' . htmlspecialchars_uni($base . '/misc.php?action=af_atf_kb_origin_variants') . '" data-selected="' . $safeValue . '">';
         $html .= $renderKbSelect($nameAttr, $value, $list);
@@ -4919,6 +4929,7 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         'character_archetype' => af_charactersheets_pick_field_value($index, ['character_archetype', 'character_class', 'archetype', 'class']),
         'character_faction' => af_charactersheets_pick_field_value($index, ['character_faction', 'faction']),
         'character_app' => af_charactersheets_pick_field_value($index, ['character_app', 'character_about', 'character_bio', 'character_description', 'app']),
+        'character_weapon' => af_charactersheets_pick_field_value($index, ['character_weapon', 'character_weapon_type', 'weapon_type'], false),
         'weapon_type' => af_charactersheets_pick_field_value($index, ['weapon_type', 'character_weapon', 'character_weapon_type'], false),
     ];
     $profile += af_atf_bridge_collect_character_profile_extras($index, array_keys($profile));
