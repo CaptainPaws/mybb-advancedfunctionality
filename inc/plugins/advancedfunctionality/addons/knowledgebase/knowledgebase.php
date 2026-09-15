@@ -3032,6 +3032,7 @@ function af_kb_character_profile_resolved_value(string $field, string $value, bo
     ];
     $mechanicsMap = [
         'character_gen' => 'character_gender',
+        'character_weapon' => 'weapon_type',
     ];
 
     $mechanicsSet = (string)($mechanicsMap[$field] ?? '');
@@ -8191,6 +8192,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                         'resource_def' => af_kb_get_arpg_mechanics_options('resource_def'),
                         'character_stat' => array_map(static function ($key, $labels) { return ['key' => $key, 'label_ru' => (string)($labels['ru'] ?? $key), 'label_en' => (string)($labels['en'] ?? $key)]; }, array_keys(af_kb_character_stats_labels_dictionary()), array_values(af_kb_character_stats_labels_dictionary())),
                         'character_gender' => af_kb_get_arpg_mechanics_options('character_gender'),
+                        'weapon_type' => af_kb_get_arpg_mechanics_options('weapon_type', 'weapon_type'),
                     ];
                     $arpgPublicTypeUiOptions = [
                         'arpg_element' => af_kb_get_public_type_options('arpg_element'),
@@ -10776,7 +10778,7 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
         if ($catalogProfile['character_origin'] === '') {
             $catalogProfile['character_origin'] = trim((string)($profile['character_race'] ?? ''));
         }
-        foreach (['character_origin', 'character_origin_variant', 'character_class', 'character_element', 'category'] as $field) {
+        foreach (['character_gen', 'character_origin', 'character_origin_variant', 'character_class', 'character_element', 'category'] as $field) {
             $value = trim((string)($catalogProfile[$field] ?? ''));
             if ($value === '') {
                 continue;
@@ -10798,6 +10800,10 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
     $url = 'misc.php?action=kb&type=' . rawurlencode((string)$entry['type']) . '&key=' . rawurlencode((string)$entry['key']);
     $kb_entry_url = htmlspecialchars_uni($url);
     $kb_character_title = htmlspecialchars_uni($title);
+    $englishName = $isCharacter ? trim((string)($profile['character_name'] ?? '')) : '';
+    $kb_character_name_en = $englishName !== '' && $englishName !== $title
+        ? htmlspecialchars_uni($englishName)
+        : '';
     $kb_character_pic = $pic !== '' ? '<img src="' . htmlspecialchars_uni($pic) . '" alt="" loading="lazy" />' : '<div class="af-kb-char-card__pic-placeholder"></div>';
     $kb_character_short = $short !== '' ? af_kb_parse_message($short) : '';
     $kb_character_meta = $meta ? implode(' • ', $meta) : '';
@@ -10845,6 +10851,8 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         $displayProfile['character_archetype'] = trim((string)($profile['character_class'] ?? ''));
     }
     foreach ([
+        'Имя персонажа [EN]' => 'character_name',
+        'Имя персонажа [RU]' => 'character_name_ru',
         'Прототип' => 'character_prototype',
         'Прозвище' => 'character_nicknames',
         'Стихия' => 'character_element',
@@ -10853,6 +10861,11 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         'Разновидность' => 'character_origin_variant',
         'Архетип' => 'character_archetype',
         'Фракция' => 'character_faction',
+        'Тип оружия' => 'character_weapon',
+        'Возраст' => 'character_age',
+        'Рост' => 'character_height',
+        'Вес' => 'character_weight',
+        'Деятельность' => 'character_activity',
     ] as $label => $field) {
         $value = trim((string)($displayProfile[$field] ?? ''));
         if ($value === '') {
@@ -10903,6 +10916,8 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         . '</section>'
         . ($appearance !== '' ? '<section class="af-kb-char-profile__section"><h3>Описание</h3><div>' . af_kb_parse_message($appearance) . '</div></section>' : '')
         . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>Биография</h3><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
+        . (!empty($profile['character_post']) ? '<section class="af-kb-char-profile__section"><h3>Пост</h3><div>' . af_kb_parse_message((string)$profile['character_post']) . '</div></section>' : '')
+        . (!empty($profile['character_userinfo']) ? '<section class="af-kb-char-profile__section"><h3>Дополнительная информация</h3><div>' . af_kb_parse_message((string)$profile['character_userinfo']) . '</div></section>' : '')
         . '<section class="af-kb-char-profile__section"><h3>Способности</h3><div class="af-kb-char-abilities">' . ($abilitiesHtml !== '' ? $abilitiesHtml : '<div class="af-kb-char-empty">No abilities yet.</div>') . '</div></section>'
         . '<section class="af-kb-char-profile__service">' . $applyCtaHtml . '</section>'
         . '</div>';

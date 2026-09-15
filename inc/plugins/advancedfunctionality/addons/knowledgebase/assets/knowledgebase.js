@@ -5296,7 +5296,7 @@
                     if (characterVariantOptions.length || state.character_profile.character_origin_variant) {
                         profileDefs.push({ name: 'character_origin_variant', label: 'Разновидность происхождения', type: 'select', options: characterVariantOptions, allowEmpty: true, emptyLabel: '—' });
                     }
-                    profileDefs.push({ name: 'character_archetype', label: 'Архетип', type: 'select', options: characterClassOptions, allowEmpty: true, emptyLabel: '—' });
+                    profileDefs.push({ name: 'character_class', label: 'Архетип', type: 'select', options: characterClassOptions, allowEmpty: true, emptyLabel: '—' });
                 } else {
                     profileDefs.push({ name: 'character_race', label: 'Раса', type: 'select', options: characterRaceOptions, allowEmpty: true, emptyLabel: '—' });
                     profileDefs.push({ name: 'character_class', label: 'Класс', type: 'select', options: characterClassOptions, allowEmpty: true, emptyLabel: '—' });

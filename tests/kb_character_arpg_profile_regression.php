@@ -24,7 +24,7 @@ character_arpg_assert(
 );
 $arpgCharacterProfile = af_kb_get_type_profile_definition_arpg('character');
 $arpgCharacterFields = (array)($arpgCharacterProfile['defaults']['character_profile'] ?? []);
-foreach (['category', 'character_pic', 'character_prototype', 'character_name', 'character_name_ru', 'character_nicknames', 'character_element', 'character_gen', 'character_origin', 'character_origin_variant', 'character_archetype', 'character_faction', 'character_weapon', 'character_age', 'character_height', 'character_weight', 'character_activity', 'character_app', 'character_post', 'character_userinfo'] as $field) {
+foreach (['category', 'character_pic', 'character_prototype', 'character_name', 'character_name_ru', 'character_nicknames', 'character_element', 'character_gen', 'character_origin', 'character_origin_variant', 'character_class', 'character_faction', 'character_weapon', 'character_age', 'character_height', 'character_weight', 'character_activity', 'character_app', 'character_post', 'character_userinfo'] as $field) {
     character_arpg_assert(array_key_exists($field, $arpgCharacterFields), 'ARPG Character profile field is missing: ' . $field);
 }
 character_arpg_assert(
