@@ -2832,7 +2832,14 @@
                     character_class: '',
                     character_archetype: '',
                     character_faction: '',
-                    character_app: ''
+                    character_weapon: '',
+                    character_age: '',
+                    character_height: '',
+                    character_weight: '',
+                    character_activity: '',
+                    character_app: '',
+                    character_post: '',
+                    character_userinfo: ''
                 };
                 base.character_stats = {
                     character_hp: 0,
@@ -3549,7 +3556,7 @@
             ensureArr('character_abilities');
             ensureArr('character_links');
             if (!state.character_profile.category) state.character_profile.category = 'canons';
-            ['character_pic', 'character_prototype', 'character_name', 'character_name_ru', 'character_nicknames', 'character_element', 'character_gen', 'character_race', 'character_origin', 'character_origin_variant', 'character_class', 'character_archetype', 'character_faction', 'character_app'].forEach(function (k) {
+            ['character_pic', 'character_prototype', 'character_name', 'character_name_ru', 'character_nicknames', 'character_element', 'character_gen', 'character_race', 'character_origin', 'character_origin_variant', 'character_class', 'character_archetype', 'character_faction', 'character_weapon', 'character_age', 'character_height', 'character_weight', 'character_activity', 'character_app', 'character_post', 'character_userinfo'].forEach(function (k) {
                 state.character_profile[k] = String(state.character_profile[k] || '');
             });
             ['character_hp', 'character_defense', 'character_element_damage_bonus', 'character_crit_damage', 'character_healing_received_bonus', 'character_attack_power', 'character_elemental_mastery', 'character_healing_bonus', 'character_shield_strength', 'character_luck'].forEach(function (k) {
@@ -4201,7 +4208,14 @@
                         character_class: String(profileC.character_class || ''),
                         character_archetype: String(profileC.character_archetype || ''),
                         character_faction: String(profileC.character_faction || ''),
-                        character_app: String(profileC.character_app || '')
+                        character_weapon: String(profileC.character_weapon || profileC.character_weapon_type || profileC.weapon_type || ''),
+                        character_age: String(profileC.character_age || ''),
+                        character_height: String(profileC.character_height || ''),
+                        character_weight: String(profileC.character_weight || ''),
+                        character_activity: String(profileC.character_activity || profileC.character_occupation || ''),
+                        character_app: String(profileC.character_app || ''),
+                        character_post: String(profileC.character_post || ''),
+                        character_userinfo: String(profileC.character_userinfo || '')
                     },
                     character_stats: {
                         character_hp: numberOrZero(statsC.character_hp != null ? statsC.character_hp : 0),
@@ -5256,6 +5270,7 @@
                 var effectStatusOptions = optionsFromMechanics('status_def', []);
                 var effectStatOptions = optionsFromMechanics('character_stat', []);
                 var characterGenderOptions = optionsFromMechanics('character_gender', []);
+                var characterWeaponOptions = optionsFromMechanics('weapon_type', []);
                 var characterElementOptions = optionsFromPublicType('arpg_element');
                 var characterRaceOptions = optionsFromPublicType('arpg_origin');
                 var characterClassOptions = optionsFromPublicType('arpg_archetype');
@@ -5287,10 +5302,17 @@
                     profileDefs.push({ name: 'character_class', label: 'Класс', type: 'select', options: characterClassOptions, allowEmpty: true, emptyLabel: '—' });
                 }
                 profileDefs.push(
-                    { name: 'character_faction', label: 'Фракция', type: 'select', options: characterFactionOptions, allowEmpty: true, emptyLabel: '—' }
+                    { name: 'character_faction', label: 'Фракция', type: 'select', options: characterFactionOptions, allowEmpty: true, emptyLabel: '—' },
+                    { name: 'character_activity', label: 'Деятельность', type: 'text' },
+                    { name: 'character_weapon', label: 'Тип оружия', type: 'select', options: characterWeaponOptions, allowEmpty: true, emptyLabel: '—' },
+                    { name: 'character_age', label: 'Возраст', type: 'text' },
+                    { name: 'character_height', label: 'Рост', type: 'text' },
+                    { name: 'character_weight', label: 'Вес', type: 'text' }
                 );
                 var profileTextareaDefs = [
-                    { name: 'character_app', label: 'Внешность', type: 'textarea', editorPolicy: 'allow', fullWidth: true }
+                    { name: 'character_app', label: 'О персонаже', type: 'textarea', editorPolicy: 'allow', fullWidth: true },
+                    { name: 'character_post', label: 'Пост', type: 'textarea', editorPolicy: 'allow', fullWidth: true },
+                    { name: 'character_userinfo', label: 'Дополнительная информация', type: 'textarea', editorPolicy: 'allow', fullWidth: true }
                 ];
 
                 var profileGrid = document.createElement('div');

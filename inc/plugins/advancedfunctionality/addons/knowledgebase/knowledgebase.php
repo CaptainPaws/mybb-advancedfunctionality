@@ -109,6 +109,37 @@ function af_kb_arpg_character_field_type_contract(): array
     ];
 }
 
+/**
+ * Canonical ATF fields owned by the shared Character contract.
+ *
+ * The values are ordered compatibility candidates used when reading older KB
+ * payloads. Writers (the KB editor and ATF prefill) must always use the key.
+ */
+function af_kb_character_profile_field_contract(): array
+{
+    return [
+        'character_element' => ['character_element', 'element'],
+        'character_pic' => ['character_pic', 'pic', 'avatar'],
+        'character_prototype' => ['character_prototype', 'prototype'],
+        'character_name' => ['character_name', 'name'],
+        'character_name_ru' => ['character_name_ru', 'name_ru', 'name_rus'],
+        'character_nicknames' => ['character_nicknames', 'nicknames'],
+        'character_weapon' => ['character_weapon', 'character_weapon_type', 'weapon_type'],
+        'character_age' => ['character_age', 'age'],
+        'character_gen' => ['character_gen', 'character_gender', 'gender', 'sex'],
+        'character_height' => ['character_height', 'height'],
+        'character_weight' => ['character_weight', 'weight'],
+        'character_class' => ['character_class', 'character_archetype', 'archetype', 'class'],
+        'character_origin' => ['character_origin', 'character_race', 'origin', 'race'],
+        'character_origin_variant' => ['character_origin_variant', 'origin_variant'],
+        'character_faction' => ['character_faction', 'faction'],
+        'character_activity' => ['character_activity', 'character_occupation', 'activity', 'occupation'],
+        'character_app' => ['character_app', 'appearance', 'description'],
+        'character_post' => ['character_post', 'post'],
+        'character_userinfo' => ['character_userinfo', 'userinfo', 'additional_info'],
+    ];
+}
+
 function af_kb_arpg_character_stat_keys(): array
 {
     return array_keys(af_kb_arpg_origin_modifier_stat_definitions());
@@ -719,7 +750,14 @@ function af_kb_default_type_definitions(): array
                     'character_origin_variant' => '',
                     'character_class' => '',
                     'character_faction' => '',
+                    'character_weapon' => '',
+                    'character_age' => '',
+                    'character_height' => '',
+                    'character_weight' => '',
+                    'character_activity' => '',
                     'character_app' => '',
+                    'character_post' => '',
+                    'character_userinfo' => '',
                 ],
                 'character_stats' => [
                     'character_hp' => 0,
@@ -758,7 +796,14 @@ function af_kb_default_type_definitions(): array
                 ['path' => 'character_profile.character_origin_variant', 'type' => 'string', 'default' => ''],
                 ['path' => 'character_profile.character_class', 'type' => 'string', 'default' => ''],
                 ['path' => 'character_profile.character_faction', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_weapon', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_age', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_height', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_weight', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_activity', 'type' => 'string', 'default' => ''],
                 ['path' => 'character_profile.character_app', 'type' => 'textarea', 'default' => ''],
+                ['path' => 'character_profile.character_post', 'type' => 'textarea', 'default' => ''],
+                ['path' => 'character_profile.character_userinfo', 'type' => 'textarea', 'default' => ''],
                 ['path' => 'character_stats.character_hp', 'type' => 'number', 'default' => 0],
                 ['path' => 'character_stats.character_defense', 'type' => 'number', 'default' => 0],
                 ['path' => 'character_stats.character_element_damage_bonus', 'type' => 'number', 'default' => 0],
@@ -3959,7 +4004,14 @@ function af_kb_get_type_profile_definition_dnd(string $typeKey): array
                     'character_race' => '',
                     'character_class' => '',
                     'character_faction' => '',
+                    'character_weapon' => '',
+                    'character_age' => '',
+                    'character_height' => '',
+                    'character_weight' => '',
+                    'character_activity' => '',
                     'character_app' => '',
+                    'character_post' => '',
+                    'character_userinfo' => '',
                 ],
                 'character_stats' => [
                     'character_hp' => 0,
@@ -10915,21 +10967,7 @@ function af_kb_build_character_application_prefill(array $entry): array
     ]);
 
     $prefill = [];
-    $profileMap = [
-        'character_pic' => ['character_pic', 'pic', 'avatar'],
-        'character_prototype' => ['character_prototype', 'prototype'],
-        'character_name' => ['character_name', 'name'],
-        'character_name_ru' => ['character_name_ru', 'name_ru', 'name_rus'],
-        'character_nicknames' => ['character_nicknames', 'nicknames'],
-        'character_age' => ['character_age', 'age'],
-        'character_element' => ['character_element', 'element'],
-        'character_gen' => ['character_gen', 'gender', 'sex'],
-        'character_race' => ['character_race', 'character_origin', 'origin', 'race'],
-        'character_class' => ['character_class', 'character_archetype', 'archetype', 'class'],
-        'character_faction' => ['character_faction', 'faction'],
-        'character_activity' => ['character_activity', 'activity', 'occupation'],
-        'character_app' => ['character_app', 'appearance', 'description'],
-    ];
+    $profileMap = af_kb_character_profile_field_contract();
     foreach ($profileMap as $targetField => $candidates) {
         foreach ($candidates as $candidate) {
             if (!array_key_exists($candidate, $profile)) {

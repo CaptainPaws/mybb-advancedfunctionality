@@ -548,7 +548,9 @@
       };
 
       originSelect.addEventListener("change", () => load(false));
-      setVisible(variantSelect.options.length > 1);
+      // Validate and restore the server-prefilled variant only after Origin is
+      // known and its dependent option set has been loaded.
+      load(true);
     },
 
     initCharacterMechanic() {
