@@ -10656,6 +10656,7 @@ function af_kb_character_status_labels(bool $isRu): array
 {
     return [
         'free' => $isRu ? 'Свободен' : 'Free',
+        'pending' => $isRu ? 'Анкета на рассмотрении' : 'Application pending',
         'occupied' => $isRu ? 'Занят' : 'Occupied',
         'held' => $isRu ? 'Придержан' : 'Held',
         'author' => $isRu ? 'Авторский' : 'Original',
@@ -10690,7 +10691,7 @@ function af_kb_get_character_availability_payload(array $entry): array
     $isAuthorCategory = in_array($category, ['originals', 'original', 'author', 'authors'], true);
 
     $storedStatus = strtolower(trim((string)($availability['status'] ?? 'free')));
-    if (!in_array($storedStatus, ['free', 'occupied', 'held'], true)) {
+    if (!in_array($storedStatus, ['free', 'pending', 'occupied', 'held'], true)) {
         $storedStatus = 'free';
     }
 
@@ -10703,6 +10704,16 @@ function af_kb_get_character_availability_payload(array $entry): array
         $effectiveStatus = 'author';
     } elseif ($storedStatus === 'held' && ($holdUntilTs <= 0 || $holdUntilTs < TIME_NOW)) {
         $effectiveStatus = 'free';
+    }
+    // A topic outside the configured pending/accepted forums is historical.
+    // Archived topics therefore never block a subsequent application.
+    $activeTid = (int)($meta['active_application_tid'] ?? 0);
+    if ($activeTid > 0 && function_exists('af_cwf_is_allowed_forum')) {
+        global $db;
+        $activeThread = is_object($db) ? (array)$db->fetch_array($db->simple_select('threads', 'tid,fid', 'tid=' . $activeTid, ['limit' => 1])) : [];
+        if (empty($activeThread) || !af_cwf_is_allowed_forum((int)($activeThread['fid'] ?? 0))) {
+            $effectiveStatus = 'free';
+        }
     }
 
     return [
@@ -10900,8 +10911,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     if ($isCanon && !empty($availability['can_apply'])) {
         $targetForumId = af_kb_resolve_character_application_forum_id();
         if ($targetForumId > 0) {
-            $applyUrl = 'misc.php?action=kb_character_apply&type=' . rawurlencode((string)($entry['type'] ?? 'character'))
-                . '&key=' . rawurlencode((string)($entry['key'] ?? ''));
+            $applyUrl = 'misc.php?action=kb_character_apply&source_kb_id=' . (int)($entry['id'] ?? 0);
             $applyCtaHtml = '<a class="af-kb-btn af-kb-btn--create" href="' . htmlspecialchars_uni($applyUrl) . '">Подать анкету</a>';
         } else {
             $applyCtaHtml = '<button type="button" class="af-kb-btn" disabled title="Не настроен форум анкет (ATF group forums).">Подать анкету</button>';
@@ -11066,13 +11076,12 @@ function af_kb_handle_character_apply(): void
         error_no_permission();
     }
 
-    $type = af_kb_resolve_requested_type((string)$mybb->get_input('type'));
-    $key = trim((string)$mybb->get_input('key'));
-    if ($type !== 'character' || $key === '') {
+    $sourceKbId = (int)$mybb->get_input('source_kb_id', MyBB::INPUT_INT);
+    if ($sourceKbId <= 0) {
         error($lang->af_kb_not_found ?? 'Entry not found.');
     }
 
-    $where = "type='character' AND `key`='" . $db->escape_string($key) . "' AND active=1";
+    $where = 'id=' . $sourceKbId . " AND type='character' AND active=1";
     $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', $where, ['limit' => 1]));
     if (!$entry || !af_kb_entry_visible_in_context($entry, 'catalog', af_kb_can_edit())) {
         error($lang->af_kb_not_found ?? 'Entry not found.');
@@ -11086,6 +11095,13 @@ function af_kb_handle_character_apply(): void
     $availability = af_kb_get_character_availability_payload($entry);
     if (empty($availability['can_apply'])) {
         error($lang->af_kb_no_access ?? 'Character is not available for application.');
+    }
+    $characterMeta = (array)($character['meta'] ?? []);
+    $previousTid = (int)($characterMeta['active_application_tid'] ?? 0);
+    if ($previousTid > 0 && (string)($availability['effective_status'] ?? '') === 'free'
+        && function_exists('af_atf_bridge_update_canon_lifecycle')) {
+        af_atf_bridge_update_canon_lifecycle((int)$entry['id'], $previousTid, (int)($characterMeta['source_uid'] ?? 0), 'archived');
+        $entry = (array)$db->fetch_array($db->simple_select('af_kb_entries', '*', 'id=' . (int)$entry['id'], ['limit' => 1]));
     }
 
     $forumId = af_kb_resolve_character_application_forum_id();
@@ -11140,7 +11156,7 @@ function af_kb_handle_character_status_save(): void
     }
 
     $status = strtolower(trim((string)$mybb->get_input('character_status')));
-    if (!in_array($status, ['free', 'occupied', 'held'], true)) {
+    if (!in_array($status, ['free', 'pending', 'occupied', 'held'], true)) {
         error('Некорректный статус.');
     }
 
@@ -11162,6 +11178,30 @@ function af_kb_handle_character_status_save(): void
     }
     $rules = isset($meta['rules']) && is_array($meta['rules']) ? (array)$meta['rules'] : [];
     $characterMeta = isset($rules['character_meta']) && is_array($rules['character_meta']) ? (array)$rules['character_meta'] : [];
+    $releaseMode = strtolower(trim((string)$mybb->get_input('release_mode')));
+    if ($status === 'free') {
+        $activeTid = (int)($characterMeta['active_application_tid'] ?? 0);
+        if ($activeTid > 0 && function_exists('af_cwf_upsert_row')) {
+            af_cwf_upsert_row($activeTid, ['state' => defined('AF_CWF_STATE_ARCHIVED') ? AF_CWF_STATE_ARCHIVED : 'archived']);
+        }
+        if ($releaseMode === 'restore') {
+            $baseline = (array)($characterMeta['canon_baseline'] ?? []);
+            if (empty($baseline)) error('Исходная версия канона ещё не сохранена.');
+            foreach (['character_profile', 'character_abilities', 'character_links'] as $field) {
+                if (array_key_exists($field, $baseline)) $rules[$field] = $baseline[$field];
+            }
+        }
+        $characterMeta['active_application_tid'] = 0;
+        $history = is_array($characterMeta['role_history'] ?? null) ? $characterMeta['role_history'] : [];
+        foreach ($history as &$event) {
+            if (is_array($event) && (int)($event['tid'] ?? 0) === $activeTid) {
+                $event['status'] = 'archived';
+                $event['archived_at'] = TIME_NOW;
+            }
+        }
+        unset($event);
+        $characterMeta['role_history'] = $history;
+    }
     $characterMeta['availability'] = [
         'status' => $status,
         'link_url' => $linkUrl,
@@ -11177,7 +11217,12 @@ function af_kb_handle_character_status_save(): void
         error('Не удалось сохранить статус.');
     }
 
-    $db->update_query('af_kb_entries', ['meta_json' => $db->escape_string($metaJson)], 'id=' . (int)$entry['id']);
+    $dataJson = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $payload = ['meta_json' => $db->escape_string($metaJson)];
+    if (is_string($dataJson) && $dataJson !== '') {
+        $payload['data_json'] = $db->escape_string($dataJson);
+    }
+    $db->update_query('af_kb_entries', $payload, 'id=' . (int)$entry['id']);
     redirect('misc.php?action=kb&type=character&key=' . rawurlencode($key), 'Статус персонажа обновлён.');
 }
 
@@ -11713,9 +11758,11 @@ function af_kb_handle_view(): void
                 . '<input type="hidden" name="key" value="' . htmlspecialchars_uni($key) . '" />'
                 . '<label>Статус<select name="character_status" data-af-kb-status-select="1">'
                 . '<option value="free"' . ($storedStatus === 'free' ? ' selected="selected"' : '') . '>Свободен</option>'
+                . '<option value="pending"' . ($storedStatus === 'pending' ? ' selected="selected"' : '') . '>Анкета на рассмотрении</option>'
                 . '<option value="occupied"' . ($storedStatus === 'occupied' ? ' selected="selected"' : '') . '>Занят</option>'
                 . '<option value="held"' . ($storedStatus === 'held' ? ' selected="selected"' : '') . '>Придержан</option>'
                 . '</select></label>'
+                . '<label>При освобождении<select name="release_mode"><option value="keep">Оставить текущую версию</option><option value="restore">Восстановить исходный канон</option></select></label>'
                 . '<label data-af-kb-status-link-wrap="1">Ссылка на профиль/анкету<input type="url" name="status_link_url" value="' . htmlspecialchars_uni((string)($availability['link_url'] ?? '')) . '" data-af-kb-status-link="1" placeholder="https://..." /></label>'
                 . '<label data-af-kb-status-date-wrap="1">Придержан до<input type="date" name="hold_until" value="' . htmlspecialchars_uni((string)($availability['hold_until'] ?? '')) . '" data-af-kb-status-date="1" /></label>'
                 . '<div class="af-kb-status-form__actions"><button type="submit" class="af-kb-btn af-kb-btn--create">Сохранить</button></div>'
