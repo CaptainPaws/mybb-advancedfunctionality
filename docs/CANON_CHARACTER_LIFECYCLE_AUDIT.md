@@ -32,3 +32,32 @@ This audit was completed before the lifecycle implementation.
    accepted CharacterWorkflow forum. Moving it elsewhere (or deleting it) makes
    it historical and releases the role; old workflow rows and topics are retained.
 
+## Immutable link lifecycle audit (`source_kb_id = 123`)
+
+The first loss was at the prefill-store read on **any POST**. The implementation
+deleted the server-side token before MyBB knew whether the request was a preview,
+had validation errors, or had successfully inserted a thread. Thus the preview
+response still rendered the opaque hidden token, but the next POST could no
+longer resolve it. A direct valid submit could retain the in-request global, but
+the persistence path also depended on ATF values and on the later page hook.
+
+| Stage | ID 123 after the fix | Evidence / representation |
+|---|---|---|
+| KB «Подать анкету» | present | GET transport starts as `source_kb_id=123`. |
+| Apply request handler | present | The handler loads active Character 123 and checks its canon category. |
+| Server prefill payload | present | `entry.id=123`; payload is stored against user, forum, expiry, and random token. |
+| Initial ATF values | present server-side | The token resolves the payload; the technical ID is not an editable ATF value. |
+| Form metadata | present | Only `af_atf_prefill_token` is a named, enabled hidden input inside the injected ATF form block. |
+| Preview | present | The token row is read but no longer deleted by a POST read. |
+| Submit POST | present | The hidden opaque token resolves again for the same user and forum. |
+| Thread creation | present | `datahandler_post_insert_thread` supplies the real tid. |
+| DataHandler hook | present | The server-owned `entry.id=123` is explicitly handed to the thread-link writer. |
+| Workflow metadata | present | Canonical persistent key `af_character_workflow.kb_entry_id=123`; acceptance metadata is only a compatibility mirror. |
+| Acceptance metadata | present immediately | `af_charactersheets_accept.kb_entry_id=123` is written at creation, not deferred until acceptance. |
+| Moderator lookup | present | `af_cwf_has_linked_kb_character()` reads workflow first, validates active Character type, then compatibility/legacy sources. |
+
+**Transport key:** `af_atf_prefill_token` in the browser; `entry.id` (originating
+as `source_kb_id`) in its server-side payload. No browser-provided KB ID is
+trusted. **Persistent key:** `kb_entry_id`. **Persist hook:**
+`af_atf_dh_insert_thread()` after `ThreadDataHandler` assigns the tid. The token
+is deleted only after the server-owned ID has been written against that tid.
