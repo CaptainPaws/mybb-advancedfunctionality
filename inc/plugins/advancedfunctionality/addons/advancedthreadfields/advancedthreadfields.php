@@ -5040,6 +5040,7 @@ function af_atf_bridge_update_canon_lifecycle(int $entryId, int $tid, int $uid, 
         $availability['reserved_by_uid'] = 0;
         $availability['reserved_by_name'] = '';
         $availability['reserved_until'] = '';
+        $availability['reservation_extended'] = 0;
         unset($availability['hold_until']);
     }
     $availability['updated_at'] = TIME_NOW;
@@ -5294,6 +5295,7 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
                 'reserved_by_uid' => 0,
                 'reserved_by_name' => '',
                 'reserved_until' => '',
+                'reservation_extended' => 0,
                 'updated_at' => TIME_NOW,
             ],
             'synced_at' => TIME_NOW,

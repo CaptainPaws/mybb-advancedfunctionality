@@ -21,7 +21,7 @@ kb_original_owner_assert(
 );
 kb_original_owner_assert(strpos($kb, "\$ownerUid = max(0, (int)(\$availability['owner_uid'] ?? 0));") !== false, 'Renderer does not read the canonical owner relation');
 kb_original_owner_assert(strpos($kb, "'af_charactersheets_accept'") !== false && strpos($kb, "'kb_entry_id=' . (int)\$entry['id']") !== false, 'Legacy originals do not resolve their durable Character sheet owner');
-kb_original_owner_assert(strpos($kb, "member.php?action=profile&amp;uid=' . (int)\$availability['owner_uid']") !== false, 'Original profile URL is not rendered');
+kb_original_owner_assert(strpos($kb, "af_kb_render_character_status_link(\$availability, \$isRu, 'service')") !== false, 'Original profile chip does not use the shared renderer');
 kb_original_owner_assert(strpos($kb, "\$status === 'reserved' ? (int)(\$availability['reserved_by_uid']") !== false, 'Reservation holder is not separated from character owner');
 
 echo "KB original owner regression checks passed.\n";

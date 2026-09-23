@@ -9905,7 +9905,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_race_variants', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save', 'kb_debug_entry_cats', 'kb_character_apply', 'kb_character_reserve', 'kb_character_status_save'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_race_variants', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save', 'kb_debug_entry_cats', 'kb_character_apply', 'kb_character_reserve', 'kb_character_extend', 'kb_character_status_save'], true)) {
         return;
     }
 
@@ -9995,6 +9995,9 @@ function af_kb_dispatch(): void
     }
     if ($action === 'kb_character_reserve') {
         af_kb_handle_character_reserve();
+    }
+    if ($action === 'kb_character_extend') {
+        af_kb_handle_character_extend();
     }
     if ($action === 'kb_character_status_save') {
         af_kb_handle_character_status_save();
@@ -10750,6 +10753,7 @@ function af_kb_get_character_availability_payload(array $entry): array
     }
     $holdUntilRaw = trim((string)($availability['reserved_until'] ?? ($availability['hold_until'] ?? '')));
     $holdUntilTs = af_kb_parse_hold_until_timestamp($holdUntilRaw);
+    $reservationExtended = !empty($availability['reservation_extended']);
 
     $effectiveStatus = $storedStatus;
     if ($isAuthorCategory) {
@@ -10778,6 +10782,12 @@ function af_kb_get_character_availability_payload(array $entry): array
         'reserved_by_name' => $reservedByName,
         'hold_until' => $holdUntilRaw,
         'hold_until_ts' => $holdUntilTs,
+        'reservation_extended' => $reservationExtended,
+        'can_extend' => $category === 'canons' && $storedStatus === 'reserved'
+            && $effectiveStatus === 'reserved' && $reservedByUid > 0
+            && $reservedByUid === (int)($GLOBALS['mybb']->user['uid'] ?? 0)
+            && $holdUntilTs >= TIME_NOW && !$reservationExtended
+            && (int)($meta['active_application_tid'] ?? 0) <= 0,
         'can_apply' => $category === 'canons' && ($effectiveStatus === 'free'
             || ($effectiveStatus === 'reserved' && $reservedByUid > 0
                 && $reservedByUid === (int)($GLOBALS['mybb']->user['uid'] ?? 0))),
@@ -10801,7 +10811,7 @@ function af_kb_render_character_status_link(array $availability, bool $isRu, str
     $uid = $status === 'reserved' ? (int)($availability['reserved_by_uid'] ?? 0) : (int)($availability['owner_uid'] ?? 0);
     if ($uid > 0) {
         $title = $isRu ? 'Профиль' : 'Profile';
-        return '<a class="af-kb-status-link af-kb-status-link--' . htmlspecialchars_uni($context) . '" href="member.php?action=profile&amp;uid=' . $uid . '">' . htmlspecialchars_uni($title) . '</a>';
+        return '<a class="af-kb-status-link af-kb-status-link--' . htmlspecialchars_uni($context) . '" href="member.php?action=profile&amp;uid=' . $uid . '"><span class="af-kb-status-link__icon" aria-hidden="true">&#128100;</span><span>' . htmlspecialchars_uni($title) . '</span></a>';
     }
     $name = $status === 'reserved' ? trim((string)($availability['reserved_by_name'] ?? '')) : '';
     return $name !== '' ? '<span class="af-kb-status-link af-kb-status-link--' . htmlspecialchars_uni($context) . '">' . htmlspecialchars_uni($isRu ? 'Придержал: ' : 'Reserved by: ') . htmlspecialchars_uni($name) . '</span>' : '';
@@ -10964,6 +10974,13 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     $availability = af_kb_get_character_availability_payload($entry);
     $isCanon = trim((string)($profile['category'] ?? '')) === 'canons';
     $applyCtaHtml = '';
+    if ($isCanon && !empty($availability['can_extend'])) {
+        $applyCtaHtml .= '<form method="post" action="misc.php" class="af-kb-inline-form">'
+            . '<input type="hidden" name="action" value="kb_character_extend" />'
+            . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$GLOBALS['mybb']->post_code) . '" />'
+            . '<input type="hidden" name="source_kb_id" value="' . (int)($entry['id'] ?? 0) . '" />'
+            . '<button type="submit" class="af-kb-btn af-kb-btn--extend">Продлить бронь</button></form>';
+    }
     if ($isCanon && !empty($availability['can_apply'])) {
         if ((string)$availability['effective_status'] === 'free' && (int)($GLOBALS['mybb']->user['uid'] ?? 0) > 0) {
             $applyCtaHtml .= '<form method="post" action="misc.php" class="af-kb-inline-form">'
@@ -10982,7 +10999,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     } elseif ($isCanon && (string)($availability['effective_status'] ?? '') === 'occupied') {
         $profileUrl = af_kb_sanitize_url((string)($availability['link_url'] ?? ''));
         if ($profileUrl !== '') {
-            $applyCtaHtml = '<a class="af-kb-btn af-kb-btn--profile" href="' . htmlspecialchars_uni($profileUrl) . '">Профиль</a>';
+            $applyCtaHtml = af_kb_render_character_status_link($availability, $isRu, 'service');
         } else {
             $applyCtaHtml = '<button type="button" class="af-kb-btn" disabled>Профиль</button>';
         }
@@ -10993,7 +11010,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
 
     // Owner identity belongs to Character, not only to canon occupancy.
     if (!$isCanon && (int)($availability['owner_uid'] ?? 0) > 0) {
-        $applyCtaHtml .= '<a class="af-kb-btn af-kb-btn--profile" href="member.php?action=profile&amp;uid=' . (int)$availability['owner_uid'] . '">Профиль</a>';
+        $applyCtaHtml .= af_kb_render_character_status_link($availability, $isRu, 'service');
     }
 
     return '<div class="af-kb-char-profile">'
@@ -11233,6 +11250,7 @@ function af_kb_handle_character_reserve(): void
     $characterMeta['availability'] = [
         'status' => 'reserved', 'owner_uid' => 0, 'link_url' => '',
         'reserved_by_uid' => $uid, 'reserved_by_name' => '', 'reserved_until' => $until,
+        'reservation_extended' => 0,
         'updated_at' => TIME_NOW, 'updated_by' => $uid,
     ];
     $rules['character_meta'] = $characterMeta;
@@ -11244,6 +11262,59 @@ function af_kb_handle_character_reserve(): void
         'meta_json' => $db->escape_string($metaJson), 'data_json' => $db->escape_string($dataJson), 'updated_at' => TIME_NOW,
     ], 'id=' . $entryId);
     redirect('misc.php?action=kb&type=character&key=' . rawurlencode((string)$entry['key']), 'Персонаж придержан на 7 дней.');
+}
+
+/** Extend the current user's active reservation once, from its existing expiry. */
+function af_kb_handle_character_extend(): void
+{
+    global $db, $mybb, $lang;
+
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    if ($uid <= 0 || strtoupper((string)$mybb->request_method) !== 'POST') error_no_permission();
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $entryId = (int)$mybb->get_input('source_kb_id', MyBB::INPUT_INT);
+    $entry = (array)$db->fetch_array($db->simple_select('af_kb_entries', '*', 'id=' . $entryId . " AND type='character' AND active=1", ['limit' => 1]));
+    if (!$entry) error($lang->af_kb_not_found ?? 'Entry not found.');
+
+    $character = af_kb_extract_character_contract($entry);
+    $availabilityPayload = af_kb_get_character_availability_payload($entry);
+    if (trim((string)(($character['profile'] ?? [])['category'] ?? '')) !== 'canons'
+        || empty($availabilityPayload['can_extend'])) {
+        error($lang->af_kb_no_access ?? 'Reservation cannot be extended.');
+    }
+
+    $meta = af_kb_decode_json((string)($entry['meta_json'] ?? '{}'));
+    if (!is_array($meta)) $meta = [];
+    $rules = kb_parse_rules($entry);
+    if (!is_array($rules)) $rules = [];
+    $characterMeta = (array)($rules['character_meta'] ?? []);
+    $availability = (array)($characterMeta['availability'] ?? []);
+    $until = af_kb_parse_hold_until_timestamp((string)($availability['reserved_until'] ?? ($availability['hold_until'] ?? '')));
+
+    // Recheck persisted values immediately before writing; never extend from now.
+    if (strtolower(trim((string)($availability['status'] ?? ''))) !== 'reserved'
+        || (int)($availability['reserved_by_uid'] ?? 0) !== $uid
+        || $until < TIME_NOW || !empty($availability['reservation_extended'])
+        || (int)($characterMeta['active_application_tid'] ?? 0) > 0) {
+        error($lang->af_kb_no_access ?? 'Reservation cannot be extended.');
+    }
+
+    $availability['reserved_until'] = $until + af_kb_character_reservation_duration();
+    unset($availability['hold_until']);
+    $availability['reservation_extended'] = 1;
+    $availability['updated_at'] = TIME_NOW;
+    $availability['updated_by'] = $uid;
+    $characterMeta['availability'] = $availability;
+    $rules['character_meta'] = $characterMeta;
+    $meta['rules'] = $rules;
+    $metaJson = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $dataJson = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($metaJson) || !is_string($dataJson)) error('Не удалось продлить бронь.');
+    $db->update_query('af_kb_entries', [
+        'meta_json' => $db->escape_string($metaJson), 'data_json' => $db->escape_string($dataJson), 'updated_at' => TIME_NOW,
+    ], 'id=' . $entryId);
+    redirect('misc.php?action=kb&type=character&key=' . rawurlencode((string)$entry['key']), 'Бронь продлена на 7 дней.');
 }
 
 /** Persistently release expired reservations; safe to invoke from a MyBB task. */
@@ -11270,6 +11341,7 @@ function af_kb_cleanup_expired_reservations(int $now = 0): int
         $availability['reserved_by_uid'] = 0;
         $availability['reserved_by_name'] = '';
         $availability['reserved_until'] = '';
+        $availability['reservation_extended'] = 0;
         unset($availability['hold_until']);
         $availability['updated_at'] = $now;
         $availability['updated_by'] = 0;
@@ -11369,6 +11441,7 @@ function af_kb_handle_character_status_save(): void
     $rules = kb_parse_rules($entry);
     if (!is_array($rules)) $rules = [];
     $characterMeta = isset($rules['character_meta']) && is_array($rules['character_meta']) ? (array)$rules['character_meta'] : [];
+    $previousAvailability = (array)($characterMeta['availability'] ?? []);
     $releaseMode = strtolower(trim((string)$mybb->get_input('release_mode')));
     if ($status === 'free') {
         $activeTid = (int)($characterMeta['active_application_tid'] ?? 0);
@@ -11397,6 +11470,10 @@ function af_kb_handle_character_status_save(): void
         $ownerUid = 0;
         $linkUrl = '';
     }
+    $sameActiveReservation = $status === 'reserved'
+        && strtolower(trim((string)($previousAvailability['status'] ?? ''))) === 'reserved'
+        && (int)($previousAvailability['reserved_by_uid'] ?? 0) === $reservedByUid
+        && trim((string)($previousAvailability['reserved_by_name'] ?? '')) === ($reservedByUid > 0 ? '' : $reservedByName);
     $characterMeta['availability'] = [
         'status' => $status,
         'owner_uid' => $ownerUid,
@@ -11404,6 +11481,7 @@ function af_kb_handle_character_status_save(): void
         'reserved_by_uid' => $reservedByUid,
         'reserved_by_name' => $reservedByUid > 0 ? '' : $reservedByName,
         'reserved_until' => $holdUntil,
+        'reservation_extended' => $sameActiveReservation && !empty($previousAvailability['reservation_extended']) ? 1 : 0,
         'updated_at' => TIME_NOW,
         'updated_by' => (int)($mybb->user['uid'] ?? 0),
     ];
