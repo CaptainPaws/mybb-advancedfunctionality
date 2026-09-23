@@ -377,14 +377,27 @@ function af_atf_prefill_store_consume(string $token, int $uid, int $fid): array
     }
     $payload['mechanic'] = (string)($payload['mechanic'] ?? ($row['mechanic'] ?? ''));
 
-    // GET and preview must not destroy the server-side identity. Consume only on
-    // the successful thread-submission request.
-    $isPost = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) === 'POST';
-    if ($isPost) {
+    return $payload;
+}
+
+/** Delete a prefill capability only after its KB identity was persisted by tid. */
+function af_atf_prefill_store_delete(string $token): void
+{
+    global $db, $cache;
+
+    $token = strtolower(trim($token));
+    if (!preg_match('~^[a-f0-9]{16,128}$~', $token)) {
+        return;
+    }
+    if (is_object($db) && $db->table_exists(AF_ATF_TABLE_PREFILL)) {
         $db->delete_query(AF_ATF_TABLE_PREFILL, "token='" . $db->escape_string($token) . "'");
     }
-
-    return $payload;
+    $cacheKey = 'af_atf_prefill_' . $token;
+    if (is_object($cache) && method_exists($cache, 'delete')) {
+        $cache->delete($cacheKey);
+    } elseif (is_object($cache) && method_exists($cache, 'update')) {
+        $cache->update($cacheKey, null);
+    }
 }
 
 
@@ -2582,13 +2595,7 @@ function af_atf_boot_prefill_from_token(int $fid): void
         $GLOBALS['af_atf_prefill_mechanic'] = $mechanic;
     }
 
-    if (strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) === 'POST') {
-        if (method_exists($cache, 'delete')) {
-            $cache->delete($cacheKey);
-        } else {
-            $cache->update($cacheKey, null);
-        }
-    }
+
 }
 
 /* -------------------- INPUT RENDER (newthread/editpost) -------------------- */
@@ -4858,6 +4865,18 @@ function af_atf_character_bridge_store_thread_kb_link(int $tid, int $fid, int $u
             af_cwf_bind_kb_entry($tid, (int)$entry['id']);
         }
         af_atf_bridge_update_canon_lifecycle((int)$entry['id'], $tid, $uid, 'pending');
+
+        // The browser returns only the opaque token. Retire it after the
+        // server-owned entry id is bound to the newly-created thread, never on
+        // preview or a validation failure.
+        $token = isset($GLOBALS['mybb']) && is_object($GLOBALS['mybb'])
+            ? trim((string)$GLOBALS['mybb']->get_input('af_atf_prefill_token'))
+            : '';
+        if ($token !== '') {
+            af_atf_prefill_store_delete($token);
+        }
+        // newthread_do_newthread_end may run after the DataHandler hook.
+        $GLOBALS['af_atf_prefill_kb_entry'] = [];
         return;
     }
 }
@@ -5706,22 +5725,24 @@ function af_atf_dh_validate(&$ph): void
 
 function af_atf_dh_insert_thread(&$ph): void
 {
-    if (empty($ph->data['af_atf_values']) || !is_array($ph->data['af_atf_values'])) {
-        return;
-    }
-
     $tid = 0;
-
     if (!empty($ph->data['tid'])) {
         $tid = (int)$ph->data['tid'];
     } elseif (property_exists($ph, 'tid') && !empty($ph->tid)) {
         $tid = (int)$ph->tid;
     } elseif (method_exists($ph, 'get_thread_id')) {
-        // на всякий случай, если когда-то добавишь такой метод
         $tid = (int)$ph->get_thread_id();
     }
 
-    if ($tid <= 0) {
+    // This hook runs only after ThreadDataHandler assigned the real tid. Persist
+    // server-owned prefill metadata independently of ordinary ATF field values.
+    if ($tid > 0) {
+        $fid = (int)($ph->data['fid'] ?? ($GLOBALS['fid'] ?? 0));
+        $uid = (int)($ph->data['uid'] ?? ($GLOBALS['mybb']->user['uid'] ?? 0));
+        af_atf_character_bridge_store_thread_kb_link($tid, $fid, $uid);
+    }
+
+    if ($tid <= 0 || empty($ph->data['af_atf_values']) || !is_array($ph->data['af_atf_values'])) {
         return;
     }
 
