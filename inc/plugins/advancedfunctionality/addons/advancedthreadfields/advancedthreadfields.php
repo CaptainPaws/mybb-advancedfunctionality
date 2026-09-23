@@ -4795,8 +4795,20 @@ function af_atf_render_character_kb_moderation_button(int $tid, int $uid, array 
         return '';
     }
 
-    $canCreate = function_exists('af_cwf_can_create_kb') && af_cwf_can_create_kb($tid, $thread, $acceptRow);
-    $canSync = function_exists('af_cwf_can_sync_kb') ? af_cwf_can_sync_kb($tid, $thread, $acceptRow) : false;
+    // Resolve the immutable workflow link here, where the action label is
+    // selected.  A newly-published application has no acceptance metadata yet,
+    // so that metadata must never decide between CREATE and SYNC.
+    $linkedKb = function_exists('af_cwf_has_linked_kb_character')
+        ? af_cwf_has_linked_kb_character($tid, $acceptRow)
+        : ['ok' => false];
+    $hasLinkedKb = !empty($linkedKb['ok']);
+
+    $canCreate = !$hasLinkedKb
+        && function_exists('af_cwf_can_create_kb')
+        && af_cwf_can_create_kb($tid, $thread, $acceptRow);
+    $canSync = $hasLinkedKb
+        && function_exists('af_cwf_can_sync_kb')
+        && af_cwf_can_sync_kb($tid, $thread, $acceptRow);
     if (!$canCreate && !$canSync) {
         return '';
     }
