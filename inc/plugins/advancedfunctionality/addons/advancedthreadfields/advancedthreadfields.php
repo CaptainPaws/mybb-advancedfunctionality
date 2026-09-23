@@ -158,6 +158,7 @@ function af_advancedthreadfields_install(): void
               `title` VARCHAR(255) NOT NULL,
               `description` TEXT NOT NULL,
               `forums` TEXT NOT NULL,
+              `archive_fid` INT UNSIGNED NOT NULL DEFAULT 0,
               `character_mechanic_mode` VARCHAR(16) NOT NULL DEFAULT 'auto',
               `catalog_characters_url` VARCHAR(500) NOT NULL DEFAULT '',
               `catalog_roles_url` VARCHAR(500) NOT NULL DEFAULT '',
@@ -1123,7 +1124,8 @@ function af_atf_db_ensure_group_columns(): void
     }
 
     $cols = [
-        'character_mechanic_mode' => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `character_mechanic_mode` VARCHAR(16) NOT NULL DEFAULT 'auto' AFTER `forums`",
+        'archive_fid'             => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `archive_fid` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `forums`",
+        'character_mechanic_mode' => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `character_mechanic_mode` VARCHAR(16) NOT NULL DEFAULT 'auto' AFTER `archive_fid`",
         'catalog_characters_url'   => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `catalog_characters_url` VARCHAR(500) NOT NULL DEFAULT '' AFTER `forums`",
         'catalog_roles_url'        => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `catalog_roles_url` VARCHAR(500) NOT NULL DEFAULT '' AFTER `catalog_characters_url`",
         'catalog_characters_label' => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `catalog_characters_label` VARCHAR(255) NOT NULL DEFAULT '' AFTER `catalog_roles_url`",
@@ -1147,6 +1149,7 @@ function af_atf_group_cache_select_fields(): array
 
     // Новые колонки из Prompt 2 — могут ещё отсутствовать на старой БД
     $optional = [
+        'archive_fid',
         'character_mechanic_mode',
         'catalog_characters_url',
         'catalog_roles_url',
@@ -2095,6 +2098,7 @@ function af_atf_rebuild_cache(bool $force = false): void
                 'forums_expanded'=> $forumsExpanded,
                 'active'         => (int)($g['active'] ?? 0),
                 'sortorder'      => (int)($g['sortorder'] ?? 0),
+                'archive_fid'     => (int)($g['archive_fid'] ?? 0),
                 'character_mechanic_mode' => (string)($g['character_mechanic_mode'] ?? 'auto'),
 
                 // новые поля: если колонок ещё нет в БД — спокойно даём дефолты
@@ -2604,20 +2608,71 @@ function af_atf_boot_prefill_from_token(int $fid): void
 
 }
 
-/** The archive is display-only: it never makes the forum an application form. */
-function af_atf_get_application_archive_forum_id(): int
+/** Resolve a group's archive, retaining the legacy global setting as fallback only. */
+function af_atf_get_group_archive_forum_id(array $group): int
 {
     global $mybb;
 
+    $archiveFid = max(0, (int)($group['archive_fid'] ?? 0));
+    if ($archiveFid > 0) return $archiveFid;
     return isset($mybb) && is_object($mybb)
         ? max(0, (int)($mybb->settings['af_atf_application_archive_fid'] ?? 0))
         : 0;
 }
 
-function af_atf_is_application_archive_forum(int $fid): bool
+/** @deprecated Use af_atf_get_group_archive_forum_id() with an identified group. */
+function af_atf_get_application_archive_forum_id(): int
 {
-    $archiveFid = af_atf_get_application_archive_forum_id();
-    return $archiveFid > 0 && $fid === $archiveFid;
+    return af_atf_get_group_archive_forum_id([]);
+}
+
+function af_atf_get_group_for_thread(int $tid, int $sourceFid = 0): ?array
+{
+    global $db;
+    if ($tid <= 0 || !is_object($db)) return null;
+    foreach (af_atf_get_groups_cached() as $group) {
+        $gid = (int)($group['gid'] ?? 0);
+        if ($gid <= 0) continue;
+        $hasValue = (int)$db->fetch_field($db->query(
+            "SELECT COUNT(*) AS total FROM " . TABLE_PREFIX . AF_ATF_TABLE_VALUES . " v " .
+            "INNER JOIN " . TABLE_PREFIX . AF_ATF_TABLE_FIELDS . " f ON (f.fieldid=v.fieldid) " .
+            "WHERE v.tid={$tid} AND f.groupid={$gid}"
+        ), 'total');
+        if ($hasValue > 0) return $group;
+    }
+    if ($sourceFid > 0) {
+        foreach (af_atf_get_groups_cached() as $group) {
+            $forums = (array)($group['forums_set'] ?? []);
+            if (!empty($forums) && isset($forums[$sourceFid])) return $group;
+        }
+    }
+    return null;
+}
+
+function af_atf_group_is_character_application(array $group): bool
+{
+    global $db;
+    $gid = (int)($group['gid'] ?? 0);
+    if ($gid <= 0 || !is_object($db)) return false;
+    $count = (int)$db->fetch_field($db->simple_select(
+        AF_ATF_TABLE_FIELDS,
+        'COUNT(*) AS total',
+        "groupid={$gid} AND active=1 AND (name='character_abilities' OR name LIKE 'character\\_%')"
+    ), 'total');
+    return $count > 0;
+}
+
+function af_atf_is_application_archive_forum(int $fid, int $tid = 0): bool
+{
+    if ($fid <= 0) return false;
+    if ($tid > 0) {
+        $group = af_atf_get_group_for_thread($tid);
+        return is_array($group) && af_atf_get_group_archive_forum_id($group) === $fid;
+    }
+    foreach (af_atf_get_groups_cached() as $group) {
+        if (af_atf_get_group_archive_forum_id($group) === $fid) return true;
+    }
+    return false;
 }
 
 /**
@@ -4973,6 +5028,13 @@ function af_atf_bridge_update_canon_lifecycle(int $entryId, int $tid, int $uid, 
     $characterMeta['synced_at'] = TIME_NOW;
     $availability = (array)($characterMeta['availability'] ?? []);
     $availability['status'] = $status === 'archived' ? 'free' : $status;
+    if ($status === 'occupied') {
+        $availability['owner_uid'] = max(0, $uid);
+        $availability['link_url'] = $uid > 0 ? 'member.php?action=profile&uid=' . $uid : '';
+    } elseif ($status === 'archived' || $status === 'free') {
+        $availability['owner_uid'] = 0;
+        $availability['link_url'] = '';
+    }
     $availability['updated_at'] = TIME_NOW;
     $characterMeta['availability'] = $availability;
     $rules['character_meta'] = $characterMeta;
@@ -5052,6 +5114,7 @@ function af_atf_archive_linked_canon_application(int $tid): bool
     $characterMeta['role_history'] = $history;
     $availability = (array)($characterMeta['availability'] ?? []);
     $availability['status'] = 'free';
+    $availability['owner_uid'] = 0;
     $availability['link_url'] = '';
     $availability['hold_until'] = '';
     $availability['updated_at'] = TIME_NOW;
@@ -5074,7 +5137,12 @@ function af_atf_archive_linked_canon_application(int $tid): bool
 /** Process MyBB's successful single-thread move hooks. */
 function af_atf_handle_application_archive_move(array $args): void
 {
-    $archiveFid = af_atf_get_application_archive_forum_id();
+    $tid = (int)($args['tid'] ?? 0);
+    if ($tid <= 0) return;
+    $sourceFid = (int)($args['old_fid'] ?? $args['fid'] ?? 0);
+    $group = af_atf_get_group_for_thread($tid, $sourceFid);
+    if (!is_array($group) || !af_atf_group_is_character_application($group)) return;
+    $archiveFid = af_atf_get_group_archive_forum_id($group);
     if ($archiveFid <= 0) return;
 
     $newFid = 0;
@@ -5086,8 +5154,7 @@ function af_atf_handle_application_archive_move(array $args): void
     }
     if ($newFid !== $archiveFid) return;
 
-    $tid = (int)($args['tid'] ?? 0);
-    if ($tid > 0) af_atf_archive_linked_canon_application($tid);
+    af_atf_archive_linked_canon_application($tid);
 }
 
 function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [], array $context = []): array
@@ -6514,7 +6581,7 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
         return '';
     }
 
-    $fields = af_atf_is_application_archive_forum($fid)
+    $fields = af_atf_is_application_archive_forum($fid, $tid)
         ? af_atf_get_archive_display_fields($values)
         : af_atf_get_fields_for_forum($fid);
     if (empty($fields)) {

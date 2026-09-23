@@ -10695,7 +10695,11 @@ function af_kb_get_character_availability_payload(array $entry): array
         $storedStatus = 'free';
     }
 
+    $ownerUid = max(0, (int)($availability['owner_uid'] ?? 0));
     $linkUrl = af_kb_sanitize_url((string)($availability['link_url'] ?? ''));
+    if ($ownerUid > 0) {
+        $linkUrl = 'member.php?action=profile&uid=' . $ownerUid;
+    }
     $holdUntilRaw = trim((string)($availability['hold_until'] ?? ''));
     $holdUntilTs = af_kb_parse_hold_until_timestamp($holdUntilRaw);
 
@@ -10721,6 +10725,7 @@ function af_kb_get_character_availability_payload(array $entry): array
         'stored_status' => $storedStatus,
         'effective_status' => $effectiveStatus,
         'link_url' => $linkUrl,
+        'owner_uid' => $ownerUid,
         'hold_until' => $holdUntilRaw,
         'hold_until_ts' => $holdUntilTs,
         'can_apply' => $category === 'canons' && $effectiveStatus === 'free',
@@ -10747,7 +10752,7 @@ function af_kb_render_character_status_link(array $availability, bool $isRu, str
         return '';
     }
 
-    $title = $isRu ? 'Открыть ссылку' : 'Open link';
+    $title = $status === 'occupied' ? ($isRu ? 'Профиль' : 'Profile') : ($isRu ? 'Открыть ссылку' : 'Open link');
     return '<a class="af-kb-status-link af-kb-status-link--' . htmlspecialchars_uni($context) . '" href="' . htmlspecialchars_uni($url) . '" target="_blank" rel="noopener noreferrer" title="' . htmlspecialchars_uni($title) . '" aria-label="' . htmlspecialchars_uni($title) . '">🔗</a>';
 }
 
@@ -10916,6 +10921,15 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         } else {
             $applyCtaHtml = '<button type="button" class="af-kb-btn" disabled title="Не настроен форум анкет (ATF group forums).">Подать анкету</button>';
         }
+    } elseif ($isCanon && (string)($availability['effective_status'] ?? '') === 'occupied') {
+        $profileUrl = af_kb_sanitize_url((string)($availability['link_url'] ?? ''));
+        if ($profileUrl !== '') {
+            $applyCtaHtml = '<a class="af-kb-btn af-kb-btn--profile" href="' . htmlspecialchars_uni($profileUrl) . '">Профиль</a>';
+        } else {
+            $applyCtaHtml = '<button type="button" class="af-kb-btn" disabled>Профиль</button>';
+        }
+    } elseif ($isCanon && (string)($availability['effective_status'] ?? '') === 'pending') {
+        $applyCtaHtml = '<button type="button" class="af-kb-btn" disabled>Анкета на рассмотрении</button>';
     }
 
     return '<div class="af-kb-char-profile">'
@@ -11168,6 +11182,16 @@ function af_kb_handle_character_status_save(): void
     }
 
     $linkUrl = af_kb_sanitize_url((string)$mybb->get_input('status_link_url'));
+    $ownerUid = 0;
+    if ($linkUrl !== '' && preg_match('~(?:[?&]|&amp;)uid=(\d+)~i', $linkUrl, $ownerMatch)) {
+        $ownerUid = (int)$ownerMatch[1];
+    }
+    if ($status === 'occupied' && $ownerUid <= 0) {
+        error('Ссылка на профиль должна содержать корректный uid.');
+    }
+    if ($status === 'occupied') {
+        $linkUrl = 'member.php?action=profile&uid=' . $ownerUid;
+    }
     $holdUntil = trim((string)$mybb->get_input('hold_until'));
     if (($status === 'occupied' || $status === 'held') && $linkUrl === '') {
         error('Для выбранного статуса требуется ссылка на профиль/анкету.');
@@ -11183,7 +11207,9 @@ function af_kb_handle_character_status_save(): void
     if (!is_array($meta)) {
         $meta = [];
     }
-    $rules = isset($meta['rules']) && is_array($meta['rules']) ? (array)$meta['rules'] : [];
+    // Use the same effective contract source as rendering (including data_json fallback).
+    $rules = kb_parse_rules($entry);
+    if (!is_array($rules)) $rules = [];
     $characterMeta = isset($rules['character_meta']) && is_array($rules['character_meta']) ? (array)$rules['character_meta'] : [];
     $releaseMode = strtolower(trim((string)$mybb->get_input('release_mode')));
     if ($status === 'free') {
@@ -11193,7 +11219,7 @@ function af_kb_handle_character_status_save(): void
         }
         if ($releaseMode === 'restore') {
             $baseline = (array)($characterMeta['canon_baseline'] ?? []);
-            if (empty($baseline)) error('Исходная версия канона ещё не сохранена.');
+            if (empty($baseline)) error('BASELINE MISSING / MANUAL RECOVERY REQUIRED');
             foreach (['character_profile', 'character_abilities', 'character_links'] as $field) {
                 if (array_key_exists($field, $baseline)) $rules[$field] = $baseline[$field];
             }
@@ -11209,8 +11235,13 @@ function af_kb_handle_character_status_save(): void
         unset($event);
         $characterMeta['role_history'] = $history;
     }
+    if ($status !== 'occupied') {
+        $ownerUid = 0;
+        if ($status === 'free' || $status === 'pending') $linkUrl = '';
+    }
     $characterMeta['availability'] = [
         'status' => $status,
+        'owner_uid' => $ownerUid,
         'link_url' => $linkUrl,
         'hold_until' => $holdUntil,
         'updated_at' => TIME_NOW,

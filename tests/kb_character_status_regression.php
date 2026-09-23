@@ -28,6 +28,11 @@ kb_character_status_assert(strpos($php, 'if (!af_kb_can_edit())') !== false, 'Mo
 kb_character_status_assert(strpos($php, 'verify_post_check(') !== false, 'Status save CSRF check is missing');
 kb_character_status_assert(strpos($php, "'availability' =") === false, 'Invalid direct availability storage detected');
 kb_character_status_assert(strpos($php, "\$characterMeta['availability'] = [") !== false, 'Status is not stored in character_meta.availability');
+kb_character_status_assert(strpos($php, '$rules = kb_parse_rules($entry);') !== false, 'Status save does not use the effective Character contract');
+kb_character_status_assert(strpos($php, "'owner_uid' => \$ownerUid") !== false, 'Occupied owner uid is not persisted');
+kb_character_status_assert(strpos($php, 'Ссылка на профиль должна содержать корректный uid.') !== false, 'Profile uid is not validated');
+kb_character_status_assert(strpos($php, 'af-kb-btn--profile') !== false, 'Occupied canon profile CTA is missing');
+kb_character_status_assert(strpos($php, '>Анкета на рассмотрении</button>') !== false, 'Pending canon disabled state is missing');
 kb_character_status_assert(strpos($php, "'can_apply' => \$category === 'canons' && \$effectiveStatus === 'free'") !== false, 'Canon application availability is not recalculated from effective status');
 
 echo "KB Character status regression checks passed.\n";
