@@ -767,7 +767,7 @@ display: inline-block;
 }
 
 .af-kb-char-card__body { padding: 10px 12px 12px; }
-.af-kb-char-card__body h3 { margin: 0 0 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.af-kb-char-card__body h3 { margin: 0 0 6px; }
 .af-kb-char-card__name-en { font-size: 13px; color: #4f5870; margin: -2px 0 6px; }
 .af-kb-char-card__name-en:empty { display: none; }
 .af-kb-char-card__meta { font-size: 12px; color: #687087; margin-bottom: 8px; }
@@ -814,7 +814,7 @@ display: inline-block;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  margin-left: 8px;
+  margin-left: 0;
   padding: 5px 10px;
   border-radius: 999px;
   font-size: 12px;
@@ -823,13 +823,21 @@ display: inline-block;
   vertical-align: middle;
   white-space: nowrap;
 }
-.af-kb-char-card__body h3 .af-kb-status-badge {
-  margin-left: 0;
+.af-character-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  margin: 0 0 8px;
 }
+.af-kb-entry-header .af-character-meta-row { margin-top: 6px; }
 .af-kb-status-badge--free { background: #e7f8ec; color: #1f7a3e; }
 .af-kb-status-badge--occupied { background: #fdeaea; color: #a22b2b; }
 .af-kb-status-badge--reserved,
 .af-kb-status-badge--held { background: #eaf1ff; color: #2a4ca8; }
+.af-kb-status-badge--application,
+.af-kb-status-badge--pending { background: #fff3d6; color: #855d00; }
 .af-kb-status-badge--author { background: #f2ebff; color: #6a3da8; }
 .af-kb-status-link {
   display: inline-flex;
@@ -838,7 +846,7 @@ display: inline-block;
   gap: 6px;
   min-height: 24px;
   box-sizing: border-box;
-  margin-left: 8px;
+  margin-left: 0;
   padding: 5px 10px;
   border-radius: 999px;
   border: 1px solid #cfd6e6;
@@ -869,6 +877,9 @@ display: inline-block;
 .af-kb-status-form__actions { display: flex; justify-content: flex-end; }
 
 @media (max-width: 640px) {
+  .af-character-meta-row > * {
+    max-width: 100%;
+  }
   .af-kb-char-ability__chip {
     font-size: 10px;
   }
