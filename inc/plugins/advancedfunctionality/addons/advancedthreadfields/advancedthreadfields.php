@@ -4558,6 +4558,10 @@ function af_atf_newthread_do_start(): void
 
     if ($fidI > 0) {
         $fid = $fidI;
+        // A successful submission does not pass through newthread_start before
+        // ThreadDataHandler inserts the thread. Rehydrate the server-owned KB
+        // identity from the opaque token on the actual POST path as well.
+        af_atf_boot_prefill_from_token($fidI);
     }
 
     // чтобы при preview/ошибках поля НЕ СТИРАЛИСЬ — готовим блок из POST
