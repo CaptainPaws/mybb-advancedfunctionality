@@ -24,6 +24,7 @@ function canon_lifecycle_function_source(string $source, string $functionName, s
 
 $prefillRead = canon_lifecycle_function_source($atf, 'af_atf_prefill_store_consume', 'af_atf_prefill_store_delete');
 $prefillBoot = canon_lifecycle_function_source($atf, 'af_atf_boot_prefill_from_token', 'af_atf_newthread_start');
+$submitStart = canon_lifecycle_function_source($atf, 'af_atf_newthread_do_start', 'af_atf_editpost_do_start');
 $insertHook = canon_lifecycle_function_source($atf, 'af_atf_dh_insert_thread', 'af_atf_dh_update_post');
 $moderationButton = canon_lifecycle_function_source($atf, 'af_atf_render_character_kb_moderation_button', 'af_atf_character_bridge_store_thread_kb_link');
 
@@ -32,6 +33,8 @@ canon_lifecycle_assert(strpos($atf, "name=\"af_atf_prefill_token\"") !== false, 
 canon_lifecycle_assert(strpos($atf, 'function af_atf_prefill_store_delete') !== false, 'Prefill token has no success-only cleanup path');
 canon_lifecycle_assert(strpos($prefillRead, 'delete_query') === false, 'DB token is consumed by preview/invalid POST');
 canon_lifecycle_assert(strpos($prefillBoot, '$cache->delete') === false, 'Cache token is consumed by preview/invalid POST');
+canon_lifecycle_assert(strpos($submitStart, 'af_atf_boot_prefill_from_token($fidI);') !== false, 'Successful submit does not resolve the opaque prefill token before ThreadDataHandler insert');
+canon_lifecycle_assert(strpos($submitStart, 'af_atf_boot_prefill_from_token($fidI);') < strpos($submitStart, 'af_atf_prepare_input_block($fidI, 0, false);'), 'Submit resolves prefill identity too late');
 canon_lifecycle_assert(strpos($insertHook, 'af_atf_character_bridge_store_thread_kb_link($tid, $fid, $uid);') !== false, 'Post-insert hook does not persist the KB link');
 canon_lifecycle_assert(strpos($insertHook, 'af_atf_character_bridge_store_thread_kb_link') < strpos($insertHook, "empty(\$ph->data['af_atf_values'])"), 'KB persistence still depends on submitted ATF values');
 canon_lifecycle_assert(strpos($workflow, "if (!empty(\$ctx['kb_linked']))") !== false, 'CREATE is not blocked for linked applications');
