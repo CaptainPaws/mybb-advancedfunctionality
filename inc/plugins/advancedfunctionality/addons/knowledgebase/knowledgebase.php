@@ -1312,18 +1312,20 @@ function af_kb_ensure_setting(int $gid, string $name, string $title, string $des
     $sid = (int)$db->fetch_field($q, 'sid');
 
     $row = [
-        'name'        => $db->escape_string($name),
         'title'       => $db->escape_string($title),
         'description' => $db->escape_string($desc),
         'optionscode' => $db->escape_string($type),
-        'value'       => $db->escape_string($value),
         'disporder'   => $order,
         'gid'         => $gid,
     ];
 
     if ($sid) {
+        // Activation and schema upgrades may refresh setting metadata, but the
+        // value belongs to the administrator and must survive reactivation.
         $db->update_query('settings', $row, "sid={$sid}");
     } else {
+        $row['name'] = $db->escape_string($name);
+        $row['value'] = $db->escape_string($value);
         $db->insert_query('settings', $row);
     }
 }
@@ -1335,8 +1337,23 @@ function af_kb_migrate_legacy_categories_ui_setting(): void
     $legacyUi = $db->fetch_array($db->simple_select('settings', 'sid,value', "name='af_kb_categories_ui'", ['limit' => 1]));
     if (!empty($legacyUi['sid'])) {
         $legacyValue = ((string)($legacyUi['value'] ?? 'sidebar') === 'top') ? 'top' : 'sidebar';
-        $db->update_query('settings', ['value' => $db->escape_string($legacyValue)], "name='af_kb_categories_ui_position'");
-        $db->delete_query('settings', "name='af_kb_categories_ui'");
+        $currentSid = (int)$db->fetch_field($db->simple_select(
+            'settings',
+            'sid',
+            "name='af_kb_categories_ui_position'",
+            ['limit' => 1]
+        ), 'sid');
+
+        if ($currentSid === 0) {
+            $db->update_query('settings', [
+                'name' => 'af_kb_categories_ui_position',
+                'value' => $db->escape_string($legacyValue),
+            ], 'sid=' . (int)$legacyUi['sid']);
+        } else {
+            // A canonical value is already present, so it wins over stale
+            // migration data left by an older release.
+            $db->delete_query('settings', 'sid=' . (int)$legacyUi['sid']);
+        }
     }
 }
 
@@ -1362,10 +1379,6 @@ function af_kb_ensure_categories_ui_position_setting(int $gid, string $title, st
             'disporder'   => 10,
             'gid'         => $gid,
         ];
-
-        if (trim((string)($existing['value'] ?? '')) === '') {
-            $updateRow['value'] = 'sidebar';
-        }
 
         $db->update_query('settings', $updateRow, "sid=" . (int)$existing['sid']);
         return;
@@ -1685,6 +1698,7 @@ SQL;
         '0',
         10
     );
+    af_kb_migrate_legacy_categories_ui_setting();
     af_kb_ensure_categories_ui_position_setting(
         $gid,
         $lang->af_kb_categories_ui_position ?? 'KB categories UI position',
@@ -1695,8 +1709,6 @@ SQL;
         $lang->af_kb_default_mechanic_mode ?? 'KB default mechanic mode',
         $lang->af_kb_default_mechanic_mode_desc ?? 'Preferred/default KB mechanic mode for new types and upcoming UI.'
     );
-
-    af_kb_migrate_legacy_categories_ui_setting();
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -1748,6 +1760,7 @@ function af_knowledgebase_activate(): bool
         $lang->af_knowledgebase_group_desc ?? 'Settings for Knowledge Base addon.'
     );
 
+    af_kb_migrate_legacy_categories_ui_setting();
     af_kb_ensure_categories_ui_position_setting(
         $gid,
         $lang->af_kb_categories_ui_position ?? 'KB categories UI position',
@@ -1767,8 +1780,6 @@ function af_knowledgebase_activate(): bool
         'index.php',
         4
     );
-    af_kb_migrate_legacy_categories_ui_setting();
-
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
     }
@@ -12096,10 +12107,13 @@ function af_kb_handle_view(): void
     }
     $kb_short = '';
     $kb_entry_body = $body;
-    $kb_banner = '';
     $bannerUrl = af_kb_sanitize_url((string)($entry['banner_url'] ?? ''));
+    $kb_entry_heading = '<h1>' . $kb_entry_icon . $kb_title . '</h1>';
     if ($bannerUrl !== '') {
-        $kb_banner = '<img class="af-kb-banner" src="' . htmlspecialchars_uni($bannerUrl) . '" alt="" loading="lazy" />';
+        $kb_entry_heading = '<div class="af-kb-entry-header-visual">'
+            . '<img class="af-kb-banner" src="' . htmlspecialchars_uni($bannerUrl) . '" alt="" loading="lazy" />'
+            . '<div class="af-kb-entry-header-title"><h1>' . $kb_entry_icon . $kb_title . '</h1></div>'
+            . '</div>';
     }
     $kb_can_edit = af_kb_can_edit() ? '1' : '0';
     $kb_back_link = af_kb_back_link_html(af_kb_url(['type' => $type]), ['kb']);

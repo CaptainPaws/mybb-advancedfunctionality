@@ -133,25 +133,46 @@
 
 .af-kb-type-header,
 .af-kb-entry-header {
-    padding: 8px 12px;
+    padding: 8px 0;
     border-radius: 6px;
     background-size: cover;
     background-position: center;
 }
 
-.af-kb-type-header-visual {
+.af-kb-type-header > h1,
+.af-kb-entry-header > h1,
+.af-kb-type-header > .af-kb-actions,
+.af-kb-type-header > .af-kb-type-desc,
+.af-kb-entry-header > .af-character-meta-row {
+    margin-right: 12px;
+    margin-left: 12px;
+}
+
+.af-kb-type-header-visual,
+.af-kb-entry-header-visual {
     position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    max-height: 350px;
     overflow: hidden;
     border-radius: 8px;
     margin-bottom: 12px;
 }
 
-.af-kb-type-header-visual > .af-kb-banner {
+.af-kb-type-header-visual > .af-kb-banner,
+.af-kb-entry-header-visual > .af-kb-banner {
+    flex: 0 0 auto;
     width: 100%;
+    height: auto;
+    max-height: none;
     margin: 0;
+    object-fit: cover;
+    object-position: center center;
 }
 
-.af-kb-type-header-title {
+.af-kb-type-header-title,
+.af-kb-entry-header-title {
     position: absolute;
     inset: 0;
     display: flex;
@@ -165,7 +186,8 @@
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }
 
-.af-kb-type-header-title h1 {
+.af-kb-type-header-title h1,
+.af-kb-entry-header-title h1 {
     max-width: 100%;
     margin: 0;
     overflow-wrap: anywhere;
@@ -909,8 +931,10 @@ display: inline-block;
 .af-kb-status-form__actions { display: flex; justify-content: flex-end; }
 
 @media (max-width: 640px) {
-  .af-kb-type-header-title { padding: 12px; }
-  .af-kb-type-header-title h1 { font-size: 1.5em; }
+  .af-kb-type-header-title,
+  .af-kb-entry-header-title { padding: 12px; }
+  .af-kb-type-header-title h1,
+  .af-kb-entry-header-title h1 { font-size: 1.5em; }
   .af-character-meta-row > * {
     max-width: 100%;
   }
