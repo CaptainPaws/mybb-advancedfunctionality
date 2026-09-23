@@ -283,6 +283,7 @@ class AF_Admin_Advancedthreadfields
             'title'       => '',
             'description' => '',
             'forums'      => '',
+            'archive_fid'  => 0,
             'character_mechanic_mode' => 'auto',
             'catalog_characters_url'   => '',
             'catalog_roles_url'        => '',
@@ -325,6 +326,7 @@ class AF_Admin_Advancedthreadfields
                 $forums = $forumsCsv; // может быть пусто => All
             }
 
+            $archiveFid = max(0, (int)$mybb->get_input('archive_fid'));
             $active = (int)$mybb->get_input('active');
             $mechanicMode = trim((string)$mybb->get_input('character_mechanic_mode'));
             if (!in_array($mechanicMode, ['auto', 'dnd', 'arpg'], true)) {
@@ -344,6 +346,7 @@ class AF_Admin_Advancedthreadfields
                     'title'       => $db->escape_string($title),
                     'description' => $db->escape_string($description),
                     'forums'      => $db->escape_string($forums),
+                    'archive_fid'  => $archiveFid,
                     'character_mechanic_mode' => $db->escape_string($mechanicMode),
                     'catalog_characters_url'   => $db->escape_string($catalogCharactersUrl),
                     'catalog_roles_url'        => $db->escape_string($catalogRolesUrl),
@@ -373,6 +376,7 @@ class AF_Admin_Advancedthreadfields
                 'title' => $title,
                 'description' => $description,
                 'forums' => $forums,
+                'archive_fid' => $archiveFid,
                 'character_mechanic_mode' => $mechanicMode,
                 'catalog_characters_url' => $catalogCharactersUrl,
                 'catalog_roles_url' => $catalogRolesUrl,
@@ -432,6 +436,8 @@ class AF_Admin_Advancedthreadfields
         }
 
         self::row($table, 'Forums', $forumsFieldHtml . $forumsHelp);
+        self::row($table, 'ID форума архива', $form->generate_numeric_field('archive_fid', (int)$group['archive_fid'], ['min' => 0])
+            . '<div style="margin-top:6px;font-size:12px;opacity:.85;">Архив только этой Group; 0 использует legacy global setting.</div>');
         self::row(
             $table,
             'Character mechanic mode',
