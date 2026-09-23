@@ -2192,7 +2192,10 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $sheet_nicknames = htmlspecialchars_uni($character_nicknames !== '' ? $character_nicknames : '—');
     $sheet_id = (int)($sheet['id'] ?? 0);
     $sheet_post_key = htmlspecialchars_uni($mybb->post_code);
-    $sheet_owner_uid = (int)$uid;
+    // The sheet row is the authority for ownership. Do not infer the profile
+    // target from the thread author or Character source metadata.
+    $sheet_owner_uid = (int)($sheet['uid'] ?? 0);
+    $sheet_profile_chip_html = af_charactersheets_build_owner_profile_chip($sheet_owner_uid);
     $bonus_items_json = htmlspecialchars_uni(af_charactersheets_json_encode((array)($sheet_view['bonus_items'] ?? [])));
 
     $sheet_mode_attr = htmlspecialchars_uni($sheet_mode);
@@ -2448,6 +2451,7 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
     $next = (float)($view['next_req'] ?? 0);
     $percent = (int)($view['level_percent'] ?? 0);
     $exp_label = htmlspecialchars_uni((string)($view['level_exp_label'] ?? ''));
+    $profile_chip_html = af_charactersheets_build_owner_profile_chip((int)($sheet['uid'] ?? 0));
 
     $skill_points_free = (int)($view['skill_pool_remaining'] ?? 0);
 
@@ -2470,6 +2474,17 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
     $tpl = $templates->get('charactersheet_progress');
     eval("\$out = \"" . $tpl . "\";");
     return $out;
+}
+
+function af_charactersheets_build_owner_profile_chip(int $owner_uid): string
+{
+    if ($owner_uid <= 0) {
+        return '';
+    }
+
+    $profile_url = '/member.php?action=profile&amp;uid=' . $owner_uid;
+
+    return '<a class="af-cs-chip af-cs-profile-chip" href="' . $profile_url . '">Профиль</a>';
 }
 
 function af_charactersheets_build_stats_html(array $index): string
