@@ -25,6 +25,7 @@ function canon_lifecycle_function_source(string $source, string $functionName, s
 $prefillRead = canon_lifecycle_function_source($atf, 'af_atf_prefill_store_consume', 'af_atf_prefill_store_delete');
 $prefillBoot = canon_lifecycle_function_source($atf, 'af_atf_boot_prefill_from_token', 'af_atf_newthread_start');
 $insertHook = canon_lifecycle_function_source($atf, 'af_atf_dh_insert_thread', 'af_atf_dh_update_post');
+$moderationButton = canon_lifecycle_function_source($atf, 'af_atf_render_character_kb_moderation_button', 'af_atf_character_bridge_store_thread_kb_link');
 
 canon_lifecycle_assert(strpos($kb, "source_kb_id=' . (int)(\$entry['id']") !== false, 'Apply URL does not carry immutable KB id');
 canon_lifecycle_assert(strpos($atf, "name=\"af_atf_prefill_token\"") !== false, 'Server-owned prefill token is not retained through submit');
@@ -37,6 +38,9 @@ canon_lifecycle_assert(strpos($workflow, "if (!empty(\$ctx['kb_linked']))") !== 
 canon_lifecycle_assert(strpos($workflow, 'function af_cwf_validate_source_kb') !== false, 'Source KB validation is missing');
 canon_lifecycle_assert(strpos($workflow, 'function af_cwf_has_linked_kb_character') !== false, 'Shared linked Character condition is missing');
 canon_lifecycle_assert(strpos($workflow, "AND type='character' AND active=1") !== false, 'Linked Character condition does not validate type and active status');
+canon_lifecycle_assert(strpos($moderationButton, 'af_cwf_has_linked_kb_character($tid, $acceptRow)') !== false, 'Moderation button does not resolve the persisted workflow KB link directly');
+canon_lifecycle_assert(strpos($moderationButton, '$canCreate = !$hasLinkedKb') !== false, 'Moderation button can still offer CREATE for a linked Character');
+canon_lifecycle_assert(strpos($moderationButton, '$canSync = $hasLinkedKb') !== false, 'Moderation button does not select SYNC from the linked Character relation');
 canon_lifecycle_assert(strpos($sheetRender, 'af_cwf_has_linked_kb_character($tid, $accept_row)') !== false, 'Sheet resolver does not use the shared linked Character condition');
 canon_lifecycle_assert(strpos($sheetRender, "'character_meta.source_uid'") === false, 'Sheet still guesses a Character link by user id');
 canon_lifecycle_assert(substr_count($sheetRender, 'if ($has_kb_character)') >= 3, 'KB presence does not control profile and ability fallbacks');

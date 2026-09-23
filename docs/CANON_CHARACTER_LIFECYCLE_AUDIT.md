@@ -12,8 +12,10 @@ This audit was completed before the lifecycle implementation.
    the payload and `af_kb_handle_character_apply()` stores its short-lived token;
    `af_atf_boot_prefill_from_token()` resolves it on `newthread.php`.
 4. **Moderation action visibility:** `af_atf_render_character_kb_moderation_button()`
-   delegates create/sync policy to `af_cwf_can_create_kb()` and
-   `af_cwf_can_sync_kb()`.
+   reads the persisted link directly through `af_cwf_has_linked_kb_character()`;
+   it then delegates forum/action policy to `af_cwf_can_create_kb()` and
+   `af_cwf_can_sync_kb()`. Acceptance metadata is not a prerequisite for
+   selecting «Синхронизировать с KB».
 5. **Duplicate protection:** the original path uses the deterministic `oc-{tid}`
    key in `af_atf_bridge_sync_character_kb_from_thread()`. Before this change the
    canon branch only linked the entry and did not sync it; server-side identity
