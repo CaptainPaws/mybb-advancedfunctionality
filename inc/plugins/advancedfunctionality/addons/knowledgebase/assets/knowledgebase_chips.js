@@ -411,7 +411,13 @@
             if (reservationWrap) reservationWrap.style.display = isReserved ? '' : 'none';
             if (ownerWrap) ownerWrap.style.display = isOccupied ? '' : 'none';
             if (releaseWrap) releaseWrap.style.display = mode === 'free' ? '' : 'none';
-            if (ownerInput) ownerInput.required = isOccupied;
+            if (ownerInput) {
+                ownerInput.required = isOccupied;
+                // A hidden number input with min="1" and value="0" still
+                // participates in native constraint validation.  That used to
+                // stop the browser before the form's submit event/request.
+                ownerInput.disabled = !isOccupied;
+            }
         }
 
         openButton.addEventListener('click', function () {

@@ -21,6 +21,9 @@ kb_character_status_assert(strpos($viewJs, 'function initCharacterStatusModal()'
 kb_character_status_assert(strpos($editorJs, 'function initCharacterStatusModal()') === false, 'Status modal handler remains stranded or duplicated in the editor runtime');
 kb_character_status_assert(strpos($viewJs, "openButton.addEventListener('click'") !== false, 'Status button has no click listener');
 kb_character_status_assert(strpos($viewJs, 'initCharacterStatusModal();') !== false, 'Status modal handler is not initialized');
+kb_character_status_assert(strpos($viewJs, 'ownerInput.disabled = !isOccupied;') !== false, 'Inactive owner validation can still block native form submission');
+kb_character_status_assert(strpos($php, 'name="action" value="kb_character_status_save"') !== false, 'Status POST does not carry an explicit backend action');
+kb_character_status_assert(strpos($php, 'name="action" value="kb_character_reserve"') !== false, 'Reservation POST does not carry an explicit backend action');
 kb_character_status_assert(strpos($php, "['free', 'reserved', 'application', 'occupied']") !== false, 'Four-state lifecycle contract is missing');
 kb_character_status_assert(strpos($php, "['category'] ?? '')) !== 'canons'") !== false, 'Status save does not require the actual canons category');
 kb_character_status_assert(strpos($php, "['mechanic'] ?? '')) !== 'arpg'") !== false, 'Status save does not protect DnD Characters');
@@ -38,6 +41,7 @@ kb_character_status_assert(strpos($php, 'af-kb-btn--profile') !== false, 'Occupi
 kb_character_status_assert(strpos($php, 'Открыть анкету') !== false, 'Application topic action is missing');
 kb_character_status_assert(strpos($php, "'can_apply' => \$category === 'canons' && (\$effectiveStatus === 'free'") !== false, 'Canon application availability is not recalculated from effective status');
 kb_character_status_assert(strpos($php, 'function af_kb_handle_character_reserve') !== false, 'Public reservation endpoint is missing');
+kb_character_status_assert(strpos($php, "\$characterMeta['active_application_tid'] = 0;") !== false, 'Reservation does not persist release of a stale application');
 kb_character_status_assert(strpos($php, 'function af_kb_cleanup_expired_reservations') !== false, 'Reservation cleanup resolver is missing');
 
 echo "KB Character status regression checks passed.\n";
