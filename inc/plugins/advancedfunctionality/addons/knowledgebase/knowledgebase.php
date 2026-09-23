@@ -10728,6 +10728,20 @@ function af_kb_get_character_availability_payload(array $entry): array
     }
 
     $ownerUid = max(0, (int)($availability['owner_uid'] ?? 0));
+    // Existing originals predate availability.owner_uid. Their durable owner
+    // relation is the accepted Character sheet row linked by kb_entry_id (not
+    // character_meta.source_uid, which is only import provenance).
+    if ($isAuthorCategory && $ownerUid <= 0 && (int)($entry['id'] ?? 0) > 0) {
+        global $db;
+        if (is_object($db) && $db->table_exists('af_charactersheets_accept')) {
+            $ownerUid = max(0, (int)$db->fetch_field($db->simple_select(
+                'af_charactersheets_accept',
+                'uid',
+                'kb_entry_id=' . (int)$entry['id'],
+                ['order_by' => 'accepted_at', 'order_dir' => 'DESC', 'limit' => 1]
+            ), 'uid'));
+        }
+    }
     $reservedByUid = max(0, (int)($availability['reserved_by_uid'] ?? ($storedStatus === 'reserved' ? $ownerUid : 0)));
     $reservedByName = trim((string)($availability['reserved_by_name'] ?? ''));
     $linkUrl = af_kb_sanitize_url((string)($availability['link_url'] ?? ''));
@@ -10952,7 +10966,8 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     $applyCtaHtml = '';
     if ($isCanon && !empty($availability['can_apply'])) {
         if ((string)$availability['effective_status'] === 'free' && (int)($GLOBALS['mybb']->user['uid'] ?? 0) > 0) {
-            $applyCtaHtml .= '<form method="post" action="misc.php?action=kb_character_reserve" class="af-kb-inline-form">'
+            $applyCtaHtml .= '<form method="post" action="misc.php" class="af-kb-inline-form">'
+                . '<input type="hidden" name="action" value="kb_character_reserve" />'
                 . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$GLOBALS['mybb']->post_code) . '" />'
                 . '<input type="hidden" name="source_kb_id" value="' . (int)($entry['id'] ?? 0) . '" />'
                 . '<button type="submit" class="af-kb-btn af-kb-btn--create">Придержать</button></form> ';
@@ -11211,6 +11226,10 @@ function af_kb_handle_character_reserve(): void
     if (!is_array($rules)) $rules = [];
     $characterMeta = (array)($rules['character_meta'] ?? []);
     $until = TIME_NOW + af_kb_character_reservation_duration();
+    // effective_status may have released a stale/historical application in
+    // memory. Persist that release too, otherwise the renderer turns the new
+    // reservation straight back into "free" on the redirected request.
+    $characterMeta['active_application_tid'] = 0;
     $characterMeta['availability'] = [
         'status' => 'reserved', 'owner_uid' => 0, 'link_url' => '',
         'reserved_by_uid' => $uid, 'reserved_by_name' => '', 'reserved_until' => $until,
@@ -11932,11 +11951,12 @@ function af_kb_handle_view(): void
         $kb_status_link = af_kb_render_character_status_link($availability, $isRu, 'entry');
         if (af_kb_can_edit() && $isArpgCanon) {
             $storedStatus = (string)($availability['stored_status'] ?? 'free');
-            $statusSaveUrl = 'misc.php?action=kb_character_status_save';
+            $statusSaveUrl = 'misc.php';
             $kb_character_status_button = '<button type="button" class="af-kb-btn af-kb-btn--edit" data-af-kb-status-open="1">Изменить статус</button>';
             $kb_character_status_modal = '<div class="af-kb-modal-backdrop af-kb-status-modal" data-af-kb-status-modal="1" style="display:none;">'
                 . '<div class="af-kb-modal"><div class="af-kb-modal-header"><h3>Статус персонажа</h3><button type="button" class="af-kb-modal-close" data-af-kb-status-close="1">&times;</button></div>'
                 . '<div class="af-kb-modal-body"><form method="post" action="' . htmlspecialchars_uni($statusSaveUrl) . '" class="af-kb-status-form" data-af-kb-status-form="1">'
+                . '<input type="hidden" name="action" value="kb_character_status_save" />'
                 . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '" />'
                 . '<input type="hidden" name="entry_id" value="' . (int)$entry['id'] . '" />'
                 . '<input type="hidden" name="type" value="character" />'

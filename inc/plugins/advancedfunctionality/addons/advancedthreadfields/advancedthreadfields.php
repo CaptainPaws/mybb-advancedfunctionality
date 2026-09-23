@@ -5283,6 +5283,19 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
             'accepted_by_uid' => (int)($context['accepted_by_uid'] ?? 0),
             'source_tid' => (int)$tid,
             'source_uid' => (int)($thread['uid'] ?? 0),
+            // Character ownership is an explicit relation. source_uid remains
+            // provenance only and must not be guessed by the renderer.
+            'availability' => [
+                'status' => 'free',
+                'owner_uid' => max(0, (int)($thread['uid'] ?? 0)),
+                'link_url' => (int)($thread['uid'] ?? 0) > 0
+                    ? 'member.php?action=profile&uid=' . (int)$thread['uid']
+                    : '',
+                'reserved_by_uid' => 0,
+                'reserved_by_name' => '',
+                'reserved_until' => '',
+                'updated_at' => TIME_NOW,
+            ],
             'synced_at' => TIME_NOW,
         ],
     ];
