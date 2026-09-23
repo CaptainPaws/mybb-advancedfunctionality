@@ -15,7 +15,10 @@
 }
 
 .af-kb-btn {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     padding: 8px 14px;
     background: #4462b2;
     color: #fff;
@@ -804,39 +807,51 @@ display: inline-block;
 .af-kb-char-ability__meta ul { margin: 4px 0 0; padding-left: 18px; }
 .af-kb-char-ability__icon-fallback { opacity: .75; font-size: 14px; line-height: 1; }
 .af-kb-char-profile__service { display: flex; gap: 8px; flex-wrap: wrap; }
+.af-kb-inline-form { display: inline-flex; margin: 0; }
 .af-kb-char-empty { color: #788094; font-style: italic; }
 .af-kb-status-badge {
   display: inline-flex;
   align-items: center;
-  margin-left: 10px;
-  padding: 2px 10px;
+  justify-content: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 5px 10px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.2;
   vertical-align: middle;
+  white-space: nowrap;
 }
 .af-kb-char-card__body h3 .af-kb-status-badge {
   margin-left: 0;
 }
 .af-kb-status-badge--free { background: #e7f8ec; color: #1f7a3e; }
 .af-kb-status-badge--occupied { background: #fdeaea; color: #a22b2b; }
+.af-kb-status-badge--reserved,
 .af-kb-status-badge--held { background: #eaf1ff; color: #2a4ca8; }
 .af-kb-status-badge--author { background: #f2ebff; color: #6a3da8; }
 .af-kb-status-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin-left: 6px;
+  gap: 6px;
+  min-height: 24px;
+  box-sizing: border-box;
+  margin-left: 8px;
+  padding: 5px 10px;
   border-radius: 999px;
   border: 1px solid #cfd6e6;
   background: #fff;
   color: #2a3f74;
   font-size: 12px;
-  line-height: 1;
+  font-weight: 700;
+  line-height: 1.2;
   text-decoration: none;
+  vertical-align: middle;
+  white-space: nowrap;
 }
+.af-kb-status-link__icon { display: inline-flex; flex: 0 0 auto; line-height: 1; }
 .af-kb-status-link:hover {
   border-color: #9aa9cc;
   background: #f5f8ff;
@@ -844,6 +859,9 @@ display: inline-block;
 .af-kb-status-link--entry {
   vertical-align: middle;
 }
+.af-kb-status-link--service { margin-left: 0; }
+.af-kb-btn--extend { background: #7656a8; }
+.af-kb-btn--extend:hover { background: #60438d; }
 .af-kb-status-form { display: grid; gap: 10px; }
 .af-kb-status-form label { display: grid; gap: 6px; font-weight: 600; }
 .af-kb-status-form input,
