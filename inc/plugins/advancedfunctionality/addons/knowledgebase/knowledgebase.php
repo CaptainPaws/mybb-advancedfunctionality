@@ -11139,20 +11139,29 @@ function af_kb_handle_character_status_save(): void
     }
     verify_post_check($mybb->get_input('my_post_key'));
 
+    $entryId = (int)$mybb->get_input('entry_id', MyBB::INPUT_INT);
     $type = af_kb_resolve_requested_type((string)$mybb->get_input('type'));
     $key = trim((string)$mybb->get_input('key'));
-    if ($type !== 'character' || $key === '') {
+    if ($entryId <= 0 || $type !== 'character' || $key === '') {
         error($lang->af_kb_not_found ?? 'Not found');
     }
 
     $entry = $db->fetch_array($db->simple_select(
         'af_kb_entries',
         '*',
-        "type='character' AND `key`='" . $db->escape_string($key) . "'",
+        'id=' . $entryId . " AND type='character' AND `key`='" . $db->escape_string($key) . "'",
         ['limit' => 1]
     ));
     if (!$entry) {
         error($lang->af_kb_not_found ?? 'Not found');
+    }
+
+    $character = af_kb_extract_character_contract($entry);
+    $profile = (array)($character['profile'] ?? []);
+    $characterContractMeta = (array)($character['meta'] ?? []);
+    if (trim((string)($profile['category'] ?? '')) !== 'canons'
+        || trim((string)($characterContractMeta['mechanic'] ?? '')) !== 'arpg') {
+        error_no_permission();
     }
 
     $status = strtolower(trim((string)$mybb->get_input('character_status')));
@@ -11743,10 +11752,15 @@ function af_kb_handle_view(): void
     $kb_character_status_button = '';
     $kb_character_status_modal = '';
     if ($type === 'character') {
+        $characterContract = af_kb_extract_character_contract($entry);
+        $characterProfile = (array)($characterContract['profile'] ?? []);
+        $characterMeta = (array)($characterContract['meta'] ?? []);
+        $isArpgCanon = trim((string)($characterProfile['category'] ?? '')) === 'canons'
+            && trim((string)($characterMeta['mechanic'] ?? '')) === 'arpg';
         $availability = af_kb_get_character_availability_payload($entry);
         $kb_status_badge = af_kb_render_character_status_badge($availability, $isRu);
         $kb_status_link = af_kb_render_character_status_link($availability, $isRu, 'entry');
-        if (af_kb_can_edit() && empty($availability['is_author'])) {
+        if (af_kb_can_edit() && $isArpgCanon) {
             $storedStatus = (string)($availability['stored_status'] ?? 'free');
             $statusSaveUrl = 'misc.php?action=kb_character_status_save';
             $kb_character_status_button = '<button type="button" class="af-kb-btn af-kb-btn--edit" data-af-kb-status-open="1">Изменить статус</button>';
@@ -11754,6 +11768,7 @@ function af_kb_handle_view(): void
                 . '<div class="af-kb-modal"><div class="af-kb-modal-header"><h3>Статус персонажа</h3><button type="button" class="af-kb-modal-close" data-af-kb-status-close="1">&times;</button></div>'
                 . '<div class="af-kb-modal-body"><form method="post" action="' . htmlspecialchars_uni($statusSaveUrl) . '" class="af-kb-status-form" data-af-kb-status-form="1">'
                 . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '" />'
+                . '<input type="hidden" name="entry_id" value="' . (int)$entry['id'] . '" />'
                 . '<input type="hidden" name="type" value="character" />'
                 . '<input type="hidden" name="key" value="' . htmlspecialchars_uni($key) . '" />'
                 . '<label>Статус<select name="character_status" data-af-kb-status-select="1">'

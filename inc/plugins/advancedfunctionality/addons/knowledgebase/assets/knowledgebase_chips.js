@@ -389,11 +389,67 @@
         });
     }
 
+    // Character entry pages receive this lightweight view runtime, while the
+    // full knowledgebase.js bundle is intentionally limited to editor pages.
+    function initCharacterStatusModal() {
+        var openButton = document.querySelector('[data-af-kb-status-open="1"]');
+        var modal = document.querySelector('[data-af-kb-status-modal="1"]');
+        if (!openButton || !modal) return;
+
+        var closeButton = modal.querySelector('[data-af-kb-status-close="1"]');
+        var select = modal.querySelector('[data-af-kb-status-select="1"]');
+        var linkInput = modal.querySelector('[data-af-kb-status-link="1"]');
+        var dateInput = modal.querySelector('[data-af-kb-status-date="1"]');
+        var linkWrap = modal.querySelector('[data-af-kb-status-link-wrap="1"]');
+        var dateWrap = modal.querySelector('[data-af-kb-status-date-wrap="1"]');
+        var form = modal.querySelector('[data-af-kb-status-form="1"]');
+
+        function syncFields() {
+            var mode = select ? String(select.value || '') : 'free';
+            var needsLink = mode === 'occupied' || mode === 'held';
+            var needsDate = mode === 'held';
+            if (linkWrap) linkWrap.style.display = needsLink ? '' : 'none';
+            if (dateWrap) dateWrap.style.display = needsDate ? '' : 'none';
+            if (linkInput) linkInput.required = needsLink;
+            if (dateInput) dateInput.required = needsDate;
+        }
+
+        openButton.addEventListener('click', function () {
+            modal.style.display = 'flex';
+            modal.classList.add('is-active');
+            syncFields();
+        });
+        if (closeButton) {
+            closeButton.addEventListener('click', function () {
+                modal.style.display = 'none';
+                modal.classList.remove('is-active');
+            });
+        }
+        modal.addEventListener('click', function (event) {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+                modal.classList.remove('is-active');
+            }
+        });
+        if (select) select.addEventListener('change', syncFields);
+        if (form) {
+            form.addEventListener('submit', function (event) {
+                syncFields();
+                if ((linkInput && linkInput.required && !String(linkInput.value || '').trim())
+                    || (dateInput && dateInput.required && !String(dateInput.value || '').trim())) {
+                    event.preventDefault();
+                }
+            });
+        }
+        syncFields();
+    }
+
     // Экспортируем, чтобы другой файл мог гарантированно поднять чипы
     window.afKbInitChips = initChips;
 
     document.addEventListener('DOMContentLoaded', function () {
         if (document.querySelector('.af-kb-chip')) initChips();
         initCharacterAjaxFilters();
+        initCharacterStatusModal();
     });
 })();
