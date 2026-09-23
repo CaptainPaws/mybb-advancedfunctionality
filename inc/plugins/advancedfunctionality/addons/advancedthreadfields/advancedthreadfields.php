@@ -483,6 +483,12 @@ function af_advancedthreadfields_init(): void
     $plugins->add_hook('forumdisplay_get_threads', 'af_atf_forumdisplay_get_threads');
     $plugins->add_hook('forumdisplay_thread', 'af_atf_forumdisplay_thread');
 
+    // A move to the explicitly configured application archive is a lifecycle
+    // event.  These hooks run from Moderation after it has resolved the
+    // destination; no "not pending/accepted any more" inference is used.
+    $plugins->add_hook('class_moderation_move_simple', 'af_atf_handle_application_archive_move');
+    $plugins->add_hook('class_moderation_move_thread_redirect', 'af_atf_handle_application_archive_move');
+
     // AJAX/JSON подсказки пользователей (как запасной путь)
     // Ставим отрицательный приоритет — пусть бежит раньше чужих обработчиков misc_start.
     $plugins->add_hook('misc_start', 'af_atf_misc_start', -50);
@@ -2596,6 +2602,44 @@ function af_atf_boot_prefill_from_token(int $fid): void
     }
 
 
+}
+
+/** The archive is display-only: it never makes the forum an application form. */
+function af_atf_get_application_archive_forum_id(): int
+{
+    global $mybb;
+
+    return isset($mybb) && is_object($mybb)
+        ? max(0, (int)($mybb->settings['af_atf_application_archive_fid'] ?? 0))
+        : 0;
+}
+
+function af_atf_is_application_archive_forum(int $fid): bool
+{
+    $archiveFid = af_atf_get_application_archive_forum_id();
+    return $archiveFid > 0 && $fid === $archiveFid;
+}
+
+/**
+ * Return active field definitions for values already stored on an archived
+ * application.  Applicability controls data entry; it must not hide historical
+ * values after MyBB changes threads.fid.
+ */
+function af_atf_get_archive_display_fields(array $values): array
+{
+    $fields = [];
+    foreach (af_atf_get_fields_cached() as $field) {
+        $fieldId = (int)($field['fieldid'] ?? 0);
+        if ($fieldId <= 0 || !array_key_exists($fieldId, $values)) {
+            continue;
+        }
+        if (empty($field['group_active']) || (int)($field['active'] ?? 0) !== 1) {
+            continue;
+        }
+        $fields[] = $field;
+    }
+    usort($fields, static fn(array $a, array $b): int => (int)$a['sortorder'] <=> (int)$b['sortorder']);
+    return $fields;
 }
 
 /* -------------------- INPUT RENDER (newthread/editpost) -------------------- */
@@ -4940,6 +4984,112 @@ function af_atf_bridge_update_canon_lifecycle(int $entryId, int $tid, int $uid, 
     return true;
 }
 
+/**
+ * Release a linked canon and restore its write-once snapshot.
+ *
+ * The workflow row supplies the durable application relation and the Character
+ * contract supplies the canon category.  Original characters and stale old
+ * applications can therefore never roll back an active/newer claim.
+ */
+function af_atf_archive_linked_canon_application(int $tid): bool
+{
+    global $db;
+
+    if ($tid <= 0 || !is_object($db) || !function_exists('af_cwf_get_row')
+        || !function_exists('af_cwf_has_linked_kb_character')) {
+        return false;
+    }
+    $workflow = af_cwf_get_row($tid);
+    if (empty($workflow) || (int)($workflow['kb_entry_id'] ?? 0) <= 0) {
+        return false;
+    }
+
+    $linked = af_cwf_has_linked_kb_character($tid);
+    $entry = (array)($linked['entry'] ?? []);
+    if (empty($linked['ok']) || (int)($entry['id'] ?? 0) !== (int)$workflow['kb_entry_id']) {
+        return false;
+    }
+
+    $metaEnvelope = function_exists('af_kb_decode_json')
+        ? af_kb_decode_json((string)($entry['meta_json'] ?? '{}'))
+        : json_decode((string)($entry['meta_json'] ?? '{}'), true);
+    $dataRules = function_exists('af_kb_decode_json')
+        ? af_kb_decode_json((string)($entry['data_json'] ?? '{}'))
+        : json_decode((string)($entry['data_json'] ?? '{}'), true);
+    if (!is_array($metaEnvelope)) $metaEnvelope = [];
+    $rules = isset($metaEnvelope['rules']) && is_array($metaEnvelope['rules'])
+        ? $metaEnvelope['rules']
+        : (is_array($dataRules) ? $dataRules : []);
+    $profile = (array)($rules['character_profile'] ?? []);
+    $characterMeta = (array)($rules['character_meta'] ?? []);
+    if (trim((string)($profile['category'] ?? '')) !== 'canons') {
+        return false;
+    }
+
+    $activeTid = (int)($characterMeta['active_application_tid'] ?? 0);
+    if ($activeTid > 0 && $activeTid !== $tid) {
+        return false; // This historical application no longer owns the role.
+    }
+    $baseline = (array)($characterMeta['canon_baseline'] ?? []);
+    if (empty($baseline)) {
+        return false; // Never fake a destructive "restore" without a snapshot.
+    }
+
+    foreach (['character_profile', 'character_abilities', 'character_links'] as $field) {
+        if (array_key_exists($field, $baseline)) {
+            $rules[$field] = $baseline[$field];
+        }
+    }
+    $characterMeta['active_application_tid'] = 0;
+    $history = is_array($characterMeta['role_history'] ?? null) ? $characterMeta['role_history'] : [];
+    foreach ($history as &$event) {
+        if (is_array($event) && (int)($event['tid'] ?? 0) === $tid) {
+            $event['status'] = 'archived';
+            if (empty($event['archived_at'])) $event['archived_at'] = TIME_NOW;
+        }
+    }
+    unset($event);
+    $characterMeta['role_history'] = $history;
+    $availability = (array)($characterMeta['availability'] ?? []);
+    $availability['status'] = 'free';
+    $availability['link_url'] = '';
+    $availability['hold_until'] = '';
+    $availability['updated_at'] = TIME_NOW;
+    $characterMeta['availability'] = $availability;
+    $rules['character_meta'] = $characterMeta;
+    $metaEnvelope['rules'] = $rules;
+
+    $metaJson = json_encode($metaEnvelope, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $dataJson = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($metaJson) || !is_string($dataJson)) return false;
+    $db->update_query('af_kb_entries', [
+        'meta_json' => $db->escape_string($metaJson),
+        'data_json' => $db->escape_string($dataJson),
+        'updated_at' => TIME_NOW,
+    ], 'id=' . (int)$entry['id']);
+    af_cwf_upsert_row($tid, ['state' => defined('AF_CWF_STATE_ARCHIVED') ? AF_CWF_STATE_ARCHIVED : 'archived']);
+    return true;
+}
+
+/** Process MyBB's successful single-thread move hooks. */
+function af_atf_handle_application_archive_move(array $args): void
+{
+    $archiveFid = af_atf_get_application_archive_forum_id();
+    if ($archiveFid <= 0) return;
+
+    $newFid = 0;
+    foreach (['moveto', 'new_fid', 'destination_fid', 'fid'] as $key) {
+        if (isset($args[$key]) && (int)$args[$key] > 0) {
+            $newFid = (int)$args[$key];
+            break;
+        }
+    }
+    if ($newFid !== $archiveFid) return;
+
+    $tid = (int)($args['tid'] ?? 0);
+    if ($tid > 0) af_atf_archive_linked_canon_application($tid);
+}
+
 function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [], array $context = []): array
 {
     global $db;
@@ -6359,13 +6509,15 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
         return '';
     }
 
-    $fields = af_atf_get_fields_for_forum($fid);
-    if (empty($fields)) {
+    $values = af_atf_get_values_by_tid($tid);
+    if (empty($values)) {
         return '';
     }
 
-    $values = af_atf_get_values_by_tid($tid);
-    if (empty($values)) {
+    $fields = af_atf_is_application_archive_forum($fid)
+        ? af_atf_get_archive_display_fields($values)
+        : af_atf_get_fields_for_forum($fid);
+    if (empty($fields)) {
         return '';
     }
 
@@ -6650,6 +6802,13 @@ search.php
 gallery.php",
             'disporder' => 17,
         ],
+        'af_atf_application_archive_fid' => [
+            'title' => 'ID форума архива анкет',
+            'description' => 'FID архива анкет. Существующие ATF-поля остаются видимыми; перенос связанной анкеты канона освобождает роль и восстанавливает исходную версию KB.',
+            'optionscode' => 'numeric',
+            'value' => '0',
+            'disporder' => 18,
+        ],
     ];
 
     foreach ($settings as $name => $row) {
@@ -6675,7 +6834,7 @@ function af_atf_remove_settings(): void
 
     $db->delete_query(
         'settings',
-        "name IN ('af_advancedthreadfields_enabled','af_atf_sf_total_points','af_atf_sf_min_value','af_atf_sf_max_value','af_atf_sf_base_value','af_atf_sf_cost_curve','af_atf_sf_allow_negative_remaining','af_atf_sf_require_exact_spend','af_atf_assets_blacklist')"
+        "name IN ('af_advancedthreadfields_enabled','af_atf_sf_total_points','af_atf_sf_min_value','af_atf_sf_max_value','af_atf_sf_base_value','af_atf_sf_cost_curve','af_atf_sf_allow_negative_remaining','af_atf_sf_require_exact_spend','af_atf_assets_blacklist','af_atf_application_archive_fid')"
     );
     $db->delete_query('settinggroups', "name='af_advancedthreadfields'");
 
