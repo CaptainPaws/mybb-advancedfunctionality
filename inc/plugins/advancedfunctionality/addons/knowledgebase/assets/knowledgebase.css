@@ -139,6 +139,38 @@
     background-position: center;
 }
 
+.af-kb-type-header-visual {
+    position: relative;
+    overflow: hidden;
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.af-kb-type-header-visual > .af-kb-banner {
+    width: 100%;
+    margin: 0;
+}
+
+.af-kb-type-header-title {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.18);
+    color: #fff;
+    text-align: center;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+.af-kb-type-header-title h1 {
+    max-width: 100%;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
 .af-kb-entry--with-bg {
     background-size: cover;
     background-position: center;
@@ -877,6 +909,8 @@ display: inline-block;
 .af-kb-status-form__actions { display: flex; justify-content: flex-end; }
 
 @media (max-width: 640px) {
+  .af-kb-type-header-title { padding: 12px; }
+  .af-kb-type-header-title h1 { font-size: 1.5em; }
   .af-character-meta-row > * {
     max-width: 100%;
   }

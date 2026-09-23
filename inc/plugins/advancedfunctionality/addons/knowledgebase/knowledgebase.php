@@ -11785,13 +11785,7 @@ function af_kb_handle_view(): void
             $typeDesc = af_kb_pick_text($typeRow, 'description');
         }
 
-        $kb_banner = '';
-        $kb_type_banner = '';
         $typeBannerUrl = $typeRow ? af_kb_sanitize_url((string)($typeRow['banner_url'] ?? '')) : '';
-        if ($typeBannerUrl !== '') {
-            $kb_banner = '<img class="af-kb-banner" src="' . htmlspecialchars_uni($typeBannerUrl) . '" alt="" loading="lazy" />';
-            $kb_type_banner = $kb_banner;
-        }
 
         $rows = '';
         foreach ($entries as $row) {
@@ -11810,6 +11804,13 @@ function af_kb_handle_view(): void
         $kb_type_icon = $typeIconHtml !== '' ? '<span class="af-kb-icon">' . $typeIconHtml . '</span>' : '';
         $kb_page_title = htmlspecialchars_uni($typeTitle);
         $kb_type_title = htmlspecialchars_uni($typeTitle);
+        $kb_type_heading = '<h1>' . $kb_type_icon . $kb_type_title . '</h1>';
+        if ($typeBannerUrl !== '') {
+            $kb_type_heading = '<div class="af-kb-type-header-visual">'
+                . '<img class="af-kb-banner" src="' . htmlspecialchars_uni($typeBannerUrl) . '" alt="" loading="lazy" />'
+                . '<div class="af-kb-type-header-title"><h1>' . $kb_type_icon . $kb_type_title . '</h1></div>'
+                . '</div>';
+        }
         $kb_type_description = af_kb_parse_message($typeDesc);
         $kb_type_value = htmlspecialchars_uni($type);
         $kb_query = htmlspecialchars_uni($query);
