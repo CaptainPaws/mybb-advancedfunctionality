@@ -398,20 +398,20 @@
 
         var closeButton = modal.querySelector('[data-af-kb-status-close="1"]');
         var select = modal.querySelector('[data-af-kb-status-select="1"]');
-        var linkInput = modal.querySelector('[data-af-kb-status-link="1"]');
-        var dateInput = modal.querySelector('[data-af-kb-status-date="1"]');
-        var linkWrap = modal.querySelector('[data-af-kb-status-link-wrap="1"]');
-        var dateWrap = modal.querySelector('[data-af-kb-status-date-wrap="1"]');
+        var ownerInput = modal.querySelector('[data-af-kb-status-owner="1"]');
+        var ownerWrap = modal.querySelector('[data-af-kb-status-owner-wrap="1"]');
+        var reservationWrap = modal.querySelector('[data-af-kb-status-reservation-wrap="1"]');
+        var releaseWrap = modal.querySelector('[data-af-kb-status-release-wrap="1"]');
         var form = modal.querySelector('[data-af-kb-status-form="1"]');
 
         function syncFields() {
             var mode = select ? String(select.value || '') : 'free';
-            var needsLink = mode === 'occupied' || mode === 'held';
-            var needsDate = mode === 'held';
-            if (linkWrap) linkWrap.style.display = needsLink ? '' : 'none';
-            if (dateWrap) dateWrap.style.display = needsDate ? '' : 'none';
-            if (linkInput) linkInput.required = needsLink;
-            if (dateInput) dateInput.required = needsDate;
+            var isReserved = mode === 'reserved';
+            var isOccupied = mode === 'occupied';
+            if (reservationWrap) reservationWrap.style.display = isReserved ? '' : 'none';
+            if (ownerWrap) ownerWrap.style.display = isOccupied ? '' : 'none';
+            if (releaseWrap) releaseWrap.style.display = mode === 'free' ? '' : 'none';
+            if (ownerInput) ownerInput.required = isOccupied;
         }
 
         openButton.addEventListener('click', function () {
@@ -435,8 +435,7 @@
         if (form) {
             form.addEventListener('submit', function (event) {
                 syncFields();
-                if ((linkInput && linkInput.required && !String(linkInput.value || '').trim())
-                    || (dateInput && dateInput.required && !String(dateInput.value || '').trim())) {
+                if (ownerInput && ownerInput.required && !String(ownerInput.value || '').trim()) {
                     event.preventDefault();
                 }
             });

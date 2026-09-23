@@ -4979,7 +4979,7 @@ function af_atf_character_bridge_store_thread_kb_link(int $tid, int $fid, int $u
         if (function_exists('af_cwf_bind_kb_entry')) {
             af_cwf_bind_kb_entry($tid, (int)$entry['id']);
         }
-        af_atf_bridge_update_canon_lifecycle((int)$entry['id'], $tid, $uid, 'pending');
+        af_atf_bridge_update_canon_lifecycle((int)$entry['id'], $tid, $uid, 'application');
 
         // The browser returns only the opaque token. Retire it after the
         // server-owned entry id is bound to the newly-created thread, never on
@@ -5026,6 +5026,7 @@ function af_atf_bridge_update_canon_lifecycle(int $entryId, int $tid, int $uid, 
     $characterMeta['source_uid'] = $uid;
     $characterMeta['sync_source'] = 'af_atf_bridge';
     $characterMeta['synced_at'] = TIME_NOW;
+    $status = $status === 'pending' ? 'application' : ($status === 'held' ? 'reserved' : $status);
     $availability = (array)($characterMeta['availability'] ?? []);
     $availability['status'] = $status === 'archived' ? 'free' : $status;
     if ($status === 'occupied') {
@@ -5034,6 +5035,12 @@ function af_atf_bridge_update_canon_lifecycle(int $entryId, int $tid, int $uid, 
     } elseif ($status === 'archived' || $status === 'free') {
         $availability['owner_uid'] = 0;
         $availability['link_url'] = '';
+    }
+    if ($status !== 'reserved') {
+        $availability['reserved_by_uid'] = 0;
+        $availability['reserved_by_name'] = '';
+        $availability['reserved_until'] = '';
+        unset($availability['hold_until']);
     }
     $availability['updated_at'] = TIME_NOW;
     $characterMeta['availability'] = $availability;
