@@ -10926,8 +10926,6 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         . '</section>'
         . ($appearance !== '' ? '<section class="af-kb-char-profile__section"><h3>Описание</h3><div>' . af_kb_parse_message($appearance) . '</div></section>' : '')
         . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>Биография</h3><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
-        . (!empty($profile['character_post']) ? '<section class="af-kb-char-profile__section"><h3>Пост</h3><div>' . af_kb_parse_message((string)$profile['character_post']) . '</div></section>' : '')
-        . (!empty($profile['character_userinfo']) ? '<section class="af-kb-char-profile__section"><h3>Дополнительная информация</h3><div>' . af_kb_parse_message((string)$profile['character_userinfo']) . '</div></section>' : '')
         . '<section class="af-kb-char-profile__section"><h3>Способности</h3><div class="af-kb-char-abilities">' . ($abilitiesHtml !== '' ? $abilitiesHtml : '<div class="af-kb-char-empty">No abilities yet.</div>') . '</div></section>'
         . '<section class="af-kb-char-profile__service">' . $applyCtaHtml . '</section>'
         . '</div>';

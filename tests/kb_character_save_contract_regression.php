@@ -146,8 +146,11 @@ character_save_assert(in_array('greatsword', array_column($weaponOptions, 'key')
 character_save_assert(af_kb_character_profile_resolved_value('character_weapon', 'greatsword', true) !== 'greatsword', 'Weapon display leaked the canonical key');
 
 $rendered = af_kb_render_character_entry(['type' => 'character', 'key' => 'manual', 'data_json' => $normalized, 'meta_json' => '{}'], [], true);
-foreach (['Name Surname', 'Имя Фамилия', 'Женский', 'Greatsword', '27', '175', '70', 'Sample post', 'Player'] as $visible) {
+foreach (['Name Surname', 'Имя Фамилия', 'Женский', 'Greatsword', '27', '175', '70'] as $visible) {
     character_save_assert(strpos($rendered, $visible) !== false, 'Public Character page omitted: ' . $visible);
+}
+foreach (['Sample post', 'Player'] as $privateApplicationValue) {
+    character_save_assert(strpos($rendered, $privateApplicationValue) === false, 'Public Character page exposed application-only data: ' . $privateApplicationValue);
 }
 
 $card = af_kb_character_catalog_card(['type' => 'character', 'key' => 'manual', 'data_json' => $normalized, 'meta_json' => '{}'], []);
