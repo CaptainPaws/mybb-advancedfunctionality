@@ -1,11 +1,12 @@
 <article class="af-kb-char-card{$kb_card_bg_class}"{$kb_card_style}>
   <a class="af-kb-char-card__link" href="{$kb_entry_url}">
     <div class="af-kb-char-card__pic">{$kb_character_pic}</div>
-    <div class="af-kb-char-card__body">
-      <h3>{$kb_character_title}{$kb_character_status_badge}</h3>
-      <div class="af-kb-char-card__name-en">{$kb_character_name_en}</div>
-      <div class="af-kb-char-card__meta">{$kb_character_meta}</div>
-      <div class="af-kb-char-card__short">{$kb_character_short}</div>
-    </div>
   </a>
+  <div class="af-kb-char-card__body">
+    <a class="af-kb-char-card__link" href="{$kb_entry_url}"><h3>{$kb_character_title}</h3></a>
+    <div class="af-character-meta-row">{$kb_character_status_badge}{$kb_character_status_link}</div>
+    <div class="af-kb-char-card__name-en">{$kb_character_name_en}</div>
+    <div class="af-kb-char-card__meta">{$kb_character_meta}</div>
+    <div class="af-kb-char-card__short">{$kb_character_short}</div>
+  </div>
 </article>

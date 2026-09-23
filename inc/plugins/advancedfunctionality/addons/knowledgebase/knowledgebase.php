@@ -10713,8 +10713,11 @@ function af_kb_parse_hold_until_timestamp(string $raw): int
     return $ts !== false ? (int)$ts : 0;
 }
 
-function af_kb_get_character_availability_payload(array $entry): array
+function af_kb_get_character_availability_payload(array &$entry): array
 {
+    // The scheduled task is authoritative; this is a safe persistence fallback
+    // for an entry opened between task runs.
+    af_kb_release_expired_character_reservation($entry, defined('TIME_NOW') ? TIME_NOW : time());
     $character = af_kb_extract_character_contract($entry);
     $profile = (array)($character['profile'] ?? []);
     $meta = (array)($character['meta'] ?? []);
@@ -10885,9 +10888,11 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
     $kb_character_short = $short !== '' ? af_kb_parse_message($short) : '';
     $kb_character_meta = $meta ? implode(' • ', $meta) : '';
     $kb_character_status_badge = '';
+    $kb_character_status_link = '';
     if ($isCharacter) {
         $availability = af_kb_get_character_availability_payload($entry);
         $kb_character_status_badge = af_kb_render_character_status_badge($availability, true);
+        $kb_character_status_link = af_kb_render_character_status_link($availability, true, 'catalog');
     }
     $kb_card_style = $entryBgStyle !== '' ? ' style="' . $entryBgStyle . '"' : '';
     $kb_card_bg_class = $entryBgStyle !== '' ? ' af-kb-char-card--with-bg' : '';
@@ -11317,6 +11322,68 @@ function af_kb_handle_character_extend(): void
     redirect('misc.php?action=kb&type=character&key=' . rawurlencode((string)$entry['key']), 'Бронь продлена на 7 дней.');
 }
 
+/** Return an active application tid from either metadata or the workflow relation. */
+function af_kb_character_active_application_tid(array $entry, array $characterMeta): int
+{
+    global $db;
+    $tid = max(0, (int)($characterMeta['active_application_tid'] ?? 0));
+    if ($tid > 0 || !is_object($db) || !$db->table_exists('af_character_workflow')) return $tid;
+
+    $entryId = (int)($entry['id'] ?? 0);
+    if ($entryId <= 0) return 0;
+    return max(0, (int)$db->fetch_field($db->simple_select(
+        'af_character_workflow',
+        'tid',
+        'kb_entry_id=' . $entryId . " AND state NOT IN ('archived','draft')",
+        ['order_by' => 'updated_at', 'order_dir' => 'DESC', 'limit' => 1]
+    ), 'tid'));
+}
+
+/** Persist one expired reservation release and update the caller's entry row. */
+function af_kb_release_expired_character_reservation(array &$entry, int $now): bool
+{
+    global $db, $cache;
+    if (!is_object($db) || (string)($entry['type'] ?? '') !== 'character') return false;
+    $rules = kb_parse_rules($entry);
+    if (!is_array($rules)) return false;
+    $characterMeta = (array)($rules['character_meta'] ?? []);
+    $availability = (array)($characterMeta['availability'] ?? []);
+    $status = strtolower(trim((string)($availability['status'] ?? '')));
+    if (!in_array($status, ['reserved', 'held'], true)
+        || af_kb_character_active_application_tid($entry, $characterMeta) > 0) return false;
+    $until = af_kb_parse_hold_until_timestamp((string)($availability['reserved_until'] ?? ($availability['hold_until'] ?? '')));
+    if ($until <= 0 || $until >= $now) return false;
+
+    $availability['status'] = 'free';
+    $availability['owner_uid'] = 0;
+    $availability['link_url'] = '';
+    $availability['reserved_by_uid'] = 0;
+    $availability['reserved_by_name'] = '';
+    $availability['reserved_until'] = '';
+    $availability['reservation_extended'] = 0;
+    unset($availability['hold_until']);
+    $availability['updated_at'] = $now;
+    $availability['updated_by'] = 0;
+    $characterMeta['availability'] = $availability;
+    $rules['character_meta'] = $characterMeta;
+    $meta = af_kb_decode_json((string)($entry['meta_json'] ?? '{}'));
+    if (!is_array($meta)) $meta = [];
+    $meta['rules'] = $rules;
+    $metaJson = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $dataJson = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($metaJson) || !is_string($dataJson)) return false;
+    $entry['meta_json'] = $metaJson;
+    $entry['data_json'] = $dataJson;
+    $entry['updated_at'] = $now;
+    $db->update_query('af_kb_entries', [
+        'meta_json' => $db->escape_string($metaJson),
+        'data_json' => $db->escape_string($dataJson),
+        'updated_at' => $now,
+    ], 'id=' . (int)$entry['id']);
+    if (is_object($cache)) $cache->delete('af_kb_entry_data_' . (int)$entry['id']);
+    return true;
+}
+
 /** Persistently release expired reservations; safe to invoke from a MyBB task. */
 function af_kb_cleanup_expired_reservations(int $now = 0): int
 {
@@ -11326,35 +11393,7 @@ function af_kb_cleanup_expired_reservations(int $now = 0): int
     $released = 0;
     $query = $db->simple_select('af_kb_entries', '*', "type='character' AND active=1");
     while ($entry = $db->fetch_array($query)) {
-        $rules = kb_parse_rules($entry);
-        if (!is_array($rules)) continue;
-        $characterMeta = (array)($rules['character_meta'] ?? []);
-        $availability = (array)($characterMeta['availability'] ?? []);
-        $status = strtolower(trim((string)($availability['status'] ?? '')));
-        if (!in_array($status, ['reserved', 'held'], true) || (int)($characterMeta['active_application_tid'] ?? 0) > 0) continue;
-        $until = af_kb_parse_hold_until_timestamp((string)($availability['reserved_until'] ?? ($availability['hold_until'] ?? '')));
-        if ($until <= 0 || $until >= $now) continue;
-
-        $availability['status'] = 'free';
-        $availability['owner_uid'] = 0;
-        $availability['link_url'] = '';
-        $availability['reserved_by_uid'] = 0;
-        $availability['reserved_by_name'] = '';
-        $availability['reserved_until'] = '';
-        $availability['reservation_extended'] = 0;
-        unset($availability['hold_until']);
-        $availability['updated_at'] = $now;
-        $availability['updated_by'] = 0;
-        $characterMeta['availability'] = $availability;
-        $rules['character_meta'] = $characterMeta;
-        $meta = af_kb_decode_json((string)($entry['meta_json'] ?? '{}'));
-        if (!is_array($meta)) $meta = [];
-        $meta['rules'] = $rules;
-        $metaJson = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $dataJson = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if (!is_string($metaJson) || !is_string($dataJson)) continue;
-        $db->update_query('af_kb_entries', ['meta_json' => $db->escape_string($metaJson), 'data_json' => $db->escape_string($dataJson), 'updated_at' => $now], 'id=' . (int)$entry['id']);
-        $released++;
+        if (af_kb_release_expired_character_reservation($entry, $now)) $released++;
     }
     return $released;
 }
