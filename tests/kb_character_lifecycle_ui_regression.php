@@ -30,8 +30,9 @@ kb_lifecycle_ui_assert(strpos($php, "'pending' => 'application'") !== false && s
 kb_lifecycle_ui_assert(strpos($atf, "af_atf_bridge_update_canon_lifecycle((int)\$entry['id'], \$tid, \$uid, 'application')") !== false, 'Successful ATF thread insert does not enter application state');
 kb_lifecycle_ui_assert(strpos($atf, "\$characterMeta['active_application_tid'] = \$status === 'archived' || \$status === 'free' ? 0 : \$tid;") !== false, 'Application transition does not retain the created tid');
 
-kb_lifecycle_ui_assert(strpos($detail, '<h1>{$kb_entry_icon}{$kb_title}</h1>') !== false, 'Detail title is not isolated from chips');
+kb_lifecycle_ui_assert(strpos($detail, '{$kb_entry_heading}') !== false, 'Conditional detail heading is missing');
 kb_lifecycle_ui_assert(strpos($detail, '<div class="af-character-meta-row">{$kb_status_badge}{$kb_status_link}</div>') !== false, 'Detail chip row is missing');
+kb_lifecycle_ui_assert(strpos($detail, '{$kb_entry_heading}') < strpos($detail, '<div class="af-character-meta-row">'), 'Detail title is not isolated above chips');
 kb_lifecycle_ui_assert(strpos($card, '<h3>{$kb_character_title}</h3>') !== false, 'Catalog title is not isolated from chips');
 kb_lifecycle_ui_assert(strpos($card, '<div class="af-character-meta-row">{$kb_character_status_badge}{$kb_character_status_link}</div>') !== false, 'Catalog chip row/profile link is missing');
 kb_lifecycle_ui_assert(strpos($css, '.af-kb-status-badge--application') !== false, 'Application chip styling is missing');
