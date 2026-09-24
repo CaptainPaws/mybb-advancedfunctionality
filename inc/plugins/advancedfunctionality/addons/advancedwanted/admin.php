@@ -150,11 +150,18 @@ class AF_Admin_Advancedwanted
         }
         $source = trim((string)$mybb->get_input('source'));
         $dependsOn = trim((string)$mybb->get_input('depends_on'));
+        $atfFieldKey = trim((string)$mybb->get_input('atf_field_key'));
         if ($type === 'kb_dynamic' && !array_key_exists($source, af_wanted_kb_source_map())) {
             $errors[] = 'Для KB dynamic выберите поддерживаемый source.';
         }
         if ($type === 'kb_dynamic' && $source === 'origin_variant' && $dependsOn === '') {
             $errors[] = 'Для разновидности происхождения укажите Depends on (обычно origin).';
+        }
+        if ($atfFieldKey !== '') {
+            $available = self::atfFieldOptions($type);
+            if (!array_key_exists($atfFieldKey, $available)) {
+                $errors[] = 'Выбранное поле ATF не существует, неактивно, недоступно форуму анкет или несовместимо по типу.';
+            }
         }
         if ($key !== '' && preg_match('/^[a-z0-9_]{1,64}$/', $key)) {
             $where = "field_key='" . $db->escape_string($key) . "'" . ($id > 0 ? ' AND id!=' . $id : '');
@@ -195,6 +202,7 @@ class AF_Admin_Advancedwanted
                 'show_card' => (bool)self::checked('show_card'),
                 'show_detail' => (bool)self::checked('show_detail'),
                 'is_title' => (bool)self::checked('is_title'),
+                'atf_field_key' => $atfFieldKey,
             ],
         ];
         return [$field, array_values(array_unique($errors))];
@@ -322,6 +330,11 @@ class AF_Admin_Advancedwanted
             . '<div class="smalltext">По одному варианту на строку в формате <code>key=Название</code>. Например: <code>male=Мужской</code>.</div>');
         $source->output('Источник данных');
 
+        $integration = new Table;
+        self::row($integration, 'Поле ATF для предзаполнения', $form->generate_select_box('atf_field_key', self::atfFieldOptions((string)$field['type']), (string)($settings['atf_field_key'] ?? ''))
+            . '<div class="smalltext">Показываются активные поля реальной схемы ATF для настроенного форума анкет и только совместимые типы. Значение копируется один раз и остаётся редактируемым.</div>');
+        $integration->output('Интеграция с ATF');
+
         $behavior = new Table;
         self::row($behavior, 'Активно', $form->generate_check_box('active', '1', 'Поле доступно в форме', ['checked' => !empty($field['active'])]));
         self::row($behavior, 'Обязательное поле', $form->generate_check_box('required', '1', 'Требовать заполнение', ['checked' => !empty($field['required'])]));
@@ -362,6 +375,19 @@ class AF_Admin_Advancedwanted
             if ((int)$field['id'] !== $editingId) {
                 $options[$field['field_key']] = $field['title'] . ' (' . $field['field_key'] . ')';
             }
+        }
+        return $options;
+    }
+
+    private static function atfFieldOptions(string $wantedType): array
+    {
+        $options = ['' => 'Не синхронизировать'];
+        foreach (af_wanted_atf_fields() as $field) {
+            $key = trim((string)($field['name'] ?? ''));
+            $type = trim((string)($field['type'] ?? ''));
+            if ($key === '' || !af_wanted_mapping_types_compatible($wantedType, $type)) continue;
+            $title = trim((string)($field['title'] ?? ''));
+            $options[$key] = ($title !== '' ? $title : $key) . ' (' . $key . ')';
         }
         return $options;
     }

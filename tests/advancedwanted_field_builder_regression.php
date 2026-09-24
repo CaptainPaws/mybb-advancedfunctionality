@@ -9,11 +9,17 @@ function verify_post_check($key) { if ($key !== 'token') throw new RuntimeExcept
 function flash_message($message, $type) { $GLOBALS['flashes'][] = [$type, $message]; }
 function admin_redirect($url) { throw new RedirectForTest($url); }
 function my_date($format, $timestamp) { return (string)$timestamp; }
+function af_atf_get_fields_for_forum($fid) { return [
+    ['fieldid'=>11, 'name'=>'character_name', 'title'=>'Имя персонажа', 'type'=>'text', 'active'=>1, 'group_active'=>1],
+    ['fieldid'=>12, 'name'=>'character_notes', 'title'=>'Биография', 'type'=>'textarea', 'active'=>1, 'group_active'=>1],
+    ['fieldid'=>13, 'name'=>'character_flag', 'title'=>'Флаг', 'type'=>'checkbox', 'active'=>1, 'group_active'=>1],
+]; }
 
 class RedirectForTest extends RuntimeException {}
 class FakeResult { public $rows; public $position = 0; public function __construct(array $rows) { $this->rows = array_values($rows); } }
 class FakeMyBB {
     public $input = [];
+    public $settings = ['af_wanted_application_forum' => 7];
     public $request_method = 'get';
     public $post_code = 'token';
     public function get_input($key) { return $this->input[$key] ?? ''; }
@@ -80,18 +86,21 @@ function saveField(array $input) {
     return false;
 }
 
-check(saveField(['title' => 'Имя', 'field_key' => 'NAME', 'type' => 'text', 'required' => 1, 'active' => 1, 'show_card' => 1, 'show_detail' => 1, 'sortorder' => 10]), 'ACP create persists first field');
+check(saveField(['title' => 'Имя', 'field_key' => 'NAME', 'type' => 'text', 'atf_field_key' => 'character_name', 'required' => 1, 'active' => 1, 'show_card' => 1, 'show_detail' => 1, 'sortorder' => 10]), 'ACP create persists first field');
 check(saveField(['title' => 'Описание', 'field_key' => 'description', 'type' => 'textarea', 'active' => 1, 'show_detail' => 1, 'sortorder' => 20]), 'ACP create persists second field');
 check(saveField(['title' => 'Изображение', 'field_key' => 'image', 'type' => 'image', 'active' => 1, 'sortorder' => 30]), 'ACP create persists image field');
 check(count($db->fields) === 3 && $db->fields[1]['field_key'] === 'name', 'field keys are stored in canonical lowercase');
 $settings = json_decode($db->fields[1]['settings_json'], true);
 check($db->fields[1]['required'] == 1 && $settings['show_card'] === true && $settings['show_detail'] === true, 'all visibility and required settings survive storage');
+check($settings['atf_field_key'] === 'character_name', 'ATF mapping is persisted in Wanted settings_json');
 
 $mybb->request_method = 'get';
 $mybb->input = ['tab' => 'fields', 'edit' => 1];
 $html = AF_Admin_Advancedwanted::render();
 check(strpos($html, 'value="name"') !== false && strpos($html, 'name="show_card" value="1" checked') !== false, 'ACP reload/edit form contains persisted configuration');
 check(strpos($html, 'Основные параметры') !== false && strpos($html, 'Источник данных') !== false && strpos($html, 'Поведение') !== false && strpos($html, 'Отображение') !== false, 'ACP editor is split into semantic ATF-style tables');
+check(strpos($html, 'Интеграция с ATF') !== false && strpos($html, 'Имя персонажа (character_name)') !== false
+    && strpos($html, 'Флаг (character_flag)') === false, 'ATF selector uses live schema and filters incompatible field types');
 check(strpos($html, '<option value="origin_variant">Разновидность происхождения</option>') !== false, 'KB dynamic source is a localized registry-backed select');
 check(strpos($html, '<option value="description">Описание (description)</option>') !== false, 'dependency selector lists active Wanted fields by field key');
 check(strpos($html, 'updateWantedFieldSettings') !== false && strpos($html, '["select","multi","radio"]') !== false, 'type-specific controls have progressive visibility behavior');
