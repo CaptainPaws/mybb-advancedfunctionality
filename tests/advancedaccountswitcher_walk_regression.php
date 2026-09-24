@@ -24,6 +24,21 @@ if (!str_contains($php, 'af_aas_apply_manifest_language(false, $apply)')) {
 foreach (['af_aas_handle_walk', "new PostDataHandler('insert')", "'lastactive' => TIME_NOW", "'lastvisit' => TIME_NOW", "return '[img]' . \$url . '[/img]'", "return '+'", 'LOCK_EX | LOCK_NB'] as $needle) {
     if (!str_contains($php, $needle)) $fail("missing walk contract: {$needle}");
 }
+foreach (['af_aas_touch_walk_session', 'AF_AAS_WALK_USERAGENT', "'location' => 'index.php'", "'location1' => 0", "'location2' => 0", "'time' => TIME_NOW", "\$db->escape_binary(\$packedIp)"] as $needle) {
+    if (!str_contains($php, $needle)) $fail("missing walk online-session contract: {$needle}");
+}
+if (substr_count($php, 'af_aas_touch_walk_session($accountUid)') !== 1) {
+    $fail('each walked account must receive exactly one online-session refresh');
+}
+if (!str_contains($php, 'uid={$uid} AND useragent=\'')) {
+    $fail('walk sessions must be updated by their dedicated per-user marker');
+}
+$helperStart = strpos($php, 'function af_aas_touch_walk_session');
+$helperEnd = strpos($php, 'function af_aas_handle_walk', $helperStart);
+$helper = ($helperStart !== false && $helperEnd !== false) ? substr($php, $helperStart, $helperEnd - $helperStart) : '';
+foreach (['my_setcookie(', '->create_session(', "delete_query('sessions', \$where"] as $forbidden) {
+    if (str_contains($helper, $forbidden)) $fail("walk online-session helper must not use destructive/browser operation: {$forbidden}");
+}
 if (str_contains($php, 'INSERT INTO " . TABLE_PREFIX . "posts')) {
     $fail('walk must not insert directly into posts');
 }
