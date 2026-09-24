@@ -1,6 +1,5 @@
-/* AdvancedWanted only defines its layout. Colours, typography, links and buttons
-   intentionally come from the active MyBB/AF theme. */
-.af-wanted { min-width: 0; }
+/* Wanted contributes layout only; colours and typography remain owned by MyBB/AF. */
+.af-wanted { min-width: 0; padding: 1rem; }
 .af-wanted .af-kb-header { margin-bottom: 1rem; }
 .af-wanted-tabs,
 .af-wanted-actions,
@@ -11,79 +10,128 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: .5rem;
+  gap: .45rem;
 }
 .af-wanted-tabs .is-active { font-weight: 700; }
 .af-wanted-actions form,
 .af-wanted-filter-actions { margin: 0; }
+.af-wanted-actions .button,
+.af-wanted-primary-action .button,
+.af-wanted-form-actions .button { padding: .35rem .65rem; }
 
 .af-wanted-filters { margin: 1rem 0; padding: 1rem; }
-.af-wanted-filter-fields {
-  display: flex;
-  align-items: end;
-  flex-wrap: wrap;
-  gap: .75rem;
-}
+.af-wanted-filter-fields { display: flex; align-items: end; flex-wrap: wrap; gap: .75rem; }
 .af-wanted-filter-fields label { display: grid; gap: .3rem; min-width: 11.25rem; }
 .af-wanted-filter-actions { min-width: auto; }
 
-/* KB's card classes provide the established card/image pattern. The explicit
-   maximum track prevents auto-fill's final/only tile from filling the row. */
+/* Mirrors knowledgebase_list_character_entry: a bounded KB card grid with a
+   picture followed by a flex-column body. */
 .af-wanted-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(16.25rem, 100%), 20rem));
+  grid-template-columns: repeat(auto-fill, 16.25rem);
+  grid-auto-rows: 1fr;
   justify-content: start;
   gap: .875rem;
 }
-.af-wanted-card { display: flex; min-width: 0; flex-direction: column; overflow: hidden; }
-.af-wanted-card .af-kb-char-card__pic { aspect-ratio: 16 / 9; }
-.af-wanted-card .af-kb-char-card__pic img,
-.af-wanted-detail-image img,
-.af-wanted-field-image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.af-wanted-card { display: flex; min-width: 0; height: 100%; flex-direction: column; overflow: hidden; }
+.af-wanted-card .af-kb-char-card__pic {
+  display: flex;
+  width: 200px;
+  height: 200px;
+  align-self: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.af-wanted-card .af-kb-char-card__pic img {
+  display: block;
+  width: 200px;
+  height: 200px;
+  object-fit: cover;
+  object-position: center;
+}
 .af-wanted-card__body { display: flex; flex: 1 1 auto; flex-direction: column; gap: .65rem; }
 .af-wanted-card__body h2,
 .af-wanted-card__body p { margin: 0; }
 .af-wanted-card__meta { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
-.af-wanted-status { display: inline-flex; width: fit-content; padding: .2rem .55rem; border: 1px solid currentColor; border-radius: 999px; line-height: 1.2; }
-.af-wanted-card__fields { display: grid; gap: .25rem; }
-.af-wanted-card__fields span { display: block; }
+.af-wanted-card__meta h2 { min-width: 0; }
+.af-wanted-status,
+.af-wanted-chip {
+  display: inline-flex;
+  width: fit-content;
+  padding: .15rem .45rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: .78rem;
+  line-height: 1.25;
+}
+.af-wanted-status { flex: 0 0 auto; }
+.af-wanted-card__fields { display: flex; flex-wrap: wrap; gap: .3rem; }
 .af-wanted-primary-action { margin-top: auto; }
-.af-wanted-actions { align-items: flex-start; justify-content: space-between; padding-top: .25rem; }
+.af-wanted-actions { align-items: flex-start; justify-content: space-between; padding-top: .35rem; }
+.af-wanted-actions__owner { margin-left: auto; }
 
-.af-wanted-panel,
-.af-wanted-detail { padding: 1rem; border: 1px solid; border-color: inherit; }
-.af-wanted-form { display: grid; gap: .9rem; }
-.af-wanted-field { display: grid; gap: .3rem; }
+.af-wanted-panel { padding: 1rem; border: 1px solid; border-color: inherit; }
+.af-wanted-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .9rem;
+}
+.af-wanted-field { display: grid; min-width: 0; align-content: start; gap: .3rem; }
+.af-wanted-field[hidden], .af-wanted-field.is-hidden { display: none; }
+.af-wanted-field--textarea,
+.af-wanted-form-actions { grid-column: 1 / -1; }
 .af-wanted-field :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { box-sizing: border-box; width: 100%; }
 .af-wanted-field textarea { min-height: 8rem; resize: vertical; }
+.af-wanted-form-actions { justify-content: flex-start; }
 
-.af-wanted-detail { overflow: hidden; padding: 0; }
-.af-wanted-detail-image { aspect-ratio: 16 / 5; overflow: hidden; }
-.af-wanted-detail-header,
-.af-wanted-context,
-.af-wanted-detail-fields,
-.af-wanted-detail > .af-wanted-actions { margin: 0; padding: 1rem; }
-.af-wanted-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-.af-wanted-detail-header h2 { margin: 0 0 .25rem; }
-.af-wanted-context p { margin: .35rem 0; }
-.af-wanted-detail-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem 1.25rem; }
+/* Published ATF's af-atf-wiki layout is the structural reference: flowing main
+   content plus a compact right-hand infobox, never a full-width hero. */
+.af-wanted-detail { min-width: 0; }
+.af-wanted-detail-header { margin-bottom: 1rem; }
+.af-wanted-detail-header .af-atf-wiki__heading { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
+.af-wanted-detail-header h2 { margin: 0; }
+.af-wanted-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(14rem, 19rem); gap: 1.25rem; }
+.af-wanted-detail-content { min-width: 0; }
+.af-wanted-infobox {
+  float: none;
+  grid-column: 2;
+  grid-row: 1;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: .75rem;
+  box-sizing: border-box;
+}
+.af-wanted-detail-image { margin: 0 auto .75rem; overflow: hidden; }
+.af-wanted-detail-image img,
+.af-wanted-field-image { display: block; width: 100%; height: auto; object-fit: cover; object-position: center; }
+.af-wanted-infobox dl,
+.af-wanted-detail-fields { display: grid; gap: .75rem; margin: 0; }
 .af-wanted-detail-field { min-width: 0; }
 .af-wanted-detail-field dt { font-weight: 700; }
-.af-wanted-detail-field dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
-.af-wanted-detail-field--textarea { grid-column: 1 / -1; }
-.af-wanted-field-image { max-height: 28rem; }
+.af-wanted-detail-field dd { margin: .2rem 0 0; overflow-wrap: anywhere; }
+.af-wanted-detail-content .af-wanted-detail-field + .af-wanted-detail-field { margin-top: 1rem; }
+.af-wanted-detail > .af-wanted-actions { margin-top: 1rem; }
 [data-af-wanted-catalog].is-loading { opacity: .65; pointer-events: none; }
 .af-wanted-results-error,
 .af-wanted-pagination { margin-top: 1rem; }
 
+@media (max-width: 900px) {
+  .af-wanted-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 700px) {
   .af-wanted-filter-fields,
   .af-wanted-filter-fields label { display: grid; width: 100%; min-width: 0; }
   .af-wanted-filter-actions { display: flex; }
-  .af-wanted-detail-fields { grid-template-columns: 1fr; }
-  .af-wanted-detail-header { flex-direction: column; }
+  .af-wanted-detail-layout { grid-template-columns: 1fr; }
+  .af-wanted-infobox { grid-column: 1; grid-row: auto; }
 }
-@media (max-width: 420px) {
+@media (max-width: 520px) {
+  .af-wanted-form { grid-template-columns: minmax(0, 1fr); }
   .af-wanted-grid { grid-template-columns: minmax(0, 1fr); }
+  .af-wanted-card { width: 100%; }
+  .af-wanted-card .af-kb-char-card__pic { max-width: 100%; }
   .af-wanted-actions { flex-direction: column; }
+  .af-wanted-actions__owner { margin-left: 0; }
 }
