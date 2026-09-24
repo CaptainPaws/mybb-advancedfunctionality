@@ -194,18 +194,47 @@ class AF_Admin_Advancedwanted
     private static function renderFields(string $base, ?array $submitted, array $errors): string
     {
         global $db, $mybb;
-        $html = '<table class="general"><tr><th>Название</th><th>Ключ</th><th>Тип</th><th>Обязательно</th><th>Активно</th><th>Порядок</th><th>Действия</th></tr>';
+        ob_start();
+        $table = new Table;
+        $table->construct_header('Название');
+        $table->construct_header('Ключ');
+        $table->construct_header('Тип', ['width' => '12%']);
+        $table->construct_header('Обязательно', ['class' => 'align_center', 'width' => '10%']);
+        $table->construct_header('Активно', ['class' => 'align_center', 'width' => '8%']);
+        $table->construct_header('Порядок', ['class' => 'align_center', 'width' => '8%']);
+        $table->construct_header('Действия', ['class' => 'align_center', 'width' => '15%']);
+        $hasFields = false;
         foreach (af_wanted_fields(false) as $field) {
-            $html .= '<tr><td>' . self::h($field['title']) . '</td><td>' . self::h($field['field_key']) . '</td><td>' . self::h($field['type']) . '</td>'
-                . '<td>' . ($field['required'] ? 'Да' : 'Нет') . '</td><td>' . ($field['active'] ? 'Да' : 'Нет') . '</td><td>' . (int)$field['sortorder'] . '</td>'
-                . '<td><a href="' . $base . '&amp;tab=fields&amp;edit=' . (int)$field['id'] . '">Изменить</a> '
-                . '<form method="post" style="display:inline"><input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '">'
-                . '<input type="hidden" name="do" value="delete_field"><input type="hidden" name="id" value="' . (int)$field['id'] . '">'
-                . '<button type="submit">Удалить</button></form></td></tr>';
+            $hasFields = true;
+            $id = (int)$field['id'];
+            $actions = '<a href="' . $base . '&amp;tab=fields&amp;do=field_edit&amp;id=' . $id . '">Изменить</a> | '
+                . '<form method="post" action="' . $base . '&amp;tab=fields" style="display:inline">'
+                . '<input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '">'
+                . '<input type="hidden" name="do" value="delete_field"><input type="hidden" name="id" value="' . $id . '">'
+                . '<button class="button button_danger" type="submit">Удалить</button></form>';
+            $table->construct_cell(self::h($field['title']));
+            $table->construct_cell(self::h($field['field_key']));
+            $table->construct_cell(self::h($field['type']));
+            $table->construct_cell($field['required'] ? 'Да' : 'Нет', ['class' => 'align_center']);
+            $table->construct_cell($field['active'] ? 'Да' : 'Нет', ['class' => 'align_center']);
+            $table->construct_cell((int)$field['sortorder'], ['class' => 'align_center']);
+            $table->construct_cell($actions, ['class' => 'align_center']);
+            $table->construct_row();
         }
-        $html .= '</table>';
+        if (!$hasFields) {
+            $table->construct_cell('Поля пока не созданы.', ['colspan' => 7]);
+            $table->construct_row();
+        }
+        $table->output('Поля формы');
+        echo '<div style="margin-top:10px"><a class="button button_primary" href="' . $base
+            . '&amp;tab=fields&amp;do=field_add">Добавить поле</a></div>';
 
-        $edit = (int)$mybb->get_input('edit');
+        $do = (string)$mybb->get_input('do');
+        $edit = (int)($mybb->get_input('id') ?: $mybb->get_input('edit'));
+        $showEditor = $submitted !== null || $do === 'field_add' || $do === 'field_edit' || $edit > 0;
+        if (!$showEditor) {
+            return (string)ob_get_clean();
+        }
         $field = $submitted;
         if ($field === null && $edit > 0) {
             $field = (array)$db->fetch_array($db->simple_select(AF_WANTED_FIELDS, '*', 'id=' . $edit, ['limit' => 1]));
@@ -220,29 +249,89 @@ class AF_Admin_Advancedwanted
             $options .= $key . '=' . $label . "\n";
         }
         if ($errors) {
-            $html .= '<div class="error"><p><strong>Поле не сохранено:</strong></p><ul>';
+            echo '<div class="error"><p><strong>Поле не сохранено:</strong></p><ul>';
             foreach ($errors as $error) {
-                $html .= '<li>' . self::h($error) . '</li>';
+                echo '<li>' . self::h($error) . '</li>';
             }
-            $html .= '</ul></div>';
+            echo '</ul></div>';
         }
         $id = (int)($field['id'] ?? 0);
-        $html .= '<h2>' . ($id ? 'Изменить' : 'Создать') . ' поле</h2><form method="post">'
-            . '<input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '"><input type="hidden" name="do" value="save_field">'
-            . '<input type="hidden" name="id" value="' . $id . '">' . self::input('title', 'Название', $field['title'])
-            . self::input('field_key', 'Ключ', $field['field_key']) . '<label>Тип <select name="type">';
-        foreach (self::FIELD_TYPES as $type) {
-            $html .= '<option value="' . $type . '"' . ($field['type'] === $type ? ' selected' : '') . '>' . $type . '</option>';
+        $form = new Form($base . '&tab=fields', 'post');
+        echo $form->generate_hidden_field('my_post_key', $mybb->post_code);
+        echo $form->generate_hidden_field('do', 'save_field');
+        echo $form->generate_hidden_field('id', $id);
+
+        $main = new Table;
+        self::row($main, 'Название', $form->generate_text_box('title', $field['title'], ['maxlength' => 255]));
+        self::row($main, 'Ключ', $form->generate_text_box('field_key', $field['field_key'], ['maxlength' => 64])
+            . '<div class="smalltext">Уникальный machine key. Например: <code>origin</code>, <code>faction</code>, <code>description</code>.</div>');
+        $types = array_combine(self::FIELD_TYPES, self::FIELD_TYPES);
+        self::row($main, 'Тип', $form->generate_select_box('type', $types, $field['type']));
+        self::row($main, 'Порядок', $form->generate_numeric_field('sortorder', (int)$field['sortorder']));
+        $main->output('Основные параметры');
+
+        $source = new Table;
+        self::row($source, 'Источник вариантов', $form->generate_select_box('source', self::sourceOptions(), (string)($settings['source'] ?? '')));
+        self::row($source, 'Зависит от поля', $form->generate_select_box('depends_on', self::dependencyOptions($id), (string)($settings['depends_on'] ?? '')));
+        self::row($source, 'Варианты значений', $form->generate_text_area('options', $options, ['rows' => 7])
+            . '<div class="smalltext">По одному варианту на строку в формате <code>key=Название</code>. Например: <code>male=Мужской</code>.</div>');
+        $source->output('Источник данных');
+
+        $behavior = new Table;
+        self::row($behavior, 'Активно', $form->generate_check_box('active', '1', 'Поле доступно в форме', ['checked' => !empty($field['active'])]));
+        self::row($behavior, 'Обязательное поле', $form->generate_check_box('required', '1', 'Требовать заполнение', ['checked' => !empty($field['required'])]));
+        self::row($behavior, 'Фильтрация', $form->generate_check_box('filterable', '1', 'Можно использовать как фильтр', ['checked' => !empty($settings['filterable'])]));
+        $behavior->output('Поведение');
+
+        $display = new Table;
+        self::row($display, 'Карточка', $form->generate_check_box('show_card', '1', 'Показывать в карточке', ['checked' => !empty($settings['show_card'])]));
+        self::row($display, 'Страница записи', $form->generate_check_box('show_detail', '1', 'Показывать на странице записи', ['checked' => !empty($settings['show_detail'])]));
+        $display->construct_cell(
+            $form->generate_submit_button($id ? 'Сохранить изменения' : 'Сохранить поле', ['class' => 'button button_primary'])
+            . ' <a class="button" href="' . $base . '&amp;tab=fields">Отмена</a>',
+            ['colspan' => 2, 'class' => 'align_center']
+        );
+        $display->construct_row();
+        $display->output('Отображение');
+        echo $form->end();
+        echo self::fieldEditorScript();
+        return (string)ob_get_clean();
+    }
+
+    private static function sourceOptions(): array
+    {
+        $labels = ['origin' => 'Происхождение', 'origin_variant' => 'Разновидность происхождения', 'archetype' => 'Архетип',
+            'faction' => 'Фракция', 'element' => 'Элемент', 'weapon' => 'Тип оружия', 'gender' => 'Пол'];
+        $options = ['' => 'Не выбран'];
+        foreach (af_wanted_kb_source_map() as $key => $_config) {
+            $options[$key] = $labels[$key] ?? $key;
         }
-        $html .= '</select></label>' . self::input('source', 'Option source', $settings['source'] ?? '')
-            . '<p class="smalltext">KB dynamic sources: ' . self::h(implode(', ', array_keys(af_wanted_kb_source_map()))) . '.</p>'
-            . self::input('depends_on', 'Depends on', $settings['depends_on'] ?? '')
-            . '<label>Options key=label<textarea name="options">' . self::h($options) . '</textarea></label>';
-        foreach (['required' => 'Обязательно', 'active' => 'Активно', 'filterable' => 'Filterable', 'show_card' => 'Show in card', 'show_detail' => 'Show in detail'] as $key => $label) {
-            $value = array_key_exists($key, $field) ? $field[$key] : ($settings[$key] ?? false);
-            $html .= '<label><input type="checkbox" name="' . $key . '" value="1"' . ($value ? ' checked' : '') . '> ' . $label . '</label>';
+        return $options;
+    }
+
+    private static function dependencyOptions(int $editingId): array
+    {
+        $options = ['' => 'Не зависит'];
+        foreach (af_wanted_fields(true) as $field) {
+            if ((int)$field['id'] !== $editingId) {
+                $options[$field['field_key']] = $field['title'] . ' (' . $field['field_key'] . ')';
+            }
         }
-        return $html . self::input('sortorder', 'Порядок', $field['sortorder']) . '<button type="submit">Сохранить</button></form>';
+        return $options;
+    }
+
+    private static function row(Table $table, string $label, string $content): void
+    {
+        $table->construct_cell($label, ['width' => '25%']);
+        $table->construct_cell($content);
+        $table->construct_row();
+    }
+
+    private static function fieldEditorScript(): string
+    {
+        return '<script>document.addEventListener("DOMContentLoaded",function(){var type=document.querySelector("select[name=type]");'
+            . 'if(!type)return;var rows={source:document.querySelector("select[name=source]").closest("tr"),depends:document.querySelector("select[name=depends_on]").closest("tr"),options:document.querySelector("textarea[name=options]").closest("tr")};'
+            . 'function updateWantedFieldSettings(){var value=type.value,stat=["select","multi","radio"].indexOf(value)!==-1,dyn=value==="kb_dynamic";rows.source.style.display=dyn?"":"none";rows.depends.style.display=dyn?"":"none";rows.options.style.display=stat?"":"none";}type.addEventListener("change",updateWantedFieldSettings);updateWantedFieldSettings();});</script>';
     }
 
     private static function renderEntries(): string
