@@ -669,6 +669,9 @@
 
             var url = mentionSuggestUrl;
             url += (url.indexOf('?') >= 0 ? '&' : '?') + 'q=' + encodeURIComponent(prefix);
+            if (typeof window.my_post_key === 'string' && window.my_post_key) {
+                url += '&my_post_key=' + encodeURIComponent(window.my_post_key);
+            }
             url += '&_af_xhr=1&_=' + Date.now();
 
             function doRenderList(list) {
