@@ -111,19 +111,68 @@ function af_wanted_fields(bool $active=true): array {
     $q=$db->simple_select(AF_WANTED_FIELDS,'*',$active?'active=1':'1=1',['order_by'=>'sortorder ASC, id ASC']);
     while($r=$db->fetch_array($q)){ $r['settings']=json_decode((string)$r['settings_json'],true)?:[]; $out[]=$r; } return $out;
 }
-function af_wanted_options(array $field, array $input=[]): array {
-    $s=$field['settings']??[]; $source=(string)($s['source']??''); $out=[];
-    if (($field['type']??'')==='kb_dynamic') {
-      if($source==='origin_variant' && function_exists('af_kb_get_origin_variants')) {
-        $parent=(string)($input[(string)($s['depends_on']??'origin')]??'');
-        if($parent!=='') foreach(af_kb_get_origin_variants($parent,true) as $r) { $k=(string)($r['variant_key']??$r['key']??''); if($k!=='') $out[$k]=(string)($r['title']??$r['label']??$k); }
-      } elseif(function_exists('af_kb_get_arpg_mechanics_options')) {
-        foreach((array)af_kb_get_arpg_mechanics_options($source) as $k=>$r) { if(is_array($r)){ $key=(string)($r['key']??$k); $out[$key]=(string)($r['label_ru']??$r['title']??$r['label']??$key); } else $out[(string)$k]=(string)$r; }
-      }
-    } else foreach((array)($s['options']??[]) as $k=>$v) $out[(string)$k]=(string)$v;
+/**
+ * Maps Wanted source names to the real KB service and its canonical registry key.
+ * Keep this explicit: public KB entry types and mechanics option sets have different APIs.
+ */
+function af_wanted_kb_source_map(): array {
+    return [
+        'origin' => ['resolver' => 'public_type', 'key' => 'arpg_origin'],
+        'origin_variant' => ['resolver' => 'origin_variants'],
+        'archetype' => ['resolver' => 'public_type', 'key' => 'arpg_archetype'],
+        'faction' => ['resolver' => 'public_type', 'key' => 'arpg_faction'],
+        'element' => ['resolver' => 'public_type', 'key' => 'arpg_element'],
+        'weapon' => ['resolver' => 'mechanics', 'key' => 'weapon_type', 'service_kind' => 'weapon_type'],
+        'gender' => ['resolver' => 'mechanics', 'key' => 'character_gender', 'service_kind' => 'snippet'],
+    ];
+}
+function af_wanted_kb_rows_to_options(array $rows): array {
+    $out=[];
+    foreach($rows as $index=>$row) {
+        if(!is_array($row)) continue;
+        $key=trim((string)($row['key']??$index));
+        if($key==='') continue;
+        $label='';
+        foreach(['label_ru','title_ru','label_en','title_en'] as $labelKey) {
+            $label=trim((string)($row[$labelKey]??''));if($label!=='')break;
+        }
+        $out[$key]=$label!==''?$label:$key;
+    }
     return $out;
 }
-function af_wanted_label(array $field,string $value): string { $o=af_wanted_options($field); return $o[$value]??$value; }
+function af_wanted_origin_variant_options(string $originKey): array {
+    if($originKey===''||!function_exists('af_kb_get_origin_variants')) return [];
+    $rows=[];
+    foreach((array)af_kb_get_origin_variants($originKey,true) as $relation) {
+        $variant=is_array($relation['variant']??null)?$relation['variant']:$relation;
+        $key=trim((string)($variant['key']??$relation['variant_key']??''));
+        if($key==='') continue;
+        $label='';foreach(['title_ru','title_en','title','label'] as $labelKey){$label=trim((string)($variant[$labelKey]??''));if($label!=='')break;}
+        $rows[$key]=$label!==''?$label:$key;
+    }
+    return $rows;
+}
+function af_wanted_options(array $field, array $input=[]): array {
+    $settings=(array)($field['settings']??[]);
+    if(($field['type']??'')!=='kb_dynamic') {
+        $out=[]; foreach((array)($settings['options']??[]) as $key=>$label) $out[(string)$key]=(string)$label; return $out;
+    }
+    $source=(string)($settings['source']??'');
+    $definition=af_wanted_kb_source_map()[$source]??null;
+    if(!$definition) return [];
+    if($definition['resolver']==='origin_variants') {
+        $parentKey=(string)($settings['depends_on']??'origin');
+        return af_wanted_origin_variant_options(trim((string)($input[$parentKey]??'')));
+    }
+    if($definition['resolver']==='public_type'&&function_exists('af_kb_get_public_type_options')) {
+        return af_wanted_kb_rows_to_options((array)af_kb_get_public_type_options($definition['key']));
+    }
+    if($definition['resolver']==='mechanics'&&function_exists('af_kb_get_arpg_mechanics_options')) {
+        return af_wanted_kb_rows_to_options((array)af_kb_get_arpg_mechanics_options($definition['key'],$definition['service_kind']));
+    }
+    return [];
+}
+function af_wanted_label(array $field,string $value,array $context=[]): string { $o=af_wanted_options($field,$context); return $o[$value]??$value; }
 function af_wanted_entry(int $id): array {
  global $db;if($id<1)return [];
  $q=$db->write_query('SELECT e.*,u.username FROM '.TABLE_PREFIX.AF_WANTED_ENTRIES.' e LEFT JOIN '.TABLE_PREFIX.'users u ON u.uid=e.author_uid WHERE e.id='.$id.' LIMIT 1');
@@ -163,6 +212,24 @@ function af_wanted_field_control(array $f,$value,array $all=[]): string {
  if($type==='checkbox')return '<input type="checkbox" name="fields['.$k.']" value="1"'.((string)$v==='1'?' checked':'').'>';
  $htmlType=in_array($type,['url','image'],true)?'url':($type==='number'?'number':'text'); return '<input type="'.$htmlType.'" name="fields['.$k.']" value="'.af_wanted_h((string)$v).'"'.$req.($type==='number'?' step="any"':'').($type==='image'?' placeholder="https://example.com/image.jpg"':'').'>';
 }
+function af_wanted_dependency_data(array $fields): array {
+ $data=[];
+ foreach($fields as $field){
+  $settings=(array)($field['settings']??[]);
+  if(($field['type']??'')!=='kb_dynamic'||($settings['source']??'')!=='origin_variant')continue;
+  $parent=(string)($settings['depends_on']??'');if($parent==='')continue;
+  $parentField=null;foreach($fields as $candidate)if((string)$candidate['field_key']===$parent){$parentField=$candidate;break;}
+  if(!$parentField)continue;
+  $variants=[];foreach(af_wanted_options($parentField) as $originKey=>$unused)$variants[$originKey]=af_wanted_origin_variant_options($originKey);
+  $data[]=['field'=>(string)$field['field_key'],'depends_on'=>$parent,'options'=>$variants];
+ }
+ return $data;
+}
+function af_wanted_dependency_script(array $fields): string {
+ $data=af_wanted_dependency_data($fields);if(!$data)return '';
+ $json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT);
+ return '<script>(function(){var dependencies='.$json.';dependencies.forEach(function(config){var parent=document.querySelector("[name=\\"fields["+config.depends_on+"]\\"]");var child=document.querySelector("[name=\\"fields["+config.field+"]\\"]");if(!parent||!child)return;parent.addEventListener("change",function(){var rows=config.options[parent.value]||{};child.value="";while(child.options.length)child.remove(0);child.add(new Option("",""));Object.keys(rows).forEach(function(key){child.add(new Option(rows[key],key));});});});})();</script>';
+}
 function af_wanted_render_page(): void {
  global $mybb,$db,$headerinclude,$header,$footer,$theme;
  if(!af_wanted_can('view')) error_no_permission();
@@ -175,7 +242,7 @@ function af_wanted_render_page(): void {
  }
  $title='Нужные персонажи';add_breadcrumb($title,'wanted.php');
  $body='<div class="af-wanted"><h1>'.$title.'</h1>';
- if($action==='create'||$action==='edit'){if(!af_wanted_can($action==='create'?'create':'edit',$entry))error_no_permission();$fields=af_wanted_fields();$vals=$entry?af_wanted_values([$id])[$id]??[]:[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$body.='<form method="post" action="wanted.php?action=save'.($id?'&id='.$id:'').'"><input type="hidden" name="my_post_key" value="'.$mybb->post_code.'">';foreach($fields as $f)$body.='<div class="af-wanted-field"><label>'.af_wanted_h($f['title']).(!empty($f['required'])?' *':'').'</label>'.af_wanted_field_control($f,$vals[(int)$f['id']]??'',$byKey).'</div>';$body.='<button class="button" type="submit">Сохранить</button></form>';
+ if($action==='create'||$action==='edit'){if(!af_wanted_can($action==='create'?'create':'edit',$entry))error_no_permission();$fields=af_wanted_fields();$vals=$entry?af_wanted_values([$id])[$id]??[]:[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$body.='<form method="post" action="wanted.php?action=save'.($id?'&id='.$id:'').'"><input type="hidden" name="my_post_key" value="'.$mybb->post_code.'">';foreach($fields as $f)$body.='<div class="af-wanted-field"><label>'.af_wanted_h($f['title']).(!empty($f['required'])?' *':'').'</label>'.af_wanted_field_control($f,$vals[(int)$f['id']]??'',$byKey).'</div>';$body.='<button class="button" type="submit">Сохранить</button></form>'.af_wanted_dependency_script($fields);
  } elseif($action==='view'){if(!$entry)error('Wanted не найден.');$fields=af_wanted_fields();$vals=af_wanted_values([$id])[$id]??[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$body.='<h2>Wanted #'.$id.'</h2><p><span class="af-wanted-status">'.af_wanted_status_label($entry['status']).'</span></p><p>Автор: '.build_profile_link(af_wanted_h((string)$entry['username']),(int)$entry['author_uid']).'</p><dl>';foreach($fields as $f)if(($f['settings']['show_detail']??true)&&isset($vals[$f['id']])&&$vals[$f['id']]!=='')$body.='<dt>'.af_wanted_h($f['title']).'</dt><dd>'.nl2br(af_wanted_h(af_wanted_display_value($f,$vals[$f['id']],$byKey))).'</dd>';$body.='</dl>'.af_wanted_actions($entry);
  } else $body.=af_wanted_catalog();
  $body.='</div>';

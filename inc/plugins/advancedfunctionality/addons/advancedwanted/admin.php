@@ -104,6 +104,14 @@ class AF_Admin_Advancedwanted
         if (!in_array($type, self::FIELD_TYPES, true)) {
             $errors[] = 'Выбран недопустимый тип поля.';
         }
+        $source = trim((string)$mybb->get_input('source'));
+        $dependsOn = trim((string)$mybb->get_input('depends_on'));
+        if ($type === 'kb_dynamic' && !array_key_exists($source, af_wanted_kb_source_map())) {
+            $errors[] = 'Для KB dynamic выберите поддерживаемый source.';
+        }
+        if ($type === 'kb_dynamic' && $source === 'origin_variant' && $dependsOn === '') {
+            $errors[] = 'Для разновидности происхождения укажите Depends on (обычно origin).';
+        }
         if ($key !== '' && preg_match('/^[a-z0-9_]{1,64}$/', $key)) {
             $where = "field_key='" . $db->escape_string($key) . "'" . ($id > 0 ? ' AND id!=' . $id : '');
             if ($db->fetch_field($db->simple_select(AF_WANTED_FIELDS, 'id', $where, ['limit' => 1]), 'id')) {
@@ -136,8 +144,8 @@ class AF_Admin_Advancedwanted
             'active' => self::checked('active'),
             'sortorder' => (int)$mybb->get_input('sortorder'),
             'settings' => [
-                'source' => trim((string)$mybb->get_input('source')),
-                'depends_on' => trim((string)$mybb->get_input('depends_on')),
+                'source' => $source,
+                'depends_on' => $dependsOn,
                 'options' => $options,
                 'filterable' => (bool)self::checked('filterable'),
                 'show_card' => (bool)self::checked('show_card'),
@@ -227,6 +235,7 @@ class AF_Admin_Advancedwanted
             $html .= '<option value="' . $type . '"' . ($field['type'] === $type ? ' selected' : '') . '>' . $type . '</option>';
         }
         $html .= '</select></label>' . self::input('source', 'Option source', $settings['source'] ?? '')
+            . '<p class="smalltext">KB dynamic sources: ' . self::h(implode(', ', array_keys(af_wanted_kb_source_map()))) . '.</p>'
             . self::input('depends_on', 'Depends on', $settings['depends_on'] ?? '')
             . '<label>Options key=label<textarea name="options">' . self::h($options) . '</textarea></label>';
         foreach (['required' => 'Обязательно', 'active' => 'Активно', 'filterable' => 'Filterable', 'show_card' => 'Show in card', 'show_detail' => 'Show in detail'] as $key => $label) {
