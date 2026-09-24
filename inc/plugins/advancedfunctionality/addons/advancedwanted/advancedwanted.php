@@ -294,24 +294,44 @@ function af_wanted_primary_image(array $fields,array $values): string {
  }
  return '';
 }
-/** Build editable ATF defaults from the stable Wanted schema keys. */
-function af_wanted_build_atf_prefill(int $id): array {
- $fields=af_wanted_fields();$stored=af_wanted_values([$id])[$id]??[];$wanted=[];
- foreach($fields as $field)$wanted[(string)$field['field_key']]=(string)($stored[(int)$field['id']]??'');
- $map=[
-  'name_en'=>'character_name','name_ru'=>'character_name_ru','prototype'=>'character_prototype',
-  'origin'=>'character_origin','origin_variant'=>'character_origin_variant','subtype'=>'character_origin_variant','archetype'=>'character_class',
-  'faction'=>'character_faction','activity'=>'character_activity','weapon'=>'character_weapon',
-  'gender'=>'character_gen','age'=>'character_age','height'=>'character_height','weight'=>'character_weight',
-  'element'=>'character_element','image'=>'character_pic','about'=>'character_app','wishes'=>'character_userinfo',
+/** Return active ATF fields applicable to the configured application forum. */
+function af_wanted_atf_fields(): array {
+ $fid=(int)($GLOBALS['mybb']->settings['af_wanted_application_forum']??0);
+ if(function_exists('af_atf_get_fields_for_forum')&&$fid>0)return af_atf_get_fields_for_forum($fid);
+ if(function_exists('af_atf_get_fields_cached')){
+  $out=[];foreach(af_atf_get_fields_cached() as $field)if(!empty($field['active'])&&!empty($field['group_active'])&&($fid<1||!function_exists('af_atf_forum_allowed')||af_atf_forum_allowed($field,$fid)))$out[]=$field;return $out;
+ }
+ return [];
+}
+function af_wanted_mapping_types_compatible(string $wantedType,string $atfType): bool {
+ $matrix=[
+  'text'=>['text'],
+  'url'=>['text','url','image'],'image'=>['text','url','image'],
+  'number'=>['number','text'],'select'=>['select','radio','kb_dynamic','kb_mechanic'],
+  'radio'=>['select','radio','kb_dynamic','kb_mechanic'],
+  'kb_dynamic'=>['kb_dynamic','kb_mechanic','select','radio'],
+  'multi'=>['multi','text','textarea'],'checkbox'=>['checkbox','text','number'],
+  'textarea'=>['textarea'],
  ];
- $values=[];foreach($map as $source=>$target){$value=trim((string)($wanted[$source]??''));if($value!=='')$values[$target]=$value;}
+ return in_array($atfType,$matrix[$wantedType]??[],true);
+}
+/** Build editable ATF defaults solely from administrator-configured mappings. */
+function af_wanted_build_atf_prefill(int $id): array {
+ $fields=af_wanted_fields();$stored=af_wanted_values([$id])[$id]??[];$targets=[];
+ foreach(af_wanted_atf_fields() as $target)$targets[(string)($target['name']??'')]=$target;
+ $values=[];$originValues=[];$variantMappings=[];
+ foreach($fields as $field){
+  $targetKey=trim((string)($field['settings']['atf_field_key']??''));if($targetKey===''||!isset($targets[$targetKey]))continue;
+  $target=$targets[$targetKey];if(!af_wanted_mapping_types_compatible((string)$field['type'],(string)$target['type']))continue;
+  $raw=$stored[(int)$field['id']]??'';$value=is_array($raw)?$raw:trim((string)$raw);if($value===''||$value===[])continue;
+  if($field['type']==='checkbox')$value=in_array((string)$value,['1','true','yes','on'],true)?'1':'0';
+  if($field['type']==='multi'&&is_array($value))$value=json_encode(array_values($value),JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+  $values[$targetKey]=$value;
+  $source=(string)($field['settings']['source']??'');if($source==='origin')$originValues[(string)$field['field_key']]=(string)$raw;if($source==='origin_variant')$variantMappings[]=[$targetKey,(string)$raw,(string)($field['settings']['depends_on']??'')];
+ }
  // A variant is meaningful only while the authoritative KB relation accepts it
  // for the selected origin. Never copy a stale dependent value into ATF.
- if(isset($values['character_origin_variant'])){
-  $origin=(string)($wanted['origin']??'');$variant=(string)$values['character_origin_variant'];
-  if($origin===''||!array_key_exists($variant,af_wanted_origin_variant_options($origin)))unset($values['character_origin_variant']);
- }
+ foreach($variantMappings as [$targetKey,$variant,$parentKey]){$origin=(string)($originValues[$parentKey]??'');unset($values[$targetKey]);if($origin!==''&&array_key_exists($variant,af_wanted_origin_variant_options($origin)))$values[$targetKey]=$variant;}
  return ['source'=>'wanted','wanted_id'=>$id,'mechanic'=>'arpg','values'=>$values];
 }
 function af_wanted_store_atf_prefill(int $id,int $uid,int $fid): string {
@@ -398,7 +418,7 @@ function af_wanted_render_page(): void {
  $title='Нужные персонажи';add_breadcrumb($title,'wanted.php');
  $body='<div class="pun"><main class="af-wanted"><div class="af-kb-header"><h1>'.$title.'</h1></div>';
  if($action==='create'||$action==='edit'){if(!af_wanted_can($action==='create'?'create':'edit',$entry))error_no_permission();$fields=af_wanted_fields();$vals=$entry?af_wanted_values([$id])[$id]??[]:[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$body.='<section class="af-wanted-panel"><h2>'.($id?'Изменить Wanted #'.$id:'Новая заявка Wanted').'</h2><form class="af-wanted-form" method="post" action="wanted.php?action=save'.($id?'&id='.$id:'').'"><input type="hidden" name="my_post_key" value="'.af_wanted_h((string)$mybb->post_code).'">';foreach($fields as $f){$settings=(array)($f['settings']??[]);$dependent=($f['type']==='kb_dynamic'&&($settings['source']??'')==='origin_variant');$available=$dependent?af_wanted_options($f,$byKey):[];$hidden=$dependent&&!$available;$body.='<div class="af-wanted-field af-wanted-field--'.af_wanted_h((string)$f['type']).($hidden?' is-hidden':'').'"'.($hidden?' hidden':'').'><label>'.af_wanted_h($f['title']).(!empty($f['required'])?' *':'').'</label>'.af_wanted_field_control($f,$vals[(int)$f['id']]??'',$byKey).'</div>';}$body.='<div class="af-wanted-form-actions"><button class="button" type="submit">Сохранить</button><a class="button" href="'.($id?'wanted.php?action=view&amp;id='.$id:'wanted.php').'">Отмена</a></div></form></section>'.af_wanted_dependency_script($fields);
- } elseif($action==='view'){if(!$entry)error('Wanted не найден.');$fields=af_wanted_fields();$vals=af_wanted_values([$id])[$id]??[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$entryTitle=af_wanted_entry_title($id,$fields,$vals);$image=af_wanted_primary_image($fields,$vals);$info='';$content='';foreach($fields as $f){$fid=(int)$f['id'];$value=$vals[$fid]??'';$settings=(array)($f['settings']??[]);if(($f['type']??'')==='image'||!empty($settings['is_title'])||!($settings['show_detail']??true)||$value==='')continue;if(($f['type']??'')==='kb_dynamic'&&($settings['source']??'')==='origin_variant'&&!af_wanted_options($f,$byKey))continue;$rendered=af_wanted_render_field_value($f,$value,$byKey);if($rendered==='')continue;$row='<div class="af-wanted-detail-field af-wanted-detail-field--'.af_wanted_h((string)$f['type']).'"><dt>'.af_wanted_h($f['title']).'</dt><dd>'.$rendered.'</dd></div>';if(($f['type']??'')==='textarea')$content.=$row;else$info.=$row;}$author=build_profile_link(af_wanted_h((string)$entry['username']),(int)$entry['author_uid']);$reservation=af_wanted_reservation_html($entry);$player=$entry['status']==='archived'&&!empty($entry['accepted_uid'])?'<div class="af-wanted-detail-field"><dt>Игрок</dt><dd>'.build_profile_link(af_wanted_h((string)$entry['accepted_name']),(int)$entry['accepted_uid']).'</dd></div>':'';$body.='<article class="af-wanted-detail af-atf-wiki"><header class="af-wanted-detail-header af-atf-wiki__header"><div class="af-atf-wiki__heading"><h2 class="af-atf-wiki__title">'.af_wanted_h($entryTitle).'</h2>'.af_wanted_status_chip($entry).'</div></header><div class="af-wanted-detail-layout af-atf-wiki__layout"><main class="af-wanted-detail-content af-atf-wiki__content"><dl class="af-wanted-detail-fields">'.$content.'</dl></main><aside class="af-wanted-infobox af-atf-wiki__infobox">';if($image!=='')$body.='<div class="af-wanted-detail-image">'.af_wanted_render_field_value(['type'=>'image'],$image).'</div>';$body.='<dl>'.$reservation.$info.'<div class="af-wanted-detail-field"><dt>Автор</dt><dd>'.$author.'</dd></div>'.$player.'</dl></aside></div>'.af_wanted_actions($entry,true).'</article>';
+ } elseif($action==='view'){if(!$entry)error('Wanted не найден.');$body.=af_wanted_render_detail($entry,true);
  } else $body.=af_wanted_catalog().'<script defer src="inc/plugins/advancedfunctionality/addons/advancedwanted/assets/advancedwanted_catalog.js"></script>';
  $body.='</main></div>';
  if (function_exists('af_front_output_template_string')) {
@@ -536,5 +556,14 @@ function af_wanted_ensure_chip_runtime(string &$page=''): void {
  if(stripos($page,'</head>')!==false)$page=str_ireplace('</head>',$inject.'</head>',$page);else$page.=$inject;
 }
 function af_wanted_modal_payload(array $entry): array {
- $id=(int)$entry['id'];$fields=af_wanted_fields();$values=af_wanted_values([$id])[$id]??[];$byKey=[];foreach($fields as $field)$byKey[$field['field_key']]=$values[(int)$field['id']]??'';$sections=[];foreach($fields as $field){$value=(string)($values[(int)$field['id']]??'');if($value===''||$field['type']==='image'||!empty($field['settings']['is_title']))continue;$sections[]=['label'=>(string)$field['title'],'html'=>af_wanted_render_field_value($field,$value,$byKey)];}$sections[]=['label'=>'Автор','html'=>build_profile_link(af_wanted_h((string)$entry['username']),(int)$entry['author_uid'])];$reservation=af_wanted_reservation_html($entry);if($reservation!=='')$sections[]=['label'=>'Бронь','html'=>'<dl>'.$reservation.'</dl>'];if(!empty($entry['application_tid']))$sections[]=['label'=>'Анкета','html'=>'<a href="showthread.php?tid='.(int)$entry['application_tid'].'">Открыть анкету</a>'];return ['id'=>$id,'key'=>(string)$id,'title'=>af_wanted_entry_title($id,$fields,$values),'icon_url'=>af_wanted_primary_image($fields,$values),'banner_url'=>af_wanted_primary_image($fields,$values),'body_html'=>'<p><strong>'.af_wanted_h(af_wanted_status_label((string)$entry['status'])).'</strong></p>','sections_html'=>$sections];
+ return ['id'=>(int)$entry['id'],'detail_html'=>af_wanted_render_detail($entry,false)];
+}
+
+/** One detail renderer shared by the full page and the post-chip modal. */
+function af_wanted_render_detail(array $entry,bool $withActions=true): string {
+ $id=(int)$entry['id'];$fields=af_wanted_fields();$vals=af_wanted_values([$id])[$id]??[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';
+ $title=af_wanted_entry_title($id,$fields,$vals);$image=af_wanted_primary_image($fields,$vals);$info='';$content='';
+ foreach($fields as $f){$value=$vals[(int)$f['id']]??'';$settings=(array)($f['settings']??[]);if(($f['type']??'')==='image'||!empty($settings['is_title'])||!($settings['show_detail']??true)||$value==='')continue;if(($f['type']??'')==='kb_dynamic'&&($settings['source']??'')==='origin_variant'&&!af_wanted_options($f,$byKey))continue;$rendered=af_wanted_render_field_value($f,$value,$byKey);if($rendered==='')continue;$row='<div class="af-wanted-detail-field af-wanted-detail-field--'.af_wanted_h((string)$f['type']).'"><dt>'.af_wanted_h($f['title']).'</dt><dd>'.$rendered.'</dd></div>';if(($f['type']??'')==='textarea')$content.=$row;else$info.=$row;}
+ $author=build_profile_link(af_wanted_h((string)$entry['username']),(int)$entry['author_uid']);$player=$entry['status']==='archived'&&!empty($entry['accepted_uid'])?'<div class="af-wanted-detail-field"><dt>Игрок</dt><dd>'.build_profile_link(af_wanted_h((string)$entry['accepted_name']),(int)$entry['accepted_uid']).'</dd></div>':'';
+ $html='<article class="af-wanted-detail af-atf-wiki"><header class="af-wanted-detail-header af-atf-wiki__header"><div class="af-atf-wiki__heading"><h2 class="af-atf-wiki__title">'.af_wanted_h($title).'</h2>'.af_wanted_status_chip($entry).'</div></header><div class="af-wanted-detail-layout af-atf-wiki__layout"><main class="af-wanted-detail-content af-atf-wiki__content"><dl class="af-wanted-detail-fields">'.$content.'</dl></main><aside class="af-wanted-infobox af-atf-wiki__infobox">';if($image!=='')$html.='<div class="af-wanted-detail-image">'.af_wanted_render_field_value(['type'=>'image'],$image).'</div>';$html.='<dl>'.af_wanted_reservation_html($entry).$info.'<div class="af-wanted-detail-field"><dt>Автор</dt><dd>'.$author.'</dd></div>'.$player.'</dl></aside></div>'.($withActions?af_wanted_actions($entry,true):'').'</article>';return $html;
 }

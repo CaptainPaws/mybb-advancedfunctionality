@@ -19,8 +19,8 @@
     modal = document.createElement('div');
     modal.className = 'af-wanted-modal-backdrop';
     modal.setAttribute('aria-hidden', 'true');
-    modal.innerHTML = '<section class="af-wanted-modal" role="dialog" aria-modal="true" aria-labelledby="af-wanted-modal-title">' +
-      '<header class="af-wanted-modal-header"><h3 id="af-wanted-modal-title"></h3>' +
+    modal.innerHTML = '<section class="af-wanted-modal" role="dialog" aria-modal="true" aria-label="Wanted">' +
+      '<header class="af-wanted-modal-header">' +
       '<button type="button" class="af-wanted-modal-close" aria-label="Закрыть">&times;</button></header>' +
       '<div class="af-wanted-modal-body"></div></section>';
     document.body.appendChild(modal);
@@ -34,16 +34,8 @@
     var shell = ensureModal();
     var entry = data && data.entry;
     if (!entry) return;
-    var title = shell.querySelector('h3');
     var body = shell.querySelector('.af-wanted-modal-body');
-    title.textContent = entry.title || entry.key || 'Wanted';
-    var image = entry.banner_url ? '<img class="af-wanted-modal-image" src="' + escapeHtml(entry.banner_url) + '" alt="" loading="lazy">' : '';
-    var sections = '';
-    (Array.isArray(entry.sections_html) ? entry.sections_html : []).forEach(function (section) {
-      if (!section) return;
-      sections += '<section class="af-wanted-modal-section"><h4>' + escapeHtml(section.label || '') + '</h4><div>' + (section.html || '') + '</div></section>';
-    });
-    body.innerHTML = image + (entry.body_html || '') + sections;
+    body.innerHTML = entry.detail_html || '';
     shell.classList.add('is-active');
     shell.setAttribute('aria-hidden', 'false');
     shell.querySelector('.af-wanted-modal-close').focus();

@@ -16,17 +16,19 @@ check(strpos($chips, "fetch('wanted.php?action=modal&ajax=1&id='") !== false
     && strpos($chips, "event.target === modal") !== false
     && strpos($chips, "closest('.af-wanted-modal-close')") !== false,
     'Wanted uses its live JSON modal with close button and overlay close');
-check(strpos($core, "'name_en'=>'character_name'") !== false
-    && strpos($core, "'origin'=>'character_origin'") !== false
-    && strpos($core, "'weapon'=>'character_weapon'") !== false
-    && strpos($core, "'image'=>'character_pic'") !== false,
-    'Wanted canonical keys map to canonical ATF names');
+check(strpos($core, "['settings']['atf_field_key']") !== false
+    && strpos($core, 'af_wanted_atf_fields()') !== false
+    && strpos($core, "'name_en'=>'character_name'") === false,
+    'Wanted maps only configured fields against the live ATF registry');
 check(strpos($core, 'af_atf_prefill_store_save') !== false
     && strpos($core, '&af_atf_prefill_token=') !== false
     && strpos($core, "'wanted_id'=>\$id") !== false,
     'apply uses the existing server-side ATF prefill token transport');
 check(strpos($core, 'af_wanted_origin_variant_options($origin)') !== false,
     'origin variant prefill is checked against its origin');
+check(strpos($core, "'detail_html'=>af_wanted_render_detail(\$entry,false)") !== false
+    && strpos($core, "af_wanted_render_detail(\$entry,true)") !== false,
+    'modal and page share one Wanted detail renderer');
 check(strpos($core, "\$action==='moderate_reservation'") !== false
     && strpos($core, "af_wanted_groups('moderate')") !== false
     && strpos($core, "verify_post_check(\$mybb->get_input('my_post_key'))") !== false,
