@@ -38,6 +38,14 @@ foreach ([$view, $characterView] as $template) {
         strpos($template, '{$kb_banner}') === false,
         'Entry templates must not render a detached banner'
     );
+    kb_banner_lifecycle_assert(
+        strpos($template, '<div class="af-kb-entry-header">') < strpos($template, '<div class="af-kb-entry-actions">'),
+        'Entry actions must render in their own row below the banner/title header'
+    );
+    kb_banner_lifecycle_assert(
+        strpos($template, 'class="af-kb-header') === false,
+        'Entry header and actions must not share the generic horizontal flex container'
+    );
 }
 kb_banner_lifecycle_assert(
     strpos($characterView, '{$kb_entry_heading}') < strpos($characterView, '{$kb_status_badge}'),
@@ -45,6 +53,9 @@ kb_banner_lifecycle_assert(
 );
 foreach (['max-height: 350px', 'width: 100%', 'height: auto', 'object-position: center center'] as $rule) {
     kb_banner_lifecycle_assert(strpos($css, $rule) !== false, "Missing banner sizing rule: {$rule}");
+}
+foreach (['.af-kb-entry-actions {', 'align-items: center', 'flex-wrap: wrap'] as $rule) {
+    kb_banner_lifecycle_assert(strpos($css, $rule) !== false, "Missing entry action layout rule: {$rule}");
 }
 
 $ensureStart = strpos($renderer, 'function af_kb_ensure_setting(');

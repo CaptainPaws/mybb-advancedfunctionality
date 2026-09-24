@@ -85,6 +85,15 @@
     justify-content: flex-end;
 }
 
+.af-kb-entry-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
 .af-kb-delete-form {
     display: inline-flex;
     margin: 0;
@@ -931,6 +940,7 @@ display: inline-block;
 .af-kb-status-form__actions { display: flex; justify-content: flex-end; }
 
 @media (max-width: 640px) {
+  .af-kb-entry-actions { justify-content: flex-start; }
   .af-kb-type-header-title,
   .af-kb-entry-header-title { padding: 12px; }
   .af-kb-type-header-title h1,
