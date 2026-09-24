@@ -244,7 +244,14 @@ function af_wanted_render_page(): void {
    if($action==='reserve'&&af_wanted_can('reserve',$entry)){ $db->write_query("UPDATE ".TABLE_PREFIX.AF_WANTED_ENTRIES." SET status='reserved',reserved_by_uid=".(int)$mybb->user['uid'].",reserved_at=".TIME_NOW.",updated_at=".TIME_NOW." WHERE id=$id AND status='open'");if((int)$db->affected_rows()!==1)error('Эта запись уже недоступна для бронирования.');redirect('wanted.php?action=view&id='.$id,'Персонаж придержан.'); }
    if($action==='release'){if(!$entry||$entry['status']!=='reserved'||(int)$entry['reserved_by_uid']!==(int)$mybb->user['uid'])error_no_permission();$db->update_query(AF_WANTED_ENTRIES,af_wanted_lifecycle_data('release_reservation'),'id='.$id." AND status='reserved' AND reserved_by_uid=".(int)$mybb->user['uid']);if((int)$db->affected_rows()!==1)error('Бронь уже изменена.');redirect('wanted.php?action=view&id='.$id,'Бронь снята.'); }
    if($action==='delete'&&af_wanted_can('delete',$entry)){ $db->delete_query(AF_WANTED_VALUES,'wanted_id='.$id);$db->delete_query(AF_WANTED_ENTRIES,'id='.$id);redirect('wanted.php','Запись удалена.'); }
-   if($action==='apply'&&af_wanted_can('apply',$entry)){ if(!in_array($entry['status']??'', ['open','reserved'],true)||(($entry['status']??'')==='reserved'&&(int)$entry['reserved_by_uid']!==(int)$mybb->user['uid']))error('Запись недоступна для подачи анкеты.');$intent=af_wanted_intent_encode($id,(int)$mybb->user['uid']); my_setcookie('af_wanted_apply',$intent,1800,true);$fid=(int)($mybb->settings['af_wanted_application_forum']??0);redirect('newthread.php?fid='.$fid,'Создайте тему анкеты. Связь с Wanted будет добавлена автоматически.'); }
+   if($action==='apply'&&af_wanted_can('apply',$entry)){
+     if(!in_array($entry['status']??'', ['open','reserved'],true)||(($entry['status']??'')==='reserved'&&(int)$entry['reserved_by_uid']!==(int)$mybb->user['uid']))error('Запись недоступна для подачи анкеты.');
+     $fid=(int)($mybb->settings['af_wanted_application_forum']??0);
+     if($fid<1)error('Форум для подачи анкет Wanted не настроен.');
+     $intent=af_wanted_intent_encode($id,(int)$mybb->user['uid'],$fid);
+     my_setcookie('af_wanted_apply',$intent,1800,true);
+     redirect('newthread.php?fid='.$fid,'Создайте тему анкеты. Связь с Wanted будет добавлена автоматически.');
+   }
  }
  if($action===''&&$mybb->get_input('ajax')==='1'){
    header('Content-Type: text/html; charset='.$mybb->settings['charset']);
@@ -276,9 +283,49 @@ function af_wanted_catalog(): string {
  $h.='<form class="af-wanted-filters" method="get" action="wanted.php"><input type="hidden" name="tab" value="'.$tab.'"><label>Поиск <input name="search" value="'.af_wanted_h($search).'"></label>';if($tab==='active'){$h.='<label>Статус <select name="status"><option value="">Все</option>';foreach(['open'=>'Свободные','reserved'=>'Придержанные','application'=>'С анкетой'] as $k=>$l)$h.='<option value="'.$k.'"'.($status===$k?' selected':'').'>'.$l.'</option>';$h.='</select></label>';}foreach($filters as [$f,$v]){$settings=(array)$f['settings'];$dependsOn=($f['type']==='kb_dynamic'&&($settings['source']??'')==='origin_variant')?(string)($settings['depends_on']??'origin'):'';$h.='<label>'.af_wanted_h($f['title']).' <select name="'.af_wanted_h($f['field_key']).'"'.($dependsOn!==''?' data-depends-on="'.af_wanted_h($dependsOn).'"':'').'><option value="">Все</option>';foreach(af_wanted_options($f,$mybb->input) as $k=>$l)$h.='<option value="'.af_wanted_h($k).'"'.($v===$k?' selected':'').'>'.af_wanted_h($l).'</option>';$h.='</select></label>';}$h.='<label>Сортировка <select name="sort"><option value="newest">Новые сначала</option><option value="oldest"'.($sort==='oldest'?' selected':'').'>Старые сначала</option></select></label><button type="submit">Применить</button><a href="wanted.php?tab='.$tab.'">Сбросить</a></form><div class="af-wanted-results" aria-live="polite"><div class="af-wanted-grid">';
  foreach($entries as $e){$ev=$values[$e['id']]??[];$byKey=[];foreach($fields as $field)$byKey[$field['field_key']]=$ev[(int)$field['id']]??'';$title='Wanted #'.(int)$e['id'];$image='';$details='';foreach($fields as $f){$v=$ev[$f['id']]??'';if($v==='')continue;if(in_array($f['field_key'],['title','name','character_name'],true))$title=af_wanted_h($v);if($f['type']==='image'&&af_wanted_valid_http_url((string)$v))$image='<img src="'.af_wanted_h($v).'" alt="">';if(!empty($f['settings']['show_card'])&&!in_array($f['type'],['textarea','image'],true))$details.='<span><b>'.af_wanted_h($f['title']).':</b> '.af_wanted_h(af_wanted_display_value($f,$v,$byKey)).'</span>';}$h.='<article class="af-wanted-card">'.$image.'<h2>'.$title.'</h2><small>Wanted #'.(int)$e['id'].' · '.af_wanted_status_label($e['status']).'</small><div>'.$details.'</div><p>Автор: '.build_profile_link(af_wanted_h((string)$e['username']),(int)$e['author_uid']).'</p>';if($e['status']==='reserved')$h.='<p>Придержано пользователем '.build_profile_link(af_wanted_h((string)$e['reserved_name']),(int)$e['reserved_by_uid']).'</p>';if($e['status']==='archived'&&!empty($e['accepted_uid']))$h.='<p>Игрок: '.build_profile_link(af_wanted_h((string)$e['accepted_name']),(int)$e['accepted_uid']).'</p>';$h.='<a class="button" href="wanted.php?action=view&id='.(int)$e['id'].'">Подробнее</a>'.af_wanted_actions($e).'</article>';}$h.='</div>';if($count>$per&&function_exists('multipage'))$h.='<nav class="af-wanted-pagination" aria-label="Страницы">'.multipage($count,$per,$page,'wanted.php?'.$query).'</nav>';return $h.'</div></section>';
 }
-function af_wanted_link_application(int $wantedId,int $tid,int $uid): bool { global $db;$e=af_wanted_entry($wantedId);if(!$e||$tid<1||!in_array($e['status'],['open','reserved'],true)||($e['status']==='reserved'&&(int)$e['reserved_by_uid']!==$uid))return false;$db->write_query("UPDATE ".TABLE_PREFIX.AF_WANTED_ENTRIES." SET status='application',application_tid=$tid,updated_at=".TIME_NOW." WHERE id=$wantedId AND status IN ('open','reserved')");if((int)$db->affected_rows()!==1)return false;if(function_exists('af_cwf_upsert_row'))af_cwf_upsert_row($tid,['wanted_id'=>$wantedId]);return true; }
+function af_wanted_link_application(int $wantedId,int $tid,int $uid): bool {
+ global $db;
+ $e=af_wanted_entry($wantedId);
+ if(!$e||$tid<1||$uid<1||!in_array($e['status'],['open','reserved'],true)||($e['status']==='reserved'&&(int)$e['reserved_by_uid']!==$uid))return false;
+ $reservationGuard="(status='open' OR (status='reserved' AND reserved_by_uid=$uid))";
+ $db->write_query("UPDATE ".TABLE_PREFIX.AF_WANTED_ENTRIES." SET status='application',application_tid=$tid,updated_at=".TIME_NOW." WHERE id=$wantedId AND $reservationGuard");
+ if((int)$db->affected_rows()!==1)return false;
+ if(function_exists('af_cwf_upsert_row'))af_cwf_upsert_row($tid,['wanted_id'=>$wantedId]);
+ return true;
+}
 function af_wanted_application_accepted(int $wantedId,int $tid,int $acceptedUid): bool {global $db;if($wantedId<1&&$tid>0){$e=$db->fetch_array($db->simple_select(AF_WANTED_ENTRIES,'id','application_tid='.$tid,['limit'=>1]));$wantedId=(int)($e['id']??0);}if($wantedId<1)return false;$db->update_query(AF_WANTED_ENTRIES,['status'=>'archived','accepted_uid'=>$acceptedUid?:null,'archived_at'=>TIME_NOW,'updated_at'=>TIME_NOW],"id=$wantedId AND status='application'");return (int)$db->affected_rows()===1;}
 function af_wanted_application_released(int $wantedId,int $tid,int $applicantUid): bool {global $db;$e=$wantedId?af_wanted_entry($wantedId):(array)$db->fetch_array($db->simple_select(AF_WANTED_ENTRIES,'*','application_tid='.$tid,['limit'=>1]));if(!$e)return false;$reserved=(int)$e['reserved_by_uid']===$applicantUid&&$applicantUid>0;$db->update_query(AF_WANTED_ENTRIES,['status'=>$reserved?'reserved':'open','application_tid'=>null,'updated_at'=>TIME_NOW],'id='.(int)$e['id']." AND status='application'");return (int)$db->affected_rows()===1;}
-function af_wanted_intent_encode(int $id,int $uid): string { global $mybb; $payload=$id.'.'.$uid.'.'.(TIME_NOW+1800);$secret=(string)($mybb->config['database']['password']??$mybb->post_code);return base64_encode($payload.'.'.hash_hmac('sha256',$payload,$secret)); }
-function af_wanted_intent_decode(string $token): array { global $mybb;$raw=base64_decode($token,true);if(!$raw)return [];$p=explode('.',$raw);if(count($p)!==4)return [];[$id,$uid,$exp,$sig]=$p;$payload=$id.'.'.$uid.'.'.$exp;$secret=(string)($mybb->config['database']['password']??$mybb->post_code);if(!hash_equals(hash_hmac('sha256',$payload,$secret),$sig)||(int)$exp<TIME_NOW)return [];return ['wanted_id'=>(int)$id,'uid'=>(int)$uid]; }
-function af_wanted_thread_created($handler): void {global $mybb;$intent=af_wanted_intent_decode((string)($mybb->cookies['af_wanted_apply']??''));if(!$intent||(int)$intent['uid']!==(int)$mybb->user['uid'])return;$tid=(int)($handler->tid??$handler->data['tid']??0);if($tid>0)af_wanted_link_application((int)$intent['wanted_id'],$tid,(int)$mybb->user['uid']);my_unsetcookie('af_wanted_apply');}
+function af_wanted_intent_secret(): string {
+ global $mybb;
+ return hash('sha256',(string)($mybb->config['database']['password']??'').'|'.(string)($mybb->settings['bburl']??'').'|'.(string)$mybb->post_code);
+}
+function af_wanted_intent_encode(int $id,int $uid,int $fid): string {
+ if($id<1||$uid<1||$fid<1)return '';
+ $payload=$id.'.'.$uid.'.'.$fid.'.'.(TIME_NOW+1800);
+ return base64_encode($payload.'.'.hash_hmac('sha256',$payload,af_wanted_intent_secret()));
+}
+function af_wanted_intent_decode(string $token): array {
+ $raw=base64_decode($token,true);
+ if(!is_string($raw)||$raw==='')return [];
+ $p=explode('.',$raw);
+ if(count($p)!==5)return [];
+ [$id,$uid,$fid,$exp,$sig]=$p;
+ foreach([$id,$uid,$fid,$exp] as $number)if(!preg_match('/^[0-9]+$/D',$number))return [];
+ $payload=$id.'.'.$uid.'.'.$fid.'.'.$exp;
+ $expires=(int)$exp;
+ if((int)$id<1||(int)$uid<1||(int)$fid<1||$expires<TIME_NOW||$expires>TIME_NOW+1800)return [];
+ if(!hash_equals(hash_hmac('sha256',$payload,af_wanted_intent_secret()),$sig))return [];
+ return ['wanted_id'=>(int)$id,'uid'=>(int)$uid,'fid'=>(int)$fid,'expires'=>$expires];
+}
+function af_wanted_thread_created($handler): void {
+ global $db,$mybb;
+ $intent=af_wanted_intent_decode((string)($mybb->cookies['af_wanted_apply']??''));
+ if(!$intent||(int)$intent['uid']!==(int)($mybb->user['uid']??0))return;
+ $tid=(int)($handler->data['tid']??$handler->tid??0);
+ if($tid<1)return;
+ // Read the persisted topic: handler globals/current user are not proof of its
+ // actual forum or author (moderation/import code may create on their behalf).
+ $thread=(array)$db->fetch_array($db->simple_select('threads','tid,fid,uid','tid='.$tid,['limit'=>1]));
+ if((int)($thread['tid']??0)!==$tid||(int)($thread['fid']??0)!==(int)$intent['fid']||(int)($thread['uid']??0)!==(int)$intent['uid'])return;
+ if(af_wanted_link_application((int)$intent['wanted_id'],$tid,(int)$thread['uid']))my_unsetcookie('af_wanted_apply');
+}

@@ -70,8 +70,16 @@ function af_cwf_ensure_schema(): void
 
     if (!is_object($db)) { return; }
     if ($db->table_exists(AF_CWF_TABLE)) {
+        $addedWantedColumn = false;
         if (!$db->field_exists('wanted_id', AF_CWF_TABLE)) {
             $db->add_column(AF_CWF_TABLE, 'wanted_id', 'INT UNSIGNED DEFAULT NULL AFTER greeting_post_id');
+            $addedWantedColumn = true;
+        }
+        // Keep the migration idempotent for installations where the column was
+        // added manually or an earlier migration stopped before creating its key.
+        $missingWantedIndex = method_exists($db, 'index_exists')
+            && !$db->index_exists(AF_CWF_TABLE, 'wanted_id');
+        if ($addedWantedColumn || $missingWantedIndex) {
             $db->write_query('ALTER TABLE '.TABLE_PREFIX.AF_CWF_TABLE.' ADD KEY wanted_id (wanted_id)');
         }
         return;
