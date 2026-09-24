@@ -90,8 +90,19 @@
         headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
         body: body.toString()
       }).then(function (response) {
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        return response.json();
+        return response.text().then(function (text) {
+          var data;
+          try {
+            data = JSON.parse(text);
+          } catch (error) {
+            console.error('Advanced Account Switcher: non-JSON walk response', text);
+            throw new Error('Сервер вернул некорректный ответ');
+          }
+          if (!response.ok) {
+            throw new Error(data.message || ('HTTP ' + response.status));
+          }
+          return data;
+        });
       }).then(function (data) {
         var lines = [data.message || 'Выгул завершён.'];
         if (typeof data.processed !== 'undefined') lines.push('Обработано аккаунтов: ' + data.processed);
