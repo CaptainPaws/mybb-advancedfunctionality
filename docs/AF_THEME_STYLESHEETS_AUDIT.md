@@ -62,6 +62,13 @@ and routing metadata. Existing `af_*.css` records and their CSS bodies are never
 deleted or rewritten by migration. After successful bundle caching they are
 detached, so they cannot duplicate either the bundle or server files.
 
+Source registry rows deliberately have `stylesheet_sid = 0`. Their
+`is_integrated` bit means that the source was accepted as bundle input, not that
+it owns a MyBB stylesheet. Diagnostics verify the source's structured section
+against the bundle row and report **bundle source**, **missing from bundle**,
+**file-mode source**, or **bundle detached** instead of presenting a source as
+an unintegrated per-addon stylesheet.
+
 ### Modes
 
 * **Theme mode** attaches `advancedstyles.css` globally. Every registered AF
@@ -77,7 +84,7 @@ file delivery. Old `auto` callers map to theme mode.
 
 ## Command semantics
 
-* **Integrate into ACP** remains accepted for compatibility for an individual
+* **Integrate into ACP** remains accepted at the action boundary for compatibility; the UI routes editing through bundle sections and does not create an individual
   legacy row. New normal synchronization does not create further opaque names.
 * **Sync all / Sync addon** rebuilds source input and updates the bundle only if
   its database CSS still equals AF's last synchronized checksum. An ACP-edited
@@ -86,10 +93,10 @@ file delivery. Old `auto` callers map to theme mode.
   Neither command replaces edits made with the section editor.
 * **Force resync** requires explicit confirmation and intentionally replaces
   the complete bundle with current server sources, clearing manual overrides.
-* **Rebuild missing** retains its conservative legacy recovery behavior; normal
-  sync also recreates a missing unified bundle without modifying legacy CSS.
-* **Restore from seed (safe)** retains the legacy rule: restore only a missing
-  or demonstrably unedited stylesheet and skip manual overrides.
+* **Rebuild missing / Restore from seed (safe)** are compatibility actions for
+  the unified bundle. Both use non-force synchronization, recreate a missing
+  `advancedstyles.css`, preserve manual bundle edits, and never create an
+  individual per-source MyBB stylesheet.
 * **Show diff/hash status** is read-only.
 
 On the first bundle creation, legacy rows whose CSS differs from their last

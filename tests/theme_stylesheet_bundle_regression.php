@@ -26,6 +26,11 @@ $checks = [
     'legacy rows retained' => 'Migration is intentionally non-destructive',
     'bundle delivery precedence' => 'Unified mode has precedence',
     'file mode detaches bundle' => "\$mode === 'theme' ? 'global' : ''",
+    'source metadata has no sid' => "['stylesheet_sid' => 0, 'updated_at' => TIME_NOW]",
+    'bundle source status' => "\$status = \$mode === 'file' ? 'file_source' : 'bundle_source'",
+    'bundle detached status' => "\$status = 'bundle_detached'",
+    'legacy duplicate cleanup' => 'af_theme_stylesheet_deduplicate_registry',
+    'section chips' => 'af-ts-section-chip',
 ];
 
 $failed = [];
@@ -42,6 +47,9 @@ if (strpos($router, 'theme_stylesheet_section') === false || strpos($router, 'th
 }
 if (preg_match("~delete_query\\(\\s*'themestylesheets'.*AF_THEME_BUNDLE~s", $core)) {
     $failed[] = 'bundle/legacy destructive deletion';
+}
+if (preg_match("~af_ensure_theme_stylesheet_registry_row.*?insert_query\\('themestylesheets'~s", $core)) {
+    $failed[] = 'source registry creates a MyBB stylesheet';
 }
 
 if ($failed) {
