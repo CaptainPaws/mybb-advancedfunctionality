@@ -30,6 +30,8 @@ $checks = [
     'bundle source status' => "\$status = \$mode === 'file' ? 'file_source' : 'bundle_source'",
     'bundle detached status' => "\$status = 'bundle_detached'",
     'legacy duplicate cleanup' => 'af_theme_stylesheet_deduplicate_registry',
+    'disabled source reconciliation' => 'af_disable_theme_stylesheet_sources',
+    'disabled source detached state' => "'is_integrated' => 0",
     'section chips' => 'af-ts-section-chip',
 ];
 
