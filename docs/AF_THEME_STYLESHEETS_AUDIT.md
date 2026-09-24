@@ -116,3 +116,45 @@ To restore the exact pre-migration theme-cache arrangement, reattach the retaine
 legacy stylesheets to the values shown by their AF diagnostics/manifest and
 detach `advancedstyles.css`. No source or legacy CSS record has to be recovered
 from a deleted file.
+
+## Regression investigation limits (2026-09-24)
+
+The production PHP error log, production database, theme cache, and the referenced
+59-name candidate list were not present in this repository. Commit `4b43bd2` was
+also not present in the supplied Git object database. Consequently, neither the
+exact production exception nor a production cleanup is claimed here. The closest
+available implementation is the sequence `f61c184`, `0a07f60`, and `e941498`; its
+section editor was reapplied to the current, working plugin instead of replacing
+the plugin with an older snapshot.
+
+The repository evidence does establish the cache-regeneration path. Legacy AF
+registry rows retain `stylesheet_sid`; their matching rows remain in
+`themestylesheets`; normal bundle migration only clears `attachedto`. Calls to
+`update_theme_stylesheet_list()` make MyBB rebuild theme metadata/cache from those
+database rows. Deleting only `cache/themes/theme1/af_*.css` therefore cannot be a
+durable cleanup: a later activation/synchronization invokes that call after bundle
+sync and MyBB can write the cache file again from the still-existing master-theme
+row. The unified sync path does not call `af_register_theme_stylesheet()` and thus
+does not create new per-source rows; it creates or updates only
+`advancedstyles.css`.
+
+Production cleanup must therefore be a separately reviewed data operation: take
+a recoverable export of `themes`, `themestylesheets`, and `af_theme_stylesheets`;
+join each of the exact 59 names to the master and child rows and registry SID;
+copy unique/manual CSS into the appropriate bundle section; then delete only the
+confirmed rows and their registry references before running MyBB's stylesheet-list
+and cache rebuild. A wildcard deletion is intentionally not implemented because
+the required allow-list and production contents are unavailable.
+
+## Verified lifecycle call paths
+
+* Install creates/upgrades the stylesheet registry before its first safe sync,
+  after settings and language setup. It also writes the ACP proxy and gateway.
+* Activation preserves the proxy/router, refreshes languages, synchronizes master
+  templates, performs a non-forced stylesheet sync, refreshes the gateway, and
+  records activation state.
+* Deactivation changes only the refresh flag. Reactivation therefore retains AF
+  settings, registry state, and ACP CSS. A normal sync compares the database CSS
+  to `last_synced_checksum`; a mismatch is treated as a manual override.
+* Force resync is the only normal command that intentionally replaces the bundle,
+  and the ACP requires the explicit confirmation field before invoking it.
