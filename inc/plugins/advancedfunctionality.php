@@ -374,6 +374,8 @@ class AF_Admin
 
         if ($view === 'theme_stylesheets') {
             self::renderThemeStylesheetsPage();
+        } elseif ($view === 'theme_stylesheet_section') {
+            self::renderThemeStylesheetSectionEditor();
         } elseif ($view) {
             $sections = self::collectAdminSections();
             foreach ($sections as $sec) {
@@ -484,6 +486,24 @@ class AF_Admin
         $themeScope = strtolower(trim((string)$mybb->get_input('theme_scope')));
         if (!in_array($themeScope, ['current', 'all'], true)) {
             $themeScope = 'all';
+        }
+
+        if ($action === 'theme_stylesheets_save_section') {
+            $sectionId = trim((string)$mybb->get_input('section_id'));
+            $bundleHash = trim((string)$mybb->get_input('bundle_hash'));
+            $sectionHash = trim((string)$mybb->get_input('section_hash'));
+            $css = (string)$mybb->get_input('section_css');
+            $saved = af_theme_stylesheet_save_section($themeTid, $sectionId, $bundleHash, $sectionHash, $css);
+            flash_message(htmlspecialchars_uni((string)$saved['message']), !empty($saved['ok']) ? 'success' : 'error');
+            if (empty($saved['ok'])) {
+                admin_redirect('index.php?module='.AF_PLUGIN_ID.'&af_view=theme_stylesheet_section&theme_tid='.(int)$themeTid.'&section_id='.rawurlencode($sectionId));
+            }
+            admin_redirect(self::themeStylesheetsUrl(null, $themeTid, 'all'));
+        }
+        if ($action === 'theme_stylesheets_repair_structure') {
+            $repaired = af_theme_stylesheet_repair_bundle_structure($themeTid, trim((string)$mybb->get_input('bundle_hash')));
+            flash_message(htmlspecialchars_uni((string)$repaired['message']), !empty($repaired['ok']) ? 'success' : 'error');
+            admin_redirect(self::themeStylesheetsUrl(null, $themeTid, 'all'));
         }
 
         if ($action === 'theme_stylesheets_force_resync' && !$confirmForce) {
@@ -605,6 +625,21 @@ class AF_Admin
             echo self::renderThemeStylesheetActionForm('theme_stylesheets_set_theme_mode', $lang->af_theme_stylesheets_set_theme_mode, AF_THEME_BUNDLE_ADDON_ID, true, false, $themeFilter, (int)$bundleTid, AF_THEME_BUNDLE_LOGICAL_ID, 'secondary');
             echo self::renderThemeStylesheetActionForm('theme_stylesheets_set_file_mode', $lang->af_theme_stylesheets_set_file_mode, AF_THEME_BUNDLE_ADDON_ID, true, false, $themeFilter, (int)$bundleTid, AF_THEME_BUNDLE_LOGICAL_ID, 'secondary');
             echo '<br>';
+            $bundleDbRow = af_theme_stylesheet_get_bundle_row((int)$bundleTid);
+            $parsed = af_theme_stylesheet_parse_bundle((string)($bundleDbRow['stylesheet'] ?? ''));
+            if (!empty($parsed['ok'])) {
+                echo '<span class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_sections).':</span> ';
+                foreach ($parsed['sections'] as $sectionId => $section) {
+                    $meta = (array)$section['meta'];
+                    $label = (string)($meta['addon_title'] ?? $meta['addon_id']).' — '.(string)($meta['source_file'] ?? $meta['logical_id']);
+                    $url = 'index.php?module='.AF_PLUGIN_ID.'&amp;af_view=theme_stylesheet_section&amp;theme_tid='.(int)$bundleTid.'&amp;section_id='.rawurlencode((string)$sectionId);
+                    echo '<a class="button af-ts-btn-secondary" href="'.$url.'">'.htmlspecialchars_uni($label).'</a> ';
+                }
+            } elseif ($bundleDbRow) {
+                echo '<span style="color:#a00;font-weight:600;">'.htmlspecialchars_uni($lang->af_theme_stylesheets_structure_error).': '.htmlspecialchars_uni((string)$parsed['error']).'</span>';
+                echo self::renderThemeStylesheetActionForm('theme_stylesheets_repair_structure', $lang->af_theme_stylesheets_repair_structure, '', true, true, $themeFilter, (int)$bundleTid, '', 'secondary', ['bundle_hash' => sha1((string)$bundleDbRow['stylesheet'])]);
+            }
+            echo '<br>';
         }
         echo '</div>';
 
@@ -699,6 +734,36 @@ class AF_Admin
         $table->output($lang->af_theme_stylesheets_title);
     }
 
+    private static function renderThemeStylesheetSectionEditor(): void
+    {
+        global $mybb, $lang;
+        $themeTid = $mybb->get_input('theme_tid', MyBB::INPUT_INT);
+        $sectionId = trim((string)$mybb->get_input('section_id'));
+        $row = af_theme_stylesheet_get_bundle_row($themeTid);
+        $css = (string)($row['stylesheet'] ?? '');
+        $parsed = af_theme_stylesheet_parse_bundle($css);
+        if (empty($parsed['ok']) || !isset($parsed['sections'][$sectionId])) {
+            echo '<div class="error"><p>'.htmlspecialchars_uni($lang->af_theme_stylesheets_structure_error).': '.htmlspecialchars_uni((string)($parsed['error'] ?? 'section not found')).'</p></div>';
+            return;
+        }
+        $section = $parsed['sections'][$sectionId];
+        $meta = (array)$section['meta'];
+        $title = (string)($meta['addon_title'] ?? $meta['addon_id']).' — '.(string)($meta['source_file'] ?? '');
+        echo '<h2>'.htmlspecialchars_uni($lang->af_theme_stylesheets_section_editor).': '.htmlspecialchars_uni($title).'</h2>';
+        echo '<p class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_section_help).'</p>';
+        echo '<form method="post" action="index.php?module='.AF_PLUGIN_ID.'">';
+        echo '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">';
+        echo '<input type="hidden" name="af_action" value="theme_stylesheets_save_section">';
+        echo '<input type="hidden" name="theme_tid" value="'.(int)$themeTid.'">';
+        echo '<input type="hidden" name="section_id" value="'.htmlspecialchars_uni($sectionId).'">';
+        echo '<input type="hidden" name="bundle_hash" value="'.sha1($css).'">';
+        echo '<input type="hidden" name="section_hash" value="'.sha1((string)$section['body']).'">';
+        echo '<textarea name="section_css" rows="35" style="box-sizing:border-box;width:100%;font-family:monospace;white-space:pre;">'.htmlspecialchars_uni((string)$section['body']).'</textarea>';
+        echo '<p><input type="submit" class="submit_button" value="'.htmlspecialchars_uni($lang->af_theme_stylesheets_section_save).'"> '
+            .'<a href="'.self::themeStylesheetsUrl(null, $themeTid, 'all').'">'.htmlspecialchars_uni($lang->af_theme_stylesheets_section_cancel).'</a></p>';
+        echo '</form>';
+    }
+
     private static function renderThemeStylesheetFilters(string $addonFilter, string $themeScope): void
     {
         global $lang;
@@ -760,7 +825,7 @@ class AF_Admin
         return '<a class="'.trim($class).'" href="'.$url.'">'.htmlspecialchars_uni($label).'</a>';
     }
 
-    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'all', ?int $themeTid = null, string $logicalId = '', string $variant = 'primary'): string
+    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'all', ?int $themeTid = null, string $logicalId = '', string $variant = 'primary', array $extra = []): string
     {
         global $mybb;
 
@@ -780,6 +845,10 @@ class AF_Admin
         }
         if ($confirm) {
             $html .= '<input type="hidden" name="confirm_force" value="1">';
+        }
+        foreach ($extra as $key => $value) {
+            if (!preg_match('~^[a-z0-9_]+$~i', (string)$key)) continue;
+            $html .= '<input type="hidden" name="'.htmlspecialchars_uni((string)$key).'" value="'.htmlspecialchars_uni((string)$value).'">';
         }
         $buttonClass = $inline ? 'button' : 'submit_button';
         $buttonClass .= ($variant === 'secondary') ? ' af-ts-btn-secondary' : ' af-ts-btn-primary';
@@ -1294,6 +1363,13 @@ function af_ensure_core_languages(bool $force = false): void
             'af_admin_menu_overview' => 'Обзор аддонов',
             'af_theme_stylesheets_title' => 'Стили тем AF',
             'af_theme_stylesheets_help' => 'Сервисная страница регистрации и обслуживания стилей тем, управляемых AF.',
+            'af_theme_stylesheets_sections' => 'Секции аддонов',
+            'af_theme_stylesheets_structure_error' => 'Структура секций повреждена. Содержимое не перезаписано; принудительная синхронизация восстановит структуру, но заменит ручные правки',
+            'af_theme_stylesheets_section_editor' => 'Редактор секции CSS',
+            'af_theme_stylesheets_section_help' => 'Сохраняется только выбранная секция. Серверный CSS не меняется. При изменении общего файла после открытия сохранение будет отклонено как конфликт.',
+            'af_theme_stylesheets_section_save' => 'Сохранить секцию',
+            'af_theme_stylesheets_section_cancel' => 'Отмена',
+            'af_theme_stylesheets_repair_structure' => 'Восстановить структуру с полной recovery-копией',
             'af_theme_stylesheets_help_actions' => 'Редактирование CSS и свойств выполняется в штатном редакторе stylesheet’ов ACP MyBB.',
             'af_theme_stylesheets_help_actions_title' => 'Памятка по действиям',
             'af_theme_stylesheets_col_theme_id' => 'ID темы',
@@ -1391,6 +1467,13 @@ function af_ensure_core_languages(bool $force = false): void
             'af_admin_menu_overview' => 'Addons overview',
             'af_theme_stylesheets_title' => 'AF Theme Stylesheets',
             'af_theme_stylesheets_help' => 'Service page for registering and maintaining AF-managed theme stylesheets.',
+            'af_theme_stylesheets_sections' => 'Addon sections',
+            'af_theme_stylesheets_structure_error' => 'Section structure is invalid. Content was not overwritten; force resync repairs structure but replaces manual edits',
+            'af_theme_stylesheets_section_editor' => 'CSS section editor',
+            'af_theme_stylesheets_section_help' => 'Only this section is saved. Server CSS is never changed. Saving is rejected if the bundle changed after opening.',
+            'af_theme_stylesheets_section_save' => 'Save section',
+            'af_theme_stylesheets_section_cancel' => 'Cancel',
+            'af_theme_stylesheets_repair_structure' => 'Repair structure with full recovery copy',
             'af_theme_stylesheets_help_actions' => 'CSS and stylesheet properties are edited in native MyBB ACP stylesheet editor.',
             'af_theme_stylesheets_help_actions_title' => 'Actions quick help',
             'af_theme_stylesheets_col_theme_id' => 'Theme ID',
@@ -2505,23 +2588,133 @@ function af_theme_stylesheet_build_bundle(?string $onlyAddonId = null): array
         }
         $addonName = trim((string)($entry['addon_meta']['name'] ?? $addonId));
         $file = ltrim(str_replace('\\', '/', (string)$entry['file']), '/');
-        $safeTitle = str_replace('*/', '* /', $addonName);
-        $safeFile = str_replace('*/', '* /', $file);
         $seedCss = af_theme_stylesheet_rebase_css_urls((string)$seed['source'], $addonId, $file);
-        $blocks[] = "/* ==========================================================================\n"
-            . "   AF addon: {$safeTitle} [{$addonId}]\n"
-            . "   Source: {$safeFile}\n"
-            . "   ========================================================================== */\n"
-            . rtrim($seedCss) . "\n";
+        $blocks[] = af_theme_stylesheet_encode_section([
+            'addon_id' => $addonId,
+            'addon_title' => $addonName,
+            'logical_id' => (string)$entry['logical_id'],
+            'source_file' => $file,
+        ], rtrim($seedCss));
         $sources[] = $addonId . ':' . $file . ':' . (string)$seed['checksum'];
     }
 
-    $css = "/* AdvancedFunctionality theme bundle. Edit in MyBB ACP.\n"
+    $css = "/* AdvancedFunctionality theme bundle (structured v1). Edit sections in AF ACP.\n"
         . " * Normal synchronization preserves an ACP-edited bundle.\n"
         . " * Force resync intentionally replaces it from the server sources.\n"
         . " */\n\n" . implode("\n", $blocks);
 
     return ['source' => $css, 'checksum' => sha1($css), 'sources' => $sources];
+}
+
+/**
+ * Encode a length-delimited bundle section. The parser never searches for a
+ * CSS/comment sentinel in the body: it reads the exact byte count authenticated
+ * by the metadata hash. Thus marker-looking text inside valid CSS is harmless.
+ */
+function af_theme_stylesheet_encode_section(array $meta, string $css): string
+{
+    $meta['version'] = 1;
+    $meta['section_id'] = sha1((string)($meta['addon_id'] ?? '')."\0".(string)($meta['logical_id'] ?? '')."\0".(string)($meta['source_file'] ?? ''));
+    $meta['bytes'] = strlen($css);
+    $meta['body_sha1'] = sha1($css);
+    $json = json_encode($meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    return '/* AF-SECTION-V1 '.base64_encode((string)$json)." */\n".$css."\n/* AF-END-SECTION-V1 */\n";
+}
+
+/** Parse the authenticated, length-delimited sections and retain byte offsets. */
+function af_theme_stylesheet_parse_bundle(string $css): array
+{
+    $marker = '/* AF-SECTION-V1 ';
+    $endMarker = "\n/* AF-END-SECTION-V1 */\n";
+    $cursor = 0;
+    $seen = false;
+    $sections = [];
+    while (($start = strpos($css, $marker, $cursor)) !== false) {
+        if ($seen && trim(substr($css, $cursor, $start - $cursor)) !== '') return ['ok' => false, 'error' => 'unmanaged content between sections', 'sections' => $sections];
+        $headerEnd = strpos($css, " */\n", $start + strlen($marker));
+        if ($headerEnd === false) return ['ok' => false, 'error' => 'unterminated section header', 'sections' => $sections];
+        $encoded = substr($css, $start + strlen($marker), $headerEnd - ($start + strlen($marker)));
+        $decoded = base64_decode($encoded, true);
+        $meta = is_string($decoded) ? json_decode($decoded, true) : null;
+        if (!is_array($meta) || (int)($meta['version'] ?? 0) !== 1 || !isset($meta['bytes'], $meta['section_id'])) {
+            return ['ok' => false, 'error' => 'invalid section metadata', 'sections' => $sections];
+        }
+        $bodyStart = $headerEnd + 4;
+        $bytes = (int)$meta['bytes'];
+        if ($bytes < 0 || $bodyStart + $bytes > strlen($css)) return ['ok' => false, 'error' => 'invalid section length', 'sections' => $sections];
+        $body = substr($css, $bodyStart, $bytes);
+        if (!hash_equals((string)($meta['body_sha1'] ?? ''), sha1($body))) return ['ok' => false, 'error' => 'section checksum mismatch', 'sections' => $sections];
+        $trailerStart = $bodyStart + $bytes;
+        if (substr($css, $trailerStart, strlen($endMarker)) !== $endMarker) return ['ok' => false, 'error' => 'section boundary mismatch', 'sections' => $sections];
+        $expectedId = sha1((string)($meta['addon_id'] ?? '')."\0".(string)($meta['logical_id'] ?? '')."\0".(string)($meta['source_file'] ?? ''));
+        if (!hash_equals($expectedId, (string)$meta['section_id'])) return ['ok' => false, 'error' => 'section identity mismatch', 'sections' => $sections];
+        if (isset($sections[$expectedId])) return ['ok' => false, 'error' => 'duplicate section identity', 'sections' => $sections];
+        $end = $trailerStart + strlen($endMarker);
+        $sections[$expectedId] = ['meta' => $meta, 'body' => $body, 'start' => $start, 'end' => $end];
+        $cursor = $end;
+        $seen = true;
+    }
+    if (!$sections) return ['ok' => false, 'error' => 'no structured sections', 'sections' => []];
+    if (trim(substr($css, $cursor)) !== '') return ['ok' => false, 'error' => 'unmanaged content after sections', 'sections' => $sections];
+    return ['ok' => true, 'error' => '', 'sections' => $sections];
+}
+
+function af_theme_stylesheet_get_bundle_row(int $themeTid): array
+{
+    global $db;
+    $state = af_theme_stylesheet_bundle_state($themeTid);
+    $sid = (int)($state['stylesheet_sid'] ?? 0);
+    if ($sid <= 0) return [];
+    $q = $db->simple_select('themestylesheets', 'sid,tid,name,stylesheet,attachedto', "sid='{$sid}' AND tid='".(int)$themeTid."'", ['limit' => 1]);
+    return $db->fetch_array($q) ?: [];
+}
+
+/** Optimistic, section-only update; every byte outside the selected block stays unchanged. */
+function af_theme_stylesheet_save_section(int $themeTid, string $sectionId, string $openedBundleHash, string $openedSectionHash, string $newCss): array
+{
+    global $db;
+    $row = af_theme_stylesheet_get_bundle_row($themeTid);
+    if (!$row) return ['ok' => false, 'code' => 'missing', 'message' => 'advancedstyles.css is missing'];
+    $current = (string)$row['stylesheet'];
+    if (!hash_equals(sha1($current), $openedBundleHash)) return ['ok' => false, 'code' => 'conflict', 'message' => 'advancedstyles.css changed after this section was opened'];
+    $parsed = af_theme_stylesheet_parse_bundle($current);
+    if (empty($parsed['ok'])) return ['ok' => false, 'code' => 'structure', 'message' => (string)$parsed['error']];
+    if (!isset($parsed['sections'][$sectionId])) return ['ok' => false, 'code' => 'missing_section', 'message' => 'section no longer exists'];
+    $section = $parsed['sections'][$sectionId];
+    if (!hash_equals(sha1((string)$section['body']), $openedSectionHash)) return ['ok' => false, 'code' => 'conflict', 'message' => 'section changed after it was opened'];
+    $replacement = af_theme_stylesheet_encode_section((array)$section['meta'], $newCss);
+    $updated = substr($current, 0, (int)$section['start']).$replacement.substr($current, (int)$section['end']);
+    $sid = (int)$row['sid'];
+    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
+    $state = af_theme_stylesheet_bundle_state($themeTid);
+    if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 1, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
+    af_theme_stylesheet_cache_row($themeTid, $sid, $updated);
+    af_theme_stylesheets_log('section saved', (string)$section['meta']['addon_id'], (string)$section['meta']['logical_id']);
+    return ['ok' => true, 'code' => 'saved', 'message' => 'section saved'];
+}
+
+/** Rebuild markers while retaining the complete malformed file in a final recovery section. */
+function af_theme_stylesheet_repair_bundle_structure(int $themeTid, string $expectedHash): array
+{
+    global $db;
+    $row = af_theme_stylesheet_get_bundle_row($themeTid);
+    if (!$row) return ['ok' => false, 'message' => 'advancedstyles.css is missing'];
+    $current = (string)$row['stylesheet'];
+    if (!hash_equals(sha1($current), $expectedHash)) return ['ok' => false, 'message' => 'advancedstyles.css changed before repair'];
+    if (!empty(af_theme_stylesheet_parse_bundle($current)['ok'])) return ['ok' => true, 'message' => 'structure is already valid'];
+    $fresh = af_theme_stylesheet_build_bundle();
+    $recovery = af_theme_stylesheet_encode_section([
+        'addon_id' => '__af_recovery__', 'addon_title' => 'Recovered complete bundle',
+        'logical_id' => 'malformed_bundle_'.substr($expectedHash, 0, 12), 'source_file' => 'ACP recovery snapshot',
+    ], $current);
+    $updated = rtrim((string)$fresh['source'])."\n\n".$recovery;
+    $sid = (int)$row['sid'];
+    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
+    $state = af_theme_stylesheet_bundle_state($themeTid);
+    if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 1, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
+    af_theme_stylesheet_cache_row($themeTid, $sid, $updated);
+    af_theme_stylesheets_log('bundle structure repaired with lossless recovery snapshot', '__af_recovery__', '*');
+    return ['ok' => true, 'message' => 'structure repaired; original bundle retained in the final recovery section'];
 }
 
 /** Rebase local url() references because the bundle is served from cache/themes. */
@@ -2632,11 +2825,15 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
                 continue;
             }
             $legacyName = str_replace('*/', '* /', (string)($cssRow['name'] ?? $legacy['stylesheet_name'] ?? 'legacy.css'));
-            $legacyBlocks[] = "/* AF migrated legacy ACP override: {$legacyName} */\n" . rtrim($legacyCss) . "\n";
+            $legacyBlocks[] = af_theme_stylesheet_encode_section([
+                'addon_id' => '__af_legacy__',
+                'addon_title' => 'Preserved legacy ACP override',
+                'logical_id' => 'legacy_'.(int)$legacySid,
+                'source_file' => $legacyName,
+            ], rtrim($legacyCss));
         }
         if ($legacyBlocks) {
-            $bundle['source'] .= "\n/* ===== Preserved legacy ACP overrides (cascade last) ===== */\n\n"
-                . implode("\n", $legacyBlocks);
+            $bundle['source'] .= "\n" . implode("\n", $legacyBlocks);
             $bundle['checksum'] = sha1((string)$bundle['source']);
             $migratedLegacyOverride = true;
         }

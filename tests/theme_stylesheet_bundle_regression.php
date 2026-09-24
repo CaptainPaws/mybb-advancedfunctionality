@@ -9,9 +9,13 @@ $router = file_get_contents($root . '/inc/plugins/advancedfunctionality/admin/ro
 $checks = [
     'fixed bundle name' => "define('AF_THEME_BUNDLE_NAME', 'advancedstyles.css')",
     'deterministic source sort' => "strtolower((string)\$a['addon_id'])",
-    'readable addon marker' => 'AF addon: {$safeTitle} [{$addonId}]',
+    'authenticated section marker' => 'AF-SECTION-V1',
+    'length delimited parser' => "\$bytes = (int)\$meta['bytes']",
+    'optimistic conflict check' => "advancedstyles.css changed after this section was opened",
+    'byte preserving replacement' => "substr(\$current, 0, (int)\$section['start']).\$replacement.substr(\$current, (int)\$section['end'])",
+    'lossless structure recovery' => 'bundle structure repaired with lossless recovery snapshot',
     'normal sync manual guard' => "\$write = \$force || (!\$manual",
-    'legacy override migration' => 'Preserved legacy ACP overrides',
+    'legacy override migration' => 'Preserved legacy ACP override',
     'legacy rows retained' => 'Migration is intentionally non-destructive',
     'bundle delivery precedence' => 'Unified mode has precedence',
     'file mode detaches bundle' => "\$mode === 'theme' ? 'global' : ''",
@@ -25,6 +29,9 @@ foreach ($checks as $label => $needle) {
 }
 if (strpos($router, 'AF_THEME_BUNDLE_NAME') === false || strpos($router, 'theme_stylesheets_set_file_mode') === false) {
     $failed[] = 'ACP bundle controls';
+}
+if (strpos($router, 'theme_stylesheet_section') === false || strpos($router, 'theme_stylesheets_save_section') === false) {
+    $failed[] = 'ACP section editor';
 }
 if (preg_match("~delete_query\\(\\s*'themestylesheets'.*AF_THEME_BUNDLE~s", $core)) {
     $failed[] = 'bundle/legacy destructive deletion';

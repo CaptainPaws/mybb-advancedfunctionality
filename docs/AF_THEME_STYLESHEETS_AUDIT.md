@@ -38,8 +38,23 @@ uninstall deliberately keeps the registry and theme stylesheets for recovery.
 
 Every MyBB theme has exactly one new AF-managed stylesheet named
 `advancedstyles.css`. The deterministic build order is addon id, then normalized
-source path. Every block has the addon display name/id and source path in a
-comment. Admin-only CSS is never included.
+source path. Every block is a versioned, length-delimited section. Its
+base64-encoded JSON header contains the addon id, logical id, source path, byte
+length, body SHA-1, and an identity derived from all three identifiers. The
+parser consumes the declared byte count instead of searching CSS for an end
+comment, so marker-looking text inside a rule or comment cannot select another
+block. Admin-only CSS is never included.
+
+The AF page lists sections by readable addon name and source path. Its compact
+editor loads one section body. Saving checks the hashes of both the complete
+bundle and the opened section, rejects concurrent changes, splices only the
+selected byte range, updates the MyBB cache, and never changes server CSS.
+
+If whole-file editing damages the structure, section saves are refused.
+**Repair structure with full recovery copy** rebuilds current seed sections and
+appends the complete previous file byte-for-byte as a final recovery section.
+That final section intentionally retains the old cascade until its necessary
+rules have been moved to their proper sections and it is emptied.
 
 The bundle has one registry record identified by addon `__af_bundle__` and
 logical id `advancedstyles`; existing source registry rows remain as migration
@@ -68,6 +83,7 @@ file delivery. Old `auto` callers map to theme mode.
   its database CSS still equals AF's last synchronized checksum. An ACP-edited
   bundle is reported as a manual override and is not overwritten. Since the
   output is one cascade, addon sync validates/rebuilds the complete bundle.
+  Neither command replaces edits made with the section editor.
 * **Force resync** requires explicit confirmation and intentionally replaces
   the complete bundle with current server sources, clearing manual overrides.
 * **Rebuild missing** retains its conservative legacy recovery behavior; normal
@@ -77,8 +93,8 @@ file delivery. Old `auto` callers map to theme mode.
 * **Show diff/hash status** is read-only.
 
 On the first bundle creation, legacy rows whose CSS differs from their last
-synchronized checksum (or is already flagged as edited) are copied to clearly
-marked blocks at the end of `advancedstyles.css`. This preserves their cascade
+synchronized checksum (or is already flagged as edited) are copied to structured
+recovery blocks at the end of `advancedstyles.css`. This preserves their cascade
 effect while leaving the originals untouched. Later normal sync regards that
 bundle as its baseline; force resync is the explicit operation that discards
 both those migrated blocks and later ACP edits.
@@ -100,4 +116,3 @@ To restore the exact pre-migration theme-cache arrangement, reattach the retaine
 legacy stylesheets to the values shown by their AF diagnostics/manifest and
 detach `advancedstyles.css`. No source or legacy CSS record has to be recovered
 from a deleted file.
-
