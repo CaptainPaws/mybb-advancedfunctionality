@@ -60,6 +60,42 @@ class AF_Admin_Advancedwanted
                 $db->delete_query(AF_WANTED_VALUES, 'wanted_id=' . $id);
                 $db->delete_query(AF_WANTED_ENTRIES, 'id=' . $id);
                 admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted');
+            } elseif ($do === 'save_reservation') {
+                $id = (int)$mybb->get_input('id');
+                $entry = (array)$db->fetch_array($db->simple_select(AF_WANTED_ENTRIES, '*', 'id=' . $id, ['limit' => 1]));
+                $mode = (string)$mybb->get_input('reservation_owner_type');
+                $owner = trim((string)$mybb->get_input('reservation_owner'));
+                $date = trim((string)$mybb->get_input('reserved_until'));
+                $until = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) ? strtotime($date . ' 23:59:59') : false;
+                $reservedUid = null;
+                $guestName = '';
+                if (!$entry || !in_array($mode, ['user', 'guest'], true) || !$until || $until <= TIME_NOW) {
+                    flash_message('Укажите владельца и будущую дату окончания брони.', 'error');
+                    admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted');
+                }
+                if ($mode === 'user') {
+                    $userWhere = ctype_digit($owner) ? 'uid=' . (int)$owner : "username='" . $db->escape_string($owner) . "'";
+                    $reservedUid = (int)$db->fetch_field($db->simple_select('users', 'uid', $userWhere, ['limit' => 1]), 'uid');
+                    if ($reservedUid < 1) {
+                        flash_message('Пользователь не найден.', 'error');
+                        admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted');
+                    }
+                } else {
+                    $guestName = $owner;
+                    if ($guestName === '' || my_strlen($guestName) > 190) {
+                        flash_message('Укажите имя гостя длиной до 190 символов.', 'error');
+                        admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted');
+                    }
+                }
+                $db->update_query(AF_WANTED_ENTRIES, [
+                    'status' => 'reserved', 'reserved_by_uid' => $reservedUid,
+                    'reserved_guest_name' => $db->escape_string($guestName),
+                    'reserved_at' => (int)($entry['reserved_at'] ?: TIME_NOW),
+                    'reserved_until' => (int)$until, 'updated_at' => TIME_NOW,
+                ], 'id=' . $id . ' AND application_tid IS NULL');
+                $saved = (int)$db->affected_rows() === 1;
+                flash_message($saved ? 'Бронь обновлена.' : 'Бронь нельзя изменить при активной анкете.', $saved ? 'success' : 'error');
+                admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted');
             } elseif (in_array($do, ['release_reservation', 'return_active', 'archive_entry'], true)) {
                 $id = (int)$mybb->get_input('id');
                 $action = $do === 'archive_entry' ? 'archive' : $do;
@@ -347,11 +383,13 @@ class AF_Admin_Advancedwanted
     private static function renderEntries(): string
     {
         global $db, $mybb;
-        $html = '<table class="general"><tr><th>ID</th><th>Автор</th><th>Статус</th><th>Reserved UID</th><th>TID</th><th>Accepted UID</th><th>Создано</th><th>Действия</th></tr>';
-        $query = $db->write_query('SELECT e.*,u.username FROM ' . TABLE_PREFIX . AF_WANTED_ENTRIES . ' e LEFT JOIN ' . TABLE_PREFIX . 'users u ON u.uid=e.author_uid ORDER BY e.id DESC LIMIT 100');
+        af_wanted_normalize_expired_reservations();
+        $html = '<table class="general"><tr><th>ID</th><th>Автор</th><th>Статус</th><th>Бронь</th><th>TID</th><th>Accepted UID</th><th>Создано</th><th>Действия</th></tr>';
+        $query = $db->write_query('SELECT e.*,u.username,ru.username reserved_name FROM ' . TABLE_PREFIX . AF_WANTED_ENTRIES . ' e LEFT JOIN ' . TABLE_PREFIX . 'users u ON u.uid=e.author_uid LEFT JOIN ' . TABLE_PREFIX . 'users ru ON ru.uid=e.reserved_by_uid ORDER BY e.id DESC LIMIT 100');
         while ($entry = $db->fetch_array($query)) {
+            $reservation = self::reservationEditor($entry);
             $html .= '<tr><td>' . (int)$entry['id'] . '</td><td>' . self::h($entry['username']) . '</td><td>' . self::h($entry['status']) . '</td>'
-                . '<td>' . (int)$entry['reserved_by_uid'] . '</td><td>' . (int)$entry['application_tid'] . '</td><td>' . (int)$entry['accepted_uid'] . '</td><td>' . my_date('relative', $entry['created_at']) . '</td><td>'
+                . '<td>' . $reservation . '</td><td>' . (int)$entry['application_tid'] . '</td><td>' . (int)$entry['accepted_uid'] . '</td><td>' . my_date('relative', $entry['created_at']) . '</td><td>'
                 . self::lifecycleActions($entry)
                 . '<form method="post"><input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '">'
                 . '<input type="hidden" name="do" value="delete_entry"><input type="hidden" name="id" value="' . (int)$entry['id'] . '"><button type="submit">Удалить</button></form></td></tr>';
@@ -364,7 +402,7 @@ class AF_Admin_Advancedwanted
         global $mybb;
         $buttons = [];
         if ($entry['status'] === 'reserved') {
-            $buttons['release_reservation'] = 'Снять reservation';
+            $buttons['release_reservation'] = 'Снять бронь';
         }
         if ($entry['status'] !== 'open') {
             $buttons['return_active'] = 'Вернуть в Active';
@@ -379,6 +417,22 @@ class AF_Admin_Advancedwanted
                 . '<button type="submit">' . $label . '</button></form>';
         }
         return $html;
+    }
+
+    private static function reservationEditor(array $entry): string
+    {
+        global $mybb;
+        if ($entry['status'] !== 'reserved' || !empty($entry['application_tid'])) return '—';
+        $isUser = (int)$entry['reserved_by_uid'] > 0;
+        $owner = $isUser ? (string)$entry['reserved_name'] : (string)$entry['reserved_guest_name'];
+        $date = !empty($entry['reserved_until']) ? date('Y-m-d', (int)$entry['reserved_until']) : '';
+        return '<form method="post" class="af-wanted-admin-reservation">'
+            . '<input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '">'
+            . '<input type="hidden" name="do" value="save_reservation"><input type="hidden" name="id" value="' . (int)$entry['id'] . '">'
+            . '<label>Тип <select name="reservation_owner_type"><option value="user"' . ($isUser ? ' selected' : '') . '>Пользователь</option><option value="guest"' . (!$isUser ? ' selected' : '') . '>Гость</option></select></label> '
+            . '<label>Пользователь / гость <input name="reservation_owner" value="' . self::h($owner) . '" required></label> '
+            . '<label>Придержано до: <input type="date" name="reserved_until" value="' . self::h($date) . '" required></label> '
+            . '<button type="submit">Сохранить бронь</button></form>';
     }
 
     private static function fieldsUrl(): string

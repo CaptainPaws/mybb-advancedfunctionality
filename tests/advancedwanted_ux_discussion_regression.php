@@ -13,7 +13,7 @@ $checks=[
  'discussion uses signed short lived cookie prefill'=>strpos($core,"my_setcookie('af_wanted_discuss'")!==false&&strpos($core,"[wanted='")!==false&&strpos($core,"af_wanted_prefill_reply")!==false,
  'wanted BBCode resolves by stable id'=>strpos($core,"'/\\[wanted=([0-9]{1,10})\\]/i'")!==false&&strpos($core,'data-wanted-id=')!==false,
  'wanted chip reuses KB modal fetch and renderer'=>strpos($chips,"function fetchChipEntry(chip)")!==false&&strpos($chips,"fetchChipEntry(chip).then")!==false,
- 'card image and chips match compact contract'=>strpos($css,'width: 200px')!==false&&strpos($css,'height: 200px')!==false&&strpos($css,'font-size: 8px')!==false&&strpos($css,'text-transform: uppercase')!==false,
+ 'card image fills a fixed-ratio area and chips stay compact'=>strpos($css,'width: 100%')!==false&&strpos($css,'aspect-ratio: 4 / 3')!==false&&strpos($css,'object-fit: cover')!==false&&strpos($css,'font-size: 8px')!==false,
  'detail has opaque high contrast wiki surface'=>strpos($css,'background: #17191e')!==false&&strpos($css,'border-bottom: 2px solid #ad865d')!==false,
  'filters and toolbar share compact responsive layout'=>strpos($css,'height: 2.25rem')!==false&&strpos($css,'.af-wanted-toolbar')!==false,
 ];
