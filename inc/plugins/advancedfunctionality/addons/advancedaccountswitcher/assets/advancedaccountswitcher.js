@@ -60,6 +60,53 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closeModal();
     });
+
+    var walk = modal.querySelector('.af-aas-walk');
+    var walkButton = walk ? walk.querySelector('.af-aas-walk-button') : null;
+    var walkAutopost = walk ? walk.querySelector('.af-aas-walk-autopost') : null;
+    var walkResult = walk ? walk.querySelector('.af-aas-walk-result') : null;
+    var walkPending = false;
+
+    function operationId() {
+      var bytes = new Uint8Array(16);
+      if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
+      else for (var i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+      return Array.prototype.map.call(bytes, function (n) { return ('0' + n.toString(16)).slice(-2); }).join('');
+    }
+
+    if (walkButton) walkButton.addEventListener('click', function () {
+      if (walkPending) return;
+      walkPending = true;
+      walkButton.disabled = true;
+      walkButton.textContent = 'Выполняется...';
+      walkResult.textContent = '';
+
+      var body = new URLSearchParams();
+      body.set('my_post_key', walk.getAttribute('data-post-key') || '');
+      body.set('operation_id', operationId());
+      body.set('autopost', walkAutopost && walkAutopost.checked ? '1' : '0');
+      fetch(walk.getAttribute('data-url'), {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: body.toString()
+      }).then(function (response) {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      }).then(function (data) {
+        var lines = [data.message || 'Выгул завершён.'];
+        if (typeof data.processed !== 'undefined') lines.push('Обработано аккаунтов: ' + data.processed);
+        if (typeof data.posted !== 'undefined') lines.push('Опубликовано сообщений: ' + data.posted);
+        lines.push('Ошибок: ' + ((data.errors || []).length));
+        (data.errors || []).forEach(function (error) { lines.push('• ' + error); });
+        walkResult.textContent = lines.join('\n');
+      }).catch(function (error) {
+        walkResult.textContent = 'Не удалось выполнить выгул: ' + error.message;
+      }).then(function () {
+        walkPending = false;
+        walkButton.disabled = false;
+        walkButton.textContent = 'Выгул твинков';
+      });
+    });
   })();
 
   // UCP suggest
