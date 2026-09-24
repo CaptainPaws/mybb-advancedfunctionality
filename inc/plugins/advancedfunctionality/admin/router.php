@@ -65,6 +65,9 @@ class AF_Admin
 
             $ctrl = self::findAdminController($view);
             if ($ctrl && file_exists($ctrl['path'])) {
+                if (!empty($ctrl['bootstrap']) && is_file($ctrl['bootstrap'])) {
+                    require_once $ctrl['bootstrap'];
+                }
                 require_once $ctrl['path'];
                 $klass = $ctrl['class'];
 
@@ -625,7 +628,7 @@ class AF_Admin
             if (!empty($meta['admin']['slug']) && $meta['admin']['slug'] === $slug) {
                 $path  = $meta['path'].($meta['admin']['controller'] ?? '');
                 $klass = 'AF_Admin_'.preg_replace('~[^A-Za-z0-9]+~', '', ucfirst($slug));
-                return ['path'=>$path, 'class'=>$klass];
+                return ['path'=>$path, 'class'=>$klass, 'bootstrap'=>($meta['bootstrap'] ?? null)];
             }
         }
         return null;
