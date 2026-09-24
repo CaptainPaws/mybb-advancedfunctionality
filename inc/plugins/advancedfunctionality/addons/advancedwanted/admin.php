@@ -1,19 +1,271 @@
 <?php
-if (!defined('IN_MYBB') || !defined('IN_ADMINCP')) die('No direct access');
-class AF_Admin_Advancedwanted {
- public static function dispatch(string $action=''): string { $html=self::render();echo $html;return $html; }
- public static function render(): string { global $db,$mybb;
-  $tab=in_array($mybb->get_input('tab'),['entries','fields','settings'],true)?$mybb->get_input('tab'):'entries';
-  if($mybb->request_method==='post'){verify_post_check($mybb->get_input('my_post_key'));$do=$mybb->get_input('do');
-   if($do==='save_field'){ $id=(int)$mybb->get_input('id');$key=preg_replace('~[^a-z0-9_]+~','',strtolower($mybb->get_input('field_key')));$type=$mybb->get_input('type');if(!in_array($type,['text','textarea','url','image','number','select','multi','checkbox','radio','kb_dynamic'],true))$type='text';$settings=['source'=>trim($mybb->get_input('source')),'depends_on'=>trim($mybb->get_input('depends_on')),'filterable'=>(bool)$mybb->get_input('filterable'),'show_card'=>(bool)$mybb->get_input('show_card'),'show_detail'=>(bool)$mybb->get_input('show_detail'),'options'=>[]];foreach(preg_split('~\R~',trim($mybb->get_input('options'))) as $line){if(strpos($line,'=')!==false){[$k,$v]=array_map('trim',explode('=',$line,2));if($k!=='')$settings['options'][$k]=$v;}}$data=['field_key'=>$db->escape_string($key),'title'=>$db->escape_string(trim($mybb->get_input('title'))),'type'=>$type,'required'=>(int)(bool)$mybb->get_input('required'),'active'=>(int)(bool)$mybb->get_input('active'),'sortorder'=>(int)$mybb->get_input('sortorder'),'settings_json'=>$db->escape_string(json_encode($settings,JSON_UNESCAPED_UNICODE))];if($id)$db->update_query(AF_WANTED_FIELDS,$data,'id='.$id);else$db->insert_query(AF_WANTED_FIELDS,$data);admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted&tab=fields');}
-   if($do==='delete_field'){ $id=(int)$mybb->get_input('id');$used=(int)$db->fetch_field($db->simple_select(AF_WANTED_VALUES,'COUNT(*) c','field_id='.$id),'c');if(!$used)$db->delete_query(AF_WANTED_FIELDS,'id='.$id);else flash_message('Поле используется и не может быть удалено.','error');admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted&tab=fields');}
-   if($do==='delete_entry'){ $id=(int)$mybb->get_input('id');$db->delete_query(AF_WANTED_VALUES,'wanted_id='.$id);$db->delete_query(AF_WANTED_ENTRIES,'id='.$id);admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted');}
-   if($do==='entry_status'){ $id=(int)$mybb->get_input('id');$status=$mybb->get_input('status');if(in_array($status,['open','reserved','application','archived'],true)){$data=['status'=>$status,'updated_at'=>TIME_NOW];if($status==='open')$data+=['reserved_by_uid'=>null,'reserved_at'=>0,'application_tid'=>null,'accepted_uid'=>null,'archived_at'=>0];if($status==='archived')$data['archived_at']=TIME_NOW;$db->update_query(AF_WANTED_ENTRIES,$data,'id='.$id);}admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted');}
-  }
-  $base='index.php?module=advancedfunctionality&af_view=advancedwanted';$h='<h1>AdvancedWanted</h1><p><a href="'.$base.'&tab=entries">Записи</a> | <a href="'.$base.'&tab=fields">Поля формы</a> | <a href="'.$base.'&tab=settings">Настройки</a></p>';
-  if($tab==='settings')return $h.'<p>Права групп, forum ID и pagination настраиваются в Configuration → Settings → AdvancedWanted.</p>';
-  if($tab==='fields'){ $h.='<table class="general"><tr><th>Название</th><th>Ключ</th><th>Тип</th><th>Обязательно</th><th>Активно</th><th>Порядок</th><th>Действия</th></tr>';foreach(af_wanted_fields(false) as $f)$h.='<tr><td>'.htmlspecialchars_uni($f['title']).'</td><td>'.$f['field_key'].'</td><td>'.$f['type'].'</td><td>'.($f['required']?'Да':'Нет').'</td><td>'.($f['active']?'Да':'Нет').'</td><td>'.$f['sortorder'].'</td><td><a href="'.$base.'&tab=fields&edit='.(int)$f['id'].'">Изменить</a> <form method="post" style="display:inline"><input type="hidden" name="my_post_key" value="'.$mybb->post_code.'"><input type="hidden" name="do" value="delete_field"><input type="hidden" name="id" value="'.(int)$f['id'].'"><button>Удалить</button></form></td></tr>';$h.='</table>';$edit=(int)$mybb->get_input('edit');$f=$edit?(array)$db->fetch_array($db->simple_select(AF_WANTED_FIELDS,'*','id='.$edit)):[];$s=json_decode((string)($f['settings_json']??''),true)?:[];$opts='';foreach((array)($s['options']??[]) as $k=>$v)$opts.="$k=$v\n";$h.='<h2>'.($edit?'Изменить':'Создать').' поле</h2><form method="post"><input type="hidden" name="my_post_key" value="'.$mybb->post_code.'"><input type="hidden" name="do" value="save_field"><input type="hidden" name="id" value="'.$edit.'">'.self::input('title','Название',$f['title']??'').self::input('field_key','Ключ',$f['field_key']??'').'<label>Тип <select name="type">';foreach(['text','textarea','url','image','number','select','multi','checkbox','radio','kb_dynamic'] as $t)$h.='<option'.(($f['type']??'')===$t?' selected':'').'>'.$t.'</option>';$h.='</select></label>'.self::input('source','Option source',$s['source']??'').self::input('depends_on','Depends on',$s['depends_on']??'').'<label>Options key=label<textarea name="options">'.htmlspecialchars_uni($opts).'</textarea></label>';foreach(['required'=>'Обязательно','active'=>'Активно','filterable'=>'Filterable','show_card'=>'Show in card','show_detail'=>'Show in detail'] as $k=>$l){$val=array_key_exists($k,$f)?$f[$k]:($s[$k]??($k==='active'));$h.='<label><input type="checkbox" name="'.$k.'" value="1"'.($val?' checked':'').'> '.$l.'</label>';}$h.=self::input('sortorder','Порядок',$f['sortorder']??0).'<button type="submit">Сохранить</button></form>';return $h; }
-  $h.='<table class="general"><tr><th>ID</th><th>Автор</th><th>Статус</th><th>Reserved UID</th><th>TID</th><th>Accepted UID</th><th>Создано</th><th>Действия</th></tr>';$q=$db->write_query('SELECT e.*,u.username FROM '.TABLE_PREFIX.AF_WANTED_ENTRIES.' e LEFT JOIN '.TABLE_PREFIX.'users u ON u.uid=e.author_uid ORDER BY e.id DESC LIMIT 100');while($e=$db->fetch_array($q)){$h.='<tr><td>'.$e['id'].'</td><td>'.htmlspecialchars_uni($e['username']).'</td><td>'.$e['status'].'</td><td>'.(int)$e['reserved_by_uid'].'</td><td>'.(int)$e['application_tid'].'</td><td>'.(int)$e['accepted_uid'].'</td><td>'.my_date('relative',$e['created_at']).'</td><td><form method="post"><input type="hidden" name="my_post_key" value="'.$mybb->post_code.'"><input type="hidden" name="do" value="entry_status"><input type="hidden" name="id" value="'.$e['id'].'"><select name="status">';foreach(['open','reserved','application','archived'] as $st)$h.='<option'.($e['status']===$st?' selected':'').'>'.$st.'</option>';$h.='</select><button>Сохранить</button></form><form method="post"><input type="hidden" name="my_post_key" value="'.$mybb->post_code.'"><input type="hidden" name="do" value="delete_entry"><input type="hidden" name="id" value="'.$e['id'].'"><button>Удалить</button></form></td></tr>';}$h.='</table>';return $h;
- }
- private static function input(string $n,string $l,$v): string{return '<label>'.$l.' <input name="'.$n.'" value="'.htmlspecialchars_uni((string)$v).'"></label>';}
+if (!defined('IN_MYBB') || !defined('IN_ADMINCP')) {
+    die('No direct access');
+}
+
+class AF_Admin_Advancedwanted
+{
+    private const FIELD_TYPES = [
+        'text', 'textarea', 'url', 'image', 'number', 'select', 'multi',
+        'checkbox', 'radio', 'kb_dynamic',
+    ];
+
+    public static function dispatch(string $action = ''): string
+    {
+        $html = self::render();
+        echo $html;
+        return $html;
+    }
+
+    public static function render(): string
+    {
+        global $db, $mybb;
+
+        $tab = in_array($mybb->get_input('tab'), ['entries', 'fields', 'settings'], true)
+            ? $mybb->get_input('tab') : 'entries';
+        $fieldErrors = [];
+        $submittedField = null;
+
+        if ($mybb->request_method === 'post') {
+            verify_post_check($mybb->get_input('my_post_key'));
+            $do = $mybb->get_input('do');
+            if ($do === 'save_field') {
+                $tab = 'fields';
+                $id = (int)$mybb->get_input('id');
+                [$submittedField, $fieldErrors] = self::fieldFromRequest($id);
+                if (!$fieldErrors) {
+                    $data = self::fieldDatabaseData($submittedField);
+                    if ($id > 0) {
+                        $db->update_query(AF_WANTED_FIELDS, $data, 'id=' . $id);
+                        flash_message('Поле успешно изменено.', 'success');
+                    } else {
+                        $db->insert_query(AF_WANTED_FIELDS, $data);
+                        flash_message('Поле успешно создано.', 'success');
+                    }
+                    admin_redirect(self::fieldsUrl());
+                }
+            } elseif ($do === 'delete_field') {
+                self::deleteField((int)$mybb->get_input('id'));
+                admin_redirect(self::fieldsUrl());
+            } elseif ($do === 'delete_entry') {
+                $id = (int)$mybb->get_input('id');
+                $db->delete_query(AF_WANTED_VALUES, 'wanted_id=' . $id);
+                $db->delete_query(AF_WANTED_ENTRIES, 'id=' . $id);
+                admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted');
+            } elseif ($do === 'entry_status') {
+                $id = (int)$mybb->get_input('id');
+                $status = $mybb->get_input('status');
+                if (in_array($status, ['open', 'reserved', 'application', 'archived'], true)) {
+                    $data = ['status' => $status, 'updated_at' => TIME_NOW];
+                    if ($status === 'open') {
+                        $data += ['reserved_by_uid' => null, 'reserved_at' => 0, 'application_tid' => null, 'accepted_uid' => null, 'archived_at' => 0];
+                    }
+                    if ($status === 'archived') {
+                        $data['archived_at'] = TIME_NOW;
+                    }
+                    $db->update_query(AF_WANTED_ENTRIES, $data, 'id=' . $id);
+                }
+                admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted');
+            }
+        }
+
+        $base = 'index.php?module=advancedfunctionality&af_view=advancedwanted';
+        $html = '<h1>AdvancedWanted</h1><p><a href="' . $base . '&amp;tab=entries">Записи</a> | '
+            . '<a href="' . $base . '&amp;tab=fields">Поля формы</a> | '
+            . '<a href="' . $base . '&amp;tab=settings">Настройки</a></p>';
+        if ($tab === 'settings') {
+            return $html . '<p>Права групп, forum ID и pagination настраиваются в Configuration → Settings → AdvancedWanted.</p>';
+        }
+        if ($tab === 'fields') {
+            return $html . self::renderFields($base, $submittedField, $fieldErrors);
+        }
+        return $html . self::renderEntries();
+    }
+
+    private static function fieldFromRequest(int $id): array
+    {
+        global $db, $mybb;
+
+        $title = trim((string)$mybb->get_input('title'));
+        $key = strtolower(trim((string)$mybb->get_input('field_key')));
+        $type = (string)$mybb->get_input('type');
+        $errors = [];
+        if ($id > 0 && !$db->fetch_field($db->simple_select(AF_WANTED_FIELDS, 'id', 'id=' . $id, ['limit' => 1]), 'id')) {
+            $errors[] = 'Редактируемое поле не найдено.';
+        }
+        if ($title === '') {
+            $errors[] = 'Название поля обязательно.';
+        }
+        if ($key === '') {
+            $errors[] = 'Ключ поля обязателен.';
+        } elseif (!preg_match('/^[a-z0-9_]{1,64}$/', $key)) {
+            $errors[] = 'Ключ может содержать только строчные латинские буквы, цифры и _. Максимальная длина — 64 символа.';
+        }
+        if (!in_array($type, self::FIELD_TYPES, true)) {
+            $errors[] = 'Выбран недопустимый тип поля.';
+        }
+        if ($key !== '' && preg_match('/^[a-z0-9_]{1,64}$/', $key)) {
+            $where = "field_key='" . $db->escape_string($key) . "'" . ($id > 0 ? ' AND id!=' . $id : '');
+            if ($db->fetch_field($db->simple_select(AF_WANTED_FIELDS, 'id', $where, ['limit' => 1]), 'id')) {
+                $errors[] = 'Поле с ключом «' . $key . '» уже существует. Укажите уникальный ключ.';
+            }
+        }
+
+        $options = [];
+        foreach (preg_split('/\R/u', trim((string)$mybb->get_input('options'))) as $line) {
+            if ($line === '') {
+                continue;
+            }
+            if (strpos($line, '=') === false) {
+                $errors[] = 'Каждая опция должна иметь формат key=Название.';
+                continue;
+            }
+            [$optionKey, $label] = array_map('trim', explode('=', $line, 2));
+            if ($optionKey === '' || $label === '') {
+                $errors[] = 'Ключ и название опции не могут быть пустыми.';
+                continue;
+            }
+            $options[$optionKey] = $label;
+        }
+        $field = [
+            'id' => $id,
+            'title' => $title,
+            'field_key' => $key,
+            'type' => $type,
+            'required' => self::checked('required'),
+            'active' => self::checked('active'),
+            'sortorder' => (int)$mybb->get_input('sortorder'),
+            'settings' => [
+                'source' => trim((string)$mybb->get_input('source')),
+                'depends_on' => trim((string)$mybb->get_input('depends_on')),
+                'options' => $options,
+                'filterable' => (bool)self::checked('filterable'),
+                'show_card' => (bool)self::checked('show_card'),
+                'show_detail' => (bool)self::checked('show_detail'),
+            ],
+        ];
+        return [$field, array_values(array_unique($errors))];
+    }
+
+    private static function checked(string $name): int
+    {
+        global $mybb;
+        return (int)((string)$mybb->get_input($name) === '1');
+    }
+
+    private static function fieldDatabaseData(array $field): array
+    {
+        global $db;
+        return [
+            'field_key' => $db->escape_string($field['field_key']),
+            'title' => $db->escape_string($field['title']),
+            'type' => $field['type'],
+            'required' => (int)$field['required'],
+            'active' => (int)$field['active'],
+            'sortorder' => (int)$field['sortorder'],
+            'settings_json' => $db->escape_string(json_encode($field['settings'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
+        ];
+    }
+
+    private static function deleteField(int $id): void
+    {
+        global $db;
+        if ($id < 1 || !$db->fetch_field($db->simple_select(AF_WANTED_FIELDS, 'id', 'id=' . $id, ['limit' => 1]), 'id')) {
+            flash_message('Поле не найдено.', 'error');
+            return;
+        }
+        $used = (int)$db->fetch_field($db->simple_select(AF_WANTED_VALUES, 'COUNT(*) AS total', 'field_id=' . $id), 'total');
+        if ($used > 0) {
+            flash_message('Поле используется в записях Wanted и не может быть удалено.', 'error');
+            return;
+        }
+        $db->delete_query(AF_WANTED_FIELDS, 'id=' . $id);
+        flash_message('Поле удалено.', 'success');
+    }
+
+    private static function renderFields(string $base, ?array $submitted, array $errors): string
+    {
+        global $db, $mybb;
+        $html = '<table class="general"><tr><th>Название</th><th>Ключ</th><th>Тип</th><th>Обязательно</th><th>Активно</th><th>Порядок</th><th>Действия</th></tr>';
+        foreach (af_wanted_fields(false) as $field) {
+            $html .= '<tr><td>' . self::h($field['title']) . '</td><td>' . self::h($field['field_key']) . '</td><td>' . self::h($field['type']) . '</td>'
+                . '<td>' . ($field['required'] ? 'Да' : 'Нет') . '</td><td>' . ($field['active'] ? 'Да' : 'Нет') . '</td><td>' . (int)$field['sortorder'] . '</td>'
+                . '<td><a href="' . $base . '&amp;tab=fields&amp;edit=' . (int)$field['id'] . '">Изменить</a> '
+                . '<form method="post" style="display:inline"><input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '">'
+                . '<input type="hidden" name="do" value="delete_field"><input type="hidden" name="id" value="' . (int)$field['id'] . '">'
+                . '<button type="submit">Удалить</button></form></td></tr>';
+        }
+        $html .= '</table>';
+
+        $edit = (int)$mybb->get_input('edit');
+        $field = $submitted;
+        if ($field === null && $edit > 0) {
+            $field = (array)$db->fetch_array($db->simple_select(AF_WANTED_FIELDS, '*', 'id=' . $edit, ['limit' => 1]));
+            if ($field) {
+                $field['settings'] = json_decode((string)$field['settings_json'], true) ?: [];
+            }
+        }
+        $field = $field ?: ['id' => 0, 'title' => '', 'field_key' => '', 'type' => 'text', 'required' => 0, 'active' => 1, 'sortorder' => 0, 'settings' => []];
+        $settings = (array)($field['settings'] ?? []);
+        $options = '';
+        foreach ((array)($settings['options'] ?? []) as $key => $label) {
+            $options .= $key . '=' . $label . "\n";
+        }
+        if ($errors) {
+            $html .= '<div class="error"><p><strong>Поле не сохранено:</strong></p><ul>';
+            foreach ($errors as $error) {
+                $html .= '<li>' . self::h($error) . '</li>';
+            }
+            $html .= '</ul></div>';
+        }
+        $id = (int)($field['id'] ?? 0);
+        $html .= '<h2>' . ($id ? 'Изменить' : 'Создать') . ' поле</h2><form method="post">'
+            . '<input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '"><input type="hidden" name="do" value="save_field">'
+            . '<input type="hidden" name="id" value="' . $id . '">' . self::input('title', 'Название', $field['title'])
+            . self::input('field_key', 'Ключ', $field['field_key']) . '<label>Тип <select name="type">';
+        foreach (self::FIELD_TYPES as $type) {
+            $html .= '<option value="' . $type . '"' . ($field['type'] === $type ? ' selected' : '') . '>' . $type . '</option>';
+        }
+        $html .= '</select></label>' . self::input('source', 'Option source', $settings['source'] ?? '')
+            . self::input('depends_on', 'Depends on', $settings['depends_on'] ?? '')
+            . '<label>Options key=label<textarea name="options">' . self::h($options) . '</textarea></label>';
+        foreach (['required' => 'Обязательно', 'active' => 'Активно', 'filterable' => 'Filterable', 'show_card' => 'Show in card', 'show_detail' => 'Show in detail'] as $key => $label) {
+            $value = array_key_exists($key, $field) ? $field[$key] : ($settings[$key] ?? false);
+            $html .= '<label><input type="checkbox" name="' . $key . '" value="1"' . ($value ? ' checked' : '') . '> ' . $label . '</label>';
+        }
+        return $html . self::input('sortorder', 'Порядок', $field['sortorder']) . '<button type="submit">Сохранить</button></form>';
+    }
+
+    private static function renderEntries(): string
+    {
+        global $db, $mybb;
+        $html = '<table class="general"><tr><th>ID</th><th>Автор</th><th>Статус</th><th>Reserved UID</th><th>TID</th><th>Accepted UID</th><th>Создано</th><th>Действия</th></tr>';
+        $query = $db->write_query('SELECT e.*,u.username FROM ' . TABLE_PREFIX . AF_WANTED_ENTRIES . ' e LEFT JOIN ' . TABLE_PREFIX . 'users u ON u.uid=e.author_uid ORDER BY e.id DESC LIMIT 100');
+        while ($entry = $db->fetch_array($query)) {
+            $html .= '<tr><td>' . (int)$entry['id'] . '</td><td>' . self::h($entry['username']) . '</td><td>' . self::h($entry['status']) . '</td>'
+                . '<td>' . (int)$entry['reserved_by_uid'] . '</td><td>' . (int)$entry['application_tid'] . '</td><td>' . (int)$entry['accepted_uid'] . '</td><td>' . my_date('relative', $entry['created_at']) . '</td><td>'
+                . '<form method="post"><input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '"><input type="hidden" name="do" value="entry_status"><input type="hidden" name="id" value="' . (int)$entry['id'] . '"><select name="status">';
+            foreach (['open', 'reserved', 'application', 'archived'] as $status) {
+                $html .= '<option value="' . $status . '"' . ($entry['status'] === $status ? ' selected' : '') . '>' . $status . '</option>';
+            }
+            $html .= '</select><button type="submit">Сохранить</button></form><form method="post"><input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '">'
+                . '<input type="hidden" name="do" value="delete_entry"><input type="hidden" name="id" value="' . (int)$entry['id'] . '"><button type="submit">Удалить</button></form></td></tr>';
+        }
+        return $html . '</table>';
+    }
+
+    private static function fieldsUrl(): string
+    {
+        return 'index.php?module=advancedfunctionality&af_view=advancedwanted&tab=fields';
+    }
+
+    private static function input(string $name, string $label, $value): string
+    {
+        return '<label>' . $label . ' <input name="' . $name . '" value="' . self::h((string)$value) . '"></label>';
+    }
+
+    private static function h(string $value): string
+    {
+        return htmlspecialchars_uni($value);
+    }
 }
