@@ -9,7 +9,7 @@ $checks = [
     'archive retains application tid while recording player and time' => strpos($wanted, "['status'=>'archived','accepted_uid'=>\$acceptedUid,'archived_at'=>TIME_NOW") !== false,
     'active and archive tabs split lifecycle states' => strpos($wanted, "e.status='archived'") !== false
         && strpos($wanted, "e.status IN ('open','reserved','application')") !== false,
-    'archive card and detail expose player profile' => substr_count($wanted, "Игрок: '.build_profile_link") >= 2,
+    'archive card and detail expose player profile' => strpos($wanted, '<dt>Игрок</dt>') !== false && strpos($wanted, "Игрок: '.build_profile_link") !== false,
     'archive exposes accepted application topic' => strpos($wanted, "Принятая анкета") !== false,
     'workflow registers hard delete release' => strpos($workflow, "class_moderation_delete_thread_start', 'af_cwf_application_thread_released") !== false,
     'workflow registers reject and cancellation releases' => strpos($workflow, "class_moderation_soft_delete_threads', 'af_cwf_application_threads_released") !== false

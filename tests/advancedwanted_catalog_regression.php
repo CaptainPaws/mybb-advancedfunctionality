@@ -9,7 +9,7 @@ $checks = [
     'filter fields are selected dynamically' => strpos($core, "['settings']['filterable']") !== false
         && strpos($core, 'field_id=".(int)$f[\'id\']') !== false,
     'search remains in SQL and targets semantic text fields' => strpos($core, 'vs.field_id IN (') !== false
-        && strpos($core, "['title','name','character_name','description']") !== false,
+        && strpos($core, "['settings']['is_title']") !== false,
     'GET fallback has an explicit action' => strpos($core, 'class="af-wanted-filters" method="get" action="wanted.php"') !== false,
     'dependent variant filter declares its configured parent' => strpos($core, 'data-depends-on=') !== false
         && strpos($core, "['depends_on']??'origin'") !== false
