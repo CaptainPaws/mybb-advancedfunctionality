@@ -2,6 +2,7 @@
 .af-wanted { min-width: 0; padding: 1rem; }
 .af-wanted .af-kb-header { margin-bottom: 1rem; }
 .af-wanted-tabs,
+.af-wanted-toolbar,
 .af-wanted-actions,
 .af-wanted-actions__lifecycle,
 .af-wanted-actions__owner,
@@ -12,6 +13,8 @@
   flex-wrap: wrap;
   gap: .45rem;
 }
+.af-wanted-toolbar { justify-content: space-between; }
+.af-wanted-create { margin-left: auto; }
 .af-wanted-tabs .is-active { font-weight: 700; }
 .af-wanted-actions form,
 .af-wanted-filter-actions { margin: 0; }
@@ -19,9 +22,11 @@
 .af-wanted-primary-action .button,
 .af-wanted-form-actions .button { padding: .35rem .65rem; }
 
-.af-wanted-filters { margin: 1rem 0; padding: 1rem; }
-.af-wanted-filter-fields { display: flex; align-items: end; flex-wrap: wrap; gap: .75rem; }
-.af-wanted-filter-fields label { display: grid; gap: .3rem; min-width: 11.25rem; }
+.af-wanted-filters { margin: 1rem 0; padding: .65rem; }
+.af-wanted-filter-fields { display: flex; align-items: end; flex-wrap: wrap; gap: .4rem; }
+.af-wanted-filter-fields label { display: grid; flex: 1 1 10rem; gap: .2rem; min-width: 9rem; }
+.af-wanted-filter-fields :is(input, select, .button) { box-sizing: border-box; height: 2.25rem; }
+.af-wanted-filter-fields .button { display: inline-flex; align-items: center; padding: 0 .65rem; }
 .af-wanted-filter-actions { min-width: auto; }
 
 /* Mirrors knowledgebase_list_character_entry: a bounded KB card grid with a
@@ -58,12 +63,13 @@
 .af-wanted-chip {
   display: inline-flex;
   width: fit-content;
-  padding: .15rem .45rem;
+  padding: 2px 5px;
   border: 1px solid currentColor;
   border-radius: 999px;
-  font-size: .78rem;
+  font-size: 8px;
   line-height: 1.25;
 }
+.af-wanted-chip { text-transform: uppercase; }
 .af-wanted-status { flex: 0 0 auto; }
 .af-wanted-card__fields { display: flex; flex-wrap: wrap; gap: .3rem; }
 .af-wanted-primary-action { margin-top: auto; }
@@ -73,7 +79,7 @@
 .af-wanted-panel { padding: 1rem; border: 1px solid; border-color: inherit; }
 .af-wanted-form {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: .9rem;
 }
 .af-wanted-field { display: grid; min-width: 0; align-content: start; gap: .3rem; }
@@ -87,9 +93,10 @@
 /* Published ATF's af-atf-wiki layout is the structural reference: flowing main
    content plus a compact right-hand infobox, never a full-width hero. */
 .af-wanted-detail { min-width: 0; }
-.af-wanted-detail-header { margin-bottom: 1rem; }
+.af-wanted-detail { padding: 1.25rem; color: #eee; background: #17191e; }
+.af-wanted-detail-header { margin-bottom: 1rem; padding-bottom: .75rem; border-bottom: 2px solid #ad865d; }
 .af-wanted-detail-header .af-atf-wiki__heading { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
-.af-wanted-detail-header h2 { margin: 0; }
+.af-wanted-detail-header h2 { margin: 0; color: #fff; font-family: Georgia, "Times New Roman", serif; letter-spacing: .02em; }
 .af-wanted-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(14rem, 19rem); gap: 1.25rem; }
 .af-wanted-detail-content { min-width: 0; }
 .af-wanted-infobox {
@@ -102,6 +109,9 @@
   margin: 0;
   padding: .75rem;
   box-sizing: border-box;
+  color: #f1f1f1;
+  border: 1px solid #ad865d;
+  background: #24272e;
 }
 .af-wanted-detail-image { margin: 0 auto .75rem; overflow: hidden; }
 .af-wanted-detail-image img,
@@ -109,20 +119,24 @@
 .af-wanted-infobox dl,
 .af-wanted-detail-fields { display: grid; gap: .75rem; margin: 0; }
 .af-wanted-detail-field { min-width: 0; }
-.af-wanted-detail-field dt { font-weight: 700; }
+.af-wanted-detail-field dt { color: #d7b184; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 .af-wanted-detail-field dd { margin: .2rem 0 0; overflow-wrap: anywhere; }
+.af-wanted-detail-content .af-wanted-detail-field { padding-bottom: .85rem; border-bottom: 1px solid rgba(215,177,132,.55); }
+.af-wanted-detail a { color: #e7c499; }
 .af-wanted-detail-content .af-wanted-detail-field + .af-wanted-detail-field { margin-top: 1rem; }
 .af-wanted-detail > .af-wanted-actions { margin-top: 1rem; }
 [data-af-wanted-catalog].is-loading { opacity: .65; pointer-events: none; }
+.af-wanted-reserve-form { display: flex; align-items: end; flex-wrap: wrap; gap: .45rem; }
+.af-wanted-guest-name { display: grid; gap: .2rem; }
+.af-wanted-post-chip { cursor: pointer; }
+.af-wanted-chip-image, .af-wanted-post-chip .af-kb-chip-icon, .af-wanted-post-chip .af-kb-icon-img { width: 20px; height: 20px; object-fit: cover; object-position: center; }
+.af-wanted-chip-fallback { display: block; width: 20px; height: 20px; background: currentColor; opacity: .25; }
 .af-wanted-results-error,
 .af-wanted-pagination { margin-top: 1rem; }
 
-@media (max-width: 900px) {
-  .af-wanted-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 @media (max-width: 700px) {
   .af-wanted-filter-fields,
-  .af-wanted-filter-fields label { display: grid; width: 100%; min-width: 0; }
+  .af-wanted-filter-fields label { min-width: min(100%, 9rem); }
   .af-wanted-filter-actions { display: flex; }
   .af-wanted-detail-layout { grid-template-columns: 1fr; }
   .af-wanted-infobox { grid-column: 1; grid-row: auto; }

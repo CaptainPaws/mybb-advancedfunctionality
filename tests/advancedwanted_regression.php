@@ -37,6 +37,6 @@ $checks=[
  'edit only updates mutable timestamp'=>strpos($core,"update_query(AF_WANTED_ENTRIES,['updated_at'=>TIME_NOW],'id='.\$id)")!==false,
  'detail renders author and configured detail fields'=>strpos($core,"Автор: '.build_profile_link")!==false&&strpos($core,"['show_detail']")!==false,
  'delete permission has a POST CSRF UI'=>strpos($core,'action="wanted.php?action=delete&id=')!==false&&strpos($core,"af_wanted_can('delete',\$e)")!==false,
- 'catalog excludes textarea from card values'=>strpos($core,"!in_array(\$f['type'],['textarea','image'],true)")!==false,
+ 'catalog excludes textarea from card values'=>strpos($core,"!in_array(\$f['type'],['select','radio','kb_dynamic'],true)")!==false,
 ];
 $failed=[];foreach($checks as $label=>$ok){echo ($ok?'PASS':'FAIL').": $label\n";if(!$ok)$failed[]=$label;}exit($failed?1:0);

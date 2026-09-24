@@ -35,6 +35,14 @@ class AF_Admin_Advancedwanted
                 [$submittedField, $fieldErrors] = self::fieldFromRequest($id);
                 if (!$fieldErrors) {
                     $data = self::fieldDatabaseData($submittedField);
+                    if (!empty($submittedField['settings']['is_title'])) {
+                        // A schema has exactly one semantic title field.
+                        foreach (af_wanted_fields(false) as $other) {
+                            if ((int)$other['id'] === $id || empty($other['settings']['is_title'])) continue;
+                            $other['settings']['is_title'] = false;
+                            $db->update_query(AF_WANTED_FIELDS, ['settings_json' => $db->escape_string(json_encode($other['settings'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))], 'id=' . (int)$other['id']);
+                        }
+                    }
                     if ($id > 0) {
                         $db->update_query(AF_WANTED_FIELDS, $data, 'id=' . $id);
                         flash_message('Поле успешно изменено.', 'success');
@@ -57,7 +65,7 @@ class AF_Admin_Advancedwanted
                 $action = $do === 'archive_entry' ? 'archive' : $do;
                 $where = 'id=' . $id;
                 if ($do === 'release_reservation') {
-                    $where .= " AND status='reserved' AND reserved_by_uid IS NOT NULL";
+                    $where .= " AND status='reserved'";
                 }
                 $db->update_query(AF_WANTED_ENTRIES, af_wanted_lifecycle_data($action), $where);
                 if ((int)$db->affected_rows() === 1) {
@@ -150,6 +158,7 @@ class AF_Admin_Advancedwanted
                 'filterable' => (bool)self::checked('filterable'),
                 'show_card' => (bool)self::checked('show_card'),
                 'show_detail' => (bool)self::checked('show_detail'),
+                'is_title' => (bool)self::checked('is_title'),
             ],
         ];
         return [$field, array_values(array_unique($errors))];
@@ -280,6 +289,7 @@ class AF_Admin_Advancedwanted
         $behavior = new Table;
         self::row($behavior, 'Активно', $form->generate_check_box('active', '1', 'Поле доступно в форме', ['checked' => !empty($field['active'])]));
         self::row($behavior, 'Обязательное поле', $form->generate_check_box('required', '1', 'Требовать заполнение', ['checked' => !empty($field['required'])]));
+        self::row($behavior, 'Использовать как имя / title', $form->generate_check_box('is_title', '1', 'Основной заголовок Wanted (может быть только один)', ['checked' => !empty($settings['is_title'])]));
         self::row($behavior, 'Фильтрация', $form->generate_check_box('filterable', '1', 'Можно использовать как фильтр', ['checked' => !empty($settings['filterable'])]));
         $behavior->output('Поведение');
 
@@ -353,7 +363,7 @@ class AF_Admin_Advancedwanted
     {
         global $mybb;
         $buttons = [];
-        if ($entry['status'] === 'reserved' && (int)$entry['reserved_by_uid'] > 0) {
+        if ($entry['status'] === 'reserved') {
             $buttons['release_reservation'] = 'Снять reservation';
         }
         if ($entry['status'] !== 'open') {
