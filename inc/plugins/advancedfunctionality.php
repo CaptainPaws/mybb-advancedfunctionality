@@ -2664,8 +2664,19 @@ function af_theme_stylesheet_get_bundle_row(int $themeTid): array
     global $db;
     $state = af_theme_stylesheet_bundle_state($themeTid);
     $sid = (int)($state['stylesheet_sid'] ?? 0);
-    if ($sid <= 0) return [];
-    $q = $db->simple_select('themestylesheets', 'sid,tid,name,stylesheet,attachedto', "sid='{$sid}' AND tid='".(int)$themeTid."'", ['limit' => 1]);
+    if ($sid > 0) {
+        $q = $db->simple_select('themestylesheets', 'sid,tid,name,stylesheet,attachedto', "sid='{$sid}' AND tid='".(int)$themeTid."'", ['limit' => 1]);
+        $row = $db->fetch_array($q) ?: [];
+        if ($row) {
+            return $row;
+        }
+    }
+
+    // A stylesheet can predate the AF registry row (or the row can contain a
+    // stale sid after a theme import).  The ACP editor must still find it by
+    // its stable MyBB name; activation will repair the registry afterwards.
+    $name = $db->escape_string(AF_THEME_BUNDLE_NAME);
+    $q = $db->simple_select('themestylesheets', 'sid,tid,name,stylesheet,attachedto', "tid='".(int)$themeTid."' AND name='{$name}'", ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]);
     return $db->fetch_array($q) ?: [];
 }
 
@@ -2839,6 +2850,28 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
         }
     }
 
+    // An existing advancedstyles.css without a registry row is user data, not
+    // proof that AF generated the current seed.  This is a common upgrade path
+    // from deployments that installed the stylesheet before the registry was
+    // introduced.  Preserve it as an authenticated section instead of
+    // replacing it during ordinary activation.
+    if ($row && !$state && !$force) {
+        $existingCss = (string)($row['stylesheet'] ?? '');
+        if ($existingCss !== '' && sha1($existingCss) !== (string)$bundle['checksum']) {
+            $parsedExisting = af_theme_stylesheet_parse_bundle($existingCss);
+            if (empty($parsedExisting['ok'])) {
+                $bundle['source'] = rtrim((string)$bundle['source'])."\n\n".af_theme_stylesheet_encode_section([
+                    'addon_id' => '__af_recovery__',
+                    'addon_title' => 'Preserved pre-registry advancedstyles.css',
+                    'logical_id' => 'pre_registry_'.substr(sha1($existingCss), 0, 12),
+                    'source_file' => 'ACP migration snapshot',
+                ], $existingCss);
+                $bundle['checksum'] = sha1((string)$bundle['source']);
+                $migratedLegacyOverride = true;
+            }
+        }
+    }
+
     $mode = strtolower((string)($state['delivery_mode'] ?? 'theme'));
     if (!in_array($mode, ['file', 'theme'], true)) {
         $mode = 'theme';
@@ -2857,13 +2890,17 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
         $current = (string)($row['stylesheet'] ?? '');
         $currentHash = sha1($current);
         $lastHash = (string)($state['last_synced_checksum'] ?? '');
-        $manual = (int)($state['manual_override'] ?? 0) === 1
+        // With no registry checksum AF cannot establish ownership of an
+        // existing file.  Treat it as manual until it has been migrated.
+        $manual = $migratedLegacyOverride
+            || (int)($state['manual_override'] ?? 0) === 1
+            || ($lastHash === '' && !$state)
             || ($lastHash !== '' && $currentHash !== $lastHash);
-        $write = $force || (!$manual && $currentHash !== (string)$bundle['checksum']);
+        $write = $force || $migratedLegacyOverride || (!$manual && $currentHash !== (string)$bundle['checksum']);
         $update = ['name' => AF_THEME_BUNDLE_NAME, 'attachedto' => $attachedTo, 'lastmodified' => TIME_NOW];
         if ($write) {
             $update['stylesheet'] = (string)$bundle['source'];
-            $manual = false;
+            $manual = $migratedLegacyOverride;
         }
         $db->update_query('themestylesheets', $update, "sid='{$sid}'");
     }
