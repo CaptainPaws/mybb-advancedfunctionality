@@ -276,6 +276,24 @@ class AF_Admin
 
         self::renderThemeStylesheetFilters($addonFilter, $themeFilter);
 
+        echo '<div class="af-ts-help"><strong>advancedstyles.css</strong><br>';
+        foreach (af_get_theme_tids() as $bundleTid) {
+            if ($themeFilter === 'current' && (int)$bundleTid !== $currentThemeTid) continue;
+            $bundleState = af_theme_stylesheet_bundle_state((int)$bundleTid);
+            if (!$bundleState) continue;
+            $bundleRow = [
+                'theme_tid' => (int)$bundleTid,
+                'stylesheet_sid' => (int)($bundleState['stylesheet_sid'] ?? 0),
+                'db_stylesheet_name' => AF_THEME_BUNDLE_NAME,
+            ];
+            echo 'Theme #'.(int)$bundleTid.': ';
+            echo self::buildThemeStylesheetEditLink($bundleRow, $lang->af_theme_stylesheets_edit_stylesheet, 'edit_stylesheet', 'primary');
+            echo self::renderThemeStylesheetActionForm('theme_stylesheets_set_theme_mode', $lang->af_theme_stylesheets_set_theme_mode, AF_THEME_BUNDLE_ADDON_ID, true, false, $themeFilter, (int)$bundleTid, AF_THEME_BUNDLE_LOGICAL_ID, 'secondary');
+            echo self::renderThemeStylesheetActionForm('theme_stylesheets_set_file_mode', $lang->af_theme_stylesheets_set_file_mode, AF_THEME_BUNDLE_ADDON_ID, true, false, $themeFilter, (int)$bundleTid, AF_THEME_BUNDLE_LOGICAL_ID, 'secondary');
+            echo '<br>';
+        }
+        echo '</div>';
+
         echo '<div class="af-ts-top-actions">';
         echo self::renderThemeStylesheetActionForm('theme_stylesheets_sync_all', $lang->af_theme_stylesheets_sync_all, '', true, false, $themeFilter, null, '', 'secondary');
         echo self::renderThemeStylesheetActionForm('theme_stylesheets_rebuild_missing', $lang->af_theme_stylesheets_rebuild_missing, '', true, false, $themeFilter, null, '', 'secondary');
