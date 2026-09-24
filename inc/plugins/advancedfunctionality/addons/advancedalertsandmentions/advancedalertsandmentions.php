@@ -247,7 +247,7 @@ function af_advancedalertsandmentions_init(): void
  */
 function af_advancedalertsandmentions_pre_output(string &$page): void
 {
-    // Пока ничего не делаем. Оставлено на будущее.
+    af_aam_pre_output_page($page);
 }
 
 
@@ -1302,7 +1302,50 @@ function af_aam_unread_count(int $uid): int
 
 function af_aam_pre_output_page(string &$page): void
 {
-    // Пока не лезем прямо в HTML, всё через шаблоны
+    global $mybb;
+    global $af_aam_js, $af_aam_css, $af_aam_header_icon, $af_aam_modal;
+
+    if (!af_aam_is_enabled() || $page === '' || stripos($page, '<html') === false) {
+        return;
+    }
+
+    // Template edits can disappear when a theme is imported or reverted.  Do
+    // not make the complete frontend depend on those three persisted edits:
+    // add every missing fragment to the final document as a safe fallback.
+    $headBits = (string)$af_aam_js . (string)$af_aam_css;
+    if ($headBits !== '' && stripos($page, 'advancedalertsandmentions.js') === false) {
+        $page = (string)preg_replace('~</head\s*>~i', $headBits . "\n</head>", $page, 1);
+    }
+
+    if (empty($mybb->user['uid'])) {
+        return;
+    }
+
+    if ((string)$af_aam_header_icon !== '' && stripos($page, 'id="af_aam_header_link"') === false) {
+        // MyBB's member panel is an unordered list.  Custom themes commonly
+        // rename its classes, so use the stable #panel container and its first
+        // list rather than a theme-specific selector.
+        $injected = 0;
+        $page = (string)preg_replace_callback(
+            '~(<div\b[^>]*\bid=(?:"|\')panel(?:"|\')[^>]*>.*?<ul\b[^>]*>)(.*?)(</ul>)~is',
+            static function (array $match) use ($af_aam_header_icon): string {
+                return $match[1] . $match[2] . $af_aam_header_icon . $match[3];
+            },
+            $page,
+            1,
+            $injected
+        );
+
+        // Last resort for heavily customised headers: the control remains
+        // available and valid even when there is no recognisable panel list.
+        if ($injected === 0) {
+            $page = (string)preg_replace('~<body\b[^>]*>~i', '$0' . $af_aam_header_icon, $page, 1);
+        }
+    }
+
+    if ((string)$af_aam_modal !== '' && stripos($page, 'id="af_aam_modal"') === false) {
+        $page = (string)preg_replace('~</body\s*>~i', $af_aam_modal . "\n</body>", $page, 1);
+    }
 }
 
 // ================ UCP: меню и предпочтения =====================
@@ -1520,6 +1563,15 @@ function af_aam_misc_router(): void
         if (!$mybb->user['uid']) {
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode([]);
+            exit;
+        }
+
+        // Suggestions expose the member directory to an authenticated UI.
+        // Require the same per-session token that is emitted with the script.
+        if (!verify_post_check($mybb->get_input('my_post_key'), true)) {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'invalid_post_key']);
             exit;
         }
 
