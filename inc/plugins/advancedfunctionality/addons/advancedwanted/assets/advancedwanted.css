@@ -1,5 +1,5 @@
 /* Wanted contributes layout only; colours and typography remain owned by MyBB/AF. */
-.af-wanted { min-width: 0; padding: 1rem; }
+.af-wanted { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; padding: 1rem; }
 .af-wanted .af-kb-header { margin-bottom: 1rem; }
 .af-wanted-tabs,
 .af-wanted-toolbar,
@@ -101,14 +101,14 @@
 
 /* Published ATF's af-atf-wiki layout is the structural reference: flowing main
    content plus a compact right-hand infobox, never a full-width hero. */
-.af-wanted-detail { min-width: 0; }
+.af-wanted-detail { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; }
 .af-wanted-detail { padding: 1.25rem; color: #eee; background: #17191e; }
 .af-wanted-detail-header { margin-bottom: 1rem; padding-bottom: .75rem; border-bottom: 2px solid #ad865d; }
 .af-wanted-detail-header .af-atf-wiki__heading { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
 .af-wanted-detail-header h2 { margin: 0; color: #fff; font-family: Georgia, "Times New Roman", serif; letter-spacing: .02em; }
-.af-wanted-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(14rem, 19rem); gap: 1.25rem; }
-.af-wanted-detail-content { min-width: 0; }
-.af-wanted-infobox {
+.af-wanted .af-wanted-detail-layout { display: grid; box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; grid-template-columns: minmax(0, 1fr) minmax(14rem, 19rem); gap: 1.25rem; }
+.af-wanted-detail-content { box-sizing: border-box; max-width: 100%; min-width: 0; overflow-wrap: anywhere; }
+.af-wanted .af-wanted-infobox {
   float: none;
   grid-column: 2;
   grid-row: 1;
@@ -124,7 +124,7 @@
 }
 .af-wanted-detail-image { margin: 0 auto .75rem; overflow: hidden; }
 .af-wanted-detail-image img,
-.af-wanted-field-image { display: block; width: 100%; height: auto; object-fit: cover; object-position: center; }
+.af-wanted-field-image { display: block; width: 100%; max-width: 100%; height: auto; object-fit: cover; object-position: center; }
 .af-wanted-infobox dl,
 .af-wanted-detail-fields { display: grid; gap: .75rem; margin: 0; }
 .af-wanted-detail-field { min-width: 0; }
@@ -141,9 +141,30 @@
 .af-wanted-reservation-admin h3 { margin-top: 0; }
 .af-wanted-reservation-admin form { display: flex; align-items: end; flex-wrap: wrap; gap: .45rem; margin-top: .45rem; }
 .af-wanted-reservation-admin label { display: grid; gap: .2rem; }
-.af-wanted-post-chip { cursor: pointer; }
-.af-wanted-chip-image, .af-wanted-post-chip .af-kb-chip-icon, .af-wanted-post-chip .af-kb-icon-img { width: 20px; height: 20px; object-fit: cover; object-position: center; }
+.af-wanted-post-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid #ccd2dd;
+  border-radius: 999px;
+  background: #f7f9ff;
+  color: #2f3b55;
+  font-size: .92em;
+  cursor: pointer;
+}
+.af-wanted-chip-icon { display: inline-flex; align-items: center; flex: 0 0 auto; }
+.af-wanted-chip-label { min-width: 0; overflow-wrap: anywhere; }
+.af-wanted-chip-image { display: block; width: 20px; max-width: 100%; height: 20px; object-fit: cover; object-position: center; }
 .af-wanted-chip-fallback { display: block; width: 20px; height: 20px; background: currentColor; opacity: .25; }
+.af-wanted-modal-backdrop { position: fixed; z-index: 10001; inset: 0; display: none; box-sizing: border-box; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,.45); }
+.af-wanted-modal-backdrop.is-active { display: flex; }
+.af-wanted-modal { box-sizing: border-box; width: 100%; max-width: 720px; max-height: 80vh; padding: 18px; overflow: auto; border-radius: 10px; background: #fff; color: #2f3b55; box-shadow: 0 12px 30px rgba(0,0,0,.2); }
+.af-wanted-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.af-wanted-modal-header h3 { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.af-wanted-modal-close { border: 0; background: transparent; font-size: 1.4em; cursor: pointer; }
+.af-wanted-modal-image { display: block; width: 100%; max-width: 100%; height: auto; margin: 12px 0; }
+.af-wanted-modal-section { min-width: 0; overflow-wrap: anywhere; }
 .af-wanted-results-error,
 .af-wanted-pagination { margin-top: 1rem; }
 

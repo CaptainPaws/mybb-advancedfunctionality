@@ -8136,11 +8136,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
     // Dedupe KB assets/markers regardless of source of injection.
     af_kb_strip_assets_from_html($page);
     $hasKbChips = stripos($page, 'af-kb-chip') !== false;
-    // Wanted discussion chips deliberately reuse this modal runtime.  They must
-    // remain interactive even when the standalone KB catalogue is disabled.
-    $hasWantedChips = stripos($page, 'data-wanted-id=') !== false;
-
-    if (($enabled || $hasWantedChips) && !$assetsDisabled) {
+    if ($enabled && !$assetsDisabled) {
         $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
         if ($bburl !== '') {
             $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_KB_ID . '/assets';
