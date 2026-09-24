@@ -317,6 +317,16 @@ function af_advancedfontawesome_pre_output(string &$page = ''): void
 
     $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AFO_ID . '/assets';
 
+    // Keep the vendor stylesheet at its original URL.  Font Awesome's
+    // ../webfonts references are relative to css/all.min.css and stop working
+    // when its contents are copied into a theme-cache bundle.
+    $faCssVersion = af_afo_asset_cache_buster('assets/font-awesome-6/css/all.min.css');
+    $faCssTag = '<link rel="stylesheet" type="text/css" href="' . $assetsBase
+        . '/font-awesome-6/css/all.min.css?v=' . $faCssVersion . '" data-af-font-awesome="6" />';
+    if (stripos($page, '</head>') !== false && !af_afo_page_has_asset($page, 'font-awesome-6/css/all.min.css')) {
+        $page = str_ireplace('</head>', $faCssTag . '</head>', $page);
+    }
+
     $cssVersion = af_afo_asset_cache_buster('assets/advancedfontawesome.css');
     $cssTag = '<link rel="stylesheet" type="text/css" href="' . $assetsBase . '/advancedfontawesome.css?v=' . $cssVersion . '" />';
     if (stripos($page, '</head>') !== false && !af_afo_page_has_asset($page, 'advancedfontawesome.css')) {
