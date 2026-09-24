@@ -43,6 +43,27 @@ class FakeDB {
     public function write_query($sql) { return new FakeResult([]); }
 }
 
+// Minimal MyBB ACP form/table API used by the controller under test.
+class Form {
+    private $action;
+    public function __construct($action, $method) { $this->action = $action; echo '<form method="'.$method.'" action="'.$action.'">'; }
+    public function generate_hidden_field($name, $value) { return '<input type="hidden" name="'.$name.'" value="'.htmlspecialchars_uni($value).'">'; }
+    public function generate_text_box($name, $value, $options = []) { return '<input type="text" name="'.$name.'" value="'.htmlspecialchars_uni($value).'">'; }
+    public function generate_numeric_field($name, $value, $options = []) { return '<input type="number" name="'.$name.'" value="'.(int)$value.'">'; }
+    public function generate_select_box($name, $options, $selected = '', $options2 = []) { $html='<select name="'.$name.'">'; foreach($options as $key=>$label) $html.='<option value="'.htmlspecialchars_uni($key).'"'.((string)$key===(string)$selected?' selected':'').'>'.htmlspecialchars_uni($label).'</option>'; return $html.'</select>'; }
+    public function generate_text_area($name, $value, $options = []) { return '<textarea name="'.$name.'">'.htmlspecialchars_uni($value).'</textarea>'; }
+    public function generate_check_box($name, $value, $label, $options = []) { return '<label><input type="checkbox" name="'.$name.'" value="'.$value.'"'.(!empty($options['checked'])?' checked':'').'> '.$label.'</label>'; }
+    public function generate_submit_button($label, $options = []) { return '<button type="submit">'.$label.'</button>'; }
+    public function end() { return '</form>'; }
+}
+class Table {
+    private $headers=[]; private $cells=[]; private $rows=[];
+    public function construct_header($value, $options = []) { $this->headers[]=$value; }
+    public function construct_cell($value, $options = []) { $this->cells[]=$value; }
+    public function construct_row() { $this->rows[]=$this->cells; $this->cells=[]; }
+    public function output($title='') { echo '<h2>'.$title.'</h2><table><tr><th>'.implode('</th><th>',$this->headers).'</th></tr>'; foreach($this->rows as $row) echo '<tr><td>'.implode('</td><td>',$row).'</td></tr>'; echo '</table>'; }
+}
+
 require_once dirname(__DIR__) . '/inc/plugins/advancedfunctionality/addons/advancedwanted/advancedwanted.php';
 require_once dirname(__DIR__) . '/inc/plugins/advancedfunctionality/addons/advancedwanted/admin.php';
 
@@ -70,6 +91,10 @@ $mybb->request_method = 'get';
 $mybb->input = ['tab' => 'fields', 'edit' => 1];
 $html = AF_Admin_Advancedwanted::render();
 check(strpos($html, 'value="name"') !== false && strpos($html, 'name="show_card" value="1" checked') !== false, 'ACP reload/edit form contains persisted configuration');
+check(strpos($html, 'Основные параметры') !== false && strpos($html, 'Источник данных') !== false && strpos($html, 'Поведение') !== false && strpos($html, 'Отображение') !== false, 'ACP editor is split into semantic ATF-style tables');
+check(strpos($html, '<option value="origin_variant">Разновидность происхождения</option>') !== false, 'KB dynamic source is a localized registry-backed select');
+check(strpos($html, '<option value="description">Описание (description)</option>') !== false, 'dependency selector lists active Wanted fields by field key');
+check(strpos($html, 'updateWantedFieldSettings') !== false && strpos($html, '["select","multi","radio"]') !== false, 'type-specific controls have progressive visibility behavior');
 
 check(saveField(['id' => 1, 'title' => 'Имя героя', 'field_key' => 'name', 'type' => 'text', 'active' => 0, 'required' => 1, 'show_detail' => 1, 'sortorder' => 40, 'source' => 'manual', 'depends_on' => 'description', 'options' => "a=А\nb=Б"]), 'ACP edit redirects after update');
 $editedSettings = json_decode($db->fields[1]['settings_json'], true);
