@@ -135,6 +135,19 @@
     text-decoration: none;
 }
 
+.af-aas-walk {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.af-aas-walk-result {
+    flex-basis: 100%;
+    white-space: pre-line;
+}
+
 .af-aas-active strong {
     text-decoration: underline;
 }

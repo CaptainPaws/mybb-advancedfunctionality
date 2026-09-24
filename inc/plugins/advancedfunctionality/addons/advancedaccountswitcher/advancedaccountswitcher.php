@@ -99,6 +99,7 @@ function af_aas_load_lang(bool $admin = false): void
             $includeLang(MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/advancedaccountswitcher/languages/' . (string)$lang->language . '/admin/' . $file . '.lang.php');
         }
 
+        af_aas_apply_manifest_language(true, $apply);
         $loadedAdmin = true;
         return;
     }
@@ -121,7 +122,27 @@ function af_aas_load_lang(bool $admin = false): void
         $includeLang(MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/advancedaccountswitcher/languages/' . (string)$lang->language . '/' . $file . '.lang.php');
     }
 
+    af_aas_apply_manifest_language(false, $apply);
     $loadedFront = true;
+}
+
+/**
+ * The manifest is the canonical UTF-8 source.  Overlaying it also repairs a
+ * previously generated language file which was saved after a latin1/UTF-8
+ * round trip; no attempt is made to decode an already damaged string.
+ */
+function af_aas_apply_manifest_language(bool $admin, callable $apply): void
+{
+    global $lang;
+
+    $manifest = require __DIR__ . '/manifest.php';
+    $language = strtolower((string)($lang->language ?? 'english'));
+    $language = ($language === 'russian' || str_starts_with($language, 'ru')) ? 'russian' : 'english';
+    $section = $admin ? 'admin' : 'front';
+    $pairs = $manifest['lang'][$language][$section] ?? [];
+    if (is_array($pairs)) {
+        $apply($pairs);
+    }
 }
 
 
@@ -415,6 +436,10 @@ function af_aas_misc_dispatch()
     if ($action === 'af_aas_account_list') {
         af_aas_render_account_list_page();
     }
+
+    if ($action === 'af_aas_walk') {
+        af_aas_handle_walk();
+    }
 }
 
 
@@ -679,6 +704,174 @@ function af_aas_get_linked_accounts(int $masterUid, bool $includeHidden = true):
     return $rows;
 }
 
+function af_aas_walk_json(array $payload): void
+{
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=UTF-8');
+        header('Cache-Control: no-store, private');
+    }
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+/** Return the editor's native BBCode, without making the switcher depend on it. */
+function af_aas_walk_message(int $uid): string
+{
+    global $db;
+
+    if (!$db->table_exists('af_ae_stikers')) {
+        return '+';
+    }
+
+    $uid = max(0, $uid);
+    $query = $db->simple_select(
+        'af_ae_stikers',
+        'url',
+        "url<>'' AND (is_user_sticker=0 OR uid={$uid})",
+        ['order_by' => 'RAND()', 'limit' => 1]
+    );
+    $url = trim((string)$db->fetch_field($query, 'url'));
+    if ($url === '' || preg_match('~^(?:javascript|data):~i', $url)) {
+        return '+';
+    }
+
+    return '[img]' . $url . '[/img]';
+}
+
+function af_aas_walk_add_post(array $author, array $thread, string &$error): bool
+{
+    global $mybb;
+
+    require_once MYBB_ROOT . 'inc/datahandlers/post.php';
+    $handler = new PostDataHandler('insert');
+    $handler->action = 'post';
+    $handler->set_data([
+        'tid' => (int)$thread['tid'],
+        'fid' => (int)$thread['fid'],
+        'subject' => 'RE: ' . (string)($thread['subject'] ?? ''),
+        'uid' => (int)$author['uid'],
+        'username' => (string)$author['username'],
+        'message' => af_aas_walk_message((int)$author['uid']),
+        'ipaddress' => get_ip(),
+        'posthash' => md5('af_aas_walk|' . (int)$author['uid'] . '|' . TIME_NOW . '|' . random_int(1, PHP_INT_MAX)),
+        'savedraft' => 0,
+        'options' => ['signature' => 0, 'subscriptionmethod' => '', 'disablesmilies' => 0],
+    ]);
+
+    if (!$handler->validate_post()) {
+        $errors = $handler->get_friendly_errors();
+        $error = implode('; ', array_map('strip_tags', (array)$errors));
+        return false;
+    }
+    $handler->insert_post();
+    return true;
+}
+
+function af_aas_handle_walk(): void
+{
+    global $mybb, $db;
+
+    $sourceUid = (int)($mybb->user['uid'] ?? 0);
+    if ($sourceUid <= 0 || empty($mybb->settings['af_advancedaccountswitcher_enabled']) || !af_aas_user_allowed($sourceUid)) {
+        af_aas_walk_json(['ok' => false, 'message' => 'Нет доступа.']);
+    }
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !verify_post_check((string)($mybb->input['my_post_key'] ?? ''), true)) {
+        af_aas_walk_json(['ok' => false, 'message' => 'Сессия устарела. Обновите страницу.']);
+    }
+
+    $token = preg_replace('~[^a-zA-Z0-9_-]~', '', (string)($mybb->input['operation_id'] ?? ''));
+    if (strlen($token) < 16) {
+        af_aas_walk_json(['ok' => false, 'message' => 'Некорректный идентификатор операции.']);
+    }
+
+    $masterUid = af_aas_get_master_uid($sourceUid);
+    $lockDir = MYBB_ROOT . 'inc/plugins/advancedfunctionality/cache/aas_walk';
+    if (!is_dir($lockDir)) {
+        @mkdir($lockDir, 0755, true);
+    }
+    $resultFile = $lockDir . '/' . hash('sha256', $masterUid . '|' . $token) . '.json';
+    $lock = @fopen($lockDir . '/master_' . $masterUid . '.lock', 'c+');
+    if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
+        af_aas_walk_json(['ok' => false, 'message' => 'Выгул уже выполняется.']);
+    }
+    if (is_file($resultFile)) {
+        $cached = json_decode((string)file_get_contents($resultFile), true);
+        flock($lock, LOCK_UN);
+        af_aas_walk_json(is_array($cached) ? $cached : ['ok' => false, 'message' => 'Операция уже обработана.']);
+    }
+
+    $accounts = [];
+    $master = get_user($masterUid);
+    if ($master) {
+        $accounts[$masterUid] = $master;
+    }
+    foreach (af_aas_get_linked_accounts($masterUid, true) as $linked) {
+        $user = get_user((int)$linked['uid']);
+        if ($user) {
+            $accounts[(int)$user['uid']] = $user;
+        }
+    }
+
+    $autopost = !empty($mybb->input['autopost']);
+    $thread = null;
+    $fatal = '';
+    if ($autopost) {
+        $tidRaw = trim((string)($mybb->settings['af_advancedaccountswitcher_walk_tid'] ?? ''));
+        if ($tidRaw === '' || !ctype_digit($tidRaw) || (int)$tidRaw <= 0) {
+            $fatal = 'TID темы для автовыгула не настроен.';
+        } else {
+            $thread = get_thread((int)$tidRaw);
+            if (!$thread || empty($thread['tid']) || (int)($thread['visible'] ?? 0) !== 1 || !empty($thread['closed'])) {
+                $fatal = 'Тема для автовыгула не существует или недоступна.';
+            }
+        }
+    }
+
+    $processed = 0;
+    $posted = 0;
+    $errors = [];
+    foreach ($accounts as $accountUid => $account) {
+        $permissions = function_exists('forum_permissions') && $thread
+            ? forum_permissions((int)$thread['fid'], $accountUid)
+            : [];
+        $db->update_query('users', ['lastactive' => TIME_NOW, 'lastvisit' => TIME_NOW], 'uid=' . $accountUid);
+        $processed++;
+        if ($autopost && $fatal === '' && (empty($permissions['canview']) || empty($permissions['canpostreplys']))) {
+            $errors[] = (string)$account['username'] . ': нет доступа к теме';
+            continue;
+        }
+
+        if ($autopost && $fatal === '') {
+            $postError = '';
+            try {
+                if (af_aas_walk_add_post($account, $thread, $postError)) {
+                    $posted++;
+                } else {
+                    $errors[] = (string)$account['username'] . ': ' . ($postError ?: 'не удалось опубликовать сообщение');
+                }
+            } catch (Throwable $exception) {
+                $errors[] = (string)$account['username'] . ': не удалось опубликовать сообщение';
+            }
+        }
+    }
+    if ($fatal !== '') {
+        $errors[] = $fatal;
+    }
+
+    $result = [
+        'ok' => $fatal === '',
+        'message' => 'Выгул завершён.',
+        'processed' => $processed,
+        'posted' => $posted,
+        'errors' => $errors,
+        'source_uid' => $sourceUid,
+    ];
+    @file_put_contents($resultFile, json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    flock($lock, LOCK_UN);
+    fclose($lock);
+    af_aas_walk_json($result);
+}
+
 
 /* ============================================================
    Switch
@@ -884,18 +1077,18 @@ function af_aas_handle_user_suggest()
     global $mybb, $db;
 
     if ((int)$mybb->user['uid'] <= 0) {
-        af_aas_json(['ok' => 0, 'error' => 'noauth'], 403);
+        af_aas_walk_json(['ok' => 0, 'error' => 'noauth'], 403);
     }
     if (empty($mybb->settings['af_advancedaccountswitcher_enabled'])) {
-        af_aas_json(['ok' => 0, 'error' => 'disabled'], 403);
+        af_aas_walk_json(['ok' => 0, 'error' => 'disabled'], 403);
     }
     if (!af_aas_user_allowed((int)$mybb->user['uid'])) {
-        af_aas_json(['ok' => 0, 'error' => 'noperm'], 403);
+        af_aas_walk_json(['ok' => 0, 'error' => 'noperm'], 403);
     }
 
     $q = trim((string)($mybb->input['query'] ?? ''));
     if (mb_strlen($q) < 2) {
-        af_aas_json(['ok' => 1, 'items' => []]);
+        af_aas_walk_json(['ok' => 1, 'items' => []]);
     }
 
     $masterUid = af_aas_get_master_uid((int)$mybb->user['uid']);
@@ -923,7 +1116,7 @@ function af_aas_handle_user_suggest()
         ];
     }
 
-    af_aas_json(['ok' => 1, 'items' => $items]);
+    af_aas_walk_json(['ok' => 1, 'items' => $items]);
 }
 
 function af_aas_json(array $payload, int $status = 200)
@@ -1661,6 +1854,13 @@ function af_aas_ensure_settings()
             'default'     => '1',
             'disporder'   => 10,
         ],
+        'af_advancedaccountswitcher_walk_tid' => [
+            'title'       => $t('af_advancedaccountswitcher_walk_tid', 'TID темы для автовыгула'),
+            'description' => $t('af_advancedaccountswitcher_walk_tid_desc', 'Положительный TID темы, куда публикуются сообщения при автовыгуле.'),
+            'optionscode' => 'numeric',
+            'default'     => '0',
+            'disporder'   => 11,
+        ],
     ];
 
     foreach ($settings as $name => $s) {
@@ -2033,6 +2233,15 @@ function af_aas_render_panel_widget(): string
     $af_aas_account_list_url = htmlspecialchars_uni($bburl . '/userlist.php');
 
     $myPostKey = (string)$mybb->post_code;
+    $af_aas_walk_url = htmlspecialchars_uni($bburl . '/misc.php?action=af_aas_walk');
+    $af_aas_walk_post_key = htmlspecialchars_uni($myPostKey);
+    $af_aas_walk_controls = '<div class="af-aas-walk" data-url="' . $af_aas_walk_url
+        . '" data-post-key="' . $af_aas_walk_post_key . '">'
+        . '<label><input type="checkbox" class="af-aas-walk-autopost"> '
+        . htmlspecialchars_uni((string)($lang->af_aas_walk_autopost ?? 'С автопостингом')) . '</label>'
+        . '<button type="button" class="button af-aas-walk-button">'
+        . htmlspecialchars_uni((string)($lang->af_aas_walk_button ?? 'Выгул твинков')) . '</button>'
+        . '<div class="af-aas-walk-result" role="status" aria-live="polite"></div></div>';
 
     $useTemplates = (is_object($templates)
         && $templates->get('af_aas_panel_widget') !== ''
@@ -2093,6 +2302,11 @@ function af_aas_render_panel_widget(): string
         $af_aas_panel_rows = $rows;
         $out = '';
         eval('$out = "' . $templates->get('af_aas_panel_widget') . '";');
+        // Existing boards can still have the pre-upgrade DB template. Keep the
+        // runtime output complete until the next explicit template sync.
+        if (strpos($out, 'af-aas-walk') === false) {
+            $out = preg_replace('~(</td>\s*</tr>\s*</tfoot>)~i', $af_aas_walk_controls . '$1', $out, 1);
+        }
         return $out;
     }
 
@@ -2130,6 +2344,7 @@ function af_aas_render_panel_widget(): string
                         <a href="' . $af_aas_ucp_url . '" class="af-aas-footer-link">' . $fManage . '</a>
                         <a href="' . $af_aas_account_list_url . '" class="af-aas-footer-link">' . $fList . '</a>
                     </div>
+                    ' . $af_aas_walk_controls . '
                 </td>
             </tr>
             </tfoot>

@@ -43,6 +43,9 @@ return [
                 'af_aas_footer_account_list'      => '📋 Список аккаунтов',
                 'af_aas_btn_login'                => 'Войти',
                 'af_aas_panel_empty'              => 'Пока нет доступных аккаунтов.',
+                'af_aas_walk_button'              => 'Выгул твинков',
+                'af_aas_walk_autopost'            => 'С автопостингом',
+                'af_aas_walk_running'             => 'Выполняется...',
 
                 'af_aas_ucp_linked_title'         => 'Привязанные аккаунты',
                 'af_aas_ucp_btn_switch'           => 'Переключиться',
@@ -195,6 +198,8 @@ return [
 
                 'af_advancedaccountswitcher_pm_notify_master'      => 'Уведомлять мастера о ЛС на доп. аккаунты',
                 'af_advancedaccountswitcher_pm_notify_master_desc' => 'Если включено — при ЛС на дополнительный аккаунт мастер получит уведомление через advancedalertsandmentions (если доступно).',
+                'af_advancedaccountswitcher_walk_tid'      => 'TID темы для автовыгула',
+                'af_advancedaccountswitcher_walk_tid_desc' => 'Положительный TID темы, куда публикуется по одному сообщению от каждого связанного аккаунта.',
 
                 // ===== ACP UI strings =====
                 'af_aas_admin_title'                => 'Advanced Account Switcher',
@@ -257,6 +262,9 @@ return [
                 'af_aas_footer_account_list'      => '📋 Account list',
                 'af_aas_btn_login'                => 'Log in',
                 'af_aas_panel_empty'              => 'No available accounts yet.',
+                'af_aas_walk_button'              => 'Walk linked accounts',
+                'af_aas_walk_autopost'            => 'With auto-posting',
+                'af_aas_walk_running'             => 'Processing...',
 
                 'af_aas_ucp_linked_title'         => 'Linked accounts',
                 'af_aas_ucp_btn_switch'           => 'Switch',
@@ -410,6 +418,8 @@ return [
 
                 'af_advancedaccountswitcher_pm_notify_master'      => 'Notify master about PMs on extras',
                 'af_advancedaccountswitcher_pm_notify_master_desc' => 'Sends a notification via advancedalertsandmentions if available.',
+                'af_advancedaccountswitcher_walk_tid'      => 'Auto-walk thread TID',
+                'af_advancedaccountswitcher_walk_tid_desc' => 'Positive thread TID where one message per linked account is posted.',
 
                 // ===== ACP UI strings =====
                 'af_aas_admin_title'                => 'Advanced Account Switcher',
