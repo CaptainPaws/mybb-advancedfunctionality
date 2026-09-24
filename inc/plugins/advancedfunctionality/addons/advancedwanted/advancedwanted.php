@@ -26,6 +26,10 @@ function af_advancedwanted_init(): void {
       $plugins->add_hook('parse_message_end', 'af_wanted_parse_message_end', 20);
       $plugins->add_hook('newreply_start', 'af_wanted_prefill_reply');
     }
+    // AF invokes addon init from its global_start bootstrap.  Normalize here
+    // rather than registering a second global_start callback too late in the
+    // same hook dispatch; no separate cron is needed.
+    af_wanted_normalize_expired_reservations();
 }
 function af_advancedwanted_uninstall(): void {
     global $db;
@@ -92,7 +96,9 @@ function af_wanted_ensure_settings(): void {
       ['af_wanted_view_groups','Группы просмотра','-1','text'],['af_wanted_create_groups','Группы создания Wanted','2','text'],
       ['af_wanted_edit_groups','Группы редактирования своих Wanted','2','text'],['af_wanted_delete_groups','Группы удаления своих Wanted','2','text'],
       ['af_wanted_reserve_groups','Группы reservation','2','text'],['af_wanted_moderate_groups','Группы модерации','4','text'],
-      ['af_wanted_allow_guest_reservation','Разрешить бронь гостям','0','yesno'],['af_wanted_reservation_days','Срок брони, дней','3','numeric'],
+      ['af_wanted_allow_guest_reservation','Разрешить бронь гостям','0','yesno'],
+      ['af_wanted_guest_reservation_days','Срок брони гостя, дней','3','numeric'],
+      ['af_wanted_user_reservation_days','Срок брони пользователя, дней','7','numeric'],
       ['af_wanted_application_forum','ID форума анкет ATF','0','numeric'],['af_wanted_discussion_tid','ID темы обсуждения Wanted','0','numeric'],
       ['af_wanted_per_page','Записей на страницу','12','numeric']];
     foreach($defs as $i=>$d){$sid=(int)$db->fetch_field($db->simple_select('settings','sid',"name='".$db->escape_string($d[0])."'"),'sid');$data=['title'=>$d[1],'description'=>$d[3]==='text'?'CSV gid; -1 = все группы.':'','optionscode'=>$d[3],'disporder'=>$i+1,'gid'=>$gid];if($sid)$db->update_query('settings',$data,'sid='.$sid);else{$data['name']=$d[0];$data['value']=$d[2];$db->insert_query('settings',$data);}}
@@ -195,6 +201,7 @@ function af_wanted_options(array $field, array $input=[]): array {
 function af_wanted_label(array $field,string $value,array $context=[]): string { $o=af_wanted_options($field,$context); return $o[$value]??$value; }
 function af_wanted_entry(int $id): array {
  global $db;if($id<1)return [];
+ af_wanted_normalize_expired_reservations($id);
  $q=$db->write_query('SELECT e.*,u.username,ru.username reserved_name,au.username accepted_name FROM '.TABLE_PREFIX.AF_WANTED_ENTRIES.' e LEFT JOIN '.TABLE_PREFIX.'users u ON u.uid=e.author_uid LEFT JOIN '.TABLE_PREFIX.'users ru ON ru.uid=e.reserved_by_uid LEFT JOIN '.TABLE_PREFIX.'users au ON au.uid=e.accepted_uid WHERE e.id='.$id.' LIMIT 1');
  return (array)$db->fetch_array($q);
 }
@@ -227,6 +234,22 @@ function af_wanted_lifecycle_data(string $action): array {
  if($action==='release_reservation'||$action==='return_active')return ['status'=>'open','reserved_by_uid'=>null,'reserved_guest_name'=>'','reserved_at'=>0,'reserved_until'=>0,'application_tid'=>null,'accepted_uid'=>null,'archived_at'=>0,'updated_at'=>TIME_NOW];
  if($action==='archive')return ['status'=>'archived','reserved_by_uid'=>null,'reserved_guest_name'=>'','reserved_at'=>0,'reserved_until'=>0,'application_tid'=>null,'accepted_uid'=>null,'archived_at'=>TIME_NOW,'updated_at'=>TIME_NOW];
  return [];
+}
+function af_wanted_normalize_expired_reservations(int $id=0): int {
+ global $db;
+ if(!is_object($db)||!$db->table_exists(AF_WANTED_ENTRIES))return 0;
+ $where="status='reserved' AND reserved_until>0 AND reserved_until<".TIME_NOW.' AND application_tid IS NULL';
+ if($id>0)$where.=' AND id='.$id;
+ $db->update_query(AF_WANTED_ENTRIES,af_wanted_lifecycle_data('release_reservation'),$where);
+ return (int)$db->affected_rows();
+}
+function af_wanted_reservation_days(bool $guest): int {
+ global $mybb;
+ $key=$guest?'af_wanted_guest_reservation_days':'af_wanted_user_reservation_days';
+ // The legacy value remains a compatibility fallback only; new installs get
+ // explicit guest/user settings and every reservation stores its own deadline.
+ $fallback=$guest?(int)($mybb->settings['af_wanted_reservation_days']??3):7;
+ return max(1,min(365,(int)($mybb->settings[$key]??$fallback)));
 }
 function af_wanted_display_value(array $field,string $value,array $all=[]): string {
  if(($field['type']??'')==='multi'){
@@ -309,11 +332,11 @@ function af_wanted_render_page(): void {
  }
  if($mybb->request_method==='post'){ verify_post_check($mybb->get_input('my_post_key'));
    if($action==='save'){ $editing=!empty($entry);if(!af_wanted_can($editing?'edit':'create',$entry)||($editing&&$entry['status']==='application'&&!af_wanted_groups('moderate')))error_no_permission(); [$vals,$errs]=af_wanted_validate(af_wanted_fields(),(array)($mybb->input['fields']??[]));if($errs)error(implode('<br>',$errs));if(!$editing){$id=(int)$db->insert_query(AF_WANTED_ENTRIES,['author_uid'=>(int)$mybb->user['uid'],'status'=>'open','created_at'=>TIME_NOW,'updated_at'=>TIME_NOW]);}else{$db->update_query(AF_WANTED_ENTRIES,['updated_at'=>TIME_NOW],'id='.$id);}af_wanted_save_values($id,$vals);redirect('wanted.php?action=view&id='.$id,'Запись сохранена.'); }
-   if($action==='reserve'&&af_wanted_can('reserve',$entry)){ $uid=(int)$mybb->user['uid'];$guest='';if(!$uid){$guest=trim((string)$mybb->get_input('guest_name'));if($guest==='')error('Укажите ваше имя.');if(my_strlen($guest)>190)error('Имя слишком длинное.');}$days=max(1,min(365,(int)($mybb->settings['af_wanted_reservation_days']??3)));$until=TIME_NOW+$days*86400;$db->update_query(AF_WANTED_ENTRIES,['status'=>'reserved','reserved_by_uid'=>$uid?:null,'reserved_guest_name'=>$guest,'reserved_at'=>TIME_NOW,'reserved_until'=>$until,'updated_at'=>TIME_NOW],"id=$id AND status='open'");if((int)$db->affected_rows()!==1)error('Эта запись уже недоступна для бронирования.');redirect('wanted.php?action=view&id='.$id,'Персонаж придержан.'); }
+   if($action==='reserve'&&af_wanted_can('reserve',$entry)){ $uid=(int)$mybb->user['uid'];$guest='';if(!$uid){$guest=trim((string)$mybb->get_input('guest_name'));if($guest==='')error('Укажите ваше имя.');if(my_strlen($guest)>190)error('Имя слишком длинное.');}$until=TIME_NOW+af_wanted_reservation_days($uid===0)*86400;$db->update_query(AF_WANTED_ENTRIES,['status'=>'reserved','reserved_by_uid'=>$uid?:null,'reserved_guest_name'=>$guest,'reserved_at'=>TIME_NOW,'reserved_until'=>$until,'updated_at'=>TIME_NOW],"id=$id AND status='open'");if((int)$db->affected_rows()!==1)error('Эта запись уже недоступна для бронирования.');redirect('wanted.php?action=view&id='.$id,'Персонаж придержан.'); }
    if($action==='release'){if(!$entry||$entry['status']!=='reserved'||(int)$entry['reserved_by_uid']!==(int)$mybb->user['uid'])error_no_permission();$db->update_query(AF_WANTED_ENTRIES,af_wanted_lifecycle_data('release_reservation'),'id='.$id." AND status='reserved' AND reserved_by_uid=".(int)$mybb->user['uid']);if((int)$db->affected_rows()!==1)error('Бронь уже изменена.');redirect('wanted.php?action=view&id='.$id,'Бронь снята.'); }
    if($action==='delete'&&af_wanted_can('delete',$entry)){ $db->delete_query(AF_WANTED_VALUES,'wanted_id='.$id);$db->delete_query(AF_WANTED_ENTRIES,'id='.$id);redirect('wanted.php','Запись удалена.'); }
    if($action==='apply'&&af_wanted_can('apply',$entry)){
-     if(!in_array($entry['status']??'', ['open','reserved'],true)||(($entry['status']??'')==='reserved'&&(int)$entry['reserved_by_uid']!==(int)$mybb->user['uid']))error('Запись недоступна для подачи анкеты.');
+     if(!in_array($entry['status']??'', ['open','reserved'],true)||(($entry['status']??'')==='reserved'&&(int)$entry['reserved_by_uid']>0&&(int)$entry['reserved_by_uid']!==(int)$mybb->user['uid']&&!af_wanted_groups('moderate')))error('Запись недоступна для подачи анкеты.');
      $fid=(int)($mybb->settings['af_wanted_application_forum']??0);
      if($fid<1)error('Форум для подачи анкет Wanted не настроен.');
      $intent=af_wanted_intent_encode($id,(int)$mybb->user['uid'],$fid);
@@ -345,7 +368,8 @@ function af_wanted_actions(array $e): string {
  $post='<input type="hidden" name="my_post_key" value="'.af_wanted_h((string)$mybb->post_code).'">';
  if($e['status']==='open'&&af_wanted_can('reserve',$e)){$guest=$uid?'':'<label class="af-wanted-guest-name">Ваше имя <input name="guest_name" required maxlength="190"></label>';$lifecycle.='<form class="af-wanted-reserve-form" method="post" action="wanted.php?action=reserve&id='.$id.'">'.$post.$guest.'<button class="button" type="submit">Придержать</button></form>';}
  if($ownsReservation)$lifecycle.='<form method="post" action="wanted.php?action=release&id='.$id.'">'.$post.'<button class="button" type="submit">Отказаться / Снять бронь</button></form>';
- if(($e['status']==='open'||$ownsReservation)&&af_wanted_can('apply',$e))$lifecycle.='<form method="post" action="wanted.php?action=apply&id='.$id.'">'.$post.'<button class="button" type="submit">Подать анкету</button></form>';
+ $guestReservation=$e['status']==='reserved'&&(int)($e['reserved_by_uid']??0)===0&&trim((string)($e['reserved_guest_name']??''))!=='';
+ if(($e['status']==='open'||$ownsReservation||$guestReservation||af_wanted_groups('moderate'))&&af_wanted_can('apply',$e))$lifecycle.='<form method="post" action="wanted.php?action=apply&id='.$id.'">'.$post.'<button class="button" type="submit">Подать анкету</button></form>';
  if($e['status']==='application'&&!empty($e['application_tid']))$lifecycle.='<a class="button" href="showthread.php?tid='.(int)$e['application_tid'].'">Открыть анкету</a>';
  if($e['status']==='archived'&&!empty($e['application_tid']))$lifecycle.='<a class="button" href="showthread.php?tid='.(int)$e['application_tid'].'">Принятая анкета</a>';
  if(af_wanted_discussion_allowed())$lifecycle.='<a class="button af-wanted-discuss" href="wanted.php?action=discuss&amp;id='.$id.'">Обсудить</a>';
@@ -358,11 +382,12 @@ function af_wanted_discussion_allowed(): bool {
  $thread=(array)$db->fetch_array($db->simple_select('threads','fid,visible','tid='.$tid,['limit'=>1]));if(!$thread||($thread['visible']??0)!=1)return false;$p=forum_permissions((int)$thread['fid']);return !empty($p['canview'])&&!empty($p['canviewthreads'])&&!empty($p['canpostreplys']);
 }
 function af_wanted_reservation_html(array $entry): string {
- if(($entry['status']??'')!=='reserved')return '';$uid=(int)($entry['reserved_by_uid']??0);$name=$uid?(string)($entry['reserved_name']??''):(string)($entry['reserved_guest_name']??'');$owner=$uid?build_profile_link(af_wanted_h($name),$uid):af_wanted_h($name);$until=(int)($entry['reserved_until']??0);
- return '<div class="af-wanted-detail-field af-wanted-reservation"><dt>Придержано за</dt><dd>'.$owner.'</dd></div>'.($until?'<div class="af-wanted-detail-field"><dt>До</dt><dd>'.af_wanted_h(my_date('d.m.Y',$until)).'</dd></div>':'');
+ if(($entry['status']??'')!=='reserved')return '';$uid=(int)($entry['reserved_by_uid']??0);$name=$uid?(string)($entry['reserved_name']??''):(string)($entry['reserved_guest_name']??'');$owner='<span class="af-wanted-reservation-owner">'.($uid?build_profile_link(af_wanted_h($name),$uid):af_wanted_h($name)).'</span>';$until=(int)($entry['reserved_until']??0);
+ return '<div class="af-wanted-detail-field af-wanted-reservation"><dt>Придержано за</dt><dd>'.$owner.'</dd></div>'.($until?'<div class="af-wanted-detail-field"><dt>Придержано до</dt><dd>'.af_wanted_h(my_date('d.m.y',$until)).'</dd></div>':'');
 }
 function af_wanted_catalog(): string {
  global $db,$mybb;
+ af_wanted_normalize_expired_reservations();
  $tab=$mybb->get_input('tab')==='archive'?'archive':'active';$where=[$tab==='archive'?"e.status='archived'":"e.status IN ('open','reserved','application')"];$params=['tab'=>$tab];
  $status=$mybb->get_input('status');if($tab==='active'&&in_array($status,['open','reserved','application'],true)){$where[]="e.status='".$db->escape_string($status)."'";$params['status']=$status;}
  $fields=af_wanted_fields();$filters=[];foreach($fields as $f){if(empty($f['settings']['filterable'])||!in_array($f['type'],['select','kb_dynamic','radio','checkbox','number','text'],true))continue;$key=(string)$f['field_key'];$value=trim((string)$mybb->get_input($key));if($value!==''&&in_array($f['type'],['select','kb_dynamic','radio'],true)&&!array_key_exists($value,af_wanted_options($f,$mybb->input)))$value='';if($value!==''){$alias='vf'.(int)$f['id'];$where[]="EXISTS (SELECT 1 FROM ".TABLE_PREFIX.AF_WANTED_VALUES." $alias WHERE $alias.wanted_id=e.id AND $alias.field_id=".(int)$f['id']." AND $alias.value_key='".$db->escape_string($value)."')";$params[$key]=$value;}$filters[]=[$f,$value];}
@@ -379,7 +404,7 @@ function af_wanted_catalog(): string {
    $image=$imageUrl!==''?af_wanted_render_field_value(['type'=>'image'],$imageUrl):'<div class="af-kb-char-card__pic-placeholder" aria-hidden="true"></div>';
    $details='';foreach($fields as $f){$v=$ev[(int)$f['id']]??'';$settings=(array)($f['settings']??[]);if($v===''||empty($settings['show_card'])||!in_array($f['type'],['select','radio','kb_dynamic'],true))continue;if($f['type']==='kb_dynamic'&&($settings['source']??'')==='origin_variant'&&!af_wanted_options($f,$byKey))continue;$details.='<span class="af-wanted-chip">'.af_wanted_render_field_value($f,$v,$byKey).'</span>';}
    $h.='<article class="af-wanted-card af-kb-char-card"><div class="af-kb-char-card__pic">'.$image.'</div><div class="af-wanted-card__body af-kb-char-card__body"><div class="af-wanted-card__meta"><h2>'.af_wanted_h($cardTitle).'</h2><span class="af-wanted-status">'.af_wanted_h(af_wanted_status_label($e['status'])).'</span></div><div class="af-wanted-card__fields">'.$details.'</div><p>Автор: '.build_profile_link(af_wanted_h((string)$e['username']),(int)$e['author_uid']).'</p>';
-   if($e['status']==='reserved'){$uid=(int)$e['reserved_by_uid'];$reserved=$uid?build_profile_link(af_wanted_h((string)$e['reserved_name']),$uid):af_wanted_h((string)$e['reserved_guest_name']);$h.='<p class="af-wanted-reservation-summary">Придержано за: '.$reserved.(!empty($e['reserved_until'])?'<br>до '.af_wanted_h(my_date('d.m.Y',(int)$e['reserved_until'])):'').'</p>';}
+   if($e['status']==='reserved'){$uid=(int)$e['reserved_by_uid'];$reserved='<span class="af-wanted-reservation-owner">'.($uid?build_profile_link(af_wanted_h((string)$e['reserved_name']),$uid):af_wanted_h((string)$e['reserved_guest_name'])).'</span>';$h.='<p class="af-wanted-reservation-summary"><span>За: '.$reserved.'</span>'.(!empty($e['reserved_until'])?'<span>До: '.af_wanted_h(my_date('d.m.y',(int)$e['reserved_until'])).'</span>':'').'</p>';}
    if($e['status']==='archived'&&!empty($e['accepted_uid']))$h.='<p>Игрок: '.build_profile_link(af_wanted_h((string)$e['accepted_name']),(int)$e['accepted_uid']).'</p>';
    $h.='<div class="af-wanted-primary-action"><a class="button" href="wanted.php?action=view&id='.$entryId.'">Подробнее</a></div>'.af_wanted_actions($e).'</div></article>';
  }
@@ -388,9 +413,10 @@ function af_wanted_catalog(): string {
 function af_wanted_link_application(int $wantedId,int $tid,int $uid): bool {
  global $db;
  $e=af_wanted_entry($wantedId);
- if(!$e||$tid<1||$uid<1||!in_array($e['status'],['open','reserved'],true)||($e['status']==='reserved'&&(int)$e['reserved_by_uid']!==$uid))return false;
- $reservationGuard="(status='open' OR (status='reserved' AND reserved_by_uid=$uid))";
- $db->write_query("UPDATE ".TABLE_PREFIX.AF_WANTED_ENTRIES." SET status='application',application_tid=$tid,updated_at=".TIME_NOW." WHERE id=$wantedId AND $reservationGuard");
+ $moderator=af_wanted_groups('moderate');
+ if(!$e||$tid<1||$uid<1||!in_array($e['status'],['open','reserved'],true)||($e['status']==='reserved'&&(int)$e['reserved_by_uid']>0&&(int)$e['reserved_by_uid']!==$uid&&!$moderator))return false;
+ $reservationGuard="(status='open' OR (status='reserved' AND (reserved_by_uid=$uid OR (reserved_by_uid IS NULL AND reserved_guest_name<>'')))".($moderator?" OR status='reserved'":'').')';
+ $db->write_query("UPDATE ".TABLE_PREFIX.AF_WANTED_ENTRIES." SET status='application',application_tid=$tid,reserved_by_uid=NULL,reserved_guest_name='',reserved_at=0,reserved_until=0,updated_at=".TIME_NOW." WHERE id=$wantedId AND $reservationGuard");
  if((int)$db->affected_rows()!==1)return false;
  if(function_exists('af_cwf_upsert_row'))af_cwf_upsert_row($tid,['wanted_id'=>$wantedId]);
  return true;
@@ -445,5 +471,5 @@ function af_wanted_parse_message_end(&$message,&$options=null): void {
  $message=preg_replace_callback('/\[wanted=([0-9]{1,10})\]/i',static function(array $m): string{$entry=af_wanted_entry((int)$m[1]);if(!$entry)return '';$fields=af_wanted_fields();$values=af_wanted_values([(int)$entry['id']])[(int)$entry['id']]??[];$title=af_wanted_entry_title((int)$entry['id'],$fields,$values);$image=af_wanted_primary_image($fields,$values);$icon=$image!==''?'<img class="af-wanted-chip-image af-kb-icon-img" src="'.af_wanted_h($image).'" alt="" loading="lazy">':'<span class="af-wanted-chip-fallback" aria-hidden="true"></span>';return '<span class="af-kb-chip af-wanted-post-chip" data-wanted-id="'.(int)$entry['id'].'" data-kb-title="'.af_wanted_h($title).'" tabindex="0"><span class="af-kb-chip-icon">'.$icon.'</span><span class="af-kb-chip-label">'.af_wanted_h($title).'</span></span>';},$message);
 }
 function af_wanted_modal_payload(array $entry): array {
- $id=(int)$entry['id'];$fields=af_wanted_fields();$values=af_wanted_values([$id])[$id]??[];$byKey=[];foreach($fields as $field)$byKey[$field['field_key']]=$values[(int)$field['id']]??'';$sections=[];foreach($fields as $field){$value=(string)($values[(int)$field['id']]??'');if($value===''||$field['type']==='image'||!empty($field['settings']['is_title']))continue;$sections[]=['label'=>(string)$field['title'],'html'=>af_wanted_render_field_value($field,$value,$byKey)];}return ['id'=>$id,'key'=>(string)$id,'title'=>af_wanted_entry_title($id,$fields,$values),'icon_url'=>af_wanted_primary_image($fields,$values),'body_html'=>'<p><strong>'.af_wanted_h(af_wanted_status_label((string)$entry['status'])).'</strong></p>','sections_html'=>$sections];
+ $id=(int)$entry['id'];$fields=af_wanted_fields();$values=af_wanted_values([$id])[$id]??[];$byKey=[];foreach($fields as $field)$byKey[$field['field_key']]=$values[(int)$field['id']]??'';$sections=[];foreach($fields as $field){$value=(string)($values[(int)$field['id']]??'');if($value===''||$field['type']==='image'||!empty($field['settings']['is_title']))continue;$sections[]=['label'=>(string)$field['title'],'html'=>af_wanted_render_field_value($field,$value,$byKey)];}$sections[]=['label'=>'Автор','html'=>build_profile_link(af_wanted_h((string)$entry['username']),(int)$entry['author_uid'])];$reservation=af_wanted_reservation_html($entry);if($reservation!=='')$sections[]=['label'=>'Бронь','html'=>'<dl>'.$reservation.'</dl>'];if(!empty($entry['application_tid']))$sections[]=['label'=>'Анкета','html'=>'<a href="showthread.php?tid='.(int)$entry['application_tid'].'">Открыть анкету</a>'];return ['id'=>$id,'key'=>(string)$id,'title'=>af_wanted_entry_title($id,$fields,$values),'icon_url'=>af_wanted_primary_image($fields,$values),'banner_url'=>af_wanted_primary_image($fields,$values),'body_html'=>'<p><strong>'.af_wanted_h(af_wanted_status_label((string)$entry['status'])).'</strong></p>','sections_html'=>$sections];
 }

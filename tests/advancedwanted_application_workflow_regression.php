@@ -13,7 +13,8 @@ $checks = [
         && strpos($wanted, "(int)(\$thread['uid']??0)!==(int)\$intent['uid']") !== false,
     'intent is consumed only after a successful exact link' => strpos($wanted, "if(af_wanted_link_application") !== false
         && strpos($wanted, "))my_unsetcookie('af_wanted_apply')") !== false,
-    'link transition atomically preserves reservation ownership' => strpos($wanted, "(status='open' OR (status='reserved' AND reserved_by_uid=\$uid))") !== false,
+    'link transition accepts the owner or an informational guest reservation atomically' => strpos($wanted, "reserved_by_uid=\$uid OR (reserved_by_uid IS NULL AND reserved_guest_name<>''") !== false
+        && strpos($wanted, "reserved_by_uid=NULL,reserved_guest_name='',reserved_at=0,reserved_until=0") !== false,
     'successful link writes CharacterWorkflow wanted metadata' => strpos($wanted, "af_cwf_upsert_row(\$tid,['wanted_id'=>\$wantedId])") !== false,
     'workflow migration adds nullable wanted column' => strpos($workflow, "add_column(AF_CWF_TABLE, 'wanted_id', 'INT UNSIGNED DEFAULT NULL") !== false,
     'workflow migration repairs a missing wanted index' => strpos($workflow, "index_exists(AF_CWF_TABLE, 'wanted_id')") !== false

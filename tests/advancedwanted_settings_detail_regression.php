@@ -7,7 +7,8 @@ $checks = [
     'required integration settings have exact ACP labels' =>
         strpos($core, 'ID форума анкет ATF') !== false &&
         strpos($core, 'ID темы обсуждения Wanted') !== false &&
-        strpos($core, 'Срок брони, дней') !== false &&
+        strpos($core, 'Срок брони гостя, дней') !== false &&
+        strpos($core, 'Срок брони пользователя, дней') !== false &&
         strpos($core, 'Разрешить бронь гостям') !== false &&
         strpos($core, 'Записей на страницу') !== false,
     'setting repair does not include value when a row already exists' =>
@@ -21,7 +22,7 @@ $checks = [
     'variant display checks authoritative options' =>
         substr_count($core, "==='origin_variant'&&!af_wanted_options(\$f,\$byKey)") >= 2,
     'reservation deadline is date-only in public output' =>
-        strpos($core, "my_date('d.m.Y',\$until)") !== false,
+        strpos($core, "my_date('d.m.y',\$until)") !== false,
 ];
 
 $failed = [];

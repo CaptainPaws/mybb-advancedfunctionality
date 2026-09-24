@@ -13,13 +13,14 @@ $checks = [
         && strpos($core, "af_wanted_lifecycle_data('release_reservation')") !== false,
     'release UI is shown only to the reservation owner' => strpos($core, '$ownsReservation=') !== false
         && strpos($core, 'action="wanted.php?action=release&id=') !== false,
-    'other users cannot see apply while reserved' => strpos($core, "(\$e['status']==='open'||\$ownsReservation)") !== false,
-    'reserved user profile is rendered on cards and detail' => strpos($core, 'af_wanted_reservation_html') !== false && strpos($core, 'Придержано за: ') !== false
+    'apply distinguishes reservation owner and informational guest reservation' => strpos($core, '$guestReservation=') !== false
+        && strpos($core, "(int)\$entry['reserved_by_uid']>0") !== false,
+    'reserved user profile is rendered as a compact chip on cards and detail' => strpos($core, 'af_wanted_reservation_html') !== false && strpos($core, 'af-wanted-reservation-owner') !== false
         && strpos($core, 'ru.username reserved_name') !== false,
     'open normalization clears all lifecycle relations' => strpos($core, "'reserved_by_uid'=>null,'reserved_guest_name'=>'','reserved_at'=>0,'reserved_until'=>0") !== false,
     'archive normalization clears incompatible relations' => strpos($core, "'status'=>'archived','reserved_by_uid'=>null,'reserved_guest_name'=>'','reserved_at'=>0,'reserved_until'=>0") !== false,
     'ACP exposes dedicated lifecycle actions without a status dropdown' => strpos($admin, "['release_reservation', 'return_active', 'archive_entry']") !== false
-        && strpos($admin, 'Снять reservation') !== false
+        && strpos($admin, 'Снять бронь') !== false
         && strpos($admin, 'Вернуть в Active') !== false
         && strpos($admin, 'Отправить в Archive') !== false
         && strpos($admin, 'name="status"') === false,
