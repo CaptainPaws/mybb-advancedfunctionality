@@ -505,6 +505,11 @@ class AF_Admin
             flash_message(htmlspecialchars_uni((string)$repaired['message']), !empty($repaired['ok']) ? 'success' : 'error');
             admin_redirect(self::themeStylesheetsUrl(null, $themeTid, 'all'));
         }
+        if ($action === 'theme_stylesheets_migrate_legacy') {
+            $migrated = af_theme_stylesheet_migrate_legacy_bundle($themeTid, trim((string)$mybb->get_input('bundle_hash')));
+            flash_message(htmlspecialchars_uni((string)$migrated['message']), !empty($migrated['ok']) ? 'success' : 'error');
+            admin_redirect(self::themeStylesheetsUrl(null, $themeTid, 'all'));
+        }
 
         if ($action === 'theme_stylesheets_force_resync' && !$confirmForce) {
             flash_message($lang->af_theme_stylesheets_force_confirm, 'error');
@@ -635,6 +640,10 @@ class AF_Admin
                     $url = 'index.php?module='.AF_PLUGIN_ID.'&amp;af_view=theme_stylesheet_section&amp;theme_tid='.(int)$bundleTid.'&amp;section_id='.rawurlencode((string)$sectionId);
                     echo '<a class="button af-ts-btn-secondary" href="'.$url.'">'.htmlspecialchars_uni($label).'</a> ';
                 }
+            } elseif ($bundleDbRow && ($parsed['status'] ?? '') === 'legacy') {
+                echo '<span style="color:#a66900;font-weight:600;">'.htmlspecialchars_uni($lang->af_theme_stylesheets_legacy_status).'</span>';
+                echo '<br><span class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_legacy_help).'</span> ';
+                echo self::renderThemeStylesheetActionForm('theme_stylesheets_migrate_legacy', $lang->af_theme_stylesheets_migrate_legacy, '', true, true, $themeFilter, (int)$bundleTid, '', 'primary', ['bundle_hash' => sha1((string)$bundleDbRow['stylesheet'])]);
             } elseif ($bundleDbRow) {
                 echo '<span style="color:#a00;font-weight:600;">'.htmlspecialchars_uni($lang->af_theme_stylesheets_structure_error).': '.htmlspecialchars_uni((string)$parsed['error']).'</span>';
                 echo self::renderThemeStylesheetActionForm('theme_stylesheets_repair_structure', $lang->af_theme_stylesheets_repair_structure, '', true, true, $themeFilter, (int)$bundleTid, '', 'secondary', ['bundle_hash' => sha1((string)$bundleDbRow['stylesheet'])]);
@@ -852,7 +861,8 @@ class AF_Admin
         }
         $buttonClass = $inline ? 'button' : 'submit_button';
         $buttonClass .= ($variant === 'secondary') ? ' af-ts-btn-secondary' : ' af-ts-btn-primary';
-        $html .= '<input type="submit" class="'.$buttonClass.'" value="'.htmlspecialchars_uni($label).'">';
+        $confirmAttr = $confirm ? ' onclick="return confirm(&amp;quot;'.htmlspecialchars_uni($action === 'theme_stylesheets_force_resync' ? 'All manual advancedstyles.css changes will be replaced.' : 'Create a recovery copy and migrate advancedstyles.css?').'&amp;quot;);"' : '';
+        $html .= '<input type="submit" class="'.$buttonClass.'"'.$confirmAttr.' value="'.htmlspecialchars_uni($label).'">';
         $html .= '</form>';
 
         return $html;
@@ -1364,12 +1374,15 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_title' => 'Стили тем AF',
             'af_theme_stylesheets_help' => 'Сервисная страница регистрации и обслуживания стилей тем, управляемых AF.',
             'af_theme_stylesheets_sections' => 'Секции аддонов',
-            'af_theme_stylesheets_structure_error' => 'Структура секций повреждена. Содержимое не перезаписано; принудительная синхронизация восстановит структуру, но заменит ручные правки',
+            'af_theme_stylesheets_structure_error' => 'Структура секций повреждена. Содержимое не перезаписано',
+            'af_theme_stylesheets_legacy_status' => 'Старый формат advancedstyles.css',
+            'af_theme_stylesheets_legacy_help' => 'Файл ещё не переведён в секционный формат. Обычная синхронизация не изменяет его содержимое.',
+            'af_theme_stylesheets_migrate_legacy' => 'Мигрировать в секционный формат',
             'af_theme_stylesheets_section_editor' => 'Редактор секции CSS',
             'af_theme_stylesheets_section_help' => 'Сохраняется только выбранная секция. Серверный CSS не меняется. При изменении общего файла после открытия сохранение будет отклонено как конфликт.',
             'af_theme_stylesheets_section_save' => 'Сохранить секцию',
             'af_theme_stylesheets_section_cancel' => 'Отмена',
-            'af_theme_stylesheets_repair_structure' => 'Восстановить структуру с полной recovery-копией',
+            'af_theme_stylesheets_repair_structure' => 'Восстановить структуру',
             'af_theme_stylesheets_help_actions' => 'Редактирование CSS и свойств выполняется в штатном редакторе stylesheet’ов ACP MyBB.',
             'af_theme_stylesheets_help_actions_title' => 'Памятка по действиям',
             'af_theme_stylesheets_col_theme_id' => 'ID темы',
@@ -1410,7 +1423,7 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_filter_all_themes' => 'Все темы',
             'af_theme_stylesheets_apply_filter' => 'Применить фильтр',
             'af_theme_stylesheets_clear_filter' => 'Сбросить',
-            'af_theme_stylesheets_force_confirm' => 'Force resync требует явного подтверждения (confirm_force=1).',
+            'af_theme_stylesheets_force_confirm' => 'Все ручные изменения advancedstyles.css будут заменены. Требуется явное подтверждение.',
             'af_theme_stylesheets_diag_found' => 'найдено в теме',
             'af_theme_stylesheets_diag_seed' => 'контрольная сумма seed',
             'af_theme_stylesheets_diag_duplicate' => 'риск дубликата',
@@ -1468,12 +1481,15 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_title' => 'AF Theme Stylesheets',
             'af_theme_stylesheets_help' => 'Service page for registering and maintaining AF-managed theme stylesheets.',
             'af_theme_stylesheets_sections' => 'Addon sections',
-            'af_theme_stylesheets_structure_error' => 'Section structure is invalid. Content was not overwritten; force resync repairs structure but replaces manual edits',
+            'af_theme_stylesheets_structure_error' => 'Section structure is corrupt. Content was not overwritten',
+            'af_theme_stylesheets_legacy_status' => 'Legacy advancedstyles.css format',
+            'af_theme_stylesheets_legacy_help' => 'This file has not been migrated to sections. Normal synchronization leaves its content unchanged.',
+            'af_theme_stylesheets_migrate_legacy' => 'Migrate to structured format',
             'af_theme_stylesheets_section_editor' => 'CSS section editor',
             'af_theme_stylesheets_section_help' => 'Only this section is saved. Server CSS is never changed. Saving is rejected if the bundle changed after opening.',
             'af_theme_stylesheets_section_save' => 'Save section',
             'af_theme_stylesheets_section_cancel' => 'Cancel',
-            'af_theme_stylesheets_repair_structure' => 'Repair structure with full recovery copy',
+            'af_theme_stylesheets_repair_structure' => 'Repair structure',
             'af_theme_stylesheets_help_actions' => 'CSS and stylesheet properties are edited in native MyBB ACP stylesheet editor.',
             'af_theme_stylesheets_help_actions_title' => 'Actions quick help',
             'af_theme_stylesheets_col_theme_id' => 'Theme ID',
@@ -1514,7 +1530,7 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_filter_all_themes' => 'All themes',
             'af_theme_stylesheets_apply_filter' => 'Apply filter',
             'af_theme_stylesheets_clear_filter' => 'clear',
-            'af_theme_stylesheets_force_confirm' => 'Force resync requires explicit confirmation (confirm_force=1).',
+            'af_theme_stylesheets_force_confirm' => 'All manual advancedstyles.css changes will be replaced. Explicit confirmation is required.',
             'af_theme_stylesheets_diag_found' => 'found in theme',
             'af_theme_stylesheets_diag_seed' => 'seed checksum',
             'af_theme_stylesheets_diag_duplicate' => 'duplicate risk',
@@ -2640,7 +2656,9 @@ function af_theme_stylesheet_encode_section(array $meta, string $css): string
     $meta['version'] = 1;
     $meta['section_id'] = sha1((string)($meta['addon_id'] ?? '')."\0".(string)($meta['logical_id'] ?? '')."\0".(string)($meta['source_file'] ?? ''));
     $meta['bytes'] = strlen($css);
+    $meta['length'] = strlen($css);
     $meta['body_sha1'] = sha1($css);
+    $meta['checksum'] = sha1($css);
     $json = json_encode($meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     return '/* AF-SECTION-V1 '.base64_encode((string)$json)." */\n".$css."\n/* AF-END-SECTION-V1 */\n";
 }
@@ -2650,6 +2668,12 @@ function af_theme_stylesheet_parse_bundle(string $css): array
 {
     $marker = '/* AF-SECTION-V1 ';
     $endMarker = "\n/* AF-END-SECTION-V1 */\n";
+    // A file which has never contained either marker is the pre-structured
+    // bundle written by AF releases before the section editor.  It is user
+    // data, not a malformed attempt at a structured bundle.
+    if (strpos($css, 'AF-SECTION-V1') === false && strpos($css, 'AF-END-SECTION-V1') === false) {
+        return ['ok' => false, 'status' => 'legacy', 'error' => 'no structured sections', 'sections' => []];
+    }
     $cursor = 0;
     $seen = false;
     $sections = [];
@@ -2678,9 +2702,9 @@ function af_theme_stylesheet_parse_bundle(string $css): array
         $cursor = $end;
         $seen = true;
     }
-    if (!$sections) return ['ok' => false, 'error' => 'no structured sections', 'sections' => []];
+    if (!$sections) return ['ok' => false, 'status' => 'corrupt', 'error' => 'no structured sections', 'sections' => []];
     if (trim(substr($css, $cursor)) !== '') return ['ok' => false, 'error' => 'unmanaged content after sections', 'sections' => $sections];
-    return ['ok' => true, 'error' => '', 'sections' => $sections];
+    return ['ok' => true, 'status' => 'structured', 'error' => '', 'sections' => $sections];
 }
 
 function af_theme_stylesheet_get_bundle_row(int $themeTid): array
@@ -2702,6 +2726,153 @@ function af_theme_stylesheet_get_bundle_row(int $themeTid): array
     $name = $db->escape_string(AF_THEME_BUNDLE_NAME);
     $q = $db->simple_select('themestylesheets', 'sid,tid,name,stylesheet,attachedto', "tid='".(int)$themeTid."' AND name='{$name}'", ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]);
     return $db->fetch_array($q) ?: [];
+}
+
+/** Persist a complete, non-delivered snapshot before a destructive CSS write. */
+function af_theme_stylesheet_create_recovery(int $themeTid, array $row, string $css): array
+{
+    $dir = rtrim(AF_CACHE, '/\\').'/css_recovery';
+    if (!is_dir($dir) && !@mkdir($dir, 0750, true) && !is_dir($dir)) {
+        return ['ok' => false, 'message' => 'Cannot create CSS recovery directory'];
+    }
+    $stamp = gmdate('Ymd_His');
+    $base = 'advancedstyles_tid'.max(1, $themeTid).'_'.$stamp;
+    $path = $dir.'/'.$base.'.css';
+    for ($attempt = 1; is_file($path); $attempt++) {
+        $path = $dir.'/'.$base.'_'.sprintf('%02d', $attempt).'.css';
+    }
+    $metaPath = substr($path, 0, -4).'.json';
+    $meta = [
+        'theme_tid' => $themeTid,
+        'stylesheet_sid' => (int)($row['sid'] ?? 0),
+        'sha1' => sha1($css),
+        'length' => strlen($css),
+        'created_at' => defined('TIME_NOW') ? TIME_NOW : time(),
+    ];
+    if (@file_put_contents($path, $css, LOCK_EX) !== strlen($css)
+        || @file_put_contents($metaPath, json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", LOCK_EX) === false) {
+        @unlink($path);
+        @unlink($metaPath);
+        return ['ok' => false, 'message' => 'Cannot write complete CSS recovery snapshot'];
+    }
+    return ['ok' => true, 'path' => $path, 'meta_path' => $metaPath, 'meta' => $meta];
+}
+
+/**
+ * Convert the known pre-section AF bundle into sections without duplicating
+ * its CSS.  Bodies are matched by the old addon/source headings.  A changed
+ * matched body becomes that source section (so deletions also survive); only
+ * genuinely unassigned CSS is placed in __legacy_manual__.
+ */
+function af_theme_stylesheet_plan_legacy_migration(string $legacy, array $fresh): array
+{
+    $parsedFresh = af_theme_stylesheet_parse_bundle((string)($fresh['source'] ?? ''));
+    if (empty($parsedFresh['ok'])) return ['ok' => false, 'message' => 'Generated bundle is not structured'];
+
+    $header = '~(?:/\*\s*=+\s*\n)?\s*AF addon:\s*(.*?)\s*\[([^\]\r\n]+)\]\s*\n\s*Source:\s*([^\r\n]+)\s*\n\s*=+\s*\*/\s*\n?~';
+    preg_match_all($header, $legacy, $matches, PREG_OFFSET_CAPTURE);
+    $byKey = [];
+    $unassigned = '';
+    if (!empty($matches[0])) {
+        $first = (int)$matches[0][0][1];
+        $prefix = substr($legacy, 0, $first);
+        // The standard generated preamble has no semantic CSS.
+        $prefix = preg_replace('~/\*\s*AdvancedFunctionality theme bundle\..*?\*/\s*~s', '', $prefix, 1);
+        $unassigned .= (string)$prefix;
+        $count = count($matches[0]);
+        for ($i = 0; $i < $count; $i++) {
+            $bodyStart = (int)$matches[0][$i][1] + strlen((string)$matches[0][$i][0]);
+            $bodyEnd = $i + 1 < $count ? (int)$matches[0][$i + 1][1] : strlen($legacy);
+            $key = trim((string)$matches[2][$i][0])."\0".trim((string)$matches[3][$i][0]);
+            if (isset($byKey[$key])) return ['ok' => false, 'message' => 'Duplicate legacy addon/source heading'];
+            $byKey[$key] = trim(substr($legacy, $bodyStart, $bodyEnd - $bodyStart));
+        }
+    } else {
+        $expectedBodies = array_map(static fn(array $s): string => trim((string)$s['body']), array_values($parsedFresh['sections']));
+        if (trim($legacy) !== trim(implode("\n\n", $expectedBodies))) {
+            return ['ok' => false, 'message' => 'Legacy layout cannot be mapped safely; CSS was not changed'];
+        }
+        foreach ($parsedFresh['sections'] as $section) {
+            $meta = (array)$section['meta'];
+            $byKey[(string)$meta['addon_id']."\0".(string)$meta['source_file']] = trim((string)$section['body']);
+        }
+    }
+
+    $blocks = [];
+    $manual = trim($unassigned);
+    $changed = false;
+    foreach ($parsedFresh['sections'] as $section) {
+        $meta = (array)$section['meta'];
+        $key = (string)$meta['addon_id']."\0".(string)$meta['source_file'];
+        $body = (string)$section['body'];
+        if (array_key_exists($key, $byKey)) {
+            $legacyBody = trim((string)$byKey[$key]);
+            $seedBody = trim($body);
+            // Content appended after an otherwise byte-identical generated
+            // source is unambiguously a manual tail, not part of that source.
+            if ($seedBody !== '' && strncmp($legacyBody, $seedBody, strlen($seedBody)) === 0) {
+                $tail = trim(substr($legacyBody, strlen($seedBody)));
+                if ($tail !== '') {
+                    $manual .= ($manual === '' ? '' : "\n\n").$tail;
+                    $legacyBody = $seedBody;
+                }
+            }
+            if ($legacyBody !== trim($body)) $changed = true;
+            $body = $legacyBody;
+            unset($byKey[$key]);
+        }
+        $blocks[] = af_theme_stylesheet_encode_section($meta, $body);
+    }
+    foreach ($byKey as $body) {
+        if (trim((string)$body) !== '') $manual .= ($manual === '' ? '' : "\n\n").trim((string)$body);
+    }
+    if ($manual !== '') {
+        $changed = true;
+        $blocks[] = af_theme_stylesheet_encode_section([
+            'addon_id' => '__manual_overrides__', 'addon_title' => 'Legacy manual overrides',
+            'logical_id' => '__legacy_manual__', 'source_file' => 'legacy advancedstyles.css',
+        ], $manual);
+    }
+    $source = "/* AdvancedFunctionality theme bundle (structured v1). Edit sections in AF ACP.\n"
+        . " * Migrated losslessly from the pre-structured advancedstyles.css.\n */\n\n".implode("\n", $blocks);
+    return ['ok' => true, 'source' => $source, 'checksum' => sha1($source), 'manual_override' => $changed, 'manual_css' => $manual];
+}
+
+/** Explicit, optimistic-locking migration; activation and normal sync never call it. */
+function af_theme_stylesheet_migrate_legacy_bundle(int $themeTid, string $expectedHash): array
+{
+    global $db;
+    $row = af_theme_stylesheet_get_bundle_row($themeTid);
+    if (!$row) return ['ok' => false, 'message' => 'advancedstyles.css is missing'];
+    $current = (string)$row['stylesheet'];
+    if (!hash_equals(sha1($current), $expectedHash)) return ['ok' => false, 'message' => 'CSS changed after the migration page was opened'];
+    $classification = af_theme_stylesheet_parse_bundle($current);
+    if (!empty($classification['ok'])) return ['ok' => false, 'message' => 'Bundle already uses structured format'];
+    if (($classification['status'] ?? '') !== 'legacy') return ['ok' => false, 'message' => 'Bundle is structurally corrupt; use structure recovery'];
+    $plan = af_theme_stylesheet_plan_legacy_migration($current, af_theme_stylesheet_build_bundle());
+    if (empty($plan['ok'])) return $plan;
+    $backup = af_theme_stylesheet_create_recovery($themeTid, $row, $current);
+    if (empty($backup['ok'])) return $backup;
+
+    $sid = (int)$row['sid'];
+    $updated = (string)$plan['source'];
+    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
+    $seed = af_theme_stylesheet_build_bundle();
+    $payload = [
+        'theme_tid' => $themeTid, 'stylesheet_sid' => $sid, 'addon_id' => AF_THEME_BUNDLE_ADDON_ID,
+        'logical_id' => AF_THEME_BUNDLE_LOGICAL_ID, 'stylesheet_name' => AF_THEME_BUNDLE_NAME,
+        'source_file' => '', 'seed_file' => 'generated:enabled-addon-css', 'seed_checksum' => (string)$seed['checksum'],
+        'last_synced_checksum' => sha1($updated), 'is_integrated' => 1,
+        'delivery_mode' => (string)(af_theme_stylesheet_bundle_state($themeTid)['delivery_mode'] ?? 'theme'),
+        'discovered_from' => 'unified_bundle', 'is_admin_only' => 0, 'last_synced_at' => TIME_NOW,
+        'manual_override' => !empty($plan['manual_override']) ? 1 : 0, 'updated_at' => TIME_NOW,
+    ];
+    $state = af_theme_stylesheet_bundle_state($themeTid);
+    if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, $payload, "id='".(int)$state['id']."'");
+    else { $payload['created_at'] = TIME_NOW; $db->insert_query(AF_THEME_STYLESHEETS_TABLE, $payload); }
+    af_theme_stylesheet_cache_row($themeTid, $sid, $updated);
+    af_theme_stylesheets_log('legacy bundle migrated; recovery: '.basename((string)$backup['path']), AF_THEME_BUNDLE_ADDON_ID, AF_THEME_BUNDLE_LOGICAL_ID);
+    return ['ok' => true, 'message' => 'Legacy bundle migrated to structured format', 'backup' => $backup['path'], 'manual_override' => !empty($plan['manual_override'])];
 }
 
 /** Optimistic, section-only update; every byte outside the selected block stays unchanged. */
@@ -2728,7 +2899,7 @@ function af_theme_stylesheet_save_section(int $themeTid, string $sectionId, stri
     return ['ok' => true, 'code' => 'saved', 'message' => 'section saved'];
 }
 
-/** Rebuild markers while retaining the complete malformed file in a final recovery section. */
+/** Rebuild malformed markers after writing a separate, non-delivered backup. */
 function af_theme_stylesheet_repair_bundle_structure(int $themeTid, string $expectedHash): array
 {
     global $db;
@@ -2736,20 +2907,20 @@ function af_theme_stylesheet_repair_bundle_structure(int $themeTid, string $expe
     if (!$row) return ['ok' => false, 'message' => 'advancedstyles.css is missing'];
     $current = (string)$row['stylesheet'];
     if (!hash_equals(sha1($current), $expectedHash)) return ['ok' => false, 'message' => 'advancedstyles.css changed before repair'];
-    if (!empty(af_theme_stylesheet_parse_bundle($current)['ok'])) return ['ok' => true, 'message' => 'structure is already valid'];
+    $classification = af_theme_stylesheet_parse_bundle($current);
+    if (!empty($classification['ok'])) return ['ok' => true, 'message' => 'structure is already valid'];
+    if (($classification['status'] ?? '') === 'legacy') return ['ok' => false, 'message' => 'Legacy bundle requires the migration action'];
     $fresh = af_theme_stylesheet_build_bundle();
-    $recovery = af_theme_stylesheet_encode_section([
-        'addon_id' => '__af_recovery__', 'addon_title' => 'Recovered complete bundle',
-        'logical_id' => 'malformed_bundle_'.substr($expectedHash, 0, 12), 'source_file' => 'ACP recovery snapshot',
-    ], $current);
-    $updated = rtrim((string)$fresh['source'])."\n\n".$recovery;
+    $backup = af_theme_stylesheet_create_recovery($themeTid, $row, $current);
+    if (empty($backup['ok'])) return $backup;
+    $updated = (string)$fresh['source'];
     $sid = (int)$row['sid'];
     $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
     $state = af_theme_stylesheet_bundle_state($themeTid);
-    if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 1, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
+    if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 0, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
     af_theme_stylesheet_cache_row($themeTid, $sid, $updated);
-    af_theme_stylesheets_log('bundle structure repaired with lossless recovery snapshot', '__af_recovery__', '*');
-    return ['ok' => true, 'message' => 'structure repaired; original bundle retained in the final recovery section'];
+    af_theme_stylesheets_log('bundle structure repaired; external recovery: '.basename((string)$backup['path']), AF_THEME_BUNDLE_ADDON_ID, '*');
+    return ['ok' => true, 'message' => 'structure repaired; original bundle saved outside frontend CSS'];
 }
 
 /** Rebase local url() references because the bundle is served from cache/themes. */
@@ -2906,6 +3077,12 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
             || ($lastHash !== '' && $currentHash !== $lastHash);
         $write = $force || (!$manual && $currentHash !== (string)$bundle['checksum']);
         $update = ['name' => AF_THEME_BUNDLE_NAME, 'attachedto' => $attachedTo, 'lastmodified' => TIME_NOW];
+        if ($write && $force && $current !== (string)$bundle['source']) {
+            $backup = af_theme_stylesheet_create_recovery($themeTid, $row, $current);
+            if (empty($backup['ok'])) {
+                return ['updated' => false, 'manual_override' => true, 'sid' => $sid, 'error' => (string)$backup['message']];
+            }
+        }
         if ($write) {
             $update['stylesheet'] = (string)$bundle['source'];
             $manual = $migratedLegacyOverride;
