@@ -31,7 +31,7 @@ $checks=[
  'workflow metadata migration'=>strpos($workflow,"field_exists('wanted_id'")!==false,
  'acceptance archives wanted'=>strpos($workflow,'af_wanted_application_accepted')!==false,
  'ordinary workflow remains nullable'=>strpos($workflow,'wanted_id INT UNSIGNED DEFAULT NULL')!==false,
- 'ACP field builder'=>strpos($admin,"do==='save_field'")!==false,
+ 'ACP field builder'=>strpos($admin, '$do === \'save_field\'')!==false,
  'safe CSRF actions'=>strpos($admin,'verify_post_check')!==false,
 ];
 $failed=[];foreach($checks as $label=>$ok){echo ($ok?'PASS':'FAIL').": $label\n";if(!$ok)$failed[]=$label;}exit($failed?1:0);
