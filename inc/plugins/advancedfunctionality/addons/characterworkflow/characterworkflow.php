@@ -39,7 +39,21 @@ function af_characterworkflow_activate(): bool
 
 function af_characterworkflow_init(): void
 {
+    global $plugins;
+
     af_cwf_ensure_schema();
+
+    if (is_object($plugins)) {
+        // These are the moderation boundaries at which an application stops
+        // being active.  Hard-delete fires before the thread disappears;
+        // soft-delete/unapprove are the forum's reject/cancel operations.
+        $plugins->add_hook('class_moderation_delete_thread_start', 'af_cwf_application_thread_released');
+        $plugins->add_hook('class_moderation_soft_delete_threads', 'af_cwf_application_threads_released');
+        $plugins->add_hook('class_moderation_unapprove_threads', 'af_cwf_application_threads_released');
+        // Cover direct PostDataHandler deletion used by integrations outside
+        // MyBB's Moderation class. The release operation is idempotent.
+        $plugins->add_hook('datahandler_post_delete_thread', 'af_cwf_application_thread_deleted');
+    }
 }
 
 function af_characterworkflow_uninstall(): void
@@ -506,6 +520,55 @@ function af_cwf_accept_character_application(int $tid, int $actorUid, array $con
     }
 
     return ['ok' => true, 'state' => AF_CWF_STATE_APPROVED, 'tid' => $tid];
+}
+
+/**
+ * Release the Wanted record linked to an application that was rejected,
+ * cancelled, or deleted. Ordinary applications deliberately remain no-ops.
+ */
+function af_cwf_release_character_application(int $tid, array $context = []): bool
+{
+    global $db;
+
+    if ($tid <= 0) {
+        return false;
+    }
+
+    $workflow = af_cwf_get_row($tid);
+    $wantedId = (int)($workflow['wanted_id'] ?? 0);
+    if ($wantedId <= 0 || !function_exists('af_wanted_application_released')) {
+        return false;
+    }
+
+    $applicantUid = (int)($context['applicant_uid'] ?? 0);
+    if ($applicantUid <= 0 && is_object($db)) {
+        $thread = (array)$db->fetch_array($db->simple_select('threads', 'uid', 'tid=' . $tid, ['limit' => 1]));
+        $applicantUid = (int)($thread['uid'] ?? 0);
+    }
+
+    return af_wanted_application_released($wantedId, $tid, $applicantUid);
+}
+
+/** MyBB hard-delete hook (one thread id). */
+function af_cwf_application_thread_released($tid): void
+{
+    af_cwf_release_character_application((int)$tid);
+}
+
+/** MyBB bulk reject/soft-delete hooks (an array of thread ids). */
+function af_cwf_application_threads_released($tids): void
+{
+    foreach ((array)$tids as $tid) {
+        af_cwf_release_character_application((int)$tid);
+    }
+}
+
+/** PostDataHandler delete hook used by non-moderation deletion paths. */
+function af_cwf_application_thread_deleted($handler): void
+{
+    $tid = (int)($handler->data['tid'] ?? $handler->tid ?? 0);
+    $uid = (int)($handler->data['uid'] ?? 0);
+    af_cwf_release_character_application($tid, ['applicant_uid' => $uid]);
 }
 
 function af_cwf_create_acceptance_greeting_post(int $tid, array $thread = [], int $actorUid = 0): int
