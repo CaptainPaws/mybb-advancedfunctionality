@@ -2,10 +2,24 @@
 $root=dirname(__DIR__);
 $core=file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancedwanted/advancedwanted.php');
 $admin=file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancedwanted/admin.php');
+$manifest=require $root.'/inc/plugins/advancedfunctionality/addons/advancedwanted/manifest.php';
+$assetPage=file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancedwanted/assets/wanted.php');
+$afCore=file_get_contents($root.'/inc/plugins/advancedfunctionality.php');
+$afRouter=file_get_contents($root.'/inc/plugins/advancedfunctionality/admin/router.php');
 $workflow=file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/characterworkflow/characterworkflow.php');
 $page=file_get_contents($root.'/wanted.php');
 $checks=[
- 'public page delegates to addon'=>strpos($page,'af_wanted_render_page')!==false,
+ 'public entry point has MyBB bootstrap'=>strpos($page,"define('IN_MYBB', 1)")!==false&&strpos($page,"define('THIS_SCRIPT', 'wanted.php')")!==false&&strpos($page,"require_once __DIR__.'/global.php'")!==false,
+ 'public page delegates to addon'=>strpos($page,'af_wanted_render_page();')!==false,
+ 'installable public alias is canonical root page'=>$page===$assetPage&&strpos($assetPage,'AF_WANTED_PAGE_ALIAS')!==false,
+ 'addon lifecycle installs public alias'=>strpos($core,'af_wanted_ensure_page_alias();')!==false&&strpos($core,"MYBB_ROOT.'wanted.php'")!==false,
+ 'runtime init performs no schema migration'=>preg_match('~function af_advancedwanted_init\(\): void \{(?<body>.*?)\n\}~s',$core,$initMatch)===1&&strpos($initMatch['body'],'af_wanted_ensure_schema')===false,
+ 'manifest exposes AF ACP controller'=>($manifest['admin']['slug']??'')==='advancedwanted'&&($manifest['admin']['controller']??'')==='admin.php'&&($manifest['admin']['title']??'')==='AdvancedWanted',
+ 'ACP router loads addon bootstrap before controller'=>strpos($afCore,"require_once \$ctrl['bootstrap']")!==false&&strpos($afRouter,"require_once \$ctrl['bootstrap']")!==false,
+ 'ACP router class and dispatch exist'=>strpos($admin,'class AF_Admin_Advancedwanted')!==false&&strpos($admin,'function dispatch')!==false,
+ 'ACP landing navigation is visible'=>count(array_filter(['AdvancedWanted','Записи','Поля формы','Настройки'],fn($label)=>strpos($admin,$label)!==false))===4,
+ 'permission keys contain no escaped underscores'=>strpos($core,"'af_wanted_'.\$name.'_groups'")!==false&&strpos($core,'af_wanted\\_')===false,
+ 'all permission actions are mapped'=>count(array_filter(['view','create','edit','delete','moderate','reserve','apply'],fn($action)=>strpos($core,"'{$action}'")!==false))===7,
  'three independent tables'=>strpos($core,"'af_wanted_entries'")!==false&&strpos($core,"'af_wanted_fields'")!==false&&strpos($core,"'af_wanted_values'")!==false,
  'immutable auto increment id'=>strpos($core,'id INT UNSIGNED NOT NULL AUTO_INCREMENT')!==false,
  'all lifecycle states'=>count(array_filter(['open','reserved','application','archived'],fn($s)=>strpos($core,"'$s'")!==false))===4,

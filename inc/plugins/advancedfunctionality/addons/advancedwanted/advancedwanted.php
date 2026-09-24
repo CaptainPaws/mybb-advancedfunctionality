@@ -4,19 +4,50 @@ define('AF_WANTED_ID', 'advancedwanted');
 define('AF_WANTED_ENTRIES', 'af_wanted_entries');
 define('AF_WANTED_FIELDS', 'af_wanted_fields');
 define('AF_WANTED_VALUES', 'af_wanted_values');
+define('AF_WANTED_PAGE_ALIAS_SIGNATURE', 'AF_WANTED_PAGE_ALIAS');
 
-function af_advancedwanted_install(): bool { af_wanted_ensure_schema(); af_wanted_ensure_settings(); return true; }
-function af_advancedwanted_activate(): bool { af_wanted_ensure_schema(); af_wanted_ensure_settings(); return true; }
+function af_advancedwanted_install(): bool {
+    af_wanted_ensure_schema();
+    af_wanted_ensure_settings();
+    return af_wanted_ensure_page_alias();
+}
+function af_advancedwanted_activate(): bool {
+    af_wanted_ensure_schema();
+    af_wanted_ensure_settings();
+    return af_wanted_ensure_page_alias();
+}
+function af_advancedwanted_upgrade(): bool {
+    return af_advancedwanted_activate();
+}
 function af_advancedwanted_init(): void {
     global $plugins;
-    af_wanted_ensure_schema();
     if (is_object($plugins)) { $plugins->add_hook('datahandler_post_insert_thread', 'af_wanted_thread_created'); }
 }
 function af_advancedwanted_uninstall(): void {
     global $db;
     $db->delete_query('settings', "name LIKE 'af_wanted_%'");
     $db->delete_query('settinggroups', "name='af_wanted'");
+    af_wanted_remove_page_alias();
     if (function_exists('rebuild_settings')) rebuild_settings();
+}
+function af_wanted_ensure_page_alias(): bool {
+    $source=__DIR__.'/assets/wanted.php';
+    $target=MYBB_ROOT.'wanted.php';
+    if (!is_file($source)) return false;
+    if (is_file($target)) {
+        $existing=(string)@file_get_contents($target);
+        if (strpos($existing,AF_WANTED_PAGE_ALIAS_SIGNATURE)===false) return false;
+        if (hash_file('sha256',$source)===hash_file('sha256',$target)) return true;
+    }
+    if (!@copy($source,$target)) return false;
+    @chmod($target,0644);
+    return true;
+}
+function af_wanted_remove_page_alias(): void {
+    $target=MYBB_ROOT.'wanted.php';
+    if (!is_file($target)) return;
+    $existing=(string)@file_get_contents($target);
+    if (strpos($existing,AF_WANTED_PAGE_ALIAS_SIGNATURE)!==false) @unlink($target);
 }
 function af_wanted_ensure_schema(): void {
     global $db;
@@ -59,14 +90,20 @@ function af_wanted_groups(string $name): bool {
     $mine=array_filter(array_map('intval',array_merge([(string)($mybb->user['usergroup']??0)],explode(',',(string)($mybb->user['additionalgroups']??'')))));
     return (bool)array_intersect($mine,array_map('intval',explode(',',$raw)));
 }
+function af_wanted_permission_name(string $action): string {
+    if ($action==='reserve'||$action==='apply') return 'create';
+    return in_array($action,['view','create','edit','delete','moderate'],true)?$action:'';
+}
 function af_wanted_can(string $action, array $entry=[]): bool {
     global $mybb;
     $uid=(int)($mybb->user['uid']??0);
     if (af_wanted_groups('moderate')) return true;
-    if ($action==='view') return af_wanted_groups('view');
+    $permission=af_wanted_permission_name($action);
+    if ($permission==='') return false;
+    if ($permission==='view') return af_wanted_groups('view');
     if (!$uid) return false;
-    if ($action==='create'||$action==='reserve'||$action==='apply') return af_wanted_groups('create');
-    if (($action==='edit'||$action==='delete') && (int)($entry['author_uid']??0)===$uid) return af_wanted_groups($action);
+    if ($permission==='create') return af_wanted_groups('create');
+    if (($permission==='edit'||$permission==='delete') && (int)($entry['author_uid']??0)===$uid) return af_wanted_groups($permission);
     return false;
 }
 function af_wanted_fields(bool $active=true): array {
@@ -126,7 +163,11 @@ function af_wanted_render_page(): void {
  if($action==='create'||$action==='edit'){if(!af_wanted_can($action==='create'?'create':'edit',$entry))error_no_permission();$fields=af_wanted_fields();$vals=$entry?af_wanted_values([$id])[$id]??[]:[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$body.='<form method="post" action="wanted.php?action=save'.($id?'&id='.$id:'').'"><input type="hidden" name="my_post_key" value="'.$mybb->post_code.'">';foreach($fields as $f)$body.='<div class="af-wanted-field"><label>'.af_wanted_h($f['title']).(!empty($f['required'])?' *':'').'</label>'.af_wanted_field_control($f,$vals[(int)$f['id']]??'',$byKey).'</div>';$body.='<button class="button" type="submit">Сохранить</button></form>';
  } elseif($action==='view'){if(!$entry)error('Wanted не найден.');$vals=af_wanted_values([$id])[$id]??[];$body.='<h2>Wanted #'.$id.'</h2><span class="af-wanted-status">'.af_wanted_status_label($entry['status']).'</span><dl>';foreach(af_wanted_fields() as $f)if(($f['settings']['show_detail']??true)&&isset($vals[$f['id']])&&$vals[$f['id']]!=='')$body.='<dt>'.af_wanted_h($f['title']).'</dt><dd>'.nl2br(af_wanted_h(af_wanted_label($f,$vals[$f['id']]))).'</dd>';$body.='</dl>'.af_wanted_actions($entry);
  } else $body.=af_wanted_catalog();
- $body.='</div>'; output_page('<html><head><title>'.$title.'</title>'.$headerinclude.'</head><body>'.$header.$body.$footer.'</body></html>');
+ $body.='</div>';
+ if (function_exists('af_front_output_template_string')) {
+     af_front_output_template_string($title,'{$wanted_body}',['wanted_body'=>$body]);
+ }
+ output_page('<!DOCTYPE html><html><head><title>'.af_wanted_h($title).'</title>'.$headerinclude.'</head><body>'.$header.$body.$footer.'</body></html>');
 }
 function af_wanted_actions(array $e): string { global $mybb; $id=(int)$e['id'];$h='';$post='<input type="hidden" name="my_post_key" value="'.$mybb->post_code.'">';if($e['status']==='open'&&af_wanted_can('reserve',$e))$h.='<form method="post" action="wanted.php?action=reserve&id='.$id.'">'.$post.'<button>Придержать</button></form>';if(in_array($e['status'],['open','reserved'],true)&&af_wanted_can('apply',$e))$h.='<form method="post" action="wanted.php?action=apply&id='.$id.'">'.$post.'<button>Подать анкету</button></form>';if($e['status']==='application'&&!empty($e['application_tid']))$h.='<a class="button" href="showthread.php?tid='.(int)$e['application_tid'].'">Открыть анкету</a>';if(af_wanted_can('edit',$e)&&$e['status']!=='application')$h.='<a class="button" href="wanted.php?action=edit&id='.$id.'">Изменить</a>';return '<div class="af-wanted-actions">'.$h.'</div>'; }
 function af_wanted_catalog(): string {
