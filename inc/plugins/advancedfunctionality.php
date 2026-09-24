@@ -2188,8 +2188,20 @@ function af_theme_stylesheets_install_schema(): void
 
     $columns = af_db_table_columns(AF_THEME_STYLESHEETS_TABLE);
     $queries = [];
+    // Some pre-registry installations already have this table, but with only
+    // the original identity columns.  Activation must finish that migration
+    // before the bundle synchronizer selects or writes the newer fields.
     if (!isset($columns['source_file'])) {
         $queries[] = "ALTER TABLE {$table} ADD COLUMN source_file varchar(255) NOT NULL default '' AFTER stylesheet_name";
+    }
+    if (!isset($columns['seed_file'])) {
+        $queries[] = "ALTER TABLE {$table} ADD COLUMN seed_file varchar(255) NOT NULL default '' AFTER source_file";
+    }
+    if (!isset($columns['seed_checksum'])) {
+        $queries[] = "ALTER TABLE {$table} ADD COLUMN seed_checksum char(40) NOT NULL default '' AFTER seed_file";
+    }
+    if (!isset($columns['last_synced_checksum'])) {
+        $queries[] = "ALTER TABLE {$table} ADD COLUMN last_synced_checksum char(40) NOT NULL default '' AFTER seed_checksum";
     }
     if (!isset($columns['is_integrated'])) {
         $queries[] = "ALTER TABLE {$table} ADD COLUMN is_integrated tinyint(1) NOT NULL default 0 AFTER last_synced_checksum";
@@ -2202,6 +2214,18 @@ function af_theme_stylesheets_install_schema(): void
     }
     if (!isset($columns['is_admin_only'])) {
         $queries[] = "ALTER TABLE {$table} ADD COLUMN is_admin_only tinyint(1) NOT NULL default 0 AFTER discovered_from";
+    }
+    if (!isset($columns['last_synced_at'])) {
+        $queries[] = "ALTER TABLE {$table} ADD COLUMN last_synced_at int unsigned NOT NULL default 0 AFTER is_admin_only";
+    }
+    if (!isset($columns['manual_override'])) {
+        $queries[] = "ALTER TABLE {$table} ADD COLUMN manual_override tinyint(1) NOT NULL default 0 AFTER last_synced_at";
+    }
+    if (!isset($columns['created_at'])) {
+        $queries[] = "ALTER TABLE {$table} ADD COLUMN created_at int unsigned NOT NULL default 0 AFTER manual_override";
+    }
+    if (!isset($columns['updated_at'])) {
+        $queries[] = "ALTER TABLE {$table} ADD COLUMN updated_at int unsigned NOT NULL default 0 AFTER created_at";
     }
     foreach ($queries as $sql) {
         $db->write_query($sql);
@@ -2851,26 +2875,10 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     }
 
     // An existing advancedstyles.css without a registry row is user data, not
-    // proof that AF generated the current seed.  This is a common upgrade path
-    // from deployments that installed the stylesheet before the registry was
-    // introduced.  Preserve it as an authenticated section instead of
-    // replacing it during ordinary activation.
-    if ($row && !$state && !$force) {
-        $existingCss = (string)($row['stylesheet'] ?? '');
-        if ($existingCss !== '' && sha1($existingCss) !== (string)$bundle['checksum']) {
-            $parsedExisting = af_theme_stylesheet_parse_bundle($existingCss);
-            if (empty($parsedExisting['ok'])) {
-                $bundle['source'] = rtrim((string)$bundle['source'])."\n\n".af_theme_stylesheet_encode_section([
-                    'addon_id' => '__af_recovery__',
-                    'addon_title' => 'Preserved pre-registry advancedstyles.css',
-                    'logical_id' => 'pre_registry_'.substr(sha1($existingCss), 0, 12),
-                    'source_file' => 'ACP migration snapshot',
-                ], $existingCss);
-                $bundle['checksum'] = sha1((string)$bundle['source']);
-                $migratedLegacyOverride = true;
-            }
-        }
-    }
+    // proof that AF generated the current seed. Adopt its SID and exact hash;
+    // ordinary activation must not convert it or embed it in a generated
+    // recovery section. Structural repair remains an explicit ACP operation.
+    $adoptingExistingBundle = (bool)($row && !$state && !$force);
 
     $mode = strtolower((string)($state['delivery_mode'] ?? 'theme'));
     if (!in_array($mode, ['file', 'theme'], true)) {
@@ -2892,11 +2900,11 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
         $lastHash = (string)($state['last_synced_checksum'] ?? '');
         // With no registry checksum AF cannot establish ownership of an
         // existing file.  Treat it as manual until it has been migrated.
-        $manual = $migratedLegacyOverride
+        $manual = $adoptingExistingBundle
+            || $migratedLegacyOverride
             || (int)($state['manual_override'] ?? 0) === 1
-            || ($lastHash === '' && !$state)
             || ($lastHash !== '' && $currentHash !== $lastHash);
-        $write = $force || $migratedLegacyOverride || (!$manual && $currentHash !== (string)$bundle['checksum']);
+        $write = $force || (!$manual && $currentHash !== (string)$bundle['checksum']);
         $update = ['name' => AF_THEME_BUNDLE_NAME, 'attachedto' => $attachedTo, 'lastmodified' => TIME_NOW];
         if ($write) {
             $update['stylesheet'] = (string)$bundle['source'];
@@ -2913,7 +2921,9 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
         'addon_id' => AF_THEME_BUNDLE_ADDON_ID, 'logical_id' => AF_THEME_BUNDLE_LOGICAL_ID,
         'stylesheet_name' => AF_THEME_BUNDLE_NAME, 'source_file' => '', 'seed_file' => 'generated:enabled-addon-css',
         'seed_checksum' => (string)$bundle['checksum'],
-        'last_synced_checksum' => $write || !$state ? (string)$bundle['checksum'] : (string)($state['last_synced_checksum'] ?? ''),
+        'last_synced_checksum' => $adoptingExistingBundle
+            ? sha1((string)($row['stylesheet'] ?? ''))
+            : ($write || !$state ? (string)$bundle['checksum'] : (string)($state['last_synced_checksum'] ?? '')),
         'is_integrated' => 1, 'delivery_mode' => $mode, 'discovered_from' => 'unified_bundle',
         'is_admin_only' => 0, 'last_synced_at' => TIME_NOW, 'manual_override' => $manual ? 1 : 0,
         'updated_at' => TIME_NOW,
