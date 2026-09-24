@@ -1,7 +1,7 @@
 <?php
 /**
  * AF Addon: Advanced Account Switcher
- * MyBB 1.8.38–1.8.39, PHP 8.0–8.4
+ * MyBB 1.8.38–1.8.40, PHP 8.0–8.4
  */
 
 if (!defined('IN_MYBB')) { die('No direct access'); }
@@ -12,6 +12,7 @@ define('AF_AAS_TABLE_LINKS', 'af_aas_links');
 define('AF_AAS_TABLE_LOG',   'af_aas_switch_log');
 define('AF_AAS_TABLE_AUDIT', 'af_aas_audit_log');
 define('AF_AAS_LOG_LIMIT', 5000);
+define('AF_AAS_WALK_USERAGENT', 'AF AccountWalk/1.0');
 
 function af_aas_load_lang(bool $admin = false): void
 {
@@ -807,6 +808,82 @@ function af_aas_walk_add_post(array $author, array $thread, string &$error): boo
     return true;
 }
 
+/**
+ * Create or refresh the server-side online row used by a linked-account walk.
+ *
+ * MyBB 1.8 determines Who's Online membership from sessions.time, not from
+ * users.lastactive. Calling Session::create_session() is deliberately avoided:
+ * for a positive uid that method deletes the user's other sessions first. This
+ * row has its own marker and SID, is never sent to the browser, and simply ages
+ * out of online queries after wolcutoffmins.
+ */
+function af_aas_touch_walk_session(int $uid): bool
+{
+    global $db, $session;
+
+    if ($uid <= 0 || !$db->table_exists('sessions')) {
+        return false;
+    }
+
+    $marker = AF_AAS_WALK_USERAGENT;
+    $where = "uid={$uid} AND useragent='" . $db->escape_string($marker) . "'";
+    $existing = [];
+    $query = $db->simple_select('sessions', 'sid', $where, ['order_by' => 'time', 'order_dir' => 'DESC']);
+    while ($row = $db->fetch_array($query)) {
+        if (!empty($row['sid'])) {
+            $existing[] = (string)$row['sid'];
+        }
+    }
+
+    $fields = [
+        'uid' => $uid,
+        'time' => TIME_NOW,
+        // A normal, public MyBB location keeps fetch_wol_activity() semantics.
+        'location' => 'index.php',
+        'useragent' => $marker,
+        'anonymous' => 0,
+        'nopermission' => 0,
+        'location1' => 0,
+        'location2' => 0,
+    ];
+
+    // MyBB's native Session::create_session() stores the packed request IP.
+    // Reusing it also lets the stock (uid, ip) grouping suppress duplicates.
+    $packedIp = is_object($session) && isset($session->packedip) ? $session->packedip : '';
+    if ($packedIp === '' && function_exists('my_inet_pton')) {
+        $packedIp = my_inet_pton(get_ip());
+    }
+    if ($db->field_exists('ip', 'sessions')) {
+        $fields['ip'] = $db->escape_binary($packedIp);
+    }
+
+    // Retain compatibility with installations whose sessions table has been
+    // customized, while filling every stock MyBB 1.8.40 online field above.
+    foreach (array_keys($fields) as $field) {
+        if (!$db->field_exists($field, 'sessions')) {
+            unset($fields[$field]);
+        }
+    }
+
+    if ($existing) {
+        $sid = array_shift($existing);
+        $db->update_query('sessions', $fields, "sid='" . $db->escape_string($sid) . "'");
+        // Heal duplicates left by older/concurrent implementations, without
+        // touching any browser session belonging to this uid.
+        if ($existing) {
+            $quoted = array_map(static function (string $duplicateSid) use ($db): string {
+                return "'" . $db->escape_string($duplicateSid) . "'";
+            }, $existing);
+            $db->delete_query('sessions', 'sid IN (' . implode(',', $quoted) . ')');
+        }
+        return true;
+    }
+
+    $fields['sid'] = md5(random_str(50));
+    $db->insert_query('sessions', $fields);
+    return true;
+}
+
 function af_aas_handle_walk(): void
 {
     global $mybb, $db;
@@ -875,6 +952,7 @@ function af_aas_handle_walk(): void
             ? forum_permissions((int)$thread['fid'], $accountUid)
             : [];
         $db->update_query('users', ['lastactive' => TIME_NOW, 'lastvisit' => TIME_NOW], 'uid=' . $accountUid);
+        af_aas_touch_walk_session($accountUid);
         $processed++;
         if ($autopost && $fatal === '' && (empty($permissions['canview']) || empty($permissions['canpostreplys']))) {
             $errors[] = (string)$account['username'] . ': нет доступа к теме';
