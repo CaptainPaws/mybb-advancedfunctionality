@@ -596,6 +596,13 @@ class AF_Admin
                 text-decoration:none;
                 cursor:pointer;
             }
+            .af-ts-sections{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+            .af-ts-section-chip,.af-ts-section-chip:link,.af-ts-section-chip:visited{
+                display:inline-flex;align-items:center;padding:4px 8px;border-radius:4px;
+                white-space:nowrap;border:1px solid rgba(0,0,0,.16);background:rgba(127,127,127,.08);
+                color:inherit;text-decoration:none;
+            }
+            .af-ts-section-chip:hover,.af-ts-section-chip:focus{background:rgba(127,127,127,.16);color:inherit;}
         </style>';
         echo '<h2>'.htmlspecialchars_uni($lang->af_theme_stylesheets_title).'</h2>';
         echo '<p class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_help).'</p>';
@@ -633,13 +640,15 @@ class AF_Admin
             $bundleDbRow = af_theme_stylesheet_get_bundle_row((int)$bundleTid);
             $parsed = af_theme_stylesheet_parse_bundle((string)($bundleDbRow['stylesheet'] ?? ''));
             if (!empty($parsed['ok'])) {
-                echo '<span class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_sections).':</span> ';
+                echo '<span class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_sections).':</span>';
+                echo '<div class="af-ts-sections">';
                 foreach ($parsed['sections'] as $sectionId => $section) {
                     $meta = (array)$section['meta'];
                     $label = (string)($meta['addon_title'] ?? $meta['addon_id']).' — '.(string)($meta['source_file'] ?? $meta['logical_id']);
                     $url = 'index.php?module='.AF_PLUGIN_ID.'&amp;af_view=theme_stylesheet_section&amp;theme_tid='.(int)$bundleTid.'&amp;section_id='.rawurlencode((string)$sectionId);
-                    echo '<a class="button af-ts-btn-secondary" href="'.$url.'">'.htmlspecialchars_uni($label).'</a> ';
+                    echo '<a class="af-ts-section-chip" href="'.$url.'">'.htmlspecialchars_uni($label).'</a>';
                 }
+                echo '</div>';
             } elseif ($bundleDbRow && ($parsed['status'] ?? '') === 'legacy') {
                 echo '<span style="color:#a66900;font-weight:600;">'.htmlspecialchars_uni($lang->af_theme_stylesheets_legacy_status).'</span>';
                 echo '<br><span class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_legacy_help).'</span> ';
@@ -703,11 +712,9 @@ class AF_Admin
                 $nameView = self::shortCell($nameRaw, 28);
 
                 $primaryActions = [];
-                if (empty($row['is_integrated'])) {
-                    $primaryActions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_integrate', $lang->af_theme_stylesheets_integrate, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id'], 'primary');
-                }
-                $primaryActions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_stylesheet, 'edit_stylesheet', 'primary');
-                $primaryActions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_properties, 'stylesheet_properties', 'primary');
+                // Source rows have no MyBB SID. Editing is intentionally routed
+                // through the bundle section chips above, never through a
+                // legacy per-source stylesheet action.
                 $secondaryActions = [];
                 $secondaryActions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_set_file_mode', $lang->af_theme_stylesheets_set_file_mode, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id'], 'secondary');
                 $secondaryActions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_set_theme_mode', $lang->af_theme_stylesheets_set_theme_mode, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id'], 'secondary');
@@ -1430,6 +1437,10 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_diag_attached' => 'подключённые страницы',
             'af_theme_stylesheets_status_ok' => 'ок',
             'af_theme_stylesheets_status_not_integrated' => 'не интегрирован',
+            'af_theme_stylesheets_status_bundle_source' => 'источник bundle',
+            'af_theme_stylesheets_status_source_missing' => 'источник отсутствует в bundle',
+            'af_theme_stylesheets_status_file_source' => 'источник file mode',
+            'af_theme_stylesheets_status_bundle_detached' => 'bundle отсоединён',
             'af_theme_stylesheets_status_missing' => 'отсутствует',
             'af_theme_stylesheets_status_manual_override' => 'локально изменён в ACP',
             'af_theme_stylesheets_status_manual_override_help' => 'Этот stylesheet вручную изменён в ACP для текущей темы. Обычный sync из seed не перезаписывает такие изменения.',
@@ -1537,6 +1548,10 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_diag_attached' => 'attached pages',
             'af_theme_stylesheets_status_ok' => 'ok',
             'af_theme_stylesheets_status_not_integrated' => 'not integrated',
+            'af_theme_stylesheets_status_bundle_source' => 'bundle source',
+            'af_theme_stylesheets_status_source_missing' => 'source missing from bundle',
+            'af_theme_stylesheets_status_file_source' => 'file-mode source',
+            'af_theme_stylesheets_status_bundle_detached' => 'bundle detached',
             'af_theme_stylesheets_status_missing' => 'missing',
             'af_theme_stylesheets_status_manual_override' => 'locally edited in ACP',
             'af_theme_stylesheets_status_manual_override_help' => 'This stylesheet was edited manually in ACP for this theme. Regular sync from seed will not overwrite it.',
@@ -3357,39 +3372,10 @@ function af_reconcile_theme_stylesheet_registry_state(int $themeTid, array $entr
     }
 
     $expectedName = af_theme_stylesheet_build_name((string)$entry['addon_id'], (string)$entry['logical_id'], (string)($entry['file'] ?? ''), (string)($state['stylesheet_name'] ?? $entry['stylesheet_name']));
-    $legacyName = af_theme_stylesheet_expected_legacy_name((string)$entry['addon_id'], (string)($entry['file'] ?? ''));
     $sid = (int)($state['stylesheet_sid'] ?? 0);
-    $row = null;
-    if ($sid > 0) {
-        $rowQ = $db->simple_select('themestylesheets', 'sid,name,stylesheet', "sid='{$sid}' AND tid='{$themeTid}'", ['limit' => 1]);
-        $row = $db->fetch_array($rowQ) ?: null;
-    }
-    if (!$row) {
-        $names = array_values(array_unique(array_filter([(string)($state['stylesheet_name'] ?? ''), $expectedName, $legacyName])));
-        foreach ($names as $candidateName) {
-            $nameEsc = $db->escape_string($candidateName);
-            $rowQ = $db->simple_select('themestylesheets', 'sid,name,stylesheet', "tid='{$themeTid}' AND name='{$nameEsc}'", ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]);
-            $row = $db->fetch_array($rowQ) ?: null;
-            if ($row) {
-                break;
-            }
-        }
-    }
-    if ($row && (string)($row['name'] ?? '') !== $expectedName) {
-        $expectedEsc = $db->escape_string($expectedName);
-        $existsQ = $db->simple_select('themestylesheets', 'sid', "tid='{$themeTid}' AND name='{$expectedEsc}'", ['limit' => 1]);
-        $expectedSid = (int)$db->fetch_field($existsQ, 'sid');
-        if ($expectedSid > 0) {
-            $rowQ = $db->simple_select('themestylesheets', 'sid,name,stylesheet', "sid='{$expectedSid}' AND tid='{$themeTid}'", ['limit' => 1]);
-            $resolved = $db->fetch_array($rowQ) ?: null;
-            if ($resolved) {
-                $row = $resolved;
-            }
-        } else {
-            $db->update_query('themestylesheets', ['name' => $expectedName], "sid='".(int)$row['sid']."'");
-            $row['name'] = $expectedName;
-        }
-    }
+    // Do not resolve a missing SID by stylesheet name: source rows are bundle
+    // metadata now. A still-valid historical SID is retained only until bundle
+    // sync has had a chance to preserve edited legacy CSS, then it is cleared.
 
     $payload = [
         'stylesheet_name' => $expectedName,
@@ -3399,19 +3385,9 @@ function af_reconcile_theme_stylesheet_registry_state(int $themeTid, array $entr
         $payload['seed_checksum'] = (string)($seed['checksum'] ?? '');
         $payload['seed_file'] = str_replace('\\', '/', str_replace(AF_BASE, '', (string)($seed['path'] ?? '')));
     }
-    if ($row) {
-        $payload['stylesheet_sid'] = (int)($row['sid'] ?? 0);
-        $payload['is_integrated'] = 1;
-        $payload['stylesheet_name'] = $expectedName;
-        if ($seed) {
-            $currentChecksum = sha1((string)($row['stylesheet'] ?? ''));
-            $lastSynced = (string)($state['last_synced_checksum'] ?? '');
-            $payload['manual_override'] = ($lastSynced !== '' && $currentChecksum !== $lastSynced) ? 1 : 0;
-        }
-    } else {
-        $payload['stylesheet_sid'] = 0;
-        $payload['is_integrated'] = 0;
-    }
+    $payload['stylesheet_sid'] = $sid;
+    $payload['is_integrated'] = $seed ? 1 : 0;
+    $payload['manual_override'] = 0;
     $db->update_query(AF_THEME_STYLESHEETS_TABLE, $payload, "id='".(int)$state['id']."'");
 }
 
@@ -3445,7 +3421,9 @@ function af_ensure_theme_stylesheet_registry_row(int $themeTid, array $entry): v
         'seed_file' => '',
         'seed_checksum' => '',
         'last_synced_checksum' => '',
-        'is_integrated' => 0,
+        // This flag means that the source participates in the generated
+        // bundle; it no longer implies ownership of a per-source MyBB SID.
+        'is_integrated' => 1,
         'delivery_mode' => 'auto',
         'discovered_from' => (string)($entry['discovered_from'] ?? ''),
         'is_admin_only' => !empty($entry['is_admin_only']) ? 1 : 0,
@@ -3466,8 +3444,26 @@ function af_theme_stylesheet_repair_legacy_registry_row(int $themeTid, array $en
     $sourceEsc = $db->escape_string(ltrim(str_replace('\\', '/', (string)($entry['file'] ?? '')), '/'));
     $expectedName = (string)$entry['stylesheet_name'];
 
-    $targetQ = $db->simple_select(AF_THEME_STYLESHEETS_TABLE, '*', "theme_tid='{$themeTid}' AND addon_id='{$addonEsc}' AND logical_id='{$logicalEsc}'", ['limit' => 1]);
+    // Old installations did not always have the unique identity key. Collapse
+    // those rows before any legacy logical-id promotion, otherwise promoting a
+    // second row can raise ER_DUP_ENTRY and abort addon enable with HTTP 500.
+    $targetQ = $db->simple_select(AF_THEME_STYLESHEETS_TABLE, '*', "theme_tid='{$themeTid}' AND addon_id='{$addonEsc}' AND logical_id='{$logicalEsc}'", ['order_by' => 'id', 'order_dir' => 'asc']);
     $target = $db->fetch_array($targetQ) ?: null;
+    if ($target) {
+        while ($duplicate = $db->fetch_array($targetQ)) {
+            if ((int)($target['stylesheet_sid'] ?? 0) <= 0 && (int)($duplicate['stylesheet_sid'] ?? 0) > 0) {
+                $target['stylesheet_sid'] = (int)$duplicate['stylesheet_sid'];
+                $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['stylesheet_sid' => (int)$duplicate['stylesheet_sid']], "id='".(int)$target['id']."'");
+            }
+            $db->delete_query(AF_THEME_STYLESHEETS_TABLE, "id='".(int)$duplicate['id']."'");
+        }
+    }
+
+    // An empty source_file was a common placeholder. It is not an identity and
+    // must not merge every stylesheet belonging to an addon.
+    if ($sourceEsc === '') {
+        return;
+    }
 
     $legacyQ = $db->simple_select(
         AF_THEME_STYLESHEETS_TABLE,
@@ -3507,11 +3503,36 @@ function af_theme_stylesheet_repair_legacy_registry_row(int $themeTid, array $en
     }
 }
 
+/** Remove registry duplicates left by schemas which predate the unique key. */
+function af_theme_stylesheet_deduplicate_registry(): void
+{
+    global $db;
+
+    $query = $db->simple_select(AF_THEME_STYLESHEETS_TABLE, '*', '', ['order_by' => 'id', 'order_dir' => 'asc']);
+    $canonical = [];
+    while ($row = $db->fetch_array($query)) {
+        $key = (int)($row['theme_tid'] ?? 0)."\0".(string)($row['addon_id'] ?? '')."\0".(string)($row['logical_id'] ?? '');
+        if (!isset($canonical[$key])) {
+            $canonical[$key] = $row;
+            continue;
+        }
+        $keep = $canonical[$key];
+        $payload = ['updated_at' => TIME_NOW];
+        if ((int)($keep['stylesheet_sid'] ?? 0) <= 0 && (int)($row['stylesheet_sid'] ?? 0) > 0) {
+            $payload['stylesheet_sid'] = (int)$row['stylesheet_sid'];
+            $canonical[$key]['stylesheet_sid'] = (int)$row['stylesheet_sid'];
+        }
+        $db->update_query(AF_THEME_STYLESHEETS_TABLE, $payload, "id='".(int)$keep['id']."'");
+        $db->delete_query(AF_THEME_STYLESHEETS_TABLE, "id='".(int)$row['id']."'");
+    }
+}
+
 function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = null): array
 {
     global $mybb, $db;
 
     af_theme_stylesheets_install_schema();
+    af_theme_stylesheet_deduplicate_registry();
 
     $addons = af_discover_addons();
     $entries = af_discover_theme_stylesheets($addons);
@@ -3552,6 +3573,13 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
         $state = af_theme_stylesheet_sync_bundle((int)$themeTid, $force);
         if (!empty($state['updated'])) $result['created_or_updated']++;
         if (!empty($state['manual_override'])) $result['manual_override']++;
+        // Once the bundle has consumed/detached legacy records, source rows
+        // must no longer advertise ownership of those MyBB stylesheet SIDs.
+        $db->update_query(
+            AF_THEME_STYLESHEETS_TABLE,
+            ['stylesheet_sid' => 0, 'updated_at' => TIME_NOW],
+            "theme_tid='".(int)$themeTid."' AND addon_id!='".$db->escape_string(AF_THEME_BUNDLE_ADDON_ID)."'"
+        );
     }
 
     return $result;
@@ -3614,77 +3642,60 @@ function af_collect_theme_stylesheet_diagnostics(?string $onlyAddonId = null): a
                 );
                 $state = $db->fetch_array($stateQ) ?: [];
             }
-            $nameEsc = $db->escape_string((string)($state['stylesheet_name'] ?? $entry['stylesheet_name']));
-
-            $sid = (int)($state['stylesheet_sid'] ?? 0);
-            $row = null;
-            if ($sid > 0) {
-                $rowQ = $db->simple_select('themestylesheets', 'sid,stylesheet,attachedto,name', "sid='{$sid}' AND tid='".(int)$themeTid."'", ['limit' => 1]);
-                $row = $db->fetch_array($rowQ) ?: null;
+            $bundleState = af_theme_stylesheet_bundle_state((int)$themeTid);
+            $bundleRow = af_theme_stylesheet_get_bundle_row((int)$themeTid);
+            $parsedBundle = af_theme_stylesheet_parse_bundle((string)($bundleRow['stylesheet'] ?? ''));
+            $sourceInBundle = false;
+            if (!empty($parsedBundle['ok'])) {
+                foreach ($parsedBundle['sections'] as $section) {
+                    $meta = (array)($section['meta'] ?? []);
+                    if ((string)($meta['addon_id'] ?? '') === $addonId
+                        && (string)($meta['logical_id'] ?? '') === (string)$entry['logical_id']) {
+                        $sourceInBundle = true;
+                        break;
+                    }
+                }
             }
-            if (!$row) {
-                $rowQ = $db->simple_select('themestylesheets', 'sid,stylesheet,attachedto,name', "tid='".(int)$themeTid."' AND name='{$nameEsc}'", ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]);
-                $row = $db->fetch_array($rowQ) ?: null;
-            }
-
-            $expectedAttach = af_build_theme_stylesheet_attach_string((array)($entry['attach'] ?? []));
-            $foundInTheme = (bool)$row;
-            $currentChecksum = $foundInTheme ? sha1((string)$row['stylesheet']) : '';
-            $lastSyncedChecksum = (string)($state['last_synced_checksum'] ?? '');
-            $manualOverride = ((int)($state['manual_override'] ?? 0) === 1);
-            $duplicateQ = $db->simple_select('themestylesheets', 'COUNT(*) AS c', "tid='".(int)$themeTid."' AND name='{$nameEsc}'");
+            $mode = strtolower((string)($bundleState['delivery_mode'] ?? 'theme'));
+            if (!in_array($mode, ['file', 'theme'], true)) $mode = 'theme';
+            $bundleAttached = (string)($bundleRow['attachedto'] ?? '');
+            $foundInTheme = !empty($bundleRow);
+            $currentChecksum = $foundInTheme ? sha1((string)$bundleRow['stylesheet']) : '';
+            $lastSyncedChecksum = (string)($bundleState['last_synced_checksum'] ?? '');
+            $manualOverride = ((int)($bundleState['manual_override'] ?? 0) === 1);
+            $bundleNameEsc = $db->escape_string(AF_THEME_BUNDLE_NAME);
+            $duplicateQ = $db->simple_select('themestylesheets', 'COUNT(*) AS c', "tid='".(int)$themeTid."' AND name='{$bundleNameEsc}'");
             $duplicateCount = (int)$db->fetch_field($duplicateQ, 'c');
             $duplicateRisk = $duplicateCount > 1;
             if ($duplicateRisk) {
                 af_theme_stylesheets_log('duplicate prevented', $addonId, (string)$entry['logical_id']);
             }
 
-            $status = 'ok';
-            if ((int)($state['is_integrated'] ?? 0) !== 1) {
-                $status = 'not_integrated';
-            } elseif (!$foundInTheme) {
-                $status = 'missing';
-            } elseif ($manualOverride || ($lastSyncedChecksum !== '' && $currentChecksum !== $lastSyncedChecksum)) {
-                $status = 'manual_override';
-            } elseif ($seedChecksum !== '' && $currentChecksum !== $seedChecksum) {
-                $status = 'outdated';
-            } elseif ($duplicateRisk) {
-                $status = 'duplicate_risk';
-            }
-
-            $modeRequested = strtolower((string)($entry['mode'] ?? 'auto'));
-            $modeStored = strtolower((string)($state['delivery_mode'] ?? 'auto'));
-            if (!in_array($modeStored, ['file', 'theme', 'auto'], true)) {
-                $modeStored = 'auto';
-            }
-            if (!in_array($modeRequested, ['file', 'theme', 'auto'], true)) {
-                $modeRequested = 'auto';
-            }
-            $mode = $modeStored !== 'auto' ? $modeStored : $modeRequested;
-            if ($mode === 'auto') {
-                $mode = ((int)($state['is_integrated'] ?? 0) === 1 && $foundInTheme) ? 'theme' : 'file';
-            }
+            $status = $mode === 'file' ? 'file_source' : 'bundle_source';
+            if (!$sourceInBundle) $status = 'source_missing';
+            elseif ($mode === 'theme' && (!$foundInTheme || $bundleAttached !== 'global')) $status = 'bundle_detached';
+            elseif ($duplicateRisk) $status = 'duplicate_risk';
 
             $rows[] = [
                 'theme_tid' => (int)$themeTid,
                 'theme_title' => (string)($themeTitles[(int)$themeTid] ?? ('Theme #'.(int)$themeTid)),
                 'addon_id' => $addonId,
                 'logical_id' => (string)$entry['logical_id'],
-                'stylesheet_sid' => (int)($row['sid'] ?? 0),
+                'stylesheet_sid' => 0,
                 'stylesheet_name' => (string)($state['stylesheet_name'] ?? $entry['stylesheet_name']),
-                'db_stylesheet_name' => (string)($row['name'] ?? ($state['stylesheet_name'] ?? $entry['stylesheet_name'])),
+                'db_stylesheet_name' => AF_THEME_BUNDLE_NAME,
                 'seed_file' => (string)($seed['path'] ?? ''),
                 'mode' => $mode,
                 'status' => $status,
-                'is_integrated' => (int)($state['is_integrated'] ?? 0) === 1,
-                'attached_to' => (string)($row['attachedto'] ?? $expectedAttach),
-                'expected_attach' => $expectedAttach,
+                'is_integrated' => $sourceInBundle,
+                'attached_to' => $mode === 'theme' ? $bundleAttached : '—',
+                'expected_attach' => $mode === 'theme' ? 'global' : '',
                 'last_synced_at' => (int)($state['last_synced_at'] ?? 0),
                 'manual_override' => $manualOverride,
                 'found_in_theme' => $foundInTheme,
                 'seed_checksum_match' => ($seedChecksum !== '' && (string)($state['seed_checksum'] ?? '') === $seedChecksum),
                 'duplicate_risk' => $duplicateRisk,
-                'attached_match' => ((string)($row['attachedto'] ?? '') === $expectedAttach),
+                'attached_match' => $mode === 'file' || $bundleAttached === 'global',
                 'seed' => $seed,
                 'entry' => $entry,
                 'state' => $state,
@@ -3755,12 +3766,17 @@ function af_theme_stylesheet_integrate(int $themeTid, string $addonId, string $l
     if (!$seed) {
         return false;
     }
-    af_register_theme_stylesheet($themeTid, (array)$match['addon_meta'], $match, $seed, $force);
+    af_theme_stylesheet_repair_legacy_registry_row($themeTid, $match);
+    af_ensure_theme_stylesheet_registry_row($themeTid, $match);
+    af_reconcile_theme_stylesheet_registry_state($themeTid, $match, $seed);
+    // Compatibility action: integration now means inclusion in the unified
+    // bundle. Never recreate an af_*.css MyBB stylesheet for this source.
+    af_theme_stylesheet_sync_bundle($themeTid, $force);
     $addonEsc = $db->escape_string($addonId);
     $logicalEsc = $db->escape_string($logicalId);
     $db->update_query(
         AF_THEME_STYLESHEETS_TABLE,
-        ['is_integrated' => 1, 'updated_at' => TIME_NOW],
+        ['stylesheet_sid' => 0, 'is_integrated' => 1, 'updated_at' => TIME_NOW],
         "theme_tid='".(int)$themeTid."' AND addon_id='{$addonEsc}' AND logical_id='{$logicalEsc}'"
     );
     return true;
@@ -3812,41 +3828,14 @@ function af_theme_stylesheets_execute_action(string $action, ?string $addonId = 
         af_theme_stylesheets_log('synced', $addonId ?? '*', '*');
         return array_merge($stats, $sync);
     }
-
-    $rows = af_collect_theme_stylesheet_diagnostics($addonId);
-    foreach ($rows as $row) {
-        if (empty($row['seed']) || !is_array($row['seed'])) {
-            $stats['skipped']++;
-            continue;
-        }
-        if (!empty($row['manual_override']) && in_array($action, ['rebuild_missing', 'restore_safe'], true)) {
-            $stats['manual_override']++;
-            af_theme_stylesheets_log('skipped due to manual override', (string)$row['addon_id'], (string)$row['logical_id']);
-            continue;
-        }
-
-        if ($action === 'rebuild_missing') {
-            if ((string)$row['status'] !== 'missing') {
-                continue;
-            }
-            af_register_theme_stylesheet((int)$row['theme_tid'], (array)$row['entry']['addon_meta'], (array)$row['entry'], (array)$row['seed'], false);
-            $stats['restored']++;
-            $stats['missing']++;
-            af_theme_stylesheets_log('restored after missing', (string)$row['addon_id'], (string)$row['logical_id']);
-            continue;
-        }
-
-        if ($action === 'restore_safe') {
-            $isMissing = ((string)$row['status'] === 'missing');
-            $notEdited = ((string)$row['current_checksum'] !== '' && (string)$row['last_synced_checksum'] !== '' && (string)$row['current_checksum'] === (string)$row['last_synced_checksum']);
-            if (!$isMissing && !$notEdited) {
-                $stats['skipped']++;
-                continue;
-            }
-            af_register_theme_stylesheet((int)$row['theme_tid'], (array)$row['entry']['addon_meta'], (array)$row['entry'], (array)$row['seed'], true);
-            $stats['restored']++;
-            af_theme_stylesheets_log($isMissing ? 'restored after missing' : 'synced', (string)$row['addon_id'], (string)$row['logical_id']);
-        }
+    if ($action === 'rebuild_missing' || $action === 'restore_safe') {
+        // Both compatibility actions operate on advancedstyles.css now. The
+        // non-force synchronizer preserves manual bundle edits and recreates a
+        // missing bundle without ever creating per-source stylesheets.
+        $sync = af_sync_theme_stylesheets(false, $addonId);
+        $stats = array_merge($stats, $sync);
+        $stats['restored'] = (int)($sync['created_or_updated'] ?? 0);
+        return $stats;
     }
 
     return $stats;
