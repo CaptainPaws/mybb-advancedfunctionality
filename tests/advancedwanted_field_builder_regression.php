@@ -121,6 +121,12 @@ $image = ['id' => 100, 'field_key' => 'image', 'title' => 'Изображени�
 check(count($errors) === 1 && strpos(af_wanted_field_control($image, '', []), 'type="url"') !== false, 'image uses an HTTP(S) URL contract');
 [, $errors] = af_wanted_validate([$image], ['image' => '']);
 check(!$errors, 'an optional image may be empty');
+check(strpos(af_wanted_render_field_value($image, 'https://example.com/hero.jpg'), '<img class="af-wanted-field-image"') === 0, 'image display values render as safe image markup');
+check(af_wanted_render_field_value($image, 'javascript:alert(1)') === '', 'unsafe image display values render no markup');
+$textarea = ['type' => 'textarea', 'settings' => []];
+check(af_wanted_render_field_value($textarea, "Первая\n<script>") === "Первая<br />\n&lt;script&gt;", 'textarea display escapes before preserving line breaks');
+$url = ['type' => 'url', 'settings' => []];
+check(strpos(af_wanted_render_field_value($url, 'https://example.com/profile'), '<a href="https://example.com/profile"') === 0, 'URL display values render as safe links');
 
 $mybb->input = ['tab' => 'fields', 'my_post_key' => 'token', 'do' => 'delete_field', 'id' => 3];
 try { AF_Admin_Advancedwanted::render(); } catch (RedirectForTest $redirect) {}

@@ -209,6 +209,39 @@ function af_wanted_display_value(array $field,string $value,array $all=[]): stri
  if(($field['type']??'')==='checkbox')return $value==='1'?'Да':'Нет';
  $options=af_wanted_options($field,$all);return $options[$value]??$value;
 }
+/**
+ * Render a stored field for public display.  Unlike af_wanted_display_value(),
+ * this is an HTML boundary: every scalar is escaped here and only known field
+ * types are allowed to introduce markup.
+ */
+function af_wanted_render_field_value(array $field,string $value,array $all=[]): string {
+ $type=(string)($field['type']??'text');
+ if($type==='image') {
+   return af_wanted_valid_http_url($value)
+     ? '<img class="af-wanted-field-image" src="'.af_wanted_h($value).'" alt="" loading="lazy">'
+     : '';
+ }
+ $display=af_wanted_display_value($field,$value,$all);
+ if($type==='textarea') return nl2br(af_wanted_h($display));
+ if($type==='url'&&af_wanted_valid_http_url($display)) {
+   return '<a href="'.af_wanted_h($display).'" rel="noopener noreferrer">'.af_wanted_h($display).'</a>';
+ }
+ return af_wanted_h($display);
+}
+function af_wanted_entry_title(int $id,array $fields,array $values): string {
+ foreach($fields as $field) {
+   if(!in_array((string)$field['field_key'],['name','title','character_name'],true))continue;
+   $value=trim((string)($values[(int)$field['id']]??''));if($value!=='')return $value;
+ }
+ return 'Wanted #'.$id;
+}
+function af_wanted_primary_image(array $fields,array $values): string {
+ foreach($fields as $field) {
+   if(($field['type']??'')!=='image')continue;
+   $value=(string)($values[(int)$field['id']]??'');if(af_wanted_valid_http_url($value))return $value;
+ }
+ return '';
+}
 function af_wanted_field_control(array $f,$value,array $all=[]): string {
  $k=af_wanted_h((string)$f['field_key']);$v=is_array($value)?$value:(string)$value;$req=!empty($f['required'])?' required':'';$type=(string)$f['type'];
  if($type==='textarea')return '<textarea name="fields['.$k.']"'.$req.'>'.af_wanted_h((string)$v).'</textarea>';
@@ -259,17 +292,31 @@ function af_wanted_render_page(): void {
    exit;
  }
  $title='Нужные персонажи';add_breadcrumb($title,'wanted.php');
- $body='<div class="af-wanted"><h1>'.$title.'</h1>';
- if($action==='create'||$action==='edit'){if(!af_wanted_can($action==='create'?'create':'edit',$entry))error_no_permission();$fields=af_wanted_fields();$vals=$entry?af_wanted_values([$id])[$id]??[]:[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$body.='<form method="post" action="wanted.php?action=save'.($id?'&id='.$id:'').'"><input type="hidden" name="my_post_key" value="'.$mybb->post_code.'">';foreach($fields as $f)$body.='<div class="af-wanted-field"><label>'.af_wanted_h($f['title']).(!empty($f['required'])?' *':'').'</label>'.af_wanted_field_control($f,$vals[(int)$f['id']]??'',$byKey).'</div>';$body.='<button class="button" type="submit">Сохранить</button></form>'.af_wanted_dependency_script($fields);
- } elseif($action==='view'){if(!$entry)error('Wanted не найден.');$fields=af_wanted_fields();$vals=af_wanted_values([$id])[$id]??[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$body.='<h2>Wanted #'.$id.'</h2><p><span class="af-wanted-status">'.af_wanted_status_label($entry['status']).'</span></p><p>Автор: '.build_profile_link(af_wanted_h((string)$entry['username']),(int)$entry['author_uid']).'</p>';if($entry['status']==='reserved')$body.='<p>Придержано пользователем '.build_profile_link(af_wanted_h((string)$entry['reserved_name']),(int)$entry['reserved_by_uid']).'</p>';if($entry['status']==='archived'&&!empty($entry['accepted_uid']))$body.='<p>Игрок: '.build_profile_link(af_wanted_h((string)$entry['accepted_name']),(int)$entry['accepted_uid']).'</p>';if($entry['status']==='archived'&&!empty($entry['application_tid']))$body.='<p><a href="showthread.php?tid='.(int)$entry['application_tid'].'">Принятая анкета</a></p>';$body.='<dl>';foreach($fields as $f)if(($f['settings']['show_detail']??true)&&isset($vals[$f['id']])&&$vals[$f['id']]!=='')$body.='<dt>'.af_wanted_h($f['title']).'</dt><dd>'.nl2br(af_wanted_h(af_wanted_display_value($f,$vals[$f['id']],$byKey))).'</dd>';$body.='</dl>'.af_wanted_actions($entry);
+ $body='<div class="pun"><div class="af-kb-page"><main class="af-wanted"><div class="af-kb-header"><h1>'.$title.'</h1></div>';
+ if($action==='create'||$action==='edit'){if(!af_wanted_can($action==='create'?'create':'edit',$entry))error_no_permission();$fields=af_wanted_fields();$vals=$entry?af_wanted_values([$id])[$id]??[]:[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$body.='<section class="af-wanted-panel"><h2>'.($id?'Изменить Wanted #'.$id:'Новая заявка Wanted').'</h2><form class="af-wanted-form" method="post" action="wanted.php?action=save'.($id?'&id='.$id:'').'"><input type="hidden" name="my_post_key" value="'.af_wanted_h((string)$mybb->post_code).'">';foreach($fields as $f)$body.='<div class="af-wanted-field"><label>'.af_wanted_h($f['title']).(!empty($f['required'])?' *':'').'</label>'.af_wanted_field_control($f,$vals[(int)$f['id']]??'',$byKey).'</div>';$body.='<div class="af-wanted-form-actions"><button class="button" type="submit">Сохранить</button><a class="button" href="'.($id?'wanted.php?action=view&amp;id='.$id:'wanted.php').'">Отмена</a></div></form></section>'.af_wanted_dependency_script($fields);
+ } elseif($action==='view'){if(!$entry)error('Wanted не найден.');$fields=af_wanted_fields();$vals=af_wanted_values([$id])[$id]??[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$entryTitle=af_wanted_entry_title($id,$fields,$vals);$image=af_wanted_primary_image($fields,$vals);$body.='<article class="af-wanted-detail af-kb-entry">';if($image!=='')$body.='<div class="af-wanted-detail-image">'.af_wanted_render_field_value(['type'=>'image'],$image).'</div>';$body.='<header class="af-wanted-detail-header"><div><h2>'.af_wanted_h($entryTitle).'</h2><span class="af-wanted-id">Wanted #'.$id.'</span></div><span class="af-wanted-status">'.af_wanted_h(af_wanted_status_label($entry['status'])).'</span></header><div class="af-wanted-context"><p>Автор: '.build_profile_link(af_wanted_h((string)$entry['username']),(int)$entry['author_uid']).'</p>';if($entry['status']==='reserved')$body.='<p>Придержано пользователем '.build_profile_link(af_wanted_h((string)$entry['reserved_name']),(int)$entry['reserved_by_uid']).'</p>';if($entry['status']==='application')$body.='<p>Анкета подана</p>';if($entry['status']==='archived')$body.='<p>Закрыто</p>';if($entry['status']==='archived'&&!empty($entry['accepted_uid']))$body.='<p>Игрок: '.build_profile_link(af_wanted_h((string)$entry['accepted_name']),(int)$entry['accepted_uid']).'</p>';if(in_array($entry['status'],['application','archived'],true)&&!empty($entry['application_tid']))$body.='<p><a class="button" href="showthread.php?tid='.(int)$entry['application_tid'].'">Открыть анкету</a></p>';$body.='</div><dl class="af-wanted-detail-fields">';foreach($fields as $f){$fid=(int)$f['id'];if(($f['type']??'')==='image'||!($f['settings']['show_detail']??true)||!isset($vals[$fid])||$vals[$fid]==='')continue;$rendered=af_wanted_render_field_value($f,$vals[$fid],$byKey);if($rendered!=='')$body.='<div class="af-wanted-detail-field af-wanted-detail-field--'.af_wanted_h((string)$f['type']).'"><dt>'.af_wanted_h($f['title']).'</dt><dd>'.$rendered.'</dd></div>';}$body.='</dl>'.af_wanted_actions($entry).'</article>';
  } else $body.=af_wanted_catalog().'<script defer src="inc/plugins/advancedfunctionality/addons/advancedwanted/assets/advancedwanted_catalog.js"></script>';
- $body.='</div>';
+ $body.='</main></div></div>';
  if (function_exists('af_front_output_template_string')) {
      af_front_output_template_string($title,'{$wanted_body}',['wanted_body'=>$body]);
  }
  output_page('<!DOCTYPE html><html><head><title>'.af_wanted_h($title).'</title>'.$headerinclude.'</head><body>'.$header.$body.$footer.'</body></html>');
 }
-function af_wanted_actions(array $e): string { global $mybb; $id=(int)$e['id'];$uid=(int)($mybb->user['uid']??0);$ownsReservation=$e['status']==='reserved'&&$uid>0&&(int)$e['reserved_by_uid']===$uid;$h='';$post='<input type="hidden" name="my_post_key" value="'.af_wanted_h((string)$mybb->post_code).'">';if($e['status']==='open'&&af_wanted_can('reserve',$e))$h.='<form method="post" action="wanted.php?action=reserve&id='.$id.'">'.$post.'<button>Придержать</button></form>';if($ownsReservation)$h.='<form method="post" action="wanted.php?action=release&id='.$id.'">'.$post.'<button type="submit">Отказаться / Снять бронь</button></form>';if(($e['status']==='open'||$ownsReservation)&&af_wanted_can('apply',$e))$h.='<form method="post" action="wanted.php?action=apply&id='.$id.'">'.$post.'<button>Подать анкету</button></form>';if($e['status']==='application'&&!empty($e['application_tid']))$h.='<a class="button" href="showthread.php?tid='.(int)$e['application_tid'].'">Открыть анкету</a>';if($e['status']==='archived'&&!empty($e['application_tid']))$h.='<a class="button" href="showthread.php?tid='.(int)$e['application_tid'].'">Принятая анкета</a>';if(af_wanted_can('edit',$e)&&$e['status']!=='application')$h.='<a class="button" href="wanted.php?action=edit&id='.$id.'">Изменить</a>';if(af_wanted_can('delete',$e))$h.='<form method="post" action="wanted.php?action=delete&id='.$id.'">'.$post.'<button type="submit" class="button">Удалить</button></form>';return '<div class="af-wanted-actions">'.$h.'</div>'; }
+function af_wanted_actions(array $e): string {
+ global $mybb;
+ $id=(int)$e['id'];$uid=(int)($mybb->user['uid']??0);
+ $ownsReservation=$e['status']==='reserved'&&$uid>0&&(int)$e['reserved_by_uid']===$uid;
+ $lifecycle='';$owner='';
+ $post='<input type="hidden" name="my_post_key" value="'.af_wanted_h((string)$mybb->post_code).'">';
+ if($e['status']==='open'&&af_wanted_can('reserve',$e))$lifecycle.='<form method="post" action="wanted.php?action=reserve&id='.$id.'">'.$post.'<button class="button" type="submit">Придержать</button></form>';
+ if($ownsReservation)$lifecycle.='<form method="post" action="wanted.php?action=release&id='.$id.'">'.$post.'<button class="button" type="submit">Отказаться / Снять бронь</button></form>';
+ if(($e['status']==='open'||$ownsReservation)&&af_wanted_can('apply',$e))$lifecycle.='<form method="post" action="wanted.php?action=apply&id='.$id.'">'.$post.'<button class="button" type="submit">Подать анкету</button></form>';
+ if($e['status']==='application'&&!empty($e['application_tid']))$lifecycle.='<a class="button" href="showthread.php?tid='.(int)$e['application_tid'].'">Открыть анкету</a>';
+ if($e['status']==='archived'&&!empty($e['application_tid']))$lifecycle.='<a class="button" href="showthread.php?tid='.(int)$e['application_tid'].'">Принятая анкета</a>';
+ if(af_wanted_can('edit',$e)&&$e['status']!=='application')$owner.='<a class="button" href="wanted.php?action=edit&id='.$id.'">Изменить</a>';
+ if(af_wanted_can('delete',$e))$owner.='<form method="post" action="wanted.php?action=delete&id='.$id.'">'.$post.'<button type="submit" class="button">Удалить</button></form>';
+ return '<div class="af-wanted-actions"><div class="af-wanted-actions__lifecycle">'.$lifecycle.'</div><div class="af-wanted-actions__owner">'.$owner.'</div></div>';
+}
 function af_wanted_catalog(): string {
  global $db,$mybb;
  $tab=$mybb->get_input('tab')==='archive'?'archive':'active';$where=[$tab==='archive'?"e.status='archived'":"e.status IN ('open','reserved','application')"];$params=['tab'=>$tab];
@@ -280,8 +327,19 @@ function af_wanted_catalog(): string {
  $count=(int)$db->fetch_field($db->write_query('SELECT COUNT(*) c FROM '.TABLE_PREFIX.AF_WANTED_ENTRIES.' e WHERE '.$condition),'c');$entries=[];$q=$db->write_query('SELECT e.*,u.username,ru.username reserved_name,au.username accepted_name FROM '.TABLE_PREFIX.AF_WANTED_ENTRIES.' e LEFT JOIN '.TABLE_PREFIX.'users u ON u.uid=e.author_uid LEFT JOIN '.TABLE_PREFIX.'users ru ON ru.uid=e.reserved_by_uid LEFT JOIN '.TABLE_PREFIX.'users au ON au.uid=e.accepted_uid WHERE '.$condition.' ORDER BY '.$order.' LIMIT '.$start.','.$per);while($r=$db->fetch_array($q))$entries[]=$r;$values=af_wanted_values(array_column($entries,'id'));
  $query=http_build_query($params);$tabParams=$params;unset($tabParams['status']);$tabParams['tab']='active';$activeUrl='wanted.php?'.http_build_query($tabParams);$tabParams['tab']='archive';$archiveUrl='wanted.php?'.http_build_query($tabParams);
  $h='<section id="af-wanted-catalog" data-af-wanted-catalog><div class="af-wanted-tabs"><a class="button'.($tab==='active'?' is-active':'').'" href="'.af_wanted_h($activeUrl).'">Активный поиск</a><a class="button'.($tab==='archive'?' is-active':'').'" href="'.af_wanted_h($archiveUrl).'">Архив</a></div>';if(af_wanted_can('create'))$h.='<p><a class="button" href="wanted.php?action=create">Создать нужного персонажа</a></p>';
- $h.='<form class="af-wanted-filters" method="get" action="wanted.php"><input type="hidden" name="tab" value="'.$tab.'"><label>Поиск <input name="search" value="'.af_wanted_h($search).'"></label>';if($tab==='active'){$h.='<label>Статус <select name="status"><option value="">Все</option>';foreach(['open'=>'Свободные','reserved'=>'Придержанные','application'=>'С анкетой'] as $k=>$l)$h.='<option value="'.$k.'"'.($status===$k?' selected':'').'>'.$l.'</option>';$h.='</select></label>';}foreach($filters as [$f,$v]){$settings=(array)$f['settings'];$dependsOn=($f['type']==='kb_dynamic'&&($settings['source']??'')==='origin_variant')?(string)($settings['depends_on']??'origin'):'';$h.='<label>'.af_wanted_h($f['title']).' <select name="'.af_wanted_h($f['field_key']).'"'.($dependsOn!==''?' data-depends-on="'.af_wanted_h($dependsOn).'"':'').'><option value="">Все</option>';foreach(af_wanted_options($f,$mybb->input) as $k=>$l)$h.='<option value="'.af_wanted_h($k).'"'.($v===$k?' selected':'').'>'.af_wanted_h($l).'</option>';$h.='</select></label>';}$h.='<label>Сортировка <select name="sort"><option value="newest">Новые сначала</option><option value="oldest"'.($sort==='oldest'?' selected':'').'>Старые сначала</option></select></label><button type="submit">Применить</button><a href="wanted.php?tab='.$tab.'">Сбросить</a></form><div class="af-wanted-results" aria-live="polite"><div class="af-wanted-grid">';
- foreach($entries as $e){$ev=$values[$e['id']]??[];$byKey=[];foreach($fields as $field)$byKey[$field['field_key']]=$ev[(int)$field['id']]??'';$title='Wanted #'.(int)$e['id'];$image='';$details='';foreach($fields as $f){$v=$ev[$f['id']]??'';if($v==='')continue;if(in_array($f['field_key'],['title','name','character_name'],true))$title=af_wanted_h($v);if($f['type']==='image'&&af_wanted_valid_http_url((string)$v))$image='<img src="'.af_wanted_h($v).'" alt="">';if(!empty($f['settings']['show_card'])&&!in_array($f['type'],['textarea','image'],true))$details.='<span><b>'.af_wanted_h($f['title']).':</b> '.af_wanted_h(af_wanted_display_value($f,$v,$byKey)).'</span>';}$h.='<article class="af-wanted-card">'.$image.'<h2>'.$title.'</h2><small>Wanted #'.(int)$e['id'].' · '.af_wanted_status_label($e['status']).'</small><div>'.$details.'</div><p>Автор: '.build_profile_link(af_wanted_h((string)$e['username']),(int)$e['author_uid']).'</p>';if($e['status']==='reserved')$h.='<p>Придержано пользователем '.build_profile_link(af_wanted_h((string)$e['reserved_name']),(int)$e['reserved_by_uid']).'</p>';if($e['status']==='archived'&&!empty($e['accepted_uid']))$h.='<p>Игрок: '.build_profile_link(af_wanted_h((string)$e['accepted_name']),(int)$e['accepted_uid']).'</p>';$h.='<a class="button" href="wanted.php?action=view&id='.(int)$e['id'].'">Подробнее</a>'.af_wanted_actions($e).'</article>';}$h.='</div>';if($count>$per&&function_exists('multipage'))$h.='<nav class="af-wanted-pagination" aria-label="Страницы">'.multipage($count,$per,$page,'wanted.php?'.$query).'</nav>';return $h.'</div></section>';
+ $h.='<form class="af-wanted-filters" method="get" action="wanted.php"><input type="hidden" name="tab" value="'.$tab.'"><div class="af-wanted-filter-fields af-kb-character-filter-fields"><label>Поиск <input name="search" value="'.af_wanted_h($search).'"></label>';if($tab==='active'){$h.='<label>Статус <select name="status"><option value="">Все</option>';foreach(['open'=>'Свободные','reserved'=>'Придержанные','application'=>'С анкетой'] as $k=>$l)$h.='<option value="'.$k.'"'.($status===$k?' selected':'').'>'.$l.'</option>';$h.='</select></label>';}foreach($filters as [$f,$v]){$settings=(array)$f['settings'];$dependsOn=($f['type']==='kb_dynamic'&&($settings['source']??'')==='origin_variant')?(string)($settings['depends_on']??'origin'):'';$h.='<label>'.af_wanted_h($f['title']).' <select name="'.af_wanted_h($f['field_key']).'"'.($dependsOn!==''?' data-depends-on="'.af_wanted_h($dependsOn).'"':'').'><option value="">Все</option>';foreach(af_wanted_options($f,$mybb->input) as $k=>$l)$h.='<option value="'.af_wanted_h($k).'"'.($v===$k?' selected':'').'>'.af_wanted_h($l).'</option>';$h.='</select></label>';}$h.='<label>Сортировка <select name="sort"><option value="newest">Новые сначала</option><option value="oldest"'.($sort==='oldest'?' selected':'').'>Старые сначала</option></select></label><div class="af-wanted-filter-actions"><button class="button" type="submit">Применить</button><a class="button" href="wanted.php?tab='.$tab.'">Сбросить</a></div></div></form><div class="af-wanted-results af-kb-character-results" aria-live="polite"><div class="af-wanted-grid af-kb-entries af-kb-entries--cards">';
+ foreach($entries as $e){
+   $entryId=(int)$e['id'];$ev=$values[$entryId]??[];$byKey=[];
+   foreach($fields as $field)$byKey[$field['field_key']]=$ev[(int)$field['id']]??'';
+   $cardTitle=af_wanted_entry_title($entryId,$fields,$ev);$imageUrl=af_wanted_primary_image($fields,$ev);
+   $image=$imageUrl!==''?af_wanted_render_field_value(['type'=>'image'],$imageUrl):'<div class="af-kb-char-card__pic-placeholder" aria-hidden="true"></div>';
+   $details='';foreach($fields as $f){$v=$ev[(int)$f['id']]??'';if($v===''||empty($f['settings']['show_card']))continue;if(!in_array($f['type'],['textarea','image'],true))$details.='<span><b>'.af_wanted_h($f['title']).':</b> '.af_wanted_render_field_value($f,$v,$byKey).'</span>';}
+   $h.='<article class="af-wanted-card af-kb-char-card"><div class="af-kb-char-card__pic">'.$image.'</div><div class="af-wanted-card__body af-kb-char-card__body"><h2>'.af_wanted_h($cardTitle).'</h2><div class="af-wanted-card__meta"><span>Wanted #'.$entryId.'</span><span class="af-wanted-status">'.af_wanted_h(af_wanted_status_label($e['status'])).'</span></div><div class="af-wanted-card__fields">'.$details.'</div><p>Автор: '.build_profile_link(af_wanted_h((string)$e['username']),(int)$e['author_uid']).'</p>';
+   if($e['status']==='reserved')$h.='<p>Придержано пользователем '.build_profile_link(af_wanted_h((string)$e['reserved_name']),(int)$e['reserved_by_uid']).'</p>';
+   if($e['status']==='archived'&&!empty($e['accepted_uid']))$h.='<p>Игрок: '.build_profile_link(af_wanted_h((string)$e['accepted_name']),(int)$e['accepted_uid']).'</p>';
+   $h.='<div class="af-wanted-primary-action"><a class="button" href="wanted.php?action=view&id='.$entryId.'">Подробнее</a></div>'.af_wanted_actions($e).'</div></article>';
+ }
+ $h.='</div>';if($count>$per&&function_exists('multipage'))$h.='<nav class="af-wanted-pagination" aria-label="Страницы">'.multipage($count,$per,$page,'wanted.php?'.$query).'</nav>';return $h.'</div></section>';
 }
 function af_wanted_link_application(int $wantedId,int $tid,int $uid): bool {
  global $db;
