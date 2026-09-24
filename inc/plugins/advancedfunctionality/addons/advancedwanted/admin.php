@@ -332,7 +332,8 @@ class AF_Admin_Advancedwanted
 
         $integration = new Table;
         self::row($integration, 'Поле ATF для предзаполнения', $form->generate_select_box('atf_field_key', self::atfFieldOptions((string)$field['type']), (string)($settings['atf_field_key'] ?? ''))
-            . '<div class="smalltext">Показываются активные поля реальной схемы ATF для настроенного форума анкет и только совместимые типы. Значение копируется один раз и остаётся редактируемым.</div>');
+            . self::atfSchemaNotice()
+            . '<div class="smalltext">Показываются активные поля реальной схемы ATF для настроенного форума анкет. Скрываются только поля с заведомо несовместимым типом; неизвестные внутренние типы ATF остаются доступными. Значение копируется один раз и остаётся редактируемым.</div>');
         $integration->output('Интеграция с ATF');
 
         $behavior = new Table;
@@ -382,7 +383,8 @@ class AF_Admin_Advancedwanted
     private static function atfFieldOptions(string $wantedType): array
     {
         $options = ['' => 'Не синхронизировать'];
-        foreach (af_wanted_atf_fields() as $field) {
+        $status = af_wanted_atf_schema_status();
+        foreach ($status['fields'] as $field) {
             $key = trim((string)($field['name'] ?? ''));
             $type = trim((string)($field['type'] ?? ''));
             if ($key === '' || !af_wanted_mapping_types_compatible($wantedType, $type)) continue;
@@ -390,6 +392,18 @@ class AF_Admin_Advancedwanted
             $options[$key] = ($title !== '' ? $title : $key) . ' (' . $key . ')';
         }
         return $options;
+    }
+
+    private static function atfSchemaNotice(): string
+    {
+        $status = af_wanted_atf_schema_status();
+        if ($status['code'] === 'forum_required') {
+            return '<div class="error smalltext">Сначала укажите ID форума анкет ATF в настройках AdvancedWanted.</div>';
+        }
+        if ($status['code'] === 'fields_missing') {
+            return '<div class="error smalltext">Для выбранного форума ATF поля не найдены.</div>';
+        }
+        return '';
     }
 
     private static function row(Table $table, string $label, string $content): void

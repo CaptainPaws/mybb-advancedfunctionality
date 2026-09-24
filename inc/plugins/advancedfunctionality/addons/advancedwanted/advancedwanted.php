@@ -294,26 +294,52 @@ function af_wanted_primary_image(array $fields,array $values): string {
  }
  return '';
 }
+/** Load ATF's public schema API in ACP, where only the current addon's bootstrap is loaded. */
+function af_wanted_load_atf_schema_api(): bool {
+ if(function_exists('af_atf_get_fields_for_forum'))return true;
+ $path=function_exists('af_get_addon_bootstrap_path')?af_get_addon_bootstrap_path('advancedthreadfields'):null;
+ if((!is_string($path)||$path==='')&&defined('AF_ADDONS'))$path=rtrim(AF_ADDONS,'/\\').'/advancedthreadfields/advancedthreadfields.php';
+ if(is_string($path)&&$path!==''&&is_file($path))require_once $path;
+ return function_exists('af_atf_get_fields_for_forum');
+}
 /** Return active ATF fields applicable to the configured application forum. */
 function af_wanted_atf_fields(): array {
  $fid=(int)($GLOBALS['mybb']->settings['af_wanted_application_forum']??0);
+ af_wanted_load_atf_schema_api();
  if(function_exists('af_atf_get_fields_for_forum')&&$fid>0)return af_atf_get_fields_for_forum($fid);
  if(function_exists('af_atf_get_fields_cached')){
   $out=[];foreach(af_atf_get_fields_cached() as $field)if(!empty($field['active'])&&!empty($field['group_active'])&&($fid<1||!function_exists('af_atf_forum_allowed')||af_atf_forum_allowed($field,$fid)))$out[]=$field;return $out;
  }
  return [];
 }
+/** Describe whether the configured application forum has a usable live ATF schema. */
+function af_wanted_atf_schema_status(): array {
+ global $db,$mybb;
+ $fid=(int)($mybb->settings['af_wanted_application_forum']??0);
+ if($fid<1)return ['code'=>'forum_required','fid'=>0,'fields'=>[]];
+ $forum=[];
+ if(function_exists('get_forum'))$forum=(array)get_forum($fid);
+ elseif(is_object($db)&&method_exists($db,'table_exists')&&$db->table_exists('forums'))$forum=(array)$db->fetch_array($db->simple_select('forums','fid','fid='.$fid,['limit'=>1]));
+ if(empty($forum['fid']))return ['code'=>'forum_required','fid'=>$fid,'fields'=>[]];
+ $fields=af_wanted_atf_fields();
+ return ['code'=>$fields?'ok':'fields_missing','fid'=>$fid,'fields'=>$fields];
+}
 function af_wanted_mapping_types_compatible(string $wantedType,string $atfType): bool {
  $matrix=[
-  'text'=>['text'],
-  'url'=>['text','url','image'],'image'=>['text','url','image'],
-  'number'=>['number','text'],'select'=>['select','radio','kb_dynamic','kb_mechanic'],
-  'radio'=>['select','radio','kb_dynamic','kb_mechanic'],
-  'kb_dynamic'=>['kb_dynamic','kb_mechanic','select','radio'],
-  'multi'=>['multi','text','textarea'],'checkbox'=>['checkbox','text','number'],
+  'text'=>['text','url','number'],
+  'url'=>['text','url'],'image'=>['text','url'],
+  'number'=>['number','text'],'select'=>['select','kb_dynamic'],
+  'radio'=>['radio','select'],
+  'kb_dynamic'=>['kb_dynamic','select'],
+  'multi'=>['multi'],'checkbox'=>['checkbox'],
   'textarea'=>['textarea'],
  ];
- return in_array($atfType,$matrix[$wantedType]??[],true);
+ $wantedType=strtolower(trim($wantedType));$atfType=strtolower(trim($atfType));
+ // An unknown/internal ATF type must remain selectable: only reject pairs for
+ // which both sides have a known, unambiguous storage contract.
+ $knownAtf=['text','textarea','url','image','number','select','multi','checkbox','radio','kb_dynamic'];
+ if(!isset($matrix[$wantedType])||!in_array($atfType,$knownAtf,true))return true;
+ return in_array($atfType,$matrix[$wantedType],true);
 }
 /** Build editable ATF defaults solely from administrator-configured mappings. */
 function af_wanted_build_atf_prefill(int $id): array {
