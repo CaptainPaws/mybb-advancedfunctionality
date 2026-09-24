@@ -83,7 +83,17 @@ final class ActivationDb
     public array $registry = [];
     private int $nextSid = 10;
 
-    public function escape_string(string $value): string { return $value; }
+    public function escape_string(string $value): string { return addslashes($value); }
+    private function decodeStylesheetPayload(array $payload): array
+    {
+        if (!array_key_exists('stylesheet', $payload)) return $payload;
+        $withoutEscapedQuotes = str_replace("\\'", '', (string)$payload['stylesheet']);
+        if (str_contains($withoutEscapedQuotes, "'")) {
+            throw new RuntimeException('Unescaped stylesheet quote reached SQL serialization');
+        }
+        $payload['stylesheet'] = stripslashes((string)$payload['stylesheet']);
+        return $payload;
+    }
     public function simple_select(string $table, string $fields = '*', string $where = '', array $options = []): array
     {
         $rows = $table === 'themestylesheets' ? array_values($this->styles) : array_values($this->registry);
@@ -104,6 +114,7 @@ final class ActivationDb
     public function insert_query(string $table, array $payload): int
     {
         if ($table === 'themestylesheets') {
+            $payload = $this->decodeStylesheetPayload($payload);
             $sid = $this->nextSid++;
             $payload['sid'] = $sid;
             $this->styles[$sid] = $payload;
@@ -116,13 +127,14 @@ final class ActivationDb
     public function update_query(string $table, array $payload, string $where): void
     {
         if ($table === 'themestylesheets') {
+            $payload = $this->decodeStylesheetPayload($payload);
             $target =& $this->styles;
         } else {
             $target =& $this->registry;
         }
         foreach ($target as &$row) {
             if (preg_match("~sid='?(\d+)'?~", $where, $m) && (int)($row['sid'] ?? 0) !== (int)$m[1]) continue;
-            if (preg_match("~id='?(\d+)'?~", $where, $m) && (int)($row['id'] ?? 0) !== (int)$m[1]) continue;
+            if (preg_match("~(?:^| )id='?(\d+)'?~", $where, $m) && (int)($row['id'] ?? 0) !== (int)$m[1]) continue;
             $row = array_merge($row, $payload);
         }
     }
@@ -130,7 +142,9 @@ final class ActivationDb
 
 function af_theme_stylesheet_build_bundle(?string $onlyAddonId = null): array
 {
-    $source = "/* generated */\n/* AF-SECTION-V1 fixture */";
+    global $enabledAddonCss;
+    $source = "/* generated */\n/* AF-SECTION-V1 fixture */\n";
+    foreach ($enabledAddonCss as $addon => $css) $source .= "/* {$addon} */\n{$css}\n";
     return ['source' => $source, 'checksum' => sha1($source), 'sources' => []];
 }
 function af_theme_stylesheet_bundle_state(int $themeTid): array
@@ -154,6 +168,7 @@ function assertSameValue(mixed $expected, mixed $actual, string $message): void
 }
 
 // Production upgrade state: bundle exists, registry does not.
+$enabledAddonCss = ['layout' => ".card { grid-template-areas: 'avatar header' 'avatar body'; }"];
 $db = new ActivationDb();
 $custom = "/* hand edited pre-registry CSS */\n.custom { color: rebeccapurple; }";
 $db->styles[7] = ['sid' => 7, 'tid' => 1, 'name' => AF_THEME_BUNDLE_NAME, 'stylesheet' => $custom, 'attachedto' => 'global'];
@@ -167,6 +182,11 @@ assertSameValue(sha1($custom), $state['last_synced_checksum'], 'adoption did not
 assertSameValue(1, $state['manual_override'], 'adopted CSS was not protected as a manual override');
 
 // Clean install creates one generated row and remains stable on activation.
+$enabledAddonCss = [
+    'layout' => ".card { grid-template-areas: 'avatar header' 'avatar body'; }",
+    'quoted-content' => ".quote::before { content: \"'\"; }",
+    'contraction' => ".note::after { content: \"it's\"; }",
+];
 $db = new ActivationDb();
 $first = af_theme_stylesheet_sync_bundle(1, false);
 $sid = $first['sid'];
@@ -175,6 +195,17 @@ for ($cycle = 1; $cycle <= 3; $cycle++) af_theme_stylesheet_sync_bundle(1, false
 assertSameValue($generated, $db->styles[$sid]['stylesheet'], 'generated bundle grew across activations');
 assertSameValue(1, count($db->styles), 'clean activation duplicated stylesheet rows');
 assertSameValue(1, count($db->registry), 'clean activation duplicated registry rows');
+
+// Rebuild the same bundle while several addons are disabled and enabled. The
+// SQL payload must remain valid and the quotes must round-trip byte-for-byte.
+unset($enabledAddonCss['layout'], $enabledAddonCss['quoted-content']);
+af_theme_stylesheet_sync_bundle(1, false);
+$disabledCss = af_theme_stylesheet_build_bundle()['source'];
+assertSameValue($disabledCss, $db->styles[$sid]['stylesheet'], 'disable rebuild changed quoted CSS');
+$enabledAddonCss['layout'] = ".card { grid-template-areas: 'avatar header' 'avatar body'; }";
+$enabledAddonCss['quoted-content'] = ".quote::before { content: \"'\"; }";
+af_theme_stylesheet_sync_bundle(1, false);
+assertSameValue(af_theme_stylesheet_build_bundle()['source'], $db->styles[$sid]['stylesheet'], 'enable rebuild changed quoted CSS');
 
 // An editor change remains byte-identical through activation.
 $edited = $generated."\n/* manual section edit */";
