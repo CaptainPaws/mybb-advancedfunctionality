@@ -3084,7 +3084,7 @@ function af_kb_character_profile_resolved_value(string $field, string $value, bo
  * Return the registered values that may be used by the public character filters.
  * Keys, rather than translated labels, are the persisted Character contract.
  */
-function af_kb_character_filter_options(string $filter, bool $isRu = true): array
+function af_kb_character_filter_options(string $filter, bool $isRu = true, string $originKey = ''): array
 {
     global $db;
 
@@ -3104,7 +3104,34 @@ function af_kb_character_filter_options(string $filter, bool $isRu = true): arra
         return $options;
     }
 
-    $type = $filter === 'origin' ? AF_KB_TYPE_ORIGIN : ($filter === 'element' ? 'arpg_element' : '');
+    if ($filter === 'variant') {
+        if ($originKey === '' || !function_exists('af_kb_get_origin_variants')) {
+            return [];
+        }
+        foreach ((array)af_kb_get_origin_variants($originKey, true) as $relation) {
+            $variant = is_array($relation['variant'] ?? null) ? $relation['variant'] : $relation;
+            $key = trim((string)($variant['key'] ?? $relation['variant_key'] ?? ''));
+            if ($key === '') continue;
+            $label = trim((string)($variant[$isRu ? 'title_ru' : 'title_en'] ?? ''));
+            if ($label === '') $label = trim((string)($variant[$isRu ? 'title_en' : 'title_ru'] ?? ''));
+            $options[$key] = $label !== '' ? $label : $key;
+        }
+        return $options;
+    }
+
+    $typeMap = ['origin' => AF_KB_TYPE_ORIGIN, 'element' => 'arpg_element', 'archetype' => 'arpg_archetype', 'faction' => 'arpg_faction'];
+    $type = (string)($typeMap[$filter] ?? '');
+    if ($filter === 'age') {
+        if (!is_object($db) || !$db->table_exists('af_kb_entries')) return [];
+        $query = $db->simple_select('af_kb_entries', '*', "type='character' AND active=1");
+        while ($row = $db->fetch_array($query)) {
+            $contract = af_kb_extract_character_contract($row);
+            $age = trim((string)($contract['profile']['character_age'] ?? ''));
+            if ($age !== '') $options[$age] = $age;
+        }
+        uksort($options, 'strnatcasecmp');
+        return $options;
+    }
     if ($type === '' || !is_object($db) || !$db->table_exists('af_kb_entries')) {
         return [];
     }
@@ -3134,7 +3161,10 @@ function af_kb_character_normalize_filters(array $input, array $optionSets): arr
     $kind = trim((string)($input['kind'] ?? ''));
     $filters = ['kind' => (string)($kindAliases[$kind] ?? '')];
 
-    foreach (['gender', 'origin', 'element'] as $name) {
+    foreach (['gender', 'origin', 'variant', 'element', 'archetype', 'faction', 'age'] as $name) {
+        if (!array_key_exists($name, $optionSets) && !array_key_exists($name, $input)) {
+            continue;
+        }
         $value = trim((string)($input[$name] ?? ''));
         $allowed = (array)($optionSets[$name] ?? []);
         $filters[$name] = $value !== '' && array_key_exists($value, $allowed) ? $value : '';
@@ -3150,7 +3180,11 @@ function af_kb_character_matches_filters(array $entry, array $filters): bool
         'kind' => strtolower(trim((string)($profile['category'] ?? ''))),
         'gender' => trim((string)($profile['character_gen'] ?? '')),
         'origin' => trim((string)($profile['character_origin'] ?? $profile['character_race'] ?? '')),
+        'variant' => trim((string)($profile['character_origin_variant'] ?? '')),
         'element' => trim((string)($profile['character_element'] ?? '')),
+        'archetype' => trim((string)($profile['character_class'] ?? $profile['character_archetype'] ?? '')),
+        'faction' => trim((string)($profile['character_faction'] ?? '')),
+        'age' => trim((string)($profile['character_age'] ?? '')),
     ];
 
     foreach ($values as $name => $value) {
@@ -3163,29 +3197,36 @@ function af_kb_character_matches_filters(array $entry, array $filters): bool
 
 function af_kb_render_character_filters(array $filters, array $optionSets, string $query): string
 {
-    $base = 'misc.php?action=kb&amp;type=character';
+    $showcase = defined('AF_CHARACTERS_PAGE_ALIAS');
+    $base = $showcase ? 'characters.php' : 'misc.php?action=kb&amp;type=character';
     $queryPart = $query !== '' ? '&amp;q=' . rawurlencode($query) : '';
     $dimensionPart = '';
-    foreach (['gender', 'origin', 'element'] as $name) {
+    foreach (['gender', 'origin', 'variant', 'element', 'archetype', 'faction', 'age'] as $name) {
         $value = (string)($filters[$name] ?? '');
         if ($value !== '') {
             $dimensionPart .= '&amp;' . $name . '=' . rawurlencode($value);
         }
     }
     $activeKind = (string)($filters['kind'] ?? '');
-    $tabs = '<a class="af-kb-character-filter-tab' . ($activeKind === '' ? ' is-active' : '') . '" href="' . $base . $queryPart . '">Все</a>';
+    $tabs = '<a class="af-kb-character-filter-tab' . ($activeKind === '' ? ' is-active' : '') . '" href="' . $base . $dimensionPart . $queryPart . '">Все</a>';
     foreach (['canon' => 'Каноны', 'original' => 'Авторские'] as $key => $label) {
         $persisted = $key === 'canon' ? 'canons' : 'originals';
         $tabs .= '<a class="af-kb-character-filter-tab' . ($activeKind === $persisted ? ' is-active' : '') . '" href="' . $base . '&amp;kind=' . $key . $dimensionPart . $queryPart . '">' . $label . '</a>';
     }
 
-    $html = '<div class="af-kb-character-filters"><nav class="af-kb-character-filter-tabs" aria-label="Тип персонажа">' . $tabs . '</nav>'
-        . '<form class="af-kb-character-filter-fields" method="get" action="misc.php">'
-        . '<input type="hidden" name="action" value="kb" /><input type="hidden" name="type" value="character" />'
+    $variantMap = [];
+    foreach (array_keys((array)($optionSets['origin'] ?? [])) as $originKey) {
+        $variantMap[(string)$originKey] = af_kb_character_filter_options('variant', af_kb_is_ru(), (string)$originKey);
+    }
+    $variantMapJson = htmlspecialchars_uni((string)json_encode($variantMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    $html = '<div class="af-kb-character-filters' . ($showcase ? ' af-characters-filters' : '') . '" data-af-character-variants="' . $variantMapJson . '"><nav class="af-kb-character-filter-tabs" aria-label="Тип персонажа">' . $tabs . '</nav>'
+        . '<form class="af-kb-character-filter-fields" method="get" action="' . ($showcase ? 'characters.php' : 'misc.php') . '">'
+        . ($showcase ? '' : '<input type="hidden" name="action" value="kb" /><input type="hidden" name="type" value="character" />')
         . '<input type="hidden" name="kind" value="' . htmlspecialchars_uni($activeKind === 'canons' ? 'canon' : ($activeKind === 'originals' ? 'original' : '')) . '" />'
         . ($query !== '' ? '<input type="hidden" name="q" value="' . htmlspecialchars_uni($query) . '" />' : '');
-    foreach (['gender' => 'Пол', 'origin' => 'Происхождение', 'element' => 'Стихия'] as $name => $label) {
-        $html .= '<label><span>' . $label . '</span><select name="' . $name . '"><option value="">Все</option>';
+    foreach (['gender' => 'Пол', 'origin' => 'Происхождение', 'variant' => 'Подтип происхождения', 'element' => 'Стихия', 'archetype' => 'Архетип', 'faction' => 'Фракция', 'age' => 'Возраст'] as $name => $label) {
+        $disabled = $name === 'variant' && empty($optionSets['variant']);
+        $html .= '<label' . ($name === 'variant' ? ' data-af-character-variant-field' : '') . ($disabled ? ' hidden' : '') . '><span>' . $label . '</span><select name="' . $name . '"' . ($disabled ? ' disabled="disabled"' : '') . '><option value="">Все</option>';
         foreach ((array)($optionSets[$name] ?? []) as $value => $optionLabel) {
             $selected = ($filters[$name] ?? '') === $value ? ' selected="selected"' : '';
             $html .= '<option value="' . htmlspecialchars_uni((string)$value) . '"' . $selected . '>' . htmlspecialchars_uni((string)$optionLabel) . '</option>';
@@ -10887,7 +10928,9 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
         }
     }
 
-    $url = 'misc.php?action=kb&type=' . rawurlencode((string)$entry['type']) . '&key=' . rawurlencode((string)$entry['key']);
+    $url = defined('MYBB_ROOT')
+        ? af_kb_url(['type' => (string)$entry['type'], 'key' => (string)$entry['key']])
+        : 'misc.php?action=kb&type=' . rawurlencode((string)$entry['type']) . '&key=' . rawurlencode((string)$entry['key']);
     $kb_entry_url = htmlspecialchars_uni($url);
     $kb_character_title = htmlspecialchars_uni($title);
     $englishName = $isCharacter ? trim((string)($profile['character_name'] ?? '')) : '';
@@ -11572,6 +11615,11 @@ function af_kb_handle_view(): void
 
         $activeMechanicKey = af_kb_get_catalog_active_mechanic_key();
         $typesWhere = "active=1 AND type NOT IN ('" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "','" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "')";
+        // Keep the Character type operational and directly addressable while
+        // removing only its category card from the ordinary public catalog.
+        if (!af_kb_can_edit()) {
+            $typesWhere .= " AND COALESCE(NULLIF(type_key,''),type)<>'character'";
+        }
         $mechanicFilter = af_kb_sql_mechanic_filter('mechanic_key', $activeMechanicKey);
         $typesWhere .= " AND ({$mechanicFilter} OR type='character' OR type_key='character')";
         if ($query !== '') {
@@ -11689,16 +11737,25 @@ function af_kb_handle_view(): void
         $characterOptionSets = [];
         $characterFilters = [];
         if ($isCharacterList) {
+            $requestedOrigin = trim((string)$mybb->get_input('origin'));
             $characterOptionSets = [
                 'gender' => af_kb_character_filter_options('gender', af_kb_is_ru()),
                 'origin' => af_kb_character_filter_options('origin', af_kb_is_ru()),
+                'variant' => af_kb_character_filter_options('variant', af_kb_is_ru(), $requestedOrigin),
                 'element' => af_kb_character_filter_options('element', af_kb_is_ru()),
+                'archetype' => af_kb_character_filter_options('archetype', af_kb_is_ru()),
+                'faction' => af_kb_character_filter_options('faction', af_kb_is_ru()),
+                'age' => af_kb_character_filter_options('age', af_kb_is_ru()),
             ];
             $characterFilters = af_kb_character_normalize_filters([
                 'kind' => $mybb->get_input('kind'),
                 'gender' => $mybb->get_input('gender'),
                 'origin' => $mybb->get_input('origin'),
+                'variant' => $mybb->get_input('variant'),
                 'element' => $mybb->get_input('element'),
+                'archetype' => $mybb->get_input('archetype'),
+                'faction' => $mybb->get_input('faction'),
+                'age' => $mybb->get_input('age'),
             ], $characterOptionSets);
         }
 
@@ -11802,7 +11859,7 @@ function af_kb_handle_view(): void
             $rows .= af_kb_catalog_entry_card($row, (array)$typeRow);
         }
         if ($rows === '') {
-            $rows = '<div class="af-kb-empty">По выбранным фильтрам персонажи не найдены.</div>';
+            $rows = '<div class="af-kb-empty">' . ($total === 0 && !$hasCharacterFilters ? 'Персонажи пока не добавлены.' : 'По выбранным фильтрам персонажи не найдены.') . '</div>';
         }
 
         if (function_exists('add_breadcrumb')) {
@@ -11813,6 +11870,7 @@ function af_kb_handle_view(): void
         $typeIconHtml = $typeRow ? af_kb_build_icon_html($typeRow['icon_url'] ?? '', $typeRow['icon_class'] ?? '') : '';
         $kb_type_icon = $typeIconHtml !== '' ? '<span class="af-kb-icon">' . $typeIconHtml . '</span>' : '';
         $kb_page_title = htmlspecialchars_uni($typeTitle);
+        if (defined('AF_CHARACTERS_PAGE_ALIAS')) $kb_page_title = 'Персонажи';
         $kb_type_title = htmlspecialchars_uni($typeTitle);
         $kb_type_heading = '<h1>' . $kb_type_icon . $kb_type_title . '</h1>';
         if ($typeBannerUrl !== '') {
@@ -11823,6 +11881,9 @@ function af_kb_handle_view(): void
         }
         $kb_type_description = af_kb_parse_message($typeDesc);
         $kb_type_value = htmlspecialchars_uni($type);
+        $kb_character_owner_class = defined('AF_CHARACTERS_PAGE_ALIAS') ? 'af-characters-catalog' : '';
+        $kb_character_form_action = defined('AF_CHARACTERS_PAGE_ALIAS') ? 'characters.php' : 'misc.php';
+        $kb_character_form_hidden = defined('AF_CHARACTERS_PAGE_ALIAS') ? '' : '<input type="hidden" name="action" value="kb" /><input type="hidden" name="type" value="' . $kb_type_value . '" />';
         $kb_query = htmlspecialchars_uni($query);
         $kb_entries_rows = $rows;
         $kb_entries_style = '';
@@ -11848,7 +11909,7 @@ function af_kb_handle_view(): void
         $kb_character_filters = $isCharacterList
             ? af_kb_render_character_filters($characterFilters, $characterOptionSets, $query)
             : '';
-        $paginationUrl = 'misc.php?action=kb&type=' . urlencode($type);
+        $paginationUrl = defined('AF_CHARACTERS_PAGE_ALIAS') ? 'characters.php' : 'misc.php?action=kb&type=' . urlencode($type);
         if ($query !== '') {
             $paginationUrl .= '&q=' . urlencode($query);
         }
@@ -11856,7 +11917,7 @@ function af_kb_handle_view(): void
             $paginationUrl .= '&cat=' . urlencode($catKey);
         }
         if ($isCharacterList) {
-            foreach (['kind', 'gender', 'origin', 'element'] as $filterName) {
+            foreach (['kind', 'gender', 'origin', 'variant', 'element', 'archetype', 'faction', 'age'] as $filterName) {
                 $filterValue = (string)($characterFilters[$filterName] ?? '');
                 if ($filterValue === '') {
                     continue;

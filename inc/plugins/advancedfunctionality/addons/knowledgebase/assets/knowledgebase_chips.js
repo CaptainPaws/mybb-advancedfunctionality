@@ -278,6 +278,26 @@
         var controller = null;
         var sequence = 0;
 
+        function updateVariantControl(origin, selected) {
+            var select = form.elements.variant;
+            var field = select ? select.closest('[data-af-character-variant-field]') : null;
+            if (!select || !field) return;
+            var map = {};
+            try { map = JSON.parse(filters.getAttribute('data-af-character-variants') || '{}'); } catch (ignore) {}
+            var choices = origin && map[origin] ? map[origin] : {};
+            select.innerHTML = '<option value="">Все</option>';
+            Object.keys(choices).forEach(function (key) {
+                var option = document.createElement('option');
+                option.value = key;
+                option.textContent = choices[key];
+                option.selected = key === selected;
+                select.appendChild(option);
+            });
+            var available = Object.keys(choices).length > 0;
+            select.disabled = !available;
+            field.hidden = !available;
+        }
+
         function pageUrl(input) {
             var url = new URL(input || window.location.href, window.location.href);
             url.hash = '';
@@ -290,11 +310,12 @@
         }
 
         function syncControls(url) {
-            ['kind', 'gender', 'origin', 'element'].forEach(function (name) {
+            ['kind', 'gender', 'origin', 'variant', 'element', 'archetype', 'faction', 'age'].forEach(function (name) {
                 var control = form.elements[name];
                 if (control) control.value = url.searchParams.get(name) || '';
             });
             var kind = url.searchParams.get('kind') || '';
+            updateVariantControl(url.searchParams.get('origin') || '', url.searchParams.get('variant') || '');
             filters.querySelectorAll('.af-kb-character-filter-tab').forEach(function (tab) {
                 var tabKind = new URL(tab.href, window.location.href).searchParams.get('kind') || '';
                 tab.classList.toggle('is-active', tabKind === kind);
@@ -348,7 +369,7 @@
 
         function urlFromForm() {
             var url = pageUrl(window.location.href);
-            ['kind', 'gender', 'origin', 'element'].forEach(function (name) {
+            ['kind', 'gender', 'origin', 'variant', 'element', 'archetype', 'faction', 'age'].forEach(function (name) {
                 var control = form.elements[name];
                 var value = control ? String(control.value || '') : '';
                 if (value) url.searchParams.set(name, value);
@@ -360,6 +381,12 @@
 
         form.addEventListener('change', function (event) {
             if (!event.target || !event.target.matches('select[name]')) return;
+            if (event.target.name === 'origin' && form.elements.variant) {
+                // Variant choices are origin-bound on the server. Clear an old
+                // machine key immediately; the GET/AJAX response is authoritative.
+                form.elements.variant.value = '';
+                updateVariantControl(String(event.target.value || ''), '');
+            }
             event.preventDefault();
             event.stopPropagation();
             load(urlFromForm(), true);

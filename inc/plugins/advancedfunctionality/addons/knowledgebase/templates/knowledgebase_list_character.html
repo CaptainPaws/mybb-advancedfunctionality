@@ -1,6 +1,6 @@
-<form class="af-kb-search" method="get" action="misc.php">
-    <input type="hidden" name="action" value="kb" />
-    <input type="hidden" name="type" value="{$kb_type_value}" />
+<div class="{$kb_character_owner_class}">
+<form class="af-kb-search" method="get" action="{$kb_character_form_action}">
+    {$kb_character_form_hidden}
     <input type="text" name="q" value="{$kb_query}" placeholder="{$lang->af_kb_search_placeholder}" />
 </form>
 <div class="af-kb-header">
@@ -22,4 +22,5 @@
             {$kb_character_results}
         </div>
     </main>
+</div>
 </div>
