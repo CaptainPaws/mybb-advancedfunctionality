@@ -1,7 +1,7 @@
 <?php
 $root = dirname(__DIR__);
 $core = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedwanted/advancedwanted.php');
-$chips = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase_chips.js');
+$chips = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedwanted/assets/advancedwanted_modal.js');
 $css = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedwanted/assets/advancedwanted.css');
 
 function check($condition, $label) {
@@ -10,12 +10,12 @@ function check($condition, $label) {
 }
 
 check(strpos($core, "'pre_output_page', 'af_wanted_ensure_chip_runtime', 20") !== false
-    && strpos($core, "stripos(\$page,'knowledgebase_chips.js')") !== false,
-    'late Wanted BBCode guarantees the shared KB chip runtime exactly once');
+    && strpos($core, "stripos(\$page,'advancedwanted_modal.js')") !== false,
+    'late Wanted BBCode guarantees its owner modal runtime exactly once');
 check(strpos($chips, "fetch('wanted.php?action=modal&ajax=1&id='") !== false
-    && strpos($chips, "event.target === backdrop") !== false
-    && strpos($chips, "classList.contains('af-kb-modal-close')") !== false,
-    'Wanted uses the existing live JSON modal with close button and overlay close');
+    && strpos($chips, "event.target === modal") !== false
+    && strpos($chips, "closest('.af-wanted-modal-close')") !== false,
+    'Wanted uses its live JSON modal with close button and overlay close');
 check(strpos($core, "'name_en'=>'character_name'") !== false
     && strpos($core, "'origin'=>'character_origin'") !== false
     && strpos($core, "'weapon'=>'character_weapon'") !== false

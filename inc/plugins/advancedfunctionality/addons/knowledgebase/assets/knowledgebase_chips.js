@@ -40,19 +40,6 @@
             .catch(function () { return null; });
     }
 
-    // Wanted uses the same chip/modal renderer and cache, but resolves by its
-    // stable numeric ID rather than pretending to be a KB type/key pair.
-    function fetchChipEntry(chip) {
-        var wantedId = chip.getAttribute('data-wanted-id');
-        if (!wantedId) return fetchEntry(chip.getAttribute('data-kb-type'), chip.getAttribute('data-kb-key'));
-        var cacheKey = 'wanted:' + wantedId;
-        if (cache[cacheKey]) return Promise.resolve(cache[cacheKey]);
-        return fetch('wanted.php?action=modal&ajax=1&id=' + encodeURIComponent(wantedId), { credentials: 'same-origin' })
-            .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
-            .then(function (data) { cache[cacheKey] = data; return data; })
-            .catch(function () { return null; });
-    }
-
     function ensureTooltip() {
         if (tooltip) return tooltip;
         tooltip = document.createElement('div');
@@ -224,10 +211,10 @@
 
             var type = chip.getAttribute('data-kb-type');
             var key = chip.getAttribute('data-kb-key');
-            if ((!type || !key) && !chip.getAttribute('data-wanted-id')) return;
+            if (!type || !key) return;
 
             tooltipTimer = setTimeout(function () {
-                fetchChipEntry(chip).then(function (data) {
+                fetchEntry(type, key).then(function (data) {
                     if (!data || !data.entry) return;
                     var hint = data.entry.tech_hint || '';
                     var tooltipHtml = data.entry.tooltip_html || '';
@@ -270,9 +257,9 @@
 
             var type = chip.getAttribute('data-kb-type');
             var key = chip.getAttribute('data-kb-key');
-            if ((!type || !key) && !chip.getAttribute('data-wanted-id')) return;
+            if (!type || !key) return;
 
-            fetchChipEntry(chip).then(function (data) {
+            fetchEntry(type, key).then(function (data) {
                 var backdrop = getOrBuildModal();
                 renderModal(data);
                 backdrop.classList.add('is-active');

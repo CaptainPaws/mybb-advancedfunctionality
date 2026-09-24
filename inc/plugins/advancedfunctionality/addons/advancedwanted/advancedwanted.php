@@ -433,12 +433,12 @@ function af_wanted_discussion_allowed(): bool {
 }
 function af_wanted_reservation_html(array $entry): string {
  if(($entry['status']??'')!=='reserved')return '';$uid=(int)($entry['reserved_by_uid']??0);$name=$uid?(string)($entry['reserved_name']??''):(string)($entry['reserved_guest_name']??'');$owner='<span class="af-wanted-reservation-owner">'.($uid?build_profile_link(af_wanted_h($name),$uid):af_wanted_h($name)).'</span>';$until=(int)($entry['reserved_until']??0);
- return '<div class="af-wanted-detail-field af-wanted-reservation"><dt>Бронь</dt><dd>Придержано до: '.($until?af_wanted_h(my_date('d.m.y',$until)):'—').' за '.$owner.'</dd></div>';
+ return '<div class="af-wanted-detail-field af-wanted-reservation"><dt>Бронь</dt><dd>Придержано до: '.($until?af_wanted_h(my_date('d.m.y',$until)):'—').' за&nbsp;'.$owner.'</dd></div>';
 }
 function af_wanted_status_chip(array $entry): string {
  if(($entry['status']??'')!=='reserved')return '<span class="af-wanted-status">'.af_wanted_h(af_wanted_status_label((string)($entry['status']??''))).'</span>';
  $uid=(int)($entry['reserved_by_uid']??0);$name=$uid?(string)($entry['reserved_name']??''):(string)($entry['reserved_guest_name']??'');$owner=$uid?build_profile_link(af_wanted_h($name),$uid):af_wanted_h($name);$until=(int)($entry['reserved_until']??0);
- return '<span class="af-wanted-status af-wanted-status--reservation">Придержано до: '.($until?af_wanted_h(my_date('d.m.y',$until)):'—').' за '.$owner.'</span>';
+ return '<span class="af-wanted-status af-wanted-status--reservation">Придержано до: '.($until?af_wanted_h(my_date('d.m.y',$until)):'—').' за&nbsp;'.$owner.'</span>';
 }
 function af_wanted_catalog(): string {
  global $db,$mybb;
@@ -522,19 +522,17 @@ function af_wanted_prefill_reply(): void {
 }
 function af_wanted_parse_message_end(&$message,&$options=null): void {
  if(!is_string($message)||stripos($message,'[wanted=')===false)return;
- $message=preg_replace_callback('/\[wanted=([0-9]{1,10})\]/i',static function(array $m): string{$entry=af_wanted_entry((int)$m[1]);if(!$entry)return '';$fields=af_wanted_fields();$values=af_wanted_values([(int)$entry['id']])[(int)$entry['id']]??[];$title=af_wanted_entry_title((int)$entry['id'],$fields,$values);$image=af_wanted_primary_image($fields,$values);$icon=$image!==''?'<img class="af-wanted-chip-image af-kb-icon-img" src="'.af_wanted_h($image).'" alt="" loading="lazy">':'<span class="af-wanted-chip-fallback" aria-hidden="true"></span>';return '<span class="af-kb-chip af-wanted-post-chip" data-wanted-id="'.(int)$entry['id'].'" data-kb-title="'.af_wanted_h($title).'" tabindex="0"><span class="af-kb-chip-icon">'.$icon.'</span><span class="af-kb-chip-label">'.af_wanted_h($title).'</span></span>';},$message);
+ $message=preg_replace_callback('/\[wanted=([0-9]{1,10})\]/i',static function(array $m): string{$entry=af_wanted_entry((int)$m[1]);if(!$entry)return '';$fields=af_wanted_fields();$values=af_wanted_values([(int)$entry['id']])[(int)$entry['id']]??[];$title=af_wanted_entry_title((int)$entry['id'],$fields,$values);$image=af_wanted_primary_image($fields,$values);$icon=$image!==''?'<img class="af-wanted-chip-image" src="'.af_wanted_h($image).'" alt="" loading="lazy">':'<span class="af-wanted-chip-fallback" aria-hidden="true"></span>';return '<span class="af-wanted-post-chip" data-wanted-id="'.(int)$entry['id'].'" data-wanted-title="'.af_wanted_h($title).'" tabindex="0" role="button"><span class="af-wanted-chip-icon">'.$icon.'</span><span class="af-wanted-chip-label">'.af_wanted_h($title).'</span></span>';},$message);
 }
 /**
- * The KB pre-output hook can run before Wanted has expanded its BBCode, so its
- * chip detector misses the late data-wanted-id marker. Inject the existing KB
- * chip runtime on a second, later pass; no separate modal implementation lives
- * in this addon.
+ * Wanted BBCode is expanded after the normal asset pass on some post pages.
+ * Inject its owner runtime late, without enrolling Wanted entities in KB JS.
  */
 function af_wanted_ensure_chip_runtime(string &$page=''): void {
- global $mybb;if(stripos($page,'data-wanted-id=')===false||stripos($page,'knowledgebase_chips.js')!==false)return;
+ global $mybb;if(stripos($page,'af-wanted-post-chip')===false||stripos($page,'advancedwanted_modal.js')!==false)return;
  $bburl=rtrim((string)($mybb->settings['bburl']??''),'/');if($bburl==='')return;
- $base=$bburl.'/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/';$file=MYBB_ROOT.'inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase_chips.js';
- $inject='<link rel="stylesheet" href="'.$base.'knowledgebase.css"><script src="'.$base.'knowledgebase_chips.js?v='.(is_file($file)?(int)filemtime($file):1).'"></script>';
+ $base=$bburl.'/inc/plugins/advancedfunctionality/addons/advancedwanted/assets/';$file=__DIR__.'/assets/advancedwanted_modal.js';
+ $inject='<link rel="stylesheet" href="'.$base.'advancedwanted.css"><script src="'.$base.'advancedwanted_modal.js?v='.(is_file($file)?(int)filemtime($file):1).'" defer></script>';
  if(stripos($page,'</head>')!==false)$page=str_ireplace('</head>',$inject.'</head>',$page);else$page.=$inject;
 }
 function af_wanted_modal_payload(array $entry): array {

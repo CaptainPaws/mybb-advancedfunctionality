@@ -2,7 +2,7 @@
 $root = dirname(__DIR__);
 $core = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedwanted/advancedwanted.php');
 $admin = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedwanted/admin.php');
-$kb = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/knowledgebase/knowledgebase.php');
+$modal = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedwanted/assets/advancedwanted_modal.js');
 $css = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedwanted/assets/advancedwanted.css');
 
 $checks = [
@@ -24,10 +24,10 @@ $checks = [
         && strpos($admin, 'Пользователь / гость') !== false
         && strpos($admin, 'type="date" name="reserved_until"') !== false
         && strpos($admin, "'reserved_until' => (int)\$until") !== false,
-    'Wanted chips force the existing KB modal runtime by stable ID' =>
+    'Wanted chips use the owner modal runtime by stable ID' =>
         strpos($core, 'data-wanted-id=') !== false
-        && strpos($kb, '$hasWantedChips') !== false
-        && strpos($kb, '$enabled || $hasWantedChips') !== false,
+        && strpos($core, 'advancedwanted_modal.js') !== false
+        && strpos($modal, "fetch('wanted.php?action=modal&ajax=1&id='") !== false,
     'cards put status below title and use a full-width cropped image' =>
         strpos($css, 'flex-direction: column') !== false
         && strpos($css, 'aspect-ratio: 4 / 3') !== false
