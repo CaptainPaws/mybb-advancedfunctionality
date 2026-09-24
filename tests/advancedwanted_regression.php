@@ -33,5 +33,10 @@ $checks=[
  'ordinary workflow remains nullable'=>strpos($workflow,'wanted_id INT UNSIGNED DEFAULT NULL')!==false,
  'ACP field builder'=>strpos($admin, '$do === \'save_field\'')!==false,
  'safe CSRF actions'=>strpos($admin,'verify_post_check')!==false,
+ 'create and edit use active schema in configured order'=>strpos($core,"af_wanted_validate(af_wanted_fields()")!==false&&strpos($core,"'order_by'=>'sortorder ASC, id ASC'")!==false,
+ 'edit only updates mutable timestamp'=>strpos($core,"update_query(AF_WANTED_ENTRIES,['updated_at'=>TIME_NOW],'id='.\$id)")!==false,
+ 'detail renders author and configured detail fields'=>strpos($core,"Автор: '.build_profile_link")!==false&&strpos($core,"['show_detail']")!==false,
+ 'delete permission has a POST CSRF UI'=>strpos($core,'action="wanted.php?action=delete&id=')!==false&&strpos($core,"af_wanted_can('delete',\$e)")!==false,
+ 'catalog excludes textarea from card values'=>strpos($core,"!in_array(\$f['type'],['textarea','image'],true)")!==false,
 ];
 $failed=[];foreach($checks as $label=>$ok){echo ($ok?'PASS':'FAIL').": $label\n";if(!$ok)$failed[]=$label;}exit($failed?1:0);

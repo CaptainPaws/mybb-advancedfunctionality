@@ -88,6 +88,9 @@ $multi = ['id' => 99, 'field_key' => 'roles', 'title' => 'Роли', 'type' => '
 check(count($errors) === 1, 'multi rejects a forged POST option');
 [, $errors] = af_wanted_validate([$multi], ['roles' => ['hero']]);
 check(!$errors, 'multi accepts only configured option keys');
+check(af_wanted_display_value($multi, '["hero","villain"]') === 'Герой, Злодей', 'multi values render with configured labels');
+$checkbox = ['id' => 101, 'field_key' => 'urgent', 'title' => 'Срочно', 'type' => 'checkbox', 'required' => 0, 'settings' => []];
+check(af_wanted_display_value($checkbox, '1') === 'Да', 'checkbox values have a readable detail/card label');
 $image = ['id' => 100, 'field_key' => 'image', 'title' => 'Изображение', 'type' => 'image', 'required' => 0, 'settings' => []];
 [, $errors] = af_wanted_validate([$image], ['image' => 'javascript:alert(1)']);
 check(count($errors) === 1 && strpos(af_wanted_field_control($image, '', []), 'type="url"') !== false, 'image uses an HTTP(S) URL contract');
