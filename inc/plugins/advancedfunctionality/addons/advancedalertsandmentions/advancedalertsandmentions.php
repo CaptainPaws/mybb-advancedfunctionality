@@ -234,8 +234,10 @@ function af_advancedalertsandmentions_init(): void
 
     $plugins->add_hook('reputation_do_add_end',        'af_aam_rep_do_add_end');
     $plugins->add_hook('datahandler_pm_insert_end',    'af_aam_pm_insert_end');
-    $plugins->add_hook('datahandler_post_insert_post', 'af_aam_post_insert_end');
-    $plugins->add_hook('datahandler_post_insert_thread', 'af_aam_thread_insert_end');
+    // The non-"_end" hooks run before MyBB inserts the row, so no pid exists yet.
+    // Creating alerts there made the old fallback select the author's previous post.
+    $plugins->add_hook('datahandler_post_insert_post_end', 'af_aam_post_insert_end');
+    $plugins->add_hook('datahandler_post_insert_thread_end', 'af_aam_thread_insert_end');
     $plugins->add_hook('datahandler_user_insert',      'af_aam_datahandler_user_insert');
 
     $plugins->add_hook('postbit',                      'af_aam_postbit_mention_button');
@@ -2180,16 +2182,11 @@ function af_aam_post_insert_end(&$posthandler): void
         return;
     }
 
-    // pid может быть 0: в этом случае будем ссылаться хотя бы на тему
-    $pid = (int)$pid;
-    if ($pid <= 0) {
-        $pidQuery = $db->simple_select(
-            'posts',
-            'pid',
-            "tid={$tid} AND uid={$fromUid}",
-            ['order_by' => 'dateline', 'order_dir' => 'DESC', 'limit' => 1]
-        );
-        $pid = (int)$db->fetch_field($pidQuery, 'pid');
+    // At the _end hook MyBB exposes the exact newly inserted pid. Never guess it
+    // from the thread's last post (or the author's latest post): under pagination
+    // and concurrent replies that can only identify a different message.
+    if ($pid <= 0 && !empty($posthandler->pid)) {
+        $pid = (int)$posthandler->pid;
     }
 
     // подгружаем тему
@@ -2449,6 +2446,8 @@ function af_aam_thread_insert_end(&$posthandler): void
         $pid = (int)$post['pid'];
     } elseif (!empty($posthandler->return_values['pid'])) {
         $pid = (int)$posthandler->return_values['pid'];
+    } elseif (!empty($posthandler->pid)) {
+        $pid = (int)$posthandler->pid;
     }
 
     if (!empty($data['fid'])) {

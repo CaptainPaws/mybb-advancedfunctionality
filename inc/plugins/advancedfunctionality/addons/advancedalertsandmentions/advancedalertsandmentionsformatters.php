@@ -34,6 +34,29 @@ function af_aam_get_known_types(): array
     ];
 }
 
+/**
+ * Build a link to an exact post using MyBB's pagination-aware route.
+ *
+ * get_post_link() may return an HTML-escaped query string. Alert URLs are sent
+ * through JSON and used as href values later, so restore the literal ampersand
+ * here and add the post anchor explicitly.
+ */
+function af_aam_get_post_url(int $pid, int $tid): string
+{
+    if ($pid <= 0) {
+        return $tid > 0 ? 'showthread.php?tid=' . $tid : '';
+    }
+
+    if (function_exists('get_post_link')) {
+        $url = html_entity_decode((string)get_post_link($pid, $tid), ENT_QUOTES, 'UTF-8');
+    } else {
+        // Defensive bootstrap fallback; normal MyBB requests always have the helper.
+        $url = 'showthread.php?' . ($tid > 0 ? 'tid=' . $tid . '&pid=' . $pid : 'pid=' . $pid);
+    }
+
+    return preg_replace('~#.*$~', '', $url) . '#pid' . $pid;
+}
+
 
 /**
  * Форматирование одного уведомления: текст + URL.
@@ -133,43 +156,27 @@ function af_aam_format_alert(array $alert): array
         // --- Ответ в твоей теме ---
         case 'post_threadauthor':
             $text = $lang->sprintf($lang->af_aam_text_reply, $fromUser, $subject);
-            if ($pid > 0) {
-                $url = 'showthread.php?pid=' . $pid . '#pid' . $pid;
-            } else {
-                $url = 'showthread.php?tid=' . $tid;
-            }
+            $url = af_aam_get_post_url($pid, $tid);
             break;
 
         // --- Новый пост в подписанной теме ---
         case 'subscribed_thread':
             $text = $lang->sprintf($lang->af_aam_text_subscribed, $fromUser, $subject);
-            if ($pid > 0) {
-                $url = 'showthread.php?pid=' . $pid . '#pid' . $pid;
-            } else {
-                $url = 'showthread.php?tid=' . $tid;
-            }
+            $url = af_aam_get_post_url($pid, $tid);
             break;
 
 
         // --- Цитата ---
         case 'quoted':
             $text = $lang->sprintf($lang->af_aam_text_quote, $fromUser, $subject);
-            if ($pid > 0) {
-                $url = 'showthread.php?pid=' . $pid . '#pid' . $pid;
-            } else {
-                $url = 'showthread.php?tid=' . $tid;
-            }
+            $url = af_aam_get_post_url($pid, $tid);
             break;
 
 
         // --- Упоминание @username / @"Имя" ---
         case 'mention':
             $text = $lang->sprintf($lang->af_aam_text_mention, $fromUser, $subject);
-            if ($pid > 0) {
-                $url = 'showthread.php?pid=' . $pid . '#pid' . $pid;
-            } else {
-                $url = 'showthread.php?tid=' . $tid;
-            }
+            $url = af_aam_get_post_url($pid, $tid);
             break;
 
 
@@ -177,11 +184,9 @@ function af_aam_format_alert(array $alert): array
         case 'subscribed_forum':
             $text = $lang->sprintf($lang->af_aam_text_subscribed_forum, $fromUser, $subject);
 
-            if ($pid > 0) {
-                // Сразу на первый пост темы
-                $url = 'showthread.php?pid=' . $pid . '#pid' . $pid;
-            } elseif ($tid > 0) {
-                $url = 'showthread.php?tid=' . $tid;
+            if ($pid > 0 || $tid > 0) {
+                // Сразу на первый пост темы; без pid старые записи ведут в тему.
+                $url = af_aam_get_post_url($pid, $tid);
             } elseif (!empty($extra['fid'])) {
                 $url = 'forumdisplay.php?fid=' . (int)$extra['fid'];
             }
