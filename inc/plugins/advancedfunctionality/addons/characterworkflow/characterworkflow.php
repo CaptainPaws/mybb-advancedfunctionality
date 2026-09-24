@@ -68,11 +68,16 @@ function af_cwf_ensure_schema(): void
 {
     global $db;
 
-    if (!is_object($db) || $db->table_exists(AF_CWF_TABLE)) {
+    if (!is_object($db)) { return; }
+    if ($db->table_exists(AF_CWF_TABLE)) {
+        if (!$db->field_exists('wanted_id', AF_CWF_TABLE)) {
+            $db->add_column(AF_CWF_TABLE, 'wanted_id', 'INT UNSIGNED DEFAULT NULL AFTER greeting_post_id');
+            $db->write_query('ALTER TABLE '.TABLE_PREFIX.AF_CWF_TABLE.' ADD KEY wanted_id (wanted_id)');
+        }
         return;
     }
 
-    $db->write_query("\n        CREATE TABLE " . TABLE_PREFIX . AF_CWF_TABLE . " (\n          tid INT UNSIGNED NOT NULL,\n          state VARCHAR(32) NOT NULL DEFAULT 'draft',\n          kb_entry_id INT UNSIGNED DEFAULT NULL,\n          sheet_id INT UNSIGNED DEFAULT NULL,\n          sheet_slug VARCHAR(190) DEFAULT NULL,\n          greeting_post_id INT UNSIGNED DEFAULT NULL,\n          reviewed_by INT UNSIGNED DEFAULT NULL,\n          accepted_by_uid INT UNSIGNED DEFAULT NULL,\n          transferred_by_uid INT UNSIGNED DEFAULT NULL,\n          accepted_at INT UNSIGNED NOT NULL DEFAULT 0,\n          transferred_at INT UNSIGNED NOT NULL DEFAULT 0,\n          revision_requested_at INT UNSIGNED NOT NULL DEFAULT 0,\n          updated_at INT UNSIGNED NOT NULL DEFAULT 0,\n          PRIMARY KEY (tid),\n          KEY state (state),\n          KEY kb_entry_id (kb_entry_id),\n          KEY sheet_id (sheet_id),\n          KEY greeting_post_id (greeting_post_id)\n        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n    ");
+    $db->write_query("\n        CREATE TABLE " . TABLE_PREFIX . AF_CWF_TABLE . " (\n          tid INT UNSIGNED NOT NULL,\n          state VARCHAR(32) NOT NULL DEFAULT 'draft',\n          kb_entry_id INT UNSIGNED DEFAULT NULL,\n          sheet_id INT UNSIGNED DEFAULT NULL,\n          sheet_slug VARCHAR(190) DEFAULT NULL,\n          greeting_post_id INT UNSIGNED DEFAULT NULL,\n          wanted_id INT UNSIGNED DEFAULT NULL,\n          reviewed_by INT UNSIGNED DEFAULT NULL,\n          accepted_by_uid INT UNSIGNED DEFAULT NULL,\n          transferred_by_uid INT UNSIGNED DEFAULT NULL,\n          accepted_at INT UNSIGNED NOT NULL DEFAULT 0,\n          transferred_at INT UNSIGNED NOT NULL DEFAULT 0,\n          revision_requested_at INT UNSIGNED NOT NULL DEFAULT 0,\n          updated_at INT UNSIGNED NOT NULL DEFAULT 0,\n          PRIMARY KEY (tid),\n          KEY state (state),\n          KEY kb_entry_id (kb_entry_id),\n          KEY sheet_id (sheet_id),\n          KEY greeting_post_id (greeting_post_id),\n          KEY wanted_id (wanted_id)\n        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n    ");
 }
 
 function af_cwf_get_row(int $tid): array
@@ -101,6 +106,7 @@ function af_cwf_upsert_row(int $tid, array $data): void
         'sheet_id' => null,
         'sheet_slug' => null,
         'greeting_post_id' => null,
+        'wanted_id' => null,
         'reviewed_by' => null,
         'accepted_by_uid' => null,
         'transferred_by_uid' => null,
@@ -486,6 +492,10 @@ function af_cwf_accept_character_application(int $tid, int $actorUid, array $con
 
     af_cwf_upsert_row($tid, $update);
     af_cwf_assign_transfer_groups((int)($thread['uid'] ?? 0));
+    $workflow = af_cwf_get_row($tid);
+    if (!empty($workflow['wanted_id']) && function_exists('af_wanted_application_accepted')) {
+        af_wanted_application_accepted((int)$workflow['wanted_id'], $tid, (int)($thread['uid'] ?? 0));
+    }
 
     return ['ok' => true, 'state' => AF_CWF_STATE_APPROVED, 'tid' => $tid];
 }
@@ -570,6 +580,10 @@ function af_cwf_transfer_character_application(int $tid, int $actorUid, array $c
 
     af_cwf_upsert_row($tid, $update);
     af_cwf_assign_transfer_groups((int)($thread['uid'] ?? 0));
+    $workflow = af_cwf_get_row($tid);
+    if (!empty($workflow['wanted_id']) && function_exists('af_wanted_application_accepted')) {
+        af_wanted_application_accepted((int)$workflow['wanted_id'], $tid, (int)($thread['uid'] ?? 0));
+    }
 
     return ['ok' => true, 'state' => $update['state'], 'tid' => $tid];
 }
