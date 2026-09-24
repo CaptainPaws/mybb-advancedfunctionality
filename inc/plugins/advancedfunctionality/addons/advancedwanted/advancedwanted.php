@@ -30,7 +30,7 @@ function af_advancedwanted_init(): void {
 function af_advancedwanted_uninstall(): void {
     global $db;
     $db->delete_query('settings', "name LIKE 'af_wanted_%'");
-    $db->delete_query('settinggroups', "name='af_wanted'");
+    $db->delete_query('settinggroups', "name IN ('af_wanted','af_advancedwanted')");
     af_wanted_remove_page_alias();
     if (function_exists('rebuild_settings')) rebuild_settings();
 }
@@ -81,17 +81,24 @@ function af_wanted_ensure_schema(): void {
 function af_wanted_ensure_settings(): void {
     global $db;
     if (!is_object($db)) return;
-    $group=$db->fetch_array($db->simple_select('settinggroups','gid',"name='af_wanted'",['limit'=>1]));
+    // AF opens the setting group named after the addon id (af_{addon id}).  The
+    // former af_wanted group was therefore a valid MyBB group, but was not the
+    // group linked from AdvancedFunctionality's addon settings screen.
+    $groupName='af_advancedwanted';
+    $group=$db->fetch_array($db->simple_select('settinggroups','gid',"name='".$db->escape_string($groupName)."'",['limit'=>1]));
     $gid=(int)($group['gid']??0);
-    if (!$gid) $gid=(int)$db->insert_query('settinggroups',['name'=>'af_wanted','title'=>'AdvancedWanted','description'=>'Права и интеграция каталога Wanted.','disporder'=>35,'isdefault'=>0]);
+    if (!$gid) $gid=(int)$db->insert_query('settinggroups',['name'=>$groupName,'title'=>'AF: AdvancedWanted','description'=>'Права и интеграция каталога Wanted.','disporder'=>35,'isdefault'=>0]);
     $defs=[
       ['af_wanted_view_groups','Группы просмотра','-1','text'],['af_wanted_create_groups','Группы создания Wanted','2','text'],
       ['af_wanted_edit_groups','Группы редактирования своих Wanted','2','text'],['af_wanted_delete_groups','Группы удаления своих Wanted','2','text'],
       ['af_wanted_reserve_groups','Группы reservation','2','text'],['af_wanted_moderate_groups','Группы модерации','4','text'],
-      ['af_wanted_allow_guest_reservation','Разрешить reservation гостям','0','yesno'],['af_wanted_reservation_days','Срок reservation, дней','3','numeric'],
-      ['af_wanted_application_forum','ID форума анкет','0','numeric'],['af_wanted_discussion_tid','ID темы обсуждения Wanted','0','numeric'],
+      ['af_wanted_allow_guest_reservation','Разрешить бронь гостям','0','yesno'],['af_wanted_reservation_days','Срок брони, дней','3','numeric'],
+      ['af_wanted_application_forum','ID форума анкет ATF','0','numeric'],['af_wanted_discussion_tid','ID темы обсуждения Wanted','0','numeric'],
       ['af_wanted_per_page','Записей на страницу','12','numeric']];
     foreach($defs as $i=>$d){$sid=(int)$db->fetch_field($db->simple_select('settings','sid',"name='".$db->escape_string($d[0])."'"),'sid');$data=['title'=>$d[1],'description'=>$d[3]==='text'?'CSV gid; -1 = все группы.':'','optionscode'=>$d[3],'disporder'=>$i+1,'gid'=>$gid];if($sid)$db->update_query('settings',$data,'sid='.$sid);else{$data['name']=$d[0];$data['value']=$d[2];$db->insert_query('settings',$data);}}
+    // Remove the now-empty, unreachable legacy group after moving its rows.
+    $legacy=(int)$db->fetch_field($db->simple_select('settinggroups','gid',"name='af_wanted'",['limit'=>1]),'gid');
+    if($legacy&&!(int)$db->fetch_field($db->simple_select('settings','COUNT(*) AS total','gid='.$legacy),'total'))$db->delete_query('settinggroups','gid='.$legacy);
     if(function_exists('rebuild_settings')) rebuild_settings();
 }
 function af_wanted_groups(string $name): bool {
@@ -112,7 +119,7 @@ function af_wanted_can(string $action, array $entry=[]): bool {
     $permission=af_wanted_permission_name($action);
     if ($permission==='') return false;
     if ($permission==='view') return af_wanted_groups('view');
-    if($permission==='reserve'&&!$uid)return !empty($mybb->settings['af_wanted_allow_guest_reservation'])&&af_wanted_groups('reserve');
+    if($permission==='reserve'&&!$uid)return !empty($mybb->settings['af_wanted_allow_guest_reservation']);
     if (!$uid) return false;
     if($permission==='reserve')return af_wanted_groups('reserve');
     if ($permission==='create') return af_wanted_groups('create');
@@ -320,11 +327,11 @@ function af_wanted_render_page(): void {
    exit;
  }
  $title='Нужные персонажи';add_breadcrumb($title,'wanted.php');
- $body='<main class="af-wanted"><div class="af-kb-header"><h1>'.$title.'</h1></div>';
+ $body='<div class="pun"><main class="af-wanted"><div class="af-kb-header"><h1>'.$title.'</h1></div>';
  if($action==='create'||$action==='edit'){if(!af_wanted_can($action==='create'?'create':'edit',$entry))error_no_permission();$fields=af_wanted_fields();$vals=$entry?af_wanted_values([$id])[$id]??[]:[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$body.='<section class="af-wanted-panel"><h2>'.($id?'Изменить Wanted #'.$id:'Новая заявка Wanted').'</h2><form class="af-wanted-form" method="post" action="wanted.php?action=save'.($id?'&id='.$id:'').'"><input type="hidden" name="my_post_key" value="'.af_wanted_h((string)$mybb->post_code).'">';foreach($fields as $f){$settings=(array)($f['settings']??[]);$dependent=($f['type']==='kb_dynamic'&&($settings['source']??'')==='origin_variant');$available=$dependent?af_wanted_options($f,$byKey):[];$hidden=$dependent&&!$available;$body.='<div class="af-wanted-field af-wanted-field--'.af_wanted_h((string)$f['type']).($hidden?' is-hidden':'').'"'.($hidden?' hidden':'').'><label>'.af_wanted_h($f['title']).(!empty($f['required'])?' *':'').'</label>'.af_wanted_field_control($f,$vals[(int)$f['id']]??'',$byKey).'</div>';}$body.='<div class="af-wanted-form-actions"><button class="button" type="submit">Сохранить</button><a class="button" href="'.($id?'wanted.php?action=view&amp;id='.$id:'wanted.php').'">Отмена</a></div></form></section>'.af_wanted_dependency_script($fields);
- } elseif($action==='view'){if(!$entry)error('Wanted не найден.');$fields=af_wanted_fields();$vals=af_wanted_values([$id])[$id]??[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$entryTitle=af_wanted_entry_title($id,$fields,$vals);$image=af_wanted_primary_image($fields,$vals);$info='';$content='';foreach($fields as $f){$fid=(int)$f['id'];$value=$vals[$fid]??'';if(($f['type']??'')==='image'||!empty($f['settings']['is_title'])||!($f['settings']['show_detail']??true)||$value==='')continue;$rendered=af_wanted_render_field_value($f,$value,$byKey);if($rendered==='')continue;$row='<div class="af-wanted-detail-field af-wanted-detail-field--'.af_wanted_h((string)$f['type']).'"><dt>'.af_wanted_h($f['title']).'</dt><dd>'.$rendered.'</dd></div>';if(in_array($f['type'],['select','radio','kb_dynamic','multi','checkbox','number'],true))$info.=$row;else$content.=$row;}$author=build_profile_link(af_wanted_h((string)$entry['username']),(int)$entry['author_uid']);$reservation=af_wanted_reservation_html($entry);$player=$entry['status']==='archived'&&!empty($entry['accepted_uid'])?'<div class="af-wanted-detail-field"><dt>Игрок</dt><dd>'.build_profile_link(af_wanted_h((string)$entry['accepted_name']),(int)$entry['accepted_uid']).'</dd></div>':'';$body.='<article class="af-wanted-detail af-atf-wiki"><header class="af-wanted-detail-header af-atf-wiki__header"><div class="af-atf-wiki__heading"><h2 class="af-atf-wiki__title">'.af_wanted_h($entryTitle).'</h2><span class="af-wanted-status">'.af_wanted_h(af_wanted_status_label($entry['status'])).'</span></div></header><div class="af-wanted-detail-layout af-atf-wiki__layout"><main class="af-wanted-detail-content af-atf-wiki__content"><dl class="af-wanted-detail-fields">'.$content.'</dl></main><aside class="af-wanted-infobox af-atf-wiki__infobox">';if($image!=='')$body.='<div class="af-wanted-detail-image">'.af_wanted_render_field_value(['type'=>'image'],$image).'</div>';$body.='<dl><div class="af-wanted-detail-field"><dt>Имя</dt><dd>'.af_wanted_h($entryTitle).'</dd></div><div class="af-wanted-detail-field"><dt>Статус</dt><dd>'.af_wanted_h(af_wanted_status_label($entry['status'])).'</dd></div>'.$reservation.$info.'<div class="af-wanted-detail-field"><dt>Автор</dt><dd>'.$author.'</dd></div>'.$player.'</dl></aside></div>'.af_wanted_actions($entry).'</article>';
+ } elseif($action==='view'){if(!$entry)error('Wanted не найден.');$fields=af_wanted_fields();$vals=af_wanted_values([$id])[$id]??[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$entryTitle=af_wanted_entry_title($id,$fields,$vals);$image=af_wanted_primary_image($fields,$vals);$info='';$content='';foreach($fields as $f){$fid=(int)$f['id'];$value=$vals[$fid]??'';$settings=(array)($f['settings']??[]);if(($f['type']??'')==='image'||!empty($settings['is_title'])||!($settings['show_detail']??true)||$value==='')continue;if(($f['type']??'')==='kb_dynamic'&&($settings['source']??'')==='origin_variant'&&!af_wanted_options($f,$byKey))continue;$rendered=af_wanted_render_field_value($f,$value,$byKey);if($rendered==='')continue;$row='<div class="af-wanted-detail-field af-wanted-detail-field--'.af_wanted_h((string)$f['type']).'"><dt>'.af_wanted_h($f['title']).'</dt><dd>'.$rendered.'</dd></div>';if(($f['type']??'')==='textarea')$content.=$row;else$info.=$row;}$author=build_profile_link(af_wanted_h((string)$entry['username']),(int)$entry['author_uid']);$reservation=af_wanted_reservation_html($entry);$player=$entry['status']==='archived'&&!empty($entry['accepted_uid'])?'<div class="af-wanted-detail-field"><dt>Игрок</dt><dd>'.build_profile_link(af_wanted_h((string)$entry['accepted_name']),(int)$entry['accepted_uid']).'</dd></div>':'';$body.='<article class="af-wanted-detail af-atf-wiki"><header class="af-wanted-detail-header af-atf-wiki__header"><div class="af-atf-wiki__heading"><h2 class="af-atf-wiki__title">'.af_wanted_h($entryTitle).'</h2><span class="af-wanted-status">'.af_wanted_h(af_wanted_status_label($entry['status'])).'</span></div></header><div class="af-wanted-detail-layout af-atf-wiki__layout"><main class="af-wanted-detail-content af-atf-wiki__content"><dl class="af-wanted-detail-fields">'.$content.'</dl></main><aside class="af-wanted-infobox af-atf-wiki__infobox">';if($image!=='')$body.='<div class="af-wanted-detail-image">'.af_wanted_render_field_value(['type'=>'image'],$image).'</div>';$body.='<dl>'.$reservation.$info.'<div class="af-wanted-detail-field"><dt>Автор</dt><dd>'.$author.'</dd></div>'.$player.'</dl></aside></div>'.af_wanted_actions($entry).'</article>';
  } else $body.=af_wanted_catalog().'<script defer src="inc/plugins/advancedfunctionality/addons/advancedwanted/assets/advancedwanted_catalog.js"></script>';
- $body.='</main>';
+ $body.='</main></div>';
  if (function_exists('af_front_output_template_string')) {
      af_front_output_template_string($title,'{$wanted_body}',['wanted_body'=>$body]);
  }
@@ -352,7 +359,7 @@ function af_wanted_discussion_allowed(): bool {
 }
 function af_wanted_reservation_html(array $entry): string {
  if(($entry['status']??'')!=='reserved')return '';$uid=(int)($entry['reserved_by_uid']??0);$name=$uid?(string)($entry['reserved_name']??''):(string)($entry['reserved_guest_name']??'');$owner=$uid?build_profile_link(af_wanted_h($name),$uid):af_wanted_h($name);$until=(int)($entry['reserved_until']??0);
- return '<div class="af-wanted-detail-field af-wanted-reservation"><dt>Придержано за</dt><dd>'.$owner.'</dd></div>'.($until?'<div class="af-wanted-detail-field"><dt>До</dt><dd>'.af_wanted_h(my_date('d.m.Y H:i',$until)).'</dd></div>':'');
+ return '<div class="af-wanted-detail-field af-wanted-reservation"><dt>Придержано за</dt><dd>'.$owner.'</dd></div>'.($until?'<div class="af-wanted-detail-field"><dt>До</dt><dd>'.af_wanted_h(my_date('d.m.Y',$until)).'</dd></div>':'');
 }
 function af_wanted_catalog(): string {
  global $db,$mybb;
@@ -370,9 +377,9 @@ function af_wanted_catalog(): string {
    foreach($fields as $field)$byKey[$field['field_key']]=$ev[(int)$field['id']]??'';
    $cardTitle=af_wanted_entry_title($entryId,$fields,$ev);$imageUrl=af_wanted_primary_image($fields,$ev);
    $image=$imageUrl!==''?af_wanted_render_field_value(['type'=>'image'],$imageUrl):'<div class="af-kb-char-card__pic-placeholder" aria-hidden="true"></div>';
-   $details='';foreach($fields as $f){$v=$ev[(int)$f['id']]??'';if($v===''||empty($f['settings']['show_card'])||!in_array($f['type'],['select','radio','kb_dynamic'],true))continue;$details.='<span class="af-wanted-chip">'.af_wanted_render_field_value($f,$v,$byKey).'</span>';}
+   $details='';foreach($fields as $f){$v=$ev[(int)$f['id']]??'';$settings=(array)($f['settings']??[]);if($v===''||empty($settings['show_card'])||!in_array($f['type'],['select','radio','kb_dynamic'],true))continue;if($f['type']==='kb_dynamic'&&($settings['source']??'')==='origin_variant'&&!af_wanted_options($f,$byKey))continue;$details.='<span class="af-wanted-chip">'.af_wanted_render_field_value($f,$v,$byKey).'</span>';}
    $h.='<article class="af-wanted-card af-kb-char-card"><div class="af-kb-char-card__pic">'.$image.'</div><div class="af-wanted-card__body af-kb-char-card__body"><div class="af-wanted-card__meta"><h2>'.af_wanted_h($cardTitle).'</h2><span class="af-wanted-status">'.af_wanted_h(af_wanted_status_label($e['status'])).'</span></div><div class="af-wanted-card__fields">'.$details.'</div><p>Автор: '.build_profile_link(af_wanted_h((string)$e['username']),(int)$e['author_uid']).'</p>';
-   if($e['status']==='reserved'){$uid=(int)$e['reserved_by_uid'];$reserved=$uid?build_profile_link(af_wanted_h((string)$e['reserved_name']),$uid):af_wanted_h((string)$e['reserved_guest_name']);$h.='<p class="af-wanted-reservation-summary">Придержано за: '.$reserved.(!empty($e['reserved_until'])?'<br>До: '.af_wanted_h(my_date('d.m.Y H:i',(int)$e['reserved_until'])):'').'</p>';}
+   if($e['status']==='reserved'){$uid=(int)$e['reserved_by_uid'];$reserved=$uid?build_profile_link(af_wanted_h((string)$e['reserved_name']),$uid):af_wanted_h((string)$e['reserved_guest_name']);$h.='<p class="af-wanted-reservation-summary">Придержано за: '.$reserved.(!empty($e['reserved_until'])?'<br>до '.af_wanted_h(my_date('d.m.Y',(int)$e['reserved_until'])):'').'</p>';}
    if($e['status']==='archived'&&!empty($e['accepted_uid']))$h.='<p>Игрок: '.build_profile_link(af_wanted_h((string)$e['accepted_name']),(int)$e['accepted_uid']).'</p>';
    $h.='<div class="af-wanted-primary-action"><a class="button" href="wanted.php?action=view&id='.$entryId.'">Подробнее</a></div>'.af_wanted_actions($e).'</div></article>';
  }
