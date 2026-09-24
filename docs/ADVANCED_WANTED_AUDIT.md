@@ -31,3 +31,23 @@
    values. Workflow linkage belongs in the existing workflow row; reservation
    expiry is supported by the timestamp already on entries.
 
+## KB dynamic source map
+
+Wanted stores the option `key` returned by KB and resolves its label only for UI.
+The source mapping is intentionally explicit because KB entry types and mechanics
+sets do not share a resolver or return shape:
+
+| Wanted source | KB resolver | Registry/type key |
+| --- | --- | --- |
+| `origin` | `af_kb_get_public_type_options()` | `arpg_origin` |
+| `origin_variant` | `af_kb_get_origin_variants(parent, true)` | relation-owned variants |
+| `archetype` | `af_kb_get_public_type_options()` | `arpg_archetype` |
+| `faction` | `af_kb_get_public_type_options()` | `arpg_faction` |
+| `element` | `af_kb_get_public_type_options()` | `arpg_element` |
+| `weapon` | `af_kb_get_arpg_mechanics_options()` | `weapon_type`, service kind `weapon_type` |
+| `gender` | `af_kb_get_arpg_mechanics_options()` | `character_gender`, service kind `snippet` |
+
+An `origin_variant` field must set `depends_on` to the field key containing its
+origin (normally `origin`). The full entry value context is passed while rendering
+cards, details, and edit controls so relation labels are never resolved without
+their parent key.
