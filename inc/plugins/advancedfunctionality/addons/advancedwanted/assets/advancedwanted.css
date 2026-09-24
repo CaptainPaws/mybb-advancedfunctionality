@@ -70,8 +70,9 @@
 }
 .af-wanted-chip { text-transform: uppercase; }
 .af-wanted-status { flex: 0 0 auto; }
+.af-wanted-status--reservation { max-width: 100%; text-transform: uppercase; }
+.af-wanted-status--reservation a { color: inherit; }
 .af-wanted-card__fields { display: flex; flex-wrap: wrap; gap: .3rem; }
-.af-wanted-reservation-summary { display: flex; flex-wrap: wrap; gap: .25rem .55rem; font-size: .85em; }
 .af-wanted-reservation-owner {
   display: inline-flex;
   width: fit-content;
@@ -136,6 +137,10 @@
 [data-af-wanted-catalog].is-loading { opacity: .65; pointer-events: none; }
 .af-wanted-reserve-form { display: flex; align-items: end; flex-wrap: wrap; gap: .45rem; }
 .af-wanted-guest-name { display: grid; gap: .2rem; }
+.af-wanted-reservation-admin { margin-top: 1rem; padding: .75rem; border: 1px solid currentColor; }
+.af-wanted-reservation-admin h3 { margin-top: 0; }
+.af-wanted-reservation-admin form { display: flex; align-items: end; flex-wrap: wrap; gap: .45rem; margin-top: .45rem; }
+.af-wanted-reservation-admin label { display: grid; gap: .2rem; }
 .af-wanted-post-chip { cursor: pointer; }
 .af-wanted-chip-image, .af-wanted-post-chip .af-kb-chip-icon, .af-wanted-post-chip .af-kb-icon-img { width: 20px; height: 20px; object-fit: cover; object-position: center; }
 .af-wanted-chip-fallback { display: block; width: 20px; height: 20px; background: currentColor; opacity: .25; }
