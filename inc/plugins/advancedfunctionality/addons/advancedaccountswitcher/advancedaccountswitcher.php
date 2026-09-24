@@ -438,6 +438,7 @@ function af_aas_misc_dispatch()
     }
 
     if ($action === 'af_aas_walk') {
+        af_aas_walk_begin_json_transport();
         af_aas_handle_walk();
     }
 }
@@ -704,13 +705,52 @@ function af_aas_get_linked_accounts(int $masterUid, bool $includeHidden = true):
     return $rows;
 }
 
+/**
+ * Isolate the walk endpoint from MyBB's normal HTML rendering pipeline.
+ *
+ * AF starts a buffer for misc.php during global_start.  Without the flag below,
+ * its shutdown handler treats the JSON as a page and runs all pre-output asset
+ * hooks over it.  The "missing stylesheet" fallback can consequently prepend a
+ * <style> element to an otherwise valid JSON document.
+ */
+function af_aas_walk_begin_json_transport(): void
+{
+    $GLOBALS['af_disable_pre_output'] = true;
+
+    if (!isset($GLOBALS['af_aas_walk_ob_base'])) {
+        $GLOBALS['af_aas_walk_ob_base'] = isset($GLOBALS['af_ob_level'])
+            ? (int)$GLOBALS['af_ob_level']
+            : ob_get_level();
+    }
+
+    // Keep warnings and accidental hook output away from the response.  The
+    // responder logs captured output before discarding it, so it is diagnosable.
+    ob_start();
+}
+
 function af_aas_walk_json(array $payload): void
 {
+    $baseLevel = isset($GLOBALS['af_aas_walk_ob_base'])
+        ? max(0, (int)$GLOBALS['af_aas_walk_ob_base'])
+        : ob_get_level();
+    $unexpectedOutput = '';
+    while (ob_get_level() > $baseLevel) {
+        $unexpectedOutput = (string)ob_get_clean() . $unexpectedOutput;
+    }
+    if (trim($unexpectedOutput) !== '') {
+        error_log('[AF AAS walk] Suppressed non-JSON output: ' . substr(trim($unexpectedOutput), 0, 2000));
+    }
+
     if (!headers_sent()) {
         header('Content-Type: application/json; charset=UTF-8');
         header('Cache-Control: no-store, private');
     }
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        error_log('[AF AAS walk] JSON encoding failed: ' . json_last_error_msg());
+        $json = '{"ok":false,"message":"Не удалось сформировать ответ сервера."}';
+    }
+    echo $json;
     exit;
 }
 
