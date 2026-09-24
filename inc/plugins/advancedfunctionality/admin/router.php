@@ -35,12 +35,17 @@ class AF_Admin
         if ($action && $addon && strpos((string)$action, 'theme_stylesheets_') !== 0) {
             verify_post_check($mybb->get_input('my_post_key'));
 
-            if ($action === 'enable') {
-                self::enableAddon($addon);
-                flash_message($lang->af_addon_enabled, 'success');
-            } elseif ($action === 'disable') {
-                self::disableAddon($addon);
-                flash_message($lang->af_addon_disabled, 'success');
+            if ($action === 'enable' || $action === 'disable') {
+                af_admin_addon_diagnostic_begin($addon, $action);
+                af_admin_addon_diagnostic_stage('enable/disable action', static function () use ($action, $addon): void {
+                    if ($action === 'enable') {
+                        self::enableAddon($addon);
+                    } else {
+                        self::disableAddon($addon);
+                    }
+                });
+                af_admin_addon_diagnostic_finish();
+                flash_message($action === 'enable' ? $lang->af_addon_enabled : $lang->af_addon_disabled, 'success');
             }
 
             admin_redirect('index.php?module='.AF_PLUGIN_ID.'&_='.TIME_NOW);
@@ -641,46 +646,38 @@ class AF_Admin
 
     public static function enableAddon(string $id): void
     {
-        $bootstrap = self::addonBootstrap($id);
-        if ($bootstrap && is_file($bootstrap)) {
-            require_once $bootstrap;
-            $fn = 'af_'.$id.'_install';
-            if (function_exists($fn)) { $fn(); }
-        }
-        self::ensureEnabledSetting($id, 1);
-        af_rebuild_and_reload_settings();
-        af_sync_theme_stylesheets(false, $id);
+        af_admin_addon_diagnostic_stage('require addon bootstrap', static function () use ($id): void {
+            $bootstrap = self::addonBootstrap($id);
+            if ($bootstrap && is_file($bootstrap)) {
+                require_once $bootstrap;
+                $fn = 'af_'.$id.'_install';
+                if (function_exists($fn)) { $fn(); }
+            }
+        });
+        af_admin_addon_diagnostic_stage('ensureEnabledSetting', static fn() => self::ensureEnabledSetting($id, 1));
+        af_admin_addon_diagnostic_stage('af_rebuild_and_reload_settings', static fn() => af_rebuild_and_reload_settings());
+        af_admin_addon_diagnostic_stage('bundle rebuild', static fn() => af_sync_theme_stylesheets(false, $id));
     }
 
     public static function disableAddon(string $id): void
     {
         af_disable_log('start', $id);
-        af_disable_log('before setting=0', $id);
-        self::ensureEnabledSetting($id, 0);
-        af_disable_log('after setting=0', $id);
-        af_disable_log('before rebuild settings', $id);
-        af_rebuild_and_reload_settings();
-        af_disable_log('after rebuild settings', $id);
-        af_disable_log('before source reconciliation', $id);
-        af_disable_theme_stylesheet_sources($id);
-        af_disable_log('after source reconciliation', $id);
-        af_disable_log('before stylesheet sync', $id);
-        af_sync_theme_stylesheets(false, $id);
-        af_disable_log('after stylesheet sync', $id);
-
-        af_disable_log('before bootstrap require', $id);
-        $bootstrap = self::addonBootstrap($id);
-        if ($bootstrap && is_file($bootstrap)) {
-            require_once $bootstrap;
-        }
-        af_disable_log('after bootstrap require', $id);
-
-        $fn = 'af_'.$id.'_deactivate';
-        af_disable_log('before addon deactivate', $id);
-        if (function_exists($fn)) {
-            $fn();
-        }
-        af_disable_log('after addon deactivate', $id);
+        af_admin_addon_diagnostic_stage('ensureEnabledSetting', static fn() => self::ensureEnabledSetting($id, 0));
+        af_admin_addon_diagnostic_stage('af_rebuild_and_reload_settings', static fn() => af_rebuild_and_reload_settings());
+        af_admin_addon_diagnostic_stage('disable reconciliation', static fn() => af_disable_theme_stylesheet_sources($id));
+        af_admin_addon_diagnostic_stage('bundle rebuild', static fn() => af_sync_theme_stylesheets(false, $id));
+        af_admin_addon_diagnostic_stage('require addon bootstrap', static function () use ($id): void {
+            $bootstrap = self::addonBootstrap($id);
+            if ($bootstrap && is_file($bootstrap)) {
+                require_once $bootstrap;
+            }
+        });
+        af_admin_addon_diagnostic_stage('af_'.$id.'_deactivate()', static function () use ($id): void {
+            $fn = 'af_'.$id.'_deactivate';
+            if (function_exists($fn)) {
+                $fn();
+            }
+        });
         af_disable_log('finished', $id);
     }
 

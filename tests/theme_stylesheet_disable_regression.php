@@ -90,12 +90,16 @@ for ($cycle = 1; $cycle <= 3; $cycle++) {
     }
 }
 
-$requiredStages = ['start', 'before setting=0', 'after setting=0', 'before rebuild settings',
-    'after rebuild settings', 'before stylesheet sync', 'after stylesheet sync', 'before bootstrap require',
-    'after bootstrap require', 'before addon deactivate', 'after addon deactivate', 'finished'];
+$requiredStages = ['ensureEnabledSetting', 'af_rebuild_and_reload_settings', 'disable reconciliation',
+    'bundle rebuild', 'require addon bootstrap', "af_'.\$id.'_deactivate()"];
 foreach ($requiredStages as $stage) {
-    if (!str_contains($router, "af_disable_log('{$stage}', \$id)")) throw new RuntimeException('Missing disable diagnostic stage '.$stage);
+    if (!str_contains($router, "af_admin_addon_diagnostic_stage('{$stage}'")) throw new RuntimeException('Missing disable diagnostic stage '.$stage);
 }
+if (!str_contains($router, "af_admin_addon_diagnostic_stage('enable/disable action'")) throw new RuntimeException('Missing toggle action diagnostic boundary');
+foreach (['Addon', 'Stage', 'Exception', 'Message', 'File', 'Line'] as $field) {
+    if (!str_contains($core, "'{$field}' =>")) throw new RuntimeException('Missing ACP diagnostic field '.$field);
+}
+if (!str_contains($core, "'class' => 'MyBB SQL error '.\$dbErrorNumber")) throw new RuntimeException('Missing MyBB SQL error shutdown capture');
 if (substr_count($router, "\$fn = 'af_'.\$id.'_deactivate';") !== 1) throw new RuntimeException('Deactivator is not owned exactly once by disableAddon');
 if (preg_match("~delete_query\([^;]+af_theme_stylesheets~i", $core)) throw new RuntimeException('Disable introduces destructive registry cleanup');
 

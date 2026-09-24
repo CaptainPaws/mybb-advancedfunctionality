@@ -349,12 +349,17 @@ class AF_Admin
         if ($action && $addon && strpos((string)$action, 'theme_stylesheets_') !== 0) {
             verify_post_check($mybb->get_input('my_post_key'));
 
-            if ($action === 'enable') {
-                self::enableAddon($addon);
-                flash_message($lang->af_addon_enabled, 'success');
-            } elseif ($action === 'disable') {
-                self::disableAddon($addon);
-                flash_message($lang->af_addon_disabled, 'success');
+            if ($action === 'enable' || $action === 'disable') {
+                af_admin_addon_diagnostic_begin($addon, $action);
+                af_admin_addon_diagnostic_stage('enable/disable action', static function () use ($action, $addon): void {
+                    if ($action === 'enable') {
+                        self::enableAddon($addon);
+                    } else {
+                        self::disableAddon($addon);
+                    }
+                });
+                af_admin_addon_diagnostic_finish();
+                flash_message($action === 'enable' ? $lang->af_addon_enabled : $lang->af_addon_disabled, 'success');
             }
 
             admin_redirect('index.php?module='.AF_PLUGIN_ID.'&_='.TIME_NOW);
@@ -962,46 +967,38 @@ class AF_Admin
 
     public static function enableAddon(string $id): void
     {
-        $bootstrap = self::addonBootstrap($id);
-        if ($bootstrap && is_file($bootstrap)) {
-            require_once $bootstrap;
-            $fn = 'af_'.$id.'_install';
-            if (function_exists($fn)) { $fn(); }
-        }
-        self::ensureEnabledSetting($id, 1);
-        af_rebuild_and_reload_settings();
-        af_sync_theme_stylesheets(false, $id);
+        af_admin_addon_diagnostic_stage('require addon bootstrap', static function () use ($id): void {
+            $bootstrap = self::addonBootstrap($id);
+            if ($bootstrap && is_file($bootstrap)) {
+                require_once $bootstrap;
+                $fn = 'af_'.$id.'_install';
+                if (function_exists($fn)) { $fn(); }
+            }
+        });
+        af_admin_addon_diagnostic_stage('ensureEnabledSetting', static fn() => self::ensureEnabledSetting($id, 1));
+        af_admin_addon_diagnostic_stage('af_rebuild_and_reload_settings', static fn() => af_rebuild_and_reload_settings());
+        af_admin_addon_diagnostic_stage('bundle rebuild', static fn() => af_sync_theme_stylesheets(false, $id));
     }
 
     public static function disableAddon(string $id): void
     {
         af_disable_log('start', $id);
-        af_disable_log('before setting=0', $id);
-        self::ensureEnabledSetting($id, 0);
-        af_disable_log('after setting=0', $id);
-        af_disable_log('before rebuild settings', $id);
-        af_rebuild_and_reload_settings();
-        af_disable_log('after rebuild settings', $id);
-        af_disable_log('before source reconciliation', $id);
-        af_disable_theme_stylesheet_sources($id);
-        af_disable_log('after source reconciliation', $id);
-        af_disable_log('before stylesheet sync', $id);
-        af_sync_theme_stylesheets(false, $id);
-        af_disable_log('after stylesheet sync', $id);
-
-        af_disable_log('before bootstrap require', $id);
-        $bootstrap = self::addonBootstrap($id);
-        if ($bootstrap && is_file($bootstrap)) {
-            require_once $bootstrap;
-        }
-        af_disable_log('after bootstrap require', $id);
-
-        $fn = 'af_'.$id.'_deactivate';
-        af_disable_log('before addon deactivate', $id);
-        if (function_exists($fn)) {
-            $fn();
-        }
-        af_disable_log('after addon deactivate', $id);
+        af_admin_addon_diagnostic_stage('ensureEnabledSetting', static fn() => self::ensureEnabledSetting($id, 0));
+        af_admin_addon_diagnostic_stage('af_rebuild_and_reload_settings', static fn() => af_rebuild_and_reload_settings());
+        af_admin_addon_diagnostic_stage('disable reconciliation', static fn() => af_disable_theme_stylesheet_sources($id));
+        af_admin_addon_diagnostic_stage('bundle rebuild', static fn() => af_sync_theme_stylesheets(false, $id));
+        af_admin_addon_diagnostic_stage('require addon bootstrap', static function () use ($id): void {
+            $bootstrap = self::addonBootstrap($id);
+            if ($bootstrap && is_file($bootstrap)) {
+                require_once $bootstrap;
+            }
+        });
+        af_admin_addon_diagnostic_stage('af_'.$id.'_deactivate()', static function () use ($id): void {
+            $fn = 'af_'.$id.'_deactivate';
+            if (function_exists($fn)) {
+                $fn();
+            }
+        });
         af_disable_log('finished', $id);
     }
 
@@ -3910,6 +3907,124 @@ function af_theme_stylesheets_log(string $event, string $addonId, string $logica
         @log_admin_action($payload);
     }
     @error_log($payload);
+}
+
+/** Start temporary ACP diagnostics for one addon toggle request. */
+function af_admin_addon_diagnostic_begin(string $addonId, string $action): void
+{
+    global $db;
+
+    $GLOBALS['af_admin_addon_diagnostic'] = [
+        'active' => true,
+        'addon' => preg_replace('~[^a-z0-9_\-]+~i', '', $addonId) ?: 'unknown',
+        'action' => $action,
+        'stage' => 'enable/disable action',
+        'file' => __FILE__,
+        'line' => __LINE__,
+        'initial_db_error' => is_object($db) && method_exists($db, 'error_number') ? (int)$db->error_number() : 0,
+    ];
+
+    if (!empty($GLOBALS['af_admin_addon_diagnostic_shutdown_registered'])) {
+        return;
+    }
+
+    $GLOBALS['af_admin_addon_diagnostic_shutdown_registered'] = true;
+    register_shutdown_function(static function (): void {
+        global $db;
+
+        $state = (array)($GLOBALS['af_admin_addon_diagnostic'] ?? []);
+        if (empty($state['active'])) {
+            return;
+        }
+
+        $last = error_get_last();
+        $dbErrorNumber = is_object($db) && method_exists($db, 'error_number') ? (int)$db->error_number() : 0;
+        $initialDbError = (int)($state['initial_db_error'] ?? 0);
+        if ($dbErrorNumber !== 0 && $dbErrorNumber !== $initialDbError) {
+            $dbMessage = method_exists($db, 'error_string') ? (string)$db->error_string() : 'Unknown database error';
+            af_admin_addon_diagnostic_render([
+                'class' => 'MyBB SQL error '.$dbErrorNumber,
+                'message' => $dbMessage,
+                'file' => (string)($state['file'] ?? __FILE__),
+                'line' => (int)($state['line'] ?? 0),
+            ]);
+            return;
+        }
+
+        if ($last && in_array((int)($last['type'] ?? 0), [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR, E_RECOVERABLE_ERROR], true)) {
+            af_admin_addon_diagnostic_render([
+                'class' => 'PHP fatal error',
+                'message' => (string)($last['message'] ?? 'Unknown fatal error'),
+                'file' => (string)($last['file'] ?? ($state['file'] ?? __FILE__)),
+                'line' => (int)($last['line'] ?? ($state['line'] ?? 0)),
+            ]);
+        }
+    });
+}
+
+/** Execute and identify one exact toggle stage, preserving normal success behaviour. */
+function af_admin_addon_diagnostic_stage(string $stage, callable $callback)
+{
+    $state = (array)($GLOBALS['af_admin_addon_diagnostic'] ?? []);
+    if (!empty($state['active'])) {
+        try {
+            $reflection = new ReflectionFunction(Closure::fromCallable($callback));
+            $state['file'] = (string)$reflection->getFileName();
+            $state['line'] = (int)$reflection->getStartLine();
+        } catch (Throwable $ignored) {
+            // Location is supplemental; never let reflection mask the real operation.
+        }
+        $state['stage'] = $stage;
+        $GLOBALS['af_admin_addon_diagnostic'] = $state;
+    }
+
+    try {
+        return $callback();
+    } catch (Throwable $error) {
+        af_admin_addon_diagnostic_render([
+            'class' => get_class($error),
+            'message' => $error->getMessage(),
+            'file' => $error->getFile(),
+            'line' => $error->getLine(),
+        ]);
+        exit;
+    }
+}
+
+/** Mark a successful request so the shutdown fallback remains silent. */
+function af_admin_addon_diagnostic_finish(): void
+{
+    if (isset($GLOBALS['af_admin_addon_diagnostic'])) {
+        $GLOBALS['af_admin_addon_diagnostic']['active'] = false;
+    }
+}
+
+/** Print a deliberately plain ACP error block that also survives shutdown. */
+function af_admin_addon_diagnostic_render(array $error): void
+{
+    $state = (array)($GLOBALS['af_admin_addon_diagnostic'] ?? []);
+    $GLOBALS['af_admin_addon_diagnostic']['active'] = false;
+
+    $fields = [
+        'Addon' => (string)($state['addon'] ?? 'unknown'),
+        'Stage' => (string)($state['stage'] ?? 'unknown'),
+        'Exception' => (string)($error['class'] ?? 'Unknown error'),
+        'Message' => (string)($error['message'] ?? ''),
+        'File' => (string)($error['file'] ?? 'unknown'),
+        'Line' => (string)($error['line'] ?? 0),
+    ];
+    $lines = [];
+    foreach ($fields as $label => $value) {
+        $lines[] = $label.': '.$value;
+    }
+    $plain = implode("\n", $lines);
+    @error_log("AF addon ACP diagnostic:\n".$plain);
+
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: text/html; charset=UTF-8');
+    }
+    echo '<div class="error"><pre style="white-space:pre-wrap">'.htmlspecialchars_uni($plain).'</pre></div>';
 }
 
 /**
