@@ -52,18 +52,18 @@ class AF_Admin_Advancedwanted
                 $db->delete_query(AF_WANTED_VALUES, 'wanted_id=' . $id);
                 $db->delete_query(AF_WANTED_ENTRIES, 'id=' . $id);
                 admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted');
-            } elseif ($do === 'entry_status') {
+            } elseif (in_array($do, ['release_reservation', 'return_active', 'archive_entry'], true)) {
                 $id = (int)$mybb->get_input('id');
-                $status = $mybb->get_input('status');
-                if (in_array($status, ['open', 'reserved', 'application', 'archived'], true)) {
-                    $data = ['status' => $status, 'updated_at' => TIME_NOW];
-                    if ($status === 'open') {
-                        $data += ['reserved_by_uid' => null, 'reserved_at' => 0, 'application_tid' => null, 'accepted_uid' => null, 'archived_at' => 0];
-                    }
-                    if ($status === 'archived') {
-                        $data['archived_at'] = TIME_NOW;
-                    }
-                    $db->update_query(AF_WANTED_ENTRIES, $data, 'id=' . $id);
+                $action = $do === 'archive_entry' ? 'archive' : $do;
+                $where = 'id=' . $id;
+                if ($do === 'release_reservation') {
+                    $where .= " AND status='reserved' AND reserved_by_uid IS NOT NULL";
+                }
+                $db->update_query(AF_WANTED_ENTRIES, af_wanted_lifecycle_data($action), $where);
+                if ((int)$db->affected_rows() === 1) {
+                    flash_message('Lifecycle Wanted обновлён.', 'success');
+                } else {
+                    flash_message('Действие неприменимо: запись уже изменена или не найдена.', 'error');
                 }
                 admin_redirect('index.php?module=advancedfunctionality&af_view=advancedwanted');
             }
@@ -253,14 +253,33 @@ class AF_Admin_Advancedwanted
         while ($entry = $db->fetch_array($query)) {
             $html .= '<tr><td>' . (int)$entry['id'] . '</td><td>' . self::h($entry['username']) . '</td><td>' . self::h($entry['status']) . '</td>'
                 . '<td>' . (int)$entry['reserved_by_uid'] . '</td><td>' . (int)$entry['application_tid'] . '</td><td>' . (int)$entry['accepted_uid'] . '</td><td>' . my_date('relative', $entry['created_at']) . '</td><td>'
-                . '<form method="post"><input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '"><input type="hidden" name="do" value="entry_status"><input type="hidden" name="id" value="' . (int)$entry['id'] . '"><select name="status">';
-            foreach (['open', 'reserved', 'application', 'archived'] as $status) {
-                $html .= '<option value="' . $status . '"' . ($entry['status'] === $status ? ' selected' : '') . '>' . $status . '</option>';
-            }
-            $html .= '</select><button type="submit">Сохранить</button></form><form method="post"><input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '">'
+                . self::lifecycleActions($entry)
+                . '<form method="post"><input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '">'
                 . '<input type="hidden" name="do" value="delete_entry"><input type="hidden" name="id" value="' . (int)$entry['id'] . '"><button type="submit">Удалить</button></form></td></tr>';
         }
         return $html . '</table>';
+    }
+
+    private static function lifecycleActions(array $entry): string
+    {
+        global $mybb;
+        $buttons = [];
+        if ($entry['status'] === 'reserved' && (int)$entry['reserved_by_uid'] > 0) {
+            $buttons['release_reservation'] = 'Снять reservation';
+        }
+        if ($entry['status'] !== 'open') {
+            $buttons['return_active'] = 'Вернуть в Active';
+        }
+        if ($entry['status'] !== 'archived') {
+            $buttons['archive_entry'] = 'Отправить в Archive';
+        }
+        $html = '';
+        foreach ($buttons as $action => $label) {
+            $html .= '<form method="post"><input type="hidden" name="my_post_key" value="' . self::h($mybb->post_code) . '">'
+                . '<input type="hidden" name="do" value="' . $action . '"><input type="hidden" name="id" value="' . (int)$entry['id'] . '">'
+                . '<button type="submit">' . $label . '</button></form>';
+        }
+        return $html;
     }
 
     private static function fieldsUrl(): string
