@@ -60,6 +60,8 @@ class AF_Admin
 
         if ($view === 'theme_stylesheets') {
             self::renderThemeStylesheetsPage();
+        } elseif ($view === 'theme_stylesheet_section') {
+            self::renderThemeStylesheetSectionEditor();
         } elseif ($view) {
             $sections = self::collectAdminSections();
             foreach ($sections as $sec) {
@@ -170,6 +172,24 @@ class AF_Admin
         $themeScope = strtolower(trim((string)$mybb->get_input('theme_scope')));
         if (!in_array($themeScope, ['current', 'all'], true)) {
             $themeScope = 'all';
+        }
+
+        if ($action === 'theme_stylesheets_save_section') {
+            $sectionId = trim((string)$mybb->get_input('section_id'));
+            $bundleHash = trim((string)$mybb->get_input('bundle_hash'));
+            $sectionHash = trim((string)$mybb->get_input('section_hash'));
+            $css = (string)$mybb->get_input('section_css');
+            $saved = af_theme_stylesheet_save_section($themeTid, $sectionId, $bundleHash, $sectionHash, $css);
+            flash_message(htmlspecialchars_uni((string)$saved['message']), !empty($saved['ok']) ? 'success' : 'error');
+            if (empty($saved['ok'])) {
+                admin_redirect('index.php?module='.AF_PLUGIN_ID.'&af_view=theme_stylesheet_section&theme_tid='.(int)$themeTid.'&section_id='.rawurlencode($sectionId));
+            }
+            admin_redirect(self::themeStylesheetsUrl(null, $themeTid, 'all'));
+        }
+        if ($action === 'theme_stylesheets_repair_structure') {
+            $repaired = af_theme_stylesheet_repair_bundle_structure($themeTid, trim((string)$mybb->get_input('bundle_hash')));
+            flash_message(htmlspecialchars_uni((string)$repaired['message']), !empty($repaired['ok']) ? 'success' : 'error');
+            admin_redirect(self::themeStylesheetsUrl(null, $themeTid, 'all'));
         }
 
         if ($action === 'theme_stylesheets_force_resync' && !$confirmForce) {
@@ -291,6 +311,21 @@ class AF_Admin
             echo self::renderThemeStylesheetActionForm('theme_stylesheets_set_theme_mode', $lang->af_theme_stylesheets_set_theme_mode, AF_THEME_BUNDLE_ADDON_ID, true, false, $themeFilter, (int)$bundleTid, AF_THEME_BUNDLE_LOGICAL_ID, 'secondary');
             echo self::renderThemeStylesheetActionForm('theme_stylesheets_set_file_mode', $lang->af_theme_stylesheets_set_file_mode, AF_THEME_BUNDLE_ADDON_ID, true, false, $themeFilter, (int)$bundleTid, AF_THEME_BUNDLE_LOGICAL_ID, 'secondary');
             echo '<br>';
+            $bundleDbRow = af_theme_stylesheet_get_bundle_row((int)$bundleTid);
+            $parsed = af_theme_stylesheet_parse_bundle((string)($bundleDbRow['stylesheet'] ?? ''));
+            if (!empty($parsed['ok'])) {
+                echo '<span class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_sections).':</span> ';
+                foreach ($parsed['sections'] as $sectionId => $section) {
+                    $meta = (array)$section['meta'];
+                    $label = (string)($meta['addon_title'] ?? $meta['addon_id']).' — '.(string)($meta['source_file'] ?? $meta['logical_id']);
+                    $url = 'index.php?module='.AF_PLUGIN_ID.'&amp;af_view=theme_stylesheet_section&amp;theme_tid='.(int)$bundleTid.'&amp;section_id='.rawurlencode((string)$sectionId);
+                    echo '<a class="button af-ts-btn-secondary" href="'.$url.'">'.htmlspecialchars_uni($label).'</a> ';
+                }
+            } elseif ($bundleDbRow) {
+                echo '<span style="color:#a00;font-weight:600;">'.htmlspecialchars_uni($lang->af_theme_stylesheets_structure_error).': '.htmlspecialchars_uni((string)$parsed['error']).'</span>';
+                echo self::renderThemeStylesheetActionForm('theme_stylesheets_repair_structure', $lang->af_theme_stylesheets_repair_structure, '', true, true, $themeFilter, (int)$bundleTid, '', 'secondary', ['bundle_hash' => sha1((string)$bundleDbRow['stylesheet'])]);
+            }
+            echo '<br>';
         }
         echo '</div>';
 
@@ -385,6 +420,36 @@ class AF_Admin
         $table->output($lang->af_theme_stylesheets_title);
     }
 
+    private static function renderThemeStylesheetSectionEditor(): void
+    {
+        global $mybb, $lang;
+        $themeTid = $mybb->get_input('theme_tid', MyBB::INPUT_INT);
+        $sectionId = trim((string)$mybb->get_input('section_id'));
+        $row = af_theme_stylesheet_get_bundle_row($themeTid);
+        $css = (string)($row['stylesheet'] ?? '');
+        $parsed = af_theme_stylesheet_parse_bundle($css);
+        if (empty($parsed['ok']) || !isset($parsed['sections'][$sectionId])) {
+            echo '<div class="error"><p>'.htmlspecialchars_uni($lang->af_theme_stylesheets_structure_error).': '.htmlspecialchars_uni((string)($parsed['error'] ?? 'section not found')).'</p></div>';
+            return;
+        }
+        $section = $parsed['sections'][$sectionId];
+        $meta = (array)$section['meta'];
+        $title = (string)($meta['addon_title'] ?? $meta['addon_id']).' — '.(string)($meta['source_file'] ?? '');
+        echo '<h2>'.htmlspecialchars_uni($lang->af_theme_stylesheets_section_editor).': '.htmlspecialchars_uni($title).'</h2>';
+        echo '<p class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_section_help).'</p>';
+        echo '<form method="post" action="index.php?module='.AF_PLUGIN_ID.'">';
+        echo '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">';
+        echo '<input type="hidden" name="af_action" value="theme_stylesheets_save_section">';
+        echo '<input type="hidden" name="theme_tid" value="'.(int)$themeTid.'">';
+        echo '<input type="hidden" name="section_id" value="'.htmlspecialchars_uni($sectionId).'">';
+        echo '<input type="hidden" name="bundle_hash" value="'.sha1($css).'">';
+        echo '<input type="hidden" name="section_hash" value="'.sha1((string)$section['body']).'">';
+        echo '<textarea name="section_css" rows="35" style="box-sizing:border-box;width:100%;font-family:monospace;white-space:pre;">'.htmlspecialchars_uni((string)$section['body']).'</textarea>';
+        echo '<p><input type="submit" class="submit_button" value="'.htmlspecialchars_uni($lang->af_theme_stylesheets_section_save).'"> '
+            .'<a href="'.self::themeStylesheetsUrl(null, $themeTid, 'all').'">'.htmlspecialchars_uni($lang->af_theme_stylesheets_section_cancel).'</a></p>';
+        echo '</form>';
+    }
+
     private static function renderThemeStylesheetFilters(string $addonFilter, string $themeScope): void
     {
         global $lang;
@@ -446,7 +511,7 @@ class AF_Admin
         return '<a class="'.trim($class).'" href="'.$url.'">'.htmlspecialchars_uni($label).'</a>';
     }
 
-    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'all', ?int $themeTid = null, string $logicalId = '', string $variant = 'primary'): string
+    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'all', ?int $themeTid = null, string $logicalId = '', string $variant = 'primary', array $extra = []): string
     {
         global $mybb;
 
@@ -466,6 +531,10 @@ class AF_Admin
         }
         if ($confirm) {
             $html .= '<input type="hidden" name="confirm_force" value="1">';
+        }
+        foreach ($extra as $key => $value) {
+            if (!preg_match('~^[a-z0-9_]+$~i', (string)$key)) continue;
+            $html .= '<input type="hidden" name="'.htmlspecialchars_uni((string)$key).'" value="'.htmlspecialchars_uni((string)$value).'">';
         }
         $buttonClass = $inline ? 'button' : 'submit_button';
         $buttonClass .= ($variant === 'secondary') ? ' af-ts-btn-secondary' : ' af-ts-btn-primary';
