@@ -191,6 +191,11 @@ class AF_Admin
             flash_message(htmlspecialchars_uni((string)$repaired['message']), !empty($repaired['ok']) ? 'success' : 'error');
             admin_redirect(self::themeStylesheetsUrl(null, $themeTid, 'all'));
         }
+        if ($action === 'theme_stylesheets_migrate_legacy') {
+            $migrated = af_theme_stylesheet_migrate_legacy_bundle($themeTid, trim((string)$mybb->get_input('bundle_hash')));
+            flash_message(htmlspecialchars_uni((string)$migrated['message']), !empty($migrated['ok']) ? 'success' : 'error');
+            admin_redirect(self::themeStylesheetsUrl(null, $themeTid, 'all'));
+        }
 
         if ($action === 'theme_stylesheets_force_resync' && !$confirmForce) {
             flash_message($lang->af_theme_stylesheets_force_confirm, 'error');
@@ -321,6 +326,10 @@ class AF_Admin
                     $url = 'index.php?module='.AF_PLUGIN_ID.'&amp;af_view=theme_stylesheet_section&amp;theme_tid='.(int)$bundleTid.'&amp;section_id='.rawurlencode((string)$sectionId);
                     echo '<a class="button af-ts-btn-secondary" href="'.$url.'">'.htmlspecialchars_uni($label).'</a> ';
                 }
+            } elseif ($bundleDbRow && ($parsed['status'] ?? '') === 'legacy') {
+                echo '<span style="color:#a66900;font-weight:600;">'.htmlspecialchars_uni($lang->af_theme_stylesheets_legacy_status).'</span>';
+                echo '<br><span class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_legacy_help).'</span> ';
+                echo self::renderThemeStylesheetActionForm('theme_stylesheets_migrate_legacy', $lang->af_theme_stylesheets_migrate_legacy, '', true, true, $themeFilter, (int)$bundleTid, '', 'primary', ['bundle_hash' => sha1((string)$bundleDbRow['stylesheet'])]);
             } elseif ($bundleDbRow) {
                 echo '<span style="color:#a00;font-weight:600;">'.htmlspecialchars_uni($lang->af_theme_stylesheets_structure_error).': '.htmlspecialchars_uni((string)$parsed['error']).'</span>';
                 echo self::renderThemeStylesheetActionForm('theme_stylesheets_repair_structure', $lang->af_theme_stylesheets_repair_structure, '', true, true, $themeFilter, (int)$bundleTid, '', 'secondary', ['bundle_hash' => sha1((string)$bundleDbRow['stylesheet'])]);
@@ -538,7 +547,8 @@ class AF_Admin
         }
         $buttonClass = $inline ? 'button' : 'submit_button';
         $buttonClass .= ($variant === 'secondary') ? ' af-ts-btn-secondary' : ' af-ts-btn-primary';
-        $html .= '<input type="submit" class="'.$buttonClass.'" value="'.htmlspecialchars_uni($label).'">';
+        $confirmAttr = $confirm ? ' onclick="return confirm(&amp;quot;'.htmlspecialchars_uni($action === 'theme_stylesheets_force_resync' ? 'All manual advancedstyles.css changes will be replaced.' : 'Create a recovery copy and migrate advancedstyles.css?').'&amp;quot;);"' : '';
+        $html .= '<input type="submit" class="'.$buttonClass.'"'.$confirmAttr.' value="'.htmlspecialchars_uni($label).'">';
         $html .= '</form>';
 
         return $html;
