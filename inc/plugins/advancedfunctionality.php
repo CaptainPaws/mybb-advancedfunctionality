@@ -2885,7 +2885,7 @@ function af_theme_stylesheet_migrate_legacy_bundle(int $themeTid, string $expect
 
     $sid = (int)$row['sid'];
     $updated = (string)$plan['source'];
-    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
+    $db->update_query('themestylesheets', ['stylesheet' => $db->escape_string($updated), 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
     $seed = af_theme_stylesheet_build_bundle();
     $payload = [
         'theme_tid' => $themeTid, 'stylesheet_sid' => $sid, 'addon_id' => AF_THEME_BUNDLE_ADDON_ID,
@@ -2920,7 +2920,7 @@ function af_theme_stylesheet_save_section(int $themeTid, string $sectionId, stri
     $replacement = af_theme_stylesheet_encode_section((array)$section['meta'], $newCss);
     $updated = substr($current, 0, (int)$section['start']).$replacement.substr($current, (int)$section['end']);
     $sid = (int)$row['sid'];
-    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
+    $db->update_query('themestylesheets', ['stylesheet' => $db->escape_string($updated), 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
     $state = af_theme_stylesheet_bundle_state($themeTid);
     if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 1, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
     af_theme_stylesheet_cache_row($themeTid, $sid, $updated);
@@ -2944,7 +2944,7 @@ function af_theme_stylesheet_repair_bundle_structure(int $themeTid, string $expe
     if (empty($backup['ok'])) return $backup;
     $updated = (string)$fresh['source'];
     $sid = (int)$row['sid'];
-    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
+    $db->update_query('themestylesheets', ['stylesheet' => $db->escape_string($updated), 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
     $state = af_theme_stylesheet_bundle_state($themeTid);
     if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 0, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
     af_theme_stylesheet_cache_row($themeTid, $sid, $updated);
@@ -3113,7 +3113,7 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
             }
         }
         if ($write) {
-            $update['stylesheet'] = (string)$bundle['source'];
+            $update['stylesheet'] = $db->escape_string((string)$bundle['source']);
             $manual = $migratedLegacyOverride;
         }
         $db->update_query('themestylesheets', $update, "sid='{$sid}'");
