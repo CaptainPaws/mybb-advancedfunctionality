@@ -9,10 +9,11 @@ function verify_post_check($key) { if ($key !== 'token') throw new RuntimeExcept
 function flash_message($message, $type) { $GLOBALS['flashes'][] = [$type, $message]; }
 function admin_redirect($url) { throw new RedirectForTest($url); }
 function my_date($format, $timestamp) { return (string)$timestamp; }
-function af_atf_get_fields_for_forum($fid) { return [
+function af_atf_get_fields_for_forum($fid) { return $fid === 8 ? [] : [
     ['fieldid'=>11, 'name'=>'character_name', 'title'=>'Имя персонажа', 'type'=>'text', 'active'=>1, 'group_active'=>1],
     ['fieldid'=>12, 'name'=>'character_notes', 'title'=>'Биография', 'type'=>'textarea', 'active'=>1, 'group_active'=>1],
     ['fieldid'=>13, 'name'=>'character_flag', 'title'=>'Флаг', 'type'=>'checkbox', 'active'=>1, 'group_active'=>1],
+    ['fieldid'=>14, 'name'=>'character_origin', 'title'=>'Происхождение', 'type'=>'kb_dynamic', 'active'=>1, 'group_active'=>1],
 ]; }
 
 class RedirectForTest extends RuntimeException {}
@@ -31,6 +32,7 @@ class FakeDB {
     public function table_exists($table) { return true; }
     public function escape_string($value) { return (string)$value; }
     public function simple_select($table, $columns = '*', $where = '', $options = []) {
+        if ($table === 'forums') return new FakeResult(preg_match('/fid=(7|8)\b/', $where, $match) ? [['fid' => (int)$match[1]]] : []);
         $rows = $table === AF_WANTED_FIELDS ? array_values($this->fields) : array_values($this->values);
         if (preg_match('/field_key=\'([^\']*)\'/', $where, $match)) $rows = array_filter($rows, fn($r) => $r['field_key'] === $match[1]);
         if (preg_match('/\bid=(\d+)/', $where, $match)) $rows = array_filter($rows, fn($r) => (int)($r['id'] ?? 0) === (int)$match[1]);
@@ -101,6 +103,9 @@ check(strpos($html, 'value="name"') !== false && strpos($html, 'name="show_card"
 check(strpos($html, 'Основные параметры') !== false && strpos($html, 'Источник данных') !== false && strpos($html, 'Поведение') !== false && strpos($html, 'Отображение') !== false, 'ACP editor is split into semantic ATF-style tables');
 check(strpos($html, 'Интеграция с ATF') !== false && strpos($html, 'Имя персонажа (character_name)') !== false
     && strpos($html, 'Флаг (character_flag)') === false, 'ATF selector uses live schema and filters incompatible field types');
+check(strpos($html, '<option value="character_name" selected>') !== false, 'persisted ATF machine key remains selected after ACP reload');
+check(af_wanted_mapping_types_compatible('text', 'number') && af_wanted_mapping_types_compatible('kb_dynamic', 'select')
+    && af_wanted_mapping_types_compatible('text', 'character_stats'), 'compatible and unknown ATF types are not over-filtered');
 check(strpos($html, '<option value="origin_variant">Разновидность происхождения</option>') !== false, 'KB dynamic source is a localized registry-backed select');
 check(strpos($html, '<option value="description">Описание (description)</option>') !== false, 'dependency selector lists active Wanted fields by field key');
 check(strpos($html, 'updateWantedFieldSettings') !== false && strpos($html, '["select","multi","radio"]') !== false, 'type-specific controls have progressive visibility behavior');
@@ -144,5 +149,24 @@ $db->values[] = ['wanted_id' => 1, 'field_id' => 2, 'value' => 'used'];
 $mybb->input['id'] = 2;
 try { AF_Admin_Advancedwanted::render(); } catch (RedirectForTest $redirect) {}
 check(isset($db->fields[2]) && str_contains($flashes[count($flashes) - 1][1], 'не может быть удалено'), 'used field deletion is blocked without orphaning values');
+
+$db->fields[20] = ['id'=>20, 'field_key'=>'wanted_name', 'title'=>'Имя и фамилия [en]', 'type'=>'text', 'required'=>0, 'active'=>1, 'sortorder'=>1,
+    'settings_json'=>json_encode(['atf_field_key'=>'character_name'])];
+$db->fields[21] = ['id'=>21, 'field_key'=>'origin', 'title'=>'Wanted Origin', 'type'=>'kb_dynamic', 'required'=>0, 'active'=>1, 'sortorder'=>2,
+    'settings_json'=>json_encode(['atf_field_key'=>'character_origin', 'source'=>'origin'])];
+$db->values[] = ['wanted_id'=>55, 'field_id'=>20, 'value'=>'Name Surname', 'value_key'=>'Name Surname'];
+$db->values[] = ['wanted_id'=>55, 'field_id'=>21, 'value'=>'mondstadt', 'value_key'=>'mondstadt'];
+$prefill = af_wanted_build_atf_prefill(55);
+check(($prefill['values']['character_name'] ?? '') === 'Name Surname', 'wanted_name maps to the ATF character_name machine key');
+check(($prefill['values']['character_origin'] ?? '') === 'mondstadt', 'KB dynamic origin key maps to the ATF character_origin machine key');
+
+$mybb->request_method = 'get';
+$mybb->settings['af_wanted_application_forum'] = 0;
+$mybb->input = ['tab'=>'fields', 'edit'=>20];
+check(strpos(AF_Admin_Advancedwanted::render(), 'Сначала укажите ID форума анкет ATF') !== false, 'ACP explains that the ATF forum ID must be configured');
+$mybb->settings['af_wanted_application_forum'] = 999;
+check(strpos(AF_Admin_Advancedwanted::render(), 'Сначала укажите ID форума анкет ATF') !== false, 'ACP treats a missing configured forum as invalid');
+$mybb->settings['af_wanted_application_forum'] = 8;
+check(strpos(AF_Admin_Advancedwanted::render(), 'Для выбранного форума ATF поля не найдены') !== false, 'ACP distinguishes an empty ATF schema from an invalid forum');
 
 exit($failures ? 1 : 0);
