@@ -349,17 +349,12 @@ class AF_Admin
         if ($action && $addon && strpos((string)$action, 'theme_stylesheets_') !== 0) {
             verify_post_check($mybb->get_input('my_post_key'));
 
-            if ($action === 'enable' || $action === 'disable') {
-                af_admin_addon_diagnostic_begin($addon, $action);
-                af_admin_addon_diagnostic_stage('enable/disable action', static function () use ($action, $addon): void {
-                    if ($action === 'enable') {
-                        self::enableAddon($addon);
-                    } else {
-                        self::disableAddon($addon);
-                    }
-                });
-                af_admin_addon_diagnostic_finish();
-                flash_message($action === 'enable' ? $lang->af_addon_enabled : $lang->af_addon_disabled, 'success');
+            if ($action === 'enable') {
+                self::enableAddon($addon);
+                flash_message($lang->af_addon_enabled, 'success');
+            } elseif ($action === 'disable') {
+                self::disableAddon($addon);
+                flash_message($lang->af_addon_disabled, 'success');
             }
 
             admin_redirect('index.php?module='.AF_PLUGIN_ID.'&_='.TIME_NOW);
@@ -967,39 +962,33 @@ class AF_Admin
 
     public static function enableAddon(string $id): void
     {
-        af_admin_addon_diagnostic_stage('require addon bootstrap', static function () use ($id): void {
-            $bootstrap = self::addonBootstrap($id);
-            if ($bootstrap && is_file($bootstrap)) {
-                require_once $bootstrap;
-                $fn = 'af_'.$id.'_install';
-                if (function_exists($fn)) { $fn(); }
-            }
-        });
-        af_admin_addon_diagnostic_stage('ensureEnabledSetting', static fn() => self::ensureEnabledSetting($id, 1));
-        af_admin_addon_diagnostic_stage('af_rebuild_and_reload_settings', static fn() => af_rebuild_and_reload_settings());
-        af_admin_addon_diagnostic_stage('bundle rebuild', static fn() => af_sync_theme_stylesheets(false, $id));
+        $bootstrap = self::addonBootstrap($id);
+        if ($bootstrap && is_file($bootstrap)) {
+            require_once $bootstrap;
+            $fn = 'af_'.$id.'_install';
+            if (function_exists($fn)) { $fn(); }
+        }
+        self::ensureEnabledSetting($id, 1);
+        af_rebuild_and_reload_settings();
+        af_sync_theme_stylesheets(false, $id);
     }
 
     public static function disableAddon(string $id): void
     {
-        af_disable_log('start', $id);
-        af_admin_addon_diagnostic_stage('ensureEnabledSetting', static fn() => self::ensureEnabledSetting($id, 0));
-        af_admin_addon_diagnostic_stage('af_rebuild_and_reload_settings', static fn() => af_rebuild_and_reload_settings());
-        af_admin_addon_diagnostic_stage('disable reconciliation', static fn() => af_disable_theme_stylesheet_sources($id));
-        af_admin_addon_diagnostic_stage('bundle rebuild', static fn() => af_sync_theme_stylesheets(false, $id));
-        af_admin_addon_diagnostic_stage('require addon bootstrap', static function () use ($id): void {
-            $bootstrap = self::addonBootstrap($id);
-            if ($bootstrap && is_file($bootstrap)) {
-                require_once $bootstrap;
-            }
-        });
-        af_admin_addon_diagnostic_stage('af_'.$id.'_deactivate()', static function () use ($id): void {
-            $fn = 'af_'.$id.'_deactivate';
-            if (function_exists($fn)) {
-                $fn();
-            }
-        });
-        af_disable_log('finished', $id);
+        self::ensureEnabledSetting($id, 0);
+        af_rebuild_and_reload_settings();
+        af_disable_theme_stylesheet_sources($id);
+        af_sync_theme_stylesheets(false, $id);
+
+        $bootstrap = self::addonBootstrap($id);
+        if ($bootstrap && is_file($bootstrap)) {
+            require_once $bootstrap;
+        }
+
+        $fn = 'af_'.$id.'_deactivate';
+        if (function_exists($fn)) {
+            $fn();
+        }
     }
 
     public static function addonBootstrap(string $id): ?string
@@ -1643,8 +1632,13 @@ function af_write_lang_file(string $fullpath, array $pairs, bool $force): void
     // Экранируем значения, собираем код
     $buf  = "<?php\n";
     foreach ($pairs as $k => $v) {
-        $key = preg_replace('~[^a-z0-9_]+~i', '_', (string)$k);
-        $val = str_replace(['\\', "'"], ['\\\\', "\\'"], (string)$v);
+        $rawKey = ltrim((string)$k, "\xEF\xBB\xBF");
+        $rawValue = ltrim((string)$v, "\xEF\xBB\xBF");
+        if (preg_match('//u', $rawKey) !== 1 || preg_match('//u', $rawValue) !== 1) {
+            throw new RuntimeException('AF language source is not valid UTF-8: '.$fullpath);
+        }
+        $key = preg_replace('~[^a-z0-9_]+~i', '_', $rawKey);
+        $val = str_replace(['\\', "'"], ['\\\\', "\\'"], $rawValue);
         $buf .= "\$l['{$key}'] = '{$val}';\n";
     }
 
@@ -1656,7 +1650,7 @@ function af_write_lang_file(string $fullpath, array $pairs, bool $force): void
         }
     }
 
-    @file_put_contents($fullpath, $buf);
+    @file_put_contents($fullpath, $buf, LOCK_EX);
 }
 
 function af_reload_settings_runtime(): void
@@ -1940,6 +1934,38 @@ function af_apply_preoutput_filters(string $page): string
 
     // 5) Last-resort дедуп <script src>
     $page = af_hard_dedup_script_src_tags($page);
+
+    return af_ensure_utf8_document_charset($page);
+}
+
+/**
+ * AF source strings and generated language files are UTF-8.  Make that byte
+ * contract explicit at the HTTP/HTML boundary instead of transcoding text.
+ */
+function af_ensure_utf8_document_charset(string $page): string
+{
+    if ($page === '' || stripos($page, '<html') === false) {
+        return $page;
+    }
+
+    if (!headers_sent()) {
+        header('Content-Type: text/html; charset=UTF-8');
+    }
+
+    $page = (string)preg_replace(
+        '~(<meta\b[^>]*\bcharset\s*=\s*["\']?)([^"\'\s/>;]+)~i',
+        '$1UTF-8',
+        $page
+    );
+    $page = (string)preg_replace(
+        '~(<meta\b[^>]*\bcontent\s*=\s*["\'][^"\']*?charset\s*=\s*)([^"\'\s;>]+)~i',
+        '$1UTF-8',
+        $page
+    );
+
+    if (!preg_match('~<meta\b[^>]*(?:\bcharset\s*=|\bcontent\s*=\s*["\'][^"\']*charset\s*=)~i', $page)) {
+        $page = (string)preg_replace('~<head\b([^>]*)>~i', '<head$1><meta charset="UTF-8">', $page, 1);
+    }
 
     return $page;
 }
@@ -3909,155 +3935,6 @@ function af_theme_stylesheets_log(string $event, string $addonId, string $logica
     @error_log($payload);
 }
 
-/** Start temporary ACP diagnostics for one addon toggle request. */
-function af_admin_addon_diagnostic_begin(string $addonId, string $action): void
-{
-    global $db;
-
-    $GLOBALS['af_admin_addon_diagnostic'] = [
-        'active' => true,
-        'addon' => preg_replace('~[^a-z0-9_\-]+~i', '', $addonId) ?: 'unknown',
-        'action' => $action,
-        'stage' => 'enable/disable action',
-        'file' => __FILE__,
-        'line' => __LINE__,
-        'initial_db_error' => is_object($db) && method_exists($db, 'error_number') ? (int)$db->error_number() : 0,
-    ];
-
-    if (!empty($GLOBALS['af_admin_addon_diagnostic_shutdown_registered'])) {
-        return;
-    }
-
-    $GLOBALS['af_admin_addon_diagnostic_shutdown_registered'] = true;
-    register_shutdown_function(static function (): void {
-        global $db;
-
-        $state = (array)($GLOBALS['af_admin_addon_diagnostic'] ?? []);
-        if (empty($state['active'])) {
-            return;
-        }
-
-        $last = error_get_last();
-        $dbErrorNumber = is_object($db) && method_exists($db, 'error_number') ? (int)$db->error_number() : 0;
-        $initialDbError = (int)($state['initial_db_error'] ?? 0);
-        if ($dbErrorNumber !== 0 && $dbErrorNumber !== $initialDbError) {
-            $dbMessage = method_exists($db, 'error_string') ? (string)$db->error_string() : 'Unknown database error';
-            af_admin_addon_diagnostic_render([
-                'class' => 'MyBB SQL error '.$dbErrorNumber,
-                'message' => $dbMessage,
-                'file' => (string)($state['file'] ?? __FILE__),
-                'line' => (int)($state['line'] ?? 0),
-            ]);
-            return;
-        }
-
-        if ($last && in_array((int)($last['type'] ?? 0), [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR, E_RECOVERABLE_ERROR], true)) {
-            af_admin_addon_diagnostic_render([
-                'class' => 'PHP fatal error',
-                'message' => (string)($last['message'] ?? 'Unknown fatal error'),
-                'file' => (string)($last['file'] ?? ($state['file'] ?? __FILE__)),
-                'line' => (int)($last['line'] ?? ($state['line'] ?? 0)),
-            ]);
-        }
-    });
-}
-
-/** Execute and identify one exact toggle stage, preserving normal success behaviour. */
-function af_admin_addon_diagnostic_stage(string $stage, callable $callback)
-{
-    $state = (array)($GLOBALS['af_admin_addon_diagnostic'] ?? []);
-    if (!empty($state['active'])) {
-        try {
-            $reflection = new ReflectionFunction(Closure::fromCallable($callback));
-            $state['file'] = (string)$reflection->getFileName();
-            $state['line'] = (int)$reflection->getStartLine();
-        } catch (Throwable $ignored) {
-            // Location is supplemental; never let reflection mask the real operation.
-        }
-        $state['stage'] = $stage;
-        $GLOBALS['af_admin_addon_diagnostic'] = $state;
-    }
-
-    try {
-        return $callback();
-    } catch (Throwable $error) {
-        af_admin_addon_diagnostic_render([
-            'class' => get_class($error),
-            'message' => $error->getMessage(),
-            'file' => $error->getFile(),
-            'line' => $error->getLine(),
-        ]);
-        exit;
-    }
-}
-
-/** Mark a successful request so the shutdown fallback remains silent. */
-function af_admin_addon_diagnostic_finish(): void
-{
-    if (isset($GLOBALS['af_admin_addon_diagnostic'])) {
-        $GLOBALS['af_admin_addon_diagnostic']['active'] = false;
-    }
-}
-
-/** Print a deliberately plain ACP error block that also survives shutdown. */
-function af_admin_addon_diagnostic_render(array $error): void
-{
-    $state = (array)($GLOBALS['af_admin_addon_diagnostic'] ?? []);
-    $GLOBALS['af_admin_addon_diagnostic']['active'] = false;
-
-    $fields = [
-        'Addon' => (string)($state['addon'] ?? 'unknown'),
-        'Stage' => (string)($state['stage'] ?? 'unknown'),
-        'Exception' => (string)($error['class'] ?? 'Unknown error'),
-        'Message' => (string)($error['message'] ?? ''),
-        'File' => (string)($error['file'] ?? 'unknown'),
-        'Line' => (string)($error['line'] ?? 0),
-    ];
-    $lines = [];
-    foreach ($fields as $label => $value) {
-        $lines[] = $label.': '.$value;
-    }
-    $plain = implode("\n", $lines);
-    @error_log("AF addon ACP diagnostic:\n".$plain);
-
-    if (!headers_sent()) {
-        http_response_code(500);
-        header('Content-Type: text/html; charset=UTF-8');
-    }
-    echo '<div class="error"><pre style="white-space:pre-wrap">'.htmlspecialchars_uni($plain).'</pre></div>';
-}
-
-/**
- * Keep a durable breadcrumb trail for the ACP disable request.  MyBB's SQL
- * error handler may terminate the request instead of throwing, so a shutdown
- * handler is required in addition to ordinary before/after logging.
- */
-function af_disable_log(string $stage, string $addonId): void
-{
-    $addonId = preg_replace('~[^a-z0-9_\-]+~i', '', $addonId) ?: 'unknown';
-    $GLOBALS['af_disable_diagnostic'] = [
-        'active' => $stage !== 'finished',
-        'addon' => $addonId,
-        'stage' => $stage,
-    ];
-    @error_log('AF disable: '.$stage.' '.$addonId);
-
-    if (empty($GLOBALS['af_disable_shutdown_registered'])) {
-        $GLOBALS['af_disable_shutdown_registered'] = true;
-        register_shutdown_function(static function (): void {
-            $state = (array)($GLOBALS['af_disable_diagnostic'] ?? []);
-            if (empty($state['active'])) {
-                return;
-            }
-            $last = error_get_last();
-            $suffix = $last
-                ? '; PHP '.(string)($last['message'] ?? 'error').' in '.(string)($last['file'] ?? 'unknown').':'.(int)($last['line'] ?? 0)
-                : '; request terminated without a PHP fatal (check the MyBB SQL error immediately above)';
-            @error_log('AF disable: aborted after '.(string)($state['stage'] ?? 'unknown').' '.(string)($state['addon'] ?? 'unknown').$suffix);
-        });
-    }
-}
-
 /**
  * Disable is not an ordinary source sync: retain source identity for a future
  * enable, but explicitly detach it from the generated bundle state.
@@ -5031,6 +4908,25 @@ function af_resolve_af_addon_css_delivery_context(string $cleanPath): array
             'is_af_addon_css' => false,
             'allow_file'      => true,
             'decision'        => [],
+        ];
+    }
+
+    // Vendor stylesheets with relative binary assets must stay at their
+    // canonical URL.  Treating them as theme-managed CSS makes the global
+    // normalizer remove the link in Theme mode and would also resolve
+    // ../webfonts against /cache/themes/... if they were bundled.
+    if (
+        (string)$resolved['addon_id'] === 'advancedfontawesome'
+        && strpos((string)$resolved['file_rel'], 'assets/font-awesome-6/css/') === 0
+    ) {
+        return [
+            'is_af_addon_css' => false,
+            'is_vendor_runtime_css' => true,
+            'addon_id' => (string)$resolved['addon_id'],
+            'file_rel' => (string)$resolved['file_rel'],
+            'clean_path' => (string)$resolved['clean_path'],
+            'decision' => [],
+            'allow_file' => true,
         ];
     }
 

@@ -90,16 +90,21 @@ for ($cycle = 1; $cycle <= 3; $cycle++) {
     }
 }
 
-$requiredStages = ['ensureEnabledSetting', 'af_rebuild_and_reload_settings', 'disable reconciliation',
-    'bundle rebuild', 'require addon bootstrap', "af_'.\$id.'_deactivate()"];
-foreach ($requiredStages as $stage) {
-    if (!str_contains($router, "af_admin_addon_diagnostic_stage('{$stage}'")) throw new RuntimeException('Missing disable diagnostic stage '.$stage);
+$disableMethod = substr($router, strpos($router, 'public static function disableAddon'), 1200);
+$requiredCalls = ['ensureEnabledSetting($id, 0)', 'af_rebuild_and_reload_settings()',
+    'af_disable_theme_stylesheet_sources($id)', 'af_sync_theme_stylesheets(false, $id)',
+    'self::addonBootstrap($id)', "\$fn = 'af_'.\$id.'_deactivate'"];
+$lastPosition = -1;
+foreach ($requiredCalls as $call) {
+    $position = strpos($disableMethod, $call);
+    if ($position === false || $position <= $lastPosition) throw new RuntimeException('Disable sequence changed at '.$call);
+    $lastPosition = $position;
 }
-if (!str_contains($router, "af_admin_addon_diagnostic_stage('enable/disable action'")) throw new RuntimeException('Missing toggle action diagnostic boundary');
-foreach (['Addon', 'Stage', 'Exception', 'Message', 'File', 'Line'] as $field) {
-    if (!str_contains($core, "'{$field}' =>")) throw new RuntimeException('Missing ACP diagnostic field '.$field);
+foreach (['af_admin_addon_diagnostic', 'af_disable_log', 'AF addon ACP diagnostic', 'AF disable:'] as $debugToken) {
+    if (str_contains($core, $debugToken) || str_contains($router, $debugToken)) {
+        throw new RuntimeException('Temporary toggle diagnostics remain: '.$debugToken);
+    }
 }
-if (!str_contains($core, "'class' => 'MyBB SQL error '.\$dbErrorNumber")) throw new RuntimeException('Missing MyBB SQL error shutdown capture');
 if (substr_count($router, "\$fn = 'af_'.\$id.'_deactivate';") !== 1) throw new RuntimeException('Deactivator is not owned exactly once by disableAddon');
 if (preg_match("~delete_query\([^;]+af_theme_stylesheets~i", $core)) throw new RuntimeException('Disable introduces destructive registry cleanup');
 
