@@ -40,14 +40,6 @@ class AF_Admin
                 flash_message($lang->af_addon_enabled, 'success');
             } elseif ($action === 'disable') {
                 self::disableAddon($addon);
-
-                $bootstrap = self::addonBootstrap($addon);
-                if ($bootstrap && is_file($bootstrap)) {
-                    require_once $bootstrap;
-                    $fn = 'af_'.$addon.'_deactivate';
-                    if (function_exists($fn)) { $fn(); }
-                }
-
                 flash_message($lang->af_addon_disabled, 'success');
             }
 
@@ -662,9 +654,34 @@ class AF_Admin
 
     public static function disableAddon(string $id): void
     {
+        af_disable_log('start', $id);
+        af_disable_log('before setting=0', $id);
         self::ensureEnabledSetting($id, 0);
+        af_disable_log('after setting=0', $id);
+        af_disable_log('before rebuild settings', $id);
         af_rebuild_and_reload_settings();
+        af_disable_log('after rebuild settings', $id);
+        af_disable_log('before source reconciliation', $id);
+        af_disable_theme_stylesheet_sources($id);
+        af_disable_log('after source reconciliation', $id);
+        af_disable_log('before stylesheet sync', $id);
         af_sync_theme_stylesheets(false, $id);
+        af_disable_log('after stylesheet sync', $id);
+
+        af_disable_log('before bootstrap require', $id);
+        $bootstrap = self::addonBootstrap($id);
+        if ($bootstrap && is_file($bootstrap)) {
+            require_once $bootstrap;
+        }
+        af_disable_log('after bootstrap require', $id);
+
+        $fn = 'af_'.$id.'_deactivate';
+        af_disable_log('before addon deactivate', $id);
+        if (function_exists($fn)) {
+            $fn();
+        }
+        af_disable_log('after addon deactivate', $id);
+        af_disable_log('finished', $id);
     }
 
     public static function addonBootstrap(string $id): ?string

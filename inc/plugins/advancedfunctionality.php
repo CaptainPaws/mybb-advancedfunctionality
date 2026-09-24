@@ -354,14 +354,6 @@ class AF_Admin
                 flash_message($lang->af_addon_enabled, 'success');
             } elseif ($action === 'disable') {
                 self::disableAddon($addon);
-
-                $bootstrap = self::addonBootstrap($addon);
-                if ($bootstrap && is_file($bootstrap)) {
-                    require_once $bootstrap;
-                    $fn = 'af_'.$addon.'_deactivate';
-                    if (function_exists($fn)) { $fn(); }
-                }
-
                 flash_message($lang->af_addon_disabled, 'success');
             }
 
@@ -983,9 +975,34 @@ class AF_Admin
 
     public static function disableAddon(string $id): void
     {
+        af_disable_log('start', $id);
+        af_disable_log('before setting=0', $id);
         self::ensureEnabledSetting($id, 0);
+        af_disable_log('after setting=0', $id);
+        af_disable_log('before rebuild settings', $id);
         af_rebuild_and_reload_settings();
+        af_disable_log('after rebuild settings', $id);
+        af_disable_log('before source reconciliation', $id);
+        af_disable_theme_stylesheet_sources($id);
+        af_disable_log('after source reconciliation', $id);
+        af_disable_log('before stylesheet sync', $id);
         af_sync_theme_stylesheets(false, $id);
+        af_disable_log('after stylesheet sync', $id);
+
+        af_disable_log('before bootstrap require', $id);
+        $bootstrap = self::addonBootstrap($id);
+        if ($bootstrap && is_file($bootstrap)) {
+            require_once $bootstrap;
+        }
+        af_disable_log('after bootstrap require', $id);
+
+        $fn = 'af_'.$id.'_deactivate';
+        af_disable_log('before addon deactivate', $id);
+        if (function_exists($fn)) {
+            $fn();
+        }
+        af_disable_log('after addon deactivate', $id);
+        af_disable_log('finished', $id);
     }
 
     public static function addonBootstrap(string $id): ?string
@@ -3559,9 +3576,13 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
         $seed = af_get_theme_stylesheet_source((array)$entry['addon_meta'], $entry);
 
         foreach ($themeTids as $themeTid) {
-            af_theme_stylesheet_repair_legacy_registry_row($themeTid, $entry);
-            af_ensure_theme_stylesheet_registry_row($themeTid, $entry);
-            af_reconcile_theme_stylesheet_registry_state($themeTid, $entry, $seed ?: null);
+            $context = $addonId.':'.(string)$entry['logical_id'].':theme='.(int)$themeTid;
+            af_theme_stylesheet_diagnostic_call('af_theme_stylesheet_repair_legacy_registry_row', $context,
+                static fn() => af_theme_stylesheet_repair_legacy_registry_row($themeTid, $entry));
+            af_theme_stylesheet_diagnostic_call('af_ensure_theme_stylesheet_registry_row', $context,
+                static fn() => af_ensure_theme_stylesheet_registry_row($themeTid, $entry));
+            af_theme_stylesheet_diagnostic_call('af_reconcile_theme_stylesheet_registry_state', $context,
+                static fn() => af_reconcile_theme_stylesheet_registry_state($themeTid, $entry, $seed ?: null));
             if (!$seed) {
                 $result['skipped']++;
                 continue;
@@ -3570,7 +3591,8 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
     }
 
     foreach ($themeTids as $themeTid) {
-        $state = af_theme_stylesheet_sync_bundle((int)$themeTid, $force);
+        $state = af_theme_stylesheet_diagnostic_call('af_theme_stylesheet_sync_bundle', 'theme='.(int)$themeTid,
+            static fn(): array => af_theme_stylesheet_sync_bundle((int)$themeTid, $force));
         if (!empty($state['updated'])) $result['created_or_updated']++;
         if (!empty($state['manual_override'])) $result['manual_override']++;
         // Once the bundle has consumed/detached legacy records, source rows
@@ -3583,6 +3605,18 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
     }
 
     return $result;
+}
+
+/** Log the exact stylesheet operation which threw without changing its error semantics. */
+function af_theme_stylesheet_diagnostic_call(string $operation, string $context, callable $callback)
+{
+    try {
+        return $callback();
+    } catch (Throwable $error) {
+        @error_log('[AF theme stylesheets] '.$operation.' failed; '.$context.'; '
+            .get_class($error).': '.$error->getMessage().' in '.$error->getFile().':'.$error->getLine());
+        throw $error;
+    }
 }
 
 function af_collect_theme_stylesheet_diagnostics(?string $onlyAddonId = null): array
@@ -3876,6 +3910,59 @@ function af_theme_stylesheets_log(string $event, string $addonId, string $logica
         @log_admin_action($payload);
     }
     @error_log($payload);
+}
+
+/**
+ * Keep a durable breadcrumb trail for the ACP disable request.  MyBB's SQL
+ * error handler may terminate the request instead of throwing, so a shutdown
+ * handler is required in addition to ordinary before/after logging.
+ */
+function af_disable_log(string $stage, string $addonId): void
+{
+    $addonId = preg_replace('~[^a-z0-9_\-]+~i', '', $addonId) ?: 'unknown';
+    $GLOBALS['af_disable_diagnostic'] = [
+        'active' => $stage !== 'finished',
+        'addon' => $addonId,
+        'stage' => $stage,
+    ];
+    @error_log('AF disable: '.$stage.' '.$addonId);
+
+    if (empty($GLOBALS['af_disable_shutdown_registered'])) {
+        $GLOBALS['af_disable_shutdown_registered'] = true;
+        register_shutdown_function(static function (): void {
+            $state = (array)($GLOBALS['af_disable_diagnostic'] ?? []);
+            if (empty($state['active'])) {
+                return;
+            }
+            $last = error_get_last();
+            $suffix = $last
+                ? '; PHP '.(string)($last['message'] ?? 'error').' in '.(string)($last['file'] ?? 'unknown').':'.(int)($last['line'] ?? 0)
+                : '; request terminated without a PHP fatal (check the MyBB SQL error immediately above)';
+            @error_log('AF disable: aborted after '.(string)($state['stage'] ?? 'unknown').' '.(string)($state['addon'] ?? 'unknown').$suffix);
+        });
+    }
+}
+
+/**
+ * Disable is not an ordinary source sync: retain source identity for a future
+ * enable, but explicitly detach it from the generated bundle state.
+ */
+function af_disable_theme_stylesheet_sources(string $addonId): void
+{
+    global $db;
+
+    $addonId = preg_replace('~[^a-z0-9_\-]+~i', '', $addonId) ?: '';
+    if ($addonId === '') {
+        return;
+    }
+
+    af_theme_stylesheets_install_schema();
+    af_theme_stylesheet_deduplicate_registry();
+    $db->update_query(AF_THEME_STYLESHEETS_TABLE, [
+        'stylesheet_sid' => 0,
+        'is_integrated' => 0,
+        'updated_at' => TIME_NOW,
+    ], "addon_id='".$db->escape_string($addonId)."'");
 }
 
 function af_theme_stylesheets_signature_for_enabled_addons(): string
