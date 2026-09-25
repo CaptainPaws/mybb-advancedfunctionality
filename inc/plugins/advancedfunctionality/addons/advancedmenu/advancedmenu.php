@@ -19,12 +19,24 @@ if (!defined('AF_ADDONS')) { /* аддон предполагает наличи
 
 define('AF_AM_ID', 'advancedmenu');
 define('AF_AM_TABLE_ITEMS', 'af_advancedmenu_items');
+define('AF_AM_TABLE_OVERRIDES', 'af_advancedmenu_overrides');
 define('AF_AM_CACHE_KEY', 'af_advancedmenu_items');
 define('AF_AM_ASSETS_MARK', '<!--af_advancedmenu_assets-->');
 define('AF_AM_APPLIED_MARK', '<!--af_advancedmenu_applied-->');
 
-/* Runtime-only system catalogue. Stage 1 does not render it, so all legacy
- * injections remain authoritative until the menu migration is explicit. */
+function af_menu_containers(): array
+{
+    return ['main'=>'Основное меню', 'secondary'=>'Дополнительное меню', 'user_drawer'=>'Пользовательское меню'];
+}
+
+function af_menu_normalize_container(string $container): string
+{
+    return ['top'=>'main', 'top_links'=>'main', 'panel'=>'user_drawer', 'panel_links'=>'user_drawer',
+        'user_links'=>'user_drawer'][$container] ?? (array_key_exists($container, af_menu_containers()) ? $container : 'main');
+}
+
+/* Runtime catalogue contains immutable provider defaults. Presentation choices
+ * are deliberately stored separately in AF_AM_TABLE_OVERRIDES. */
 function af_menu_register_item(array $item): bool
 {
     $key = strtolower(trim((string)($item['key'] ?? '')));
@@ -34,9 +46,12 @@ function af_menu_register_item(array $item): bool
     $item = array_merge(['key'=>$key, 'source_addon'=>'mybb', 'label'=>$key,
         'icon'=>'', 'type'=>$type, 'default_container'=>'panel_links',
         'default_sortorder'=>100, 'visibility'=>true, 'action'=>[],
-        'badge_provider'=>null, 'renderer'=>null], $item);
+        'badge_provider'=>null, 'renderer'=>null, 'allowed_containers'=>array_keys(af_menu_containers())], $item);
     $item['key'] = $key; $item['type'] = $type;
     $item['default_sortorder'] = (int)$item['default_sortorder'];
+    $item['default_container'] = af_menu_normalize_container((string)$item['default_container']);
+    $item['allowed_containers'] = array_values(array_intersect(array_keys(af_menu_containers()), (array)$item['allowed_containers']));
+    if (!$item['allowed_containers']) $item['allowed_containers'] = [$item['default_container']];
     $GLOBALS['af_advancedmenu_system_registry'][$key] = $item;
     return true;
 }
@@ -76,6 +91,55 @@ function af_menu_item_badge(array $item)
 {
     $provider = $item['badge_provider'] ?? null;
     return is_callable($provider) ? $provider($item) : null;
+}
+
+function af_menu_ensure_registry_overrides(?array $registry = null): void
+{
+    global $db;
+    $registry = $registry ?? af_menu_collect_registry();
+    foreach ($registry as $key => $item) {
+        $escaped = $db->escape_string($key);
+        $exists = (int)$db->fetch_field($db->simple_select(AF_AM_TABLE_OVERRIDES, 'COUNT(*) AS total', "item_key='{$escaped}'"), 'total');
+        if ($exists) continue; // Provider reloads must never overwrite an administrator's choices.
+        $db->insert_query(AF_AM_TABLE_OVERRIDES, ['item_key'=>$key, 'enabled'=>1,
+            'container'=>$item['default_container'], 'sortorder'=>(int)$item['default_sortorder'],
+            'label_override'=>null, 'icon_override'=>null, 'created_at'=>TIME_NOW, 'updated_at'=>TIME_NOW]);
+    }
+}
+
+function af_menu_get_overrides(): array
+{
+    global $db;
+    $out = [];
+    $q = $db->simple_select(AF_AM_TABLE_OVERRIDES, '*');
+    while ($row = $db->fetch_array($q)) $out[(string)$row['item_key']] = $row;
+    return $out;
+}
+
+function af_menu_configured_registry(bool $ensure = true): array
+{
+    $registry = af_menu_collect_registry();
+    if ($ensure) af_menu_ensure_registry_overrides($registry);
+    $overrides = af_menu_get_overrides();
+    foreach ($registry as $key => &$item) {
+        $o = $overrides[$key] ?? [];
+        $item['enabled'] = (int)($o['enabled'] ?? 1);
+        $item['container'] = af_menu_normalize_container((string)($o['container'] ?? $item['default_container']));
+        if (!in_array($item['container'], $item['allowed_containers'], true)) $item['container'] = $item['default_container'];
+        $item['sortorder'] = (int)($o['sortorder'] ?? $item['default_sortorder']);
+        if (($o['label_override'] ?? '') !== '') $item['label'] = $o['label_override'];
+        if (($o['icon_override'] ?? '') !== '') $item['icon'] = $o['icon_override'];
+    }
+    unset($item);
+    uasort($registry, static fn($a, $b) => [$a['container'],$a['sortorder'],$a['key']] <=> [$b['container'],$b['sortorder'],$b['key']]);
+    return $registry;
+}
+
+/** Presentation switch for legacy providers that still own their frontend markup. */
+function af_menu_system_item_enabled(string $key): bool
+{
+    $items = af_menu_configured_registry();
+    return !isset($items[$key]) || !empty($items[$key]['enabled']);
 }
 
 /* =========================
@@ -123,6 +187,7 @@ function af_advancedmenu_install_db(): void
         CREATE TABLE IF NOT EXISTS `".TABLE_PREFIX.AF_AM_TABLE_ITEMS."` (
             `id` int unsigned NOT NULL AUTO_INCREMENT,
             `location` varchar(10) NOT NULL DEFAULT 'top',
+            `container` varchar(24) NOT NULL DEFAULT 'main',
             `slug` varchar(64) NOT NULL,
             `title` varchar(255) NOT NULL,
             `url` varchar(500) NOT NULL,
@@ -139,6 +204,14 @@ function af_advancedmenu_install_db(): void
         ) {$collation}
     ");
 
+    $db->write_query("CREATE TABLE IF NOT EXISTS `".TABLE_PREFIX.AF_AM_TABLE_OVERRIDES."` (
+        `item_key` varchar(64) NOT NULL, `enabled` tinyint(1) NOT NULL DEFAULT 1,
+        `container` varchar(24) NOT NULL DEFAULT 'main', `sortorder` int NOT NULL DEFAULT 100,
+        `label_override` varchar(255) NULL, `icon_override` varchar(255) NULL,
+        `created_at` int unsigned NOT NULL DEFAULT 0, `updated_at` int unsigned NOT NULL DEFAULT 0,
+        PRIMARY KEY (`item_key`), KEY `idx_container_sort` (`container`,`sortorder`)
+    ) {$collation}");
+
     // Мягкий апгрейд: если таблица была создана раньше без icon/hint — добавим.
     if (method_exists($db, 'field_exists')) {
         if (!$db->field_exists('icon', AF_AM_TABLE_ITEMS)) {
@@ -147,9 +220,15 @@ function af_advancedmenu_install_db(): void
         if (!$db->field_exists('hint', AF_AM_TABLE_ITEMS)) {
             $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_ITEMS."` ADD COLUMN `hint` varchar(255) NOT NULL DEFAULT '' AFTER `icon`");
         }
+        if (!$db->field_exists('container', AF_AM_TABLE_ITEMS)) {
+            $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_ITEMS."` ADD COLUMN `container` varchar(24) NOT NULL DEFAULT 'main' AFTER `location`");
+            $db->write_query("UPDATE `".TABLE_PREFIX.AF_AM_TABLE_ITEMS."` SET `container`=CASE WHEN `location`='panel' THEN 'user_drawer' ELSE 'main' END");
+        }
     } else {
         // fallback (если внезапно нет field_exists) — не трогаем, чтобы не падать.
     }
+
+    af_menu_ensure_registry_overrides();
 }
 
 function af_advancedmenu_install_settings(): void
