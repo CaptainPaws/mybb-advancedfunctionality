@@ -142,13 +142,33 @@ function af_kb_character_profile_field_contract(): array
 
 function af_kb_arpg_character_stat_keys(): array
 {
-    return array_keys(af_kb_arpg_origin_modifier_stat_definitions());
+    return array_keys(af_kb_arpg_character_stat_registry());
+}
+
+/** One shared, UI-facing ARPG stat contract. Legacy/DnD armor is deliberately absent. */
+function af_kb_arpg_character_stat_registry(): array
+{
+    return [
+        'hp' => ['label' => 'Здоровье', 'vm_field' => 'character_hp'],
+        'atk' => ['label' => 'Сила атаки', 'vm_field' => 'character_attack_power'],
+        'def' => ['label' => 'Защита', 'vm_field' => 'character_defense'],
+        'speed' => ['label' => 'Скорость', 'vm_field' => 'character_speed'],
+        'crit_rate' => ['label' => 'Шанс крита', 'vm_field' => 'character_crit_rate'],
+        'crit_dmg' => ['label' => 'Крит. урон', 'vm_field' => 'character_crit_damage'],
+        'element_damage_bonus' => ['label' => 'Бонус стихийного урона', 'vm_field' => 'character_element_damage_bonus'],
+        'mastery' => ['label' => 'Мастерство стихий', 'vm_field' => 'character_elemental_mastery'],
+        'healing_bonus' => ['label' => 'Бонус лечения', 'vm_field' => 'character_healing_bonus'],
+        'shield_strength' => ['label' => 'Бонус щита', 'vm_field' => 'character_shield_strength'],
+        'status_hit' => ['label' => 'Шанс наложения статуса', 'vm_field' => 'character_status_hit'],
+        'status_resist' => ['label' => 'Сопротивление статусам', 'vm_field' => 'character_status_resist'],
+        'luck' => ['label' => 'Удача', 'vm_field' => 'character_luck'],
+    ];
 }
 
 function af_kb_arpg_character_stat_options(): array
 {
     $options = [];
-    foreach (af_kb_arpg_origin_modifier_stat_definitions() as $key => $definition) {
+    foreach (af_kb_arpg_character_stat_registry() as $key => $definition) {
         $options[] = ['value' => $key, 'label' => (string)$definition['label']];
     }
     return $options;
@@ -163,15 +183,13 @@ function af_kb_arpg_origin_modifier_stat_definitions(): array
 {
     $originSchema = af_kb_default_type_profile_payload_arpg('arpg_origin');
     $fieldMap = [
-        'hp_base' => ['key' => 'hp', 'label' => 'HP', 'vm_field' => 'character_hp'],
-        'defense_base' => ['key' => 'def', 'label' => 'Defense', 'vm_field' => 'character_defense'],
-        'attack_power_base' => ['key' => 'atk', 'label' => 'Attack Power', 'vm_field' => 'character_attack_power'],
-        'movement_speed' => ['key' => 'speed', 'label' => 'Movement Speed', 'vm_field' => 'character_speed'],
-        'crit_damage_base' => ['key' => 'crit_dmg', 'label' => 'Crit Damage', 'vm_field' => 'character_crit_damage'],
-        'elemental_mastery_base' => ['key' => 'mastery', 'label' => 'Elemental Mastery', 'vm_field' => 'character_elemental_mastery'],
-        'elemental_damage_bonus_base' => ['key' => 'element_damage_bonus', 'label' => 'Elemental Damage Bonus', 'vm_field' => 'character_element_damage_bonus'],
-        'healing_bonus_base' => ['key' => 'healing_bonus', 'label' => 'Healing Bonus', 'vm_field' => 'character_healing_bonus'],
-        'shield_bonus_base' => ['key' => 'shield_strength', 'label' => 'Shield Bonus', 'vm_field' => 'character_shield_strength'],
+        'hp_base' => ['key' => 'hp'], 'attack_power_base' => ['key' => 'atk'],
+        'defense_base' => ['key' => 'def'], 'movement_speed' => ['key' => 'speed'],
+        'crit_rate_base' => ['key' => 'crit_rate'], 'crit_damage_base' => ['key' => 'crit_dmg'],
+        'elemental_damage_bonus_base' => ['key' => 'element_damage_bonus'],
+        'elemental_mastery_base' => ['key' => 'mastery'], 'healing_bonus_base' => ['key' => 'healing_bonus'],
+        'shield_bonus_base' => ['key' => 'shield_strength'], 'status_hit_base' => ['key' => 'status_hit'],
+        'status_resist_base' => ['key' => 'status_resist'], 'luck_base' => ['key' => 'luck'],
         'hp_per_level' => ['key' => 'hp_per_level', 'label' => 'HP per Level', 'vm_field' => 'character_hp', 'level_scaled' => true],
         'defense_per_level' => ['key' => 'defense_per_level', 'label' => 'Defense per Level', 'vm_field' => 'character_defense', 'level_scaled' => true],
         'attack_power_per_level' => ['key' => 'attack_power_per_level', 'label' => 'Attack Power per Level', 'vm_field' => 'character_attack_power', 'level_scaled' => true],
@@ -185,6 +203,7 @@ function af_kb_arpg_origin_modifier_stat_definitions(): array
         }
         $key = (string)$definition['key'];
         unset($definition['key']);
+        $definition = array_merge((array)(af_kb_arpg_character_stat_registry()[$key] ?? []), $definition);
         $definition['origin_field'] = $originField;
         $definitions[$key] = $definition;
     }
@@ -193,14 +212,14 @@ function af_kb_arpg_origin_modifier_stat_definitions(): array
 
 function af_kb_arpg_origin_modifier_operations(): array
 {
-    return ['flat'];
+    return ['flat', 'percent'];
 }
 
 function af_kb_arpg_apply_origin_variant_modifiers(array $stats, array $rules, int $levelSteps = 0): array
 {
     $definitions = af_kb_arpg_origin_modifier_stat_definitions();
     foreach ((array)($rules['modifiers'] ?? []) as $modifier) {
-        if (!is_array($modifier) || (string)($modifier['mode'] ?? 'flat') !== 'flat') {
+        if (!is_array($modifier) || !in_array((string)($modifier['mode'] ?? 'flat'), af_kb_arpg_origin_modifier_operations(), true)) {
             continue;
         }
         $definition = $definitions[trim((string)($modifier['stat_key'] ?? ''))] ?? null;
@@ -209,6 +228,8 @@ function af_kb_arpg_apply_origin_variant_modifiers(array $stats, array $rules, i
         }
         $target = (string)$definition['vm_field'];
         $scale = !empty($definition['level_scaled']) ? max(0, $levelSteps) : 1;
+        // Percent-valued ARPG stats are stored in percentage points; both modes
+        // therefore aggregate numerically while retaining their display semantics.
         $stats[$target] = (float)($stats[$target] ?? 0) + ((float)$modifier['value'] * $scale);
     }
     return $stats;
@@ -292,11 +313,15 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'hp_base' => 100,
             'defense_base' => 5,
             'attack_power_base' => 10,
+            'crit_rate_base' => 0,
             'crit_damage_base' => 0,
             'elemental_mastery_base' => 0,
             'elemental_damage_bonus_base' => 0,
             'healing_bonus_base' => 0,
             'shield_bonus_base' => 0,
+            'status_hit_base' => 0,
+            'status_resist_base' => 0,
+            'luck_base' => 0,
             'hp_per_level' => 0,
             'defense_per_level' => 0,
             'attack_power_per_level' => 0,
@@ -320,11 +345,15 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'hp_base' => 0,
             'defense_base' => 0,
             'attack_power_base' => 0,
+            'crit_rate_base' => 0,
             'crit_damage_base' => 0,
             'elemental_mastery_base' => 0,
             'elemental_damage_bonus_base' => 0,
             'healing_bonus_base' => 0,
             'shield_bonus_base' => 0,
+            'status_hit_base' => 0,
+            'status_resist_base' => 0,
+            'luck_base' => 0,
             'hp_per_level' => 0,
             'defense_per_level' => 0,
             'attack_power_per_level' => 0,
@@ -425,7 +454,7 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'rank' => 'normal',
             'threat_tier' => 1,
             'level' => 1,
-            'combat_stats' => ['hp' => 0, 'atk' => 0, 'def' => 0, 'armor' => 0, 'crit_rate' => 0, 'crit_dmg' => 0, 'status_hit' => 0, 'status_resist' => 0],
+            'combat_stats' => ['hp' => 0, 'atk' => 0, 'def' => 0, 'speed' => 0, 'crit_rate' => 0, 'crit_dmg' => 0, 'element_damage_bonus' => 0, 'mastery' => 0, 'healing_bonus' => 0, 'shield_strength' => 0, 'status_hit' => 0, 'status_resist' => 0, 'luck' => 0],
             'resists' => [],
             'weaknesses' => [],
             'ability_keys' => [],
@@ -873,15 +902,15 @@ function af_kb_default_arpg_type_definitions(): array
         $isService = !empty($typeDef['service']);
         $rootDefaults = af_kb_arpg_envelope_defaults($typeKey);
         $requiredMap = [
-            'arpg_origin' => ['rules.size', 'rules.creature_type', 'rules.movement_speed', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.racial_bonuses_text', 'rules.racial_traits_text', 'rules.starting_notes'],
-            'arpg_archetype' => ['rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.slot_rules_text', 'rules.description_notes'],
+            'arpg_origin' => ['rules.size', 'rules.creature_type', 'rules.movement_speed', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_rate_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.status_hit_base', 'rules.status_resist_base', 'rules.luck_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.racial_bonuses_text', 'rules.racial_traits_text', 'rules.starting_notes'],
+            'arpg_archetype' => ['rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_rate_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.status_hit_base', 'rules.status_resist_base', 'rules.luck_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.slot_rules_text', 'rules.description_notes'],
             'arpg_element' => ['rules.family', 'rules.counter_element', 'rules.description_text'],
             'arpg_faction' => ['rules.standing_model', 'rules.vendor_access_text', 'rules.story_flags_text', 'rules.description_text'],
             'arpg_lore' => ['rules.linked_entities_text', 'rules.timeline_text', 'rules.source_text'],
             'arpg_ability' => ['rules.type', 'rules.subtype', 'rules.slot', 'rules.damage_type', 'rules.targeting', 'rules.range', 'rules.cast_time', 'rules.cooldown', 'rules.duration', 'rules.max_charges', 'rules.level_cap', 'rules.resources', 'rules.effects', 'rules.modifiers', 'rules.triggers', 'rules.conditions', 'rules.stacking', 'rules.upgrade_requirements'],
             'arpg_talent' => ['rules.tree', 'rules.tier', 'rules.rank', 'rules.slot_type', 'rules.node_label', 'rules.rank_weight', 'rules.socket_cost', 'rules.effects', 'rules.passive_effects', 'rules.modifiers', 'rules.grants', 'rules.requirements', 'rules.mutual_exclusives'],
             'arpg_item' => ['rules.item_kind', 'rules.equip_slot', 'rules.rarity', 'rules.subtype', 'rules.level_min', 'rules.level_max', 'rules.progression_stage', 'rules.level_cap', 'rules.base_stats', 'rules.modifiers', 'rules.effects', 'rules.passive_effects', 'rules.triggers', 'rules.grants', 'rules.upgrade_steps'],
-            'arpg_bestiary' => ['rules.family', 'rules.archetype', 'rules.faction', 'rules.rank', 'rules.threat_tier', 'rules.level', 'rules.combat_stats.hp', 'rules.combat_stats.atk', 'rules.combat_stats.def', 'rules.combat_stats.armor', 'rules.combat_stats.crit_rate', 'rules.combat_stats.crit_dmg', 'rules.combat_stats.status_hit', 'rules.combat_stats.status_resist', 'rules.resists', 'rules.weaknesses', 'rules.ability_keys', 'rules.loot'],
+            'arpg_bestiary' => ['rules.family', 'rules.archetype', 'rules.faction', 'rules.rank', 'rules.threat_tier', 'rules.level', 'rules.combat_stats.hp', 'rules.combat_stats.atk', 'rules.combat_stats.def', 'rules.combat_stats.speed', 'rules.combat_stats.crit_rate', 'rules.combat_stats.crit_dmg', 'rules.combat_stats.element_damage_bonus', 'rules.combat_stats.mastery', 'rules.combat_stats.healing_bonus', 'rules.combat_stats.shield_strength', 'rules.combat_stats.status_hit', 'rules.combat_stats.status_resist', 'rules.combat_stats.luck', 'rules.resists', 'rules.weaknesses', 'rules.ability_keys', 'rules.loot'],
             'arpg_mechanics' => ['rules.service_kind', 'rules.category', 'rules.visibility.catalog', 'rules.visibility.search', 'rules.visibility.internal', 'rules.entries'],
         ];
 
@@ -893,11 +922,15 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.hp_base', 'type' => 'number', 'required' => true, 'default' => 100],
                 ['path' => 'rules.defense_base', 'type' => 'number', 'required' => true, 'default' => 5],
                 ['path' => 'rules.attack_power_base', 'type' => 'number', 'required' => true, 'default' => 10],
+                ['path' => 'rules.crit_rate_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.crit_damage_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.elemental_mastery_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.elemental_damage_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.healing_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.shield_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.status_hit_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.status_resist_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.luck_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.hp_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.defense_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.attack_power_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
@@ -912,11 +945,15 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.hp_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.defense_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.attack_power_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.crit_rate_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.crit_damage_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.elemental_mastery_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.elemental_damage_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.healing_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.shield_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.status_hit_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.status_resist_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.luck_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.hp_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.defense_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.attack_power_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
@@ -1020,11 +1057,16 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.combat_stats.hp', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.combat_stats.atk', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.combat_stats.def', 'type' => 'number', 'required' => true, 'default' => 0],
-                ['path' => 'rules.combat_stats.armor', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.speed', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.combat_stats.crit_rate', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.combat_stats.crit_dmg', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.element_damage_bonus', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.mastery', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.healing_bonus', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.shield_strength', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.combat_stats.status_hit', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.combat_stats.status_resist', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.luck', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.resists', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [['path' => 'damage_type', 'type' => 'string', 'required' => true], ['path' => 'value', 'type' => 'number', 'required' => true], ['path' => 'notes', 'type' => 'string', 'default' => '']]], 'default' => []],
                 ['path' => 'rules.weaknesses', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [['path' => 'damage_type', 'type' => 'string', 'required' => true], ['path' => 'value', 'type' => 'number', 'required' => true], ['path' => 'notes', 'type' => 'string', 'default' => '']]], 'default' => []],
                 ['path' => 'rules.ability_keys', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [
@@ -1111,8 +1153,8 @@ function af_kb_default_arpg_type_definitions(): array
             'ui_profile' => 'arpg',
             'rules_enabled' => true,
             'ui_rules_editor' => true,
-            'modifier_stat_options' => $typeKey === 'arpg_origin_variant' ? af_kb_arpg_character_stat_options() : [],
-            'modifier_operations' => $typeKey === 'arpg_origin_variant' ? af_kb_arpg_origin_modifier_operations() : [],
+            'modifier_stat_options' => in_array($typeKey, ['arpg_origin_variant', 'arpg_talent', 'arpg_item', 'arpg_ability'], true) ? af_kb_arpg_character_stat_options() : [],
+            'modifier_operations' => in_array($typeKey, ['arpg_origin_variant', 'arpg_talent', 'arpg_item', 'arpg_ability'], true) ? af_kb_arpg_origin_modifier_operations() : [],
             'rules_schema' => AF_KB_ARPG_META_SCHEMA,
             'rules_required_keys' => ['schema', 'mechanic', 'tags', 'ui', 'blocks', 'rules'],
             'required_paths' => array_values($requiredMap[$typeKey] ?? []),
@@ -6214,11 +6256,16 @@ function af_kb_arpg_migrate_legacy_rules_contract(string $type, array $rules): a
             'hp' => af_kb_arpg_pick_first($legacyCombat, ['hp', 'health'], $legacyCombat['hp'] ?? 0),
             'atk' => af_kb_arpg_pick_first($legacyCombat, ['atk', 'attack'], $legacyCombat['atk'] ?? 0),
             'def' => af_kb_arpg_pick_first($legacyCombat, ['def', 'defense'], $legacyCombat['def'] ?? 0),
-            'armor' => af_kb_arpg_pick_first($legacyCombat, ['armor'], $legacyCombat['armor'] ?? 0),
+            'speed' => af_kb_arpg_pick_first($legacyCombat, ['speed'], $legacyCombat['speed'] ?? 0),
             'crit_rate' => af_kb_arpg_pick_first($legacyCombat, ['crit_rate', 'crit'], $legacyCombat['crit_rate'] ?? 0),
             'crit_dmg' => af_kb_arpg_pick_first($legacyCombat, ['crit_dmg', 'crit_damage'], $legacyCombat['crit_dmg'] ?? 0),
+            'element_damage_bonus' => af_kb_arpg_pick_first($legacyCombat, ['element_damage_bonus'], $legacyCombat['element_damage_bonus'] ?? 0),
+            'mastery' => af_kb_arpg_pick_first($legacyCombat, ['mastery'], $legacyCombat['mastery'] ?? 0),
+            'healing_bonus' => af_kb_arpg_pick_first($legacyCombat, ['healing_bonus'], $legacyCombat['healing_bonus'] ?? 0),
+            'shield_strength' => af_kb_arpg_pick_first($legacyCombat, ['shield_strength'], $legacyCombat['shield_strength'] ?? 0),
             'status_hit' => af_kb_arpg_pick_first($legacyCombat, ['status_hit', 'status_accuracy'], $legacyCombat['status_hit'] ?? 0),
             'status_resist' => af_kb_arpg_pick_first($legacyCombat, ['status_resist', 'status_resistance'], $legacyCombat['status_resist'] ?? 0),
+            'luck' => af_kb_arpg_pick_first($legacyCombat, ['luck'], $legacyCombat['luck'] ?? 0),
         ];
 
         $rules['resists'] = af_kb_arpg_pick_array($rules, ['resists']);
@@ -6684,14 +6731,14 @@ function af_kb_validate_arpg_envelope(string $type, array $payload, bool $isServ
 function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, array &$errors): void
 {
     $requiredMap = [
-        'origin' => ['rules.type_profile', 'rules.size', 'rules.creature_type', 'rules.movement_speed', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.racial_bonuses_text', 'rules.racial_traits_text', 'rules.starting_notes'],
-        'archetype' => ['rules.type_profile', 'rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.slot_rules_text', 'rules.description_notes'],
+        'origin' => ['rules.type_profile', 'rules.size', 'rules.creature_type', 'rules.movement_speed', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_rate_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.status_hit_base', 'rules.status_resist_base', 'rules.luck_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.racial_bonuses_text', 'rules.racial_traits_text', 'rules.starting_notes'],
+        'archetype' => ['rules.type_profile', 'rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_rate_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.status_hit_base', 'rules.status_resist_base', 'rules.luck_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.slot_rules_text', 'rules.description_notes'],
         'faction' => ['rules.type_profile', 'rules.standing_model', 'rules.vendor_access_text', 'rules.story_flags_text', 'rules.description_text'],
         'lore' => ['rules.type_profile', 'rules.linked_entities_text', 'rules.timeline_text', 'rules.source_text'],
         'ability' => ['rules.type_profile', 'rules.type', 'rules.subtype', 'rules.slot', 'rules.damage_type', 'rules.targeting', 'rules.range', 'rules.cast_time', 'rules.cooldown', 'rules.duration', 'rules.max_charges', 'rules.level_cap', 'rules.resources', 'rules.effects', 'rules.modifiers', 'rules.triggers', 'rules.conditions', 'rules.stacking', 'rules.upgrade_requirements'],
         'talent' => ['rules.type_profile', 'rules.tree', 'rules.tier', 'rules.rank', 'rules.slot_type', 'rules.node_label', 'rules.rank_weight', 'rules.socket_cost', 'rules.effects', 'rules.passive_effects', 'rules.modifiers', 'rules.grants', 'rules.requirements', 'rules.mutual_exclusives'],
         'item' => ['rules.type_profile', 'rules.item_kind', 'rules.equip_slot', 'rules.rarity', 'rules.subtype', 'rules.level_min', 'rules.level_max', 'rules.progression_stage', 'rules.level_cap', 'rules.base_stats', 'rules.modifiers', 'rules.effects', 'rules.passive_effects', 'rules.triggers', 'rules.grants', 'rules.upgrade_steps'],
-        'bestiary' => ['rules.type_profile', 'rules.family', 'rules.archetype', 'rules.faction', 'rules.rank', 'rules.threat_tier', 'rules.level', 'rules.combat_stats.hp', 'rules.combat_stats.atk', 'rules.combat_stats.def', 'rules.combat_stats.armor', 'rules.combat_stats.crit_rate', 'rules.combat_stats.crit_dmg', 'rules.combat_stats.status_hit', 'rules.combat_stats.status_resist', 'rules.resists', 'rules.weaknesses', 'rules.ability_keys', 'rules.loot'],
+        'bestiary' => ['rules.type_profile', 'rules.family', 'rules.archetype', 'rules.faction', 'rules.rank', 'rules.threat_tier', 'rules.level', 'rules.combat_stats.hp', 'rules.combat_stats.atk', 'rules.combat_stats.def', 'rules.combat_stats.speed', 'rules.combat_stats.crit_rate', 'rules.combat_stats.crit_dmg', 'rules.combat_stats.element_damage_bonus', 'rules.combat_stats.mastery', 'rules.combat_stats.healing_bonus', 'rules.combat_stats.shield_strength', 'rules.combat_stats.status_hit', 'rules.combat_stats.status_resist', 'rules.combat_stats.luck', 'rules.resists', 'rules.weaknesses', 'rules.ability_keys', 'rules.loot'],
     ];
 
     // Для ARPG requiredMap должен проверять наличие ключа в envelope,
@@ -6847,7 +6894,7 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
         }
 
         $combatStats = (array)($payload['rules']['combat_stats'] ?? []);
-        foreach (['hp', 'atk', 'def', 'armor', 'crit_rate', 'crit_dmg', 'status_hit', 'status_resist'] as $statKey) {
+        foreach (af_kb_arpg_character_stat_keys() as $statKey) {
             if (!is_numeric($combatStats[$statKey] ?? null)) {
                 $errors[] = 'ARPG bestiary requires numeric "rules.combat_stats.' . $statKey . '".';
             }
@@ -10618,6 +10665,7 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
             'character_hp' => ['hp_base', 'base_hp'],
             'character_defense' => ['defense_base', 'base_defense'],
             'character_attack_power' => ['attack_power_base', 'base_damage'],
+            'character_crit_rate' => ['crit_rate_base'],
             'character_crit_damage' => ['crit_damage_base'],
             'character_elemental_mastery' => ['elemental_mastery_base'],
             'character_element_damage_bonus' => ['elemental_damage_bonus_base'],
@@ -10625,6 +10673,8 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
             'character_shield_strength' => ['shield_bonus_base'],
             'character_healing_received_bonus' => ['healing_received_bonus_base'],
             'character_luck' => ['luck_base'],
+            'character_status_hit' => ['status_hit_base'],
+            'character_status_resist' => ['status_resist_base'],
         ];
         $growthMap = [
             'character_hp' => ['hp_per_level'],
@@ -10661,12 +10711,11 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
         'character_shield_strength' => $buildValue('character_shield_strength'),
         'character_healing_received_bonus' => $buildValue('character_healing_received_bonus'),
         'character_luck' => $buildValue('character_luck'),
-        'character_armor' => 0.0,
         'character_speed' => af_kb_arpg_pick_rule_number($originRules, ['movement_speed'])
             + af_kb_arpg_pick_rule_number($originVariantRules, ['movement_speed']),
-        'character_crit_rate' => 0.0,
-        'character_status_hit' => 0.0,
-        'character_status_resist' => 0.0,
+        'character_crit_rate' => $buildValue('character_crit_rate'),
+        'character_status_hit' => $buildValue('character_status_hit'),
+        'character_status_resist' => $buildValue('character_status_resist'),
     ];
 
     $stats = af_kb_arpg_apply_origin_variant_modifiers($stats, $originVariantRules, $levelSteps);
@@ -10675,6 +10724,7 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
         'character_hp' => ['character_hp', 'hp', 'health'],
         'character_defense' => ['character_defense', 'defense', 'def'],
         'character_attack_power' => ['character_attack_power', 'attack_power', 'atk', 'attack'],
+        'character_crit_rate' => ['character_crit_rate', 'crit_rate'],
         'character_crit_damage' => ['character_crit_damage', 'crit_damage', 'critical_damage'],
         'character_elemental_mastery' => ['character_elemental_mastery', 'elemental_mastery', 'mastery'],
         'character_element_damage_bonus' => ['character_element_damage_bonus', 'element_damage_bonus', 'elemental_damage_bonus'],
@@ -10682,6 +10732,8 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
         'character_shield_strength' => ['character_shield_strength', 'shield_strength'],
         'character_healing_received_bonus' => ['character_healing_received_bonus', 'healing_received_bonus'],
         'character_luck' => ['character_luck', 'luck'],
+        'character_status_hit' => ['character_status_hit', 'status_hit'],
+        'character_status_resist' => ['character_status_resist', 'status_resist'],
     ];
 
     foreach ($manualMap as $target => $aliases) {

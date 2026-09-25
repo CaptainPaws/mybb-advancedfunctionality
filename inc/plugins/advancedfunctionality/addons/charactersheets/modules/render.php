@@ -1133,7 +1133,6 @@ function af_charactersheets_arpg_apply_origin_variant_modifiers(array $stats, ar
         'def' => ['character_defense', false],
         'atk' => ['character_attack_power', false],
         'speed' => ['character_speed', false],
-        'armor' => ['character_armor', false],
         'crit_rate' => ['character_crit_rate', false],
         'crit_dmg' => ['character_crit_damage', false],
         'crit_damage' => ['character_crit_damage', false],
@@ -1143,13 +1142,14 @@ function af_charactersheets_arpg_apply_origin_variant_modifiers(array $stats, ar
         'element_damage_bonus' => ['character_element_damage_bonus', false],
         'healing_bonus' => ['character_healing_bonus', false],
         'shield_strength' => ['character_shield_strength', false],
+        'luck' => ['character_luck', false],
         'hp_per_level' => ['character_hp', true],
         'defense_per_level' => ['character_defense', true],
         'attack_power_per_level' => ['character_attack_power', true],
         'elemental_mastery_per_level' => ['character_elemental_mastery', true],
     ];
     foreach ((array)($rules['modifiers'] ?? []) as $modifier) {
-        if (!is_array($modifier) || (string)($modifier['mode'] ?? 'flat') !== 'flat' || !is_numeric($modifier['value'] ?? null)) {
+        if (!is_array($modifier) || !in_array((string)($modifier['mode'] ?? 'flat'), ['flat', 'percent'], true) || !is_numeric($modifier['value'] ?? null)) {
             continue;
         }
         $target = $targets[trim((string)($modifier['stat_key'] ?? ''))] ?? null;
@@ -1168,13 +1168,12 @@ function af_charactersheets_arpg_apply_equipment_rules(array $stats, array $rule
         if (!is_array($rules)) {
             continue;
         }
-        // ARPG item base_stats and unconditional flat modifiers share the same
-        // stat keys. Conditional and percentage modes are descriptive until a
-        // combat context can evaluate their conditions and operation order.
+        // Base stats and unconditional modifiers share the canonical stat keys.
+        // Percent-valued stats use percentage points, so percent is additive.
         foreach (['base_stats', 'modifiers'] as $bucket) {
             $flatRules = ['modifiers' => []];
             foreach ((array)($rules[$bucket] ?? []) as $modifier) {
-                if (!is_array($modifier) || trim((string)($modifier['mode'] ?? 'flat')) !== 'flat') {
+                if (!is_array($modifier) || !in_array(trim((string)($modifier['mode'] ?? 'flat')), ['flat', 'percent'], true)) {
                     continue;
                 }
                 if (trim((string)($modifier['condition_text'] ?? '')) !== '') {
@@ -1245,12 +1244,12 @@ function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $
         'character_element_damage_bonus' => $sum('elemental_damage_bonus_base'),
         'character_healing_bonus' => $sum('healing_bonus_base'),
         'character_shield_strength' => $sum('shield_bonus_base'),
-        'character_armor' => 0.0,
+        'character_luck' => $sum('luck_base'),
         'character_speed' => af_charactersheets_arpg_numeric_rule($originRules, 'movement_speed')
             + af_charactersheets_arpg_numeric_rule($originVariantRules, 'movement_speed'),
-        'character_crit_rate' => 0.0,
-        'character_status_hit' => 0.0,
-        'character_status_resist' => 0.0,
+        'character_crit_rate' => $sum('crit_rate_base'),
+        'character_status_hit' => $sum('status_hit_base'),
+        'character_status_resist' => $sum('status_resist_base'),
     ];
 
     $stats['character_attack_power'] += $sum('base_damage_bonus');
@@ -1264,6 +1263,12 @@ function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $
     }
 
     return $stats;
+}
+
+/** Public mechanics API for future loot/reward resolvers. */
+function af_charactersheets_arpg_final_luck(array $characterStats): float
+{
+    return (float)($characterStats['character_luck'] ?? 0);
 }
 
 function af_charactersheets_arpg_resolve_profile_option(array $atf_index, string $field, string $rawValue): array
@@ -1626,10 +1631,9 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
 
     $elementSlug = function_exists('my_strtolower') ? my_strtolower($element) : strtolower($element);
     $stats_panel = [
-        ['label' => 'HP', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_hp', $sheet_view, ['mechanics.hp_total'])],
+        ['label' => 'Здоровье', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_hp', $sheet_view, ['mechanics.hp_total'])],
         ['label' => 'Защита', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_defense', $sheet_view, ['mechanics.ac_total'])],
         ['label' => 'Сила атаки', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_attack_power', $sheet_view, ['mechanics.damage_bonus'])],
-        ['label' => 'Броня', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_armor', $sheet_view, ['mechanics.armor_total'])],
         ['label' => 'Скорость', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_speed', $sheet_view, ['mechanics.speed_total'])],
         ['label' => 'Шанс крита', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_crit_rate', $sheet_view, ['character_computed_state.fixed_bonuses.crit_rate'])],
         ['label' => 'Крит. урон', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_crit_damage', $sheet_view, ['character_computed_state.fixed_bonuses.crit_dmg', 'character_computed_state.resources.crit_dmg'])],
@@ -1640,8 +1644,9 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         ])],
         ['label' => 'Бонус лечения', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_healing_bonus', $sheet_view, ['character_computed_state.resources.healing_bonus'])],
         ['label' => 'Бонус щита', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_shield_strength', $sheet_view, ['character_computed_state.resources.shield_strength', 'mechanics.shield_bonus'])],
-        ['label' => 'Шанс статуса', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_status_hit', $sheet_view, ['character_computed_state.resources.status_hit'])],
-        ['label' => 'Сопротивление статусу', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_status_resist', $sheet_view, ['character_computed_state.resources.status_resist'])],
+        ['label' => 'Шанс наложения статуса', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_status_hit', $sheet_view, ['character_computed_state.resources.status_hit'])],
+        ['label' => 'Сопротивление статусам', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_status_resist', $sheet_view, ['character_computed_state.resources.status_resist'])],
+        ['label' => 'Удача', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_luck', $sheet_view, ['character_computed_state.resources.luck'])],
     ];
 
     $arpgStatsTrace = [
