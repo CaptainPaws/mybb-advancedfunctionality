@@ -85,6 +85,8 @@ function af_charactersheets_handle_api_impl(): void
         'equip_equipment',
         'unequip_equipment',
         'set_active_weapon',
+        'equip_talent',
+        'unequip_talent',
         'reset_attributes',
         'reset_skills',
     ], true)) {
@@ -705,6 +707,42 @@ function af_charactersheets_handle_api_impl(): void
 
         $augmentations['slots'] = $slots;
         $build['augmentations'] = $augmentations;
+        af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+    } elseif ($do === 'equip_talent' || $do === 'unequip_talent') {
+        if (!$can_edit_loadout) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
+        }
+        $ownerUid = (int)($sheet['uid'] ?? 0);
+        $key = trim((string)$mybb->get_input('key'));
+        $catalog = af_charactersheets_arpg_talent_catalog();
+        $state = af_charactersheets_arpg_talent_state($build, $ownerUid);
+        $talents = (array)($build['talents'] ?? []);
+        $slots = (array)($talents['slots'] ?? []);
+        if ($do === 'unequip_talent') {
+            foreach ($slots as $slotCode => $activeKey) if ((string)$activeKey === $key) unset($slots[$slotCode]);
+        } else {
+            if ($key === '' || empty($catalog[$key]) || empty($state['owned'][$key])) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Talent is not owned']);
+            }
+            $rules = (array)$catalog[$key]['rules'];
+            $slot = trim((string)$mybb->get_input('slot'));
+            $allowedSlot = trim((string)($rules['slot_type'] ?? 'passive')) ?: 'passive';
+            if ($slot === '') $slot = $allowedSlot;
+            if ($slot !== $allowedSlot) af_charactersheets_json_response(['success' => false, 'error' => 'Talent is not allowed in this slot']);
+            $missing = array_diff(af_charactersheets_arpg_talent_prerequisite_keys($rules), array_values($state['slots']));
+            if ($missing) af_charactersheets_json_response(['success' => false, 'error' => 'Talent prerequisites are not active']);
+            foreach ((array)($rules['mutual_exclusives'] ?? []) as $exclusive) {
+                $exclusiveKey = is_array($exclusive) ? (string)($exclusive['key'] ?? $exclusive['talent_key'] ?? '') : (string)$exclusive;
+                if ($exclusiveKey !== '' && in_array($exclusiveKey, array_values($state['slots']), true)) {
+                    af_charactersheets_json_response(['success' => false, 'error' => 'Mutually exclusive talent is active']);
+                }
+            }
+            // A slot is replaced only by this explicit equip request.
+            foreach ($slots as $slotCode => $activeKey) if ((string)$activeKey === $key) unset($slots[$slotCode]);
+            $slots[$slot] = $key;
+        }
+        $talents['slots'] = $slots;
+        $build['talents'] = $talents;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif ($do === 'equip_equipment' || $do === 'unequip_equipment' || $do === 'set_active_weapon') {
         if (!$can_edit_loadout) {
