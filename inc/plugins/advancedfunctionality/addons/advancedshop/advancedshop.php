@@ -2113,6 +2113,7 @@ function af_advancedshop_checkout(): void
 {
     global $mybb, $db, $lang;
     $uid = (int)($mybb->user['uid'] ?? 0);
+    af_advancedshop_inv_debug('checkout_started', ['uid' => $uid]);
     if ($uid <= 0) { af_advancedshop_json_err('auth', 403); }
     if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 0) !== 1) {
         af_advancedshop_json_err('Покупка недоступна: Advanced Inventory отключён или не установлен.', 400);
@@ -2122,6 +2123,7 @@ function af_advancedshop_checkout(): void
     $cart = af_advancedshop_get_or_create_cart((int)$shop['shop_id'], $uid);
     [$items, $totalsByCurrency] = af_advancedshop_checkout_collect_items((int)$cart['cart_id']);
     if (!$items || !$totalsByCurrency) { af_advancedshop_json_err('empty', 400); }
+    af_advancedshop_inv_debug('items_collected', ['uid' => $uid, 'cart_id' => (int)$cart['cart_id'], 'items' => $items, 'totals' => $totalsByCurrency]);
 
     $insufficient = [];
     foreach ($totalsByCurrency as $currencySlug => $totalCurrency) {
@@ -2132,8 +2134,12 @@ function af_advancedshop_checkout(): void
         }
     }
     if ($insufficient) {
+        if (count($insufficient) === 1 && $insufficient[0] === af_advancedshop_currency_label('ability_tokens')) {
+            af_advancedshop_json_err('Недостаточно Ability Tokens.', 400);
+        }
         af_advancedshop_json_err(($lang->af_advancedshop_error_not_enough_money ?? 'Not enough money') . ': ' . implode(', ', $insufficient), 400);
     }
+    af_advancedshop_inv_debug('balance_ok', ['uid' => $uid, 'totals' => $totalsByCurrency]);
 
     $db->write_query('START TRANSACTION');
     try {
@@ -2155,6 +2161,10 @@ function af_advancedshop_checkout(): void
             'payload' => $orderPayload,
         ]);
         $orderId = (int)$db->insert_query('af_shop_orders', $orderPayload);
+        if ($orderId <= 0) {
+            throw new RuntimeException('Не удалось создать заказ.');
+        }
+        af_advancedshop_inv_debug('order_created', ['uid' => $uid, 'order_id' => $orderId]);
 
         foreach ($totalsByCurrency as $currencySlug => $totalCurrency) {
             $currencySlug = af_advancedshop_normalize_currency_slug((string)$currencySlug);
@@ -2168,6 +2178,7 @@ function af_advancedshop_checkout(): void
 
         $db->delete_query('af_shop_cart_items', 'cart_id=' . (int)$cart['cart_id']);
         $db->write_query('COMMIT');
+        af_advancedshop_inv_debug('checkout_committed', ['uid' => $uid, 'order_id' => $orderId]);
     } catch (mysqli_sql_exception $e) {
         $db->write_query('ROLLBACK');
         af_advancedshop_inv_debug('checkout_failed', [
@@ -2676,7 +2687,7 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     $kbCols = af_advancedshop_kb_cols();
     $kbIdCol = $kbCols['id'] ?? 'id';
     $kb = [];
-    if ($kbId > 0) {
+    if ($kbId > 0 || ($kbTypeFromItem !== '' && $kbKeyFromItem !== '')) {
         $kbTableSql = af_advancedshop_kb_table();
         $select = [$kbIdCol . ' AS kb_id'];
         if (!empty($kbCols['type'])) { $select[] = ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
@@ -2716,11 +2727,19 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
             'fields' => $select,
             'uid' => $uid,
             'kb_id' => $kbId,
+            'kb_type' => $kbTypeFromItem,
+            'kb_key' => $kbKeyFromItem,
         ]);
 
         if ($kbTableSql !== '') {
             try {
-                $kb = (array)$db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . $kbTableSql . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
+                $identityWhere = $kbId > 0 ? ($kbIdCol . '=' . $kbId) : '1=0';
+                if ($kbTypeFromItem !== '' && $kbKeyFromItem !== '' && !empty($kbCols['type']) && !empty($kbCols['key'])) {
+                    $typeCol = $kbCols['type'] === 'type' ? '`type`' : $kbCols['type'];
+                    $keyCol = $kbCols['key'] === 'key' ? '`key`' : $kbCols['key'];
+                    $identityWhere .= " OR (" . $typeCol . "='" . $db->escape_string($kbTypeFromItem) . "' AND " . $keyCol . "='" . $db->escape_string($kbKeyFromItem) . "')";
+                }
+                $kb = (array)$db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . $kbTableSql . " WHERE (" . $identityWhere . ") LIMIT 1"));
             } catch (Throwable $e) {
                 $kb = [];
                 af_advancedshop_inv_debug('checkout_kb_lookup_warning', [
@@ -2815,10 +2834,9 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
 
     $kbTypeNorm = mb_strtolower(trim((string)$payload['kb_type']));
     if ($kbTypeNorm === 'arpg_talent') {
+        $payload['entity'] = 'abilities';
         $payload['slot'] = 'abilities';
-        if (trim((string)$payload['subtype']) === '') {
-            $payload['subtype'] = 'talent';
-        }
+        $payload['subtype'] = 'talent';
     } elseif ($kbTypeNorm === 'arpg_item' && (string)$payload['slot'] === 'abilities') {
         $payload['slot'] = (string)($baseTarget['slot'] ?? 'resources');
         if ((string)$payload['slot'] === 'abilities') {
@@ -4247,7 +4265,27 @@ function af_shop_add_balance(int $uid, string $currency_slug, int $amount, strin
 
 function af_shop_sub_balance(int $uid, string $currency_slug, int $amount, string $reason, array $meta = []): void
 {
-    af_shop_add_balance($uid, $currency_slug, -abs($amount), $reason, $meta);
+    $currency_slug = af_advancedshop_normalize_currency_slug($currency_slug);
+    $amount = abs($amount);
+    $before = af_shop_get_balance($uid, $currency_slug);
+    if ($before < $amount) {
+        throw new RuntimeException('Недостаточно ' . af_advancedshop_currency_label($currency_slug) . '.');
+    }
+
+    // A purchase is not a negative award. The generic af_balance_add_* API
+    // intentionally ignores negative values unless the administrator enables
+    // negative awards, which used to make checkout silently keep the balance.
+    if (!function_exists('af_balance_apply_scaled_delta')) {
+        throw new RuntimeException('Модуль баланса недоступен для списания валюты.');
+    }
+    $meta['reason'] = $reason;
+    $meta['source'] = 'advancedshop';
+    af_balance_apply_scaled_delta($uid, $currency_slug, -$amount, $meta, true);
+
+    $after = af_shop_get_balance($uid, $currency_slug);
+    if ($after !== $before - $amount) {
+        throw new RuntimeException('Не удалось списать ' . af_advancedshop_currency_label($currency_slug) . '.');
+    }
 }
 
 function af_advancedshop_json(array $data): void
