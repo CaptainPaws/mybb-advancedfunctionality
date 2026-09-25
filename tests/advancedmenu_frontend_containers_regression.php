@@ -36,7 +36,7 @@ if (strpos($modal, 'af-am-badge') === false || strpos($modal, '>7</span>') === f
 $source = file_get_contents(AF_ADDONS.'advancedmenu/advancedmenu.php');
 $css = file_get_contents(AF_ADDONS.'advancedmenu/assets/advancedmenu.css');
 $characters = file_get_contents(AF_ADDONS.'advancedcharacters/advancedcharacters.php');
-foreach (['af-am-main', 'af-am-secondary', 'af-am-user-drawer', 'af-am-burger', "af_menu_configured_registry()", "empty(\$item['enabled'])"] as $needle) {
+foreach (['af-am-shell', 'af-am-main', 'af-am-secondary', 'af-am-user-drawer', 'af-am-burger', "af_menu_configured_registry()", "empty(\$item['enabled'])"] as $needle) {
     if (strpos($source, $needle) === false) throw new RuntimeException('Missing frontend container contract: '.$needle);
 }
 foreach (['position: sticky', 'max-width: 100vw', '#header .top_links', '#header .panel_links', '#footer .upper', '.af-am-member #panel'] as $needle) {
@@ -53,8 +53,19 @@ foreach (['af_advancedcharacters_menu_provider', 'af_characters_add_moderator_li
     if (strpos($characters, $needle) !== false) throw new RuntimeException('Characters menu injection remains: '.$needle);
 }
 
-if (!preg_match('~<nav class="af-am-bar af-am-main"[^>]*>\'\s*\.\s*\'<button class="af-am-burger"~', $source)) {
+if (!preg_match('~<div class="af-am-shell af-am-navigation"[^>]*>\'\s*\.\s*\'<nav class="af-am-bar af-am-main"[^>]*>\'\s*\.\s*\'<button class="af-am-burger"~', $source)) {
     throw new RuntimeException('Burger is not inside the main navigation.');
+}
+
+// AAS's legacy template puts the trigger and modal in one injected widget.
+// Removing the old control must not span forward into the modal or a later li.
+$legacyAas = '<li class="legacy"><span class="af-aas-panel"><a href="#" class="af-aas-trigger" id="af_aas_trigger">Accounts</a></span>'
+    .'<div id="af_aas_modal"><a href="misc.php?action=af_aas_switch&amp;uid=2">Switch</a></div></li>'
+    .'<li><a href="private.php">Messages</a></li>';
+$cleanAas = af_advancedmenu_remove_legacy_modal_triggers($legacyAas);
+if (strpos($cleanAas, 'id="af_aas_trigger"') !== false) throw new RuntimeException('Legacy AAS trigger was not removed.');
+foreach (['id="af_aas_modal"', 'action=af_aas_switch', 'private.php'] as $needle) {
+    if (strpos($cleanAas, $needle) === false) throw new RuntimeException('AAS runtime was consumed while removing its trigger: '.$needle);
 }
 
 echo "advancedmenu frontend containers regression: OK\n";
