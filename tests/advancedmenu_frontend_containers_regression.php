@@ -21,13 +21,19 @@ if (strpos($modal, 'af-am-badge') === false || strpos($modal, '>7</span>') === f
 $source = file_get_contents(AF_ADDONS.'advancedmenu/advancedmenu.php');
 $css = file_get_contents(AF_ADDONS.'advancedmenu/assets/advancedmenu.css');
 $characters = file_get_contents(AF_ADDONS.'advancedcharacters/advancedcharacters.php');
-foreach (['af-am-main', 'af-am-secondary', "af_menu_configured_registry()", "empty(\$item['enabled'])"] as $needle) {
+foreach (['af-am-main', 'af-am-secondary', 'af-am-user-drawer', 'af-am-burger', "af_menu_configured_registry()", "empty(\$item['enabled'])"] as $needle) {
     if (strpos($source, $needle) === false) throw new RuntimeException('Missing frontend container contract: '.$needle);
 }
 foreach (['position: sticky', 'max-width: 100vw', '#header .top_links', '#header .panel_links', '#footer .upper'] as $needle) {
     if (strpos($css, $needle) === false) throw new RuntimeException('Missing layout rule: '.$needle);
 }
-if (strpos($css, '.user_links') !== false) throw new RuntimeException('user_links must remain available for stage 4.');
+foreach (['#header .user_links', '.af-am-drawer-overlay', 'body.af-am-drawer-open', 'bottom: 14px'] as $needle) {
+    if (strpos($css, $needle) === false) throw new RuntimeException('Missing user drawer layout rule: '.$needle);
+}
+$js = file_get_contents(AF_ADDONS.'advancedmenu/assets/advancedmenu.js');
+foreach (["event.key === 'Escape'", "setAttribute('aria-expanded'", "event.key !== 'Tab'", "overlay.addEventListener('click'"] as $needle) {
+    if (strpos($js, $needle) === false) throw new RuntimeException('Missing accessible drawer behavior: '.$needle);
+}
 if (strpos($characters, "!empty(\$mybb->settings['af_advancedmenu_enabled'])") === false) {
     throw new RuntimeException('Characters legacy injection is not guarded by AdvancedMenu.');
 }

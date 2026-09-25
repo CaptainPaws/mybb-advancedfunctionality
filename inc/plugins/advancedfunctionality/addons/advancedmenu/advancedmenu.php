@@ -46,7 +46,7 @@ function af_menu_register_item(array $item): bool
     $item = array_merge(['key'=>$key, 'source_addon'=>'mybb', 'label'=>$key,
         'icon'=>'', 'type'=>$type, 'default_container'=>'panel_links',
         'default_sortorder'=>100, 'visibility'=>true, 'action'=>[],
-        'badge_provider'=>null, 'renderer'=>null, 'allowed_containers'=>array_keys(af_menu_containers())], $item);
+        'badge_provider'=>null, 'renderer'=>null, 'section'=>'links', 'allowed_containers'=>array_keys(af_menu_containers())], $item);
     $item['key'] = $key; $item['type'] = $type;
     $item['default_sortorder'] = (int)$item['default_sortorder'];
     $item['default_container'] = af_menu_normalize_container((string)$item['default_container']);
@@ -58,10 +58,18 @@ function af_menu_register_item(array $item): bool
 
 function af_menu_register_core_items(): void
 {
+    global $mybb;
     $member = static function (): bool { global $mybb; return !empty($mybb->user['uid']); };
     $mod = static function (): bool { global $mybb; return !empty($mybb->usergroup['canmodcp']) || !empty($mybb->usergroup['issupermod']) || (!empty($mybb->user['uid']) && function_exists('is_moderator') && is_moderator()); };
     $admin = static function (): bool { global $mybb; return !empty($mybb->usergroup['cancp']); };
-    af_menu_register_item(['key'=>'new_posts','label'=>'Новые сообщения','icon'=>'fa-solid fa-clock-rotate-left','type'=>'link','default_container'=>'secondary','default_sortorder'=>40,'visibility'=>$member,'action'=>['url'=>'search.php?action=getnew']]);
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    $postKey = rawurlencode((string)($mybb->post_code ?? ''));
+    af_menu_register_item(['key'=>'profile','label'=>'Профиль','icon'=>'fa-solid fa-user','type'=>'link','section'=>'profile','default_container'=>'user_drawer','default_sortorder'=>10,'visibility'=>$member,'action'=>['url'=>'member.php?action=profile&amp;uid='.$uid]]);
+    af_menu_register_item(['key'=>'usercp','label'=>'User CP','icon'=>'fa-solid fa-user-gear','type'=>'link','section'=>'profile','default_container'=>'user_drawer','default_sortorder'=>20,'visibility'=>$member,'action'=>['url'=>'usercp.php']]);
+    af_menu_register_item(['key'=>'new_posts','label'=>'Новые сообщения','icon'=>'fa-solid fa-clock-rotate-left','type'=>'link','section'=>'links','default_container'=>'user_drawer','default_sortorder'=>40,'visibility'=>$member,'action'=>['url'=>'search.php?action=getnew']]);
+    af_menu_register_item(['key'=>'private_messages','label'=>'Личные сообщения','icon'=>'fa-solid fa-envelope','type'=>'link','section'=>'links','default_container'=>'user_drawer','default_sortorder'=>50,'visibility'=>$member,'action'=>['url'=>'private.php']]);
+    af_menu_register_item(['key'=>'todays_posts','label'=>'Сообщения за сегодня','icon'=>'fa-solid fa-calendar-day','type'=>'link','section'=>'links','default_container'=>'user_drawer','default_sortorder'=>60,'visibility'=>$member,'action'=>['url'=>'search.php?action=getdaily']]);
+    af_menu_register_item(['key'=>'logout','label'=>'Выйти','icon'=>'fa-solid fa-right-from-bracket','type'=>'action/system','section'=>'settings','default_container'=>'user_drawer','default_sortorder'=>100,'visibility'=>$member,'action'=>['url'=>'member.php?action=logout&amp;logoutkey='.$postKey]]);
     af_menu_register_item(['key'=>'modcp','label'=>'Mod CP','icon'=>'fa-solid fa-shield-halved','type'=>'link','default_container'=>'secondary','default_sortorder'=>80,'visibility'=>$mod,'action'=>['url'=>'modcp.php']]);
     af_menu_register_item(['key'=>'admincp','label'=>'Admin CP','icon'=>'fa-solid fa-screwdriver-wrench','type'=>'link','default_container'=>'secondary','default_sortorder'=>90,'visibility'=>$admin,'action'=>['url'=>'admin/index.php']]);
 }
@@ -1004,14 +1012,48 @@ function af_advancedmenu_build_container_html(string $container): string
     return implode("\n", array_column($rows, 'html'));
 }
 
+/** Drawer sections are presentation metadata; items retain the global ACP order. */
+function af_advancedmenu_build_drawer_html(): string
+{
+    $sections = ['profile'=>'Профиль', 'links'=>'Ссылки', 'settings'=>'Настройки'];
+    $items = af_menu_configured_registry();
+    $custom = af_advancedmenu_get_items();
+    $out = '';
+    foreach ($sections as $section => $title) {
+        $rows = [];
+        foreach ($items as $item) {
+            if (($item['container'] ?? '') !== 'user_drawer' || ($item['section'] ?? 'links') !== $section
+                || empty($item['enabled']) || !af_menu_item_is_visible($item)) continue;
+            $rows[] = ['sort'=>(int)$item['sortorder'], 'key'=>(string)$item['key'], 'html'=>af_advancedmenu_render_registry_item($item)];
+        }
+        if ($section === 'links') foreach ($custom as $item) {
+            if (af_menu_normalize_container((string)($item['container'] ?? $item['location'] ?? 'main')) !== 'user_drawer'
+                || (int)$item['enabled'] !== 1 || !af_advancedmenu_item_is_visible($item)) continue;
+            $rows[] = ['sort'=>(int)$item['sort_order'], 'key'=>'custom_'.(int)$item['id'], 'html'=>af_advancedmenu_render_item($item)];
+        }
+        if (!$rows) continue;
+        usort($rows, static fn(array $a, array $b): int => [$a['sort'], $a['key']] <=> [$b['sort'], $b['key']]);
+        $out .= '<section class="af-am-drawer-section" aria-labelledby="af-am-section-'.$section.'">'
+            .'<h2 id="af-am-section-'.$section.'">'.$title.'</h2><ul class="af-am-drawer-list">'
+            .implode("\n", array_column($rows, 'html')).'</ul></section>';
+    }
+    return $out;
+}
+
 function af_advancedmenu_render_frontend_nav(): string
 {
     $main = af_advancedmenu_build_container_html('main');
     $secondary = af_advancedmenu_build_container_html('secondary');
+    $drawer = af_advancedmenu_build_drawer_html();
     return '<div class="af-am-navigation" data-af-am-navigation="1">'
+        .'<button class="af-am-burger" type="button" aria-label="Открыть пользовательское меню" aria-expanded="false" aria-controls="af-am-user-drawer"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>'
         .'<nav class="af-am-bar af-am-main" aria-label="Основное меню"><ul class="af-am-list">'.$main.'</ul></nav>'
         .'<nav class="af-am-bar af-am-secondary" aria-label="Дополнительное меню"><ul class="af-am-list">'.$secondary.'</ul></nav>'
-        .'</div>';
+        .'</div><div class="af-am-drawer-shell" data-af-am-drawer-shell hidden>'
+        .'<button class="af-am-drawer-overlay" type="button" tabindex="-1" aria-label="Закрыть пользовательское меню"></button>'
+        .'<aside id="af-am-user-drawer" class="af-am-drawer" role="dialog" aria-modal="true" aria-label="Пользовательское меню" tabindex="-1">'
+        .'<div class="af-am-drawer-header"><strong>Меню пользователя</strong><button class="af-am-drawer-close" type="button" aria-label="Закрыть пользовательское меню">&times;</button></div>'
+        .$drawer.'</aside></div>';
 }
 
 function af_advancedmenu_install_frontend_nav(string &$page): void
@@ -1531,10 +1573,8 @@ function af_advancedmenu_pre_output(string &$page = ''): void
 
     af_advancedmenu_inject_assets($page);
 
-    // Stage 3 owns two dedicated navigation rows.  Legacy top_links and
-    // panel_links remain in the document for compatibility, but are hidden by
-    // the scoped layout CSS; user_links deliberately stays untouched until
-    // the user-drawer stage.
+    // All three navigation surfaces are controlled by the registry. Legacy
+    // lists remain only as hidden compatibility hooks for their owning addons.
     af_advancedmenu_install_frontend_nav($page);
     $page .= "\n".AF_AM_APPLIED_MARK."\n";
 }
