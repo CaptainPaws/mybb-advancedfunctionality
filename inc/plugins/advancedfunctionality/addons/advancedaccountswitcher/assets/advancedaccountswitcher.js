@@ -26,7 +26,13 @@
     var closeBtn = modal ? modal.querySelector('.af-aas-modal-close') : null;
     var backdrop = modal ? modal.querySelector('.af-aas-modal-backdrop') : null;
 
-    if (!modal) return;
+    if (!modal || document.afAasModalOwner) return;
+    document.afAasModalOwner = true;
+
+    // The legacy header template renders its trigger and shell together.  The
+    // trigger may be relocated by AdvancedMenu, but the dialog must live in
+    // the page modal layer rather than inherit a transformed/clipped header.
+    if (modal.parentNode !== document.body) document.body.appendChild(modal);
 
     function triggers() { return document.querySelectorAll('#af_aas_trigger'); }
     function setExpanded(value) {
@@ -36,12 +42,14 @@
     function openModal() {
       modal.classList.add('af-aas-modal-open');
       modal.style.display = 'flex';
+      modal.setAttribute('aria-hidden', 'false');
       setExpanded('true');
     }
 
     function closeModal() {
       modal.classList.remove('af-aas-modal-open');
       modal.style.display = 'none';
+      modal.setAttribute('aria-hidden', 'true');
       setExpanded('false');
     }
 
@@ -50,8 +58,10 @@
       if (!trigger) return;
       if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
         e.preventDefault();
-        if (modal.classList.contains('af-aas-modal-open')) closeModal();
-        else openModal();
+        // A trigger click only opens. The previous toggle made a duplicate
+        // delegated/legacy delivery execute closeModal() on the same click.
+        // Closing remains owned by the X, backdrop, outside click and Escape.
+        openModal();
       }
     });
 
