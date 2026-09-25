@@ -1072,6 +1072,15 @@
             var modifierOperations = Array.isArray(typeSchema.modifier_operations)
                 ? typeSchema.modifier_operations.slice()
                 : ['flat'];
+            var passiveEffectOptions = Array.isArray(typeSchema.passive_effect_options)
+                ? typeSchema.passive_effect_options.slice() : [];
+            var mechanicsSets = (window.afKbArpgMechanicsOptionSets && typeof window.afKbArpgMechanicsOptionSets === 'object')
+                ? window.afKbArpgMechanicsOptionSets : {};
+            function mechanicsOptions(key) {
+                return (Array.isArray(mechanicsSets[key]) ? mechanicsSets[key] : []).map(function (row) {
+                    return { value: String(row.key || ''), label: String(row.label_ru || row.label_en || row.key || '') };
+                });
+            }
 
             function getRootDefaults() {
                 var defaults = (typeSchema && typeSchema.root_defaults && typeof typeSchema.root_defaults === 'object')
@@ -1418,6 +1427,51 @@
                 });
 
                 redraw();
+            }
+
+            function renderPassiveEffectEditor(container) {
+                var wrap = createSection(container, 'Пассивные эффекты (типизированные постоянные эффекты)');
+                var list = document.createElement('div');
+                var add = document.createElement('button');
+                add.type = 'button'; add.className = 'af-kb-add'; add.textContent = 'Добавить пассивный эффект';
+                var arr = ensureRuleArray('passive_effects');
+                var types = passiveEffectOptions.length ? passiveEffectOptions : [{value:'description', label:'Другое / описательный эффект'}];
+                var operationOptions = [{value:'flat',label:'Плоский бонус'},{value:'percent',label:'Процентный бонус'}];
+                var statusOptions = mechanicsOptions('status_def');
+                var resourceOptions = mechanicsOptions('resource_def');
+                if (!resourceOptions.length) resourceOptions = mechanicsOptions('ability_resource');
+                var damageOptions = mechanicsOptions('ability_damage_type');
+
+                function columnsFor(kind) {
+                    var common = [{key:'condition_text',label:'Условие',default:''},{key:'notes',label:'Пояснение',default:''}];
+                    if (kind === 'stat_modifier' || kind === 'conditional_bonus') return [{key:'stat_key',label:'Характеристика',type:'select',options:modifierStatOptions,default:'atk'},{key:'mode',label:'Операция',type:'select',options:operationOptions,default:'flat'},{key:'value',label:'Значение',type:'number',default:0}].concat(common);
+                    if (kind === 'status_apply') return [{key:'status_key',label:'Статус',type:'select',options:statusOptions,default:''},{key:'chance',label:'Шанс, %',type:'number',default:100},{key:'duration',label:'Длительность',type:'number',default:0},{key:'stacks',label:'Стаки',type:'number',default:1}].concat(common);
+                    if (kind === 'status_resistance') return [{key:'status_key',label:'Статус',type:'select',options:statusOptions,default:''},{key:'mode',label:'Операция',type:'select',options:operationOptions,default:'percent'},{key:'value',label:'Значение',type:'number',default:0}].concat(common);
+                    if (kind === 'immunity') return [{key:'status_key',label:'Статус / эффект',type:'select',options:statusOptions,default:''}].concat(common);
+                    if (kind === 'resource_restore') return [{key:'resource_key',label:'Ресурс',type:'select',options:resourceOptions,default:''},{key:'mode',label:'Операция',type:'select',options:operationOptions,default:'flat'},{key:'value',label:'Значение',type:'number',default:0}].concat(common);
+                    if (kind === 'damage_bonus' || kind === 'damage_reduction' || kind === 'element_bonus') return [{key:'damage_type',label:'Тип урона / элемент',type:'select',options:damageOptions,default:''},{key:'mode',label:'Операция',type:'select',options:operationOptions,default:'percent'},{key:'value',label:'Значение',type:'number',default:0}].concat(common);
+                    if (kind === 'healing_bonus' || kind === 'shield_bonus') return [{key:'mode',label:'Операция',type:'select',options:operationOptions,default:'percent'},{key:'value',label:'Значение',type:'number',default:0}].concat(common);
+                    if (kind === 'triggered_effect') return [{key:'trigger_key',label:'Триггер',type:'select',options:mechanicsOptions('trigger_template'),default:''},{key:'effect_text',label:'Эффект',default:''}].concat(common);
+                    return [{key:'description',label:'Описание эффекта',default:''}].concat(common);
+                }
+                function redraw() {
+                    list.innerHTML = '';
+                    if (!arr.length) { var empty=document.createElement('div'); empty.className='af-kb-help'; empty.textContent='Список пуст.'; list.appendChild(empty); }
+                    arr.forEach(function(row, idx) {
+                        if (!row || typeof row !== 'object' || Array.isArray(row)) row=arr[idx]={};
+                        if (!row.type) row.type = row.kind || 'description';
+                        if (row.type === 'description' && !row.description && row.value != null) row.description=String(row.value);
+                        var card=document.createElement('div'); card.className='af-kb-block-item';
+                        var typeCell=fieldCell(row,{key:'type',label:'Тип эффекта',type:'select',options:types,default:'description'},function(){ redraw(); syncToRaw(); });
+                        var grid=document.createElement('div'); grid.className='af-kb-row'; grid.appendChild(typeCell);
+                        columnsFor(String(row.type)).forEach(function(col){ grid.appendChild(fieldCell(row,col,syncToRaw)); });
+                        var del=document.createElement('button'); del.type='button'; del.className='af-kb-remove'; del.textContent='Удалить';
+                        del.addEventListener('click',function(){arr.splice(idx,1);redraw();syncToRaw();});
+                        card.appendChild(grid); card.appendChild(del); list.appendChild(card);
+                    });
+                }
+                add.addEventListener('click',function(){arr.push({type:String(types[0].value || 'description'),condition_text:'',notes:''});redraw();syncToRaw();});
+                wrap.appendChild(add); wrap.appendChild(list); redraw();
             }
 
             function renderRuleFields(container, defs, title) {
@@ -1820,7 +1874,8 @@
                     { key: 'notes', label: 'Пояснение', default: '' }
                 ], [{ key: 'stat_modifier', label: 'Бонус к характеристике', seed: { type:'stat_modifier', stat_key:'atk', mode:'flat', value:0, condition_text:'', notes:'' } }]);
 
-                [['passive_effects','Пассивные эффекты (описательные постоянные эффекты)'], ['requirements','Требования'], ['mutual_exclusives','Несовместимые таланты']].forEach(function (pair) {
+                renderPassiveEffectEditor(rulesRoot);
+                [['requirements','Требования'], ['mutual_exclusives','Несовместимые таланты']].forEach(function (pair) {
                     var k = pair[0];
                     renderSeededArrayEditor(
                         rulesRoot,
