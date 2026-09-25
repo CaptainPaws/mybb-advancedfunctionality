@@ -23,6 +23,61 @@ define('AF_AM_CACHE_KEY', 'af_advancedmenu_items');
 define('AF_AM_ASSETS_MARK', '<!--af_advancedmenu_assets-->');
 define('AF_AM_APPLIED_MARK', '<!--af_advancedmenu_applied-->');
 
+/* Runtime-only system catalogue. Stage 1 does not render it, so all legacy
+ * injections remain authoritative until the menu migration is explicit. */
+function af_menu_register_item(array $item): bool
+{
+    $key = strtolower(trim((string)($item['key'] ?? '')));
+    if ($key === '' || !preg_match('~^[a-z][a-z0-9_]*$~', $key)) return false;
+    $type = strtolower((string)($item['type'] ?? 'link'));
+    if (!in_array($type, ['link', 'modal', 'action/system'], true)) return false;
+    $item = array_merge(['key'=>$key, 'source_addon'=>'mybb', 'label'=>$key,
+        'icon'=>'', 'type'=>$type, 'default_container'=>'panel_links',
+        'default_sortorder'=>100, 'visibility'=>true, 'action'=>[],
+        'badge_provider'=>null, 'renderer'=>null], $item);
+    $item['key'] = $key; $item['type'] = $type;
+    $item['default_sortorder'] = (int)$item['default_sortorder'];
+    $GLOBALS['af_advancedmenu_system_registry'][$key] = $item;
+    return true;
+}
+
+function af_menu_register_core_items(): void
+{
+    $member = static function (): bool { global $mybb; return !empty($mybb->user['uid']); };
+    $mod = static function (): bool { global $mybb; return !empty($mybb->usergroup['canmodcp']) || !empty($mybb->usergroup['issupermod']) || (!empty($mybb->user['uid']) && function_exists('is_moderator') && is_moderator()); };
+    $admin = static function (): bool { global $mybb; return !empty($mybb->usergroup['cancp']); };
+    af_menu_register_item(['key'=>'new_posts','label'=>'Новые сообщения','icon'=>'fa-solid fa-clock-rotate-left','type'=>'link','default_sortorder'=>40,'visibility'=>$member,'action'=>['url'=>'search.php?action=getnew']]);
+    af_menu_register_item(['key'=>'modcp','label'=>'Mod CP','icon'=>'fa-solid fa-shield-halved','type'=>'link','default_sortorder'=>80,'visibility'=>$mod,'action'=>['url'=>'modcp.php']]);
+    af_menu_register_item(['key'=>'admincp','label'=>'Admin CP','icon'=>'fa-solid fa-screwdriver-wrench','type'=>'link','default_sortorder'=>90,'visibility'=>$admin,'action'=>['url'=>'admin/index.php']]);
+}
+
+function af_menu_collect_registry(bool $force = false): array
+{
+    static $collected = false;
+    if ($force) { $GLOBALS['af_advancedmenu_system_registry'] = []; $collected = false; }
+    if (!$collected) {
+        $collected = true; af_menu_register_core_items();
+        foreach (get_defined_functions()['user'] as $function) {
+            if (preg_match('~^af_[a-z0-9_]+_menu_provider$~', $function)) $function();
+        }
+    }
+    $items = $GLOBALS['af_advancedmenu_system_registry'] ?? [];
+    uasort($items, static fn(array $a, array $b): int => [$a['default_sortorder'], $a['key']] <=> [$b['default_sortorder'], $b['key']]);
+    return $items;
+}
+
+function af_menu_item_is_visible(array $item): bool
+{
+    $value = $item['visibility'] ?? true;
+    return is_callable($value) ? (bool)$value($item) : (bool)$value;
+}
+
+function af_menu_item_badge(array $item)
+{
+    $provider = $item['badge_provider'] ?? null;
+    return is_callable($provider) ? $provider($item) : null;
+}
+
 /* =========================
    BOOTSTRAP / ENSURE
    ========================= */
@@ -1273,6 +1328,7 @@ function af_advancedmenu_init(): void
 
     af_advancedmenu_ensure_installed();
     af_advancedmenu_load_lang(false);
+    af_menu_collect_registry();
 
     if (empty($mybb->settings['af_advancedmenu_enabled'])) {
         return;
