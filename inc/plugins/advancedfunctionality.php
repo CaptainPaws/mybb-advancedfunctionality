@@ -1696,6 +1696,14 @@ function advancedfunctionality_bootstrap_addons()
     }
     $GLOBALS['af_addons_bootstrapped'] = true;
 
+    // AdvancedOnlineAvatar was folded into AdvancedPosterAvatar.  Migrate an
+    // existing installation before discovery so a site which only enabled the
+    // former addon does not silently lose its online-list avatars after the
+    // upgrade.  The legacy setting is retained (but disabled) deliberately:
+    // administrators do not have to clean the database by hand and rollback
+    // remains possible.
+    af_migrate_advancedavatar_addons();
+
     // Подключаем активные аддоны и их языки (front)
     $addons = af_discover_addons();
     foreach ($addons as $meta) {
@@ -1715,6 +1723,44 @@ function advancedfunctionality_bootstrap_addons()
             }
         }
     }
+}
+
+function af_migrate_advancedavatar_addons(): void
+{
+    global $db, $mybb;
+
+    if (($mybb->settings['af_advancedonlineavatar_enabled'] ?? '0') !== '1') {
+        return;
+    }
+
+    if (($mybb->settings['af_advancedposteravatar_enabled'] ?? '0') !== '1') {
+        $bootstrap = AF_ADDONS . 'advancedposteravatar/advancedposteravatar.php';
+        if (is_file($bootstrap)) {
+            require_once $bootstrap;
+            if (function_exists('af_advancedposteravatar_install')) {
+                af_advancedposteravatar_install();
+            }
+        }
+
+        af_ensure_settinggroup(
+            'af_advancedposteravatar',
+            'AF: AdvancedAvatar',
+            'Unified poster and online avatar settings.'
+        );
+        af_ensure_setting(
+            'af_advancedposteravatar',
+            'af_advancedposteravatar_enabled',
+            'Enable addon',
+            'Enables poster and online-list avatars.',
+            'yesno',
+            '1',
+            1
+        );
+        $db->update_query('settings', ['value' => '1'], "name='af_advancedposteravatar_enabled'");
+    }
+
+    $db->update_query('settings', ['value' => '0'], "name='af_advancedonlineavatar_enabled'");
+    af_rebuild_and_reload_settings();
 }
 
 

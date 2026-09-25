@@ -16,6 +16,7 @@ if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
 define('AF_APA_ID', 'advancedposteravatar');
 define('AF_APA_MARK', '<!--af_apa_assets-->');
+define('AF_APA_ONLINE_DONE', '<!--af_avatar_online_done-->');
 
 /* -------------------- INSTALL / UNINSTALL -------------------- */
 function af_advancedposteravatar_install()
@@ -33,8 +34,8 @@ function af_advancedposteravatar_install()
         $disporder = (int)$db->fetch_field($db->simple_select('settinggroups', 'MAX(disporder) AS mx'), 'mx');
         $insert = [
             'name'        => $groupName,
-            'title'       => 'AF: Advanced Poster Avatar',
-            'description' => 'Настройки отображения аватара последнего постера.',
+            'title'       => 'AF: AdvancedAvatar',
+            'description' => 'Настройки аватаров последнего постера и online-списка.',
             'disporder'   => $disporder + 1,
             'isdefault'   => 0,
         ];
@@ -137,6 +138,10 @@ function af_advancedposteravatar_pre_output(&$page)
         $page = af_apa_replace_markers($page, $ctx['wrap'], $ctx['img'], $ctx['pos']);
     }
 
+    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'online.php') {
+        $page = af_avatar_render_online_page((string)$page);
+    }
+
     if (!af_apa_should_run_on_this_script()) {
         return;
     }
@@ -227,46 +232,24 @@ function af_apa_replace_markers($html, $wrapClass, $imgClass, $pos)
 
 function af_apa_render_avatar_block($uid, array $userMap, $wrapClass, $imgClass, $pos, $wrapMode)
 {
-    global $mybb, $lang, $theme;
+    global $lang;
 
     $lang->load('global');
-
-    $size = af_apa_size();
-    $defaultAvatar = str_replace('{theme}', $theme['imgdir'], (string)$mybb->settings['useravatar']);
-    $onerror = ((int)$mybb->settings['af_advancedposteravatar_onerror'] === 1)
-        ? ' onerror="this.src=\'' . htmlspecialchars_uni($defaultAvatar) . '\'"'
-        : '';
 
     $pos = ($pos === 'right') ? 'right' : 'left';
     $posClass = ($pos === 'right') ? 'apa_pos_right' : 'apa_pos_left';
 
     // строим “внутренность” аватара: либо img, либо ссылка+img
     if ($uid <= 0 || empty($userMap[$uid])) {
-        $name = $lang->guest;
-        $img = af_apa_build_img_tag('', $name, $size, $imgClass, $defaultAvatar, $onerror);
-        $avatarInner = $img;
+        $avatarInner = af_avatar_render(['uid' => 0, 'username' => $lang->guest], 'post', ['img_class' => $imgClass]);
     } else {
-        $u = $userMap[$uid];
-        $name = (string)$u['username'];
-
-        $avatarUrl = '';
-        if (!empty($u['avatar'])) {
-            $fa = format_avatar($u['avatar'], $size . 'x' . $size, 2048);
-            $avatarUrl = isset($fa['image']) ? (string)$fa['image'] : (string)$u['avatar'];
-        }
-
-        $img = af_apa_build_img_tag($avatarUrl, $name, $size, $imgClass, $defaultAvatar, $onerror);
-
-        $profile = get_profile_link((int)$uid);
-        $href = $mybb->settings['bburl'] . '/' . $profile;
-
-        $avatarInner = '<a href="' . htmlspecialchars_uni($href) . '" class="apa_link" title="' . htmlspecialchars_uni($name) . '">' . $img . '</a>';
+        $avatarInner = af_avatar_render($userMap[$uid], 'post', ['img_class' => $imgClass]);
     }
 
     $wrapClassSafe = htmlspecialchars_uni($wrapClass);
 
     // CSS-переменная под размер (чтобы padding считался автоматически)
-    $style = ' style="--apa-size:' . (int)$size . 'px"';
+    $style = ' style="--apa-size:' . (int)af_apa_size() . 'px"';
 
     if ($wrapMode) {
         return '<span class="apa_row ' . $posClass . ' ' . $wrapClassSafe . '"' . $style . '>'
@@ -278,6 +261,101 @@ function af_apa_render_avatar_block($uid, array $userMap, $wrapClass, $imgClass,
     return '<span class="apa_inline ' . $posClass . ' ' . $wrapClassSafe . '"' . $style . '>'
          . '<span class="apa_avatar">' . $avatarInner . '</span>'
          . '</span>';
+}
+
+/**
+ * Single owner renderer for every avatar surface.
+ *
+ * The row is mandatory input: the viewed user's globals are intentionally not
+ * consulted.  This makes the uid -> profile URL relationship local and keeps
+ * list rendering from accidentally reusing the first/current user's uid.
+ */
+function af_avatar_render(array $user, string $context, array $options = []): string
+{
+    global $mybb, $theme, $lang;
+
+    $uid = max(0, (int)($user['uid'] ?? 0));
+    $username = trim((string)($user['username'] ?? ''));
+    if ($username === '') {
+        $username = (string)($lang->guest ?? 'Guest');
+    }
+
+    $isOnline = $context === 'online';
+    $size = $isOnline ? 26 : af_apa_size();
+    $defaultAvatar = str_replace('{theme}', (string)($theme['imgdir'] ?? 'images'), (string)($mybb->settings['useravatar'] ?? 'images/default_avatar.png'));
+    $avatarUrl = trim((string)($user['avatar'] ?? ''));
+    if ($avatarUrl !== '') {
+        $formatted = format_avatar($avatarUrl, $size . 'x' . $size, 2048);
+        $avatarUrl = (string)($formatted['image'] ?? $avatarUrl);
+    }
+
+    $imgClass = trim('af-avatar__image ' . ($options['img_class'] ?? ''));
+    $onerror = ((int)($mybb->settings['af_advancedposteravatar_onerror'] ?? 1) === 1)
+        ? ' onerror="this.onerror=null;this.src=\'' . htmlspecialchars_uni($defaultAvatar) . '\'"'
+        : '';
+    $img = af_apa_build_img_tag($avatarUrl, $username, $size, $imgClass, $defaultAvatar, $onerror);
+    $classes = 'af-avatar af-avatar--' . ($isOnline ? 'online' : 'post');
+
+    // Guests and unresolved rows have no owner profile and must never inherit
+    // a profile link from adjacent/current-user markup.
+    if ($uid === 0) {
+        return '<span class="' . $classes . ' af-avatar--guest" aria-hidden="true">' . $img . '</span>';
+    }
+
+    $profileUrl = rtrim((string)$mybb->settings['bburl'], '/') . '/' . ltrim(get_profile_link($uid), '/');
+    return '<a href="' . htmlspecialchars_uni($profileUrl) . '" class="' . $classes . ' apa_link" title="' . htmlspecialchars_uni($username) . '">' . $img . '</a>';
+}
+
+function af_avatar_render_online_page(string $page): string
+{
+    global $db, $lang;
+
+    if ($page === '' || strpos($page, AF_APA_ONLINE_DONE) !== false) {
+        return $page;
+    }
+
+    $uids = [];
+    if (preg_match_all('~member\.php\?[^"\']*(?:&amp;|&)uid=([0-9]+)~i', $page, $matches)) {
+        foreach ($matches[1] as $rawUid) {
+            $uid = (int)$rawUid;
+            if ($uid > 0) $uids[$uid] = $uid;
+        }
+    }
+
+    $users = [];
+    if ($uids) {
+        $query = $db->simple_select('users', 'uid, username, avatar, avatartype', 'uid IN (' . implode(',', $uids) . ')');
+        while ($row = $db->fetch_array($query)) {
+            $users[(int)$row['uid']] = $row;
+        }
+    }
+
+    $guestLabels = array_unique(array_filter([(string)($lang->guest ?? ''), 'Guest', 'Гость']));
+    $page = (string)preg_replace_callback('~<tr\b[^>]*>[\s\S]*?</tr>~i', static function (array $rowMatch) use ($users, $guestLabels): string {
+        $rowHtml = $rowMatch[0];
+        if (preg_match('~<th\b|\bclass\s*=\s*(["\'])[^"\']*\b(?:thead|tcat|tfoot)\b~i', $rowHtml)) return $rowHtml;
+        if (!preg_match('~(<td\b[^>]*>)([\s\S]*?)(</td>)~i', $rowHtml, $cell)) return $rowHtml;
+        if (strpos($cell[2], 'af-avatar--online') !== false) return $rowHtml;
+
+        $avatar = '';
+        if (preg_match('~member\.php\?[^"\']*(?:&amp;|&)uid=([0-9]+)~i', $cell[2], $uidMatch)) {
+            $uid = (int)$uidMatch[1];
+            if (isset($users[$uid])) $avatar = af_avatar_render($users[$uid], 'online');
+        } else {
+            $text = strip_tags($cell[2]);
+            foreach ($guestLabels as $label) {
+                if ($label !== '' && my_stripos($text, $label) !== false) {
+                    $avatar = af_avatar_render(['uid' => 0, 'username' => $label], 'online');
+                    break;
+                }
+            }
+        }
+        if ($avatar === '') return $rowHtml;
+        $newCell = $cell[1] . $avatar . $cell[2] . $cell[3];
+        return (string)preg_replace('~' . preg_quote($cell[0], '~') . '~', addcslashes($newCell, '\\$'), $rowHtml, 1);
+    }, $page);
+
+    return $page . "\n" . AF_APA_ONLINE_DONE;
 }
 
 
@@ -330,6 +408,9 @@ function af_apa_should_run_on_this_script()
         return true;
     }
     if (THIS_SCRIPT === 'forumdisplay.php' && (int)$mybb->settings['af_advancedposteravatar_forumdisplay'] === 1) {
+        return true;
+    }
+    if (THIS_SCRIPT === 'online.php') {
         return true;
     }
     return false;
@@ -466,8 +547,8 @@ function af_apa_assets_html()
           . '/inc/plugins/advancedfunctionality/addons/' . AF_APA_ID
           . '/assets';
 
-    $css = $base . '/advancedposteravatar.css?v=100';
-    $js  = $base . '/advancedposteravatar.js?v=100';
+    $css = $base . '/advancedposteravatar.css?v=200';
+    $js  = $base . '/advancedposteravatar.js?v=200';
 
     return '<link rel="stylesheet" href="' . htmlspecialchars_uni($css) . '" />' . "\n"
          . '<script src="' . htmlspecialchars_uni($js) . '" defer></script>';

@@ -2,18 +2,18 @@
 
 return [
     'id'          => 'advancedposteravatar',
-    'name'        => 'Advanced Poster Avatar',
+    'name'        => 'AdvancedAvatar',
     'author'      => 'CaptainPaws',
     'authorsite'  => '',
-    'description' => 'Показывает аватар последнего постера в списке форумов и тем (index.php, forumdisplay.php).',
-    'version'     => '1.0.0',
+    'description' => 'Единый renderer аватаров последнего постера и списка online.',
+    'version'     => '2.0.0',
     'bootstrap'   => 'advancedposteravatar.php',
 
     'lang'        => [
         'russian' => [
             'front' => [
-                'af_advancedposteravatar_name'        => 'Advanced Poster Avatar',
-                'af_advancedposteravatar_description' => 'Показывает аватар последнего постера в списке форумов и тем.',
+                'af_advancedposteravatar_name'        => 'AdvancedAvatar',
+                'af_advancedposteravatar_description' => 'Показывает аватары последних постеров и online-пользователей.',
             ],
             'admin' => [
                 'af_advancedposteravatar_group'      => 'AF: Advanced Poster Avatar',
@@ -22,8 +22,8 @@ return [
         ],
         'english' => [
             'front' => [
-                'af_advancedposteravatar_name'        => 'Advanced Poster Avatar',
-                'af_advancedposteravatar_description' => 'Shows the last poster avatar in forum/thread lists.',
+                'af_advancedposteravatar_name'        => 'AdvancedAvatar',
+                'af_advancedposteravatar_description' => 'Shows last-poster and online-list avatars with one renderer.',
             ],
             'admin' => [
                 'af_advancedposteravatar_group'      => 'AF: Advanced Poster Avatar',

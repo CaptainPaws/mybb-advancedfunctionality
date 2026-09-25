@@ -46,6 +46,23 @@
   text-decoration: none;
 }
 
+/* Shared owner renderer; context only controls dimensions/presentation. */
+.af-avatar{
+  display: inline-flex;
+  vertical-align: middle;
+  align-items: center;
+  flex: 0 0 auto;
+  line-height: 0;
+}
+.af-avatar--online{ margin-right: 8px; }
+.af-avatar--online img{
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+}
+.af-avatar--post img{ border-radius: 50%; }
+.af-avatar__image{ object-fit: cover; display: block; }
+
 /* fallback (если где-то встретится маркер без <apa_end>) */
 .apa_inline{
   display: inline-flex;
