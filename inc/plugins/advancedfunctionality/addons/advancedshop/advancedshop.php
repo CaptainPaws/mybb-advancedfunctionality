@@ -445,6 +445,28 @@ function af_advancedshop_kb_type_mechanic_key(string $typeKey, array $typeRow = 
     return 'dnd';
 }
 
+function af_advancedshop_kb_type_supports_mechanic(string $typeKey, string $mechanicKey, array $typeRow = []): bool
+{
+    $mechanicKey = mb_strtolower(trim($mechanicKey));
+    $compatibility = mb_strtolower(trim((string)($typeRow['mechanic_key'] ?? af_advancedshop_kb_type_mechanic_key($typeKey, $typeRow))));
+    if (in_array($compatibility, ['all', 'both', '*'], true)) {
+        return in_array($mechanicKey, ['dnd', 'arpg'], true);
+    }
+    $supported = preg_split('/[\s,|]+/', $compatibility, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    return in_array($mechanicKey, $supported, true);
+}
+
+function af_advancedshop_kb_type_options(string $mechanicKey): array
+{
+    $options = [];
+    foreach (af_advancedshop_kb_type_registry() as $typeKey => $typeRow) {
+        if (af_advancedshop_kb_type_supports_mechanic((string)$typeKey, $mechanicKey, (array)$typeRow)) {
+            $options[(string)$typeKey] = (string)($typeRow['title'] ?? $typeKey);
+        }
+    }
+    return $options;
+}
+
 function af_advancedshop_kb_filter_scope(string $kbType, string $mechanicKey): array
 {
     $type = mb_strtolower(trim($kbType));
@@ -481,8 +503,8 @@ function af_advancedshop_kb_filter_scope(string $kbType, string $mechanicKey): a
 
 /**
  * Return the mechanic assigned to a shop.  settings_json is the existing
- * per-shop configuration contract; shops created before this option existed
- * remain DnD unless their code explicitly identifies an ARPG shop.
+ * per-shop configuration contract. Shops created before this option existed
+ * use the documented DnD default; URLs, names and slot contents are never used.
  */
 function af_advancedshop_shop_mechanic(array $shop): string
 {
@@ -492,8 +514,7 @@ function af_advancedshop_shop_mechanic(array $shop): string
         return $mechanic;
     }
 
-    $code = mb_strtolower(trim((string)($shop['code'] ?? '')));
-    return strpos($code, 'arpg') !== false ? 'arpg' : 'dnd';
+    return 'dnd';
 }
 
 function af_advancedshop_kb_mechanic(string $kbType): string
@@ -509,8 +530,13 @@ function af_advancedshop_assert_source_matches_shop(array $shop, array $sourcePa
         return;
     }
     $shopMechanic = af_advancedshop_shop_mechanic($shop);
-    $itemMechanic = af_advancedshop_kb_mechanic((string)($sourcePayload['kb_type'] ?? 'item'));
-    if ($itemMechanic !== $shopMechanic) {
+    $kbType = mb_strtolower(trim((string)($sourcePayload['kb_type'] ?? 'item')));
+    $registry = af_advancedshop_kb_type_registry();
+    if (!isset($registry[$kbType])) {
+        throw new RuntimeException('Unknown or inactive KB type: ' . $kbType . '.');
+    }
+    $itemMechanic = af_advancedshop_kb_type_mechanic_key($kbType, (array)$registry[$kbType]);
+    if (!af_advancedshop_kb_type_supports_mechanic($kbType, $shopMechanic, (array)$registry[$kbType])) {
         throw new RuntimeException('Item mechanic (' . $itemMechanic . ') does not match shop mechanic (' . $shopMechanic . ').');
     }
 }
@@ -1514,11 +1540,19 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
     while ($countRow = $db->fetch_array($qSlotCounts)) {
         $slotCounts[(int)$countRow['cat_id']] = (int)$countRow['cnt'];
     }
-    $cats = af_advancedshop_render_shop_categories_tree($flatCats, (string)$shop['code'], $catId, $isManagerView, $slotCounts);
+    $allUrl = af_advancedshop_url('shop_category', ['shop' => (string)$shop['code']], true);
+    $allActive = $catId <= 0 ? ' is-active' : '';
+    $cats = '<div class="af-shop-cat-node af-shop-cat-node--all"><a class="af-shop-cat-link' . $allActive . '" href="' . $allUrl . '">Показать все</a></div>'
+        . af_advancedshop_render_shop_categories_tree($flatCats, (string)$shop['code'], $catId, $isManagerView, $slotCounts);
     af_advancedshop_debug_categories((string)$shop['code'], $shopId, $flatCats);
 
     $slotsHtml = '';
     $where = 's.shop_id=' . $shopId . ' AND s.enabled=1';
+    $enabledCatIds = [];
+    foreach ($flatCats as $flatCat) {
+        if ((int)($flatCat['enabled'] ?? 0) === 1) { $enabledCatIds[] = (int)$flatCat['cat_id']; }
+    }
+    $where .= $enabledCatIds ? ' AND s.cat_id IN(' . implode(',', $enabledCatIds) . ')' : ' AND 1=0';
     if ($catId > 0) { $where .= ' AND s.cat_id=' . $catId; }
     $kbCols = af_advancedshop_kb_cols();
     $kbIdCol = $kbCols['id'] ?? 'id';
@@ -1553,7 +1587,9 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
         $sourceType = af_advancedshop_source_type_from_slot($slot);
         // Legacy incompatible links are retained for administrators, but are
         // never exposed for sale on a public shop page.
-        if ($sourceType === 'kb' && af_advancedshop_kb_mechanic((string)($slot['slot_kb_type'] ?? $slot['kb_type'] ?? 'item')) !== $shopMechanic) {
+        $publicKbType = (string)($slot['slot_kb_type'] ?? $slot['kb_type'] ?? 'item');
+        $publicTypeRegistry = af_advancedshop_kb_type_registry();
+        if ($sourceType === 'kb' && !af_advancedshop_kb_type_supports_mechanic($publicKbType, $shopMechanic, (array)($publicTypeRegistry[$publicKbType] ?? []))) {
             continue;
         }
         $sourceRefId = af_advancedshop_source_ref_id_from_slot($slot);
@@ -2920,32 +2956,12 @@ function af_advancedshop_render_manage(): void
     }
 
     $assets = af_advancedshop_assets_html();
-    $legacyMismatches = [];
-    $kbCols = af_advancedshop_kb_cols();
-    $kbTypeCol = $kbCols['type'] ?? '`type`';
-    $kbIdCol = $kbCols['id'] ?? 'id';
-    $mismatchQuery = $db->query(
-        'SELECT s.slot_id, s.kb_id, e.' . ($kbTypeCol === 'type' ? '`type`' : $kbTypeCol) . ' AS kb_type '
-        . 'FROM ' . TABLE_PREFIX . 'af_shop_slots s LEFT JOIN ' . af_advancedshop_kb_table() . ' e ON(e.' . $kbIdCol . '=s.kb_id) '
-        . "WHERE s.shop_id=" . (int)$shop['shop_id'] . " AND (s.source_type='kb' OR s.source_type='' OR s.source_type IS NULL)"
-    );
-    $shopMechanic = af_advancedshop_shop_mechanic($shop);
-    while ($mismatch = $db->fetch_array($mismatchQuery)) {
-        $itemMechanic = af_advancedshop_kb_mechanic((string)($mismatch['kb_type'] ?? 'item'));
-        if ($itemMechanic !== $shopMechanic) {
-            $legacyMismatches[] = 'slot #' . (int)$mismatch['slot_id'] . ' → KB #' . (int)$mismatch['kb_id'] . ' (' . $itemMechanic . ')';
-        }
-    }
     $health_block = '<div class="af-shop-health" id="af-shop-health">'
         . '<strong>AF Shop health</strong> '
         . '<span data-health-js>JS loaded: no</span> '
         . '<span data-health-postkey>postKey present: no</span> '
         . '<span data-health-api>API ping: ...</span>'
         . '</div>';
-    if ($legacyMismatches) {
-        $health_block .= '<div class="af-shop-legacy-report" role="status"><strong>Legacy mechanic mismatches (not shown publicly):</strong><ul><li>'
-            . implode('</li><li>', array_map('htmlspecialchars_uni', $legacyMismatches)) . '</li></ul></div>';
-    }
     $page_title = htmlspecialchars_uni($lang->af_advancedshop_manage_title ?? 'Управление магазином');
     $bbname = htmlspecialchars_uni((string)($mybb->settings['bbname'] ?? ''));
     eval('$categories_table = "' . af_advancedshop_tpl('advancedshop_manage_categories') . '";');
@@ -3131,6 +3147,10 @@ function af_advancedshop_manage_slots(): void
         add_breadcrumb($category_title_raw, af_advancedshop_manage_url((string)$shop['code'], 'slots', $catId));
 
         $manage_url = htmlspecialchars_uni(af_advancedshop_manage_url((string)$shop['code']));
+        $kb_type_options = '<option value="all">All compatible types</option>';
+        foreach (af_advancedshop_kb_type_options(af_advancedshop_shop_mechanic($shop)) as $typeKey => $typeTitle) {
+            $kb_type_options .= '<option value="' . htmlspecialchars_uni($typeKey) . '">' . htmlspecialchars_uni($typeTitle) . '</option>';
+        }
         $assets = af_advancedshop_assets_html();
         $page_title = htmlspecialchars_uni(($lang->af_advancedshop_manage_slots ?? 'Слоты') . ': ' . $category_title_raw);
         $bbname = htmlspecialchars_uni((string)($mybb->settings['bbname'] ?? ''));
@@ -3493,7 +3513,7 @@ function af_advancedshop_kb_search(): void
     $spellSchoolFilter = mb_strtolower(trim((string)$mybb->get_input('spell_school')));
     $typeRegistry = af_advancedshop_kb_type_registry();
     if ($typeFilter !== 'all' && isset($typeRegistry[$typeFilter])
-        && (string)($typeRegistry[$typeFilter]['mechanic_key'] ?? '') !== $mechanicFilter) {
+        && !af_advancedshop_kb_type_supports_mechanic($typeFilter, $mechanicFilter, (array)$typeRegistry[$typeFilter])) {
         $typeFilter = 'all';
     }
     $scope = af_advancedshop_kb_filter_scope($typeFilter, $mechanicFilter);
@@ -3524,7 +3544,7 @@ function af_advancedshop_kb_search(): void
     if (!empty($typeCol) && $typeFilter === 'all' && in_array($mechanicFilter, ['dnd', 'arpg'], true)) {
         $typeValues = [];
         foreach ($typeRegistry as $rowType => $typeMeta) {
-            if ((string)($typeMeta['mechanic_key'] ?? '') === $mechanicFilter) {
+            if (af_advancedshop_kb_type_supports_mechanic((string)$rowType, $mechanicFilter, (array)$typeMeta)) {
                 $typeValues[] = "'" . $db->escape_string($rowType) . "'";
             }
         }
@@ -3563,7 +3583,7 @@ function af_advancedshop_kb_search(): void
         $kbType = (string)($row['kb_type'] ?? 'item');
         $rowMechanic = af_advancedshop_kb_type_mechanic_key($kbType, (array)($typeRegistry[$kbType] ?? []));
         $rowScope = af_advancedshop_kb_filter_scope($kbType, $rowMechanic);
-        if ($mechanicFilter !== 'all' && $rowMechanic !== $mechanicFilter) { continue; }
+        if ($mechanicFilter !== 'all' && !af_advancedshop_kb_type_supports_mechanic($kbType, $mechanicFilter, (array)($typeRegistry[$kbType] ?? []))) { continue; }
         if ($rarityFilter !== '' && !empty($rowScope['rarity'])) {
             $raritySource = mb_strtolower(trim((string)($profile['rarity_raw'] ?? $profile['rarity'] ?? '')));
             if ($raritySource !== $rarityFilter) { continue; }
