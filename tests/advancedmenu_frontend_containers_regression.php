@@ -42,7 +42,7 @@ foreach (['af-am-shell', 'af-am-main', 'af-am-secondary', 'af-am-user-drawer', '
 foreach (['position: sticky', 'max-width: 100vw', '#header .top_links', '#header .panel_links', '#footer .upper', '.af-am-member #panel'] as $needle) {
     if (strpos($css, $needle) === false) throw new RuntimeException('Missing layout rule: '.$needle);
 }
-foreach (['#header .user_links', '.af-am-drawer-overlay', 'body.af-am-drawer-open', 'bottom: 14px'] as $needle) {
+foreach (['#header .user_links', '.af-am-drawer-overlay', 'body.af-am-drawer-open', 'inset: auto auto 14px 14px'] as $needle) {
     if (strpos($css, $needle) === false) throw new RuntimeException('Missing user drawer layout rule: '.$needle);
 }
 $js = file_get_contents(AF_ADDONS.'advancedmenu/assets/advancedmenu.js');
@@ -53,8 +53,12 @@ foreach (['af_advancedcharacters_menu_provider', 'af_characters_add_moderator_li
     if (strpos($characters, $needle) !== false) throw new RuntimeException('Characters menu injection remains: '.$needle);
 }
 
-if (!preg_match('~<div class="af-am-shell af-am-navigation"[^>]*>\'\s*\.\s*\'<nav class="af-am-bar af-am-main"[^>]*>\'\s*\.\s*\'<button class="af-am-burger"~', $source)) {
-    throw new RuntimeException('Burger is not inside the main navigation.');
+if (!preg_match('~<nav class="af-am-bar af-am-main"[^>]*>\'\s*\.\s*\'<ul class="af-am-list"><button class="af-am-burger"~', $source)) {
+    throw new RuntimeException('Burger is not the first element inside the main menu list.');
+}
+
+if (substr_count($source, '<button class="af-am-burger"') !== 1) {
+    throw new RuntimeException('Frontend renderer must define exactly one burger.');
 }
 
 // AAS's legacy template puts the trigger and modal in one injected widget.
