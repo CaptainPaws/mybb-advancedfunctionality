@@ -67,6 +67,9 @@
 
 .af-aas-modal.af-aas-modal-open {
     display: flex;
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .af-aas-modal-backdrop {

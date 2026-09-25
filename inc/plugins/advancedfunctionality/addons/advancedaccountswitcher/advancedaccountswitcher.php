@@ -2455,7 +2455,7 @@ function af_aas_render_panel_widget(): string
         <a href="#" class="af-aas-trigger" id="af_aas_trigger" aria-expanded="false" title="' . $tSwitch . '">👥 ' . $lblAcc . '</a>
     </span>
 
-    <div id="af_aas_modal" class="modal af-aas-modal" style="display:none;">
+    <div id="af_aas_modal" class="modal af-aas-modal" role="dialog" aria-modal="true" aria-hidden="true" style="display:none;">
         <div class="af-aas-modal-backdrop"></div>
 
         <table class="tborder af-aas-modal-table" cellspacing="1" cellpadding="6" border="0">

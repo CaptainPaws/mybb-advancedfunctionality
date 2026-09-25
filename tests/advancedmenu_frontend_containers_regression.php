@@ -29,6 +29,27 @@ foreach (["'trigger_renderer'=>'af_aas_render_menu_trigger'", 'aria-controls="af
 foreach (["document.addEventListener('click'", "closest('#af_aas_trigger')", "document.addEventListener('DOMContentLoaded', init)"] as $needle) {
     if (strpos($aasJs, $needle) === false) throw new RuntimeException('AAS delegated trigger handling missing: '.$needle);
 }
+foreach ([
+    'document.afAasModalOwner',
+    'document.body.appendChild(modal)',
+    "modal.setAttribute('aria-hidden', 'false')",
+    "modal.setAttribute('aria-hidden', 'true')",
+] as $needle) {
+    if (strpos($aasJs, $needle) === false) throw new RuntimeException('AAS production modal contract missing: '.$needle);
+}
+if (strpos($aasJs, "if (modal.classList.contains('af-aas-modal-open')) closeModal()") !== false) {
+    throw new RuntimeException('AAS trigger still toggles closed during its open click.');
+}
+if (substr_count($aasJs, "var trigger = e.target.closest('#af_aas_trigger')") !== 1) {
+    throw new RuntimeException('AAS must install exactly one owner trigger handler.');
+}
+$aasTemplate = file_get_contents(AF_ADDONS.'advancedaccountswitcher/templates/advancedaccountswitcher.html');
+if (substr_count($aasTemplate, 'id="af_aas_modal"') !== 1) {
+    throw new RuntimeException('The production AAS template must contain exactly one modal shell.');
+}
+foreach (['role="dialog"', 'aria-modal="true"', 'aria-hidden="true"'] as $needle) {
+    if (strpos($aasTemplate, $needle) === false) throw new RuntimeException('AAS dialog semantics missing: '.$needle);
+}
 if (strpos($modal, 'af-am-badge') === false || strpos($modal, '>7</span>') === false) {
     throw new RuntimeException('Unread badge was not rendered.');
 }
