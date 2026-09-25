@@ -1953,51 +1953,95 @@ function af_charactersheets_arpg_render_talent_tree_html(array $sheet_arpg_vm, b
     $build = (array)($sheet_arpg_vm['build'] ?? []);
     $state = af_charactersheets_arpg_talent_state($build, (int)($sheet_arpg_vm['uid'] ?? 0));
     $catalog = af_charactersheets_arpg_talent_catalog();
-    $branches = [];
-    foreach ($catalog as $key => &$node) $branches[(string)($node['rules']['tree'] ?? 'custom')][] =& $node;
-    unset($node);
-    $branchCount = max(1, count($branches)); $branchIndex = 0;
-    foreach ($branches as &$branch) {
-        usort($branch, static fn($a, $b) => ((int)($a['rules']['tier'] ?? 1)) <=> ((int)($b['rules']['tier'] ?? 1)));
-        $count = max(1, count($branch));
-        foreach ($branch as $i => &$node) { $node['x'] = 10 + (80 * ($i / max(1, $count - 1))); $node['y'] = 15 + (70 * ($branchIndex / max(1, $branchCount - 1))); }
-        unset($node); $branchIndex++;
+    $branches = $tiers = [];
+    foreach ($catalog as $key => $node) {
+        $branch = trim((string)($node['rules']['tree'] ?? '')) ?: 'custom';
+        $tier = max(1, (int)($node['rules']['tier'] ?? 1));
+        $branches[$branch][] = $key;
+        $tiers[$tier][] = $key;
     }
-    unset($branch);
+    ksort($tiers, SORT_NUMERIC);
+    $branchNames = array_keys($branches);
+    $branchCount = max(1, count($branchNames));
+    $tierNames = array_keys($tiers);
+    $tierCount = max(1, count($tierNames));
+    $positions = [];
+    $tierIndex = 0;
+    foreach ($tiers as $tier => $keys) {
+        $byBranch = [];
+        foreach ($keys as $key) {
+            $branch = trim((string)($catalog[$key]['rules']['tree'] ?? '')) ?: 'custom';
+            $byBranch[$branch][] = $key;
+        }
+        foreach ($byBranch as $branch => $branchKeys) {
+            $branchIndex = (int)array_search($branch, $branchNames, true);
+            $baseX = 500;
+            if ($branchCount > 1) $baseX = 115 + (770 * ($branchIndex / ($branchCount - 1)));
+            $nodeCount = count($branchKeys);
+            foreach ($branchKeys as $nodeIndex => $key) {
+                $offset = $nodeCount > 1 ? (($nodeIndex - (($nodeCount - 1) / 2)) * 92) : 0;
+                $positions[$key] = ['x' => max(58, min(942, $baseX + $offset)), 'y' => 110 + (155 * $tierIndex)];
+            }
+        }
+        $tierIndex++;
+    }
+    $canvasHeight = max(360, 205 + (155 * max(1, $tierCount - 1)));
+    $activeKeys = array_values($state['slots']);
 
-    $html = '<section class="af-cs-arpg-panel"><h2>Древо талантов</h2>'
-        . '<div class="af-cs-arpg-talent-hint">Доступно: <strong>' . htmlspecialchars_uni((string)($wallet['ability_tokens'] ?? '0')) . ' ' . htmlspecialchars_uni((string)($wallet['ability_symbol'] ?? '♦')) . '</strong></div>'
-        . '<div class="af-cs-arpg-talent-tree" data-afcs-arpg-talent-tree="1" data-afcs-arpg-can-edit="' . ($canEdit ? '1' : '0') . '">';
+    $html = '<section class="af-cs-arpg-talent-board"><div class="af-cs-arpg-talent-toolbar">'
+        . '<div><span class="af-cs-arpg-talent-kicker">ПУТЬ РАЗВИТИЯ</span><h3>Древо талантов</h3></div>'
+        . '<div class="af-cs-arpg-talent-currency"><small>Очки способностей</small><strong>' . htmlspecialchars_uni((string)($wallet['ability_tokens'] ?? '0')) . ' <span>' . htmlspecialchars_uni((string)($wallet['ability_symbol'] ?? '♦')) . '</span></strong></div>'
+        . '</div><div class="af-cs-arpg-talent-legend" aria-label="Обозначения">'
+        . '<span><i class="is-active"></i>Активен</span><span><i class="is-available"></i>Доступен</span><span><i class="is-owned"></i>Получен</span><span><i class="is-locked"></i>Заблокирован</span></div>'
+        . '<div class="af-cs-arpg-talent-scroll"><div class="af-cs-arpg-talent-tree" style="--af-tree-height:' . $canvasHeight . 'px" data-afcs-arpg-talent-tree="1" data-afcs-arpg-can-edit="' . ($canEdit ? '1' : '0') . '">'
+        . '<div class="af-cs-arpg-tree-atmosphere" aria-hidden="true"></div>';
+
+    foreach ($branchNames as $branchIndex => $branch) {
+        $x = $branchCount > 1 ? 11.5 + (77 * ($branchIndex / ($branchCount - 1))) : 50;
+        $html .= '<div class="af-cs-arpg-branch-label" style="left:' . $x . '%"><span>' . htmlspecialchars_uni($branch) . '</span></div>';
+    }
+    foreach ($tiers as $tier => $keys) {
+        $firstKey = reset($keys); $y = (float)($positions[$firstKey]['y'] ?? 110);
+        $html .= '<div class="af-cs-arpg-tier-line" style="top:' . $y . 'px"><span>УРОВЕНЬ ' . (int)$tier . '</span></div>';
+    }
+
+    $html .= '<svg class="af-cs-arpg-talent-connections" viewBox="0 0 1000 ' . $canvasHeight . '" preserveAspectRatio="none" aria-hidden="true">';
 
     foreach ($catalog as $key => $node) foreach (af_charactersheets_arpg_talent_prerequisite_keys($node['rules']) as $parentKey) {
-        $from = $catalog[$parentKey] ?? null; $to = $node;
-        if (!$from) continue;
-        $dx = (float)$to['x'] - (float)$from['x'];
-        $dy = (float)$to['y'] - (float)$from['y'];
-        $length = sqrt(($dx * $dx) + ($dy * $dy));
-        $angle = rad2deg(atan2($dy, $dx));
-        $html .= '<div class="af-cs-arpg-talent-edge" style="left:' . (float)$from['x'] . '%;top:' . (float)$from['y'] . '%;width:' . $length . '%;transform: rotate(' . $angle . 'deg);"></div>';
+        if (!isset($positions[$parentKey], $positions[$key])) continue;
+        $edgeState = in_array($parentKey, $activeKeys, true) && in_array($key, $activeKeys, true) ? 'is-active' : (in_array($parentKey, $activeKeys, true) ? 'is-open' : 'is-locked');
+        $from = $positions[$parentKey]; $to = $positions[$key];
+        $middleY = ((float)$from['y'] + (float)$to['y']) / 2;
+        $path = 'M ' . (float)$from['x'] . ' ' . (float)$from['y'] . ' C ' . (float)$from['x'] . ' ' . $middleY . ', ' . (float)$to['x'] . ' ' . $middleY . ', ' . (float)$to['x'] . ' ' . (float)$to['y'];
+        $html .= '<path class="af-cs-arpg-talent-edge ' . $edgeState . '" d="' . $path . '"></path>';
     }
+    $html .= '</svg>';
 
     foreach ($catalog as $id => $node) {
         $rules = $node['rules']; $entry = $node['entry'];
         $isOwned = isset($state['owned'][$id]); $slot = trim((string)($rules['slot_type'] ?? 'passive'));
         $isActive = in_array($id, $state['slots'], true);
         $prereqs = af_charactersheets_arpg_talent_prerequisite_keys($rules);
-        $available = $isOwned && !array_diff($prereqs, array_values($state['slots']));
+        $available = $isOwned && !array_diff($prereqs, $activeKeys);
+        $isRoot = !$prereqs;
         $title = trim(af_charactersheets_kb_pick_text($entry, 'title')) ?: $id;
         $description = trim(strip_tags(af_charactersheets_kb_pick_text($entry, 'description')));
-        $html .= '<button type="button" class="af-cs-arpg-talent-node' . ($isOwned ? ' is-owned' : ' is-locked') . ($available ? ' is-available' : '') . ($isActive ? ' is-active' : '') . '"'
-            . ' style="left:' . (float)$node['x'] . '%;top:' . (float)$node['y'] . '%;"'
+        $initial = function_exists('mb_substr') ? mb_substr($title, 0, 1) : substr($title, 0, 1);
+        $position = $positions[$id] ?? ['x' => 500, 'y' => 110];
+        $stateLabel = $isActive ? 'Активен' : ($available ? 'Доступен' : ($isOwned ? 'Получен' : 'Заблокирован'));
+        $html .= '<button type="button" class="af-cs-arpg-talent-node' . ($isOwned ? ' is-owned' : ' is-locked') . ($available ? ' is-available' : '') . ($isActive ? ' is-active' : '') . ($isRoot ? ' is-root' : '') . '"'
+            . ' style="left:' . ((float)$position['x'] / 10) . '%;top:' . (float)$position['y'] . 'px;"'
             . ' data-afcs-arpg-talent-node="1"'
             . ' data-afcs-arpg-talent-id="' . htmlspecialchars_uni($id) . '"'
             . ' data-afcs-arpg-talent-slot="' . htmlspecialchars_uni($slot) . '" data-afcs-arpg-talent-active="' . ($isActive ? '1' : '0') . '"'
-            . ' title="' . htmlspecialchars_uni($description) . '">'
-            . '<span>' . htmlspecialchars_uni($title) . '</span><small>T' . (int)($rules['tier'] ?? 1) . ' · ' . htmlspecialchars_uni($slot) . '</small>'
+            . ' title="' . htmlspecialchars_uni($description) . '" aria-label="' . htmlspecialchars_uni($title . '. ' . $stateLabel) . '">'
+            . '<span class="af-cs-arpg-talent-orbit" aria-hidden="true"></span><span class="af-cs-arpg-talent-glyph">' . htmlspecialchars_uni($isRoot ? '◆' : $initial) . '</span>'
+            . '<span class="af-cs-arpg-talent-name">' . htmlspecialchars_uni($title) . '</span><small>' . htmlspecialchars_uni($stateLabel) . ' · ' . htmlspecialchars_uni($slot) . '</small>'
             . '</button>';
     }
 
-    $html .= '</div><div class="af-cs-muted">Заблокирован — купить в магазине; золотой — куплен; светящийся — активен. Нажмите узел для информации и установки.</div></section>';
+    if (!$catalog) $html .= '<div class="af-cs-arpg-tree-empty">Таланты ещё не добавлены в базу знаний.</div>';
+    $html .= '</div></div><p class="af-cs-arpg-talent-help">Выберите узел, чтобы прочитать описание или изменить активный талант. Связи показывают необходимые предыдущие таланты.</p></section>';
     return $html;
 }
 
