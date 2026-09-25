@@ -86,7 +86,7 @@ class AF_Admin_Advancedmenu
 
         $do  = (string)$mybb->get_input('do');
         $loc = (string)$mybb->get_input('loc');
-        $loc = ($loc === 'panel') ? 'panel' : 'top';
+        $loc = af_menu_normalize_container($loc);
 
         // breadcrumb
         if (is_object($page) && method_exists($page, 'add_breadcrumb_item')) {
@@ -94,6 +94,9 @@ class AF_Admin_Advancedmenu
         }
 
         switch ($do) {
+            case 'save_order':
+                self::save_order();
+                return;
             case 'add':
                 self::page_form($loc, 0);
                 return;
@@ -163,89 +166,62 @@ class AF_Admin_Advancedmenu
 
     private static function page_list(string $loc): void
     {
-        global $db, $page;
+        global $db, $page, $mybb;
+        $active = af_menu_normalize_container($loc);
+        $tabs = [];
+        foreach (af_menu_containers() as $key=>$label) $tabs[$key] = ['title'=>$label, 'link'=>self::url(['loc'=>$key,'do'=>'list']), 'description'=>''];
+        $tabs['settings'] = ['title'=>'Настройки', 'link'=>self::url(['loc'=>$active,'do'=>'settings']), 'description'=>''];
+        if (is_object($page) && method_exists($page, 'output_nav_tabs')) $page->output_nav_tabs($tabs, $active);
 
-        $active = ($loc === 'panel') ? 'panel' : 'top';
-
-        $tabs = [
-            'top' => [
-                'title' => 'Верхнее меню (top_links)',
-                'link'  => self::url(['loc' => 'top', 'do' => 'list']),
-                'description' => 'Пункты для <ul class="menu top_links"> в header.',
-            ],
-            'panel' => [
-                'title' => 'Юзерское меню (panel_links)',
-                'link'  => self::url(['loc' => 'panel', 'do' => 'list']),
-                'description' => 'Пункты для <ul class="menu panel_links"> в header_welcomeblock_member.',
-            ],
-            'settings' => [
-                'title' => 'Настройки',
-                'link'  => self::url(['loc' => $active, 'do' => 'settings']),
-                'description' => 'Режимы append/replace и паттерны скрытия/защиты.',
-            ],
-        ];
-
-        if (is_object($page) && method_exists($page, 'output_nav_tabs')) {
-            $page->output_nav_tabs($tabs, $active);
-        }
-
-        echo '<div style="margin: 10px 0;">';
-        echo '<a class="button button_primary" href="'.htmlspecialchars_uni(self::url(['do' => 'add', 'loc' => $active])).'">+ Добавить пункт</a>';
-        echo '</div>';
-
+        echo '<p><a class="button button_primary" href="'.htmlspecialchars_uni(self::url(['do'=>'add','loc'=>$active])).'">+ Добавить custom link</a></p>';
+        echo '<form method="post" action="'.htmlspecialchars_uni(self::url(['do'=>'save_order','loc'=>$active])).'">';
+        echo '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">';
         require_once MYBB_ADMIN_DIR.'inc/class_table.php';
-
         $table = new Table;
-        $table->construct_header('ID', ['width' => '60px']);
-        $table->construct_header('Slug', ['width' => '180px']);
-        $table->construct_header('Название');
-        $table->construct_header('Ссылка');
-        $table->construct_header('Порядок', ['width' => '80px']);
-        $table->construct_header('Enabled', ['width' => '80px']);
-        $table->construct_header('Действия', ['width' => '260px']);
-
-        $q = $db->simple_select(
-            AF_AM_TABLE_ITEMS,
-            '*',
-            "location='".$db->escape_string($active)."'",
-            ['order_by' => 'sort_order, id', 'order_dir' => 'ASC']
-        );
-
-        $rows = 0;
-        while ($row = $db->fetch_array($q)) {
-            $rows++;
-            $id = (int)$row['id'];
-
-            $slug  = htmlspecialchars_uni((string)$row['slug']);
-            $title = htmlspecialchars_uni((string)$row['title']);
-            $url   = htmlspecialchars_uni((string)$row['url']);
-
-            $enabled = ((int)$row['enabled'] === 1);
-            $enabledHtml = $enabled
-                ? '<span style="color:#0a0; font-weight:700;">Да</span>'
-                : '<span style="color:#a00; font-weight:700;">Нет</span>';
-
-            $actions = [];
-            $actions[] = '<a class="button button_small" href="'.htmlspecialchars_uni(self::url(['do' => 'edit', 'loc' => $active, 'id' => $id])).'">Редактировать</a>';
-            $actions[] = '<a class="button button_small" href="'.htmlspecialchars_uni(self::url(['do' => 'toggle', 'loc' => $active, 'id' => $id])).'">'.($enabled ? 'Выключить' : 'Включить').'</a>';
-            $actions[] = '<a class="button button_small button_danger" href="'.htmlspecialchars_uni(self::url(['do' => 'delete', 'loc' => $active, 'id' => $id])).'">Удалить</a>';
-
-            $table->construct_cell($id);
-            $table->construct_cell($slug);
-            $table->construct_cell($title);
-            $table->construct_cell($url);
-            $table->construct_cell((int)$row['sort_order']);
-            $table->construct_cell($enabledHtml);
-            $table->construct_cell(implode(' ', $actions));
-            $table->construct_row();
+        foreach (['Название','Source','Type','Container','Enabled','Sortorder','Действия'] as $heading) $table->construct_header($heading);
+        $rows = [];
+        foreach (af_menu_configured_registry() as $key=>$item) if ($item['container'] === $active) $rows[] = ['source'=>'system','key'=>$key] + $item;
+        $q = $db->simple_select(AF_AM_TABLE_ITEMS, '*', '', ['order_by'=>'sort_order, id']);
+        while ($item=$db->fetch_array($q)) {
+            $container = af_menu_normalize_container((string)($item['container'] ?? $item['location']));
+            if ($container === $active) $rows[] = ['source'=>'custom','key'=>'custom_'.(int)$item['id'],'container'=>$container,'sortorder'=>(int)$item['sort_order'],'label'=>$item['title'],'type'=>'link','allowed_containers'=>array_keys(af_menu_containers())] + $item;
         }
-
-        if ($rows === 0) {
-            $table->construct_cell('<em>Пока нет пунктов. Добавь первый.</em>', ['colspan' => 7]);
-            $table->construct_row();
+        usort($rows, static fn($a,$b)=>[$a['sortorder'],$a['key']] <=> [$b['sortorder'],$b['key']]);
+        foreach ($rows as $item) {
+            $key = (string)$item['key']; $field = htmlspecialchars_uni($key);
+            $options = '';
+            foreach (af_menu_containers() as $value=>$label) if (in_array($value,$item['allowed_containers'],true)) $options .= '<option value="'.$value.'"'.($value===$item['container']?' selected':'').'>'.htmlspecialchars_uni($label).'</option>';
+            $actions = $item['source']==='custom' ? '<a href="'.htmlspecialchars_uni(self::url(['do'=>'edit','id'=>(int)$item['id'],'loc'=>$active])).'">Редактировать</a> · <a href="'.htmlspecialchars_uni(self::url(['do'=>'delete','id'=>(int)$item['id'],'loc'=>$active])).'">Удалить</a>' : '<span title="Registry definition remains owned by the provider">Настройки показа</span>';
+            $table->construct_cell(htmlspecialchars_uni((string)$item['label']));
+            $table->construct_cell(htmlspecialchars_uni($item['source']==='system' ? (string)$item['source_addon'] : 'AdvancedMenu'));
+            $table->construct_cell(htmlspecialchars_uni((string)$item['type']));
+            $table->construct_cell('<select name="items['.$field.'][container]">'.$options.'</select>');
+            $table->construct_cell('<input type="checkbox" name="items['.$field.'][enabled]" value="1"'.(!empty($item['enabled'])?' checked':'').'>');
+            $table->construct_cell('<input type="number" name="items['.$field.'][sortorder]" value="'.(int)$item['sortorder'].'" style="width:70px">');
+            $table->construct_cell($actions); $table->construct_row();
         }
+        if (!$rows) { $table->construct_cell('<em>В этом контейнере нет пунктов.</em>', ['colspan'=>7]); $table->construct_row(); }
+        $table->output(af_menu_containers()[$active]);
+        echo '<p><button class="button button_primary" type="submit">Сохранить порядок и настройки</button></p></form>';
+    }
 
-        $table->output($active === 'top' ? 'Пункты верхнего меню' : 'Пункты юзерского меню');
+    private static function save_order(): void
+    {
+        global $mybb, $db;
+        verify_post_check($mybb->get_input('my_post_key'));
+        $posted = $mybb->get_input('items', MyBB::INPUT_ARRAY);
+        $registry = af_menu_collect_registry();
+        foreach ((array)$posted as $key=>$values) {
+            $container = af_menu_normalize_container((string)($values['container'] ?? 'main'));
+            $enabled = empty($values['enabled']) ? 0 : 1; $sort = (int)($values['sortorder'] ?? 100);
+            if (str_starts_with((string)$key, 'custom_')) {
+                $id=(int)substr((string)$key,7); $db->update_query(AF_AM_TABLE_ITEMS,['container'=>$container,'location'=>$container==='user_drawer'?'panel':'top','enabled'=>$enabled,'sort_order'=>$sort,'updated_at'=>TIME_NOW],"id='{$id}'");
+            } elseif (isset($registry[$key]) && in_array($container,$registry[$key]['allowed_containers'],true)) {
+                $db->update_query(AF_AM_TABLE_OVERRIDES,['container'=>$container,'enabled'=>$enabled,'sortorder'=>$sort,'updated_at'=>TIME_NOW],"item_key='".$db->escape_string((string)$key)."'");
+            }
+        }
+        af_advancedmenu_rebuild_cache();
+        self::go(['do'=>'list','loc'=>af_menu_normalize_container((string)$mybb->get_input('loc'))]);
     }
 
     /* ----------------------------- ADD/EDIT ----------------------------- */
@@ -255,7 +231,8 @@ class AF_Admin_Advancedmenu
 
         require_once MYBB_ADMIN_DIR.'inc/class_form.php';
 
-        $loc = ($loc === 'panel') ? 'panel' : 'top';
+        $logicalContainer = af_menu_normalize_container($loc);
+        $loc = ($logicalContainer === 'user_drawer') ? 'panel' : 'top';
         $isEdit = ($id > 0);
 
         // дефолт: в panel обычно не надо показывать гостям
@@ -280,6 +257,7 @@ class AF_Admin_Advancedmenu
                 return;
             }
             $loc  = ($row['location'] === 'panel') ? 'panel' : 'top';
+            $logicalContainer = af_menu_normalize_container((string)($row['container'] ?? $loc));
             $data = array_merge($data, $row);
         }
 
@@ -396,6 +374,7 @@ class AF_Admin_Advancedmenu
 
             $save = [
                 'location'   => $loc,
+                'container'  => $logicalContainer,
                 'slug'       => $db->escape_string($slug),
                 'title'      => $db->escape_string($title),
                 'url'        => $db->escape_string($url),
@@ -418,7 +397,7 @@ class AF_Admin_Advancedmenu
                 af_advancedmenu_rebuild_cache();
             }
 
-            admin_redirect(self::url(['loc' => $loc, 'do' => 'list']), 'Сохранено.');
+            admin_redirect(self::url(['loc' => $logicalContainer, 'do' => 'list']), 'Сохранено.');
             return;
         }
 
@@ -621,25 +600,12 @@ class AF_Admin_Advancedmenu
     {
         global $page;
 
-        $active = ($loc === 'panel') ? 'panel' : 'top';
-
-        $tabs = [
-            'top' => [
-                'title' => 'Верхнее меню (top_links)',
-                'link'  => self::url(['loc' => 'top', 'do' => 'list']),
-                'description' => '',
-            ],
-            'panel' => [
-                'title' => 'Юзерское меню (panel_links)',
-                'link'  => self::url(['loc' => 'panel', 'do' => 'list']),
-                'description' => '',
-            ],
-            'settings' => [
-                'title' => 'Настройки',
-                'link'  => self::url(['loc' => $active, 'do' => 'settings']),
-                'description' => '',
-            ],
-        ];
+        $active = af_menu_normalize_container($loc);
+        $tabs = [];
+        foreach (af_menu_containers() as $key=>$label) {
+            $tabs[$key] = ['title'=>$label, 'link'=>self::url(['loc'=>$key, 'do'=>'list']), 'description'=>''];
+        }
+        $tabs['settings'] = ['title'=>'Настройки', 'link'=>self::url(['loc'=>$active, 'do'=>'settings']), 'description'=>''];
 
         if (is_object($page) && method_exists($page, 'output_nav_tabs')) {
             $page->output_nav_tabs($tabs, 'settings');
@@ -648,6 +614,7 @@ class AF_Admin_Advancedmenu
         echo '<div style="margin: 10px 0;">';
         echo '<p>Настройки аддона находятся в <strong>Настройки → AdvancedMenu</strong> (settings.php) внутри ACP.</p>';
         echo '<ul style="margin-left: 18px;">';
+        echo '<li><strong>Container</strong>: main, secondary или user_drawer; порядок и enabled сохраняются отдельно от registry.</li>';
         echo '<li><strong>Top menu mode</strong>: append / replace</li>';
         echo '<li><strong>Panel menu mode</strong>: append / replace (с защитой AAS/AAM)</li>';
         echo '<li><strong>Hide patterns</strong>: удаляет <code>&lt;li&gt;</code> по подстроке</li>';
