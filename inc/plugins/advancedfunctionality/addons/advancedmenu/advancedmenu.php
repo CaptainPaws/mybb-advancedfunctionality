@@ -1179,8 +1179,8 @@ function af_advancedmenu_render_frontend_nav(): string
     $drawer = af_advancedmenu_build_drawer_html();
     return '<div class="af-am-shell af-am-navigation" data-af-am-navigation="1">'
         .'<nav class="af-am-bar af-am-main" aria-label="Основное меню">'
-        .'<button class="af-am-burger" type="button" aria-label="Открыть пользовательское меню" aria-expanded="false" aria-controls="af-am-user-drawer"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>'
-        .'<ul class="af-am-list">'.$main.'</ul></nav>'
+        .'<ul class="af-am-list"><button class="af-am-burger" type="button" aria-label="Открыть пользовательское меню" aria-expanded="false" aria-controls="af-am-user-drawer"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>'
+        .$main.'</ul></nav>'
         .'<nav class="af-am-bar af-am-secondary" aria-label="Дополнительное меню"><ul class="af-am-list">'.$secondary.'</ul></nav>'
         .'</div><div class="af-am-drawer-shell" data-af-am-drawer-shell hidden>'
         .'<button class="af-am-drawer-overlay" type="button" tabindex="-1" aria-label="Закрыть пользовательское меню"></button>'

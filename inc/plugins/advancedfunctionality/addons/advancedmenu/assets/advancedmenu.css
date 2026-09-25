@@ -93,8 +93,7 @@
 .af-advancedmenu-layout.af-am-member #panel,
 .af-advancedmenu-layout.af-am-member #header > .panel { display: none !important; }
 
-.af-am-burger {
-  position: static;
+.af-advancedmenu-layout .af-am-main .af-am-list > .af-am-burger {
   flex: 0 0 48px;
   width: 48px;
   min-height: var(--af-am-main-height);
@@ -105,7 +104,15 @@
   cursor: pointer;
   box-shadow: none;
 }
-.af-am-burger:hover, .af-am-burger:focus-visible { background: #39424c; }
+.af-advancedmenu-layout .af-am-main .af-am-list > .af-am-burger:hover,
+.af-advancedmenu-layout .af-am-main .af-am-list > .af-am-burger:focus-visible { background: #39424c; }
+@media (min-width: 769px) {
+  .af-advancedmenu-layout .af-am-main .af-am-list > .af-am-burger {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+  }
+}
 .af-am-drawer-shell { position: fixed; z-index: 1300; inset: 0; }
 .af-am-drawer-shell[hidden] { display: none; }
 .af-am-drawer-overlay { position: absolute; inset: 0; width: 100%; border: 0; background: rgba(0,0,0,.58); cursor: default; }
@@ -148,11 +155,10 @@
 body.af-am-drawer-open { overflow: hidden; }
 
 @media (max-width: 768px) {
-  .af-am-burger {
-    position: fixed;
+  .af-advancedmenu-layout .af-am-main .af-am-list > .af-am-burger {
+    position: fixed !important;
     z-index: 1200;
-    bottom: 14px;
-    left: 14px;
+    inset: auto auto 14px 14px !important;
     width: 46px;
     min-height: 46px;
     border-radius: 50%;
