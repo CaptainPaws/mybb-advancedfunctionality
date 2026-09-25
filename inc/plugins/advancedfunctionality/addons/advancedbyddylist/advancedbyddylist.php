@@ -12,6 +12,11 @@ if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 define('AF_ABDL_ID', 'advancedbyddylist');
 define('AF_ABDL_TPL_MARK', '<!--af_abdl-->');
 
+function af_advancedbyddylist_menu_provider(): void
+{
+    af_menu_register_item(['key'=>'friends','source_addon'=>AF_ABDL_ID,'label'=>'Друзья','icon'=>'fa-solid fa-user-group','type'=>'modal','default_container'=>'user_links','default_sortorder'=>30,'visibility'=>static function (): bool { global $mybb; return !empty($mybb->user['uid']) && af_abdl_is_enabled(); },'action'=>['url'=>'misc.php?action=buddypopup&amp;modal=1','trigger_selector'=>'a[href*="action=buddypopup"]','handler'=>'MyBB.popupWindow','owner_template'=>'misc_buddypopup']]);
+}
+
 function af_advancedbyddylist_install(): void
 {
     af_abdl_ensure_settings();

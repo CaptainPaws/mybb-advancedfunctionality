@@ -4,6 +4,12 @@ if (!defined('IN_MYBB')) die('No direct access');
 define('AF_CHARACTERS_ID', 'advancedcharacters');
 define('AF_CHARACTERS_PAGE_ALIAS_SIGNATURE', 'AF_CHARACTERS_PAGE_ALIAS');
 
+function af_advancedcharacters_menu_provider(): void
+{
+    af_menu_register_item(['key'=>'characters','source_addon'=>AF_CHARACTERS_ID,'label'=>'Персонажи','icon'=>'fa-solid fa-masks-theater','type'=>'link','default_container'=>'panel_links','default_sortorder'=>70,'visibility'=>static function (): bool { global $mybb; return !empty($mybb->usergroup['cancp']) || !empty($mybb->usergroup['canmodcp']) || (!empty($mybb->user['uid']) && function_exists('is_moderator') && is_moderator()); },'action'=>['url'=>'characters.php']]);
+}
+
+
 function af_advancedcharacters_install(): bool { return af_characters_ensure_page_alias(); }
 function af_advancedcharacters_activate(): bool { return af_characters_ensure_page_alias(); }
 function af_advancedcharacters_upgrade(): bool { return af_characters_ensure_page_alias(); }

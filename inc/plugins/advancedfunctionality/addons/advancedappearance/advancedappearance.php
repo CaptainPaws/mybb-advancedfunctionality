@@ -31,6 +31,14 @@ define('AF_AA_ALIAS_FITTINGROOM', 'fittingroom.php');
 define('AF_AA_ALIAS_APSTUDIO_MARK', 'AF_AA_APSTUDIO_PAGE_ALIAS');
 define('AF_AA_ALIAS_FITTINGROOM_MARK', 'AF_AA_FITTINGROOM_PAGE_ALIAS');
 
+function af_advancedappearance_menu_provider(): void
+{
+    $staff = static function (): bool { global $mybb; return !empty($mybb->usergroup['cancp']); };
+    af_menu_register_item(['key'=>'presets','source_addon'=>AF_AA_ID,'label'=>'Пресеты','icon'=>'fa-solid fa-palette','type'=>'link','default_container'=>'top_links','default_sortorder'=>50,'visibility'=>$staff,'action'=>['url'=>AF_AA_ALIAS_APSTUDIO]]);
+    af_menu_register_item(['key'=>'fitting_room','source_addon'=>AF_AA_ID,'label'=>'Примерочная','icon'=>'fa-solid fa-shirt','type'=>'link','default_container'=>'top_links','default_sortorder'=>55,'visibility'=>true,'action'=>['url'=>AF_AA_ALIAS_FITTINGROOM]]);
+}
+
+
 define('AF_AA_TPL_APSTUDIO', 'advancedappearance_apstudio');
 define('AF_AA_TPL_FITTINGROOM', 'advancedappearance_fittingroom');
 
