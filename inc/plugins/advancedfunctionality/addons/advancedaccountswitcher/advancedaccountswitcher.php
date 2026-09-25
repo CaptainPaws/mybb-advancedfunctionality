@@ -16,7 +16,16 @@ define('AF_AAS_WALK_USERAGENT', 'AF AccountWalk/1.0');
 
 function af_advancedaccountswitcher_menu_provider(): void
 {
-    af_menu_register_item(['key'=>'advanced_account_switcher','source_addon'=>AF_AAS_ID,'label'=>'Аккаунты','icon'=>'fa-solid fa-users','type'=>'modal','default_container'=>'secondary','default_sortorder'=>10,'visibility'=>static function (): bool { global $mybb; return !empty($mybb->user['uid']) && !empty($mybb->settings['af_advancedaccountswitcher_enabled']); },'action'=>['trigger_selector'=>'#af_aas_trigger','trigger_class'=>'af-aas-trigger','modal_selector'=>'#af_aas_modal','owner_template'=>'af_aas_panel_widget']]);
+    af_menu_register_item(['key'=>'advanced_account_switcher','source_addon'=>AF_AAS_ID,'label'=>'Аккаунты','icon'=>'fa-solid fa-users','type'=>'modal','default_container'=>'secondary','default_sortorder'=>10,'visibility'=>static function (): bool { global $mybb; return !empty($mybb->user['uid']) && !empty($mybb->settings['af_advancedaccountswitcher_enabled']); },'action'=>['trigger_selector'=>'#af_aas_trigger','trigger_class'=>'af-aas-trigger','modal_selector'=>'#af_aas_modal','owner_template'=>'af_aas_panel_widget','trigger_renderer'=>'af_aas_render_menu_trigger']]);
+}
+
+/** AAS owns this trigger contract; AdvancedMenu owns only its placement. */
+function af_aas_render_menu_trigger(array $item): string
+{
+    $label = htmlspecialchars_uni((string)($item['label'] ?? 'Аккаунты'));
+    $icon = preg_replace('~[^a-z0-9 _-]~i', '', (string)($item['icon'] ?? 'fa-solid fa-users'));
+    return '<li class="af-am-item af-am-system af-am-advanced_account_switcher"><a href="#" class="af-am-link af-am-system-link af-am-modal-trigger af-aas-trigger" id="af_aas_trigger" aria-haspopup="dialog" aria-controls="af_aas_modal" aria-expanded="false">'
+        .'<i class="af-am-ico '.htmlspecialchars_uni($icon).'" aria-hidden="true"></i><span class="af-am-title">'.$label.'</span></a></li>';
 }
 
 

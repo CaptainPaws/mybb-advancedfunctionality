@@ -440,7 +440,7 @@ class AF_Admin_Advancedmenu
 
         $container->output_row(
             'Ссылка',
-            'Можно абсолютную или относительную (например <code>index.php</code> или <code>/</code>).',
+            'Можно абсолютную или относительную (например <code>index.php</code> или <code>/</code>).<br>Доступные переменные: <code>{uid}</code>, <code>{username}</code>',
             $form->generate_text_box('url', htmlspecialchars_uni((string)$data['url']), ['style' => 'width: 520px;']),
             'url'
         );
