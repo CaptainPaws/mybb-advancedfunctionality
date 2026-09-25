@@ -103,6 +103,18 @@
 }
 .af-am-drawer-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; font-size: 1.15em; }
 .af-am-drawer-close { border: 0; padding: 4px 10px; background: transparent; color: inherit; font-size: 2em; line-height: 1; cursor: pointer; }
+.af-am-drawer-account { margin: 0 0 22px; padding: 0 0 20px; border-bottom: 1px solid rgba(255,255,255,.18); }
+.af-am-drawer-identity { display: flex; align-items: center; gap: 14px; }
+.af-am-drawer-account .af-avatar { flex: 0 0 auto; }
+.af-am-drawer-account .af-am-drawer-avatar-image { display: block; width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+.af-am-drawer-usertext { min-width: 0; }
+.af-am-drawer-welcome, .af-am-drawer-lastvisit { margin: 0; color: #aeb8c3; font-size: .82em; }
+.af-am-drawer-username { display: block; overflow: hidden; margin: 3px 0; color: #fff; font-size: 1.2em; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.af-am-drawer-account-actions { display: flex; gap: 8px; margin-top: 14px; }
+.af-am-account-action { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1 1 0; padding: 9px 10px; border-radius: 4px; background: rgba(255,255,255,.1); color: #fff; text-decoration: none; }
+.af-am-account-action:hover, .af-am-account-action:focus-visible { background: rgba(255,255,255,.2); }
+.af-am-account-action--logout { color: #ffd8d8; }
+.af-am-drawer-account--guest .af-am-drawer-welcome { font-size: 1em; color: #fff; }
 .af-am-drawer-section { margin: 0 0 22px; }
 .af-am-drawer-section h2 { margin: 0 0 8px; color: #aeb8c3; font-size: .75em; letter-spacing: .08em; text-transform: uppercase; }
 .af-am-drawer-list { margin: 0; padding: 0; list-style: none; }

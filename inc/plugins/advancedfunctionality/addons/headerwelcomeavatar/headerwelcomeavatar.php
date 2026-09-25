@@ -518,6 +518,12 @@ function af_headerwelcomeavatar_pre_output(string &$page): void
 
     if (!af_headerwelcomeavatar_is_frontend()) return;
 
+    // AdvancedMenu owns the account surface when its drawer is enabled. Keep
+    // this addon as a fallback for installations that disable AdvancedMenu,
+    // but never inject a second avatar/welcome block beside the drawer.
+    if (function_exists('af_advancedmenu_render_drawer_account')
+        && !empty($mybb->settings['af_advancedmenu_enabled'])) return;
+
     $enabled = (int)($mybb->settings['af_headerwelcomeavatar_enabled'] ?? 1);
     if ($enabled !== 1) return;
 
