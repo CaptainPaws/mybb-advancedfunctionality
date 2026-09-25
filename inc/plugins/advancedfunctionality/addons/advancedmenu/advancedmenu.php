@@ -61,9 +61,9 @@ function af_menu_register_core_items(): void
     $member = static function (): bool { global $mybb; return !empty($mybb->user['uid']); };
     $mod = static function (): bool { global $mybb; return !empty($mybb->usergroup['canmodcp']) || !empty($mybb->usergroup['issupermod']) || (!empty($mybb->user['uid']) && function_exists('is_moderator') && is_moderator()); };
     $admin = static function (): bool { global $mybb; return !empty($mybb->usergroup['cancp']); };
-    af_menu_register_item(['key'=>'new_posts','label'=>'Новые сообщения','icon'=>'fa-solid fa-clock-rotate-left','type'=>'link','default_sortorder'=>40,'visibility'=>$member,'action'=>['url'=>'search.php?action=getnew']]);
-    af_menu_register_item(['key'=>'modcp','label'=>'Mod CP','icon'=>'fa-solid fa-shield-halved','type'=>'link','default_sortorder'=>80,'visibility'=>$mod,'action'=>['url'=>'modcp.php']]);
-    af_menu_register_item(['key'=>'admincp','label'=>'Admin CP','icon'=>'fa-solid fa-screwdriver-wrench','type'=>'link','default_sortorder'=>90,'visibility'=>$admin,'action'=>['url'=>'admin/index.php']]);
+    af_menu_register_item(['key'=>'new_posts','label'=>'Новые сообщения','icon'=>'fa-solid fa-clock-rotate-left','type'=>'link','default_container'=>'secondary','default_sortorder'=>40,'visibility'=>$member,'action'=>['url'=>'search.php?action=getnew']]);
+    af_menu_register_item(['key'=>'modcp','label'=>'Mod CP','icon'=>'fa-solid fa-shield-halved','type'=>'link','default_container'=>'secondary','default_sortorder'=>80,'visibility'=>$mod,'action'=>['url'=>'modcp.php']]);
+    af_menu_register_item(['key'=>'admincp','label'=>'Admin CP','icon'=>'fa-solid fa-screwdriver-wrench','type'=>'link','default_container'=>'secondary','default_sortorder'=>90,'visibility'=>$admin,'action'=>['url'=>'admin/index.php']]);
 }
 
 function af_menu_collect_registry(bool $force = false): array
@@ -100,7 +100,16 @@ function af_menu_ensure_registry_overrides(?array $registry = null): void
     foreach ($registry as $key => $item) {
         $escaped = $db->escape_string($key);
         $exists = (int)$db->fetch_field($db->simple_select(AF_AM_TABLE_OVERRIDES, 'COUNT(*) AS total', "item_key='{$escaped}'"), 'total');
-        if ($exists) continue; // Provider reloads must never overwrite an administrator's choices.
+        if ($exists) {
+            // Stage-2 defaults pointed at legacy aliases. Move only pristine
+            // rows; an administrator-edited row has a different updated_at.
+            $row = $db->fetch_array($db->simple_select(AF_AM_TABLE_OVERRIDES, '*', "item_key='{$escaped}'", ['limit'=>1]));
+            if ($row && (int)$row['created_at'] === (int)$row['updated_at']
+                && (string)$row['container'] !== (string)$item['default_container']) {
+                $db->update_query(AF_AM_TABLE_OVERRIDES, ['container'=>$item['default_container'], 'sortorder'=>(int)$item['default_sortorder']], "item_key='{$escaped}'");
+            }
+            continue; // Provider reloads must never overwrite administrator choices.
+        }
         $db->insert_query(AF_AM_TABLE_OVERRIDES, ['item_key'=>$key, 'enabled'=>1,
             'container'=>$item['default_container'], 'sortorder'=>(int)$item['default_sortorder'],
             'label_override'=>null, 'icon_override'=>null, 'created_at'=>TIME_NOW, 'updated_at'=>TIME_NOW]);
@@ -943,6 +952,89 @@ function af_advancedmenu_build_menu_html(string $targetUlClass): string
     return $out;
 }
 
+/** Render a registry item without changing the trigger contract owned by its addon. */
+function af_advancedmenu_render_registry_item(array $item): string
+{
+    $key = preg_replace('~[^a-z0-9_-]~i', '', (string)$item['key']);
+    $label = htmlspecialchars_uni((string)$item['label']);
+    $action = (array)($item['action'] ?? []);
+    $type = (string)($item['type'] ?? 'link');
+    $classes = 'af-am-link af-am-system-link';
+    $attrs = '';
+
+    if ($type === 'modal') {
+        $classes .= ' af-am-modal-trigger';
+        $href = isset($action['handler']) ? af_advancedmenu_normalize_url((string)($action['url'] ?? '#')) : '#';
+        $selector = (string)($action['trigger_selector'] ?? '');
+        if (preg_match('~^#([a-z][a-z0-9_-]*)$~i', $selector, $match)) {
+            $attrs .= ' id="'.htmlspecialchars_uni($match[1]).'"';
+        }
+        $modal = (string)($action['modal_selector'] ?? '');
+        if ($modal !== '') $attrs .= ' data-af-am-modal="'.htmlspecialchars_uni($modal).'" aria-haspopup="dialog" aria-expanded="false"';
+        if (($action['handler'] ?? '') === 'MyBB.popupWindow') $attrs .= ' onclick="MyBB.popupWindow(this.href); return false;"';
+    } else {
+        $href = af_advancedmenu_normalize_url((string)($action['url'] ?? '#'));
+    }
+
+    $icon = '';
+    $iconClasses = preg_replace('~[^a-z0-9 _-]~i', '', (string)($item['icon'] ?? ''));
+    if ($iconClasses !== '') $icon = '<i class="af-am-ico '.htmlspecialchars_uni($iconClasses).'" aria-hidden="true"></i>';
+    $badge = af_menu_item_badge($item);
+    $badgeHtml = ($badge !== null && (int)$badge > 0)
+        ? '<span class="af-am-badge" aria-label="'.htmlspecialchars_uni((string)$badge).'">'.htmlspecialchars_uni((string)$badge).'</span>' : '';
+
+    return '<li class="af-am-item af-am-system af-am-'.$key.'"><a class="'.$classes.'" href="'.htmlspecialchars_uni($href).'"'.$attrs.'>'
+        .$icon.'<span class="af-am-title">'.$label.'</span>'.$badgeHtml.'</a></li>';
+}
+
+/** Merge provider and custom items using the single ACP sort order. */
+function af_advancedmenu_build_container_html(string $container): string
+{
+    $rows = [];
+    foreach (af_menu_configured_registry() as $item) {
+        if (($item['container'] ?? '') !== $container || empty($item['enabled']) || !af_menu_item_is_visible($item)) continue;
+        $rows[] = ['sort'=>(int)$item['sortorder'], 'key'=>(string)$item['key'], 'html'=>af_advancedmenu_render_registry_item($item)];
+    }
+    foreach (af_advancedmenu_get_items() as $item) {
+        $itemContainer = af_menu_normalize_container((string)($item['container'] ?? $item['location'] ?? 'main'));
+        if ($itemContainer !== $container || (int)$item['enabled'] !== 1 || !af_advancedmenu_item_is_visible($item)) continue;
+        $rows[] = ['sort'=>(int)$item['sort_order'], 'key'=>'custom_'.(int)$item['id'], 'html'=>af_advancedmenu_render_item($item)];
+    }
+    usort($rows, static fn(array $a, array $b): int => [$a['sort'], $a['key']] <=> [$b['sort'], $b['key']]);
+    return implode("\n", array_column($rows, 'html'));
+}
+
+function af_advancedmenu_render_frontend_nav(): string
+{
+    $main = af_advancedmenu_build_container_html('main');
+    $secondary = af_advancedmenu_build_container_html('secondary');
+    return '<div class="af-am-navigation" data-af-am-navigation="1">'
+        .'<nav class="af-am-bar af-am-main" aria-label="Основное меню"><ul class="af-am-list">'.$main.'</ul></nav>'
+        .'<nav class="af-am-bar af-am-secondary" aria-label="Дополнительное меню"><ul class="af-am-list">'.$secondary.'</ul></nav>'
+        .'</div>';
+}
+
+function af_advancedmenu_install_frontend_nav(string &$page): void
+{
+    if (strpos($page, 'data-af-am-navigation="1"') !== false) return;
+
+    // The modal implementations bind to these stable IDs. Remove only their
+    // legacy controls, never the modal/dialog markup itself.
+    $page = (string)preg_replace('~<li\b[^>]*>\s*<a\b[^>]*id=["\'](?:af_aas_trigger|af_aam_header_link)["\'][^>]*>.*?</a>\s*</li>~is', '', $page);
+    $page = (string)preg_replace('~<a\b[^>]*id=["\'](?:af_aas_trigger|af_aam_header_link)["\'][^>]*>.*?</a>~is', '', $page);
+
+    $nav = af_advancedmenu_render_frontend_nav();
+    $page = (string)preg_replace_callback('~<body\b([^>]*)>~i', static function (array $m) use ($nav): string {
+        $attrs = $m[1];
+        if (preg_match('~\bclass\s*=\s*(["\'])(.*?)\1~i', $attrs)) {
+            $attrs = (string)preg_replace('~\bclass\s*=\s*(["\'])(.*?)\1~i', 'class=$1$2 af-advancedmenu-layout$1', $attrs, 1);
+        } else {
+            $attrs .= ' class="af-advancedmenu-layout"';
+        }
+        return '<body'.$attrs.'>'.$nav;
+    }, $page, 1);
+}
+
 function af_advancedmenu_set_template_vars(): void
 {
     $items = af_advancedmenu_get_items();
@@ -1439,125 +1531,10 @@ function af_advancedmenu_pre_output(string &$page = ''): void
 
     af_advancedmenu_inject_assets($page);
 
-    $topLis   = af_advancedmenu_build_menu_html('top_links');
-    $panelLis = af_advancedmenu_build_menu_html('panel_links');
-
-    $topMode   = isset($mybb->settings['af_advancedmenu_top_mode']) ? (string)$mybb->settings['af_advancedmenu_top_mode'] : 'append';
-    $panelMode = isset($mybb->settings['af_advancedmenu_panel_mode']) ? (string)$mybb->settings['af_advancedmenu_panel_mode'] : 'append';
-
-    $topHide   = isset($mybb->settings['af_advancedmenu_top_hide']) ? (string)$mybb->settings['af_advancedmenu_top_hide'] : '';
-    $panelHide = isset($mybb->settings['af_advancedmenu_panel_hide']) ? (string)$mybb->settings['af_advancedmenu_panel_hide'] : '';
-    $userHide  = isset($mybb->settings['af_advancedmenu_user_hide']) ? (string)$mybb->settings['af_advancedmenu_user_hide'] : '';
-
-    $topHideArr   = af_advancedmenu_parse_csv($topHide);
-    $panelHideArr = af_advancedmenu_parse_csv($panelHide);
-    $userHideArr  = af_advancedmenu_parse_csv($userHide);
-
-    $panelProtect = isset($mybb->settings['af_advancedmenu_panel_protect']) ? (string)$mybb->settings['af_advancedmenu_panel_protect'] : '';
-    $panelProtectPos = isset($mybb->settings['af_advancedmenu_panel_protect_pos']) ? (string)$mybb->settings['af_advancedmenu_panel_protect_pos'] : 'end';
-    $panelProtectArr = af_advancedmenu_parse_csv($panelProtect);
-
-    $topProtect = isset($mybb->settings['af_advancedmenu_top_protect']) ? (string)$mybb->settings['af_advancedmenu_top_protect'] : '';
-    $topProtectPos = isset($mybb->settings['af_advancedmenu_top_protect_pos']) ? (string)$mybb->settings['af_advancedmenu_top_protect_pos'] : 'end';
-    $topProtectArr = af_advancedmenu_parse_csv($topProtect);
-
-    $topStrip  = isset($mybb->settings['af_advancedmenu_top_strip_imgs']) ? (string)$mybb->settings['af_advancedmenu_top_strip_imgs'] : '';
-    $panelStrip = isset($mybb->settings['af_advancedmenu_panel_strip_imgs']) ? (string)$mybb->settings['af_advancedmenu_panel_strip_imgs'] : '';
-
-    $topStripArr   = af_advancedmenu_parse_csv($topStrip);
-    $panelStripArr = af_advancedmenu_parse_csv($panelStrip);
-
-    /**
-     * AUTO-PROTECT системных ссылок в replace-режиме:
-     * ModCP/AdminCP должны сохраняться, если они доступны пользователю.
-     */
-    $canAdminCp = !empty($mybb->usergroup['cancp']);
-    $canModCp   = !empty($mybb->usergroup['canmodcp'])
-        || !empty($mybb->usergroup['issupermod'])
-        || (function_exists('is_moderator') && is_moderator());
-
-    if ($canModCp) {
-        $panelProtectArr[] = 'modcp.php';
-        $topProtectArr[]   = 'modcp.php';
-    }
-    if ($canAdminCp) {
-        $panelProtectArr[] = 'admin/index.php';
-        $panelProtectArr[] = '/admin/';
-        $topProtectArr[]   = 'admin/index.php';
-        $topProtectArr[]   = '/admin/';
-    }
-
-    // дедуп
-    $panelProtectArr = array_values(array_unique(array_filter(array_map('trim', $panelProtectArr), static fn($v) => $v !== '')));
-    $topProtectArr   = array_values(array_unique(array_filter(array_map('trim', $topProtectArr), static fn($v) => $v !== '')));
-
-    if (trim($topLis) !== '' || !empty($topHideArr) || ($topMode === 'replace' && !empty($topProtectArr)) || !empty($topStripArr)) {
-        af_advancedmenu_apply_to_ul(
-            $page,
-            'top_links',
-            $topMode,
-            $topLis,
-            $topHideArr,
-            $topProtectArr,
-            $topProtectPos,
-            $topStripArr
-        );
-    }
-
-    if (trim($panelLis) !== '' || !empty($panelHideArr) || ($panelMode === 'replace' && !empty($panelProtectArr)) || !empty($panelStripArr)) {
-        af_advancedmenu_apply_to_ul(
-            $page,
-            'panel_links',
-            $panelMode,
-            $panelLis,
-            $panelHideArr,
-            $panelProtectArr,
-            $panelProtectPos,
-            $panelStripArr
-        );
-    }
-
-    // user_links — только скрытие/strip
-    if (!empty($userHideArr) || !empty($panelStripArr)) {
-        af_advancedmenu_apply_to_ul(
-            $page,
-            'user_links',
-            'append',
-            '',
-            $userHideArr,
-            [],
-            'end',
-            $panelStripArr
-        );
-    }
-
-    $extraTargets = isset($mybb->settings['af_advancedmenu_extra_targets']) ? (string)$mybb->settings['af_advancedmenu_extra_targets'] : '';
-    $extraArr = af_advancedmenu_parse_csv($extraTargets);
-
-    if (!empty($extraArr)) {
-        foreach ($extraArr as $t) {
-            $t = af_advancedmenu_resolve_target($t);
-            if ($t === 'top_links' || $t === 'panel_links' || $t === 'user_links') {
-                continue;
-            }
-
-            $lis = af_advancedmenu_build_menu_html($t);
-            if (trim($lis) === '') {
-                continue;
-            }
-
-            af_advancedmenu_apply_to_ul(
-                $page,
-                $t,
-                'append',
-                $lis,
-                [],
-                [],
-                'end',
-                []
-            );
-        }
-    }
-
+    // Stage 3 owns two dedicated navigation rows.  Legacy top_links and
+    // panel_links remain in the document for compatibility, but are hidden by
+    // the scoped layout CSS; user_links deliberately stays untouched until
+    // the user-drawer stage.
+    af_advancedmenu_install_frontend_nav($page);
     $page .= "\n".AF_AM_APPLIED_MARK."\n";
 }

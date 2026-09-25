@@ -6,7 +6,7 @@ define('AF_CHARACTERS_PAGE_ALIAS_SIGNATURE', 'AF_CHARACTERS_PAGE_ALIAS');
 
 function af_advancedcharacters_menu_provider(): void
 {
-    af_menu_register_item(['key'=>'characters','source_addon'=>AF_CHARACTERS_ID,'label'=>'Персонажи','icon'=>'fa-solid fa-masks-theater','type'=>'link','default_container'=>'panel_links','default_sortorder'=>70,'visibility'=>static function (): bool { global $mybb; return !empty($mybb->usergroup['cancp']) || !empty($mybb->usergroup['canmodcp']) || (!empty($mybb->user['uid']) && function_exists('is_moderator') && is_moderator()); },'action'=>['url'=>'characters.php']]);
+    af_menu_register_item(['key'=>'characters','source_addon'=>AF_CHARACTERS_ID,'label'=>'Персонажи','icon'=>'fa-solid fa-masks-theater','type'=>'link','default_container'=>'main','default_sortorder'=>70,'visibility'=>true,'action'=>['url'=>'characters.php']]);
 }
 
 
@@ -56,6 +56,10 @@ function af_characters_render_page(): void
 function af_characters_add_moderator_link(&$page): void
 {
     global $mybb;
+    // AdvancedMenu owns this item (including visibility and ordering).  Keep
+    // the old injector only as a compatibility fallback when it is disabled.
+    if (function_exists('af_menu_configured_registry')
+        && !empty($mybb->settings['af_advancedmenu_enabled'])) return;
     if (!is_string($page) || strpos($page, 'data-af-characters-mod-link') !== false) return;
     $isStaff = !empty($mybb->usergroup['cancp']) || !empty($mybb->usergroup['canmodcp'])
         || (!empty($mybb->user['uid']) && function_exists('is_moderator') && is_moderator());

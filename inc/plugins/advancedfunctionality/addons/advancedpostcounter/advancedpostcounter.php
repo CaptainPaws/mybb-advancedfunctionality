@@ -21,7 +21,7 @@ const AF_APC_DEFAULT_ASSETS_BLACKLIST = "index.php\nforumdisplay.php\nusercp.php
 
 function af_advancedpostcounter_menu_provider(): void
 {
-    af_menu_register_item(['key'=>'post_activity','source_addon'=>AF_APC_ID,'label'=>'Постовая активность','icon'=>'fa-solid fa-chart-column','type'=>'link','default_container'=>'top_links','default_sortorder'=>60,'visibility'=>true,'action'=>['url'=>'postsactivity.php']]);
+    af_menu_register_item(['key'=>'post_activity','source_addon'=>AF_APC_ID,'label'=>'Постовая активность','icon'=>'fa-solid fa-chart-column','type'=>'link','default_container'=>'secondary','default_sortorder'=>60,'visibility'=>true,'action'=>['url'=>'postsactivity.php']]);
 }
 
 

@@ -16,7 +16,7 @@ define('AF_AAS_WALK_USERAGENT', 'AF AccountWalk/1.0');
 
 function af_advancedaccountswitcher_menu_provider(): void
 {
-    af_menu_register_item(['key'=>'advanced_account_switcher','source_addon'=>AF_AAS_ID,'label'=>'Аккаунты','icon'=>'fa-solid fa-users','type'=>'modal','default_container'=>'panel_links','default_sortorder'=>10,'visibility'=>static function (): bool { global $mybb; return !empty($mybb->user['uid']) && !empty($mybb->settings['af_advancedaccountswitcher_enabled']); },'action'=>['trigger_selector'=>'#af_aas_trigger','modal_selector'=>'#af_aas_panel','owner_template'=>'af_aas_panel_widget']]);
+    af_menu_register_item(['key'=>'advanced_account_switcher','source_addon'=>AF_AAS_ID,'label'=>'Аккаунты','icon'=>'fa-solid fa-users','type'=>'modal','default_container'=>'secondary','default_sortorder'=>10,'visibility'=>static function (): bool { global $mybb; return !empty($mybb->user['uid']) && !empty($mybb->settings['af_advancedaccountswitcher_enabled']); },'action'=>['trigger_selector'=>'#af_aas_trigger','modal_selector'=>'#af_aas_modal','owner_template'=>'af_aas_panel_widget']]);
 }
 
 
