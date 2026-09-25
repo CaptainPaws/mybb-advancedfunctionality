@@ -4319,14 +4319,13 @@ function af_atf_character_stats_percent_keys(): array
         'character_healing_received_bonus',
         'character_healing_bonus',
         'character_shield_strength',
-        'character_luck',
     ];
 }
 
 function af_atf_character_stats_labels(): array
 {
     return [
-        'character_hp' => 'HP',
+        'character_hp' => 'Здоровье',
         'character_defense' => 'Защита',
         'character_attack_power' => 'Сила атаки',
         'character_element_damage_bonus' => 'Бонус урона стихий',

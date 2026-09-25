@@ -1584,11 +1584,15 @@
                         { key: 'hp_base', label: 'hp_base', type: 'number', default: 100 },
                         { key: 'defense_base', label: 'defense_base', type: 'number', default: 5 },
                         { key: 'attack_power_base', label: 'attack_power_base', type: 'number', default: 10 },
+                        { key: 'crit_rate_base', label: 'crit_rate_base', type: 'number', default: 0 },
                         { key: 'crit_damage_base', label: 'crit_damage_base', type: 'number', default: 0 },
                         { key: 'elemental_mastery_base', label: 'elemental_mastery_base', type: 'number', default: 0 },
                         { key: 'elemental_damage_bonus_base', label: 'elemental_damage_bonus_base', type: 'number', default: 0 },
                         { key: 'healing_bonus_base', label: 'healing_bonus_base', type: 'number', default: 0 },
                         { key: 'shield_bonus_base', label: 'shield_bonus_base', type: 'number', default: 0 },
+                        { key: 'status_hit_base', label: 'status_hit_base', type: 'number', default: 0 },
+                        { key: 'status_resist_base', label: 'status_resist_base', type: 'number', default: 0 },
+                        { key: 'luck_base', label: 'luck_base', type: 'number', default: 0 },
                         { key: 'hp_per_level', label: 'hp_per_level', type: 'number', default: 0 },
                         { key: 'defense_per_level', label: 'defense_per_level', type: 'number', default: 0 },
                         { key: 'attack_power_per_level', label: 'attack_power_per_level', type: 'number', default: 0 },
@@ -1623,11 +1627,15 @@
                         { key: 'hp_base', label: 'hp_base', type: 'number', default: 0 },
                         { key: 'defense_base', label: 'defense_base', type: 'number', default: 0 },
                         { key: 'attack_power_base', label: 'attack_power_base', type: 'number', default: 0 },
+                        { key: 'crit_rate_base', label: 'crit_rate_base', type: 'number', default: 0 },
                         { key: 'crit_damage_base', label: 'crit_damage_base', type: 'number', default: 0 },
                         { key: 'elemental_mastery_base', label: 'elemental_mastery_base', type: 'number', default: 0 },
                         { key: 'elemental_damage_bonus_base', label: 'elemental_damage_bonus_base', type: 'number', default: 0 },
                         { key: 'healing_bonus_base', label: 'healing_bonus_base', type: 'number', default: 0 },
                         { key: 'shield_bonus_base', label: 'shield_bonus_base', type: 'number', default: 0 },
+                        { key: 'status_hit_base', label: 'status_hit_base', type: 'number', default: 0 },
+                        { key: 'status_resist_base', label: 'status_resist_base', type: 'number', default: 0 },
+                        { key: 'luck_base', label: 'luck_base', type: 'number', default: 0 },
                         { key: 'hp_per_level', label: 'hp_per_level', type: 'number', default: 0 },
                         { key: 'defense_per_level', label: 'defense_per_level', type: 'number', default: 0 },
                         { key: 'attack_power_per_level', label: 'attack_power_per_level', type: 'number', default: 0 },
@@ -1783,39 +1791,52 @@
                     { key: 'node_label', label: 'node_label', default: '' },
                     { key: 'rank_weight', label: 'rank_weight', type: 'number', default: 1 },
                     { key: 'socket_cost', label: 'socket_cost', type: 'number', default: 1 }
-                ], 'Talent core');
+                ], 'Ядро таланта');
 
-                renderSeededArrayEditor(rulesRoot, 'effects', 'effects', [
-                    { key: 'kind', label: 'kind', default: 'flat_stat_bonus' },
-                    { key: 'target', label: 'target', default: '' },
-                    { key: 'damage_type', label: 'damage_type', default: '' },
-                    { key: 'mode', label: 'mode', default: 'percent' },
-                    { key: 'value', label: 'value', type: 'number', default: 0 },
-                    { key: 'notes', label: 'notes', default: '' }
+                renderSeededArrayEditor(rulesRoot, 'Эффекты (активные или срабатывающие по условию)', 'effects', [
+                    { key: 'kind', label: 'Тип эффекта', type: 'select', options: [
+                        {value:'flat_stat_bonus',label:'Бонус к характеристике (плоский)'},
+                        {value:'percent_stat_bonus',label:'Бонус к характеристике (%)'},
+                        {value:'status_damage_bonus',label:'Бонус урона статуса'},
+                        {value:'resistance_bonus',label:'Бонус сопротивления'},
+                        {value:'passive_proc',label:'Условное срабатывание'}], default: 'flat_stat_bonus' },
+                    { key: 'stat_key', label: 'Характеристика', type: 'select', options: modifierStatOptions, default: modifierStatOptions.length ? modifierStatOptions[0].value : '' },
+                    { key: 'mode', label: 'Операция', type: 'select', options: [{value:'flat',label:'Плоский бонус'},{value:'percent',label:'Процентный бонус'}], default: 'flat' },
+                    { key: 'value', label: 'Значение', type: 'number', default: 0 },
+                    { key: 'condition_text', label: 'Условие (пусто = постоянно)', default: '' },
+                    { key: 'notes', label: 'Пояснение', default: '' }
                 ], [
-                    { key: 'flat_stat_bonus', label: 'flat_stat_bonus', seed: { kind: 'flat_stat_bonus', target: '', damage_type: '', mode: 'flat', value: 0, notes: '' } },
-                    { key: 'percent_stat_bonus', label: 'percent_stat_bonus', seed: { kind: 'percent_stat_bonus', target: '', damage_type: '', mode: 'percent', value: 0, notes: '' } },
-                    { key: 'status_damage_bonus', label: 'status_damage_bonus', seed: { kind: 'status_damage_bonus', target: '', damage_type: '', mode: 'percent', value: 0, notes: '' } },
-                    { key: 'resistance_bonus', label: 'resistance_bonus', seed: { kind: 'resistance_bonus', target: '', damage_type: '', mode: 'percent', value: 0, notes: '' } },
-                    { key: 'passive_proc', label: 'passive_proc', seed: { kind: 'passive_proc', target: '', damage_type: '', mode: 'percent', value: 0, notes: '' } }
+                    { key: 'flat_stat_bonus', label: 'Бонус к характеристике', seed: { kind: 'flat_stat_bonus', stat_key: 'atk', mode: 'flat', value: 0, condition_text: '', notes: '' } },
+                    { key: 'percent_stat_bonus', label: 'Бонус к характеристике (%)', seed: { kind: 'percent_stat_bonus', stat_key: 'crit_rate', mode: 'percent', value: 0, condition_text: '', notes: '' } },
+                    { key: 'passive_proc', label: 'Условный эффект', seed: { kind: 'passive_proc', stat_key: 'atk', mode: 'flat', value: 0, condition_text: '', notes: '' } }
                 ]);
 
-                ['passive_effects', 'modifiers', 'requirements', 'mutual_exclusives'].forEach(function (k) {
+                renderSeededArrayEditor(rulesRoot, 'Модификаторы (постоянные числовые изменения)', 'modifiers', [
+                    { key: 'type', label: 'Тип', type: 'select', options: [{value:'stat_modifier',label:'Бонус к характеристике'}], default: 'stat_modifier' },
+                    { key: 'stat_key', label: 'Характеристика', type: 'select', options: modifierStatOptions, default: modifierStatOptions.length ? modifierStatOptions[0].value : '' },
+                    { key: 'mode', label: 'Операция', type: 'select', options: [{value:'flat',label:'Плоский бонус'},{value:'percent',label:'Процентный бонус'}], default: 'flat' },
+                    { key: 'value', label: 'Значение', type: 'number', default: 0 },
+                    { key: 'condition_text', label: 'Условие (пусто = постоянно)', default: '' },
+                    { key: 'notes', label: 'Пояснение', default: '' }
+                ], [{ key: 'stat_modifier', label: 'Бонус к характеристике', seed: { type:'stat_modifier', stat_key:'atk', mode:'flat', value:0, condition_text:'', notes:'' } }]);
+
+                [['passive_effects','Пассивные эффекты (описательные постоянные эффекты)'], ['requirements','Требования'], ['mutual_exclusives','Несовместимые таланты']].forEach(function (pair) {
+                    var k = pair[0];
                     renderSeededArrayEditor(
                         rulesRoot,
-                        k,
+                        pair[1],
                         k,
                         [{ key: 'kind', label: 'kind', default: '' }, { key: 'value', label: 'value', default: '' }],
-                        [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]
+                        [{ key: 'default', label: k === 'requirements' ? 'Требование' : (k === 'mutual_exclusives' ? 'Несовместимый талант' : 'Пассивный эффект'), seed: { kind: '', value: '' } }]
                     );
                 });
 
-                renderSeededArrayEditor(rulesRoot, 'grants', 'grants', [
+                renderSeededArrayEditor(rulesRoot, 'Выдаваемые эффекты', 'grants', [
                     { key: 'grant_type', label: 'grant_type', default: 'tag' },
                     { key: 'value', label: 'value', default: '' },
                     { key: 'notes', label: 'notes', default: '' }
                 ], [
-                    { key: 'tag', label: 'tag', seed: { grant_type: 'tag', value: '', notes: '' } },
+                    { key: 'tag', label: 'Тег', seed: { grant_type: 'tag', value: '', notes: '' } },
                     { key: 'ability_unlock', label: 'ability_unlock', seed: { grant_type: 'ability_unlock', value: '', notes: '' } },
                     { key: 'item_unlock', label: 'item_unlock', seed: { grant_type: 'item_unlock', value: '', notes: '' } },
                     { key: 'resource_bonus', label: 'resource_bonus', seed: { grant_type: 'resource_bonus', value: '', notes: '' } },
@@ -2049,11 +2070,16 @@
                     { key: 'combat_stats.hp', label: 'combat_stats.hp', type: 'number', default: 0 },
                     { key: 'combat_stats.atk', label: 'combat_stats.atk', type: 'number', default: 0 },
                     { key: 'combat_stats.def', label: 'combat_stats.def', type: 'number', default: 0 },
-                    { key: 'combat_stats.armor', label: 'combat_stats.armor', type: 'number', default: 0 },
+                    { key: 'combat_stats.speed', label: 'combat_stats.speed', type: 'number', default: 0 },
                     { key: 'combat_stats.crit_rate', label: 'combat_stats.crit_rate', type: 'number', default: 0 },
                     { key: 'combat_stats.crit_dmg', label: 'combat_stats.crit_dmg', type: 'number', default: 0 },
+                    { key: 'combat_stats.element_damage_bonus', label: 'combat_stats.element_damage_bonus', type: 'number', default: 0 },
+                    { key: 'combat_stats.mastery', label: 'combat_stats.mastery', type: 'number', default: 0 },
+                    { key: 'combat_stats.healing_bonus', label: 'combat_stats.healing_bonus', type: 'number', default: 0 },
+                    { key: 'combat_stats.shield_strength', label: 'combat_stats.shield_strength', type: 'number', default: 0 },
                     { key: 'combat_stats.status_hit', label: 'combat_stats.status_hit', type: 'number', default: 0 },
-                    { key: 'combat_stats.status_resist', label: 'combat_stats.status_resist', type: 'number', default: 0 }
+                    { key: 'combat_stats.status_resist', label: 'combat_stats.status_resist', type: 'number', default: 0 },
+                    { key: 'combat_stats.luck', label: 'combat_stats.luck', type: 'number', default: 0 }
                 ], 'Combat stats');
 
                 renderSeededArrayEditor(rulesRoot, 'resists', 'resists', [
