@@ -302,8 +302,11 @@ function af_avatar_render(array $user, string $context, array $options = []): st
         return '<span class="' . $classes . ' af-avatar--guest" aria-hidden="true">' . $img . '</span>';
     }
 
-    $profileUrl = rtrim((string)$mybb->settings['bburl'], '/') . '/' . ltrim(get_profile_link($uid), '/');
-    return '<a href="' . htmlspecialchars_uni($profileUrl) . '" class="' . $classes . ' apa_link" title="' . htmlspecialchars_uni($username) . '">' . $img . '</a>';
+    // get_profile_link() returns markup-ready `&amp;`.  Keep the navigation URL
+    // raw here and escape it exactly once when it enters the href attribute.
+    $profileUrlRaw = rtrim((string)$mybb->settings['bburl'], '/') . '/member.php?action=profile&uid=' . $uid;
+    $profileUrlHtml = htmlspecialchars_uni($profileUrlRaw);
+    return '<a href="' . $profileUrlHtml . '" class="' . $classes . ' apa_link" title="' . htmlspecialchars_uni($username) . '">' . $img . '</a>';
 }
 
 function af_avatar_render_online_page(string $page): string
