@@ -1022,6 +1022,9 @@ function af_advancedmenu_build_drawer_html(): string
     foreach ($sections as $section => $title) {
         $rows = [];
         foreach ($items as $item) {
+            // Profile and logout are primary identity actions and are rendered
+            // in the drawer account card rather than repeated in the lists.
+            if (in_array((string)($item['key'] ?? ''), ['profile', 'logout'], true)) continue;
             if (($item['container'] ?? '') !== 'user_drawer' || ($item['section'] ?? 'links') !== $section
                 || empty($item['enabled']) || !af_menu_item_is_visible($item)) continue;
             $rows[] = ['sort'=>(int)$item['sortorder'], 'key'=>(string)$item['key'], 'html'=>af_advancedmenu_render_registry_item($item)];
@@ -1040,6 +1043,44 @@ function af_advancedmenu_build_drawer_html(): string
     return $out;
 }
 
+/** Render the drawer identity surface; avatar ownership stays with AdvancedAvatar. */
+function af_advancedmenu_render_drawer_account(): string
+{
+    global $mybb, $lang;
+
+    $uid = max(0, (int)($mybb->user['uid'] ?? 0));
+    if ($uid === 0) {
+        return '<section class="af-am-drawer-account af-am-drawer-account--guest" aria-label="Гостевой аккаунт">'
+            .'<p class="af-am-drawer-welcome">Добро пожаловать</p><div class="af-am-drawer-account-actions">'
+            .'<a class="af-am-account-action" href="member.php?action=login"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i> Войти</a>'
+            .'<a class="af-am-account-action" href="member.php?action=register"><i class="fa-solid fa-user-plus" aria-hidden="true"></i> Регистрация</a>'
+            .'</div></section>';
+    }
+
+    $username = trim((string)($mybb->user['username'] ?? ''));
+    $username = $username !== '' ? $username : (string)($lang->guest ?? 'User');
+    $profileUrl = 'member.php?action=profile&amp;uid='.$uid;
+    $avatar = function_exists('af_avatar_render')
+        ? af_avatar_render((array)$mybb->user, 'drawer', ['img_class'=>'af-am-drawer-avatar-image'])
+        : '';
+    $lastVisit = '';
+    $lastVisitTs = (int)($mybb->user['lastvisit'] ?? 0);
+    if ($lastVisitTs > 0 && function_exists('my_date')) {
+        $lastVisit = '<p class="af-am-drawer-lastvisit">'.htmlspecialchars_uni((string)($lang->welcome_lastvisit ?? 'Последний визит: '))
+            .htmlspecialchars_uni((string)my_date('relative', $lastVisitTs)).'</p>';
+    }
+    $logoutUrl = 'member.php?action=logout&amp;logoutkey='.rawurlencode((string)($mybb->post_code ?? ''));
+
+    return '<section class="af-am-drawer-account" aria-label="Аккаунт пользователя">'
+        .'<div class="af-am-drawer-identity">'.$avatar.'<div class="af-am-drawer-usertext">'
+        .'<p class="af-am-drawer-welcome">Добро пожаловать</p>'
+        .'<a class="af-am-drawer-username" href="'.$profileUrl.'">'.htmlspecialchars_uni($username).'</a>'
+        .$lastVisit.'</div></div><div class="af-am-drawer-account-actions">'
+        .'<a class="af-am-account-action" href="'.$profileUrl.'"><i class="fa-solid fa-user" aria-hidden="true"></i> Профиль</a>'
+        .'<a class="af-am-account-action af-am-account-action--logout" href="'.$logoutUrl.'"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Выйти</a>'
+        .'</div></section>';
+}
+
 function af_advancedmenu_render_frontend_nav(): string
 {
     $main = af_advancedmenu_build_container_html('main');
@@ -1053,7 +1094,7 @@ function af_advancedmenu_render_frontend_nav(): string
         .'<button class="af-am-drawer-overlay" type="button" tabindex="-1" aria-label="Закрыть пользовательское меню"></button>'
         .'<aside id="af-am-user-drawer" class="af-am-drawer" role="dialog" aria-modal="true" aria-label="Пользовательское меню" tabindex="-1">'
         .'<div class="af-am-drawer-header"><strong>Меню пользователя</strong><button class="af-am-drawer-close" type="button" aria-label="Закрыть пользовательское меню">&times;</button></div>'
-        .$drawer.'</aside></div>';
+        .af_advancedmenu_render_drawer_account().$drawer.'</aside></div>';
 }
 
 function af_advancedmenu_install_frontend_nav(string &$page): void
