@@ -5,7 +5,7 @@ function htmlspecialchars_uni($value) { return htmlspecialchars((string)$value, 
 function af_avatar_render(array $user, string $context, array $options = []) {
     return '<a class="shared-avatar" href="member.php?action=profile&amp;uid='.(int)$user['uid'].'">avatar</a>';
 }
-function my_date($format, $timestamp) { return 'recently'; }
+function my_date($format, $timestamp) { return '<span title="formatted date">recently</span>'; }
 $mybb = (object)[
     'settings'=>['bburl'=>'https://board.test'],
     'user'=>['uid'=>42, 'username'=>'Drawer User', 'lastvisit'=>123],
@@ -31,8 +31,11 @@ if (strpos($items['logout']['action']['url'], 'logoutkey=logout-token') === fals
 }
 
 $account = af_advancedmenu_render_drawer_account();
-foreach (['shared-avatar', 'uid=42', 'Drawer User', 'Профиль', 'action=logout&amp;logoutkey=logout-token', 'recently'] as $needle) {
+foreach (['shared-avatar', 'uid=42', 'Drawer User', 'Профиль', 'action=logout&amp;logoutkey=logout-token', '<span title="formatted date">recently</span>'] as $needle) {
     if (strpos($account, $needle) === false) throw new RuntimeException('Member account header missing: '.$needle);
+}
+if (strpos($account, '&lt;span') !== false) {
+    throw new RuntimeException('Trusted MyBB relative-date markup was double escaped.');
 }
 if (substr_count($account, 'shared-avatar') !== 1) {
     throw new RuntimeException('Drawer must call the shared avatar renderer exactly once.');

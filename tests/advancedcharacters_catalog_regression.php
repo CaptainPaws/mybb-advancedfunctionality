@@ -26,7 +26,9 @@ foreach (['kind', 'gender', 'origin', 'variant', 'element', 'archetype', 'factio
     advancedcharacters_assert(strpos($js, "'{$filter}'") !== false, "AJAX URL support is missing: {$filter}");
 }
 advancedcharacters_assert(strpos($kb, "COALESCE(NULLIF(type_key,''),type)<>'character'") !== false, 'Character type card is not hidden visually');
-advancedcharacters_assert(strpos($bootstrap, 'data-af-characters-mod-link') !== false && strpos($bootstrap, '>Персонажи</a>') !== false, 'Moderator Characters link is missing');
+foreach (['af_advancedcharacters_menu_provider', 'af_characters_add_moderator_link', 'data-af-characters-mod-link', "'key'=>'characters'"] as $needle) {
+    advancedcharacters_assert(strpos($bootstrap, $needle) === false, 'Automatic Characters menu integration remains: '.$needle);
+}
 advancedcharacters_assert(strpos($kb, 'af_kb_get_origin_variants($originKey, true)') !== false, 'Origin Variant does not use the KB resolver');
 advancedcharacters_assert(strpos($kb, 'Персонажи пока не добавлены.') !== false, 'Required empty state is missing');
 advancedcharacters_assert(strpos($bootstrap, 'CREATE TABLE') === false && strpos($bootstrap, 'af_characters_entries') === false, 'A parallel character storage was introduced');
