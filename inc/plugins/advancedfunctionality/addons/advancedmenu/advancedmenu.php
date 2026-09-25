@@ -1177,7 +1177,7 @@ function af_advancedmenu_render_frontend_nav(): string
     $main = af_advancedmenu_build_container_html('main');
     $secondary = af_advancedmenu_build_container_html('secondary');
     $drawer = af_advancedmenu_build_drawer_html();
-    return '<div class="af-am-navigation" data-af-am-navigation="1">'
+    return '<div class="af-am-shell af-am-navigation" data-af-am-navigation="1">'
         .'<nav class="af-am-bar af-am-main" aria-label="Основное меню">'
         .'<button class="af-am-burger" type="button" aria-label="Открыть пользовательское меню" aria-expanded="false" aria-controls="af-am-user-drawer"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>'
         .'<ul class="af-am-list">'.$main.'</ul></nav>'
@@ -1189,15 +1189,27 @@ function af_advancedmenu_render_frontend_nav(): string
         .af_advancedmenu_render_drawer_account().$drawer.'</aside></div>';
 }
 
+/** Remove duplicate legacy controls while retaining provider-owned runtime. */
+function af_advancedmenu_remove_legacy_modal_triggers(string $page): string
+{
+    return (string)preg_replace(
+        '~<a\b[^>]*id=["\'](?:af_aas_trigger|af_aam_header_link)["\'][^>]*>(?:(?!<a\b|</a\s*>).)*</a\s*>~is',
+        '',
+        $page
+    );
+}
+
 function af_advancedmenu_install_frontend_nav(string &$page): void
 {
     global $theme_select;
     if (strpos($page, 'data-af-am-navigation="1"') !== false) return;
 
-    // The modal implementations bind to these stable IDs. Remove only their
-    // legacy controls, never the modal/dialog markup itself.
-    $page = (string)preg_replace('~<li\b[^>]*>\s*<a\b[^>]*id=["\'](?:af_aas_trigger|af_aam_header_link)["\'][^>]*>.*?</a>\s*</li>~is', '', $page);
-    $page = (string)preg_replace('~<a\b[^>]*id=["\'](?:af_aas_trigger|af_aam_header_link)["\'][^>]*>.*?</a>~is', '', $page);
+    // The modal implementations bind to these stable IDs. Remove only the
+    // legacy anchors, never their surrounding provider widget. In particular,
+    // AAS places its modal after the anchor inside the same template variable;
+    // matching from <li> to a later </li> can therefore consume the modal and
+    // the beginning of the next menu item.
+    $page = af_advancedmenu_remove_legacy_modal_triggers($page);
 
     $nav = af_advancedmenu_render_frontend_nav();
     $memberBodyClass = !empty($GLOBALS['mybb']->user['uid']) ? ' af-am-member' : ' af-am-guest';
