@@ -335,7 +335,7 @@ class AF_Admin_Advancedshop
                     $html .= '<p>Title RU: <input type="text" name="title_ru" value="' . htmlspecialchars_uni((string)($editShop['title_ru'] ?? '')) . '" maxlength="255" style="width:60%"></p>';
                     $html .= '<p>Title EN: <input type="text" name="title_en" value="' . htmlspecialchars_uni((string)($editShop['title_en'] ?? '')) . '" maxlength="255" style="width:60%"></p>';
                     $editSettings = json_decode((string)($editShop['settings_json'] ?? ''), true);
-                    $editMechanic = in_array((string)($editSettings['mechanic_key'] ?? ''), ['dnd', 'arpg'], true) ? (string)$editSettings['mechanic_key'] : (strpos(strtolower((string)$editShop['code']), 'arpg') !== false ? 'arpg' : 'dnd');
+                    $editMechanic = in_array((string)($editSettings['mechanic_key'] ?? ''), ['dnd', 'arpg'], true) ? (string)$editSettings['mechanic_key'] : 'dnd';
                     $html .= '<p>Game mechanic: <select name="mechanic_key"><option value="dnd"' . ($editMechanic === 'dnd' ? ' selected' : '') . '>DnD</option><option value="arpg"' . ($editMechanic === 'arpg' ? ' selected' : '') . '>ARPG</option></select></p>';
                 } else {
                     $title = (string)($editShop['title'] ?? '');
