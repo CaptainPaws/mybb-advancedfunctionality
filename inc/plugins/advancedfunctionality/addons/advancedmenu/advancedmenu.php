@@ -990,6 +990,8 @@ function af_advancedmenu_render_registry_item(array $item): string
 
     if ($type === 'modal') {
         $classes .= ' af-am-modal-trigger';
+        $triggerClass = preg_replace('~[^a-z0-9 _-]~i', '', (string)($action['trigger_class'] ?? ''));
+        if ($triggerClass !== '') $classes .= ' '.$triggerClass;
         $href = isset($action['handler']) ? af_advancedmenu_normalize_url((string)($action['url'] ?? '#')) : '#';
         $selector = (string)($action['trigger_selector'] ?? '');
         if (preg_match('~^#([a-z][a-z0-9_-]*)$~i', $selector, $match)) {
@@ -1110,8 +1112,11 @@ function af_advancedmenu_render_drawer_account(): string
     $lastVisit = '';
     $lastVisitTs = (int)($mybb->user['lastvisit'] ?? 0);
     if ($lastVisitTs > 0 && function_exists('my_date')) {
+        // my_date('relative') is MyBB-owned presentation HTML (not user data):
+        // recent dates include a safe <span title="..."> fragment.  Escaping it
+        // here displayed that markup literally in the drawer.
         $lastVisit = '<p class="af-am-drawer-lastvisit">'.htmlspecialchars_uni((string)($lang->welcome_lastvisit ?? 'Последний визит: '))
-            .htmlspecialchars_uni((string)my_date('relative', $lastVisitTs)).'</p>';
+            .(string)my_date('relative', $lastVisitTs).'</p>';
     }
     $logoutUrl = 'member.php?action=logout&amp;logoutkey='.rawurlencode((string)($mybb->post_code ?? ''));
 
@@ -1131,8 +1136,9 @@ function af_advancedmenu_render_frontend_nav(): string
     $secondary = af_advancedmenu_build_container_html('secondary');
     $drawer = af_advancedmenu_build_drawer_html();
     return '<div class="af-am-navigation" data-af-am-navigation="1">'
+        .'<nav class="af-am-bar af-am-main" aria-label="Основное меню">'
         .'<button class="af-am-burger" type="button" aria-label="Открыть пользовательское меню" aria-expanded="false" aria-controls="af-am-user-drawer"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>'
-        .'<nav class="af-am-bar af-am-main" aria-label="Основное меню"><ul class="af-am-list">'.$main.'</ul></nav>'
+        .'<ul class="af-am-list">'.$main.'</ul></nav>'
         .'<nav class="af-am-bar af-am-secondary" aria-label="Дополнительное меню"><ul class="af-am-list">'.$secondary.'</ul></nav>'
         .'</div><div class="af-am-drawer-shell" data-af-am-drawer-shell hidden>'
         .'<button class="af-am-drawer-overlay" type="button" tabindex="-1" aria-label="Закрыть пользовательское меню"></button>'
@@ -1152,17 +1158,18 @@ function af_advancedmenu_install_frontend_nav(string &$page): void
     $page = (string)preg_replace('~<a\b[^>]*id=["\'](?:af_aas_trigger|af_aam_header_link)["\'][^>]*>.*?</a>~is', '', $page);
 
     $nav = af_advancedmenu_render_frontend_nav();
+    $memberBodyClass = !empty($GLOBALS['mybb']->user['uid']) ? ' af-am-member' : ' af-am-guest';
     // MyBB.changeTheme() addresses the provider form by its stable id. Move
     // that exact form into the drawer instead of cloning it into invalid DOM.
     if (strpos($nav, 'data-af-am-widget="theme_switcher"') !== false && !empty($theme_select)) {
         $page = str_replace((string)$theme_select, '', $page);
     }
-    $page = (string)preg_replace_callback('~<body\b([^>]*)>~i', static function (array $m) use ($nav): string {
+    $page = (string)preg_replace_callback('~<body\b([^>]*)>~i', static function (array $m) use ($nav, $memberBodyClass): string {
         $attrs = $m[1];
         if (preg_match('~\bclass\s*=\s*(["\'])(.*?)\1~i', $attrs)) {
-            $attrs = (string)preg_replace('~\bclass\s*=\s*(["\'])(.*?)\1~i', 'class=$1$2 af-advancedmenu-layout$1', $attrs, 1);
+            $attrs = (string)preg_replace('~\bclass\s*=\s*(["\'])(.*?)\1~i', 'class=$1$2 af-advancedmenu-layout'.$memberBodyClass.'$1', $attrs, 1);
         } else {
-            $attrs .= ' class="af-advancedmenu-layout"';
+            $attrs .= ' class="af-advancedmenu-layout'.$memberBodyClass.'"';
         }
         return '<body'.$attrs.'>'.$nav;
     }, $page, 1);

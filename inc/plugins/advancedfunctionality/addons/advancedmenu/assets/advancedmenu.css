@@ -24,7 +24,18 @@
   color: #fff;
 }
 
-.af-advancedmenu-layout .af-am-main { min-height: var(--af-am-main-height); }
+.af-advancedmenu-layout .af-am-main {
+  display: flex;
+  align-items: stretch;
+  min-height: var(--af-am-main-height);
+  overflow: hidden;
+}
+.af-advancedmenu-layout .af-am-main .af-am-list {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  overflow-x: auto;
+}
 .af-advancedmenu-layout .af-am-secondary {
   min-height: var(--af-am-secondary-height);
   background: #303740;
@@ -72,19 +83,22 @@
 .af-advancedmenu-layout #logo,
 .af-advancedmenu-layout #footer .upper { display: none !important; }
 
+/* The drawer replaces the complete member welcome panel.  Guests retain the
+   stock login/register surface as a compatibility fallback. */
+.af-advancedmenu-layout.af-am-member #panel,
+.af-advancedmenu-layout.af-am-member #header > .panel { display: none !important; }
+
 .af-am-burger {
-  position: fixed;
-  z-index: 1200;
-  left: 14px;
-  top: 50%;
-  width: 46px;
-  height: 46px;
+  position: static;
+  flex: 0 0 48px;
+  width: 48px;
+  min-height: var(--af-am-main-height);
   border: 0;
-  border-radius: 50%;
+  border-radius: 0;
   background: #20252b;
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 3px 14px rgba(0,0,0,.3);
+  box-shadow: none;
 }
 .af-am-burger:hover, .af-am-burger:focus-visible { background: #39424c; }
 .af-am-drawer-shell { position: fixed; z-index: 1300; inset: 0; }
@@ -127,7 +141,16 @@
 body.af-am-drawer-open { overflow: hidden; }
 
 @media (max-width: 768px) {
-  .af-am-burger { top: auto; bottom: 14px; left: 14px; }
+  .af-am-burger {
+    position: fixed;
+    z-index: 1200;
+    bottom: 14px;
+    left: 14px;
+    width: 46px;
+    min-height: 46px;
+    border-radius: 50%;
+    box-shadow: 0 3px 14px rgba(0,0,0,.3);
+  }
   .af-advancedmenu-layout .af-am-list { padding-inline: 6px; }
   .af-advancedmenu-layout .af-am-list .af-am-link { padding-inline: 10px; }
 }
