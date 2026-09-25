@@ -97,8 +97,19 @@
       headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
       body: new URLSearchParams(data)
     })
-      .then(function(r){ return r.text(); })
-      .then(parseJSON);
+      .then(function(r){
+        return r.text().then(function(text) {
+          var payload = parseJSON(text);
+          if (!r.ok && (!payload || payload.ok !== false)) {
+            return { ok: false, error: 'HTTP ' + r.status, code: r.status };
+          }
+          return payload;
+        });
+      })
+      .catch(function(err) {
+        afShopWarn('Shop request failed', err);
+        return { ok: false, error: 'Не удалось выполнить запрос. Проверьте соединение и повторите попытку.' };
+      });
   }
 
   function getJSON(url) {
@@ -678,6 +689,9 @@
         } else if (res.error !== 'busy') {
           afShopToast(res.error || 'Error', 'error');
         }
+      }).catch(function(err) {
+        afShopWarn('Checkout failed', err);
+        afShopToast((err && err.message) || 'Не удалось завершить покупку.', 'error');
       });
       return;
     }
