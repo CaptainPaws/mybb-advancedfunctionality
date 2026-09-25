@@ -573,6 +573,37 @@ function af_advancedmenu_normalize_url(string $url): string
     return $bburl.'/'.ltrim($url, '/');
 }
 
+/** Expand the small, explicit URL variable registry at render time only. */
+function af_advancedmenu_expand_url_placeholders(string $url): ?string
+{
+    global $mybb;
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    if (strpos($url, '{uid}') !== false && $uid <= 0) return null;
+    return strtr($url, ['{uid}' => (string)$uid, '{username}' => rawurlencode((string)($mybb->user['username'] ?? ''))]);
+}
+
+/** Match the path and every query parameter required by the menu URL. */
+function af_advancedmenu_url_is_active(string $url): bool
+{
+    global $mybb;
+    $expanded = af_advancedmenu_expand_url_placeholders(html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    if ($expanded === null || $expanded === '' || $expanded === '#') return false;
+    $target = parse_url(af_advancedmenu_normalize_url($expanded));
+    if (!is_array($target) || empty($target['path'])) return false;
+    $board = parse_url((string)($mybb->settings['bburl'] ?? ''));
+    if (!empty($target['host']) && (!is_array($board) || strcasecmp((string)$target['host'], (string)($board['host'] ?? '')) !== 0)) return false;
+    $request = parse_url((string)($_SERVER['REQUEST_URI'] ?? ''));
+    if (!is_array($request)) return false;
+    $normalPath = static fn(string $path): string => rtrim('/'.ltrim($path, '/'), '/') ?: '/';
+    if ($normalPath((string)($target['path'] ?? '')) !== $normalPath((string)($request['path'] ?? ''))) return false;
+    parse_str((string)($target['query'] ?? ''), $required);
+    parse_str((string)($request['query'] ?? ''), $actual);
+    foreach ($required as $key => $value) {
+        if (!array_key_exists($key, $actual) || (string)$actual[$key] !== (string)$value) return false;
+    }
+    return true;
+}
+
 function af_advancedmenu_parse_csv(string $csv): array
 {
     $csv = (string)$csv;
@@ -658,6 +689,7 @@ function af_advancedmenu_item_is_visible(array $item): bool
     // авто-санити: usercp/private для гостя скрываем даже если админ забыл visibility
     if ($isGuest) {
         $rawUrl = isset($item['url']) ? (string)$item['url'] : '';
+        if (strpos($rawUrl, '{uid}') !== false) return false;
         if ($rawUrl !== '') {
             $u = strtolower($rawUrl);
             if (strpos($u, 'usercp.php') !== false || strpos($u, 'private.php') !== false) {
@@ -855,7 +887,10 @@ function af_advancedmenu_render_item(array $item): string
     $location = ($item['location'] === 'panel') ? 'panel' : 'top';
     $slug     = (string)$item['slug'];
     $title    = htmlspecialchars_uni((string)$item['title']);
-    $url      = htmlspecialchars_uni(af_advancedmenu_normalize_url((string)$item['url']));
+    $expandedUrl = af_advancedmenu_expand_url_placeholders((string)$item['url']);
+    if ($expandedUrl === null) return '';
+    $url      = htmlspecialchars_uni(af_advancedmenu_normalize_url($expandedUrl));
+    $activeClass = af_advancedmenu_url_is_active((string)$item['url']) ? ' is-active' : '';
 
     // ПОДСКАЗКА (tooltip)
     // Делаем "двойной" вывод:
@@ -920,17 +955,21 @@ function af_advancedmenu_render_item(array $item): string
         $af_am_title    = $title;
         $af_am_url      = $url;
         $af_am_icon     = $iconHtml;
+        $af_am_active_class = $activeClass;
 
         // ВАЖНО: оставляем переменную как ты уже делала, но теперь она несёт и data и title.
         $af_am_hint_attr = $hintAttr;
 
         $out = '';
         eval("\$out = \"$tpl\";");
+        if ($activeClass !== '' && strpos($out, 'is-active') === false) {
+            $out = (string)preg_replace('~class=(["\'])([^"\']*\baf-am-item\b[^"\']*)\1~i', 'class=$1$2 is-active$1', $out, 1);
+        }
         return (string)$out;
     }
 
     // fallback HTML (если нет шаблона)
-    return '<li class="af-am-item af-am-'.$location.' af-am-'.$slug.'"><a class="af-am-link" href="'.$url.'"'.$hintAttr.'>'.$iconHtml.'<span class="af-am-title">'.$title.'</span></a></li>';
+    return '<li class="af-am-item af-am-'.$location.' af-am-'.$slug.$activeClass.'"><a class="af-am-link" href="'.$url.'"'.$hintAttr.'>'.$iconHtml.'<span class="af-am-title">'.$title.'</span></a></li>';
 }
 
 function af_advancedmenu_resolve_target(string $location): string
@@ -985,6 +1024,8 @@ function af_advancedmenu_render_registry_item(array $item): string
     $action = (array)($item['action'] ?? []);
     $type = (string)($item['type'] ?? 'link');
     if ($type === 'widget') return af_advancedmenu_render_widget($item);
+    $providerRenderer = $action['trigger_renderer'] ?? null;
+    if ($type === 'modal' && is_callable($providerRenderer)) return (string)$providerRenderer($item);
     $classes = 'af-am-link af-am-system-link';
     $attrs = '';
 
@@ -1002,6 +1043,7 @@ function af_advancedmenu_render_registry_item(array $item): string
         if (($action['handler'] ?? '') === 'MyBB.popupWindow') $attrs .= ' onclick="MyBB.popupWindow(this.href); return false;"';
     } else {
         $href = af_advancedmenu_normalize_url((string)($action['url'] ?? '#'));
+        if ($type === 'link' && af_advancedmenu_url_is_active((string)($action['url'] ?? ''))) $classes .= ' is-active';
     }
 
     $icon = '';

@@ -21,6 +21,14 @@ $aasModal = af_advancedmenu_render_registry_item([
 foreach (['id="af_aas_trigger"', 'class="af-am-link af-am-system-link af-am-modal-trigger af-aas-trigger"', 'data-af-am-modal="#af_aas_modal"'] as $needle) {
     if (strpos($aasModal, $needle) === false) throw new RuntimeException('AAS trigger contract missing: '.$needle);
 }
+$aasPhp = file_get_contents(AF_ADDONS.'advancedaccountswitcher/advancedaccountswitcher.php');
+$aasJs = file_get_contents(AF_ADDONS.'advancedaccountswitcher/assets/advancedaccountswitcher.js');
+foreach (["'trigger_renderer'=>'af_aas_render_menu_trigger'", 'aria-controls="af_aas_modal"'] as $needle) {
+    if (strpos($aasPhp, $needle) === false) throw new RuntimeException('AAS owner trigger contract missing: '.$needle);
+}
+foreach (["document.addEventListener('click'", "closest('#af_aas_trigger')"] as $needle) {
+    if (strpos($aasJs, $needle) === false) throw new RuntimeException('AAS delegated trigger handling missing: '.$needle);
+}
 if (strpos($modal, 'af-am-badge') === false || strpos($modal, '>7</span>') === false) {
     throw new RuntimeException('Unread badge was not rendered.');
 }

@@ -21,26 +21,32 @@
 
   // Header modal (👥)
   (function initModal() {
-    var trigger = qs('#af_aas_trigger');
     var modal = qs('#af_aas_modal');
     var closeBtn = modal ? modal.querySelector('.af-aas-modal-close') : null;
     var backdrop = modal ? modal.querySelector('.af-aas-modal-backdrop') : null;
 
-    if (!trigger || !modal) return;
+    if (!modal) return;
+
+    function triggers() { return document.querySelectorAll('#af_aas_trigger'); }
+    function setExpanded(value) {
+      Array.prototype.forEach.call(triggers(), function (node) { node.setAttribute('aria-expanded', value); });
+    }
 
     function openModal() {
       modal.classList.add('af-aas-modal-open');
       modal.style.display = 'flex';
-      trigger.setAttribute('aria-expanded', 'true');
+      setExpanded('true');
     }
 
     function closeModal() {
       modal.classList.remove('af-aas-modal-open');
       modal.style.display = 'none';
-      trigger.setAttribute('aria-expanded', 'false');
+      setExpanded('false');
     }
 
-    trigger.addEventListener('click', function (e) {
+    document.addEventListener('click', function (e) {
+      var trigger = e.target.closest('#af_aas_trigger');
+      if (!trigger) return;
       if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         if (modal.classList.contains('af-aas-modal-open')) closeModal();
