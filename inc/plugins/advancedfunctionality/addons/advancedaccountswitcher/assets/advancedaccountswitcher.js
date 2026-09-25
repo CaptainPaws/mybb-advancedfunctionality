@@ -1,8 +1,9 @@
 (function () {
   'use strict';
 
-  if (window.afAasInitialized) return;
-  window.afAasInitialized = true;
+  function init() {
+    if (window.afAasInitialized) return;
+    window.afAasInitialized = true;
 
   function qs(sel, root) { return (root || document).querySelector(sel); }
 
@@ -383,5 +384,16 @@
         });
     });
   })();
+
+  }
+
+  // Keep the same lifecycle contract as Alerts: the asset can be emitted in
+  // headerinclude (including by an older theme without `defer`), while the AAS
+  // trigger and modal shell are rendered later in the page body.
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    init();
+  } else {
+    document.addEventListener('DOMContentLoaded', init);
+  }
 
 })();

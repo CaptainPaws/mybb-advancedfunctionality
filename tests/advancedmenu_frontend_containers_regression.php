@@ -26,7 +26,7 @@ $aasJs = file_get_contents(AF_ADDONS.'advancedaccountswitcher/assets/advancedacc
 foreach (["'trigger_renderer'=>'af_aas_render_menu_trigger'", 'aria-controls="af_aas_modal"'] as $needle) {
     if (strpos($aasPhp, $needle) === false) throw new RuntimeException('AAS owner trigger contract missing: '.$needle);
 }
-foreach (["document.addEventListener('click'", "closest('#af_aas_trigger')"] as $needle) {
+foreach (["document.addEventListener('click'", "closest('#af_aas_trigger')", "document.addEventListener('DOMContentLoaded', init)"] as $needle) {
     if (strpos($aasJs, $needle) === false) throw new RuntimeException('AAS delegated trigger handling missing: '.$needle);
 }
 if (strpos($modal, 'af-am-badge') === false || strpos($modal, '>7</span>') === false) {
