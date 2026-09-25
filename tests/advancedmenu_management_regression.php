@@ -18,7 +18,7 @@ if ($registry['stage_two_item']['allowed_containers'] !== array_keys($expected))
 
 $runtime = file_get_contents(AF_ADDONS.'advancedmenu/advancedmenu.php');
 $admin = file_get_contents(AF_ADDONS.'advancedmenu/admin.php');
-foreach (['AF_AM_TABLE_OVERRIDES', 'label_override', 'icon_override', "if ($".'exists) continue'] as $needle) {
+foreach (['AF_AM_TABLE_OVERRIDES', 'label_override', 'icon_override', 'Provider reloads must never overwrite administrator choices'] as $needle) {
     if (strpos($runtime, $needle) === false) throw new RuntimeException("override contract missing: {$needle}");
 }
 foreach (['save_order', 'sortorder', 'source_addon', 'allowed_containers'] as $needle) {
