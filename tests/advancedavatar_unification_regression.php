@@ -12,10 +12,20 @@ if (is_file($root . '/inc/plugins/advancedfunctionality/addons/advancedonlineava
     throw new RuntimeException('Legacy AdvancedOnlineAvatar is still discoverable');
 }
 
-foreach (['function af_avatar_render(', "'online.php'", 'af_avatar_render_online_page', 'get_profile_link($uid)'] as $needle) {
+foreach (['function af_avatar_render(', "'online.php'", 'af_avatar_render_online_page', '$profileUrlRaw', '$profileUrlHtml'] as $needle) {
     if (!str_contains($avatar, $needle)) {
         throw new RuntimeException("Unified avatar contract is missing: {$needle}");
     }
+}
+
+if (str_contains($avatar, 'htmlspecialchars_uni(get_profile_link(')
+    || str_contains($avatar, "str_replace('&amp;', '&'")) {
+    throw new RuntimeException('Avatar profile URLs still use double escaping or entity replacement');
+}
+
+if (!str_contains($avatar, "'/member.php?action=profile&uid=' . \$uid")
+    || !str_contains($avatar, '$profileUrlHtml = htmlspecialchars_uni($profileUrlRaw);')) {
+    throw new RuntimeException('Avatar profile URLs are not kept raw until the HTML attribute boundary');
 }
 
 if (str_contains($avatar, "get_profile_link((int)\$mybb->user['uid'])") || str_contains($avatar, 'uid=1')) {
