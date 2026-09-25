@@ -120,6 +120,10 @@
 .af-am-drawer-list { margin: 0; padding: 0; list-style: none; }
 .af-am-drawer-list .af-am-link { display: flex; width: 100%; box-sizing: border-box; padding: 11px 8px; border-radius: 4px; color: inherit; text-decoration: none; }
 .af-am-drawer-list .af-am-link:hover, .af-am-drawer-list .af-am-link:focus-visible { background: rgba(255,255,255,.12); }
+.af-am-widget { padding: 9px 8px 12px; }
+.af-am-widget-label { margin-bottom: 7px; font-size: .82em; font-weight: 700; text-transform: uppercase; }
+.af-am-widget-content form { margin: 0; }
+.af-am-widget-content select { width: 100%; min-height: 42px; box-sizing: border-box; padding: 8px; font: inherit; }
 body.af-am-drawer-open { overflow: hidden; }
 
 @media (max-width: 768px) {
@@ -217,4 +221,3 @@ body.af-am-drawer-open { overflow: hidden; }
 .af-am-link{
   position: relative;
 }
-

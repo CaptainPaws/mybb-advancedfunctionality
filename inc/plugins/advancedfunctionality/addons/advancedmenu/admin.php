@@ -178,7 +178,7 @@ class AF_Admin_Advancedmenu
         echo '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">';
         require_once MYBB_ADMIN_DIR.'inc/class_table.php';
         $table = new Table;
-        foreach (['Название','Source','Type','Container','Enabled','Sortorder','Действия'] as $heading) $table->construct_header($heading);
+        foreach (['Название','Source','Type','Container','Section','Enabled','Sortorder','Действия'] as $heading) $table->construct_header($heading);
         $rows = [];
         foreach (af_menu_configured_registry() as $key=>$item) if ($item['container'] === $active) $rows[] = ['source'=>'system','key'=>$key] + $item;
         $q = $db->simple_select(AF_AM_TABLE_ITEMS, '*', '', ['order_by'=>'sort_order, id']);
@@ -191,16 +191,19 @@ class AF_Admin_Advancedmenu
             $key = (string)$item['key']; $field = htmlspecialchars_uni($key);
             $options = '';
             foreach (af_menu_containers() as $value=>$label) if (in_array($value,$item['allowed_containers'],true)) $options .= '<option value="'.$value.'"'.($value===$item['container']?' selected':'').'>'.htmlspecialchars_uni($label).'</option>';
+            $sectionOptions = '';
+            foreach (af_menu_sections() as $value=>$label) $sectionOptions .= '<option value="'.$value.'"'.($value===($item['section'] ?? 'links')?' selected':'').'>'.htmlspecialchars_uni($label).'</option>';
             $actions = $item['source']==='custom' ? '<a href="'.htmlspecialchars_uni(self::url(['do'=>'edit','id'=>(int)$item['id'],'loc'=>$active])).'">Редактировать</a> · <a href="'.htmlspecialchars_uni(self::url(['do'=>'delete','id'=>(int)$item['id'],'loc'=>$active])).'">Удалить</a>' : '<span title="Registry definition remains owned by the provider">Настройки показа</span>';
             $table->construct_cell(htmlspecialchars_uni((string)$item['label']));
             $table->construct_cell(htmlspecialchars_uni($item['source']==='system' ? (string)$item['source_addon'] : 'AdvancedMenu'));
             $table->construct_cell(htmlspecialchars_uni((string)$item['type']));
             $table->construct_cell('<select name="items['.$field.'][container]">'.$options.'</select>');
+            $table->construct_cell('<select name="items['.$field.'][section]">'.$sectionOptions.'</select>');
             $table->construct_cell('<input type="checkbox" name="items['.$field.'][enabled]" value="1"'.(!empty($item['enabled'])?' checked':'').'>');
             $table->construct_cell('<input type="number" name="items['.$field.'][sortorder]" value="'.(int)$item['sortorder'].'" style="width:70px">');
             $table->construct_cell($actions); $table->construct_row();
         }
-        if (!$rows) { $table->construct_cell('<em>В этом контейнере нет пунктов.</em>', ['colspan'=>7]); $table->construct_row(); }
+        if (!$rows) { $table->construct_cell('<em>В этом контейнере нет пунктов.</em>', ['colspan'=>8]); $table->construct_row(); }
         $table->output(af_menu_containers()[$active]);
         echo '<p><button class="button button_primary" type="submit">Сохранить порядок и настройки</button></p></form>';
     }
@@ -213,11 +216,13 @@ class AF_Admin_Advancedmenu
         $registry = af_menu_collect_registry();
         foreach ((array)$posted as $key=>$values) {
             $container = af_menu_normalize_container((string)($values['container'] ?? 'main'));
+            $section = (string)($values['section'] ?? 'links');
+            if (!array_key_exists($section, af_menu_sections())) $section = 'links';
             $enabled = empty($values['enabled']) ? 0 : 1; $sort = (int)($values['sortorder'] ?? 100);
             if (str_starts_with((string)$key, 'custom_')) {
                 $id=(int)substr((string)$key,7); $db->update_query(AF_AM_TABLE_ITEMS,['container'=>$container,'location'=>$container==='user_drawer'?'panel':'top','enabled'=>$enabled,'sort_order'=>$sort,'updated_at'=>TIME_NOW],"id='{$id}'");
             } elseif (isset($registry[$key]) && in_array($container,$registry[$key]['allowed_containers'],true)) {
-                $db->update_query(AF_AM_TABLE_OVERRIDES,['container'=>$container,'enabled'=>$enabled,'sortorder'=>$sort,'updated_at'=>TIME_NOW],"item_key='".$db->escape_string((string)$key)."'");
+                $db->update_query(AF_AM_TABLE_OVERRIDES,['container'=>$container,'section'=>$section,'enabled'=>$enabled,'sortorder'=>$sort,'updated_at'=>TIME_NOW],"item_key='".$db->escape_string((string)$key)."'");
             }
         }
         af_advancedmenu_rebuild_cache();

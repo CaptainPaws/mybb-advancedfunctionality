@@ -29,6 +29,12 @@ function af_menu_containers(): array
     return ['main'=>'Основное меню', 'secondary'=>'Дополнительное меню', 'user_drawer'=>'Пользовательское меню'];
 }
 
+/** Drawer groups shared by providers and the ACP presentation controls. */
+function af_menu_sections(): array
+{
+    return ['profile'=>'Профиль', 'links'=>'Ссылки', 'settings'=>'Настройки'];
+}
+
 function af_menu_normalize_container(string $container): string
 {
     return ['top'=>'main', 'top_links'=>'main', 'panel'=>'user_drawer', 'panel_links'=>'user_drawer',
@@ -42,14 +48,16 @@ function af_menu_register_item(array $item): bool
     $key = strtolower(trim((string)($item['key'] ?? '')));
     if ($key === '' || !preg_match('~^[a-z][a-z0-9_]*$~', $key)) return false;
     $type = strtolower((string)($item['type'] ?? 'link'));
-    if (!in_array($type, ['link', 'modal', 'action/system'], true)) return false;
+    if (!in_array($type, ['link', 'modal', 'action/system', 'widget'], true)) return false;
     $item = array_merge(['key'=>$key, 'source_addon'=>'mybb', 'label'=>$key,
         'icon'=>'', 'type'=>$type, 'default_container'=>'panel_links',
         'default_sortorder'=>100, 'visibility'=>true, 'action'=>[],
-        'badge_provider'=>null, 'renderer'=>null, 'section'=>'links', 'allowed_containers'=>array_keys(af_menu_containers())], $item);
+        'badge_provider'=>null, 'renderer'=>null, 'widget_config'=>[], 'section'=>'links', 'allowed_containers'=>array_keys(af_menu_containers())], $item);
+    if ($type === 'widget' && !is_callable($item['renderer'])) return false;
     $item['key'] = $key; $item['type'] = $type;
     $item['default_sortorder'] = (int)$item['default_sortorder'];
     $item['default_container'] = af_menu_normalize_container((string)$item['default_container']);
+    $item['section'] = array_key_exists((string)$item['section'], af_menu_sections()) ? (string)$item['section'] : 'settings';
     $item['allowed_containers'] = array_values(array_intersect(array_keys(af_menu_containers()), (array)$item['allowed_containers']));
     if (!$item['allowed_containers']) $item['allowed_containers'] = [$item['default_container']];
     $GLOBALS['af_advancedmenu_system_registry'][$key] = $item;
@@ -70,6 +78,10 @@ function af_menu_register_core_items(): void
     af_menu_register_item(['key'=>'private_messages','label'=>'Личные сообщения','icon'=>'fa-solid fa-envelope','type'=>'link','section'=>'links','default_container'=>'user_drawer','default_sortorder'=>50,'visibility'=>$member,'action'=>['url'=>'private.php']]);
     af_menu_register_item(['key'=>'todays_posts','label'=>'Сообщения за сегодня','icon'=>'fa-solid fa-calendar-day','type'=>'link','section'=>'links','default_container'=>'user_drawer','default_sortorder'=>60,'visibility'=>$member,'action'=>['url'=>'search.php?action=getdaily']]);
     af_menu_register_item(['key'=>'logout','label'=>'Выйти','icon'=>'fa-solid fa-right-from-bracket','type'=>'action/system','section'=>'settings','default_container'=>'user_drawer','default_sortorder'=>100,'visibility'=>$member,'action'=>['url'=>'member.php?action=logout&amp;logoutkey='.$postKey]]);
+    af_menu_register_item(['key'=>'theme_switcher','label'=>'Тема','icon'=>'fa-solid fa-circle-half-stroke','type'=>'widget',
+        'section'=>'settings','default_container'=>'user_drawer','default_sortorder'=>80,'visibility'=>true,
+        'allowed_containers'=>['user_drawer'],'renderer'=>'af_advancedmenu_render_theme_widget',
+        'widget_config'=>['provider'=>'mybb_footer_theme_select']]);
     af_menu_register_item(['key'=>'modcp','label'=>'Mod CP','icon'=>'fa-solid fa-shield-halved','type'=>'link','default_container'=>'secondary','default_sortorder'=>80,'visibility'=>$mod,'action'=>['url'=>'modcp.php']]);
     af_menu_register_item(['key'=>'admincp','label'=>'Admin CP','icon'=>'fa-solid fa-screwdriver-wrench','type'=>'link','default_container'=>'secondary','default_sortorder'=>90,'visibility'=>$admin,'action'=>['url'=>'admin/index.php']]);
 }
@@ -119,7 +131,7 @@ function af_menu_ensure_registry_overrides(?array $registry = null): void
             continue; // Provider reloads must never overwrite administrator choices.
         }
         $db->insert_query(AF_AM_TABLE_OVERRIDES, ['item_key'=>$key, 'enabled'=>1,
-            'container'=>$item['default_container'], 'sortorder'=>(int)$item['default_sortorder'],
+            'container'=>$item['default_container'], 'section'=>(string)$item['section'], 'sortorder'=>(int)$item['default_sortorder'],
             'label_override'=>null, 'icon_override'=>null, 'created_at'=>TIME_NOW, 'updated_at'=>TIME_NOW]);
     }
 }
@@ -144,6 +156,8 @@ function af_menu_configured_registry(bool $ensure = true): array
         $item['container'] = af_menu_normalize_container((string)($o['container'] ?? $item['default_container']));
         if (!in_array($item['container'], $item['allowed_containers'], true)) $item['container'] = $item['default_container'];
         $item['sortorder'] = (int)($o['sortorder'] ?? $item['default_sortorder']);
+        $section = (string)($o['section'] ?? $item['section']);
+        $item['section'] = array_key_exists($section, af_menu_sections()) ? $section : $item['section'];
         if (($o['label_override'] ?? '') !== '') $item['label'] = $o['label_override'];
         if (($o['icon_override'] ?? '') !== '') $item['icon'] = $o['icon_override'];
     }
@@ -223,7 +237,7 @@ function af_advancedmenu_install_db(): void
 
     $db->write_query("CREATE TABLE IF NOT EXISTS `".TABLE_PREFIX.AF_AM_TABLE_OVERRIDES."` (
         `item_key` varchar(64) NOT NULL, `enabled` tinyint(1) NOT NULL DEFAULT 1,
-        `container` varchar(24) NOT NULL DEFAULT 'main', `sortorder` int NOT NULL DEFAULT 100,
+        `container` varchar(24) NOT NULL DEFAULT 'main', `section` varchar(24) NULL, `sortorder` int NOT NULL DEFAULT 100,
         `label_override` varchar(255) NULL, `icon_override` varchar(255) NULL,
         `created_at` int unsigned NOT NULL DEFAULT 0, `updated_at` int unsigned NOT NULL DEFAULT 0,
         PRIMARY KEY (`item_key`), KEY `idx_container_sort` (`container`,`sortorder`)
@@ -240,6 +254,9 @@ function af_advancedmenu_install_db(): void
         if (!$db->field_exists('container', AF_AM_TABLE_ITEMS)) {
             $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_ITEMS."` ADD COLUMN `container` varchar(24) NOT NULL DEFAULT 'main' AFTER `location`");
             $db->write_query("UPDATE `".TABLE_PREFIX.AF_AM_TABLE_ITEMS."` SET `container`=CASE WHEN `location`='panel' THEN 'user_drawer' ELSE 'main' END");
+        }
+        if (!$db->field_exists('section', AF_AM_TABLE_OVERRIDES)) {
+            $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_OVERRIDES."` ADD COLUMN `section` varchar(24) NULL AFTER `container`");
         }
     } else {
         // fallback (если внезапно нет field_exists) — не трогаем, чтобы не падать.
@@ -967,6 +984,7 @@ function af_advancedmenu_render_registry_item(array $item): string
     $label = htmlspecialchars_uni((string)$item['label']);
     $action = (array)($item['action'] ?? []);
     $type = (string)($item['type'] ?? 'link');
+    if ($type === 'widget') return af_advancedmenu_render_widget($item);
     $classes = 'af-am-link af-am-system-link';
     $attrs = '';
 
@@ -995,6 +1013,31 @@ function af_advancedmenu_render_registry_item(array $item): string
         .$icon.'<span class="af-am-title">'.$label.'</span>'.$badgeHtml.'</a></li>';
 }
 
+/**
+ * Render provider-owned interactive content without manufacturing an URL.
+ * Providers receive their registered item (including widget_config) and own
+ * the controls and persistence mechanism; AdvancedMenu owns only placement.
+ */
+function af_advancedmenu_render_widget(array $item): string
+{
+    $renderer = $item['renderer'] ?? null;
+    if (!is_callable($renderer)) return '';
+    $content = (string)$renderer($item);
+    if (trim($content) === '') return '';
+    $key = preg_replace('~[^a-z0-9_-]~i', '', (string)($item['key'] ?? 'widget'));
+    $label = htmlspecialchars_uni((string)($item['label'] ?? ''));
+    return '<li class="af-am-widget af-am-widget-'.$key.'" data-af-am-widget="'.$key.'">'
+        .($label !== '' ? '<div class="af-am-widget-label">'.$label.'</div>' : '')
+        .'<div class="af-am-widget-content">'.$content.'</div></li>';
+}
+
+/** Reuse MyBB's footer theme provider, including its real options and submit flow. */
+function af_advancedmenu_render_theme_widget(array $item = []): string
+{
+    global $theme_select;
+    return trim((string)($theme_select ?? ''));
+}
+
 /** Merge provider and custom items using the single ACP sort order. */
 function af_advancedmenu_build_container_html(string $container): string
 {
@@ -1015,7 +1058,7 @@ function af_advancedmenu_build_container_html(string $container): string
 /** Drawer sections are presentation metadata; items retain the global ACP order. */
 function af_advancedmenu_build_drawer_html(): string
 {
-    $sections = ['profile'=>'Профиль', 'links'=>'Ссылки', 'settings'=>'Настройки'];
+    $sections = af_menu_sections();
     $items = af_menu_configured_registry();
     $custom = af_advancedmenu_get_items();
     $out = '';
@@ -1027,7 +1070,8 @@ function af_advancedmenu_build_drawer_html(): string
             if (in_array((string)($item['key'] ?? ''), ['profile', 'logout'], true)) continue;
             if (($item['container'] ?? '') !== 'user_drawer' || ($item['section'] ?? 'links') !== $section
                 || empty($item['enabled']) || !af_menu_item_is_visible($item)) continue;
-            $rows[] = ['sort'=>(int)$item['sortorder'], 'key'=>(string)$item['key'], 'html'=>af_advancedmenu_render_registry_item($item)];
+            $html = af_advancedmenu_render_registry_item($item);
+            if ($html !== '') $rows[] = ['sort'=>(int)$item['sortorder'], 'key'=>(string)$item['key'], 'html'=>$html];
         }
         if ($section === 'links') foreach ($custom as $item) {
             if (af_menu_normalize_container((string)($item['container'] ?? $item['location'] ?? 'main')) !== 'user_drawer'
@@ -1099,6 +1143,7 @@ function af_advancedmenu_render_frontend_nav(): string
 
 function af_advancedmenu_install_frontend_nav(string &$page): void
 {
+    global $theme_select;
     if (strpos($page, 'data-af-am-navigation="1"') !== false) return;
 
     // The modal implementations bind to these stable IDs. Remove only their
@@ -1107,6 +1152,11 @@ function af_advancedmenu_install_frontend_nav(string &$page): void
     $page = (string)preg_replace('~<a\b[^>]*id=["\'](?:af_aas_trigger|af_aam_header_link)["\'][^>]*>.*?</a>~is', '', $page);
 
     $nav = af_advancedmenu_render_frontend_nav();
+    // MyBB.changeTheme() addresses the provider form by its stable id. Move
+    // that exact form into the drawer instead of cloning it into invalid DOM.
+    if (strpos($nav, 'data-af-am-widget="theme_switcher"') !== false && !empty($theme_select)) {
+        $page = str_replace((string)$theme_select, '', $page);
+    }
     $page = (string)preg_replace_callback('~<body\b([^>]*)>~i', static function (array $m) use ($nav): string {
         $attrs = $m[1];
         if (preg_match('~\bclass\s*=\s*(["\'])(.*?)\1~i', $attrs)) {
