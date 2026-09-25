@@ -1058,6 +1058,7 @@ function af_advinv_default_entity_filters(): array
         ['entity' => 'pets', 'code' => 'pets', 'title_ru' => 'Питомцы', 'title_en' => 'Pets', 'sortorder' => 20, 'match_json' => '{"tags":["pet","pets"],"kind":["pet"],"type":["pet"]}'],
         ['entity' => 'abilities', 'code' => 'spell', 'title_ru' => 'Заклинания', 'title_en' => 'Spells', 'sortorder' => 10, 'match_json' => '{"type":["spell"],"tags":["spell"]}'],
         ['entity' => 'abilities', 'code' => 'ritual', 'title_ru' => 'Ритуалы', 'title_en' => 'Rituals', 'sortorder' => 20, 'match_json' => '{"type":["ritual"],"tags":["ritual"]}'],
+        ['entity' => 'abilities', 'code' => 'talent', 'title_ru' => 'Таланты', 'title_en' => 'Talents', 'sortorder' => 30, 'match_json' => '{"kb_type":["arpg_talent"]}'],
     ];
 
     foreach (af_advinv_customization_filter_definitions() as $definition) {
@@ -1225,10 +1226,9 @@ function af_advinv_entity_filters_upgrade_schema(): void
             'updated_at' => TIME_NOW,
         ];
         $exists = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ENTITY_FILTERS, 'COUNT(*) AS c', "entity='{$entity}' AND code='{$code}'", ['limit' => 1]), 'c');
-        if ($exists > 0) {
-            $db->update_query(AF_ADVINV_TABLE_ENTITY_FILTERS, $payload, "entity='{$entity}' AND code='{$code}'");
-            continue;
-        }
+        // Defaults are seeds, not authoritative configuration. Never overwrite
+        // an administrator's enabled/title/order/matcher choices on ensure.
+        if ($exists > 0) continue;
         $db->insert_query(AF_ADVINV_TABLE_ENTITY_FILTERS, array_merge([
             'entity' => $entity,
             'code' => $code,
@@ -2815,9 +2815,11 @@ function af_advinv_match_filter_rule(array $rule, array $kbMeta): bool
         'kind' => af_advinv_collect_meta_values($kbMeta, ['rules.item_kind', 'rules.rules.item_kind', 'rules.item.item_kind', 'rules.item.kind', 'item_kind', 'kind']),
         'type' => af_advinv_collect_meta_values($kbMeta, ['rules.item.item_type', 'rules.item.type', 'item_type', 'type']),
         'tags' => af_advinv_collect_meta_values($kbMeta, ['rules.item.tags', 'tags']),
+        'kb_type' => af_advinv_collect_meta_values($kbMeta, ['kb_type', 'type']),
+        'subtype' => af_advinv_collect_meta_values($kbMeta, ['subtype', 'rules.subtype']),
     ];
 
-    foreach (['kind', 'type', 'tags'] as $field) {
+    foreach (['kind', 'type', 'tags', 'kb_type', 'subtype'] as $field) {
         if (!array_key_exists($field, $rule)) {
             continue;
         }
@@ -2897,11 +2899,16 @@ function af_inv_add_item(int $uid, array $item): int
     $metaJson = is_string($item['meta_json'] ?? null) ? (string)$item['meta_json'] : json_encode((array)($item['meta'] ?? []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $meta = @json_decode((string)$metaJson, true);
     $meta = is_array($meta) ? $meta : [];
+    // Make identity fields available to the same declarative matcher as KB
+    // metadata, without requiring them to be duplicated inside meta_json.
+    $meta['kb_type'] = $kbType;
+    if ($subtype !== '') $meta['subtype'] = $subtype;
 
     $equipmentKinds = ['weapon', 'armor', 'ammo', 'augmentations', 'consumable'];
-    if (af_advinv_is_spell_kb_type($kbType)) {
+    if (af_advinv_is_ability_like_kb_type($kbType)) {
         $entity = 'abilities';
         $slot = 'abilities';
+        if (mb_strtolower(trim($kbType)) === 'arpg_talent') $subtype = 'talent';
     }
     if ($slot === '') {
         $slot = $entity;

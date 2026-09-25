@@ -22,7 +22,7 @@ $jsPath = __DIR__ . '/../inc/plugins/advancedfunctionality/addons/knowledgebase/
 $jsSource = file_get_contents($jsPath);
 dynamic_controls_assert(is_string($jsSource), 'Unable to inspect knowledgebase.js');
 
-$seededEditor = dynamic_controls_function_source($jsSource, 'function renderSeededArrayEditor(', 'function renderRuleFields(');
+$seededEditor = dynamic_controls_function_source($jsSource, 'function renderSeededArrayEditor(', 'function renderPassiveEffectEditor(');
 $blocksEditor = dynamic_controls_function_source($jsSource, 'function renderBlocks()', 'function renderSimpleRules()');
 
 dynamic_controls_assert(substr_count($seededEditor, "className = 'af-kb-add'") === 1, 'Seeded array editor renders more than one Add control');

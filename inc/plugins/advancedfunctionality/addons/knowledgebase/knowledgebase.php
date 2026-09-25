@@ -174,6 +174,41 @@ function af_kb_arpg_character_stat_options(): array
     return $options;
 }
 
+function af_kb_arpg_character_stat_label(string $key): string
+{
+    $definition = af_kb_arpg_character_stat_registry()[trim($key)] ?? null;
+    return is_array($definition) ? (string)($definition['label'] ?? $key) : trim($key);
+}
+
+/** Shared passive-effect types consumed by every ARPG rules editor. */
+function af_kb_arpg_passive_effect_registry(): array
+{
+    return [
+        'stat_modifier' => 'Бонус к характеристике',
+        'damage_bonus' => 'Увеличение урона',
+        'damage_reduction' => 'Уменьшение получаемого урона',
+        'healing_bonus' => 'Бонус лечения',
+        'shield_bonus' => 'Бонус щита',
+        'status_apply' => 'Шанс наложения статуса',
+        'status_resistance' => 'Сопротивление статусам',
+        'resource_restore' => 'Восстановление ресурса',
+        'element_bonus' => 'Усиление элемента',
+        'immunity' => 'Иммунитет',
+        'conditional_bonus' => 'Условный бонус',
+        'triggered_effect' => 'Триггерный эффект',
+        'description' => 'Другое / описательный эффект',
+    ];
+}
+
+function af_kb_arpg_passive_effect_options(): array
+{
+    $options = [];
+    foreach (af_kb_arpg_passive_effect_registry() as $key => $label) {
+        $options[] = ['value' => $key, 'label' => $label];
+    }
+    return $options;
+}
+
 /**
  * Adapts mechanical Origin schema fields to the canonical keys consumed by
  * Character Sheets. The Origin defaults below remain the source of truth: a
@@ -3000,6 +3035,27 @@ function af_kb_get_arpg_mechanics_options(string $entryKey, string $serviceKind 
     } elseif ($entry === null) {
         $rows = af_kb_arpg_mechanics_options_fallback($entryKey);
     }
+    // status_def/resource_def/trigger_template/condition_template are also
+    // valid standalone mechanics entries. Expose their real machine keys when
+    // an aggregate option-set entry is not installed.
+    if (!$rows && in_array($resolvedServiceKind, ['status_def', 'resource_def', 'trigger_template', 'condition_template'], true)) {
+        global $db;
+        if ($db->table_exists('af_kb_entries')) {
+            $query = $db->simple_select('af_kb_entries', '`key`,title_ru,title_en,data_json', "type='arpg_mechanics' AND active=1", ['order_by' => 'sortorder, `key`', 'order_dir' => 'ASC']);
+            while ($mechanicRow = $db->fetch_array($query)) {
+                $mechanicPayload = af_kb_decode_json((string)($mechanicRow['data_json'] ?? '{}'));
+                $mechanicRules = is_array($mechanicPayload['rules'] ?? null) ? $mechanicPayload['rules'] : [];
+                if ((string)($mechanicRules['service_kind'] ?? '') !== $resolvedServiceKind) continue;
+                $rows[] = [
+                    'key' => (string)($mechanicRow['key'] ?? ''),
+                    'label_ru' => (string)($mechanicRow['title_ru'] ?? ''),
+                    'label_en' => (string)($mechanicRow['title_en'] ?? ''),
+                    'sortorder' => (int)($mechanicRules['sortorder'] ?? 0),
+                    'is_active' => 1,
+                ];
+            }
+        }
+    }
     $normalizedRows = [];
     foreach ((array)$rows as $idx => $row) {
         $normalized = af_kb_normalize_arpg_mechanics_entry_row_by_service_kind($row, $resolvedServiceKind, $idx + 1);
@@ -4362,10 +4418,11 @@ function af_kb_get_type_schema_arpg(string $typeKey): array
 
     // Runtime-owned contract fields must not depend on a possibly stale
     // ui_schema_json persisted when the type was first installed.
-    if ($typeKey === AF_KB_TYPE_ORIGIN_VARIANT) {
+    if (in_array($typeKey, [AF_KB_TYPE_ORIGIN_VARIANT, 'arpg_origin', 'arpg_archetype', 'arpg_talent', 'arpg_item', 'arpg_ability'], true)) {
         $schema['modifier_stat_options'] = af_kb_arpg_character_stat_options();
         $schema['modifier_operations'] = af_kb_arpg_origin_modifier_operations();
     }
+    $schema['passive_effect_options'] = af_kb_arpg_passive_effect_options();
 
     return $schema;
 }
@@ -8997,7 +9054,10 @@ function af_kb_render_inline_ability_effect_row(array $effect, bool $isRu): stri
     $duration = af_kb_arpg_inline_number($effect['duration_value'] ?? $effect['duration'] ?? '');
     $durationUnit = af_kb_get_arpg_mechanics_option_label('combat_duration_unit', (string)($effect['duration_unit'] ?? ''), $isRu);
     $statusKey = af_kb_get_arpg_mechanics_option_label('status_def', (string)($effect['status_key'] ?? ''), $isRu);
-    $statKey = af_kb_character_stat_label((string)($effect['stat_key'] ?? ''), $isRu);
+    $rawStatKey = (string)($effect['stat_key'] ?? '');
+    $statKey = isset(af_kb_arpg_character_stat_registry()[$rawStatKey])
+        ? af_kb_arpg_character_stat_label($rawStatKey)
+        : af_kb_character_stat_label($rawStatKey, $isRu);
     $resourceKey = af_kb_get_arpg_mechanics_option_label('ability_resource', (string)($effect['resource_key'] ?? ''), $isRu);
     $operation = af_kb_get_arpg_mechanics_option_label('ability_effect_operation', (string)($effect['operation'] ?? ''), $isRu);
     $element = af_kb_character_profile_resolved_value('character_element', (string)($effect['element'] ?? ''), $isRu);

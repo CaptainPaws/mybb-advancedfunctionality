@@ -619,7 +619,7 @@ function af_charactersheets_arpg_build_effect_lines(array $ability): array
             $parts[] = function_exists('af_kb_get_arpg_mechanics_option_label') ? af_kb_get_arpg_mechanics_option_label($spec[1], $raw, true) : $raw;
         }
         $statKey = trim((string)($effect['stat_key'] ?? ''));
-        if ($statKey !== '') $parts[] = function_exists('af_kb_character_stat_label') ? af_kb_character_stat_label($statKey, true) : $statKey;
+        if ($statKey !== '') $parts[] = function_exists('af_kb_arpg_character_stat_label') ? af_kb_arpg_character_stat_label($statKey) : (function_exists('af_kb_character_stat_label') ? af_kb_character_stat_label($statKey, true) : $statKey);
         $element = trim((string)($effect['element'] ?? ''));
         if ($element !== '') $parts[] = function_exists('af_kb_character_profile_resolved_value') ? af_kb_character_profile_resolved_value('character_element', $element, true) : $element;
         $duration = trim((string)($effect['duration_value'] ?? ''));
@@ -1148,6 +1148,11 @@ function af_charactersheets_arpg_apply_origin_variant_modifiers(array $stats, ar
         'attack_power_per_level' => ['character_attack_power', true],
         'elemental_mastery_per_level' => ['character_elemental_mastery', true],
     ];
+    if (function_exists('af_kb_arpg_character_stat_registry')) {
+        foreach (af_kb_arpg_character_stat_registry() as $registryKey => $definition) {
+            if (!empty($definition['vm_field'])) $targets[(string)$registryKey] = [(string)$definition['vm_field'], false];
+        }
+    }
     foreach ((array)($rules['modifiers'] ?? []) as $modifier) {
         if (!is_array($modifier) || !in_array((string)($modifier['mode'] ?? 'flat'), ['flat', 'percent'], true) || !is_numeric($modifier['value'] ?? null)) {
             continue;
