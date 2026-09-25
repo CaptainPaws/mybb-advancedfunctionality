@@ -329,11 +329,18 @@ function af_charactersheets_arpg_format_kb_item(string $kb_type, string $kb_key,
     ];
 }
 
-function af_charactersheets_arpg_collect_equipment_items(array $build): array
+function af_charactersheets_arpg_live_equipment_state(int $uid): array
+{
+    if ($uid <= 0 || !function_exists('af_advinv_export_charactersheet_equipment_state')) {
+        return ['items' => [], 'equipped' => [], 'groups' => []];
+    }
+    return (array)af_advinv_export_charactersheet_equipment_state($uid);
+}
+
+function af_charactersheets_arpg_collect_equipment_items(array $build, int $uid = 0): array
 {
     $result = [];
-    $slots = (array)($build['equipment']['slots'] ?? []);
-    foreach ($slots as $slot_code => $slot_item) {
+    foreach ((array)(af_charactersheets_arpg_live_equipment_state($uid)['equipped'] ?? []) as $slot_code => $slot_item) {
         if (!is_array($slot_item)) {
             continue;
         }
@@ -349,10 +356,11 @@ function af_charactersheets_arpg_collect_equipment_items(array $build): array
     return $result;
 }
 
-function af_charactersheets_arpg_collect_equipment_rule_sources(array $build): array
+function af_charactersheets_arpg_collect_equipment_rule_sources(array $build, int $uid = 0): array
 {
     $sources = [];
-    foreach ((array)($build['equipment']['slots'] ?? []) as $slotItem) {
+    $weaponResolved = false;
+    foreach ((array)(af_charactersheets_arpg_live_equipment_state($uid)['equipped'] ?? []) as $slotCode => $slotItem) {
         if (!is_array($slotItem)) {
             continue;
         }
@@ -361,9 +369,19 @@ function af_charactersheets_arpg_collect_equipment_rule_sources(array $build): a
         if ($type === '' || $key === '') {
             continue;
         }
+        $isWeapon = (string)($slotItem['subtype'] ?? '') === 'weapon' || strpos((string)$slotCode, 'weapon_') === 0;
+        // ARPG has one weapon. Legacy Inventory slot codes remain storage details,
+        // but never turn into five simultaneously active weapon sources.
+        if ($isWeapon && $weaponResolved) {
+            continue;
+        }
+        if ($isWeapon) {
+            $weaponResolved = true;
+        }
         $entry = af_charactersheets_kb_get_entry($type, $key);
         $rules = af_charactersheets_arpg_extract_entry_rules($entry);
         if ($rules) {
+            $rules['_equipment_slot'] = (string)$slotCode;
             $sources[] = $rules;
         }
     }
@@ -1278,10 +1296,9 @@ function af_charactersheets_arpg_resolve_profile_option(array $atf_index, string
     ];
 }
 
-function af_charactersheets_arpg_collect_weapon_data(array $build): array
+function af_charactersheets_arpg_collect_weapon_data(array $build, int $uid = 0): array
 {
-    $slots = (array)($build['equipment']['slots'] ?? []);
-    $active_weapon_slot = (string)((array)($build['equipment'] ?? [])['active_weapon_slot'] ?? '');
+    $slots = (array)(af_charactersheets_arpg_live_equipment_state($uid)['equipped'] ?? []);
     $weapon_slots = ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged'];
     $variants = [];
     $active = [];
@@ -1317,7 +1334,7 @@ function af_charactersheets_arpg_collect_weapon_data(array $build): array
         ];
         $variants[] = $variant;
 
-        if ($active_weapon_slot !== '' && $slot_code === $active_weapon_slot) {
+        if (!$active) {
             $active = $variant;
         }
     }
@@ -1329,10 +1346,9 @@ function af_charactersheets_arpg_collect_weapon_data(array $build): array
     return ['active' => $active, 'variants' => $variants];
 }
 
-function af_charactersheets_arpg_collect_artifacts_data(array $build): array
+function af_charactersheets_arpg_collect_artifacts_data(array $build, int $uid = 0): array
 {
-    $slots = (array)($build['equipment']['slots'] ?? []);
-    $inventory = (array)($build['inventory']['items'] ?? []);
+    $slots = (array)(af_charactersheets_arpg_live_equipment_state($uid)['equipped'] ?? []);
     $result = [];
 
     $appendArtifact = static function (array $item, string $source) use (&$result): void {
@@ -1375,17 +1391,10 @@ function af_charactersheets_arpg_collect_artifacts_data(array $build): array
         }
         $appendArtifact($slotItem, 'slot:' . $slotCode);
     }
-    foreach ($inventory as $item) {
-        if (!is_array($item)) {
-            continue;
-        }
-        $appendArtifact($item, 'inventory');
-    }
-
     return $result;
 }
 
-function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_view, array $atf_index, array $build = [], array $character_source = []): array
+function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_view, array $atf_index, array $build = [], array $character_source = [], int $uid = 0): array
 {
     global $mybb;
 
@@ -1398,7 +1407,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $mechanics = (array)($sheet_view['mechanics'] ?? []);
     $resources = (array)($sheet_view['character_computed_state']['resources'] ?? []);
     $resistances = (array)($sheet_view['character_computed_state']['resistances'] ?? []);
-    $equipment_items = af_charactersheets_arpg_collect_equipment_items($build);
+    $equipment_items = af_charactersheets_arpg_collect_equipment_items($build, $uid);
     $inventory_items = af_charactersheets_arpg_collect_inventory_items($build);
     $abilities_items = [];
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
@@ -1446,9 +1455,13 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     }
     $archetypeResolved = af_charactersheets_arpg_resolve_kb_entry_flexible('arpg_archetype', $rawArchetype);
     $archetypeRules = af_charactersheets_arpg_extract_entry_rules((array)($archetypeResolved['entry'] ?? []));
-    $equipmentRuleSources = af_charactersheets_arpg_collect_equipment_rule_sources($build);
-    $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level, $originVariantRules, $equipmentRuleSources);
+    $equipmentRuleSources = af_charactersheets_arpg_collect_equipment_rule_sources($build, $uid);
+    $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level, $originVariantRules);
     $character_stats = af_charactersheets_arpg_merge_runtime_stats($character_stats, $computedKbStats);
+    // Canonical character payloads may already contain non-zero base totals.
+    // Apply live equipment afterwards so those payload values cannot mask item
+    // modifiers and Inventory changes are reflected without rewriting build_json.
+    $character_stats = af_charactersheets_arpg_apply_equipment_rules($character_stats, $equipmentRuleSources);
     $ruleCollections = af_charactersheets_arpg_merge_rule_collections(
         ['resources' => $resources, 'resistances' => $resistances],
         array_merge([$originRules, $originVariantRules, $archetypeRules], $equipmentRuleSources)
@@ -1477,8 +1490,8 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $wallet_display = function_exists('af_balance_format_credits') ? af_balance_format_credits($wallet_raw) : number_format($wallet_raw / 100, 2, '.', ' ');
     $ability_tokens_display = function_exists('af_balance_format_ability_tokens') ? af_balance_format_ability_tokens($ability_tokens_raw) : number_format($ability_tokens_raw / 100, 2, '.', ' ');
     $ability_symbol = (string)($mybb->settings['af_balance_ability_tokens_symbol'] ?? '♦');
-    $weapon = af_charactersheets_arpg_collect_weapon_data($build);
-    $artifacts = af_charactersheets_arpg_collect_artifacts_data($build);
+    $weapon = af_charactersheets_arpg_collect_weapon_data($build, $uid);
+    $artifacts = af_charactersheets_arpg_collect_artifacts_data($build, $uid);
     $activeAbilities = [];
     if ($has_kb_character) {
         foreach ($character_abilities as $ability) {
@@ -1929,91 +1942,87 @@ function af_charactersheets_arpg_render_talent_tree_html(array $sheet_arpg_vm, b
     return $html;
 }
 
+function af_charactersheets_arpg_render_item_detail(array $entry, array $rules): string
+{
+    $html = af_charactersheets_kb_get_block_html($entry, 'description')
+        . af_charactersheets_kb_get_block_html($entry, 'bonuses')
+        . af_charactersheets_kb_get_block_html($entry, 'effects');
+    $detailRules = [];
+    foreach (['base_stats', 'modifiers', 'effects', 'passive_effects', 'weapon', 'artifact'] as $key) {
+        if (!empty($rules[$key])) {
+            $detailRules[$key] = $rules[$key];
+        }
+    }
+    if ($detailRules) {
+        $json = af_charactersheets_json_encode($detailRules);
+        $html .= function_exists('af_kb_render_tech_details')
+            ? af_kb_render_tech_details('Характеристики и эффекты', $json)
+            : '<details><summary>Характеристики и эффекты</summary><pre>' . htmlspecialchars_uni($json) . '</pre></details>';
+    }
+    return $html;
+}
+
 function af_charactersheets_build_arpg_equipment_html(array $build, bool $can_edit, int $uid = 0): string
 {
-    $state = $uid > 0 && function_exists('af_advinv_export_charactersheet_equipment_state')
-        ? af_advinv_export_charactersheet_equipment_state($uid)
-        : ['items' => [], 'equipped' => []];
-    $slot_labels = af_inv_equipment_slots();
-    $cards = [];
-    $equipped = [];
-    foreach ((array)($state['equipped'] ?? []) as $slotCode => $slotItem) {
-        if (!is_array($slotItem) || empty($slotItem['item_id'])) {
-            continue;
-        }
-        $equipped[(int)$slotItem['item_id']] = (string)$slotCode;
-    }
-
-    $renderCard = static function (array $item, string $equippedSlot = '') use ($slot_labels): string {
+    $state = af_charactersheets_arpg_live_equipment_state($uid);
+    $renderCard = static function (array $item, string $slotCode, bool $compact = false): string {
         $itemId = (int)($item['id'] ?? $item['item_id'] ?? 0);
         $title = htmlspecialchars_uni((string)($item['title'] ?? 'Предмет'));
         $icon = htmlspecialchars_uni((string)($item['icon'] ?? ''));
-        $desc = htmlspecialchars_uni(trim((string)($item['description'] ?? $item['short_description'] ?? 'Без описания')));
-        $candidateSlots = array_values(array_unique(array_filter(array_map('strval', (array)($item['candidate_slots'] ?? [])))));
-        $defaultSlot = (string)($candidateSlots[0] ?? '');
-        $kind = trim((string)($item['subtype'] ?? 'gear'));
-        if ($kind === 'artifact') {
-            $kind = 'gear';
+        $entry = af_charactersheets_kb_get_entry((string)($item['kb_type'] ?? ''), (string)($item['kb_key'] ?? ''));
+        $rules = af_charactersheets_arpg_extract_entry_rules($entry);
+        $rarity = trim((string)($rules['rarity'] ?? ($rules['item']['rarity'] ?? '')));
+        $subtype = trim((string)($rules['subtype'] ?? $rules['item_kind'] ?? ($item['subtype'] ?? '')));
+        $stats = [];
+        foreach (array_merge((array)($rules['base_stats'] ?? []), (array)($rules['modifiers'] ?? [])) as $stat) {
+            if (!is_array($stat)) continue;
+            $key = trim((string)($stat['stat_key'] ?? $stat['key'] ?? ''));
+            $value = $stat['value'] ?? null;
+            if ($key !== '' && is_numeric($value)) $stats[] = $key . ' ' . ((float)$value >= 0 ? '+' : '') . $value;
+            if (count($stats) >= 2) break;
         }
-        if (!in_array($kind, ['armor', 'weapon', 'ammo', 'consumable', 'gear'], true)) {
-            $kind = 'gear';
-        }
-        $slotOptions = '';
-        foreach ($candidateSlots as $slotCode) {
-            $slotOptions .= '<option value="' . htmlspecialchars_uni($slotCode) . '">' . htmlspecialchars_uni((string)($slot_labels[$slotCode] ?? $slotCode)) . '</option>';
-        }
-        return '<article class="af-cs-arpg-equip-card' . ($equippedSlot !== '' ? ' is-equipped' : '') . '" data-afcs-equipment-card="1" data-afcs-equipment-filter-kind="' . htmlspecialchars_uni($kind) . '" data-afcs-equipment-item-id="' . $itemId . '" data-afcs-equipment-candidate-slots="' . htmlspecialchars_uni(implode(',', $candidateSlots)) . '" data-afcs-equipment-default-slot="' . htmlspecialchars_uni($defaultSlot) . '">'
+        $detail = af_charactersheets_arpg_render_item_detail($entry, $rules);
+        return '<article class="af-cs-arpg-equip-card' . ($compact ? ' af-cs-arpg-equip-card--support' : '') . ' is-equipped" data-afcs-equipment-card="1" data-afcs-equipment-item-id="' . $itemId . '">'
             . '<div class="af-cs-arpg-equip-card__inner">'
             . '<div class="af-cs-arpg-equip-card__face af-cs-arpg-equip-card__face--front">'
             . ($icon !== '' ? '<img src="' . $icon . '" alt="' . $title . '" loading="lazy" />' : '<div class="af-cs-arpg-equip-card__empty"></div>')
             . '<h4>' . $title . '</h4>'
-            . '<div class="af-cs-muted">' . htmlspecialchars_uni(mb_strtoupper($kind)) . ($equippedSlot !== '' ? ' • Надето' : '') . '</div>'
+            . '<div class="af-cs-arpg-equip-card__chips">' . ($rarity !== '' ? '<span>' . htmlspecialchars_uni($rarity) . '</span>' : '')
+            . implode('', array_map(static function ($stat): string { return '<span>' . htmlspecialchars_uni($stat) . '</span>'; }, $stats)) . '</div>'
             . '</div>'
             . '<div class="af-cs-arpg-equip-card__face af-cs-arpg-equip-card__face--back">'
             . '<h4>' . $title . '</h4>'
-            . '<div class="af-cs-arpg-equip-card__desc">' . $desc . '</div>'
+            . '<div class="af-cs-arpg-equip-card__meta"><span>' . htmlspecialchars_uni($subtype) . '</span><span>' . htmlspecialchars_uni($slotCode) . '</span>' . ($rarity !== '' ? '<span>' . htmlspecialchars_uni($rarity) . '</span>' : '') . '</div>'
+            . '<div class="af-cs-arpg-equip-card__desc">' . $detail . '</div>'
             . '</div>'
             . '</div>'
-            . '<div class="af-cs-arpg-equip-card__actions" data-afcs-arpg-edit-only="1">'
-            . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-arpg-flip="1">Перевернуть</button>'
-            . ($equippedSlot !== ''
-                ? '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-unequip="1" data-afcs-equipment-slot="' . htmlspecialchars_uni($equippedSlot) . '">Снять</button>'
-                : (($slotOptions !== '' ? '<select data-afcs-equipment-slot-select="1">' . $slotOptions . '</select>' : '')
-                    . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-equip="1" data-afcs-equipment-item-id="' . $itemId . '" data-afcs-equipment-slot-default="' . htmlspecialchars_uni($defaultSlot) . '">Надеть</button>'))
-            . '</div>'
+            . '<button type="button" class="af-cs-btn af-cs-btn--ghost af-cs-arpg-equip-card__info" data-afcs-arpg-flip="1">Инфо</button>'
             . '</article>';
     };
 
-    $activeWeaponHtml = '<div class="af-cs-muted">Оружие не экипировано</div>';
+    $weaponHtml = '<div class="af-cs-arpg-equip-empty">Оружие не экипировано</div>';
+    $equipmentCards = '';
     foreach ((array)($state['equipped'] ?? []) as $slotCode => $slotItem) {
-        if (!is_array($slotItem) || empty($slotItem['item_id']) || strpos((string)$slotCode, 'weapon_') !== 0) {
+        if (!is_array($slotItem) || empty($slotItem['item_id']) || strpos((string)$slotCode, 'support_') === 0) continue;
+        if ((string)($slotItem['subtype'] ?? '') === 'weapon' || strpos((string)$slotCode, 'weapon_') === 0) {
+            if (strpos($weaponHtml, 'equip-empty') !== false) $weaponHtml = $renderCard($slotItem, (string)$slotCode);
             continue;
         }
-        $activeWeaponHtml = $renderCard($slotItem, (string)$slotCode);
-        break;
+        $equipmentCards .= $renderCard($slotItem, (string)$slotCode);
+    }
+    if ($equipmentCards === '') $equipmentCards = '<div class="af-cs-arpg-equip-empty">Артефакты и броня не экипированы</div>';
+    $supportCards = '';
+    foreach (['support_1', 'support_2', 'support_3', 'support_4'] as $slotCode) {
+        $slotItem = (array)(($state['equipped'] ?? [])[$slotCode] ?? []);
+        $supportCards .= $slotItem ? $renderCard($slotItem, $slotCode, true)
+            : '<div class="af-cs-arpg-support-empty"><span>' . htmlspecialchars_uni(substr($slotCode, -1)) . '</span></div>';
     }
 
-    $artifactsCards = '';
-    foreach ((array)($state['items'] ?? []) as $item) {
-        if (!is_array($item)) {
-            continue;
-        }
-        $slot = (string)($equipped[(int)($item['id'] ?? 0)] ?? '');
-        $cards[] = $renderCard($item, $slot);
-        $subtype = (string)($item['subtype'] ?? '');
-        if ($subtype === 'artifact' && $slot !== '') {
-            $artifactsCards .= $renderCard($item, $slot);
-        }
-    }
-
-    $cardsHtml = $cards ? implode('', $cards) : '<div class="af-cs-muted">Нет предметов экипировки.</div>';
-    $artifactsHtml = $artifactsCards !== '' ? $artifactsCards : '<div class="af-cs-muted">Артефакты не надеты.</div>';
-
-    return '<div class="af-cs-arpg-equipment" data-afcs-arpg-equipment-root="1" data-afcs-equipment-can-edit="' . ($can_edit ? '1' : '0') . '">'
-        . '<section class="af-cs-arpg-panel"><div class="af-cs-arpg-equip-head"><h2>Активная экипировка</h2>'
-        . ($can_edit ? '<button type="button" class="af-cs-attrs__gear" data-afcs-arpg-edit-toggle="1" aria-label="Редактировать экипировку"><i class="fa-solid fa-gear" aria-hidden="true"></i></button>' : '')
-        . '</div><div class="af-cs-arpg-equip-grid">' . $activeWeaponHtml . $artifactsHtml . '</div></section>'
-        . '<section class="af-cs-arpg-panel af-cs-arpg-equip-manage" data-afcs-arpg-equip-manage="1" hidden><h2>Управление экипировкой</h2><div class="af-cs-arpg-equip-grid">' . $cardsHtml . '</div></section>'
+    return '<div class="af-cs-arpg-equipment" data-afcs-arpg-equipment-root="1" data-afcs-equipment-can-edit="0">'
+        . '<section class="af-cs-arpg-panel"><div class="af-cs-arpg-equip-head"><h2>Оружие и экипировка</h2>'
+        . ($can_edit ? '<a class="af-cs-btn af-cs-btn--ghost" href="inventory.php?uid=' . $uid . '">Открыть инвентарь</a>' : '')
+        . '</div><div class="af-cs-arpg-equip-grid">' . $weaponHtml . $equipmentCards . '</div></section>'
+        . '<section class="af-cs-arpg-panel"><h2>Быстрые слоты</h2><div class="af-cs-arpg-support-grid">' . $supportCards . '</div></section>'
         . '</div>';
 }
 
@@ -2242,7 +2251,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $sheet_arpg_achievements_block_html = '';
 
     if ($is_arpg_sheet) {
-        $sheet_arpg_vm = af_charactersheets_build_arpg_view_model($sheet, $sheet_view, $atf_index, $build, $character_source);
+        $sheet_arpg_vm = af_charactersheets_build_arpg_view_model($sheet, $sheet_view, $atf_index, $build, $character_source, $sheet_owner_uid_for_loadout);
         $sheet_arpg_vm_json = htmlspecialchars_uni(af_charactersheets_json_encode($sheet_arpg_vm));
 
         $sheet_arpg_combat = (array)($sheet_arpg_vm['combat'] ?? []);
