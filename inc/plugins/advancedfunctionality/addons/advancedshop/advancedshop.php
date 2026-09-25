@@ -2580,6 +2580,13 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
 {
     global $db;
     af_advancedshop_ensure_inventory_grant_available($uid);
+    if (af_advancedshop_normalize_kb_type((string)($item['kb_type'] ?? '')) === 'arpg_talent'
+        && defined('AF_ADVINV_TABLE_ITEMS') && $db->table_exists(AF_ADVINV_TABLE_ITEMS)) {
+        $talentKey = trim((string)($item['kb_key'] ?? ''));
+        $exists = $db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ITEMS, 'id', "uid={$uid} AND entity='abilities' AND subtype='talent' AND kb_type='arpg_talent' AND kb_key='" . $db->escape_string($talentKey) . "' AND qty>0", ['limit' => 1]), 'id');
+        if ((int)$exists > 0) throw new RuntimeException('Этот уникальный талант уже принадлежит персонажу.');
+        $item['qty'] = 1;
+    }
     af_advancedshop_inv_debug('grant_stage', ['step' => 'before_legacy_grant', 'uid' => $uid]);
     af_advancedshop_grant_legacy_inventory_bypass($uid, $item);
 
@@ -3273,6 +3280,7 @@ function af_advancedshop_manage_slot_create(): void
 
     $priceMinor = af_advancedshop_money_to_minor((string)$mybb->get_input('price'));
     $currency = af_advancedshop_normalize_currency_slug((string)$mybb->get_input('currency'));
+    if (af_advancedshop_normalize_kb_type((string)$sourcePayload['kb_type']) === 'arpg_talent') $currency = 'ability_tokens';
 
     $slotId = (int)$db->insert_query('af_shop_slots', [
         'shop_id' => (int)$shop['shop_id'],
@@ -3285,7 +3293,7 @@ function af_advancedshop_manage_slot_create(): void
         'price' => $priceMinor,
         'currency' => $db->escape_string($currency),
         'stock' => (int)$mybb->get_input('stock', MyBB::INPUT_INT),
-        'limit_per_user' => max(0, (int)$mybb->get_input('limit_per_user', MyBB::INPUT_INT)),
+        'limit_per_user' => af_advancedshop_normalize_kb_type((string)$sourcePayload['kb_type']) === 'arpg_talent' ? 1 : max(0, (int)$mybb->get_input('limit_per_user', MyBB::INPUT_INT)),
         'enabled' => (int)$mybb->get_input('enabled') ? 1 : 0,
         'sortorder' => (int)$mybb->get_input('sortorder', MyBB::INPUT_INT),
         'meta_json' => $db->escape_string((string)$mybb->get_input('meta_json')),
@@ -3349,9 +3357,9 @@ function af_advancedshop_manage_slot_update(): void
         'kb_id' => (int)$sourcePayload['kb_id'],
         'kb_key' => $db->escape_string((string)$sourcePayload['kb_key']),
         'price' => $priceMinor,
-        'currency' => $db->escape_string(af_advancedshop_normalize_currency_slug((string)($mybb->get_input('currency') ?: $slot['currency']))),
+        'currency' => $db->escape_string(af_advancedshop_normalize_kb_type((string)$sourcePayload['kb_type']) === 'arpg_talent' ? 'ability_tokens' : af_advancedshop_normalize_currency_slug((string)($mybb->get_input('currency') ?: $slot['currency']))),
         'stock' => (int)$mybb->get_input('stock', MyBB::INPUT_INT),
-        'limit_per_user' => max(0, (int)$mybb->get_input('limit_per_user', MyBB::INPUT_INT)),
+        'limit_per_user' => af_advancedshop_normalize_kb_type((string)$sourcePayload['kb_type']) === 'arpg_talent' ? 1 : max(0, (int)$mybb->get_input('limit_per_user', MyBB::INPUT_INT)),
         'enabled' => (int)$mybb->get_input('enabled') ? 1 : 0,
         'sortorder' => (int)$mybb->get_input('sortorder', MyBB::INPUT_INT),
     ];

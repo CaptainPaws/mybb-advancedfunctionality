@@ -1302,10 +1302,20 @@
           var canEditTalents = tree.getAttribute('data-afcs-arpg-can-edit') === '1';
           tree.querySelectorAll('[data-afcs-arpg-talent-node]').forEach(function (node) {
             node.addEventListener('click', function () {
-              if (node.classList.contains('is-owned')) return;
-              if (!canEditTalents) return;
-              if (!window.confirm('Установить купленный талант в этот узел?')) return;
-              node.classList.add('is-owned');
+              var title = node.querySelector('span');
+              var detail = node.getAttribute('title') || 'Описание не указано.';
+              if (!node.classList.contains('is-owned')) {
+                window.alert((title ? title.textContent + '\n\n' : '') + detail + '\n\nТалант не куплен. Приобретите его в Advanced Shop.');
+                return;
+              }
+              if (!canEditTalents) { window.alert(detail); return; }
+              var active = node.getAttribute('data-afcs-arpg-talent-active') === '1';
+              var prompt = active ? 'Снять этот талант?' : 'Установить талант в слот ' + (node.getAttribute('data-afcs-arpg-talent-slot') || 'passive') + '?';
+              if (!window.confirm(prompt + '\n\n' + detail)) return;
+              afCsAjax(active ? 'unequip_talent' : 'equip_talent', {
+                key: node.getAttribute('data-afcs-arpg-talent-id') || '',
+                slot: node.getAttribute('data-afcs-arpg-talent-slot') || ''
+              }).then(function () { window.location.reload(); });
             });
           });
         });

@@ -388,6 +388,63 @@ function af_charactersheets_arpg_collect_equipment_rule_sources(array $build, in
     return $sources;
 }
 
+/** Live Inventory is the ownership ledger; the sheet stores only active slots. */
+function af_charactersheets_arpg_talent_state(array $build, int $uid): array
+{
+    global $db;
+    $owned = [];
+    if ($uid > 0 && $db->table_exists('af_advinv_items')) {
+        $q = $db->simple_select('af_advinv_items', 'id,kb_key,qty', "uid={$uid} AND entity='abilities' AND subtype='talent' AND kb_type='arpg_talent' AND qty>0");
+        while ($row = $db->fetch_array($q)) {
+            $key = trim((string)$row['kb_key']);
+            if ($key !== '') $owned[$key] = ['item_id' => (int)$row['id'], 'qty' => (int)$row['qty']];
+        }
+    }
+    $slots = [];
+    foreach ((array)af_charactersheets_deep_get($build, 'talents.slots', []) as $slot => $key) {
+        $slot = trim((string)$slot); $key = trim((string)$key);
+        if ($slot !== '' && $key !== '' && isset($owned[$key])) $slots[$slot] = $key;
+    }
+    return ['owned' => $owned, 'slots' => $slots];
+}
+
+function af_charactersheets_arpg_talent_catalog(): array
+{
+    global $db;
+    if (!$db->table_exists('af_kb_entries')) return [];
+    $rows = [];
+    $q = $db->simple_select('af_kb_entries', '*', "type='arpg_talent' AND active=1", ['order_by' => 'sortorder,id', 'order_dir' => 'ASC']);
+    while ($entry = $db->fetch_array($q)) {
+        $key = trim((string)($entry['key'] ?? ''));
+        if ($key === '') continue;
+        $rules = af_charactersheets_arpg_extract_entry_rules($entry);
+        $rows[$key] = ['key' => $key, 'entry' => $entry, 'rules' => $rules];
+    }
+    return $rows;
+}
+
+function af_charactersheets_arpg_talent_prerequisite_keys(array $rules): array
+{
+    $keys = [];
+    foreach ((array)($rules['requirements'] ?? []) as $requirement) {
+        $key = is_array($requirement) ? trim((string)($requirement['talent_key'] ?? $requirement['key'] ?? $requirement['id'] ?? '')) : trim((string)$requirement);
+        $kind = is_array($requirement) ? trim((string)($requirement['type'] ?? $requirement['kind'] ?? 'talent')) : 'talent';
+        if ($key !== '' && in_array($kind, ['', 'talent', 'prerequisite'], true)) $keys[$key] = $key;
+    }
+    return array_values($keys);
+}
+
+function af_charactersheets_arpg_collect_talent_rule_sources(array $build, int $uid): array
+{
+    $state = af_charactersheets_arpg_talent_state($build, $uid);
+    $sources = [];
+    foreach ($state['slots'] as $key) {
+        $rules = af_charactersheets_arpg_extract_entry_rules(af_charactersheets_kb_get_entry('arpg_talent', $key));
+        if ($rules) $sources[] = $rules;
+    }
+    return $sources;
+}
+
 function af_charactersheets_arpg_collect_inventory_items(array $build): array
 {
     $result = [];
@@ -1076,7 +1133,12 @@ function af_charactersheets_arpg_apply_origin_variant_modifiers(array $stats, ar
         'def' => ['character_defense', false],
         'atk' => ['character_attack_power', false],
         'speed' => ['character_speed', false],
+        'armor' => ['character_armor', false],
+        'crit_rate' => ['character_crit_rate', false],
         'crit_dmg' => ['character_crit_damage', false],
+        'crit_damage' => ['character_crit_damage', false],
+        'status_hit' => ['character_status_hit', false],
+        'status_resist' => ['character_status_resist', false],
         'mastery' => ['character_elemental_mastery', false],
         'element_damage_bonus' => ['character_element_damage_bonus', false],
         'healing_bonus' => ['character_healing_bonus', false],
@@ -1456,15 +1518,17 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $archetypeResolved = af_charactersheets_arpg_resolve_kb_entry_flexible('arpg_archetype', $rawArchetype);
     $archetypeRules = af_charactersheets_arpg_extract_entry_rules((array)($archetypeResolved['entry'] ?? []));
     $equipmentRuleSources = af_charactersheets_arpg_collect_equipment_rule_sources($build, $uid);
+    $talentRuleSources = af_charactersheets_arpg_collect_talent_rule_sources($build, $uid);
     $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level, $originVariantRules);
     $character_stats = af_charactersheets_arpg_merge_runtime_stats($character_stats, $computedKbStats);
     // Canonical character payloads may already contain non-zero base totals.
     // Apply live equipment afterwards so those payload values cannot mask item
     // modifiers and Inventory changes are reflected without rewriting build_json.
     $character_stats = af_charactersheets_arpg_apply_equipment_rules($character_stats, $equipmentRuleSources);
+    $character_stats = af_charactersheets_arpg_apply_equipment_rules($character_stats, $talentRuleSources);
     $ruleCollections = af_charactersheets_arpg_merge_rule_collections(
         ['resources' => $resources, 'resistances' => $resistances],
-        array_merge([$originRules, $originVariantRules, $archetypeRules], $equipmentRuleSources)
+        array_merge([$originRules, $originVariantRules, $archetypeRules], $equipmentRuleSources, $talentRuleSources)
     );
     $resources = (array)($ruleCollections['resources'] ?? []);
     $resistances = (array)($ruleCollections['resistances'] ?? []);
@@ -1876,49 +1940,28 @@ function af_charactersheets_arpg_render_description_html(array $sheet_arpg_vm): 
 function af_charactersheets_arpg_render_talent_tree_html(array $sheet_arpg_vm, bool $canEdit): string
 {
     $wallet = (array)($sheet_arpg_vm['wallet'] ?? []);
-    $owned = (array)af_charactersheets_deep_get($sheet_arpg_vm, 'build.talents.owned', []);
-    $ownedMap = [];
-    foreach ($owned as $talentKey) {
-        $ownedMap[(string)$talentKey] = true;
+    $build = (array)($sheet_arpg_vm['build'] ?? []);
+    $state = af_charactersheets_arpg_talent_state($build, (int)($sheet_arpg_vm['uid'] ?? 0));
+    $catalog = af_charactersheets_arpg_talent_catalog();
+    $branches = [];
+    foreach ($catalog as $key => &$node) $branches[(string)($node['rules']['tree'] ?? 'custom')][] =& $node;
+    unset($node);
+    $branchCount = max(1, count($branches)); $branchIndex = 0;
+    foreach ($branches as &$branch) {
+        usort($branch, static fn($a, $b) => ((int)($a['rules']['tier'] ?? 1)) <=> ((int)($b['rules']['tier'] ?? 1)));
+        $count = max(1, count($branch));
+        foreach ($branch as $i => &$node) { $node['x'] = 10 + (80 * ($i / max(1, $count - 1))); $node['y'] = 15 + (70 * ($branchIndex / max(1, $branchCount - 1))); }
+        unset($node); $branchIndex++;
     }
-
-    $nodes = [
-        ['id' => 'core_1', 'title' => 'Core I', 'x' => 8, 'y' => 40],
-        ['id' => 'core_2', 'title' => 'Core II', 'x' => 28, 'y' => 24],
-        ['id' => 'core_3', 'title' => 'Core III', 'x' => 28, 'y' => 56],
-        ['id' => 'burst', 'title' => 'Burst', 'x' => 50, 'y' => 40],
-        ['id' => 'ward', 'title' => 'Ward', 'x' => 72, 'y' => 24],
-        ['id' => 'focus', 'title' => 'Focus', 'x' => 72, 'y' => 56],
-        ['id' => 'ascend', 'title' => 'Ascend', 'x' => 92, 'y' => 40],
-    ];
-    $edges = [
-        ['core_1', 'core_2'],
-        ['core_1', 'core_3'],
-        ['core_2', 'burst'],
-        ['core_3', 'burst'],
-        ['burst', 'ward'],
-        ['burst', 'focus'],
-        ['ward', 'ascend'],
-        ['focus', 'ascend'],
-    ];
+    unset($branch);
 
     $html = '<section class="af-cs-arpg-panel"><h2>Древо талантов</h2>'
         . '<div class="af-cs-arpg-talent-hint">Доступно: <strong>' . htmlspecialchars_uni((string)($wallet['ability_tokens'] ?? '0')) . ' ' . htmlspecialchars_uni((string)($wallet['ability_symbol'] ?? '♦')) . '</strong></div>'
         . '<div class="af-cs-arpg-talent-tree" data-afcs-arpg-talent-tree="1" data-afcs-arpg-can-edit="' . ($canEdit ? '1' : '0') . '">';
 
-    foreach ($edges as $edge) {
-        $from = null;
-        $to = null;
-        foreach ($nodes as $node) {
-            if ($node['id'] === $edge[0]) {
-                $from = $node;
-            } elseif ($node['id'] === $edge[1]) {
-                $to = $node;
-            }
-        }
-        if (!$from || !$to) {
-            continue;
-        }
+    foreach ($catalog as $key => $node) foreach (af_charactersheets_arpg_talent_prerequisite_keys($node['rules']) as $parentKey) {
+        $from = $catalog[$parentKey] ?? null; $to = $node;
+        if (!$from) continue;
         $dx = (float)$to['x'] - (float)$from['x'];
         $dy = (float)$to['y'] - (float)$from['y'];
         $length = sqrt(($dx * $dx) + ($dy * $dy));
@@ -1926,19 +1969,25 @@ function af_charactersheets_arpg_render_talent_tree_html(array $sheet_arpg_vm, b
         $html .= '<div class="af-cs-arpg-talent-edge" style="left:' . (float)$from['x'] . '%;top:' . (float)$from['y'] . '%;width:' . $length . '%;transform: rotate(' . $angle . 'deg);"></div>';
     }
 
-    foreach ($nodes as $node) {
-        $id = (string)$node['id'];
-        $isOwned = isset($ownedMap[$id]);
-        $html .= '<button type="button" class="af-cs-arpg-talent-node' . ($isOwned ? ' is-owned' : '') . '"'
+    foreach ($catalog as $id => $node) {
+        $rules = $node['rules']; $entry = $node['entry'];
+        $isOwned = isset($state['owned'][$id]); $slot = trim((string)($rules['slot_type'] ?? 'passive'));
+        $isActive = in_array($id, $state['slots'], true);
+        $prereqs = af_charactersheets_arpg_talent_prerequisite_keys($rules);
+        $available = $isOwned && !array_diff($prereqs, array_values($state['slots']));
+        $title = trim(af_charactersheets_kb_pick_text($entry, 'title')) ?: $id;
+        $description = trim(strip_tags(af_charactersheets_kb_pick_text($entry, 'description')));
+        $html .= '<button type="button" class="af-cs-arpg-talent-node' . ($isOwned ? ' is-owned' : ' is-locked') . ($available ? ' is-available' : '') . ($isActive ? ' is-active' : '') . '"'
             . ' style="left:' . (float)$node['x'] . '%;top:' . (float)$node['y'] . '%;"'
             . ' data-afcs-arpg-talent-node="1"'
             . ' data-afcs-arpg-talent-id="' . htmlspecialchars_uni($id) . '"'
-            . ' title="' . htmlspecialchars_uni((string)$node['title']) . '">'
-            . '<span>' . htmlspecialchars_uni((string)$node['title']) . '</span>'
+            . ' data-afcs-arpg-talent-slot="' . htmlspecialchars_uni($slot) . '" data-afcs-arpg-talent-active="' . ($isActive ? '1' : '0') . '"'
+            . ' title="' . htmlspecialchars_uni($description) . '">'
+            . '<span>' . htmlspecialchars_uni($title) . '</span><small>T' . (int)($rules['tier'] ?? 1) . ' · ' . htmlspecialchars_uni($slot) . '</small>'
             . '</button>';
     }
 
-    $html .= '</div><div class="af-cs-muted">Нажмите на пустой узел, чтобы назначить купленный талант.</div></section>';
+    $html .= '</div><div class="af-cs-muted">Заблокирован — купить в магазине; золотой — куплен; светящийся — активен. Нажмите узел для информации и установки.</div></section>';
     return $html;
 }
 

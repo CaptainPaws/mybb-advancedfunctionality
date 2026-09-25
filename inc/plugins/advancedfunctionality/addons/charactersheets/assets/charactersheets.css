@@ -3053,9 +3053,17 @@
   background: rgba(30, 10, 10, 0.86);
   color: #fff;
   border-radius: 8px;
+  display: grid;
+  place-content: center;
+  gap: 1px;
+  cursor: pointer;
 }
 
+.af-cs-arpg-talent-node small { font-size: 9px; opacity: .65; }
+.af-cs-arpg-talent-node.is-locked { filter: grayscale(1); opacity: .5; }
 .af-cs-arpg-talent-node.is-owned { border-color: #f1cb76; box-shadow: 0 0 0 1px rgba(241,203,118,.5) inset; }
+.af-cs-arpg-talent-node.is-available { background: rgba(72, 49, 16, .92); }
+.af-cs-arpg-talent-node.is-active { border-color: #fff0a8; background: #745016; box-shadow: 0 0 8px #f1cb76, 0 0 22px rgba(241,203,118,.55); }
 
 .af-cs-arpg-equip-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
 .af-cs-arpg-equip-grid { display:flex; flex-wrap:wrap; align-items:flex-start; gap:12px; }
