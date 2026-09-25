@@ -1077,6 +1077,16 @@ function af_aam_bootstrap(): void
         return;
     }
 
+    // CharacterSheets deliberately has no forum navigation surface.  Building
+    // the global header fragment here made the persisted header template (and
+    // the pre-output fallback) leak a standalone alerts link onto both catalog
+    // and slug views.  Do not produce any AAM surface fragments for that route.
+    if (af_aam_is_charactersheets_surface()) {
+        $af_aam_js = $af_aam_css = $af_aam_header_icon = $af_aam_modal = '';
+        $af_aam_mentions_js = $af_aam_main_js = '';
+        return;
+    }
+
     if (!isset($lang->af_aam_name)) {
         $lang->load('advancedfunctionality_' . AF_AAM_ID);
     }
@@ -1151,6 +1161,19 @@ function af_aam_bootstrap(): void
     eval('$af_aam_js          = "'.$templates->get('af_aam_js_popup').'";');
     eval('$af_aam_header_icon = "'.$templates->get('af_aam_header_icon').'";');
     eval('$af_aam_modal       = "'.$templates->get('af_aam_modal').'";');
+}
+
+function af_aam_is_charactersheets_surface(): bool
+{
+    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'charactersheets.php') {
+        return true;
+    }
+
+    // Covers direct fragment/modal requests that bootstrap through a custom
+    // entry point while retaining the CharacterSheets request path.
+    $script = basename((string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    $path = (string)(parse_url((string)($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?? '');
+    return $script === 'charactersheets.php' || basename($path) === 'charactersheets.php';
 }
 
 
@@ -1307,7 +1330,11 @@ function af_aam_pre_output_page(string &$page): void
     global $mybb;
     global $af_aam_js, $af_aam_css, $af_aam_header_icon, $af_aam_modal;
 
-    if (!af_aam_is_enabled() || $page === '' || stripos($page, '<html') === false) {
+    if (!af_aam_is_enabled()
+        || (function_exists('af_aam_is_charactersheets_surface') && af_aam_is_charactersheets_surface())
+        || $page === ''
+        || stripos($page, '<html') === false
+    ) {
         return;
     }
 
