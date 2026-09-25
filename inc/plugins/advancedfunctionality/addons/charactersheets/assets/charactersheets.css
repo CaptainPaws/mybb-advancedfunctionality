@@ -3027,43 +3027,53 @@
 .af-cs-arpg-main-item span { font-size: 12px; opacity: .8; display: block; }
 .af-cs-arpg-main-item strong { font-size: 15px; }
 
-.af-cs-arpg-talent-tree {
-  position: relative;
-  min-height: 280px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
-  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.05), rgba(0,0,0,.24));
-}
-
-.af-cs-arpg-talent-edge {
-  position: absolute;
-  height: 2px;
-  border-top: 2px solid rgba(242, 177, 120, 0.55);
-  transform-origin: left center;
-  pointer-events: none;
-}
-
-.af-cs-arpg-talent-node {
-  position: absolute;
-  width: 92px;
-  height: 36px;
-  margin-left: -46px;
-  margin-top: -18px;
-  border: 1px solid rgba(255,255,255,0.3);
-  background: rgba(30, 10, 10, 0.86);
-  color: #fff;
-  border-radius: 8px;
-  display: grid;
-  place-content: center;
-  gap: 1px;
-  cursor: pointer;
-}
-
-.af-cs-arpg-talent-node small { font-size: 9px; opacity: .65; }
-.af-cs-arpg-talent-node.is-locked { filter: grayscale(1); opacity: .5; }
-.af-cs-arpg-talent-node.is-owned { border-color: #f1cb76; box-shadow: 0 0 0 1px rgba(241,203,118,.5) inset; }
-.af-cs-arpg-talent-node.is-available { background: rgba(72, 49, 16, .92); }
-.af-cs-arpg-talent-node.is-active { border-color: #fff0a8; background: #745016; box-shadow: 0 0 8px #f1cb76, 0 0 22px rgba(241,203,118,.55); }
+.af-cs-arpg-talent-board { overflow: hidden; border: 1px solid rgba(214,178,105,.24); border-radius: 16px; background: linear-gradient(145deg, rgba(30,22,30,.97), rgba(8,12,20,.98)); box-shadow: inset 0 1px rgba(255,255,255,.05), 0 16px 45px rgba(0,0,0,.18); }
+.af-cs-arpg-talent-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 22px 13px; border-bottom:1px solid rgba(214,178,105,.16); background:linear-gradient(90deg,rgba(158,91,40,.12),transparent 45%,rgba(64,99,131,.1)); }
+.af-cs-arpg-talent-toolbar h3 { margin:2px 0 0; font-family:Georgia,serif; font-size:22px; font-weight:500; letter-spacing:.03em; color:#f4e5c4; }
+.af-cs-arpg-talent-kicker { color:#bd9860; font-size:9px; font-weight:800; letter-spacing:.24em; }
+.af-cs-arpg-talent-currency { min-width:130px; text-align:right; }
+.af-cs-arpg-talent-currency small { display:block; color:#9f9689; font-size:9px; letter-spacing:.08em; text-transform:uppercase; }
+.af-cs-arpg-talent-currency strong { color:#f5df9b; font:600 18px Georgia,serif; }
+.af-cs-arpg-talent-currency strong span { color:#d6a948; text-shadow:0 0 9px rgba(240,181,66,.65); }
+.af-cs-arpg-talent-legend { display:flex; justify-content:center; flex-wrap:wrap; gap:10px 20px; padding:9px 16px; background:rgba(0,0,0,.2); color:#aaa39a; font-size:10px; letter-spacing:.04em; }
+.af-cs-arpg-talent-legend span { display:flex; align-items:center; gap:6px; }
+.af-cs-arpg-talent-legend i { width:8px; height:8px; border:1px solid #6d6964; border-radius:50%; background:#302e31; }
+.af-cs-arpg-talent-legend i.is-owned { border-color:#a98451; background:#5f482d; }
+.af-cs-arpg-talent-legend i.is-available { border-color:#67a9be; background:#315d69; box-shadow:0 0 5px #458ba0; }
+.af-cs-arpg-talent-legend i.is-active { border-color:#ffe29b; background:#d29732; box-shadow:0 0 7px #e6a83b; }
+.af-cs-arpg-talent-scroll { overflow-x:auto; overscroll-behavior-inline:contain; }
+.af-cs-arpg-talent-tree { position:relative; min-width:720px; height:var(--af-tree-height,360px); overflow:hidden; isolation:isolate; background:radial-gradient(ellipse at 50% 8%,rgba(173,105,53,.13),transparent 42%), linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px); background-size:auto,100% 38px; }
+.af-cs-arpg-tree-atmosphere { position:absolute; inset:0; z-index:-2; opacity:.45; background:radial-gradient(circle at 15% 45%,rgba(83,53,101,.2),transparent 25%),radial-gradient(circle at 85% 48%,rgba(34,91,105,.2),transparent 25%); }
+.af-cs-arpg-branch-label { position:absolute; z-index:3; top:18px; transform:translateX(-50%); color:#bfb09b; font:600 10px Georgia,serif; letter-spacing:.16em; text-transform:uppercase; white-space:nowrap; }
+.af-cs-arpg-branch-label span { padding:4px 12px; border-bottom:1px solid rgba(205,168,102,.28); }
+.af-cs-arpg-tier-line { position:absolute; z-index:-1; left:28px; right:28px; height:1px; border-top:1px solid rgba(201,183,151,.09); }
+.af-cs-arpg-tier-line span { position:absolute; left:0; top:-14px; color:rgba(202,191,173,.36); font-size:8px; letter-spacing:.12em; }
+.af-cs-arpg-talent-connections { position:absolute; z-index:0; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+.af-cs-arpg-talent-edge { fill:none; stroke:rgba(111,105,101,.42); stroke-width:5; vector-effect:non-scaling-stroke; }
+.af-cs-arpg-talent-edge.is-open { stroke:rgba(74,149,167,.72); filter:drop-shadow(0 0 3px rgba(67,151,171,.5)); }
+.af-cs-arpg-talent-edge.is-active { stroke:#d59d43; stroke-width:6; filter:drop-shadow(0 0 4px rgba(232,170,65,.75)); }
+.af-cs-arpg-talent-node { position:absolute; z-index:2; width:74px; height:74px; margin:-37px 0 0 -37px; padding:0; border:0; background:transparent; color:#d8d1c7; cursor:pointer; font:inherit; text-align:center; }
+.af-cs-arpg-talent-orbit,.af-cs-arpg-talent-glyph { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%) rotate(45deg); box-sizing:border-box; }
+.af-cs-arpg-talent-orbit { width:52px; height:52px; border:2px solid #59575a; background:linear-gradient(135deg,#29272c,#111217); box-shadow:0 0 0 4px #14151a,0 0 0 5px rgba(139,132,120,.25),inset 0 0 12px #08090c; transition:.2s ease; }
+.af-cs-arpg-talent-glyph { display:grid; place-items:center; width:38px; height:38px; border:1px solid rgba(255,255,255,.13); background:radial-gradient(circle at 35% 25%,#565058,#201e24 70%); color:#bcb6b0; font:700 18px Georgia,serif; text-shadow:0 1px 2px #000; }
+.af-cs-arpg-talent-glyph,.af-cs-arpg-talent-node.is-root .af-cs-arpg-talent-glyph { transform:translate(-50%,-50%); border-radius:50%; }
+.af-cs-arpg-talent-node.is-root .af-cs-arpg-talent-orbit { width:60px; height:60px; }
+.af-cs-arpg-talent-name { position:absolute; left:50%; top:66px; transform:translateX(-50%); width:128px; overflow:hidden; color:#d9d2c6; font-size:11px; font-weight:700; line-height:1.15; text-overflow:ellipsis; white-space:nowrap; text-shadow:0 2px 3px #000; }
+.af-cs-arpg-talent-node small { position:absolute; left:50%; top:81px; transform:translateX(-50%); width:130px; color:#827e79; font-size:8px; line-height:1; text-transform:uppercase; white-space:nowrap; }
+.af-cs-arpg-talent-node.is-locked { filter:grayscale(.9); opacity:.55; }
+.af-cs-arpg-talent-node.is-owned .af-cs-arpg-talent-orbit { border-color:#9f7d4e; }
+.af-cs-arpg-talent-node.is-available .af-cs-arpg-talent-orbit { border-color:#61a7b9; box-shadow:0 0 0 4px #142026,0 0 13px rgba(70,157,179,.72),inset 0 0 14px #0b1d23; animation:af-talent-breathe 2.5s ease-in-out infinite; }
+.af-cs-arpg-talent-node.is-available .af-cs-arpg-talent-glyph { background:radial-gradient(circle at 35% 25%,#578b96,#17333c 72%); color:#ddfaff; }
+.af-cs-arpg-talent-node.is-active .af-cs-arpg-talent-orbit { border-color:#f7d785; box-shadow:0 0 0 4px #302412,0 0 20px rgba(239,177,62,.92),inset 0 0 15px #6c4814; animation:none; }
+.af-cs-arpg-talent-node.is-active .af-cs-arpg-talent-glyph { background:radial-gradient(circle at 35% 25%,#e9bd62,#6a4314 74%); color:#fff4c9; }
+.af-cs-arpg-talent-node.is-active .af-cs-arpg-talent-name { color:#ffe6a8; }
+.af-cs-arpg-talent-node:hover,.af-cs-arpg-talent-node:focus-visible { z-index:4; outline:none; filter:none; opacity:1; }
+.af-cs-arpg-talent-node:hover .af-cs-arpg-talent-orbit,.af-cs-arpg-talent-node:focus-visible .af-cs-arpg-talent-orbit { transform:translate(-50%,-50%) rotate(45deg) scale(1.1); border-color:#f3dfb2; }
+.af-cs-arpg-talent-help { margin:0; padding:11px 18px 14px; border-top:1px solid rgba(255,255,255,.06); color:#898580; font-size:10px; text-align:center; }
+.af-cs-arpg-tree-empty { position:absolute; inset:0; display:grid; place-items:center; color:#898580; font-size:12px; }
+@keyframes af-talent-breathe { 50% { box-shadow:0 0 0 4px #142026,0 0 21px rgba(70,157,179,.92),inset 0 0 14px #0b1d23; } }
+@media (prefers-reduced-motion:reduce) { .af-cs-arpg-talent-node.is-available .af-cs-arpg-talent-orbit { animation:none; } }
+@media (max-width:640px) { .af-cs-arpg-talent-toolbar { padding:14px; } .af-cs-arpg-talent-toolbar h3 { font-size:18px; } .af-cs-arpg-talent-legend { justify-content:flex-start; } }
 
 .af-cs-arpg-equip-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
 .af-cs-arpg-equip-grid { display:flex; flex-wrap:wrap; align-items:flex-start; gap:12px; }
