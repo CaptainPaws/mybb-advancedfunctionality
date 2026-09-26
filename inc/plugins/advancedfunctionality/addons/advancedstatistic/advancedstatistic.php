@@ -177,6 +177,11 @@ function af_advancedstatistic_lang(): void
 
 function af_advancedstatistic_inject_assets(string &$page): void
 {
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed('advancedstatistic', 'pre_output')) {
+        return;
+    }
+
     // если уже прогнали дедуп/инжект в этом прогоне — выходим
     if (strpos($page, '<!--af_advancedstatistic_assets-->') !== false) {
         return;

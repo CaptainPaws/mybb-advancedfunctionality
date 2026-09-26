@@ -696,7 +696,7 @@ function af_balance_enqueue_assets(): void
 {
     global $mybb;
 
-    if (af_balance_assets_disabled_for_current_page()) {
+    if (!af_balance_frontend_assets_allowed('queue') || af_balance_assets_disabled_for_current_page()) {
         return;
     }
 
@@ -714,9 +714,16 @@ function af_balance_enqueue_assets(): void
     }
 }
 
+function af_balance_frontend_assets_allowed(string $resource): bool
+{
+    return !function_exists('af_frontend_asset_allowed')
+        || af_frontend_asset_allowed('balance', $resource);
+}
+
 function af_balance_pre_output_page(string &$page): void
 {
-    if (!af_balance_assets_disabled_for_current_page()) {
+    if (af_balance_frontend_assets_allowed('pre_output')
+        && !af_balance_assets_disabled_for_current_page()) {
         return;
     }
 
@@ -2261,8 +2268,11 @@ function af_balance_render_manage_page(): void
             . '    <button type="button" class="button" data-af-balance-apply>Применить</button>'
             . '    <button type="button" class="button" data-af-balance-close>Отмена</button>'
             . '  </div>'
-            . '</div>'
-            . '<script>window.afBalanceConfig={kind:' . json_encode($kind) . ',postKey:' . json_encode($mybb->post_code) . '};</script>';
+            . '</div>';
+
+        if (af_balance_frontend_assets_allowed('inline_config')) {
+            $content_html .= '<script>window.afBalanceConfig={kind:' . json_encode($kind) . ',postKey:' . json_encode($mybb->post_code) . '};</script>';
+        }
     }
 
     af_balance_enqueue_assets();
