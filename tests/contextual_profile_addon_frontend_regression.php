@@ -101,6 +101,12 @@ foreach ($ownerGates as $file => $needle) {
     }
 }
 
+$apfSource = file_get_contents($addons . '/advancedprofilefields/advancedprofilefields.php');
+if (!is_string($apfSource)
+    || !str_contains($apfSource, "af_apf_asset_ver(AF_APF_ASSETS_DIR . 'advancedprofilefields.css')")) {
+    throw new RuntimeException('AdvancedProfileFields must convert its CSS path to an integer version before af_apf_add_ver');
+}
+
 foreach (['smarturltitles', 'indexredirect'] as $id) {
     $manifest = require $addons . '/' . $id . '/manifest.php';
     if (isset($manifest['frontend']) || isset($manifest['assets'])) {

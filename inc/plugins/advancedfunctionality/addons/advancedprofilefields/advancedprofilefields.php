@@ -865,7 +865,10 @@ function af_advancedprofilefields_pre_output(&$page = ''): void
     // advancedprofilefields.js is intentionally a no-op; only the stylesheet is required.
     $base = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/')
         . '/inc/plugins/advancedfunctionality/addons/' . AF_APF_ID . '/assets/';
-    $css = af_apf_add_ver($base . 'advancedprofilefields.css', AF_APF_ASSETS_DIR . 'advancedprofilefields.css');
+    $css = af_apf_add_ver(
+        $base . 'advancedprofilefields.css',
+        af_apf_asset_ver(AF_APF_ASSETS_DIR . 'advancedprofilefields.css')
+    );
     $tag = AF_APF_ASSET_MARK . "\n<link rel=\"stylesheet\" href=\"" . htmlspecialchars_uni($css) . "\">\n";
     if (stripos($page, '</head>') !== false) {
         $page = preg_replace('~</head>~i', $tag . '</head>', $page, 1) ?? $page;
