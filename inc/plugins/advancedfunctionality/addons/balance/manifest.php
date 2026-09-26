@@ -13,6 +13,15 @@ return [
     'website'     => 'https://github.com/CaptainPaws',
     'bootstrap'   => 'balance.php',
 
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [
+            ['script' => 'balancemanage.php'],
+            ['script' => 'misc.php', 'action' => 'balance_manage'],
+        ],
+        'directory_fallback' => false,
+    ],
+
     // интеграция в ACP через AF router
     'admin' => [
         'slug'       => 'balance',

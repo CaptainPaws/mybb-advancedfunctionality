@@ -9,6 +9,15 @@ return [
     'version'     => '1.0.0',
     'bootstrap'   => 'advancedpostcounter.php',
 
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [
+            ['script' => 'postsactivity.php'],
+            ['script' => 'postsbyuser.php'],
+        ],
+        'directory_fallback' => false,
+    ],
+
     // Языки — ядро AF сгенерит RU/EN для фронта и админки
     'lang'        => [
         'russian' => [

@@ -10,6 +10,15 @@ return [
     'website'   => 'https://github.com/CaptainPaws',
     'bootstrap' => 'advancedstatistic.php',
 
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [
+            // MyBB defines THIS_SCRIPT as index.php for both / and /index.php.
+            ['script' => 'index.php'],
+        ],
+        'directory_fallback' => false,
+    ],
+
     // Языки — ядро AF сгенерит RU/EN для фронта и админки
     'lang' => [
         'russian' => [

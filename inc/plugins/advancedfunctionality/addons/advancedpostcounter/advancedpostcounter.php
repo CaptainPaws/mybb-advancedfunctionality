@@ -281,6 +281,13 @@ function af_apc_current_script_name(): string
 
 function af_apc_should_load_assets_for_page(string $page): bool
 {
+    // Postbit/profile markers only request server-rendered values. They must not
+    // turn a backend PostCounter integration into a frontend dependency.
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_APC_ID, 'pre_output')) {
+        return false;
+    }
+
     if (af_apc_assets_disabled_for_current_page()) {
         return false;
     }
