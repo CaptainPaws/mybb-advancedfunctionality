@@ -13,6 +13,17 @@ return [
     'website'     => 'https://github.com/CaptainPaws',
     'bootstrap'   => 'charactersheets.php',
 
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [
+            ['script' => 'charactersheets.php'],
+        ],
+        'response_rules' => [
+            ['has_charactersheet_component' => true],
+        ],
+        'directory_fallback' => false,
+    ],
+
     // Если у аддона будет AF-страница в ACP через роутер:
     // (если admin.php реально отсутствует — можешь удалить этот блок целиком)
     'admin' => [

@@ -8,6 +8,16 @@ return [
     'author'      => 'CaptainPaws',
     'website'     => 'https://github.com/CaptainPaws',
     'bootstrap'   => 'characterworkflow.php',
+    // CharacterWorkflow exposes server-side orchestration APIs only. The
+    // moderation controls that consume them are rendered and owned by
+    // CharacterSheets, so directory discovery must never make this addon a
+    // showthread-wide frontend runtime.
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [],
+        'response_rules' => [],
+        'directory_fallback' => false,
+    ],
     'lang' => [
         'russian' => [
             'front' => [

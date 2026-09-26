@@ -13,6 +13,17 @@ return [
     'website'     => 'https://github.com/CaptainPaws',
     'bootstrap'   => 'advancedthreadfields.php',
 
+    'frontend' => [
+        'mode' => 'contextual',
+        // ATF is forum-configured. A script name alone cannot prove that this
+        // response contains one of its controls or display components.
+        'routes' => [],
+        'response_rules' => [
+            ['has_atf_component' => true],
+        ],
+        'directory_fallback' => false,
+    ],
+
     'admin' => [
         'slug'       => 'advancedthreadfields',
         'controller' => 'admin.php',

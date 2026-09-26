@@ -518,6 +518,7 @@ function af_charactersheets_output_modal_page(string $content, string $title = '
     }
 
     $page_title = $title !== '' ? $title : 'Character sheet';
+    $GLOBALS['af_charactersheets_has_frontend_component'] = true;
     $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n";
     af_charactersheets_ensure_assets_in_headerinclude();
     if (function_exists('af_assets_inject_headerinclude')) {
@@ -631,7 +632,13 @@ function af_charactersheets_showthread_start_impl(): void
 
 function af_charactersheets_pre_output_impl(&$page): void
 {
-    if (!defined('THIS_SCRIPT') || THIS_SCRIPT !== 'showthread.php') {
+    if (!defined('THIS_SCRIPT') || !in_array(THIS_SCRIPT, ['showthread.php', 'member.php'], true)) {
+        return;
+    }
+
+    $hasComponent = !empty($GLOBALS['af_charactersheets_has_frontend_component']);
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_CS_ID, 'pre_output', null, ['has_charactersheet_component' => $hasComponent])) {
         return;
     }
 
@@ -1867,6 +1874,12 @@ function af_charactersheets_should_force_assets_for_modal_request(): bool
 function af_charactersheets_enqueue_assets(): void
 {
     if (af_cs_assets_disabled_for_current_page()) {
+        return;
+    }
+
+    $hasComponent = !empty($GLOBALS['af_charactersheets_has_frontend_component']);
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_CS_ID, 'runtime', null, ['has_charactersheet_component' => $hasComponent])) {
         return;
     }
 

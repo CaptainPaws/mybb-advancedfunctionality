@@ -508,6 +508,15 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         return;
     }
 
+    $hasComponent = !empty($GLOBALS['af_atf_has_frontend_component'])
+        || !empty($GLOBALS['af_atf_input_html'])
+        || !empty($GLOBALS['af_atf_showthread_block'])
+        || !empty($GLOBALS['af_atf_forum_catalog_cta_html']);
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_ATF_ID, 'pre_output', null, ['has_atf_component' => $hasComponent])) {
+        return;
+    }
+
     if (stripos($page, 'id="redirect"') !== false || stripos($page, "id='redirect'") !== false) {
         return;
     }
@@ -2417,6 +2426,9 @@ function af_atf_prepare_input_block(int $fid, int $tid = 0, bool $isEdit = false
     $GLOBALS['af_atf_context_fields'] = $fields;
     $GLOBALS['af_atf_context_values'] = $values;
     $af_atf_input_html = af_atf_render_inputs($fields, $values);
+    if ($af_atf_input_html !== '') {
+        $GLOBALS['af_atf_has_frontend_component'] = true;
+    }
     $prefillToken = trim((string)$mybb->get_input('af_atf_prefill_token'));
     if (!$isEdit && preg_match('~^[a-f0-9]{16,128}$~i', $prefillToken)) {
         $af_atf_input_html .= '<input type="hidden" name="af_atf_prefill_token" value="'
@@ -6104,6 +6116,9 @@ function af_atf_forumdisplay_start(): void
     }
 
     $GLOBALS['af_atf_forum_catalog_cta_html'] = af_atf_build_catalog_cta_html($forumId);
+    if ($GLOBALS['af_atf_forum_catalog_cta_html'] !== '') {
+        $GLOBALS['af_atf_has_frontend_component'] = true;
+    }
 }
 
 function af_atf_forumdisplay_thread(): void
@@ -6777,6 +6792,8 @@ function af_atf_postbit(&$post): void
     if ($block === '') {
         return;
     }
+
+    $GLOBALS['af_atf_has_frontend_component'] = true;
 
     $cur = isset($post['message']) && is_string($post['message']) ? $post['message'] : '';
 
