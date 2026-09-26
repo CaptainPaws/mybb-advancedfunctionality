@@ -8,6 +8,14 @@ return [
     'description' => 'Страница правил форума с категориями. Управление: Админка → Расширенный функционал → Правила.',
     // Файл bootstrap относительно каталога аддона:
     'bootstrap'   => 'advancedrules.php',
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [
+            ['script' => 'misc.php', 'action' => 'advancedrules'],
+        ],
+        // The page behavior is inline in rules_index; there are no directory assets.
+        'directory_fallback' => false,
+    ],
     // Описываем, что есть внутренняя админ-страница (для левого меню AF)
     'admin' => [
         'slug'  => 'advancedrules',

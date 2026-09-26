@@ -12,6 +12,15 @@ return [
     'authorsite'  => 'https://github.com/CaptainPaws',
     'description' => 'Добавляет CSS-классы для дополнительных полей профиля (customfields) в профиле, UserCP, регистрации и постбите, а также помечает поля "Сообщений" и "Тем".',
     'bootstrap'   => 'advancedprofilefields.php',
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [],
+        'response_rules' => [
+            ['has_apf_output' => true],
+        ],
+        // pre_output owns component-aware delivery; keep the legacy blacklist too.
+        'directory_fallback' => false,
+    ],
 
     'admin' => [
         'slug'       => 'advancedprofilefields',

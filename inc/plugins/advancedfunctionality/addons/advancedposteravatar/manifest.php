@@ -8,6 +8,16 @@ return [
     'description' => 'Единый renderer аватаров последнего постера и списка online.',
     'version'     => '2.0.0',
     'bootstrap'   => 'advancedposteravatar.php',
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [
+            ['script' => 'index.php'],
+            ['script' => 'forumdisplay.php'],
+            ['script' => 'online.php'],
+        ],
+        // This addon owns its conditional CSS/JS injection.
+        'directory_fallback' => false,
+    ],
 
     'lang'        => [
         'russian' => [

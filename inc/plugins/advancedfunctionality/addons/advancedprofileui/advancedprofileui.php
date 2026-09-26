@@ -1654,6 +1654,11 @@ function af_apui_pre_output_page(string &$page): void
         return;
     }
 
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_APUI_ID, 'pre_output', null, ['has_apui_output' => true])) {
+        return;
+    }
+
     $bburl = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/');
     $base = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_APUI_ID . '/assets';
     $jsUrl = af_apui_add_ver($base . '/advancedprofileui.js', AF_APUI_ASSETS_DIR . 'advancedprofileui.js');
