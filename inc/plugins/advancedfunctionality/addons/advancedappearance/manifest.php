@@ -8,6 +8,17 @@ return [
     'authorsite'  => 'https://github.com/CaptainPaws',
     'description' => 'Каталог визуальных пресетов и назначения пользователям для APUI.',
     'bootstrap'   => 'advancedappearance.php',
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [
+            ['script' => 'apstudio.php'],
+            ['script' => 'fittingroom.php'],
+        ],
+        'response_rules' => [
+            ['has_appearance_runtime' => true],
+        ],
+        'directory_fallback' => false,
+    ],
     'admin' => [
         'slug'       => 'advancedappearance',
         'controller' => 'admin.php',

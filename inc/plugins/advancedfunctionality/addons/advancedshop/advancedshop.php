@@ -1755,6 +1755,12 @@ function af_advancedshop_render_shop_not_found(): void
 
 function af_advancedshop_assets_html(): string
 {
+    // Config and runtime are one permission unit: never emit endpointScript alone.
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_ADVSHOP_ID, 'component_runtime', null, ['has_shop_component' => true])) {
+        return '';
+    }
+
     if (af_shop_assets_disabled_for_current_page()) {
         return '';
     }
@@ -1876,6 +1882,12 @@ function af_advancedshop_pre_output(string &$page = ''): void
     }
 
     if (!af_advancedshop_should_load_assets_for_page((string)$page)) {
+        af_advancedshop_strip_assets_from_html($page);
+        return;
+    }
+
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_ADVSHOP_ID, 'pre_output', null, ['has_shop_component' => true])) {
         af_advancedshop_strip_assets_from_html($page);
         return;
     }
