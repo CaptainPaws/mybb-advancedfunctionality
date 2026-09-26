@@ -811,28 +811,16 @@ function af_advancededitor_resolve_sceditor_theme_css_url(string $bburl): string
     return $bburl . '/jscripts/sceditor/themes/default.min.css';
 }
 
-function af_advancededitor_build_sceditor_content_css(string $baseCssUrl, array $packCssUrls): string
+function af_advancededitor_build_sceditor_content_css(string $baseCssUrl): string
 {
-    $urls = [];
-
+    // SCEditor's `style` option is one stylesheet URL, not a CSS URL list.
+    // Passing an array (or a comma-joined list) is stringified into one invalid
+    // request such as "jquery.sceditor.mybb.css,https://.../advancedstyles.css".
+    // Pack CSS is emitted as normal <link> elements above. The iframe must keep
+    // the stock MyBB content stylesheet so WYSIWYG typography matches the
+    // stable editor; source mode continues to use the page's existing CSS.
     $baseCssUrl = trim($baseCssUrl);
-    if ($baseCssUrl !== '') {
-        $urls[] = $baseCssUrl;
-    }
-
-    foreach ($packCssUrls as $url) {
-        $url = trim((string)$url);
-        if ($url === '') {
-            continue;
-        }
-        $urls[] = $url;
-    }
-
-    if (empty($urls)) {
-        return '';
-    }
-
-    return implode(',', array_values(array_unique($urls)));
+    return $baseCssUrl;
 }
 
 function af_advancededitor_assets_disabled_for_current_page(): bool
@@ -1037,10 +1025,7 @@ function af_advancededitor_pre_output(string &$page = ''): void
 
         // SCEditor: content css (для iframe WYSIWYG)
         $sceditorContentCssBase = af_advancededitor_resolve_sceditor_content_css_url($bburl);
-        $sceditorContentCss = af_advancededitor_build_sceditor_content_css(
-            $sceditorContentCssBase,
-            (!empty($packs['css']) && is_array($packs['css'])) ? $packs['css'] : []
-        );
+        $sceditorContentCss = af_advancededitor_build_sceditor_content_css($sceditorContentCssBase);
 
         // SCEditor core + bbcode plugin
         $core = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.min.js');
