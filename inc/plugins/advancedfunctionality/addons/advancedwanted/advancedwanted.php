@@ -389,6 +389,7 @@ function af_wanted_dependency_data(array $fields): array {
  return $data;
 }
 function af_wanted_dependency_script(array $fields): string {
+ if(!af_wanted_frontend_asset_allowed('dependency'))return '';
  $data=af_wanted_dependency_data($fields);if(!$data)return '';
  $json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT);
  return '<script>(function(){var dependencies='.$json.';dependencies.forEach(function(config){var parent=document.querySelector("[name=\\"fields["+config.depends_on+"]\\"]");var child=document.querySelector("[name=\\"fields["+config.field+"]\\"]");if(!parent||!child)return;var cell=child.closest(".af-wanted-field");function update(initial){var rows=config.options[parent.value]||{},saved=initial?child.value:"";if(!initial)child.value="";while(child.options.length)child.remove(0);child.add(new Option("",""));Object.keys(rows).forEach(function(key){child.add(new Option(rows[key],key));});child.value=Object.prototype.hasOwnProperty.call(rows,saved)?saved:"";child.disabled=Object.keys(rows).length===0;if(cell){cell.hidden=child.disabled;cell.classList.toggle("is-hidden",child.disabled);}}parent.addEventListener("change",function(){update(false);});update(true);});})();</script>';
@@ -445,7 +446,7 @@ function af_wanted_render_page(): void {
  $body='<div class="pun"><main class="af-wanted"><div class="af-kb-header"><h1>'.$title.'</h1></div>';
  if($action==='create'||$action==='edit'){if(!af_wanted_can($action==='create'?'create':'edit',$entry))error_no_permission();$fields=af_wanted_fields();$vals=$entry?af_wanted_values([$id])[$id]??[]:[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$body.='<section class="af-wanted-panel"><h2>'.($id?'Изменить Wanted #'.$id:'Новая заявка Wanted').'</h2><form class="af-wanted-form" method="post" action="wanted.php?action=save'.($id?'&id='.$id:'').'"><input type="hidden" name="my_post_key" value="'.af_wanted_h((string)$mybb->post_code).'">';foreach($fields as $f){$settings=(array)($f['settings']??[]);$dependent=($f['type']==='kb_dynamic'&&($settings['source']??'')==='origin_variant');$available=$dependent?af_wanted_options($f,$byKey):[];$hidden=$dependent&&!$available;$body.='<div class="af-wanted-field af-wanted-field--'.af_wanted_h((string)$f['type']).($hidden?' is-hidden':'').'"'.($hidden?' hidden':'').'><label>'.af_wanted_h($f['title']).(!empty($f['required'])?' *':'').'</label>'.af_wanted_field_control($f,$vals[(int)$f['id']]??'',$byKey).'</div>';}$body.='<div class="af-wanted-form-actions"><button class="button" type="submit">Сохранить</button><a class="button" href="'.($id?'wanted.php?action=view&amp;id='.$id:'wanted.php').'">Отмена</a></div></form></section>'.af_wanted_dependency_script($fields);
  } elseif($action==='view'){if(!$entry)error('Wanted не найден.');$body.=af_wanted_render_detail($entry,true);
- } else $body.=af_wanted_catalog().'<script defer src="inc/plugins/advancedfunctionality/addons/advancedwanted/assets/advancedwanted_catalog.js"></script>';
+ } else {$body.=af_wanted_catalog();if(af_wanted_frontend_asset_allowed('catalog'))$body.='<script defer src="inc/plugins/advancedfunctionality/addons/advancedwanted/assets/advancedwanted_catalog.js"></script>';}
  $body.='</main></div>';
  if (function_exists('af_front_output_template_string')) {
      af_front_output_template_string($title,'{$wanted_body}',['wanted_body'=>$body]);
@@ -576,10 +577,17 @@ function af_wanted_parse_message_end(&$message,&$options=null): void {
  */
 function af_wanted_ensure_chip_runtime(string &$page=''): void {
  global $mybb;if(stripos($page,'af-wanted-post-chip')===false||stripos($page,'advancedwanted_modal.js')!==false)return;
+ if(!af_wanted_frontend_asset_allowed('modal',['has_wanted_chip'=>true]))return;
  $bburl=rtrim((string)($mybb->settings['bburl']??''),'/');if($bburl==='')return;
  $base=$bburl.'/inc/plugins/advancedfunctionality/addons/advancedwanted/assets/';$file=__DIR__.'/assets/advancedwanted_modal.js';
  $inject='<link rel="stylesheet" href="'.$base.'advancedwanted.css"><script src="'.$base.'advancedwanted_modal.js?v='.(is_file($file)?(int)filemtime($file):1).'" defer></script>';
  if(stripos($page,'</head>')!==false)$page=str_ireplace('</head>',$inject.'</head>',$page);else$page.=$inject;
+}
+
+/** Apply the manifest decision and the pilot's legacy blacklist together. */
+function af_wanted_frontend_asset_allowed(string $resource,array $responseFacts=[]): bool {
+ if(function_exists('af_frontend_asset_allowed')&&!af_frontend_asset_allowed(AF_WANTED_ID,$resource,null,$responseFacts))return false;
+ return !function_exists('af_is_blacklisted')||!af_is_blacklisted(AF_WANTED_ID);
 }
 function af_wanted_modal_payload(array $entry): array {
  return ['id'=>(int)$entry['id'],'detail_html'=>af_wanted_render_detail($entry,false)];
