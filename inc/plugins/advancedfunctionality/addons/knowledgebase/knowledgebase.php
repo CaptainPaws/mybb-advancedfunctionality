@@ -4683,6 +4683,19 @@ function af_kb_build_css_include_tag(string $fileRel): string
         . '?v=' . af_kb_asset_version($assetFile);
     return '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($href) . '" />';
 }
+
+/** Apply the manifest decision before any KB-owned frontend output. */
+function af_kb_frontend_asset_allowed(string $resource, array $responseFacts = []): bool
+{
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_KB_ID, $resource, null, $responseFacts)) {
+        return false;
+    }
+
+    // The legacy operator blacklist remains an additional emergency control.
+    return !af_kb_assets_disabled_for_current_page();
+}
+
 /**
  * Гарантированно добавляет CSS/JS KB в $headerinclude (один раз).
  * Важно: единая версия — filemtime.
@@ -4691,7 +4704,7 @@ function af_kb_ensure_header_bits(): void
 {
     global $mybb, $headerinclude;
 
-    if (af_kb_assets_disabled_for_current_page()) {
+    if (!af_kb_frontend_asset_allowed('header_ensure')) {
         return;
     }
 
@@ -8269,19 +8282,20 @@ function af_knowledgebase_pre_output(string &$page = ''): void
     }
     $is_kb_page = in_array(
         $action,
-        ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types'],
+        ['kb', 'view', 'kb_edit', 'kb_type_edit', 'kb_help', 'kb_manage_categories'],
         true
     );
-    $isKbViewPage = ($action === 'kb');
+    $isKbViewPage = in_array($action, ['kb', 'view'], true);
     $isKbEditorPage = in_array($action, ['kb_edit', 'kb_type_edit'], true);
 
     $enabled = !empty($mybb->settings['af_knowledgebase_enabled']);
-    $assetsDisabled = af_kb_assets_disabled_for_current_page();
-
     // Dedupe KB assets/markers regardless of source of injection.
     af_kb_strip_assets_from_html($page);
     $hasKbChips = stripos($page, 'af-kb-chip') !== false;
-    if ($enabled && !$assetsDisabled) {
+    $pageAssetsAllowed = $is_kb_page && af_kb_frontend_asset_allowed('page_runtime');
+    $chipAssetsAllowed = $hasKbChips
+        && af_kb_frontend_asset_allowed('chip_runtime', ['has_kb_chip' => true]);
+    if ($enabled && ($pageAssetsAllowed || $chipAssetsAllowed)) {
         $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
         if ($bburl !== '') {
             $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_KB_ID . '/assets';
@@ -8298,7 +8312,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
             $runtimeModeTag = '';
             $kbUiCss = '';
 
-            if ($is_kb_page || $hasKbChips) {
+            if ($pageAssetsAllowed || $chipAssetsAllowed) {
                 // KB base css/js
                 $cssTag .= af_kb_build_css_include_tag('assets/knowledgebase.css');
                 $kbUiCss  = af_kb_build_css_include_tag('assets/knowledgebase_kbui.css');
@@ -8320,13 +8334,14 @@ function af_knowledgebase_pre_output(string &$page = ''): void
             }
 
             // SCEditor только на страницах редактирования KB
-            if ($isKbEditorPage) {
+            if ($isKbEditorPage && $pageAssetsAllowed
+                && af_kb_frontend_asset_allowed('sceditor_stack')) {
                 $bundle = af_kb_build_sceditor_assets_and_init($bburl, $page);
                 $editorAssets = $bundle['assets'] ?? '';
                 $editorInit   = $bundle['init'] ?? '';
             }
 
-            if ($is_kb_page || $hasKbChips) {
+            if ($pageAssetsAllowed || $chipAssetsAllowed) {
                 $runtimeModeTag = '<script>window.afKbRuntimeMode='
                     . json_encode($isKbEditorPage ? 'editor' : 'view', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                     . ';</script>';
