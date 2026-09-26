@@ -2254,6 +2254,201 @@ function af_discover_addons(): array
     return $out;
 }
 
+/**
+ * Normalizes the optional declarative frontend section of an addon manifest.
+ *
+ * Invalid metadata deliberately falls back to legacy mode.  This keeps old
+ * manifests, and addons deployed while a manifest is being edited, fail-open.
+ * The cache lives only for the duration of this PHP request.
+ */
+function af_resolve_frontend_manifest(array $manifest): array
+{
+    static $cache = [];
+
+    $frontend = $manifest['frontend'] ?? null;
+    $cacheKey = md5(serialize($frontend));
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+
+    $legacy = [
+        'mode' => 'legacy',
+        'routes' => [],
+        'legacy_fallback' => true,
+        'valid' => true,
+        'diagnostic' => '',
+    ];
+
+    if ($frontend === null) {
+        return $cache[$cacheKey] = $legacy;
+    }
+    if (!is_array($frontend)) {
+        $legacy['valid'] = false;
+        $legacy['diagnostic'] = 'frontend metadata must be an array';
+        return $cache[$cacheKey] = $legacy;
+    }
+
+    if (array_key_exists('mode', $frontend) && !is_string($frontend['mode'])) {
+        $legacy['valid'] = false;
+        $legacy['diagnostic'] = 'frontend mode must be a string';
+        return $cache[$cacheKey] = $legacy;
+    }
+    $mode = strtolower(trim((string)($frontend['mode'] ?? 'legacy')));
+    if (!in_array($mode, ['legacy', 'global', 'contextual'], true)) {
+        $legacy['valid'] = false;
+        $legacy['diagnostic'] = 'unknown frontend mode';
+        return $cache[$cacheKey] = $legacy;
+    }
+    if ($mode === 'legacy') {
+        return $cache[$cacheKey] = $legacy;
+    }
+    if ($mode === 'global') {
+        return $cache[$cacheKey] = [
+            'mode' => 'global',
+            'routes' => [],
+            'legacy_fallback' => false,
+            'valid' => true,
+            'diagnostic' => '',
+        ];
+    }
+
+    $routes = $frontend['routes'] ?? null;
+    if (!is_array($routes) || !array_is_list($routes)) {
+        $legacy['valid'] = false;
+        $legacy['diagnostic'] = 'contextual frontend routes must be a list';
+        return $cache[$cacheKey] = $legacy;
+    }
+
+    $normalizedRoutes = [];
+    foreach ($routes as $route) {
+        if (!is_array($route)) {
+            $legacy['valid'] = false;
+            $legacy['diagnostic'] = 'each frontend route must be an array';
+            return $cache[$cacheKey] = $legacy;
+        }
+
+        $normalized = [];
+        if (array_key_exists('script', $route)) {
+            if (!is_string($route['script'])) {
+                $legacy['valid'] = false;
+                $legacy['diagnostic'] = 'frontend route script must be a string';
+                return $cache[$cacheKey] = $legacy;
+            }
+            $normalized['script'] = af_normalize_script_name($route['script']);
+        }
+        if (array_key_exists('action', $route)) {
+            if (!is_string($route['action'])) {
+                $legacy['valid'] = false;
+                $legacy['diagnostic'] = 'frontend route action must be a string';
+                return $cache[$cacheKey] = $legacy;
+            }
+            $normalized['action'] = strtolower(trim($route['action']));
+        }
+        foreach (['fid', 'tid'] as $numericKey) {
+            if (!array_key_exists($numericKey, $route)) {
+                continue;
+            }
+            $values = is_array($route[$numericKey]) ? $route[$numericKey] : [$route[$numericKey]];
+            if ($values === []) {
+                $normalized = [];
+                break;
+            }
+            $normalized[$numericKey] = [];
+            foreach ($values as $value) {
+                if (!(is_int($value) || (is_string($value) && ctype_digit($value)))) {
+                    $normalized = [];
+                    break 2;
+                }
+                $normalized[$numericKey][] = (int)$value;
+            }
+        }
+
+        if ($normalized === [] || (isset($normalized['script']) && $normalized['script'] === '')) {
+            $legacy['valid'] = false;
+            $legacy['diagnostic'] = 'frontend route contains no valid match criteria';
+            return $cache[$cacheKey] = $legacy;
+        }
+        $normalizedRoutes[] = $normalized;
+    }
+
+    return $cache[$cacheKey] = [
+        'mode' => 'contextual',
+        'routes' => $normalizedRoutes,
+        'legacy_fallback' => false,
+        'valid' => true,
+        'diagnostic' => '',
+    ];
+}
+
+/** Returns true when every criterion in a normalized route matches. */
+function af_frontend_route_matches(array $route, array $context): bool
+{
+    if (isset($route['script']) && af_normalize_script_name((string)($context['script'] ?? '')) !== $route['script']) {
+        return false;
+    }
+    if (isset($route['action']) && strtolower(trim((string)($context['action'] ?? ''))) !== $route['action']) {
+        return false;
+    }
+    foreach (['fid', 'tid'] as $numericKey) {
+        if (isset($route[$numericKey]) && !in_array((int)($context[$numericKey] ?? 0), $route[$numericKey], true)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Detailed, side-effect-free decision for diagnostics and tests.
+ * Response facts are intentionally separate from the immutable request context.
+ */
+function af_frontend_asset_decision($addon, $resource = null, ?array $context = null, array $responseFacts = []): array
+{
+    $manifest = is_array($addon) ? $addon : [];
+    if (!is_array($addon) && is_string($addon) && $addon !== '') {
+        foreach (af_discover_addons() as $candidate) {
+            if ((string)($candidate['id'] ?? '') === $addon) {
+                $manifest = $candidate;
+                break;
+            }
+        }
+    }
+
+    $frontend = af_resolve_frontend_manifest($manifest);
+    $context = $context ?? af_frontend_request_context();
+    $allowed = true;
+    $matchedRoute = null;
+
+    if ($frontend['mode'] === 'contextual') {
+        $allowed = false;
+        foreach ($frontend['routes'] as $index => $route) {
+            if (af_frontend_route_matches($route, $context)) {
+                $allowed = true;
+                $matchedRoute = $index;
+                break;
+            }
+        }
+    }
+
+    return [
+        'addon' => (string)($manifest['id'] ?? (is_string($addon) ? $addon : '')),
+        'resource' => $resource,
+        'mode' => $frontend['mode'],
+        'matched_route' => $matchedRoute,
+        'allowed' => $allowed,
+        'legacy_fallback' => $frontend['legacy_fallback'],
+        'valid' => $frontend['valid'],
+        'diagnostic' => $frontend['diagnostic'],
+        'response_facts' => $responseFacts,
+    ];
+}
+
+/** Canonical frontend permission API. It makes a decision and emits no HTML. */
+function af_frontend_asset_allowed($addon, $resource = null, ?array $context = null, array $responseFacts = []): bool
+{
+    $decision = af_frontend_asset_decision($addon, $resource, $context, $responseFacts);
+    return !empty($decision['allowed']);
+}
+
 function af_db_table_columns(string $table): array
 {
     global $db;
@@ -4698,6 +4893,61 @@ function af_assets_init_context(): array
     return $ctx;
 }
 
+/**
+ * Resolves immutable request facts used by all frontend permission decisions.
+ * Late facts derived from rendered HTML must be passed separately to the
+ * permission API and are never stored in this request-local context.
+ */
+function af_frontend_request_context(): array
+{
+    global $mybb;
+
+    static $context = null;
+    if (is_array($context)) {
+        return $context;
+    }
+
+    $script = af_normalize_script_name((string)(defined('THIS_SCRIPT')
+        ? THIS_SCRIPT
+        : ($_SERVER['SCRIPT_NAME'] ?? '')));
+    $self = strtolower(str_replace('\\', '/', (string)($_SERVER['PHP_SELF'] ?? '')));
+    $uri = strtolower((string)($_SERVER['REQUEST_URI'] ?? ''));
+    $admin = (defined('IN_ADMINCP') && IN_ADMINCP)
+        || (defined('ADMIN_CP') && ADMIN_CP)
+        || strpos($self, '/admin/') !== false
+        || strpos($uri, '/admin/') !== false;
+    $xmlhttp = $script === 'xmlhttp.php';
+
+    $input = [];
+    if (isset($mybb) && is_object($mybb) && isset($mybb->input) && is_array($mybb->input)) {
+        $input = $mybb->input;
+    } elseif (is_array($_REQUEST ?? null)) {
+        $input = $_REQUEST;
+    }
+
+    $action = strtolower(trim((string)($input['action'] ?? '')));
+    $ajax = af_is_ajax_request() || (int)($input['ajax'] ?? 0) === 1;
+    $acceptsJson = strpos(strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json') !== false;
+
+    $context = [
+        'script' => $script,
+        'action' => $action,
+        'fid' => max(0, (int)($input['fid'] ?? 0)),
+        'tid' => max(0, (int)($input['tid'] ?? 0)),
+        'ajax' => $ajax,
+        'method' => strtoupper(trim((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'))) ?: 'GET',
+        'admin' => $admin,
+        'xmlhttp' => $xmlhttp,
+        'response_capabilities' => [
+            'html' => !$ajax && !$xmlhttp,
+            'json' => $ajax || $xmlhttp || $acceptsJson,
+            'late_response_facts' => !$admin && !$xmlhttp,
+        ],
+    ];
+
+    return $context;
+}
+
 function af_asset_clean_path(string $urlOrPath): string
 {
     $urlOrPath = trim($urlOrPath);
@@ -5778,6 +6028,9 @@ function af_collect_enabled_addon_assets(): array
     foreach ($addons as $meta) {
         $id = $meta['id'] ?? '';
         if ($id === '' || !af_is_addon_enabled($id)) {
+            continue;
+        }
+        if (!af_frontend_asset_allowed($meta)) {
             continue;
         }
         if (af_is_blacklisted($id)) {
