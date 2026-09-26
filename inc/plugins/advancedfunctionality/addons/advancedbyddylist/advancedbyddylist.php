@@ -60,6 +60,7 @@ function af_advancedbyddylist_pre_output(string &$page = ''): void
     global $mybb;
 
     if (!af_abdl_is_enabled() || empty($mybb->user['uid']) || $page === '') return;
+    if (strpos($page, 'advancedbyddylist.js?v=1') !== false) return;
 
     $hasTrigger = (bool)preg_match('~<a\b[^>]*href=["\'][^"\']*\baction=(?:buddypopup|buddypopup&amp;)[^"\']*["\']~i', $page)
         || (bool)preg_match('~<a\b[^>]*href=["\'][^"\']*action=buddypopup(?:&amp;|&|["\'])~i', $page);
