@@ -83,6 +83,20 @@ if (!af_frontend_asset_allowed($contextual, null, $wantedContext)
     throw new RuntimeException('Contextual script matching returned an unexpected decision');
 }
 
+$responseAware = [
+    'id' => 'wanted',
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [['script' => 'wanted.php']],
+        'response_rules' => [['has_wanted_chip' => true]],
+    ],
+];
+if (!af_frontend_asset_allowed($responseAware, 'modal', $indexContext, ['has_wanted_chip' => true])
+    || af_frontend_asset_allowed($responseAware, 'modal', $indexContext)
+    || af_frontend_asset_allowed($responseAware, 'modal', $indexContext, ['has_wanted_chip' => false])) {
+    throw new RuntimeException('Response-aware permission did not require the declared response fact');
+}
+
 $actionManifest = [
     'frontend' => [
         'mode' => 'contextual',
@@ -111,6 +125,9 @@ foreach ([
     ['frontend' => ['mode' => 'unknown']],
     ['frontend' => ['mode' => 'contextual', 'routes' => 'wanted.php']],
     ['frontend' => ['mode' => 'contextual', 'routes' => [['script' => []]]]],
+    ['frontend' => ['mode' => 'contextual', 'routes' => [], 'response_rules' => 'wrong']],
+    ['frontend' => ['mode' => 'contextual', 'routes' => [], 'response_rules' => [[]]]],
+    ['frontend' => ['mode' => 'contextual', 'routes' => [], 'directory_fallback' => 'no']],
 ] as $malformed) {
     $decision = af_frontend_asset_decision($malformed, null, $indexContext, ['has_component' => true]);
     if (!$decision['allowed'] || !$decision['legacy_fallback'] || $decision['valid']) {
@@ -145,7 +162,8 @@ if ($permissionPosition === false || $blacklistPosition === false || $permission
     throw new RuntimeException('Collector permission must run before the legacy blacklist');
 }
 if (!str_contains($collector, "\$manifestAssets = \$meta['assets'] ?? null")
-    || !str_contains($collector, "scandir(\$assetsDir)")) {
+    || !str_contains($collector, "scandir(\$assetsDir)")
+    || !str_contains($collector, "empty(\$frontend['directory_fallback'])")) {
     throw new RuntimeException('Manifest assets or directory fallback was removed');
 }
 

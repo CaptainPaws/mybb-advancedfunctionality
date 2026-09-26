@@ -2,6 +2,13 @@
 return [
  'id'=>'advancedwanted','name'=>'AdvancedWanted','description'=>'Каталог заявок на нужных персонажей.','version'=>'1.0.0','author'=>'CaptainPaws','bootstrap'=>'advancedwanted.php',
  'admin'=>['slug'=>'advancedwanted','controller'=>'admin.php','title'=>'AdvancedWanted','icon'=>'fas fa-user-plus','order'=>35],
+ 'frontend'=>[
+   'mode'=>'contextual',
+   // Branch-specific scripts remain owned by AdvancedWanted, not directory discovery.
+   'directory_fallback'=>false,
+   'routes'=>[['script'=>'wanted.php']],
+   'response_rules'=>[['has_wanted_chip'=>true]],
+ ],
  'theme_stylesheets'=>[[
    'id'=>'advancedwanted_main','file'=>'assets/advancedwanted.css','stylesheet_name'=>'af_advancedwanted.css',
    'attach'=>[['file'=>'global'],['file'=>'wanted.php']],

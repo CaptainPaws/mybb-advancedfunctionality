@@ -2274,6 +2274,8 @@ function af_resolve_frontend_manifest(array $manifest): array
     $legacy = [
         'mode' => 'legacy',
         'routes' => [],
+        'response_rules' => [],
+        'directory_fallback' => true,
         'legacy_fallback' => true,
         'valid' => true,
         'diagnostic' => '',
@@ -2306,6 +2308,8 @@ function af_resolve_frontend_manifest(array $manifest): array
         return $cache[$cacheKey] = [
             'mode' => 'global',
             'routes' => [],
+            'response_rules' => [],
+            'directory_fallback' => true,
             'legacy_fallback' => false,
             'valid' => true,
             'diagnostic' => '',
@@ -2316,6 +2320,11 @@ function af_resolve_frontend_manifest(array $manifest): array
     if (!is_array($routes) || !array_is_list($routes)) {
         $legacy['valid'] = false;
         $legacy['diagnostic'] = 'contextual frontend routes must be a list';
+        return $cache[$cacheKey] = $legacy;
+    }
+    if (array_key_exists('directory_fallback', $frontend) && !is_bool($frontend['directory_fallback'])) {
+        $legacy['valid'] = false;
+        $legacy['diagnostic'] = 'frontend directory fallback flag must be boolean';
         return $cache[$cacheKey] = $legacy;
     }
 
@@ -2371,9 +2380,34 @@ function af_resolve_frontend_manifest(array $manifest): array
         $normalizedRoutes[] = $normalized;
     }
 
+    $responseRules = $frontend['response_rules'] ?? [];
+    if (!is_array($responseRules) || !array_is_list($responseRules)) {
+        $legacy['valid'] = false;
+        $legacy['diagnostic'] = 'frontend response rules must be a list';
+        return $cache[$cacheKey] = $legacy;
+    }
+    $normalizedResponseRules = [];
+    foreach ($responseRules as $rule) {
+        if (!is_array($rule) || $rule === []) {
+            $legacy['valid'] = false;
+            $legacy['diagnostic'] = 'each frontend response rule must be a non-empty array';
+            return $cache[$cacheKey] = $legacy;
+        }
+        foreach ($rule as $fact => $expected) {
+            if (!is_string($fact) || trim($fact) === '' || !is_scalar($expected)) {
+                $legacy['valid'] = false;
+                $legacy['diagnostic'] = 'frontend response rule facts must have scalar values';
+                return $cache[$cacheKey] = $legacy;
+            }
+        }
+        $normalizedResponseRules[] = $rule;
+    }
+
     return $cache[$cacheKey] = [
         'mode' => 'contextual',
         'routes' => $normalizedRoutes,
+        'response_rules' => $normalizedResponseRules,
+        'directory_fallback' => $frontend['directory_fallback'] ?? true,
         'legacy_fallback' => false,
         'valid' => true,
         'diagnostic' => '',
@@ -2425,6 +2459,22 @@ function af_frontend_asset_decision($addon, $resource = null, ?array $context = 
                 $allowed = true;
                 $matchedRoute = $index;
                 break;
+            }
+        }
+        if (!$allowed) {
+            foreach ($frontend['response_rules'] as $index => $rule) {
+                $matches = true;
+                foreach ($rule as $fact => $expected) {
+                    if (!array_key_exists($fact, $responseFacts) || $responseFacts[$fact] !== $expected) {
+                        $matches = false;
+                        break;
+                    }
+                }
+                if ($matches) {
+                    $allowed = true;
+                    $matchedRoute = 'response:'.$index;
+                    break;
+                }
             }
         }
     }
@@ -6073,6 +6123,11 @@ function af_collect_enabled_addon_assets(): array
                 }
             }
 
+            continue;
+        }
+
+        $frontend = af_resolve_frontend_manifest($meta);
+        if (empty($frontend['directory_fallback'])) {
             continue;
         }
 
