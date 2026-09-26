@@ -7,6 +7,23 @@ return [
     'description' => 'Standalone user inventory for AdvancedFunctionality.',
     'version' => '1.0.0',
     'bootstrap' => 'advancedinventory.php',
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [
+            ['script' => 'inventory.php'],
+            ['script' => 'inventories.php'],
+            ['script' => 'abilities.php'],
+            ['script' => 'misc.php', 'action' => 'inventory'],
+            ['script' => 'misc.php', 'action' => 'abilities'],
+            ['script' => 'misc.php', 'action' => 'inventories'],
+            ['script' => 'misc.php', 'action' => 'tab'],
+            ['script' => 'misc.php', 'action' => 'entity'],
+        ],
+        'response_rules' => [
+            ['has_inventory_component' => true],
+        ],
+        'directory_fallback' => false,
+    ],
     'lang' => [
         'russian' => [
             'front' => [

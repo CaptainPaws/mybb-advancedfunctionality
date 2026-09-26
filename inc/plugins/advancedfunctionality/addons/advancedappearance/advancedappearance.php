@@ -1388,8 +1388,12 @@ function af_aa_pre_output_page(string &$page): void
     }
 
     if ($runtimeCss !== '') {
-        $page = af_aa_inject_runtime_css($page, $runtimeCss);
-        $page = af_aa_inject_modal_scope_js($page);
+        $allowed = !function_exists('af_frontend_asset_allowed')
+            || af_frontend_asset_allowed(AF_AA_ID, 'runtime_css', null, ['has_appearance_runtime' => true]);
+        if ($allowed) {
+            $page = af_aa_inject_runtime_css($page, $runtimeCss);
+            $page = af_aa_inject_modal_scope_js($page);
+        }
     }
 
     if (defined('THIS_SCRIPT') && ((string)THIS_SCRIPT === 'newthread.php' || (string)THIS_SCRIPT === 'editpost.php')) {
@@ -1462,6 +1466,11 @@ function af_aa_inject_modal_scope_js(string $page): string
 function af_aa_modal_scope_js_tag(): string
 {
     global $mybb;
+
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_AA_ID, 'modal_scope', null, ['has_appearance_runtime' => true])) {
+        return '';
+    }
 
     $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
     if ($bburl === '') {
@@ -3523,6 +3532,11 @@ function af_aa_page_asset_tags(): string
     global $mybb;
 
     if (!af_aa_is_preview_script()) {
+        return '';
+    }
+
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_AA_ID, 'page_runtime')) {
         return '';
     }
 

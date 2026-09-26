@@ -7,6 +7,22 @@ return [
     'description' => 'Game shop and inventory for AdvancedFunctionality.',
     'version'     => '1.0.0',
     'bootstrap'   => 'advancedshop.php',
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [
+            ['script' => 'shop.php'],
+            ['script' => 'shop_manage.php'],
+            ['script' => 'misc.php', 'action' => 'shop'],
+            ['script' => 'misc.php', 'action' => 'shop_category'],
+            ['script' => 'misc.php', 'action' => 'shop_cart'],
+            ['script' => 'misc.php', 'action' => 'shop_manage'],
+            ['script' => 'misc.php', 'action' => 'shop_manage_slots'],
+        ],
+        'response_rules' => [
+            ['has_shop_component' => true],
+        ],
+        'directory_fallback' => false,
+    ],
     'lang' => [
         'russian' => [
             'front' => [

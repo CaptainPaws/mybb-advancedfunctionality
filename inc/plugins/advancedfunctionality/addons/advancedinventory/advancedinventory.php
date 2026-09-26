@@ -376,6 +376,12 @@ function af_advancedinventory_assets_are_blacklisted(?string $script = null): bo
 
 function af_advancedinventory_should_inject_assets(bool $embedded = false, string $action = ''): bool
 {
+    $facts = $embedded ? ['has_inventory_component' => true] : [];
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_ADVINV_ID, $embedded ? 'component_runtime' : 'page_runtime', null, $facts)) {
+        return false;
+    }
+
     if (af_advancedinventory_assets_are_blacklisted()) {
         return false;
     }
