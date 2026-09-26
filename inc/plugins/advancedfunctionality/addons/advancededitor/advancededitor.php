@@ -885,6 +885,16 @@ function af_advancededitor_build_css_tag_for_asset(string $assetUrl, string $bbu
     return '<link rel="stylesheet" href="' . htmlspecialchars_uni($href) . '" />' . "\n";
 }
 
+function af_advancededitor_response_facts(string $page): array
+{
+    $hasMessage = (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']message["\'])[^>]*>~i', $page);
+    $hasKbEditor = (bool)preg_match('~<textarea\b(?=[^>]*\bclass=["\'][^"\']*\baf-kb-editor\b)[^>]*>~i', $page);
+    $hasPostContent = stripos($page, 'class="post_body"') !== false
+        || (bool)preg_match('~class=["\'][^"\']*\bpost_body\b~i', $page)
+        || (bool)preg_match('~id=["\']posts["\']~i', $page);
+    return ['has_supported_editor' => $hasMessage || $hasKbEditor, 'has_post_content' => $hasPostContent];
+}
+
 function af_advancededitor_pre_output(string &$page = ''): void
 {
     global $mybb;
@@ -900,6 +910,10 @@ function af_advancededitor_pre_output(string &$page = ''): void
 
     // ---- чистим возможный старый мусор (чтобы можно было переинжектить) ----
     af_advancededitor_strip_own_assets($page);
+
+    $facts = af_advancededitor_response_facts($page);
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_AE_ID, 'pre_output', null, $facts)) return;
 
     // Шрифты по ТЗ грузим на всех страницах.
     $injectHead = "\n<!--af_advancededitor-->\n";
@@ -918,17 +932,11 @@ function af_advancededitor_pre_output(string &$page = ''): void
     }
 
     // ---- определяем режим ----
-    $hasTextarea = (stripos($page, '<textarea') !== false);
+    $hasTextarea = $facts['has_supported_editor'];
 
     // быстрый признак "есть контент постов"
     $looksLikeContentPage =
-        (stripos($page, 'class="post ') !== false) ||
-        (stripos($page, 'class="post_body"') !== false) ||
-        (stripos($page, 'id="posts"') !== false) ||
-        (stripos($page, 'showthread.php') !== false) ||
-        (stripos($page, 'forumdisplay.php') !== false) ||
-        (stripos($page, 'private.php') !== false) ||
-        (stripos($page, 'search.php') !== false);
+        $facts['has_post_content'];
 
     // Пакеты BB-кнопок/стилей (включая copycode)
     $packs = af_advancededitor_discover_bbcode_packs($bburl);
@@ -1114,6 +1122,9 @@ table #post_options, table #postoptions{display:none!important;}
             if (in_array($action, ['kb_edit', 'kb_type_edit'], true)) {
                 $editorSelector = 'textarea.af-kb-editor';
             }
+        }
+        if ($editorSelector === '') {
+            $editorSelector = 'textarea[name="message"]';
         }
 
         if ($helpFeatureEnabled) {
