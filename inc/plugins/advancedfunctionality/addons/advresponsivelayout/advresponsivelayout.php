@@ -494,6 +494,11 @@ function af_advresponsivelayout_strip_assets(string $page): string
 
 function af_advresponsivelayout_pre_output(string &$page = ''): void
 {
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_ADVRWD_ID, 'runtime')) {
+        return;
+    }
+
     if (!is_string($page) || $page === '') {
         return;
     }

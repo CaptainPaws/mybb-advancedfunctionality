@@ -1716,6 +1716,10 @@ function af_advancedmenu_pre_output(string &$page = ''): void
     if (!af_advancedmenu_is_frontend_context()) {
         return;
     }
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_AM_ID, 'pre_output')) {
+        return;
+    }
 
     af_advancedmenu_ensure_installed();
 

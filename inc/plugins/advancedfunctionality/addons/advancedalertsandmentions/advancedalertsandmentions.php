@@ -1082,6 +1082,10 @@ function af_aam_bootstrap(): void
     if (!af_aam_is_enabled()) {
         return;
     }
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_AAM_ID, 'bootstrap')) {
+        return;
+    }
 
     // CharacterSheets deliberately has no forum navigation surface.  Building
     // the global header fragment here made the persisted header template (and
@@ -1337,6 +1341,8 @@ function af_aam_pre_output_page(string &$page): void
     global $af_aam_js, $af_aam_css, $af_aam_header_icon, $af_aam_modal;
 
     if (!af_aam_is_enabled()
+        || (function_exists('af_frontend_asset_allowed')
+            && !af_frontend_asset_allowed(AF_AAM_ID, 'pre_output'))
         || (function_exists('af_aam_is_charactersheets_surface') && af_aam_is_charactersheets_surface())
         || $page === ''
         || stripos($page, '<html') === false

@@ -11,6 +11,10 @@ return [
     'authorsite'  => 'https://github.com/CaptainPaws',
     'bootstrap' => 'advancedmenu.php',
 
+    'frontend' => [
+        'mode' => 'global',
+    ],
+
     'admin' => [
         'slug'       => 'advancedmenu',
         'name'       => 'AdvancedMenu',

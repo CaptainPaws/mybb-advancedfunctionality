@@ -9,6 +9,10 @@ return [
     'version'     => '1.0.0',
     'bootstrap'   => 'advancedaccountswitcher.php',
 
+    'frontend' => [
+        'mode' => 'global',
+    ],
+
     'assets'      => [
         'front' => [
             'js'  => ['assets/advancedaccountswitcher.js'],

@@ -8,6 +8,10 @@ return [
     'authorsite'  => '',
     'bootstrap' => 'headerwelcomeavatar.php',
 
+    'frontend' => [
+        'mode' => 'global',
+    ],
+
     // Языковые ключи (AF ядро сгенерит RU/EN front+admin)
     'lang' => [
         // front

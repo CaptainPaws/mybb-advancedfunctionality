@@ -7,6 +7,10 @@ return [
     'description' => 'Full mobile responsive system for forum core navigation and AF plugin pages.',
     'version' => '2.0.0',
     'bootstrap' => 'advresponsivelayout.php',
+
+    'frontend' => [
+        'mode' => 'global',
+    ],
     'assets' => [
         'front' => [
             'css' => [],
