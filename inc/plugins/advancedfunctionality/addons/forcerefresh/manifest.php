@@ -11,6 +11,15 @@ return [
     'author'      => 'CaptainPaws',
     'bootstrap'   => 'forcerefresh.php',
 
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [],
+        'response_rules' => [
+            ['has_quick_reply' => true],
+        ],
+        'directory_fallback' => false,
+    ],
+
     'lang' => [
         'ru' => [
             'af_forcerefresh_name' => 'Force Refresh (Quick Reply)',

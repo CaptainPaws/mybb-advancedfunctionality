@@ -9,6 +9,16 @@ return [
     'author'   => 'CaptainPaws',
     'bootstrap'=> 'advancededitor.php',
 
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [],
+        'response_rules' => [
+            ['has_supported_editor' => true],
+            ['has_post_content' => true],
+        ],
+        'directory_fallback' => false,
+    ],
+
     // AF core сам синхронизирует языки по этим ключам (как у вас принято)
     'lang' => [
         'front' => [

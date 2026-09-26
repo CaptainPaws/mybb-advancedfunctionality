@@ -15,6 +15,15 @@ return [
     'website'     => 'https://github.com/CaptainPaws',
     'bootstrap'   => 'advancedbyddylist.php',
 
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [],
+        'response_rules' => [
+            ['has_buddy_trigger' => true],
+        ],
+        'directory_fallback' => false,
+    ],
+
 
     'lang' => [
         'russian' => [

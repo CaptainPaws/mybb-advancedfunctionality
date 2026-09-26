@@ -54,6 +54,28 @@ function af_abdl_is_enabled(): bool
     return !empty($mybb->settings['af_abdl_enabled']);
 }
 
+/** The caller document owns the modal runtime; the AJAX fragment only supplies markup. */
+function af_advancedbyddylist_pre_output(string &$page = ''): void
+{
+    global $mybb;
+
+    if (!af_abdl_is_enabled() || empty($mybb->user['uid']) || $page === '') return;
+
+    $hasTrigger = (bool)preg_match('~<a\b[^>]*href=["\'][^"\']*\baction=(?:buddypopup|buddypopup&amp;)[^"\']*["\']~i', $page)
+        || (bool)preg_match('~<a\b[^>]*href=["\'][^"\']*action=buddypopup(?:&amp;|&|["\'])~i', $page);
+    if (!$hasTrigger) return;
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_ABDL_ID, 'modal_caller', null, ['has_buddy_trigger' => true])) return;
+
+    $base = rtrim((string)($mybb->settings['bburl'] ?? ''), '/')
+        . '/inc/plugins/advancedfunctionality/addons/' . AF_ABDL_ID . '/assets/';
+    $inject = '<link rel="stylesheet" href="' . htmlspecialchars_uni($base . 'advancedbyddylist.css?v=1') . '" />' . "\n"
+        . '<script src="' . htmlspecialchars_uni($base . 'advancedbyddylist.js?v=1') . '"></script>' . "\n";
+    if (stripos($page, '</head>') !== false) {
+        $page = (string)preg_replace('~</head>~i', $inject . '</head>', $page, 1);
+    }
+}
+
 /**
  * Подмешиваем данные игнора + ассеты, но ТОЛЬКО для action=buddypopup&modal=1
  */

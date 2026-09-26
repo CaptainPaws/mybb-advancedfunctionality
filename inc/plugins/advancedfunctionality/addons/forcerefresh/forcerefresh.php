@@ -50,13 +50,15 @@ function af_forcerefresh_pre_output(string &$page = ''): void
         return;
     }
 
-    if (!in_array($script, ['showthread.php', 'newreply.php', 'newthread.php', 'editpost.php'], true)) {
+    if ($script !== 'showthread.php') {
         return;
     }
 
     if (!af_forcerefresh_should_load_assets($script, (string)$page)) {
         return;
     }
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_FORCEREFRESH_ID, 'quick_reply', null, ['has_quick_reply' => true])) return;
 
     $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
     if ($bburl === '') {
@@ -241,14 +243,6 @@ function af_forcerefresh_should_load_assets(string $script, string $page): bool
             || strpos($page, 'id="quick_reply_form"') !== false
             || strpos($page, "id='quick_reply_form'") !== false
             || strpos($page, 'name="message"') !== false;
-    }
-
-    if (in_array($script, ['newreply.php', 'newthread.php', 'editpost.php'], true)) {
-        return strpos($page, 'name="message"') !== false
-            || strpos($page, "name='message'") !== false
-            || strpos($page, 'id="message"') !== false
-            || strpos($page, "id='message'") !== false
-            || strpos($page, 'sceditor-container') !== false;
     }
 
     return false;

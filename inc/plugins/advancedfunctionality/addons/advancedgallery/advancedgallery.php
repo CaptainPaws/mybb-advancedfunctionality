@@ -680,6 +680,19 @@ function af_advancedgallery_pre_output(string &$page = ''): void
         return;
     }
 
+    // Remove collector/legacy source tags first; this owner decides whether the response has a UI host.
+    $page = (string)preg_replace(
+        '~<link\b[^>]*href=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/advancedgallery/assets/[^"\']+\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
+        '',
+        $page
+    );
+    $page = str_replace(AF_AG_MARK_DONE, '', $page);
+    $page = (string)preg_replace(
+        '~<script\b[^>]*src=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/advancedgallery/assets/[^"\']+\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i',
+        '',
+        $page
+    );
+
     if (af_gallery_assets_disabled_for_current_page()) {
         $page = preg_replace(
             '~<link\b[^>]*href=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/advancedgallery/assets/[^"\']+\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
@@ -703,33 +716,21 @@ function af_advancedgallery_pre_output(string &$page = ''): void
     // - на страницах с редактором (кнопка галереи + модалка)
     $script = defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '';
     $wantScripts = false;
+    $hasPicker = function_exists('af_advancededitor_response_facts')
+        ? !empty(af_advancededitor_response_facts($page)['has_supported_editor'])
+        : (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']message["\'])[^>]*>~i', $page);
 
-    if ($script === 'gallery.php') {
+    if ($script === 'gallery.php' && stripos($page, '<html') !== false) {
         $wantScripts = true;
-    } else {
-        $editorScripts = [
-            'showthread.php',
-            'newreply.php',
-            'newthread.php',
-            'editpost.php',
-            'private.php',
-            'usercp.php',
-            'misc.php',
-        ];
-
-        if (in_array($script, $editorScripts, true)) {
-            $wantScripts = true;
-        } else {
-            // fallback: если в HTML уже есть SCEditor — значит это страница с редактором
-            if (stripos($page, 'sceditor') !== false || stripos($page, 'data-sceditor-command') !== false) {
-                $wantScripts = true;
-            }
-        }
+    } elseif ($hasPicker) {
+        $wantScripts = true;
     }
 
     if (!$wantScripts) {
         return;
     }
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_AG_ID, 'pre_output', null, ['has_gallery_picker' => $hasPicker])) return;
 
     $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
     if ($bburl === '') {

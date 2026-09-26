@@ -10,6 +10,17 @@ return [
 
     'bootstrap'   => 'advancedgallery.php',
 
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [
+            ['script' => 'gallery.php'],
+        ],
+        'response_rules' => [
+            ['has_gallery_picker' => true],
+        ],
+        'directory_fallback' => false,
+    ],
+
     'admin' => [
         'slug'       => 'advancedgallery',
         'name'       => 'Галерея',
