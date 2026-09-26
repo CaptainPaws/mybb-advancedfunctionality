@@ -92,39 +92,21 @@ function af_ajsb_is_private_read_with_pmid(): bool
 
 function af_ajsb_allowed_assets_for_page(): array
 {
-    $css = ['scroll-buttons.css'];
-    $js  = ['scroll-buttons.js', 'postcontrols-tooltips.js'];
-
-    $isShowthread  = af_is_script('showthread.php');
-    $isForumdisplay = af_is_script('forumdisplay.php');
-    $isPmRead = af_ajsb_is_private_read_with_pmid();
-
-    if ($isShowthread) {
-        $js[] = 'af_popup_detach.js';
-    }
-
-    if ($isShowthread || $isForumdisplay) {
-        $css[] = 'af_quickquote.css';
-        $js[] = 'af_quickquote.js';
-        $css[] = 'fimp.css';
-        $js[] = 'fimp.js';
-        $js[] = 'kill-threaded-mode-link.js';
-    }
-
-    if ($isShowthread || $isForumdisplay || $isPmRead) {
-        $css[] = 'postbit-fa-icons.css';
-        $js[] = 'postbit-fa-icons.js';
-    }
-
-    if ($isShowthread || $isPmRead) {
-        $css[] = 'quote-avatars.css';
-        $js[] = 'quote-avatars.js';
-    }
-
-    return [
-        'css' => array_values(array_unique($css)),
-        'js' => array_values(array_unique($js)),
+    // This order is executable order, not a directory sort.  In particular,
+    // shared helpers stay ahead of component runtimes.
+    $catalog = [
+        'css' => ['scroll-buttons.css', 'af_quickquote.css', 'fimp.css', 'postbit-fa-icons.css', 'quote-avatars.css'],
+        'js' => ['scroll-buttons.js', 'postcontrols-tooltips.js', 'af_popup_detach.js', 'af_quickquote.js', 'fimp.js', 'kill-threaded-mode-link.js', 'postbit-fa-icons.js', 'quote-avatars.js'],
     ];
+    $allowed = ['css' => [], 'js' => []];
+    foreach ($catalog as $type => $files) {
+        foreach ($files as $file) {
+            if (!function_exists('af_frontend_asset_allowed') || af_frontend_asset_allowed(AF_AJSB_ID, $file)) {
+                $allowed[$type][] = $file;
+            }
+        }
+    }
+    return $allowed;
 }
 
 
@@ -157,8 +139,10 @@ function af_advancedjsbandle_pre_output(string &$page = ''): void
     $cssFiles = af_ajsb_list_css_files();
     $allowed  = af_ajsb_allowed_assets_for_page();
 
-    $allowedJs = array_values(array_intersect($jsFiles, $allowed['js']));
-    $allowedCss = array_values(array_intersect($cssFiles, $allowed['css']));
+    // array_intersect is intentionally oriented this way to retain catalog
+    // order rather than scandir/natural-sort order.
+    $allowedJs = array_values(array_intersect($allowed['js'], $jsFiles));
+    $allowedCss = array_values(array_intersect($allowed['css'], $cssFiles));
 
     if (!$jsFiles && !$cssFiles) {
         return;

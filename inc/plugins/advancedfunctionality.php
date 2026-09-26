@@ -1951,6 +1951,12 @@ function af_apply_preoutput_filters(string $page): string
             continue;
         }
 
+        // AdvancedJSBundle is a final-page transformer.  Running it while the
+        // source owners are still emitting markup makes its source set stale.
+        if ($id === 'advancedjsbandle') {
+            continue;
+        }
+
         if (!empty($meta['bootstrap']) && is_file($meta['bootstrap'])) {
             require_once $meta['bootstrap'];
         }
@@ -1974,6 +1980,17 @@ function af_apply_preoutput_filters(string $page): string
 
     // 2) Вклеиваем ассеты (CSS/JS) всех включённых аддонов
     $page = af_inject_enabled_addon_assets($page);
+
+    // 2.1) Bundle must observe the final, permission-filtered owner output.
+    if (af_is_addon_enabled('advancedjsbandle')) {
+        $bundleBootstrap = AF_ADDONS.'advancedjsbandle/advancedjsbandle.php';
+        if (is_file($bundleBootstrap)) {
+            require_once $bundleBootstrap;
+        }
+        if (function_exists('af_advancedjsbandle_pre_output')) {
+            af_advancedjsbandle_pre_output($page);
+        }
+    }
 
     // 3) Страховка: если внезапно нет НИ ОДНОГО rel="stylesheet" — вклеим $stylesheets
     $page = af_inject_core_stylesheets_if_missing($page);
@@ -2305,11 +2322,16 @@ function af_resolve_frontend_manifest(array $manifest): array
         return $cache[$cacheKey] = $legacy;
     }
     if ($mode === 'global') {
+        if (array_key_exists('directory_fallback', $frontend) && !is_bool($frontend['directory_fallback'])) {
+            $legacy['valid'] = false;
+            $legacy['diagnostic'] = 'frontend directory fallback flag must be boolean';
+            return $cache[$cacheKey] = $legacy;
+        }
         return $cache[$cacheKey] = [
             'mode' => 'global',
             'routes' => [],
             'response_rules' => [],
-            'directory_fallback' => true,
+            'directory_fallback' => $frontend['directory_fallback'] ?? true,
             'legacy_fallback' => false,
             'valid' => true,
             'diagnostic' => '',
@@ -2447,6 +2469,15 @@ function af_frontend_asset_decision($addon, $resource = null, ?array $context = 
         }
     }
 
+    // A resource may narrow (never broaden implicitly) its addon's frontend
+    // contract.  Keeping this in the canonical resolver prevents late owners
+    // such as AdvancedJSBundle from growing plugin-specific permission code.
+    if (is_string($resource) && $resource !== '') {
+        $resources = $manifest['frontend']['resources'] ?? null;
+        if (is_array($resources) && isset($resources[$resource]) && is_array($resources[$resource])) {
+            $manifest['frontend'] = $resources[$resource];
+        }
+    }
     $frontend = af_resolve_frontend_manifest($manifest);
     $context = $context ?? af_frontend_request_context();
     $allowed = true;

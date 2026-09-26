@@ -7,6 +7,25 @@ return [
     'author'      => 'CaptainPaws',
     'website'     => 'https://github.com/CaptainPaws',
     'bootstrap' => 'advancedjsbandle.php',
+    'frontend' => [
+        'mode' => 'global',
+        'directory_fallback' => false,
+        'resources' => [
+            'scroll-buttons.css' => ['mode' => 'global'],
+            'scroll-buttons.js' => ['mode' => 'global'],
+            'postcontrols-tooltips.js' => ['mode' => 'global'],
+            'af_popup_detach.js' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php']]],
+            'af_quickquote.css' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'forumdisplay.php']]],
+            'af_quickquote.js' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'forumdisplay.php']]],
+            'fimp.css' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'forumdisplay.php']]],
+            'fimp.js' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'forumdisplay.php']]],
+            'kill-threaded-mode-link.js' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'forumdisplay.php']]],
+            'postbit-fa-icons.css' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'forumdisplay.php'], ['script' => 'private.php', 'action' => 'read']]],
+            'postbit-fa-icons.js' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'forumdisplay.php'], ['script' => 'private.php', 'action' => 'read']]],
+            'quote-avatars.css' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'private.php', 'action' => 'read']]],
+            'quote-avatars.js' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'private.php', 'action' => 'read']]],
+        ],
+    ],
     'theme_stylesheets' => [
         [
             'id' => 'advancedjsbandle_scroll_buttons',

@@ -69,6 +69,25 @@ if (!af_frontend_asset_allowed(['id' => 'legacy'], null, $indexContext)) {
 if (!af_frontend_asset_allowed(['id' => 'global', 'frontend' => ['mode' => 'global']], null, $indexContext)) {
     throw new RuntimeException('Global frontend mode must be allowed');
 }
+$resourceAware = [
+    'id' => 'bundle',
+    'frontend' => [
+        'mode' => 'global',
+        'directory_fallback' => false,
+        'resources' => [
+            'thread.js' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php']]],
+        ],
+    ],
+];
+if (!af_frontend_asset_allowed($resourceAware, 'thread.js', ['script' => 'showthread.php'])
+    || af_frontend_asset_allowed($resourceAware, 'thread.js', $indexContext)
+    || !af_frontend_asset_allowed($resourceAware, 'unknown.js', $indexContext)) {
+    throw new RuntimeException('Resource frontend rules must narrow the parent addon decision');
+}
+$resourceManifest = af_resolve_frontend_manifest($resourceAware);
+if ($resourceManifest['directory_fallback'] !== false) {
+    throw new RuntimeException('Global manifests must be able to disable directory fallback');
+}
 
 $contextual = [
     'id' => 'wanted',
