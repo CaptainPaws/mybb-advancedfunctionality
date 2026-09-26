@@ -88,12 +88,27 @@ function af_menu_register_core_items(): void
 
 function af_menu_collect_registry(bool $force = false): array
 {
-    static $collected = false;
-    if ($force) { $GLOBALS['af_advancedmenu_system_registry'] = []; $collected = false; }
-    if (!$collected) {
-        $collected = true; af_menu_register_core_items();
-        foreach (get_defined_functions()['user'] as $function) {
-            if (preg_match('~^af_[a-z0-9_]+_menu_provider$~', $function)) $function();
+    static $coreRegistered = false;
+    static $calledProviders = [];
+    if ($force) {
+        $GLOBALS['af_advancedmenu_system_registry'] = [];
+        $coreRegistered = false;
+        $calledProviders = [];
+    }
+    if (!$coreRegistered) {
+        $coreRegistered = true;
+        af_menu_register_core_items();
+    }
+
+    // Addons are bootstrapped one by one. AdvancedMenu may therefore be
+    // initialised before a provider function exists. Discover newly loaded
+    // providers on every read instead of freezing the catalogue on the first
+    // call; each provider still runs at most once per request.
+    foreach (get_defined_functions()['user'] as $function) {
+        if (!isset($calledProviders[$function])
+            && preg_match('~^af_[a-z0-9_]+_menu_provider$~', $function)) {
+            $calledProviders[$function] = true;
+            $function();
         }
     }
     $items = $GLOBALS['af_advancedmenu_system_registry'] ?? [];
@@ -1033,7 +1048,9 @@ function af_advancedmenu_render_registry_item(array $item): string
         $classes .= ' af-am-modal-trigger';
         $triggerClass = preg_replace('~[^a-z0-9 _-]~i', '', (string)($action['trigger_class'] ?? ''));
         if ($triggerClass !== '') $classes .= ' '.$triggerClass;
-        $href = isset($action['handler']) ? af_advancedmenu_normalize_url((string)($action['url'] ?? '#')) : '#';
+        $href = isset($action['handler'])
+            ? af_advancedmenu_normalize_url(html_entity_decode((string)($action['url'] ?? '#'), ENT_QUOTES | ENT_HTML5, 'UTF-8'))
+            : '#';
         $selector = (string)($action['trigger_selector'] ?? '');
         if (preg_match('~^#([a-z][a-z0-9_-]*)$~i', $selector, $match)) {
             $attrs .= ' id="'.htmlspecialchars_uni($match[1]).'"';
