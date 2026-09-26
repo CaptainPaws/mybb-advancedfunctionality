@@ -2213,6 +2213,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     if (empty($sheet)) {
         return '<div class="af-cs-page"><div class="af-cs-muted">Лист не найден. Запись анкеты помечена для восстановления: откройте тему анкеты и повторно создайте лист.</div></div>';
     }
+    $GLOBALS['af_charactersheets_has_frontend_component'] = true;
     $character_source = af_charactersheets_resolve_character_kb_entry($tid, $uid, $accept_row);
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
     $character_stats = (array)(($character_source['payload'] ?? [])['stats'] ?? []);
@@ -4698,11 +4699,12 @@ function af_charactersheets_render_catalog_page(): void
         $cards_html = '<div class="af-cs-muted">Листы персонажей пока не созданы.</div>';
     }
 
-    $assets = af_charactersheets_get_asset_urls();
-    $asset_version = af_charactersheets_get_asset_version();
-    $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n"
-        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=' . $asset_version . '" />' . "\n"
-        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=' . $asset_version . '"></script>' . "\n";
+    $GLOBALS['af_charactersheets_has_frontend_component'] = true;
+    $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n";
+    af_charactersheets_ensure_assets_in_headerinclude();
+    if (function_exists('af_assets_inject_headerinclude')) {
+        af_assets_inject_headerinclude([]);
+    }
 
     $page_title = 'Каталог листов персонажей';
     $tpl = $templates->get('charactersheets_catalog');
