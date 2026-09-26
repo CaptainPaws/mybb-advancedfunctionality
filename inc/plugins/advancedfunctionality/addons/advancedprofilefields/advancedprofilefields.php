@@ -848,8 +848,28 @@ function af_advancedprofilefields_pre_output(&$page = ''): void
         return;
     }
 
-    // Legacy cleanup: удаляем возможный ручной инжект аддона.
-    // Дальнейшую загрузку CSS/JS выполняет только единый AF Asset Manager.
+    // Remove legacy/central copies before making the component-aware decision.
     af_apf_strip_own_assets($page);
     af_apf_dedupe_own_assets($page);
+
+    if (af_apf_assets_disabled_for_current_page()) {
+        return;
+    }
+
+    $hasOutput = strpos($page, AF_APF_SIG) !== false;
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_APF_ID, 'pre_output', null, ['has_apf_output' => $hasOutput])) {
+        return;
+    }
+
+    // advancedprofilefields.js is intentionally a no-op; only the stylesheet is required.
+    $base = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/')
+        . '/inc/plugins/advancedfunctionality/addons/' . AF_APF_ID . '/assets/';
+    $css = af_apf_add_ver($base . 'advancedprofilefields.css', AF_APF_ASSETS_DIR . 'advancedprofilefields.css');
+    $tag = AF_APF_ASSET_MARK . "\n<link rel=\"stylesheet\" href=\"" . htmlspecialchars_uni($css) . "\">\n";
+    if (stripos($page, '</head>') !== false) {
+        $page = preg_replace('~</head>~i', $tag . '</head>', $page, 1) ?? $page;
+    } else {
+        $page .= "\n" . $tag;
+    }
 }

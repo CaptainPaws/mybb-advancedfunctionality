@@ -545,6 +545,11 @@ function af_apa_assets_html()
 {
     global $mybb;
 
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_APA_ID, 'pre_output')) {
+        return '';
+    }
+
     // теперь ассеты лежат в /addons/advancedposteravatar/assets/
     $base = $mybb->settings['bburl']
           . '/inc/plugins/advancedfunctionality/addons/' . AF_APA_ID
