@@ -301,6 +301,10 @@ function af_advancedfontawesome_pre_output(string &$page = ''): void
     if (!af_afo_is_frontend()) {
         return;
     }
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_AFO_ID, 'pre_output')) {
+        return;
+    }
 
     if (empty($mybb->settings['af_advancedfontawesome_enabled'])) {
         return;

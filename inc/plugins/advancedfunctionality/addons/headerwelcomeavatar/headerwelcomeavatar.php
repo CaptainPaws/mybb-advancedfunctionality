@@ -517,6 +517,8 @@ function af_headerwelcomeavatar_pre_output(string &$page): void
     global $mybb;
 
     if (!af_headerwelcomeavatar_is_frontend()) return;
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed('headerwelcomeavatar', 'pre_output')) return;
 
     // AdvancedMenu owns the account surface when its drawer is enabled. Keep
     // this addon as a fallback for installations that disable AdvancedMenu,

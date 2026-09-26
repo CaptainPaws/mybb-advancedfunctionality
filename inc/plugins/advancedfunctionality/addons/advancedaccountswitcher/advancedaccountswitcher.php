@@ -378,6 +378,10 @@ function af_advancedaccountswitcher_init()
     if (empty($mybb->settings['af_advancedaccountswitcher_enabled'])) {
         return;
     }
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_AAS_ID, 'pre_output')) {
+        return;
+    }
 
     // 0) Определяем страницу редиректа MyBB
     $isRedirect =

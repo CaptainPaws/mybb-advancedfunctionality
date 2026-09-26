@@ -15,6 +15,10 @@ return [
     'website'     => 'https://github.com/CaptainPaws',
     'bootstrap'   => 'advancedalertsandmentions.php',
 
+    'frontend' => [
+        'mode' => 'global',
+    ],
+
     // админ-интеграция в роутер AF
     'admin' => [
         // slug используется в левом меню AF

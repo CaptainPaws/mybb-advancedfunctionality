@@ -9,6 +9,10 @@ return [
     'author'   => 'CaptainPaws',
     'bootstrap'=> 'advancedfontawesome.php',
 
+    'frontend' => [
+        'mode' => 'global',
+    ],
+
     'lang' => [
         'front' => [
             'af_advancedfontawesome_name'        => 'Advanced Font Awesome',
