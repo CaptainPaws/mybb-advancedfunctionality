@@ -7,6 +7,30 @@ return [
     'authorsite'  => '',
     'description' => 'Единая база знаний для сущностей (type/key).',
     'bootstrap'   => 'knowledgebase.php',
+    'frontend' => [
+        'mode' => 'contextual',
+        'routes' => [
+            // kb.php is the canonical frontend entry point.  Keep actions
+            // explicit so JSON/mutation endpoints are not frontend contexts.
+            ['script' => 'kb.php', 'action' => ''],
+            ['script' => 'kb.php', 'action' => 'kb'],
+            ['script' => 'kb.php', 'action' => 'view'],
+            ['script' => 'kb.php', 'action' => 'kb_edit'],
+            ['script' => 'kb.php', 'action' => 'kb_type_edit'],
+            ['script' => 'kb.php', 'action' => 'kb_help'],
+            ['script' => 'kb.php', 'action' => 'kb_manage_categories'],
+            // Retain the legacy misc.php frontend aliases only for HTML pages.
+            ['script' => 'misc.php', 'action' => 'kb'],
+            ['script' => 'misc.php', 'action' => 'kb_edit'],
+            ['script' => 'misc.php', 'action' => 'kb_type_edit'],
+            ['script' => 'misc.php', 'action' => 'kb_help'],
+            ['script' => 'misc.php', 'action' => 'kb_manage_categories'],
+        ],
+        'response_rules' => [
+            ['has_kb_chip' => true],
+        ],
+        'directory_fallback' => false,
+    ],
     'admin' => [
         'slug'       => 'knowledgebase',
         'title'      => 'Knowledge Base',
