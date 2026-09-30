@@ -6,6 +6,7 @@ if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 define('AF_ABDL_ID', 'advancedbyddylist'); // Historical addon id; retained for upgrades.
 define('AF_ABDL_FRIENDSHIPS', 'af_buddy_friendships');
 define('AF_ABDL_IGNORES', 'af_buddy_ignores');
+define('AF_ABDL_PAGE_ALIAS_SIGNATURE', 'AF_ABDL_BUDDY_PAGE_ALIAS');
 
 function af_advancedbyddylist_menu_provider(): void
 {
@@ -23,11 +24,99 @@ function af_advancedbyddylist_install(): void
     af_abdl_ensure_settings();
     af_abdl_ensure_schema();
     af_abdl_migrate_legacy();
+    af_abdl_install_page_alias();
 }
 function af_advancedbyddylist_activate(): void { af_advancedbyddylist_install(); }
+function af_advancedbyddylist_upgrade(): void { af_abdl_install_page_alias(); }
 function af_advancedbyddylist_deactivate(): void { /* Relations intentionally survive deactivation. */ }
-function af_advancedbyddylist_uninstall(): void { af_abdl_remove_settings(); /* User relations are retained deliberately. */ }
-function af_advancedbyddylist_init(): void { /* buddy.php calls the public controller directly. */ }
+function af_advancedbyddylist_uninstall(): void
+{
+    af_abdl_remove_settings();
+    af_abdl_remove_page_alias();
+    /* User relations are retained deliberately. */
+}
+function af_advancedbyddylist_init(): void
+{
+    global $mybb;
+
+    // Only administrators visiting the frontend repair a deleted alias. Existing
+    // files are never rewritten here, so normal requests incur no file writes.
+    if (!defined('IN_ADMINCP')
+        && af_abdl_is_enabled()
+        && !empty($mybb->usergroup)
+        && (int)($mybb->usergroup['cancp'] ?? 0) === 1
+        && !file_exists(MYBB_ROOT . 'buddy.php')
+    ) {
+        af_abdl_install_page_alias();
+    }
+}
+
+function af_abdl_install_page_alias(): bool
+{
+    $source = __DIR__ . '/assets/buddy.php';
+    $destination = MYBB_ROOT . 'buddy.php';
+
+    if (!is_file($source) || !is_readable($source)) {
+        return false;
+    }
+
+    $sourceCode = @file_get_contents($source);
+    if ($sourceCode === false || trim($sourceCode) === '') {
+        return false;
+    }
+
+    if (is_file($destination)) {
+        $destinationCode = @file_get_contents($destination);
+        if ($destinationCode === false
+            || strpos($destinationCode, AF_ABDL_PAGE_ALIAS_SIGNATURE) === false
+        ) {
+            return false;
+        }
+        if (hash('sha256', $destinationCode) === hash('sha256', $sourceCode)) {
+            return true;
+        }
+    }
+
+    // PHP cannot atomically replace an existing file with rename() on every
+    // supported Windows setup. Use a locked overwrite there; new aliases and
+    // Unix updates use a verified temporary file followed by an atomic rename.
+    if (DIRECTORY_SEPARATOR === '\\' && is_file($destination)) {
+        $written = @file_put_contents($destination, $sourceCode, LOCK_EX);
+        return $written === strlen($sourceCode)
+            && @file_get_contents($destination) === $sourceCode;
+    }
+
+    $temporary = @tempnam(dirname($destination), '.af-abdl-');
+    if ($temporary === false) {
+        return false;
+    }
+
+    $written = @file_put_contents($temporary, $sourceCode, LOCK_EX);
+    $valid = $written === strlen($sourceCode)
+        && @file_get_contents($temporary) === $sourceCode;
+    if (!$valid || !@rename($temporary, $destination)) {
+        @unlink($temporary);
+        return false;
+    }
+
+    @chmod($destination, 0644);
+    return @file_get_contents($destination) === $sourceCode;
+}
+
+function af_abdl_remove_page_alias(): bool
+{
+    $destination = MYBB_ROOT . 'buddy.php';
+    if (!is_file($destination) || !is_readable($destination)) {
+        return !file_exists($destination);
+    }
+
+    $code = @file_get_contents($destination);
+    if ($code === false || strpos($code, AF_ABDL_PAGE_ALIAS_SIGNATURE) === false) {
+        return false;
+    }
+
+    return @unlink($destination);
+}
 
 function af_abdl_is_enabled(): bool
 {
