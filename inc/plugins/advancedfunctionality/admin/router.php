@@ -638,8 +638,7 @@ class AF_Admin
 
     public static function isAddonEnabled(string $id): bool
     {
-        global $mybb;
-        return isset($mybb->settings['af_'.$id.'_enabled']) && $mybb->settings['af_'.$id.'_enabled'] === '1';
+        return af_is_addon_enabled($id);
     }
 
     public static function enableAddon(string $id): void
@@ -652,6 +651,7 @@ class AF_Admin
         }
         self::ensureEnabledSetting($id, 1);
         af_rebuild_and_reload_settings();
+        af_lifecycle_transition($id, true);
         af_sync_theme_stylesheets(false, $id);
     }
 
@@ -659,6 +659,10 @@ class AF_Admin
     {
         self::ensureEnabledSetting($id, 0);
         af_rebuild_and_reload_settings();
+
+        // The setting change is authoritative immediately.  Code loaded earlier
+        // in this request must not retain runtime permission after this point.
+        af_lifecycle_transition($id, false);
         af_disable_theme_stylesheet_sources($id);
         af_sync_theme_stylesheets(false, $id);
 

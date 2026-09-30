@@ -112,12 +112,22 @@ function af_menu_collect_registry(bool $force = false): array
     // call; each provider still runs at most once per request.
     foreach (get_defined_functions()['user'] as $function) {
         if (!isset($calledProviders[$function])
-            && preg_match('~^af_[a-z0-9_]+_menu_provider$~', $function)) {
+            && preg_match('~^af_([a-z0-9_]+)_menu_provider$~', $function, $match)) {
             $calledProviders[$function] = true;
-            $function();
+            $owner = (string)($match[1] ?? '');
+            if ($owner !== '' && (!function_exists('af_is_addon_enabled') || af_is_addon_enabled($owner))) {
+                function_exists('af_run_addon_callback')
+                    ? af_run_addon_callback($owner, $function)
+                    : $function();
+            }
         }
     }
     $items = $GLOBALS['af_advancedmenu_system_registry'] ?? [];
+    $items = array_filter($items, static function (array $item): bool {
+        $owner = strtolower(trim((string)($item['source_addon'] ?? 'mybb')));
+        return $owner === '' || $owner === 'mybb'
+            || !function_exists('af_is_addon_enabled') || af_is_addon_enabled($owner);
+    });
     uasort($items, static fn(array $a, array $b): int => [$a['default_sortorder'], $a['key']] <=> [$b['default_sortorder'], $b['key']]);
     return $items;
 }

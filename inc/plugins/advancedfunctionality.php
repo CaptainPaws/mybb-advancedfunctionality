@@ -959,8 +959,7 @@ class AF_Admin
 
     public static function isAddonEnabled(string $id): bool
     {
-        global $mybb;
-        return isset($mybb->settings['af_'.$id.'_enabled']) && $mybb->settings['af_'.$id.'_enabled'] === '1';
+        return af_is_addon_enabled($id);
     }
 
     public static function enableAddon(string $id): void
@@ -973,6 +972,7 @@ class AF_Admin
         }
         self::ensureEnabledSetting($id, 1);
         af_rebuild_and_reload_settings();
+        af_lifecycle_transition($id, true);
         af_sync_theme_stylesheets(false, $id);
     }
 
@@ -980,6 +980,10 @@ class AF_Admin
     {
         self::ensureEnabledSetting($id, 0);
         af_rebuild_and_reload_settings();
+
+        // The setting change is authoritative immediately.  Code loaded earlier
+        // in this request must not retain runtime permission after this point.
+        af_lifecycle_transition($id, false);
         af_disable_theme_stylesheet_sources($id);
         af_sync_theme_stylesheets(false, $id);
 
@@ -2480,10 +2484,12 @@ function af_frontend_asset_decision($addon, $resource = null, ?array $context = 
     }
     $frontend = af_resolve_frontend_manifest($manifest);
     $context = $context ?? af_frontend_request_context();
-    $allowed = true;
+    $addonId = (string)($manifest['id'] ?? (is_string($addon) ? $addon : ''));
+    // A manifest describes capabilities; it never grants runtime permission.
+    $allowed = $addonId === '' || !function_exists('af_is_addon_enabled') || af_is_addon_enabled($addonId);
     $matchedRoute = null;
 
-    if ($frontend['mode'] === 'contextual') {
+    if ($allowed && $frontend['mode'] === 'contextual') {
         $allowed = false;
         foreach ($frontend['routes'] as $index => $route) {
             if (af_frontend_route_matches($route, $context)) {
@@ -2511,7 +2517,7 @@ function af_frontend_asset_decision($addon, $resource = null, ?array $context = 
     }
 
     return [
-        'addon' => (string)($manifest['id'] ?? (is_string($addon) ? $addon : '')),
+        'addon' => $addonId,
         'resource' => $resource,
         'mode' => $frontend['mode'],
         'matched_route' => $matchedRoute,
@@ -4351,10 +4357,66 @@ function af_maybe_sync_theme_stylesheets_runtime(): void
     @file_put_contents($sigFile, $sigNow, LOCK_EX);
 }
 
+/**
+ * Return the authoritative request-local addon state.
+ *
+ * A lifecycle transition overrides every registry assembled earlier in the
+ * request.  A loaded PHP function is not proof that its addon may still run.
+ */
 function af_is_addon_enabled(string $id): bool
 {
+    $id = preg_replace('~[^a-z0-9_\-]+~i', '', $id) ?: '';
+    if ($id === '') {
+        return false;
+    }
+
+    $states = $GLOBALS['af_addon_runtime_states'] ?? [];
+    if (array_key_exists($id, $states)) {
+        return $states[$id] === true;
+    }
+
     global $mybb;
-    return isset($mybb->settings['af_'.$id.'_enabled']) && $mybb->settings['af_'.$id.'_enabled'] === '1';
+    return isset($mybb->settings['af_'.$id.'_enabled']) && (string)$mybb->settings['af_'.$id.'_enabled'] === '1';
+}
+
+/**
+ * Publish an enable/disable transition and invalidate request-local registries.
+ * Persistent addon data is deliberately untouched; cleanup belongs to uninstall.
+ */
+function af_lifecycle_transition(string $id, bool $active): void
+{
+    $id = preg_replace('~[^a-z0-9_\-]+~i', '', $id) ?: '';
+    if ($id === '') {
+        return;
+    }
+
+    if (!isset($GLOBALS['af_addon_runtime_states']) || !is_array($GLOBALS['af_addon_runtime_states'])) {
+        $GLOBALS['af_addon_runtime_states'] = [];
+    }
+    $GLOBALS['af_addon_runtime_states'][$id] = $active;
+    $GLOBALS['af_addon_registry_generation'] = (int)($GLOBALS['af_addon_registry_generation'] ?? 0) + 1;
+
+    // These registries contain executable callbacks or assets.  Rebuild them
+    // from current state instead of allowing a pre-transition snapshot to leak.
+    $GLOBALS['af_assets_queue'] = ['css' => [], 'js' => []];
+    unset($GLOBALS['af_advancedmenu_system_registry']);
+    unset($GLOBALS['af_response_fact_providers']);
+    unset($GLOBALS['af_frontend_owners']);
+    unset($GLOBALS['af_self_heal_registry']);
+
+    // A false value is also meaningful: runtime sync may be reconsidered using
+    // the new enabled set, but no inactive addon callback gains permission.
+    $GLOBALS['af_templates_synced_runtime'] = false;
+    $GLOBALS['af_theme_stylesheets_synced_runtime'] = false;
+}
+
+/** Execute addon-owned runtime only while its current state permits it. */
+function af_run_addon_callback(string $id, callable $callback, array $arguments = [])
+{
+    if (!af_is_addon_enabled($id)) {
+        return null;
+    }
+    return $callback(...$arguments);
 }
 
 
