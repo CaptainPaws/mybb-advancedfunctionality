@@ -103,7 +103,10 @@ function af_advancededitor_resolve_css_delivery_url(string $fileRel): string
         : ['include_file' => true, 'use_theme_stylesheet' => false, 'theme_href' => ''];
 
     if (!empty($decision['use_theme_stylesheet']) && !empty($decision['theme_href'])) {
-        return (string)$decision['theme_href'];
+        // The usable bundle is already attached by MyBB.  Re-emitting its URL
+        // once for every AdvancedEditor pack duplicates advancedstyles.css and
+        // moves copies around the SCEditor runtime stylesheet in the cascade.
+        return '';
     }
 
     if (empty($decision['include_file'])) {
