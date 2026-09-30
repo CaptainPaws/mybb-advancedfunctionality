@@ -8292,10 +8292,19 @@ function af_knowledgebase_pre_output(string &$page = ''): void
     // Dedupe KB assets/markers regardless of source of injection.
     af_kb_strip_assets_from_html($page);
     $hasKbChips = stripos($page, 'af-kb-chip') !== false;
+    // Keep this response detection owner-local. Knowledge Base must declare
+    // and authorize its editor integration rather than relying on an AF-core
+    // exception for AdvancedEditor.
+    $hasSupportedEditor = (bool)preg_match(
+        '~<textarea\b(?=[^>]*(?:\bname=["\']message["\']|\bclass=["\'][^"\']*(?:\baf-kb-editor\b|\baf-atf-bbcode-editor\b)))[^>]*>~i',
+        $page
+    );
     $pageAssetsAllowed = $is_kb_page && af_kb_frontend_asset_allowed('page_runtime');
     $chipAssetsAllowed = $hasKbChips
         && af_kb_frontend_asset_allowed('chip_runtime', ['has_kb_chip' => true]);
-    if ($enabled && ($pageAssetsAllowed || $chipAssetsAllowed)) {
+    $editorAssetsAllowed = $hasSupportedEditor
+        && af_kb_frontend_asset_allowed('editor_integration', ['has_supported_editor' => true]);
+    if ($enabled && ($pageAssetsAllowed || $chipAssetsAllowed || $editorAssetsAllowed)) {
         $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
         if ($bburl !== '') {
             $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_KB_ID . '/assets';
@@ -8312,7 +8321,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
             $runtimeModeTag = '';
             $kbUiCss = '';
 
-            if ($pageAssetsAllowed || $chipAssetsAllowed) {
+            if ($pageAssetsAllowed || $chipAssetsAllowed || $editorAssetsAllowed) {
                 // KB base css/js
                 $cssTag .= af_kb_build_css_include_tag('assets/knowledgebase.css');
                 $kbUiCss  = af_kb_build_css_include_tag('assets/knowledgebase_kbui.css');
@@ -8341,7 +8350,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 $editorInit   = $bundle['init'] ?? '';
             }
 
-            if ($pageAssetsAllowed || $chipAssetsAllowed) {
+            if ($pageAssetsAllowed || $chipAssetsAllowed || $editorAssetsAllowed) {
                 $runtimeModeTag = '<script>window.afKbRuntimeMode='
                     . json_encode($isKbEditorPage ? 'editor' : 'view', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                     . ';</script>';
@@ -8354,7 +8363,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                     'json_list' => af_kb_url(['action' => 'kb_json_list']),
                 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';</script>';
 
-                if ($isKbEditorPage) {
+                if ($editorAssetsAllowed) {
                     af_knowledgebase_load_lang(false);
                     $langPayload = json_encode([
                         'kbInsertLabel'  => $lang->af_kb_kb_insert_label ?? 'KB',
@@ -8366,6 +8375,24 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                         'kbInsertButton' => $lang->af_kb_kb_insert_button ?? 'Insert',
                     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                     $langTag = $langPayload !== false ? '<script>window.afKbLang='.$langPayload.';</script>' : '';
+
+                    // The picker needs only its lazy JSON endpoints and a
+                    // mechanic default. Entries themselves remain unloaded
+                    // until the user chooses a type or searches.
+                    $endpointTag = '<script>window.afKbEndpoints=' . json_encode([
+                        'get' => af_kb_url(['action' => 'kb_get']),
+                        'list' => af_kb_url(['action' => 'kb_list']),
+                        'types' => af_kb_url(['action' => 'kb_types']),
+                        'children' => af_kb_url(['action' => 'kb_children']),
+                        'json_list' => af_kb_url(['action' => 'kb_json_list']),
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';window.afKbInsertMechanic='
+                        . json_encode(af_kb_get_catalog_active_mechanic_key(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                        . ';</script>';
+
+                    $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?v='.af_kb_asset_version('knowledgebase_insert.js').'"></script>';
+                }
+
+                if ($isKbEditorPage) {
 
                     $arpgMechanicsUiOptions = [
                         'ability_type' => af_kb_get_arpg_mechanics_options('ability_type'),
@@ -8428,7 +8455,6 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                         . ';</script>';
 
                     $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?v='.af_kb_asset_version('knowledgebase_chips.js').'"></script>';
-                    $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?v='.af_kb_asset_version('knowledgebase_insert.js').'"></script>';
                 }
             }
 

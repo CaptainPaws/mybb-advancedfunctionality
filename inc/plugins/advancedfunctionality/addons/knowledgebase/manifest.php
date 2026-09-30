@@ -28,6 +28,9 @@ return [
         ],
         'response_rules' => [
             ['has_kb_chip' => true],
+            // The picker/command is KB-owned, but is useful in every editor
+            // surface supplied by AdvancedEditor (posts, quick reply and ATF).
+            ['has_supported_editor' => true],
         ],
         'directory_fallback' => false,
     ],
