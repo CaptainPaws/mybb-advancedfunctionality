@@ -56,7 +56,7 @@ if (strpos($welcomeSource, "function_exists('af_advancedmenu_render_drawer_accou
 }
 
 $buddySource = file_get_contents(AF_ADDONS.'advancedbyddylist/advancedbyddylist.php');
-foreach (["'key'=>'friends'", "'type'=>'modal'", "'default_container'=>'user_drawer'", "'handler'=>'MyBB.popupWindow'"] as $needle) {
+foreach (["'key' => 'friends'", "'type' => 'link'", "'default_container' => 'user_drawer'", "'url' => 'buddy.php'"] as $needle) {
     if (strpos($buddySource, $needle) === false) throw new RuntimeException('Friends drawer contract missing: '.$needle);
 }
 

@@ -1,412 +1,254 @@
 <?php
-/**
- * AF Addon: Advanced Buddy List
- * - Переписывает содержимое шаблона misc_buddypopup на нормальную модалку с табами
- * - Добавляет игнор-лист в вывод buddypopup
- * - Подключает свои CSS/JS только для этого окна
- */
-
+/** Advanced Buddy List: reciprocal friendships and one-way ignores. */
 if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
-define('AF_ABDL_ID', 'advancedbyddylist');
-define('AF_ABDL_TPL_MARK', '<!--af_abdl-->');
+define('AF_ABDL_ID', 'advancedbyddylist'); // Historical addon id; retained for upgrades.
+define('AF_ABDL_FRIENDSHIPS', 'af_buddy_friendships');
+define('AF_ABDL_IGNORES', 'af_buddy_ignores');
 
 function af_advancedbyddylist_menu_provider(): void
 {
-    af_menu_register_item(['key'=>'friends','source_addon'=>AF_ABDL_ID,'label'=>'Друзья','icon'=>'fa-solid fa-user-group','type'=>'modal','section'=>'links','default_container'=>'user_drawer','default_sortorder'=>30,'visibility'=>static function (): bool { global $mybb; return !empty($mybb->user['uid']) && af_abdl_is_enabled(); },'action'=>['url'=>'misc.php?action=buddypopup&amp;modal=1','trigger_selector'=>'a[href*="action=buddypopup"]','handler'=>'MyBB.popupWindow','owner_template'=>'misc_buddypopup']]);
+    af_menu_register_item([
+        'key' => 'friends', 'source_addon' => AF_ABDL_ID, 'label' => 'Друзья',
+        'icon' => 'fa-solid fa-user-group', 'type' => 'link', 'section' => 'links',
+        'default_container' => 'user_drawer', 'default_sortorder' => 30,
+        'visibility' => static function (): bool { global $mybb; return !empty($mybb->user['uid']) && af_abdl_is_enabled(); },
+        'action' => ['url' => 'buddy.php'],
+    ]);
 }
 
 function af_advancedbyddylist_install(): void
 {
     af_abdl_ensure_settings();
-    af_abdl_patch_misc_buddypopup_template(true);
+    af_abdl_ensure_schema();
+    af_abdl_migrate_legacy();
 }
-
-function af_advancedbyddylist_uninstall(): void
-{
-    af_abdl_unpatch_misc_buddypopup_template();
-    af_abdl_remove_settings();
-}
-
-function af_advancedbyddylist_activate(): void
-{
-    af_abdl_ensure_settings();
-    af_abdl_patch_misc_buddypopup_template(false);
-}
-
-function af_advancedbyddylist_deactivate(): void
-{
-    // В деактивации возвращаем стандартный шаблон, если мы его патчили
-    af_abdl_unpatch_misc_buddypopup_template();
-}
-
-function af_advancedbyddylist_init(): void
-{
-    global $plugins;
-    $plugins->add_hook('misc_start', 'af_abdl_hook_misc_start');
-}
-
+function af_advancedbyddylist_activate(): void { af_advancedbyddylist_install(); }
+function af_advancedbyddylist_deactivate(): void { /* Relations intentionally survive deactivation. */ }
+function af_advancedbyddylist_uninstall(): void { af_abdl_remove_settings(); /* User relations are retained deliberately. */ }
+function af_advancedbyddylist_init(): void { /* buddy.php calls the public controller directly. */ }
 
 function af_abdl_is_enabled(): bool
 {
     global $mybb;
-    return !empty($mybb->settings['af_abdl_enabled']);
+    return !isset($mybb->settings['af_abdl_enabled']) || !empty($mybb->settings['af_abdl_enabled']);
 }
 
-/** The caller document owns the modal runtime; the AJAX fragment only supplies markup. */
-function af_advancedbyddylist_pre_output(string &$page = ''): void
+function af_abdl_ensure_schema(): void
 {
-    global $mybb;
-
-    if (!af_abdl_is_enabled() || empty($mybb->user['uid']) || $page === '') return;
-    if (strpos($page, 'advancedbyddylist.js?v=1') !== false) return;
-
-    $hasTrigger = (bool)preg_match('~<a\b[^>]*href=["\'][^"\']*\baction=(?:buddypopup|buddypopup&amp;)[^"\']*["\']~i', $page)
-        || (bool)preg_match('~<a\b[^>]*href=["\'][^"\']*action=buddypopup(?:&amp;|&|["\'])~i', $page);
-    if (!$hasTrigger) return;
-    if (function_exists('af_frontend_asset_allowed')
-        && !af_frontend_asset_allowed(AF_ABDL_ID, 'modal_caller', null, ['has_buddy_trigger' => true])) return;
-
-    $base = rtrim((string)($mybb->settings['bburl'] ?? ''), '/')
-        . '/inc/plugins/advancedfunctionality/addons/' . AF_ABDL_ID . '/assets/';
-    $inject = '<link rel="stylesheet" href="' . htmlspecialchars_uni($base . 'advancedbyddylist.css?v=1') . '" />' . "\n"
-        . '<script src="' . htmlspecialchars_uni($base . 'advancedbyddylist.js?v=1') . '"></script>' . "\n";
-    if (stripos($page, '</head>') !== false) {
-        $page = (string)preg_replace('~</head>~i', $inject . '</head>', $page, 1);
+    global $db;
+    $collation = $db->build_create_table_collation();
+    if (!$db->table_exists(AF_ABDL_FRIENDSHIPS)) {
+        $db->write_query("CREATE TABLE `{$db->table_prefix}" . AF_ABDL_FRIENDSHIPS . "` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT,
+            `requester_uid` int unsigned NOT NULL,
+            `addressee_uid` int unsigned NOT NULL,
+            `pair_low` int unsigned NOT NULL,
+            `pair_high` int unsigned NOT NULL,
+            `status` enum('pending','accepted') NOT NULL DEFAULT 'pending',
+            `created_at` int unsigned NOT NULL,
+            `updated_at` int unsigned NOT NULL,
+            PRIMARY KEY (`id`), UNIQUE KEY `pair` (`pair_low`,`pair_high`),
+            KEY `requester_status` (`requester_uid`,`status`), KEY `addressee_status` (`addressee_uid`,`status`)
+        ) ENGINE=MyISAM{$collation}");
+    }
+    if (!$db->table_exists(AF_ABDL_IGNORES)) {
+        $db->write_query("CREATE TABLE `{$db->table_prefix}" . AF_ABDL_IGNORES . "` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `uid` int unsigned NOT NULL,
+            `ignored_uid` int unsigned NOT NULL, `created_at` int unsigned NOT NULL,
+            PRIMARY KEY (`id`), UNIQUE KEY `owner_target` (`uid`,`ignored_uid`), KEY `ignored_uid` (`ignored_uid`)
+        ) ENGINE=MyISAM{$collation}");
     }
 }
 
-/**
- * Подмешиваем данные игнора + ассеты, но ТОЛЬКО для action=buddypopup&modal=1
- */
-function af_abdl_hook_misc_start(): void
+/** One-time, idempotent import. Legacy buddy entries become accepted relations. */
+function af_abdl_migrate_legacy(): void
 {
-    global $mybb;
-
-    if (!af_abdl_is_enabled()) return;
-    if (THIS_SCRIPT !== 'misc.php') return;
-
-    $action = (string)($mybb->input['action'] ?? '');
-    if ($action !== 'buddypopup') return;
-
-    $modal = (int)($mybb->input['modal'] ?? 0);
-    if ($modal !== 1) return;
-
-    // Теперь мы в том самом окне popupWindow(modal=1).
-    // Дальше: готовим переменные, которые будут использоваться в misc_buddypopup (наш переписанный шаблон).
-    af_abdl_prepare_popup_vars();
-}
-
-/**
- * Готовим переменные для шаблона:
- * - $af_abdl_css, $af_abdl_js
- * - $af_abdl_ignore_rows (HTML строк игнора)
- * - $af_abdl_strings (JSON строк для JS: подписи табов)
- */
-function af_abdl_prepare_popup_vars(): void
-{
-    global $mybb, $lang;
-
-    if ($mybb->user['uid'] <= 0) {
-        // гости не должны сюда попадать нормально, но не ломаемся
-        return;
-    }
-
-    // язык (AF-ядро генерит lang файл advancedfunctionality_advancedbyddylist.lang.php)
-    if (function_exists('af_abdl_lang')) {
-        af_abdl_lang();
-    } else {
-        // фоллбек: пробуем руками
-        if (method_exists($lang, 'load')) {
-            $lang->load('advancedfunctionality_advancedbyddylist');
+    global $db;
+    if (!$db->table_exists(AF_ABDL_FRIENDSHIPS) || !$db->table_exists(AF_ABDL_IGNORES)) return;
+    $q = $db->simple_select('users', 'uid,buddylist,ignorelist', "buddylist<>'' OR ignorelist<>''");
+    while ($user = $db->fetch_array($q)) {
+        $uid = (int)$user['uid'];
+        foreach (af_abdl_parse_uid_csv((string)$user['buddylist']) as $other) {
+            if ($other === $uid || !af_abdl_user_exists($other)) continue;
+            [$low, $high] = [min($uid, $other), max($uid, $other)];
+            $exists = (int)$db->fetch_field($db->simple_select(AF_ABDL_FRIENDSHIPS, 'id', "pair_low={$low} AND pair_high={$high}", ['limit'=>1]), 'id');
+            if (!$exists) $db->insert_query(AF_ABDL_FRIENDSHIPS, ['requester_uid'=>$uid,'addressee_uid'=>$other,'pair_low'=>$low,'pair_high'=>$high,'status'=>'accepted','created_at'=>TIME_NOW,'updated_at'=>TIME_NOW]);
+        }
+        foreach (af_abdl_parse_uid_csv((string)$user['ignorelist']) as $other) {
+            if ($other === $uid || !af_abdl_user_exists($other)) continue;
+            $exists = (int)$db->fetch_field($db->simple_select(AF_ABDL_IGNORES, 'id', "uid={$uid} AND ignored_uid={$other}", ['limit'=>1]), 'id');
+            if (!$exists) $db->insert_query(AF_ABDL_IGNORES, ['uid'=>$uid,'ignored_uid'=>$other,'created_at'=>TIME_NOW]);
         }
     }
-
-    $bburl = rtrim((string)$mybb->settings['bburl'], '/');
-    $assets = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_ABDL_ID . '/assets/';
-
-    // Эти переменные подхватит шаблон misc_buddypopup (который мы перепишем)
-    $GLOBALS['af_abdl_css'] = $assets . 'advancedbyddylist.css?v=1';
-    $GLOBALS['af_abdl_js']  = $assets . 'advancedbyddylist.js?v=1';
-
-    // Игнор: собираем строки как таблицу, в стиле buddy rows
-    $GLOBALS['af_abdl_ignore_rows'] = af_abdl_build_list_rows('ignore');
-
-    // Тексты для JS
-    $strings = [
-        'tab_friends'  => $lang->af_abdl_tab_friends ?? 'Friends',
-        'tab_ignore'   => $lang->af_abdl_tab_ignore ?? 'Ignore',
-        'online'       => $lang->af_abdl_online ?? 'Online',
-        'offline'      => $lang->af_abdl_offline ?? 'Offline',
-        'send_pm'      => $lang->af_abdl_send_pm ?? 'Send private message',
-        'manage_lists' => $lang->af_abdl_manage_lists ?? 'Friends/Ignore list',
-        'close'        => $lang->af_abdl_close ?? 'Close',
-        'empty'        => $lang->af_abdl_empty ?? 'Empty.',
-        'edit_url'     => $bburl . '/usercp.php?action=editlists',
-    ];
-
-    $GLOBALS['af_abdl_strings'] = json_encode($strings, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
-/**
- * $type = 'ignore' (позже можно расширить)
- * Возвращает <tr>... строки для вставки в таблицу.
- */
-function af_abdl_build_list_rows(string $type): string
+function af_abdl_user_exists(int $uid): bool
 {
-    global $mybb, $db;
-
-    $uid = (int)$mybb->user['uid'];
-    if ($uid <= 0) return '';
-
-    $csv = '';
-    if ($type === 'ignore') {
-        $csv = (string)($mybb->user['ignorelist'] ?? '');
-    } else {
-        $csv = (string)($mybb->user['buddylist'] ?? '');
-    }
-
-    $ids = af_abdl_parse_uid_csv($csv);
-    if (!$ids) {
-        return '';
-    }
-
-    $in = implode(',', array_map('intval', $ids));
-
-    // users
-    $q = $db->simple_select('users', 'uid,username,usergroup,displaygroup,avatar,avatardimensions,lastactive', "uid IN ($in)");
-    $users = [];
-    while ($u = $db->fetch_array($q)) {
-        $users[(int)$u['uid']] = $u;
-    }
-
-    // online sessions
-    $online = [];
-    $cutoff = TIME_NOW - 15 * 60;
-    $qs = $db->simple_select('sessions', 'uid', "uid IN ($in) AND time > " . (int)$cutoff);
-    while ($s = $db->fetch_array($qs)) {
-        $online[(int)$s['uid']] = true;
-    }
-
-    // порядок как в csv
-    $onlineRows = '';
-    $offlineRows = '';
-
-    foreach ($ids as $id) {
-        $id = (int)$id;
-        if ($id <= 0 || !isset($users[$id])) continue;
-
-        $u = $users[$id];
-
-        $avatar = trim((string)$u['avatar']);
-        if ($avatar === '') {
-            $avatar = 'images/default_avatar.png';
-        }
-
-        $profile = 'member.php?action=profile&uid=' . (int)$id;
-        $sendpm  = 'private.php?action=send&uid=' . (int)$id;
-
-        $username = htmlspecialchars_uni($u['username']);
-        $rowClass = !empty($online[$id]) ? 'trow2' : 'trow1';
-
-        $row = '';
-        $row .= '<tr>';
-        $row .= '  <td class="' . $rowClass . '" width="1%">';
-        $row .= '    <div class="buddy_avatar float_left"><img src="' . htmlspecialchars_uni($avatar) . '" alt="" width="44" height="44" style="margin-top: 3px;"></div>';
-        $row .= '  </td>';
-        $row .= '  <td class="' . $rowClass . '">';
-        $row .= '    <a href="' . htmlspecialchars_uni($profile) . '" target="_blank" onclick="if(window.opener){ window.opener.location = this.href; return false; }">' . $username . '</a>';
-        $row .= '    <div class="buddy_action">';
-        $row .= '      <span class="smalltext"><a href="' . htmlspecialchars_uni($sendpm) . '" target="_blank" onclick="if(window.opener){ window.opener.location.href=this.href; return false; }">' . htmlspecialchars_uni($GLOBALS['lang']->af_abdl_send_pm ?? 'Send private message') . '</a></span>';
-        $row .= '    </div>';
-        $row .= '  </td>';
-        $row .= '</tr>';
-
-        if (!empty($online[$id])) $onlineRows .= $row;
-        else $offlineRows .= $row;
-    }
-
-    $out = '';
-    if ($onlineRows !== '') {
-        $out .= '<tr><td class="tcat" colspan="2"><strong>' . htmlspecialchars_uni($GLOBALS['lang']->af_abdl_online ?? 'Online') . '</strong></td></tr>';
-        $out .= $onlineRows;
-    }
-    if ($offlineRows !== '') {
-        $out .= '<tr><td class="tcat" colspan="2"><strong>' . htmlspecialchars_uni($GLOBALS['lang']->af_abdl_offline ?? 'Offline') . '</strong></td></tr>';
-        $out .= $offlineRows;
-    }
-
-    return $out;
+    global $db;
+    return $uid > 0 && (int)$db->fetch_field($db->simple_select('users', 'uid', "uid={$uid}", ['limit'=>1]), 'uid') === $uid;
 }
-
 function af_abdl_parse_uid_csv(string $csv): array
 {
-    $csv = trim($csv);
-    if ($csv === '') return [];
-
-    $parts = preg_split('~\s*,\s*~', $csv);
-    $out = [];
-    foreach ($parts as $p) {
-        $n = (int)$p;
-        if ($n > 0) $out[$n] = $n;
-    }
+    $out=[]; foreach (preg_split('~\s*,\s*~', trim($csv), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $value) { $id=(int)$value; if ($id>0) $out[$id]=$id; }
     return array_values($out);
 }
 
-/**
- * Настройки (минимум: enable)
- */
+function af_abdl_relation(int $uid, int $other): ?array
+{
+    global $db;
+    $low=min($uid,$other); $high=max($uid,$other);
+    $row=$db->fetch_array($db->simple_select(AF_ABDL_FRIENDSHIPS, '*', "pair_low={$low} AND pair_high={$high}", ['limit'=>1]));
+    return $row ?: null;
+}
+function af_abdl_is_ignored_either_way(int $uid, int $other): bool
+{
+    global $db;
+    return (bool)$db->fetch_field($db->simple_select(AF_ABDL_IGNORES, 'id', "(uid={$uid} AND ignored_uid={$other}) OR (uid={$other} AND ignored_uid={$uid})", ['limit'=>1]), 'id');
+}
+
+/** Execute a state transition. This is the authoritative backend validation layer. */
+function af_abdl_apply_action(string $action, int $uid, int $target): array
+{
+    global $db;
+    if ($uid <= 0) return [false, 'Требуется авторизация.'];
+    if ($target <= 0 || $target === $uid || !af_abdl_user_exists($target)) return [false, 'Некорректный пользователь.'];
+    $relation=af_abdl_relation($uid,$target);
+    [$low,$high]=[min($uid,$target),max($uid,$target)];
+
+    if ($action === 'add') {
+        if (af_abdl_is_ignored_either_way($uid,$target)) return [false, 'Сначала необходимо снять игнорирование.'];
+        if ($relation) return [false, 'Заявка или дружба уже существует.'];
+        $db->insert_query(AF_ABDL_FRIENDSHIPS,['requester_uid'=>$uid,'addressee_uid'=>$target,'pair_low'=>$low,'pair_high'=>$high,'status'=>'pending','created_at'=>TIME_NOW,'updated_at'=>TIME_NOW]);
+        af_abdl_alert($target,'buddy_request',$uid);
+        return [true,'Заявка отправлена.'];
+    }
+    if ($action === 'accept') {
+        if (!$relation || $relation['status'] !== 'pending' || (int)$relation['addressee_uid'] !== $uid) return [false,'Эта входящая заявка недоступна.'];
+        if (af_abdl_is_ignored_either_way($uid,$target)) return [false,'Нельзя принять заявку при активном игнорировании.'];
+        $db->update_query(AF_ABDL_FRIENDSHIPS,['status'=>'accepted','updated_at'=>TIME_NOW],'id='.(int)$relation['id']);
+        af_abdl_sync_legacy_pair($uid,$target); af_abdl_alert($target,'buddy_accepted',$uid);
+        return [true,'Заявка принята.'];
+    }
+    if ($action === 'decline' && $relation && $relation['status']==='pending' && (int)$relation['addressee_uid']===$uid) {
+        $db->delete_query(AF_ABDL_FRIENDSHIPS,'id='.(int)$relation['id']); return [true,'Заявка отклонена.'];
+    }
+    if ($action === 'cancel' && $relation && $relation['status']==='pending' && (int)$relation['requester_uid']===$uid) {
+        $db->delete_query(AF_ABDL_FRIENDSHIPS,'id='.(int)$relation['id']); return [true,'Заявка отменена.'];
+    }
+    if ($action === 'remove' && $relation && $relation['status']==='accepted') {
+        $db->delete_query(AF_ABDL_FRIENDSHIPS,'id='.(int)$relation['id']); af_abdl_sync_legacy_pair($uid,$target); return [true,'Дружба удалена.'];
+    }
+    if ($action === 'ignore') {
+        if ($relation) $db->delete_query(AF_ABDL_FRIENDSHIPS,'id='.(int)$relation['id']);
+        if (!$db->fetch_field($db->simple_select(AF_ABDL_IGNORES,'id',"uid={$uid} AND ignored_uid={$target}",['limit'=>1]),'id')) {
+            $db->insert_query(AF_ABDL_IGNORES,['uid'=>$uid,'ignored_uid'=>$target,'created_at'=>TIME_NOW]);
+        }
+        af_abdl_sync_legacy_pair($uid,$target); return [true,'Пользователь добавлен в игнор-лист.'];
+    }
+    if ($action === 'unignore') {
+        $db->delete_query(AF_ABDL_IGNORES,"uid={$uid} AND ignored_uid={$target}"); af_abdl_sync_legacy_user($uid); return [true,'Пользователь удалён из игнор-листа.'];
+    }
+    return [false,'Действие не соответствует текущему состоянию связи.'];
+}
+
+/** AF tables are truth; MyBB CSV fields are only a compatibility projection. */
+function af_abdl_sync_legacy_pair(int $a, int $b): void { af_abdl_sync_legacy_user($a); af_abdl_sync_legacy_user($b); }
+function af_abdl_sync_legacy_user(int $uid): void
+{
+    global $db;
+    $friends=[]; $q=$db->simple_select(AF_ABDL_FRIENDSHIPS,'requester_uid,addressee_uid',"status='accepted' AND (requester_uid={$uid} OR addressee_uid={$uid})");
+    while ($r=$db->fetch_array($q)) $friends[]=(int)$r['requester_uid']===$uid?(int)$r['addressee_uid']:(int)$r['requester_uid'];
+    $ignores=[]; $q=$db->simple_select(AF_ABDL_IGNORES,'ignored_uid',"uid={$uid}"); while($r=$db->fetch_array($q)) $ignores[]=(int)$r['ignored_uid'];
+    sort($friends); sort($ignores);
+    $db->update_query('users',['buddylist'=>implode(',',$friends),'ignorelist'=>implode(',',$ignores)],"uid={$uid}");
+}
+
+function af_abdl_alert(int $to, string $code, int $from): void
+{
+    if (function_exists('af_aam_register_type')) af_aam_register_type($code, $code === 'buddy_request' ? 'Новая заявка в друзья' : 'Заявка в друзья принята', 1, 1, 1);
+    if (function_exists('af_aam_add_alert')) af_aam_add_alert($to,$code,0,$from,['url'=>'buddy.php?tab=friends']);
+}
+
+function af_abdl_fetch_users(array $ids): array
+{
+    global $db;
+    $ids=array_values(array_unique(array_filter(array_map('intval',$ids)))); if (!$ids) return [];
+    $in=implode(',',$ids); $online=[]; $q=$db->simple_select('sessions','uid',"uid IN ({$in}) AND time>".(TIME_NOW-900)); while($r=$db->fetch_array($q)) $online[(int)$r['uid']]=true;
+    $users=[]; $q=$db->simple_select('users','uid,username,avatar,lastactive',"uid IN ({$in})"); while($r=$db->fetch_array($q)){ $r['online']=isset($online[(int)$r['uid']]); $users[(int)$r['uid']]=$r; }
+    return $users;
+}
+
+function af_abdl_action_buttons(int $uid, int $target): string
+{
+    global $db;
+    $relation=af_abdl_relation($uid,$target);
+    $ignored=(bool)$db->fetch_field($db->simple_select(AF_ABDL_IGNORES,'id',"uid={$uid} AND ignored_uid={$target}",['limit'=>1]),'id');
+    $buttons='';
+    if ($ignored) $buttons.=af_abdl_button('unignore',$target,'Убрать из игнор-листа');
+    elseif (!$relation) $buttons.=af_abdl_button('add',$target,'Добавить в друзья').af_abdl_button('ignore',$target,'Добавить в игнор-лист','muted');
+    elseif ($relation['status']==='accepted') $buttons.=af_abdl_button('remove',$target,'Убрать из друзей').af_abdl_button('ignore',$target,'Добавить в игнор-лист','muted');
+    elseif ((int)$relation['requester_uid']===$uid) $buttons.='<span class="af-abdl-chip">Заявка отправлена</span>'.af_abdl_button('cancel',$target,'Отменить','muted');
+    else $buttons.=af_abdl_button('accept',$target,'Принять').af_abdl_button('decline',$target,'Отклонить','muted');
+    return $buttons;
+}
+function af_abdl_button(string $action,int $uid,string $label,string $class=''): string
+{
+    global $mybb;
+    return '<form class="af-abdl-action" method="post" action="buddy.php"><input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'"><input type="hidden" name="action" value="'.$action.'"><input type="hidden" name="uid" value="'.$uid.'"><button class="af-abdl-btn '.$class.'" type="submit">'.htmlspecialchars_uni($label).'</button></form>';
+}
+function af_abdl_card(array $u,string $actions='',bool $pm=false): string
+{
+    $id=(int)$u['uid']; $avatar=trim((string)$u['avatar']) ?: 'images/default_avatar.png';
+    $html='<article class="af-abdl-card" data-uid="'.$id.'"><img class="af-abdl-avatar" src="'.htmlspecialchars_uni($avatar).'" alt=""><div class="af-abdl-person"><strong>'.htmlspecialchars_uni($u['username']).'</strong>';
+    if(isset($u['online'])) $html.='<span class="af-abdl-status '.($u['online']?'online':'').'">'.($u['online']?'В сети':'Не в сети').'</span>';
+    $html.='</div><div class="af-abdl-actions"><a class="af-abdl-btn muted" href="member.php?action=profile&amp;uid='.$id.'">Профиль</a>';
+    if($pm) $html.='<a class="af-abdl-btn muted" href="private.php?action=send&amp;uid='.$id.'">ЛС</a>';
+    return $html.$actions.'</div></article>';
+}
+
+function af_abdl_render_page(): void
+{
+    global $mybb,$db,$headerinclude,$header,$footer;
+    if (empty($mybb->user['uid'])) error_no_permission();
+    if (!af_abdl_is_enabled()) error('Advanced Buddy List отключён.');
+    af_abdl_ensure_schema(); $uid=(int)$mybb->user['uid'];
+    $ajax=!empty($mybb->input['ajax']);
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+        $valid=verify_post_check((string)($mybb->input['my_post_key'] ?? ''),true);
+        $result=$valid ? af_abdl_apply_action((string)($mybb->input['action'] ?? ''),$uid,(int)($mybb->input['uid'] ?? 0)) : [false,'Неверный CSRF-токен.'];
+        if ($ajax) { header('Content-Type: application/json; charset=utf-8'); echo json_encode(['ok'=>$result[0],'message'=>$result[1]],JSON_UNESCAPED_UNICODE); exit; }
+        if (!$result[0]) error($result[1]);
+        redirect('buddy.php?tab=' . (((string)$mybb->input['action']==='unignore'||(string)$mybb->input['action']==='ignore')?'ignore':'friends'),$result[1]);
+    }
+    $tab=in_array(($mybb->input['tab']??'friends'),['friends','ignore','search'],true)?(string)$mybb->input['tab']:'friends';
+    $content='';
+    if ($tab==='friends') {
+        $relations=[]; $ids=[]; $q=$db->simple_select(AF_ABDL_FRIENDSHIPS,'*',"requester_uid={$uid} OR addressee_uid={$uid}",['order_by'=>'updated_at','order_dir'=>'DESC']);
+        while($r=$db->fetch_array($q)){ $other=(int)$r['requester_uid']===$uid?(int)$r['addressee_uid']:(int)$r['requester_uid']; $r['other']=$other; $relations[]=$r; $ids[]=$other; }
+        $users=af_abdl_fetch_users($ids); $accepted=$incoming=$outgoing='';
+        foreach($relations as $r){ if(!isset($users[$r['other']]))continue; if($r['status']==='accepted')$accepted.=af_abdl_card($users[$r['other']],af_abdl_button('remove',$r['other'],'Убрать из друзей'),true); elseif((int)$r['addressee_uid']===$uid)$incoming.=af_abdl_card($users[$r['other']],af_abdl_button('accept',$r['other'],'Принять').af_abdl_button('decline',$r['other'],'Отклонить')); else $outgoing.=af_abdl_card($users[$r['other']],'<span class="af-abdl-chip">Ожидание</span>'.af_abdl_button('cancel',$r['other'],'Отменить')); }
+        $content=af_abdl_section('Друзья',$accepted).af_abdl_section('Входящие заявки',$incoming).af_abdl_section('Исходящие заявки',$outgoing);
+    } elseif($tab==='ignore') {
+        $ids=[];$q=$db->simple_select(AF_ABDL_IGNORES,'ignored_uid',"uid={$uid}",['order_by'=>'created_at','order_dir'=>'DESC']);while($r=$db->fetch_array($q))$ids[]=(int)$r['ignored_uid'];$users=af_abdl_fetch_users($ids);foreach($ids as $id)if(isset($users[$id]))$content.=af_abdl_card($users[$id],af_abdl_button('unignore',$id,'Убрать из игнор-листа'));$content=af_abdl_section('Игнор-лист',$content);
+    } else {
+        $query=trim((string)($mybb->input['q']??'')); $content='<form class="af-abdl-search" method="get"><input type="hidden" name="tab" value="search"><input name="q" minlength="2" maxlength="50" value="'.htmlspecialchars_uni($query).'" placeholder="Имя пользователя"><button class="af-abdl-btn">Найти</button></form><div class="af-abdl-results">';
+        if(my_strlen($query)>=2){$esc=$db->escape_string_like($query);$q=$db->simple_select('users','uid,username,avatar,lastactive',"uid<>{$uid} AND username LIKE '%{$esc}%'",['order_by'=>'username','limit'=>25]);while($u=$db->fetch_array($q))$content.=af_abdl_card($u,af_abdl_action_buttons($uid,(int)$u['uid']));}$content.='</div>';
+    }
+    $base=rtrim((string)$mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/'.AF_ABDL_ID.'/assets/';
+    $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni($base.'advancedbyddylist.css?v=2').'"><script defer src="'.htmlspecialchars_uni($base.'advancedbyddylist.js?v=2').'"></script>';
+    $tabs='';foreach(['friends'=>'Друзья','ignore'=>'Игнор-лист','search'=>'Поиск'] as $key=>$label)$tabs.='<a class="af-abdl-tab '.($tab===$key?'is-active':'').'" href="buddy.php?tab='.$key.'">'.$label.'</a>';
+    $page='<!doctype html><html><head><title>Друзья</title>'.$headerinclude.'</head><body>'.$header.'<main class="af-abdl-page"><header class="af-abdl-heading"><h1>Друзья</h1><nav class="af-abdl-tabs">'.$tabs.'</nav></header><div id="af-abdl-content">'.$content.'</div></main>'.$footer.'</body></html>';
+    output_page($page);
+}
+function af_abdl_section(string $title,string $content): string { return '<section class="af-abdl-section"><h2>'.$title.'</h2>'.($content?:'<p class="af-abdl-empty">Пока пусто.</p>').'</section>'; }
+
 function af_abdl_ensure_settings(): void
 {
-    global $db;
-
-    // группа
-    $gid = 0;
-    $q = $db->simple_select('settinggroups', 'gid', "name='af_abdl'");
-    $row = $db->fetch_array($q);
-    if ($row) $gid = (int)$row['gid'];
-
-    if ($gid <= 0) {
-        $disp = 1;
-        $q2 = $db->simple_select('settinggroups', 'MAX(disporder) AS mx');
-        $r2 = $db->fetch_array($q2);
-        $disp = (int)($r2['mx'] ?? 0) + 1;
-
-        $db->insert_query('settinggroups', [
-            'name'        => 'af_abdl',
-            'title'       => 'AF: Advanced Buddy List',
-            'description' => 'Settings for Advanced Buddy List modal',
-            'disporder'   => $disp,
-            'isdefault'   => 0,
-        ]);
-        $gid = (int)$db->insert_id();
-    }
-
-    // setting
-    $exists = $db->fetch_field($db->simple_select('settings', 'sid', "name='af_abdl_enabled'"), 'sid');
-    if (!$exists) {
-        $order = 1;
-        $db->insert_query('settings', [
-            'name'        => 'af_abdl_enabled',
-            'title'       => 'Enable Advanced Buddy List',
-            'description' => 'If enabled, misc_buddypopup template is replaced with improved modal (tabs + close).',
-            'optionscode' => 'yesno',
-            'value'       => '1',
-            'disporder'   => $order,
-            'gid'         => $gid,
-        ]);
-    }
-
+    global $db; $gid=(int)$db->fetch_field($db->simple_select('settinggroups','gid',"name='af_abdl'",['limit'=>1]),'gid');
+    if(!$gid){$db->insert_query('settinggroups',['name'=>'af_abdl','title'=>'AF: Advanced Buddy List','description'=>'Полноценная система друзей и игнорирования.','disporder'=>100,'isdefault'=>0]);$gid=(int)$db->insert_id();}
+    if(!$db->fetch_field($db->simple_select('settings','sid',"name='af_abdl_enabled'",['limit'=>1]),'sid'))$db->insert_query('settings',['name'=>'af_abdl_enabled','title'=>'Enable Advanced Buddy List','description'=>'Enable friendship system.','optionscode'=>'yesno','value'=>'1','disporder'=>1,'gid'=>$gid]);
     rebuild_settings();
 }
-
-function af_abdl_remove_settings(): void
-{
-    global $db;
-
-    $db->delete_query('settings', "name='af_abdl_enabled'");
-    $db->delete_query('settinggroups', "name='af_abdl'");
-    rebuild_settings();
-}
-
-/**
- * Перезапись misc_buddypopup в БД.
- * - если force=true: пишем всегда
- * - иначе: пишем только если ещё не патчено
- */
-function af_abdl_patch_misc_buddypopup_template(bool $force): void
-{
-    global $db;
-
-    // берём master template (sid=-2 или -1) — в разных установках бывает по-разному,
-    // поэтому патчим все совпадения title='misc_buddypopup' кроме пользовательских theme sets.
-    $q = $db->simple_select('templates', 'tid,template', "title='misc_buddypopup'");
-    while ($t = $db->fetch_array($q)) {
-        $tid = (int)$t['tid'];
-        $tpl = (string)$t['template'];
-
-        if (!$force && strpos($tpl, AF_ABDL_TPL_MARK) !== false) {
-            continue;
-        }
-
-        $new = af_abdl_new_misc_buddypopup_template();
-
-        $db->update_query('templates', ['template' => $db->escape_string($new)], "tid={$tid}");
-    }
-}
-
-/**
- * Возврат к простому виду (чтобы деактивация не оставляла твой форум “навсегда патченным”)
- * Это НЕ “оригинал MyBB”, это “тот всратый минимальный”, который ты прислала — но зато predictable.
- */
-function af_abdl_unpatch_misc_buddypopup_template(): void
-{
-    global $db;
-
-    $fallback = "<div class=\"modal\">\n\t<div style=\"overflow-y: auto; max-height: 400px;\">\n\t\t<table cellspacing=\"{\$theme['borderwidth']}\" cellpadding=\"{\$theme['tablespace']}\" class=\"tborder\">\n\t\t<tr>\n\t\t\t<td class=\"thead\"{\$colspan}>\n\t\t\t\t<div><strong>{\$lang->buddy_list}</strong></div>\n\t\t\t</td>\n\t\t</tr>\n\t\t{\$buddies}\n\t\t</table>\n\t</div>\n</div>";
-
-    $q = $db->simple_select('templates', 'tid,template', "title='misc_buddypopup'");
-    while ($t = $db->fetch_array($q)) {
-        $tid = (int)$t['tid'];
-        $tpl = (string)$t['template'];
-
-        if (strpos($tpl, AF_ABDL_TPL_MARK) === false) {
-            continue;
-        }
-
-        $db->update_query('templates', ['template' => $db->escape_string($fallback)], "tid={$tid}");
-    }
-}
-
-/**модалка**/
-function af_abdl_new_misc_buddypopup_template(): string
-{
-    return AF_ABDL_TPL_MARK . <<<HTML
-<div class="modal af-abdl-modal" id="af_abdl_modal" aria-hidden="false">
-  <div class="af-abdl-modal-backdrop" data-af-abdl-close="1" aria-hidden="true"></div>
-
-  <div class="af-abdl-modal-panel" role="dialog" aria-modal="true" aria-labelledby="af_abdl_title">
-    <button type="button"
-            class="af-abdl-modal-close"
-            data-af-abdl-close="1"
-            aria-label="{\$lang->af_abdl_close}"
-            title="{\$lang->af_abdl_close}">×</button>
-
-    <table cellspacing="{\$theme['borderwidth']}" cellpadding="{\$theme['tablespace']}" class="tborder af-abdl-modal-table">
-      <tr>
-        <td class="thead" colspan="2">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <strong id="af_abdl_title">{\$lang->buddy_list}</strong>
-          </div>
-        </td>
-      </tr>
-
-      <tr>
-        <td class="tcat" colspan="2">
-          <div class="af-abdl-tabs">
-            <a href="#" class="button af-abdl-tab is-active" data-tab="friends">{\$lang->af_abdl_tab_friends}</a>
-            <a href="#" class="button af-abdl-tab" data-tab="ignore">{\$lang->af_abdl_tab_ignore}</a>
-          </div>
-        </td>
-      </tr>
-
-      <tbody class="af-abdl-pane" data-pane="friends">
-        {\$buddies}
-      </tbody>
-
-      <tbody class="af-abdl-pane" data-pane="ignore" style="display:none;">
-        {\$af_abdl_ignore_rows}
-      </tbody>
-
-      <tr>
-        <td class="tfoot" colspan="2" style="text-align:right;">
-          <a href="usercp.php?action=editlists" target="_blank" rel="noopener">{\$lang->af_abdl_manage_lists}</a>
-        </td>
-      </tr>
-    </table>
-  </div>
-</div>
-HTML;
-}
-
+function af_abdl_remove_settings(): void { global $db; $db->delete_query('settings',"name='af_abdl_enabled'");$db->delete_query('settinggroups',"name='af_abdl'");rebuild_settings(); }
