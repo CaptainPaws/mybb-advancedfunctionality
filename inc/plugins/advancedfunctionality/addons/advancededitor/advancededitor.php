@@ -877,10 +877,15 @@ function af_advancededitor_response_facts(string $page): array
 {
     $hasMessage = (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']message["\'])[^>]*>~i', $page);
     $hasKbEditor = (bool)preg_match('~<textarea\b(?=[^>]*\bclass=["\'][^"\']*\baf-kb-editor\b)[^>]*>~i', $page);
+    $hasAtfEditor = (bool)preg_match('~<textarea\b(?=[^>]*\bclass=["\'][^"\']*\baf-atf-bbcode-editor\b)[^>]*>~i', $page);
     $hasPostContent = stripos($page, 'class="post_body"') !== false
         || (bool)preg_match('~class=["\'][^"\']*\bpost_body\b~i', $page)
         || (bool)preg_match('~id=["\']posts["\']~i', $page);
-    return ['has_supported_editor' => $hasMessage || $hasKbEditor, 'has_post_content' => $hasPostContent];
+    return [
+        'has_supported_editor' => $hasMessage || $hasKbEditor || $hasAtfEditor,
+        'has_atf_editor' => $hasAtfEditor,
+        'has_post_content' => $hasPostContent,
+    ];
 }
 
 function af_advancededitor_pre_output(string &$page = ''): void
@@ -1101,16 +1106,14 @@ table #post_options, table #postoptions{display:none!important;}
         $fontFamilies = af_advancededitor_collect_font_families_for_payload();
         $postKey = (string)($mybb->post_code ?? '');
 
-        $editorSelector = '';
+        $editorSelectors = ['textarea[name="message"]', 'textarea.af-atf-bbcode-editor'];
         if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'misc.php') {
             $action = (string)($mybb->input['action'] ?? '');
             if (in_array($action, ['kb_edit', 'kb_type_edit'], true)) {
-                $editorSelector = 'textarea.af-kb-editor';
+                $editorSelectors[] = 'textarea.af-kb-editor';
             }
         }
-        if ($editorSelector === '') {
-            $editorSelector = 'textarea[name="message"]';
-        }
+        $editorSelector = implode(', ', array_unique($editorSelectors));
 
         if ($helpFeatureEnabled) {
             $helpButtonDef = [

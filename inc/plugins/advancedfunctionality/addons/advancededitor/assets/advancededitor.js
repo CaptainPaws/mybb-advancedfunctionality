@@ -2006,6 +2006,16 @@
     root = root || document;
     if (!root.querySelectorAll) return;
 
+    // querySelectorAll() never includes root itself.  ATF can add or replace
+    // its marked textarea dynamically, so initialize that node before
+    // scanning its descendants.
+    if (root.nodeType === 1 && root.tagName === 'TEXTAREA') {
+      var rootSelector = getEditorSelector();
+      if (!rootSelector || (root.matches && root.matches(rootSelector))) {
+        initOneTextarea(root);
+      }
+    }
+
     var list = collectTargets(root);
     for (var i = 0; i < list.length; i++) {
       initOneTextarea(list[i]);

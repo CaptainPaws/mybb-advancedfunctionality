@@ -5,11 +5,11 @@ $forceManifest = require __DIR__.'/../inc/plugins/advancedfunctionality/addons/f
 $editor = file_get_contents(__DIR__.'/../inc/plugins/advancedfunctionality/addons/advancededitor/advancededitor.php');
 $force = file_get_contents(__DIR__.'/../inc/plugins/advancedfunctionality/addons/forcerefresh/forcerefresh.php');
 
-if (($editorManifest['frontend']['response_rules'] ?? []) !== [['has_supported_editor' => true], ['has_post_content' => true]]
+if (($editorManifest['frontend']['response_rules'] ?? []) !== [['has_supported_editor' => true], ['has_atf_editor' => true], ['has_post_content' => true]]
     || ($editorManifest['frontend']['directory_fallback'] ?? null) !== false) throw new RuntimeException('Editor manifest facts mismatch.');
 if (($forceManifest['frontend']['response_rules'] ?? []) !== [['has_quick_reply' => true]]
     || ($forceManifest['frontend']['directory_fallback'] ?? null) !== false) throw new RuntimeException('Force Refresh manifest facts mismatch.');
-foreach (["name=[\"\\']message", 'af-kb-editor', "af_frontend_asset_allowed(AF_AE_ID, 'pre_output'", 'textarea[name="message"]'] as $needle) {
+foreach (["name=[\"\\']message", 'af-kb-editor', 'af-atf-bbcode-editor', "af_frontend_asset_allowed(AF_AE_ID, 'pre_output'", 'textarea[name="message"]'] as $needle) {
     if (!str_contains($editor, $needle)) throw new RuntimeException('Editor component guard missing: '.$needle);
 }
 foreach (["\$script !== 'showthread.php'", "af_frontend_asset_allowed(AF_FORCEREFRESH_ID, 'quick_reply'", "['has_quick_reply' => true]"] as $needle) {
