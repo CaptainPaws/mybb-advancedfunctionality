@@ -45,6 +45,31 @@
         return null;
     }
 
+    function getKbEditorHeight() {
+        var viewportHeight = Number(window.innerHeight || 0);
+        var isMobile = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+
+        if (!isMobile) {
+            return 360;
+        }
+
+        // Keep enough of a small screen available for the surrounding form,
+        // without allowing the editing surface to collapse to an unusable row.
+        if (!viewportHeight) {
+            return 280;
+        }
+
+        return Math.max(240, Math.min(320, Math.round(viewportHeight * 0.45)));
+    }
+
+    function applyKbEditorHeight(instance) {
+        if (!instance || typeof instance.height !== 'function') {
+            return;
+        }
+
+        instance.height(getKbEditorHeight());
+    }
+
     function destroyEditorInstance(field) {
         if (!field) {
             return false;
@@ -158,7 +183,12 @@
                 return;
             }
 
-            if (getEditorInstance(field)) {
+            var existingInstance = getEditorInstance(field);
+            if (existingInstance) {
+                // AdvancedEditor can win the initialization race. Normalize the
+                // existing KB instance through SCEditor's API instead of CSS so
+                // post/reply/ATF editor dimensions remain untouched.
+                applyKbEditorHeight(existingInstance);
                 field.dataset.afKbEditor = '1';
                 field.setAttribute('data-af-kb-editor-init', '1');
                 return;
@@ -171,8 +201,18 @@
             field.dataset.afKbEditor = '1';
             field.setAttribute('data-af-kb-editor-init', '1');
 
-            var options = Object.assign({}, baseOptions, { startInSourceMode: true });
+            // MyBB's global sceditor_options can contain height: "100%". On the
+            // KB form its parent has no explicit height, which makes SCEditor's
+            // iframe/source area collapse to roughly one line. Give KB-owned
+            // editors their own SCEditor height while preserving all other
+            // global options.
+            var options = Object.assign({}, baseOptions, {
+                startInSourceMode: true,
+                height: getKbEditorHeight()
+            });
             window.jQuery(field).sceditor(options);
+
+            applyKbEditorHeight(getEditorInstance(field));
         });
     }
 
@@ -280,6 +320,8 @@
         destroyEditorInstance: destroyEditorInstance,
         markEditorPolicy: markEditorPolicy,
         cleanupDeniedEditors: cleanupDeniedEditors,
+        getKbEditorHeight: getKbEditorHeight,
+        applyKbEditorHeight: applyKbEditorHeight,
         initEditors: initEditors,
         refreshEditorPolicy: refreshEditorPolicy,
         observeEditorLeaks: observeEditorLeaks,
