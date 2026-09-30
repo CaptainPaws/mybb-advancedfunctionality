@@ -88,10 +88,48 @@
 .af-advancedmenu-layout #logo,
 .af-advancedmenu-layout #footer .upper { display: none !important; }
 
-/* The drawer replaces the complete member welcome panel.  Guests retain the
-   stock login/register surface as a compatibility fallback. */
+/* AdvancedMenu owns the complete account surface. The stock panel is hidden
+   for both states so custom header templates cannot duplicate or relocate it. */
+.af-advancedmenu-layout #panel,
+.af-advancedmenu-layout #header > .panel,
 .af-advancedmenu-layout.af-am-member #panel,
 .af-advancedmenu-layout.af-am-member #header > .panel { display: none !important; }
+
+.af-advancedmenu-layout .af-am-guest-account {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  min-height: 44px;
+  padding: 6px 18px;
+  box-sizing: border-box;
+  border-top: 1px solid rgba(255,255,255,.08);
+  background: #252b32;
+  color: #fff;
+}
+.af-am-guest-greeting { margin-right: auto; font-weight: 600; }
+.af-am-guest-actions { display: flex; align-items: center; gap: 8px; }
+.af-am-guest-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 5px 12px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 4px;
+  color: #fff;
+  text-decoration: none;
+}
+.af-am-guest-action:hover,
+.af-am-guest-action:focus-visible { background: rgba(255,255,255,.14); }
+.af-am-guest-action--register { background: rgba(255,255,255,.1); }
+
+@media (max-width: 480px) {
+  .af-advancedmenu-layout .af-am-guest-account { gap: 8px; padding-inline: 10px; }
+  .af-am-guest-actions { gap: 5px; }
+  .af-am-guest-action { padding-inline: 8px; }
+}
 
 .af-advancedmenu-layout .af-am-main .af-am-list > .af-am-burger {
   flex: 0 0 48px;
