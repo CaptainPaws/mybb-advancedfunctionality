@@ -3775,14 +3775,13 @@ function af_atf_build_input_html(array $field, string $value): string
         }
 
         case 'textarea': {
-            $textarea = '<textarea id="'.$taId.'" class="textarea af-atf-input" name="'.$nameAttr.'" rows="8" cols="60"'.$maxAttr.'>'.$safeValue.'</textarea>';
+            // This marker is the frontend contract with AdvancedEditor.  Do
+            // not call MyBB's inserter here: it can create a competing
+            // SCEditor instance before AdvancedEditor installs its complete
+            // toolbar and custom commands.
+            $textarea = '<textarea id="'.$taId.'" class="textarea af-atf-input af-atf-bbcode-editor" data-af-ae-editor="1" name="'.$nameAttr.'" rows="8" cols="60"'.$maxAttr.'>'.$safeValue.'</textarea>';
 
-            $toolbar = '';
-            if (function_exists('build_mycode_inserter')) {
-                $toolbar = build_mycode_inserter($taId, 'mini');
-            }
-
-            return '<div class="af-atf-editor">'.$toolbar.$textarea.'</div>';
+            return '<div class="af-atf-editor">'.$textarea.'</div>';
         }
 
         case 'image':

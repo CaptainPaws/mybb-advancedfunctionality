@@ -14,6 +14,9 @@ return [
         'routes' => [],
         'response_rules' => [
             ['has_supported_editor' => true],
+            // AdvancedThreadFields owns this response context and marks only
+            // its BBCode-enabled textarea controls with this fact.
+            ['has_atf_editor' => true],
             ['has_post_content' => true],
         ],
         'directory_fallback' => false,
