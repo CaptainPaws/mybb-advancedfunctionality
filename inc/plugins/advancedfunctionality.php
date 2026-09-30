@@ -5892,6 +5892,63 @@ function af_theme_stylesheet_is_usable_on_current_request(array $state, int $the
     return af_theme_stylesheet_is_attached_to_request((string)($row['attachedto'] ?? ''));
 }
 
+/**
+ * Prove that the attached unified bundle actually carries a source file.
+ *
+ * Attachment alone is not sufficient: a preserved/manual or stale bundle can
+ * be perfectly loadable while lacking a newly registered addon section.  In
+ * that case callers must fail open to the source file rather than suppressing
+ * the only copy of its CSS.
+ */
+function af_theme_stylesheet_bundle_contains_source(array $state, int $themeTid, string $addonId, string $fileRel): bool
+{
+    global $db;
+
+    $addonId = strtolower(trim($addonId));
+    $fileRel = strtolower(ltrim(str_replace('\\', '/', trim($fileRel)), '/'));
+    if ($themeTid <= 0 || $addonId === '' || $fileRel === '') {
+        return false;
+    }
+
+    $sid = (int)($state['stylesheet_sid'] ?? 0);
+    $name = trim((string)($state['stylesheet_name'] ?? AF_THEME_BUNDLE_NAME));
+    $row = [];
+    if ($sid > 0) {
+        $q = $db->simple_select('themestylesheets', 'sid,stylesheet', "sid='{$sid}' AND tid='{$themeTid}'", ['limit' => 1]);
+        $row = $db->fetch_array($q) ?: [];
+    }
+    if (!$row && $name !== '') {
+        $nameEsc = $db->escape_string($name);
+        $q = $db->simple_select('themestylesheets', 'sid,stylesheet', "tid='{$themeTid}' AND name='{$nameEsc}'", ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]);
+        $row = $db->fetch_array($q) ?: [];
+    }
+    if (!$row) {
+        return false;
+    }
+
+    static $parsedByRow = [];
+    $css = (string)($row['stylesheet'] ?? '');
+    $cacheKey = $themeTid . ':' . (int)($row['sid'] ?? 0) . ':' . sha1($css);
+    if (!array_key_exists($cacheKey, $parsedByRow)) {
+        $parsedByRow[$cacheKey] = af_theme_stylesheet_parse_bundle($css);
+    }
+    $parsed = $parsedByRow[$cacheKey];
+    if (empty($parsed['ok']) || empty($parsed['sections']) || !is_array($parsed['sections'])) {
+        return false;
+    }
+
+    foreach ($parsed['sections'] as $section) {
+        $meta = (array)($section['meta'] ?? []);
+        $sectionAddon = strtolower(trim((string)($meta['addon_id'] ?? '')));
+        $sectionFile = strtolower(ltrim(str_replace('\\', '/', trim((string)($meta['source_file'] ?? ''))), '/'));
+        if ($sectionAddon === $addonId && $sectionFile === $fileRel && (string)($section['body'] ?? '') !== '') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function af_theme_stylesheet_frontend_href_for_candidate(string $addonId, string $fileRel): string
 {
     $decision = af_theme_stylesheet_delivery_decision($addonId, $fileRel);
@@ -5934,12 +5991,21 @@ function af_theme_stylesheet_delivery_decision(string $addonId, string $fileRel)
             ];
         }
         $bundleHref = af_theme_stylesheet_resolve_theme_href_from_state($bundleState, (int)$bundleTid);
-        $bundleUsable = $bundleHref !== '' && af_theme_stylesheet_is_usable_on_current_request($bundleState, (int)$bundleTid);
+        $bundleContainsSource = af_theme_stylesheet_bundle_contains_source(
+            $bundleState,
+            (int)$bundleTid,
+            $addonId,
+            $fileRel
+        );
+        $bundleUsable = $bundleHref !== ''
+            && af_theme_stylesheet_is_usable_on_current_request($bundleState, (int)$bundleTid)
+            && $bundleContainsSource;
         return [
             'mode' => 'theme', 'state_found' => true, 'is_integrated' => $bundleUsable,
-            // Fail open to server CSS if cache/attachment is unexpectedly lost.
+            // Fail open if cache/attachment or the requested section is lost.
             'include_file' => !$bundleUsable, 'use_theme_stylesheet' => $bundleUsable,
             'theme_href' => $bundleUsable ? $bundleHref : '',
+            'bundle_section_present' => $bundleContainsSource,
         ];
     }
     $candidate       = af_find_css_candidate_for_file($addonId, $fileRel);
