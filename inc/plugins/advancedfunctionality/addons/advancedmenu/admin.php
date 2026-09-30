@@ -193,7 +193,16 @@ class AF_Admin_Advancedmenu
             foreach (af_menu_containers() as $value=>$label) if (in_array($value,$item['allowed_containers'],true)) $options .= '<option value="'.$value.'"'.($value===$item['container']?' selected':'').'>'.htmlspecialchars_uni($label).'</option>';
             $sectionOptions = '';
             foreach (af_menu_sections() as $value=>$label) $sectionOptions .= '<option value="'.$value.'"'.($value===($item['section'] ?? 'links')?' selected':'').'>'.htmlspecialchars_uni($label).'</option>';
-            $actions = $item['source']==='custom' ? '<a href="'.htmlspecialchars_uni(self::url(['do'=>'edit','id'=>(int)$item['id'],'loc'=>$active])).'">Редактировать</a> · <a href="'.htmlspecialchars_uni(self::url(['do'=>'delete','id'=>(int)$item['id'],'loc'=>$active])).'">Удалить</a>' : '<span title="Registry definition remains owned by the provider">Настройки показа</span>';
+            if ($item['source'] === 'custom') {
+                $id = (int)$item['id'];
+                $actions = '<a href="'.htmlspecialchars_uni(self::url(['do'=>'edit','id'=>$id,'loc'=>$active])).'">Редактировать</a>';
+                $actions .= ' · <a href="'.htmlspecialchars_uni(self::url(['do'=>'delete','id'=>$id,'loc'=>$active])).'">Удалить</a>';
+                $actions .= ' · <form method="post" action="'.htmlspecialchars_uni(self::url(['do'=>'toggle','id'=>$id,'loc'=>$active])).'" style="display:inline">'
+                    .'<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">'
+                    .'<button class="button" type="submit">'.(!empty($item['enabled']) ? 'Выключить' : 'Включить').'</button></form>';
+            } else {
+                $actions = '<span title="Registry definition remains owned by the provider">Настройки показа</span>';
+            }
             $table->construct_cell(htmlspecialchars_uni((string)$item['label']));
             $table->construct_cell(htmlspecialchars_uni($item['source']==='system' ? (string)$item['source_addon'] : 'AdvancedMenu'));
             $table->construct_cell(htmlspecialchars_uni((string)$item['type']));
@@ -237,11 +246,11 @@ class AF_Admin_Advancedmenu
         require_once MYBB_ADMIN_DIR.'inc/class_form.php';
 
         $logicalContainer = af_menu_normalize_container($loc);
-        $loc = ($logicalContainer === 'user_drawer') ? 'panel' : 'top';
+        $legacyLocation = ($logicalContainer === 'user_drawer') ? 'panel' : 'top';
         $isEdit = ($id > 0);
 
         // дефолт: в panel обычно не надо показывать гостям
-        $defaultVis = ($loc === 'panel') ? 'users' : '';
+        $defaultVis = ($legacyLocation === 'panel') ? 'users' : '';
 
         $data = [
             'slug'       => '',
@@ -261,8 +270,9 @@ class AF_Admin_Advancedmenu
                 self::simple_error('Пункт не найден.');
                 return;
             }
-            $loc  = ($row['location'] === 'panel') ? 'panel' : 'top';
-            $logicalContainer = af_menu_normalize_container((string)($row['container'] ?? $loc));
+            $legacyLocation = ((string)$row['location'] === 'panel') ? 'panel' : 'top';
+            $storedContainer = trim((string)($row['container'] ?? ''));
+            $logicalContainer = af_menu_normalize_container($storedContainer !== '' ? $storedContainer : $legacyLocation);
             $data = array_merge($data, $row);
         }
 
@@ -288,6 +298,14 @@ class AF_Admin_Advancedmenu
 
         if ($mybb->request_method === 'post') {
             verify_post_check($mybb->get_input('my_post_key'));
+
+            // Do not silently turn a stale/tampered edit submission into an
+            // insert for another item.  The route id and form id must agree.
+            $postedId = (int)$mybb->get_input('item_id', MyBB::INPUT_INT);
+            if (($isEdit && $postedId !== $id) || (!$isEdit && $postedId !== 0)) {
+                self::simple_error('Некорректный ID пункта меню. Обновите страницу и повторите попытку.');
+                return;
+            }
 
             $slug    = trim((string)$mybb->get_input('slug'));
             $title   = trim((string)$mybb->get_input('title'));
@@ -367,7 +385,7 @@ class AF_Admin_Advancedmenu
                 $visibility = ''; // all
             }
 
-            $where = "location='".$db->escape_string($loc)."' AND slug='".$db->escape_string($slug)."'";
+            $where = "container='".$db->escape_string($logicalContainer)."' AND slug='".$db->escape_string($slug)."'";
             if ($isEdit) {
                 $where .= " AND id!='".(int)$id."'";
             }
@@ -378,14 +396,17 @@ class AF_Admin_Advancedmenu
             }
 
             $save = [
-                'location'   => $loc,
+                'location'   => $legacyLocation,
                 'container'  => $logicalContainer,
-                'slug'       => $db->escape_string($slug),
-                'title'      => $db->escape_string($title),
-                'url'        => $db->escape_string($url),
-                'icon'       => $db->escape_string($icon),
-                'hint'       => $db->escape_string($hint),
-                'visibility' => $db->escape_string($visibility),
+                // MyBB's insert_query/update_query escape values themselves.
+                // Pre-escaping here stored literal backslashes and broke the
+                // form -> DB -> form/frontend round trip.
+                'slug'       => $slug,
+                'title'      => $title,
+                'url'        => $url,
+                'icon'       => $icon,
+                'hint'       => $hint,
+                'visibility' => $visibility,
                 'sort_order' => $sort,
                 'enabled'    => $enabled,
                 'updated_at' => TIME_NOW,
@@ -410,52 +431,53 @@ class AF_Admin_Advancedmenu
         self::output_iconpicker_assets();
 
         echo '<div style="margin: 10px 0;">';
-        echo '<a class="button" href="'.htmlspecialchars_uni(self::url(['loc' => $loc, 'do' => 'list'])).'">← Назад к списку</a>';
+        echo '<a class="button" href="'.htmlspecialchars_uni(self::url(['loc' => $logicalContainer, 'do' => 'list'])).'">← Назад к списку</a>';
         echo '</div>';
 
         $formAction = self::url([
             'do'  => $isEdit ? 'edit' : 'add',
-            'loc' => $loc,
+            'loc' => $logicalContainer,
             'id'  => $isEdit ? $id : null
         ]);
 
         $form = new Form($formAction, 'post');
         echo $form->generate_hidden_field('my_post_key', $mybb->post_code);
+        echo $form->generate_hidden_field('item_id', $isEdit ? $id : 0);
 
         $container = new FormContainer($isEdit ? 'Редактировать пункт' : 'Добавить пункт');
 
         $container->output_row(
             'Slug (техническое имя)',
             'Например: <code>mainpage</code>. Будет доступен как {$menu_mainpage} или {$panel_mainpage}.',
-            $form->generate_text_box('slug', htmlspecialchars_uni((string)$data['slug']), ['style' => 'width: 320px;']),
+            $form->generate_text_box('slug', (string)$data['slug'], ['style' => 'width: 320px;']),
             'slug'
         );
 
         $container->output_row(
             'Название',
             'Отображаемый текст ссылки.',
-            $form->generate_text_box('title', htmlspecialchars_uni((string)$data['title']), ['style' => 'width: 520px;']),
+            $form->generate_text_box('title', (string)$data['title'], ['style' => 'width: 520px;']),
             'title'
         );
 
         $container->output_row(
             'Ссылка',
             'Можно абсолютную или относительную (например <code>index.php</code> или <code>/</code>).<br>Доступные переменные: <code>{uid}</code>, <code>{username}</code>',
-            $form->generate_text_box('url', htmlspecialchars_uni((string)$data['url']), ['style' => 'width: 520px;']),
+            $form->generate_text_box('url', (string)$data['url'], ['style' => 'width: 520px;']),
             'url'
         );
         
         $container->output_row(
             'Подсказка (tooltip)',
             'Появится при наведении на пункт меню. Только текст, без HTML.',
-            $form->generate_text_box('hint', htmlspecialchars_uni((string)($data['hint'] ?? '')), ['style' => 'width: 520px;', 'placeholder' => 'Например: Перейти к профилю']),
+            $form->generate_text_box('hint', (string)($data['hint'] ?? ''), ['style' => 'width: 520px;', 'placeholder' => 'Например: Перейти к профилю']),
             'hint'
         );
         
 
         // Иконка: инпут + кнопка пикера + превью (JS сам подцепит по data-атрибутам)
         $iconVal = (string)($data['icon'] ?? '');
-        $iconInput = $form->generate_text_box('icon', htmlspecialchars_uni($iconVal), [
+        $iconInput = $form->generate_text_box('icon', $iconVal, [
             'style' => 'width: 420px;',
             'id' => 'af-am-icon-input',
             'data-af-am-icon-input' => '1',
@@ -504,7 +526,7 @@ class AF_Admin_Advancedmenu
         $container->output_row(
             'Видимость: группы (ID через запятую)',
             'Используется только если “Видимость” = “Только группам”. Пример: <code>4,6</code>.',
-            $form->generate_text_box('visibility_groups', htmlspecialchars_uni($visGroups), ['style' => 'width: 240px;']),
+            $form->generate_text_box('visibility_groups', $visGroups, ['style' => 'width: 240px;']),
             'visibility_groups'
         );
 
@@ -544,7 +566,8 @@ class AF_Admin_Advancedmenu
             return;
         }
 
-        $realLoc = ($row['location'] === 'panel') ? 'panel' : 'top';
+        $storedContainer = trim((string)($row['container'] ?? ''));
+        $logicalContainer = af_menu_normalize_container($storedContainer !== '' ? $storedContainer : (string)$row['location']);
 
         if ($mybb->request_method === 'post') {
             verify_post_check($mybb->get_input('my_post_key'));
@@ -555,13 +578,13 @@ class AF_Admin_Advancedmenu
                 af_advancedmenu_rebuild_cache();
             }
 
-            admin_redirect(self::url(['loc' => $realLoc, 'do' => 'list']), 'Удалено.');
+            admin_redirect(self::url(['loc' => $logicalContainer, 'do' => 'list']), 'Удалено.');
             return;
         }
 
         require_once MYBB_ADMIN_DIR.'inc/class_form.php';
 
-        $form = new Form(self::url(['do' => 'delete', 'loc' => $realLoc, 'id' => $id]), 'post');
+        $form = new Form(self::url(['do' => 'delete', 'loc' => $logicalContainer, 'id' => $id]), 'post');
         echo $form->generate_hidden_field('my_post_key', $mybb->post_code);
 
         echo '<div class="confirm_action" style="margin-top: 15px;">';
@@ -569,7 +592,7 @@ class AF_Admin_Advancedmenu
         echo '<p><strong>'.htmlspecialchars_uni((string)$row['title']).'</strong> (slug: <code>'.htmlspecialchars_uni((string)$row['slug']).'</code>)</p>';
         echo '<div style="margin-top: 12px;">';
         echo $form->generate_submit_button('Да, удалить', ['class' => 'button button_danger']).' ';
-        echo '<a class="button" href="'.htmlspecialchars_uni(self::url(['loc' => $realLoc, 'do' => 'list'])).'">Отмена</a>';
+        echo '<a class="button" href="'.htmlspecialchars_uni(self::url(['loc' => $logicalContainer, 'do' => 'list'])).'">Отмена</a>';
         echo '</div>';
         echo '</div>';
 
@@ -580,7 +603,13 @@ class AF_Admin_Advancedmenu
 
     private static function do_toggle(string $loc, int $id): void
     {
-        global $db;
+        global $mybb, $db;
+
+        if ($mybb->request_method !== 'post') {
+            self::simple_error('Изменение статуса разрешено только через форму ACP.');
+            return;
+        }
+        verify_post_check($mybb->get_input('my_post_key'));
 
         $row = $db->fetch_array($db->simple_select(AF_AM_TABLE_ITEMS, '*', "id='".(int)$id."'", ['limit' => 1]));
         if (!$row) {
@@ -595,8 +624,9 @@ class AF_Admin_Advancedmenu
             af_advancedmenu_rebuild_cache();
         }
 
-        $realLoc = ($row['location'] === 'panel') ? 'panel' : 'top';
-        admin_redirect(self::url(['loc' => $realLoc, 'do' => 'list']), 'Обновлено.');
+        $storedContainer = trim((string)($row['container'] ?? ''));
+        $logicalContainer = af_menu_normalize_container($storedContainer !== '' ? $storedContainer : (string)$row['location']);
+        admin_redirect(self::url(['loc' => $logicalContainer, 'do' => 'list']), 'Обновлено.');
     }
 
     /* ----------------------------- SETTINGS (INFO PAGE) ----------------------------- */
