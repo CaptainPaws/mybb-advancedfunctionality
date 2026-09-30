@@ -3236,7 +3236,10 @@ function af_theme_stylesheet_migrate_legacy_bundle(int $themeTid, string $expect
 
     $sid = (int)$row['sid'];
     $updated = (string)$plan['source'];
-    $db->update_query('themestylesheets', ['stylesheet' => $db->escape_string($updated), 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
+    // MyBB's insert/update helpers escape values themselves. Passing an
+    // already escaped stylesheet corrupts quotes and backslashes on every
+    // save (and makes the cached file differ from the ACP value).
+    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
     $seed = af_theme_stylesheet_build_bundle();
     $payload = [
         'theme_tid' => $themeTid, 'stylesheet_sid' => $sid, 'addon_id' => AF_THEME_BUNDLE_ADDON_ID,
@@ -3271,7 +3274,7 @@ function af_theme_stylesheet_save_section(int $themeTid, string $sectionId, stri
     $replacement = af_theme_stylesheet_encode_section((array)$section['meta'], $newCss);
     $updated = substr($current, 0, (int)$section['start']).$replacement.substr($current, (int)$section['end']);
     $sid = (int)$row['sid'];
-    $db->update_query('themestylesheets', ['stylesheet' => $db->escape_string($updated), 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
+    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
     $state = af_theme_stylesheet_bundle_state($themeTid);
     if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 1, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
     af_theme_stylesheet_cache_row($themeTid, $sid, $updated);
@@ -3295,7 +3298,7 @@ function af_theme_stylesheet_repair_bundle_structure(int $themeTid, string $expe
     if (empty($backup['ok'])) return $backup;
     $updated = (string)$fresh['source'];
     $sid = (int)$row['sid'];
-    $db->update_query('themestylesheets', ['stylesheet' => $db->escape_string($updated), 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
+    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
     $state = af_theme_stylesheet_bundle_state($themeTid);
     if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 0, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
     af_theme_stylesheet_cache_row($themeTid, $sid, $updated);
@@ -3441,7 +3444,7 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     if (!$row) {
         $sid = (int)$db->insert_query('themestylesheets', [
             'name' => $nameEsc, 'tid' => $themeTid, 'attachedto' => $attachedTo,
-            'stylesheet' => $db->escape_string((string)$bundle['source']), 'cachefile' => '', 'lastmodified' => TIME_NOW,
+            'stylesheet' => (string)$bundle['source'], 'cachefile' => '', 'lastmodified' => TIME_NOW,
         ]);
         $row = ['sid' => $sid, 'stylesheet' => (string)$bundle['source']];
         $write = true;
@@ -3464,7 +3467,7 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
             }
         }
         if ($write) {
-            $update['stylesheet'] = $db->escape_string((string)$bundle['source']);
+            $update['stylesheet'] = (string)$bundle['source'];
             $manual = $migratedLegacyOverride;
         }
         $db->update_query('themestylesheets', $update, "sid='{$sid}'");
@@ -5748,7 +5751,7 @@ function af_theme_stylesheet_resolve_theme_href_from_state(array $state, int $th
     if ($sid > 0) {
         $sidQ = $db->simple_select(
             'themestylesheets',
-            'sid,name',
+            'sid,name,stylesheet,cachefile,lastmodified',
             "sid='{$sid}' AND tid='{$themeTid}'",
             ['limit' => 1]
         );
@@ -5761,7 +5764,7 @@ function af_theme_stylesheet_resolve_theme_href_from_state(array $state, int $th
             $nameEsc = $db->escape_string($name);
             $nameQ = $db->simple_select(
                 'themestylesheets',
-                'sid,name',
+                'sid,name,stylesheet,cachefile,lastmodified',
                 "tid='{$themeTid}' AND name='{$nameEsc}'",
                 ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]
             );
@@ -5776,19 +5779,26 @@ function af_theme_stylesheet_resolve_theme_href_from_state(array $state, int $th
 
     $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
     $cacheDirFs = MYBB_ROOT . 'cache/themes/theme' . $themeTid . '/';
+    // The content hash, unlike TIME_NOW, changes even for two ACP saves in
+    // the same second and makes browser/proxy invalidation deterministic.
+    $version = substr(sha1((string)($themeRow['stylesheet'] ?? '')), 0, 16);
+    $cacheReady = (string)($themeRow['cachefile'] ?? '') === $name;
 
     $nameMin = preg_replace('~\.css$~i', '.min.css', $name) ?? $name;
     $nameMin = trim((string)$nameMin);
 
-    if ($nameMin !== '' && is_file($cacheDirFs . $nameMin)) {
-        return $bburl . '/cache/themes/theme' . $themeTid . '/' . rawurlencode($nameMin);
+    if ($cacheReady && $nameMin !== '' && is_file($cacheDirFs . $nameMin)) {
+        return $bburl . '/cache/themes/theme' . $themeTid . '/' . rawurlencode($nameMin) . '?v=' . $version;
     }
 
-    if (is_file($cacheDirFs . $name)) {
-        return $bburl . '/cache/themes/theme' . $themeTid . '/' . rawurlencode($name);
+    if ($cacheReady && is_file($cacheDirFs . $name)) {
+        return $bburl . '/cache/themes/theme' . $themeTid . '/' . rawurlencode($name) . '?v=' . $version;
     }
 
-    return '';
+    // css.php is MyBB's canonical database-backed stylesheet fallback. It
+    // keeps the unified bundle usable when cache/themes is temporarily not
+    // writable, rather than forcing every addon back to an external file.
+    return $bburl . '/css.php?stylesheet=' . (int)$themeRow['sid'] . '&v=' . $version;
 }
 
 function af_theme_stylesheet_is_attached_to_request(string $attachedTo): bool

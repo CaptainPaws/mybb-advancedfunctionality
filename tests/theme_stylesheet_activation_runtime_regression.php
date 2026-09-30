@@ -86,12 +86,8 @@ final class ActivationDb
     public function escape_string(string $value): string { return addslashes($value); }
     private function decodeStylesheetPayload(array $payload): array
     {
-        if (!array_key_exists('stylesheet', $payload)) return $payload;
-        $withoutEscapedQuotes = str_replace("\\'", '', (string)$payload['stylesheet']);
-        if (str_contains($withoutEscapedQuotes, "'")) {
-            throw new RuntimeException('Unescaped stylesheet quote reached SQL serialization');
-        }
-        $payload['stylesheet'] = stripslashes((string)$payload['stylesheet']);
+        // MyBB's DB abstraction receives raw values and performs SQL escaping
+        // internally. The stored value therefore has to remain byte-identical.
         return $payload;
     }
     public function simple_select(string $table, string $fields = '*', string $where = '', array $options = []): array
