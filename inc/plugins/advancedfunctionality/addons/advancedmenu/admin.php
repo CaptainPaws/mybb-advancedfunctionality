@@ -229,7 +229,7 @@ class AF_Admin_Advancedmenu
             if (!array_key_exists($section, af_menu_sections())) $section = 'links';
             $enabled = empty($values['enabled']) ? 0 : 1; $sort = (int)($values['sortorder'] ?? 100);
             if (str_starts_with((string)$key, 'custom_')) {
-                $id=(int)substr((string)$key,7); $db->update_query(AF_AM_TABLE_ITEMS,['container'=>$container,'location'=>$container==='user_drawer'?'panel':'top','enabled'=>$enabled,'sort_order'=>$sort,'updated_at'=>TIME_NOW],"id='{$id}'");
+                $id=(int)substr((string)$key,7); $db->update_query(AF_AM_TABLE_ITEMS,['container'=>$container,'location'=>$container==='user_drawer'?'panel':'top','section'=>$section,'enabled'=>$enabled,'sort_order'=>$sort,'updated_at'=>TIME_NOW],"id='{$id}'");
             } elseif (isset($registry[$key]) && in_array($container,$registry[$key]['allowed_containers'],true)) {
                 $db->update_query(AF_AM_TABLE_OVERRIDES,['container'=>$container,'section'=>$section,'enabled'=>$enabled,'sortorder'=>$sort,'updated_at'=>TIME_NOW],"item_key='".$db->escape_string((string)$key)."'");
             }
@@ -258,6 +258,7 @@ class AF_Admin_Advancedmenu
             'url'        => '',
             'icon'       => '',
             'hint'       => '',
+            'section'    => 'links',
             'sort_order' => 10,
             'enabled'    => 1,
             'visibility' => $defaultVis,
@@ -312,6 +313,9 @@ class AF_Admin_Advancedmenu
             $url     = trim((string)$mybb->get_input('url'));
             $icon    = trim((string)$mybb->get_input('icon'));
             $hint    = trim((string)$mybb->get_input('hint'));
+            $logicalContainer = af_menu_normalize_container((string)$mybb->get_input('container'));
+            $legacyLocation = ($logicalContainer === 'user_drawer') ? 'panel' : 'top';
+            $section = af_menu_normalize_section(trim((string)$mybb->get_input('section')));
             $sort    = (int)$mybb->get_input('sort_order', MyBB::INPUT_INT);
             $enabled = ((int)$mybb->get_input('enabled', MyBB::INPUT_INT) === 1) ? 1 : 0;
 
@@ -398,6 +402,7 @@ class AF_Admin_Advancedmenu
             $save = [
                 'location'   => $legacyLocation,
                 'container'  => $logicalContainer,
+                'section'    => $section,
                 // MyBB's insert_query/update_query escape values themselves.
                 // Pre-escaping here stored literal backslashes and broke the
                 // form -> DB -> form/frontend round trip.
@@ -458,6 +463,20 @@ class AF_Admin_Advancedmenu
             'Отображаемый текст ссылки.',
             $form->generate_text_box('title', (string)$data['title'], ['style' => 'width: 520px;']),
             'title'
+        );
+
+        $container->output_row(
+            'Контейнер',
+            'Область меню, в которой будет показан пункт.',
+            $form->generate_select_box('container', af_menu_containers(), $logicalContainer, ['style' => 'width: 360px;']),
+            'container'
+        );
+
+        $container->output_row(
+            'Раздел',
+            'Стабильный ключ хранится в базе; подпись используется только в интерфейсе.',
+            $form->generate_select_box('section', af_menu_sections(), af_menu_normalize_section((string)($data['section'] ?? 'links')), ['style' => 'width: 360px;']),
+            'section'
         );
 
         $container->output_row(
