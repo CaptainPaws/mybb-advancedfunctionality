@@ -134,6 +134,46 @@ function af_menu_item_badge(array $item)
     return is_callable($provider) ? $provider($item) : null;
 }
 
+/** Stable identity for a provider-owned item. Placement is intentionally absent. */
+function af_menu_provider_identity(array $item): string
+{
+    return strtolower(trim((string)($item['source_addon'] ?? 'mybb'))).'::'.strtolower(trim((string)($item['key'] ?? '')));
+}
+
+/** Apply editable DB fields after all immutable provider defaults. */
+function af_menu_apply_override(array $item, ?array $override): array
+{
+    $override = $override ?? [];
+    $item['enabled'] = (int)($override['enabled'] ?? 1);
+    $item['container'] = af_menu_normalize_container((string)($override['container'] ?? $item['default_container']));
+    if (!in_array($item['container'], $item['allowed_containers'], true)) $item['container'] = $item['default_container'];
+    $item['sortorder'] = (int)($override['sortorder'] ?? $item['default_sortorder']);
+    $section = (string)($override['section'] ?? $item['section']);
+    $item['section'] = array_key_exists($section, af_menu_sections()) ? $section : $item['section'];
+    if (($override['label_override'] ?? '') !== '') $item['label'] = $override['label_override'];
+    if (($override['icon_override'] ?? '') !== '') $item['icon'] = $override['icon_override'];
+    $item['canonical_identity'] = af_menu_provider_identity($item);
+    return $item;
+}
+
+/** Repair only duplicate provider overrides; the custom-items table is untouched. */
+function af_menu_repair_duplicate_overrides(): void
+{
+    global $db;
+    $q = $db->simple_select(AF_AM_TABLE_OVERRIDES, 'item_key, COUNT(*) AS total', '', ['group_by'=>'item_key', 'having'=>'COUNT(*) > 1']);
+    while ($group = $db->fetch_array($q)) {
+        $escaped = $db->escape_string((string)$group['item_key']);
+        $winner = $db->fetch_array($db->simple_select(AF_AM_TABLE_OVERRIDES, '*', "item_key='{$escaped}'", [
+            'order_by'=>'updated_at, created_at', 'order_dir'=>'DESC', 'limit'=>1
+        ]));
+        if (!$winner) continue;
+        $db->delete_query(AF_AM_TABLE_OVERRIDES, "item_key='{$escaped}'");
+        $db->insert_query(AF_AM_TABLE_OVERRIDES, array_intersect_key($winner, array_flip([
+            'item_key','source_addon','enabled','container','section','sortorder','label_override','icon_override','created_at','updated_at'
+        ])));
+    }
+}
+
 function af_menu_ensure_registry_overrides(?array $registry = null): void
 {
     global $db;
@@ -141,17 +181,20 @@ function af_menu_ensure_registry_overrides(?array $registry = null): void
     foreach ($registry as $key => $item) {
         $escaped = $db->escape_string($key);
         $exists = (int)$db->fetch_field($db->simple_select(AF_AM_TABLE_OVERRIDES, 'COUNT(*) AS total', "item_key='{$escaped}'"), 'total');
+        $source = (string)$item['source_addon'];
         if ($exists) {
             // Stage-2 defaults pointed at legacy aliases. Move only pristine
             // rows; an administrator-edited row has a different updated_at.
             $row = $db->fetch_array($db->simple_select(AF_AM_TABLE_OVERRIDES, '*', "item_key='{$escaped}'", ['limit'=>1]));
             if ($row && (int)$row['created_at'] === (int)$row['updated_at']
                 && (string)$row['container'] !== (string)$item['default_container']) {
-                $db->update_query(AF_AM_TABLE_OVERRIDES, ['container'=>$item['default_container'], 'sortorder'=>(int)$item['default_sortorder']], "item_key='{$escaped}'");
+                $db->update_query(AF_AM_TABLE_OVERRIDES, ['source_addon'=>$source, 'container'=>$item['default_container'], 'sortorder'=>(int)$item['default_sortorder']], "item_key='{$escaped}'");
+            } elseif ($row && (string)($row['source_addon'] ?? '') === '') {
+                $db->update_query(AF_AM_TABLE_OVERRIDES, ['source_addon'=>$source], "item_key='{$escaped}'");
             }
             continue; // Provider reloads must never overwrite administrator choices.
         }
-        $db->insert_query(AF_AM_TABLE_OVERRIDES, ['item_key'=>$key, 'enabled'=>1,
+        $db->insert_query(AF_AM_TABLE_OVERRIDES, ['item_key'=>$key, 'source_addon'=>$source, 'enabled'=>1,
             'container'=>$item['default_container'], 'section'=>(string)$item['section'], 'sortorder'=>(int)$item['default_sortorder'],
             'label_override'=>null, 'icon_override'=>null, 'created_at'=>TIME_NOW, 'updated_at'=>TIME_NOW]);
     }
@@ -162,7 +205,12 @@ function af_menu_get_overrides(): array
     global $db;
     $out = [];
     $q = $db->simple_select(AF_AM_TABLE_OVERRIDES, '*');
-    while ($row = $db->fetch_array($q)) $out[(string)$row['item_key']] = $row;
+    while ($row = $db->fetch_array($q)) {
+        $key = (string)$row['item_key'];
+        if (!isset($out[$key]) || [(int)$row['updated_at'], (int)$row['created_at']] > [(int)$out[$key]['updated_at'], (int)$out[$key]['created_at']]) {
+            $out[$key] = $row;
+        }
+    }
     return $out;
 }
 
@@ -172,15 +220,9 @@ function af_menu_configured_registry(bool $ensure = true): array
     if ($ensure) af_menu_ensure_registry_overrides($registry);
     $overrides = af_menu_get_overrides();
     foreach ($registry as $key => &$item) {
-        $o = $overrides[$key] ?? [];
-        $item['enabled'] = (int)($o['enabled'] ?? 1);
-        $item['container'] = af_menu_normalize_container((string)($o['container'] ?? $item['default_container']));
-        if (!in_array($item['container'], $item['allowed_containers'], true)) $item['container'] = $item['default_container'];
-        $item['sortorder'] = (int)($o['sortorder'] ?? $item['default_sortorder']);
-        $section = (string)($o['section'] ?? $item['section']);
-        $item['section'] = array_key_exists($section, af_menu_sections()) ? $section : $item['section'];
-        if (($o['label_override'] ?? '') !== '') $item['label'] = $o['label_override'];
-        if (($o['icon_override'] ?? '') !== '') $item['icon'] = $o['icon_override'];
+        $o = $overrides[$key] ?? null;
+        if ($o && ($o['source_addon'] ?? '') !== '' && (string)$o['source_addon'] !== (string)$item['source_addon']) $o = null;
+        $item = af_menu_apply_override($item, $o);
     }
     unset($item);
     uasort($registry, static fn($a, $b) => [$a['container'],$a['sortorder'],$a['key']] <=> [$b['container'],$b['sortorder'],$b['key']]);
@@ -258,7 +300,7 @@ function af_advancedmenu_install_db(): void
     ");
 
     $db->write_query("CREATE TABLE IF NOT EXISTS `".TABLE_PREFIX.AF_AM_TABLE_OVERRIDES."` (
-        `item_key` varchar(64) NOT NULL, `enabled` tinyint(1) NOT NULL DEFAULT 1,
+        `item_key` varchar(64) NOT NULL, `source_addon` varchar(64) NOT NULL DEFAULT '', `enabled` tinyint(1) NOT NULL DEFAULT 1,
         `container` varchar(24) NOT NULL DEFAULT 'main', `section` varchar(24) NULL, `sortorder` int NOT NULL DEFAULT 100,
         `label_override` varchar(255) NULL, `icon_override` varchar(255) NULL,
         `created_at` int unsigned NOT NULL DEFAULT 0, `updated_at` int unsigned NOT NULL DEFAULT 0,
@@ -280,6 +322,9 @@ function af_advancedmenu_install_db(): void
         if (!$db->field_exists('section', AF_AM_TABLE_OVERRIDES)) {
             $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_OVERRIDES."` ADD COLUMN `section` varchar(24) NULL AFTER `container`");
         }
+        if (!$db->field_exists('source_addon', AF_AM_TABLE_OVERRIDES)) {
+            $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_OVERRIDES."` ADD COLUMN `source_addon` varchar(64) NOT NULL DEFAULT '' AFTER `item_key`");
+        }
         if (!$db->field_exists('section', AF_AM_TABLE_ITEMS)) {
             $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_ITEMS."` ADD COLUMN `section` varchar(24) NOT NULL DEFAULT 'links' AFTER `container`");
         }
@@ -287,6 +332,7 @@ function af_advancedmenu_install_db(): void
         // fallback (если внезапно нет field_exists) — не трогаем, чтобы не падать.
     }
 
+    af_menu_repair_duplicate_overrides();
     af_menu_ensure_registry_overrides();
 }
 
@@ -1113,8 +1159,12 @@ function af_advancedmenu_render_theme_widget(array $item = []): string
 function af_advancedmenu_build_container_html(string $container): string
 {
     $rows = [];
+    $seenProviders = [];
     foreach (af_menu_configured_registry() as $item) {
         if (($item['container'] ?? '') !== $container || empty($item['enabled']) || !af_menu_item_is_visible($item)) continue;
+        $identity = (string)($item['canonical_identity'] ?? af_menu_provider_identity($item));
+        if (isset($seenProviders[$identity])) continue;
+        $seenProviders[$identity] = true;
         $rows[] = ['sort'=>(int)$item['sortorder'], 'key'=>(string)$item['key'], 'html'=>af_advancedmenu_render_registry_item($item)];
     }
     foreach (af_advancedmenu_get_items() as $item) {
@@ -1132,6 +1182,7 @@ function af_advancedmenu_build_drawer_html(): string
     $sections = af_menu_sections();
     $items = af_menu_configured_registry();
     $custom = af_advancedmenu_get_items();
+    $seenProviders = [];
     $out = '';
     foreach ($sections as $section => $title) {
         $rows = [];
@@ -1141,6 +1192,9 @@ function af_advancedmenu_build_drawer_html(): string
             if (in_array((string)($item['key'] ?? ''), ['profile', 'logout'], true)) continue;
             if (($item['container'] ?? '') !== 'user_drawer' || ($item['section'] ?? 'links') !== $section
                 || empty($item['enabled']) || !af_menu_item_is_visible($item)) continue;
+            $identity = (string)($item['canonical_identity'] ?? af_menu_provider_identity($item));
+            if (isset($seenProviders[$identity])) continue;
+            $seenProviders[$identity] = true;
             $html = af_advancedmenu_render_registry_item($item);
             if ($html !== '') $rows[] = ['sort'=>(int)$item['sortorder'], 'key'=>(string)$item['key'], 'html'=>$html];
         }

@@ -231,7 +231,15 @@ class AF_Admin_Advancedmenu
             if (str_starts_with((string)$key, 'custom_')) {
                 $id=(int)substr((string)$key,7); $db->update_query(AF_AM_TABLE_ITEMS,['container'=>$container,'location'=>$container==='user_drawer'?'panel':'top','section'=>$section,'enabled'=>$enabled,'sort_order'=>$sort,'updated_at'=>TIME_NOW],"id='{$id}'");
             } elseif (isset($registry[$key]) && in_array($container,$registry[$key]['allowed_containers'],true)) {
-                $db->update_query(AF_AM_TABLE_OVERRIDES,['container'=>$container,'section'=>$section,'enabled'=>$enabled,'sortorder'=>$sort,'updated_at'=>TIME_NOW],"item_key='".$db->escape_string((string)$key)."'");
+                $escaped = $db->escape_string((string)$key);
+                $save = ['source_addon'=>(string)$registry[$key]['source_addon'],'container'=>$container,'section'=>$section,'enabled'=>$enabled,'sortorder'=>$sort,'updated_at'=>TIME_NOW];
+                $exists = (int)$db->fetch_field($db->simple_select(AF_AM_TABLE_OVERRIDES, 'COUNT(*) AS total', "item_key='{$escaped}'"), 'total');
+                if ($exists) {
+                    $db->update_query(AF_AM_TABLE_OVERRIDES, $save, "item_key='{$escaped}'");
+                } else {
+                    $save += ['item_key'=>(string)$key,'label_override'=>null,'icon_override'=>null,'created_at'=>TIME_NOW];
+                    $db->insert_query(AF_AM_TABLE_OVERRIDES, $save);
+                }
             }
         }
         af_advancedmenu_rebuild_cache();
