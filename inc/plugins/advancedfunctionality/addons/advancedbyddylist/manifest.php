@@ -8,8 +8,8 @@ return [
     'id'          => 'advancedbyddylist',
     'type'        => 'addon',
     'name'        => 'Advanced Buddy List',
-    'description' => 'Улучшенная модалка друзей/игнора для MyBB.popupWindow (misc.php?action=buddypopup&modal=1).',
-    'version'     => '1.0.0',
+    'description' => 'Взаимные друзья, заявки, односторонний игнор и поиск пользователей.',
+    'version'     => '2.0.0',
     'compatibility' => '18*',
     'author'      => 'CaptainPaws',
     'website'     => 'https://github.com/CaptainPaws',
@@ -17,10 +17,10 @@ return [
 
     'frontend' => [
         'mode' => 'contextual',
-        'routes' => [],
-        'response_rules' => [
-            ['has_buddy_trigger' => true],
+        'routes' => [
+            ['script' => 'buddy.php'],
         ],
+        'response_rules' => [],
         'directory_fallback' => false,
     ],
 
