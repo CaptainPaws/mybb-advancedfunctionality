@@ -6,7 +6,10 @@ $source = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/k
 
 if (($manifest['frontend']['mode'] ?? '') !== 'contextual'
     || ($manifest['frontend']['directory_fallback'] ?? null) !== false
-    || ($manifest['frontend']['response_rules'] ?? []) !== [['has_kb_chip' => true]]) {
+    || ($manifest['frontend']['response_rules'] ?? []) !== [
+        ['has_kb_chip' => true],
+        ['has_supported_editor' => true],
+    ]) {
     throw new RuntimeException('Knowledge Base frontend contract is not contextual/component-aware.');
 }
 
@@ -33,6 +36,7 @@ foreach (['kb_get', 'kb_list', 'kb_types', 'kb_children', 'knowledgebase_entry',
 foreach ([
     "af_kb_frontend_asset_allowed('page_runtime')",
     "af_kb_frontend_asset_allowed('chip_runtime', ['has_kb_chip' => true])",
+    "af_kb_frontend_asset_allowed('editor_integration', ['has_supported_editor' => true])",
     "af_kb_frontend_asset_allowed('sceditor_stack')",
     "af_kb_frontend_asset_allowed('header_ensure')",
 ] as $needle) {

@@ -12,12 +12,12 @@ whether a page receives the KB browser runtime.
 | KB chips in parsed posts or sheets | `parse_message_end` renders `.af-kb-chip` | Chip response fact enables CSS, chip/modal runtime and endpoints only when the marker exists |
 | KB entry modal endpoint | Reads and renders an entry payload | None: the caller already owns the chip runtime |
 | JSON list/get/types/children/variant endpoints | Read-only KB payloads for callers | None |
-| AdvancedThreadFields DnD/ARPG forms | Server-side types, races, variants, origins, archetypes, factions, abilities, mechanics and labels; its own AJAX bridge | None merely for reading KB data |
+| AdvancedThreadFields DnD/ARPG forms | Server-side types, races, variants, origins, archetypes, factions, abilities, mechanics and labels; its own AJAX bridge | BBCode-enabled ATF textareas receive the lazy KB chip picker; other controls receive nothing merely for reading KB data |
 | CharacterSheets DnD/ARPG | Server-side race/variant bonuses, abilities, equipment, normalized rules and modal data | None merely for calculations/rendering; a rendered KB chip is handled by the component fact |
 | CharacterWorkflow | Character record creation, acceptance/canonical/original flows, sheet creation and moderation data | None |
 | Shop | Item/ability metadata, normalized profiles and rules | None |
 | Inventory | Item/ability metadata and normalized profiles | None |
-| Editor insert integration on KB edit pages | KB entity search and insertion | Base editor runtime, then chips and insert runtime, then inline config; SCEditor dependencies/init remain page-local |
+| Editor insert integration in posts, quick reply, ATF and KB edit pages | KB entity search and insertion | The `has_supported_editor` response fact enables base/UI CSS, chips and the single insert runtime plus inline picker config; KB's heavy editor runtime and SCEditor dependencies/init remain KB-page-local |
 | ARPG mechanics | `origin`, `origin_variant`, `archetype`, `faction`, `ability`, mechanics option sets and `item` | None outside an actual KB UI/chip |
 | DnD mechanics | Race, race variants, classes, themes, abilities and related rule data | None outside an actual KB UI/chip |
 
@@ -25,9 +25,9 @@ whether a page receives the KB browser runtime.
 
 The manifest owns only explicit HTML actions on `kb.php` and their legacy
 `misc.php` aliases. AJAX, JSON and mutation actions are intentionally absent.
-The late response fact `has_kb_chip=true` covers embedded chips without making
-`showthread.php`, CharacterSheets, ATF, Shop, Inventory, or editor-bearing pages
-KB routes.
+The late response facts `has_kb_chip=true` and `has_supported_editor=true` cover
+embedded chips and editor integration without making `showthread.php`,
+CharacterSheets, ATF, Shop, Inventory, or editor-bearing pages KB routes.
 
 Owner injections (`pre_output_page`, header ensure, SCEditor stack, direct KB
 scripts and inline configuration) pass through the same permission API while
@@ -36,4 +36,6 @@ Theme stylesheet declarations and automatic/file/theme delivery are unchanged.
 
 The preserved script/config order is: KB base runtime, KB chips runtime, KB
 insert runtime, inline language/endpoints/options, runtime mode, and SCEditor
-initialization. View/chip contexts omit the base editor and insert runtimes.
+initialization. View/chip contexts omit the base editor and insert runtimes;
+non-KB editor contexts omit the heavy KB editor runtime and SCEditor stack while
+retaining the picker runtime.
