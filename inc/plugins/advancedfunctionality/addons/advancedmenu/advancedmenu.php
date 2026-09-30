@@ -1242,6 +1242,9 @@ function af_advancedmenu_install_frontend_nav(string &$page): void
 {
     global $theme_select;
     if (strpos($page, 'data-af-am-navigation="1"') !== false) return;
+    // Content-only documents (for example a Character Sheet iframe) keep the
+    // shared head/assets, but deliberately opt out of all site navigation.
+    if (preg_match('~<body\b[^>]*\bdata-af-layout\s*=\s*(["\'])content-only\1~i', $page)) return;
 
     // The modal implementations bind to these stable IDs. Remove only the
     // legacy anchors, never their surrounding provider widget. In particular,
