@@ -886,6 +886,7 @@ function af_advancededitor_response_facts(string $page): array
         || (bool)preg_match('~id=["\']posts["\']~i', $page);
     return [
         'has_supported_editor' => $hasMessage || $hasKbEditor || $hasAtfEditor,
+        'has_kb_editor' => $hasKbEditor,
         'has_atf_editor' => $hasAtfEditor,
         'has_post_content' => $hasPostContent,
     ];
@@ -1110,11 +1111,11 @@ table #post_options, table #postoptions{display:none!important;}
         $postKey = (string)($mybb->post_code ?? '');
 
         $editorSelectors = ['textarea[name="message"]', 'textarea.af-atf-bbcode-editor'];
-        if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'misc.php') {
-            $action = (string)($mybb->input['action'] ?? '');
-            if (in_array($action, ['kb_edit', 'kb_type_edit'], true)) {
-                $editorSelectors[] = 'textarea.af-kb-editor';
-            }
+        // Select editor surfaces from the final response, not from a script
+        // alias. KB is served by both kb.php and legacy misc.php routes and its
+        // repeaters can add more marked textareas after the initial render.
+        if (!empty($facts['has_kb_editor'])) {
+            $editorSelectors[] = 'textarea.af-kb-editor';
         }
         $editorSelector = implode(', ', array_unique($editorSelectors));
 

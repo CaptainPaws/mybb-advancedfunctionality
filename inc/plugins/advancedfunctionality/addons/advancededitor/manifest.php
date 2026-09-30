@@ -11,7 +11,16 @@ return [
 
     'frontend' => [
         'mode' => 'contextual',
-        'routes' => [],
+        'routes' => [
+            // KB owns the HTML and publishes the canonical editor marker late,
+            // in the rendered response.  Declare both its canonical entry
+            // point and retained misc.php aliases so bootstrap-time permission
+            // checks cannot discard the editor before response facts exist.
+            ['script' => 'kb.php', 'action' => 'kb_edit'],
+            ['script' => 'kb.php', 'action' => 'kb_type_edit'],
+            ['script' => 'misc.php', 'action' => 'kb_edit'],
+            ['script' => 'misc.php', 'action' => 'kb_type_edit'],
+        ],
         'response_rules' => [
             ['has_supported_editor' => true],
             // AdvancedThreadFields owns this response context and marks only

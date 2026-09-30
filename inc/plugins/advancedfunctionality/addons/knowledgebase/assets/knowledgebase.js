@@ -24,6 +24,23 @@
         return /^blocks\[\d+]\[content_(ru|en)]$/.test(name);
     }
 
+    function isAdvancedEditorOwnedField(field) {
+        var payload = window.afAdvancedEditorPayload || window.afAePayload;
+        var selector = payload && payload.cfg && typeof payload.cfg.editorSelector === 'string'
+            ? payload.cfg.editorSelector.trim()
+            : '';
+
+        if (!field || !selector || typeof field.matches !== 'function') {
+            return false;
+        }
+
+        try {
+            return field.matches(selector);
+        } catch (err) {
+            return false;
+        }
+    }
+
     function afKbEndpoint(name, fallback) {
         var map = (window && window.afKbEndpoints) ? window.afKbEndpoints : null;
         return (map && map[name]) ? map[name] : fallback;
@@ -183,6 +200,14 @@
                 return;
             }
 
+            // AdvancedEditor owns every canonically marked KB textarea when
+            // its response payload is present. Do not win the DOMContentLoaded
+            // or repeater race with KB's small fallback toolbar; AE's initial
+            // scan/MutationObserver will create the full configured instance.
+            if (isAdvancedEditorOwnedField(field)) {
+                return;
+            }
+
             var existingInstance = getEditorInstance(field);
             if (existingInstance) {
                 // AdvancedEditor can win the initialization race. Normalize the
@@ -316,6 +341,7 @@
 
     window.__afKbEditorGuard = {
         isAllowedKbEditorField: isAllowedKbEditorField,
+        isAdvancedEditorOwnedField: isAdvancedEditorOwnedField,
         getEditorInstance: getEditorInstance,
         destroyEditorInstance: destroyEditorInstance,
         markEditorPolicy: markEditorPolicy,
