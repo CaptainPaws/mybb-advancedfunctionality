@@ -35,6 +35,12 @@ function af_menu_sections(): array
     return ['profile'=>'Профиль', 'links'=>'Ссылки', 'settings'=>'Настройки'];
 }
 
+/** Return the stable storage key used by both custom and provider items. */
+function af_menu_normalize_section(string $section): string
+{
+    return array_key_exists($section, af_menu_sections()) ? $section : 'links';
+}
+
 function af_menu_normalize_container(string $container): string
 {
     return ['top'=>'main', 'top_links'=>'main', 'panel'=>'user_drawer', 'panel_links'=>'user_drawer',
@@ -234,6 +240,7 @@ function af_advancedmenu_install_db(): void
             `id` int unsigned NOT NULL AUTO_INCREMENT,
             `location` varchar(10) NOT NULL DEFAULT 'top',
             `container` varchar(24) NOT NULL DEFAULT 'main',
+            `section` varchar(24) NOT NULL DEFAULT 'links',
             `slug` varchar(64) NOT NULL,
             `title` varchar(255) NOT NULL,
             `url` varchar(500) NOT NULL,
@@ -272,6 +279,9 @@ function af_advancedmenu_install_db(): void
         }
         if (!$db->field_exists('section', AF_AM_TABLE_OVERRIDES)) {
             $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_OVERRIDES."` ADD COLUMN `section` varchar(24) NULL AFTER `container`");
+        }
+        if (!$db->field_exists('section', AF_AM_TABLE_ITEMS)) {
+            $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_ITEMS."` ADD COLUMN `section` varchar(24) NOT NULL DEFAULT 'links' AFTER `container`");
         }
     } else {
         // fallback (если внезапно нет field_exists) — не трогаем, чтобы не падать.
@@ -1134,8 +1144,9 @@ function af_advancedmenu_build_drawer_html(): string
             $html = af_advancedmenu_render_registry_item($item);
             if ($html !== '') $rows[] = ['sort'=>(int)$item['sortorder'], 'key'=>(string)$item['key'], 'html'=>$html];
         }
-        if ($section === 'links') foreach ($custom as $item) {
+        foreach ($custom as $item) {
             if (af_menu_normalize_container((string)($item['container'] ?? $item['location'] ?? 'main')) !== 'user_drawer'
+                || af_menu_normalize_section((string)($item['section'] ?? 'links')) !== $section
                 || (int)$item['enabled'] !== 1 || !af_advancedmenu_item_is_visible($item)) continue;
             $rows[] = ['sort'=>(int)$item['sort_order'], 'key'=>'custom_'.(int)$item['id'], 'html'=>af_advancedmenu_render_item($item)];
         }
