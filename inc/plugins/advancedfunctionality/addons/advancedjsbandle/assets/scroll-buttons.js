@@ -72,6 +72,9 @@
   }
 
   onReady(function () {
+    // Embedded/content-only documents own their scrolling surface and must not
+    // receive the global page navigation controls.
+    if (document.body && document.body.getAttribute('data-af-layout') === 'content-only') return;
     // если страниц короткая — вообще не рисуем
     if (maxScrollTop() < 200) return;
 
