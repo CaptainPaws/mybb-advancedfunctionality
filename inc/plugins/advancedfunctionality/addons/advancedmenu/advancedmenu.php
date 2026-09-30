@@ -1189,6 +1189,27 @@ function af_advancedmenu_render_drawer_account(): string
         .'</div></section>';
 }
 
+/**
+ * Render the single, page-independent guest account surface below the
+ * secondary navigation. The drawer keeps its compact copy for mobile access,
+ * while this is the canonical visible welcome block in the page header.
+ */
+function af_advancedmenu_render_guest_account_bar(): string
+{
+    global $mybb;
+
+    if (!empty($mybb->user['uid'])) {
+        return '';
+    }
+
+    return '<section class="af-am-guest-account" aria-label="Гостевой аккаунт">'
+        .'<span class="af-am-guest-greeting">Привет, гость</span>'
+        .'<div class="af-am-guest-actions">'
+        .'<a class="af-am-guest-action af-am-guest-action--login" href="member.php?action=login">Войти</a>'
+        .'<a class="af-am-guest-action af-am-guest-action--register" href="member.php?action=register">Регистрация</a>'
+        .'</div></section>';
+}
+
 function af_advancedmenu_render_frontend_nav(): string
 {
     $main = af_advancedmenu_build_container_html('main');
@@ -1199,6 +1220,7 @@ function af_advancedmenu_render_frontend_nav(): string
         .'<ul class="af-am-list"><button class="af-am-burger" type="button" aria-label="Открыть пользовательское меню" aria-expanded="false" aria-controls="af-am-user-drawer"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>'
         .$main.'</ul></nav>'
         .'<nav class="af-am-bar af-am-secondary" aria-label="Дополнительное меню"><ul class="af-am-list">'.$secondary.'</ul></nav>'
+        .af_advancedmenu_render_guest_account_bar()
         .'</div><div class="af-am-drawer-shell" data-af-am-drawer-shell hidden>'
         .'<button class="af-am-drawer-overlay" type="button" tabindex="-1" aria-label="Закрыть пользовательское меню"></button>'
         .'<aside id="af-am-user-drawer" class="af-am-drawer" role="dialog" aria-modal="true" aria-label="Пользовательское меню" tabindex="-1">'
