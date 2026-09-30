@@ -25,4 +25,31 @@ foreach (['save_order', 'sortorder', 'source_addon', 'allowed_containers'] as $n
     if (strpos($admin, $needle) === false) throw new RuntimeException("ACP management missing: {$needle}");
 }
 
+// The manifest container migration used to collapse `secondary` to legacy
+// `top` in the form action.  On POST that selected `main`, so add/edit saved
+// into the wrong container.  Keep the logical container throughout the CRUD
+// round trip, and bind edit submissions to the id which populated the form.
+foreach ([
+    "'loc' => \$logicalContainer",
+    "generate_hidden_field('item_id'",
+    "\$postedId !== \$id",
+    "container='\".\$db->escape_string(\$logicalContainer)",
+] as $needle) {
+    if (strpos($admin, $needle) === false) throw new RuntimeException("ACP CRUD round-trip guard missing: {$needle}");
+}
+
+// MyBB's DB helpers and Form fields perform their own escaping.  Reintroducing
+// either pre-escape corrupts quotes/ampersands after edit and frontend render.
+foreach ([
+    "'title'      => \$db->escape_string",
+    "generate_text_box('url', htmlspecialchars_uni",
+] as $forbidden) {
+    if (strpos($admin, $forbidden) !== false) throw new RuntimeException("ACP value is escaped twice: {$forbidden}");
+}
+
+if (strpos($admin, "\$mybb->request_method !== 'post'") === false
+    || substr_count($admin, "verify_post_check(\$mybb->get_input('my_post_key'))") < 4) {
+    throw new RuntimeException('Destructive custom-item operations must be POST + CSRF protected.');
+}
+
 echo "advancedmenu management regression: OK\n";
