@@ -160,14 +160,16 @@ function af_menu_apply_override(array $item, ?array $override): array
 function af_menu_repair_duplicate_overrides(): void
 {
     global $db;
-    $q = $db->simple_select(AF_AM_TABLE_OVERRIDES, 'item_key, COUNT(*) AS total', '', ['group_by'=>'item_key', 'having'=>'COUNT(*) > 1']);
+    $q = $db->simple_select(AF_AM_TABLE_OVERRIDES, 'source_addon, item_key, COUNT(*) AS total', '', ['group_by'=>'source_addon, item_key', 'having'=>'COUNT(*) > 1']);
     while ($group = $db->fetch_array($q)) {
         $escaped = $db->escape_string((string)$group['item_key']);
-        $winner = $db->fetch_array($db->simple_select(AF_AM_TABLE_OVERRIDES, '*', "item_key='{$escaped}'", [
+        $source = $db->escape_string((string)$group['source_addon']);
+        $where = "source_addon='{$source}' AND item_key='{$escaped}'";
+        $winner = $db->fetch_array($db->simple_select(AF_AM_TABLE_OVERRIDES, '*', $where, [
             'order_by'=>'updated_at, created_at', 'order_dir'=>'DESC', 'limit'=>1
         ]));
         if (!$winner) continue;
-        $db->delete_query(AF_AM_TABLE_OVERRIDES, "item_key='{$escaped}'");
+        $db->delete_query(AF_AM_TABLE_OVERRIDES, $where);
         $db->insert_query(AF_AM_TABLE_OVERRIDES, array_intersect_key($winner, array_flip([
             'item_key','source_addon','enabled','container','section','sortorder','label_override','icon_override','created_at','updated_at'
         ])));
@@ -180,17 +182,17 @@ function af_menu_ensure_registry_overrides(?array $registry = null): void
     $registry = $registry ?? af_menu_collect_registry();
     foreach ($registry as $key => $item) {
         $escaped = $db->escape_string($key);
-        $exists = (int)$db->fetch_field($db->simple_select(AF_AM_TABLE_OVERRIDES, 'COUNT(*) AS total', "item_key='{$escaped}'"), 'total');
         $source = (string)$item['source_addon'];
+        $sourceEscaped = $db->escape_string($source);
+        $where = "source_addon='{$sourceEscaped}' AND item_key='{$escaped}'";
+        $exists = (int)$db->fetch_field($db->simple_select(AF_AM_TABLE_OVERRIDES, 'COUNT(*) AS total', $where), 'total');
         if ($exists) {
             // Stage-2 defaults pointed at legacy aliases. Move only pristine
             // rows; an administrator-edited row has a different updated_at.
-            $row = $db->fetch_array($db->simple_select(AF_AM_TABLE_OVERRIDES, '*', "item_key='{$escaped}'", ['limit'=>1]));
+            $row = $db->fetch_array($db->simple_select(AF_AM_TABLE_OVERRIDES, '*', $where, ['limit'=>1]));
             if ($row && (int)$row['created_at'] === (int)$row['updated_at']
                 && (string)$row['container'] !== (string)$item['default_container']) {
-                $db->update_query(AF_AM_TABLE_OVERRIDES, ['source_addon'=>$source, 'container'=>$item['default_container'], 'sortorder'=>(int)$item['default_sortorder']], "item_key='{$escaped}'");
-            } elseif ($row && (string)($row['source_addon'] ?? '') === '') {
-                $db->update_query(AF_AM_TABLE_OVERRIDES, ['source_addon'=>$source], "item_key='{$escaped}'");
+                $db->update_query(AF_AM_TABLE_OVERRIDES, ['container'=>$item['default_container'], 'sortorder'=>(int)$item['default_sortorder']], $where);
             }
             continue; // Provider reloads must never overwrite administrator choices.
         }
@@ -206,22 +208,65 @@ function af_menu_get_overrides(): array
     $out = [];
     $q = $db->simple_select(AF_AM_TABLE_OVERRIDES, '*');
     while ($row = $db->fetch_array($q)) {
-        $key = (string)$row['item_key'];
-        if (!isset($out[$key]) || [(int)$row['updated_at'], (int)$row['created_at']] > [(int)$out[$key]['updated_at'], (int)$out[$key]['created_at']]) {
-            $out[$key] = $row;
+        $identity = strtolower((string)$row['source_addon']).'::'.strtolower((string)$row['item_key']);
+        if (!isset($out[$identity]) || [(int)$row['updated_at'], (int)$row['created_at']] > [(int)$out[$identity]['updated_at'], (int)$out[$identity]['created_at']]) {
+            $out[$identity] = $row;
         }
     }
     return $out;
 }
 
+/** Safely adopt demonstrable manual copies of the three historical provider links. */
+function af_menu_migrate_known_provider_copies(array $registry): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    global $db;
+    $known = ['advancedappearance::presets'=>true, 'advancedappearance::fitting_room'=>true,
+        'advancedpostcounter::post_activity'=>true];
+    $normalizeUrl = static function (string $url): string {
+        $url = html_entity_decode(trim($url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return strtolower(ltrim((string)preg_replace('~^https?://[^/]+/~i', '', $url), '/'));
+    };
+    foreach ($registry as $provider) {
+        if (!isset($known[af_menu_provider_identity($provider)])) continue;
+        $providerUrl = $normalizeUrl((string)($provider['action']['url'] ?? ''));
+        if ($providerUrl === '') continue;
+        $q = $db->simple_select(AF_AM_TABLE_ITEMS, '*');
+        while ($custom = $db->fetch_array($q)) {
+            $urlMatches = $normalizeUrl((string)$custom['url']) === $providerUrl;
+            $labelMatches = trim((string)$custom['title']) === trim((string)$provider['label']);
+            $keyMatches = strtolower(trim((string)$custom['slug'])) === (string)$provider['key'];
+            // A label alone can be legitimate custom content and is never deleted.
+            if (!$urlMatches || (!$labelMatches && !$keyMatches)) continue;
+            $source = $db->escape_string((string)$provider['source_addon']);
+            $key = $db->escape_string((string)$provider['key']);
+            $where = "source_addon='{$source}' AND item_key='{$key}'";
+            $db->update_query(AF_AM_TABLE_OVERRIDES, [
+                'enabled'=>(int)$custom['enabled'],
+                'container'=>af_menu_normalize_container((string)($custom['container'] ?? $custom['location'])),
+                'section'=>af_menu_normalize_section((string)($custom['section'] ?? 'links')),
+                'sortorder'=>(int)$custom['sort_order'],
+                'label_override'=>$labelMatches ? null : (string)$custom['title'],
+                'icon_override'=>trim((string)$custom['icon']) === trim((string)$provider['icon']) ? null : (string)$custom['icon'],
+                'updated_at'=>TIME_NOW,
+            ], $where);
+            $db->delete_query(AF_AM_TABLE_ITEMS, "id='".(int)$custom['id']."'");
+        }
+    }
+}
+
 function af_menu_configured_registry(bool $ensure = true): array
 {
     $registry = af_menu_collect_registry();
-    if ($ensure) af_menu_ensure_registry_overrides($registry);
+    if ($ensure) {
+        af_menu_ensure_registry_overrides($registry);
+        af_menu_migrate_known_provider_copies($registry);
+    }
     $overrides = af_menu_get_overrides();
     foreach ($registry as $key => &$item) {
-        $o = $overrides[$key] ?? null;
-        if ($o && ($o['source_addon'] ?? '') !== '' && (string)$o['source_addon'] !== (string)$item['source_addon']) $o = null;
+        $o = $overrides[af_menu_provider_identity($item)] ?? null;
         $item = af_menu_apply_override($item, $o);
     }
     unset($item);
@@ -304,7 +349,7 @@ function af_advancedmenu_install_db(): void
         `container` varchar(24) NOT NULL DEFAULT 'main', `section` varchar(24) NULL, `sortorder` int NOT NULL DEFAULT 100,
         `label_override` varchar(255) NULL, `icon_override` varchar(255) NULL,
         `created_at` int unsigned NOT NULL DEFAULT 0, `updated_at` int unsigned NOT NULL DEFAULT 0,
-        PRIMARY KEY (`item_key`), KEY `idx_container_sort` (`container`,`sortorder`)
+        PRIMARY KEY (`source_addon`,`item_key`), KEY `idx_container_sort` (`container`,`sortorder`)
     ) {$collation}");
 
     // Мягкий апгрейд: если таблица была создана раньше без icon/hint — добавим.
@@ -330,6 +375,21 @@ function af_advancedmenu_install_db(): void
         }
     } else {
         // fallback (если внезапно нет field_exists) — не трогаем, чтобы не падать.
+    }
+
+    // Old installations used item_key alone as the primary key. Backfill the
+    // owner where it is unambiguous, then enforce the canonical pair.
+    $registry = af_menu_collect_registry();
+    foreach ($registry as $key => $item) {
+        $escaped = $db->escape_string((string)$key);
+        $db->update_query(AF_AM_TABLE_OVERRIDES, ['source_addon'=>(string)$item['source_addon']], "item_key='{$escaped}' AND source_addon=''");
+    }
+    $primaryColumns = [];
+    $indexes = $db->write_query("SHOW INDEX FROM `".TABLE_PREFIX.AF_AM_TABLE_OVERRIDES."` WHERE Key_name='PRIMARY'");
+    while ($index = $db->fetch_array($indexes)) $primaryColumns[(int)$index['Seq_in_index']] = (string)$index['Column_name'];
+    ksort($primaryColumns);
+    if (array_values($primaryColumns) !== ['source_addon', 'item_key']) {
+        $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_OVERRIDES."` DROP PRIMARY KEY, ADD PRIMARY KEY (`source_addon`,`item_key`)");
     }
 
     af_menu_repair_duplicate_overrides();

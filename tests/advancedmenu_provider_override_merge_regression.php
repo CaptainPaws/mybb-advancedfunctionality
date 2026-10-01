@@ -7,7 +7,7 @@ require AF_ADDONS.'advancedmenu/advancedmenu.php';
 $fixtures = [
     ['key'=>'presets', 'source_addon'=>'advancedappearance', 'label'=>'Пресеты'],
     ['key'=>'fitting_room', 'source_addon'=>'advancedappearance', 'label'=>'Примерочная'],
-    ['key'=>'account_switcher', 'source_addon'=>'advancedaccountswitcher', 'label'=>'Аккаунты'],
+    ['key'=>'post_activity', 'source_addon'=>'advancedpostcounter', 'label'=>'Постовая активность'],
 ];
 
 foreach ($fixtures as $fixture) {
@@ -42,6 +42,22 @@ foreach (['af_menu_repair_duplicate_overrides', "'order_by'=>'updated_at, create
 }
 foreach (["if (\$exists)", 'update_query(AF_AM_TABLE_OVERRIDES', 'insert_query(AF_AM_TABLE_OVERRIDES'] as $needle) {
     if (strpos($admin, $needle) === false) throw new RuntimeException('Override upsert contract missing: '.$needle);
+}
+foreach (["PRIMARY KEY (`source_addon`,`item_key`)", 'af_menu_migrate_known_provider_copies',
+    "if (!\$urlMatches || (!\$labelMatches && !\$keyMatches))", 'SYSTEM / PROVIDER', 'Вернуть defaults'] as $needle) {
+    if (strpos($runtime.$admin, $needle) === false) throw new RuntimeException('First-class provider management missing: '.$needle);
+}
+
+// Regression fixture: a custom item with the same visible label is not the
+// provider entity. Only the source/key pair receives the override.
+$provider = ['key'=>'presets', 'source_addon'=>'advancedappearance', 'label'=>'Пресеты', 'icon'=>'',
+    'default_container'=>'user_drawer', 'default_sortorder'=>50, 'section'=>'links', 'allowed_containers'=>['user_drawer']];
+$system = af_menu_apply_override($provider, ['source_addon'=>'advancedappearance', 'item_key'=>'presets',
+    'container'=>'user_drawer', 'section'=>'settings', 'sortorder'=>5, 'enabled'=>1]);
+$custom = ['id'=>42, 'title'=>'Пресеты', 'url'=>'somewhere-else.php'];
+if ($system['section'] !== 'settings' || $system['canonical_identity'] !== 'advancedappearance::presets'
+    || $custom['id'] !== 42) {
+    throw new RuntimeException('Provider override and same-label custom item were not kept as distinct entities.');
 }
 
 echo "advancedmenu provider override merge regression: OK\n";

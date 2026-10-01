@@ -40,3 +40,15 @@ The registry is deliberately parallel and runtime-only. `af_advancedmenu_build_m
 ## Stage 2 removal/migration checklist
 
 Only after registry rendering has parity tests, disable: AAS's `header_welcomeblock_member` placeholder and pre-output fallback; AAM's header-icon patch/fallback (retain footer modal and assets); the MyBB `$buddylink` trigger only if replaced with an equivalent popup trigger (retain `misc_buddypopup`); AdvancedCharacters' regex insertion; duplicate theme links for CP/New Posts; and any production-theme hard-coded links for Post activity, Presets, Fitting room or Characters. HeaderWelcomeAvatar must be adapted to the final welcome markup rather than removed. AdvancedMenu legacy DB injection/hide/protect modes require a separate migration plan.
+
+## ACP provider ownership and overrides (2026-10)
+
+The earlier ACP list was populated exclusively from `af_advancedmenu_items`, while provider registrations lived in the request-local registry and were consumed only by frontend rendering. That split made provider links effectively runtime-only and encouraged administrators to recreate them as custom rows.
+
+The editor now builds one list from three layers: provider defaults from `af_menu_collect_registry()`, matching rows from `af_advancedmenu_overrides`, and independent custom rows from `af_advancedmenu_items`. A provider is identified only by the normalized pair `source_addon::key`; placement, label, icon, URL and section are presentation data and never identity. The known owners are `advancedappearance::presets`, `advancedappearance::fitting_room`, and `advancedpostcounter::post_activity`.
+
+An override is merged after its provider default and may change enabled state, container, drawer section, sort order, label, and icon. The ACP marks these entries **SYSTEM / PROVIDER**, shows owner and key, and offers a reset that removes the override so defaults are materialized again. Custom rows remain marked **CUSTOM** even if their label matches a provider.
+
+The installation upgrade changes the override primary key from `item_key` to `(source_addon, item_key)` and preserves existing rows. Activation and request-time registry discovery use an upsert-like ensure operation: a row is inserted only when the canonical pair is absent, and an existing administrator override is not overwritten.
+
+A conservative migration runs for the three known historical links. It migrates placement, section, order, enabled state, label and icon only when a custom row has the provider URL plus either the provider label or historical key/slug. A label match alone is intentionally never enough. Once settings are copied into the provider override, that proven manual copy is removed; unrelated same-label custom links stay intact.
