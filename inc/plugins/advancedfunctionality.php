@@ -15,6 +15,7 @@ define('AF_PLUGIN_ID', 'advancedfunctionality');
 define('AF_BASE', MYBB_ROOT.'inc/plugins/'.AF_PLUGIN_ID.'/');
 define('AF_ADDONS', AF_BASE.'addons/');
 define('AF_ADMIN', AF_BASE.'admin/');
+define('AF_ADMIN_ROUTER_SOURCE', AF_ADMIN.'router.dist.php');
 define('AF_ASSETS', AF_BASE.'assets/');
 define('AF_CACHE',  AF_BASE.'cache/');
 define('AF_ADMIN_PROXY_DIR', MYBB_ROOT.'admin/modules/'.AF_PLUGIN_ID.'/');
@@ -104,8 +105,7 @@ function advancedfunctionality_install()
  */
 function advancedfunctionality_activate()
 {
-    // НЕ форсим scaffold — чтобы не перезаписывать router.php и admin proxy.
-    // Только создаём каталоги, если их нет.
+    // Refresh the AF-owned generated router; foreign routers are preserved.
     af_ensure_scaffold(false);
 
     // Языки ядра можно обновлять безопасно
@@ -297,6 +297,38 @@ function af_front_output_template_string(string $pageTitle, string $templateStri
 }
 
 
+function af_admin_router_signature(): string
+{
+    return 'AF-GENERATED: admin-router v3';
+}
+
+/** Refresh the generated ACP router from its versioned canonical source. */
+function af_ensure_admin_router(): array
+{
+    $source = defined('AF_ADMIN_ROUTER_SOURCE') ? AF_ADMIN_ROUTER_SOURCE : AF_ADMIN.'router.dist.php';
+    $target = AF_ADMIN.'router.php';
+    $ownedPrefix = 'AF-GENERATED: admin-router';
+    if (!is_file($source)) return ['ok' => false, 'status' => 'source_missing'];
+    $canonical = (string)@file_get_contents($source);
+    if ($canonical === '' || strpos($canonical, af_admin_router_signature()) === false) {
+        return ['ok' => false, 'status' => 'source_invalid'];
+    }
+    if (is_file($target)) {
+        $current = (string)@file_get_contents($target);
+        if (strpos($current, $ownedPrefix) === false) {
+            @file_put_contents(AF_CACHE.'router_diagnostic.txt', 'foreign_router_not_overwritten', LOCK_EX);
+            return ['ok' => false, 'status' => 'foreign_router'];
+        }
+        if (hash_equals(hash('sha256', $canonical), hash('sha256', $current))) {
+            return ['ok' => true, 'status' => 'unchanged'];
+        }
+    }
+    $written = @file_put_contents($target, $canonical, LOCK_EX);
+    return $written === strlen($canonical)
+        ? ['ok' => true, 'status' => 'updated']
+        : ['ok' => false, 'status' => 'write_failed'];
+}
+
 function af_ensure_scaffold(bool $force_refresh = false): void
 {
     foreach ([AF_BASE, AF_ADDONS, AF_ADMIN, AF_ASSETS, AF_CACHE] as $dir) {
@@ -306,7 +338,12 @@ function af_ensure_scaffold(bool $force_refresh = false): void
         if (!is_dir($dir)) @mkdir($dir, 0777, true);
     }
 
-    // --- 1) Пересборка маршрутизатора плагина (inc/plugins/.../admin/router.php)
+    // router.dist.php is the canonical source. Refresh owned generated
+    // routers on every install/activation, while preserving foreign files.
+    af_ensure_admin_router();
+
+    // Backward-compatible embedded bootstrap is only a last resort when the
+    // canonical distribution file is absent.
     $router = AF_ADMIN.'router.php';
     if (!is_file($router) || $force_refresh) {
 
@@ -715,9 +752,12 @@ class AF_Admin
                 $nameView = self::shortCell($nameRaw, 28);
 
                 $primaryActions = [];
-                // Source rows have no MyBB SID. Editing is intentionally routed
-                // through the bundle section chips above, never through a
-                // legacy per-source stylesheet action.
+                if (!empty($row['section_id'])) {
+                    $simpleUrl = 'index.php?module='.AF_PLUGIN_ID.'&amp;af_view=theme_stylesheet_section&amp;theme_tid='.$themeTid.'&amp;section_id='.rawurlencode((string)$row['section_id']);
+                    $primaryActions[] = '<a class="button af-ts-btn-primary" href="'.$simpleUrl.'">Simple mode</a>';
+                }
+                $bundleEditRow = ['theme_tid' => $themeTid, 'db_stylesheet_name' => AF_THEME_BUNDLE_NAME];
+                $primaryActions[] = self::buildThemeStylesheetEditLink($bundleEditRow, 'Advanced mode', 'edit_stylesheet', 'primary');
                 $secondaryActions = [];
                 $secondaryActions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_set_file_mode', $lang->af_theme_stylesheets_set_file_mode, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id'], 'secondary');
                 $secondaryActions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_set_theme_mode', $lang->af_theme_stylesheets_set_theme_mode, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id'], 'secondary');
@@ -3075,6 +3115,9 @@ function af_theme_stylesheet_build_bundle(?string $onlyAddonId = null): array
             'addon_title' => $addonName,
             'logical_id' => (string)$entry['logical_id'],
             'source_file' => $file,
+            // Persist the rebased seed identity used by three-way incremental sync.
+            'seed_body_sha1' => sha1($seedCss),
+            'seed_checksum' => (string)$seed['checksum'],
         ];
         $identity = sha1($addonId."\0".(string)$entry['logical_id']."\0".$file);
         if (isset($identities[$identity])) {
@@ -3405,12 +3448,20 @@ function af_theme_stylesheet_save_section(int $themeTid, string $sectionId, stri
     if (!isset($parsed['sections'][$sectionId])) return ['ok' => false, 'code' => 'missing_section', 'message' => 'section no longer exists'];
     $section = $parsed['sections'][$sectionId];
     if (!hash_equals(sha1((string)$section['body']), $openedSectionHash)) return ['ok' => false, 'code' => 'conflict', 'message' => 'section changed after it was opened'];
-    $replacement = af_theme_stylesheet_encode_section((array)$section['meta'], $newCss);
+    $editedMeta = (array)$section['meta'];
+    $editedMeta['manual_override'] = true;
+    $replacement = af_theme_stylesheet_encode_section($editedMeta, $newCss);
     $updated = substr($current, 0, (int)$section['start']).$replacement.substr($current, (int)$section['end']);
     $sid = (int)$row['sid'];
     $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
     $state = af_theme_stylesheet_bundle_state($themeTid);
     if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 1, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
+    $addonId = (string)($editedMeta['addon_id'] ?? '');
+    $logicalId = (string)($editedMeta['logical_id'] ?? '');
+    if ($addonId !== '' && $logicalId !== '') {
+        $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['manual_override' => 1, 'updated_at' => TIME_NOW],
+            "theme_tid='".(int)$themeTid."' AND addon_id='".$db->escape_string($addonId)."' AND logical_id='".$db->escape_string($logicalId)."'");
+    }
     af_theme_stylesheet_cache_row($themeTid, $sid, $updated);
     af_theme_stylesheets_log('section saved', (string)$section['meta']['addon_id'], (string)$section['meta']['logical_id']);
     return ['ok' => true, 'code' => 'saved', 'message' => 'section saved'];
@@ -3543,6 +3594,65 @@ function af_theme_stylesheet_cache_row(int $themeTid, int $sid, string $css): ar
     }
 }
 
+/** Merge fresh seeds into an existing structured bundle without touching unrelated bodies. */
+function af_theme_stylesheet_incremental_bundle(string $current, array $fresh): array
+{
+    $old = af_theme_stylesheet_parse_bundle($current);
+    $new = af_theme_stylesheet_parse_bundle((string)($fresh['source'] ?? ''));
+    if (empty($old['ok']) || empty($new['ok'])) {
+        return ['ok' => false, 'error' => empty($old['ok']) ? (string)($old['error'] ?? 'existing bundle invalid') : (string)($new['error'] ?? 'seed bundle invalid')];
+    }
+
+    $blocks = [];
+    $manual = false;
+    $added = 0;
+    $updated = 0;
+    foreach ($new['sections'] as $id => $seedSection) {
+        $seedMeta = (array)$seedSection['meta'];
+        $seedBody = (string)$seedSection['body'];
+        if (!isset($old['sections'][$id])) {
+            $blocks[] = af_theme_stylesheet_encode_section($seedMeta, $seedBody);
+            $added++;
+            continue;
+        }
+        $existing = $old['sections'][$id];
+        $oldMeta = (array)$existing['meta'];
+        $oldBody = (string)$existing['body'];
+        $previousSeedBody = (string)($oldMeta['seed_body_sha1'] ?? '');
+        $wasEdited = !empty($oldMeta['manual_override'])
+            || ($previousSeedBody !== '' && !hash_equals($previousSeedBody, sha1($oldBody)));
+
+        if (!$wasEdited && $previousSeedBody !== '' && !hash_equals($previousSeedBody, (string)($seedMeta['seed_body_sha1'] ?? ''))) {
+            // Upstream changed and the section still equals its old base.
+            $oldBody = $seedBody;
+            $updated++;
+        } elseif ($wasEdited) {
+            $manual = true;
+            $seedMeta['manual_override'] = true;
+            if (($oldMeta['seed_checksum'] ?? '') !== ($seedMeta['seed_checksum'] ?? '')) {
+                $seedMeta['seed_changed'] = true;
+            }
+        }
+        // Refresh identity/display metadata, but retain the body byte-for-byte.
+        $blocks[] = af_theme_stylesheet_encode_section($seedMeta, $oldBody);
+    }
+
+    // Preserve non-seed recovery/manual sections. Disabled addon sections are
+    // deliberately retained too, making Theme -> File -> Theme reversible.
+    foreach ($old['sections'] as $id => $section) {
+        if (isset($new['sections'][$id])) continue;
+        $meta = (array)$section['meta'];
+        $meta['inactive'] = true;
+        $blocks[] = af_theme_stylesheet_encode_section($meta, (string)$section['body']);
+        if (!empty($meta['manual_override'])) $manual = true;
+    }
+    $source = "/* AdvancedFunctionality theme bundle (structured v1). Edit sections in AF ACP.\n"
+        . " * Incremental synchronization preserves section bodies and only adds missing seeds.\n */\n\n".implode("\n", $blocks);
+    $parsed = af_theme_stylesheet_parse_bundle($source);
+    if (empty($parsed['ok'])) return ['ok' => false, 'error' => (string)($parsed['error'] ?? 'incremental validation failed')];
+    return ['ok' => true, 'source' => $source, 'checksum' => sha1($source), 'sections' => $parsed['sections'], 'manual_override' => $manual, 'added' => $added, 'updated' => $updated];
+}
+
 /** Create/update advancedstyles.css without touching any legacy af_a_*.css body. */
 function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): array
 {
@@ -3611,6 +3721,18 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     // recovery section. Structural repair remains an explicit ACP operation.
     $adoptingExistingBundle = (bool)($row && !$state && !$force);
 
+    // Normal sync is incremental. An owned structured bundle is merged even
+    // when its whole-file hash is marked manual; only Force Resync may discard
+    // section bodies. A pre-registry/legacy file is adopted unchanged.
+    if ($row && $state && !$force && function_exists('af_theme_stylesheet_incremental_bundle')) {
+        $incremental = af_theme_stylesheet_incremental_bundle((string)($row['stylesheet'] ?? ''), $bundle);
+        if (!empty($incremental['ok'])) {
+            $bundle = array_merge($bundle, $incremental);
+        } elseif (($incremental['error'] ?? '') !== 'no structured sections') {
+            return ['updated' => false, 'manual_override' => true, 'sid' => $sid, 'error' => 'incremental merge refused: '.(string)$incremental['error']];
+        }
+    }
+
     $mode = strtolower((string)($state['delivery_mode'] ?? 'theme'));
     if (!in_array($mode, ['file', 'theme'], true)) {
         $mode = 'theme';
@@ -3635,7 +3757,10 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
             || $migratedLegacyOverride
             || (int)($state['manual_override'] ?? 0) === 1
             || ($lastHash !== '' && $currentHash !== $lastHash);
-        $write = $force || (!$manual && $currentHash !== (string)$bundle['checksum']);
+        $structuredOwned = $state && function_exists('af_theme_stylesheet_parse_bundle')
+            && !empty(af_theme_stylesheet_parse_bundle($current)['ok']);
+        $write = $force || ($structuredOwned && $currentHash !== (string)$bundle['checksum'])
+            || (!$manual && $currentHash !== (string)$bundle['checksum']);
         $update = ['name' => AF_THEME_BUNDLE_NAME, 'attachedto' => $attachedTo, 'lastmodified' => TIME_NOW];
         if ($write && $force && $current !== (string)$bundle['source']) {
             $backup = af_theme_stylesheet_create_recovery($themeTid, $row, $current);
@@ -3645,7 +3770,7 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
         }
         if ($write) {
             $update['stylesheet'] = (string)$bundle['source'];
-            $manual = $migratedLegacyOverride;
+            $manual = $force ? false : ($migratedLegacyOverride || !empty($bundle['manual_override']));
         }
         $db->update_query('themestylesheets', $update, "sid='{$sid}'");
     }
@@ -3653,6 +3778,29 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     $cacheCss = $write ? (string)$bundle['source'] : (string)($row['stylesheet'] ?? '');
     $cache = af_theme_stylesheet_cache_row($themeTid, $sid, $cacheCss);
     if (!is_array($cache)) $cache = ['ok' => true]; // compatibility with older integrations
+
+    // Project first-class section state back to each source registry row.
+    $finalParsed = function_exists('af_theme_stylesheet_parse_bundle')
+        ? af_theme_stylesheet_parse_bundle($cacheCss) : ['ok' => false];
+    if (!empty($finalParsed['ok'])) {
+        foreach ($finalParsed['sections'] as $section) {
+            $sectionMeta = (array)($section['meta'] ?? []);
+            $sectionAddon = (string)($sectionMeta['addon_id'] ?? '');
+            $sectionLogical = (string)($sectionMeta['logical_id'] ?? '');
+            if ($sectionAddon === '' || $sectionAddon === AF_THEME_BUNDLE_ADDON_ID || $sectionLogical === '') continue;
+            $sectionManual = !empty($sectionMeta['manual_override']);
+            $sourcePayload = [
+                'manual_override' => $sectionManual ? 1 : 0,
+                'last_synced_at' => TIME_NOW,
+                'updated_at' => TIME_NOW,
+            ];
+            if (!$sectionManual && !empty($sectionMeta['seed_checksum'])) {
+                $sourcePayload['last_synced_checksum'] = (string)$sectionMeta['seed_checksum'];
+            }
+            $db->update_query(AF_THEME_STYLESHEETS_TABLE, $sourcePayload,
+                "theme_tid='".(int)$themeTid."' AND addon_id='".$db->escape_string($sectionAddon)."' AND logical_id='".$db->escape_string($sectionLogical)."'");
+        }
+    }
 
     $payload = [
         'theme_tid' => $themeTid, 'stylesheet_sid' => $sid,
@@ -3928,12 +4076,15 @@ function af_reconcile_theme_stylesheet_registry_state(int $themeTid, array $entr
         'updated_at' => TIME_NOW,
     ];
     if ($seed) {
+        // seed_checksum is current upstream; last_synced_checksum remains the
+        // last seed actually applied to the section (the three-way base).
         $payload['seed_checksum'] = (string)($seed['checksum'] ?? '');
         $payload['seed_file'] = str_replace('\\', '/', str_replace(AF_BASE, '', (string)($seed['path'] ?? '')));
     }
     $payload['stylesheet_sid'] = $sid;
     $payload['is_integrated'] = $seed ? 1 : 0;
-    $payload['manual_override'] = 0;
+    // Never clear manual_override here: activation/reconciliation is metadata
+    // discovery, not authorization to replace an edited section.
     $db->update_query(AF_THEME_STYLESHEETS_TABLE, $payload, "id='".(int)$state['id']."'");
 }
 
@@ -4248,12 +4399,16 @@ function af_collect_theme_stylesheet_diagnostics(?string $onlyAddonId = null): a
             $bundleRow = af_theme_stylesheet_get_bundle_row((int)$themeTid);
             $parsedBundle = af_theme_stylesheet_parse_bundle((string)($bundleRow['stylesheet'] ?? ''));
             $sourceInBundle = false;
+            $sourceSectionId = '';
+            $sourceSectionMeta = [];
             if (!empty($parsedBundle['ok'])) {
                 foreach ($parsedBundle['sections'] as $section) {
                     $meta = (array)($section['meta'] ?? []);
                     if ((string)($meta['addon_id'] ?? '') === $addonId
                         && (string)($meta['logical_id'] ?? '') === (string)$entry['logical_id']) {
                         $sourceInBundle = true;
+                        $sourceSectionId = (string)($meta['section_id'] ?? '');
+                        $sourceSectionMeta = $meta;
                         break;
                     }
                 }
@@ -4280,8 +4435,9 @@ function af_collect_theme_stylesheet_diagnostics(?string $onlyAddonId = null): a
 
             $effectiveReason = 'theme_delivery_ok';
             if ($mode === 'file') $effectiveReason = 'file_mode';
-            elseif (!$bundleState || !$foundInTheme) $effectiveReason = 'bundle_missing';
-            elseif ((int)($bundleState['stylesheet_sid'] ?? 0) <= 0) $effectiveReason = 'bundle_href_missing';
+            elseif (!$foundInTheme) $effectiveReason = 'bundle_missing';
+            elseif (!$bundleState) $effectiveReason = 'bundle_registry_missing';
+            elseif ((int)($bundleState['stylesheet_sid'] ?? 0) <= 0) $effectiveReason = 'bundle_sid_stale';
             elseif ($bundleAttached !== 'global') $effectiveReason = 'bundle_not_attached';
             elseif (!$sourceInBundle) $effectiveReason = 'section_missing';
             elseif ((string)($bundleRow['cachefile'] ?? '') !== AF_THEME_BUNDLE_NAME) $effectiveReason = 'bundle_cache_missing';
@@ -4303,6 +4459,9 @@ function af_collect_theme_stylesheet_diagnostics(?string $onlyAddonId = null): a
                 'bundle_stylesheet_sid' => (int)($bundleState['stylesheet_sid'] ?? 0),
                 'bundle_cachefile' => (string)($bundleRow['cachefile'] ?? ''),
                 'bundle_section_present' => $sourceInBundle,
+                'section_id' => $sourceSectionId,
+                'section_meta' => $sourceSectionMeta,
+                'seed_changed' => !empty($sourceSectionMeta['seed_changed']),
                 'is_integrated' => $sourceInBundle,
                 'attached_to' => $mode === 'theme' ? $bundleAttached : '—',
                 'expected_attach' => $mode === 'theme' ? 'global' : '',
@@ -4427,13 +4586,24 @@ function af_theme_stylesheets_execute_action(string $action, ?string $addonId = 
     }
     if ($action === 'set_file_mode_bulk' || $action === 'set_theme_mode_bulk') {
         global $db;
+        // File-mode bulk must migrate old registry schemas too; previously it
+        // could write delivery_mode before sync had installed that column.
+        af_theme_stylesheets_install_schema();
         $mode = $action === 'set_theme_mode_bulk' ? 'theme' : 'file';
         // Build/repair first: bulk Theme mode must never suppress sources
         // against a stale or absent bundle row.
         if ($mode === 'theme') af_sync_theme_stylesheets(false, $addonId ?: null);
         $tids = $themeTid !== null && $themeTid > 0 ? [$themeTid] : af_get_theme_tids();
-        foreach ($tids as $tid) {
-            if (af_theme_stylesheet_set_delivery_mode((int)$tid, AF_THEME_BUNDLE_ADDON_ID, AF_THEME_BUNDLE_LOGICAL_ID, $mode)) {
+        $transactional = method_exists($db, 'write_query');
+        if ($transactional) $db->write_query('START TRANSACTION');
+        try {
+            foreach ($tids as $tid) {
+                // This is a bundle operation. Do not emulate source-row button
+                // clicks or pass the synthetic bundle identity through a
+                // per-source contract.
+                if (!af_theme_stylesheet_set_delivery_mode((int)$tid, '', '', $mode)) {
+                    throw new RuntimeException('Unable to set bundle delivery mode for theme '.(int)$tid);
+                }
                 $where = "theme_tid='".(int)$tid."' AND addon_id!='".$db->escape_string(AF_THEME_BUNDLE_ADDON_ID)."'";
                 if ($addonId !== null && $addonId !== '') $where .= " AND addon_id='".$db->escape_string($addonId)."'";
                 $db->update_query(AF_THEME_STYLESHEETS_TABLE, [
@@ -4442,6 +4612,11 @@ function af_theme_stylesheets_execute_action(string $action, ?string $addonId = 
                 ], $where);
                 $stats['changed']++;
             }
+            if ($transactional) $db->write_query('COMMIT');
+        } catch (Throwable $error) {
+            if ($transactional) $db->write_query('ROLLBACK');
+            @error_log('[AF advancedstyles] bulk_'.$mode.' failed: '.get_class($error).': '.$error->getMessage());
+            throw $error;
         }
         return $stats;
     }
