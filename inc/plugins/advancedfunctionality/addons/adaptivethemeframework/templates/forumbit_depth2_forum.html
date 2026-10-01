@@ -1,0 +1,16 @@
+<article class="atf-card atf-forum-card" data-forum-id="{$forum['fid']}">
+  <div class="atf-forum-card__status" aria-label="{$lightbulb['altonoff']}">
+    <span class="forum_status forum_{$lightbulb['folder']} ajax_mark_read" title="{$lightbulb['altonoff']}" id="mark_read_{$forum['fid']}"></span>
+  </div>
+  <div class="atf-forum-card__identity">
+    <h2 class="atf-forum-card__title"><a href="{$forum_url}">{$forum['name']}</a></h2>
+    {$forum_viewers_text}
+    <div class="atf-forum-card__description">{$forum['description']}</div>
+    <div class="atf-forum-card__subforums">{$modlist}{$subforums}</div>
+  </div>
+  <dl class="atf-forum-card__stats atf-meta">
+    <div class="atf-forum-card__stat"><dt>{$lang->forumbit_threads}</dt><dd>{$threads}{$unapproved['unapproved_threads']}</dd></div>
+    <div class="atf-forum-card__stat"><dt>{$lang->forumbit_posts}</dt><dd>{$posts}{$unapproved['unapproved_posts']}</dd></div>
+  </dl>
+  <div class="atf-forum-card__lastpost">{$lastpost}</div>
+</article>

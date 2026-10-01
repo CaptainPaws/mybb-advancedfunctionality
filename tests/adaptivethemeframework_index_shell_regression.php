@@ -12,13 +12,18 @@ foreach (['{$headerinclude}', '{$header}', '{$fastnews}', '{$forums}', '{$boards
     }
 }
 foreach (['forumbit_depth2_forum', 'forumbit_depth2_forum_lastpost'] as $title) {
-    if (str_contains((string)$template, $title) || preg_match("~['\"]{$title}['\"]~", (string)$php)) {
-        throw new RuntimeException("ATF index migration must not own {$title}.");
+    $card = file_get_contents($addon . '/templates/' . $title . '.html');
+    if (!is_string($card) || !str_contains($php, "'{$title}' =>") || str_contains($card, '<tr')) {
+        throw new RuntimeException("ATF must own a semantic card template for {$title}.");
     }
 }
 if (!str_contains((string)$template, 'class="atf-page atf-index"')
     || !str_contains((string)$template, 'class="atf-index__section atf-index__forums"')) {
     throw new RuntimeException('ATF index page and compatibility section are missing.');
+}
+if (substr_count($php, "'forum.lastposter_avatar'") < 2
+    || !str_contains((string)file_get_contents($addon . '/templates/forumbit_depth2_forum_lastpost.html'), '<atf-forum-avatar')) {
+    throw new RuntimeException('Forum avatar slot is not composed into final card output.');
 }
 if (!str_contains((string)$php, "ownership_state' => af_adaptivethemeframework_db_string('manual_override')")
     || !str_contains((string)$php, "ownership_state' => af_adaptivethemeframework_db_string('restore_conflict')")
