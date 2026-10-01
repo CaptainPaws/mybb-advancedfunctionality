@@ -106,6 +106,35 @@ function af_menu_collect_registry(bool $force = false): array
         af_menu_register_core_items();
     }
 
+    // Manifests are the request-independent provider catalogue.  In
+    // particular, AdminCP does not bootstrap frontend addon files, so looking
+    // only at get_defined_functions() made its catalogue depend on load order.
+    // The declarative items intentionally contain callback *names*: reading a
+    // manifest must not execute the addon's frontend bootstrap or hooks.
+    if (function_exists('af_discover_addons')) {
+        foreach (af_discover_addons() as $addon) {
+            $id = strtolower(trim((string)($addon['id'] ?? '')));
+            if ($id === '' || (function_exists('af_is_addon_enabled') && !af_is_addon_enabled($id))) {
+                continue;
+            }
+            $contract = $addon['menu_provider'] ?? null;
+            if (!is_array($contract)) continue;
+            foreach ((array)($contract['items'] ?? []) as $item) {
+                if (!is_array($item)) continue;
+                // The manifest owner is authoritative; a manifest cannot
+                // impersonate another addon by supplying source_addon.
+                $item['source_addon'] = $id;
+                af_menu_register_item($item);
+            }
+            $callback = strtolower(trim((string)($contract['callback'] ?? '')));
+            if ($callback !== '' && preg_match('~^af_[a-z0-9_]+_menu_provider$~', $callback)
+                && function_exists($callback) && !isset($calledProviders[$callback])) {
+                $calledProviders[$callback] = true;
+                $callback();
+            }
+        }
+    }
+
     // Addons are bootstrapped one by one. AdvancedMenu may therefore be
     // initialised before a provider function exists. Discover newly loaded
     // providers on every read instead of freezing the catalogue on the first
@@ -125,6 +154,10 @@ function af_menu_collect_registry(bool $force = false): array
 function af_menu_item_is_visible(array $item): bool
 {
     $value = $item['visibility'] ?? true;
+    // An unresolved callback name is expected in ACP (frontend bootstraps are
+    // deliberately not loaded there).  It must never accidentally become
+    // truthy merely because it is a non-empty string.
+    if (is_string($value)) return function_exists($value) ? (bool)$value($item) : false;
     return is_callable($value) ? (bool)$value($item) : (bool)$value;
 }
 
@@ -1164,9 +1197,11 @@ function af_advancedmenu_render_registry_item(array $item): string
         $classes .= ' af-am-modal-trigger';
         $triggerClass = preg_replace('~[^a-z0-9 _-]~i', '', (string)($action['trigger_class'] ?? ''));
         if ($triggerClass !== '') $classes .= ' '.$triggerClass;
-        $href = isset($action['handler'])
-            ? af_advancedmenu_normalize_url(html_entity_decode((string)($action['url'] ?? '#'), ENT_QUOTES | ENT_HTML5, 'UTF-8'))
-            : '#';
+        // Keep a real provider URL when one is declared.  JavaScript still
+        // intercepts the modal trigger, while no-JS/error paths retain the
+        // owner's fallback instead of becoming a dead "#" link.
+        $rawUrl = html_entity_decode((string)($action['url'] ?? '#'), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $href = $rawUrl === '#' ? '#' : af_advancedmenu_normalize_url($rawUrl);
         $selector = (string)($action['trigger_selector'] ?? '');
         if (preg_match('~^#([a-z][a-z0-9_-]*)$~i', $selector, $match)) {
             $attrs .= ' id="'.htmlspecialchars_uni($match[1]).'"';
