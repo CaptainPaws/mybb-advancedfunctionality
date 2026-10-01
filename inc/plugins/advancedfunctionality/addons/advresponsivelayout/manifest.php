@@ -4,8 +4,8 @@ return [
     'name' => 'Adaptive Responsive Layout',
     'author' => 'CaptainPaws',
     'authorsite' => 'https://github.com/CaptainPaws',
-    'description' => 'Full mobile responsive system for forum core navigation and AF plugin pages.',
-    'version' => '2.0.0',
+    'description' => 'Unified responsive layout layer for MyBB and AF plugin pages; navigation is provided by AdvancedMenu.',
+    'version' => '2.1.0',
     'bootstrap' => 'advresponsivelayout.php',
 
     'frontend' => [
