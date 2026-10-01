@@ -449,6 +449,8 @@ function af_advancedthreadfields_init(): void
         return;
     }
 
+    af_atf_register_theme_provider();
+
     // ВАЖНО: ранний перехват JSON-эндпоинтов ещё на global_start,
     // чтобы не успевал построиться HTML и не инжектились ассеты.
     // (на текущем хите уже поздно, но на следующем запросе сработает идеально)
@@ -6122,7 +6124,7 @@ function af_atf_forumdisplay_start(): void
 
 function af_atf_forumdisplay_thread(): void
 {
-    global $thread, $fid, $templates;
+    global $thread, $fid;
 
     $fid = (int)$fid;
     $tid = (int)($thread['tid'] ?? 0);
@@ -6131,10 +6133,47 @@ function af_atf_forumdisplay_thread(): void
         return;
     }
 
+    $html = af_atf_render_forum_chips(['tid' => $tid, 'fid' => $fid]);
+    // ATF owns composition while active. Keep the installed marker/variable
+    // untouched for rollback, but do not render the same provider twice.
+    $thread['af_atf_forum_chips'] = af_atf_theme_is_active() || $html === ''
+        ? ''
+        : "\n" . AF_ATF_TPL_MARK_CHIPS . "\n" . $html . "\n";
+}
+
+function af_atf_theme_is_active(): bool
+{
+    return function_exists('af_adaptivethemeframework_register_component')
+        && function_exists('af_is_addon_enabled')
+        && af_is_addon_enabled('adaptivethemeframework');
+}
+
+function af_atf_register_theme_provider(): bool
+{
+    if (!af_atf_theme_is_active()) {
+        return false;
+    }
+    return af_adaptivethemeframework_register_component([
+        'owner' => AF_ATF_ID,
+        'key' => 'forum_meta_chips',
+        'slot' => 'thread.meta_chips',
+        'renderer' => 'af_atf_render_forum_chips',
+    ]);
+}
+
+/** Provider contract: only the positive topic and forum ids are required. */
+function af_atf_render_forum_chips(array $context): string
+{
+    global $templates;
+    $fid = (int)($context['fid'] ?? 0);
+    $tid = (int)($context['tid'] ?? 0);
+    if ($fid <= 0 || $tid <= 0 || !is_object($templates)) {
+        return '';
+    }
+
     $fields = af_atf_get_fields_for_forum($fid);
     if (empty($fields)) {
-        $thread['af_atf_forum_chips'] = '';
-        return;
+        return '';
     }
 
     $values = af_atf_get_values_by_tid($tid);
@@ -6167,16 +6206,10 @@ function af_atf_forumdisplay_thread(): void
     }
 
     if ($chips === '') {
-        $thread['af_atf_forum_chips'] = '';
-        return;
+        return '';
     }
 
-    // Только переменная (для корректной вставки через шаблон),
-    // НИКАКИХ доп. "хаков" в multipage — именно они могут улетать в шапку при кривом HTML.
-    $thread['af_atf_forum_chips'] =
-        "\n" . AF_ATF_TPL_MARK_CHIPS . "\n"
-        . '<span class="af-atf-chips">'.$chips.'</span>'
-        . "\n";
+    return '<span class="af-atf-chips">'.$chips.'</span>';
 }
 
 /* -------------------- DISPLAY FORMAT / PARSER -------------------- */
