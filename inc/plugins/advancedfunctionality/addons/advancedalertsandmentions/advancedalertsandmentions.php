@@ -443,13 +443,6 @@ function af_advancedalertsandmentions_install(): void
     );
 
     $settings = [
-        'af_aam_enabled' => [
-            'title'       => $lang->af_aam_enabled ?? 'Включить уведомления',
-            'description' => $lang->af_aam_enabled_desc ?? 'Включает систему уведомлений и упоминаний.',
-            'optionscode' => 'yesno',
-            'value'       => '1',
-            'disporder'   => 1,
-        ],
         'af_aam_per_page' => [
             'title'       => $lang->af_aam_per_page ?? 'Уведомлений на страницу',
             'description' => $lang->af_aam_per_page_desc ?? 'Количество уведомлений в UCP.',
@@ -587,6 +580,13 @@ function af_advancedalertsandmentions_install(): void
         $insert['name'] = $nameEsc;
         $db->insert_query('settings', $insert);
     }
+
+    // AF owns addon lifecycle through af_{addon_id}_enabled.  Older AAM
+    // releases created a second lifecycle switch which could remain at 0
+    // after AF re-enabled the addon and consequently hide its menu provider.
+    // Retire that duplicate setting during install/upgrade instead of trying
+    // to keep two independently editable values synchronized.
+    $db->delete_query('settings', "name='af_aam_enabled'");
 
     rebuild_settings();
 
@@ -930,14 +930,12 @@ function af_aam_install_templates(): void
 function af_aam_is_enabled(): bool
 {
     global $mybb;
-    if (empty($mybb->settings['af_aam_enabled']) || (int)$mybb->settings['af_aam_enabled'] !== 1) {
-        return false;
-    }
-    // AF ядро: включён ли аддон
-    if (isset($mybb->settings['af_' . AF_AAM_ID . '_enabled']) && (int)$mybb->settings['af_' . AF_AAM_ID . '_enabled'] !== 1) {
-        return false;
-    }
-    return true;
+    // AF's canonical lifecycle setting is the sole source of truth.  In
+    // particular, do not consult the retired af_aam_enabled value: stale
+    // production caches/databases may still contain it until the next
+    // install/activation migration runs.
+    return isset($mybb->settings['af_' . AF_AAM_ID . '_enabled'])
+        && (int)$mybb->settings['af_' . AF_AAM_ID . '_enabled'] === 1;
 }
 
 function af_aam_parse_gid_csv(string $raw): array
