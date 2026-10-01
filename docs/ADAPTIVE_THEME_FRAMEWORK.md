@@ -35,6 +35,22 @@ The catalogue covers the audited profile, post, thread, forum-card, header and
 footer integration points. It is returned by
 `af_adaptivethemeframework_slots()` and is the authoritative allowlist.
 
+### `forum.lastposter_avatar` context
+
+Forum-card layouts render this slot with exactly the last-poster identity that
+MyBB has already attached to the forum row:
+
+- `fid` (positive integer): the forum whose card is being composed;
+- `lastposteruid` (integer, `0` for a guest): MyBB's last-poster user id;
+- `lastposter` (string): MyBB's last-poster display name.
+
+Layouts must not query or pass avatar columns and must not pass the complete
+forum/global arrays. AdvancedPosterAvatar owns the user lookup, default/letter
+avatar fallback and final escaped HTML. Missing contract keys produce no
+component. A deleted/unresolved uid follows the same guest fallback as the
+legacy renderer. While ATF is active, the provider's slot output is exclusive:
+installed legacy template markers are retained for rollback but do not render.
+
 ## Design-system contract
 
 ATF visual primitives use the `atf-` prefix. Components use BEM-style
