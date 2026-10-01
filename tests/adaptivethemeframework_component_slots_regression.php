@@ -12,6 +12,12 @@ function af_is_addon_enabled(string $owner): bool
 
 require $addon . '/adaptivethemeframework.php';
 
+foreach (get_included_files() as $includedFile) {
+    if (basename($includedFile) === 'advresponsivelayout.php') {
+        throw new RuntimeException('The component slot API loaded the deprecated legacy addon.');
+    }
+}
+
 $required = [
     'profile.hero', 'profile.navigation', 'profile.forum_info', 'profile.character_sheet',
     'profile.application', 'profile.timeline', 'profile.activity', 'profile.balance',

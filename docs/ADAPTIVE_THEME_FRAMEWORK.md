@@ -39,10 +39,13 @@ footer integration points. It is returned by
 
 The addon does not patch MyBB core, remove or modify templates, replace
 `member_profile` or `postbit`, copy Adaptive Responsive Layout, introduce visual
-design, or migrate another addon. Adaptive Theme Framework and the old
-Adaptive Responsive Layout are mutually exclusive: when ATF is enabled, the
-legacy addon's asset injection is hard-disabled. No slots model the old
-`advresponsivelayout.js` DOM contract.
+design, or migrate another addon.
+
+Adaptive Responsive Layout (`advresponsivelayout`) is deprecated. Adaptive
+Theme Framework is its independent replacement, and the two addons should not
+be enabled at the same time. The legacy addon is not a dependency of ATF: ATF
+does not load it, call it, or rely on its assets or runtime. No slots model the
+old `advresponsivelayout.js` DOM contract.
 
 Frontend asset lists are intentionally empty until the component-slot contract
 and presentation implementation are introduced.
