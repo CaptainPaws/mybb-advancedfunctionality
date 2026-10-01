@@ -8,6 +8,11 @@ return [
     'description' => 'Единый renderer аватаров последнего постера и списка online.',
     'version'     => '2.0.0',
     'bootstrap'   => 'advancedposteravatar.php',
+    // Activation-time integrations are loaded explicitly by their consumer;
+    // they must not depend on global_start/frontend initialization order.
+    'compatibility_providers' => [
+        'adaptivethemeframework' => 'af_apa_register_atf_compatibility_normalizer',
+    ],
     'frontend' => [
         'mode' => 'contextual',
         'routes' => [

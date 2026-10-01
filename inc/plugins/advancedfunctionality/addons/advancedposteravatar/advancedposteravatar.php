@@ -292,11 +292,14 @@ function af_apa_register_atf_compatibility_normalizer(): bool
     if (!function_exists('af_adaptivethemeframework_register_compatibility_normalizer')) {
         $GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizers'][AF_APA_ID . '::legacy_markers']
             = 'af_apa_normalize_atf_template';
+        $GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizer_prefixes'][AF_APA_ID . '::legacy_markers']
+            = 'apa';
         return true;
     }
     return af_adaptivethemeframework_register_compatibility_normalizer(
         AF_APA_ID . '::legacy_markers',
-        'af_apa_normalize_atf_template'
+        'af_apa_normalize_atf_template',
+        'apa'
     );
 }
 
@@ -311,6 +314,8 @@ function af_apa_normalize_atf_template(string $templateName, string $current): ?
     if (!isset($markers[$templateName])) {
         return null;
     }
+    $startMarkerCount = substr_count($current, $markers[$templateName]);
+    $endMarkerCount = substr_count($current, '<apa_end>');
     $normalized = str_replace([$markers[$templateName], '<apa_end>'], '', $current);
     if ($normalized === $current) {
         return null;
@@ -320,6 +325,10 @@ function af_apa_normalize_atf_template(string $templateName, string $current): ?
         'owner' => AF_APA_ID,
         'source' => 'legacy_template_markers',
         'transformation_type' => 'exact_known_marker_removal',
+        'diagnostic' => [
+            'start_marker_count' => $startMarkerCount,
+            'end_marker_count' => $endMarkerCount,
+        ],
     ];
 }
 

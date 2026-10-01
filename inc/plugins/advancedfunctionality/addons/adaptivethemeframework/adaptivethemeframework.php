@@ -16,7 +16,37 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.5.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.6.0');
+
+/** Load activation compatibility callbacks declared by enabled AF addons. */
+function af_adaptivethemeframework_discover_compatibility_providers(): void
+{
+    if (!function_exists('af_discover_addons')) {
+        return;
+    }
+    global $mybb;
+    foreach (af_discover_addons() as $manifest) {
+        $id = strtolower(trim((string)($manifest['id'] ?? '')));
+        $providers = $manifest['compatibility_providers'] ?? [];
+        $callback = is_array($providers) ? ($providers[AF_ADAPTIVETHEMEFRAMEWORK_ID] ?? null) : null;
+        if ($id === '' || !is_string($callback) || $callback === '') {
+            continue;
+        }
+        $enabled = function_exists('af_is_addon_enabled')
+            ? af_is_addon_enabled($id)
+            : (string)($mybb->settings['af_' . $id . '_enabled'] ?? '0') === '1';
+        if (!$enabled) {
+            continue;
+        }
+        $bootstrap = (string)($manifest['bootstrap'] ?? '');
+        if ($bootstrap !== '' && is_file($bootstrap)) {
+            require_once $bootstrap;
+        }
+        if (is_callable($callback)) {
+            $callback();
+        }
+    }
+}
 
 /**
  * Register a narrowly scoped compatibility normalizer.
@@ -26,7 +56,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.5.0');
  * containing normalized_content, owner, source and transformation_type.
  * ATF deliberately does not inspect or clean third-party markup itself.
  */
-function af_adaptivethemeframework_register_compatibility_normalizer(string $identity, callable $normalizer): bool
+function af_adaptivethemeframework_register_compatibility_normalizer(string $identity, callable $normalizer, string $diagnosticPrefix = 'normalizer'): bool
 {
     $identity = strtolower(trim($identity));
     if (!preg_match('~^[a-z][a-z0-9_.:-]*$~', $identity)
@@ -34,23 +64,49 @@ function af_adaptivethemeframework_register_compatibility_normalizer(string $ide
         return false;
     }
     $GLOBALS['af_adaptivethemeframework_compatibility_normalizers'][$identity] = $normalizer;
+    $GLOBALS['af_adaptivethemeframework_compatibility_normalizer_prefixes'][$identity]
+        = preg_match('~^[a-z][a-z0-9_]*$~', $diagnosticPrefix) ? $diagnosticPrefix : 'normalizer';
     return true;
 }
 
 /** @return array<string, string>|null */
 function af_adaptivethemeframework_normalize_compatible_template(string $templateName, string $current): ?array
 {
+    af_adaptivethemeframework_discover_compatibility_providers();
     // Providers may load earlier than ATF during an enable request. Import
     // their declarations now, without knowing which addons supplied them.
     foreach (($GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizers'] ?? []) as $identity => $normalizer) {
         if (is_callable($normalizer)) {
-            af_adaptivethemeframework_register_compatibility_normalizer((string)$identity, $normalizer);
+            $prefix = (string)($GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizer_prefixes'][$identity] ?? 'normalizer');
+            af_adaptivethemeframework_register_compatibility_normalizer((string)$identity, $normalizer, $prefix);
         }
     }
     unset($GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizers']);
+    unset($GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizer_prefixes']);
 
-    foreach (($GLOBALS['af_adaptivethemeframework_compatibility_normalizers'] ?? []) as $normalizer) {
+    $normalizers = $GLOBALS['af_adaptivethemeframework_compatibility_normalizers'] ?? [];
+    $trace = [
+        'template' => $templateName,
+        'normalizers' => array_keys($normalizers),
+        'normalizer_count' => count($normalizers),
+        'calls' => [],
+    ];
+    foreach ($normalizers as $identity => $normalizer) {
         $result = $normalizer($templateName, $current);
+        $call = [
+            'identity' => (string)$identity,
+            'diagnostic_prefix' => (string)($GLOBALS['af_adaptivethemeframework_compatibility_normalizer_prefixes'][$identity] ?? 'normalizer'),
+            'called' => true,
+            'returned' => is_array($result) ? 'normalized_content' : 'null',
+        ];
+        if (is_array($result) && array_key_exists('normalized_content', $result)) {
+            $call['changed'] = (string)$result['normalized_content'] !== $current;
+            $call['normalized_checksum'] = af_adaptivethemeframework_checksum((string)$result['normalized_content']);
+            if (isset($result['diagnostic']) && is_array($result['diagnostic'])) {
+                $call += $result['diagnostic'];
+            }
+        }
+        $trace['calls'][] = $call;
         if (!is_array($result)
             || !array_key_exists('normalized_content', $result)
             || trim((string)($result['owner'] ?? '')) === ''
@@ -64,9 +120,43 @@ function af_adaptivethemeframework_normalize_compatible_template(string $templat
             continue;
         }
         $result['normalized_content'] = $normalized;
+        $GLOBALS['af_adaptivethemeframework_normalizer_diagnostic'] = $trace;
         return $result;
     }
+    $GLOBALS['af_adaptivethemeframework_normalizer_diagnostic'] = $trace;
     return null;
+}
+
+/** Render body-free evidence collected while compatibility normalization ran. */
+function af_adaptivethemeframework_normalizer_diagnostic(string $seed, string $current, ?array $compatibility): string
+{
+    $trace = $GLOBALS['af_adaptivethemeframework_normalizer_diagnostic'] ?? [];
+    $lines = [
+        'template=' . (string)($trace['template'] ?? ''),
+        'normalizers=' . implode(',', (array)($trace['normalizers'] ?? [])),
+        'normalizer_count=' . (int)($trace['normalizer_count'] ?? 0),
+    ];
+    foreach ((array)($trace['calls'] ?? []) as $call) {
+        $prefix = (string)($call['diagnostic_prefix'] ?? 'normalizer') . '_';
+        $lines[] = $prefix . 'called=yes';
+        $lines[] = $prefix . 'returned=' . (string)($call['returned'] ?? 'null');
+        if (array_key_exists('changed', $call)) $lines[] = $prefix . 'changed=' . ($call['changed'] ? 'yes' : 'no');
+        foreach (['start_marker_count', 'end_marker_count', 'normalized_checksum'] as $field) {
+            if (array_key_exists($field, $call)) $lines[] = $field . '=' . $call[$field];
+        }
+    }
+    $normalized = $compatibility === null ? $current : (string)$compatibility['normalized_content'];
+    $matches = hash_equals(af_adaptivethemeframework_checksum($seed), af_adaptivethemeframework_checksum($normalized));
+    $limit = min(strlen($normalized), strlen($seed));
+    $offset = $limit;
+    for ($i = 0; $i < $limit; $i++) { if ($normalized[$i] !== $seed[$i]) { $offset = $i; break; } }
+    $lines[] = 'matches_seed=' . ($matches ? 'yes' : 'no');
+    if (!$matches) {
+        $lines[] = 'length_current=' . strlen($current);
+        $lines[] = 'length_seed=' . strlen($seed);
+        $lines[] = 'first_differing_offset=' . $offset;
+    }
+    return implode("\n", $lines);
 }
 
 function af_adaptivethemeframework_init(): void
@@ -497,6 +587,7 @@ function af_adaptivethemeframework_schema_readiness(): bool
 /** Acquire reversible, per-template-set leases. Master sid=-2 is read only. */
 function af_adaptivethemeframework_acquire_templates(): bool
 {
+    af_adaptivethemeframework_discover_compatibility_providers();
     foreach (af_adaptivethemeframework_template_seeds() as $name => $path) {
         if (!af_adaptivethemeframework_acquire_template($name, $path)) {
             return false;
@@ -514,7 +605,8 @@ function af_adaptivethemeframework_ownership_conflict(
     string $currentChecksum,
     string $previousChecksum,
     string $installedChecksum,
-    string $seedChecksum
+    string $seedChecksum,
+    string $diagnostic = ''
 ): RuntimeException {
     return new RuntimeException(
         "ATF ownership conflict:\n"
@@ -525,6 +617,7 @@ function af_adaptivethemeframework_ownership_conflict(
         . 'previous=' . $previousChecksum . "\n"
         . 'installed=' . $installedChecksum . "\n"
         . 'seed=' . $seedChecksum
+        . ($diagnostic === '' ? '' : "\n" . $diagnostic)
     );
 }
 
@@ -577,13 +670,21 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                     : null;
                 $matchesCompatibleSeed = $compatibility !== null
                     && hash_equals($seedChecksum, af_adaptivethemeframework_checksum($compatibility['normalized_content']));
+                $diagnostic = '';
+                if (!$matchesPrevious && !$matchesInstalled && !$matchesSeed) {
+                    $diagnostic = af_adaptivethemeframework_normalizer_diagnostic($seed, $current, $compatibility)
+                        . "\nsid=" . $sid;
+                    // Emit the same body-free evidence for both successful
+                    // compatibility recovery and fail-closed conflicts.
+                    error_log("[ATF compatibility]\n" . $diagnostic);
+                }
 
                 // Reconcile every activation from checksum evidence. States such as
                 // manual_override are diagnostic, not permanent locks.
                 if (!$matchesPrevious && !$matchesInstalled && !($matchesSeed && $previousValid) && !$matchesCompatibleSeed) {
                     af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
                     $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => af_adaptivethemeframework_db_string('manual_override'), 'current_content' => af_adaptivethemeframework_db_string($current), 'updated_at' => $now], "id='".(int)$lease['id']."'");
-                    throw af_adaptivethemeframework_ownership_conflict($templateName, $sid, (string)$lease['ownership_state'], $currentChecksum, $previousChecksum, $installedChecksum, $seedChecksum);
+                    throw af_adaptivethemeframework_ownership_conflict($templateName, $sid, (string)$lease['ownership_state'], $currentChecksum, $previousChecksum, $installedChecksum, $seedChecksum, $diagnostic);
                 }
 
                 // Preserve the original pre-ATF backup. Only normalize ownership
