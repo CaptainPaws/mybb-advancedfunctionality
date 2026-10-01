@@ -296,6 +296,46 @@ function af_front_output_template_string(string $pageTitle, string $templateStri
 }
 
 
+/** Store a body-free lifecycle failure that survives the ACP redirect. */
+function af_store_addon_lifecycle_diagnostic(string $addon, string $operation, string $stage, Throwable $error): array
+{
+    $safeMessage = str_replace(["\r", "\n"], ' ', $error->getMessage());
+    $safeMessage = (string)preg_replace('~\b(password|passwd|pwd)\s*[=:]\s*[^\s;,]+~i', '$1=[redacted]', $safeMessage);
+    $diagnostic = [
+        'addon' => preg_replace('~[^a-z0-9_-]~i', '', $addon),
+        'operation' => preg_replace('~[^a-z0-9_-]~i', '', $operation),
+        'stage' => substr($stage, 0, 190),
+        'exception' => get_class($error),
+        'message' => substr($safeMessage, 0, 1000),
+        'template_sid' => preg_match('~\[sid=(-?\d+)\]~', $stage, $match) ? (int)$match[1] : null,
+        'recorded_at' => defined('TIME_NOW') ? TIME_NOW : time(),
+    ];
+    $path = AF_CACHE.'lifecycle_'.$diagnostic['addon'].'.json';
+    @file_put_contents($path, json_encode($diagnostic, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), LOCK_EX);
+    return $diagnostic;
+}
+
+function af_read_addon_lifecycle_diagnostic(string $addon): ?array
+{
+    $addon = preg_replace('~[^a-z0-9_-]~i', '', $addon);
+    $json = @file_get_contents(AF_CACHE.'lifecycle_'.$addon.'.json');
+    $value = is_string($json) ? json_decode($json, true) : null;
+    return is_array($value) ? $value : null;
+}
+
+function af_clear_addon_lifecycle_diagnostic(string $addon): void
+{
+    $addon = preg_replace('~[^a-z0-9_-]~i', '', $addon);
+    @unlink(AF_CACHE.'lifecycle_'.$addon.'.json');
+}
+
+function af_format_addon_lifecycle_diagnostic(array $diagnostic): string
+{
+    return 'ATF activation failed; stage: '.($diagnostic['stage'] ?? 'unknown')
+        .'; exception: '.($diagnostic['exception'] ?? 'unknown')
+        .'; message: '.($diagnostic['message'] ?? 'unknown');
+}
+
 class AF_Admin
 {
     public static function dispatch()
@@ -328,8 +368,24 @@ class AF_Admin
             verify_post_check($mybb->get_input('my_post_key'));
 
             if ($action === 'enable') {
-                self::enableAddon($addon);
-                flash_message($lang->af_addon_enabled, 'success');
+                try {
+                    $enabled = self::enableAddon($addon);
+                } catch (Throwable $error) {
+                    $enabled = false;
+                    if ($addon === 'adaptivethemeframework') {
+                        $stage = (string)($GLOBALS['af_adaptivethemeframework_activation_stage'] ?? 'af_controller');
+                        af_store_addon_lifecycle_diagnostic($addon, 'enable', $stage, $error);
+                    }
+                }
+                if ($enabled) {
+                    flash_message($lang->af_addon_enabled, 'success');
+                } else {
+                    $diagnostic = af_read_addon_lifecycle_diagnostic($addon);
+                    $message = $diagnostic
+                        ? af_format_addon_lifecycle_diagnostic($diagnostic)
+                        : 'Addon activation failed without a lifecycle diagnostic.';
+                    flash_message(htmlspecialchars_uni($message), 'error');
+                }
             } elseif ($action === 'disable') {
                 self::disableAddon($addon);
                 flash_message($lang->af_addon_disabled, 'success');
@@ -990,17 +1046,54 @@ class AF_Admin
         return isset($mybb->settings['af_'.$id.'_enabled']) && $mybb->settings['af_'.$id.'_enabled'] === '1';
     }
 
-    public static function enableAddon(string $id): void
+    public static function enableAddon(string $id): bool
     {
+        $isAtf = $id === 'adaptivethemeframework';
+        if ($isAtf) {
+            af_clear_addon_lifecycle_diagnostic($id);
+            $GLOBALS['af_adaptivethemeframework_activation_stage'] = 'load_addon';
+        }
         $bootstrap = self::addonBootstrap($id);
-        if ($bootstrap && is_file($bootstrap)) {
-            require_once $bootstrap;
+        if (!$bootstrap || !is_file($bootstrap)) {
+            if ($isAtf) {
+                af_store_addon_lifecycle_diagnostic($id, 'enable', 'load_addon', new RuntimeException('addon bootstrap was not found'));
+            }
+            return false;
+        }
+        require_once $bootstrap;
+
+        if ($isAtf) {
+            $GLOBALS['af_adaptivethemeframework_activation_stage'] = 'is_installed';
+            $installedFn = 'af_'.$id.'_is_installed';
+            $installed = function_exists($installedFn) && (bool)$installedFn();
+            if (!$installed) {
+                $GLOBALS['af_adaptivethemeframework_activation_stage'] = 'install';
+                $installFn = 'af_'.$id.'_install';
+                if (!function_exists($installFn) || $installFn() !== true) {
+                    if (!af_read_addon_lifecycle_diagnostic($id)) {
+                        af_store_addon_lifecycle_diagnostic($id, 'enable', 'install', new RuntimeException('install returned false'));
+                    }
+                    return false;
+                }
+            }
+            $GLOBALS['af_adaptivethemeframework_activation_stage'] = 'activate';
+            $activateFn = 'af_'.$id.'_activate';
+            if (!function_exists($activateFn) || $activateFn() !== true) {
+                if (!af_read_addon_lifecycle_diagnostic($id)) {
+                    af_store_addon_lifecycle_diagnostic($id, 'enable', 'activate', new RuntimeException('activate returned false'));
+                }
+                return false;
+            }
+        } else {
             $fn = 'af_'.$id.'_install';
             if (function_exists($fn)) { $fn(); }
         }
+        if ($isAtf) { $GLOBALS['af_adaptivethemeframework_activation_stage'] = 'persist_enabled_setting'; }
         self::ensureEnabledSetting($id, 1);
         af_rebuild_and_reload_settings();
+        if ($isAtf) { $GLOBALS['af_adaptivethemeframework_activation_stage'] = 'sync_theme_stylesheets'; }
         af_sync_theme_stylesheets(false, $id);
+        return true;
     }
 
     public static function disableAddon(string $id): void

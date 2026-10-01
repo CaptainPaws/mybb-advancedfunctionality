@@ -224,7 +224,7 @@ function af_adaptivethemeframework_render_slot(string $slot, array $context = []
 
 function af_adaptivethemeframework_install(): bool
 {
-    return af_adaptivethemeframework_acquire_index();
+    return af_adaptivethemeframework_schema_readiness();
 }
 
 function af_adaptivethemeframework_is_installed(): bool
@@ -272,6 +272,15 @@ function af_adaptivethemeframework_activation_stage(string $stage): void
         register_shutdown_function(static function (): void {
             $error = error_get_last();
             if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+                $fatal = new ErrorException($error['message'], 0, $error['type'], $error['file'], $error['line']);
+                if (function_exists('af_store_addon_lifecycle_diagnostic')) {
+                    af_store_addon_lifecycle_diagnostic(
+                        AF_ADAPTIVETHEMEFRAMEWORK_ID,
+                        'enable',
+                        (string)($GLOBALS['af_adaptivethemeframework_activation_stage'] ?? 'unknown'),
+                        $fatal
+                    );
+                }
                 error_log('[ATF activation] stage=' . ($GLOBALS['af_adaptivethemeframework_activation_stage'] ?? 'unknown')
                     . ' fatal=' . $error['message']);
             }
@@ -283,8 +292,10 @@ function af_adaptivethemeframework_activation_failure(Throwable $error): bool
 {
     $stage = (string)($GLOBALS['af_adaptivethemeframework_activation_stage'] ?? 'unknown');
     error_log('[ATF activation] stage=' . $stage . ' exception=' . get_class($error) . ': ' . $error->getMessage());
-    // MyBB's addon controller can display this exception instead of an unlabelled HTTP 500.
-    throw new RuntimeException('Adaptive Theme Framework activation failed at ' . $stage . ': ' . $error->getMessage(), 0, $error);
+    if (function_exists('af_store_addon_lifecycle_diagnostic')) {
+        af_store_addon_lifecycle_diagnostic(AF_ADAPTIVETHEMEFRAMEWORK_ID, 'enable', $stage, $error);
+    }
+    return false;
 }
 
 /** @return array<string, string> */
@@ -321,6 +332,7 @@ function af_adaptivethemeframework_ensure_ownership_schema(): bool
     $table = AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME;
     af_adaptivethemeframework_activation_stage('ensure_schema');
     if (!$db->table_exists($table)) {
+        af_adaptivethemeframework_activation_stage('create_ownership_table');
         $collation = $db->build_create_table_collation();
         // Do not force MyISAM: the server/project default may provide transactional DDL/DML.
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . $table . " (
@@ -338,27 +350,62 @@ function af_adaptivethemeframework_ensure_ownership_schema(): bool
         ){$collation}");
     } else {
         foreach (af_adaptivethemeframework_ownership_columns() as $column => $definition) {
+            af_adaptivethemeframework_activation_stage('inspect_column[' . $column . ']');
             if (!$db->field_exists($column, $table)) {
+                af_adaptivethemeframework_activation_stage('add_column[' . $column . ']');
                 $db->add_column($table, $column, $definition);
             }
         }
         $indexes = ['template_lease' => 'UNIQUE KEY template_lease (template_sid, template_name)', 'ownership_state' => 'KEY ownership_state (ownership_state)', 'template_tid' => 'KEY template_tid (template_tid)'];
         foreach ($indexes as $name => $definition) {
+            af_adaptivethemeframework_activation_stage('inspect_index[' . $name . ']');
             if (method_exists($db, 'index_exists') && !$db->index_exists($table, $name)) {
+                if ($name === 'template_lease') {
+                    af_adaptivethemeframework_activation_stage('check_duplicate_leases');
+                    $duplicates = $db->write_query(
+                        'SELECT template_sid, template_name, COUNT(*) AS cnt FROM '.TABLE_PREFIX.$table
+                        .' GROUP BY template_sid, template_name HAVING COUNT(*) > 1 LIMIT 1'
+                    );
+                    $duplicate = $db->fetch_array($duplicates);
+                    if ($duplicate) {
+                        throw new RuntimeException(
+                            'duplicate ownership leases require manual reconciliation for template set '
+                            .(int)$duplicate['template_sid'].' and template '.(string)$duplicate['template_name']
+                        );
+                    }
+                }
+                af_adaptivethemeframework_activation_stage('add_index[' . $name . ']');
                 $db->write_query('ALTER TABLE ' . TABLE_PREFIX . $table . ' ADD ' . $definition);
             }
         }
     }
     af_adaptivethemeframework_activation_stage('validate_schema');
     if (!$db->table_exists($table)) {
-        return false;
+        throw new RuntimeException('ownership table does not exist after schema migration');
     }
     foreach (array_keys(af_adaptivethemeframework_ownership_columns()) as $column) {
         if (!$db->field_exists($column, $table)) {
-            return false;
+            throw new RuntimeException('ownership column is missing after schema migration: ' . $column);
+        }
+    }
+    if (method_exists($db, 'index_exists')) {
+        foreach (['template_lease', 'ownership_state', 'template_tid'] as $index) {
+            if (!$db->index_exists($table, $index)) {
+                throw new RuntimeException('ownership index is missing after schema migration: ' . $index);
+            }
         }
     }
     return true;
+}
+
+/** Schema-only diagnostic path: it never reads from or writes to templates. */
+function af_adaptivethemeframework_schema_readiness(): bool
+{
+    try {
+        return af_adaptivethemeframework_ensure_ownership_schema();
+    } catch (Throwable $error) {
+        return af_adaptivethemeframework_activation_failure($error);
+    }
 }
 
 /** Acquire a reversible, per-template-set lease for index. Master sid=-2 is read only. */
