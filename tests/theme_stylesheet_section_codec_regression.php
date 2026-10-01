@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 $core = file_get_contents(dirname(__DIR__).'/inc/plugins/advancedfunctionality.php');
-$start = strpos($core, 'function af_theme_stylesheet_encode_section');
+$start = strpos($core, 'function af_theme_stylesheet_section_id');
 $end = strpos($core, 'function af_theme_stylesheet_get_bundle_row', $start);
 if ($start === false || $end === false) {
     fwrite(STDERR, "FAIL: section codec functions not found\n");
@@ -37,3 +37,32 @@ if (!empty(af_theme_stylesheet_parse_bundle($corrupt)['ok'])) {
 }
 
 echo "AF stylesheet section codec regression checks passed.\n";
+
+$cases = [
+    '', "a{color:red}", "a{color:red}\n", "a{\r\n color:red;\r\n}",
+    "/* русский комментарий 😀 */\n.ёж{--имя:'значение'}",
+    <<<'CSS'
+/* comments */ /* AF-SECTION-V1 fake */ x{content:'*/ \\ "';}
+CSS,
+    "x{background:url(data:image/svg+xml;base64,PHN2Zy8+)}",
+    "@media (width > 1px){x{display:block}}\n@font-face{font-family:x;src:url('x.woff2')}",
+    str_repeat(".long{--value:'abcdef'}\n", 20000),
+];
+foreach ($cases as $index => $body) {
+    $encoded = af_theme_stylesheet_encode_section(['addon_id' => 'case', 'logical_id' => (string)$index, 'source_file' => "case{$index}.css"], $body);
+    $roundTrip = af_theme_stylesheet_parse_bundle($encoded);
+    $actual = (string)(array_values($roundTrip['sections'] ?? [])[0]['body'] ?? "\0");
+    if (empty($roundTrip['ok']) || $actual !== $body) throw new RuntimeException("codec property case {$index} did not round-trip");
+}
+
+// Reproduce the production symptom: native ACP changed the body without
+// changing length/checksum metadata. Re-signing preserves it as a manual edit.
+$edited = str_replace('color: red', 'color: tan', $bundle);
+$mismatch = af_theme_stylesheet_parse_bundle($edited);
+if (($mismatch['error'] ?? '') !== 'section checksum mismatch') throw new RuntimeException('production checksum mismatch was not reproduced');
+$resigned = af_theme_stylesheet_resign_edited_bundle($edited);
+if (empty($resigned['ok']) || empty(af_theme_stylesheet_parse_bundle($resigned['source'])['ok']) || !str_contains($resigned['source'], 'color: tan')) {
+    throw new RuntimeException('ACP body edit was not preserved and re-signed');
+}
+
+echo "AF stylesheet property and ACP re-sign checks passed.\n";
