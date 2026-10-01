@@ -1687,6 +1687,8 @@ $plugins->add_hook('xmlhttp', 'af_core_xmlhttp_bootstrap_addons', 1);
 
 // XMLHTTP роутинг (аналог MyAlerts)
 $plugins->add_hook('xmlhttp', 'af_xmlhttp_router', -1);
+$plugins->add_hook('admin_style_themes_edit_stylesheet_simple_commit', 'af_theme_stylesheet_acp_resign', 100);
+$plugins->add_hook('admin_style_themes_edit_stylesheet_advanced_commit', 'af_theme_stylesheet_acp_resign', 100);
 
 function advancedfunctionality_bootstrap_addons()
 {
@@ -2936,15 +2938,22 @@ function af_get_theme_stylesheet_source(array $meta, array $entry): ?array
         return null;
     }
 
-    $seedPath = $base.'/'.ltrim((string)$entry['file'], '/');
-    if (!is_file($seedPath)) {
+    $relative = ltrim(str_replace('\\', '/', (string)($entry['file'] ?? '')), '/');
+    $baseReal = realpath($base);
+    $seedPath = realpath($base.'/'.$relative);
+    if ($baseReal === false || $seedPath === false || !is_file($seedPath) || !is_readable($seedPath)
+        || strtolower((string)pathinfo($seedPath, PATHINFO_EXTENSION)) !== 'css'
+        || ($seedPath !== $baseReal && strpos($seedPath, rtrim($baseReal, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR) !== 0)) {
+        @error_log('[AF advancedstyles] operation=source_validation addon_id='.(string)($entry['addon_id'] ?? '').' logical_id='.(string)($entry['logical_id'] ?? '').' source_file='.$relative);
         return null;
     }
 
-    $source = (string)@file_get_contents($seedPath);
-    if ($source === '') {
+    $read = @file_get_contents($seedPath);
+    if (!is_string($read) || strpos($read, "\0") !== false) {
+        @error_log('[AF advancedstyles] operation=source_read addon_id='.(string)($entry['addon_id'] ?? '').' logical_id='.(string)($entry['logical_id'] ?? '').' source_file='.$relative);
         return null;
     }
+    $source = $read;
 
     return [
         'path' => $seedPath,
@@ -2987,12 +2996,13 @@ function af_theme_stylesheet_build_bundle(?string $onlyAddonId = null): array
 
     $entries = af_discover_theme_stylesheets();
     usort($entries, static function (array $a, array $b): int {
-        return [strtolower((string)$a['addon_id']), strtolower((string)$a['file'])]
-            <=> [strtolower((string)$b['addon_id']), strtolower((string)$b['file'])];
+        return [strtolower((string)$a['addon_id']), (string)$a['logical_id'], strtolower(str_replace('\\', '/', (string)$a['file']))]
+            <=> [strtolower((string)$b['addon_id']), (string)$b['logical_id'], strtolower(str_replace('\\', '/', (string)$b['file']))];
     });
 
     $blocks = [];
     $sources = [];
+    $identities = [];
     foreach ($entries as $entry) {
         $addonId = (string)$entry['addon_id'];
         if ($onlyAddonId !== null && $onlyAddonId !== '' && $addonId !== $onlyAddonId) {
@@ -3008,13 +3018,22 @@ function af_theme_stylesheet_build_bundle(?string $onlyAddonId = null): array
         }
         $addonName = trim((string)($entry['addon_meta']['name'] ?? $addonId));
         $file = ltrim(str_replace('\\', '/', (string)$entry['file']), '/');
-        $seedCss = af_theme_stylesheet_rebase_css_urls((string)$seed['source'], $addonId, $file);
-        $blocks[] = af_theme_stylesheet_encode_section([
+        // Canonicalise line endings before *both* hashing and writing. Do not
+        // trim: final newlines and other whitespace are legitimate CSS data.
+        $seedCss = str_replace(["\r\n", "\r"], "\n", (string)$seed['source']);
+        $seedCss = af_theme_stylesheet_rebase_css_urls($seedCss, $addonId, $file);
+        $meta = [
             'addon_id' => $addonId,
             'addon_title' => $addonName,
             'logical_id' => (string)$entry['logical_id'],
             'source_file' => $file,
-        ], rtrim($seedCss));
+        ];
+        $identity = sha1($addonId."\0".(string)$entry['logical_id']."\0".$file);
+        if (isset($identities[$identity])) {
+            throw new RuntimeException('duplicate section identity: '.$identities[$identity].' and '.$addonId.':'.$file);
+        }
+        $identities[$identity] = $addonId.':'.$file;
+        $blocks[] = af_theme_stylesheet_encode_section($meta, $seedCss);
         $sources[] = $addonId . ':' . $file . ':' . (string)$seed['checksum'];
     }
 
@@ -3023,7 +3042,18 @@ function af_theme_stylesheet_build_bundle(?string $onlyAddonId = null): array
         . " * Force resync intentionally replaces it from the server sources.\n"
         . " */\n\n" . implode("\n", $blocks);
 
-    return ['source' => $css, 'checksum' => sha1($css), 'sources' => $sources];
+    $built = ['source' => $css, 'checksum' => sha1($css), 'sources' => $sources];
+    $validation = function_exists('af_theme_stylesheet_validate_bundle') ? af_theme_stylesheet_validate_bundle($built) : ['ok' => true, 'sections' => []];
+    if (empty($validation['ok'])) {
+        throw new RuntimeException('generated advancedstyles.css failed self-validation: '.(string)$validation['error']);
+    }
+    $built['sections'] = $validation['sections'];
+    return $built;
+}
+
+function af_theme_stylesheet_section_id(array $meta): string
+{
+    return sha1((string)($meta['addon_id'] ?? '')."\0".(string)($meta['logical_id'] ?? '')."\0".(string)($meta['source_file'] ?? ''));
 }
 
 /**
@@ -3040,7 +3070,10 @@ function af_theme_stylesheet_encode_section(array $meta, string $css): string
     $meta['body_sha1'] = sha1($css);
     $meta['checksum'] = sha1($css);
     $json = json_encode($meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    return '/* AF-SECTION-V1 '.base64_encode((string)$json)." */\n".$css."\n/* AF-END-SECTION-V1 */\n";
+    if (!is_string($json) || json_last_error() !== JSON_ERROR_NONE) {
+        throw new RuntimeException('Cannot encode AF stylesheet section metadata: '.json_last_error_msg());
+    }
+    return '/* AF-SECTION-V1 '.base64_encode($json)." */\n".$css."\n/* AF-END-SECTION-V1 */\n";
 }
 
 /** Parse the authenticated, length-delimited sections and retain byte offsets. */
@@ -3082,9 +3115,62 @@ function af_theme_stylesheet_parse_bundle(string $css): array
         $cursor = $end;
         $seen = true;
     }
-    if (!$sections) return ['ok' => false, 'status' => 'corrupt', 'error' => 'no structured sections', 'sections' => []];
+    if (!$sections) {
+        if (strpos($css, 'AdvancedFunctionality theme bundle (structured v1)') !== false) {
+            return ['ok' => true, 'status' => 'structured', 'error' => '', 'sections' => []];
+        }
+        return ['ok' => false, 'status' => 'corrupt', 'error' => 'no structured sections', 'sections' => []];
+    }
     if (trim(substr($css, $cursor)) !== '') return ['ok' => false, 'error' => 'unmanaged content after sections', 'sections' => $sections];
     return ['ok' => true, 'status' => 'structured', 'error' => '', 'sections' => $sections];
+}
+
+/** Compare a freshly built bundle with its parsed byte representation. */
+function af_theme_stylesheet_validate_bundle(array $built): array
+{
+    $parsed = af_theme_stylesheet_parse_bundle((string)($built['source'] ?? ''));
+    if (empty($parsed['ok'])) return $parsed;
+    foreach ($parsed['sections'] as $id => $section) {
+        $body = (string)$section['body'];
+        $meta = (array)$section['meta'];
+        if ((int)($meta['bytes'] ?? -1) !== strlen($body) || !hash_equals((string)($meta['body_sha1'] ?? ''), sha1($body))) {
+            return ['ok' => false, 'error' => 'self-validation mismatch for '.(string)($meta['addon_id'] ?? '?').':'.(string)($meta['logical_id'] ?? '?'), 'sections' => $parsed['sections']];
+        }
+    }
+    return $parsed;
+}
+
+/**
+ * Re-sign a structurally recognisable bundle after MyBB's whole-file editor.
+ * Delimiters, identities and JSON remain protected; only section body length
+ * and checksum are regenerated and the section is marked as user edited.
+ */
+function af_theme_stylesheet_resign_edited_bundle(string $css): array
+{
+    $marker = '/* AF-SECTION-V1 ';
+    $trailer = "\n/* AF-END-SECTION-V1 */\n";
+    $cursor = 0; $output = ''; $count = 0;
+    while (($start = strpos($css, $marker, $cursor)) !== false) {
+        $output .= substr($css, $cursor, $start - $cursor);
+        $headerEnd = strpos($css, " */\n", $start + strlen($marker));
+        if ($headerEnd === false) return ['ok' => false, 'error' => 'unterminated section header'];
+        $raw = substr($css, $start + strlen($marker), $headerEnd - $start - strlen($marker));
+        $decoded = base64_decode($raw, true);
+        $meta = is_string($decoded) ? json_decode($decoded, true) : null;
+        if (!is_array($meta) || (int)($meta['version'] ?? 0) !== 1 || !isset($meta['section_id'])) return ['ok' => false, 'error' => 'invalid section metadata'];
+        if (!hash_equals(af_theme_stylesheet_section_id($meta), (string)$meta['section_id'])) return ['ok' => false, 'error' => 'section identity mismatch'];
+        $bodyStart = $headerEnd + 4;
+        $end = strpos($css, $trailer, $bodyStart);
+        if ($end === false) return ['ok' => false, 'error' => 'section boundary mismatch'];
+        $body = substr($css, $bodyStart, $end - $bodyStart);
+        $meta['manual_override'] = true;
+        $output .= af_theme_stylesheet_encode_section($meta, $body);
+        $cursor = $end + strlen($trailer); $count++;
+    }
+    $output .= substr($css, $cursor);
+    if ($count === 0) return ['ok' => false, 'error' => 'no structured sections'];
+    $parsed = af_theme_stylesheet_parse_bundle($output);
+    return empty($parsed['ok']) ? $parsed : ['ok' => true, 'source' => $output, 'sections' => $parsed['sections']];
 }
 
 function af_theme_stylesheet_get_bundle_row(int $themeTid): array
@@ -3293,17 +3379,27 @@ function af_theme_stylesheet_repair_bundle_structure(int $themeTid, string $expe
     $classification = af_theme_stylesheet_parse_bundle($current);
     if (!empty($classification['ok'])) return ['ok' => true, 'message' => 'structure is already valid'];
     if (($classification['status'] ?? '') === 'legacy') return ['ok' => false, 'message' => 'Legacy bundle requires the migration action'];
-    $fresh = af_theme_stylesheet_build_bundle();
+    // A normal whole-file ACP edit changes authenticated body bytes but not
+    // section identities. Preserve it by re-signing rather than replacing it.
+    $resigned = af_theme_stylesheet_resign_edited_bundle($current);
+    $fresh = !empty($resigned['ok'])
+        ? ['source' => (string)$resigned['source'], 'checksum' => sha1((string)$resigned['source'])]
+        : af_theme_stylesheet_build_bundle();
+    $validated = af_theme_stylesheet_validate_bundle($fresh);
+    if (empty($validated['ok'])) {
+        return ['ok' => false, 'message' => 'Fresh bundle validation failed: '.(string)($validated['error'] ?? 'unknown error')];
+    }
     $backup = af_theme_stylesheet_create_recovery($themeTid, $row, $current);
     if (empty($backup['ok'])) return $backup;
     $updated = (string)$fresh['source'];
     $sid = (int)$row['sid'];
     $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
     $state = af_theme_stylesheet_bundle_state($themeTid);
-    if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 0, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
-    af_theme_stylesheet_cache_row($themeTid, $sid, $updated);
+    $manual = !empty($resigned['ok']);
+    if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => $manual ? 1 : 0, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
+    $cache = af_theme_stylesheet_cache_row($themeTid, $sid, $updated);
     af_theme_stylesheets_log('bundle structure repaired; external recovery: '.basename((string)$backup['path']), AF_THEME_BUNDLE_ADDON_ID, '*');
-    return ['ok' => true, 'message' => 'structure repaired; original bundle saved outside frontend CSS'];
+    return ['ok' => true, 'message' => 'structure repaired; original bundle saved outside frontend CSS', 'cache' => $cache, 'preserved_manual_content' => $manual];
 }
 
 /** Rebase local url() references because the bundle is served from cache/themes. */
@@ -3354,7 +3450,7 @@ function af_theme_stylesheet_bundle_state(int $themeTid): array
     return $db->fetch_array($q) ?: [];
 }
 
-function af_theme_stylesheet_cache_row(int $themeTid, int $sid, string $css): void
+function af_theme_stylesheet_cache_row(int $themeTid, int $sid, string $css): array
 {
     global $db;
     if (!function_exists('cache_stylesheet') || !function_exists('update_theme_stylesheet_list')) {
@@ -3363,12 +3459,17 @@ function af_theme_stylesheet_cache_row(int $themeTid, int $sid, string $css): vo
             require_once $adminInc;
         }
     }
-    if (function_exists('cache_stylesheet')) {
-        $cached = cache_stylesheet($themeTid, AF_THEME_BUNDLE_NAME, $css);
-        $db->update_query('themestylesheets', ['cachefile' => $cached !== false ? AF_THEME_BUNDLE_NAME : ''], "sid='{$sid}'");
-    }
-    if (function_exists('update_theme_stylesheet_list')) {
-        update_theme_stylesheet_list($themeTid);
+    try {
+        if (function_exists('cache_stylesheet')) {
+            $cached = cache_stylesheet($themeTid, AF_THEME_BUNDLE_NAME, $css);
+            $db->update_query('themestylesheets', ['cachefile' => $cached !== false ? AF_THEME_BUNDLE_NAME : ''], "sid='{$sid}'");
+            if ($cached === false) return ['ok' => false, 'error' => 'cache_stylesheet returned false'];
+        }
+        if (function_exists('update_theme_stylesheet_list')) update_theme_stylesheet_list($themeTid);
+        return ['ok' => true];
+    } catch (Throwable $error) {
+        @error_log('[AF advancedstyles] operation=cache theme_tid='.$themeTid.' exception='.get_class($error).': '.$error->getMessage());
+        return ['ok' => false, 'error' => $error->getMessage()];
     }
 }
 
@@ -3378,6 +3479,10 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     global $db;
 
     $bundle = af_theme_stylesheet_build_bundle();
+    $validation = function_exists('af_theme_stylesheet_validate_bundle') ? af_theme_stylesheet_validate_bundle($bundle) : ['ok' => true];
+    if (empty($validation['ok'])) {
+        return ['updated' => false, 'manual_override' => false, 'sid' => 0, 'error' => 'generated bundle invalid: '.(string)($validation['error'] ?? '')];
+    }
     $state = af_theme_stylesheet_bundle_state($themeTid);
     $sid = (int)($state['stylesheet_sid'] ?? 0);
     $nameEsc = $db->escape_string(AF_THEME_BUNDLE_NAME);
@@ -3425,6 +3530,8 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
             $bundle['source'] .= "\n" . implode("\n", $legacyBlocks);
             $bundle['checksum'] = sha1((string)$bundle['source']);
             $migratedLegacyOverride = true;
+            $validation = function_exists('af_theme_stylesheet_validate_bundle') ? af_theme_stylesheet_validate_bundle($bundle) : ['ok' => true];
+            if (empty($validation['ok'])) return ['updated' => false, 'manual_override' => true, 'sid' => 0, 'error' => 'legacy merge validation failed: '.(string)$validation['error']];
         }
     }
 
@@ -3474,7 +3581,8 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     }
 
     $cacheCss = $write ? (string)$bundle['source'] : (string)($row['stylesheet'] ?? '');
-    af_theme_stylesheet_cache_row($themeTid, $sid, $cacheCss);
+    $cache = af_theme_stylesheet_cache_row($themeTid, $sid, $cacheCss);
+    if (!is_array($cache)) $cache = ['ok' => true]; // compatibility with older integrations
 
     $payload = [
         'theme_tid' => $themeTid, 'stylesheet_sid' => $sid,
@@ -3508,7 +3616,7 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
         update_theme_stylesheet_list($themeTid);
     }
 
-    return ['updated' => $write, 'manual_override' => $manual, 'sid' => $sid];
+    return ['updated' => $write, 'manual_override' => $manual, 'sid' => $sid, 'cache' => $cache, 'error' => empty($cache['ok']) ? (string)$cache['error'] : ''];
 }
 
 function af_mark_theme_stylesheet_managed(int $themeTid, int $sid, array $entry, array $seed, bool $manualOverride, ?string $resolvedName = null): void
@@ -3905,7 +4013,7 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
     $addons = af_discover_addons();
     $entries = af_discover_theme_stylesheets($addons);
     $themeTids = af_get_theme_tids();
-    $result = ['created_or_updated' => 0, 'manual_override' => 0, 'skipped' => 0];
+    $result = ['created_or_updated' => 0, 'manual_override' => 0, 'skipped' => 0, 'errors' => []];
 
     // Metadata rows are retained for source-file routing and rollback, but new
     // per-source MyBB stylesheets are no longer created. One bundle per theme
@@ -3942,8 +4050,14 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
     }
 
     foreach ($themeTids as $themeTid) {
-        $state = af_theme_stylesheet_diagnostic_call('af_theme_stylesheet_sync_bundle', 'theme='.(int)$themeTid,
-            static fn(): array => af_theme_stylesheet_sync_bundle((int)$themeTid, $force));
+        try {
+            $state = af_theme_stylesheet_sync_bundle((int)$themeTid, $force);
+        } catch (Throwable $error) {
+            @error_log('[AF advancedstyles] operation=sync theme_tid='.(int)$themeTid.' exception='.get_class($error).': '.$error->getMessage());
+            $result['errors'][] = ['theme_tid' => (int)$themeTid, 'message' => $error->getMessage()];
+            continue;
+        }
+        if (!empty($state['error'])) $result['errors'][] = ['theme_tid' => (int)$themeTid, 'message' => (string)$state['error']];
         if (!empty($state['updated'])) $result['created_or_updated']++;
         if (!empty($state['manual_override'])) $result['manual_override']++;
         // Once the bundle has consumed/detached legacy records, source rows
@@ -3958,13 +4072,46 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
     return $result;
 }
 
+/** Re-authenticate legitimate body edits made in MyBB's native CSS editor. */
+function af_theme_stylesheet_acp_resign(): void
+{
+    global $db, $mybb;
+    $sid = isset($mybb) && method_exists($mybb, 'get_input') ? (int)$mybb->get_input('sid') : (int)($_REQUEST['sid'] ?? 0);
+    $tid = isset($mybb) && method_exists($mybb, 'get_input') ? (int)$mybb->get_input('tid') : (int)($_REQUEST['tid'] ?? 0);
+    $file = isset($mybb) && method_exists($mybb, 'get_input') ? (string)$mybb->get_input('file') : (string)($_REQUEST['file'] ?? '');
+    if ($sid > 0) {
+        $where = "sid='{$sid}'";
+    } elseif ($tid > 0 && $file === AF_THEME_BUNDLE_NAME) {
+        $where = "tid='{$tid}' AND name='".$db->escape_string(AF_THEME_BUNDLE_NAME)."'";
+    } else {
+        return;
+    }
+    $q = $db->simple_select('themestylesheets', 'sid,tid,name,stylesheet', $where, ['order_by' => 'sid', 'order_dir' => 'desc', 'limit' => 1]);
+    $row = $db->fetch_array($q) ?: [];
+    if ((string)($row['name'] ?? '') !== AF_THEME_BUNDLE_NAME) return;
+    $sid = (int)$row['sid'];
+    $css = (string)($row['stylesheet'] ?? '');
+    $parsed = af_theme_stylesheet_parse_bundle($css);
+    if (!empty($parsed['ok'])) return;
+    $resigned = af_theme_stylesheet_resign_edited_bundle($css);
+    if (empty($resigned['ok'])) {
+        @error_log('[AF advancedstyles] operation=acp_resign theme_tid='.(int)($row['tid'] ?? 0).' exception='.(string)($resigned['error'] ?? 'structural corruption'));
+        return;
+    }
+    $updated = (string)$resigned['source'];
+    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}'");
+    $state = af_theme_stylesheet_bundle_state((int)$row['tid']);
+    if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 1, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
+    af_theme_stylesheet_cache_row((int)$row['tid'], $sid, $updated);
+}
+
 /** Log the exact stylesheet operation which threw without changing its error semantics. */
 function af_theme_stylesheet_diagnostic_call(string $operation, string $context, callable $callback)
 {
     try {
         return $callback();
     } catch (Throwable $error) {
-        @error_log('[AF theme stylesheets] '.$operation.' failed; '.$context.'; '
+        @error_log('[AF advancedstyles] '.$operation.' failed; '.$context.'; '
             .get_class($error).': '.$error->getMessage().' in '.$error->getFile().':'.$error->getLine());
         throw $error;
     }
