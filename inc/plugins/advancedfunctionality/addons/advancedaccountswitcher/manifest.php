@@ -9,6 +9,14 @@ return [
     'version'     => '1.0.0',
     'bootstrap'   => 'advancedaccountswitcher.php',
 
+
+    'menu_provider' => [
+        'callback' => 'af_advancedaccountswitcher_menu_provider',
+        'items' => [
+            ['key'=>'advanced_account_switcher','label'=>'Аккаунты','icon'=>'fa-solid fa-users','type'=>'modal','default_container'=>'secondary','default_sortorder'=>10,'visibility'=>'af_advancedaccountswitcher_menu_visible','action'=>['url'=>'usercp.php?action=af_aas','trigger_selector'=>'#af_aas_trigger','trigger_class'=>'af-aas-trigger','modal_selector'=>'#af_aas_modal','owner_template'=>'af_aas_panel_widget','trigger_renderer'=>'af_aas_render_menu_trigger']],
+        ],
+    ],
+
     'frontend' => [
         'mode' => 'global',
     ],

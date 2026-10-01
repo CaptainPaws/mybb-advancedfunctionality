@@ -23,9 +23,21 @@ const AF_AAM_BASE         = 'inc/plugins/advancedfunctionality/addons/' . AF_AAM
 const AF_AAM_TABLE_ALERTS = 'aam_alerts';
 const AF_AAM_TABLE_TYPES  = 'aam_alert_types';
 
+function af_advancedalertsandmentions_menu_visible(): bool
+{
+    global $mybb;
+    return !empty($mybb->user['uid']) && af_aam_is_enabled();
+}
+
+function af_advancedalertsandmentions_menu_badge(): int
+{
+    global $af_aam_unread;
+    return (int)($af_aam_unread ?? 0);
+}
+
 function af_advancedalertsandmentions_menu_provider(): void
 {
-    af_menu_register_item(['key'=>'advanced_alerts','source_addon'=>AF_AAM_ID,'label'=>'Уведомления','icon'=>'fa-solid fa-bell','type'=>'modal','default_container'=>'secondary','default_sortorder'=>20,'visibility'=>static function (): bool { global $mybb; return !empty($mybb->user['uid']) && af_aam_is_enabled(); },'action'=>['url'=>'misc.php?action=af_aam_list','trigger_selector'=>'#af_aam_header_link','modal_selector'=>'#af_aam_modal','owner_template'=>'af_aam_header_icon'],'badge_provider'=>static function (): int { global $af_aam_unread; return (int)($af_aam_unread ?? 0); }]);
+    af_menu_register_item(['key'=>'advanced_alerts','source_addon'=>AF_AAM_ID,'label'=>'Уведомления','icon'=>'fa-solid fa-bell','type'=>'modal','default_container'=>'secondary','default_sortorder'=>20,'visibility'=>'af_advancedalertsandmentions_menu_visible','action'=>['url'=>'misc.php?action=af_aam_list','trigger_selector'=>'#af_aam_header_link','modal_selector'=>'#af_aam_modal','owner_template'=>'af_aam_header_icon'],'badge_provider'=>'af_advancedalertsandmentions_menu_badge']);
 }
 
 

@@ -15,6 +15,14 @@ return [
     'website'     => 'https://github.com/CaptainPaws',
     'bootstrap'   => 'advancedalertsandmentions.php',
 
+
+    'menu_provider' => [
+        'callback' => 'af_advancedalertsandmentions_menu_provider',
+        'items' => [
+            ['key'=>'advanced_alerts','label'=>'Уведомления','icon'=>'fa-solid fa-bell','type'=>'modal','default_container'=>'secondary','default_sortorder'=>20,'visibility'=>'af_advancedalertsandmentions_menu_visible','action'=>['url'=>'misc.php?action=af_aam_list','trigger_selector'=>'#af_aam_header_link','modal_selector'=>'#af_aam_modal','owner_template'=>'af_aam_header_icon'],'badge_provider'=>'af_advancedalertsandmentions_menu_badge'],
+        ],
+    ],
+
     'frontend' => [
         'mode' => 'global',
     ],
