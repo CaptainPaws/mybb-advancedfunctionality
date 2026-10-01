@@ -124,4 +124,34 @@ if (!str_contains($legacy, 'uploads/avatar.png') || !str_contains($legacy, 'apa_
     throw new RuntimeException('ATF-off legacy marker rendering is unavailable.');
 }
 
+// Template lifecycle uses the seed catalogue as the ownership boundary. ATF
+// mode must not even call MyBB's patch helper for an owned template, while the
+// same legacy patch remains available with ATF disabled.
+$GLOBALS['apa_template_patch_calls'] = [];
+function find_replace_templatesets($title, $find, $replace, $limit = -1): void {
+    $GLOBALS['apa_template_patch_calls'][] = $title;
+}
+$adminRoot = sys_get_temp_dir() . '/apa-admin-' . getmypid() . '/';
+@mkdir($adminRoot . 'inc', 0777, true);
+file_put_contents($adminRoot . 'inc/adminfunctions_templates.php', "<?php\n");
+if (!defined('MYBB_ROOT')) define('MYBB_ROOT', $adminRoot);
+
+$GLOBALS['test_enabled']['adaptivethemeframework'] = true;
+af_apa_templates_apply(true);
+if (in_array('forumbit_depth2_forum_lastpost', $GLOBALS['apa_template_patch_calls'], true)) {
+    throw new RuntimeException('ATF mode patched an ATF-owned lastpost template.');
+}
+
+$GLOBALS['apa_template_patch_calls'] = [];
+$GLOBALS['test_enabled']['adaptivethemeframework'] = false;
+af_apa_templates_apply(true);
+foreach (['forumbit_depth1_forum_lastpost', 'forumbit_depth2_forum_lastpost', 'forumdisplay_thread'] as $legacyTemplate) {
+    if (!in_array($legacyTemplate, $GLOBALS['apa_template_patch_calls'], true)) {
+        throw new RuntimeException("ATF-off mode did not patch {$legacyTemplate}.");
+    }
+}
+@unlink($adminRoot . 'inc/adminfunctions_templates.php');
+@rmdir($adminRoot . 'inc');
+@rmdir($adminRoot);
+
 echo "AdvancedPosterAvatar ATF provider passed.\n";

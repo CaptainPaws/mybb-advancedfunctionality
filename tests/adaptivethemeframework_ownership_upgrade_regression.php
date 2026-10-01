@@ -113,6 +113,8 @@ define('TIME_NOW', 12345);
 $addon = dirname(__DIR__) . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework';
 define('AF_ADDONS', dirname($addon) . '/');
 require $addon . '/adaptivethemeframework.php';
+require dirname($addon) . '/advancedposteravatar/advancedposteravatar.php';
+af_apa_register_atf_compatibility_normalizer();
 $seed = af_adaptivethemeframework_index_seed();
 
 // A: no ledger -> current schema -> acquire.
@@ -169,6 +171,31 @@ $db->tables['templates'][1]['template'] = $previous;
 if (!af_adaptivethemeframework_activate()) throw new RuntimeException('manual_override with previous content did not recover');
 $lease = $db->tables['af_adaptivethemeframework_template_ownership'][0];
 if ($lease['ownership_state'] !== 'owned' || $lease['previous_content'] !== $previous || $db->tables['templates'][1]['template'] !== $seed) throw new RuntimeException('recovery replaced original backup');
+
+// APA markers are attributable compatibility noise, not a user override. Only
+// an exact marker-only difference may be recovered and the backup is immutable.
+$lastpostSeed = file_get_contents($addon . '/templates/forumbit_depth2_forum_lastpost.html');
+$lastpostTemplate =& $db->tables['templates'][5];
+$lastpostLeaseIndex = array_search('forumbit_depth2_forum_lastpost', array_column($db->tables['af_adaptivethemeframework_template_ownership'], 'template_name'), true);
+$lastpostLease =& $db->tables['af_adaptivethemeframework_template_ownership'][$lastpostLeaseIndex];
+$lastpostBackup = $lastpostLease['previous_content'];
+$lastpostTemplate['template'] = '<apa_uid_[{$lastpost_data[\'lastposteruid\']}]>' . $lastpostSeed . '<apa_end>';
+if (!af_adaptivethemeframework_activate()
+    || $lastpostTemplate['template'] !== $lastpostSeed
+    || $lastpostLease['ownership_state'] !== 'owned'
+    || $lastpostLease['previous_content'] !== $lastpostBackup) {
+    throw new RuntimeException('APA-only template pollution was not safely recovered');
+}
+
+$pollutedWithEdit = '<apa_uid_[{$lastpost_data[\'lastposteruid\']}]>' . $lastpostSeed . '<!-- user edit --><apa_end>';
+$lastpostTemplate['template'] = $pollutedWithEdit;
+if (af_adaptivethemeframework_activate() !== false
+    || $lastpostTemplate['template'] !== $pollutedWithEdit
+    || $lastpostLease['ownership_state'] !== 'manual_override') {
+    throw new RuntimeException('APA normalization concealed a real user edit');
+}
+$lastpostTemplate['template'] = $lastpostSeed;
+if (!af_adaptivethemeframework_activate()) throw new RuntimeException('lastpost fixture did not recover after conflict assertion');
 
 // An installed old seed is proof of ownership and may be upgraded in place.
 $newSeedPath = tempnam(sys_get_temp_dir(), 'atf-seed-');
