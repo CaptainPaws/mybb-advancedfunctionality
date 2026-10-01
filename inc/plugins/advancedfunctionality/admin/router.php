@@ -638,7 +638,8 @@ class AF_Admin
 
     public static function isAddonEnabled(string $id): bool
     {
-        return af_is_addon_enabled($id);
+        global $mybb;
+        return isset($mybb->settings['af_'.$id.'_enabled']) && $mybb->settings['af_'.$id.'_enabled'] === '1';
     }
 
     public static function enableAddon(string $id): void
@@ -658,7 +659,6 @@ class AF_Admin
     {
         self::ensureEnabledSetting($id, 0);
         af_rebuild_and_reload_settings();
-
         af_disable_theme_stylesheet_sources($id);
         af_sync_theme_stylesheets(false, $id);
 
@@ -719,6 +719,4 @@ class AF_Admin
     }
 }
 
-if (!defined('AF_ADMIN_SKIP_DISPATCH')) {
-    AF_Admin::dispatch();
-}
+AF_Admin::dispatch();
