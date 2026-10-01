@@ -83,6 +83,21 @@ final class ActivationDb
     public array $registry = [];
     private int $nextSid = 10;
 
+    public function table_exists(string $table): bool { return true; }
+    public function write_query(string $sql): array
+    {
+        if (str_starts_with($sql, 'SHOW COLUMNS')) {
+            $columns = [
+                'id', 'theme_tid', 'stylesheet_sid', 'addon_id', 'logical_id', 'stylesheet_name',
+                'source_file', 'seed_file', 'seed_checksum', 'last_synced_checksum', 'is_integrated',
+                'delivery_mode', 'discovered_from', 'is_admin_only', 'last_synced_at', 'manual_override',
+                'created_at', 'updated_at',
+            ];
+            return ['rows' => array_map(static fn(string $name): array => ['Field' => $name], $columns), 'position' => 0];
+        }
+        throw new RuntimeException('Unexpected SQL: '.$sql);
+    }
+
     public function escape_string(string $value): string { return addslashes($value); }
     private function decodeStylesheetPayload(array $payload): array
     {
@@ -131,6 +146,8 @@ final class ActivationDb
         foreach ($target as &$row) {
             if (preg_match("~sid='?(\d+)'?~", $where, $m) && (int)($row['sid'] ?? 0) !== (int)$m[1]) continue;
             if (preg_match("~(?:^| )id='?(\d+)'?~", $where, $m) && (int)($row['id'] ?? 0) !== (int)$m[1]) continue;
+            if (preg_match("~theme_tid='?(\d+)'?~", $where, $m) && (int)($row['theme_tid'] ?? 0) !== (int)$m[1]) continue;
+            if (str_contains($where, "addon_id!='__af_bundle__'") && (string)($row['addon_id'] ?? '') === '__af_bundle__') continue;
             $row = array_merge($row, $payload);
         }
     }
@@ -139,9 +156,16 @@ final class ActivationDb
 function af_theme_stylesheet_build_bundle(?string $onlyAddonId = null): array
 {
     global $enabledAddonCss;
-    $source = "/* generated */\n/* AF-SECTION-V1 fixture */\n";
-    foreach ($enabledAddonCss as $addon => $css) $source .= "/* {$addon} */\n{$css}\n";
-    return ['source' => $source, 'checksum' => sha1($source), 'sources' => []];
+    $source = "/* AdvancedFunctionality theme bundle (structured v1). Edit sections in AF ACP. */\n\n";
+    $sources = [];
+    foreach ($enabledAddonCss as $addon => $css) {
+        $source .= af_theme_stylesheet_encode_section([
+            'addon_id' => $addon, 'logical_id' => 'main', 'source_file' => "assets/{$addon}.css",
+            'seed_body_sha1' => sha1($css), 'seed_checksum' => sha1($css),
+        ], $css)."\n";
+        $sources[] = $addon.':assets/'.$addon.'.css:'.sha1($css);
+    }
+    return ['source' => $source, 'checksum' => sha1($source), 'sources' => $sources];
 }
 function af_theme_stylesheet_bundle_state(int $themeTid): array
 {
@@ -151,8 +175,16 @@ function af_theme_stylesheet_bundle_state(int $themeTid): array
     }
     return [];
 }
-function af_theme_stylesheet_encode_section(array $meta, string $css): string { return $css; }
-function af_theme_stylesheet_cache_row(int $themeTid, int $sid, string $css): void {}
+eval(extractFunction($core, 'af_theme_stylesheet_section_id'));
+eval(extractFunction($core, 'af_theme_stylesheet_encode_section'));
+eval(extractFunction($core, 'af_theme_stylesheet_parse_bundle'));
+eval(extractFunction($core, 'af_theme_stylesheet_validate_bundle'));
+function af_theme_stylesheet_cache_row(int $themeTid, int $sid, string $css): array
+{
+    global $db;
+    $db->update_query('themestylesheets', ['cachefile' => AF_THEME_BUNDLE_NAME], "sid='{$sid}'");
+    return ['ok' => true];
+}
 eval(extractFunction($core, 'af_theme_stylesheet_sync_bundle'));
 
 function assertSameValue(mixed $expected, mixed $actual, string $message): void
@@ -191,6 +223,80 @@ for ($cycle = 1; $cycle <= 3; $cycle++) af_theme_stylesheet_sync_bundle(1, false
 assertSameValue($generated, $db->styles[$sid]['stylesheet'], 'generated bundle grew across activations');
 assertSameValue(1, count($db->styles), 'clean activation duplicated stylesheet rows');
 assertSameValue(1, count($db->registry), 'clean activation duplicated registry rows');
+assertSameValue('global', $db->styles[$sid]['attachedto'], 'fresh bundle was not attached to every page');
+assertSameValue(AF_THEME_BUNDLE_NAME, $db->styles[$sid]['cachefile'], 'fresh bundle cachefile was not registered');
+$cleanParsed = af_theme_stylesheet_parse_bundle($db->styles[$sid]['stylesheet']);
+assertSameValue(true, $cleanParsed['ok'], 'fresh bundle is not an authenticated structured bundle');
+assertSameValue(count($enabledAddonCss), count($cleanParsed['sections']), 'fresh bundle omitted enabled CSS sections');
+assertSameValue(count($enabledAddonCss), $first['source_count'], 'sync did not report all enabled CSS sources');
+assertSameValue(count($cleanParsed['sections']), $first['section_count'], 'sync section count differs from persisted bundle');
+
+// Exercise the public production entry point, not merely sync_bundle. Start
+// from the exact production failure fixture: no stylesheet and no bundle row.
+function af_theme_stylesheet_deduplicate_registry(): void {}
+function af_discover_addons(): array { return [['id' => 'fixture']]; }
+function af_discover_theme_stylesheets(?array $addons = null): array
+{
+    global $enabledAddonCss;
+    $entries = [];
+    foreach ($enabledAddonCss as $addon => $_css) {
+        $entries[] = [
+            'addon_id' => $addon, 'logical_id' => 'main', 'file' => "assets/{$addon}.css",
+            'stylesheet_name' => "af_{$addon}.css", 'enabled_setting' => '',
+            'addon_meta' => ['path' => __DIR__, 'name' => $addon], 'discovered_from' => 'fixture',
+        ];
+    }
+    return $entries;
+}
+function af_get_theme_tids(): array { return [1]; }
+function af_get_theme_stylesheet_source(array $meta, array $entry): ?array
+{
+    global $enabledAddonCss;
+    $css = $enabledAddonCss[$entry['addon_id']] ?? null;
+    return is_string($css) ? ['path' => __FILE__, 'source' => $css, 'checksum' => sha1($css)] : null;
+}
+function af_theme_stylesheet_repair_legacy_registry_row(int $themeTid, array $entry): void {}
+function af_reconcile_theme_stylesheet_registry_state(int $themeTid, array $entry, ?array $seed = null): void {}
+function af_ensure_theme_stylesheet_registry_row(int $themeTid, array $entry): void
+{
+    global $db;
+    foreach ($db->registry as $row) {
+        if ((int)$row['theme_tid'] === $themeTid && $row['addon_id'] === $entry['addon_id']) return;
+    }
+    $db->insert_query(AF_THEME_STYLESHEETS_TABLE, [
+        'theme_tid' => $themeTid, 'stylesheet_sid' => 0, 'addon_id' => $entry['addon_id'],
+        'logical_id' => $entry['logical_id'], 'stylesheet_name' => $entry['stylesheet_name'],
+        'delivery_mode' => 'auto', 'manual_override' => 0,
+    ]);
+}
+function af_theme_stylesheet_diagnostic_call(string $operation, string $context, callable $callback): mixed
+{
+    return $callback();
+}
+eval(extractFunction($core, 'af_sync_theme_stylesheets'));
+
+$enabledAddonCss = [
+    'layout' => '.layout { display: grid; }',
+    'profile' => '.profile { container-type: inline-size; }',
+    'menu' => '.menu { display: flex; }',
+];
+$db = new ActivationDb();
+$sync = af_sync_theme_stylesheets(false);
+assertSameValue([], $sync['errors'], 'public sync reported a fresh-creation error');
+assertSameValue(1, $sync['created_or_updated'], 'public sync did not report bundle creation');
+assertSameValue(1, count($db->styles), 'public sync did not create exactly one MyBB stylesheet');
+$publicStyle = array_values($db->styles)[0];
+$publicBundleRows = array_values(array_filter($db->registry, static fn(array $row): bool => ($row['addon_id'] ?? '') === AF_THEME_BUNDLE_ADDON_ID));
+assertSameValue(1, count($publicBundleRows), 'public sync did not create exactly one bundle registry row');
+assertSameValue((int)$publicStyle['sid'], (int)$publicBundleRows[0]['stylesheet_sid'], 'registry SID does not point at the created stylesheet');
+assertSameValue('global', $publicStyle['attachedto'], 'public sync bundle attachment is not global');
+assertSameValue(AF_THEME_BUNDLE_NAME, $publicStyle['cachefile'], 'public sync did not set the cachefile');
+assertSameValue(true, trim($publicStyle['stylesheet']) !== '', 'public sync created an empty CSS body');
+$publicParsed = af_theme_stylesheet_parse_bundle($publicStyle['stylesheet']);
+assertSameValue(true, $publicParsed['ok'], 'public sync persisted an invalid bundle');
+assertSameValue(count($enabledAddonCss), count($publicParsed['sections']), 'public sync source/section cardinality mismatch');
+$publicSourceCount = count($enabledAddonCss);
+$publicSectionCount = count($publicParsed['sections']);
 
 // Rebuild the same bundle while several addons are disabled and enabled. The
 // SQL payload must remain valid and the quotes must round-trip byte-for-byte.
@@ -210,4 +316,5 @@ af_theme_stylesheet_sync_bundle(1, false);
 assertSameValue($edited, $db->styles[$sid]['stylesheet'], 'activation overwrote an edited registered bundle');
 
 echo "AF activation SQL failure reproduced: {$reproduced}\n";
+echo "AF fresh public sync fixture: SID={$publicStyle['sid']}; sources={$publicSourceCount}; sections={$publicSectionCount}.\n";
 echo "AF activation bundle runtime regression checks passed.\n";
