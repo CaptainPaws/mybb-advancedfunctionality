@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.6.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.7.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -164,7 +164,39 @@ function af_adaptivethemeframework_init(): void
     global $plugins;
     if (is_object($plugins) && method_exists($plugins, 'add_hook')) {
         $plugins->add_hook('pre_output_page', 'af_adaptivethemeframework_mark_page', 100);
+        // MyBB has finished deriving every forumdisplay value at this point.
+        // Compose provider slots here rather than teaching providers about the
+        // topic-card DOM or patching their legacy template variables.
+        $plugins->add_hook('forumdisplay_thread_end', 'af_adaptivethemeframework_compose_thread_card', 100);
     }
+}
+
+/** Remove the table cell owned by a stock child template, retaining its body. */
+function af_adaptivethemeframework_topic_cell_content(string $html): string
+{
+    if (preg_match('~^\s*<td\b[^>]*>(.*)</td>\s*$~is', $html, $match)) {
+        return (string)$match[1];
+    }
+    return $html;
+}
+
+/** Compose forumdisplay-only values consumed by the owned topic-card seed. */
+function af_adaptivethemeframework_compose_thread_card(): void
+{
+    global $thread, $fid, $rating, $modbit;
+
+    if (!is_array($thread)) {
+        return;
+    }
+    $context = af_adaptivethemeframework_thread_card_context($thread, (int)$fid);
+    $thread['atf_meta_chips'] = af_adaptivethemeframework_render_slot('thread.meta_chips', $context);
+    $thread['atf_lastposter_avatar'] = af_adaptivethemeframework_render_slot('thread.lastposter_avatar', $context);
+
+    // The stock rating and moderation child templates are <td> elements. The
+    // card is deliberately not a restyled table row, so retain their complete
+    // controls/content while dropping only that obsolete outer table cell.
+    $thread['atf_rating'] = af_adaptivethemeframework_topic_cell_content((string)($rating ?? ''));
+    $thread['atf_modbit'] = af_adaptivethemeframework_topic_cell_content((string)($modbit ?? ''));
 }
 
 /** Add the activation marker and resolve server-rendered forum-card slots. */
@@ -424,6 +456,7 @@ function af_adaptivethemeframework_template_seeds(): array
         'index' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/index.html',
         'forumbit_depth2_forum' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum.html',
         'forumbit_depth2_forum_lastpost' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum_lastpost.html',
+        'forumdisplay_thread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay_thread.html',
     ];
 }
 
