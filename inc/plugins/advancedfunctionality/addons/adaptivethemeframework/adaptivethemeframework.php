@@ -18,6 +18,57 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_I
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.5.0');
 
+/**
+ * Register a narrowly scoped compatibility normalizer.
+ *
+ * A normalizer receives the template name and current bytes. It must return
+ * null when it cannot make an exact, attributable transformation, or an array
+ * containing normalized_content, owner, source and transformation_type.
+ * ATF deliberately does not inspect or clean third-party markup itself.
+ */
+function af_adaptivethemeframework_register_compatibility_normalizer(string $identity, callable $normalizer): bool
+{
+    $identity = strtolower(trim($identity));
+    if (!preg_match('~^[a-z][a-z0-9_.:-]*$~', $identity)
+        || isset($GLOBALS['af_adaptivethemeframework_compatibility_normalizers'][$identity])) {
+        return false;
+    }
+    $GLOBALS['af_adaptivethemeframework_compatibility_normalizers'][$identity] = $normalizer;
+    return true;
+}
+
+/** @return array<string, string>|null */
+function af_adaptivethemeframework_normalize_compatible_template(string $templateName, string $current): ?array
+{
+    // Providers may load earlier than ATF during an enable request. Import
+    // their declarations now, without knowing which addons supplied them.
+    foreach (($GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizers'] ?? []) as $identity => $normalizer) {
+        if (is_callable($normalizer)) {
+            af_adaptivethemeframework_register_compatibility_normalizer((string)$identity, $normalizer);
+        }
+    }
+    unset($GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizers']);
+
+    foreach (($GLOBALS['af_adaptivethemeframework_compatibility_normalizers'] ?? []) as $normalizer) {
+        $result = $normalizer($templateName, $current);
+        if (!is_array($result)
+            || !array_key_exists('normalized_content', $result)
+            || trim((string)($result['owner'] ?? '')) === ''
+            || trim((string)($result['source'] ?? '')) === ''
+            || trim((string)($result['transformation_type'] ?? '')) === '') {
+            continue;
+        }
+        $normalized = (string)$result['normalized_content'];
+        // A provider cannot claim compatibility without changing any bytes.
+        if ($normalized === $current) {
+            continue;
+        }
+        $result['normalized_content'] = $normalized;
+        return $result;
+    }
+    return null;
+}
+
 function af_adaptivethemeframework_init(): void
 {
     global $plugins;
@@ -521,10 +572,15 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                 $matchesPrevious = $previousValid && hash_equals($previousChecksum, $currentChecksum);
                 $matchesInstalled = $installedChecksum !== '' && hash_equals($installedChecksum, $currentChecksum);
                 $matchesSeed = hash_equals($seedChecksum, $currentChecksum);
+                $compatibility = (!$matchesPrevious && !$matchesInstalled && !$matchesSeed)
+                    ? af_adaptivethemeframework_normalize_compatible_template($templateName, $current)
+                    : null;
+                $matchesCompatibleSeed = $compatibility !== null
+                    && hash_equals($seedChecksum, af_adaptivethemeframework_checksum($compatibility['normalized_content']));
 
                 // Reconcile every activation from checksum evidence. States such as
                 // manual_override are diagnostic, not permanent locks.
-                if (!$matchesPrevious && !$matchesInstalled && !($matchesSeed && $previousValid)) {
+                if (!$matchesPrevious && !$matchesInstalled && !($matchesSeed && $previousValid) && !$matchesCompatibleSeed) {
                     af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
                     $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => af_adaptivethemeframework_db_string('manual_override'), 'current_content' => af_adaptivethemeframework_db_string($current), 'updated_at' => $now], "id='".(int)$lease['id']."'");
                     throw af_adaptivethemeframework_ownership_conflict($templateName, $sid, (string)$lease['ownership_state'], $currentChecksum, $previousChecksum, $installedChecksum, $seedChecksum);
@@ -533,7 +589,7 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                 // Preserve the original pre-ATF backup. Only normalize ownership
                 // and seed metadata; never replace previous_* during recovery.
                 af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
-                $provenInstalledChecksum = $matchesSeed ? $seedChecksum : $installedChecksum;
+                $provenInstalledChecksum = ($matchesSeed || $matchesCompatibleSeed) ? $seedChecksum : $installedChecksum;
                 $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['atf_seed_content' => af_adaptivethemeframework_db_string($seed), 'atf_seed_checksum' => af_adaptivethemeframework_db_string($seedChecksum), 'atf_installed_checksum' => af_adaptivethemeframework_db_string($provenInstalledChecksum), 'atf_version' => af_adaptivethemeframework_db_string(AF_ADAPTIVETHEMEFRAMEWORK_VERSION), 'ownership_state' => af_adaptivethemeframework_db_string('owned'), 'current_content' => af_adaptivethemeframework_db_string(''), 'updated_at' => $now, 'restored_at' => 0], "id='".(int)$lease['id']."'");
                 if ($matchesSeed) {
                     continue;

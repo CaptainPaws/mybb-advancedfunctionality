@@ -117,6 +117,7 @@ function af_apa_ensure_setting($gid, $name, $title, $desc, $optionscode, $value,
 /* -------------------- INIT / HOOKS -------------------- */
 function af_advancedposteravatar_init()
 {
+    af_apa_register_atf_compatibility_normalizer();
     // Аддон грузится ядром AF в global_start
     if (!af_apa_is_frontend()) {
         return;
@@ -283,6 +284,51 @@ function af_apa_atf_is_active(): bool
     return function_exists('af_adaptivethemeframework_register_component')
         && function_exists('af_is_addon_enabled')
         && af_is_addon_enabled('adaptivethemeframework');
+}
+
+/** Register APA's exact marker cleanup with ATF; ATF itself stays addon-agnostic. */
+function af_apa_register_atf_compatibility_normalizer(): bool
+{
+    if (!function_exists('af_adaptivethemeframework_register_compatibility_normalizer')) {
+        $GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizers'][AF_APA_ID . '::legacy_markers']
+            = 'af_apa_normalize_atf_template';
+        return true;
+    }
+    return af_adaptivethemeframework_register_compatibility_normalizer(
+        AF_APA_ID . '::legacy_markers',
+        'af_apa_normalize_atf_template'
+    );
+}
+
+/** @return array<string, string>|null */
+function af_apa_normalize_atf_template(string $templateName, string $current): ?array
+{
+    $markers = [
+        'forumbit_depth1_forum_lastpost' => '<apa_uid_[{$lastpost_data[\'lastposteruid\']}]>',
+        'forumbit_depth2_forum_lastpost' => '<apa_uid_[{$lastpost_data[\'lastposteruid\']}]>',
+        'forumdisplay_thread' => '<apa_uid_[{$thread[\'lastposteruid\']}]>',
+    ];
+    if (!isset($markers[$templateName])) {
+        return null;
+    }
+    $normalized = str_replace([$markers[$templateName], '<apa_end>'], '', $current);
+    if ($normalized === $current) {
+        return null;
+    }
+    return [
+        'normalized_content' => $normalized,
+        'owner' => AF_APA_ID,
+        'source' => 'legacy_template_markers',
+        'transformation_type' => 'exact_known_marker_removal',
+    ];
+}
+
+/** ATF ownership is derived from its seed catalogue, including future additions. */
+function af_apa_template_is_atf_owned(string $templateName): bool
+{
+    return af_apa_atf_is_active()
+        && function_exists('af_adaptivethemeframework_template_seeds')
+        && array_key_exists($templateName, af_adaptivethemeframework_template_seeds());
 }
 
 /** Register the forum-card avatar without transferring data ownership to ATF. */
@@ -569,11 +615,13 @@ function af_apa_templates_apply($install = true)
             '#^(?!.*' . preg_quote($markerIndexStart, '#') . ')(.*)$#s',
             $markerIndexStart . '$1'
         );
-        find_replace_templatesets(
-            'forumbit_depth2_forum_lastpost',
-            '#^(?!.*' . preg_quote($markerIndexStart, '#') . ')(.*)$#s',
-            $markerIndexStart . '$1'
-        );
+        if (!af_apa_template_is_atf_owned('forumbit_depth2_forum_lastpost')) {
+            find_replace_templatesets(
+                'forumbit_depth2_forum_lastpost',
+                '#^(?!.*' . preg_quote($markerIndexStart, '#') . ')(.*)$#s',
+                $markerIndexStart . '$1'
+            );
+        }
 
         // end
         find_replace_templatesets(
@@ -581,11 +629,13 @@ function af_apa_templates_apply($install = true)
             '#^(?!.*' . preg_quote($markerEnd, '#') . ')(.*)$#s',
             '$1' . $markerEnd
         );
-        find_replace_templatesets(
-            'forumbit_depth2_forum_lastpost',
-            '#^(?!.*' . preg_quote($markerEnd, '#') . ')(.*)$#s',
-            '$1' . $markerEnd
-        );
+        if (!af_apa_template_is_atf_owned('forumbit_depth2_forum_lastpost')) {
+            find_replace_templatesets(
+                'forumbit_depth2_forum_lastpost',
+                '#^(?!.*' . preg_quote($markerEnd, '#') . ')(.*)$#s',
+                '$1' . $markerEnd
+            );
+        }
 
         /* ---------- FORUMDISPLAY (threadlist lastpost column) ---------- */
         /**
@@ -598,6 +648,10 @@ function af_apa_templates_apply($install = true)
          * 2) START вставляем ПЕРЕД {$lastpostdate} (но только в том td, где дальше есть {$lastposterlink}).
          * 3) END вставляем ПЕРЕД </td> ЭТОГО ЖЕ td (после START).
          */
+
+        if (af_apa_template_is_atf_owned('forumdisplay_thread')) {
+            return;
+        }
 
         // 1) чистим следы старых установок в forumdisplay_thread
         find_replace_templatesets('forumdisplay_thread', '#' . preg_quote($markerFDStart, '#') . '#', '', 0);
@@ -631,13 +685,21 @@ function af_apa_templates_apply($install = true)
     } else {
         // удаляем маркеры
         find_replace_templatesets('forumbit_depth1_forum_lastpost', '#' . preg_quote($markerIndexStart, '#') . '#', '', 0);
-        find_replace_templatesets('forumbit_depth2_forum_lastpost', '#' . preg_quote($markerIndexStart, '#') . '#', '', 0);
+        if (!af_apa_template_is_atf_owned('forumbit_depth2_forum_lastpost')) {
+            find_replace_templatesets('forumbit_depth2_forum_lastpost', '#' . preg_quote($markerIndexStart, '#') . '#', '', 0);
+        }
 
-        find_replace_templatesets('forumdisplay_thread', '#' . preg_quote($markerFDStart, '#') . '#', '', 0);
+        if (!af_apa_template_is_atf_owned('forumdisplay_thread')) {
+            find_replace_templatesets('forumdisplay_thread', '#' . preg_quote($markerFDStart, '#') . '#', '', 0);
+        }
 
         find_replace_templatesets('forumbit_depth1_forum_lastpost', '#' . preg_quote($markerEnd, '#') . '#', '', 0);
-        find_replace_templatesets('forumbit_depth2_forum_lastpost', '#' . preg_quote($markerEnd, '#') . '#', '', 0);
-        find_replace_templatesets('forumdisplay_thread', '#' . preg_quote($markerEnd, '#') . '#', '', 0);
+        if (!af_apa_template_is_atf_owned('forumbit_depth2_forum_lastpost')) {
+            find_replace_templatesets('forumbit_depth2_forum_lastpost', '#' . preg_quote($markerEnd, '#') . '#', '', 0);
+        }
+        if (!af_apa_template_is_atf_owned('forumdisplay_thread')) {
+            find_replace_templatesets('forumdisplay_thread', '#' . preg_quote($markerEnd, '#') . '#', '', 0);
+        }
     }
 }
 
