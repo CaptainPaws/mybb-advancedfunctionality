@@ -118,15 +118,22 @@ $seed = af_adaptivethemeframework_index_seed();
 // A: no ledger -> current schema -> acquire.
 $db = new AtfDatabase();
 $previous = $db->tables['templates'][1]['template'];
+$originalTemplates = array_column(array_filter($db->tables['templates'], static fn($row) => (int)$row['sid'] === 1), 'template', 'title');
 if (!af_adaptivethemeframework_activate() || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 3 || $db->tables['templates'][1]['template'] !== $seed) throw new RuntimeException('fresh acquisition failed');
 $lease = $db->tables['af_adaptivethemeframework_template_ownership'][0];
 if ($lease['previous_content'] !== $previous || $lease['atf_seed_content'] !== $seed) throw new RuntimeException('SQL-safe lease did not round-trip raw template content');
 $master = $db->tables['templates'][0];
 // activate -> deactivate -> activate must restore and reuse the one natural-key row.
 af_adaptivethemeframework_deactivate();
-if ($db->tables['templates'][1]['template'] !== $previous) throw new RuntimeException('deactivation did not restore previous content');
+foreach ($originalTemplates as $title => $content) {
+    $restored = array_values(array_filter($db->tables['templates'], static fn($row) => (int)$row['sid'] === 1 && $row['title'] === $title));
+    if (count($restored) !== 1 || $restored[0]['template'] !== $content) throw new RuntimeException("deactivation did not restore {$title}");
+}
 af_adaptivethemeframework_activate();
 if (count($db->tables['af_adaptivethemeframework_template_ownership']) !== 3 || $db->tables['templates'][0] !== $master) throw new RuntimeException('repeat lifecycle made a backup chain or changed master');
+foreach ($db->tables['af_adaptivethemeframework_template_ownership'] as $row) {
+    if ($row['previous_content'] !== $originalTemplates[$row['template_name']] || $row['ownership_state'] !== 'owned') throw new RuntimeException("repeat lifecycle lost backup for {$row['template_name']}");
+}
 
 // B/C: previous schema is ALTERed in place; legacy bytes survive and fail closed.
 $legacy = ['id'=>7, 'template_name'=>'index', 'template_sid'=>1, 'previous_content'=>'IRREPLACEABLE BACKUP'];
@@ -154,6 +161,38 @@ af_adaptivethemeframework_activate();
 $db->tables['templates'][1]['template'] = 'MANUAL EDIT';
 $conflict = af_adaptivethemeframework_activate() === false;
 if (!$conflict || $db->tables['templates'][1]['template'] !== 'MANUAL EDIT' || $db->tables['af_adaptivethemeframework_template_ownership'][0]['ownership_state'] !== 'manual_override') throw new RuntimeException('manual conflict was overwritten');
+if (($GLOBALS['af_adaptivethemeframework_activation_stage'] ?? '') !== 'update_lease[template=index,sid=1]') throw new RuntimeException('conflict stage omits template identity');
+
+// A diagnostic state is recoverable when checksum evidence says the original
+// pre-ATF value is live again. The original backup must remain unchanged.
+$db->tables['templates'][1]['template'] = $previous;
+if (!af_adaptivethemeframework_activate()) throw new RuntimeException('manual_override with previous content did not recover');
+$lease = $db->tables['af_adaptivethemeframework_template_ownership'][0];
+if ($lease['ownership_state'] !== 'owned' || $lease['previous_content'] !== $previous || $db->tables['templates'][1]['template'] !== $seed) throw new RuntimeException('recovery replaced original backup');
+
+// An installed old seed is proof of ownership and may be upgraded in place.
+$newSeedPath = tempnam(sys_get_temp_dir(), 'atf-seed-');
+$newSeed = $seed . "\n<!-- regression seed upgrade -->";
+file_put_contents($newSeedPath, $newSeed);
+if (!af_adaptivethemeframework_acquire_template('index', $newSeedPath) || $db->tables['templates'][1]['template'] !== $newSeed) throw new RuntimeException('old installed seed was not upgraded');
+$lease = $db->tables['af_adaptivethemeframework_template_ownership'][0];
+if ($lease['previous_content'] !== $previous || $lease['atf_installed_checksum'] !== hash('sha256', $newSeed)) throw new RuntimeException('seed upgrade damaged lease');
+
+// If deployment put the new seed live first, reconcile it using the valid
+// original backup rather than creating a backup chain.
+$deployedSeed = $newSeed . "\n<!-- deployed ahead of lease -->";
+file_put_contents($newSeedPath, $deployedSeed);
+$db->tables['templates'][1]['template'] = $deployedSeed;
+$db->tables['af_adaptivethemeframework_template_ownership'][0]['ownership_state'] = 'migration_review';
+if (!af_adaptivethemeframework_acquire_template('index', $newSeedPath)) throw new RuntimeException('live current seed did not reconcile');
+$lease = $db->tables['af_adaptivethemeframework_template_ownership'][0];
+if ($lease['ownership_state'] !== 'owned' || $lease['previous_content'] !== $previous || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 3) throw new RuntimeException('current-seed reconciliation damaged backup');
+unlink($newSeedPath);
+
+$diagnostic = af_adaptivethemeframework_ownership_conflict('index', 1, 'manual_override', 'current-hash', 'previous-hash', 'installed-hash', 'seed-hash')->getMessage();
+foreach (['template=index', 'sid=1', 'state=manual_override', 'current=current-hash', 'previous=previous-hash', 'installed=installed-hash', 'seed=seed-hash'] as $field) {
+    if (!str_contains($diagnostic, $field)) throw new RuntimeException("ownership diagnostic omits {$field}");
+}
 
 // E: a set inheriting the master receives an escaped override, then release
 // removes it and reacquisition reuses the same lease instead of chaining backups.

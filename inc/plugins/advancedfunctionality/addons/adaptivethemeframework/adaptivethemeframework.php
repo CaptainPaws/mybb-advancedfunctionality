@@ -455,6 +455,28 @@ function af_adaptivethemeframework_acquire_templates(): bool
     return true;
 }
 
+/** Build a body-free ownership error containing all checksum evidence. */
+function af_adaptivethemeframework_ownership_conflict(
+    string $templateName,
+    int $sid,
+    string $state,
+    string $currentChecksum,
+    string $previousChecksum,
+    string $installedChecksum,
+    string $seedChecksum
+): RuntimeException {
+    return new RuntimeException(
+        "ATF ownership conflict:\n"
+        . 'template=' . $templateName . "\n"
+        . 'sid=' . $sid . "\n"
+        . 'state=' . $state . "\n"
+        . 'current=' . $currentChecksum . "\n"
+        . 'previous=' . $previousChecksum . "\n"
+        . 'installed=' . $installedChecksum . "\n"
+        . 'seed=' . $seedChecksum
+    );
+}
+
 function af_adaptivethemeframework_acquire_template(string $templateName, string $seedPath): bool
 {
     global $db;
@@ -466,7 +488,7 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
         if (!af_adaptivethemeframework_ensure_ownership_schema()) {
             throw new RuntimeException('ownership schema validation failed');
         }
-        af_adaptivethemeframework_activation_stage('validate_template_seed');
+        af_adaptivethemeframework_activation_stage('validate_template_seed[template=' . $templateName . ']');
         $seed = @file_get_contents($seedPath);
         $seed = is_string($seed) ? $seed : '';
         if ($seed === '') {
@@ -474,7 +496,7 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
         }
         $seedChecksum = af_adaptivethemeframework_checksum($seed);
         $now = defined('TIME_NOW') ? TIME_NOW : time();
-        af_adaptivethemeframework_activation_stage('load_master_template');
+        af_adaptivethemeframework_activation_stage('load_master_template[template=' . $templateName . ']');
         $master = $db->fetch_array($db->simple_select('templates', '*', "title='{$templateNameSql}' AND sid='-2'", ['limit' => 1]));
         if (!$master) {
             throw new RuntimeException('master template (sid=-2) was not found');
@@ -483,36 +505,46 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
         $sets = $db->simple_select('templatesets', 'sid', 'sid>0', ['order_by' => 'sid']);
         while ($set = $db->fetch_array($sets)) {
             $sid = (int)$set['sid'];
-            af_adaptivethemeframework_activation_stage('inspect_template[sid=' . $sid . ']');
+            af_adaptivethemeframework_activation_stage('inspect_template[template=' . $templateName . ',sid=' . $sid . ']');
             $live = $db->fetch_array($db->simple_select('templates', '*', "title='{$templateNameSql}' AND sid='{$sid}'", ['limit' => 1]));
             $exists = !empty($live);
             $current = (string)($exists ? $live['template'] : $master['template']);
-            af_adaptivethemeframework_activation_stage('load_lease[sid=' . $sid . ']');
+            af_adaptivethemeframework_activation_stage('load_lease[template=' . $templateName . ',sid=' . $sid . ']');
             $lease = $db->fetch_array($db->simple_select(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, '*', "template_sid='{$sid}' AND template_name='{$templateNameSql}'", ['limit' => 1]));
 
-            if ($lease && $lease['ownership_state'] !== 'restored') {
-                if ($lease['ownership_state'] !== 'owned' || !hash_equals((string)$lease['atf_installed_checksum'], af_adaptivethemeframework_checksum($current))) {
-                    af_adaptivethemeframework_activation_stage('update_lease[sid=' . $sid . ']');
+            if ($lease) {
+                $currentChecksum = af_adaptivethemeframework_checksum($current);
+                $previousChecksum = (string)$lease['previous_checksum'];
+                $installedChecksum = (string)$lease['atf_installed_checksum'];
+                $previousValid = $previousChecksum !== ''
+                    && hash_equals($previousChecksum, af_adaptivethemeframework_checksum((string)$lease['previous_content']));
+                $matchesPrevious = $previousValid && hash_equals($previousChecksum, $currentChecksum);
+                $matchesInstalled = $installedChecksum !== '' && hash_equals($installedChecksum, $currentChecksum);
+                $matchesSeed = hash_equals($seedChecksum, $currentChecksum);
+
+                // Reconcile every activation from checksum evidence. States such as
+                // manual_override are diagnostic, not permanent locks.
+                if (!$matchesPrevious && !$matchesInstalled && !($matchesSeed && $previousValid)) {
+                    af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
                     $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => af_adaptivethemeframework_db_string('manual_override'), 'current_content' => af_adaptivethemeframework_db_string($current), 'updated_at' => $now], "id='".(int)$lease['id']."'");
-                    throw new RuntimeException('template ownership cannot be proven for template set ' . $sid);
+                    throw af_adaptivethemeframework_ownership_conflict($templateName, $sid, (string)$lease['ownership_state'], $currentChecksum, $previousChecksum, $installedChecksum, $seedChecksum);
                 }
-                if (hash_equals((string)$lease['atf_seed_checksum'], $seedChecksum)) {
+
+                // Preserve the original pre-ATF backup. Only normalize ownership
+                // and seed metadata; never replace previous_* during recovery.
+                af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
+                $provenInstalledChecksum = $matchesSeed ? $seedChecksum : $installedChecksum;
+                $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['atf_seed_content' => af_adaptivethemeframework_db_string($seed), 'atf_seed_checksum' => af_adaptivethemeframework_db_string($seedChecksum), 'atf_installed_checksum' => af_adaptivethemeframework_db_string($provenInstalledChecksum), 'atf_version' => af_adaptivethemeframework_db_string(AF_ADAPTIVETHEMEFRAMEWORK_VERSION), 'ownership_state' => af_adaptivethemeframework_db_string('owned'), 'current_content' => af_adaptivethemeframework_db_string(''), 'updated_at' => $now, 'restored_at' => 0], "id='".(int)$lease['id']."'");
+                if ($matchesSeed) {
                     continue;
                 }
-                // Persist the intended checksum before changing the live template.
-                af_adaptivethemeframework_activation_stage('update_lease[sid=' . $sid . ']');
-                $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['atf_seed_content' => af_adaptivethemeframework_db_string($seed), 'atf_seed_checksum' => af_adaptivethemeframework_db_string($seedChecksum), 'atf_installed_checksum' => af_adaptivethemeframework_db_string($seedChecksum), 'atf_version' => af_adaptivethemeframework_db_string(AF_ADAPTIVETHEMEFRAMEWORK_VERSION), 'updated_at' => $now], "id='".(int)$lease['id']."'");
             } else {
                 $record = ['template_name' => af_adaptivethemeframework_db_string($templateName), 'template_sid' => $sid, 'template_tid' => $exists ? (int)$live['tid'] : 0, 'previous_exists' => $exists ? 1 : 0, 'previous_content' => af_adaptivethemeframework_db_string($current), 'previous_checksum' => af_adaptivethemeframework_db_string(af_adaptivethemeframework_checksum($current)), 'previous_dateline' => (int)($exists ? ($live['dateline'] ?? 0) : ($master['dateline'] ?? 0)), 'atf_seed_content' => af_adaptivethemeframework_db_string($seed), 'atf_seed_checksum' => af_adaptivethemeframework_db_string($seedChecksum), 'atf_installed_checksum' => af_adaptivethemeframework_db_string($seedChecksum), 'atf_version' => af_adaptivethemeframework_db_string(AF_ADAPTIVETHEMEFRAMEWORK_VERSION), 'ownership_state' => af_adaptivethemeframework_db_string('owned'), 'current_content' => af_adaptivethemeframework_db_string(''), 'created_at' => $now, 'updated_at' => $now, 'restored_at' => 0];
-                af_adaptivethemeframework_activation_stage(($lease ? 'update_lease' : 'create_lease') . '[sid=' . $sid . ']');
-                if ($lease) {
-                    $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, $record, "id='".(int)$lease['id']."'");
-                } else {
-                    $db->insert_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, $record);
-                }
+                af_adaptivethemeframework_activation_stage('create_lease[template=' . $templateName . ',sid=' . $sid . ']');
+                $db->insert_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, $record);
             }
 
-            af_adaptivethemeframework_activation_stage(($exists ? 'write_template' : 'insert_template_override') . '[sid=' . $sid . ']');
+            af_adaptivethemeframework_activation_stage(($exists ? 'write_template' : 'insert_template_override') . '[template=' . $templateName . ',sid=' . $sid . ']');
             if ($exists) {
                 $db->update_query('templates', ['template' => af_adaptivethemeframework_db_string($seed), 'dateline' => $now], "tid='".(int)$live['tid']."'");
                 $tid = (int)$live['tid'];
@@ -521,12 +553,13 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                 $tid = (int)$db->insert_query('templates', ['title' => af_adaptivethemeframework_db_string($templateName), 'template' => af_adaptivethemeframework_db_string($seed), 'sid' => $sid, 'version' => af_adaptivethemeframework_db_string('1840'), 'status' => af_adaptivethemeframework_db_string(''), 'dateline' => $now]);
                 $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['template_tid' => $tid], "template_sid='{$sid}' AND template_name='{$templateNameSql}'");
             }
-            af_adaptivethemeframework_activation_stage('verify_template[sid=' . $sid . ']');
+            af_adaptivethemeframework_activation_stage('verify_template[template=' . $templateName . ',sid=' . $sid . ']');
             $installed = $db->fetch_array($db->simple_select('templates', 'tid,template', "title='{$templateNameSql}' AND sid='{$sid}'", ['limit' => 1]));
             if (!$installed || !hash_equals($seedChecksum, af_adaptivethemeframework_checksum((string)$installed['template']))) {
                 $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => af_adaptivethemeframework_db_string('write_failed'), 'updated_at' => $now], "template_sid='{$sid}' AND template_name='{$templateNameSql}'");
-                throw new RuntimeException('installed template checksum verification failed for template set ' . $sid);
+                throw new RuntimeException('installed template checksum verification failed for template ' . $templateName . ' in template set ' . $sid);
             }
+            $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['atf_installed_checksum' => af_adaptivethemeframework_db_string($seedChecksum), 'ownership_state' => af_adaptivethemeframework_db_string('owned'), 'updated_at' => $now], "template_sid='{$sid}' AND template_name='{$templateNameSql}'");
         }
         return true;
     } catch (Throwable $error) {
@@ -548,7 +581,9 @@ function af_adaptivethemeframework_release_templates(): bool
     $ok = true;
     while ($lease = $db->fetch_array($query)) {
         $sid = (int)$lease['template_sid'];
-        $templateName = $db->escape_string((string)$lease['template_name']);
+        $templateNameRaw = (string)$lease['template_name'];
+        $templateName = $db->escape_string($templateNameRaw);
+        af_adaptivethemeframework_activation_stage('restore[template=' . $templateNameRaw . ',sid=' . $sid . ']');
         $live = $db->fetch_array($db->simple_select('templates', '*', "title='{$templateName}' AND sid='{$sid}'", ['limit' => 1]));
         if (!$live || af_adaptivethemeframework_checksum((string)$live['template']) !== $lease['atf_installed_checksum']) {
             $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => af_adaptivethemeframework_db_string('restore_conflict'), 'current_content' => af_adaptivethemeframework_db_string((string)($live['template'] ?? '')), 'updated_at' => $now], "id='".(int)$lease['id']."'");
