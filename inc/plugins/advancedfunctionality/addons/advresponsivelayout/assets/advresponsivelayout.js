@@ -8,9 +8,6 @@
 
   var MOBILE_QUERY = '(max-width: 767.98px)';
   var state = {
-    refs: null,
-    extraOpen: false,
-    extraSource: null,
     resizeTimer: null,
     activeTooltip: null,
     userdetailsTooltipTimer: null,
@@ -39,105 +36,10 @@
     return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
   }
 
-  function ensureRefs() {
-    if (state.refs) return state.refs;
-
-    var host = $('.af-rwd-main-nav-host');
-    if (!host) {
-      host = createEl('div', 'af-rwd-main-nav-host');
-
-      var bar = createEl('div', 'af-rwd-main-nav-bar');
-
-      var prevBtn = createEl('button', 'af-rwd-main-nav-scroll af-rwd-main-nav-scroll--prev');
-      prevBtn.type = 'button';
-      prevBtn.setAttribute('aria-label', 'Прокрутить меню влево');
-      prevBtn.textContent = '‹';
-
-      var shell = createEl('div', 'af-rwd-main-nav-shell');
-
-      var actions = createEl('div', 'af-rwd-main-nav-actions');
-
-      var burger = createEl('button', 'af-rwd-right-trigger');
-      burger.type = 'button';
-      burger.setAttribute('aria-label', 'Открыть дополнительное меню');
-      burger.setAttribute('aria-expanded', 'false');
-      burger.innerHTML = '<span class="af-rwd-right-trigger__icon" aria-hidden="true"></span>';
-
-      var nextBtn = createEl('button', 'af-rwd-main-nav-scroll af-rwd-main-nav-scroll--next');
-      nextBtn.type = 'button';
-      nextBtn.setAttribute('aria-label', 'Прокрутить меню вправо');
-      nextBtn.textContent = '›';
-
-      actions.appendChild(burger);
-
-      bar.appendChild(prevBtn);
-      bar.appendChild(shell);
-      bar.appendChild(actions);
-      bar.appendChild(nextBtn);
-      host.appendChild(bar);
-      document.body.appendChild(host);
-    }
-
-    var overlay = $('.af-rwd-extra-overlay');
-    if (!overlay) {
-      overlay = createEl('div', 'af-rwd-extra-overlay');
-      document.body.appendChild(overlay);
-    }
-
-    var drawer = $('.af-rwd-right-menu');
-    if (!drawer) {
-      drawer = createEl('aside', 'af-rwd-right-menu');
-      document.body.appendChild(drawer);
-    }
-
-    state.refs = {
-      host: host,
-      shell: $('.af-rwd-main-nav-shell', host),
-      prevBtn: $('.af-rwd-main-nav-scroll--prev', host),
-      nextBtn: $('.af-rwd-main-nav-scroll--next', host),
-      burger: $('.af-rwd-right-trigger', host),
-      overlay: overlay,
-      drawer: drawer
-    };
-
-    bindStaticEvents();
-    return state.refs;
-  }
-
-  function bindStaticEvents() {
-    var refs = state.refs;
-    if (!refs || refs.host.__afRwdBound) return;
-
-    refs.prevBtn.addEventListener('click', function () {
-      refs.shell.scrollBy({ left: -160, behavior: 'smooth' });
-    });
-
-    refs.nextBtn.addEventListener('click', function () {
-      refs.shell.scrollBy({ left: 160, behavior: 'smooth' });
-    });
-
-    refs.shell.addEventListener('scroll', syncNavButtons, { passive: true });
-
-    refs.burger.addEventListener('click', function () {
-      if (!isMobile() || !body.classList.contains('af-rwd-extra-nav-mounted')) return;
-      setDrawerOpen(!state.extraOpen);
-    });
-
-    refs.overlay.addEventListener('click', function () {
-      setDrawerOpen(false);
-    });
-
+  function bindLayoutEvents() {
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') {
-        setDrawerOpen(false);
-        clearActiveUserdetailsPopup();
-      }
+      if (e.key === 'Escape') clearActiveUserdetailsPopup();
     });
-
-    window.addEventListener('resize', function () {
-      clearTimeout(state.resizeTimer);
-      state.resizeTimer = setTimeout(applyMode, 80);
-    }, { passive: true });
 
     document.addEventListener('click', function (e) {
       var railStatTrigger = e.target.closest(
@@ -145,28 +47,22 @@
         '.af-apui-postbit-rail .af-apui-stat-item__icon, ' +
         '.af-apui-postbit-rail .af-apui-stat-item__value'
       );
-
       if (railStatTrigger && !railStatTrigger.closest('.post_controls')) {
-        var railStatItem = railStatTrigger.closest('.af-apui-stat-item') || railStatTrigger;
-        normalizeRailStatTooltipSource(railStatItem);
+        normalizeRailStatTooltipSource(railStatTrigger.closest('.af-apui-stat-item') || railStatTrigger);
         clearActiveUserdetailsPopup();
         return;
       }
 
       var trigger = e.target.closest(
-        '.author_statistics .af-apui-stat-item__value, ' +
-        '.author_statistics .af-apui-stat-item__trigger, ' +
+        '.author_statistics .af-apui-stat-item__value, .author_statistics .af-apui-stat-item__trigger, ' +
         '.author_statistics a, .author_statistics button, .author_statistics [role="button"], ' +
-        '.af-apui-postbit-userdetails .af-apui-stat-item__value, ' +
-        '.af-apui-postbit-userdetails .af-apui-stat-item__trigger, ' +
+        '.af-apui-postbit-userdetails .af-apui-stat-item__value, .af-apui-postbit-userdetails .af-apui-stat-item__trigger, ' +
         '.af-apui-postbit-userdetails a, .af-apui-postbit-userdetails button, .af-apui-postbit-userdetails [role="button"]'
       );
-
       if (trigger && !trigger.closest('.post_controls')) {
         scheduleUserdetailsPopupPosition(trigger);
         return;
       }
-
       if (state.activeTooltip) {
         setTimeout(function () {
           if (!state.activeTooltip) return;
@@ -176,126 +72,7 @@
       }
     });
 
-    document.addEventListener('scroll', function () {
-      positionActiveUserdetailsPopup();
-    }, true);
-
-    refs.host.__afRwdBound = true;
-  }
-
-  function setDrawerOpen(open) {
-    var refs = ensureRefs();
-    state.extraOpen = !!open;
-    body.classList.toggle('af-rwd-right-menu-open', state.extraOpen);
-    refs.burger.setAttribute('aria-expanded', state.extraOpen ? 'true' : 'false');
-  }
-
-  function updateMainNavOffset() {
-    var refs = ensureRefs();
-    var h = refs.host.offsetHeight || 56;
-    document.documentElement.style.setProperty('--af-rwd-main-nav-offset', h + 'px');
-  }
-
-  function syncNavButtons() {
-    var refs = ensureRefs();
-    var maxScroll = Math.max(0, refs.shell.scrollWidth - refs.shell.clientWidth);
-    refs.prevBtn.disabled = refs.shell.scrollLeft <= 2;
-    refs.nextBtn.disabled = refs.shell.scrollLeft >= maxScroll - 2;
-  }
-
-  function findBestMainNavSource() {
-    var candidates = [];
-    var selectors = [
-      '#header ul.menu.top_links',
-      '#header .menu.top_links',
-      '.header ul.menu.top_links',
-      '.header .menu.top_links',
-      '#panel ul.menu.top_links',
-      'ul.menu.top_links'
-    ];
-
-    selectors.forEach(function (selector) {
-      $all(selector).forEach(function (node) {
-        if (candidates.indexOf(node) === -1) {
-          candidates.push(node);
-        }
-      });
-    });
-
-    if (!candidates.length) return null;
-
-    candidates.sort(function (a, b) {
-      var aLinks = a.querySelectorAll('li > a').length;
-      var bLinks = b.querySelectorAll('li > a').length;
-      return bLinks - aLinks;
-    });
-
-    return candidates[0];
-  }
-
-  function mountMainNav() {
-    var refs = ensureRefs();
-    refs.shell.innerHTML = '';
-    body.classList.remove('af-rwd-main-nav-mounted');
-
-    if (!isMobile()) return;
-
-    var source = findBestMainNavSource();
-    if (!source) return;
-
-    source.classList.add('af-rwd-main-nav-source');
-
-    var clone = source.cloneNode(true);
-    clone.classList.remove('af-rwd-main-nav-source');
-    clone.classList.add('af-rwd-main-nav-clone');
-
-    refs.shell.appendChild(clone);
-    body.classList.add('af-rwd-main-nav-mounted');
-
-    updateMainNavOffset();
-    syncNavButtons();
-  }
-
-  function findExtraNavSource() {
-    return state.extraSource || $('#panel .lower') || $('.panel .lower') || $('#header .lower') || $('.lower');
-  }
-
-  function mountExtraNav() {
-    var refs = ensureRefs();
-    body.classList.remove('af-rwd-extra-nav-mounted');
-
-    if (!isMobile()) {
-      restoreExtraNav();
-      refs.drawer.innerHTML = '';
-      return;
-    }
-
-    var source = findExtraNavSource();
-    if (!source) {
-      restoreExtraNav();
-      refs.drawer.innerHTML = '';
-      setDrawerOpen(false);
-      return;
-    }
-
-    if (state.extraSource && state.extraSource !== source) {
-      restoreNode(state.extraSource);
-      state.extraSource.classList.remove('af-rwd-extra-nav-source', 'af-rwd-extra-nav-live');
-    }
-
-    state.extraSource = source;
-    source.classList.add('af-rwd-extra-nav-source', 'af-rwd-extra-nav-live');
-
-    moveNode(source, refs.drawer);
-
-    body.classList.add('af-rwd-extra-nav-mounted');
-  }
-
-  function restoreExtraNav() {
-    if (state.extraSource) {
-      restoreNode(state.extraSource);
-      state.extraSource.classList.remove('af-rwd-extra-nav-live');
-    }
+    document.addEventListener('scroll', positionActiveUserdetailsPopup, true);
   }
 
   function moveNode(node, target, beforeNode, post) {
@@ -1030,41 +807,29 @@
   }
 
   function applyMode() {
-    ensureRefs();
-
     if (isMobile()) {
-      mountMainNav();
-      mountExtraNav();
       mountPostbitsMobile();
       normalizeRailButtonsMobile();
       markMobileTables();
       stabilizeAvatars();
       syncModalClass();
-      updateMainNavOffset();
-      syncNavButtons();
       positionActiveUserdetailsPopup();
     } else {
-      setDrawerOpen(false);
       clearActiveUserdetailsPopup();
-      restoreExtraNav();
       restoreRailButtonsDesktop();
       restorePostbitsDesktop();
       markMobileTables();
 
-      var refs = ensureRefs();
-      refs.shell.innerHTML = '';
-      refs.drawer.innerHTML = '';
-
-      body.classList.remove('af-rwd-main-nav-mounted', 'af-rwd-extra-nav-mounted', 'af-rwd-right-menu-open');
-
-      $all('.af-rwd-main-nav-source').forEach(function (node) {
-        node.classList.remove('af-rwd-main-nav-source');
-      });
     }
   }
 
   function init() {
+    bindLayoutEvents();
     applyMode();
+    window.addEventListener('resize', function () {
+      clearTimeout(state.resizeTimer);
+      state.resizeTimer = setTimeout(applyMode, 80);
+    }, { passive: true });
   }
 
   if (document.readyState === 'loading') {

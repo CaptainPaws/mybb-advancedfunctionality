@@ -28,10 +28,12 @@ function af_advresponsivelayout_install(): void
     );
 
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_enabled', 'Enable mobile responsive system', 'Enable/disable AF mobile responsive layout system.', 'yesno', '1', 1, $gid);
-    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_assets_blacklist', 'Assets blacklist', "Disable responsive assets on listed pages (one per line).\nExamples:\nindex.php\nmember.php?action=profile", 'textarea', "modcp.php\nmodcp.php?action=*\nadmin/index.php", 2, $gid);
+    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_assets_blacklist', 'Assets blacklist', "Disable responsive assets on listed pages (one per line).\nExamples:\nindex.php\nmember.php?action=profile", 'textarea', "admin/index.php", 2, $gid);
 
-    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_enable_sticky_main_nav', 'Enable sticky main nav', 'Keep the primary forum menu visible/sticky on mobile screens.', 'yesno', '1', 3, $gid);
-    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_enable_right_burger_menu', 'Enable right burger extra menu', 'Show right-side burger for extra/top/user menus while keeping main nav visible.', 'yesno', '1', 4, $gid);
+    // Navigation is owned exclusively by AdvancedMenu. Remove settings left by
+    // older releases rather than keeping a second mobile-menu implementation.
+    global $db;
+    $db->delete_query('settings', "name IN ('af_advresponsivelayout_enable_sticky_main_nav','af_advresponsivelayout_enable_right_burger_menu','af_advresponsivelayout_mobile_header_breakpoint')");
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_enable_table_wrap', 'Enable table wrapping', 'Auto-wrap wide content tables for horizontal scrolling.', 'yesno', '1', 5, $gid);
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_enable_media_fixes', 'Enable media fixes', 'Responsive constraints for images/video/iframes and long content.', 'yesno', '1', 6, $gid);
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_enable_modal_fixes', 'Enable modal fixes', 'Responsive behavior for modal/surface containers.', 'yesno', '1', 7, $gid);
@@ -41,12 +43,11 @@ function af_advresponsivelayout_install(): void
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_enable_compact_profile_mobile', 'Enable compact profile/usercp mobile layout', 'Apply mobile layout for profile hero, tabs, side panels and usercp blocks.', 'yesno', '1', 10, $gid);
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_enable_plugin_patches', 'Enable plugin-aware mobile patches', 'Responsive layout patches for AF plugins (Inventory/Shop/KB/CharacterSheets).', 'yesno', '1', 11, $gid);
 
-    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_mobile_header_breakpoint', 'Mobile header breakpoint (px)', 'Breakpoint where mobile header + right burger behavior becomes active.', 'numeric', '768', 12, $gid);
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_breakpoint_phone', 'Phone breakpoint (px)', 'Phone breakpoint used by responsive layout system.', 'numeric', '768', 13, $gid);
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_breakpoint_tablet', 'Tablet breakpoint (px)', 'Tablet breakpoint used by responsive layout system.', 'numeric', '1024', 14, $gid);
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_breakpoint_desktop', 'Desktop breakpoint (px)', 'Desktop breakpoint used by responsive layout system.', 'numeric', '1200', 15, $gid);
 
-    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_page_pad_mobile', 'Mobile page padding', 'Responsive page padding for narrow screens (CSS value).', 'text', '8px', 16, $gid);
+    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_page_pad_mobile', 'Mobile page padding', 'Responsive page padding for narrow screens (CSS value).', 'text', '12px', 16, $gid);
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_page_pad_desktop', 'Desktop page padding', 'Responsive page padding for desktop screens (CSS value).', 'text', '20px', 17, $gid);
 
     if (function_exists('rebuild_settings')) {
@@ -285,6 +286,7 @@ function af_advresponsivelayout_detect_page_aliases(string $script, string $acti
         'member.php' => 'af-rwd-member',
         'usercp.php' => 'af-rwd-usercp',
         'private.php' => 'af-rwd-private',
+        'modcp.php' => 'af-rwd-modcp',
         'postsactivity.php' => 'af-rwd-postsactivity',
         'userlist.php' => 'af-rwd-userlist',
         'search.php' => 'af-rwd-search',
@@ -346,7 +348,7 @@ function af_advresponsivelayout_add_body_classes(string $page): string
     $script = af_advresponsivelayout_current_script_name();
     $action = af_advresponsivelayout_normalize_action((string)$mybb->get_input('action'));
 
-    $classes = ['af-rwd-enabled', 'af-rwd-right-menu-closed'];
+    $classes = ['af-rwd-enabled'];
     if ($script !== '') {
         $classes[] = 'af-rwd-script-' . preg_replace('~[^a-z0-9_-]+~', '-', str_replace('.php', '', $script));
     }
@@ -356,14 +358,6 @@ function af_advresponsivelayout_add_body_classes(string $page): string
 
     foreach (af_advresponsivelayout_detect_page_aliases($script, $action) as $cls) {
         $classes[] = $cls;
-    }
-
-    if (af_advresponsivelayout_setting_enabled('af_advresponsivelayout_enable_sticky_main_nav', true)) {
-        $classes[] = 'af-rwd-main-nav-sticky';
-    }
-    if (af_advresponsivelayout_setting_enabled('af_advresponsivelayout_enable_right_burger_menu', true)) {
-        $classes[] = 'af-rwd-right-burger';
-        $classes[] = 'af-rwd-mobile-header';
     }
 
     if (af_advresponsivelayout_setting_enabled('af_advresponsivelayout_enable_table_wrap', true)) {
@@ -422,13 +416,11 @@ function af_advresponsivelayout_runtime_style_tag(): string
     $phone = max(360, (int)($mybb->settings['af_advresponsivelayout_breakpoint_phone'] ?? 768));
     $tablet = max($phone + 1, (int)($mybb->settings['af_advresponsivelayout_breakpoint_tablet'] ?? 1024));
     $desktop = max($tablet, (int)($mybb->settings['af_advresponsivelayout_breakpoint_desktop'] ?? 1200));
-    $headerBp = max(360, (int)($mybb->settings['af_advresponsivelayout_mobile_header_breakpoint'] ?? 768));
-
-    $padMobile = trim((string)($mybb->settings['af_advresponsivelayout_page_pad_mobile'] ?? '8px'));
+    $padMobile = trim((string)($mybb->settings['af_advresponsivelayout_page_pad_mobile'] ?? '12px'));
     $padDesktop = trim((string)($mybb->settings['af_advresponsivelayout_page_pad_desktop'] ?? '20px'));
 
     if (!preg_match('~^[0-9.]+(?:px|rem|em|vw|%)$~i', $padMobile)) {
-        $padMobile = '8px';
+        $padMobile = '12px';
     }
     if (!preg_match('~^[0-9.]+(?:px|rem|em|vw|%)$~i', $padDesktop)) {
         $padDesktop = '20px';
@@ -441,8 +433,9 @@ function af_advresponsivelayout_runtime_style_tag(): string
         . '--af-rwd-breakpoint-tablet:' . (int)$tablet . 'px;'
         . '--af-rwd-breakpoint-desktop:' . (int)$desktop . 'px;'
         . '--af-rwd-mobile-max:' . (int)$mobileMax . 'px;'
-        . '--af-rwd-mobile-header-breakpoint:' . (int)$headerBp . 'px;'
         . '--af-rwd-page-pad-mobile:' . htmlspecialchars_uni($padMobile) . ';'
+        . '--af-mobile-page-gap:' . htmlspecialchars_uni($padMobile) . ';'
+        . '--af-mobile-section-gap:12px;--af-mobile-card-gap:10px;'
         . '--af-rwd-page-pad-desktop:' . htmlspecialchars_uni($padDesktop) . ';'
         . '}</style>';
 }
