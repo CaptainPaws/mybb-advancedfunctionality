@@ -81,6 +81,7 @@ final class ActivationDb
 {
     public array $styles = [];
     public array $registry = [];
+    public bool $escapeValues = true;
     private int $nextSid = 10;
 
     public function table_exists(string $table): bool { return true; }
@@ -98,11 +99,17 @@ final class ActivationDb
         throw new RuntimeException('Unexpected SQL: '.$sql);
     }
 
-    public function escape_string(string $value): string { return addslashes($value); }
+    public function escape_string(string $value): string { return $this->escapeValues ? addslashes($value) : $value; }
     private function decodeStylesheetPayload(array $payload): array
     {
-        // MyBB's DB abstraction receives raw values and performs SQL escaping
-        // internally. The stored value therefore has to remain byte-identical.
+        // MyBB 1.8's query builder only adds surrounding SQL quotes. Simulate
+        // the server decoding the value which the caller escaped exactly once.
+        if (isset($payload['stylesheet'])) {
+            if (preg_match("~(?<!\\\\)'~", (string)$payload['stylesheet'])) {
+                throw new RuntimeException("You have an error in your SQL syntax near unescaped stylesheet quote");
+            }
+            $payload['stylesheet'] = stripslashes((string)$payload['stylesheet']);
+        }
         return $payload;
     }
     public function simple_select(string $table, string $fields = '*', string $where = '', array $options = []): array
@@ -181,6 +188,8 @@ eval(extractFunction($core, 'af_theme_stylesheet_section_id'));
 eval(extractFunction($core, 'af_theme_stylesheet_encode_section'));
 eval(extractFunction($core, 'af_theme_stylesheet_parse_bundle'));
 eval(extractFunction($core, 'af_theme_stylesheet_validate_bundle'));
+eval(extractFunction($core, 'af_theme_stylesheet_db_css'));
+eval(extractFunction($core, 'af_theme_stylesheet_sql_stage'));
 function af_theme_stylesheet_cache_row(int $themeTid, int $sid, string $css): array
 {
     global $db;
@@ -211,20 +220,51 @@ $state = array_values($db->registry)[0];
 assertSameValue(sha1($custom), $state['last_synced_checksum'], 'adoption did not record the current CSS hash');
 assertSameValue(1, $state['manual_override'], 'adopted CSS was not protected as a manual override');
 
-// Clean install creates one generated row and remains stable on activation.
+// Clean install uses the real production stylesheet which exposed the SQL
+// quoting bug. In particular it contains the single-quoted grid area names
+// immediately before .af-aam-toast rules.
+$productionCssPath = dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/advancedalertsandmentions/assets/advancedalertsandmentions.css';
+$productionCss = file_get_contents($productionCssPath);
+if (!is_string($productionCss)
+    || !str_contains($productionCss, "'avatar header'")
+    || !str_contains($productionCss, "'avatar body';")
+    || !str_contains($productionCss, 'column-gap: 8px;')
+    || !str_contains($productionCss, '.af-aam-toast')) {
+    throw new RuntimeException('Production advancedalertsandmentions CSS fixture is missing');
+}
 $enabledAddonCss = [
-    'layout' => ".card { grid-template-areas: 'avatar header' 'avatar body'; }",
-    'quoted-content' => ".quote::before { content: \"'\"; }",
-    'contraction' => ".note::after { content: \"it's\"; }",
+    'advancedalertsandmentions' => $productionCss,
 ];
+$db = new ActivationDb();
+$db->escapeValues = false;
+$stageDiagnostic = '';
+try {
+    af_theme_stylesheet_sync_bundle(1, false);
+} catch (RuntimeException $error) {
+    $stageDiagnostic = $error->getMessage();
+}
+if (!str_contains($stageDiagnostic, 'operation=sync_bundle theme_tid=1')
+    || !str_contains($stageDiagnostic, 'function=af_theme_stylesheet_sync_bundle')
+    || !str_contains($stageDiagnostic, 'stage=insert_themestylesheets')
+    || !str_contains($stageDiagnostic, 'addon=__af_bundle__')) {
+    throw new RuntimeException('Fresh INSERT exception lacks the SQL-stage diagnostic: '.$stageDiagnostic);
+}
+
 $db = new ActivationDb();
 $first = af_theme_stylesheet_sync_bundle(1, false);
 $sid = $first['sid'];
+$secondTheme = af_theme_stylesheet_sync_bundle(2, false);
+$secondSid = $secondTheme['sid'];
 $generated = $db->styles[$sid]['stylesheet'];
 for ($cycle = 1; $cycle <= 3; $cycle++) af_theme_stylesheet_sync_bundle(1, false);
 assertSameValue($generated, $db->styles[$sid]['stylesheet'], 'generated bundle grew across activations');
-assertSameValue(1, count($db->styles), 'clean activation duplicated stylesheet rows');
-assertSameValue(1, count($db->registry), 'clean activation duplicated registry rows');
+assertSameValue(2, count($db->styles), 'fresh sync did not create one stylesheet per theme');
+assertSameValue(2, count($db->registry), 'fresh sync did not create one registry row per theme');
+assertSameValue(true, $sid > 0 && $secondSid > 0, 'fresh inserts did not return positive SIDs');
+assertSameValue($sid, (int)$first['diagnostic']['registry_sid'], 'theme 1 registry/re-SELECT SID mismatch');
+assertSameValue($secondSid, (int)$secondTheme['diagnostic']['registry_sid'], 'theme 2 registry/re-SELECT SID mismatch');
+assertSameValue(true, $first['diagnostic']['insert_verified'], 'theme 1 INSERT re-SELECT was not confirmed');
+assertSameValue(true, $secondTheme['diagnostic']['insert_verified'], 'theme 2 INSERT re-SELECT was not confirmed');
 assertSameValue('global', $db->styles[$sid]['attachedto'], 'fresh bundle was not attached to every page');
 assertSameValue(AF_THEME_BUNDLE_NAME, $db->styles[$sid]['cachefile'], 'fresh bundle cachefile was not registered');
 $cleanParsed = af_theme_stylesheet_parse_bundle($db->styles[$sid]['stylesheet']);
@@ -319,4 +359,5 @@ assertSameValue($edited, $db->styles[$sid]['stylesheet'], 'activation overwrote 
 
 echo "AF activation SQL failure reproduced: {$reproduced}\n";
 echo "AF fresh public sync fixture: SID={$publicStyle['sid']}; sources={$publicSourceCount}; sections={$publicSectionCount}.\n";
+echo "AF production CSS fresh inserts: theme 1 SID={$sid}; theme 2 SID={$secondSid}; re-SELECT confirmed.\n";
 echo "AF activation bundle runtime regression checks passed.\n";
