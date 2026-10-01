@@ -520,6 +520,10 @@ class AF_Admin
             $op = 'set_file_mode';
         } elseif ($action === 'theme_stylesheets_set_theme_mode') {
             $op = 'set_theme_mode';
+        } elseif ($action === 'theme_stylesheets_set_file_mode_bulk') {
+            $op = 'set_file_mode_bulk';
+        } elseif ($action === 'theme_stylesheets_set_theme_mode_bulk') {
+            $op = 'set_theme_mode_bulk';
         } elseif ($action === 'theme_stylesheets_set_auto_mode') {
             $op = 'set_auto_mode';
         } elseif ($action === 'theme_stylesheets_sync_addon') {
@@ -657,6 +661,10 @@ class AF_Admin
         echo '</div>';
 
         echo '<div class="af-ts-top-actions">';
+        $bulkAddon = $addonFilter !== '' ? $addonFilter : '';
+        $bulkThemeTid = $themeFilter === 'current' ? $currentThemeTid : null;
+        echo self::renderThemeStylesheetActionForm('theme_stylesheets_set_theme_mode_bulk', $addonFilter !== '' ? $lang->af_theme_stylesheets_bulk_filtered_theme : ($themeFilter === 'current' ? $lang->af_theme_stylesheets_bulk_current_theme : $lang->af_theme_stylesheets_bulk_all_theme), $bulkAddon, true, false, $themeFilter, $bulkThemeTid, '', 'primary');
+        echo self::renderThemeStylesheetActionForm('theme_stylesheets_set_file_mode_bulk', $addonFilter !== '' ? $lang->af_theme_stylesheets_bulk_filtered_file : ($themeFilter === 'current' ? $lang->af_theme_stylesheets_bulk_current_file : $lang->af_theme_stylesheets_bulk_all_file), $bulkAddon, true, false, $themeFilter, $bulkThemeTid, '', 'primary');
         echo self::renderThemeStylesheetActionForm('theme_stylesheets_sync_all', $lang->af_theme_stylesheets_sync_all, '', true, false, $themeFilter, null, '', 'secondary');
         echo self::renderThemeStylesheetActionForm('theme_stylesheets_rebuild_missing', $lang->af_theme_stylesheets_rebuild_missing, '', true, false, $themeFilter, null, '', 'secondary');
         echo self::renderThemeStylesheetActionForm('theme_stylesheets_force_resync', $lang->af_theme_stylesheets_force_resync, '', true, true, $themeFilter, null, '', 'secondary');
@@ -723,7 +731,12 @@ class AF_Admin
                 $table->construct_cell($logicalView);
                 $table->construct_cell($nameView);
                 $table->construct_cell($seedFile);
-                $table->construct_cell($mode, ['class' => 'align_center']);
+                $effective = (string)($row['effective_delivery'] ?? 'FILE FALLBACK');
+                $reason = (string)($row['effective_reason'] ?? 'bundle_missing');
+                $effectiveColor = $effective === 'FILE FALLBACK' ? '#a00' : ($effective === AF_THEME_BUNDLE_NAME ? '#2f6f2f' : '#555');
+                $modeHtml = '<strong>'.$mode.'</strong><br><span class="smalltext" style="color:'.$effectiveColor.'">Effective: '.htmlspecialchars_uni($effective).'</span>';
+                if ($reason !== 'theme_delivery_ok' && $reason !== 'file_mode') $modeHtml .= '<br><span class="smalltext" style="color:#a00">Reason: '.htmlspecialchars_uni($reason).'</span>';
+                $table->construct_cell($modeHtml, ['class' => 'align_center']);
                 $statusHtml = '<span style="color:'.$statusColor.';font-weight:600;"';
                 if ($statusHint !== '') {
                     $statusHtml .= ' title="'.htmlspecialchars_uni($statusHint).'"';
@@ -1415,6 +1428,12 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_integrate' => 'ИНТЕГРИРОВАТЬ В ACP',
             'af_theme_stylesheets_set_file_mode' => 'Файловый режим',
             'af_theme_stylesheets_set_theme_mode' => 'Theme-режим',
+            'af_theme_stylesheets_bulk_all_theme' => 'Все → Theme mode',
+            'af_theme_stylesheets_bulk_all_file' => 'Все → File mode',
+            'af_theme_stylesheets_bulk_current_theme' => 'Текущая тема → Theme',
+            'af_theme_stylesheets_bulk_current_file' => 'Текущая тема → File',
+            'af_theme_stylesheets_bulk_filtered_theme' => 'Отфильтрованные → Theme',
+            'af_theme_stylesheets_bulk_filtered_file' => 'Отфильтрованные → File',
             'af_theme_stylesheets_sync_all' => 'Синхронизировать всё',
             'af_theme_stylesheets_sync_addon' => 'Синхронизировать аддон',
             'af_theme_stylesheets_rebuild_missing' => 'Восстановить отсутствующие',
@@ -1526,6 +1545,12 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_integrate' => 'INTEGRATE INTO ACP',
             'af_theme_stylesheets_set_file_mode' => 'File mode',
             'af_theme_stylesheets_set_theme_mode' => 'Theme mode',
+            'af_theme_stylesheets_bulk_all_theme' => 'All → Theme mode',
+            'af_theme_stylesheets_bulk_all_file' => 'All → File mode',
+            'af_theme_stylesheets_bulk_current_theme' => 'Current theme → Theme',
+            'af_theme_stylesheets_bulk_current_file' => 'Current theme → File',
+            'af_theme_stylesheets_bulk_filtered_theme' => 'Filtered → Theme',
+            'af_theme_stylesheets_bulk_filtered_file' => 'Filtered → File',
             'af_theme_stylesheets_sync_all' => 'Sync all',
             'af_theme_stylesheets_sync_addon' => 'Sync addon',
             'af_theme_stylesheets_rebuild_missing' => 'Rebuild missing',
@@ -1997,6 +2022,11 @@ function af_apply_preoutput_filters(string $page): string
     // 3) Страховка: если внезапно нет НИ ОДНОГО rel="stylesheet" — вклеим $stylesheets
     $page = af_inject_core_stylesheets_if_missing($page);
 
+    // MyBB normally emits attached stylesheets through {$stylesheets}. Some
+    // customized themes omit that variable, so make the delivery contract
+    // explicit before the final de-duplicator runs.
+    $page = af_ensure_theme_bundle_link($page);
+
     // 4) Last-resort дедуп/нормализация CSS
     $page = af_hard_normalize_stylesheet_link_tags($page);
 
@@ -2004,6 +2034,22 @@ function af_apply_preoutput_filters(string $page): string
     $page = af_hard_dedup_script_src_tags($page);
 
     return af_ensure_utf8_document_charset($page);
+}
+
+function af_ensure_theme_bundle_link(string $page): string
+{
+    if ($page === '' || defined('IN_ADMINCP')) return $page;
+    foreach (af_get_theme_inheritance_tids(af_current_theme_tid()) as $tid) {
+        $state = af_theme_stylesheet_bundle_state((int)$tid);
+        if (!$state || strtolower((string)($state['delivery_mode'] ?? 'theme')) === 'file') continue;
+        if (!af_theme_stylesheet_is_usable_on_current_request($state, (int)$tid)) continue;
+        $href = af_theme_stylesheet_resolve_theme_href_from_state($state, (int)$tid);
+        if ($href === '') continue;
+        $clean = af_asset_clean_path($href);
+        if (($clean !== '' && strpos($page, $clean) !== false) || strpos($page, $href) !== false) return $page;
+        return af_inject_into_head($page, "\n<!--af_theme_bundle-->\n<link rel=\"stylesheet\" href=\"".htmlspecialchars_uni($href)."\">\n");
+    }
+    return $page;
 }
 
 /**
@@ -3017,7 +3063,9 @@ function af_theme_stylesheet_build_bundle(?string $onlyAddonId = null): array
             continue;
         }
         $addonName = trim((string)($entry['addon_meta']['name'] ?? $addonId));
-        $file = ltrim(str_replace('\\', '/', (string)$entry['file']), '/');
+        $file = function_exists('af_theme_stylesheet_canonical_source_file')
+            ? af_theme_stylesheet_canonical_source_file($addonId, (string)$entry['file'])
+            : strtolower(ltrim(str_replace('\\', '/', (string)$entry['file']), './'));
         // Canonicalise line endings before *both* hashing and writing. Do not
         // trim: final newlines and other whitespace are legitimate CSS data.
         $seedCss = str_replace(["\r\n", "\r"], "\n", (string)$seed['source']);
@@ -3179,7 +3227,7 @@ function af_theme_stylesheet_get_bundle_row(int $themeTid): array
     $state = af_theme_stylesheet_bundle_state($themeTid);
     $sid = (int)($state['stylesheet_sid'] ?? 0);
     if ($sid > 0) {
-        $q = $db->simple_select('themestylesheets', 'sid,tid,name,stylesheet,attachedto', "sid='{$sid}' AND tid='".(int)$themeTid."'", ['limit' => 1]);
+        $q = $db->simple_select('themestylesheets', 'sid,tid,name,stylesheet,attachedto,cachefile', "sid='{$sid}' AND tid='".(int)$themeTid."'", ['limit' => 1]);
         $row = $db->fetch_array($q) ?: [];
         if ($row) {
             return $row;
@@ -3190,7 +3238,7 @@ function af_theme_stylesheet_get_bundle_row(int $themeTid): array
     // stale sid after a theme import).  The ACP editor must still find it by
     // its stable MyBB name; activation will repair the registry afterwards.
     $name = $db->escape_string(AF_THEME_BUNDLE_NAME);
-    $q = $db->simple_select('themestylesheets', 'sid,tid,name,stylesheet,attachedto', "tid='".(int)$themeTid."' AND name='{$name}'", ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]);
+    $q = $db->simple_select('themestylesheets', 'sid,tid,name,stylesheet,attachedto,cachefile', "tid='".(int)$themeTid."' AND name='{$name}'", ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]);
     return $db->fetch_array($q) ?: [];
 }
 
@@ -3447,7 +3495,29 @@ function af_theme_stylesheet_bundle_state(int $themeTid): array
         "theme_tid='".(int)$themeTid."' AND addon_id='".$db->escape_string(AF_THEME_BUNDLE_ADDON_ID)."' AND logical_id='".$db->escape_string(AF_THEME_BUNDLE_LOGICAL_ID)."'",
         ['limit' => 1]
     );
-    return $db->fetch_array($q) ?: [];
+    $state = $db->fetch_array($q) ?: [];
+    if (!$state) return [];
+
+    // Theme imports commonly invalidate stored SIDs while preserving the
+    // named stylesheet. Adopt that row immediately so runtime diagnostics and
+    // the next cache rebuild no longer operate on a stale registry pointer.
+    $sid = (int)($state['stylesheet_sid'] ?? 0);
+    $valid = [];
+    if ($sid > 0) {
+        $validQ = $db->simple_select('themestylesheets', 'sid', "sid='{$sid}' AND tid='".(int)$themeTid."' AND name='".$db->escape_string(AF_THEME_BUNDLE_NAME)."'", ['limit' => 1]);
+        $valid = $db->fetch_array($validQ) ?: [];
+    }
+    if (!$valid) {
+        $name = $db->escape_string(AF_THEME_BUNDLE_NAME);
+        $rowQ = $db->simple_select('themestylesheets', 'sid', "tid='".(int)$themeTid."' AND name='{$name}'", ['order_by' => 'sid', 'order_dir' => 'desc', 'limit' => 1]);
+        $repairSid = (int)$db->fetch_field($rowQ, 'sid');
+        if ($repairSid > 0) {
+            $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['stylesheet_sid' => $repairSid, 'is_integrated' => 1, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
+            $state['stylesheet_sid'] = $repairSid;
+            $state['is_integrated'] = 1;
+        }
+    }
+    return $state;
 }
 
 function af_theme_stylesheet_cache_row(int $themeTid, int $sid, string $css): array
@@ -4208,6 +4278,15 @@ function af_collect_theme_stylesheet_diagnostics(?string $onlyAddonId = null): a
             elseif ($mode === 'theme' && (!$foundInTheme || $bundleAttached !== 'global')) $status = 'bundle_detached';
             elseif ($duplicateRisk) $status = 'duplicate_risk';
 
+            $effectiveReason = 'theme_delivery_ok';
+            if ($mode === 'file') $effectiveReason = 'file_mode';
+            elseif (!$bundleState || !$foundInTheme) $effectiveReason = 'bundle_missing';
+            elseif ((int)($bundleState['stylesheet_sid'] ?? 0) <= 0) $effectiveReason = 'bundle_href_missing';
+            elseif ($bundleAttached !== 'global') $effectiveReason = 'bundle_not_attached';
+            elseif (!$sourceInBundle) $effectiveReason = 'section_missing';
+            elseif ((string)($bundleRow['cachefile'] ?? '') !== AF_THEME_BUNDLE_NAME) $effectiveReason = 'bundle_cache_missing';
+            $effectiveDelivery = $mode === 'file' ? 'FILE' : ($effectiveReason === 'theme_delivery_ok' ? AF_THEME_BUNDLE_NAME : 'FILE FALLBACK');
+
             $rows[] = [
                 'theme_tid' => (int)$themeTid,
                 'theme_title' => (string)($themeTitles[(int)$themeTid] ?? ('Theme #'.(int)$themeTid)),
@@ -4219,6 +4298,11 @@ function af_collect_theme_stylesheet_diagnostics(?string $onlyAddonId = null): a
                 'seed_file' => (string)($seed['path'] ?? ''),
                 'mode' => $mode,
                 'status' => $status,
+                'effective_delivery' => $effectiveDelivery,
+                'effective_reason' => $effectiveReason,
+                'bundle_stylesheet_sid' => (int)($bundleState['stylesheet_sid'] ?? 0),
+                'bundle_cachefile' => (string)($bundleRow['cachefile'] ?? ''),
+                'bundle_section_present' => $sourceInBundle,
                 'is_integrated' => $sourceInBundle,
                 'attached_to' => $mode === 'theme' ? $bundleAttached : '—',
                 'expected_attach' => $mode === 'theme' ? 'global' : '',
@@ -4341,6 +4425,26 @@ function af_theme_stylesheets_execute_action(string $action, ?string $addonId = 
         $stats['changed'] = af_theme_stylesheet_set_delivery_mode($themeTid, $addonId, $logicalId, 'auto') ? 1 : 0;
         return $stats;
     }
+    if ($action === 'set_file_mode_bulk' || $action === 'set_theme_mode_bulk') {
+        global $db;
+        $mode = $action === 'set_theme_mode_bulk' ? 'theme' : 'file';
+        // Build/repair first: bulk Theme mode must never suppress sources
+        // against a stale or absent bundle row.
+        if ($mode === 'theme') af_sync_theme_stylesheets(false, $addonId ?: null);
+        $tids = $themeTid !== null && $themeTid > 0 ? [$themeTid] : af_get_theme_tids();
+        foreach ($tids as $tid) {
+            if (af_theme_stylesheet_set_delivery_mode((int)$tid, AF_THEME_BUNDLE_ADDON_ID, AF_THEME_BUNDLE_LOGICAL_ID, $mode)) {
+                $where = "theme_tid='".(int)$tid."' AND addon_id!='".$db->escape_string(AF_THEME_BUNDLE_ADDON_ID)."'";
+                if ($addonId !== null && $addonId !== '') $where .= " AND addon_id='".$db->escape_string($addonId)."'";
+                $db->update_query(AF_THEME_STYLESHEETS_TABLE, [
+                    'delivery_mode' => $mode, 'stylesheet_sid' => 0,
+                    'is_integrated' => $mode === 'theme' ? 1 : 0, 'updated_at' => TIME_NOW,
+                ], $where);
+                $stats['changed']++;
+            }
+        }
+        return $stats;
+    }
 
     if ($action === 'sync_all') {
         $sync = af_sync_theme_stylesheets(false, null);
@@ -4388,6 +4492,8 @@ function af_theme_stylesheets_action_message(string $action, array $result, $lan
         'set_file_mode' => 'af_theme_stylesheets_msg_set_file_mode',
         'set_theme_mode' => 'af_theme_stylesheets_msg_set_theme_mode',
         'set_auto_mode' => 'af_theme_stylesheets_msg_set_auto_mode',
+        'set_file_mode_bulk' => 'af_theme_stylesheets_msg_set_file_mode',
+        'set_theme_mode_bulk' => 'af_theme_stylesheets_msg_set_theme_mode',
         'sync_all' => 'af_theme_stylesheets_msg_sync_all',
         'sync_addon' => 'af_theme_stylesheets_msg_sync_addon',
         'rebuild_missing' => 'af_theme_stylesheets_msg_rebuild_missing',
@@ -5455,7 +5561,10 @@ function af_resolve_af_addon_css_delivery_context(string $cleanPath): array
             'addon_id' => (string)$resolved['addon_id'],
             'file_rel' => (string)$resolved['file_rel'],
             'clean_path' => (string)$resolved['clean_path'],
-            'decision' => [],
+            'decision' => [
+                'mode' => 'file', 'include_file' => true,
+                'use_theme_stylesheet' => false, 'reason' => 'vendor_runtime_css',
+            ],
             'allow_file' => true,
         ];
     }
@@ -5669,6 +5778,14 @@ function af_current_theme_tid(): int
         }
     }
     global $mybb, $db;
+    // MyBB resolves a member's selected theme into $mybb->user['style'] before
+    // every front-end page.  Asset collection can run before the global
+    // $theme array is populated, so falling straight back to the board default
+    // routed members with a custom theme through the wrong bundle.
+    $userTid = (int)($mybb->user['style'] ?? 0);
+    if ($userTid > 0) {
+        return $userTid;
+    }
     $tid = (int)($mybb->settings['theme'] ?? 1);
     if ($tid > 1) {
         return $tid;
@@ -5676,6 +5793,26 @@ function af_current_theme_tid(): int
     $q = $db->simple_select('themes', 'tid', "tid > 1", ['order_by' => 'tid', 'order_dir' => 'asc', 'limit' => 1]);
     $fallback = (int)$db->fetch_field($q, 'tid');
     return $fallback > 1 ? $fallback : 1;
+}
+
+/** Canonical source identity shared by discovery, bundle writing and lookup. */
+function af_theme_stylesheet_canonical_source_file(string $addonId, string $file): string
+{
+    $addonId = strtolower(trim($addonId));
+    $file = str_replace('\\', '/', trim($file));
+    $file = preg_replace('~(?:^|/)\./~', '/', $file) ?? $file;
+    $file = ltrim($file, '/');
+    $prefix = 'inc/plugins/'.strtolower(AF_PLUGIN_ID).'/addons/'.$addonId.'/';
+    if ($addonId !== '' && strpos(strtolower($file), $prefix) === 0) {
+        $file = substr($file, strlen($prefix));
+    }
+    $parts = [];
+    foreach (explode('/', $file) as $part) {
+        if ($part === '' || $part === '.') continue;
+        if ($part === '..') { array_pop($parts); continue; }
+        $parts[] = $part;
+    }
+    return strtolower(implode('/', $parts));
 }
 
 function af_get_theme_inheritance_tids(?int $startTid = null): array
@@ -6052,7 +6189,9 @@ function af_theme_stylesheet_bundle_contains_source(array $state, int $themeTid,
     global $db;
 
     $addonId = strtolower(trim($addonId));
-    $fileRel = strtolower(ltrim(str_replace('\\', '/', trim($fileRel)), '/'));
+    $fileRel = af_theme_stylesheet_canonical_source_file($addonId, $fileRel);
+    $candidate = af_find_css_candidate_for_file($addonId, $fileRel);
+    $logicalId = (string)($candidate['logical_id'] ?? '');
     if ($themeTid <= 0 || $addonId === '' || $fileRel === '') {
         return false;
     }
@@ -6087,8 +6226,15 @@ function af_theme_stylesheet_bundle_contains_source(array $state, int $themeTid,
     foreach ($parsed['sections'] as $section) {
         $meta = (array)($section['meta'] ?? []);
         $sectionAddon = strtolower(trim((string)($meta['addon_id'] ?? '')));
-        $sectionFile = strtolower(ltrim(str_replace('\\', '/', trim((string)($meta['source_file'] ?? ''))), '/'));
-        if ($sectionAddon === $addonId && $sectionFile === $fileRel && (string)($section['body'] ?? '') !== '') {
+        $sectionFile = af_theme_stylesheet_canonical_source_file($sectionAddon, (string)($meta['source_file'] ?? ''));
+        $sectionLogical = (string)($meta['logical_id'] ?? '');
+        $identityMatches = $sectionAddon === $addonId
+            && (($sectionFile !== '' && $sectionFile === $fileRel)
+                || ($logicalId !== '' && $sectionLogical === $logicalId));
+        // Empty CSS is still a valid, authenticated section and must not force
+        // file delivery (which would make an intentional ACP empty override
+        // impossible).
+        if ($identityMatches) {
             return true;
         }
     }
@@ -6116,7 +6262,7 @@ function af_theme_stylesheet_delivery_decision(string $addonId, string $fileRel)
             'is_integrated' => false,
             'include_file' => true,
             'use_theme_stylesheet' => false,
-            'theme_href' => ''
+            'theme_href' => '', 'reason' => 'invalid_source',
         ];
     }
 
@@ -6135,6 +6281,8 @@ function af_theme_stylesheet_delivery_decision(string $addonId, string $fileRel)
             return [
                 'mode' => 'file', 'state_found' => true, 'is_integrated' => false,
                 'include_file' => true, 'use_theme_stylesheet' => false, 'theme_href' => '',
+                'reason' => 'file_mode', 'current_theme_tid' => $currentThemeTid,
+                'inheritance_tids' => $themeTids, 'bundle_theme_tid' => (int)$bundleTid,
             ];
         }
         $bundleHref = af_theme_stylesheet_resolve_theme_href_from_state($bundleState, (int)$bundleTid);
@@ -6144,15 +6292,30 @@ function af_theme_stylesheet_delivery_decision(string $addonId, string $fileRel)
             $addonId,
             $fileRel
         );
+        $bundleAttached = af_theme_stylesheet_is_usable_on_current_request($bundleState, (int)$bundleTid);
         $bundleUsable = $bundleHref !== ''
-            && af_theme_stylesheet_is_usable_on_current_request($bundleState, (int)$bundleTid)
+            && $bundleAttached
             && $bundleContainsSource;
+        $reason = 'theme_delivery_ok';
+        if ($bundleHref === '') $reason = 'bundle_href_missing';
+        elseif (!$bundleAttached) $reason = 'bundle_not_attached';
+        elseif (!$bundleContainsSource) $reason = 'section_missing';
         return [
             'mode' => 'theme', 'state_found' => true, 'is_integrated' => $bundleUsable,
             // Fail open if cache/attachment or the requested section is lost.
             'include_file' => !$bundleUsable, 'use_theme_stylesheet' => $bundleUsable,
             'theme_href' => $bundleUsable ? $bundleHref : '',
             'bundle_section_present' => $bundleContainsSource,
+            'reason' => $reason,
+            'addon_id' => $addonId,
+            'file_rel' => af_theme_stylesheet_canonical_source_file($addonId, $fileRel),
+            'current_theme_tid' => $currentThemeTid,
+            'inheritance_tids' => $themeTids,
+            'bundle_theme_tid' => (int)$bundleTid,
+            'bundle_found' => true,
+            'bundle_stylesheet_sid' => (int)($bundleState['stylesheet_sid'] ?? 0),
+            'bundle_delivery_mode' => $bundleMode,
+            'bundle_href' => $bundleHref,
         ];
     }
     $candidate       = af_find_css_candidate_for_file($addonId, $fileRel);
@@ -6313,7 +6476,10 @@ function af_theme_stylesheet_delivery_decision(string $addonId, string $fileRel)
         'is_integrated' => false,
         'include_file' => true,
         'use_theme_stylesheet' => false,
-        'theme_href' => '',
+        'theme_href' => '', 'reason' => 'bundle_missing',
+        'addon_id' => $addonId, 'file_rel' => af_theme_stylesheet_canonical_source_file($addonId, $fileRel),
+        'current_theme_tid' => $currentThemeTid, 'inheritance_tids' => $themeTids,
+        'bundle_found' => false,
     ];
 }
 
