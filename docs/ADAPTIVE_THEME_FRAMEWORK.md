@@ -51,6 +51,21 @@ component. A deleted/unresolved uid follows the same guest fallback as the
 legacy renderer. While ATF is active, the provider's slot output is exclusive:
 installed legacy template markers are retained for rollback but do not render.
 
+### Thread-card context
+
+Future `forumdisplay_thread` composition must call
+`af_adaptivethemeframework_thread_card_context()` and pass that result to its
+slots. The closed context contains `tid`, `fid`, `subject`, `lastposteruid` and
+`lastposter`; it additionally contains `lastpostpid` only when the query has a
+positive value. It never contains the complete thread or global state.
+
+AdvancedThreadFields provides `thread.meta_chips` and requires only `tid` and
+`fid`. AdvancedPosterAvatar provides `thread.lastposter_avatar` and uses `tid`,
+`fid`, `lastposteruid` and `lastposter`. With ATF active their installed legacy
+markers remain available for rollback but produce no duplicate output; with
+ATF inactive the existing template variables and marker replacement continue
+to operate.
+
 ## Design-system contract
 
 ATF visual primitives use the `atf-` prefix. Components use BEM-style

@@ -292,12 +292,34 @@ function af_apa_register_atf_provider(): bool
         return false;
     }
 
-    return af_adaptivethemeframework_register_component([
+    $forum = af_adaptivethemeframework_register_component([
         'owner' => AF_APA_ID,
         'key' => 'lastposter_avatar',
         'slot' => 'forum.lastposter_avatar',
         'renderer' => 'af_apa_render_atf_lastposter_avatar',
     ]);
+    $thread = af_adaptivethemeframework_register_component([
+        'owner' => AF_APA_ID,
+        'key' => 'thread_lastposter_avatar',
+        'slot' => 'thread.lastposter_avatar',
+        'renderer' => 'af_apa_render_atf_thread_lastposter_avatar',
+    ]);
+    return $forum || $thread;
+}
+
+/** Render the last-poster avatar for a topic card from its explicit context. */
+function af_apa_render_atf_thread_lastposter_avatar(array $context): string
+{
+    global $mybb;
+    if ((string)($mybb->settings['af_advancedposteravatar_forumdisplay'] ?? '1') !== '1'
+        || (int)($context['tid'] ?? 0) <= 0) {
+        return '';
+    }
+
+    $forumContext = $context;
+    $forumContext['fid'] = (int)($context['fid'] ?? 0);
+    $html = af_apa_render_atf_lastposter_avatar($forumContext);
+    return str_replace(['apa_forumindex', 'apa_img_index'], ['apa_forumdisplay', 'apa_img_forumdisplay'], $html);
 }
 
 /**

@@ -54,6 +54,10 @@ $components = af_adaptivethemeframework_components_for_slot('forum.lastposter_av
 if (count($components) !== 1 || key($components) !== 'advancedposteravatar::lastposter_avatar') {
     throw new RuntimeException('Stable forum avatar provider identity is missing.');
 }
+$threadComponents = af_adaptivethemeframework_components_for_slot('thread.lastposter_avatar');
+if (count($threadComponents) !== 1 || key($threadComponents) !== 'advancedposteravatar::thread_lastposter_avatar') {
+    throw new RuntimeException('Stable thread avatar provider identity is missing.');
+}
 
 $render = static fn(int $uid, string $name): string => af_adaptivethemeframework_render_slot(
     'forum.lastposter_avatar', ['fid' => 3, 'lastposteruid' => $uid, 'lastposter' => $name]
@@ -65,6 +69,23 @@ if (!str_contains($render(999, 'Deleted'), 'af-avatar--guest')) throw new Runtim
 if (af_adaptivethemeframework_render_slot('forum.lastposter_avatar', ['lastposteruid' => 7, 'lastposter' => 'Avatar User']) !== '') {
     throw new RuntimeException('Invalid forum context rendered a component.');
 }
+$threadContext = af_adaptivethemeframework_thread_card_context([
+    'tid' => 11, 'subject' => 'Topic', 'lastposteruid' => 7,
+    'lastposter' => 'Avatar User', 'lastpostpid' => 23, 'private' => 'must-not-leak',
+], 3);
+if (array_keys($threadContext) !== ['tid', 'fid', 'subject', 'lastposteruid', 'lastposter', 'lastpostpid']
+    || isset($threadContext['private'])) {
+    throw new RuntimeException('Thread-card context is not a closed, minimal contract.');
+}
+$threadAvatar = af_adaptivethemeframework_render_slot('thread.lastposter_avatar', $threadContext);
+if (!str_contains($threadAvatar, 'uploads/avatar.png') || !str_contains($threadAvatar, 'apa_forumdisplay')) {
+    throw new RuntimeException('ATF thread-card avatar output failed.');
+}
+$GLOBALS['test_enabled']['advancedposteravatar'] = false;
+if (af_adaptivethemeframework_render_slot('thread.lastposter_avatar', $threadContext) !== '') {
+    throw new RuntimeException('Disabled avatar provider did not leave its thread slot empty.');
+}
+$GLOBALS['test_enabled']['advancedposteravatar'] = true;
 
 // Exercise the same server-side composition consumed by the ATF template, not
 // merely provider registration or a direct slot call.

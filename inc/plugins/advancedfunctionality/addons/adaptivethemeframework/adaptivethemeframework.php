@@ -219,6 +219,27 @@ function af_adaptivethemeframework_render_slot(string $slot, array $context = []
     return $html;
 }
 
+/**
+ * Build the deliberately small context shared by future ATF thread cards.
+ *
+ * Providers receive values, never the complete MyBB thread/global state.  A
+ * last-post pid is optional because not every forumdisplay query exposes it.
+ */
+function af_adaptivethemeframework_thread_card_context(array $thread, int $fid): array
+{
+    $context = [
+        'tid' => max(0, (int)($thread['tid'] ?? 0)),
+        'fid' => max(0, $fid),
+        'subject' => (string)($thread['subject'] ?? ''),
+        'lastposteruid' => max(0, (int)($thread['lastposteruid'] ?? 0)),
+        'lastposter' => (string)($thread['lastposter'] ?? ''),
+    ];
+    if (isset($thread['lastpostpid']) && (int)$thread['lastpostpid'] > 0) {
+        $context['lastpostpid'] = (int)$thread['lastpostpid'];
+    }
+    return $context;
+}
+
 function af_adaptivethemeframework_install(): bool
 {
     return af_adaptivethemeframework_schema_readiness();
