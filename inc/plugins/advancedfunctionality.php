@@ -3606,6 +3606,15 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     if (empty($validation['ok'])) {
         return ['updated' => false, 'manual_override' => false, 'sid' => 0, 'error' => 'generated bundle invalid: '.(string)($validation['error'] ?? '')];
     }
+    $sourceCount = count((array)($bundle['sources'] ?? []));
+    $sectionCount = count((array)($validation['sections'] ?? []));
+    if ($sourceCount !== $sectionCount) {
+        return [
+            'updated' => false, 'manual_override' => false, 'sid' => 0,
+            'source_count' => $sourceCount, 'section_count' => $sectionCount,
+            'error' => "generated bundle source/section mismatch: {$sourceCount}/{$sectionCount}",
+        ];
+    }
     $state = af_theme_stylesheet_bundle_state($themeTid);
     $sid = (int)($state['stylesheet_sid'] ?? 0);
     $nameEsc = $db->escape_string(AF_THEME_BUNDLE_NAME);
@@ -3684,10 +3693,26 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     $write = false;
     $manual = $migratedLegacyOverride;
     if (!$row) {
-        $sid = (int)$db->insert_query('themestylesheets', [
-            'name' => $nameEsc, 'tid' => $themeTid, 'attachedto' => $attachedTo,
+        // Values passed to MyBB's insert helper are deliberately raw: the DB
+        // driver performs escaping. This is the branch which makes a fresh
+        // bundle visible on MyBB's native Stylesheets page.
+        $insertResult = $db->insert_query('themestylesheets', [
+            'name' => AF_THEME_BUNDLE_NAME, 'tid' => $themeTid, 'attachedto' => $attachedTo,
             'stylesheet' => (string)$bundle['source'], 'cachefile' => '', 'lastmodified' => TIME_NOW,
         ]);
+        $sid = (int)$insertResult;
+        // Some compatible DB adapters report success and expose the generated
+        // auto-increment value separately instead of returning it directly.
+        if ($sid <= 0 && method_exists($db, 'insert_id')) {
+            $sid = (int)$db->insert_id();
+        }
+        if ($sid <= 0) {
+            return [
+                'updated' => false, 'manual_override' => false, 'sid' => 0,
+                'source_count' => $sourceCount, 'section_count' => $sectionCount,
+                'error' => 'MyBB did not return a SID for the new advancedstyles.css row',
+            ];
+        }
         $row = ['sid' => $sid, 'stylesheet' => (string)$bundle['source']];
         $write = true;
     } else {
@@ -3777,7 +3802,11 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
         update_theme_stylesheet_list($themeTid);
     }
 
-    return ['updated' => $write, 'manual_override' => $manual, 'sid' => $sid, 'cache' => $cache, 'error' => empty($cache['ok']) ? (string)$cache['error'] : ''];
+    return [
+        'updated' => $write, 'manual_override' => $manual, 'sid' => $sid,
+        'source_count' => $sourceCount, 'section_count' => $sectionCount,
+        'cache' => $cache, 'error' => empty($cache['ok']) ? (string)$cache['error'] : '',
+    ];
 }
 
 function af_mark_theme_stylesheet_managed(int $themeTid, int $sid, array $entry, array $seed, bool $manualOverride, ?string $resolvedName = null): void
