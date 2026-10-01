@@ -178,7 +178,7 @@ class AF_Admin_Advancedmenu
         echo '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">';
         require_once MYBB_ADMIN_DIR.'inc/class_table.php';
         $table = new Table;
-        foreach (['Название','Source','Type','Container','Section','Enabled','Sortorder','Действия'] as $heading) $table->construct_header($heading);
+        foreach (['Название','Key','Source / тип','Type','Container','Section','Enabled','Sortorder','Действия'] as $heading) $table->construct_header($heading);
         $rows = [];
         foreach (af_menu_configured_registry() as $key=>$item) if ($item['container'] === $active) $rows[] = ['source'=>'system','key'=>$key] + $item;
         $q = $db->simple_select(AF_AM_TABLE_ITEMS, '*', '', ['order_by'=>'sort_order, id']);
@@ -201,10 +201,18 @@ class AF_Admin_Advancedmenu
                     .'<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">'
                     .'<button class="button" type="submit">'.(!empty($item['enabled']) ? 'Выключить' : 'Включить').'</button></form>';
             } else {
-                $actions = '<span title="Registry definition remains owned by the provider">Настройки показа</span>';
+                $actions = '<label><input type="checkbox" name="items['.$field.'][reset]" value="1"> Вернуть defaults</label>';
             }
-            $table->construct_cell(htmlspecialchars_uni((string)$item['label']));
-            $table->construct_cell(htmlspecialchars_uni($item['source']==='system' ? (string)$item['source_addon'] : 'AdvancedMenu'));
+            $title = htmlspecialchars_uni((string)$item['label']);
+            if ($item['source'] === 'system') {
+                $title = '<input type="text" name="items['.$field.'][label]" value="'.$title.'" style="width:150px"><br>'
+                    .'<input type="text" name="items['.$field.'][icon]" value="'.htmlspecialchars_uni((string)($item['icon'] ?? '')).'" placeholder="icon" style="width:150px">';
+            }
+            $table->construct_cell($title);
+            $table->construct_cell('<code>'.htmlspecialchars_uni($item['source']==='system' ? (string)$item['key'] : (string)$item['slug']).'</code>');
+            $table->construct_cell($item['source']==='system'
+                ? '<strong class="badge badge-success">SYSTEM / PROVIDER</strong><br>'.htmlspecialchars_uni((string)$item['source_addon'])
+                : '<strong>CUSTOM</strong><br>AdvancedMenu');
             $table->construct_cell(htmlspecialchars_uni((string)$item['type']));
             $table->construct_cell('<select name="items['.$field.'][container]">'.$options.'</select>');
             $table->construct_cell('<select name="items['.$field.'][section]">'.$sectionOptions.'</select>');
@@ -212,7 +220,7 @@ class AF_Admin_Advancedmenu
             $table->construct_cell('<input type="number" name="items['.$field.'][sortorder]" value="'.(int)$item['sortorder'].'" style="width:70px">');
             $table->construct_cell($actions); $table->construct_row();
         }
-        if (!$rows) { $table->construct_cell('<em>В этом контейнере нет пунктов.</em>', ['colspan'=>8]); $table->construct_row(); }
+        if (!$rows) { $table->construct_cell('<em>В этом контейнере нет пунктов.</em>', ['colspan'=>9]); $table->construct_row(); }
         $table->output(af_menu_containers()[$active]);
         echo '<p><button class="button button_primary" type="submit">Сохранить порядок и настройки</button></p></form>';
     }
@@ -232,10 +240,21 @@ class AF_Admin_Advancedmenu
                 $id=(int)substr((string)$key,7); $db->update_query(AF_AM_TABLE_ITEMS,['container'=>$container,'location'=>$container==='user_drawer'?'panel':'top','section'=>$section,'enabled'=>$enabled,'sort_order'=>$sort,'updated_at'=>TIME_NOW],"id='{$id}'");
             } elseif (isset($registry[$key]) && in_array($container,$registry[$key]['allowed_containers'],true)) {
                 $escaped = $db->escape_string((string)$key);
-                $save = ['source_addon'=>(string)$registry[$key]['source_addon'],'container'=>$container,'section'=>$section,'enabled'=>$enabled,'sortorder'=>$sort,'updated_at'=>TIME_NOW];
-                $exists = (int)$db->fetch_field($db->simple_select(AF_AM_TABLE_OVERRIDES, 'COUNT(*) AS total', "item_key='{$escaped}'"), 'total');
+                $source = (string)$registry[$key]['source_addon'];
+                $sourceEscaped = $db->escape_string($source);
+                $where = "source_addon='{$sourceEscaped}' AND item_key='{$escaped}'";
+                if (!empty($values['reset'])) {
+                    $db->delete_query(AF_AM_TABLE_OVERRIDES, $where);
+                    continue;
+                }
+                $label = trim((string)($values['label'] ?? ''));
+                $icon = trim((string)($values['icon'] ?? ''));
+                $save = ['source_addon'=>$source,'container'=>$container,'section'=>$section,'enabled'=>$enabled,'sortorder'=>$sort,
+                    'label_override'=>$label === (string)$registry[$key]['label'] ? null : $label,
+                    'icon_override'=>$icon === (string)$registry[$key]['icon'] ? null : $icon,'updated_at'=>TIME_NOW];
+                $exists = (int)$db->fetch_field($db->simple_select(AF_AM_TABLE_OVERRIDES, 'COUNT(*) AS total', $where), 'total');
                 if ($exists) {
-                    $db->update_query(AF_AM_TABLE_OVERRIDES, $save, "item_key='{$escaped}'");
+                    $db->update_query(AF_AM_TABLE_OVERRIDES, $save, $where);
                 } else {
                     $save += ['item_key'=>(string)$key,'label_override'=>null,'icon_override'=>null,'created_at'=>TIME_NOW];
                     $db->insert_query(AF_AM_TABLE_OVERRIDES, $save);
