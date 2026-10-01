@@ -86,7 +86,7 @@ function advancedfunctionality_install()
     foreach ($addons as $meta) {
         af_sync_addon_languages($meta, true);
     }
-    af_sync_theme_stylesheets(false);
+    af_run_lifecycle_theme_stylesheet_sync('install');
 
     // 6) Gateway runtime (в корень форума)
     af_ensure_gateway_runtime(true);
@@ -118,7 +118,7 @@ function advancedfunctionality_activate()
 
     // Шаблоны аддонов -> в БД (master templates)
     af_sync_all_addon_templates(true);
-    af_sync_theme_stylesheets(false);
+    af_run_lifecycle_theme_stylesheet_sync('activate');
 
     // Шлюз: обновляем runtime в корне форума из stub
     af_ensure_gateway_runtime(true);
@@ -518,7 +518,7 @@ class AF_Admin
 
         $result = af_theme_stylesheets_execute_action($op, $addonId !== '' ? $addonId : null, $confirmForce, $themeTid > 0 ? $themeTid : null, $logicalId !== '' ? $logicalId : null);
         $message = af_theme_stylesheets_action_message($op, $result, $lang);
-        flash_message($message, 'success');
+        flash_message($message, empty($result['errors']) ? 'success' : 'error');
         admin_redirect(self::themeStylesheetsUrl($addonId !== '' ? $addonId : null, $themeTid > 0 ? $themeTid : null, $themeScope));
     }
 
@@ -583,6 +583,39 @@ class AF_Admin
         </style>';
         echo '<h2>'.htmlspecialchars_uni($lang->af_theme_stylesheets_title).'</h2>';
         echo '<p class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_help).'</p>';
+        $lastSync = af_theme_stylesheet_read_last_sync();
+        echo '<div class="af-ts-help"><strong>Last advancedstyles.css bundle sync</strong>';
+        if (!$lastSync) {
+            echo '<p class="smalltext">No bundle sync diagnostic has been recorded yet.</p>';
+        } else {
+            echo '<p class="smalltext">Addons: '.(int)($lastSync['addon_count'] ?? 0)
+                .'; manifest CSS entries: '.(int)($lastSync['manifest_css_entry_count'] ?? 0)
+                .'; enabled: '.(int)($lastSync['enabled_source_count'] ?? 0)
+                .'; themes: '.htmlspecialchars_uni(implode(', ', array_map('intval', (array)($lastSync['theme_tids'] ?? [])))).'.</p>';
+            foreach ((array)($lastSync['themes'] ?? []) as $diagnostic) {
+                $error = (string)($diagnostic['exact_error'] ?? '');
+                echo '<div style="margin:6px 0;'.($error !== '' ? 'color:#a00;font-weight:600;' : '').'">Theme #'.(int)($diagnostic['theme_tid'] ?? 0)
+                    .': discovered='.(int)($diagnostic['discovered_source_count'] ?? 0)
+                    .', enabled='.(int)($diagnostic['enabled_source_count'] ?? 0)
+                    .', sections='.(int)($diagnostic['built_section_count'] ?? 0)
+                    .', creation attempted='.(!empty($diagnostic['bundle_creation_attempted']) ? 'yes' : 'no')
+                    .', inserted SID='.(int)($diagnostic['inserted_sid'] ?? 0)
+                    .', re-SELECT='.(!empty($diagnostic['insert_verified']) ? 'confirmed' : 'not confirmed')
+                    .', registry SID='.(int)($diagnostic['registry_sid'] ?? 0)
+                    .', cache='.htmlspecialchars_uni((string)($diagnostic['cache_result'] ?? 'not attempted'));
+                if ($error !== '') echo '<br>advancedstyles.css creation failed: '.htmlspecialchars_uni($error);
+                echo '</div>';
+            }
+            foreach ((array)($lastSync['errors'] ?? []) as $error) {
+                if ((int)($error['theme_tid'] ?? 0) === 0) echo '<div style="color:#a00;font-weight:600;">advancedstyles.css creation failed: '.htmlspecialchars_uni((string)($error['message'] ?? 'unknown error')).'</div>';
+            }
+            echo '<details><summary>Source enablement diagnostic</summary><table class="general" style="width:100%;margin-top:6px"><tr><th>addon_id</th><th>logical_id</th><th>enabled_setting</th><th>runtime value</th><th>decision</th></tr>';
+            foreach ((array)($lastSync['source_diagnostics'] ?? []) as $source) {
+                echo '<tr><td>'.htmlspecialchars_uni((string)($source['addon_id'] ?? '')).'</td><td>'.htmlspecialchars_uni((string)($source['logical_id'] ?? '')).'</td><td>'.htmlspecialchars_uni((string)($source['enabled_setting'] ?? '')).'</td><td>'.htmlspecialchars_uni((string)($source['runtime_value'] ?? '')).'</td><td>'.(!empty($source['included']) ? 'included' : 'skipped: '.htmlspecialchars_uni((string)($source['reason'] ?? 'unknown'))).'</td></tr>';
+            }
+            echo '</table></details>';
+        }
+        echo '</div>';
         echo '<div class="af-ts-help">';
         echo '<strong>'.htmlspecialchars_uni($lang->af_theme_stylesheets_help_actions_title).'</strong>';
         echo '<ul class="smalltext">';
@@ -1218,6 +1251,53 @@ PHP;
 function af_write_cache(string $key, string $value): void
 {
     @file_put_contents(AF_CACHE.$key.'.txt', $value);
+}
+
+function af_theme_stylesheet_write_last_sync(array $result): void
+{
+    $payload = json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if (is_string($payload)) {
+        @file_put_contents(AF_CACHE.'theme_stylesheets_last_sync.json', $payload."\n", LOCK_EX);
+    }
+}
+
+function af_theme_stylesheet_read_last_sync(): array
+{
+    $raw = @file_get_contents(AF_CACHE.'theme_stylesheets_last_sync.json');
+    $decoded = is_string($raw) ? json_decode($raw, true) : null;
+    return is_array($decoded) ? $decoded : [];
+}
+
+/** Keep activation non-fatal while making a failed bundle sync impossible to report as success. */
+function af_handle_lifecycle_theme_stylesheet_sync(string $operation, array $result): void
+{
+    if (empty($result['errors'])) {
+        return;
+    }
+    foreach ($result['errors'] as $error) {
+        $themeTid = (int)($error['theme_tid'] ?? 0);
+        $message = (string)($error['message'] ?? 'unknown bundle sync error');
+        af_theme_stylesheets_log($operation.' failed: '.$message, AF_THEME_BUNDLE_ADDON_ID, 'theme='.$themeTid);
+    }
+    if (function_exists('flash_message')) {
+        $first = (array)reset($result['errors']);
+        flash_message('advancedstyles.css creation failed: '.(string)($first['message'] ?? 'unknown bundle sync error'), 'error');
+    }
+}
+
+function af_run_lifecycle_theme_stylesheet_sync(string $operation): array
+{
+    try {
+        $result = af_sync_theme_stylesheets(false);
+    } catch (Throwable $error) {
+        $result = [
+            'timestamp' => defined('TIME_NOW') ? TIME_NOW : time(), 'themes' => [],
+            'errors' => [['theme_tid' => 0, 'message' => get_class($error).': '.$error->getMessage()]],
+        ];
+        af_theme_stylesheet_write_last_sync($result);
+    }
+    af_handle_lifecycle_theme_stylesheet_sync($operation, $result);
+    return $result;
 }
 
 function af_gateway_signature(): string
@@ -3037,9 +3117,6 @@ function af_get_theme_tids(): array
     $tids = array_values(array_unique($tids));
     sort($tids, SORT_NUMERIC);
 
-    if (!$tids) {
-        return [1];
-    }
     return $tids;
 }
 
@@ -3062,6 +3139,7 @@ function af_theme_stylesheet_build_bundle(?string $onlyAddonId = null): array
 
     $blocks = [];
     $sources = [];
+    $sourceDiagnostics = [];
     $identities = [];
     foreach ($entries as $entry) {
         $addonId = (string)$entry['addon_id'];
@@ -3069,13 +3147,26 @@ function af_theme_stylesheet_build_bundle(?string $onlyAddonId = null): array
             continue;
         }
         $enabledSetting = (string)($entry['enabled_setting'] ?? '');
-        if ($enabledSetting !== '' && (string)($mybb->settings[$enabledSetting] ?? '0') !== '1') {
+        $runtimeValue = $enabledSetting === '' ? '1' : (string)($mybb->settings[$enabledSetting] ?? '<missing>');
+        $sourceDiagnostic = [
+            'addon_id' => $addonId, 'logical_id' => (string)$entry['logical_id'],
+            'enabled_setting' => $enabledSetting, 'runtime_value' => $runtimeValue,
+            'included' => false, 'reason' => '',
+        ];
+        if ($enabledSetting !== '' && $runtimeValue !== '1') {
+            $sourceDiagnostic['reason'] = $runtimeValue === '<missing>' ? 'setting_missing' : 'setting_disabled';
+            $sourceDiagnostics[] = $sourceDiagnostic;
             continue;
         }
         $seed = af_get_theme_stylesheet_source((array)$entry['addon_meta'], $entry);
         if (!$seed) {
+            $sourceDiagnostic['reason'] = 'source_unreadable';
+            $sourceDiagnostics[] = $sourceDiagnostic;
             continue;
         }
+        $sourceDiagnostic['included'] = true;
+        $sourceDiagnostic['reason'] = 'included';
+        $sourceDiagnostics[] = $sourceDiagnostic;
         $addonName = trim((string)($entry['addon_meta']['name'] ?? $addonId));
         $file = function_exists('af_theme_stylesheet_canonical_source_file')
             ? af_theme_stylesheet_canonical_source_file($addonId, (string)$entry['file'])
@@ -3107,7 +3198,7 @@ function af_theme_stylesheet_build_bundle(?string $onlyAddonId = null): array
         . " * Force resync intentionally replaces it from the server sources.\n"
         . " */\n\n" . implode("\n", $blocks);
 
-    $built = ['source' => $css, 'checksum' => sha1($css), 'sources' => $sources];
+    $built = ['source' => $css, 'checksum' => sha1($css), 'sources' => $sources, 'source_diagnostics' => $sourceDiagnostics, 'discovered_count' => count($entries)];
     $validation = function_exists('af_theme_stylesheet_validate_bundle') ? af_theme_stylesheet_validate_bundle($built) : ['ok' => true, 'sections' => []];
     if (empty($validation['ok'])) {
         throw new RuntimeException('generated advancedstyles.css failed self-validation: '.(string)$validation['error']);
@@ -3560,7 +3651,6 @@ function af_theme_stylesheet_cache_row(int $themeTid, int $sid, string $css): ar
             $db->update_query('themestylesheets', ['cachefile' => $cached !== false ? AF_THEME_BUNDLE_NAME : ''], "sid='{$sid}'");
             if ($cached === false) return ['ok' => false, 'error' => 'cache_stylesheet returned false'];
         }
-        if (function_exists('update_theme_stylesheet_list')) update_theme_stylesheet_list($themeTid);
         return ['ok' => true];
     } catch (Throwable $error) {
         @error_log('[AF advancedstyles] operation=cache theme_tid='.$themeTid.' exception='.get_class($error).': '.$error->getMessage());
@@ -3639,11 +3729,27 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     }
     $sourceCount = count((array)($bundle['sources'] ?? []));
     $sectionCount = count((array)($validation['sections'] ?? []));
+    $baseDiagnostic = [
+        'theme_tid' => $themeTid,
+        'discovered_source_count' => (int)($bundle['discovered_count'] ?? $sourceCount),
+        'enabled_source_count' => $sourceCount,
+        'built_section_count' => $sectionCount,
+        'bundle_creation_attempted' => false,
+        'inserted_sid' => 0,
+        'insert_verified' => false,
+        'registry_sid' => 0,
+        'registry_verified' => false,
+        'db_created' => false,
+        'cache_created' => false,
+        'cache_result' => 'not attempted',
+        'source_diagnostics' => (array)($bundle['source_diagnostics'] ?? []),
+    ];
     if ($sourceCount !== $sectionCount) {
         return [
             'updated' => false, 'manual_override' => false, 'sid' => 0,
             'source_count' => $sourceCount, 'section_count' => $sectionCount,
             'error' => "generated bundle source/section mismatch: {$sourceCount}/{$sectionCount}",
+            'diagnostic' => $baseDiagnostic,
         ];
     }
     $state = af_theme_stylesheet_bundle_state($themeTid);
@@ -3724,6 +3830,7 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     $write = false;
     $manual = $migratedLegacyOverride;
     if (!$row) {
+        $baseDiagnostic['bundle_creation_attempted'] = true;
         // Values passed to MyBB's insert helper are deliberately raw: the DB
         // driver performs escaping. This is the branch which makes a fresh
         // bundle visible on MyBB's native Stylesheets page.
@@ -3741,12 +3848,30 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
             return [
                 'updated' => false, 'manual_override' => false, 'sid' => 0,
                 'source_count' => $sourceCount, 'section_count' => $sectionCount,
-                'error' => 'MyBB did not return a SID for the new advancedstyles.css row',
+                'error' => 'MyBB did not return a SID for the new advancedstyles.css row', 'diagnostic' => $baseDiagnostic,
             ];
         }
-        $row = ['sid' => $sid, 'stylesheet' => (string)$bundle['source']];
+        $baseDiagnostic['inserted_sid'] = $sid;
+        $verifyQ = $db->simple_select('themestylesheets', 'sid,tid,name', "sid='{$sid}'", ['limit' => 1]);
+        $verifiedInsert = $db->fetch_array($verifyQ) ?: [];
+        if ((int)($verifiedInsert['sid'] ?? 0) !== $sid
+            || (int)($verifiedInsert['tid'] ?? 0) !== $themeTid
+            || (string)($verifiedInsert['name'] ?? '') !== AF_THEME_BUNDLE_NAME) {
+            return [
+                'updated' => false, 'manual_override' => false, 'sid' => $sid,
+                'source_count' => $sourceCount, 'section_count' => $sectionCount,
+                'error' => "advancedstyles.css INSERT was not confirmed by SELECT for SID {$sid}",
+                'diagnostic' => $baseDiagnostic,
+            ];
+        }
+        $baseDiagnostic['insert_verified'] = true;
+        $baseDiagnostic['db_created'] = true;
+        $row = ['sid' => $sid, 'tid' => $themeTid, 'name' => AF_THEME_BUNDLE_NAME, 'stylesheet' => (string)$bundle['source']];
         $write = true;
     } else {
+        $baseDiagnostic['inserted_sid'] = $sid;
+        $baseDiagnostic['insert_verified'] = true;
+        $baseDiagnostic['db_created'] = true;
         $current = (string)($row['stylesheet'] ?? '');
         $currentHash = sha1($current);
         $lastHash = (string)($state['last_synced_checksum'] ?? '');
@@ -3777,6 +3902,8 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     $cacheCss = $write ? (string)$bundle['source'] : (string)($row['stylesheet'] ?? '');
     $cache = af_theme_stylesheet_cache_row($themeTid, $sid, $cacheCss);
     if (!is_array($cache)) $cache = ['ok' => true]; // compatibility with older integrations
+    $baseDiagnostic['cache_created'] = !empty($cache['ok']);
+    $baseDiagnostic['cache_result'] = !empty($cache['ok']) ? 'ok' : (string)($cache['error'] ?? 'unknown cache error');
 
     // Project first-class section state back to each source registry row.
     $finalParsed = function_exists('af_theme_stylesheet_parse_bundle')
@@ -3820,6 +3947,25 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
         $db->insert_query(AF_THEME_STYLESHEETS_TABLE, $payload);
     }
 
+    $registryQ = $db->simple_select(
+        AF_THEME_STYLESHEETS_TABLE,
+        'stylesheet_sid',
+        "theme_tid='{$themeTid}' AND addon_id='".$db->escape_string(AF_THEME_BUNDLE_ADDON_ID)."' AND logical_id='".$db->escape_string(AF_THEME_BUNDLE_LOGICAL_ID)."'",
+        ['limit' => 1]
+    );
+    $registryVerification = $db->fetch_array($registryQ) ?: [];
+    $registrySid = (int)($registryVerification['stylesheet_sid'] ?? 0);
+    $baseDiagnostic['registry_sid'] = $registrySid;
+    $baseDiagnostic['registry_verified'] = $registrySid === $sid;
+    if ($registrySid !== $sid) {
+        return [
+            'updated' => $write, 'manual_override' => $manual, 'sid' => $sid,
+            'source_count' => $sourceCount, 'section_count' => $sectionCount, 'cache' => $cache,
+            'error' => "bundle registry SID {$registrySid} does not match stylesheet SID {$sid}",
+            'diagnostic' => $baseDiagnostic,
+        ];
+    }
+
     // Migration is intentionally non-destructive: legacy rows and CSS bodies
     // remain available for rollback, but are detached to avoid double delivery.
     $legacyQ = $db->simple_select(AF_THEME_STYLESHEETS_TABLE, 'stylesheet_sid', "theme_tid='{$themeTid}' AND addon_id!='".$db->escape_string(AF_THEME_BUNDLE_ADDON_ID)."' AND stylesheet_sid > 0");
@@ -3837,6 +3983,7 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
         'updated' => $write, 'manual_override' => $manual, 'sid' => $sid,
         'source_count' => $sourceCount, 'section_count' => $sectionCount,
         'cache' => $cache, 'error' => empty($cache['ok']) ? (string)$cache['error'] : '',
+        'diagnostic' => $baseDiagnostic,
     ];
 }
 
@@ -4237,7 +4384,34 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
     $addons = af_discover_addons();
     $entries = af_discover_theme_stylesheets($addons);
     $themeTids = af_get_theme_tids();
-    $result = ['created_or_updated' => 0, 'manual_override' => 0, 'skipped' => 0, 'errors' => []];
+    $sourceDiagnostics = [];
+    foreach ($entries as $entry) {
+        $setting = (string)($entry['enabled_setting'] ?? '');
+        $value = $setting === '' ? '1' : (string)($mybb->settings[$setting] ?? '<missing>');
+        $enabled = $setting === '' || $value === '1';
+        $readable = $enabled && (bool)af_get_theme_stylesheet_source((array)$entry['addon_meta'], $entry);
+        $sourceDiagnostics[] = [
+            'addon_id' => (string)$entry['addon_id'],
+            'logical_id' => (string)$entry['logical_id'],
+            'enabled_setting' => $setting,
+            'runtime_value' => $value,
+            'included' => $readable,
+            'reason' => !$enabled ? ($value === '<missing>' ? 'setting_missing' : 'setting_disabled') : ($readable ? 'included' : 'source_unreadable'),
+        ];
+    }
+    $result = [
+        'timestamp' => defined('TIME_NOW') ? TIME_NOW : time(),
+        'addon_count' => count($addons), 'manifest_css_entry_count' => count($entries),
+        'theme_tids' => $themeTids,
+        'enabled_source_count' => count(array_filter($sourceDiagnostics, static fn(array $row): bool => !empty($row['included']))),
+        'source_diagnostics' => $sourceDiagnostics, 'themes' => [],
+        'created_or_updated' => 0, 'manual_override' => 0, 'skipped' => 0, 'errors' => [],
+    ];
+    if (!$themeTids) {
+        $result['errors'][] = ['theme_tid' => 0, 'message' => 'No MyBB themes were discovered; advancedstyles.css creation was not attempted'];
+        if (function_exists('af_theme_stylesheet_write_last_sync')) af_theme_stylesheet_write_last_sync($result);
+        return $result;
+    }
 
     // Metadata rows are retained for source-file routing and rollback, but new
     // per-source MyBB stylesheets are no longer created. One bundle per theme
@@ -4279,8 +4453,14 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
         } catch (Throwable $error) {
             @error_log('[AF advancedstyles] operation=sync theme_tid='.(int)$themeTid.' exception='.get_class($error).': '.$error->getMessage());
             $result['errors'][] = ['theme_tid' => (int)$themeTid, 'message' => $error->getMessage()];
+            $result['themes'][] = ['theme_tid' => (int)$themeTid, 'exact_error' => get_class($error).': '.$error->getMessage()];
             continue;
         }
+        $themeDiagnostic = (array)($state['diagnostic'] ?? []);
+        $themeDiagnostic['theme_tid'] = (int)$themeTid;
+        $themeDiagnostic['inserted_sid'] = (int)($themeDiagnostic['inserted_sid'] ?? $state['sid'] ?? 0);
+        $themeDiagnostic['exact_error'] = (string)($state['error'] ?? '');
+        $result['themes'][] = $themeDiagnostic;
         if (!empty($state['error'])) $result['errors'][] = ['theme_tid' => (int)$themeTid, 'message' => (string)$state['error']];
         if (!empty($state['updated'])) $result['created_or_updated']++;
         if (!empty($state['manual_override'])) $result['manual_override']++;
@@ -4293,6 +4473,7 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
         );
     }
 
+    if (function_exists('af_theme_stylesheet_write_last_sync')) af_theme_stylesheet_write_last_sync($result);
     return $result;
 }
 

@@ -113,6 +113,8 @@ final class ActivationDb
             if (preg_match("~theme_tid='?(\d+)'?~", $where, $m) && (int)($row['theme_tid'] ?? 0) !== (int)$m[1]) return false;
             if (preg_match("~(?:^| )tid='?(\d+)'?~", $where, $m) && (int)($row['tid'] ?? 0) !== (int)$m[1]) return false;
             if (preg_match("~name='([^']+)'~", $where, $m) && (string)($row['name'] ?? '') !== $m[1]) return false;
+            if (preg_match("~addon_id='([^']+)'~", $where, $m) && (string)($row['addon_id'] ?? '') !== $m[1]) return false;
+            if (preg_match("~logical_id='([^']+)'~", $where, $m) && (string)($row['logical_id'] ?? '') !== $m[1]) return false;
             if (str_contains($where, "addon_id!='__af_bundle__'") && (string)($row['addon_id'] ?? '') === '__af_bundle__') return false;
             return true;
         }));
