@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+// Unit coverage for the low-level runtime guard helpers. ACP lifecycle coverage
+// belongs to addon_admin_lifecycle_integration.php, which calls AF_Admin.
+
 $root = dirname(__DIR__);
 $core = file_get_contents($root.'/inc/plugins/advancedfunctionality.php');
 $router = file_get_contents($root.'/inc/plugins/advancedfunctionality/admin/router.php');
@@ -61,10 +64,9 @@ foreach ($addons as $addon) {
 
 foreach ([$core, $router] as $source) {
     $disable = substr($source, strpos($source, 'public static function disableAddon'), 1500);
-    $state = strpos($disable, 'af_lifecycle_transition($id, false)');
     $callback = strpos($disable, "\$fn = 'af_'.\$id.'_deactivate'");
-    if ($state === false || $callback === false || $state > $callback) {
-        throw new RuntimeException('Inactive state is not published before the lifecycle callback');
+    if ($callback === false || str_contains($disable, 'af_lifecycle_transition(')) {
+        throw new RuntimeException('ACP disable must use reloaded settings without broad request invalidation');
     }
 }
 if (!str_contains($core, "\$allowed = \$addonId === '' || !function_exists('af_is_addon_enabled') || af_is_addon_enabled(\$addonId)")) {
@@ -81,4 +83,4 @@ if (preg_match($forbiddenLifecycleHack, $core)) {
     throw new RuntimeException('Addon-specific lifecycle exclusion added to AF core');
 }
 
-echo "AF lifecycle contract passed twice for Knowledge Base, Advanced Buddy List, Advanced Editor, AdvancedThreadFields, and AdvancedMenu.\n";
+echo "AF runtime guard unit contract passed twice for Knowledge Base, Advanced Buddy List, Advanced Editor, AdvancedThreadFields, and AdvancedMenu.\n";

@@ -972,7 +972,6 @@ class AF_Admin
         }
         self::ensureEnabledSetting($id, 1);
         af_rebuild_and_reload_settings();
-        af_lifecycle_transition($id, true);
         af_sync_theme_stylesheets(false, $id);
     }
 
@@ -981,9 +980,6 @@ class AF_Admin
         self::ensureEnabledSetting($id, 0);
         af_rebuild_and_reload_settings();
 
-        // The setting change is authoritative immediately.  Code loaded earlier
-        // in this request must not retain runtime permission after this point.
-        af_lifecycle_transition($id, false);
         af_disable_theme_stylesheet_sources($id);
         af_sync_theme_stylesheets(false, $id);
 
@@ -1044,7 +1040,9 @@ class AF_Admin
     }
 }
 
-AF_Admin::dispatch();
+if (!defined('AF_ADMIN_SKIP_DISPATCH')) {
+    AF_Admin::dispatch();
+}
 
 PHP;
 
