@@ -1,0 +1,179 @@
+/*
+ * Adaptive Theme Framework design system.
+ * Public components use the atf- prefix and BEM-style __element/--modifier
+ * names. Every rule is inert unless the addon adds body.atf-active.
+ */
+body.atf-active {
+  /* Surfaces and text */
+  --atf-color-page: #11151c;
+  --atf-color-page-subtle: #171d26;
+  --atf-color-surface: #202936;
+  --atf-color-surface-raised: #293545;
+  --atf-color-text: #edf2f7;
+  --atf-color-text-muted: #aeb9c7;
+  --atf-color-accent: #8fb7ff;
+  --atf-color-accent-contrast: #101722;
+  --atf-color-border: #3a485b;
+  --atf-color-border-strong: #607089;
+
+  /* Shape */
+  --atf-radius-sm: 0.25rem;
+  --atf-radius-md: 0.5rem;
+  --atf-radius-lg: 0.875rem;
+  --atf-radius-pill: 999px;
+
+  /* Spacing: shared by page layout and components */
+  --atf-space-1: 0.25rem;
+  --atf-space-2: 0.5rem;
+  --atf-space-3: 0.75rem;
+  --atf-space-4: 1rem;
+  --atf-space-5: 1.5rem;
+  --atf-space-6: 2rem;
+  --atf-page-gap: var(--atf-space-5);
+  --atf-component-gap: var(--atf-space-4);
+  --atf-content-max-width: 75rem;
+
+  /* Typography */
+  --atf-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --atf-font-size-sm: 0.875rem;
+  --atf-font-size-md: 1rem;
+  --atf-font-size-lg: 1.25rem;
+  --atf-line-height: 1.5;
+  --atf-font-weight-medium: 500;
+  --atf-font-weight-bold: 700;
+
+  /* Controls */
+  --atf-control-height: 2.5rem;
+  --atf-control-padding-inline: 1rem;
+  --atf-control-border-width: 1px;
+  --atf-focus-ring: 0 0 0 3px rgb(143 183 255 / 35%);
+
+  /* Named responsive contract (media queries below mirror these values). */
+  --atf-breakpoint-desktop: 75rem;
+  --atf-breakpoint-tablet: 64rem;
+  --atf-breakpoint-mobile: 48rem;
+  --atf-breakpoint-narrow: 30rem;
+}
+
+body.atf-active .atf-page {
+  box-sizing: border-box;
+  width: min(100%, var(--atf-content-max-width));
+  margin-inline: auto;
+  padding-inline: var(--atf-page-gap);
+  color: var(--atf-color-text);
+  font-family: var(--atf-font-family);
+  font-size: var(--atf-font-size-md);
+  line-height: var(--atf-line-height);
+}
+
+body.atf-active .atf-section { margin-block: var(--atf-space-6); }
+
+body.atf-active .atf-card {
+  padding: var(--atf-space-5);
+  background: var(--atf-color-surface);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-lg);
+}
+
+body.atf-active .atf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--atf-component-gap);
+}
+
+body.atf-active .atf-stack { display: flex; flex-direction: column; gap: var(--atf-component-gap); }
+body.atf-active .atf-stack--compact { gap: var(--atf-space-2); }
+
+body.atf-active .atf-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--atf-space-2) var(--atf-space-3);
+  color: var(--atf-color-text-muted);
+  font-size: var(--atf-font-size-sm);
+}
+
+body.atf-active .atf-button {
+  display: inline-flex;
+  min-height: var(--atf-control-height);
+  align-items: center;
+  justify-content: center;
+  gap: var(--atf-space-2);
+  box-sizing: border-box;
+  padding-inline: var(--atf-control-padding-inline);
+  color: var(--atf-color-accent-contrast);
+  font: inherit;
+  font-weight: var(--atf-font-weight-medium);
+  text-decoration: none;
+  cursor: pointer;
+  background: var(--atf-color-accent);
+  border: var(--atf-control-border-width) solid transparent;
+  border-radius: var(--atf-radius-md);
+}
+
+body.atf-active .atf-button:hover { filter: brightness(1.08); }
+body.atf-active .atf-button:focus-visible { outline: 0; box-shadow: var(--atf-focus-ring); }
+body.atf-active .atf-button--secondary { color: var(--atf-color-text); background: var(--atf-color-surface-raised); border-color: var(--atf-color-border); }
+body.atf-active .atf-button[disabled], body.atf-active .atf-button[aria-disabled="true"] { cursor: not-allowed; opacity: 0.55; }
+
+body.atf-active .atf-tabs {
+  display: flex;
+  gap: var(--atf-space-2);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--atf-color-border);
+}
+
+body.atf-active .atf-tabs__item {
+  padding: var(--atf-space-3) var(--atf-space-4);
+  color: var(--atf-color-text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+}
+
+body.atf-active .atf-tabs__item[aria-current="page"], body.atf-active .atf-tabs__item--active { color: var(--atf-color-text); border-color: var(--atf-color-accent); }
+
+body.atf-active .atf-chip {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  padding-inline: var(--atf-space-3);
+  color: var(--atf-color-text-muted);
+  font-size: var(--atf-font-size-sm);
+  background: var(--atf-color-page-subtle);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-pill);
+}
+
+body.atf-active .atf-form-row { display: grid; gap: var(--atf-space-2); }
+body.atf-active .atf-form-row__label { font-weight: var(--atf-font-weight-medium); }
+body.atf-active .atf-form-row__hint, body.atf-active .atf-form-row__error { font-size: var(--atf-font-size-sm); }
+body.atf-active .atf-form-row__hint { color: var(--atf-color-text-muted); }
+body.atf-active .atf-form-row__error { color: #ff9b9b; }
+body.atf-active .atf-form-row :is(input, select, textarea) {
+  box-sizing: border-box;
+  min-height: var(--atf-control-height);
+  padding: var(--atf-space-2) var(--atf-space-3);
+  color: var(--atf-color-text);
+  font: inherit;
+  background: var(--atf-color-page-subtle);
+  border: var(--atf-control-border-width) solid var(--atf-color-border);
+  border-radius: var(--atf-radius-md);
+}
+body.atf-active .atf-form-row :is(input, select, textarea):focus-visible { outline: 0; border-color: var(--atf-color-accent); box-shadow: var(--atf-focus-ring); }
+
+/* Tablet */
+@media (max-width: 64rem) {
+  body.atf-active { --atf-page-gap: var(--atf-space-4); --atf-component-gap: var(--atf-space-3); }
+}
+
+/* Mobile */
+@media (max-width: 48rem) {
+  body.atf-active { --atf-page-gap: var(--atf-space-3); }
+  body.atf-active .atf-card { padding: var(--atf-space-4); }
+}
+
+/* Narrow mobile */
+@media (max-width: 30rem) {
+  body.atf-active { --atf-page-gap: var(--atf-space-2); --atf-component-gap: var(--atf-space-2); }
+  body.atf-active .atf-button { width: 100%; }
+}
