@@ -122,6 +122,8 @@ function af_advancedposteravatar_init()
         return;
     }
 
+    af_apa_register_atf_provider();
+
     // ВАЖНО:
     // НИЧЕГО не вставляем в $forum['lastpost'] и другие timestamp поля.
     // Маркеры добавляются через шаблоны при install/uninstall (как в оригинале LPA).
@@ -134,8 +136,17 @@ function af_advancedposteravatar_pre_output(&$page)
     }
 
     if (strpos($page, '<apa_uid_[') !== false) {
-        $ctx = af_apa_context();
-        $page = af_apa_replace_markers($page, $ctx['wrap'], $ctx['img'], $ctx['pos']);
+        if (af_apa_atf_is_active()) {
+            // Installed legacy markers may coexist with the future ATF forum
+            // template, but only the slot is allowed to render while ATF owns
+            // composition. Remove inert markers rather than emitting a second
+            // avatar (or leaking custom tags into the response).
+            $page = (string)preg_replace('#<apa_uid_\[[0-9]+\]>#', '', $page);
+            $page = str_replace('<apa_end>', '', $page);
+        } else {
+            $ctx = af_apa_context();
+            $page = af_apa_replace_markers($page, $ctx['wrap'], $ctx['img'], $ctx['pos']);
+        }
     }
 
     if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'online.php') {
@@ -261,6 +272,74 @@ function af_apa_render_avatar_block($uid, array $userMap, $wrapClass, $imgClass,
     return '<span class="apa_inline ' . $posClass . ' ' . $wrapClassSafe . '"' . $style . '>'
          . '<span class="apa_avatar">' . $avatarInner . '</span>'
          . '</span>';
+}
+
+/**
+ * ATF is an optional presentation dependency. Its enabled setting is the
+ * activation boundary; merely having the API loaded is not sufficient.
+ */
+function af_apa_atf_is_active(): bool
+{
+    return function_exists('af_adaptivethemeframework_register_component')
+        && function_exists('af_is_addon_enabled')
+        && af_is_addon_enabled('adaptivethemeframework');
+}
+
+/** Register the forum-card avatar without transferring data ownership to ATF. */
+function af_apa_register_atf_provider(): bool
+{
+    if (!af_apa_atf_is_active()) {
+        return false;
+    }
+
+    return af_adaptivethemeframework_register_component([
+        'owner' => AF_APA_ID,
+        'key' => 'lastposter_avatar',
+        'slot' => 'forum.lastposter_avatar',
+        'renderer' => 'af_apa_render_atf_lastposter_avatar',
+    ]);
+}
+
+/**
+ * Render an ATF forum-card avatar.
+ *
+ * Context contract: fid, lastposteruid and lastposter. The forum id makes the
+ * card context explicit; the other two values are MyBB's last-post identity.
+ * Avatar fields are deliberately loaded here because AdvancedPosterAvatar,
+ * not the layout framework, owns avatar lookup and fallback behaviour.
+ */
+function af_apa_render_atf_lastposter_avatar(array $context): string
+{
+    global $db, $lang;
+
+    if ((int)($context['fid'] ?? 0) <= 0
+        || !array_key_exists('lastposteruid', $context)
+        || !array_key_exists('lastposter', $context)) {
+        return '';
+    }
+
+    $uid = max(0, (int)$context['lastposteruid']);
+    $user = null;
+    if ($uid > 0 && is_object($db)) {
+        $query = $db->simple_select('users', 'uid, username, avatar, avatartype', 'uid=' . $uid, ['limit' => 1]);
+        $row = $db->fetch_array($query);
+        if (is_array($row)) {
+            $user = $row;
+        }
+    }
+
+    if ($user === null) {
+        if (is_object($lang) && method_exists($lang, 'load')) {
+            $lang->load('global');
+        }
+        $user = ['uid' => 0, 'username' => (string)($lang->guest ?? 'Guest')];
+    }
+
+    return '<span class="apa_inline apa_pos_' . af_apa_position()
+        . ' apa_forumindex" style="--apa-size:' . af_apa_size() . 'px">'
+        . '<span class="apa_avatar">'
+        . af_avatar_render($user, 'post', ['img_class' => 'apa_img_index'])
+        . '</span></span>';
 }
 
 /**
