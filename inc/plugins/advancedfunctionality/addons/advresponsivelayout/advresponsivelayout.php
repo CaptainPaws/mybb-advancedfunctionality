@@ -261,11 +261,6 @@ function af_advresponsivelayout_setting_enabled(string $key, bool $default = tru
 
 function af_advresponsivelayout_should_inject_assets(): bool
 {
-    // ATF and the legacy DOM-moving layout are mutually exclusive. Keep this
-    // runtime guard even if both addon settings were enabled accidentally.
-    if (function_exists('af_is_addon_enabled') && af_is_addon_enabled('adaptivethemeframework')) {
-        return false;
-    }
     if (defined('IN_ADMINCP') || (defined('THIS_SCRIPT') && THIS_SCRIPT === 'xmlhttp.php')) {
         return false;
     }
