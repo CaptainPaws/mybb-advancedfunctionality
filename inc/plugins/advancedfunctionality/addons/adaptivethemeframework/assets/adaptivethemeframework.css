@@ -68,6 +68,15 @@ body.atf-active .atf-page {
 
 body.atf-active .atf-section { margin-block: var(--atf-space-6); }
 
+/* Index owns only page composition. The legacy forumbit markup remains untouched. */
+body.atf-active .atf-index { padding-block: var(--atf-space-6); }
+body.atf-active .atf-index__hero { margin-block-end: var(--atf-space-6); }
+body.atf-active .atf-index__title { margin: 0; font-size: clamp(1.75rem, 4vw, 2.75rem); line-height: 1.15; }
+body.atf-active .atf-index__section { margin-block: var(--atf-space-5); }
+body.atf-active .atf-index__section:empty { display: none; }
+body.atf-active .atf-index__forums { min-width: 0; }
+body.atf-active .atf-index__forums > * { max-width: 100%; }
+
 body.atf-active .atf-card {
   padding: var(--atf-space-5);
   background: var(--atf-color-surface);

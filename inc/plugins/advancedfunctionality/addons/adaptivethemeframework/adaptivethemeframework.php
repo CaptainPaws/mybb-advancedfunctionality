@@ -15,6 +15,8 @@ if (!defined('AF_ADDONS')) {
 
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
+define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.4.0');
 
 function af_adaptivethemeframework_init(): void
 {
@@ -222,26 +224,175 @@ function af_adaptivethemeframework_render_slot(string $slot, array $context = []
 
 function af_adaptivethemeframework_install(): bool
 {
-    return true;
+    return af_adaptivethemeframework_acquire_index();
 }
 
 function af_adaptivethemeframework_is_installed(): bool
 {
-    // This version owns no persistent state beyond AF's enabled setting.
-    return true;
+    global $db;
+    if (!is_object($db)) {
+        return true;
+    }
+    return $db->table_exists(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME);
 }
 
 function af_adaptivethemeframework_activate(): bool
 {
-    return true;
+    return af_adaptivethemeframework_acquire_index();
 }
 
 function af_adaptivethemeframework_deactivate(): bool
 {
-    return true;
+    return af_adaptivethemeframework_release_index();
 }
 
 function af_adaptivethemeframework_uninstall(): bool
 {
-    return true;
+    // Keep the ledger: conflicts contain the only durable copy of both versions.
+    return af_adaptivethemeframework_release_index();
+}
+
+function af_adaptivethemeframework_index_seed(): string
+{
+    $seed = @file_get_contents(AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/index.html');
+    return is_string($seed) ? $seed : '';
+}
+
+function af_adaptivethemeframework_checksum(string $content): string
+{
+    return hash('sha256', $content);
+}
+
+function af_adaptivethemeframework_ensure_ownership_schema(): bool
+{
+    global $db;
+    if (!is_object($db)) {
+        return true;
+    }
+    if ($db->table_exists(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME)) {
+        return true;
+    }
+    $collation = $db->build_create_table_collation();
+    $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME . " (
+        id int unsigned NOT NULL AUTO_INCREMENT,
+        template_name varchar(120) NOT NULL,
+        template_sid int NOT NULL,
+        template_tid int unsigned NOT NULL DEFAULT 0,
+        previous_exists tinyint(1) NOT NULL DEFAULT 1,
+        previous_content mediumtext NOT NULL,
+        previous_checksum char(64) NOT NULL,
+        previous_dateline int unsigned NOT NULL DEFAULT 0,
+        atf_seed_content mediumtext NOT NULL,
+        atf_seed_checksum char(64) NOT NULL,
+        atf_installed_checksum char(64) NOT NULL,
+        atf_version varchar(32) NOT NULL,
+        ownership_state varchar(24) NOT NULL,
+        current_content mediumtext NOT NULL,
+        created_at int unsigned NOT NULL,
+        updated_at int unsigned NOT NULL,
+        restored_at int unsigned NOT NULL DEFAULT 0,
+        PRIMARY KEY (id),
+        UNIQUE KEY template_lease (template_sid, template_name),
+        KEY ownership_state (ownership_state),
+        KEY template_tid (template_tid)
+    ) ENGINE=MyISAM{$collation}");
+    return $db->table_exists(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME);
+}
+
+/** Acquire a reversible, per-template-set lease for index. Master sid=-2 is read only. */
+function af_adaptivethemeframework_acquire_index(): bool
+{
+    global $db;
+    if (!is_object($db)) {
+        return true;
+    }
+    $seed = af_adaptivethemeframework_index_seed();
+    if ($seed === '' || !af_adaptivethemeframework_ensure_ownership_schema()) {
+        return false;
+    }
+    $now = defined('TIME_NOW') ? TIME_NOW : time();
+    $master = $db->fetch_array($db->simple_select('templates', '*', "title='index' AND sid='-2'", ['limit' => 1]));
+    $sets = $db->simple_select('templatesets', 'sid', 'sid>0', ['order_by' => 'sid']);
+    $ok = true;
+    while ($set = $db->fetch_array($sets)) {
+        $sid = (int)$set['sid'];
+        $live = $db->fetch_array($db->simple_select('templates', '*', "title='index' AND sid='{$sid}'", ['limit' => 1]));
+        $exists = !empty($live);
+        if (!$exists) {
+            $live = $master;
+        }
+        if (empty($live)) {
+            $ok = false;
+            continue;
+        }
+        $lease = $db->fetch_array($db->simple_select(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, '*', "template_sid='{$sid}' AND template_name='index'", ['limit' => 1]));
+        $current = (string)$live['template'];
+        if ($lease && $lease['ownership_state'] !== 'restored') {
+            if ($lease['ownership_state'] !== 'owned' || af_adaptivethemeframework_checksum($current) !== $lease['atf_installed_checksum']) {
+                $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => 'manual_override', 'current_content' => $current, 'updated_at' => $now], "id='".(int)$lease['id']."'");
+                $ok = false;
+                continue;
+            }
+            if ($lease['atf_seed_checksum'] !== af_adaptivethemeframework_checksum($seed)) {
+                $db->update_query('templates', ['template' => $seed, 'dateline' => $now], "tid='".(int)$live['tid']."'");
+                $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['atf_seed_content' => $seed, 'atf_seed_checksum' => af_adaptivethemeframework_checksum($seed), 'atf_installed_checksum' => af_adaptivethemeframework_checksum($seed), 'atf_version' => AF_ADAPTIVETHEMEFRAMEWORK_VERSION, 'updated_at' => $now], "id='".(int)$lease['id']."'");
+            }
+            continue;
+        }
+        $record = ['template_name' => 'index', 'template_sid' => $sid, 'template_tid' => $exists ? (int)$live['tid'] : 0, 'previous_exists' => $exists ? 1 : 0, 'previous_content' => $current, 'previous_checksum' => af_adaptivethemeframework_checksum($current), 'previous_dateline' => (int)($live['dateline'] ?? 0), 'atf_seed_content' => $seed, 'atf_seed_checksum' => af_adaptivethemeframework_checksum($seed), 'atf_installed_checksum' => af_adaptivethemeframework_checksum($seed), 'atf_version' => AF_ADAPTIVETHEMEFRAMEWORK_VERSION, 'ownership_state' => 'owned', 'current_content' => '', 'created_at' => $now, 'updated_at' => $now, 'restored_at' => 0];
+        if ($lease) {
+            $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, $record, "id='".(int)$lease['id']."'");
+        } else {
+            $db->insert_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, $record);
+        }
+        if ($exists) {
+            $db->update_query('templates', ['template' => $seed, 'dateline' => $now], "tid='".(int)$live['tid']."'");
+        } else {
+            $tid = $db->insert_query('templates', ['title' => 'index', 'template' => $seed, 'sid' => $sid, 'version' => '1840', 'dateline' => $now]);
+            $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['template_tid' => (int)$tid], "template_sid='{$sid}' AND template_name='index'");
+        }
+    }
+    af_adaptivethemeframework_refresh_template_cache();
+    return $ok;
+}
+
+function af_adaptivethemeframework_release_index(): bool
+{
+    global $db;
+    if (!is_object($db)) {
+        return true;
+    }
+    if (!$db->table_exists(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME)) {
+        return true;
+    }
+    $now = defined('TIME_NOW') ? TIME_NOW : time();
+    $query = $db->simple_select(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, '*', "template_name='index' AND ownership_state='owned'");
+    $ok = true;
+    while ($lease = $db->fetch_array($query)) {
+        $sid = (int)$lease['template_sid'];
+        $live = $db->fetch_array($db->simple_select('templates', '*', "title='index' AND sid='{$sid}'", ['limit' => 1]));
+        if (!$live || af_adaptivethemeframework_checksum((string)$live['template']) !== $lease['atf_installed_checksum']) {
+            $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => 'restore_conflict', 'current_content' => (string)($live['template'] ?? ''), 'updated_at' => $now], "id='".(int)$lease['id']."'");
+            $ok = false;
+            continue;
+        }
+        if ((int)$lease['previous_exists'] === 1) {
+            $db->update_query('templates', ['template' => $lease['previous_content'], 'dateline' => (int)$lease['previous_dateline']], "tid='".(int)$live['tid']."'");
+        } else {
+            $db->delete_query('templates', "tid='".(int)$live['tid']."'");
+        }
+        $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => 'restored', 'updated_at' => $now, 'restored_at' => $now], "id='".(int)$lease['id']."'");
+    }
+    af_adaptivethemeframework_refresh_template_cache();
+    return $ok;
+}
+
+function af_adaptivethemeframework_refresh_template_cache(): void
+{
+    if (!function_exists('cache_templatesets') && defined('MYBB_ROOT')) {
+        require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+    }
+    if (function_exists('cache_templatesets')) {
+        cache_templatesets();
+    }
 }
