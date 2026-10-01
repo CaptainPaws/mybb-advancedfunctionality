@@ -20,9 +20,9 @@ if (!str_contains((string)$template, 'class="atf-page atf-index"')
     || !str_contains((string)$template, 'class="atf-index__section atf-index__forums"')) {
     throw new RuntimeException('ATF index page and compatibility section are missing.');
 }
-if (!str_contains((string)$php, "ownership_state' => 'manual_override'")
-    || !str_contains((string)$php, "ownership_state' => 'restore_conflict'")
-    || !str_contains((string)$php, "ownership_state' => 'restored'")) {
+if (!str_contains((string)$php, "ownership_state' => af_adaptivethemeframework_db_string('manual_override')")
+    || !str_contains((string)$php, "ownership_state' => af_adaptivethemeframework_db_string('restore_conflict')")
+    || !str_contains((string)$php, "ownership_state' => af_adaptivethemeframework_db_string('restored')")) {
     throw new RuntimeException('Index lease does not fail closed for manual edits and restore conflicts.');
 }
 preg_match_all('~^\s*([^@\s}][^{}]*?)\s*\{~m', preg_replace('~/\*.*?\*/~s', '', (string)$css), $blocks);

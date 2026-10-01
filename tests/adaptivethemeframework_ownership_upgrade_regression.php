@@ -6,10 +6,12 @@ class AtfDatabase {
     public array $columns = [];
     public array $indexes = [];
     public int $nextId = 100;
+    public array $writeLog = [];
     public function __construct(bool $legacy = false, array $legacyRows = []) {
+        $previous = "<title>{\$mybb->settings['bbname']}</title>\n<script>\nvar x = '{\$lang->some_value}';\nvar path = \"C:\\\\themes\\\"atf\\\"\";\n</script>";
         $this->tables['templates'] = [
             ['tid'=>1, 'title'=>'index', 'template'=>'MASTER', 'sid'=>-2, 'version'=>'1840', 'status'=>'', 'dateline'=>10],
-            ['tid'=>2, 'title'=>'index', 'template'=>'CUSTOM', 'sid'=>1, 'version'=>'1840', 'status'=>'', 'dateline'=>20],
+            ['tid'=>2, 'title'=>'index', 'template'=>$previous, 'sid'=>1, 'version'=>'1840', 'status'=>'', 'dateline'=>20],
         ];
         $this->tables['templatesets'] = [['sid'=>1, 'title'=>'Default']];
         if ($legacy) {
@@ -63,13 +65,36 @@ class AtfDatabase {
         return new AtfResult($rows);
     }
     public function fetch_array($result) { return $result->rows[$result->position++] ?? false; }
+    public function escape_string($value) {
+        return strtr((string)$value, ["\\"=>"\\\\", "\0"=>"\\0", "\n"=>"\\n", "\r"=>"\\r", "'"=>"\\'", '"'=>'\\"']);
+    }
+    private function decodeWrite(array $row): array {
+        foreach ($row as $key => $value) {
+            if (!is_string($value)) continue;
+            // MyBB quotes values without escaping them. Model the resulting SQL
+            // literal, rejecting raw quotes and decoding what MySQL stores.
+            for ($i = 0, $length = strlen($value); $i < $length; $i++) {
+                if ($value[$i] === "'") throw new RuntimeException("SQL syntax error: unescaped quote in {$key}");
+                if ($value[$i] !== "\\") continue;
+                if (++$i >= $length) throw new RuntimeException("SQL syntax error: dangling backslash in {$key}");
+            }
+            $row[$key] = preg_replace_callback('/\\\\([0nr\\\\\'\"])/', static fn($match) => match ($match[1]) {
+                '0' => "\0", 'n' => "\n", 'r' => "\r", default => $match[1],
+            }, $value);
+        }
+        return $row;
+    }
     public function insert_query($table, $row) {
+        $this->writeLog[] = ['insert', $table, $row];
+        $row = $this->decodeWrite($row);
         if ($table === 'templates') $row['tid'] = $this->nextId++;
         else $row['id'] = $this->nextId++;
         $this->tables[$table][] = $row;
         return $row[$table === 'templates' ? 'tid' : 'id'];
     }
     public function update_query($table, $values, $where) {
+        $this->writeLog[] = ['update', $table, $values];
+        $values = $this->decodeWrite($values);
         foreach ($this->tables[$table] as &$row) if ($this->matches($row, $where)) $row = array_merge($row, $values);
         return true;
     }
@@ -88,11 +113,14 @@ $seed = af_adaptivethemeframework_index_seed();
 
 // A: no ledger -> current schema -> acquire.
 $db = new AtfDatabase();
+$previous = $db->tables['templates'][1]['template'];
 if (!af_adaptivethemeframework_activate() || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 1 || $db->tables['templates'][1]['template'] !== $seed) throw new RuntimeException('fresh acquisition failed');
+$lease = $db->tables['af_adaptivethemeframework_template_ownership'][0];
+if ($lease['previous_content'] !== $previous || $lease['atf_seed_content'] !== $seed) throw new RuntimeException('SQL-safe lease did not round-trip raw template content');
 $master = $db->tables['templates'][0];
 // activate -> deactivate -> activate must restore and reuse the one natural-key row.
 af_adaptivethemeframework_deactivate();
-if ($db->tables['templates'][1]['template'] !== 'CUSTOM') throw new RuntimeException('deactivation did not restore previous content');
+if ($db->tables['templates'][1]['template'] !== $previous) throw new RuntimeException('deactivation did not restore previous content');
 af_adaptivethemeframework_activate();
 if (count($db->tables['af_adaptivethemeframework_template_ownership']) !== 1 || $db->tables['templates'][0] !== $master) throw new RuntimeException('repeat lifecycle made a backup chain or changed master');
 
@@ -102,7 +130,7 @@ $db = new AtfDatabase(true, [$legacy]);
 $failedClosed = af_adaptivethemeframework_activate() === false
     && str_starts_with((string)($GLOBALS['af_adaptivethemeframework_activation_stage'] ?? ''), 'update_lease');
 $row = $db->tables['af_adaptivethemeframework_template_ownership'][0];
-if (!$failedClosed || $row['previous_content'] !== 'IRREPLACEABLE BACKUP' || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 1 || $db->tables['templates'][1]['template'] !== 'CUSTOM') throw new RuntimeException('legacy migration did not preserve/fail closed');
+if (!$failedClosed || $row['previous_content'] !== 'IRREPLACEABLE BACKUP' || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 1 || $db->tables['templates'][1]['template'] !== $previous) throw new RuntimeException('legacy migration did not preserve/fail closed');
 foreach (array_keys(af_adaptivethemeframework_ownership_columns()) as $column) if (!$db->field_exists($column, 'af_adaptivethemeframework_template_ownership')) throw new RuntimeException("missing migrated column {$column}");
 
 // Duplicate natural keys are reported before UNIQUE DDL; no lease or template is deleted/changed.
@@ -122,5 +150,16 @@ af_adaptivethemeframework_activate();
 $db->tables['templates'][1]['template'] = 'MANUAL EDIT';
 $conflict = af_adaptivethemeframework_activate() === false;
 if (!$conflict || $db->tables['templates'][1]['template'] !== 'MANUAL EDIT' || $db->tables['af_adaptivethemeframework_template_ownership'][0]['ownership_state'] !== 'manual_override') throw new RuntimeException('manual conflict was overwritten');
+
+// E: a set inheriting the master receives an escaped override, then release
+// removes it and reacquisition reuses the same lease instead of chaining backups.
+$db = new AtfDatabase();
+array_splice($db->tables['templates'], 1, 1);
+if (!af_adaptivethemeframework_activate()) throw new RuntimeException('index override acquisition failed');
+$override = array_values(array_filter($db->tables['templates'], static fn($row) => (int)$row['sid'] === 1));
+$templateInsert = array_values(array_filter($db->writeLog, static fn($write) => $write[0] === 'insert' && $write[1] === 'templates'));
+if (count($override) !== 1 || $override[0]['template'] !== $seed || count($templateInsert) !== 1) throw new RuntimeException('escaped index override was not inserted');
+if (!af_adaptivethemeframework_deactivate() || count(array_filter($db->tables['templates'], static fn($row) => (int)$row['sid'] === 1)) !== 0) throw new RuntimeException('inherited index override was not released');
+if (!af_adaptivethemeframework_activate() || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 1) throw new RuntimeException('override reacquisition made a backup chain');
 
 echo "ATF ownership fresh/upgrade/conflict lifecycle passed.\n";
