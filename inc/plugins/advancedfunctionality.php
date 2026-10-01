@@ -3350,6 +3350,33 @@ function af_theme_stylesheet_get_bundle_row(int $themeTid): array
     return $db->fetch_array($q) ?: [];
 }
 
+/**
+ * Prepare a stylesheet body for MyBB's array query builders.
+ *
+ * MyBB 1.8's insert_query()/update_query() quote string values, but do not
+ * call escape_string() for them.  Keep this at the DB boundary so the source
+ * used for hashing, parsing, caching, and verification always remains raw.
+ */
+function af_theme_stylesheet_db_css(string $css): string
+{
+    global $db;
+    return $db->escape_string($css);
+}
+
+/** Execute a CSS DB operation with a useful, body-free production diagnostic. */
+function af_theme_stylesheet_sql_stage(string $stage, int $themeTid, callable $callback)
+{
+    try {
+        return $callback();
+    } catch (Throwable $error) {
+        $context = 'operation=sync_bundle theme_tid='.$themeTid
+            .' function=af_theme_stylesheet_sync_bundle stage='.$stage
+            .' addon='.AF_THEME_BUNDLE_ADDON_ID;
+        @error_log('[AF advancedstyles] '.$context.' exception='.get_class($error).': '.$error->getMessage());
+        throw new RuntimeException($context.'; '.$error->getMessage(), 0, $error);
+    }
+}
+
 /** Persist a complete, non-delivered snapshot before a destructive CSS write. */
 function af_theme_stylesheet_create_recovery(int $themeTid, array $row, string $css): array
 {
@@ -3478,10 +3505,7 @@ function af_theme_stylesheet_migrate_legacy_bundle(int $themeTid, string $expect
 
     $sid = (int)$row['sid'];
     $updated = (string)$plan['source'];
-    // MyBB's insert/update helpers escape values themselves. Passing an
-    // already escaped stylesheet corrupts quotes and backslashes on every
-    // save (and makes the cached file differ from the ACP value).
-    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
+    $db->update_query('themestylesheets', ['stylesheet' => af_theme_stylesheet_db_css($updated), 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
     $seed = af_theme_stylesheet_build_bundle();
     $payload = [
         'theme_tid' => $themeTid, 'stylesheet_sid' => $sid, 'addon_id' => AF_THEME_BUNDLE_ADDON_ID,
@@ -3518,7 +3542,7 @@ function af_theme_stylesheet_save_section(int $themeTid, string $sectionId, stri
     $replacement = af_theme_stylesheet_encode_section($editedMeta, $newCss);
     $updated = substr($current, 0, (int)$section['start']).$replacement.substr($current, (int)$section['end']);
     $sid = (int)$row['sid'];
-    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
+    $db->update_query('themestylesheets', ['stylesheet' => af_theme_stylesheet_db_css($updated), 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
     $state = af_theme_stylesheet_bundle_state($themeTid);
     if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 1, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
     $addonId = (string)($editedMeta['addon_id'] ?? '');
@@ -3557,7 +3581,7 @@ function af_theme_stylesheet_repair_bundle_structure(int $themeTid, string $expe
     if (empty($backup['ok'])) return $backup;
     $updated = (string)$fresh['source'];
     $sid = (int)$row['sid'];
-    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
+    $db->update_query('themestylesheets', ['stylesheet' => af_theme_stylesheet_db_css($updated), 'lastmodified' => TIME_NOW], "sid='{$sid}' AND tid='".(int)$themeTid."'");
     $state = af_theme_stylesheet_bundle_state($themeTid);
     $manual = !empty($resigned['ok']);
     if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => $manual ? 1 : 0, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
@@ -3831,13 +3855,12 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     $manual = $migratedLegacyOverride;
     if (!$row) {
         $baseDiagnostic['bundle_creation_attempted'] = true;
-        // Values passed to MyBB's insert helper are deliberately raw: the DB
-        // driver performs escaping. This is the branch which makes a fresh
-        // bundle visible on MyBB's native Stylesheets page.
-        $insertResult = $db->insert_query('themestylesheets', [
+        // MyBB's array helper adds SQL quotes but does not escape their body.
+        // Escape exactly once here, at the DB boundary.
+        $insertResult = af_theme_stylesheet_sql_stage('insert_themestylesheets', $themeTid, static fn() => $db->insert_query('themestylesheets', [
             'name' => AF_THEME_BUNDLE_NAME, 'tid' => $themeTid, 'attachedto' => $attachedTo,
-            'stylesheet' => (string)$bundle['source'], 'cachefile' => '', 'lastmodified' => TIME_NOW,
-        ]);
+            'stylesheet' => af_theme_stylesheet_db_css((string)$bundle['source']), 'cachefile' => '', 'lastmodified' => TIME_NOW,
+        ]));
         $sid = (int)$insertResult;
         // Some compatible DB adapters report success and expose the generated
         // auto-increment value separately instead of returning it directly.
@@ -3893,7 +3916,7 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
             }
         }
         if ($write) {
-            $update['stylesheet'] = (string)$bundle['source'];
+            $update['stylesheet'] = af_theme_stylesheet_db_css((string)$bundle['source']);
             $manual = $force ? false : ($migratedLegacyOverride || !empty($bundle['manual_override']));
         }
         $db->update_query('themestylesheets', $update, "sid='{$sid}'");
@@ -4453,7 +4476,19 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
         } catch (Throwable $error) {
             @error_log('[AF advancedstyles] operation=sync theme_tid='.(int)$themeTid.' exception='.get_class($error).': '.$error->getMessage());
             $result['errors'][] = ['theme_tid' => (int)$themeTid, 'message' => $error->getMessage()];
-            $result['themes'][] = ['theme_tid' => (int)$themeTid, 'exact_error' => get_class($error).': '.$error->getMessage()];
+            $insertAttempted = str_contains($error->getMessage(), 'stage=insert_themestylesheets');
+            $result['themes'][] = [
+                'theme_tid' => (int)$themeTid,
+                'bundle_creation_attempted' => $insertAttempted,
+                'inserted_sid' => 0,
+                'insert_verified' => false,
+                'registry_sid' => 0,
+                'registry_verified' => false,
+                'cache_created' => false,
+                'cache_result' => 'not attempted',
+                'sql_stage' => $insertAttempted ? 'insert_themestylesheets' : 'unknown',
+                'exact_error' => get_class($error).': '.$error->getMessage(),
+            ];
             continue;
         }
         $themeDiagnostic = (array)($state['diagnostic'] ?? []);
@@ -4504,7 +4539,7 @@ function af_theme_stylesheet_acp_resign(): void
         return;
     }
     $updated = (string)$resigned['source'];
-    $db->update_query('themestylesheets', ['stylesheet' => $updated, 'lastmodified' => TIME_NOW], "sid='{$sid}'");
+    $db->update_query('themestylesheets', ['stylesheet' => af_theme_stylesheet_db_css($updated), 'lastmodified' => TIME_NOW], "sid='{$sid}'");
     $state = af_theme_stylesheet_bundle_state((int)$row['tid']);
     if ($state) $db->update_query(AF_THEME_STYLESHEETS_TABLE, ['last_synced_checksum' => sha1($updated), 'manual_override' => 1, 'updated_at' => TIME_NOW], "id='".(int)$state['id']."'");
     af_theme_stylesheet_cache_row((int)$row['tid'], $sid, $updated);
