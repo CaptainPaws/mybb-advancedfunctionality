@@ -15,7 +15,6 @@ define('AF_PLUGIN_ID', 'advancedfunctionality');
 define('AF_BASE', MYBB_ROOT.'inc/plugins/'.AF_PLUGIN_ID.'/');
 define('AF_ADDONS', AF_BASE.'addons/');
 define('AF_ADMIN', AF_BASE.'admin/');
-define('AF_ADMIN_ROUTER_SOURCE', AF_ADMIN.'router.dist.php');
 define('AF_ASSETS', AF_BASE.'assets/');
 define('AF_CACHE',  AF_BASE.'cache/');
 define('AF_ADMIN_PROXY_DIR', MYBB_ROOT.'admin/modules/'.AF_PLUGIN_ID.'/');
@@ -296,64 +295,6 @@ function af_front_output_template_string(string $pageTitle, string $templateStri
     exit;
 }
 
-
-function af_admin_router_signature(): string
-{
-    return 'AF-GENERATED: admin-router v3';
-}
-
-/** Refresh the generated ACP router from its versioned canonical source. */
-function af_ensure_admin_router(): array
-{
-    $source = defined('AF_ADMIN_ROUTER_SOURCE') ? AF_ADMIN_ROUTER_SOURCE : AF_ADMIN.'router.dist.php';
-    $target = AF_ADMIN.'router.php';
-    $ownedPrefix = 'AF-GENERATED: admin-router';
-    if (!is_file($source)) return ['ok' => false, 'status' => 'source_missing'];
-    $canonical = (string)@file_get_contents($source);
-    if ($canonical === '' || strpos($canonical, af_admin_router_signature()) === false) {
-        return ['ok' => false, 'status' => 'source_invalid'];
-    }
-    if (is_file($target)) {
-        $current = (string)@file_get_contents($target);
-        if (strpos($current, $ownedPrefix) === false) {
-            @file_put_contents(AF_CACHE.'router_diagnostic.txt', 'foreign_router_not_overwritten', LOCK_EX);
-            return ['ok' => false, 'status' => 'foreign_router'];
-        }
-        if (hash_equals(hash('sha256', $canonical), hash('sha256', $current))) {
-            return ['ok' => true, 'status' => 'unchanged'];
-        }
-    }
-    $written = @file_put_contents($target, $canonical, LOCK_EX);
-    return $written === strlen($canonical)
-        ? ['ok' => true, 'status' => 'updated']
-        : ['ok' => false, 'status' => 'write_failed'];
-}
-
-function af_ensure_scaffold(bool $force_refresh = false): void
-{
-    foreach ([AF_BASE, AF_ADDONS, AF_ADMIN, AF_ASSETS, AF_CACHE] as $dir) {
-        if (!is_dir($dir)) @mkdir($dir, 0777, true);
-    }
-    foreach ([AF_LANG_EN, AF_LANG_EN_ADMIN, AF_LANG_RU, AF_LANG_RU_ADMIN] as $dir) {
-        if (!is_dir($dir)) @mkdir($dir, 0777, true);
-    }
-
-    // router.dist.php is the canonical source. Refresh owned generated
-    // routers on every install/activation, while preserving foreign files.
-    af_ensure_admin_router();
-
-    // Backward-compatible embedded bootstrap is only a last resort when the
-    // canonical distribution file is absent.
-    $router = AF_ADMIN.'router.php';
-    if (!is_file($router) || $force_refresh) {
-
-        // ВАЖНО: тут должен быть ТОЛЬКО ОДИН nowdoc. Никаких "$code = <<<'PHP'" внутри.
-        $code = <<<'PHP'
-<?php
-// Router for Advanced functionality admin module
-if (!defined('IN_MYBB')) { die('No direct access'); }
-
-require_once MYBB_ROOT.'inc/plugins/advancedfunctionality.php';
 
 class AF_Admin
 {
@@ -1093,11 +1034,13 @@ class AF_Admin
     }
 }
 
-AF_Admin::dispatch();
-
-PHP;
-
-        @file_put_contents($router, $code);
+function af_ensure_scaffold(bool $force_refresh = false): void
+{
+    foreach ([AF_BASE, AF_ADDONS, AF_ADMIN, AF_ASSETS, AF_CACHE] as $dir) {
+        if (!is_dir($dir)) @mkdir($dir, 0777, true);
+    }
+    foreach ([AF_LANG_EN, AF_LANG_EN_ADMIN, AF_LANG_RU, AF_LANG_RU_ADMIN] as $dir) {
+        if (!is_dir($dir)) @mkdir($dir, 0777, true);
     }
 
     // --- 2) Админ-модуль: module_meta.php + index.php-прокси (в РЕАЛЬНУЮ папку админки)

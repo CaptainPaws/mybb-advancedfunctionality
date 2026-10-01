@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__);
 $core = file_get_contents($root . '/inc/plugins/advancedfunctionality.php');
-$router = file_get_contents($root . '/inc/plugins/advancedfunctionality/admin/router.php');
+$router = $core;
 
 $checks = [
     'fixed bundle name' => "define('AF_THEME_BUNDLE_NAME', 'advancedstyles.css')",
