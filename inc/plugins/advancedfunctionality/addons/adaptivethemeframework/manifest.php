@@ -6,7 +6,7 @@ return [
     'id' => 'adaptivethemeframework',
     'name' => 'Adaptive Theme Framework',
     'description' => 'Presentation framework for adaptive AF component-slot layouts.',
-    'version' => '0.2.0',
+    'version' => '0.3.0',
     'author' => 'AdvancedFunctionality',
     'bootstrap' => 'adaptivethemeframework.php',
 
@@ -17,13 +17,22 @@ return [
         'directory_fallback' => false,
     ],
 
-    // Assets will be introduced with the component-slot implementation.
+    // CSS is a normal AF theme source and is therefore composed into
+    // advancedstyles.css. It is deliberately not queued as a direct asset.
     'assets' => [
         'front' => [
             'css' => [],
             'js' => [],
         ],
     ],
+
+    'theme_stylesheets' => [[
+        'id' => 'adaptivethemeframework_design_system',
+        'file' => 'assets/adaptivethemeframework.css',
+        'stylesheet_name' => 'af_adaptivethemeframework.css',
+        'attach' => [],
+        'enabled_setting' => 'af_adaptivethemeframework_enabled',
+    ]],
 
     'lang' => [
         'russian' => [

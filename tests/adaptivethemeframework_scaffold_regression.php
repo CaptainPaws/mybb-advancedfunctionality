@@ -18,7 +18,13 @@ if (($manifest['frontend'] ?? []) !== [
 }
 
 if (($manifest['assets']['front'] ?? null) !== ['css' => [], 'js' => []]) {
-    throw new RuntimeException('Initial Adaptive Theme Framework assets must remain empty.');
+    throw new RuntimeException('Adaptive Theme Framework must not bypass theme stylesheet delivery.');
+}
+
+$stylesheet = $manifest['theme_stylesheets'][0] ?? [];
+if (($stylesheet['file'] ?? '') !== 'assets/adaptivethemeframework.css'
+    || ($stylesheet['enabled_setting'] ?? '') !== 'af_adaptivethemeframework_enabled') {
+    throw new RuntimeException('Adaptive Theme Framework design system must use the AF theme stylesheet pipeline.');
 }
 
 if (str_contains(strtolower(serialize($manifest)), 'blacklist')) {

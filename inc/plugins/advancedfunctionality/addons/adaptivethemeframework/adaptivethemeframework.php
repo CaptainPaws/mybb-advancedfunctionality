@@ -18,7 +18,51 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_I
 
 function af_adaptivethemeframework_init(): void
 {
-    // Slot providers register from their own bootstrap. No MyBB hook is needed.
+    global $plugins;
+    if (is_object($plugins) && method_exists($plugins, 'add_hook')) {
+        $plugins->add_hook('pre_output_page', 'af_adaptivethemeframework_mark_page', 100);
+    }
+}
+
+/**
+ * Add the single activation boundary used by every ATF design-system rule.
+ *
+ * This runtime marker, rather than a template edit, keeps the current MyBB
+ * templates untouched and makes a retained/cached stylesheet inert whenever
+ * the addon is disabled.
+ */
+function af_adaptivethemeframework_mark_page(string &$page): void
+{
+    if ($page === '' || stripos($page, '<body') === false) {
+        return;
+    }
+
+    $page = (string)preg_replace_callback(
+        '~<body\b([^>]*)>~i',
+        static function (array $match): string {
+            $attributes = $match[1];
+            if (preg_match('~\bclass\s*=\s*(["\'])(.*?)\1~is', $attributes, $classMatch, PREG_OFFSET_CAPTURE)) {
+                $classes = preg_split('~\s+~', trim($classMatch[2][0])) ?: [];
+                if (!in_array('atf-active', $classes, true)) {
+                    $classes[] = 'atf-active';
+                }
+                $replacement = 'class=' . $classMatch[1][0]
+                    . implode(' ', array_filter($classes))
+                    . $classMatch[1][0];
+                $attributes = substr_replace(
+                    $attributes,
+                    $replacement,
+                    (int)$classMatch[0][1],
+                    strlen($classMatch[0][0])
+                );
+            } else {
+                $attributes .= ' class="atf-active"';
+            }
+            return '<body' . $attributes . '>';
+        },
+        $page,
+        1
+    );
 }
 
 /** The public, compatibility-audited slot catalogue. */
