@@ -1,6 +1,7 @@
 <?php
-// Stable ACP bootstrap; all implementation lives in advancedfunctionality.php.
-if (!defined('IN_MYBB')) { die('No direct access'); }
+if (!defined('IN_MYBB')) {
+    die('No direct access');
+}
 
 require_once MYBB_ROOT.'inc/plugins/advancedfunctionality.php';
 

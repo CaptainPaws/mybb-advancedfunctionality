@@ -1043,6 +1043,9 @@ function af_ensure_scaffold(bool $force_refresh = false): void
         if (!is_dir($dir)) @mkdir($dir, 0777, true);
     }
 
+    // Migrate the old generated AF_Admin copy to a bootstrap-only router.
+    af_ensure_admin_router_proxy();
+
     // --- 2) Админ-модуль: module_meta.php + index.php-прокси (в РЕАЛЬНУЮ папку админки)
     $adminAbs = af_admin_absdir();
     $modDir   = rtrim($adminAbs,'/').'/modules/'.AF_PLUGIN_ID;
@@ -1165,6 +1168,34 @@ PHP;
 
 
 
+
+
+function af_admin_router_proxy_contents(): string
+{
+    return <<<'PHP'
+<?php
+if (!defined('IN_MYBB')) {
+    die('No direct access');
+}
+
+require_once MYBB_ROOT.'inc/plugins/advancedfunctionality.php';
+
+AF_Admin::dispatch();
+PHP;
+}
+
+/** Ensure the plugin-owned ACP router contains no implementation code. */
+function af_ensure_admin_router_proxy(): bool
+{
+    $router = AF_ADMIN.'router.php';
+    $proxy = af_admin_router_proxy_contents();
+
+    if (is_file($router) && (string)@file_get_contents($router) === $proxy) {
+        return true;
+    }
+
+    return @file_put_contents($router, $proxy, LOCK_EX) === strlen($proxy);
+}
 
 
 function af_write_admin_proxy(): void
