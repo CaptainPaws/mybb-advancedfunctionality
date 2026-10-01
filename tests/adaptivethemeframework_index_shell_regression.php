@@ -11,7 +11,7 @@ foreach (['{$headerinclude}', '{$header}', '{$fastnews}', '{$forums}', '{$boards
         throw new RuntimeException("Index compatibility value must render exactly once: {$value}");
     }
 }
-foreach (['forumbit_depth2_forum', 'forumbit_depth2_forum_lastpost'] as $title) {
+foreach (['forumbit_depth2_forum', 'forumbit_depth2_forum_lastpost', 'forumdisplay_thread'] as $title) {
     $card = file_get_contents($addon . '/templates/' . $title . '.html');
     if (!is_string($card) || !str_contains($php, "'{$title}' =>") || str_contains($card, '<tr')) {
         throw new RuntimeException("ATF must own a semantic card template for {$title}.");
