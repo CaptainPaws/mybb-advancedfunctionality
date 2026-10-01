@@ -66,6 +66,30 @@ if (af_adaptivethemeframework_render_slot('forum.lastposter_avatar', ['lastposte
     throw new RuntimeException('Invalid forum context rendered a component.');
 }
 
+// Exercise the same server-side composition consumed by the ATF template, not
+// merely provider registration or a direct slot call.
+$lastpostTemplate = file_get_contents($addons . 'adaptivethemeframework/templates/forumbit_depth2_forum_lastpost.html');
+$renderedCardLastpost = str_replace(
+    ['{$forum[\'fid\']}', '{$lastpost_data[\'lastposteruid\']}'],
+    ['3', '7'],
+    (string)$lastpostTemplate
+);
+af_adaptivethemeframework_mark_page($renderedCardLastpost);
+if (!str_contains($renderedCardLastpost, 'uploads/avatar.png')) {
+    throw new RuntimeException('ATF forum-card output did not contain the provider avatar HTML.');
+}
+$GLOBALS['test_enabled']['advancedposteravatar'] = false;
+$renderedWithoutProvider = str_replace(
+    ['{$forum[\'fid\']}', '{$lastpost_data[\'lastposteruid\']}'],
+    ['3', '7'],
+    (string)$lastpostTemplate
+);
+af_adaptivethemeframework_mark_page($renderedWithoutProvider);
+if (str_contains($renderedWithoutProvider, 'uploads/avatar.png') || !str_contains($renderedWithoutProvider, 'atf-forum-lastpost__content')) {
+    throw new RuntimeException('ATF forum-card fallback without an avatar provider is broken.');
+}
+$GLOBALS['test_enabled']['advancedposteravatar'] = true;
+
 $page = '<apa_uid_[7]>legacy<apa_end>';
 af_advancedposteravatar_pre_output($page);
 if (str_contains($page, 'uploads/avatar.png') || str_contains($page, '<apa_')) {

@@ -1,0 +1,8 @@
+<section class="atf-forum-lastpost" aria-label="{$lang->forumbit_lastpost}">
+  <div class="atf-forum-lastpost__avatar"><atf-forum-avatar fid="{$forum['fid']}" uid="{$lastpost_data['lastposteruid']}"></atf-forum-avatar></div>
+  <div class="atf-forum-lastpost__content">
+    <a class="atf-forum-lastpost__thread" href="{$lastpost_link}" title="{$full_lastpost_subject}">{$lastpost_subject}</a>
+    <div class="atf-forum-lastpost__poster">{$lang->by} {$lastpost_profilelink}</div>
+    <time class="atf-forum-lastpost__time">{$lastpost_date}</time>
+  </div>
+</section>
