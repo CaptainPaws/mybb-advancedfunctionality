@@ -23,7 +23,19 @@ class AtfDatabase {
     public function build_create_table_collation() { return ' DEFAULT CHARSET=utf8mb4'; }
     public function write_query($sql) {
         $name = 'af_adaptivethemeframework_template_ownership';
-        if (str_starts_with($sql, 'CREATE TABLE')) {
+        if (str_starts_with($sql, 'SELECT template_sid')) {
+            $counts = [];
+            foreach ($this->tables[$name] as $row) {
+                $key = (int)($row['template_sid'] ?? 0).'|'.(string)($row['template_name'] ?? '');
+                $counts[$key] = ($counts[$key] ?? 0) + 1;
+            }
+            $rows = [];
+            foreach ($counts as $key => $count) if ($count > 1) {
+                [$sid, $template] = explode('|', $key, 2);
+                $rows[] = ['template_sid'=>(int)$sid, 'template_name'=>$template, 'cnt'=>$count];
+            }
+            return new AtfResult(array_slice($rows, 0, 1));
+        } elseif (str_starts_with($sql, 'CREATE TABLE')) {
             $this->tables[$name] = [];
             $this->columns[$name] = array_keys(af_adaptivethemeframework_ownership_columns());
             $this->indexes[$name] = ['template_lease', 'ownership_state', 'template_tid'];
@@ -87,18 +99,28 @@ if (count($db->tables['af_adaptivethemeframework_template_ownership']) !== 1 || 
 // B/C: previous schema is ALTERed in place; legacy bytes survive and fail closed.
 $legacy = ['id'=>7, 'template_name'=>'index', 'template_sid'=>1, 'previous_content'=>'IRREPLACEABLE BACKUP'];
 $db = new AtfDatabase(true, [$legacy]);
-$failedClosed = false;
-try { af_adaptivethemeframework_activate(); } catch (RuntimeException $error) { $failedClosed = str_contains($error->getMessage(), 'load_lease') || str_contains($error->getMessage(), 'ownership cannot be proven'); }
+$failedClosed = af_adaptivethemeframework_activate() === false
+    && str_starts_with((string)($GLOBALS['af_adaptivethemeframework_activation_stage'] ?? ''), 'update_lease');
 $row = $db->tables['af_adaptivethemeframework_template_ownership'][0];
 if (!$failedClosed || $row['previous_content'] !== 'IRREPLACEABLE BACKUP' || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 1 || $db->tables['templates'][1]['template'] !== 'CUSTOM') throw new RuntimeException('legacy migration did not preserve/fail closed');
 foreach (array_keys(af_adaptivethemeframework_ownership_columns()) as $column) if (!$db->field_exists($column, 'af_adaptivethemeframework_template_ownership')) throw new RuntimeException("missing migrated column {$column}");
+
+// Duplicate natural keys are reported before UNIQUE DDL; no lease or template is deleted/changed.
+$duplicateRows = [$legacy, array_merge($legacy, ['id'=>8, 'previous_content'=>'SECOND BACKUP'])];
+$db = new AtfDatabase(true, $duplicateRows);
+$templatesBeforeDuplicateCheck = $db->tables['templates'];
+if (af_adaptivethemeframework_schema_readiness() !== false
+    || ($GLOBALS['af_adaptivethemeframework_activation_stage'] ?? '') !== 'check_duplicate_leases'
+    || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 2
+    || $db->tables['templates'] !== $templatesBeforeDuplicateCheck) {
+    throw new RuntimeException('duplicate lease preflight was not safe');
+}
 
 // D: proven lease plus changed live index becomes conflict and is never overwritten.
 $db = new AtfDatabase();
 af_adaptivethemeframework_activate();
 $db->tables['templates'][1]['template'] = 'MANUAL EDIT';
-$conflict = false;
-try { af_adaptivethemeframework_activate(); } catch (RuntimeException $error) { $conflict = true; }
+$conflict = af_adaptivethemeframework_activate() === false;
 if (!$conflict || $db->tables['templates'][1]['template'] !== 'MANUAL EDIT' || $db->tables['af_adaptivethemeframework_template_ownership'][0]['ownership_state'] !== 'manual_override') throw new RuntimeException('manual conflict was overwritten');
 
 echo "ATF ownership fresh/upgrade/conflict lifecycle passed.\n";
