@@ -416,6 +416,18 @@ body.atf-active .atf-pm-space__used { color: var(--atf-color-page); background: 
 body.atf-active .atf-pm-space.high .atf-pm-space__used { background: #d95c5c; }
 body.atf-active .atf-pm__folder-select { max-width: 100%; }
 body.atf-active .atf-pm__empty { text-align: center; }
+body.atf-active .atf-pm-search__form { display: grid; gap: var(--atf-component-gap); }
+body.atf-active .atf-pm-search .atf-section { display: grid; gap: var(--atf-space-4); }
+body.atf-active .atf-pm-search .atf-section > h2 { margin: 0; }
+body.atf-active .atf-pm-search .atf-form-row__hint,
+body.atf-active .atf-pm-search .atf-form-row__choices { display: flex; flex-wrap: wrap; gap: var(--atf-space-2) var(--atf-space-4); }
+body.atf-active .atf-pm-search fieldset.atf-form-row { min-width: 0; padding: 0; border: 0; }
+body.atf-active .atf-pm-search__folders { min-height: 8rem; }
+body.atf-active .atf-pm-search__submit { text-align: center; }
+body.atf-active .atf-pm-card--search { grid-template-columns: auto auto minmax(0, 1fr) minmax(7rem, .3fr) minmax(6rem, .25fr) auto auto; }
+body.atf-active .atf-pm-card__snippet { margin-block-start: var(--atf-space-2); color: var(--atf-color-text-muted); overflow-wrap: anywhere; }
+body.atf-active .atf-pm-card__folder { min-width: 0; overflow-wrap: anywhere; text-align: center; }
+body.atf-active .atf-pm__search-headings { display: flex; flex-wrap: wrap; gap: var(--atf-space-3); color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }
 
 @media (max-width: 48rem) {
   body.atf-active .atf-pm__header,
@@ -426,6 +438,8 @@ body.atf-active .atf-pm__empty { text-align: center; }
   body.atf-active .atf-pm-card__correspondent,
   body.atf-active .atf-pm-card__date { grid-column: 3 / -1; text-align: start; }
   body.atf-active .atf-pm-card__check { grid-column: 4; grid-row: 1; }
+  body.atf-active .atf-pm-card--search { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+  body.atf-active .atf-pm-card--search .atf-pm-card__folder { grid-column: 3 / -1; text-align: start; }
 }
 
 body.atf-active .atf-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
