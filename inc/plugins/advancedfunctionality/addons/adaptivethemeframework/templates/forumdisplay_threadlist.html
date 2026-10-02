@@ -1,10 +1,9 @@
-<div class="atf-topic-list" aria-labelledby="atf-topic-list-title">
+<div class="atf-topic-list">
 	<div class="atf-topic-list__actions">
 		<div>{$multipage}</div>
 		<div>{$newthread}</div>
 	</div>
-	<header class="atf-topic-list__header">
-		<h2 id="atf-topic-list-title">{$foruminfo['name']}</h2>
+	<header class="atf-topic-list__header atf-topic-list__header--actions">
 		<div class="atf-topic-list__forum-actions"><a href="misc.php?action=markread&amp;fid={$fid}{$post_code_string}">{$lang->markforum_read}</a>{$addremovesubscription}{$clearstoredpass}</div>
 	</header>
 	<nav class="atf-topic-list__sort" aria-label="{$lang->sort_by}">
