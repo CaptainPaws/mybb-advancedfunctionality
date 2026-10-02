@@ -63,6 +63,10 @@ body.atf-active .pun.atf-page-shell {
   margin-inline: auto;
   min-width: 0;
   padding-inline: var(--atf-page-gap);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 body.atf-active .atf-page {
