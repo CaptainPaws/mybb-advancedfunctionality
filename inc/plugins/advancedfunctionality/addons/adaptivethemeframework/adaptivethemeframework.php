@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.22.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.23.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1474,6 +1474,9 @@ function af_adaptivethemeframework_template_seeds(): array
 {
     return [
         'index' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/index.html',
+        // MyBB 1.8.40 build_forumbits() selects this template for each visible
+        // top-level category and supplies its already permission-filtered children.
+        'forumbit_depth1_cat' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth1_cat.html',
         'forumbit_depth2_forum' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum.html',
         'forumbit_depth2_forum_lastpost' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum_lastpost.html',
         'forumdisplay' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay.html',

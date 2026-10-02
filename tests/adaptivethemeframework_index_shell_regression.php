@@ -11,11 +11,18 @@ foreach (['{$headerinclude}', '{$header}', '{$fastnews}', '{$forums}', '{$boards
         throw new RuntimeException("Index compatibility value must render exactly once: {$value}");
     }
 }
-foreach (['forumbit_depth2_forum', 'forumbit_depth2_forum_lastpost', 'forumdisplay_thread'] as $title) {
+foreach (['forumbit_depth1_cat', 'forumbit_depth2_forum', 'forumbit_depth2_forum_lastpost', 'forumdisplay_thread'] as $title) {
     $card = file_get_contents($addon . '/templates/' . $title . '.html');
     if (!is_string($card) || !str_contains($php, "'{$title}' =>") || str_contains($card, '<tr')) {
         throw new RuntimeException("ATF must own a semantic card template for {$title}.");
     }
+}
+$category = file_get_contents($addon . '/templates/forumbit_depth1_cat.html');
+if (!str_contains((string)$category, '<section class="atf-forum-category"')
+    || !str_contains((string)$category, '<div class="atf-forum-category__forums" style="{$expdisplay}" id="cat_{$forum[\'fid\']}_e">')
+    || substr_count((string)$category, '{$sub_forums}') !== 1
+    || !str_contains((string)$category, 'id="cat_{$forum[\'fid\']}_img" class="expander"')) {
+    throw new RuntimeException('Top-level categories must own their rendered cards and retain native collapse state.');
 }
 if (!str_contains((string)$template, 'class="pun atf-page-shell atf-page atf-index"')
     || !str_contains((string)$template, 'class="atf-index__section atf-index__forums"')) {
