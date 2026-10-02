@@ -16,6 +16,14 @@ if ($schemaCall === false || $schemaWrite === false || $schemaCall > $schemaWrit
     throw new RuntimeException('Theme stylesheet registry schema is not upgraded before Buddy ownership migration.');
 }
 
+$escapedBundleWrite = "['stylesheet'=>\$db->escape_string(\$css),'lastmodified'=>TIME_NOW]";
+if (!str_contains($source, $escapedBundleWrite)) {
+    throw new RuntimeException('Migrated advancedstyles.css is written without SQL escaping.');
+}
+if (str_contains($source, "['stylesheet'=>\$css,'lastmodified'=>TIME_NOW]")) {
+    throw new RuntimeException('Unsafe raw stylesheet SQL write is still present.');
+}
+
 $migrationStart = strpos($source, 'function af_abdl_migrate_addon_identity');
 $migrationEnd = strpos($source, 'function af_abdl_select_lifecycle_value');
 $migration = substr($source, $migrationStart, $migrationEnd - $migrationStart);
@@ -38,7 +46,7 @@ foreach ([
     }
 }
 
-if (($manifest['id'] ?? '') !== 'advancedbuddylist' || ($manifest['version'] ?? '') !== '2.1.1') {
+if (($manifest['id'] ?? '') !== 'advancedbuddylist' || ($manifest['version'] ?? '') !== '2.1.2') {
     throw new RuntimeException('Advanced Buddy List manifest version/id mismatch.');
 }
 
