@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.16.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.17.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -305,9 +305,7 @@ function af_adaptivethemeframework_register_pm_providers(): bool
 {
     $providers = [
         ['pm_navigation', 'pm.navigation', static fn(array $context): string =>
-            (string)($context['native']['usercp_navigation'] ?? '')
-            . (string)($context['native']['folder_navigation'] ?? '')
-            . (string)($context['native']['folder_options'] ?? '')],
+            af_adaptivethemeframework_render_pm_navigation($context)],
         ['pm_quota', 'pm.quota', static fn(array $context): string =>
             (string)($context['native']['quota'] ?? '')],
         ['pm_notice', 'pm.notice', static fn(array $context): string =>
@@ -334,9 +332,6 @@ function af_adaptivethemeframework_register_pm_providers(): bool
 function af_adaptivethemeframework_pm_context(array $state, array $values): array
 {
     $nativeMap = [
-        'usercpnav' => 'usercp_navigation',
-        'folderjump' => 'folder_navigation',
-        'folderoplist' => 'folder_options',
         'pmspacebar' => 'quota',
         'limitwarning' => 'limit_warning',
         'multipage' => 'pagination',
@@ -360,14 +355,89 @@ function af_adaptivethemeframework_pm_context(array $state, array $values): arra
             'url' => (string)($state['current_url'] ?? ''),
             'action' => (string)($state['action'] ?? ''),
         ],
+        'folders' => is_array($state['folders'] ?? null) ? $state['folders'] : [],
+        'permissions' => [
+            'send' => !empty($state['can_send']),
+            'track' => !empty($state['can_track']),
+        ],
         'native' => $native,
     ];
+}
+
+/** Render the PM-owned navigation without transporting the legacy UCP table. */
+function af_adaptivethemeframework_render_pm_navigation(array $context): string
+{
+    global $lang;
+    $action = (string)($context['action'] ?? '');
+    $folderId = (int)($context['folder']['id'] ?? 0);
+    $folderIsCurrent = in_array($action, ['', 'read'], true);
+    $current = '';
+    if (!empty($context['permissions']['send']) && $action === 'send') {
+        $current = 'compose';
+    } elseif (in_array($action, ['advanced_search', 'search', 'results', 'do_search'], true)) {
+        $current = 'search';
+    } elseif (in_array($action, ['tracking', 'stoptracking', 'stopalltracking'], true)) {
+        $current = 'tracking';
+    } elseif (in_array($action, ['folders', 'do_folders'], true)) {
+        $current = 'folders';
+    } elseif (in_array($action, ['empty', 'do_empty'], true)) {
+        $current = 'empty';
+    } elseif (in_array($action, ['export', 'do_export'], true)) {
+        $current = 'export';
+    }
+
+    $escape = static fn(string $value): string => function_exists('htmlspecialchars_uni')
+        ? htmlspecialchars_uni($value)
+        : htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $label = static function(string $key, string $fallback) use ($lang, $escape): string {
+        $value = is_object($lang) && isset($lang->{$key}) ? (string)$lang->{$key} : $fallback;
+        return $escape($value);
+    };
+    $link = static function(string $key, string $url, string $text) use (&$current, $escape): string {
+        $active = $current === $key;
+        return '<li><a class="atf-pm-navigation__item'.($active ? ' is-active' : '').'" href="'
+            .$escape($url).'"'.($active ? ' aria-current="page"' : '').'>'.$text.'</a></li>';
+    };
+
+    $primary = '';
+    if (!empty($context['permissions']['send'])) {
+        $primary .= $link('compose', 'private.php?action=send', $label('atf_pm_compose', 'Написать ЛС'));
+    }
+    $unreadLabel = is_object($lang) ? (string)($lang->folder_unread ?? '') : '';
+    foreach ((array)($context['folders'] ?? []) as $id => $name) {
+        $id = (int)$id;
+        // MyBB may expose its historical virtual Unread folder in pmfolders;
+        // it has no canonical route of its own and is intentionally omitted.
+        if ($id === 1 && $unreadLabel !== '' && (string)$name === $unreadLabel
+            && array_key_exists(0, (array)$context['folders'])) {
+            continue;
+        }
+        $key = 'folder-'.$id;
+        if ($folderIsCurrent && $folderId === $id && $current === '') {
+            $current = $key;
+        }
+        $primary .= $link($key, 'private.php?fid='.$id, $escape((string)$name));
+    }
+
+    $management = '';
+    if (!empty($context['permissions']['track'])) {
+        $management .= $link('tracking', 'private.php?action=tracking', $label('atf_pm_tracking', 'Отслеживание'));
+    }
+    $management .= $link('search', 'private.php?action=advanced_search', $label('atf_pm_advanced_search', 'Расширенный поиск'));
+    $management .= $link('folders', 'private.php?action=folders', $label('atf_pm_edit_folders', 'Редактировать папки'));
+    $management .= $link('empty', 'private.php?action=empty', $label('atf_pm_clear_folders', 'Очистить папки'));
+    $management .= $link('export', 'private.php?action=export', $label('atf_pm_export', 'Экспорт сообщений'));
+
+    return '<nav class="atf-pm-navigation" aria-label="'.$label('private_messaging', 'Личные сообщения').'">'
+        .'<div class="atf-pm-navigation__group"><ul>'.$primary.'</ul></div>'
+        .'<div class="atf-pm-navigation__group atf-pm-navigation__group--management"><ul>'.$management.'</ul></div>'
+        .'</nav>';
 }
 
 /** Materialize the PM slots while leaving every legacy template untouched. */
 function af_adaptivethemeframework_compose_pm_workspace(): void
 {
-    global $mybb, $fid, $foldername;
+    global $mybb, $fid, $foldername, $foldernames, $pm;
     if (!defined('THIS_SCRIPT') || THIS_SCRIPT !== 'private.php') {
         return;
     }
@@ -377,20 +447,32 @@ function af_adaptivethemeframework_compose_pm_workspace(): void
         ? (string)get_current_location()
         : (string)($_SERVER['REQUEST_URI'] ?? '');
     $names = [
-        'usercpnav', 'folderjump', 'folderoplist', 'pmspacebar',
+        'pmspacebar',
         'limitwarning', 'multipage', 'composelink', 'emptyexportlink',
     ];
     $values = [];
     foreach ($names as $name) {
         $values[$name] = (string)($GLOBALS[$name] ?? '');
     }
+    $resolvedFid = (int)($fid ?? ($mybb->input['fid'] ?? 0));
+    if ($action === 'read' && isset($pm['folder'])) {
+        $resolvedFid = (int)$pm['folder'];
+    }
     $context = af_adaptivethemeframework_pm_context([
         'action' => $action,
-        'folder_id' => (int)($fid ?? ($mybb->input['fid'] ?? 0)),
+        'folder_id' => $resolvedFid,
         'folder_name' => (string)($foldername ?? ''),
         'uid' => $uid,
         'current_url' => $currentUrl,
+        'folders' => is_array($foldernames ?? null) ? $foldernames : [],
+        'can_send' => !empty($mybb->usergroup['cansendpms']),
+        'can_track' => !empty($mybb->usergroup['cantrackpms']),
     ], $values);
+    $ucpContext = af_adaptivethemeframework_ucp_context([
+        'route' => 'private.php', 'action' => $action, 'fid' => $resolvedFid,
+        'uid' => $uid, 'title' => '',
+    ], []);
+    $GLOBALS['atf_ucp_global_navigation'] = $ucpContext['global_navigation'];
     foreach (['navigation', 'quota', 'notice', 'pagination', 'actions',
               'content', 'before_content', 'after_content'] as $name) {
         $GLOBALS['atf_pm_' . $name] = af_adaptivethemeframework_render_slot('pm.' . $name, $context);
