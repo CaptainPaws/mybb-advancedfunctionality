@@ -1,0 +1,38 @@
+<html>
+<head>
+<title>{$mybb->settings['bbname']} - {$lang->pm_tracking}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+<main class="atf-page atf-pm atf-pm-tracking">
+	<nav class="atf-pm__navigation" aria-label="{$lang->private_messaging}">{$atf_pm_navigation}</nav>
+	{$atf_pm_before_content}
+	<header class="atf-pm__header atf-card">
+		<div class="atf-pm__heading"><p class="atf-pm__eyebrow">{$lang->private_messaging}</p><h1 class="atf-pm__title">{$lang->pm_tracking}</h1></div>
+	</header>
+	<section class="atf-pm-tracking__section" aria-labelledby="atf-tracking-read-title">
+		<div class="atf-pm-tracking__section-head"><h2 id="atf-tracking-read-title">{$lang->read_messages}</h2><div class="atf-pm-tracking__pagination">{$read_multipage}</div></div>
+		<form action="private.php" method="post" class="atf-pm-tracking__form">
+			<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+			<input type="hidden" name="action" value="do_tracking" />
+			<div class="atf-pm-tracking__toolbar atf-card"><span>{$lang->message_title}</span><span>{$lang->sentto}</span><span>{$lang->dateread}</span><label><span class="atf-visually-hidden">{$lang->selected_messages}</span><input type="checkbox" class="checkbox checkall" name="allbox" /></label></div>
+			<div class="atf-pm-tracking__messages">{$readmessages}</div>
+			{$stoptrackingread}
+		</form>
+	</section>
+	<section class="atf-pm-tracking__section" aria-labelledby="atf-tracking-unread-title">
+		<div class="atf-pm-tracking__section-head"><h2 id="atf-tracking-unread-title">{$lang->unread_messages}</h2><div class="atf-pm-tracking__pagination">{$unread_multipage}</div></div>
+		<form action="private.php" method="post" class="atf-pm-tracking__form">
+			<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+			<input type="hidden" name="action" value="do_tracking" />
+			<div class="atf-pm-tracking__toolbar atf-card"><span>{$lang->message_title}</span><span>{$lang->sentto}</span><span>{$lang->datesent}</span><label><span class="atf-visually-hidden">{$lang->selected_messages}</span><input type="checkbox" class="checkbox checkall" name="allbox" /></label></div>
+			<div class="atf-pm-tracking__messages">{$unreadmessages}</div>
+			{$stoptrackingunread}
+		</form>
+	</section>
+	{$atf_pm_after_content}
+</main>
+{$footer}
+</body>
+</html>

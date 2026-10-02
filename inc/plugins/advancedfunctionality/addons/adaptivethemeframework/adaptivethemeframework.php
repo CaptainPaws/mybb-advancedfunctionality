@@ -852,6 +852,12 @@ function af_adaptivethemeframework_template_seeds(): array
         'private_send_autocomplete' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_send_autocomplete.html',
         'private_send_buddyselect' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_send_buddyselect.html',
         'private_send_tracking' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_send_tracking.html',
+        'private_tracking' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_tracking.html',
+        'private_tracking_nomessage' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_tracking_nomessage.html',
+        'private_tracking_readmessage' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_tracking_readmessage.html',
+        'private_tracking_unreadmessage' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_tracking_unreadmessage.html',
+        'private_tracking_readmessage_stop' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_tracking_readmessage_stop.html',
+        'private_tracking_unreadmessage_stop' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_tracking_unreadmessage_stop.html',
     ];
 }
 

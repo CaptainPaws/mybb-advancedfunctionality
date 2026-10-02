@@ -1,0 +1,7 @@
+<article class="atf-pm-tracking-card atf-pm-tracking-card--unread atf-card" data-pm-id="{$unreadmessage['pmid']}">
+	<div class="atf-pm-tracking-card__state"><img src="{$theme['imgdir']}/new_pm.png" alt="" /></div>
+	<h3 class="atf-pm-tracking-card__subject">{$unreadmessage['subject']}</h3>
+	<div class="atf-pm-tracking-card__recipient">{$unreadmessage['profilelink']}</div>
+	<time class="atf-pm-tracking-card__date">{$senddate}</time>
+	<label class="atf-pm-tracking-card__check"><span class="atf-visually-hidden">{$unreadmessage['subject']}</span><input type="checkbox" class="checkbox" name="unreadcheck[{$unreadmessage['pmid']}]" value="1" /></label>
+</article>
