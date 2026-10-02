@@ -1,0 +1,26 @@
+<html>
+<head>
+<title>{$lang->viewing_pm} {$pm['subject']}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+<main class="atf-pm atf-pm-read">
+	<nav class="atf-pm__navigation" aria-label="{$lang->private_messaging}">{$atf_pm_navigation}</nav>
+	{$atf_pm_before_content}
+	<header class="atf-pm-read__header atf-card">
+		<p class="atf-pm__eyebrow">{$lang->private_messaging}</p>
+		<h1 class="atf-pm__title">{$pm['subject']}</h1>
+		<div class="atf-pm-read__action">{$action_time}</div>
+	</header>
+	<section class="atf-pm-read__conversation" aria-label="{$pm['subject']}">
+		<div id="posts_container">
+			<div id="posts">{$message}</div>
+		</div>
+	</section>
+	{$quickreply}
+	{$atf_pm_after_content}
+</main>
+{$footer}
+</body>
+</html>
