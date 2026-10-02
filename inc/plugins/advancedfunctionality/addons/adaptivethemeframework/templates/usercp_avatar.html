@@ -1,0 +1,12 @@
+<html><head><title>{$mybb->settings['bbname']} - {$lang->change_avatar}</title>{$headerinclude}</head><body>
+{$header}
+<main class="atf-page atf-ucp atf-ucp-form" id="content"><div class="atf-stack">
+{$atf_ucp_global_navigation}{$atf_ucp_local_navigation}
+<header class="atf-ucp__header"><h1 class="atf-ucp__title">{$lang->change_avatar}</h1></header>
+{$avatar_error}
+<form enctype="multipart/form-data" action="usercp.php" method="post" class="atf-stack">
+<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+<section class="atf-card atf-avatar-current"><div class="atf-avatar-current__copy">{$lang->avatar_note}{$avatarmsg}</div>{$currentavatar}</section>
+<section class="atf-card atf-form-section"><h2>{$lang->custom_avatar}</h2>{$avatarupload}{$avatar_remote}</section>
+<div class="atf-form-actions"><input type="hidden" name="action" value="do_avatar" /><input type="submit" class="button atf-button" name="submit" value="{$lang->change_avatar}" />{$removeavatar}</div>
+</form></div></main>{$footer}</body></html>

@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.19.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.20.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -209,6 +209,9 @@ function af_adaptivethemeframework_init(): void
             // forms keep their existing roots until they explicitly adopt the
             // shared context and slots.
             $plugins->add_hook('usercp_end', 'af_adaptivethemeframework_compose_ucp_overview', 1000);
+            foreach (['usercp_profile_end', 'usercp_avatar_end', 'usercp_editsig_end'] as $hook) {
+                $plugins->add_hook($hook, 'af_adaptivethemeframework_compose_ucp_profile_surface', 1000);
+            }
         }
         if ($isPrivateRoute) {
             // PM rows expose their display participant only while their bit is
@@ -226,6 +229,34 @@ function af_adaptivethemeframework_init(): void
             }
         }
     }
+}
+
+/** Compose navigation for the three ATF-owned Profile workspaces. */
+function af_adaptivethemeframework_compose_ucp_profile_surface(): void
+{
+    global $mybb, $lang;
+    if (!defined('THIS_SCRIPT') || THIS_SCRIPT !== 'usercp.php' || !is_object($mybb)) {
+        return;
+    }
+    $action = (string)($mybb->input['action'] ?? '');
+    if (!in_array($action, ['profile', 'avatar', 'editsig'], true)) {
+        return;
+    }
+    $titles = [
+        'profile' => 'edit_profile',
+        'avatar' => 'change_avatar',
+        'editsig' => 'edit_sig',
+    ];
+    $titleKey = $titles[$action];
+    $context = af_adaptivethemeframework_ucp_context([
+        'route' => 'usercp.php',
+        'action' => $action,
+        'uid' => (int)($mybb->user['uid'] ?? 0),
+        'title' => is_object($lang) ? (string)($lang->{$titleKey} ?? '') : '',
+    ], []);
+    $GLOBALS['atf_ucp_global_navigation'] = $context['global_navigation'];
+    $GLOBALS['atf_ucp_local_navigation'] = $context['local_navigation'];
+    $GLOBALS['atf_ucp_context'] = $context;
 }
 
 /**
@@ -926,8 +957,8 @@ function af_adaptivethemeframework_ucp_signature_visible(): bool
 {
     global $mybb;
     return !empty($mybb->usergroup['canusesig'])
-        && ((int)($mybb->usergroup['sigpostcount'] ?? 0) === 0 || (int)($mybb->user['postnum'] ?? 0) >= (int)$mybb->usergroup['sigpostcount'])
-        && ((int)($mybb->user['suspendsigtime'] ?? 0) === 0 || (int)$mybb->user['suspendsigtime'] < TIME_NOW);
+        && ((int)($mybb->usergroup['canusesigxposts'] ?? 0) === 0
+            || (int)($mybb->user['postnum'] ?? 0) >= (int)$mybb->usergroup['canusesigxposts']);
 }
 
 /** Seed the immutable MyBB hierarchy. Addons can safely register after this call. */
@@ -1292,6 +1323,24 @@ function af_adaptivethemeframework_template_seeds(): array
         'usercp_warnings' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_warnings.html',
         'usercp_warnings_warning' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_warnings_warning.html',
         'usercp_warnings_warning_post' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_warnings_warning_post.html',
+        'usercp_profile' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_profile.html',
+        'usercp_profile_away' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_profile_away.html',
+        'usercp_profile_website' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_profile_website.html',
+        'usercp_profile_customtitle' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_profile_customtitle.html',
+        'usercp_profile_customtitle_currentcustom' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_profile_customtitle_currentcustom.html',
+        'usercp_profile_customtitle_reverttitle' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_profile_customtitle_reverttitle.html',
+        'usercp_profile_profilefields' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_profile_profilefields.html',
+        'usercp_avatar' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_avatar.html',
+        'usercp_avatar_current' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_avatar_current.html',
+        'usercp_avatar_upload' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_avatar_upload.html',
+        'usercp_avatar_remote' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_avatar_remote.html',
+        'usercp_avatar_remove' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_avatar_remove.html',
+        'usercp_avatar_auto_resize_auto' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_avatar_auto_resize_auto.html',
+        'usercp_avatar_auto_resize_user' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_avatar_auto_resize_user.html',
+        'usercp_editsig' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editsig.html',
+        'usercp_editsig_current' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editsig_current.html',
+        'usercp_editsig_preview' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editsig_preview.html',
+        'usercp_editsig_suspended' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editsig_suspended.html',
         'showthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread.html',
         'postbit_classic' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/postbit_classic.html',
         'private' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private.html',
