@@ -13,10 +13,10 @@ and `376673ae7fdf6792ff6959e759c0d8bc13f6faefb49d76feb2cec2d436ab2f42`.
 The complete AF repository was searched for User CP routes, hooks, templates,
 and DOM dependencies on 2026-10-02.
 
-This task deliberately takes ownership of **no** `usercp*`, `private*`, or AF
-addon template and changes no presentation. Its output is a server-side
-navigation and composition contract. The existing PM Phase 1 ownership and
-workspace contract remain as documented in
+The registry phase deliberately took ownership of no `usercp*` template. The
+first shell phase now leases only `usercp`, `usercp_currentavatar`, and
+`usercp_notepad`; every other User CP surface and all AF addon pages remain
+legacy. The existing PM Phase 1 ownership and workspace contract remain as documented in
 `ATF_PRIVATE_MESSAGING_MIGRATION_CONTRACT.md`.
 
 The following are explicitly out of scope:
@@ -385,25 +385,29 @@ tokens, and providers cannot submit arbitrary navigation HTML.
 
 ## Shell composition boundary
 
-The future UCP shell may own only layout and the two navigation slots. Core and
-plugin surfaces continue to own their forms/content. A suitable context is:
+The UCP shell owns only layout and the two navigation slots. Core and plugin
+surfaces continue to own their forms/content. The implemented shared context is:
 
 ```php
 [
     'route' => ['script' => 'usercp.php', 'action' => 'profile'],
-    'user' => ['uid' => 123],
-    'navigation' => [
-        'global' => $resolvedGlobalItems,
-        'local' => $resolvedLocalItems,
-        'active' => 'profile.edit',
-    ],
-    'native' => [
-        'title' => $pageTitle,
-        'notices' => $permissionFilteredNotices,
-        'content' => $alreadyRenderedSurface,
-    ],
+    'uid' => 123,
+    'global_navigation' => $globalNavigationHtml,
+    'local_navigation' => $localNavigationHtml,
+    'active_key' => 'overview',
+    'title' => $pageTitle,
+    'notices' => $noticeSlotHtml,
+    'content' => $whitelistedNativeFragments,
+    'actions' => $actionSlotHtml,
 ]
 ```
+
+The Overview is the sole adopted UCP surface. It consumes
+`ucp.global_navigation` and `ucp.local_navigation` and never renders
+`{$usercpnav}`. Its account summary, activation state, reputation, referrals,
+warnings, subscription/thread lists, avatar, and notepad remain core-produced.
+The notepad retains its `do_notepad` POST action, `notepad` field, and
+`my_post_key`; it is a widget rather than a navigation route.
 
 The existing `pm.navigation` slot currently transports rendered legacy
 `usercpnav`, folder navigation and folder options together. That is acceptable

@@ -1,0 +1,9 @@
+<form action="usercp.php" method="post" class="atf-card atf-stack atf-ucp-notepad">
+<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+<h2 class="atf-ucp-notepad__title">{$lang->personal_notepad}</h2>
+<textarea name="notepad" cols="1" rows="10" class="usercp_notepad atf-ucp-notepad__input">{$mybb->user['notepad']}</textarea>
+<div class="atf-ucp-notepad__actions">
+<input type="hidden" name="action" value="do_notepad" />
+<input type="submit" class="button atf-button" name="submit" value="{$lang->update_notepad}" />
+</div>
+</form>

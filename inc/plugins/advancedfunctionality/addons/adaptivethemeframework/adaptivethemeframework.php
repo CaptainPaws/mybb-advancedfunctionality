@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.15.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.16.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -204,6 +204,12 @@ function af_adaptivethemeframework_init(): void
         // Run after profile addons have produced their permission-filtered
         // values. The ATF-owned template consumes only these composed slots.
         $plugins->add_hook('member_profile_end', 'af_adaptivethemeframework_compose_profile', 1000);
+        if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'usercp.php') {
+            // Core fires this only for the account-summary surface. Other UCP
+            // forms keep their existing roots until they explicitly adopt the
+            // shared context and slots.
+            $plugins->add_hook('usercp_end', 'af_adaptivethemeframework_compose_ucp_overview', 1000);
+        }
         if ($isPrivateRoute) {
             // Each hook runs after its surface has prepared the native values,
             // but before its legacy private_* parent template is evaluated.
@@ -216,6 +222,82 @@ function af_adaptivethemeframework_init(): void
             }
         }
     }
+}
+
+/**
+ * Build the closed context shared by this and future UCP surfaces.
+ *
+ * Native fragments have already passed through MyBB's permissions, escaping,
+ * and plugin hooks. They are transported here, not reconstructed by ATF.
+ */
+function af_adaptivethemeframework_ucp_context(array $state, array $values): array
+{
+    $route = af_adaptivethemeframework_ucp_route_context([
+        'script' => (string)($state['route'] ?? 'usercp.php'),
+        'action' => (string)($state['action'] ?? ''),
+        'type' => (string)($state['type'] ?? ''),
+        'tid' => (int)($state['tid'] ?? 0),
+        'fid' => (int)($state['fid'] ?? 0),
+    ]);
+    $navigation = af_adaptivethemeframework_ucp_navigation($route);
+    $base = [
+        'route' => $route,
+        'uid' => max(0, (int)($state['uid'] ?? 0)),
+        'global_navigation' => '',
+        'local_navigation' => '',
+        'active_key' => (string)$navigation['current'],
+        'title' => (string)($state['title'] ?? ''),
+        'notices' => '',
+        'content' => array_intersect_key($values, array_flip([
+            'avatar', 'username', 'posts', 'posts_day', 'reputation', 'email',
+            'regdate', 'usergroup', 'referral_info', 'latest_subscribed',
+            'latest_threads', 'latest_warnings', 'user_notepad',
+        ])),
+        'actions' => '',
+    ];
+    // Render navigation against the same bounded context providers receive.
+    $base['global_navigation'] = af_adaptivethemeframework_render_slot('ucp.global_navigation', $base);
+    $base['local_navigation'] = af_adaptivethemeframework_render_slot('ucp.local_navigation', $base);
+    $base['notices'] = af_adaptivethemeframework_render_slot('ucp.notice', $base);
+    $base['actions'] = af_adaptivethemeframework_render_slot('ucp.actions', $base);
+    return $base;
+}
+
+/** Materialize the Overview shell slots without exposing $GLOBALS to providers. */
+function af_adaptivethemeframework_compose_ucp_overview(): void
+{
+    global $mybb, $lang;
+    if (!defined('THIS_SCRIPT') || THIS_SCRIPT !== 'usercp.php'
+        || !is_object($mybb) || (string)($mybb->input['action'] ?? '') !== '') {
+        return;
+    }
+    $names = [
+        'avatar', 'username', 'reputation', 'regdate', 'usergroup',
+        'referral_info', 'latest_subscribed', 'latest_threads',
+        'latest_warnings', 'user_notepad',
+    ];
+    $values = [];
+    foreach ($names as $name) {
+        $values[$name] = (string)($GLOBALS[$name] ?? '');
+    }
+    $values['posts'] = (string)($mybb->user['posts'] ?? '');
+    $values['posts_day'] = is_object($lang) ? (string)($lang->posts_day ?? '') : '';
+    $values['email'] = (string)($mybb->user['email'] ?? '');
+
+    $context = af_adaptivethemeframework_ucp_context([
+        'route' => 'usercp.php',
+        'action' => '',
+        'uid' => (int)($mybb->user['uid'] ?? 0),
+        'title' => is_object($lang) ? (string)($lang->account_summary ?? '') : '',
+    ], $values);
+    $GLOBALS['atf_ucp_global_navigation'] = $context['global_navigation'];
+    $GLOBALS['atf_ucp_local_navigation'] = $context['local_navigation'];
+    $GLOBALS['atf_ucp_notices'] = $context['notices'];
+    $GLOBALS['atf_ucp_actions'] = $context['actions'];
+    $GLOBALS['atf_ucp_before_content'] = af_adaptivethemeframework_render_slot('ucp.before_content', $context);
+    $GLOBALS['atf_ucp_content'] = af_adaptivethemeframework_render_slot('ucp.content', $context);
+    $GLOBALS['atf_ucp_after_content'] = af_adaptivethemeframework_render_slot('ucp.after_content', $context);
+    $GLOBALS['atf_ucp_context'] = $context;
 }
 
 /** Register native PM workspace fragments without claiming a private_* template. */
@@ -1055,6 +1137,9 @@ function af_adaptivethemeframework_template_seeds(): array
         'forumbit_depth2_forum_lastpost' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum_lastpost.html',
         'forumdisplay_thread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay_thread.html',
         'member_profile' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/member_profile.html',
+        'usercp' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp.html',
+        'usercp_currentavatar' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_currentavatar.html',
+        'usercp_notepad' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_notepad.html',
         'showthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread.html',
         'postbit_classic' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/postbit_classic.html',
         'private' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private.html',
