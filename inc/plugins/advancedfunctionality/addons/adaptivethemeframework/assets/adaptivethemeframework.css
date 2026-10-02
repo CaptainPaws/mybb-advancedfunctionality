@@ -460,3 +460,33 @@ body.atf-active .atf-pm-quickreply__submit { display: flex; grid-column: 1 / -1;
 }
 
 body.atf-active .atf-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* PM compose keeps MyBB's send/editor pipeline and changes presentation only. */
+body.atf-active .atf-pm-compose,
+body.atf-active .atf-pm-compose__form,
+body.atf-active .atf-pm-compose__editor { min-width: 0; }
+body.atf-active .atf-pm-compose__feedback:empty,
+body.atf-active .atf-pm-compose__posticons:empty { display: none; }
+body.atf-active .atf-pm-compose__feedback { display: grid; gap: var(--atf-space-3); }
+body.atf-active .atf-pm-compose__label-line,
+body.atf-active .atf-pm-compose__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--atf-space-2); }
+body.atf-active .atf-pm-compose__label-line { justify-content: space-between; }
+body.atf-active .atf-pm-compose__bcc-toggle { padding: 0; color: var(--atf-color-accent); font: inherit; cursor: pointer; background: transparent; border: 0; }
+body.atf-active .atf-pm-compose .atf-form-row > :is(input[type="text"], textarea),
+body.atf-active .atf-pm-compose__editor textarea { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+body.atf-active .atf-pm-compose__posticons { width: 100%; border-collapse: collapse; }
+body.atf-active .atf-pm-compose__posticons td { padding: var(--atf-space-2) 0; }
+body.atf-active .atf-pm-compose__editor-tools,
+body.atf-active .atf-pm-compose__editor-tools > * { min-width: 0; max-width: 100%; }
+body.atf-active .atf-pm-compose__options h2 { margin-block-start: 0; }
+body.atf-active .atf-pm-compose__actions { justify-content: center; }
+body.atf-active .atf-pm-compose__buddy { display: inline-block; margin-inline-start: var(--atf-space-2); }
+body.atf-active .atf-pm-compose__buddy img { vertical-align: middle; }
+body.atf-active .atf-pm-compose__autocomplete { display: contents; }
+body.atf-active .atf-pm-compose .select2-container { width: 100% !important; max-width: 100%; }
+
+@media (max-width: 48rem) {
+  body.atf-active .atf-pm-compose__actions { align-items: stretch; flex-direction: column; }
+  body.atf-active .atf-pm-compose__actions .atf-button { width: 100%; }
+  body.atf-active .atf-pm-compose__editor-tools { overflow-x: auto; }
+}
