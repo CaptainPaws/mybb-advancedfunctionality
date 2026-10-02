@@ -1,0 +1,6 @@
+<span class="atf-pm-recipients"><a href="private.php?action=read&amp;pmid={$message['pmid']}" id="private_message_{$message['pmid']}">{$lang->multiple_recipients}</a><span id="private_message_{$message['pmid']}_popup" class="popup_menu" style="display: none;"><strong class="popup_menu_title">{$lang->to}</strong>{$to_users}{$bcc_users}</span></span>
+<script type="text/javascript">
+<!--
+	$("#private_message_{$message['pmid']}").popupMenu();
+// -->
+</script>

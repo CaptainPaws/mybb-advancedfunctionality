@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.11.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.12.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -822,6 +822,22 @@ function af_adaptivethemeframework_template_seeds(): array
         'member_profile' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/member_profile.html',
         'showthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread.html',
         'postbit_classic' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/postbit_classic.html',
+        'private' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private.html',
+        'private_messagebit' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_messagebit.html',
+        'private_messagebit_icon' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_messagebit_icon.html',
+        'private_messagebit_denyreceipt' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_messagebit_denyreceipt.html',
+        'private_multiple_recipients' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_multiple_recipients.html',
+        'private_multiple_recipients_user' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_multiple_recipients_user.html',
+        'private_multiple_recipients_bcc' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_multiple_recipients_bcc.html',
+        'private_jump_folders' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_jump_folders.html',
+        'private_jump_folders_folder' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_jump_folders_folder.html',
+        'private_move' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_move.html',
+        'private_orderarrow' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_orderarrow.html',
+        'private_pmspace' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_pmspace.html',
+        'private_composelink' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_composelink.html',
+        'private_emptyexportlink' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_emptyexportlink.html',
+        'private_limitwarning' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_limitwarning.html',
+        'private_nomessages' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_nomessages.html',
     ];
 }
 
