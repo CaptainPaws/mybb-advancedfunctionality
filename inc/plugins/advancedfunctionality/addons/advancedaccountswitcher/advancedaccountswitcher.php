@@ -2536,6 +2536,33 @@ function af_aas_render_panel_widget(): string
     </div>';
 }
 
+/**
+ * Split MyBB's relative-date HTML contract into a presentation DTO.
+ *
+ * @return array{datetime:string,text:string,title:string}
+ */
+function af_aas_userlist_date_presentation(int $timestamp): array
+{
+    global $mybb;
+    if ($timestamp <= 0) return ['datetime'=>'', 'text'=>'', 'title'=>''];
+
+    $dateFormat = (string)($mybb->settings['dateformat'] ?? 'm-d-Y');
+    $timeFormat = (string)($mybb->settings['timeformat'] ?? 'h:i A');
+    $title = (string)my_date($dateFormat.', '.$timeFormat, $timestamp);
+    $formatted = (string)my_date('relative', $timestamp);
+    // MyBB 1.8 wraps relative values in one span. Accept only that known
+    // contract; unexpected markup falls back to exact text rather than being
+    // escaped into a visible HTML fragment.
+    if (preg_match('~^\s*<span\b[^>]*>([^<]*)</span>\s*$~iu', $formatted, $match)) {
+        $text = html_entity_decode($match[1], ENT_QUOTES, 'UTF-8');
+    } elseif (strpos($formatted, '<') === false) {
+        $text = html_entity_decode($formatted, ENT_QUOTES, 'UTF-8');
+    } else {
+        $text = $title;
+    }
+    return ['datetime'=>gmdate('c', $timestamp), 'text'=>$text, 'title'=>$title];
+}
+
 function af_aas_render_account_list_page()
 {
     global $mybb, $db, $cache, $lang, $templates, $theme;
@@ -2927,20 +2954,38 @@ function af_aas_render_account_list_page()
                 && (int)($r['master_hidden'] ?? 0) !== 1;
             $avatarUser = ['uid'=>$uid, 'username'=>$username, 'avatar'=>(string)($r['avatar'] ?? ''), 'avatardimensions'=>(string)($r['avatardimensions'] ?? '')];
             if (function_exists('af_avatar_render')) {
-                $avatarHtml = af_avatar_render($avatarUser, 'userlist', ['img_class'=>'atf-user-card__image']);
+                $avatarHtml = af_avatar_render($avatarUser, 'userlist', [
+                    'img_class'=>'atf-user-card__image', 'decorative'=>true,
+                    'force_fallback'=>true, 'allow_letter'=>false,
+                ]);
             } else {
                 $fa = function_exists('format_avatar') ? format_avatar($avatarUser['avatar'], $avatarUser['avatardimensions']) : null;
-                $src = is_array($fa) && !empty($fa['image']) ? (string)$fa['image'] : af_aas_get_avatar_url($uid);
-                $avatarHtml = '<img class="atf-user-card__image" src="'.htmlspecialchars_uni($src).'" alt="" loading="lazy">';
+                $src = is_array($fa) && !empty($fa['image']) ? (string)$fa['image'] : '';
+                $fallback = function_exists('af_adaptivethemeframework_default_avatar_url')
+                    ? af_adaptivethemeframework_default_avatar_url()
+                    : rtrim($bburl, '/').'/images/default_avatar.png';
+                if ($src === '') $src = $fallback;
+                $avatarHtml = '<a href="'.htmlspecialchars_uni($bburl.'/member.php?action=profile&uid='.$uid).'" aria-hidden="true" tabindex="-1"><img class="atf-user-card__image" src="'.htmlspecialchars_uni($src).'" alt="" loading="lazy" onerror="this.onerror=null;this.src=\''.htmlspecialchars_uni($fallback).'\'"></a>';
+            }
+            $registered = af_aas_userlist_date_presentation((int)($r['regdate'] ?? 0));
+            $activity = af_aas_userlist_date_presentation((int)($r['lastactive'] ?? 0));
+            if ((int)($r['invisible'] ?? 0) === 1
+                && (int)($mybb->usergroup['canviewwolinvis'] ?? 0) !== 1
+                && $uid !== (int)($mybb->user['uid'] ?? 0)) {
+                $activity = ['datetime'=>'', 'text'=>(string)($lang->lastvisit_hidden ?? ''), 'title'=>''];
+            } elseif ($activity['text'] === '') {
+                $activity['text'] = (string)($lang->lastvisit_never ?? '');
             }
             $dtoUsers[$uid] = [
                 'uid'=>$uid, 'username_raw'=>$username,
                 'profile_url'=>$bburl.'/member.php?action=profile&uid='.$uid,
                 'avatar'=>['html'=>$avatarHtml],
-                'registered_at'=>(int)($r['regdate'] ?? 0) > 0 ? gmdate('c', (int)$r['regdate']) : '',
-                'registered_relative'=>(int)($r['regdate'] ?? 0) > 0 ? my_date('relative', (int)$r['regdate']) : '—',
-                'last_active_at'=>(int)($r['lastactive'] ?? 0) > 0 ? gmdate('c', (int)$r['lastactive']) : '',
-                'last_active_relative'=>(int)($r['lastactive'] ?? 0) > 0 ? my_date('relative', (int)$r['lastactive']) : '—',
+                'registered_at'=>$registered['datetime'],
+                'registered_text'=>$registered['text'],
+                'registered_title'=>$registered['title'],
+                'activity_datetime'=>$activity['datetime'],
+                'activity_text'=>$activity['text'],
+                'activity_title'=>$activity['title'],
                 'post_count'=>my_number_format((int)($r['postnum'] ?? 0)),
                 'thread_count'=>my_number_format((int)($r['threadnum'] ?? 0)),
                 'master'=>['visible'=>$masterVisible, 'uid'=>$masterVisible ? $masterUid : 0,

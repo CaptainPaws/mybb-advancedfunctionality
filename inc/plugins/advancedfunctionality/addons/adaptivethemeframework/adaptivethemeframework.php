@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.21.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.22.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -204,6 +204,11 @@ function af_adaptivethemeframework_init(): void
         // Run after profile addons have produced their permission-filtered
         // values. The ATF-owned template consumes only these composed slots.
         $plugins->add_hook('member_profile_end', 'af_adaptivethemeframework_compose_profile', 1000);
+        // Core remains the stock member-list data/action/pagination owner. The
+        // late row hook only normalizes presentation values and materializes
+        // the same public slots used by the AAS DTO renderer.
+        $plugins->add_hook('memberlist_end', 'af_adaptivethemeframework_compose_stock_userlist_page', 1000);
+        $plugins->add_hook('memberlist_user', 'af_adaptivethemeframework_compose_stock_user_card', 1000);
         if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'usercp.php') {
             // Contextual subscription confirmations have no dedicated end
             // hook, so prepare their navigation before core evaluates them.
@@ -237,6 +242,35 @@ function af_adaptivethemeframework_init(): void
             }
         }
     }
+}
+
+/** URL used by every ATF user-card when its supplied avatar is absent/broken. */
+function af_adaptivethemeframework_default_avatar_url(): string
+{
+    global $mybb, $theme;
+    $fallback = (string)($mybb->settings['useravatar'] ?? 'images/default_avatar.png');
+    $fallback = str_replace('{theme}', (string)($theme['imgdir'] ?? 'images'), $fallback);
+    if (!preg_match('~^(?:https?:)?//|^data:|^/~i', $fallback)) {
+        $fallback = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/' . ltrim($fallback, '/');
+    }
+    return $fallback;
+}
+
+/** Materialize page slots without wrapping empty provider output. */
+function af_adaptivethemeframework_compose_stock_userlist_page(): void
+{
+    $context = ['surface' => 'stock_memberlist'];
+    $GLOBALS['atf_userlist_before_list'] = af_adaptivethemeframework_render_slot('userlist.before_list', $context);
+    $GLOBALS['atf_userlist_after_list'] = af_adaptivethemeframework_render_slot('userlist.after_list', $context);
+}
+
+/** Preserve core-prepared row values and expose only explicit provider slots. */
+function af_adaptivethemeframework_compose_stock_user_card(array &$user): void
+{
+    $uid = max(0, (int)($user['uid'] ?? 0));
+    $context = ['surface' => 'stock_memberlist', 'uid' => $uid, 'user' => $user];
+    $user['atf_meta'] = af_adaptivethemeframework_render_slot('userlist.card.meta', $context);
+    $user['atf_actions'] = af_adaptivethemeframework_render_slot('userlist.card.actions', $context);
 }
 
 /** Compose navigation for every ATF-owned UCP workspace and contextual route. */
@@ -863,6 +897,32 @@ function af_adaptivethemeframework_mark_page(string &$page): void
         $page
     );
 
+    // The nested stock avatar template remains MyBB-owned. Normalize only an
+    // image already rendered inside our card viewport; this adds no lookup,
+    // permission decision, or dependency on another addon's DOM.
+    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'memberlist.php') {
+        $fallback = htmlspecialchars_uni(af_adaptivethemeframework_default_avatar_url());
+        $page = (string)preg_replace_callback(
+            '~(<div class="atf-user-card__avatar">)(.*?)(</div>)~is',
+            static function (array $match) use ($fallback): string {
+                $image = trim($match[2]);
+                if ($image === '' || stripos($image, '<img') === false) {
+                    $image = '<img class="atf-user-card__image" src="'.$fallback.'" alt="" loading="lazy">';
+                } else {
+                    $image = (string)preg_replace('~\s+alt=("[^"]*"|\'[^\']*\')~i', '', $image, 1);
+                    $image = (string)preg_replace(
+                        '~<img\b~i',
+                        '<img alt="" onerror="this.onerror=null;this.src=\''.$fallback.'\'"',
+                        $image,
+                        1
+                    );
+                }
+                return $match[1].$image.$match[3];
+            },
+            $page
+        );
+    }
+
     if ($page === '' || stripos($page, '<body') === false) {
         return;
     }
@@ -1324,17 +1384,18 @@ function af_adaptivethemeframework_render_userlist(array $page): string
             ? '<span class="atf-user-card__presence is-'.$presence.'" aria-label="'.$e($user['presence']['label'] ?? $presence).'"></span>' : '';
         $master = (array)($user['master'] ?? []);
         $masterHtml = !empty($master['visible'])
-            ? '<a href="'.$e($master['profile_url'] ?? '').'">'.$e($master['username_raw'] ?? '').'</a>' : '&mdash;';
+            ? '<div><dt>'.$e($page['labels']['master'] ?? '').'</dt><dd><a href="'.$e($master['profile_url'] ?? '').'">'.$e($master['username_raw'] ?? '').'</a></dd></div>' : '';
+        $actions = af_adaptivethemeframework_render_slot('userlist.card.actions', $context);
         $rows .= '<article class="atf-card atf-user-card is-presence-'.$presence.'" data-uid="'.$uid.'">'
             .'<div class="atf-user-card__avatar">'.(string)($user['avatar']['html'] ?? '').$presenceHtml.'</div>'
             .'<div class="atf-user-card__body"><h2 class="atf-user-card__name"><a href="'.$e($user['profile_url'] ?? '').'">'.$e($user['username_raw'] ?? '').'</a></h2>'
-            .'<dl class="atf-user-card__meta"><div><dt>'.$e($page['labels']['registered'] ?? '').'</dt><dd><time datetime="'.$e($user['registered_at'] ?? '').'">'.$e($user['registered_relative'] ?? '').'</time></dd></div>'
-            .'<div><dt>'.$e($page['labels']['active'] ?? '').'</dt><dd><time datetime="'.$e($user['last_active_at'] ?? '').'">'.$e($user['last_active_relative'] ?? '').'</time></dd></div>'
+            .'<dl class="atf-user-card__meta"><div><dt>'.$e($page['labels']['registered'] ?? '').'</dt><dd><time datetime="'.$e($user['registered_at'] ?? '').'" title="'.$e($user['registered_title'] ?? '').'">'.$e($user['registered_text'] ?? '').'</time></dd></div>'
+            .'<div><dt>'.$e($page['labels']['active'] ?? '').'</dt><dd><time datetime="'.$e($user['activity_datetime'] ?? '').'" title="'.$e($user['activity_title'] ?? '').'">'.$e($user['activity_text'] ?? '').'</time></dd></div>'
             .'<div><dt>'.$e($page['labels']['posts'] ?? '').'</dt><dd>'.$e($user['post_count'] ?? 0).'</dd></div>'
             .'<div><dt>'.$e($page['labels']['threads'] ?? '').'</dt><dd>'.$e($user['thread_count'] ?? 0).'</dd></div>'
-            .'<div><dt>'.$e($page['labels']['master'] ?? '').'</dt><dd>'.$masterHtml.'</dd></div></dl>'
+            .$masterHtml.'</dl>'
             .af_adaptivethemeframework_render_slot('userlist.card.meta', $context)
-            .'<div class="atf-user-card__actions">'.af_adaptivethemeframework_render_slot('userlist.card.actions', $context).'</div></div></article>';
+            .($actions !== '' ? '<div class="atf-user-card__actions">'.$actions.'</div>' : '').'</div></article>';
     }
     if ($rows === '') $rows = '<p class="atf-empty-state">'.$e($page['empty'] ?? '').'</p>';
     $context = ['surface'=>'aas_userlist', 'user_count'=>count((array)($page['users'] ?? []))];
