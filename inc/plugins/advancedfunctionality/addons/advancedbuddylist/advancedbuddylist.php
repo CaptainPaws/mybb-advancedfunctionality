@@ -461,7 +461,7 @@ function af_abdl_migrate_theme_stylesheet_ownership(): void
         }
         usort($edits,static fn(array $a,array $b): int=>$b['start']<=>$a['start']);
         foreach($edits as $edit) $css=substr($css,0,$edit['start']).$edit['body'].substr($css,$edit['end']);
-        if ($changed) $db->update_query('themestylesheets',['stylesheet'=>$css,'lastmodified'=>TIME_NOW],'sid='.(int)$row['sid']);
+        if ($changed) $db->update_query('themestylesheets',['stylesheet'=>$db->escape_string($css),'lastmodified'=>TIME_NOW],'sid='.(int)$row['sid']);
     }
 }
 
