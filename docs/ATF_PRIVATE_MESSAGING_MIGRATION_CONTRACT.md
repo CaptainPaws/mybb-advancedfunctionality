@@ -11,10 +11,12 @@ inferred from template names.  `private_messagebit_sep` is shipped in the theme
 XML but is not requested by 1.8.40 `private.php`; it is explicitly identified
 below instead of silently treating it as a live child.
 
-This task deliberately does **not** acquire, seed, patch, or replace a PM
-template, does not change `private.php`, permissions, or either editor, and does
-not register PM slots.  Consequently ATF off and ATF on both continue to render
-the current PM templates without any PM-specific ATF replacement.
+This work deliberately does **not** acquire, seed, patch, or replace a PM
+template, and does not change `private.php`, permissions, or either editor.
+ATF now exposes a data-only workspace contract on `private.php`: the generic
+`pm.navigation`, `pm.quota`, `pm.notice`, `pm.pagination`, `pm.actions`,
+`pm.content`, `pm.before_content`, and `pm.after_content` slots. Consequently
+ATF off and ATF on both continue to render the current legacy PM templates.
 
 ## Verified template graph
 

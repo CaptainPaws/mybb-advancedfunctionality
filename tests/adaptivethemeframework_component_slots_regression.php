@@ -29,6 +29,8 @@ $required = [
     'thread.lastposter_avatar', 'thread.meta_chips', 'header.primary_navigation',
     'header.secondary_navigation', 'header.user_navigation', 'header.assets',
     'footer.components', 'footer.modals',
+    'pm.navigation', 'pm.quota', 'pm.notice', 'pm.pagination', 'pm.actions',
+    'pm.content', 'pm.before_content', 'pm.after_content',
 ];
 if (af_adaptivethemeframework_slots() !== $required) {
     throw new RuntimeException('The audited slot catalogue changed.');
@@ -72,6 +74,32 @@ if (af_adaptivethemeframework_register_component([
     'owner' => 'alpha', 'key' => 'unknown', 'slot' => 'legacy.dom.marker', 'html' => 'bad',
 ])) {
     throw new RuntimeException('An unknown compatibility slot was accepted.');
+}
+
+if (!af_adaptivethemeframework_register_pm_providers()
+    || af_adaptivethemeframework_register_pm_providers()) {
+    throw new RuntimeException('PM providers were not registered exactly once.');
+}
+$pmContext = af_adaptivethemeframework_pm_context([
+    'action' => 'read', 'folder_id' => 7, 'folder_name' => 'Custom',
+    'uid' => 42, 'current_url' => 'private.php?action=read&pmid=9',
+], [
+    'usercpnav' => '<usercp>', 'folderjump' => '<jump>', 'folderoplist' => '<options>',
+    'pmspacebar' => '<quota>', 'limitwarning' => '<warning>', 'multipage' => '<pages>',
+    'composelink' => '<compose>', 'emptyexportlink' => '<empty-export>',
+]);
+if ($pmContext['folder'] !== ['id' => 7, 'name' => 'Custom']
+    || $pmContext['user']['uid'] !== 42
+    || af_adaptivethemeframework_render_slot('pm.navigation', $pmContext) !== '<usercp><jump><options>'
+    || af_adaptivethemeframework_render_slot('pm.quota', $pmContext) !== '<quota>'
+    || af_adaptivethemeframework_render_slot('pm.notice', $pmContext) !== '<warning>'
+    || af_adaptivethemeframework_render_slot('pm.pagination', $pmContext) !== '<pages>'
+    || af_adaptivethemeframework_render_slot('pm.actions', $pmContext) !== '<compose><empty-export>') {
+    throw new RuntimeException('Closed PM context or native provider transport failed.');
+}
+$emptyPmContext = af_adaptivethemeframework_pm_context([], []);
+if (array_filter($emptyPmContext['native'], static fn(string $value): bool => $value !== '')) {
+    throw new RuntimeException('Surface-specific PM values did not default to empty strings.');
 }
 
 echo "Adaptive Theme Framework component slots passed.\n";
