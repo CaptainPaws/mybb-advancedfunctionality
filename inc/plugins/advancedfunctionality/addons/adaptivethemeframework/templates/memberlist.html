@@ -20,7 +20,9 @@
     <a href="{$sorturl}&amp;sort=postnum&amp;order=descending">{$lang->posts}</a>{$orderarrow['postnum']}
     <a href="{$sorturl}&amp;sort=threadnum&amp;order=descending">{$lang->threads}</a>{$orderarrow['threadnum']}
   </nav>
+  {$atf_userlist_before_list}
   <section class="atf-user-grid" aria-label="{$lang->member_list}">{$users}</section>
+  {$atf_userlist_after_list}
   {$multipage}
   <form method="post" action="memberlist.php" class="atf-card atf-userlist__filters">
     <h2>{$lang->search_members}</h2>

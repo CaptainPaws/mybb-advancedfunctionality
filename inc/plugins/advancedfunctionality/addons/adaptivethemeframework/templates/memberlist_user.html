@@ -1,5 +1,5 @@
 <article class="atf-card atf-user-card" data-uid="{$user['uid']}">
-  <div class="atf-user-card__avatar">{$user['avatar']}</div>
+  <div class="atf-user-card__avatar"><a href="member.php?action=profile&amp;uid={$user['uid']}" aria-hidden="true" tabindex="-1">{$user['avatar']}</a></div>
   <div class="atf-user-card__body">
     <h2 class="atf-user-card__name">{$user['profilelink']}</h2>
     <div class="atf-user-card__role">
@@ -13,6 +13,8 @@
       <div><dt>{$lang->posts}</dt><dd>{$user['postnum']}</dd></div>
       <div><dt>{$lang->threads}</dt><dd>{$user['threadnum']}</dd></div>
       {$referral_bit}
+      {$user['atf_meta']}
     </dl>
+    {$user['atf_actions']}
   </div>
 </article>

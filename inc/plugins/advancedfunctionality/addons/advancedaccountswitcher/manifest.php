@@ -83,9 +83,9 @@ return [
                 'af_aas_account_list_col_active'     => 'Активность',
                 'af_aas_account_list_col_posts'      => 'Сообщений',
                 'af_aas_account_list_col_threads'    => 'Тем',
-                'af_aas_account_list_col_link'       => 'Привязка',
+                'af_aas_account_list_col_link'       => 'Основной аккаунт',
                 'af_aas_account_list_col_reputation' => 'Репутация',
-                'af_aas_account_list_hint'           => 'В колонке “Привязка” показывается мастер-аккаунт, если он есть и если у мастера не включена приватность.',
+                'af_aas_account_list_hint'           => 'В колонке “Основной аккаунт” показывается мастер-аккаунт, если он есть и если у мастера не включена приватность.',
                 'af_aas_account_list_empty'          => 'Пока ничего не найдено.',
 
                 'af_aas_privacy_title'            => 'Приватность',
@@ -114,7 +114,7 @@ return [
                 'af_aas_letter_reset'             => 'сброс',
 
                 'af_aas_empty'                    => 'Ничего не найдено.',
-                'af_aas_col_linkage'              => 'Привязка',
+                'af_aas_col_linkage'              => 'Основной аккаунт',
 
                 // ===== messages/errors =====
                 'af_aas_msg_switched'             => 'Переключено.',
@@ -302,9 +302,9 @@ return [
                 'af_aas_account_list_col_active'     => 'Activity',
                 'af_aas_account_list_col_posts'      => 'Posts',
                 'af_aas_account_list_col_threads'    => 'Threads',
-                'af_aas_account_list_col_link'       => 'Link',
+                'af_aas_account_list_col_link'       => 'Primary account',
                 'af_aas_account_list_col_reputation' => 'Reputation',
-                'af_aas_account_list_hint'           => 'The “Link” column shows the master account if it exists and the master has not enabled privacy.',
+                'af_aas_account_list_hint'           => 'The “Primary account” column shows the master account if it exists and the master has not enabled privacy.',
                 'af_aas_account_list_empty'          => 'Nothing found yet.',
 
                 'af_aas_privacy_title'            => 'Privacy',
@@ -334,7 +334,7 @@ return [
                 'af_aas_letter_reset'             => 'reset',
 
                 'af_aas_empty'                    => 'Nothing found.',
-                'af_aas_col_linkage'              => 'Linked to',
+                'af_aas_col_linkage'              => 'Primary account',
 
                 // ===== messages/errors =====
                 'af_aas_msg_switched'             => 'Switched.',

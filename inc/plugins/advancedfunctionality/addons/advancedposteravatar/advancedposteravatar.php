@@ -446,7 +446,7 @@ function af_avatar_render(array $user, string $context, array $options = []): st
     }
 
     $imgClass = trim('af-avatar__image ' . ($options['img_class'] ?? ''));
-    $onerror = ((int)($mybb->settings['af_advancedposteravatar_onerror'] ?? 1) === 1)
+    $onerror = (!empty($options['force_fallback']) || (int)($mybb->settings['af_advancedposteravatar_onerror'] ?? 1) === 1)
         ? ' onerror="this.onerror=null;this.src=\'' . htmlspecialchars_uni($defaultAvatar) . '\'"'
         : '';
     $decorative = !empty($options['decorative']);
@@ -472,10 +472,8 @@ function af_avatar_render(array $user, string $context, array $options = []): st
     // raw here and escape it exactly once when it enters the href attribute.
     $profileUrlRaw = rtrim((string)$mybb->settings['bburl'], '/') . '/member.php?action=profile&uid=' . $uid;
     $profileUrlHtml = htmlspecialchars_uni($profileUrlRaw);
-    $accessibleName = $decorative
-        ? ' aria-label="' . htmlspecialchars_uni($username) . '"'
-        : '';
-    return '<a href="' . $profileUrlHtml . '" class="' . $classes . ' apa_link" title="' . htmlspecialchars_uni($username) . '"' . $accessibleName . '>' . $img . '</a>';
+    $decorativeAttributes = $decorative ? ' aria-hidden="true" tabindex="-1"' : '';
+    return '<a href="' . $profileUrlHtml . '" class="' . $classes . ' apa_link" title="' . htmlspecialchars_uni($username) . '"' . $decorativeAttributes . '>' . $img . '</a>';
 }
 
 function af_avatar_render_online_page(string $page): string
