@@ -1,0 +1,96 @@
+<html>
+<head>
+<title>{$thread['subject']}</title>
+{$headerinclude}
+<script type="text/javascript">
+<!--
+	var quickdelete_confirm = "{$lang->quickdelete_confirm}";
+	var quickrestore_confirm = "{$lang->quickrestore_confirm}";
+	var allowEditReason = "{$mybb->settings['alloweditreason']}";
+	var thread_deleted = "{$thread_deleted}";
+	var visible_replies = "{$thread['replies']}";
+	lang.save_changes = "{$lang->save_changes}";
+	lang.cancel_edit = "{$lang->cancel_edit}";
+	lang.quick_edit_update_error = "{$lang->quick_edit_update_error}";
+	lang.quick_reply_post_error = "{$lang->quick_reply_post_error}";
+	lang.quick_delete_error = "{$lang->quick_delete_error}";
+	lang.quick_delete_success = "{$lang->quick_delete_success}";
+	lang.quick_delete_thread_success = "{$lang->quick_delete_thread_success}";
+	lang.quick_restore_error = "{$lang->quick_restore_error}";
+	lang.quick_restore_success = "{$lang->quick_restore_success}";
+	lang.editreason = "{$lang->postbit_editreason}";
+	lang.post_deleted_error = "{$lang->post_deleted_error}";
+	lang.softdelete_thread = "{$lang->soft_delete_thread}";
+	lang.restore_thread = "{$lang->restore_thread}";
+// -->
+</script>
+<script type="text/javascript" src="{$mybb->asset_url}/jscripts/report.js?ver=1820"></script>
+<script src="{$mybb->asset_url}/jscripts/jeditable/jeditable.min.js"></script>
+<script type="text/javascript" src="{$mybb->asset_url}/jscripts/thread.js?ver=1838"></script>
+</head>
+<body class="af-apui-thread-page af-aa-user-{$thread['uid']}">
+{$header}
+<main class="atf-page atf-thread" id="content">
+  <div class="atf-thread__breadcrumbs">{$atf_thread_breadcrumbs}</div>
+  {$threadnotesbox}
+  <section class="atf-card atf-thread__poll">{$pollbox}</section>
+
+  <header class="atf-card atf-thread__header af-apui-thread-hero af-aa-user-{$thread['uid']}">
+    <div class="af-apui-thread-hero__background" aria-hidden="true"></div>
+    <div class="af-apui-thread-hero__banner" aria-hidden="true"></div>
+    <div class="atf-thread__header-content af-apui-thread-hero__inner">
+      <div class="atf-thread__heading">
+        <h1 class="atf-thread__title">{$thread['displayprefix']}{$thread['subject']}</h1>
+        <div class="atf-thread__toggle smalltext"><strong><a href="showthread.php?mode={$thread_toggle}&amp;tid={$tid}&amp;pid={$pid}#pid{$pid}">{$lang->thread_toggle}</a>{$threadnoteslink}</strong></div>
+      </div>
+      <div class="atf-meta atf-thread__meta">{$atf_thread_meta}</div>
+      <div class="atf-thread__fields">{$atf_thread_fields}</div>
+    </div>
+  </header>
+
+  <div class="atf-thread__toolbar">
+    <div class="atf-thread__pagination">{$multipage}</div>
+    <div class="atf-thread__rating">{$ratethread}</div>
+    <div class="atf-thread__reply">{$newreply}</div>
+  </div>
+
+  <div class="atf-thread__slot atf-thread__slot--before">{$atf_thread_before_posts}</div>
+  <section class="atf-thread__posts" aria-label="Posts">
+    <div id="posts_container">
+      <div id="posts">{$posts}</div>
+    </div>
+  </section>
+  <div class="atf-thread__slot atf-thread__slot--after">{$atf_thread_after_posts}</div>
+
+  <nav class="atf-thread__adjacent" aria-label="Adjacent threads">
+    {$search_thread}
+    <strong>&laquo; <a href="{$next_oldest_link}">{$lang->next_oldest}</a> | <a href="{$next_newest_link}">{$lang->next_newest}</a> &raquo;</strong>
+  </nav>
+  <div class="atf-thread__toolbar atf-thread__toolbar--bottom">
+    <div class="atf-thread__pagination">{$multipage}</div>
+    <div class="atf-thread__reply">{$newreply}</div>
+  </div>
+
+  <section class="atf-thread__quick-reply">{$quickreply}</section>
+  {$threadexbox}
+  {$similarthreads}
+  {$usersbrowsing}
+
+  <footer class="atf-thread__controls">
+    <div class="atf-thread__tools">
+      <ul class="thread_tools">{$printthread}{$sendthread}{$addremovesubscription}{$addpoll}</ul>
+    </div>
+    <div class="atf-thread__moderation">{$moderationoptions}{$forumjump}</div>
+  </footer>
+</main>
+{$footer}
+<script type="text/javascript">
+	var thread_deleted = "{$thread_deleted}";
+	if(thread_deleted == "1")
+	{
+		$("#quick_reply_form, .new_reply_button, .thread_tools, .inline_rating").hide();
+		$("#moderator_options_selector option.option_mirage").attr("disabled","disabled");
+	}
+</script>
+</body>
+</html>

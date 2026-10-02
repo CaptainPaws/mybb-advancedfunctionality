@@ -23,6 +23,24 @@ foreach (['posts_html', 'quickreply_html', 'moderation_html', 'poll_html', 'thre
     if (!array_key_exists($key, $context)) throw new RuntimeException("Missing showthread contract key: {$key}");
 }
 
+$seeds = af_adaptivethemeframework_template_seeds();
+$showthread = file_get_contents($seeds['showthread'] ?? '');
+foreach (['id="posts_container"', 'id="posts"', '{$posts}', '{$quickreply}', '{$moderationoptions}',
+          '{$pollbox}', '{$multipage}', '{$newreply}', '{$addremovesubscription}', '{$thread_deleted}',
+          '{$atf_thread_breadcrumbs}', '{$atf_thread_meta}', '{$atf_thread_fields}',
+          '{$atf_thread_before_posts}', '{$atf_thread_after_posts}'] as $anchor) {
+    if (!str_contains($showthread, $anchor)) throw new RuntimeException("ATF showthread seed omits {$anchor}");
+}
+if (!str_contains($showthread, '/jscripts/thread.js?ver=1838')
+    || !str_contains($showthread, '/jscripts/jeditable/jeditable.min.js')
+    || !str_contains($showthread, '/jscripts/report.js?ver=1820')) {
+    throw new RuntimeException('ATF showthread seed omits MyBB post action scripts.');
+}
+if (!str_contains(file_get_contents(AF_ADDONS . 'adaptivethemeframework/adaptivethemeframework.php'),
+    "add_hook('showthread_end', 'af_adaptivethemeframework_compose_showthread'")) {
+    throw new RuntimeException('Showthread composition hook is not registered.');
+}
+
 $threadFields = file_get_contents(AF_ADDONS . 'advancedthreadfields/advancedthreadfields.php');
 if (!str_contains($threadFields, "'slot' => 'thread.atf_fields'")
     || !preg_match('~function af_atf_render_showthread_fields.*?return af_atf_build_display_block_for_tid_fid\(\$tid, \$fid\);~s', $threadFields)) {

@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.7.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.8.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -169,6 +169,7 @@ function af_adaptivethemeframework_init(): void
         // Compose provider slots here rather than teaching providers about the
         // topic-card DOM or patching their legacy template variables.
         $plugins->add_hook('forumdisplay_thread_end', 'af_adaptivethemeframework_compose_thread_card', 100);
+        $plugins->add_hook('showthread_end', 'af_adaptivethemeframework_compose_showthread', 100);
     }
 }
 
@@ -213,6 +214,40 @@ function af_adaptivethemeframework_showthread_context(array $thread, int $fid, a
         $context[$key] = (string)($rendered[$key] ?? '');
     }
     return $context;
+}
+
+/** Compose the five ATF thread slots after MyBB has rendered every control. */
+function af_adaptivethemeframework_compose_showthread(): void
+{
+    global $thread, $fid, $header, $posts, $quickreply, $moderationoptions, $pollbox,
+           $multipage, $printthread, $sendthread, $addremovesubscription, $addpoll;
+    global $atf_thread_breadcrumbs, $atf_thread_meta, $atf_thread_fields,
+           $atf_thread_before_posts, $atf_thread_after_posts;
+
+    if (!is_array($thread)) {
+        return;
+    }
+    // The stock header contains the same late-bound token. Move it rather than
+    // duplicating the breadcrumb trail in the ATF shell.
+    $header = str_replace('<navigation>', '', (string)$header);
+    $context = af_adaptivethemeframework_showthread_context($thread, (int)$fid, [
+        // parse_page() expands this native token after the showthread template
+        // is evaluated, so the slot receives the final MyBB breadcrumb trail.
+        'breadcrumbs_html' => '<navigation>',
+        'posts_html' => (string)($posts ?? ''),
+        'quickreply_html' => (string)($quickreply ?? ''),
+        'moderation_html' => (string)($moderationoptions ?? ''),
+        'poll_html' => (string)($pollbox ?? ''),
+        'thread_tools_html' => (string)($printthread ?? '') . (string)($sendthread ?? '')
+            . (string)($addremovesubscription ?? '') . (string)($addpoll ?? ''),
+        'pagination_html' => (string)($multipage ?? ''),
+    ]);
+
+    $atf_thread_breadcrumbs = af_adaptivethemeframework_render_slot('thread.breadcrumbs', $context);
+    $atf_thread_meta = af_adaptivethemeframework_render_slot('thread.meta', $context);
+    $atf_thread_fields = af_adaptivethemeframework_render_slot('thread.atf_fields', $context);
+    $atf_thread_before_posts = af_adaptivethemeframework_render_slot('thread.before_posts', $context);
+    $atf_thread_after_posts = af_adaptivethemeframework_render_slot('thread.after_posts', $context);
 }
 
 /** Remove the table cell owned by a stock child template, retaining its body. */
@@ -501,6 +536,7 @@ function af_adaptivethemeframework_template_seeds(): array
         'forumbit_depth2_forum' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum.html',
         'forumbit_depth2_forum_lastpost' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum_lastpost.html',
         'forumdisplay_thread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay_thread.html',
+        'showthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread.html',
     ];
 }
 

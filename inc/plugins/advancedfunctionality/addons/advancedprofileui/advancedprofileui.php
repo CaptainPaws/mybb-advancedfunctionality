@@ -2179,6 +2179,9 @@ function af_apui_apply_overrides(): void
         if (!isset($customTemplates[$title])) {
             continue;
         }
+        if (af_apui_template_is_atf_owned($title)) {
+            continue;
+        }
 
         $titleEsc = $db->escape_string($title);
         $query = $db->simple_select('templates', 'tid,title,sid,template,dateline', "title='" . $titleEsc . "' AND sid != '-2'");
@@ -2213,6 +2216,9 @@ function af_apui_restore_overrides(): void
     while ($backup = $db->fetch_array($q)) {
         $tid = (int)$backup['template_tid'];
         $title = (string)$backup['title'];
+        if (af_apui_template_is_atf_owned($title)) {
+            continue;
+        }
         $sid = (int)$backup['sid'];
         $template = (string)$backup['original_template'];
         $dateline = (int)$backup['original_dateline'];
@@ -2238,6 +2244,15 @@ function af_apui_restore_overrides(): void
             'updated_at' => TIME_NOW,
         ], "id='" . (int)$backup['id'] . "'");
     }
+}
+
+/** ATF's generic lease is authoritative while it owns a full template. */
+function af_apui_template_is_atf_owned(string $templateName): bool
+{
+    return function_exists('af_is_addon_enabled')
+        && af_is_addon_enabled('adaptivethemeframework')
+        && function_exists('af_adaptivethemeframework_template_seeds')
+        && array_key_exists($templateName, af_adaptivethemeframework_template_seeds());
 }
 
 function af_apui_backup_template_row(array $row): void
