@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.12.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.13.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -838,6 +838,11 @@ function af_adaptivethemeframework_template_seeds(): array
         'private_emptyexportlink' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_emptyexportlink.html',
         'private_limitwarning' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_limitwarning.html',
         'private_nomessages' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_nomessages.html',
+        'private_advanced_search' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_advanced_search.html',
+        'private_advanced_search_folders' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_advanced_search_folders.html',
+        'private_search_results' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_search_results.html',
+        'private_search_messagebit' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_search_messagebit.html',
+        'private_search_results_nomessages' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_search_results_nomessages.html',
     ];
 }
 
