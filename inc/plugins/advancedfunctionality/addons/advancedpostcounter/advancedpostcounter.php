@@ -1105,10 +1105,14 @@ function af_advancedpostcounter_postbit(array &$post): void
 function af_advancedpostcounter_register_atf_provider(): bool
 {
     if (!function_exists('af_adaptivethemeframework_register_component')) return false;
-    return af_adaptivethemeframework_register_component([
+    $registered = af_adaptivethemeframework_register_component([
         'owner' => AF_APC_ID, 'key' => 'post_counter', 'slot' => 'post.post_counter',
         'renderer' => static fn(array $context): string => (string)($context['post']['af_apc_atf_html'] ?? ''),
     ]);
+    return af_adaptivethemeframework_register_component([
+        'owner' => AF_APC_ID, 'key' => 'profile_post_counter', 'slot' => 'profile.post_counter',
+        'renderer' => static fn(array $context): string => (string)($context['providers']['post_counter'] ?? ''),
+    ]) || $registered;
 }
 
 function af_advancedpostcounter_member_profile_end(): void

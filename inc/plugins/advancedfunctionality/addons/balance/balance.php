@@ -102,6 +102,13 @@ function af_balance_init(): void
 {
     global $plugins;
 
+    if (function_exists('af_adaptivethemeframework_register_component')) {
+        af_adaptivethemeframework_register_component([
+            'owner' => 'balance', 'key' => 'profile_balance', 'slot' => 'profile.balance',
+            'renderer' => static fn(array $context): string => (string)($context['providers']['balance'] ?? ''),
+        ]);
+    }
+
     $plugins->add_hook('member_do_register_end', 'af_balance_member_do_register_end');
 
     // INSERT: используем *_end — на этом этапе пост уже в БД и pid гарантированно доступен

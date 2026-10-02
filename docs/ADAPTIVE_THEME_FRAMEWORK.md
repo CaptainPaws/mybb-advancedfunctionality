@@ -59,6 +59,36 @@ presentation path. Provider transport has none. The retired Adaptive Responsive
 Layout DOM-moving runtime is deliberately outside this contract and is neither
 loaded nor emulated by ATF.
 
+## Member profile provider hand-off
+
+`member_profile` is not an ATF-owned template yet. While ATF is enabled its
+late `member_profile_end` hook nevertheless builds a closed profile context and
+resolves the future template variables `{$atf_profile_<slot>}`. The context
+contains only the profile identity and a small member subset, rendered native
+fragments, owner/viewer identity, APUI section output, and AdvancedAppearance
+metadata. It does not expose `$GLOBALS` to providers.
+
+| Slot | Owner and actual runtime source |
+| --- | --- |
+| `profile.hero` | AdvancedProfileUI; MyBB's rendered avatar, formatted name, title, group image/stars, presence, registration/last-visit values, plus uid-scoped AdvancedAppearance metadata. |
+| `profile.navigation` | AdvancedProfileUI; links derived from non-empty APUI section outputs, retaining `#af-apui-tab-*` hashes and `data-tab` keys. |
+| `profile.forum_info` | Existing `$af_apui_forum_info_grid` builder output. |
+| `profile.character_sheet` | Existing `$af_apui_character_sheet_tab`; CharacterSheets remains its renderer/data source when a sheet exists. |
+| `profile.application` | Existing `$af_apui_application_tab`; the application integration retains its queries and actions. |
+| `profile.timeline`, `profile.activity` | Existing APUI builder outputs (currently APUI empty states). |
+| `profile.balance` | Balance's existing `$memprofile['balance']`, after its calculation hook. A disabled/missing addon registers no provider. |
+| `profile.post_counter` | AdvancedPostCounter's existing `$memprofile['advancedpostcounter']`; the legacy marker path remains intact. |
+| `profile.main` | MyBB-rendered `profilefields`, `contact_details`, and `signature`. |
+| `profile.after_content` | MyBB-rendered moderator, administrator, buddy, ignore, and report blocks. |
+
+ATF transports native blocks after MyBB has applied their permissions; it does
+not reimplement those checks. `profile.before_content` is intentionally empty.
+With ATF off the current APUI template and all legacy variables are unchanged.
+Until the future template and JavaScript are migrated, the remaining profile
+DOM compatibility surface is APUI's tab/panel selectors and the
+`af-apui-member-profile-page` / `af-aa-profile-user-<uid>` styling hierarchy;
+providers themselves do not inspect that DOM.
+
 Providers call `af_adaptivethemeframework_register_component()` with `owner`,
 `key`, `slot`, and either a callable `renderer` or static `html`. The stable
 identity is `owner::key`, so registering it twice (including in a different

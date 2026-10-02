@@ -185,6 +185,7 @@ function af_adaptivethemeframework_init(): void
     global $plugins;
     af_adaptivethemeframework_register_thread_providers();
     af_adaptivethemeframework_register_post_providers();
+    af_adaptivethemeframework_register_profile_providers();
     if (is_object($plugins) && method_exists($plugins, 'add_hook')) {
         $plugins->add_hook('pre_output_page', 'af_adaptivethemeframework_mark_page', 100);
         // MyBB has finished deriving every forumdisplay value at this point.
@@ -195,7 +196,97 @@ function af_adaptivethemeframework_init(): void
         $plugins->add_hook('postbit', 'af_adaptivethemeframework_compose_postbit', 1000);
         $plugins->add_hook('postbit_prev', 'af_adaptivethemeframework_compose_postbit', 1000);
         $plugins->add_hook('postbit_pm', 'af_adaptivethemeframework_compose_postbit', 1000);
+        // Run after profile addons have produced their permission-filtered
+        // legacy values. The member_profile template is intentionally not
+        // owned by ATF yet; these globals are the hand-off for its next seed.
+        $plugins->add_hook('member_profile_end', 'af_adaptivethemeframework_compose_profile', 1000);
     }
+}
+
+/** Native profile fragments stay rendered by MyBB, preserving its permissions. */
+function af_adaptivethemeframework_register_profile_providers(): bool
+{
+    $registered = af_adaptivethemeframework_register_component([
+        'owner' => 'mybb', 'key' => 'profile_main', 'slot' => 'profile.main',
+        'renderer' => static fn(array $context): string =>
+            (string)($context['native']['profilefields'] ?? '')
+            . (string)($context['native']['contact_details'] ?? '')
+            . (string)($context['native']['signature'] ?? ''),
+    ]);
+    $registered = af_adaptivethemeframework_register_component([
+        'owner' => 'mybb', 'key' => 'profile_actions', 'slot' => 'profile.after_content',
+        'renderer' => static fn(array $context): string => implode('', [
+            (string)($context['native']['modoptions'] ?? ''),
+            (string)($context['native']['adminoptions'] ?? ''),
+            (string)($context['native']['buddy_options'] ?? ''),
+            (string)($context['native']['ignore_options'] ?? ''),
+            (string)($context['native']['report_options'] ?? ''),
+        ]),
+    ]) || $registered;
+    return $registered;
+}
+
+/** A closed, deliberately whitelisted profile context (never $GLOBALS). */
+function af_adaptivethemeframework_profile_context(array $member, array $values): array
+{
+    global $mybb;
+    $uid = max(0, (int)($member['uid'] ?? 0));
+    $viewerUid = is_object($mybb) ? max(0, (int)($mybb->user['uid'] ?? 0)) : 0;
+    $memberKeys = ['uid', 'username', 'usergroup', 'displaygroup', 'avatar', 'usertitle', 'regdate', 'lastactive'];
+    return [
+        'uid' => $uid,
+        'username' => (string)($member['username'] ?? ''),
+        'member' => array_intersect_key($member, array_flip($memberKeys)),
+        'identity' => array_intersect_key($values, array_flip([
+            'formattedname', 'avatar', 'usertitle', 'groupimage', 'userstars',
+            'online_status', 'memregdate', 'memlastvisitdate', 'awaybit', 'bannedbit',
+        ])),
+        'appearance' => [
+            'uid_class' => $uid > 0 ? 'af-aa-profile-user-' . $uid : '',
+            'payload' => $uid > 0 && function_exists('af_aa_build_user_css_payload')
+                ? (array)af_aa_build_user_css_payload($uid)
+                : [],
+        ],
+        'native' => array_intersect_key($values, array_flip([
+            'profilefields', 'contact_details', 'signature', 'modoptions',
+            'adminoptions', 'buddy_options', 'ignore_options', 'report_options',
+        ])),
+        'viewer' => ['uid' => $viewerUid, 'is_owner' => $uid > 0 && $viewerUid === $uid],
+        'sections' => (array)($values['sections'] ?? []),
+        'providers' => (array)($values['providers'] ?? []),
+    ];
+}
+
+/** Resolve every profile slot without changing the current member_profile. */
+function af_adaptivethemeframework_compose_profile(): void
+{
+    global $memprofile;
+    if (!is_array($memprofile)) return;
+    $names = [
+        'formattedname', 'avatar', 'usertitle', 'groupimage', 'userstars', 'online_status',
+        'memregdate', 'memlastvisitdate', 'awaybit', 'bannedbit', 'profilefields',
+        'contact_details', 'signature', 'modoptions', 'adminoptions', 'buddy_options',
+        'ignore_options', 'report_options',
+    ];
+    $values = [];
+    foreach ($names as $name) $values[$name] = (string)($GLOBALS[$name] ?? '');
+    $values['sections'] = [
+        'info' => (string)($GLOBALS['af_apui_forum_info_grid'] ?? ''),
+        'sheet' => (string)($GLOBALS['af_apui_character_sheet_tab'] ?? ''),
+        'application' => (string)($GLOBALS['af_apui_application_tab'] ?? ''),
+        'timeline' => (string)($GLOBALS['af_apui_timeline_tab'] ?? ''),
+        'activity' => (string)($GLOBALS['af_apui_activity_tab'] ?? ''),
+    ];
+    $values['providers'] = [
+        'balance' => (string)($memprofile['balance'] ?? ''),
+        'post_counter' => (string)($memprofile['advancedpostcounter'] ?? ''),
+    ];
+    $context = af_adaptivethemeframework_profile_context($memprofile, $values);
+    foreach (['hero', 'navigation', 'forum_info', 'character_sheet', 'application', 'timeline',
+        'activity', 'balance', 'post_counter', 'before_content', 'main', 'after_content'] as $name) {
+        $GLOBALS['atf_profile_' . $name] = af_adaptivethemeframework_render_slot('profile.' . $name, $context);
+    }
+    $GLOBALS['atf_profile_context'] = $context;
 }
 
 /** Register native controls as one indivisible, permission-safe provider. */
