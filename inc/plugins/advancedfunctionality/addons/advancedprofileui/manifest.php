@@ -8,6 +8,11 @@ return [
     'authorsite'  => 'https://github.com/CaptainPaws',
     'description' => 'Каркас кастомных шаблонов member_profile и postbit_classic с безопасным override/restore.',
     'bootstrap'   => 'advancedprofileui.php',
+    // ATF activation can safely hand off APUI-owned full templates by their
+    // explicit owner markers after an ATF -> legacy/APUI -> ATF lifecycle.
+    'compatibility_providers' => [
+        'adaptivethemeframework' => 'af_apui_register_atf_compatibility_normalizer',
+    ],
     'frontend' => [
         'mode' => 'contextual',
         'routes' => [],

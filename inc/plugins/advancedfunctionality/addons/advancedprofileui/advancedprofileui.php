@@ -295,6 +295,85 @@ function af_apui_register_atf_post_providers(): bool
 }
 af_apui_register_atf_post_providers();
 
+/**
+ * Activation-time ATF handoff for APUI-owned full templates.
+ *
+ * APUI deliberately stamps its full-template replacements with owner markers.
+ * When ATF is being re-enabled after an ATF -> legacy/APUI -> ATF cycle, the
+ * live template can therefore be a legitimate APUI-owned predecessor instead
+ * of the original ATF lease backup.  Prove that ownership from the exact APUI
+ * wrapper markers, then hand ATF its own seed.  Any unmarked/manual template
+ * remains fail-closed.
+ */
+function af_apui_normalize_atf_predecessor(string $templateName, string $current): ?array
+{
+    $markers = [
+        'member_profile' => ['<!-- AF_APUI member_profile START -->', '<!-- AF_APUI member_profile END -->'],
+        'postbit_classic' => ['<!-- AF_APUI postbit_classic START -->', '<!-- AF_APUI postbit_classic END -->'],
+        'showthread' => ['<!-- AF_APUI showthread START -->', '<!-- AF_APUI showthread END -->'],
+    ];
+    if (!isset($markers[$templateName])) {
+        return null;
+    }
+
+    [$start, $end] = $markers[$templateName];
+    if (substr_count($current, $start) !== 1 || substr_count($current, $end) !== 1) {
+        return null;
+    }
+
+    $trimmed = trim($current);
+    if (strpos($trimmed, $start) !== 0
+        || substr($trimmed, -strlen($end)) !== $end) {
+        return null;
+    }
+
+    if (!function_exists('af_adaptivethemeframework_template_seeds')) {
+        return null;
+    }
+    $seeds = af_adaptivethemeframework_template_seeds();
+    $seedPath = (string)($seeds[$templateName] ?? '');
+    if ($seedPath === '' || !is_file($seedPath)) {
+        return null;
+    }
+
+    $seed = @file_get_contents($seedPath);
+    if (!is_string($seed) || $seed === '') {
+        return null;
+    }
+
+    return [
+        'normalized_content' => $seed,
+        'owner' => AF_APUI_ID,
+        'source' => 'apui_full_template_owner_markers',
+        'transformation_type' => 'known_owner_template_handoff',
+        'diagnostic' => [
+            'start_marker_count' => 1,
+            'end_marker_count' => 1,
+        ],
+    ];
+}
+
+function af_apui_register_atf_compatibility_normalizer(): bool
+{
+    if (function_exists('af_adaptivethemeframework_register_compatibility_normalizer')) {
+        return af_adaptivethemeframework_register_compatibility_normalizer(
+            AF_APUI_ID . '::owned_template_handoff',
+            'af_apui_normalize_atf_predecessor',
+            'apui'
+        );
+    }
+
+    // APUI may load before ATF on a normal frontend request. Preserve the
+    // declaration so ATF can import it later without depending on load order.
+    $identity = AF_APUI_ID . '::owned_template_handoff';
+    $GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizers'][$identity]
+        = 'af_apui_normalize_atf_predecessor';
+    $GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizer_prefixes'][$identity]
+        = 'apui';
+    return true;
+}
+af_apui_register_atf_compatibility_normalizer();
+
 function af_apui_get_css_delivery_mode(): string
 {
     global $mybb;
