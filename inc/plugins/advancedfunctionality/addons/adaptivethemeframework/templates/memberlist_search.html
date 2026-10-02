@@ -1,7 +1,7 @@
 <html>
 <head><title>{$mybb->settings['bbname']} - {$lang->search_member_list}</title>{$headerinclude}</head>
 <body>{$header}
-<main class="atf-userlist"><form method="post" action="memberlist.php" class="atf-card atf-userlist__filters">
+<main class="pun atf-page-shell atf-page atf-userlist"><form method="post" action="memberlist.php" class="atf-card atf-userlist__filters">
   <h1>{$lang->search_member_list}</h1><h2>{$lang->search_criteria}</h2>
   <div class="atf-form-grid">
     <label for="username">{$lang->username}<span><select name="username_match"><option value="begins">{$lang->begins_with}</option><option value="contains">{$lang->username_contains}</option><option value="exact">{$lang->username_exact}</option></select></span><input type="text" class="textbox" name="username" id="username" /></label>
