@@ -13,32 +13,29 @@
 <header class="atf-modcp__header"><h1 class="atf-modcp__title">{$atf_modcp_title}</h1>{$atf_modcp_actions}</header>
 {$atf_modcp_notice}
 {$atf_modcp_before_content}
-<div class="atf-modcp__content">
-<form action="modcp.php" method="post">
+<div class="atf-modcp__content atf-modcp-reports">
+<form action="modcp.php" method="post" class="atf-stack atf-modcp-reports__form">
 <input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 <input type="hidden" name="page" value="{$page}" />
-
-		<table border="0" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" class="tborder">
-		<tr>
-			<td class="thead" colspan="5"><strong>{$lang->report_center}</strong></td>
-		</tr>
-		<tr>
-			<td class="tcat" width="35%"><span class="smalltext"><strong>{$lang->report_info}</strong></span></td>
-			<td class="tcat" align="left" width="25%"><span class="smalltext"><strong>{$lang->report_type}</strong></span></td>
-			<td class="tcat" align="center" width="15%"><span class="smalltext"><strong>{$lang->report_count}</strong></span></td>
-			<td class="tcat" align="right" width="20%"><span class="smalltext"><strong>{$lang->report_lastpost}</strong></span></td>
-			<td class="tcat" align="center" width="5%"><input type="checkbox" name="allbox" onclick="inlineReports.checkAll(this);" /></td>
-		</tr>
-		{$selectall}
-		{$reports}
-		<tr>
-			<td class="tfoot" colspan="7" align="right"><span class="smalltext"><strong><a href="modcp.php?action=allreports">{$lang->view_all_reports}</a></strong></span></td>
-		</tr>
-		</table>
-		{$reportspages}
-		<br />
-		<div align="center"><input type="hidden" name="action" value="do_reports" /><input type="submit" id="inline_read" class="button" name="reportsubmit" value="{$lang->mark_read} ({$inlinecount})" /></div>
-	
+<section class="atf-card atf-modcp-panel">
+  <header class="atf-modcp-panel__header atf-modcp-panel__header--split">
+    <h2>{$lang->report_center}</h2>
+    <label class="atf-modcp-reports__select-page">
+      <input type="checkbox" name="allbox" onclick="inlineReports.checkAll(this);" />
+      <span>{$lang->select_all}</span>
+    </label>
+  </header>
+  {$selectall}
+  <div class="atf-modcp-list atf-modcp-report-list">{$reports}</div>
+  <footer class="atf-modcp-panel__footer">
+    <a href="modcp.php?action=allreports">{$lang->view_all_reports}</a>
+  </footer>
+</section>
+{$reportspages}
+<div class="atf-modcp-form__actions">
+  <input type="hidden" name="action" value="do_reports" />
+  <input type="submit" id="inline_read" class="button atf-button" name="reportsubmit" value="{$lang->mark_read} ({$inlinecount})" />
+</div>
 </form>
 </div>
 {$atf_modcp_after_content}

@@ -12,35 +12,17 @@
 <header class="atf-modcp__header"><h1 class="atf-modcp__title">{$atf_modcp_title}</h1>{$atf_modcp_actions}</header>
 {$atf_modcp_notice}
 {$atf_modcp_before_content}
-<div class="atf-modcp__content">
-<form action="modcp.php" method="post">
+<div class="atf-modcp__content atf-modcp-queue">
+<form action="modcp.php" method="post" class="atf-stack">
 <input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 <input type="hidden" name="action" value="do_modqueue" />
-
-	<table border="0" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" class="tborder">
-		<tr>
-			<td class="thead" colspan="6">
-				<div class="float_right">
-					{$thread_link}
-					{$post_link}
-					{$navsep}<strong>{$lang->attachments}</strong>
-				</div>
-				<strong>{$lang->attachments_awaiting_moderation}</strong>
-			</td>
-		</tr>
-		<tr>
-			<td class="tcat"><span class="smalltext"><strong>{$lang->filename}</strong></span></td>
-			<td class="tcat" align="center" width="20%"><span class="smalltext"><strong>{$lang->author}</strong></span></td>
-			<td class="tcat" align="center" width="20%"><span class="smalltext"><strong>{$lang->date}</strong></span></td>
-			<td class="tcat" align="center" colspan="3"><span class="smalltext"><strong>{$lang->controls}</strong></span></td>
-		</tr>
-		{$attachments}
-		</table>
+<section class="atf-card atf-modcp-panel">
+  <header class="atf-modcp-panel__header"><h2>{$lang->attachments_awaiting_moderation}</h2></header>
+  <div class="atf-modcp-list atf-modcp-queue-list">{$attachments}</div>
+</section>
 {$multipage}
 {$mass_controls}
-<br />
-<div align="center"><input type="submit" class="button" name="reportsubmit" value="{$lang->perform_actions}" /></div>
-
+<div class="atf-modcp-form__actions"><input type="submit" class="button atf-button" name="reportsubmit" value="{$lang->perform_actions}" /></div>
 </form>
 </div>
 {$atf_modcp_after_content}

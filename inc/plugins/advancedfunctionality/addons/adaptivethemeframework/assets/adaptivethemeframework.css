@@ -569,6 +569,112 @@ body.atf-active .atf-modcp-overview__bans-table thead th {
   text-transform: uppercase;
 }
 
+/* Task 46: Open Reports and moderation queues. */
+body.atf-active .atf-modcp-reports,
+body.atf-active .atf-modcp-queue {
+  display: grid;
+  gap: var(--atf-component-gap);
+  min-width: 0;
+  overflow: visible;
+}
+body.atf-active .atf-modcp-panel__header--split,
+body.atf-active .atf-modcp-panel__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--atf-space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+body.atf-active .atf-modcp-reports__select-page {
+  display: inline-flex;
+  gap: var(--atf-space-2);
+  align-items: center;
+}
+body.atf-active .atf-modcp-selectall {
+  padding: var(--atf-space-3);
+  text-align: center;
+  background: var(--atf-color-page-subtle);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-md);
+}
+body.atf-active .atf-modcp-report-card {
+  position: relative;
+}
+body.atf-active .atf-modcp-report-card.trow_selected {
+  outline: 2px solid var(--atf-color-accent);
+  outline-offset: -2px;
+}
+body.atf-active .atf-modcp-report-card__select {
+  position: absolute;
+  inset-block-start: var(--atf-space-3);
+  inset-inline-end: var(--atf-space-3);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--atf-space-1);
+}
+body.atf-active .atf-modcp-report-card__select-label {
+  font-size: var(--atf-font-size-sm);
+}
+body.atf-active .atf-modcp-report-card__content,
+body.atf-active .atf-modcp-report-card__comment {
+  padding-inline-end: 2.5rem;
+}
+body.atf-active .atf-modcp-queue-card {
+  display: grid;
+  gap: var(--atf-space-3);
+}
+body.atf-active .atf-modcp-queue-card__header,
+body.atf-active .atf-modcp-queue-card__identity,
+body.atf-active .atf-modcp-queue-card__context,
+body.atf-active .atf-modcp-queue-card__message {
+  min-width: 0;
+}
+body.atf-active .atf-modcp-queue-card__identity h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+body.atf-active .atf-modcp-queue-card__context {
+  color: var(--atf-color-text-muted);
+  font-size: var(--atf-font-size-sm);
+}
+body.atf-active .atf-modcp-queue-card__message {
+  overflow-wrap: anywhere;
+}
+body.atf-active .atf-modcp-queue-card__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--atf-space-2) var(--atf-space-4);
+  padding: var(--atf-space-3);
+  margin: 0;
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-md);
+}
+body.atf-active .atf-modcp-queue-card__controls legend {
+  padding-inline: var(--atf-space-1);
+  color: var(--atf-color-text-muted);
+  font-size: var(--atf-font-size-sm);
+}
+body.atf-active .atf-modcp-queue-card__controls label {
+  display: inline-flex;
+  gap: var(--atf-space-1);
+  align-items: center;
+}
+body.atf-active .atf-modcp-queue-mass {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--atf-space-2);
+}
+body.atf-active .atf-modcp-queue-mass a {
+  display: inline-flex;
+  min-height: var(--atf-control-height);
+  align-items: center;
+  padding-inline: var(--atf-space-3);
+  text-decoration: none;
+  background: var(--atf-color-surface);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-pill);
+}
+
 body.atf-active .atf-ucp__notices:empty,
 body.atf-active .atf-ucp__actions:empty,
 body.atf-active .atf-ucp__provided:empty,
