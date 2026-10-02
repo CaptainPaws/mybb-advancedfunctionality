@@ -1,0 +1,46 @@
+<html>
+<head>
+<title>{$lang->user_cp}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+<main class="atf-page atf-ucp" id="content">
+<div class="atf-stack">
+{$atf_ucp_global_navigation}
+{$atf_ucp_local_navigation}
+<div class="atf-ucp__notices">{$atf_ucp_notices}</div>
+<header class="atf-ucp__header">
+<h1 class="atf-ucp__title">{$lang->account_summary}</h1>
+<div class="atf-ucp__actions">{$atf_ucp_actions}</div>
+</header>
+{$atf_ucp_before_content}
+<div class="atf-ucp__provided">{$atf_ucp_content}</div>
+<section class="atf-section atf-card atf-ucp-summary" aria-labelledby="atf-ucp-summary-title">
+<h2 class="atf-ucp-summary__title" id="atf-ucp-summary-title">{$lang->account_summary}</h2>
+<div class="atf-ucp-summary__body">
+{$avatar}
+<div class="atf-stack atf-stack--compact">
+<div class="atf-ucp-summary__username">{$username}</div>
+<dl class="atf-meta atf-ucp-summary__meta">
+<div><dt>{$lang->postnum}</dt><dd><a href="search.php?action=finduser&amp;uid={$mybb->user['uid']}">{$mybb->user['posts']}</a> {$lang->posts_day}</dd></div>
+<div><dt>{$lang->email}</dt><dd>{$mybb->user['email']}</dd></div>
+<div><dt>{$lang->registration_date}</dt><dd>{$regdate}</dd></div>
+<div><dt>{$lang->primary_usergroup}</dt><dd>{$usergroup}</dd></div>
+</dl>
+<div class="atf-ucp-summary__supplemental">{$reputation}{$referral_info}</div>
+</div>
+</div>
+</section>
+<div class="atf-grid atf-ucp-widgets">
+<section class="atf-ucp-widget">{$latest_subscribed}</section>
+<section class="atf-ucp-widget">{$latest_threads}</section>
+<section class="atf-ucp-widget">{$latest_warnings}</section>
+<section class="atf-ucp-widget">{$user_notepad}</section>
+</div>
+{$atf_ucp_after_content}
+</div>
+</main>
+{$footer}
+</body>
+</html>
