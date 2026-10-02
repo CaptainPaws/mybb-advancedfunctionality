@@ -31,6 +31,8 @@ $required = [
     'footer.components', 'footer.modals',
     'pm.navigation', 'pm.quota', 'pm.notice', 'pm.pagination', 'pm.actions',
     'pm.content', 'pm.before_content', 'pm.after_content',
+    'ucp.global_navigation', 'ucp.local_navigation', 'ucp.before_content',
+    'ucp.content', 'ucp.after_content', 'ucp.notice', 'ucp.actions',
 ];
 if (af_adaptivethemeframework_slots() !== $required) {
     throw new RuntimeException('The audited slot catalogue changed.');

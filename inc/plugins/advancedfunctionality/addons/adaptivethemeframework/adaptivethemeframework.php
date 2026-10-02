@@ -186,6 +186,7 @@ function af_adaptivethemeframework_init(): void
     af_adaptivethemeframework_register_thread_providers();
     af_adaptivethemeframework_register_post_providers();
     af_adaptivethemeframework_register_profile_providers();
+    af_adaptivethemeframework_ucp_seed_navigation();
     $isPrivateRoute = defined('THIS_SCRIPT') && THIS_SCRIPT === 'private.php';
     if ($isPrivateRoute) {
         af_adaptivethemeframework_register_pm_providers();
@@ -597,6 +598,231 @@ function af_adaptivethemeframework_mark_page(string &$page): void
     );
 }
 
+/** Semantic icons accepted from UCP navigation providers. */
+function af_adaptivethemeframework_ucp_icon_tokens(): array
+{
+    return ['home', 'user', 'sliders', 'shield', 'users', 'bookmark', 'file', 'envelope', 'bell'];
+}
+
+/** Record one bad provider definition without making the User CP unavailable. */
+function af_adaptivethemeframework_ucp_navigation_error(string $provider, string $key, string $reason): bool
+{
+    $message = sprintf('ATF UCP navigation provider %s (%s) rejected: %s', $provider ?: 'unknown', $key ?: 'unknown', $reason);
+    $GLOBALS['af_adaptivethemeframework_ucp_navigation_errors'][] = $message;
+    if (function_exists('error_log')) error_log($message);
+    return false;
+}
+
+/** Validate and register one data-only UCP navigation item. */
+function af_adaptivethemeframework_ucp_register_navigation_provider(array $item): bool
+{
+    $provider = strtolower(trim((string)($item['provider'] ?? '')));
+    $key = strtolower(trim((string)($item['key'] ?? '')));
+    $parent = strtolower(trim((string)($item['parent'] ?? '')));
+    $allowedFields = ['key','parent','route','label','icon','weight','visibility','active','children','provider','badge','external','meta'];
+    if (array_diff(array_keys($item), $allowedFields)) {
+        return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'unsupported field');
+    }
+    if (!preg_match('~^[a-z][a-z0-9_]*$~', $provider) || !preg_match('~^[a-z][a-z0-9_.-]*$~', $key)) {
+        return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'invalid provider or key');
+    }
+    if (isset($GLOBALS['af_adaptivethemeframework_ucp_navigation'][$key])) {
+        return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'duplicate key');
+    }
+    if ($parent !== '' && !isset($GLOBALS['af_adaptivethemeframework_ucp_navigation'][$parent])) {
+        return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'unknown parent');
+    }
+    $route = $item['route'] ?? null;
+    $scripts = ['usercp.php', 'private.php', 'member.php'];
+    if (!is_array($route) || !in_array($route['script'] ?? '', $scripts, true)) {
+        return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'invalid script');
+    }
+    $query = $route['query'] ?? [];
+    if (!is_array($query)) return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'invalid query structure');
+    foreach ($query as $name => $value) {
+        if (!is_string($name) || !preg_match('~^[a-z][a-z0-9_]*$~i', $name) || (!is_scalar($value) && $value !== null)) {
+            return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'invalid query structure');
+        }
+    }
+    $label = $item['label'] ?? '';
+    if (!is_string($label) || trim($label) === '' || $label !== strip_tags($label) || preg_match('~[<>]~', $label)) {
+        return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'invalid label');
+    }
+    $icon = (string)($item['icon'] ?? '');
+    if ($icon !== '' && !in_array($icon, af_adaptivethemeframework_ucp_icon_tokens(), true)) {
+        return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'invalid icon token');
+    }
+    $visibility = $item['visibility'] ?? true;
+    if (!is_bool($visibility) && !is_callable($visibility)) {
+        return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'invalid visibility callback');
+    }
+    $active = $item['active'] ?? [];
+    if (!is_array($active) && !is_callable($active)) {
+        return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'invalid active resolver');
+    }
+    if (is_array($active)) {
+        foreach (['scripts', 'actions'] as $field) {
+            if (isset($active[$field]) && (!is_array($active[$field]) || array_filter($active[$field], 'is_string') !== $active[$field])) {
+                return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'invalid active resolver');
+            }
+        }
+        if (isset($active['context']) && !is_callable($active['context'])) {
+            return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'invalid active context');
+        }
+    }
+    if (isset($item['children']) && !is_array($item['children'])) {
+        return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'children must be definitions');
+    }
+    $children = $item['children'] ?? [];
+    unset($item['children']);
+    $item += ['weight' => 100, 'badge' => null, 'external' => false, 'meta' => []];
+    $item['key'] = $key; $item['parent'] = $parent; $item['provider'] = $provider;
+    $item['route'] = ['script' => $route['script'], 'query' => $query];
+    $item['weight'] = (int)$item['weight']; $item['children'] = [];
+    $GLOBALS['af_adaptivethemeframework_ucp_navigation'][$key] = $item;
+    if ($parent !== '') $GLOBALS['af_adaptivethemeframework_ucp_navigation'][$parent]['children'][] = $key;
+    foreach ($children as $childKey => $child) {
+        if (!is_array($child)) { af_adaptivethemeframework_ucp_navigation_error($provider, (string)$childKey, 'child is not a definition'); continue; }
+        $child['key'] = isset($child['key']) ? $child['key'] : $key . '.' . $childKey;
+        $child['parent'] = $key; $child['provider'] = $provider;
+        af_adaptivethemeframework_ucp_register_navigation_provider($child);
+    }
+    return true;
+}
+
+function af_adaptivethemeframework_ucp_can_access(): bool
+{
+    global $mybb;
+    return (int)($mybb->user['uid'] ?? 0) > 0 && !empty($mybb->usergroup['canusercp']);
+}
+function af_adaptivethemeframework_ucp_signature_visible(): bool
+{
+    global $mybb;
+    return !empty($mybb->usergroup['canusesig'])
+        && ((int)($mybb->usergroup['sigpostcount'] ?? 0) === 0 || (int)($mybb->user['postnum'] ?? 0) >= (int)$mybb->usergroup['sigpostcount'])
+        && ((int)($mybb->user['suspendsigtime'] ?? 0) === 0 || (int)$mybb->user['suspendsigtime'] < TIME_NOW);
+}
+
+/** Seed the immutable MyBB hierarchy. Addons can safely register after this call. */
+function af_adaptivethemeframework_ucp_seed_navigation(): void
+{
+    if (!empty($GLOBALS['af_adaptivethemeframework_ucp_navigation_seeded'])) return;
+    $GLOBALS['af_adaptivethemeframework_ucp_navigation_seeded'] = true;
+    $access = 'af_adaptivethemeframework_ucp_can_access';
+    $def = static function(string $key, string $parent, string $script, array $query, string $label, string $icon, int $weight, $visibility, array $actions): void {
+        af_adaptivethemeframework_ucp_register_navigation_provider(compact('key','parent','label','icon','weight','visibility') + [
+            'provider'=>'mybb', 'route'=>['script'=>$script,'query'=>$query],
+            'active'=>['scripts'=>[$script], 'actions'=>$actions], 'children'=>[],
+        ]);
+    };
+    $def('overview','', 'usercp.php',[], 'ucp_nav_home','home',10,$access,['','do_notepad']);
+    $def('profile','', 'usercp.php',['action'=>'profile'], 'Profile','user',20,$access,['profile','do_profile','avatar','do_avatar','editsig','do_editsig']);
+    $def('profile.edit','profile','usercp.php',['action'=>'profile'],'ucp_nav_edit_profile','user',10,$access,['profile','do_profile']);
+    $def('profile.avatar','profile','usercp.php',['action'=>'avatar'],'ucp_nav_change_avatar','user',20,static function(): bool { global $mybb; return af_adaptivethemeframework_ucp_can_access() && !empty($mybb->usergroup['canchangeavatar']); },['avatar','do_avatar']);
+    $def('profile.signature','profile','usercp.php',['action'=>'editsig'],'ucp_nav_edit_sig','file',30,'af_adaptivethemeframework_ucp_signature_visible',['editsig','do_editsig']);
+    $def('profile.public','profile','member.php',['action'=>'profile','uid'=>'{uid}'],'View public profile','user',40,$access,[]);
+    $GLOBALS['af_adaptivethemeframework_ucp_navigation']['profile.public']['external'] = true;
+    $def('preferences','', 'usercp.php',['action'=>'options'],'Preferences','sliders',30,$access,['options','do_options']);
+    $def('preferences.general','preferences','usercp.php',['action'=>'options'],'General preferences','sliders',10,$access,['options','do_options']);
+    $def('security','', 'usercp.php',['action'=>'password'],'Security','shield',40,$access,['password','do_password','email','do_email','changename','do_changename']);
+    $def('security.password','security','usercp.php',['action'=>'password'],'Password','shield',10,$access,['password','do_password']);
+    $def('security.email','security','usercp.php',['action'=>'email'],'Email','envelope',20,$access,['email','do_email']);
+    $def('security.username','security','usercp.php',['action'=>'changename'],'Username','user',30,static function(): bool { global $mybb; return af_adaptivethemeframework_ucp_can_access() && (int)($mybb->usergroup['canchangename'] ?? 0) !== 0; },['changename','do_changename']);
+    $def('social','', 'usercp.php',['action'=>'editlists'],'Social','users',50,$access,['editlists','do_editlists','acceptrequest','declinerequest','cancelrequest','usergroups']);
+    $def('social.lists','social','usercp.php',['action'=>'editlists'],'Buddy / Ignore','users',10,$access,['editlists','do_editlists','acceptrequest','declinerequest','cancelrequest']);
+    $def('social.groups','social','usercp.php',['action'=>'usergroups'],'Group memberships','users',20,$access,['usergroups']);
+    $def('subscriptions','', 'usercp.php',['action'=>'subscriptions'],'Subscriptions','bookmark',60,$access,['subscriptions','do_subscriptions','forumsubscriptions','addsubscription','do_addsubscription','removesubscription','removesubscriptions']);
+    $subscriptionContext = static function(array $route, array $item): bool {
+        $action=$route['action']; if (!in_array($action,['addsubscription','do_addsubscription','removesubscription','removesubscriptions'],true)) return true;
+        $type=$route['type']; $tid=$route['tid']; $fid=$route['fid'];
+        return $item['key']==='subscriptions.forums'
+            ? ($type==='forum' && $fid>0 && $tid===0)
+            : (in_array($type, ['', 'thread'], true) && $tid>0 && $fid===0);
+    };
+    af_adaptivethemeframework_ucp_register_navigation_provider(['provider'=>'mybb','key'=>'subscriptions.threads','parent'=>'subscriptions','route'=>['script'=>'usercp.php','query'=>['action'=>'subscriptions']],'label'=>'Threads','icon'=>'bookmark','weight'=>10,'visibility'=>$access,'active'=>['scripts'=>['usercp.php'],'actions'=>['subscriptions','do_subscriptions','addsubscription','do_addsubscription','removesubscription','removesubscriptions'],'context'=>$subscriptionContext],'children'=>[]]);
+    af_adaptivethemeframework_ucp_register_navigation_provider(['provider'=>'mybb','key'=>'subscriptions.forums','parent'=>'subscriptions','route'=>['script'=>'usercp.php','query'=>['action'=>'forumsubscriptions']],'label'=>'Forums','icon'=>'bookmark','weight'=>20,'visibility'=>$access,'active'=>['scripts'=>['usercp.php'],'actions'=>['forumsubscriptions','addsubscription','do_addsubscription','removesubscription','removesubscriptions'],'context'=>$subscriptionContext],'children'=>[]]);
+    $def('content','', 'usercp.php',['action'=>'drafts'],'Content','file',70,$access,['drafts','do_drafts','attachments','do_attachments']);
+    $def('content.drafts','content','usercp.php',['action'=>'drafts'],'Drafts','file',10,$access,['drafts','do_drafts']);
+    $def('content.attachments','content','usercp.php',['action'=>'attachments'],'Attachments','file',20,static function(): bool { global $mybb; return af_adaptivethemeframework_ucp_can_access() && !empty($mybb->settings['enableattachments']); },['attachments','do_attachments']);
+    $def('messages','', 'private.php',[], 'Messages','envelope',80,static function(): bool { global $mybb; return (int)($mybb->user['uid']??0)>0 && !empty($mybb->settings['enablepms']) && !empty($mybb->usergroup['canusepms']); },[]);
+    foreach (($GLOBALS['af_adaptivethemeframework_pending_ucp_navigation'] ?? []) as $pending) {
+        if (is_array($pending)) af_adaptivethemeframework_ucp_register_navigation_provider($pending);
+    }
+    unset($GLOBALS['af_adaptivethemeframework_pending_ucp_navigation']);
+}
+
+/** Normalize request input to the small typed context used by active rules. */
+function af_adaptivethemeframework_ucp_route_context(array $context = []): array
+{
+    global $mybb;
+    $input = static function(string $key) use ($context, $mybb) { return array_key_exists($key,$context) ? $context[$key] : (is_object($mybb) ? $mybb->get_input($key) : ($_REQUEST[$key] ?? '')); };
+    return ['script'=>strtolower(basename((string)($context['script'] ?? (defined('THIS_SCRIPT') ? THIS_SCRIPT : '')))),
+        'action'=>(string)$input('action'), 'type'=>(string)$input('type'),
+        'tid'=>max(0,(int)$input('tid')), 'fid'=>max(0,(int)$input('fid'))];
+}
+
+/** Return visible data with exactly one deepest current item and active ancestors. */
+function af_adaptivethemeframework_ucp_navigation(array $context = []): array
+{
+    af_adaptivethemeframework_ucp_seed_navigation(); $route=af_adaptivethemeframework_ucp_route_context($context);
+    $items=[]; $matches=[];
+    foreach (($GLOBALS['af_adaptivethemeframework_ucp_navigation']??[]) as $key=>$item) {
+        try { $visible=is_callable($item['visibility']) ? (bool)call_user_func($item['visibility'],$route,$item) : $item['visibility']===true; }
+        catch (Throwable $e) { af_adaptivethemeframework_ucp_navigation_error($item['provider'],$key,'visibility failed: '.$e->getMessage()); $visible=false; }
+        if (!$visible) continue;
+        $items[$key]=$item; $rule=$item['active']; $matched=false;
+        try {
+            if (is_callable($rule)) $matched=(bool)$rule($route,$item);
+            else $matched=in_array($route['script'],$rule['scripts']??[$item['route']['script']],true)
+                && in_array($route['action'],$rule['actions']??[],true)
+                && (!isset($rule['context']) || $rule['context']($route,$item));
+        } catch (Throwable $e) { af_adaptivethemeframework_ucp_navigation_error($item['provider'],$key,'active resolver failed: '.$e->getMessage()); }
+        if ($matched) $matches[$key]=substr_count($key,'.')+1;
+    }
+    if ($route['script']==='private.php' && isset($items['messages'])) $matches['messages']=1;
+    arsort($matches); $current=(string)(array_key_first($matches)??'');
+    foreach ($items as $key=>&$item) { $item['current']=$key===$current; $item['is_active']=$item['current'] || ($current!=='' && str_starts_with($current,$key.'.')); }
+    unset($item);
+    uasort($items,static fn($a,$b)=>[$a['weight'],$a['key']]<=>[$b['weight'],$b['key']]);
+    return ['items'=>$items,'current'=>$current,'route'=>$route];
+}
+
+function af_adaptivethemeframework_ucp_label(string $label): string
+{
+    global $lang; $value=(is_object($lang) && isset($lang->{$label})) ? (string)$lang->{$label} : $label;
+    return htmlspecialchars_uni($value);
+}
+function af_adaptivethemeframework_ucp_url(array $item): string
+{
+    global $mybb; $query=$item['route']['query'];
+    foreach ($query as &$value) if ($value==='{uid}') $value=(int)($mybb->user['uid']??0); unset($value);
+    $base=rtrim((string)($mybb->settings['bburl']??''),'/').'/'.$item['route']['script'];
+    return htmlspecialchars_uni($base.($query ? '?'.http_build_query($query,'','&',PHP_QUERY_RFC3986) : ''));
+}
+
+/** Render either stable Level 1 domains or children of its active domain. */
+function af_adaptivethemeframework_render_ucp_navigation(string $level, array $context = []): string
+{
+    $navigation=af_adaptivethemeframework_ucp_navigation($context); $items=$navigation['items']; $parent='';
+    if ($level==='local' && $navigation['current']!=='') $parent=explode('.',$navigation['current'],2)[0];
+    $links='';
+    foreach ($items as $item) {
+        if (($level==='global' && $item['parent']!=='') || ($level==='local' && $item['parent']!==$parent)) continue;
+        $classes=['atf-ucp-navigation__item']; if ($item['is_active']) $classes[]='is-active';
+        $attrs=$item['current'] ? ' aria-current="page"' : '';
+        if (!empty($item['external'])) $attrs.=' rel="external"';
+        $badge=$item['badge'];
+        try { if (is_callable($badge)) $badge=$badge($context,$item); }
+        catch (Throwable $e) { af_adaptivethemeframework_ucp_navigation_error($item['provider'],$item['key'],'badge failed: '.$e->getMessage()); $badge=null; }
+        $badge=($badge===null||$badge==='') ? '' : '<span class="atf-ucp-navigation__badge">'.htmlspecialchars_uni((string)$badge).'</span>';
+        $icon=$item['icon']==='' ? '' : '<span class="atf-ucp-navigation__icon" data-icon="'.htmlspecialchars_uni($item['icon']).'" aria-hidden="true"></span>';
+        $links.='<li class="'.implode(' ',$classes).'"><a href="'.af_adaptivethemeframework_ucp_url($item).'"'.$attrs.'>'.$icon.'<span>'.af_adaptivethemeframework_ucp_label($item['label']).'</span>'.$badge.'</a></li>';
+    }
+    if ($links==='') return '';
+    $label=$level==='global' ? 'User control panel' : 'Section navigation';
+    return '<nav class="atf-ucp-navigation atf-ucp-navigation--'.$level.'" aria-label="'.$label.'"><ul>'.$links.'</ul></nav>';
+}
+
 /** The public, compatibility-audited slot catalogue. */
 function af_adaptivethemeframework_slots(): array
 {
@@ -616,6 +842,9 @@ function af_adaptivethemeframework_slots(): array
         'footer.modals',
         'pm.navigation', 'pm.quota', 'pm.notice', 'pm.pagination',
         'pm.actions', 'pm.content', 'pm.before_content', 'pm.after_content',
+        'ucp.global_navigation', 'ucp.local_navigation',
+        'ucp.before_content', 'ucp.content', 'ucp.after_content',
+        'ucp.notice', 'ucp.actions',
     ];
 }
 
@@ -741,6 +970,12 @@ function af_adaptivethemeframework_render_value($value, array $context, array $c
 /** Render all eligible components in deterministic order. */
 function af_adaptivethemeframework_render_slot(string $slot, array $context = []): string
 {
+    if ($slot === 'ucp.global_navigation') {
+        return af_adaptivethemeframework_render_ucp_navigation('global', $context);
+    }
+    if ($slot === 'ucp.local_navigation') {
+        return af_adaptivethemeframework_render_ucp_navigation('local', $context);
+    }
     $html = '';
     foreach (af_adaptivethemeframework_components_for_slot($slot, $context) as $component) {
         $rendered = array_key_exists('html', $component)
