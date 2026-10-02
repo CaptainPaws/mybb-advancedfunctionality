@@ -568,6 +568,17 @@ function af_adaptivethemeframework_compose_pm_workspace(): void
     foreach ($names as $name) {
         $values[$name] = (string)($GLOBALS[$name] ?? '');
     }
+    // Core's shared posticons template is intentionally not leased by ATF. On
+    // the compose surface it supplies only a row/cell wrapper around the icon
+    // controls, so discard that table presentation while retaining the exact
+    // permission-filtered controls and their names/values.
+    if (isset($GLOBALS['posticons'])) {
+        $GLOBALS['posticons'] = (string)preg_replace(
+            '~</?(?:table|thead|tbody|tfoot|tr|th|td)\b[^>]*>~i',
+            '',
+            (string)$GLOBALS['posticons']
+        );
+    }
     $resolvedFid = (int)($fid ?? ($mybb->input['fid'] ?? 0));
     if ($action === 'read' && isset($pm['folder'])) {
         $resolvedFid = (int)$pm['folder'];
