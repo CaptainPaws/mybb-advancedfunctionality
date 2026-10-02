@@ -1247,7 +1247,15 @@ function af_advancedmenu_render_widget(array $item): string
 function af_advancedmenu_render_theme_widget(array $item = []): string
 {
     global $theme_select;
-    return trim((string)($theme_select ?? ''));
+    $content = trim((string)($theme_select ?? ''));
+    // AdvancedMenu is only the widget host. Presentation owners may append
+    // independent controls without teaching navigation how they are stored.
+    foreach (($GLOBALS['af_theme_switcher_preference_providers'] ?? []) as $provider) {
+        if (is_callable($provider)) {
+            $content .= (string)$provider($item);
+        }
+    }
+    return $content;
 }
 
 /** Merge provider and custom items using the single ACP sort order. */

@@ -16,7 +16,8 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.23.0');
+define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.24.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -183,6 +184,8 @@ function af_adaptivethemeframework_normalizer_diagnostic(string $seed, string $c
 function af_adaptivethemeframework_init(): void
 {
     global $plugins;
+    af_adaptivethemeframework_ensure_preferences_schema();
+    $GLOBALS['af_theme_switcher_preference_providers']['adaptivethemeframework'] = 'af_adaptivethemeframework_render_theme_preferences';
     af_adaptivethemeframework_register_thread_providers();
     af_adaptivethemeframework_register_post_providers();
     af_adaptivethemeframework_register_profile_providers();
@@ -193,6 +196,8 @@ function af_adaptivethemeframework_init(): void
     }
     if (is_object($plugins) && method_exists($plugins, 'add_hook')) {
         $plugins->add_hook('pre_output_page', 'af_adaptivethemeframework_mark_page', 100);
+        $plugins->add_hook('index_start', 'af_adaptivethemeframework_resolve_index_preferences', 100);
+        $plugins->add_hook('misc_start', 'af_adaptivethemeframework_save_presentation_preference', 10);
         // MyBB has finished deriving every forumdisplay value at this point.
         // Compose provider slots here rather than teaching providers about the
         // topic-card DOM or patching their legacy template variables.
@@ -242,6 +247,73 @@ function af_adaptivethemeframework_init(): void
             }
         }
     }
+}
+
+/** Create reusable per-user presentation storage without changing MyBB users. */
+function af_adaptivethemeframework_ensure_preferences_schema(): bool
+{
+    global $db;
+    if (!is_object($db) || $db->table_exists(AF_PRESENTATION_PREFERENCES_TABLE_NAME)) return true;
+    $collation = $db->build_create_table_collation();
+    $db->write_query('CREATE TABLE IF NOT EXISTS '.TABLE_PREFIX.AF_PRESENTATION_PREFERENCES_TABLE_NAME." (
+        uid int unsigned NOT NULL, preference_key varchar(64) NOT NULL DEFAULT '',
+        preference_value varchar(255) NOT NULL DEFAULT '', updated_at int unsigned NOT NULL DEFAULT 0,
+        PRIMARY KEY (uid, preference_key), KEY preference_key (preference_key)
+    ){$collation}");
+    return true;
+}
+
+function af_adaptivethemeframework_forum_layout(): string
+{
+    global $db, $mybb;
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    if ($uid <= 0 || !is_object($db) || !$db->table_exists(AF_PRESENTATION_PREFERENCES_TABLE_NAME)) return 'full';
+    $value = (string)$db->fetch_field($db->simple_select(
+        AF_PRESENTATION_PREFERENCES_TABLE_NAME,
+        'preference_value',
+        "uid='{$uid}' AND preference_key='forum_layout'",
+        ['limit' => 1]
+    ), 'preference_value');
+    return in_array($value, ['full', 'grid'], true) ? $value : 'full';
+}
+
+/** Resolve the validated state before the owned index template is rendered. */
+function af_adaptivethemeframework_resolve_index_preferences(): void
+{
+    $GLOBALS['atf_forum_layout'] = af_adaptivethemeframework_forum_layout();
+}
+
+/** Provider-owned controls embedded by the theme_switcher host. */
+function af_adaptivethemeframework_render_theme_preferences(array $item = []): string
+{
+    global $lang, $mybb;
+    if (empty($mybb->user['uid'])) return '';
+    $lang->load('advancedfunctionality_adaptivethemeframework');
+    $layout = af_adaptivethemeframework_forum_layout();
+    $label = htmlspecialchars_uni((string)($lang->atf_forum_layout ?? 'Forum layout'));
+    $full = htmlspecialchars_uni((string)($lang->atf_forum_layout_full ?? 'Full width'));
+    $grid = htmlspecialchars_uni((string)($lang->atf_forum_layout_grid ?? 'Grid'));
+    $save = htmlspecialchars_uni((string)($lang->atf_presentation_save ?? 'Save'));
+    return '<form class="atf-theme-preferences" method="post" action="misc.php?action=atf_presentation_preference">'
+        .'<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni((string)$mybb->post_code).'">'
+        .'<fieldset><legend>'.$label.'</legend><label><input type="radio" name="forum_layout" value="full"'.($layout === 'full' ? ' checked' : '').'> '.$full.'</label>'
+        .'<label><input type="radio" name="forum_layout" value="grid"'.($layout === 'grid' ? ' checked' : '').'> '.$grid.'</label></fieldset>'
+        .'<button type="submit">'.$save.'</button></form>';
+}
+
+/** Persist only the submitted, allow-listed preference for registered users. */
+function af_adaptivethemeframework_save_presentation_preference(): void
+{
+    global $db, $mybb;
+    if (($mybb->get_input('action') ?? '') !== 'atf_presentation_preference') return;
+    if (empty($mybb->user['uid'])) error_no_permission();
+    verify_post_check($mybb->get_input('my_post_key'));
+    $value = (string)$mybb->get_input('forum_layout');
+    if (!in_array($value, ['full', 'grid'], true)) $value = 'full';
+    $row = ['uid' => (int)$mybb->user['uid'], 'preference_key' => 'forum_layout',
+        'preference_value' => $db->escape_string($value), 'updated_at' => TIME_NOW];
+    $db->replace_query(AF_PRESENTATION_PREFERENCES_TABLE_NAME, $row);
+    redirect('index.php');
 }
 
 /** URL used by every ATF user-card when its supplied avatar is absent/broken. */
@@ -935,10 +1007,19 @@ function af_adaptivethemeframework_mark_page(string &$page): void
                 if (!in_array('atf-active', $classes, true)) {
                     $classes[] = 'atf-active';
                 }
+                if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'index.php') {
+                    $layout = ($GLOBALS['atf_forum_layout'] ?? 'full') === 'grid' ? 'grid' : 'full';
+                    $classes[] = 'atf-forum-layout--'.$layout;
+                }
                 $replacement = 'class=' . $classMatch[1][0] . implode(' ', array_filter($classes)) . $classMatch[1][0];
                 $attributes = substr_replace($attributes, $replacement, (int)$classMatch[0][1], strlen($classMatch[0][0]));
             } else {
-                $attributes .= ' class="atf-active"';
+                $layoutClass = '';
+                if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'index.php') {
+                    $layout = ($GLOBALS['atf_forum_layout'] ?? 'full') === 'grid' ? 'grid' : 'full';
+                    $layoutClass = ' atf-forum-layout--'.$layout;
+                }
+                $attributes .= ' class="atf-active'.$layoutClass.'"';
             }
             return '<body' . $attributes . '>';
         },
@@ -1875,7 +1956,8 @@ function af_adaptivethemeframework_ensure_ownership_schema(): bool
 function af_adaptivethemeframework_schema_readiness(): bool
 {
     try {
-        return af_adaptivethemeframework_ensure_ownership_schema();
+        return af_adaptivethemeframework_ensure_ownership_schema()
+            && af_adaptivethemeframework_ensure_preferences_schema();
     } catch (Throwable $error) {
         return af_adaptivethemeframework_activation_failure($error);
     }
