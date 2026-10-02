@@ -166,6 +166,9 @@ function af_adaptivethemeframework_normalizer_diagnostic(string $seed, string $c
     $lines[] = 'matches_canonical_seed=' . ($matchesCanonicalSeed ? 'yes' : 'no');
     $lines[] = 'matches_compatible_seed=' . ($matchesCompatibleSeed ? 'yes' : 'no');
     $lines[] = 'matches_canonical_compatible_seed=' . ($matchesCanonicalCompatibleSeed ? 'yes' : 'no');
+    $matchesCompatibleBoundaryNewlineSeed = $compatibility !== null
+        && af_adaptivethemeframework_matches_compatible_boundary_newline($seed, $normalized);
+    $lines[] = 'matches_compatible_boundary_newline_seed=' . ($matchesCompatibleBoundaryNewlineSeed ? 'yes' : 'no');
     // Retain the original field for consumers of the existing diagnostic.
     $lines[] = 'matches_seed=' . (($matchesCompatibleSeed || ($compatibility === null && $matchesExactSeed)) ? 'yes' : 'no');
     if (!$matchesCompatibleSeed && !($compatibility === null && $matchesExactSeed)) {
@@ -642,6 +645,41 @@ function af_adaptivethemeframework_canonical_template_checksum(string $content):
     );
 }
 
+/**
+ * Prove one very narrow recovery case after a trusted compatibility normalizer:
+ * the normalized template is the ATF seed with exactly one logical line break
+ * missing. This covers legacy injections whose cleanup consumed the CRLF/LF at
+ * the insertion boundary, without accepting arbitrary whitespace or markup edits.
+ */
+function af_adaptivethemeframework_matches_compatible_boundary_newline(string $seed, string $candidate): bool
+{
+    $seedCanonical = af_adaptivethemeframework_canonical_template_content($seed);
+    $candidateCanonical = af_adaptivethemeframework_canonical_template_content($candidate);
+
+    if ($seedCanonical === $candidateCanonical) {
+        return true;
+    }
+
+    // After EOL canonicalization, one consumed CRLF becomes exactly one missing "\n".
+    if (strlen($seedCanonical) !== strlen($candidateCanonical) + 1) {
+        return false;
+    }
+
+    $limit = strlen($candidateCanonical);
+    $offset = 0;
+    while ($offset < $limit && $seedCanonical[$offset] === $candidateCanonical[$offset]) {
+        $offset++;
+    }
+
+    if (($seedCanonical[$offset] ?? '') !== "\n") {
+        return false;
+    }
+
+    return substr($seedCanonical, 0, $offset)
+        . substr($seedCanonical, $offset + 1)
+        === $candidateCanonical;
+}
+
 /** Return bounded, escaped byte evidence without logging the whole template. */
 function af_adaptivethemeframework_byte_diff_diagnostic(string $current, string $seed): string
 {
@@ -925,6 +963,12 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                             (string)$compatibility['normalized_content']
                         )
                     );
+                $matchesCompatibleBoundaryNewlineSeed = $compatibility !== null
+                    && $previousValid
+                    && af_adaptivethemeframework_matches_compatible_boundary_newline(
+                        $seed,
+                        (string)$compatibility['normalized_content']
+                    );
                 $diagnostic = '';
                 if (!$matchesPrevious && !$matchesInstalled && !$matchesSeed) {
                     $diagnostic = af_adaptivethemeframework_normalizer_diagnostic($seed, $current, $compatibility)
@@ -936,7 +980,7 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
 
                 // Reconcile every activation from checksum evidence. States such as
                 // manual_override are diagnostic, not permanent locks.
-                if (!$matchesPrevious && !$matchesInstalled && !($matchesSeed && $previousValid) && !$matchesCanonicalSeed && !$matchesCompatibleSeed && !$matchesCanonicalCompatibleSeed) {
+                if (!$matchesPrevious && !$matchesInstalled && !($matchesSeed && $previousValid) && !$matchesCanonicalSeed && !$matchesCompatibleSeed && !$matchesCanonicalCompatibleSeed && !$matchesCompatibleBoundaryNewlineSeed) {
                     af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
                     $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => af_adaptivethemeframework_db_string('manual_override'), 'current_content' => af_adaptivethemeframework_db_string($current), 'updated_at' => $now], "id='".(int)$lease['id']."'");
                     throw af_adaptivethemeframework_ownership_conflict($templateName, $sid, (string)$lease['ownership_state'], $currentChecksum, $previousChecksum, $installedChecksum, $seedChecksum, $diagnostic);
@@ -945,7 +989,7 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                 // Preserve the original pre-ATF backup. Only normalize ownership
                 // and seed metadata; never replace previous_* during recovery.
                 af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
-                $provenInstalledChecksum = ($matchesSeed || $matchesCanonicalSeed || $matchesCompatibleSeed || $matchesCanonicalCompatibleSeed) ? $seedChecksum : $installedChecksum;
+                $provenInstalledChecksum = ($matchesSeed || $matchesCanonicalSeed || $matchesCompatibleSeed || $matchesCanonicalCompatibleSeed || $matchesCompatibleBoundaryNewlineSeed) ? $seedChecksum : $installedChecksum;
                 $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['atf_seed_content' => af_adaptivethemeframework_db_string($seed), 'atf_seed_checksum' => af_adaptivethemeframework_db_string($seedChecksum), 'atf_installed_checksum' => af_adaptivethemeframework_db_string($provenInstalledChecksum), 'atf_version' => af_adaptivethemeframework_db_string(AF_ADAPTIVETHEMEFRAMEWORK_VERSION), 'ownership_state' => af_adaptivethemeframework_db_string('owned'), 'current_content' => af_adaptivethemeframework_db_string(''), 'updated_at' => $now, 'restored_at' => 0], "id='".(int)$lease['id']."'");
                 if ($matchesSeed) {
                     continue;
