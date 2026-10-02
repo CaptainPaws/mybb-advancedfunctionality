@@ -863,6 +863,9 @@ function af_adaptivethemeframework_template_seeds(): array
         'private_folders_folder_unremovable' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_folders_folder_unremovable.html',
         'private_empty' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_empty.html',
         'private_empty_folder' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_empty_folder.html',
+        'private_archive' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_archive.html',
+        'private_archive_folders' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_archive_folders.html',
+        'private_archive_folders_folder' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_archive_folders_folder.html',
     ];
 }
 

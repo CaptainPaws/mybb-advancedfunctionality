@@ -527,6 +527,18 @@ body.atf-active .atf-pm-empty__keep { display: flex; gap: var(--atf-space-2); al
 body.atf-active .atf-pm-empty__actions { padding-block-start: var(--atf-space-4); border-block-start: 1px solid var(--atf-color-border); }
 body.atf-active .atf-button--danger { background: #b33a3a; }
 
+/* Archive is only the interactive export form. The standalone HTML, text and
+   CSV renderers remain outside the ATF template lease and page shell. */
+body.atf-active .atf-pm-archive__form,
+body.atf-active .atf-pm-archive__section { min-width: 0; }
+body.atf-active .atf-pm-archive__section { gap: var(--atf-space-3); }
+body.atf-active .atf-pm-archive__section h2,
+body.atf-active .atf-pm-archive__section p { margin: 0; }
+body.atf-active .atf-pm-archive select[multiple] { width: 100%; min-width: 0; min-height: 10rem; }
+body.atf-active .atf-pm-archive__date { display: flex; flex-wrap: wrap; align-items: center; gap: var(--atf-space-2); }
+body.atf-active .atf-pm-archive__date input[type="text"] { width: 5rem; }
+body.atf-active .atf-pm-archive__actions { display: flex; justify-content: center; }
+
 @media (max-width: 48rem) {
   body.atf-active .atf-pm-compose__actions { align-items: stretch; flex-direction: column; }
   body.atf-active .atf-pm-compose__actions .atf-button { width: 100%; }
