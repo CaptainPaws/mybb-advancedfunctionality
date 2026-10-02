@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.4');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.5');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1821,6 +1821,19 @@ function af_adaptivethemeframework_template_seeds(): array
         // existing UCP/APF ownership boundary and are reused as rendered data.
         'modcp_editprofile_signature' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_editprofile_signature.html',
         'modcp_editprofile_suspensions_info' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_editprofile_suspensions_info.html',
+
+        // Task 49: ban presentation. The shared modcp_banning_ban child is
+        // intentionally owned now that both the dedicated ban list and the
+        // Task 45 overview consume the same semantic card shape.
+        'modcp_banning_ban' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banning_ban.html',
+        'modcp_banning_edit' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banning_edit.html',
+        'modcp_banning_remaining' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banning_remaining.html',
+        'modcp_banning_nobanned' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banning_nobanned.html',
+        'modcp_nobanned' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_nobanned.html',
+        'modcp_banuser_addusername' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banuser_addusername.html',
+        'modcp_banuser_editusername' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banuser_editusername.html',
+        'modcp_banuser_bangroups' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banuser_bangroups.html',
+        'modcp_banuser_lift' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banuser_lift.html',
 
         'usercp' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp.html',
         'usercp_currentavatar' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_currentavatar.html',

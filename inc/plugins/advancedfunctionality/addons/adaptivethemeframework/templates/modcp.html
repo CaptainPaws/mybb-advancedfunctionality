@@ -17,19 +17,7 @@
   {$latestfivemodactions}
   <section class="atf-card atf-modcp-panel atf-modcp-overview__bans">
     <header class="atf-modcp-panel__header"><h2>{$lang->bans_ending_soon}</h2></header>
-    <div class="atf-modcp-overview__bans-scroll">
-      <table class="atf-modcp-overview__bans-table">
-        <thead>
-          <tr>
-            <th>{$lang->username}</th>
-            <th>{$lang->reason}</th>
-            <th>{$lang->ban_length}</th>
-            <th>{$lang->ban_bannedby}</th>
-          </tr>
-        </thead>
-        <tbody>{$bannedusers}</tbody>
-      </table>
-    </div>
+    <div class="atf-modcp-list atf-modcp-ban-list atf-modcp-ban-list--overview">{$bannedusers}</div>
   </section>
   <section class="atf-card atf-modcp-panel atf-modcp-overview__notes">
     <header class="atf-modcp-panel__header">
