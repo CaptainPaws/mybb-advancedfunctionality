@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.5');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.6');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1834,6 +1834,18 @@ function af_adaptivethemeframework_template_seeds(): array
         'modcp_banuser_editusername' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banuser_editusername.html',
         'modcp_banuser_bangroups' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banuser_bangroups.html',
         'modcp_banuser_lift' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banuser_lift.html',
+
+        // Task 50: ModCP-exclusive announcement presentation. Public
+        // announcement_* templates remain core-owned; ATF does not alter
+        // announcement storage, parsing, permissions or mutation routes.
+        'modcp_announcements_global' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_announcements_global.html',
+        'modcp_announcements_forum' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_announcements_forum.html',
+        'modcp_announcements_forum_nomod' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_announcements_forum_nomod.html',
+        'modcp_announcements_announcement' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_announcements_announcement.html',
+        'modcp_announcements_announcement_global' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_announcements_announcement_global.html',
+        'modcp_no_announcements_global' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_no_announcements_global.html',
+        'modcp_no_announcements_forum' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_no_announcements_forum.html',
+        'modcp_announcements_allowhtml' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_announcements_allowhtml.html',
 
         'usercp' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp.html',
         'usercp_currentavatar' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_currentavatar.html',
