@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.24.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.24.1');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1561,6 +1561,10 @@ function af_adaptivethemeframework_template_seeds(): array
         'forumbit_depth2_forum' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum.html',
         'forumbit_depth2_forum_lastpost' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum_lastpost.html',
         'forumdisplay' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay.html',
+        // The stock subforum wrapper is a table. Once depth2 forums are semantic
+        // articles, browsers foster-parent those articles outside the table,
+        // leaving an empty category bar between subforums and topic cards.
+        'forumdisplay_subforums' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay_subforums.html',
         // Own the list wrapper as well as its rows: putting semantic <article>
         // cards directly in the stock <tbody> makes browsers foster-parent them
         // outside the list and visually splits the last-post content.
