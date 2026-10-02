@@ -68,7 +68,7 @@ to operate.
 
 ### Showthread context
 
-Future showthread composition must build its closed context with
+Showthread composition builds its closed context with
 `af_adaptivethemeframework_showthread_context()`. Identity and metadata are
 `tid`, `fid`, owner `uid`/`username`, `subject`, `dateline`, and `lastpost`.
 `thread.meta` is reserved for additional metadata providers; there is no real
@@ -85,11 +85,14 @@ tokens, poll, tools, pagination, quick reply, and MyBB JavaScript globals.
 The `thread.breadcrumbs` core provider returns `breadcrumbs_html`; it never
 searches APUI comments or normalizes APUI DOM.
 
-Until the showthread ownership migration, APUI remains presentation owner and
-the `<!--AF_ATF_SHOW-->`, `<!--AF_APUI_THREAD_BREADCRUMBS_TOP-->`, and
-`<!--AF_APUI_THREAD_BREADCRUMBS_BOTTOM-->` paths remain ATF-off compatibility
-fallbacks. In the next phase ATF becomes presentation owner while APUI remains
-only a data/provider owner; the new layout must compose the two slots directly.
+ATF now acquires `showthread` through the same per-template-set ownership ledger
+as every other owned seed. The live pre-ATF bytes (including an APUI override)
+are restored on release. While ATF is active, APUI skips its `showthread`
+writer but continues to supply runtime Appearance CSS. The ATF seed retains
+only the APUI body/hero class bridge required by that CSS; `atf-thread*` owns
+the layout. It directly renders `thread.breadcrumbs`, `thread.meta`,
+`thread.atf_fields`, `thread.before_posts`, and `thread.after_posts`. The
+legacy marker paths remain untouched for exact ATF-off restoration.
 
 ## Design-system contract
 
