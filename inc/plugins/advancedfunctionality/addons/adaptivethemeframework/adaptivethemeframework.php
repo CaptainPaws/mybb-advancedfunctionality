@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.14.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.15.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -848,6 +848,10 @@ function af_adaptivethemeframework_template_seeds(): array
         'private_read_to' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_read_to.html',
         'private_read_bcc' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_read_bcc.html',
         'private_quickreply' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_quickreply.html',
+        'private_send' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_send.html',
+        'private_send_autocomplete' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_send_autocomplete.html',
+        'private_send_buddyselect' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_send_buddyselect.html',
+        'private_send_tracking' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_send_tracking.html',
     ];
 }
 

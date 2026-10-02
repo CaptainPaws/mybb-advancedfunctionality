@@ -1,0 +1,65 @@
+<html>
+<head>
+<title>{$lang->compose_pm}</title>
+{$headerinclude}
+<script type="text/javascript" src="{$mybb->asset_url}/jscripts/usercp.js?ver=1827"></script>
+</head>
+<body>
+{$header}
+<main class="atf-page atf-pm atf-pm-compose">
+	<nav class="atf-pm__navigation" aria-label="{$lang->private_messaging}">{$atf_pm_navigation}</nav>
+	{$atf_pm_before_content}
+	<header class="atf-pm__header atf-card">
+		<div class="atf-pm__heading"><p class="atf-pm__eyebrow">{$lang->private_messaging}</p><h1 class="atf-pm__title">{$lang->compose_pm}</h1></div>
+		<div class="atf-pm__quota">{$atf_pm_quota}</div>
+	</header>
+	<div class="atf-pm__notice">{$atf_pm_notice}</div>
+	<form action="private.php" method="post" name="input" class="atf-pm-compose__form atf-stack">
+		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+		<div class="atf-pm-compose__feedback">{$preview}{$send_errors}</div>
+		<section class="atf-section atf-card atf-stack" aria-label="{$lang->compose_pm}">
+			<div class="atf-form-row">
+				<div class="atf-pm-compose__label-line"><label class="atf-form-row__label" for="to">{$lang->compose_to}</label><button type="button" class="atf-pm-compose__bcc-toggle" onclick="showBcc();">{$lang->compose_bcc_show}</button></div>
+				<textarea name="to" id="to" rows="2" cols="38" tabindex="1">{$to}</textarea>
+				<div class="atf-form-row__hint">{$lang->separate_names}{$buddy_select_to}{$max_recipients}</div>
+			</div>
+			<div class="atf-form-row" id="bcc_area">
+				<label class="atf-form-row__label" for="bcc">{$lang->compose_bcc}</label>
+				<textarea name="bcc" id="bcc" rows="2" cols="38" tabindex="1">{$bcc}</textarea>
+				<div class="atf-form-row__hint">{$buddy_select_bcc}</div>
+			</div>
+			<div class="atf-form-row"><label class="atf-form-row__label" for="subject">{$lang->compose_subject}</label><input type="text" class="textbox" name="subject" id="subject" size="40" maxlength="85" value="{$subject}" tabindex="3" /></div>
+			<table class="atf-pm-compose__posticons" role="presentation">{$posticons}</table>
+		</section>
+		<section class="atf-section atf-card atf-pm-compose__editor">
+			<div class="atf-form-row"><label class="atf-form-row__label" for="message">{$lang->compose_message}</label><textarea name="message" id="message" rows="20" cols="70" tabindex="4">{$message}</textarea></div>
+			<div class="atf-pm-compose__editor-tools">{$smilieinserter}{$codebuttons}</div>
+		</section>
+		<section class="atf-section atf-card atf-pm-compose__options">
+			<h2>{$lang->compose_options}</h2>
+			<div class="atf-stack atf-stack--compact">
+				<label><input type="checkbox" class="checkbox" name="options[signature]" value="1" tabindex="5" {$optionschecked['signature']} /> {$lang->options_sig}</label>
+				<label><input type="checkbox" class="checkbox" name="options[disablesmilies]" value="1" tabindex="6" {$optionschecked['disablesmilies']} /> {$lang->options_disable_smilies}</label>
+				<label><input type="checkbox" class="checkbox" name="options[savecopy]" value="1" tabindex="7" {$optionschecked['savecopy']} /> {$lang->options_save_copy}</label>
+				{$private_send_tracking}
+			</div>
+		</section>
+		<input type="hidden" name="action" value="do_send" />
+		<input type="hidden" name="pmid" value="{$pmid}" />
+		<input type="hidden" name="do" value="{$do}" />
+		<div class="atf-pm-compose__actions">
+			<input type="submit" class="atf-button" name="submit" value="{$lang->send_message}" tabindex="9" accesskey="s" />
+			<input type="submit" class="atf-button atf-button--secondary" name="saveasdraft" value="{$lang->save_draft}" tabindex="10" />
+			<input type="submit" class="atf-button atf-button--secondary" name="preview" value="{$lang->preview}" tabindex="11" />
+		</div>
+	</form>
+	{$atf_pm_after_content}
+</main>
+{$footer}
+<script type="text/javascript">
+if($("#bcc_area").length > 0 && $("#bcc").val() == "") { $("#bcc_area").css("display", "none"); }
+function showBcc() { if($("#bcc_area").css("display") == "none") { $("#bcc_area").css("display", ""); } else { $("#bcc_area").css("display", "none"); } }
+</script>
+{$autocompletejs}
+</body>
+</html>
