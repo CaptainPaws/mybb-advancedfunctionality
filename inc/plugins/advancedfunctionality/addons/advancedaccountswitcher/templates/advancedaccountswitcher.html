@@ -292,3 +292,25 @@
     </table>
 </form>
 <!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_usercp_atf -->
+<!DOCTYPE html><html xml:lang="{$lang->settings['htmllang']}" lang="{$lang->settings['htmllang']}"><head><title>{$af_aas_page_title} - {$mybb->settings['bbname']}</title>{$headerinclude}</head><body>{$header}<main class="atf-page atf-ucp atf-social" id="content"><div class="atf-stack">{$atf_ucp_global_navigation}{$atf_ucp_local_navigation}<header class="atf-ucp__header"><h1 class="atf-ucp__title">{$af_aas_page_title}</h1></header>{$af_aas_usercpmain}</div></main>{$footer}</body></html>
+<!-- /TEMPLATE -->
+<!-- TEMPLATE: af_aas_ucp_page_atf -->
+<section class="af-aas-ucp atf-stack">{$af_aas_warning}<section class="atf-card"><h2>{$lang->af_aas_ucp_linked_title}</h2><div class="atf-group-list">{$af_aas_list}</div></section><div class="af-aas-grid">{$af_aas_create_form}{$af_aas_link_form}</div>{$af_aas_privacy_form}</section>
+<!-- /TEMPLATE -->
+<!-- TEMPLATE: af_aas_ucp_row_atf -->
+<article class="atf-group-card {$af_aas_row_class}"><div>{$af_aas_miniavatar}<strong>{$af_aas_username}</strong> <span class="smalltext">(#{$af_aas_uid})</span></div><div class="af-aas-row-actions"><a class="button button_small" href="{$af_aas_switch_url}">{$lang->af_aas_ucp_btn_switch}</a>{$af_aas_unlink_form}</div></article>
+<!-- /TEMPLATE -->
+<!-- TEMPLATE: af_aas_ucp_empty_atf -->
+<p class="atf-empty">{$lang->af_aas_ucp_empty}</p>
+<!-- /TEMPLATE -->
+<!-- TEMPLATE: af_aas_ucp_form_create_atf -->
+<form method="post" action="{$af_aas_ucp_action}" class="af-aas-form atf-card atf-stack"><input type="hidden" name="my_post_key" value="{$my_post_key}"><input type="hidden" name="do" value="create"><h2>{$lang->af_aas_ucp_create_title}</h2><label class="atf-form-row"><span class="atf-form-row__label">{$lang->af_aas_ucp_create_username}</span><input type="text" id="afAasCreateUsername" name="new_username" class="textbox" required></label><label class="atf-form-row"><span class="atf-form-row__label">{$lang->af_aas_ucp_create_password}</span><input type="password" id="afAasCreatePassword" name="new_password" class="textbox" required></label><label class="atf-form-row"><span class="atf-form-row__label">{$lang->af_aas_ucp_create_password2}</span><input type="password" id="afAasCreatePassword2" name="new_password2" class="textbox" required></label><p class="smalltext">{$lang->af_aas_ucp_create_hint}</p><div class="atf-form-actions"><button type="submit" class="button atf-button">{$lang->af_aas_ucp_create_btn}</button></div></form>
+<!-- /TEMPLATE -->
+<!-- TEMPLATE: af_aas_ucp_form_link_atf -->
+<form method="post" action="{$af_aas_ucp_action}" class="af-aas-form atf-card atf-stack" id="afAasLinkForm"><input type="hidden" name="my_post_key" value="{$my_post_key}"><input type="hidden" name="do" value="link_existing"><h2>{$lang->af_aas_ucp_link_title}</h2><label class="atf-form-row"><span class="atf-form-row__label">{$lang->af_aas_ucp_link_username}</span><span><input type="text" name="link_username" class="textbox" autocomplete="off" id="afAasLinkUsername" required><input type="hidden" name="link_uid" id="afAasLinkUid" value="0"><span class="af-aas-suggest" id="afAasSuggest" hidden="hidden"></span><span class="smalltext">{$lang->af_aas_ucp_link_username_hint}</span></span></label><label class="atf-form-row"><span class="atf-form-row__label">{$lang->af_aas_ucp_link_password}</span><input type="password" name="link_password" class="textbox" id="afAasLinkPassword" required></label><div class="atf-form-actions"><button type="submit" class="button atf-button">{$lang->af_aas_ucp_link_btn}</button></div></form>
+<!-- /TEMPLATE -->
+<!-- TEMPLATE: af_aas_ucp_privacy_form_atf -->
+<form method="post" action="{$af_aas_ucp_action}" class="af-aas-form atf-card atf-stack"><input type="hidden" name="my_post_key" value="{$my_post_key}"><input type="hidden" name="do" value="save_privacy"><h2>{$lang->af_aas_privacy_title}</h2><label><input type="checkbox" name="hide_in_list" value="1"{$af_aas_privacy_checked}> {$lang->af_aas_privacy_checkbox}</label><p class="smalltext">{$lang->af_aas_privacy_hint}</p><div class="atf-form-actions"><button type="submit" class="button atf-button">{$lang->af_aas_privacy_btn_save}</button></div></form>
+<!-- /TEMPLATE -->

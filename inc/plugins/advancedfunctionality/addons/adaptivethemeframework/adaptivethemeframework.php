@@ -211,6 +211,7 @@ function af_adaptivethemeframework_init(): void
             foreach ([
                 'usercp_profile_end', 'usercp_avatar_end', 'usercp_editsig_end',
                 'usercp_options_end', 'usercp_password', 'usercp_email', 'usercp_changename_end',
+                'usercp_editlists_end', 'usercp_usergroups_end',
             ] as $hook) {
                 $plugins->add_hook($hook, 'af_adaptivethemeframework_compose_ucp_profile_surface', 1000);
             }
@@ -241,7 +242,7 @@ function af_adaptivethemeframework_compose_ucp_profile_surface(): void
         return;
     }
     $action = (string)($mybb->input['action'] ?? '');
-    if (!in_array($action, ['profile', 'avatar', 'editsig', 'options', 'password', 'email', 'changename'], true)) {
+    if (!in_array($action, ['profile', 'avatar', 'editsig', 'options', 'password', 'email', 'changename', 'editlists', 'usergroups'], true)) {
         return;
     }
     $titles = [
@@ -252,6 +253,8 @@ function af_adaptivethemeframework_compose_ucp_profile_surface(): void
         'password' => 'change_password',
         'email' => 'change_email',
         'changename' => 'change_username',
+        'editlists' => 'edit_lists',
+        'usergroups' => 'group_memberships',
     ];
     $titleKey = $titles[$action];
     $context = af_adaptivethemeframework_ucp_context([
@@ -1368,6 +1371,34 @@ function af_adaptivethemeframework_template_seeds(): array
         'usercp_password' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_password.html',
         'usercp_email' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_email.html',
         'usercp_changename' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_changename.html',
+        'usercp_editlists' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editlists.html',
+        'usercp_editlists_user' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editlists_user.html',
+        'usercp_editlists_no_buddies' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editlists_no_buddies.html',
+        'usercp_editlists_no_ignored' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editlists_no_ignored.html',
+        'usercp_editlists_received_requests' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editlists_received_requests.html',
+        'usercp_editlists_received_request' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editlists_received_request.html',
+        'usercp_editlists_sent_requests' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editlists_sent_requests.html',
+        'usercp_editlists_sent_request' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editlists_sent_request.html',
+        'usercp_editlists_no_requests' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editlists_no_requests.html',
+        'usercp_usergroups' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups.html',
+        'usercp_usergroups_joingroup' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_joingroup.html',
+        'usercp_usergroups_leader' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_leader.html',
+        'usercp_usergroups_leader_usergroup' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_leader_usergroup.html',
+        'usercp_usergroups_leader_usergroup_memberlist' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_leader_usergroup_memberlist.html',
+        'usercp_usergroups_leader_usergroup_moderaterequests' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_leader_usergroup_moderaterequests.html',
+        'usercp_usergroups_memberof' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_memberof.html',
+        'usercp_usergroups_memberof_usergroup' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_memberof_usergroup.html',
+        'usercp_usergroups_memberof_usergroup_description' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_memberof_usergroup_description.html',
+        'usercp_usergroups_memberof_usergroup_display' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_memberof_usergroup_display.html',
+        'usercp_usergroups_memberof_usergroup_leave' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_memberof_usergroup_leave.html',
+        'usercp_usergroups_memberof_usergroup_leaveleader' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_memberof_usergroup_leaveleader.html',
+        'usercp_usergroups_memberof_usergroup_leaveother' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_memberof_usergroup_leaveother.html',
+        'usercp_usergroups_memberof_usergroup_leaveprimary' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_memberof_usergroup_leaveprimary.html',
+        'usercp_usergroups_memberof_usergroup_setdisplay' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_memberof_usergroup_setdisplay.html',
+        'usercp_usergroups_joinable' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_joinable.html',
+        'usercp_usergroups_joinable_usergroup' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_joinable_usergroup.html',
+        'usercp_usergroups_joinable_usergroup_description' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_joinable_usergroup_description.html',
+        'usercp_usergroups_joinable_usergroup_join' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_joinable_usergroup_join.html',
         'showthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread.html',
         'postbit_classic' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/postbit_classic.html',
         'private' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private.html',

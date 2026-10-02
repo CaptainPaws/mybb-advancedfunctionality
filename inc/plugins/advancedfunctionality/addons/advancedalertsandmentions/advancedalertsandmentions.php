@@ -721,8 +721,10 @@ function af_advancedalertsandmentions_uninstall(): void
         'af_aam_header_icon',
         'af_aam_modal',
         'af_aam_list_page',
+        'af_aam_list_page_atf',
         'af_aam_list_row',
         'af_aam_ucp_prefs',
+        'af_aam_ucp_prefs_atf',
         'af_aam_ucp_prefs_row',
         'af_aam_alert_row_popup',
         'af_aam_alert_row_popup_empty',
@@ -922,8 +924,10 @@ function af_aam_install_templates(): void
         'af_aam_alert_row_popup',
         'af_aam_alert_row_popup_empty',
         'af_aam_list_page',
+        'af_aam_list_page_atf',
         'af_aam_list_row',
         'af_aam_ucp_prefs',
+        'af_aam_ucp_prefs_atf',
         'af_aam_ucp_prefs_row',
         'af_aam_js_popup',
     ];
@@ -1433,7 +1437,7 @@ function af_aam_usercp_menu(&$usercpnav): void
 {
     global $lang, $mybb;
 
-    if (!af_aam_is_enabled()) {
+    if (!af_aam_is_enabled() || function_exists('af_adaptivethemeframework_ucp_context')) {
         return;
     }
 
@@ -1549,7 +1553,14 @@ function af_aam_usercp_start(): void
 
         $multipage = multipage($total, $perPage, $page, 'usercp.php?action=af_aam_list');
 
-        eval('echo "'.$templates->get('af_aam_list_page').'";');
+        $templateName = 'af_aam_list_page';
+        if (function_exists('af_adaptivethemeframework_ucp_context')) {
+            $context = af_adaptivethemeframework_ucp_context(['route'=>'usercp.php','action'=>$action,'uid'=>$uid,'title'=>(string)$lang->af_aam_link_alerts], []);
+            $atf_ucp_global_navigation=$context['global_navigation']; $atf_ucp_local_navigation=$context['local_navigation'];
+            $templateName = 'af_aam_list_page_atf';
+        }
+        eval('$page = "'.$templates->get($templateName).'";');
+        output_page($page);
         exit;
     }
 
@@ -1607,7 +1618,14 @@ function af_aam_usercp_start(): void
             eval('$af_aam_prefs_rows .= "'.$templates->get('af_aam_ucp_prefs_row').'";');
         }
 
-        eval('echo "'.$templates->get('af_aam_ucp_prefs').'";');
+        $templateName = 'af_aam_ucp_prefs';
+        if (function_exists('af_adaptivethemeframework_ucp_context')) {
+            $context = af_adaptivethemeframework_ucp_context(['route'=>'usercp.php','action'=>$action,'uid'=>$uid,'title'=>(string)$lang->af_aam_link_alerts], []);
+            $atf_ucp_global_navigation=$context['global_navigation']; $atf_ucp_local_navigation=$context['local_navigation'];
+            $templateName = 'af_aam_ucp_prefs_atf';
+        }
+        eval('$page = "'.$templates->get($templateName).'";');
+        output_page($page);
         exit;
     }
 }
