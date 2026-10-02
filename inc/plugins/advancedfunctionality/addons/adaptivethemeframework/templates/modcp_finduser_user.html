@@ -1,0 +1,11 @@
+<article class="atf-modcp-list-card atf-modcp-user-card">
+  <header class="atf-modcp-user-card__header">
+    <h3><a href="modcp.php?action=editprofile&amp;uid={$user['uid']}">{$user['username']}</a></h3>
+    <span class="atf-chip">{$usergroup}</span>
+  </header>
+  <dl class="atf-modcp-user-card__meta atf-meta">
+    <div><dt>{$lang->regdate}</dt><dd>{$regdate}</dd></div>
+    <div><dt>{$lang->lastvisit}</dt><dd>{$lastdate}</dd></div>
+    <div><dt>{$lang->postnum}</dt><dd>{$user['postnum']}</dd></div>
+  </dl>
+</article>
