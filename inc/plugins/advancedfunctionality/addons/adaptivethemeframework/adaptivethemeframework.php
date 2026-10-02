@@ -155,6 +155,7 @@ function af_adaptivethemeframework_normalizer_diagnostic(string $seed, string $c
         $lines[] = 'length_current=' . strlen($current);
         $lines[] = 'length_seed=' . strlen($seed);
         $lines[] = 'first_differing_offset=' . $offset;
+        $lines[] = af_adaptivethemeframework_byte_diff_diagnostic($current, $seed);
     }
     return implode("\n", $lines);
 }
@@ -603,6 +604,60 @@ function af_adaptivethemeframework_checksum(string $content): string
     return hash('sha256', $content);
 }
 
+/**
+ * Canonicalize only transport-level template whitespace for checksum proof.
+ *
+ * This value must never be persisted as template content.  In particular, it
+ * deliberately leaves indentation, internal whitespace, comments and markup
+ * untouched.
+ */
+function af_adaptivethemeframework_canonical_template_content(string $content): string
+{
+    $content = str_replace(["\r\n", "\r"], "\n", $content);
+    $content = (string)preg_replace('/[ \t]+(?=\n)/', '', $content);
+    return (string)preg_replace('/\n*\z/', "\n", $content);
+}
+
+function af_adaptivethemeframework_canonical_template_checksum(string $content): string
+{
+    return af_adaptivethemeframework_checksum(
+        af_adaptivethemeframework_canonical_template_content($content)
+    );
+}
+
+/** Return bounded, escaped byte evidence without logging the whole template. */
+function af_adaptivethemeframework_byte_diff_diagnostic(string $current, string $seed): string
+{
+    $currentLength = strlen($current);
+    $seedLength = strlen($seed);
+    $limit = min($currentLength, $seedLength);
+    $prefix = 0;
+    while ($prefix < $limit && $current[$prefix] === $seed[$prefix]) {
+        $prefix++;
+    }
+    $suffix = 0;
+    while ($suffix < $currentLength - $prefix
+        && $suffix < $seedLength - $prefix
+        && $current[$currentLength - $suffix - 1] === $seed[$seedLength - $suffix - 1]) {
+        $suffix++;
+    }
+    $before = min(64, $prefix);
+    $currentWindow = substr($current, $prefix - $before, $before + min(64, $currentLength - $prefix));
+    $seedWindow = substr($seed, $prefix - $before, $before + min(64, $seedLength - $prefix));
+    $escape = static function (string $value): string {
+        return addcslashes($value, "\0..\37\177..\377\\\"");
+    };
+    $hex = static function (string $value, int $offset): string {
+        return $offset < strlen($value) ? sprintf('%02x', ord($value[$offset])) : 'EOF';
+    };
+    return 'common_prefix_length=' . $prefix . "\n"
+        . 'common_suffix_length=' . $suffix . "\n"
+        . 'current_byte_at_difference=0x' . $hex($current, $prefix) . "\n"
+        . 'seed_byte_at_difference=0x' . $hex($seed, $prefix) . "\n"
+        . 'current_window_escaped="' . $escape($currentWindow) . '"' . "\n"
+        . 'seed_window_escaped="' . $escape($seedWindow) . '"';
+}
+
 /** Escape one raw string immediately before passing it to a MyBB write helper. */
 function af_adaptivethemeframework_db_string(string $value): string
 {
@@ -836,6 +891,10 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                 $matchesPrevious = $previousValid && hash_equals($previousChecksum, $currentChecksum);
                 $matchesInstalled = $installedChecksum !== '' && hash_equals($installedChecksum, $currentChecksum);
                 $matchesSeed = hash_equals($seedChecksum, $currentChecksum);
+                $matchesCanonicalSeed = $previousValid && !$matchesSeed && hash_equals(
+                    af_adaptivethemeframework_canonical_template_checksum($seed),
+                    af_adaptivethemeframework_canonical_template_checksum($current)
+                );
                 $compatibility = (!$matchesPrevious && !$matchesInstalled && !$matchesSeed)
                     ? af_adaptivethemeframework_normalize_compatible_template($templateName, $current)
                     : null;
@@ -852,7 +911,7 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
 
                 // Reconcile every activation from checksum evidence. States such as
                 // manual_override are diagnostic, not permanent locks.
-                if (!$matchesPrevious && !$matchesInstalled && !($matchesSeed && $previousValid) && !$matchesCompatibleSeed) {
+                if (!$matchesPrevious && !$matchesInstalled && !($matchesSeed && $previousValid) && !$matchesCanonicalSeed && !$matchesCompatibleSeed) {
                     af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
                     $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => af_adaptivethemeframework_db_string('manual_override'), 'current_content' => af_adaptivethemeframework_db_string($current), 'updated_at' => $now], "id='".(int)$lease['id']."'");
                     throw af_adaptivethemeframework_ownership_conflict($templateName, $sid, (string)$lease['ownership_state'], $currentChecksum, $previousChecksum, $installedChecksum, $seedChecksum, $diagnostic);
@@ -861,7 +920,7 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                 // Preserve the original pre-ATF backup. Only normalize ownership
                 // and seed metadata; never replace previous_* during recovery.
                 af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
-                $provenInstalledChecksum = ($matchesSeed || $matchesCompatibleSeed) ? $seedChecksum : $installedChecksum;
+                $provenInstalledChecksum = ($matchesSeed || $matchesCanonicalSeed || $matchesCompatibleSeed) ? $seedChecksum : $installedChecksum;
                 $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['atf_seed_content' => af_adaptivethemeframework_db_string($seed), 'atf_seed_checksum' => af_adaptivethemeframework_db_string($seedChecksum), 'atf_installed_checksum' => af_adaptivethemeframework_db_string($provenInstalledChecksum), 'atf_version' => af_adaptivethemeframework_db_string(AF_ADAPTIVETHEMEFRAMEWORK_VERSION), 'ownership_state' => af_adaptivethemeframework_db_string('owned'), 'current_content' => af_adaptivethemeframework_db_string(''), 'updated_at' => $now, 'restored_at' => 0], "id='".(int)$lease['id']."'");
                 if ($matchesSeed) {
                     continue;
@@ -913,7 +972,17 @@ function af_adaptivethemeframework_release_templates(): bool
         $templateName = $db->escape_string($templateNameRaw);
         af_adaptivethemeframework_activation_stage('restore[template=' . $templateNameRaw . ',sid=' . $sid . ']');
         $live = $db->fetch_array($db->simple_select('templates', '*', "title='{$templateName}' AND sid='{$sid}'", ['limit' => 1]));
-        if (!$live || af_adaptivethemeframework_checksum((string)$live['template']) !== $lease['atf_installed_checksum']) {
+        $liveMatchesInstalled = $live
+            && hash_equals((string)$lease['atf_installed_checksum'], af_adaptivethemeframework_checksum((string)$live['template']));
+        $storedSeedValid = (string)$lease['atf_seed_checksum'] !== '' && hash_equals(
+            (string)$lease['atf_seed_checksum'],
+            af_adaptivethemeframework_checksum((string)$lease['atf_seed_content'])
+        );
+        $liveMatchesCanonicalSeed = $live && $storedSeedValid && hash_equals(
+            af_adaptivethemeframework_canonical_template_checksum((string)$lease['atf_seed_content']),
+            af_adaptivethemeframework_canonical_template_checksum((string)$live['template'])
+        );
+        if (!$liveMatchesInstalled && !$liveMatchesCanonicalSeed) {
             $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => af_adaptivethemeframework_db_string('restore_conflict'), 'current_content' => af_adaptivethemeframework_db_string((string)($live['template'] ?? '')), 'updated_at' => $now], "id='".(int)$lease['id']."'");
             $ok = false;
             continue;
