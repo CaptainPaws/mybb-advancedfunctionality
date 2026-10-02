@@ -1383,8 +1383,12 @@ function af_adaptivethemeframework_render_userlist(array $page): string
         $presenceHtml = !empty($user['presence']['can_disclose'])
             ? '<span class="atf-user-card__presence is-'.$presence.'" aria-label="'.$e($user['presence']['label'] ?? $presence).'"></span>' : '';
         $master = (array)($user['master'] ?? []);
-        $masterHtml = !empty($master['visible'])
-            ? '<div><dt>'.$e($page['labels']['master'] ?? '').'</dt><dd><a href="'.$e($master['profile_url'] ?? '').'">'.$e($master['username_raw'] ?? '').'</a></dd></div>' : '';
+        $masterValue = !empty($master['visible'])
+            ? '<a href="'.$e($master['profile_url'] ?? '').'">'.$e($master['username_raw'] ?? '').'</a>'
+            : '&mdash;';
+        // Keep the field structurally stable: no linked account and a
+        // privacy-hidden link are intentionally indistinguishable to viewers.
+        $masterHtml = '<div><dt>'.$e($page['labels']['master'] ?? '').'</dt><dd>'.$masterValue.'</dd></div>';
         $actions = af_adaptivethemeframework_render_slot('userlist.card.actions', $context);
         $rows .= '<article class="atf-card atf-user-card is-presence-'.$presence.'" data-uid="'.$uid.'">'
             .'<div class="atf-user-card__avatar">'.(string)($user['avatar']['html'] ?? '').$presenceHtml.'</div>'
