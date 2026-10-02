@@ -295,6 +295,64 @@ function af_apui_register_atf_post_providers(): bool
 }
 af_apui_register_atf_post_providers();
 
+/** Reuse APUI's existing profile builders as ATF providers. */
+function af_apui_register_atf_profile_providers(): bool
+{
+    if (!function_exists('af_adaptivethemeframework_register_component')) return false;
+    $mapping = [
+        'forum_info' => 'forum_info', 'character_sheet' => 'sheet',
+        'application' => 'application', 'timeline' => 'timeline', 'activity' => 'activity',
+    ];
+    $registered = false;
+    foreach ($mapping as $key => $section) {
+        $registered = af_adaptivethemeframework_register_component([
+            'owner' => AF_APUI_ID, 'key' => 'profile_' . $key, 'slot' => 'profile.' . $key,
+            'renderer' => static fn(array $context): string => (string)($context['sections'][$section] ?? ''),
+        ]) || $registered;
+    }
+    $registered = af_adaptivethemeframework_register_component([
+        'owner' => AF_APUI_ID, 'key' => 'profile_hero', 'slot' => 'profile.hero',
+        'renderer' => 'af_apui_render_atf_profile_hero',
+    ]) || $registered;
+    $registered = af_adaptivethemeframework_register_component([
+        'owner' => AF_APUI_ID, 'key' => 'profile_navigation', 'slot' => 'profile.navigation',
+        'renderer' => 'af_apui_render_atf_profile_navigation',
+    ]) || $registered;
+    return $registered;
+}
+
+function af_apui_render_atf_profile_hero(array $context): string
+{
+    $i = (array)($context['identity'] ?? []);
+    $uidClass = htmlspecialchars_uni((string)($context['appearance']['uid_class'] ?? ''));
+    return '<section class="af-apui-profile-hero ' . $uidClass . '" data-atf-profile-hero="1">'
+        . '<div class="af-apui-profile-avatar-frame">' . (string)($i['avatar'] ?? '') . '</div>'
+        . '<div class="af-apui-profile-name-wrap">' . (string)($i['formattedname'] ?? '') . '</div>'
+        . '<div class="af-apui-profile-rank-wrap">' . (string)($i['usertitle'] ?? '') . '</div>'
+        . (string)($i['groupimage'] ?? '') . (string)($i['userstars'] ?? '')
+        . '<div class="af-apui-profile-meta"><span class="af-apui-profile-meta-item">'
+        . (string)($i['memregdate'] ?? '') . '</span><span class="af-apui-profile-meta-item">'
+        . (string)($i['memlastvisitdate'] ?? '') . '</span></div>'
+        . '<div class="af-apui-profile-presence">' . (string)($i['online_status'] ?? '') . '</div>'
+        . '</section>';
+}
+
+function af_apui_render_atf_profile_navigation(array $context): string
+{
+    $labels = ['info' => 'Основная информация', 'sheet' => 'Лист персонажа', 'application' => 'Анкета',
+        'timeline' => 'Хронология', 'activity' => 'Активность'];
+    $items = [];
+    foreach ((array)($context['sections'] ?? []) as $key => $html) {
+        if (trim((string)$html) === '' || !isset($labels[$key])) continue;
+        $active = !$items;
+        $items[] = '<a class="af-apui-tab' . ($active ? ' is-active' : '') . '" href="#af-apui-tab-'
+            . htmlspecialchars_uni((string)$key) . '" data-tab="' . htmlspecialchars_uni((string)$key)
+            . '" aria-selected="' . ($active ? 'true' : 'false') . '">' . $labels[$key] . '</a>';
+    }
+    return $items ? '<nav class="af-apui-profile-tabs__nav" data-af-apui-tabs-nav="1">' . implode('', $items) . '</nav>' : '';
+}
+af_apui_register_atf_profile_providers();
+
 /**
  * Activation-time ATF handoff for APUI-owned full templates.
  *
