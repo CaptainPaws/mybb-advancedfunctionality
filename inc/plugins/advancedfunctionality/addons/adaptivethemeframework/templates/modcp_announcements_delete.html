@@ -1,0 +1,39 @@
+<html>
+<head>
+<title>{$mybb->settings['bbname']} - {$lang->delete_announcement}</title>
+{$headerinclude}
+</head>
+<body>
+	{$header}
+<main class="pun atf-page-shell atf-page atf-modcp" id="content">
+<div class="atf-stack">
+{$atf_modcp_global_navigation}
+{$atf_modcp_local_navigation}
+<header class="atf-modcp__header"><h1 class="atf-modcp__title">{$atf_modcp_title}</h1>{$atf_modcp_actions}</header>
+{$atf_modcp_notice}
+{$atf_modcp_before_content}
+<div class="atf-modcp__content">
+<form action="modcp.php" method="post" enctype="multipart/form-data">
+	<input type="hidden" name="action" value="do_delete_announcement" />
+	<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+		
+					<table border="0" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" class="tborder">
+					<tr>
+					<td class="thead" colspan="2"><strong>{$announcement['subject']} - {$lang->delete_announcement}</strong></td>
+					</tr>
+					<tr>
+					<td class="trow1" colspan="2" align="center">{$lang->confirm_delete_announcement}</td>
+					</tr>
+					</table>
+					<br />
+					<div align="center"><input type="submit" class="button" name="submit" value="{$lang->delete_announcement}" /></div>
+					<input type="hidden" name="aid" value="{$aid}" />
+				
+	</form>
+</div>
+{$atf_modcp_after_content}
+</div>
+</main>
+{$footer}
+</body>
+</html>
