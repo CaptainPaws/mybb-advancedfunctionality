@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.10.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.11.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -186,6 +186,10 @@ function af_adaptivethemeframework_init(): void
     af_adaptivethemeframework_register_thread_providers();
     af_adaptivethemeframework_register_post_providers();
     af_adaptivethemeframework_register_profile_providers();
+    $isPrivateRoute = defined('THIS_SCRIPT') && THIS_SCRIPT === 'private.php';
+    if ($isPrivateRoute) {
+        af_adaptivethemeframework_register_pm_providers();
+    }
     if (is_object($plugins) && method_exists($plugins, 'add_hook')) {
         $plugins->add_hook('pre_output_page', 'af_adaptivethemeframework_mark_page', 100);
         // MyBB has finished deriving every forumdisplay value at this point.
@@ -199,7 +203,116 @@ function af_adaptivethemeframework_init(): void
         // Run after profile addons have produced their permission-filtered
         // values. The ATF-owned template consumes only these composed slots.
         $plugins->add_hook('member_profile_end', 'af_adaptivethemeframework_compose_profile', 1000);
+        if ($isPrivateRoute) {
+            // Each hook runs after its surface has prepared the native values,
+            // but before its legacy private_* parent template is evaluated.
+            foreach ([
+                'private_end', 'private_results_end', 'private_advanced_search',
+                'private_send_end', 'private_read_end', 'private_tracking_end',
+                'private_folders_end', 'private_empty_end', 'private_export_end',
+            ] as $hook) {
+                $plugins->add_hook($hook, 'af_adaptivethemeframework_compose_pm_workspace', 1000);
+            }
+        }
     }
+}
+
+/** Register native PM workspace fragments without claiming a private_* template. */
+function af_adaptivethemeframework_register_pm_providers(): bool
+{
+    $providers = [
+        ['pm_navigation', 'pm.navigation', static fn(array $context): string =>
+            (string)($context['native']['usercp_navigation'] ?? '')
+            . (string)($context['native']['folder_navigation'] ?? '')
+            . (string)($context['native']['folder_options'] ?? '')],
+        ['pm_quota', 'pm.quota', static fn(array $context): string =>
+            (string)($context['native']['quota'] ?? '')],
+        ['pm_notice', 'pm.notice', static fn(array $context): string =>
+            (string)($context['native']['limit_warning'] ?? '')],
+        ['pm_pagination', 'pm.pagination', static fn(array $context): string =>
+            (string)($context['native']['pagination'] ?? '')],
+        ['pm_actions', 'pm.actions', static fn(array $context): string =>
+            (string)($context['native']['compose_link'] ?? '')
+            . (string)($context['native']['empty_export_link'] ?? '')],
+    ];
+    $registered = false;
+    foreach ($providers as [$key, $slot, $renderer]) {
+        $registered = af_adaptivethemeframework_register_component([
+            'owner' => 'mybb', 'key' => $key, 'slot' => $slot, 'renderer' => $renderer,
+        ]) || $registered;
+    }
+    return $registered;
+}
+
+/**
+ * Closed PM workspace contract. All HTML is transported after MyBB rendered
+ * it; ATF does not derive folders, permissions, quota, actions, or tokens.
+ */
+function af_adaptivethemeframework_pm_context(array $state, array $values): array
+{
+    $nativeMap = [
+        'usercpnav' => 'usercp_navigation',
+        'folderjump' => 'folder_navigation',
+        'folderoplist' => 'folder_options',
+        'pmspacebar' => 'quota',
+        'limitwarning' => 'limit_warning',
+        'multipage' => 'pagination',
+        'composelink' => 'compose_link',
+        'emptyexportlink' => 'empty_export_link',
+    ];
+    $native = [];
+    foreach ($nativeMap as $source => $target) {
+        $native[$target] = (string)($values[$source] ?? '');
+    }
+
+    return [
+        'route' => 'private.php',
+        'action' => (string)($state['action'] ?? ''),
+        'folder' => [
+            'id' => max(0, (int)($state['folder_id'] ?? 0)),
+            'name' => (string)($state['folder_name'] ?? ''),
+        ],
+        'user' => ['uid' => max(0, (int)($state['uid'] ?? 0))],
+        'identity' => [
+            'url' => (string)($state['current_url'] ?? ''),
+            'action' => (string)($state['action'] ?? ''),
+        ],
+        'native' => $native,
+    ];
+}
+
+/** Materialize the PM slots while leaving every legacy template untouched. */
+function af_adaptivethemeframework_compose_pm_workspace(): void
+{
+    global $mybb, $fid, $foldername;
+    if (!defined('THIS_SCRIPT') || THIS_SCRIPT !== 'private.php') {
+        return;
+    }
+    $action = is_object($mybb) ? (string)($mybb->input['action'] ?? '') : '';
+    $uid = is_object($mybb) ? (int)($mybb->user['uid'] ?? 0) : 0;
+    $currentUrl = function_exists('get_current_location')
+        ? (string)get_current_location()
+        : (string)($_SERVER['REQUEST_URI'] ?? '');
+    $names = [
+        'usercpnav', 'folderjump', 'folderoplist', 'pmspacebar',
+        'limitwarning', 'multipage', 'composelink', 'emptyexportlink',
+    ];
+    $values = [];
+    foreach ($names as $name) {
+        $values[$name] = (string)($GLOBALS[$name] ?? '');
+    }
+    $context = af_adaptivethemeframework_pm_context([
+        'action' => $action,
+        'folder_id' => (int)($fid ?? ($mybb->input['fid'] ?? 0)),
+        'folder_name' => (string)($foldername ?? ''),
+        'uid' => $uid,
+        'current_url' => $currentUrl,
+    ], $values);
+    foreach (['navigation', 'quota', 'notice', 'pagination', 'actions',
+              'content', 'before_content', 'after_content'] as $name) {
+        $GLOBALS['atf_pm_' . $name] = af_adaptivethemeframework_render_slot('pm.' . $name, $context);
+    }
+    $GLOBALS['atf_pm_context'] = $context;
 }
 
 /** Native profile fragments stay rendered by MyBB, preserving its permissions. */
@@ -501,6 +614,8 @@ function af_adaptivethemeframework_slots(): array
         'header.primary_navigation', 'header.secondary_navigation',
         'header.user_navigation', 'header.assets', 'footer.components',
         'footer.modals',
+        'pm.navigation', 'pm.quota', 'pm.notice', 'pm.pagination',
+        'pm.actions', 'pm.content', 'pm.before_content', 'pm.after_content',
     ];
 }
 
