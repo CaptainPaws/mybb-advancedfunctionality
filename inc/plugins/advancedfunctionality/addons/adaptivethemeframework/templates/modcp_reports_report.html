@@ -1,0 +1,12 @@
+<article class="atf-modcp-list-card atf-modcp-report-card inline_row">
+  <div class="atf-modcp-report-card__content">{$report_data['content']}</div>
+  <div class="atf-modcp-report-card__comment">{$report_data['comment']}</div>
+  <dl class="atf-modcp-report-card__meta atf-meta">
+    <div><dt>{$lang->report_count}</dt><dd>{$report_data['reports']}</dd></div>
+    <div><dt>{$lang->report_lastpost}</dt><dd>{$report_data['lastreporter']}</dd></div>
+  </dl>
+  <label class="atf-modcp-report-card__select">
+    <input type="checkbox" class="checkbox" name="reports[]" id="reports_{$report['rid']}" value="{$report['rid']}"{$inlinecheck} />
+    <span>{$lang->select}</span>
+  </label>
+</article>
