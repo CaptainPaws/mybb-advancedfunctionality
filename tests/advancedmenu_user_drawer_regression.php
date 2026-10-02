@@ -56,8 +56,8 @@ if (strpos($welcomeSource, "function_exists('af_advancedmenu_render_drawer_accou
 }
 
 $buddySource = file_get_contents(AF_ADDONS.'advancedbuddylist/advancedbuddylist.php');
-foreach (["'key' => 'friends'", "'type' => 'link'", "'default_container' => 'user_drawer'", "'url' => 'buddy.php'"] as $needle) {
-    if (strpos($buddySource, $needle) === false) throw new RuntimeException('Friends drawer contract missing: '.$needle);
+if (strpos($buddySource, 'af_advancedbuddylist_menu_provider') !== false || strpos($buddySource, "af_menu_register_item") !== false) {
+    throw new RuntimeException('Advanced Buddy List must not inject a Friends item into the user drawer.');
 }
 
 echo "advancedmenu user drawer regression: OK\n";
