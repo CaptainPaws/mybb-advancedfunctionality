@@ -289,6 +289,41 @@ body.atf-active .atf-form-row :is(input, select, textarea) {
 }
 body.atf-active .atf-form-row :is(input, select, textarea):focus-visible { outline: 0; border-color: var(--atf-color-accent); box-shadow: var(--atf-focus-ring); }
 
+/* Profile composition. APUI remains a data/modal provider; ATF owns this DOM. */
+body.atf-active .atf-profile { display: grid; gap: var(--atf-page-gap); min-width: 0; }
+body.atf-active .atf-profile__hero { min-width: 0; }
+body.atf-active .atf-profile-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--atf-space-5);
+  align-items: end;
+  min-width: 0;
+  padding: var(--atf-space-6);
+  background-color: var(--atf-color-surface);
+  background-image: var(--af-apui-profile-banner-overlay, none), var(--af-apui-profile-banner-image, none);
+  background-position: center;
+  background-size: cover;
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-lg);
+}
+body.atf-active .atf-profile-hero__avatar { width: clamp(5rem, 12vw, 9rem); min-width: 0; }
+body.atf-active .atf-profile-hero__avatar img { display: block; width: 100%; height: auto; }
+body.atf-active .atf-profile-hero__identity { min-width: 0; overflow-wrap: anywhere; }
+body.atf-active .atf-profile-hero__name { font-size: var(--atf-font-size-xl); font-weight: var(--atf-font-weight-bold); }
+body.atf-active .atf-profile-hero__rank, body.atf-active .atf-profile-hero__meta { display: flex; flex-wrap: wrap; gap: var(--atf-space-2); }
+body.atf-active .atf-profile-hero__meta { align-content: end; color: var(--atf-color-text-muted); }
+body.atf-active .atf-profile__workspace, body.atf-active .atf-profile__content { display: grid; gap: var(--atf-component-gap); min-width: 0; }
+body.atf-active .atf-profile__navigation { min-width: 0; overflow: hidden; }
+body.atf-active .atf-profile-nav { display: flex; gap: var(--atf-space-2); overflow-x: auto; border-bottom: 1px solid var(--atf-color-border); }
+body.atf-active .atf-profile-nav__item { flex: 0 0 auto; padding: var(--atf-space-3) var(--atf-space-4); color: var(--atf-color-text-muted); text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent; }
+body.atf-active .atf-profile-nav__item.is-active { color: var(--atf-color-text); border-color: var(--atf-color-accent); }
+body.atf-active .atf-profile__panel { min-width: 0; padding: var(--atf-space-5); background: var(--atf-color-surface); border: 1px solid var(--atf-color-border); border-radius: var(--atf-radius-lg); }
+body.atf-active .atf-profile__panel[hidden] { display: none; }
+body.atf-active .atf-profile__panel > :not(:empty) + :not(:empty) { margin-block-start: var(--atf-component-gap); }
+body.atf-active .atf-profile__before:empty, body.atf-active .atf-profile__after:empty,
+body.atf-active .atf-profile__forum-info:empty, body.atf-active .atf-profile__balance:empty,
+body.atf-active .atf-profile__post-counter:empty, body.atf-active .atf-profile__native:empty { display: none; }
+
 /* Tablet */
 @media (max-width: 64rem) {
   body.atf-active { --atf-page-gap: var(--atf-space-4); --atf-component-gap: var(--atf-space-3); }
@@ -324,6 +359,10 @@ body.atf-active .atf-form-row :is(input, select, textarea):focus-visible { outli
   body.atf-active .atf-post__permalink { grid-column: 2; grid-row: 1; }
   body.atf-active .atf-post__subject { grid-column: 1; grid-row: 1; }
   body.atf-active .atf-post__date { grid-column: 1 / -1; }
+  body.atf-active .atf-profile-hero { grid-template-columns: minmax(0, 1fr); align-items: start; padding: var(--atf-space-4); }
+  body.atf-active .atf-profile-hero__avatar { width: min(7rem, 40vw); }
+  body.atf-active .atf-profile-hero__meta { align-content: start; }
+  body.atf-active .atf-profile__panel { padding: var(--atf-space-4); }
 }
 
 /* Narrow mobile */
