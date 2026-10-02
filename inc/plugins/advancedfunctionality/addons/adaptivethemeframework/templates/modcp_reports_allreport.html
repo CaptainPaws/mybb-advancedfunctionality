@@ -1,0 +1,9 @@
+<article class="atf-modcp-list-card atf-modcp-report-card">
+  <div class="atf-modcp-report-card__content">{$report_data['content']}</div>
+  <div class="atf-modcp-report-card__comment">{$report_data['comment']}</div>
+  <dl class="atf-modcp-report-card__meta atf-meta">
+    <div><dt>{$lang->reporter}</dt><dd><a href="{$report['reporterlink']}" target="_blank">{$report['username']}</a></dd></div>
+    <div><dt>{$lang->report_count}</dt><dd>{$report_data['reports']}</dd></div>
+    <div><dt>{$lang->report_time}</dt><dd>{$report_data['time']}</dd></div>
+  </dl>
+</article>
