@@ -162,6 +162,7 @@ function af_adaptivethemeframework_normalizer_diagnostic(string $seed, string $c
 function af_adaptivethemeframework_init(): void
 {
     global $plugins;
+    af_adaptivethemeframework_register_thread_providers();
     if (is_object($plugins) && method_exists($plugins, 'add_hook')) {
         $plugins->add_hook('pre_output_page', 'af_adaptivethemeframework_mark_page', 100);
         // MyBB has finished deriving every forumdisplay value at this point.
@@ -169,6 +170,49 @@ function af_adaptivethemeframework_init(): void
         // topic-card DOM or patching their legacy template variables.
         $plugins->add_hook('forumdisplay_thread_end', 'af_adaptivethemeframework_compose_thread_card', 100);
     }
+}
+
+/** Register MyBB-owned thread data which a future showthread layout composes. */
+function af_adaptivethemeframework_register_thread_providers(): bool
+{
+    return af_adaptivethemeframework_register_component([
+        'owner' => 'mybb',
+        'key' => 'thread_breadcrumbs',
+        'slot' => 'thread.breadcrumbs',
+        'renderer' => 'af_adaptivethemeframework_render_thread_breadcrumbs',
+    ]);
+}
+
+/** Breadcrumb HTML is supplied by showthread composition, never recovered from the DOM. */
+function af_adaptivethemeframework_render_thread_breadcrumbs(array $context): string
+{
+    return (string)($context['breadcrumbs_html'] ?? '');
+}
+
+/**
+ * Closed data contract for a future ATF showthread presentation.
+ *
+ * Rendered MyBB controls stay explicit because recreating them would risk
+ * dropping permissions, tokens, element ids, or JavaScript behaviour.
+ */
+function af_adaptivethemeframework_showthread_context(array $thread, int $fid, array $rendered = []): array
+{
+    $context = [
+        'tid' => max(0, (int)($thread['tid'] ?? 0)),
+        'fid' => max(0, $fid),
+        'uid' => max(0, (int)($thread['uid'] ?? 0)),
+        'username' => (string)($thread['username'] ?? ''),
+        'subject' => (string)($thread['subject'] ?? ''),
+        'dateline' => max(0, (int)($thread['dateline'] ?? 0)),
+        'lastpost' => max(0, (int)($thread['lastpost'] ?? 0)),
+        'posts_html' => (string)($rendered['posts_html'] ?? ''),
+        'breadcrumbs_html' => (string)($rendered['breadcrumbs_html'] ?? ''),
+    ];
+    foreach (['quickreply_html', 'moderation_html', 'poll_html', 'thread_tools_html',
+              'pagination_html', 'javascript_html'] as $key) {
+        $context[$key] = (string)($rendered[$key] ?? '');
+    }
+    return $context;
 }
 
 /** Remove the table cell owned by a stock child template, retaining its body. */

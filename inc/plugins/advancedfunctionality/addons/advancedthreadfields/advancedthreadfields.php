@@ -6153,12 +6153,33 @@ function af_atf_register_theme_provider(): bool
     if (!af_atf_theme_is_active()) {
         return false;
     }
-    return af_adaptivethemeframework_register_component([
+    $forum = af_adaptivethemeframework_register_component([
         'owner' => AF_ATF_ID,
         'key' => 'forum_meta_chips',
         'slot' => 'thread.meta_chips',
         'renderer' => 'af_atf_render_forum_chips',
     ]);
+    $showthread = af_adaptivethemeframework_register_component([
+        'owner' => AF_ATF_ID,
+        'key' => 'showthread_fields',
+        'slot' => 'thread.atf_fields',
+        'renderer' => 'af_atf_render_showthread_fields',
+    ]);
+    return $forum || $showthread;
+}
+
+/**
+ * ATF provider for the full thread field block.  Keep the existing builder as
+ * the sole rendering implementation so slot and legacy output cannot drift.
+ */
+function af_atf_render_showthread_fields(array $context): string
+{
+    $tid = (int)($context['tid'] ?? 0);
+    $fid = (int)($context['fid'] ?? 0);
+    if ($tid <= 0 || $fid <= 0) {
+        return '';
+    }
+    return af_atf_build_display_block_for_tid_fid($tid, $fid);
 }
 
 /** Provider contract: only the positive topic and forum ids are required. */
