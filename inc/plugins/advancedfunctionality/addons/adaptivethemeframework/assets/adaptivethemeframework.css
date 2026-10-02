@@ -149,9 +149,30 @@ body.atf-active .atf-forum-lastpost__poster,
 body.atf-active .atf-forum-lastpost__time { display: block; color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }
 
 /* Forumdisplay topic cards: semantic siblings, never table-row skins. */
+body.atf-active .atf-topic-list,
+body.atf-active .atf-topic-list__cards { width: 100%; min-width: 0; max-width: 100%; }
+body.atf-active .atf-topic-list__actions,
+body.atf-active .atf-topic-list__header,
+body.atf-active .atf-topic-list__sort,
+body.atf-active .atf-topic-list__footer,
+body.atf-active .atf-topic-list__legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--atf-space-2) var(--atf-space-4); }
+body.atf-active .atf-topic-list__actions,
+body.atf-active .atf-topic-list__header,
+body.atf-active .atf-topic-list__footer { justify-content: space-between; }
+body.atf-active .atf-topic-list__header h2 { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+body.atf-active .atf-topic-list__sort { padding-block: var(--atf-space-3); }
+body.atf-active .atf-topic-list__auxiliary,
+body.atf-active .atf-topic-list__filters { width: 100%; max-width: 100%; }
+body.atf-active .atf-topic-list__auxiliary:not(:has(tr)),
+body.atf-active .atf-topic-list__filters:not(:has(tr)) { display: none; }
+body.atf-active .atf-topic-list__separator { margin: var(--atf-space-4) 0 var(--atf-space-2); }
+body.atf-active .atf-topic-list__actions--footer,
+body.atf-active .atf-topic-list__footer { margin-block-start: var(--atf-space-4); }
+body.atf-active .atf-topic-list__moderation { min-width: 0; max-width: 100%; }
 body.atf-active .atf-topic-card {
+  position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto minmax(12rem, 0.6fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) max-content minmax(12rem, 18rem) auto;
   gap: var(--atf-space-4);
   align-items: center;
   margin-block: var(--atf-space-3);
@@ -161,7 +182,9 @@ body.atf-active .atf-topic-card__status { display: flex; align-items: center; ga
 body.atf-active .atf-topic-card__main,
 body.atf-active .atf-topic-card__lastpost,
 body.atf-active .atf-topic-card__lastpost-content { min-width: 0; }
+body.atf-active .atf-topic-card__heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--atf-space-1) var(--atf-space-2); min-width: 0; }
 body.atf-active .atf-topic-card__title { margin: 0; font-size: var(--atf-font-size-md); overflow-wrap: anywhere; }
+body.atf-active .atf-topic-card__pages { display: flex; flex-wrap: wrap; min-width: 0; }
 body.atf-active .atf-topic-card__title a { color: var(--atf-color-text); text-decoration: none; }
 body.atf-active .atf-topic-card__title a:hover { color: var(--atf-color-accent); }
 body.atf-active .atf-topic-card__pages:empty,
@@ -174,8 +197,10 @@ body.atf-active .atf-topic-card__stat { text-align: center; }
 body.atf-active .atf-topic-card__stat dt { font-size: 0.75rem; text-transform: uppercase; }
 body.atf-active .atf-topic-card__stat dd { margin: 0; color: var(--atf-color-text); font-weight: var(--atf-font-weight-bold); }
 body.atf-active .atf-topic-card__lastpost { display: flex; gap: var(--atf-space-3); align-items: center; padding-inline-start: var(--atf-space-4); border-inline-start: 1px solid var(--atf-color-border); }
-body.atf-active .atf-topic-card__avatar { flex: 0 0 auto; max-width: 4rem; }
-body.atf-active .atf-topic-card__avatar :is(img, svg) { display: block; max-width: 100%; height: auto; }
+body.atf-active .atf-topic-card__avatar { flex: 0 0 3rem; width: 3rem; height: 3rem; overflow: hidden; }
+body.atf-active .atf-topic-card__avatar > *,
+body.atf-active .atf-topic-card__avatar .apa_avatar { display: block; width: 100%; height: 100%; }
+body.atf-active .atf-topic-card__avatar :is(img, svg) { display: block; width: 100%; height: 100%; max-width: 100%; object-fit: cover; object-position: center; }
 body.atf-active .atf-topic-card__lastposter,
 body.atf-active .atf-topic-card__lasttime { display: block; overflow-wrap: anywhere; }
 body.atf-active .atf-topic-card__lasttime { color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }

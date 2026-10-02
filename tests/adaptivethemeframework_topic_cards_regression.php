@@ -13,6 +13,7 @@ function atf_topic_assert(bool $condition, string $message): void
 
 $base = AF_ADDONS . 'adaptivethemeframework/';
 $template = (string)file_get_contents($base . 'templates/forumdisplay_thread.html');
+$listTemplate = (string)file_get_contents($base . 'templates/forumdisplay_threadlist.html');
 $css = (string)file_get_contents($base . 'assets/adaptivethemeframework.css');
 $php = (string)file_get_contents($base . 'adaptivethemeframework.php');
 
@@ -33,7 +34,9 @@ atf_topic_assert(str_contains($template, '{$thread_type_class}'), 'Sticky/regula
 atf_topic_assert(str_contains($template, 'atf-topic-card--{$folder}'), 'Unread/closed/moved folder state is absent.');
 atf_topic_assert(str_contains($php, "render_slot('thread.meta_chips'") && str_contains($php, "render_slot('thread.lastposter_avatar'"), 'Topic providers do not use the ATF slot API.');
 atf_topic_assert(str_contains($css, '@media (max-width: 48rem)') && str_contains($css, '.atf-topic-card { grid-template-columns: 1fr;'), 'Mobile one-column contract is absent.');
-atf_topic_assert(str_contains($css, 'grid-template-columns: auto minmax(0, 1fr) auto minmax(12rem, 0.6fr) auto;'), 'Desktop compact grid contract is absent.');
+atf_topic_assert(str_contains($css, 'grid-template-columns: auto minmax(0, 1fr) max-content minmax(12rem, 18rem) auto;'), 'Desktop bounded grid contract is absent.');
+atf_topic_assert(str_contains($listTemplate, '<section class="atf-topic-list__cards">{$threads}</section>'), 'Topic cards must have a non-table list owner.');
+atf_topic_assert(!preg_match('~<table[^>]*>[^<]*(?:<(?!/table)[^>]*>[^<]*)*\{\$threads\}~s', $listTemplate), 'Topic cards must not render inside a table.');
 
 $GLOBALS['af_adaptivethemeframework_components'] = [];
 af_adaptivethemeframework_register_component(['owner' => 'mybb', 'key' => 'chips_test', 'slot' => 'thread.meta_chips', 'html' => '<b>chips</b>']);

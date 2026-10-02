@@ -1,0 +1,36 @@
+<div class="atf-topic-list" aria-labelledby="atf-topic-list-title">
+	<div class="atf-topic-list__actions">
+		<div>{$multipage}</div>
+		<div>{$newthread}</div>
+	</div>
+	<header class="atf-topic-list__header">
+		<h2 id="atf-topic-list-title">{$foruminfo['name']}</h2>
+		<div class="atf-topic-list__forum-actions"><a href="misc.php?action=markread&amp;fid={$fid}{$post_code_string}">{$lang->markforum_read}</a>{$addremovesubscription}{$clearstoredpass}</div>
+	</header>
+	<nav class="atf-topic-list__sort" aria-label="{$lang->sort_by}">
+		<a href="{$sorturl}&amp;sortby=subject&amp;order=asc">{$lang->thread}</a> {$orderarrow['subject']}
+		<a href="{$sorturl}&amp;sortby=starter&amp;order=asc">{$lang->author}</a> {$orderarrow['starter']}
+		<a href="{$sorturl}&amp;sortby=replies&amp;order=desc">{$lang->replies}</a> {$orderarrow['replies']}
+		<a href="{$sorturl}&amp;sortby=views&amp;order=desc">{$lang->views}</a> {$orderarrow['views']}
+		{$ratingcol}
+		<a href="{$sorturl}&amp;sortby=lastpost&amp;order=desc">{$lang->lastpost}</a> {$orderarrow['lastpost']}
+	</nav>
+	<table class="atf-topic-list__auxiliary"><tbody>{$selectall}{$announcementlist}</tbody></table>
+	<section class="atf-topic-list__cards">{$threads}</section>
+	<table class="atf-topic-list__filters"><tbody>{$forumsort}</tbody></table>
+	<div class="atf-topic-list__actions atf-topic-list__actions--footer">
+		<div>{$multipage}</div>
+		<div>{$newthread}</div>
+	</div>
+	<div class="atf-topic-list__footer">
+		<div class="atf-topic-list__legend">
+			<span><span class="thread_status newfolder" title="{$lang->new_thread}">&nbsp;</span> {$lang->new_thread}</span>
+			<span><span class="thread_status newhotfolder" title="{$lang->new_hot_thread}">&nbsp;</span> {$lang->new_hot_thread}</span>
+			<span><span class="thread_status hotfolder" title="{$lang->hot_thread}">&nbsp;</span> {$lang->hot_thread}</span>
+			<span><span class="thread_status folder" title="{$lang->no_new_thread}">&nbsp;</span> {$lang->no_new_thread}</span>
+			<span><span class="thread_status dot_folder" title="{$lang->posts_by_you}">&nbsp;</span> {$lang->posts_by_you}</span>
+			<span><span class="thread_status closefolder" title="{$lang->closed_thread}">&nbsp;</span> {$lang->closed_thread}</span>
+		</div>
+		<div class="atf-topic-list__moderation">{$inlinemod}{$searchforum}{$forumjump}</div>
+	</div>
+</div>

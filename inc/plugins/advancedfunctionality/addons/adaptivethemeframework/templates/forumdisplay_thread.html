@@ -5,8 +5,10 @@
 	</div>
 	<div class="atf-topic-card__main">
 		{$attachment_count}
-		<h3 class="atf-topic-card__title">{$prefix} {$gotounread}{$thread['threadprefix']}<span class="{$inline_edit_class} {$new_class}" id="tid_{$inline_edit_tid}"><a href="{$thread['threadlink']}">{$thread['subject']}</a></span></h3>
-		<div class="atf-topic-card__pages">{$thread['multipage']}</div>
+		<div class="atf-topic-card__heading">
+			<h3 class="atf-topic-card__title">{$prefix} {$gotounread}{$thread['threadprefix']}<span class="{$inline_edit_class} {$new_class}" id="tid_{$inline_edit_tid}"><a href="{$thread['threadlink']}">{$thread['subject']}</a></span></h3>
+			<div class="atf-topic-card__pages">{$thread['multipage']}</div>
+		</div>
 		<div class="atf-topic-card__byline atf-meta"><span class="author">{$thread['profilelink']}{$lang->comma}</span><time class="thread_start_datetime">{$thread['start_datetime']}</time></div>
 		<div class="atf-topic-card__chips">{$thread['atf_meta_chips']}</div>
 	</div>
