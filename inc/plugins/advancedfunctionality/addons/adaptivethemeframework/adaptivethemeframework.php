@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.17.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.18.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -211,6 +211,10 @@ function af_adaptivethemeframework_init(): void
             $plugins->add_hook('usercp_end', 'af_adaptivethemeframework_compose_ucp_overview', 1000);
         }
         if ($isPrivateRoute) {
+            // PM rows expose their display participant only while their bit is
+            // evaluated.  Tiny uid markers retain that decision and this late
+            // pass resolves every distinct participant in one query.
+            $plugins->add_hook('pre_output_page', 'af_adaptivethemeframework_render_pm_avatars', 90);
             // Each hook runs after its surface has prepared the native values,
             // but before its legacy private_* parent template is evaluated.
             foreach ([
@@ -222,6 +226,65 @@ function af_adaptivethemeframework_init(): void
             }
         }
     }
+}
+
+/**
+ * Resolve all PM-card avatar markers with one user lookup for the whole page.
+ *
+ * MyBB's $tofromuid already implements the inbox/sent/draft and multiple-
+ * recipient display contract. A zero marker therefore deliberately means the
+ * neutral fallback and never becomes a link to an unrelated account.
+ */
+function af_adaptivethemeframework_render_pm_avatars(string &$page): string
+{
+    global $db, $lang;
+
+    if (strpos($page, '<atf-pm-avatar ') === false) {
+        return $page;
+    }
+
+    preg_match_all('~<atf-pm-avatar data-uid="(\d+)"></atf-pm-avatar>~', $page, $matches);
+    $uids = array_values(array_unique(array_filter(array_map('intval', $matches[1] ?? []))));
+    $users = [];
+    if ($uids && is_object($db)) {
+        $query = $db->simple_select(
+            'users',
+            'uid, username, avatar, avatartype',
+            'uid IN (' . implode(',', $uids) . ')'
+        );
+        while ($user = $db->fetch_array($query)) {
+            $users[(int)$user['uid']] = $user;
+        }
+    }
+
+    if (!function_exists('af_avatar_render')) {
+        $avatarService = AF_ADDONS . 'advancedposteravatar/advancedposteravatar.php';
+        if (is_file($avatarService)) {
+            require_once $avatarService;
+        }
+    }
+    $fallbackName = is_object($lang) ? (string)($lang->guest ?? 'Guest') : 'Guest';
+
+    $page = preg_replace_callback(
+        '~<atf-pm-avatar data-uid="(\d+)"></atf-pm-avatar>~',
+        static function(array $match) use ($users, $fallbackName): string {
+            if (!function_exists('af_avatar_render')) {
+                return '';
+            }
+            $uid = (int)$match[1];
+            $user = $users[$uid] ?? ['uid' => 0, 'username' => $fallbackName];
+            return af_avatar_render($user, 'post', [
+                'img_class' => 'atf-pm-card__avatar-image',
+                'decorative' => true,
+                // The letter-avatar enhancer is not loaded on private.php;
+                // use the same renderer's static default-image branch.
+                'allow_letter' => false,
+            ]);
+        },
+        $page
+    );
+
+    return $page;
 }
 
 /**

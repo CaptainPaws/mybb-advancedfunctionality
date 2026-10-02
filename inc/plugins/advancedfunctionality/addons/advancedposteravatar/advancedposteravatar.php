@@ -449,7 +449,17 @@ function af_avatar_render(array $user, string $context, array $options = []): st
     $onerror = ((int)($mybb->settings['af_advancedposteravatar_onerror'] ?? 1) === 1)
         ? ' onerror="this.onerror=null;this.src=\'' . htmlspecialchars_uni($defaultAvatar) . '\'"'
         : '';
-    $img = af_apa_build_img_tag($avatarUrl, $username, $size, $imgClass, $defaultAvatar, $onerror);
+    $decorative = !empty($options['decorative']);
+    $img = af_apa_build_img_tag(
+        $avatarUrl,
+        $username,
+        $size,
+        $imgClass,
+        $defaultAvatar,
+        $onerror,
+        $decorative ? '' : $username,
+        $options['allow_letter'] ?? null
+    );
     $classes = 'af-avatar af-avatar--' . ($isOnline ? 'online' : 'post');
 
     // Guests and unresolved rows have no owner profile and must never inherit
@@ -462,7 +472,10 @@ function af_avatar_render(array $user, string $context, array $options = []): st
     // raw here and escape it exactly once when it enters the href attribute.
     $profileUrlRaw = rtrim((string)$mybb->settings['bburl'], '/') . '/member.php?action=profile&uid=' . $uid;
     $profileUrlHtml = htmlspecialchars_uni($profileUrlRaw);
-    return '<a href="' . $profileUrlHtml . '" class="' . $classes . ' apa_link" title="' . htmlspecialchars_uni($username) . '">' . $img . '</a>';
+    $accessibleName = $decorative
+        ? ' aria-label="' . htmlspecialchars_uni($username) . '"'
+        : '';
+    return '<a href="' . $profileUrlHtml . '" class="' . $classes . ' apa_link" title="' . htmlspecialchars_uni($username) . '"' . $accessibleName . '>' . $img . '</a>';
 }
 
 function af_avatar_render_online_page(string $page): string
@@ -519,27 +532,30 @@ function af_avatar_render_online_page(string $page): string
 
 
 
-function af_apa_build_img_tag($avatarUrl, $username, $size, $imgClass, $defaultAvatar, $onerror)
+function af_apa_build_img_tag($avatarUrl, $username, $size, $imgClass, $defaultAvatar, $onerror, $alt = null, $allowLetter = null)
 {
     global $mybb;
 
     $usernameSafe = htmlspecialchars_uni($username);
+    $altSafe = htmlspecialchars_uni($alt === null ? $username : $alt);
     $sizeInt = (int)$size;
 
-    $useLetter = ((int)$mybb->settings['af_advancedposteravatar_letter'] === 1);
+    $useLetter = $allowLetter === null
+        ? ((int)$mybb->settings['af_advancedposteravatar_letter'] === 1)
+        : (bool)$allowLetter;
 
     if ($avatarUrl === '') {
         if ($useLetter) {
             // JS превратит это в svg data-uri
-            return '<img src="javascript:void(0);" class="apa_bg ' . htmlspecialchars_uni($imgClass) . '" data-name="' . $usernameSafe . '" alt="' . $usernameSafe . '" width="' . $sizeInt . '" height="' . $sizeInt . '" />';
+            return '<img src="javascript:void(0);" class="apa_bg ' . htmlspecialchars_uni($imgClass) . '" data-name="' . $usernameSafe . '" alt="' . $altSafe . '" width="' . $sizeInt . '" height="' . $sizeInt . '" />';
         }
 
         $src = htmlspecialchars_uni($defaultAvatar);
-        return '<img src="' . $src . '" class="apa_img ' . htmlspecialchars_uni($imgClass) . '" alt="' . $usernameSafe . '" width="' . $sizeInt . '" height="' . $sizeInt . '"' . $onerror . ' />';
+        return '<img src="' . $src . '" class="apa_img ' . htmlspecialchars_uni($imgClass) . '" alt="' . $altSafe . '" width="' . $sizeInt . '" height="' . $sizeInt . '"' . $onerror . ' />';
     }
 
     $src = htmlspecialchars_uni($avatarUrl);
-    return '<img src="' . $src . '" class="apa_img ' . htmlspecialchars_uni($imgClass) . '" alt="' . $usernameSafe . '" width="' . $sizeInt . '" height="' . $sizeInt . '"' . $onerror . ' />';
+    return '<img src="' . $src . '" class="apa_img ' . htmlspecialchars_uni($imgClass) . '" alt="' . $altSafe . '" width="' . $sizeInt . '" height="' . $sizeInt . '"' . $onerror . ' />';
 }
 
 /* -------------------- HELPERS -------------------- */
