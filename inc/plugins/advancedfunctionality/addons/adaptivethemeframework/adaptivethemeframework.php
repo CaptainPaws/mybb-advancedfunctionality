@@ -205,6 +205,9 @@ function af_adaptivethemeframework_init(): void
         // values. The ATF-owned template consumes only these composed slots.
         $plugins->add_hook('member_profile_end', 'af_adaptivethemeframework_compose_profile', 1000);
         if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'usercp.php') {
+            // Contextual subscription confirmations have no dedicated end
+            // hook, so prepare their navigation before core evaluates them.
+            $plugins->add_hook('usercp_start', 'af_adaptivethemeframework_compose_ucp_profile_surface', 1000);
             // Each migrated form keeps native core values and processing while
             // adopting the shared navigation context at its final display hook.
             $plugins->add_hook('usercp_end', 'af_adaptivethemeframework_compose_ucp_overview', 1000);
@@ -212,6 +215,8 @@ function af_adaptivethemeframework_init(): void
                 'usercp_profile_end', 'usercp_avatar_end', 'usercp_editsig_end',
                 'usercp_options_end', 'usercp_password', 'usercp_email', 'usercp_changename_end',
                 'usercp_editlists_end', 'usercp_usergroups_end',
+                'usercp_subscriptions_end', 'usercp_forumsubscriptions_end',
+                'usercp_drafts_end', 'usercp_attachments_end',
             ] as $hook) {
                 $plugins->add_hook($hook, 'af_adaptivethemeframework_compose_ucp_profile_surface', 1000);
             }
@@ -234,7 +239,7 @@ function af_adaptivethemeframework_init(): void
     }
 }
 
-/** Compose navigation for the ATF-owned Profile, Preferences, and Security workspaces. */
+/** Compose navigation for every ATF-owned UCP workspace and contextual route. */
 function af_adaptivethemeframework_compose_ucp_profile_surface(): void
 {
     global $mybb, $lang;
@@ -242,7 +247,7 @@ function af_adaptivethemeframework_compose_ucp_profile_surface(): void
         return;
     }
     $action = (string)($mybb->input['action'] ?? '');
-    if (!in_array($action, ['profile', 'avatar', 'editsig', 'options', 'password', 'email', 'changename', 'editlists', 'usergroups'], true)) {
+    if (!in_array($action, ['profile', 'avatar', 'editsig', 'options', 'password', 'email', 'changename', 'editlists', 'usergroups', 'subscriptions', 'forumsubscriptions', 'drafts', 'attachments', 'addsubscription', 'removesubscription'], true)) {
         return;
     }
     $titles = [
@@ -255,6 +260,12 @@ function af_adaptivethemeframework_compose_ucp_profile_surface(): void
         'changename' => 'change_username',
         'editlists' => 'edit_lists',
         'usergroups' => 'group_memberships',
+        'subscriptions' => 'subscriptions',
+        'forumsubscriptions' => 'forum_subscriptions',
+        'drafts' => 'drafts',
+        'attachments' => 'attachments_manager',
+        'addsubscription' => 'subscribe_to_thread',
+        'removesubscription' => ((string)($mybb->input['type'] ?? '') === 'forum' ? 'unsubscribe_from_forum' : 'unsubscribe_from_thread'),
     ];
     $titleKey = $titles[$action];
     $context = af_adaptivethemeframework_ucp_context([
@@ -1399,6 +1410,26 @@ function af_adaptivethemeframework_template_seeds(): array
         'usercp_usergroups_joinable_usergroup' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_joinable_usergroup.html',
         'usercp_usergroups_joinable_usergroup_description' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_joinable_usergroup_description.html',
         'usercp_usergroups_joinable_usergroup_join' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_usergroups_joinable_usergroup_join.html',
+        'usercp_subscriptions' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_subscriptions.html',
+        'usercp_subscriptions_thread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_subscriptions_thread.html',
+        'usercp_subscriptions_thread_icon' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_subscriptions_thread_icon.html',
+        'usercp_subscriptions_remove' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_subscriptions_remove.html',
+        'usercp_subscriptions_none' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_subscriptions_none.html',
+        'usercp_forumsubscriptions' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_forumsubscriptions.html',
+        'usercp_forumsubscriptions_forum' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_forumsubscriptions_forum.html',
+        'usercp_forumsubscriptions_none' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_forumsubscriptions_none.html',
+        'usercp_addsubscription_thread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_addsubscription_thread.html',
+        'usercp_removesubscription_thread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_removesubscription_thread.html',
+        'usercp_removesubscription_forum' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_removesubscription_forum.html',
+        'usercp_drafts' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_drafts.html',
+        'usercp_drafts_draft' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_drafts_draft.html',
+        'usercp_drafts_draft_forum' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_drafts_draft_forum.html',
+        'usercp_drafts_draft_thread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_drafts_draft_thread.html',
+        'usercp_drafts_none' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_drafts_none.html',
+        'usercp_attachments' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_attachments.html',
+        'usercp_attachments_attachment' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_attachments_attachment.html',
+        'usercp_attachments_none' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_attachments_none.html',
+        'delete_attachments_button' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/delete_attachments_button.html',
         'showthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread.html',
         'postbit_classic' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/postbit_classic.html',
         'private' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private.html',

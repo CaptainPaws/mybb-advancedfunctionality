@@ -680,3 +680,17 @@ body.atf-active .atf-options-form fieldset > legend { padding-inline: var(--atf-
 .atf-social-requests{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:var(--atf-space-4,16px)}
 .atf-social-request-list{display:grid;gap:var(--atf-space-2,8px)}
 .atf-social-request time{margin-inline-start:auto}.atf-group-card{display:block}.atf-group-card h3{margin-top:0}.atf-group-card__actions{margin-top:var(--atf-space-3,12px)}
+
+/* Subscription and content UCP collections use cards rather than core tables. */
+body.atf-active :is(.atf-subscription-list,.atf-draft-list,.atf-attachment-list){display:grid;gap:var(--atf-space-3)}
+body.atf-active .atf-collection-toolbar,body.atf-active .atf-bulk-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--atf-space-3)}
+body.atf-active :is(.atf-subscription-card,.atf-forum-subscription,.atf-draft-card,.atf-attachment-card){display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--atf-space-3);min-width:0}
+body.atf-active :is(.atf-subscription-card,.atf-forum-subscription,.atf-draft-card,.atf-attachment-card) h2{margin:0;font-size:var(--atf-font-size-md);overflow-wrap:anywhere}
+body.atf-active .atf-meta{color:var(--atf-color-text-muted);font-size:var(--atf-font-size-sm)}
+body.atf-active .atf-subscription-card__metrics{display:flex;flex-wrap:wrap;gap:var(--atf-space-2) var(--atf-space-4);font-size:var(--atf-font-size-sm)}
+body.atf-active .atf-forum-subscription__actions{display:flex;flex-direction:column;gap:var(--atf-space-2);text-align:end}
+body.atf-active .atf-empty-state{padding:var(--atf-space-5);text-align:center;color:var(--atf-color-text-muted)}
+body.atf-active .atf-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:var(--atf-space-3);margin:0}
+body.atf-active .atf-stat-grid>div{padding:var(--atf-space-3);border:1px solid var(--atf-color-border);border-radius:var(--atf-radius)}
+body.atf-active .atf-stat-grid :is(dt,dd){margin:0}body.atf-active .atf-stat-grid dt{color:var(--atf-color-text-muted);font-size:var(--atf-font-size-sm)}
+@media(max-width:48rem){body.atf-active :is(.atf-subscription-card,.atf-forum-subscription,.atf-draft-card,.atf-attachment-card){align-items:start;grid-template-columns:auto minmax(0,1fr) auto}body.atf-active .atf-forum-subscription__actions{grid-column:2/-1;flex-direction:row;text-align:start}body.atf-active .atf-bulk-actions{align-items:stretch;flex-direction:column}}
