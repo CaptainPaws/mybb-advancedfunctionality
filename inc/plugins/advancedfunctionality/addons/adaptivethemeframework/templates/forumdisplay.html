@@ -21,8 +21,15 @@
 {$moderatedby}
 {$usersbrowsing}
 {$rules}
-{$subforums}
-{$threadslist}
+<section class="atf-forumdisplay__category" aria-labelledby="atf-forumdisplay-title">
+  <header class="atf-forumdisplay__category-header">
+    <h1 id="atf-forumdisplay-title">{$foruminfo['name']}</h1>
+  </header>
+  <div class="atf-forumdisplay__category-body">
+    {$subforums}
+    {$threadslist}
+  </div>
+</section>
 </main>
 {$footer}
 </body>

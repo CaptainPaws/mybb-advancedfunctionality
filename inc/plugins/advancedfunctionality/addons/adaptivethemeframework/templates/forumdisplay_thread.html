@@ -10,7 +10,6 @@
 			<div class="atf-topic-card__pages">{$thread['multipage']}</div>
 		</div>
 		<div class="atf-topic-card__byline atf-meta"><span class="author">{$thread['profilelink']}{$lang->comma}</span><time class="thread_start_datetime">{$thread['start_datetime']}</time></div>
-		<div class="atf-topic-card__chips">{$thread['atf_meta_chips']}</div>
 	</div>
 	<dl class="atf-topic-card__stats atf-meta">
 		<div class="atf-topic-card__stat"><dt>{$lang->replies}</dt><dd><a href="{$mybb->settings['bburl']}/misc.php?action=whoposted&amp;tid={$thread['tid']}" onclick="MyBB.whoPosted({$thread['tid']}); return false;">{$thread['replies']}</a>{$unapproved_posts}</dd></div>

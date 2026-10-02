@@ -109,6 +109,56 @@ body.atf-active .atf-forum-category__identity { min-width: 0; }
 body.atf-active .atf-forum-category__title { margin: 0; }
 body.atf-active .atf-forum-category__description:empty { display: none; }
 body.atf-active .atf-forum-category__forums { display: block; }
+
+/* Forumdisplay keeps its child forums and topic list inside one semantic
+   current-forum section. The stock forumdisplay_subforums table cannot wrap
+   semantic <article> cards without browser foster-parenting. */
+body.atf-active .atf-forumdisplay__category {
+  width: 100%;
+  min-width: 0;
+  margin-block: var(--atf-space-4);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--atf-color-page-subtle) 88%, transparent);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-lg);
+}
+body.atf-active .atf-forumdisplay__category-header {
+  padding: var(--atf-space-4) var(--atf-space-5);
+  border-bottom: 1px solid var(--atf-color-border);
+}
+body.atf-active .atf-forumdisplay__category-header h1,
+body.atf-active .atf-forumdisplay__subforums-header h2 {
+  margin: 0;
+}
+body.atf-active .atf-forumdisplay__category-body {
+  display: grid;
+  gap: var(--atf-space-5);
+  min-width: 0;
+  padding: var(--atf-space-5);
+}
+body.atf-active .atf-forumdisplay__subforums,
+body.atf-active .atf-forumdisplay__subforum-cards {
+  min-width: 0;
+}
+body.atf-active .atf-forumdisplay__subforums {
+  display: grid;
+  gap: var(--atf-space-3);
+}
+body.atf-active .atf-forumdisplay__subforums-header {
+  padding-block-end: var(--atf-space-2);
+  border-bottom: 1px solid var(--atf-color-border);
+}
+body.atf-active .atf-forumdisplay__subforum-cards {
+  display: grid;
+  gap: var(--atf-space-3);
+}
+body.atf-active .atf-forumdisplay__subforum-cards > .atf-forum-card {
+  margin-block: 0;
+}
+body.atf-active .atf-topic-list__header--actions {
+  justify-content: flex-end;
+}
+
 body.atf-active.atf-forum-layout--grid .atf-forum-category__forums {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -141,6 +191,33 @@ body.atf-active .atf-forum-card__stat { text-align: center; }
 body.atf-active .atf-forum-card__stat dt { font-size: 0.75rem; text-transform: uppercase; }
 body.atf-active .atf-forum-card__stat dd { margin: 0; color: var(--atf-color-text); font-weight: var(--atf-font-weight-bold); }
 body.atf-active .atf-forum-card__lastpost { min-width: 0; padding-inline-start: var(--atf-space-4); border-inline-start: 1px solid var(--atf-color-border); }
+
+/* Grid preference is a card composition change, not merely a two-column
+   container. Give the forum identity the full useful row and move compact
+   stats beneath it so titles do not get squeezed between counters/last-post. */
+body.atf-active.atf-forum-layout--grid .atf-forum-card {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "status identity"
+    "status stats"
+    "status lastpost";
+  align-items: start;
+}
+body.atf-active.atf-forum-layout--grid .atf-forum-card__status { grid-area: status; }
+body.atf-active.atf-forum-layout--grid .atf-forum-card__identity { grid-area: identity; width: 100%; }
+body.atf-active.atf-forum-layout--grid .atf-forum-card__stats {
+  grid-area: stats;
+  justify-content: flex-start;
+  gap: var(--atf-space-4);
+}
+body.atf-active.atf-forum-layout--grid .atf-forum-card__stat { text-align: start; }
+body.atf-active.atf-forum-layout--grid .atf-forum-card__lastpost {
+  grid-area: lastpost;
+  padding: var(--atf-space-3) 0 0;
+  border-inline-start: 0;
+  border-top: 1px solid var(--atf-color-border);
+}
+
 body.atf-active .atf-forum-lastpost { display: flex; gap: var(--atf-space-3); align-items: center; min-width: 0; }
 body.atf-active .atf-forum-lastpost__avatar { flex: 0 0 auto; max-width: 4rem; }
 body.atf-active .atf-forum-lastpost__avatar :is(img, svg) { display: block; max-width: 100%; height: auto; }
@@ -188,7 +265,6 @@ body.atf-active .atf-topic-card__pages { display: flex; flex-wrap: wrap; min-wid
 body.atf-active .atf-topic-card__title a { color: var(--atf-color-text); text-decoration: none; }
 body.atf-active .atf-topic-card__title a:hover { color: var(--atf-color-accent); }
 body.atf-active .atf-topic-card__pages:empty,
-body.atf-active .atf-topic-card__chips:empty,
 body.atf-active .atf-topic-card__rating:empty,
 body.atf-active .atf-topic-card__avatar:empty,
 body.atf-active .atf-topic-card__moderation:empty { display: none; }
