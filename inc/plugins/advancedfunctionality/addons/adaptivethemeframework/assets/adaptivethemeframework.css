@@ -798,6 +798,80 @@ body.atf-active .atf-modcp-ipsearch input[type="text"] {
   max-width: 100%;
 }
 
+/* Task 48: moderator edit-profile form. */
+body.atf-active .atf-modcp-editprofile,
+body.atf-active .atf-modcp-editprofile__form {
+  min-width: 0;
+}
+body.atf-active .atf-modcp-editprofile__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--atf-component-gap);
+  min-width: 0;
+}
+body.atf-active .atf-modcp-editprofile .atf-form-section {
+  display: grid;
+  gap: var(--atf-space-3);
+  min-width: 0;
+}
+body.atf-active .atf-modcp-editprofile .atf-form-section > h2 {
+  margin: 0;
+}
+body.atf-active .atf-modcp-editprofile :is(input[type="text"], select, textarea) {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+body.atf-active .atf-modcp-editprofile textarea {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+}
+body.atf-active .atf-modcp-editprofile__profilefields {
+  min-width: 0;
+  overflow-x: auto;
+}
+body.atf-active .atf-modcp-editprofile__provider-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+}
+body.atf-active .atf-modcp-editprofile__provider-table :is(td, th) {
+  padding: var(--atf-space-2) 0;
+  vertical-align: top;
+  border: 0;
+}
+body.atf-active .atf-modcp-suspension {
+  display: grid;
+  gap: var(--atf-space-2);
+  min-width: 0;
+  padding: var(--atf-space-3);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-md);
+}
+body.atf-active .atf-modcp-suspension__details {
+  display: grid;
+  gap: var(--atf-space-2);
+  min-width: 0;
+}
+body.atf-active .atf-modcp-duration {
+  width: 4rem !important;
+  flex: 0 0 4rem;
+}
+body.atf-active .atf-modcp-editprofile .atf-form-row__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--atf-space-2);
+  align-items: center;
+  min-width: 0;
+}
+body.atf-active .atf-modcp-editprofile .atf-form-row__controls--date {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(5rem, .75fr);
+}
+body.atf-active .atf-modcp-editprofile__signature .atf-modcp-suspension {
+  margin-block-start: var(--atf-space-3);
+}
+
 body.atf-active .atf-ucp__notices:empty,
 body.atf-active .atf-ucp__actions:empty,
 body.atf-active .atf-ucp__provided:empty,
@@ -954,7 +1028,8 @@ body.atf-active .atf-profile__post-counter:empty, body.atf-active .atf-profile__
   body.atf-active .atf-modcp-awaiting__grid,
   body.atf-active .atf-modcp-filter__grid,
   body.atf-active .atf-modcp-log-card,
-  body.atf-active .atf-modcp-report-card { grid-template-columns: minmax(0, 1fr); }
+  body.atf-active .atf-modcp-report-card,
+  body.atf-active .atf-modcp-editprofile__grid { grid-template-columns: minmax(0, 1fr); }
   body.atf-active .atf-modcp-report-card__meta { grid-column: auto; }
   body.atf-active .atf-modcp-form__actions { justify-content: stretch; }
   body.atf-active .atf-ucp-summary__body { grid-template-columns: minmax(0, 1fr); }
