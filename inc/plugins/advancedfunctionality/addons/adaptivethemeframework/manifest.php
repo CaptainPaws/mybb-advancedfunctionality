@@ -6,7 +6,7 @@ return [
     'id' => 'adaptivethemeframework',
     'name' => 'Adaptive Theme Framework',
     'description' => 'Presentation framework for adaptive AF component-slot layouts.',
-    'version' => '0.23.0',
+    'version' => '0.24.0',
     'author' => 'AdvancedFunctionality',
     'bootstrap' => 'adaptivethemeframework.php',
 
@@ -39,6 +39,10 @@ return [
             'front' => [
                 'af_adaptivethemeframework_name' => 'Adaptive Theme Framework',
                 'af_adaptivethemeframework_description' => 'Адаптивный слой представления на основе компонентных слотов.',
+                'atf_forum_layout' => 'Отображение форумов',
+                'atf_forum_layout_full' => 'По ширине',
+                'atf_forum_layout_grid' => 'Сетка',
+                'atf_presentation_save' => 'Сохранить',
                 'atf_pm_compose' => 'Написать ЛС',
                 'atf_pm_tracking' => 'Отслеживание',
                 'atf_pm_advanced_search' => 'Расширенный поиск',
@@ -76,6 +80,10 @@ return [
             'front' => [
                 'af_adaptivethemeframework_name' => 'Adaptive Theme Framework',
                 'af_adaptivethemeframework_description' => 'Adaptive presentation layer based on component slots.',
+                'atf_forum_layout' => 'Forum layout',
+                'atf_forum_layout_full' => 'Full width',
+                'atf_forum_layout_grid' => 'Grid',
+                'atf_presentation_save' => 'Save',
                 'atf_pm_compose' => 'Compose message',
                 'atf_pm_tracking' => 'Tracking',
                 'atf_pm_advanced_search' => 'Advanced search',

@@ -108,8 +108,14 @@ body.atf-active .atf-forum-category__collapse { flex: 0 0 auto; }
 body.atf-active .atf-forum-category__identity { min-width: 0; }
 body.atf-active .atf-forum-category__title { margin: 0; }
 body.atf-active .atf-forum-category__description:empty { display: none; }
-/* Task 41 can opt this child container into a grid without changing ownership. */
 body.atf-active .atf-forum-category__forums { display: block; }
+body.atf-active.atf-forum-layout--grid .atf-forum-category__forums {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--atf-space-3);
+}
+body.atf-active.atf-forum-layout--grid .atf-forum-category__forums > .atf-forum-card { margin-block: 0; }
+body.atf-active.atf-forum-layout--grid .atf-forum-category__forums > .atf-forum-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
 body.atf-active .atf-forum-card {
   display: grid;
@@ -422,6 +428,7 @@ body.atf-active .atf-profile__post-counter:empty, body.atf-active .atf-profile__
 @media (max-width: 48rem) {
   body.atf-active { --atf-page-gap: var(--atf-space-3); }
   body.atf-active .atf-card { padding: var(--atf-space-4); }
+  body.atf-active.atf-forum-layout--grid .atf-forum-category__forums { grid-template-columns: 1fr; }
   body.atf-active .atf-forum-card { grid-template-columns: auto minmax(0, 1fr); }
   body.atf-active .atf-forum-card__stats,
   body.atf-active .atf-forum-card__lastpost { grid-column: 1 / -1; }
