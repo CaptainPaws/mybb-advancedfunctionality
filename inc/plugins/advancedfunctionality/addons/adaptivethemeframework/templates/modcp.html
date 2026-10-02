@@ -12,39 +12,41 @@
 <header class="atf-modcp__header"><h1 class="atf-modcp__title">{$atf_modcp_title}</h1>{$atf_modcp_actions}</header>
 {$atf_modcp_notice}
 {$atf_modcp_before_content}
-<div class="atf-modcp__content">
-{$awaitingmoderation}
-{$latestfivemodactions}
-<table border="0" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" class="tborder">
-<tr>
-<td class="thead" align="center" colspan="4"><strong>{$lang->bans_ending_soon}</strong></td>
-</tr>
-<tr>
-<td class="tcat" width="25%"><span class="smalltext"><strong>{$lang->username}</strong></span></td>
-<td class="tcat" align="center" width="30%"><span class="smalltext"><strong>{$lang->reason}</strong></span></td>
-<td class="tcat" align="center" width="25%"><span class="smalltext"><strong>{$lang->ban_length}</strong></span></td>
-<td class="tcat" align="center" width="20%"><span class="smalltext"><strong>{$lang->ban_bannedby}</strong></span></td>
-</tr>
-{$bannedusers}
-</table>
-<br />
-<form action="modcp.php" method="post">
-<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
-<input type="hidden" name="action" value="do_modnotes" />
-<table border="0" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" class="tborder">
-<tr>
-<td class="thead" align="center" colspan="1"><strong>{$lang->moderator_notes}</strong></td>
-</tr>
-<tr>
-<td class="tcat"><span class="smalltext"><strong>{$lang->notes_public_all}</strong></span></td>
-</tr>
-<tr>
-<td class="trow1"><textarea name="modnotes" style="width: 99%; height: 200px;" rows="5" cols="45">{$modnotes}</textarea></td>
-</tr>
-</table>
-<br />
-<div align="center"><input type="submit" class="button" name="notessubmit" value="{$lang->save_notes}" /></div>
-</form>
+<div class="atf-modcp__content atf-modcp-overview">
+  {$awaitingmoderation}
+  {$latestfivemodactions}
+  <section class="atf-card atf-modcp-panel atf-modcp-overview__bans">
+    <header class="atf-modcp-panel__header"><h2>{$lang->bans_ending_soon}</h2></header>
+    <div class="atf-modcp-overview__bans-scroll">
+      <table class="atf-modcp-overview__bans-table">
+        <thead>
+          <tr>
+            <th>{$lang->username}</th>
+            <th>{$lang->reason}</th>
+            <th>{$lang->ban_length}</th>
+            <th>{$lang->ban_bannedby}</th>
+          </tr>
+        </thead>
+        <tbody>{$bannedusers}</tbody>
+      </table>
+    </div>
+  </section>
+  <section class="atf-card atf-modcp-panel atf-modcp-overview__notes">
+    <header class="atf-modcp-panel__header">
+      <h2>{$lang->moderator_notes}</h2>
+      <p class="atf-meta">{$lang->notes_public_all}</p>
+    </header>
+    <form action="modcp.php" method="post" class="atf-stack">
+      <input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+      <input type="hidden" name="action" value="do_modnotes" />
+      <div class="atf-form-row">
+        <textarea name="modnotes" rows="5" cols="45">{$modnotes}</textarea>
+      </div>
+      <div class="atf-modcp-form__actions">
+        <input type="submit" class="button atf-button" name="notessubmit" value="{$lang->save_notes}" />
+      </div>
+    </form>
+  </section>
 </div>
 {$atf_modcp_after_content}
 </div>
