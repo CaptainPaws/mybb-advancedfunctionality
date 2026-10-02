@@ -504,6 +504,29 @@ body.atf-active .atf-pm-tracking-card__check { padding: var(--atf-space-2); }
 body.atf-active .atf-pm-tracking__actions { text-align: end; }
 body.atf-active .atf-pm-tracking__empty { text-align: center; }
 
+/* Folder administration remains a native MyBB form. ATF only arranges the
+   folder rows and keeps the destructive empty action visually distinct. */
+body.atf-active .atf-pm-folders__form,
+body.atf-active .atf-pm-folders__section,
+body.atf-active .atf-pm-folders__list { min-width: 0; }
+body.atf-active .atf-pm-folders__section { gap: var(--atf-space-4); }
+body.atf-active .atf-pm-folders__section h2,
+body.atf-active .atf-pm-folders__section p { margin: 0; }
+body.atf-active .atf-pm-folders__row { grid-template-columns: minmax(0, 1fr); }
+body.atf-active .atf-pm-folders__row input[type="text"] { width: 100%; min-width: 0; max-width: 30rem; }
+body.atf-active .atf-pm-folders__protected { color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); overflow-wrap: anywhere; }
+body.atf-active .atf-pm-folders__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--atf-space-2); }
+body.atf-active .atf-pm-empty__head,
+body.atf-active .atf-pm-empty__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(5rem, auto) minmax(4rem, auto); gap: var(--atf-space-3); align-items: center; min-width: 0; }
+body.atf-active .atf-pm-empty__head { color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); font-weight: var(--atf-font-weight-medium); }
+body.atf-active .atf-pm-empty__count,
+body.atf-active .atf-pm-empty__choice { text-align: center; }
+body.atf-active .atf-pm-empty__choice input,
+body.atf-active .atf-pm-empty__keep input { min-height: auto; padding: 0; }
+body.atf-active .atf-pm-empty__keep { display: flex; gap: var(--atf-space-2); align-items: center; justify-content: center; }
+body.atf-active .atf-pm-empty__actions { padding-block-start: var(--atf-space-4); border-block-start: 1px solid var(--atf-color-border); }
+body.atf-active .atf-button--danger { background: #b33a3a; }
+
 @media (max-width: 48rem) {
   body.atf-active .atf-pm-compose__actions { align-items: stretch; flex-direction: column; }
   body.atf-active .atf-pm-compose__actions .atf-button { width: 100%; }
@@ -515,4 +538,8 @@ body.atf-active .atf-pm-tracking__empty { text-align: center; }
   body.atf-active .atf-pm-tracking-card__date { grid-column: 2 / -1; text-align: start; }
   body.atf-active .atf-pm-tracking-card__check { grid-column: 3; grid-row: 1; }
   body.atf-active .atf-pm-tracking__actions { text-align: start; }
+  body.atf-active .atf-pm-empty__head { display: none; }
+  body.atf-active .atf-pm-empty__row { grid-template-columns: minmax(0, 1fr) auto; }
+  body.atf-active .atf-pm-empty__count { grid-column: 1; text-align: start; color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }
+  body.atf-active .atf-pm-empty__choice { grid-column: 2; grid-row: 1 / span 2; }
 }
