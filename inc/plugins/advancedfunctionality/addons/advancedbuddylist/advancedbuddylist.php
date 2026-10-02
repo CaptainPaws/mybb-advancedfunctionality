@@ -22,10 +22,25 @@ function af_advancedbuddylist_menu_provider(): void
 
 function af_advancedbuddylist_install(): void
 {
-    af_abdl_migrate_addon_identity();
-    af_abdl_ensure_schema();
-    af_abdl_migrate_legacy();
-    af_abdl_install_page_alias();
+    $stage = 'migrate_identity';
+
+    try {
+        af_abdl_migrate_addon_identity();
+
+        $stage = 'ensure_schema';
+        af_abdl_ensure_schema();
+
+        $stage = 'migrate_legacy_relations';
+        af_abdl_migrate_legacy();
+
+        $stage = 'install_page_alias';
+        af_abdl_install_page_alias();
+    } catch (Throwable $error) {
+        if (function_exists('af_store_addon_lifecycle_diagnostic')) {
+            af_store_addon_lifecycle_diagnostic(AF_ABDL_ID, 'enable', $stage, $error);
+        }
+        throw $error;
+    }
 }
 function af_advancedbuddylist_activate(): void { af_advancedbuddylist_install(); }
 function af_advancedbuddylist_upgrade(): void { af_advancedbuddylist_install(); }
@@ -350,7 +365,6 @@ function af_abdl_migrate_addon_identity(): void
     global $db, $mybb;
     static $migrated = false;
     if ($migrated) return;
-    $migrated = true;
     $names = ['af_advancedbuddylist_enabled', 'af_advancedbyddylist_enabled', 'af_abdl_enabled'];
     $found = [];
     $query = $db->simple_select('settings', 'sid,gid,name,value', "name IN ('".implode("','", $names)."')");
@@ -388,6 +402,10 @@ function af_abdl_migrate_addon_identity(): void
         $mybb->settings[$names[0]] = $value;
         unset($mybb->settings[$names[1]], $mybb->settings[$names[2]]);
     }
+
+    // Mark the migration complete only after every step succeeds. If a SQL or
+    // filesystem error interrupts the migration, a retry must be allowed.
+    $migrated = true;
 }
 
 function af_abdl_select_lifecycle_value(array $settings): string
@@ -404,6 +422,14 @@ function af_advancedbuddylist_migrate_identity(): void { af_abdl_migrate_addon_i
 function af_abdl_migrate_theme_stylesheet_ownership(): void
 {
     global $db;
+
+    // Existing AF installations may have an older registry schema. The Buddy
+    // identity migration writes updated_at, so upgrade the shared registry
+    // before touching legacy ownership rows.
+    if (function_exists('af_theme_stylesheets_install_schema')) {
+        af_theme_stylesheets_install_schema();
+    }
+
     if (defined('AF_THEME_STYLESHEETS_TABLE') && $db->table_exists(AF_THEME_STYLESHEETS_TABLE)) {
         $q=$db->simple_select(AF_THEME_STYLESHEETS_TABLE,'id,theme_tid,logical_id',"addon_id='advancedbyddylist'");
         while($row=$db->fetch_array($q)) {
