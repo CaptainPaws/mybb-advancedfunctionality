@@ -6,7 +6,8 @@
 <body>
 {$header}
 <main class="atf-pm atf-pm-read">
-	<nav class="atf-pm__navigation" aria-label="{$lang->private_messaging}">{$atf_pm_navigation}</nav>
+	<div class="atf-pm__global-navigation">{$atf_ucp_global_navigation}</div>
+	<div class="atf-pm__navigation">{$atf_pm_navigation}</div>
 	{$atf_pm_before_content}
 	<header class="atf-pm-read__header atf-card">
 		<p class="atf-pm__eyebrow">{$lang->private_messaging}</p>

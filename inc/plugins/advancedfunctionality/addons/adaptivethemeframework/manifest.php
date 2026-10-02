@@ -6,7 +6,7 @@ return [
     'id' => 'adaptivethemeframework',
     'name' => 'Adaptive Theme Framework',
     'description' => 'Presentation framework for adaptive AF component-slot layouts.',
-    'version' => '0.16.0',
+    'version' => '0.17.0',
     'author' => 'AdvancedFunctionality',
     'bootstrap' => 'adaptivethemeframework.php',
 
@@ -39,6 +39,12 @@ return [
             'front' => [
                 'af_adaptivethemeframework_name' => 'Adaptive Theme Framework',
                 'af_adaptivethemeframework_description' => 'Адаптивный слой представления на основе компонентных слотов.',
+                'atf_pm_compose' => 'Написать ЛС',
+                'atf_pm_tracking' => 'Отслеживание',
+                'atf_pm_advanced_search' => 'Расширенный поиск',
+                'atf_pm_edit_folders' => 'Редактировать папки',
+                'atf_pm_clear_folders' => 'Очистить папки',
+                'atf_pm_export' => 'Экспорт сообщений',
             ],
             'admin' => [
                 'af_adaptivethemeframework_group' => 'AF: Adaptive Theme Framework',
@@ -49,6 +55,12 @@ return [
             'front' => [
                 'af_adaptivethemeframework_name' => 'Adaptive Theme Framework',
                 'af_adaptivethemeframework_description' => 'Adaptive presentation layer based on component slots.',
+                'atf_pm_compose' => 'Compose message',
+                'atf_pm_tracking' => 'Tracking',
+                'atf_pm_advanced_search' => 'Advanced search',
+                'atf_pm_edit_folders' => 'Edit folders',
+                'atf_pm_clear_folders' => 'Clear folders',
+                'atf_pm_export' => 'Export messages',
             ],
             'admin' => [
                 'af_adaptivethemeframework_group' => 'AF: Adaptive Theme Framework',

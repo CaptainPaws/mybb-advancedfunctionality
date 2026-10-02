@@ -85,14 +85,16 @@ if (!af_adaptivethemeframework_register_pm_providers()
 $pmContext = af_adaptivethemeframework_pm_context([
     'action' => 'read', 'folder_id' => 7, 'folder_name' => 'Custom',
     'uid' => 42, 'current_url' => 'private.php?action=read&pmid=9',
+    'folders' => [1 => 'Inbox', 2 => 'Sent', 5 => 'Custom'],
+    'can_send' => true, 'can_track' => true,
 ], [
-    'usercpnav' => '<usercp>', 'folderjump' => '<jump>', 'folderoplist' => '<options>',
     'pmspacebar' => '<quota>', 'limitwarning' => '<warning>', 'multipage' => '<pages>',
     'composelink' => '<compose>', 'emptyexportlink' => '<empty-export>',
 ]);
 if ($pmContext['folder'] !== ['id' => 7, 'name' => 'Custom']
     || $pmContext['user']['uid'] !== 42
-    || af_adaptivethemeframework_render_slot('pm.navigation', $pmContext) !== '<usercp><jump><options>'
+    || !str_contains(af_adaptivethemeframework_render_slot('pm.navigation', $pmContext), 'private.php?fid=5')
+    || !str_contains(af_adaptivethemeframework_render_slot('pm.navigation', $pmContext), 'action=advanced_search')
     || af_adaptivethemeframework_render_slot('pm.quota', $pmContext) !== '<quota>'
     || af_adaptivethemeframework_render_slot('pm.notice', $pmContext) !== '<warning>'
     || af_adaptivethemeframework_render_slot('pm.pagination', $pmContext) !== '<pages>'
