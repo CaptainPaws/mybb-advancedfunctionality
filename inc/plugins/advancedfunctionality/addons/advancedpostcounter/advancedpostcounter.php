@@ -1042,6 +1042,14 @@ function af_advancedpostcounter_postbit(array &$post): void
 
     $marker = sprintf(AF_APC_MARK_POST, $uid);
 
+    if (function_exists('af_adaptivethemeframework_render_slot')) {
+        // ATF owns placement. Legacy variables/fallback mutation remain an
+        // ATF-off compatibility path only.
+        $post['advancedpostcounter'] = '';
+        $post['af_apc_atf_html'] = $marker;
+        return;
+    }
+
     // Всегда задаём переменную для шаблона (если она там есть)
     $post['advancedpostcounter'] = $marker;
 
@@ -1092,6 +1100,15 @@ function af_advancedpostcounter_postbit(array &$post): void
     } elseif (strpos($post['user_details'], $marker) === false) {
         $post['user_details'] .= "\n" . $marker . "\n";
     }
+}
+
+function af_advancedpostcounter_register_atf_provider(): bool
+{
+    if (!function_exists('af_adaptivethemeframework_register_component')) return false;
+    return af_adaptivethemeframework_register_component([
+        'owner' => AF_APC_ID, 'key' => 'post_counter', 'slot' => 'post.post_counter',
+        'renderer' => static fn(array $context): string => (string)($context['post']['af_apc_atf_html'] ?? ''),
+    ]);
 }
 
 function af_advancedpostcounter_member_profile_end(): void
@@ -1558,6 +1575,7 @@ function af_advancedpostcounter_init(): void
         return;
     }
     $done = true;
+    af_advancedpostcounter_register_atf_provider();
 
     // язык можно грузить здесь — init точно вызывается ядром AF
     af_advancedpostcounter_lang();

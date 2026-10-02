@@ -271,6 +271,30 @@ function af_apui_register_hooks(): void
 }
 af_apui_register_hooks();
 
+/** Expose APUI composition through ATF values, never through its wrapper DOM. */
+function af_apui_register_atf_post_providers(): bool
+{
+    if (!function_exists('af_adaptivethemeframework_register_component')) return false;
+    $mapping = [
+        'identity' => ['post.author.identity', 'profilelink'],
+        'meta' => ['post.author.meta', 'af_apui_presence_html'],
+        'profile_fields' => ['post.author.profile_fields', 'af_apui_profile_fields_html'],
+        'rail' => ['post.author.rail', 'af_apui_author_statistics_html'],
+        'plaque' => ['post.author.plaque', 'af_apui_plaque_html'],
+        // CharacterSheets remains the renderer; this is its APUI-composed output.
+        'character' => ['post.author.character', 'af_apui_actionbar_html'],
+    ];
+    $registered = false;
+    foreach ($mapping as $key => [$slot, $field]) {
+        $registered = af_adaptivethemeframework_register_component([
+            'owner' => AF_APUI_ID, 'key' => 'post_' . $key, 'slot' => $slot,
+            'renderer' => static fn(array $context): string => (string)($context['post'][$field] ?? ''),
+        ]) || $registered;
+    }
+    return $registered;
+}
+af_apui_register_atf_post_providers();
+
 function af_apui_get_css_delivery_mode(): string
 {
     global $mybb;

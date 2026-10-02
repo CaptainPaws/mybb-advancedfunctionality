@@ -14,6 +14,51 @@ the addon's manifest-based permission metadata.
 
 ## Component slot contract
 
+### Postbit provider contract
+
+ATF prepares both `postbit` and `postbit_classic` through the same provider
+pipeline; it does not replace either template yet. At the late postbit hook the
+composed values are available in `$post['af_atf_slots']`, keyed by slot name.
+`$post['af_atf_context']` contains only `pid`, `tid`, and `uid` for diagnostics.
+
+Provider renderers receive `pid`, `tid`, `uid`, and a curated `post` value. The
+curated value is not the complete MyBB post row. It contains rendered identity,
+author metadata, body-adjacent fragments, APUI composition values,
+`af_aa_user_class`, and already permission-checked native action controls. A
+provider must not assume any `.af-apui-postbit` element exists. Passing a full
+post row requires a new, documented provider-specific justification.
+
+The current mapping is:
+
+| Provider value | ATF slot |
+| --- | --- |
+| APUI `profilelink` | `post.author.identity` |
+| APUI presence | `post.author.meta` |
+| APUI profile fields | `post.author.profile_fields` |
+| APUI author statistics | `post.author.rail` |
+| APUI/AdvancedAppearance plaque | `post.author.plaque` |
+| CharacterSheets action composed by APUI | `post.author.character` |
+| AdvancedPostCounter marker/output | `post.post_counter` |
+| Native MyBB/AAM action buttons | `post.actions` |
+
+`post.before_body` and `post.after_body` are intentionally available extension
+points and remain empty until a provider registers content. Native actions are
+forwarded as rendered HTML so edit, delete/restore, approve/unapprove, quote,
+multiquote/reply, report, mention, warning and PM controls retain MyBB's
+permission checks and JavaScript attributes.
+
+With ATF disabled, APUI continues to own its existing `postbit_classic` output
+and AdvancedPostCounter continues to populate `$post['advancedpostcounter']`
+and its legacy fallback. With ATF enabled, PostCounter uses only
+`post.post_counter`; the legacy variable is kept empty to prevent duplication.
+APUI still emits its named `$post['af_apui_*']` variables for the unchanged
+legacy template during this preparation phase.
+
+The only remaining DOM dependencies are in the legacy APUI template/CSS/JS
+presentation path. Provider transport has none. The retired Adaptive Responsive
+Layout DOM-moving runtime is deliberately outside this contract and is neither
+loaded nor emulated by ATF.
+
 Providers call `af_adaptivethemeframework_register_component()` with `owner`,
 `key`, `slot`, and either a callable `renderer` or static `html`. The stable
 identity is `owner::key`, so registering it twice (including in a different
