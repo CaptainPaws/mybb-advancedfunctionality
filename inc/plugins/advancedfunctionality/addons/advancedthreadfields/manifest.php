@@ -12,6 +12,10 @@ return [
     'author'   => 'CaptainPaws',
     'website'     => 'https://github.com/CaptainPaws',
     'bootstrap'   => 'advancedthreadfields.php',
+    // Activation recovery removes only this addon's exact legacy injections.
+    'compatibility_providers' => [
+        'adaptivethemeframework' => 'af_atf_register_atf_compatibility_normalizer',
+    ],
 
     'frontend' => [
         'mode' => 'contextual',
