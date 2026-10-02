@@ -163,6 +163,7 @@ function af_adaptivethemeframework_init(): void
 {
     global $plugins;
     af_adaptivethemeframework_register_thread_providers();
+    af_adaptivethemeframework_register_post_providers();
     if (is_object($plugins) && method_exists($plugins, 'add_hook')) {
         $plugins->add_hook('pre_output_page', 'af_adaptivethemeframework_mark_page', 100);
         // MyBB has finished deriving every forumdisplay value at this point.
@@ -170,6 +171,62 @@ function af_adaptivethemeframework_init(): void
         // topic-card DOM or patching their legacy template variables.
         $plugins->add_hook('forumdisplay_thread_end', 'af_adaptivethemeframework_compose_thread_card', 100);
         $plugins->add_hook('showthread_end', 'af_adaptivethemeframework_compose_showthread', 100);
+        $plugins->add_hook('postbit', 'af_adaptivethemeframework_compose_postbit', 1000);
+        $plugins->add_hook('postbit_prev', 'af_adaptivethemeframework_compose_postbit', 1000);
+        $plugins->add_hook('postbit_pm', 'af_adaptivethemeframework_compose_postbit', 1000);
+    }
+}
+
+/** Register native controls as one indivisible, permission-safe provider. */
+function af_adaptivethemeframework_register_post_providers(): bool
+{
+    return af_adaptivethemeframework_register_component([
+        'owner' => 'mybb', 'key' => 'post_actions', 'slot' => 'post.actions',
+        'renderer' => static fn(array $context): string => (string)($context['post']['actions_html'] ?? ''),
+    ]);
+}
+
+/**
+ * Closed post-provider contract: pid/tid/uid and a curated `post` payload.
+ * The payload is deliberately not the complete MyBB row. Native controls are
+ * passed through rather than rebuilt, preserving permissions and tokens.
+ */
+function af_adaptivethemeframework_post_context(array $post): array
+{
+    $actionKeys = [
+        'button_email', 'button_pm', 'button_www', 'button_find', 'button_rep',
+        'button_edit', 'button_quickdelete', 'button_quickrestore', 'button_quote',
+        'button_multiquote', 'button_report', 'button_warn', 'button_purgespammer',
+        'button_approve', 'button_unapprove', 'button_restore',
+        'button_reply_pm', 'button_replyall_pm', 'button_forward_pm', 'button_delete_pm',
+    ];
+    $actions = '';
+    foreach ($actionKeys as $key) $actions .= (string)($post[$key] ?? '');
+    $keys = [
+        'username', 'profilelink', 'useravatar', 'usertitle', 'groupimage', 'userstars',
+        'postdate', 'posturl', 'subject', 'subject_extra', 'icon', 'editedmsg',
+        'attachments', 'signature', 'iplogged', 'poststatus', 'input_editreason',
+        'af_aa_user_class', 'af_apui_presence_html', 'af_apui_profile_fields_html',
+        'af_apui_author_statistics_html', 'af_apui_actionbar_html', 'af_apui_rail_html',
+        'af_apui_plaque_html', 'advancedpostcounter', 'af_apc_atf_html',
+    ];
+    $data = ['actions_html' => $actions];
+    foreach ($keys as $key) $data[$key] = (string)($post[$key] ?? '');
+    return ['pid' => max(0, (int)($post['pid'] ?? 0)),
+        'tid' => max(0, (int)($post['tid'] ?? 0)),
+        'uid' => max(0, (int)($post['uid'] ?? 0)), 'post' => $data];
+}
+
+/** Materialize every post slot without imposing a DOM or changing templates. */
+function af_adaptivethemeframework_compose_postbit(array &$post): void
+{
+    $context = af_adaptivethemeframework_post_context($post);
+    $post['af_atf_context'] = ['pid' => $context['pid'], 'tid' => $context['tid'], 'uid' => $context['uid']];
+    $post['af_atf_slots'] = [];
+    foreach (af_adaptivethemeframework_slots() as $slot) {
+        if (strncmp($slot, 'post.', 5) === 0) {
+            $post['af_atf_slots'][$slot] = af_adaptivethemeframework_render_slot($slot, $context);
+        }
     }
 }
 
