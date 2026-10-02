@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.18.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.19.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -452,8 +452,8 @@ function af_adaptivethemeframework_render_pm_navigation(array $context): string
     $escape = static fn(string $value): string => function_exists('htmlspecialchars_uni')
         ? htmlspecialchars_uni($value)
         : htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    $label = static function(string $key, string $fallback) use ($lang, $escape): string {
-        $value = is_object($lang) && isset($lang->{$key}) ? (string)$lang->{$key} : $fallback;
+    $label = static function(string $key) use ($lang, $escape): string {
+        $value = is_object($lang) && isset($lang->{$key}) ? (string)$lang->{$key} : $key;
         return $escape($value);
     };
     $link = static function(string $key, string $url, string $text) use (&$current, $escape): string {
@@ -464,7 +464,7 @@ function af_adaptivethemeframework_render_pm_navigation(array $context): string
 
     $primary = '';
     if (!empty($context['permissions']['send'])) {
-        $primary .= $link('compose', 'private.php?action=send', $label('atf_pm_compose', 'Написать ЛС'));
+        $primary .= $link('compose', 'private.php?action=send', $label('atf_pm_compose'));
     }
     $unreadLabel = is_object($lang) ? (string)($lang->folder_unread ?? '') : '';
     foreach ((array)($context['folders'] ?? []) as $id => $name) {
@@ -484,14 +484,14 @@ function af_adaptivethemeframework_render_pm_navigation(array $context): string
 
     $management = '';
     if (!empty($context['permissions']['track'])) {
-        $management .= $link('tracking', 'private.php?action=tracking', $label('atf_pm_tracking', 'Отслеживание'));
+        $management .= $link('tracking', 'private.php?action=tracking', $label('atf_pm_tracking'));
     }
-    $management .= $link('search', 'private.php?action=advanced_search', $label('atf_pm_advanced_search', 'Расширенный поиск'));
-    $management .= $link('folders', 'private.php?action=folders', $label('atf_pm_edit_folders', 'Редактировать папки'));
-    $management .= $link('empty', 'private.php?action=empty', $label('atf_pm_clear_folders', 'Очистить папки'));
-    $management .= $link('export', 'private.php?action=export', $label('atf_pm_export', 'Экспорт сообщений'));
+    $management .= $link('search', 'private.php?action=advanced_search', $label('atf_pm_advanced_search'));
+    $management .= $link('folders', 'private.php?action=folders', $label('atf_pm_edit_folders'));
+    $management .= $link('empty', 'private.php?action=empty', $label('atf_pm_clear_folders'));
+    $management .= $link('export', 'private.php?action=export', $label('atf_pm_export'));
 
-    return '<nav class="atf-pm-navigation" aria-label="'.$label('private_messaging', 'Личные сообщения').'">'
+    return '<nav class="atf-pm-navigation" aria-label="'.$label('private_messaging').'">'
         .'<div class="atf-pm-navigation__group"><ul>'.$primary.'</ul></div>'
         .'<div class="atf-pm-navigation__group atf-pm-navigation__group--management"><ul>'.$management.'</ul></div>'
         .'</nav>';
@@ -872,8 +872,8 @@ function af_adaptivethemeframework_ucp_register_navigation_provider(array $item)
         }
     }
     $label = $item['label'] ?? '';
-    if (!is_string($label) || trim($label) === '' || $label !== strip_tags($label) || preg_match('~[<>]~', $label)) {
-        return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'invalid label');
+    if (!is_string($label) || !preg_match('~^[a-z][a-z0-9_]*$~', $label)) {
+        return af_adaptivethemeframework_ucp_navigation_error($provider, $key, 'label must be a language key');
     }
     $icon = (string)($item['icon'] ?? '');
     if ($icon !== '' && !in_array($icon, af_adaptivethemeframework_ucp_icon_tokens(), true)) {
@@ -942,23 +942,23 @@ function af_adaptivethemeframework_ucp_seed_navigation(): void
             'active'=>['scripts'=>[$script], 'actions'=>$actions], 'children'=>[],
         ]);
     };
-    $def('overview','', 'usercp.php',[], 'ucp_nav_home','home',10,$access,['','do_notepad']);
-    $def('profile','', 'usercp.php',['action'=>'profile'], 'Profile','user',20,$access,['profile','do_profile','avatar','do_avatar','editsig','do_editsig']);
+    $def('overview','', 'usercp.php',[], 'atf_ucp_nav_overview','home',10,$access,['','do_notepad']);
+    $def('profile','', 'usercp.php',['action'=>'profile'], 'atf_ucp_nav_profile','user',20,$access,['profile','do_profile','avatar','do_avatar','editsig','do_editsig']);
     $def('profile.edit','profile','usercp.php',['action'=>'profile'],'ucp_nav_edit_profile','user',10,$access,['profile','do_profile']);
     $def('profile.avatar','profile','usercp.php',['action'=>'avatar'],'ucp_nav_change_avatar','user',20,static function(): bool { global $mybb; return af_adaptivethemeframework_ucp_can_access() && !empty($mybb->usergroup['canchangeavatar']); },['avatar','do_avatar']);
     $def('profile.signature','profile','usercp.php',['action'=>'editsig'],'ucp_nav_edit_sig','file',30,'af_adaptivethemeframework_ucp_signature_visible',['editsig','do_editsig']);
-    $def('profile.public','profile','member.php',['action'=>'profile','uid'=>'{uid}'],'View public profile','user',40,$access,[]);
+    $def('profile.public','profile','member.php',['action'=>'profile','uid'=>'{uid}'],'atf_ucp_nav_public_profile','user',40,$access,[]);
     $GLOBALS['af_adaptivethemeframework_ucp_navigation']['profile.public']['external'] = true;
-    $def('preferences','', 'usercp.php',['action'=>'options'],'Preferences','sliders',30,$access,['options','do_options']);
-    $def('preferences.general','preferences','usercp.php',['action'=>'options'],'General preferences','sliders',10,$access,['options','do_options']);
-    $def('security','', 'usercp.php',['action'=>'password'],'Security','shield',40,$access,['password','do_password','email','do_email','changename','do_changename']);
-    $def('security.password','security','usercp.php',['action'=>'password'],'Password','shield',10,$access,['password','do_password']);
-    $def('security.email','security','usercp.php',['action'=>'email'],'Email','envelope',20,$access,['email','do_email']);
-    $def('security.username','security','usercp.php',['action'=>'changename'],'Username','user',30,static function(): bool { global $mybb; return af_adaptivethemeframework_ucp_can_access() && (int)($mybb->usergroup['canchangename'] ?? 0) !== 0; },['changename','do_changename']);
-    $def('social','', 'usercp.php',['action'=>'editlists'],'Social','users',50,$access,['editlists','do_editlists','acceptrequest','declinerequest','cancelrequest','usergroups']);
-    $def('social.lists','social','usercp.php',['action'=>'editlists'],'Buddy / Ignore','users',10,$access,['editlists','do_editlists','acceptrequest','declinerequest','cancelrequest']);
-    $def('social.groups','social','usercp.php',['action'=>'usergroups'],'Group memberships','users',20,$access,['usergroups']);
-    $def('subscriptions','', 'usercp.php',['action'=>'subscriptions'],'Subscriptions','bookmark',60,$access,['subscriptions','do_subscriptions','forumsubscriptions','addsubscription','do_addsubscription','removesubscription','removesubscriptions']);
+    $def('preferences','', 'usercp.php',['action'=>'options'],'atf_ucp_nav_preferences','sliders',30,$access,['options','do_options']);
+    $def('preferences.general','preferences','usercp.php',['action'=>'options'],'atf_ucp_nav_general_preferences','sliders',10,$access,['options','do_options']);
+    $def('security','', 'usercp.php',['action'=>'password'],'atf_ucp_nav_security','shield',40,$access,['password','do_password','email','do_email','changename','do_changename']);
+    $def('security.password','security','usercp.php',['action'=>'password'],'atf_ucp_nav_password','shield',10,$access,['password','do_password']);
+    $def('security.email','security','usercp.php',['action'=>'email'],'atf_ucp_nav_email','envelope',20,$access,['email','do_email']);
+    $def('security.username','security','usercp.php',['action'=>'changename'],'atf_ucp_nav_username','user',30,static function(): bool { global $mybb; return af_adaptivethemeframework_ucp_can_access() && (int)($mybb->usergroup['canchangename'] ?? 0) !== 0; },['changename','do_changename']);
+    $def('social','', 'usercp.php',['action'=>'editlists'],'atf_ucp_nav_social','users',50,$access,['editlists','do_editlists','acceptrequest','declinerequest','cancelrequest','usergroups']);
+    $def('social.lists','social','usercp.php',['action'=>'editlists'],'atf_ucp_nav_buddy_ignore','users',10,$access,['editlists','do_editlists','acceptrequest','declinerequest','cancelrequest']);
+    $def('social.groups','social','usercp.php',['action'=>'usergroups'],'atf_ucp_nav_group_memberships','users',20,$access,['usergroups']);
+    $def('subscriptions','', 'usercp.php',['action'=>'subscriptions'],'atf_ucp_nav_subscriptions','bookmark',60,$access,['subscriptions','do_subscriptions','forumsubscriptions','addsubscription','do_addsubscription','removesubscription','removesubscriptions']);
     $subscriptionContext = static function(array $route, array $item): bool {
         $action=$route['action']; if (!in_array($action,['addsubscription','do_addsubscription','removesubscription','removesubscriptions'],true)) return true;
         $type=$route['type']; $tid=$route['tid']; $fid=$route['fid'];
@@ -966,12 +966,12 @@ function af_adaptivethemeframework_ucp_seed_navigation(): void
             ? ($type==='forum' && $fid>0 && $tid===0)
             : (in_array($type, ['', 'thread'], true) && $tid>0 && $fid===0);
     };
-    af_adaptivethemeframework_ucp_register_navigation_provider(['provider'=>'mybb','key'=>'subscriptions.threads','parent'=>'subscriptions','route'=>['script'=>'usercp.php','query'=>['action'=>'subscriptions']],'label'=>'Threads','icon'=>'bookmark','weight'=>10,'visibility'=>$access,'active'=>['scripts'=>['usercp.php'],'actions'=>['subscriptions','do_subscriptions','addsubscription','do_addsubscription','removesubscription','removesubscriptions'],'context'=>$subscriptionContext],'children'=>[]]);
-    af_adaptivethemeframework_ucp_register_navigation_provider(['provider'=>'mybb','key'=>'subscriptions.forums','parent'=>'subscriptions','route'=>['script'=>'usercp.php','query'=>['action'=>'forumsubscriptions']],'label'=>'Forums','icon'=>'bookmark','weight'=>20,'visibility'=>$access,'active'=>['scripts'=>['usercp.php'],'actions'=>['forumsubscriptions','addsubscription','do_addsubscription','removesubscription','removesubscriptions'],'context'=>$subscriptionContext],'children'=>[]]);
-    $def('content','', 'usercp.php',['action'=>'drafts'],'Content','file',70,$access,['drafts','do_drafts','attachments','do_attachments']);
-    $def('content.drafts','content','usercp.php',['action'=>'drafts'],'Drafts','file',10,$access,['drafts','do_drafts']);
-    $def('content.attachments','content','usercp.php',['action'=>'attachments'],'Attachments','file',20,static function(): bool { global $mybb; return af_adaptivethemeframework_ucp_can_access() && !empty($mybb->settings['enableattachments']); },['attachments','do_attachments']);
-    $def('messages','', 'private.php',[], 'Messages','envelope',80,static function(): bool { global $mybb; return (int)($mybb->user['uid']??0)>0 && !empty($mybb->settings['enablepms']) && !empty($mybb->usergroup['canusepms']); },[]);
+    af_adaptivethemeframework_ucp_register_navigation_provider(['provider'=>'mybb','key'=>'subscriptions.threads','parent'=>'subscriptions','route'=>['script'=>'usercp.php','query'=>['action'=>'subscriptions']],'label'=>'atf_ucp_nav_threads','icon'=>'bookmark','weight'=>10,'visibility'=>$access,'active'=>['scripts'=>['usercp.php'],'actions'=>['subscriptions','do_subscriptions','addsubscription','do_addsubscription','removesubscription','removesubscriptions'],'context'=>$subscriptionContext],'children'=>[]]);
+    af_adaptivethemeframework_ucp_register_navigation_provider(['provider'=>'mybb','key'=>'subscriptions.forums','parent'=>'subscriptions','route'=>['script'=>'usercp.php','query'=>['action'=>'forumsubscriptions']],'label'=>'atf_ucp_nav_forums','icon'=>'bookmark','weight'=>20,'visibility'=>$access,'active'=>['scripts'=>['usercp.php'],'actions'=>['forumsubscriptions','addsubscription','do_addsubscription','removesubscription','removesubscriptions'],'context'=>$subscriptionContext],'children'=>[]]);
+    $def('content','', 'usercp.php',['action'=>'drafts'],'atf_ucp_nav_content','file',70,$access,['drafts','do_drafts','attachments','do_attachments']);
+    $def('content.drafts','content','usercp.php',['action'=>'drafts'],'atf_ucp_nav_drafts','file',10,$access,['drafts','do_drafts']);
+    $def('content.attachments','content','usercp.php',['action'=>'attachments'],'atf_ucp_nav_attachments','file',20,static function(): bool { global $mybb; return af_adaptivethemeframework_ucp_can_access() && !empty($mybb->settings['enableattachments']); },['attachments','do_attachments']);
+    $def('messages','', 'private.php',[], 'atf_ucp_nav_messages','envelope',80,static function(): bool { global $mybb; return (int)($mybb->user['uid']??0)>0 && !empty($mybb->settings['enablepms']) && !empty($mybb->usergroup['canusepms']); },[]);
     foreach (($GLOBALS['af_adaptivethemeframework_pending_ucp_navigation'] ?? []) as $pending) {
         if (is_array($pending)) af_adaptivethemeframework_ucp_register_navigation_provider($pending);
     }
@@ -1046,8 +1046,8 @@ function af_adaptivethemeframework_render_ucp_navigation(string $level, array $c
         $links.='<li class="'.implode(' ',$classes).'"><a href="'.af_adaptivethemeframework_ucp_url($item).'"'.$attrs.'>'.$icon.'<span>'.af_adaptivethemeframework_ucp_label($item['label']).'</span>'.$badge.'</a></li>';
     }
     if ($links==='') return '';
-    $label=$level==='global' ? 'User control panel' : 'Section navigation';
-    return '<nav class="atf-ucp-navigation atf-ucp-navigation--'.$level.'" aria-label="'.$label.'"><ul>'.$links.'</ul></nav>';
+    $label=$level==='global' ? 'atf_ucp_navigation' : 'atf_ucp_section_navigation';
+    return '<nav class="atf-ucp-navigation atf-ucp-navigation--'.$level.'" aria-label="'.af_adaptivethemeframework_ucp_label($label).'"><ul>'.$links.'</ul></nav>';
 }
 
 /** The public, compatibility-audited slot catalogue. */
@@ -1285,6 +1285,13 @@ function af_adaptivethemeframework_template_seeds(): array
         'usercp' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp.html',
         'usercp_currentavatar' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_currentavatar.html',
         'usercp_notepad' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_notepad.html',
+        'usercp_latest_threads' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_latest_threads.html',
+        'usercp_latest_threads_threads' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_latest_threads_threads.html',
+        'usercp_latest_subscribed' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_latest_subscribed.html',
+        'usercp_latest_subscribed_threads' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_latest_subscribed_threads.html',
+        'usercp_warnings' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_warnings.html',
+        'usercp_warnings_warning' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_warnings_warning.html',
+        'usercp_warnings_warning_post' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_warnings_warning_post.html',
         'showthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread.html',
         'postbit_classic' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/postbit_classic.html',
         'private' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private.html',

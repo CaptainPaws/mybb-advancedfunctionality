@@ -260,9 +260,7 @@ body.atf-active .atf-tabs__item {
 
 body.atf-active .atf-tabs__item[aria-current="page"], body.atf-active .atf-tabs__item--active { color: var(--atf-color-text); border-color: var(--atf-color-accent); }
 
-/* UCP shell. Registry navigation and native Overview fragments share one DOM;
-   legacy tables inside thread/warning widgets are bounded, never used as the
-   page or navigation layout. */
+/* UCP shell. Registry navigation and native Overview fragments share one DOM. */
 body.atf-active .atf-ucp { min-width: 0; padding-block: var(--atf-space-5); }
 body.atf-active .atf-ucp-navigation { min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
 body.atf-active .atf-ucp-navigation ul { display: flex; gap: var(--atf-space-2); width: max-content; min-width: 100%; padding: 0 0 var(--atf-space-1); margin: 0; list-style: none; }
@@ -286,9 +284,33 @@ body.atf-active .atf-ucp-summary__meta > div { display: flex; flex-wrap: wrap; g
 body.atf-active .atf-ucp-summary__meta dt { font-weight: var(--atf-font-weight-bold); }
 body.atf-active .atf-ucp-summary__meta dd { margin: 0; }
 body.atf-active .atf-ucp-widgets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-body.atf-active .atf-ucp-widget { min-width: 0; overflow-x: auto; }
+body.atf-active .atf-ucp-widget { min-width: 0; }
 body.atf-active .atf-ucp-widget > br:first-child { display: none; }
-body.atf-active .atf-ucp-widget table { width: 100%; max-width: 100%; }
+body.atf-active .atf-ucp-thread-widget,
+body.atf-active .atf-ucp-warning-widget { height: 100%; box-sizing: border-box; }
+body.atf-active .atf-ucp-thread-widget__header,
+body.atf-active .atf-ucp-warning-widget__header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--atf-space-2); }
+body.atf-active .atf-ucp-thread-widget__header h2,
+body.atf-active .atf-ucp-warning-widget__header h2,
+body.atf-active .atf-ucp-thread-card__title { margin: 0; }
+body.atf-active .atf-ucp-thread-list,
+body.atf-active .atf-ucp-warning-list { display: grid; gap: var(--atf-space-3); }
+body.atf-active .atf-ucp-thread-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(9rem, auto); gap: var(--atf-space-3); align-items: center; padding-block: var(--atf-space-3); border-block-start: 1px solid var(--atf-color-border); }
+body.atf-active .atf-ucp-thread-card__status { display: flex; gap: var(--atf-space-1); align-items: center; }
+body.atf-active .atf-ucp-thread-card__main { min-width: 0; }
+body.atf-active .atf-ucp-thread-card__title { font-size: var(--atf-font-size-md); overflow-wrap: anywhere; }
+body.atf-active .atf-ucp-thread-card__meta { display: flex; flex-wrap: wrap; gap: var(--atf-space-1) var(--atf-space-3); color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }
+body.atf-active .atf-ucp-thread-card__stats,
+body.atf-active .atf-ucp-warning-card__meta { display: flex; gap: var(--atf-space-3); margin: 0; }
+body.atf-active .atf-ucp-thread-card__stats div,
+body.atf-active .atf-ucp-warning-card__meta div { display: grid; gap: var(--atf-space-1); }
+body.atf-active .atf-ucp-thread-card__stats dt,
+body.atf-active .atf-ucp-warning-card__meta dt { color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }
+body.atf-active .atf-ucp-thread-card__stats dd,
+body.atf-active .atf-ucp-warning-card__meta dd { margin: 0; }
+body.atf-active .atf-ucp-thread-card__lastpost { display: grid; gap: var(--atf-space-1); font-size: var(--atf-font-size-sm); }
+body.atf-active .atf-ucp-warning-card { display: grid; gap: var(--atf-space-3); padding-block: var(--atf-space-3); border-block-start: 1px solid var(--atf-color-border); }
+body.atf-active .atf-ucp-warning-card__post { display: block; }
 body.atf-active .atf-ucp-notepad { min-width: 0; height: 100%; box-sizing: border-box; }
 body.atf-active .atf-ucp-notepad__input { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; resize: vertical; }
 body.atf-active .atf-ucp-notepad__actions { text-align: end; }
@@ -400,6 +422,10 @@ body.atf-active .atf-profile__post-counter:empty, body.atf-active .atf-profile__
   body.atf-active .atf-ucp-summary__body { grid-template-columns: minmax(0, 1fr); }
   body.atf-active .atf-ucp__header { align-items: stretch; flex-direction: column; }
   body.atf-active .atf-ucp-widget { max-width: 100%; }
+  body.atf-active .atf-ucp-thread-card { grid-template-columns: auto minmax(0, 1fr); }
+  body.atf-active .atf-ucp-thread-card__stats,
+  body.atf-active .atf-ucp-thread-card__lastpost { grid-column: 2; }
+  body.atf-active .atf-ucp-warning-card__meta { flex-wrap: wrap; }
 }
 
 /* Narrow mobile */
