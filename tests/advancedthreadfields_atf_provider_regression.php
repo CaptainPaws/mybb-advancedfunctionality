@@ -72,6 +72,9 @@ $GLOBALS['test_enabled']['advancedthreadfields'] = false;
 if (af_adaptivethemeframework_render_slot('thread.meta_chips', $context) !== '') {
     throw new RuntimeException('Disabled metadata provider did not leave its slot empty.');
 }
+if (af_adaptivethemeframework_render_slot('thread.atf_fields', ['tid' => 11, 'fid' => 3]) !== '') {
+    throw new RuntimeException('Disabled showthread fields provider did not leave its slot empty.');
+}
 $GLOBALS['test_enabled']['advancedthreadfields'] = true;
 $GLOBALS['test_enabled']['adaptivethemeframework'] = false;
 af_atf_forumdisplay_thread();

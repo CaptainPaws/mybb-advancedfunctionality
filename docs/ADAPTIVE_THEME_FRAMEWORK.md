@@ -66,6 +66,31 @@ markers remain available for rollback but produce no duplicate output; with
 ATF inactive the existing template variables and marker replacement continue
 to operate.
 
+### Showthread context
+
+Future showthread composition must build its closed context with
+`af_adaptivethemeframework_showthread_context()`. Identity and metadata are
+`tid`, `fid`, owner `uid`/`username`, `subject`, `dateline`, and `lastpost`.
+`thread.meta` is reserved for additional metadata providers; there is no real
+provider today because core owner/forum/date presentation needs no separate
+business-data renderer. Thread fields are the real `thread.atf_fields`
+provider and use only `tid` and `fid`.
+
+Rendered MyBB contracts are passed explicitly as `posts_html`,
+`breadcrumbs_html`, `quickreply_html`, `moderation_html`, `poll_html`,
+`thread_tools_html`, `pagination_html`, and `javascript_html`. The layout must
+retain both `#posts_container` and `#posts`, and must preserve the generated
+post IDs, edit/delete/quick-edit/report controls, moderation permissions and
+tokens, poll, tools, pagination, quick reply, and MyBB JavaScript globals.
+The `thread.breadcrumbs` core provider returns `breadcrumbs_html`; it never
+searches APUI comments or normalizes APUI DOM.
+
+Until the showthread ownership migration, APUI remains presentation owner and
+the `<!--AF_ATF_SHOW-->`, `<!--AF_APUI_THREAD_BREADCRUMBS_TOP-->`, and
+`<!--AF_APUI_THREAD_BREADCRUMBS_BOTTOM-->` paths remain ATF-off compatibility
+fallbacks. In the next phase ATF becomes presentation owner while APUI remains
+only a data/provider owner; the new layout must compose the two slots directly.
+
 ## Design-system contract
 
 ATF visual primitives use the `atf-` prefix. Components use BEM-style
