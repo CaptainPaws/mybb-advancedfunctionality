@@ -1,0 +1,42 @@
+<html>
+<head>
+<title>{$mybb->settings['bbname']} - {$lang->edit_profile}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+<main class="atf-page atf-ucp atf-ucp-form" id="content">
+<div class="atf-stack">
+{$atf_ucp_global_navigation}
+{$atf_ucp_local_navigation}
+<header class="atf-ucp__header"><h1 class="atf-ucp__title">{$lang->edit_profile}</h1></header>
+{$errors}
+<form action="usercp.php" method="post" name="input" class="atf-stack atf-profile-form">
+<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+<section class="atf-card atf-form-section">
+<h2>{$lang->profile_required}</h2>
+<p class="atf-form-row__hint"><strong>{$lang->change_email_notice}</strong></p>
+<div class="atf-stack atf-profile-fields-provider">{$requiredfields}</div>
+</section>
+<section class="atf-card atf-form-section">
+<h2>{$lang->profile_optional}</h2>
+<div class="atf-form-row">
+<span class="atf-form-row__label">{$lang->birthday}</span>
+<div class="atf-form-row__controls atf-form-row__controls--date">
+<select name="bday1" aria-label="{$lang->birthday}"><option value="">&nbsp;</option>{$bdaydaysel}</select>
+<select name="bday2" aria-label="{$lang->birthday}"><option value="">&nbsp;</option><option value="1" {$bdaymonthsel['1']}>{$lang->month_1}</option><option value="2" {$bdaymonthsel['2']}>{$lang->month_2}</option><option value="3" {$bdaymonthsel['3']}>{$lang->month_3}</option><option value="4" {$bdaymonthsel['4']}>{$lang->month_4}</option><option value="5" {$bdaymonthsel['5']}>{$lang->month_5}</option><option value="6" {$bdaymonthsel['6']}>{$lang->month_6}</option><option value="7" {$bdaymonthsel['7']}>{$lang->month_7}</option><option value="8" {$bdaymonthsel['8']}>{$lang->month_8}</option><option value="9" {$bdaymonthsel['9']}>{$lang->month_9}</option><option value="10" {$bdaymonthsel['10']}>{$lang->month_10}</option><option value="11" {$bdaymonthsel['11']}>{$lang->month_11}</option><option value="12" {$bdaymonthsel['12']}>{$lang->month_12}</option></select>
+<input type="text" class="textbox" size="4" maxlength="4" name="bday3" value="{$bday['2']}" aria-label="{$lang->birthday}" />
+</div></div>
+<label class="atf-form-row"><span class="atf-form-row__label">{$lang->birthdayprivacy}</span><select name="birthdayprivacy"><option value="all"{$allselected}>{$lang->birthdayprivacyall}</option><option value="none"{$noneselected}>{$lang->birthdayprivacynone}</option><option value="age"{$ageselected}>{$lang->birthdayprivacyage}</option></select></label>
+{$website}
+</section>
+{$customfields}
+{$customtitle}
+{$awaysection}
+<div class="atf-form-actions"><input type="hidden" name="action" value="do_profile" /><input type="submit" class="button atf-button" name="regsubmit" value="{$lang->update_profile}" /></div>
+</form>
+</div>
+</main>
+{$footer}
+</body>
+</html>

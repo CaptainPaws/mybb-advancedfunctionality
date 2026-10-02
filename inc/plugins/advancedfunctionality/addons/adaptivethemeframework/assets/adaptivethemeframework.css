@@ -625,3 +625,43 @@ body.atf-active .atf-pm-archive__actions { display: flex; justify-content: cente
   body.atf-active .atf-pm-empty__count { grid-column: 1; text-align: start; color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }
   body.atf-active .atf-pm-empty__choice { grid-column: 2; grid-row: 1 / span 2; }
 }
+
+/* Profile UCP workspaces. Provider-owned custom fields are inserted as opaque
+   children; ATF neither parses nor rewrites their permission-sensitive HTML. */
+body.atf-active .atf-ucp-form,
+body.atf-active .atf-ucp-form form,
+body.atf-active .atf-form-section,
+body.atf-active .atf-profile-fields-provider { min-width: 0; }
+body.atf-active .atf-form-section { display: grid; gap: var(--atf-space-4); }
+body.atf-active .atf-form-section > h2,
+body.atf-active .atf-signature-preview > h2 { margin: 0; font-size: var(--atf-font-size-lg); }
+body.atf-active .atf-ucp-form .atf-form-row :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+body.atf-active .atf-ucp-form input[type="file"] { width: 100%; max-width: 100%; }
+body.atf-active .atf-form-row__controls { display: grid; gap: var(--atf-space-2); min-width: 0; }
+body.atf-active .atf-form-row__controls--date { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+body.atf-active .atf-form-row__choices { display: flex; flex-wrap: wrap; gap: var(--atf-space-2) var(--atf-space-4); }
+body.atf-active .atf-form-row__choices--stack { flex-direction: column; }
+body.atf-active fieldset.atf-form-row { padding: 0; border: 0; }
+body.atf-active .atf-form-choice { display: flex; gap: var(--atf-space-2); align-items: center; }
+body.atf-active .atf-form-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--atf-space-2); }
+body.atf-active .atf-avatar-current { display: flex; align-items: center; justify-content: space-between; gap: var(--atf-space-4); }
+body.atf-active .atf-avatar-current__copy { min-width: 0; }
+body.atf-active .atf-avatar-current__image { flex: 0 0 auto; }
+body.atf-active .atf-avatar-current__image img { display: block; max-width: min(10rem, 35vw); height: auto; }
+body.atf-active .atf-signature-editor { display: grid; grid-template-columns: minmax(10rem, .3fr) minmax(0, 1fr); gap: var(--atf-space-4); }
+body.atf-active .atf-signature-editor__aside,
+body.atf-active .atf-signature-editor__input,
+body.atf-active .atf-signature-editor__input > * { min-width: 0; max-width: 100%; }
+body.atf-active .atf-signature-editor textarea { box-sizing: border-box; width: 100%; max-width: 100%; resize: vertical; }
+body.atf-active .atf-signature-editor .sceditor-container { box-sizing: border-box; width: 100% !important; max-width: 100%; }
+body.atf-active .atf-signature-editor .sceditor-container iframe,
+body.atf-active .atf-signature-editor .sceditor-container textarea { max-width: 100%; }
+body.atf-active .atf-signature-preview { min-width: 0; overflow-wrap: anywhere; }
+body.atf-active .atf-signature-preview__body { margin-block-start: var(--atf-space-4); max-width: 100%; overflow-x: auto; }
+
+@media (max-width: 48rem) {
+  body.atf-active .atf-form-row__controls--date,
+  body.atf-active .atf-signature-editor { grid-template-columns: minmax(0, 1fr); }
+  body.atf-active .atf-avatar-current { align-items: flex-start; flex-direction: column; }
+  body.atf-active .atf-ucp-form :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { width: 100%; max-width: 100%; }
+}
