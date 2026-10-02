@@ -945,6 +945,30 @@ function af_adaptivethemeframework_mark_page(string &$page): void
         $page,
         1
     );
+
+    // Forumdisplay keeps MyBB's route-owned document template. Reuse its
+    // existing content root instead of adding a second wrapper around the
+    // legacy controls and the ATF-owned topic cards.
+    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'forumdisplay.php') {
+        $page = (string)preg_replace_callback(
+            '~<([a-z][a-z0-9]*)\b([^>]*\bid\s*=\s*(["\'])content\3[^>]*)>~i',
+            static function (array $match): string {
+                $attributes = $match[2];
+                $shellClasses = ['pun', 'atf-page-shell', 'atf-page', 'atf-forumdisplay'];
+                if (preg_match('~\bclass\s*=\s*(["\'])(.*?)\1~is', $attributes, $classMatch, PREG_OFFSET_CAPTURE)) {
+                    $classes = preg_split('~\s+~', trim($classMatch[2][0])) ?: [];
+                    $classes = array_values(array_unique(array_merge($classes, $shellClasses)));
+                    $replacement = 'class=' . $classMatch[1][0] . implode(' ', array_filter($classes)) . $classMatch[1][0];
+                    $attributes = substr_replace($attributes, $replacement, (int)$classMatch[0][1], strlen($classMatch[0][0]));
+                } else {
+                    $attributes .= ' class="' . implode(' ', $shellClasses) . '"';
+                }
+                return '<' . $match[1] . $attributes . '>';
+            },
+            $page,
+            1
+        );
+    }
 }
 
 /** Semantic icons accepted from UCP navigation providers. */
