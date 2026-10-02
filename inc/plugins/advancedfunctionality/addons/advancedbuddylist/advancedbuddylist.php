@@ -313,7 +313,7 @@ function af_abdl_button(string $action,int $uid,string $label,string $class=''):
 function af_abdl_icon_button(string $action,int $uid,string $label,string $icon='fa-user-plus'): string
 {
     global $mybb;
-    return '<form class="af-abdl-action" method="post" action="buddy.php"><input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'"><input type="hidden" name="action" value="'.$action.'"><input type="hidden" name="uid" value="'.$uid.'"><button class="af-abdl-btn af-abdl-icon-btn" type="submit" title="'.htmlspecialchars_uni($label).'" aria-label="'.htmlspecialchars_uni($label).'"><i class="fa-solid '.htmlspecialchars_uni($icon).'" aria-hidden="true"></i></button></form>';
+    return '<form class="af-abdl-action af-abdl-icon-action" method="post" action="buddy.php"><input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'"><input type="hidden" name="action" value="'.$action.'"><input type="hidden" name="uid" value="'.$uid.'"><button class="af-abdl-btn af-abdl-icon-btn" type="submit" title="'.htmlspecialchars_uni($label).'" aria-label="'.htmlspecialchars_uni($label).'"><i class="fa-solid '.htmlspecialchars_uni($icon).'" aria-hidden="true"></i></button></form>';
 }
 function af_abdl_search_action(int $uid,int $target): string
 {
