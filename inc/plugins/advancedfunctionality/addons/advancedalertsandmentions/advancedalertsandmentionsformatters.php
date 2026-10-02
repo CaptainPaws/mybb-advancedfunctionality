@@ -150,7 +150,7 @@ function af_aam_format_alert(array $alert): array
 
             // Куда вести:
             // логично — в списки друзей (там пользователь увидит добавленного/может добавить взаимно/управлять)
-            $url = 'usercp.php?action=editlists';
+            $url = !empty($extra['url']) ? (string)$extra['url'] : 'usercp.php?action=editlists';
             break;
 
         // --- Ответ в твоей теме ---

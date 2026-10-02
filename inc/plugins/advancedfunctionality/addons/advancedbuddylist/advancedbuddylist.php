@@ -310,6 +310,22 @@ function af_abdl_button(string $action,int $uid,string $label,string $class=''):
     global $mybb;
     return '<form class="af-abdl-action" method="post" action="buddy.php"><input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'"><input type="hidden" name="action" value="'.$action.'"><input type="hidden" name="uid" value="'.$uid.'"><button class="af-abdl-btn '.$class.'" type="submit">'.htmlspecialchars_uni($label).'</button></form>';
 }
+function af_abdl_icon_button(string $action,int $uid,string $label,string $icon='fa-user-plus'): string
+{
+    global $mybb;
+    return '<form class="af-abdl-action af-abdl-icon-action" method="post" action="buddy.php"><input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'"><input type="hidden" name="action" value="'.$action.'"><input type="hidden" name="uid" value="'.$uid.'"><button class="af-abdl-btn af-abdl-icon-btn" type="submit" title="'.htmlspecialchars_uni($label).'" aria-label="'.htmlspecialchars_uni($label).'"><i class="fa-solid '.htmlspecialchars_uni($icon).'" aria-hidden="true"></i></button></form>';
+}
+function af_abdl_search_action(int $uid,int $target): string
+{
+    global $db;
+    $relation=af_abdl_relation($uid,$target);
+    $ignored=(bool)$db->fetch_field($db->simple_select(AF_ABDL_IGNORES,'id',"uid={$uid} AND ignored_uid={$target}",['limit'=>1]),'id');
+    if ($ignored) return '<span class="af-abdl-chip">В игнор-листе</span>';
+    if (!$relation) return af_abdl_icon_button('add',$target,'Добавить в друзья');
+    if ($relation['status']==='accepted') return '<span class="af-abdl-chip">В друзьях</span>';
+    if ((int)$relation['requester_uid']===$uid) return '<span class="af-abdl-chip">Заявка отправлена</span>';
+    return '<span class="af-abdl-chip">Входящая заявка</span>';
+}
 function af_abdl_card(array $u,string $actions='',bool $pm=false): string
 {
     $id=(int)$u['uid']; $avatar=trim((string)$u['avatar']) ?: 'images/default_avatar.png';
@@ -345,8 +361,18 @@ function af_abdl_render_page(): void
     } elseif($tab==='ignore') {
         $ids=[];$q=$db->simple_select(AF_ABDL_IGNORES,'ignored_uid',"uid={$uid}",['order_by'=>'created_at','order_dir'=>'DESC']);while($r=$db->fetch_array($q))$ids[]=(int)$r['ignored_uid'];$users=af_abdl_fetch_users($ids);foreach($ids as $id)if(isset($users[$id]))$content.=af_abdl_card($users[$id],af_abdl_button('unignore',$id,'Убрать из игнор-листа'));$content=af_abdl_section('Игнор-лист',$content);
     } else {
-        $query=trim((string)($mybb->input['q']??'')); $content='<form class="af-abdl-search" method="get"><input type="hidden" name="tab" value="search"><input name="q" minlength="2" maxlength="50" value="'.htmlspecialchars_uni($query).'" placeholder="Имя пользователя"><button class="af-abdl-btn">Найти</button></form><div class="af-abdl-results">';
-        if(my_strlen($query)>=2){$esc=$db->escape_string_like($query);$q=$db->simple_select('users','uid,username,avatar,lastactive',"uid<>{$uid} AND username LIKE '%{$esc}%'",['order_by'=>'username','limit'=>25]);while($u=$db->fetch_array($q))$content.=af_abdl_card($u,af_abdl_action_buttons($uid,(int)$u['uid']));}$content.='</div>';
+        $query=trim((string)($mybb->input['q']??''));
+        $content='<form class="af-abdl-search" method="get"><input type="hidden" name="tab" value="search"><input name="q" minlength="2" maxlength="50" value="'.htmlspecialchars_uni($query).'" placeholder="Имя пользователя"><button class="af-abdl-btn">Найти</button></form><div class="af-abdl-results">';
+        $where="uid<>{$uid}";
+        if(my_strlen($query)>=2){
+            $esc=$db->escape_string_like($query);
+            $where.=" AND username LIKE '%{$esc}%'";
+        }
+        $q=$db->simple_select('users','uid,username,avatar,lastactive',$where,['order_by'=>'username','order_dir'=>'ASC','limit'=>50]);
+        while($u=$db->fetch_array($q)){
+            $content.=af_abdl_card($u,af_abdl_search_action($uid,(int)$u['uid']));
+        }
+        $content.='</div>';
     }
     $base=rtrim((string)$mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/'.AF_ABDL_ID.'/assets/';
     $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni($base.'advancedbuddylist.css?v=2').'"><script defer src="'.htmlspecialchars_uni($base.'advancedbuddylist.js?v=2').'"></script>';

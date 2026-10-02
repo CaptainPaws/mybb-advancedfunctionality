@@ -12,7 +12,7 @@
   var timer;
   document.addEventListener('input',function(event){
     if(!event.target.matches('.af-abdl-search input[name="q"]'))return;
-    clearTimeout(timer);var input=event.target;if(input.value.trim().length<2)return;
-    timer=setTimeout(function(){var url='buddy.php?tab=search&q='+encodeURIComponent(input.value.trim());fetch(url,{credentials:'same-origin'}).then(function(r){return r.text();}).then(replaceFrom);},300);
+    clearTimeout(timer);var input=event.target;var value=input.value.trim();if(value.length===1)return;
+    timer=setTimeout(function(){var url='buddy.php?tab=search'+(value.length>=2?'&q='+encodeURIComponent(value):'');fetch(url,{credentials:'same-origin'}).then(function(r){return r.text();}).then(replaceFrom);},300);
   });
 })();
