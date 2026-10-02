@@ -1,0 +1,16 @@
+<article class="atf-modcp-list-card atf-modcp-queue-card">
+  <header class="atf-modcp-queue-card__header">
+    <div class="atf-modcp-queue-card__identity">
+      <h3><a href="{$post['postlink']}#pid{$post['pid']}">{$post['subject']}</a></h3>
+      <div class="atf-meta">{$profile_link} · {$postdate}</div>
+    </div>
+  </header>
+  <div class="atf-modcp-queue-card__context">{$forum}{$thread}</div>
+  <div class="atf-modcp-queue-card__message">{$post['message']}</div>
+  <fieldset class="atf-modcp-queue-card__controls">
+    <legend>{$lang->controls}</legend>
+    <label class="label_radio_ignore"><input type="radio" class="radio radio_ignore" name="posts[{$post['pid']}]" value="ignore" checked="checked" /> {$lang->ignore}</label>
+    <label class="label_radio_delete"><input type="radio" class="radio radio_delete" name="posts[{$post['pid']}]" value="delete" /> {$lang->delete}</label>
+    <label class="label_radio_approve"><input type="radio" class="radio radio_approve" name="posts[{$post['pid']}]" value="approve" /> {$lang->approve}</label>
+  </fieldset>
+</article>
