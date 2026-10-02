@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.1');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1772,6 +1772,23 @@ function af_adaptivethemeframework_template_seeds(): array
         'modcp_ipsearch' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_ipsearch.html',
         'modcp_banning' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banning.html',
         'modcp_banuser' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banuser.html',
+
+        // Task 45 migrates only the child presentation that is exclusive to
+        // Overview, Moderator Log and All Reports. Shared ban-row fragments
+        // remain core-owned until the dedicated bans task.
+        'modcp_awaitingmoderation' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_awaitingmoderation.html',
+        'modcp_awaitingthreads' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_awaitingthreads.html',
+        'modcp_awaitingposts' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_awaitingposts.html',
+        'modcp_awaitingattachments' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_awaitingattachments.html',
+        'modcp_awaitingmoderation_none' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_awaitingmoderation_none.html',
+        'modcp_latestfivemodactions' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_latestfivemodactions.html',
+        'modcp_modlogs_result' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modlogs_result.html',
+        'modcp_modlogs_noresults' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modlogs_noresults.html',
+        'modcp_modlogs_nologs' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modlogs_nologs.html',
+        'modcp_modlogs_multipage' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modlogs_multipage.html',
+        'modcp_reports_allreport' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_reports_allreport.html',
+        'modcp_reports_allnoreports' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_reports_allnoreports.html',
+
         'usercp' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp.html',
         'usercp_currentavatar' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_currentavatar.html',
         'usercp_notepad' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_notepad.html',
