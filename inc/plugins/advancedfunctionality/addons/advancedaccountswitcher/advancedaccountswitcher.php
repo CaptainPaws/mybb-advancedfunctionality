@@ -2908,6 +2908,90 @@ function af_aas_render_account_list_page()
 
     $letterBar .= '</div>';
 
+    // ATF is a presentation consumer only. Keep this branch after AAS has
+    // applied its canonical query, sorting, linkage and privacy policy, and
+    // leave the byte-for-byte legacy renderer below reachable when ATF is off.
+    if (function_exists('af_adaptivethemeframework_presentation_is_active')
+        && af_adaptivethemeframework_presentation_is_active()
+        && function_exists('af_adaptivethemeframework_render_userlist')) {
+        $dtoUsers = [];
+        $dtoUids = [];
+        while ($r = $db->fetch_array($res)) {
+            $uid = (int)($r['uid'] ?? 0);
+            $username = (string)($r['username'] ?? '');
+            if ($uid <= 0 || $username === '') continue;
+            $masterUid = (int)($r['master_uid'] ?? 0);
+            $masterName = (string)($r['master_username'] ?? '');
+            $masterVisible = $masterUid > 0 && $masterName !== ''
+                && (int)($r['user_hidden'] ?? 0) !== 1
+                && (int)($r['master_hidden'] ?? 0) !== 1;
+            $avatarUser = ['uid'=>$uid, 'username'=>$username, 'avatar'=>(string)($r['avatar'] ?? ''), 'avatardimensions'=>(string)($r['avatardimensions'] ?? '')];
+            if (function_exists('af_avatar_render')) {
+                $avatarHtml = af_avatar_render($avatarUser, 'userlist', ['img_class'=>'atf-user-card__image']);
+            } else {
+                $fa = function_exists('format_avatar') ? format_avatar($avatarUser['avatar'], $avatarUser['avatardimensions']) : null;
+                $src = is_array($fa) && !empty($fa['image']) ? (string)$fa['image'] : af_aas_get_avatar_url($uid);
+                $avatarHtml = '<img class="atf-user-card__image" src="'.htmlspecialchars_uni($src).'" alt="" loading="lazy">';
+            }
+            $dtoUsers[$uid] = [
+                'uid'=>$uid, 'username_raw'=>$username,
+                'profile_url'=>$bburl.'/member.php?action=profile&uid='.$uid,
+                'avatar'=>['html'=>$avatarHtml],
+                'registered_at'=>(int)($r['regdate'] ?? 0) > 0 ? gmdate('c', (int)$r['regdate']) : '',
+                'registered_relative'=>(int)($r['regdate'] ?? 0) > 0 ? my_date('relative', (int)$r['regdate']) : '—',
+                'last_active_at'=>(int)($r['lastactive'] ?? 0) > 0 ? gmdate('c', (int)$r['lastactive']) : '',
+                'last_active_relative'=>(int)($r['lastactive'] ?? 0) > 0 ? my_date('relative', (int)$r['lastactive']) : '—',
+                'post_count'=>my_number_format((int)($r['postnum'] ?? 0)),
+                'thread_count'=>my_number_format((int)($r['threadnum'] ?? 0)),
+                'master'=>['visible'=>$masterVisible, 'uid'=>$masterVisible ? $masterUid : 0,
+                    'username_raw'=>$masterVisible ? $masterName : '',
+                    'profile_url'=>$masterVisible ? $bburl.'/member.php?action=profile&uid='.$masterUid : ''],
+                'presence'=>['state'=>'offline', 'can_disclose'=>true, 'label'=>'offline'],
+                '_invisible'=>(int)($r['invisible'] ?? 0) === 1,
+            ];
+            $dtoUids[] = $uid;
+        }
+        if ($dtoUids) {
+            $cutoff = TIME_NOW - max(1, (int)($mybb->settings['wolcutoff'] ?? 15)) * 60;
+            $online = [];
+            $presenceQuery = $db->simple_select('sessions', 'uid', 'uid IN ('.implode(',', array_map('intval', $dtoUids)).') AND time>'.(int)$cutoff, ['group_by'=>'uid']);
+            while ($session = $db->fetch_array($presenceQuery)) $online[(int)$session['uid']] = true;
+            foreach ($dtoUsers as $uid => &$dtoUser) {
+                if ($dtoUser['_invisible'] && (int)($mybb->usergroup['canviewwolinvis'] ?? 0) !== 1) {
+                    $dtoUser['presence'] = ['state'=>'hidden', 'can_disclose'=>false, 'label'=>''];
+                } else {
+                    $state = isset($online[$uid]) ? 'online' : 'offline';
+                    $dtoUser['presence'] = ['state'=>$state, 'can_disclose'=>true, 'label'=>$state];
+                }
+                unset($dtoUser['_invisible']);
+            }
+            unset($dtoUser);
+        }
+        $content = af_adaptivethemeframework_render_userlist([
+            'title'=>$pageTitle, 'users'=>array_values($dtoUsers), 'empty'=>$txt_empty,
+            'pagination'=>$multipage,
+            'labels'=>['registered'=>$col_reg, 'active'=>$col_active, 'posts'=>$col_posts, 'threads'=>$col_threads, 'master'=>$col_linkage],
+            'filters'=>[
+                'action'=>'userlist.php', 'username'=>$search_username_raw, 'username_match'=>$username_match,
+                'sort'=>$sort, 'order'=>$order, 'perpage'=>$per_page,
+                'labels'=>['title'=>$lbl_controls_title, 'username'=>$lbl_username, 'match'=>$lbl_match,
+                    'sort'=>$lbl_sort, 'order'=>$lbl_order, 'perpage'=>$lbl_perpage, 'show'=>$btn_show,
+                    'reset'=>$btn_reset, 'begins'=>$opt_begins, 'contains'=>$opt_contains, 'exact'=>$opt_exact,
+                    'sort_username'=>$opt_sort_username, 'sort_regdate'=>$opt_sort_regdate, 'sort_last'=>$opt_sort_last,
+                    'sort_posts'=>$opt_sort_posts, 'sort_threads'=>$opt_sort_threads, 'sort_reputation'=>$opt_sort_rep],
+            ],
+            'letters'=>['label'=>$lbl_letter, 'other'=>$lbl_letter_other, 'reset'=>$lbl_letter_reset,
+                'sort'=>$sort, 'order'=>$order, 'perpage'=>$per_page, 'search_query'=>$search_url_base],
+        ]);
+        if (is_object($templates)) {
+            if (empty($headerinclude)) { eval('$headerinclude = "'.$templates->get('headerinclude').'";'); }
+            if (empty($header)) { eval('$header = "'.$templates->get('header').'";'); }
+            if (empty($footer)) { eval('$footer = "'.$templates->get('footer').'";'); }
+        }
+        output_page('<!DOCTYPE html><html><head><title>'.htmlspecialchars_uni($pageTitle).' - '.htmlspecialchars_uni((string)$mybb->settings['bbname']).'</title>'.$headerinclude.'</head><body>'.$header.$content.$footer.'</body></html>');
+        exit;
+    }
+
     // ---------- build rows
     $rows = '';
     $i = 0;

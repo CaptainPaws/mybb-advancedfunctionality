@@ -1,0 +1,37 @@
+<html>
+<head>
+<title>{$mybb->settings['bbname']} - {$lang->member_list}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+<main class="atf-userlist">
+  <header class="atf-userlist__header">
+    <h1>{$lang->member_list}</h1>
+    <nav class="atf-userlist__letters" aria-label="{$lang->member_list}">
+      <a href="memberlist.php?username_match=begins&amp;username={$lang->a}">{$lang->a}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->b}">{$lang->b}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->c}">{$lang->c}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->d}">{$lang->d}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->e}">{$lang->e}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->f}">{$lang->f}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->g}">{$lang->g}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->h}">{$lang->h}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->i}">{$lang->i}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->j}">{$lang->j}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->k}">{$lang->k}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->l}">{$lang->l}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->m}">{$lang->m}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->n}">{$lang->n}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->o}">{$lang->o}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->p}">{$lang->p}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->q}">{$lang->q}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->r}">{$lang->r}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->s}">{$lang->s}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->t}">{$lang->t}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->u}">{$lang->u}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->v}">{$lang->v}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->w}">{$lang->w}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->x}">{$lang->x}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->y}">{$lang->y}</a><a href="memberlist.php?username_match=begins&amp;username={$lang->z}">{$lang->z}</a>
+    </nav>
+  </header>
+  {$multipage}
+  <nav class="atf-userlist__sort" aria-label="{$lang->sort_by}">
+    <a href="{$sorturl}&amp;sort=username&amp;order=ascending">{$lang->username}</a>{$orderarrow['username']}
+    <a href="{$sorturl}&amp;sort=regdate&amp;order=ascending">{$lang->joined}</a>{$orderarrow['regdate']}
+    <a href="{$sorturl}&amp;sort=lastvisit&amp;order=descending">{$lang->lastvisit}</a>{$orderarrow['lastvisit']}
+    <a href="{$sorturl}&amp;sort=postnum&amp;order=descending">{$lang->posts}</a>{$orderarrow['postnum']}
+    <a href="{$sorturl}&amp;sort=threadnum&amp;order=descending">{$lang->threads}</a>{$orderarrow['threadnum']}
+  </nav>
+  <section class="atf-user-grid" aria-label="{$lang->member_list}">{$users}</section>
+  {$multipage}
+  <form method="post" action="memberlist.php" class="atf-card atf-userlist__filters">
+    <h2>{$lang->search_members}</h2>
+    <div class="atf-form-grid">
+      <label>{$lang->username}<span>{$lang->exactly}</span><input type="text" class="textbox" name="username" id="username" value="{$search_username}" /></label>
+      <label>{$lang->website}<span>{$lang->contains}</span><input type="text" class="textbox" name="website" id="website" value="{$search_website}" /></label>
+      <label>{$lang->sort_by}<select name="sort" id="sort"><option value="username"{$sort_selected['username']}>{$lang->sort_by_username}</option><option value="regdate"{$sort_selected['regdate']}>{$lang->sort_by_regdate}</option><option value="lastvisit"{$sort_selected['lastvisit']}>{$lang->sort_by_lastvisit}</option><option value="postnum"{$sort_selected['postnum']}>{$lang->sort_by_posts}</option><option value="threadnum"{$sort_selected['threadnum']}>{$lang->sort_by_threads}</option>{$referrals_option}</select></label>
+    </div>
+    <div class="atf-form-actions"><label><input type="radio" name="order" value="ascending"{$order_check['ascending']} />{$lang->order_asc}</label><label><input type="radio" name="order" value="descending"{$order_check['descending']} />{$lang->order_desc}</label><input type="submit" class="button" value="{$lang->search}" /><a href="memberlist.php?action=search">{$lang->advanced_search}</a></div>
+  </form>
+</main>
+{$footer}
+</body>
+</html>
