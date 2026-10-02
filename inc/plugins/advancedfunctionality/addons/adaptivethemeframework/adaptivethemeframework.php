@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.24.1');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -190,6 +190,7 @@ function af_adaptivethemeframework_init(): void
     af_adaptivethemeframework_register_post_providers();
     af_adaptivethemeframework_register_profile_providers();
     af_adaptivethemeframework_ucp_seed_navigation();
+    af_adaptivethemeframework_modcp_seed_navigation();
     $isPrivateRoute = defined('THIS_SCRIPT') && THIS_SCRIPT === 'private.php';
     if ($isPrivateRoute) {
         af_adaptivethemeframework_register_pm_providers();
@@ -214,6 +215,11 @@ function af_adaptivethemeframework_init(): void
         // the same public slots used by the AAS DTO renderer.
         $plugins->add_hook('memberlist_end', 'af_adaptivethemeframework_compose_stock_userlist_page', 1000);
         $plugins->add_hook('memberlist_user', 'af_adaptivethemeframework_compose_stock_user_card', 1000);
+        if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'modcp.php') {
+            // Core has already built its permission-filtered forum counters at
+            // this hook. ATF consumes that state; it never authorizes a route.
+            $plugins->add_hook('modcp_start', 'af_adaptivethemeframework_compose_modcp_shell', 1000);
+        }
         if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'usercp.php') {
             // Contextual subscription confirmations have no dedicated end
             // hook, so prepare their navigation before core evaluates them.
@@ -1029,6 +1035,163 @@ function af_adaptivethemeframework_mark_page(string &$page): void
 
 }
 
+/** The core ModCP entry gate; section predicates deliberately build on it. */
+function af_adaptivethemeframework_modcp_can_access(): bool
+{
+    global $mybb;
+    return defined('THIS_SCRIPT') && THIS_SCRIPT === 'modcp.php'
+        && is_object($mybb) && (int)($mybb->user['uid'] ?? 0) > 0
+        && (int)($mybb->usergroup['canmodcp'] ?? 0) === 1;
+}
+
+/** Record a malformed data provider without making the moderator panel fail. */
+function af_adaptivethemeframework_modcp_navigation_error(string $provider, string $key, string $reason): bool
+{
+    $message = sprintf('ATF ModCP navigation provider %s (%s) rejected: %s', $provider ?: 'unknown', $key ?: 'unknown', $reason);
+    $GLOBALS['af_adaptivethemeframework_modcp_navigation_errors'][] = $message;
+    if (function_exists('error_log')) error_log($message);
+    return false;
+}
+
+/** Register one typed, data-only ModCP destination. */
+function af_adaptivethemeframework_modcp_register_navigation_provider(array $item): bool
+{
+    $provider = strtolower(trim((string)($item['provider'] ?? '')));
+    $key = strtolower(trim((string)($item['key'] ?? '')));
+    $parent = strtolower(trim((string)($item['parent'] ?? '')));
+    $allowed = ['provider','key','parent','route','label','weight','visibility','active','contextual','children'];
+    if (array_diff(array_keys($item), $allowed)) return af_adaptivethemeframework_modcp_navigation_error($provider, $key, 'unsupported field');
+    if (!preg_match('~^[a-z][a-z0-9_]*$~', $provider) || !preg_match('~^[a-z][a-z0-9_.-]*$~', $key)) return af_adaptivethemeframework_modcp_navigation_error($provider, $key, 'invalid provider or key');
+    if (isset($GLOBALS['af_adaptivethemeframework_modcp_navigation'][$key])) return af_adaptivethemeframework_modcp_navigation_error($provider, $key, 'duplicate key');
+    if ($parent !== '' && !isset($GLOBALS['af_adaptivethemeframework_modcp_navigation'][$parent])) return af_adaptivethemeframework_modcp_navigation_error($provider, $key, 'unknown parent');
+    $route = $item['route'] ?? null;
+    if (!is_array($route) || ($route['script'] ?? '') !== 'modcp.php' || !is_array($route['query'] ?? [])) return af_adaptivethemeframework_modcp_navigation_error($provider, $key, 'invalid route');
+    foreach ($route['query'] as $name => $value) {
+        if (!is_string($name) || !preg_match('~^[a-z][a-z0-9_]*$~i', $name) || (!is_scalar($value) && $value !== null)) return af_adaptivethemeframework_modcp_navigation_error($provider, $key, 'invalid query');
+    }
+    if (!preg_match('~^[a-z][a-z0-9_]*$~', (string)($item['label'] ?? ''))) return af_adaptivethemeframework_modcp_navigation_error($provider, $key, 'label must be a language key');
+    if (!is_bool($item['visibility'] ?? null) && !is_callable($item['visibility'] ?? null)) return af_adaptivethemeframework_modcp_navigation_error($provider, $key, 'invalid visibility');
+    if (!is_callable($item['active'] ?? null)) return af_adaptivethemeframework_modcp_navigation_error($provider, $key, 'invalid active resolver');
+    $item += ['weight' => 100, 'contextual' => false, 'children' => []];
+    if (!is_array($item['children'])) return af_adaptivethemeframework_modcp_navigation_error($provider, $key, 'children must be definitions');
+    $children = $item['children']; unset($item['children']);
+    $item['provider']=$provider; $item['key']=$key; $item['parent']=$parent; $item['weight']=(int)$item['weight'];
+    $GLOBALS['af_adaptivethemeframework_modcp_navigation'][$key]=$item;
+    foreach ($children as $childKey => $child) {
+        if (!is_array($child)) return af_adaptivethemeframework_modcp_navigation_error($provider, (string)$childKey, 'child is not a definition');
+        $child += ['provider'=>$provider, 'key'=>(string)$childKey, 'parent'=>$key];
+        if (!af_adaptivethemeframework_modcp_register_navigation_provider($child)) return false;
+    }
+    return true;
+}
+
+/** Seed native sections with visibility callbacks backed by core-built state. */
+function af_adaptivethemeframework_modcp_seed_navigation(): void
+{
+    if (!empty($GLOBALS['af_adaptivethemeframework_modcp_navigation_seeded'])) return;
+    $GLOBALS['af_adaptivethemeframework_modcp_navigation_seeded'] = true;
+    $entry=static fn(): bool => af_adaptivethemeframework_modcp_can_access();
+    $cap=static fn(string $name, ?string $count=null): callable => static function() use ($name,$count): bool {
+        global $mybb;
+        if (!af_adaptivethemeframework_modcp_can_access() || empty($mybb->usergroup[$name])) return false;
+        return !empty($mybb->usergroup['issupermod']) || $count === null || (int)($GLOBALS[$count] ?? 0) > 0;
+    };
+    $def=static function(string $key,string $parent,array $query,string $label,int $weight,callable $visible,callable $active,bool $contextual=false): void {
+        af_adaptivethemeframework_modcp_register_navigation_provider(['provider'=>'mybb','key'=>$key,'parent'=>$parent,'route'=>['script'=>'modcp.php','query'=>$query],'label'=>$label,'weight'=>$weight,'visibility'=>$visible,'active'=>$active,'contextual'=>$contextual,'children'=>[]]);
+    };
+    $is=static fn(array $actions): callable => static fn(array $r): bool => in_array($r['action'],$actions,true);
+    $def('overview','',[],'atf_modcp_nav_overview',10,$entry,$is(['','do_modnotes']));
+    $reports=$cap('canmanagereportedcontent','numreportedposts');
+    $def('reports','',['action'=>'reports'],'atf_modcp_nav_reports',20,$reports,$is(['reports','do_reports','allreports']));
+    $def('reports.open','reports',['action'=>'reports'],'atf_modcp_nav_open',10,$reports,$is(['reports','do_reports']));
+    $def('reports.all','reports',['action'=>'allreports'],'atf_modcp_nav_all',20,$reports,$is(['allreports']));
+    $queue=$cap('canmanagemodqueue','atf_modcp_any_queue_scope');
+    $GLOBALS['atf_modcp_any_queue_scope']=(int)($GLOBALS['nummodqueuethreads']??0)+(int)($GLOBALS['nummodqueueposts']??0)+(int)($GLOBALS['nummodqueueattach']??0);
+    $def('queue','',['action'=>'modqueue'],'atf_modcp_nav_queue',30,$queue,$is(['modqueue','do_modqueue']));
+    foreach ([['threads','nummodqueuethreads',31],['posts','nummodqueueposts',32],['attachments','nummodqueueattach',33]] as [$type,$count,$weight]) {
+        $visible=static function() use ($count,$type): bool { global $mybb; return af_adaptivethemeframework_modcp_can_access() && !empty($mybb->usergroup['canmanagemodqueue']) && (!empty($mybb->usergroup['issupermod']) || (int)($GLOBALS[$count]??0)>0) && ($type!=='attachments' || !empty($mybb->settings['enableattachments'])); };
+        $def('queue.'.$type,'queue',['action'=>'modqueue','type'=>$type],'atf_modcp_nav_'.$type,$weight,$visible,static fn(array $r): bool => in_array($r['action'],['modqueue','do_modqueue'],true)&&$r['queue_type']===$type);
+    }
+    $users=$cap('caneditprofiles');
+    $def('users','',['action'=>'finduser'],'atf_modcp_nav_users',40,$users,$is(['finduser','editprofile','do_editprofile']));
+    $def('users.find','users',['action'=>'finduser'],'atf_modcp_nav_find_user',10,$users,$is(['finduser']));
+    $def('users.edit','users',['action'=>'editprofile','uid'=>'{uid}'],'atf_modcp_nav_edit_profile',20,static fn(array $r): bool => $users($r)&&$r['uid']>0&&in_array($r['action'],['editprofile','do_editprofile'],true),static fn(array $r): bool => in_array($r['action'],['editprofile','do_editprofile'],true)&&$r['uid']>0,true);
+    $warnings=$cap('canviewwarnlogs'); $def('warnings','',['action'=>'warninglogs'],'atf_modcp_nav_warnings',50,$warnings,$is(['warninglogs'])); $def('warnings.log','warnings',['action'=>'warninglogs'],'atf_modcp_nav_log',10,$warnings,$is(['warninglogs']));
+    $bans=$cap('canbanusers'); $def('bans','',['action'=>'banning'],'atf_modcp_nav_bans',60,$bans,$is(['banning','liftban','banuser','do_banuser']));
+    $def('bans.list','bans',['action'=>'banning'],'atf_modcp_nav_ban_list',10,$bans,$is(['banning','liftban']));
+    $def('bans.add','bans',['action'=>'banuser'],'atf_modcp_nav_add_ban',20,$bans,static fn(array $r): bool => in_array($r['action'],['banuser','do_banuser'],true)&&$r['uid']===0);
+    $def('bans.edit','bans',['action'=>'banuser','uid'=>'{uid}'],'atf_modcp_nav_edit_ban',30,static fn(array $r): bool => $bans($r)&&$r['uid']>0&&in_array($r['action'],['banuser','do_banuser'],true),static fn(array $r): bool => in_array($r['action'],['banuser','do_banuser'],true)&&$r['uid']>0,true);
+    $ips=$cap('canuseipsearch'); $def('iptools','',['action'=>'ipsearch'],'atf_modcp_nav_ip_tools',70,$ips,$is(['ipsearch','iplookup'])); $def('iptools.search','iptools',['action'=>'ipsearch'],'atf_modcp_nav_ip_search',10,$ips,$is(['ipsearch','iplookup']));
+    $ann=$cap('canmanageannounce','numannouncements'); $def('announcements','',['action'=>'announcements'],'atf_modcp_nav_announcements',80,$ann,$is(['announcements','new_announcement','do_new_announcement','edit_announcement','do_edit_announcement','delete_announcement','do_delete_announcement']));
+    $def('announcements.list','announcements',['action'=>'announcements'],'atf_modcp_nav_announcement_list',10,$ann,$is(['announcements','delete_announcement','do_delete_announcement']));
+    $announcementScope=static function(array $r) use ($ann): bool { global $mybb; return $ann($r) && (($r['fid']===-1 && !empty($mybb->usergroup['issupermod'])) || ($r['fid']>0 && function_exists('is_moderator') && is_moderator($r['fid'],'canmanageannouncements'))); };
+    $def('announcements.add','announcements',['action'=>'new_announcement','fid'=>'{fid}'],'atf_modcp_nav_add_announcement',20,$announcementScope,$is(['new_announcement','do_new_announcement']));
+    $def('announcements.edit','announcements',['action'=>'edit_announcement','aid'=>'{aid}'],'atf_modcp_nav_edit_announcement',30,static fn(array $r): bool => $ann($r)&&$r['aid']>0&&in_array($r['action'],['edit_announcement','do_edit_announcement'],true),static fn(array $r): bool => in_array($r['action'],['edit_announcement','do_edit_announcement'],true)&&$r['aid']>0,true);
+    $logs=$cap('canviewmodlogs','nummodlogs'); $def('modlogs','',['action'=>'modlogs'],'atf_modcp_nav_modlogs',90,$logs,$is(['modlogs']));
+}
+
+/** Normalize action and typed request values solely for rendering/active state. */
+function af_adaptivethemeframework_modcp_route_context(array $context=[]): array
+{
+    global $mybb;
+    $value=static fn(string $key) => array_key_exists($key,$context) ? $context[$key] : (is_object($mybb) ? ($mybb->input[$key]??'') : ($_REQUEST[$key]??''));
+    $action=(string)$value('action'); $type=(string)$value('type');
+    if ($action==='do_modqueue') {
+        $found=[]; foreach (['threads','posts','attachments'] as $candidate) if (is_array($value($candidate)) && $value($candidate)!==[]) $found[]=$candidate;
+        $type=count($found)===1 ? $found[0] : '';
+    }
+    if (!in_array($type,['threads','posts','attachments'],true)) $type='';
+    $integer=static fn($raw): int => filter_var($raw,FILTER_VALIDATE_INT)!==false ? (int)$raw : 0;
+    return ['script'=>strtolower(basename((string)($context['script']??(defined('THIS_SCRIPT')?THIS_SCRIPT:'')))),'action'=>$action,'queue_type'=>$type,'uid'=>max(0,$integer($value('uid'))),'aid'=>max(0,$integer($value('aid'))),'fid'=>$integer($value('fid'))];
+}
+
+/** Resolve visible items and one deepest active key; unknown actions stay neutral. */
+function af_adaptivethemeframework_modcp_navigation(array $context=[]): array
+{
+    af_adaptivethemeframework_modcp_seed_navigation(); $route=af_adaptivethemeframework_modcp_route_context($context); $items=[];$matches=[];
+    if ($route['script']!=='modcp.php' || !af_adaptivethemeframework_modcp_can_access()) return ['items'=>[],'current'=>'','route'=>$route];
+    foreach (($GLOBALS['af_adaptivethemeframework_modcp_navigation']??[]) as $key=>$item) {
+        try {$visible=is_callable($item['visibility'])?(bool)$item['visibility']($route,$item):$item['visibility']===true;} catch(Throwable $e){af_adaptivethemeframework_modcp_navigation_error($item['provider'],$key,'visibility failed: '.$e->getMessage());$visible=false;}
+        if(!$visible)continue; $items[$key]=$item;
+        try {if((bool)$item['active']($route,$item))$matches[$key]=substr_count($key,'.')+1;} catch(Throwable $e){af_adaptivethemeframework_modcp_navigation_error($item['provider'],$key,'active failed: '.$e->getMessage());}
+    }
+    arsort($matches);$current=(string)(array_key_first($matches)??'');
+    foreach($items as $key=>&$item){$item['current']=$key===$current;$item['is_active']=$item['current']||($current!==''&&str_starts_with($current,$key.'.'));}unset($item);
+    uasort($items,static fn($a,$b)=>[$a['weight'],$a['key']]<=>[$b['weight'],$b['key']]);
+    return ['items'=>$items,'current'=>$current,'route'=>$route];
+}
+
+function af_adaptivethemeframework_render_modcp_navigation(string $level,array $context=[]): string
+{
+    $navigation=af_adaptivethemeframework_modcp_navigation($context);$parent=$navigation['current']===''?'':explode('.',$navigation['current'],2)[0];$links='';
+    foreach($navigation['items'] as $item){if(($level==='global'&&$item['parent']!=='')||($level==='local'&&$item['parent']!==$parent))continue;
+        $query=$item['route']['query'];foreach($query as &$v){if($v==='{uid}')$v=$navigation['route']['uid'];elseif($v==='{aid}')$v=$navigation['route']['aid'];elseif($v==='{fid}')$v=$navigation['route']['fid'];}unset($v);
+        $url='modcp.php'.($query?'?'.http_build_query($query,'','&',PHP_QUERY_RFC3986):'');$label=af_adaptivethemeframework_ucp_label($item['label']);
+        $links.='<li class="atf-ucp-navigation__item'.($item['is_active']?' is-active':'').'"><a href="'.htmlspecialchars_uni($url).'"'.($item['current']?' aria-current="page"':'').'><span>'.$label.'</span></a></li>';
+    }
+    if($links==='')return '';$label=$level==='global'?'atf_modcp_navigation':'atf_modcp_section_navigation';
+    return '<nav class="atf-ucp-navigation atf-ucp-navigation--'.$level.' atf-modcp-navigation atf-modcp-navigation--'.$level.'" aria-label="'.af_adaptivethemeframework_ucp_label($label).'"><ul>'.$links.'</ul></nav>';
+}
+
+/** Materialize the shell after core has calculated every scoped-forum count. */
+function af_adaptivethemeframework_compose_modcp_shell(): void
+{
+    global $lang;
+    if(!af_adaptivethemeframework_modcp_can_access())return;
+    if (is_object($lang)) $lang->load('advancedfunctionality_adaptivethemeframework');
+    // Seeding happens during global.php, before modcp.php derives these counts;
+    // refresh the aggregate consumed by the Queue parent now.
+    $GLOBALS['atf_modcp_any_queue_scope']=(int)($GLOBALS['nummodqueuethreads']??0)+(int)($GLOBALS['nummodqueueposts']??0)+(int)($GLOBALS['nummodqueueattach']??0);
+    $navigation=af_adaptivethemeframework_modcp_navigation();$route=$navigation['route'];
+    $titles=[''=>'atf_modcp_nav_overview','do_modnotes'=>'atf_modcp_nav_overview','reports'=>'atf_modcp_nav_reports','do_reports'=>'atf_modcp_nav_reports','allreports'=>'atf_modcp_nav_all','modqueue'=>'atf_modcp_nav_queue','do_modqueue'=>'atf_modcp_nav_queue','finduser'=>'atf_modcp_nav_find_user','editprofile'=>'atf_modcp_nav_edit_profile','do_editprofile'=>'atf_modcp_nav_edit_profile','warninglogs'=>'atf_modcp_nav_warnings','ipsearch'=>'atf_modcp_nav_ip_search','iplookup'=>'atf_modcp_nav_ip_search','banning'=>'atf_modcp_nav_ban_list','liftban'=>'atf_modcp_nav_ban_list','banuser'=>'atf_modcp_nav_add_ban','do_banuser'=>'atf_modcp_nav_add_ban','announcements'=>'atf_modcp_nav_announcement_list','new_announcement'=>'atf_modcp_nav_add_announcement','do_new_announcement'=>'atf_modcp_nav_add_announcement','edit_announcement'=>'atf_modcp_nav_edit_announcement','do_edit_announcement'=>'atf_modcp_nav_edit_announcement','delete_announcement'=>'atf_modcp_nav_announcement_list','do_delete_announcement'=>'atf_modcp_nav_announcement_list','modlogs'=>'atf_modcp_nav_modlogs'];
+    if(in_array($route['action'],['banuser','do_banuser'],true)&&$route['uid']>0)$titles[$route['action']]='atf_modcp_nav_edit_ban';
+    $titleKey=$titles[$route['action']]??'atf_modcp_title';$context=['route'=>$route,'active_key'=>$navigation['current']];
+    $GLOBALS['atf_modcp_title']=is_object($lang)?(string)($lang->{$titleKey}??$lang->modcp??''):'';
+    $GLOBALS['atf_modcp_global_navigation']=af_adaptivethemeframework_render_slot('modcp.global_navigation',$context);
+    $GLOBALS['atf_modcp_local_navigation']=af_adaptivethemeframework_render_slot('modcp.local_navigation',$context);
+    foreach(['notice','actions','before_content','after_content'] as $slot)$GLOBALS['atf_modcp_'.$slot]=af_adaptivethemeframework_render_slot('modcp.'.$slot,$context);
+}
+
 /** Semantic icons accepted from UCP navigation providers. */
 function af_adaptivethemeframework_ucp_icon_tokens(): array
 {
@@ -1268,6 +1431,8 @@ function af_adaptivethemeframework_slots(): array
         'thread.breadcrumbs', 'thread.meta', 'thread.atf_fields',
         'thread.before_posts', 'thread.after_posts', 'forum.lastposter_avatar',
         'thread.lastposter_avatar', 'thread.meta_chips',
+        'modcp.global_navigation', 'modcp.local_navigation',
+        'modcp.before_content', 'modcp.after_content', 'modcp.notice', 'modcp.actions',
         'header.primary_navigation', 'header.secondary_navigation',
         'header.user_navigation', 'header.assets', 'footer.components',
         'footer.modals',
@@ -1408,6 +1573,12 @@ function af_adaptivethemeframework_render_slot(string $slot, array $context = []
     }
     if ($slot === 'ucp.local_navigation') {
         return af_adaptivethemeframework_render_ucp_navigation('local', $context);
+    }
+    if ($slot === 'modcp.global_navigation') {
+        return af_adaptivethemeframework_render_modcp_navigation('global', $context);
+    }
+    if ($slot === 'modcp.local_navigation') {
+        return af_adaptivethemeframework_render_modcp_navigation('local', $context);
     }
     $html = '';
     foreach (af_adaptivethemeframework_components_for_slot($slot, $context) as $component) {
@@ -1580,6 +1751,27 @@ function af_adaptivethemeframework_template_seeds(): array
         'memberlist_search' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/memberlist_search.html',
         'memberlist_error' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/memberlist_error.html',
         'memberlist_referrals_bit' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/memberlist_referrals_bit.html',
+        // Task 44 owns only the proven full-document ModCP roots. All native
+        // rows, forms, editor fragments, empty states and shared templates stay
+        // core-owned and are merely rendered inside these shells.
+        'modcp' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp.html',
+        'modcp_reports' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_reports.html',
+        'modcp_reports_allreports' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_reports_allreports.html',
+        'modcp_modlogs' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modlogs.html',
+        'modcp_announcements' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_announcements.html',
+        'modcp_announcements_new' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_announcements_new.html',
+        'modcp_announcements_edit' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_announcements_edit.html',
+        'modcp_announcements_delete' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_announcements_delete.html',
+        'modcp_modqueue_threads' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_threads.html',
+        'modcp_modqueue_posts' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_posts.html',
+        'modcp_modqueue_attachments' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_attachments.html',
+        'modcp_modqueue_empty' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_empty.html',
+        'modcp_finduser' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_finduser.html',
+        'modcp_editprofile' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_editprofile.html',
+        'modcp_warninglogs' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_warninglogs.html',
+        'modcp_ipsearch' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_ipsearch.html',
+        'modcp_banning' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banning.html',
+        'modcp_banuser' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_banuser.html',
         'usercp' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp.html',
         'usercp_currentavatar' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_currentavatar.html',
         'usercp_notepad' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_notepad.html',

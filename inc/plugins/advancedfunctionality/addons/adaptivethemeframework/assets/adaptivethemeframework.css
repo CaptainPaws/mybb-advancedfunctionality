@@ -408,6 +408,9 @@ body.atf-active .atf-ucp-navigation ul { display: flex; gap: var(--atf-space-2);
 body.atf-active .atf-ucp-navigation__item a { display: inline-flex; align-items: center; gap: var(--atf-space-2); min-height: var(--atf-control-height); box-sizing: border-box; padding-inline: var(--atf-space-3); color: var(--atf-color-text-muted); text-decoration: none; white-space: nowrap; background: var(--atf-color-surface); border: 1px solid var(--atf-color-border); border-radius: var(--atf-radius-pill); }
 body.atf-active .atf-ucp-navigation__item.is-active a { color: var(--atf-color-text); border-color: var(--atf-color-accent); }
 body.atf-active .atf-ucp-navigation__badge { min-width: 1.25rem; padding-inline: var(--atf-space-1); color: var(--atf-color-accent-contrast); font-size: var(--atf-font-size-sm); text-align: center; background: var(--atf-color-accent); border-radius: var(--atf-radius-pill); }
+body.atf-active .atf-modcp__header { display: flex; align-items: center; justify-content: space-between; gap: var(--atf-space-3); flex-wrap: wrap; }
+body.atf-active .atf-modcp__title { margin: 0; }
+body.atf-active .atf-modcp__content { min-width: 0; max-width: 100%; overflow-x: auto; }
 body.atf-active .atf-ucp__notices:empty,
 body.atf-active .atf-ucp__actions:empty,
 body.atf-active .atf-ucp__provided:empty,

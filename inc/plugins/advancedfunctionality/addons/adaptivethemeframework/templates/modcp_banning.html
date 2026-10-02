@@ -1,0 +1,37 @@
+<html>
+<head>
+<title>{$mybb->settings['bbname']} - {$lang->ban_banned}</title>
+{$headerinclude}
+</head>
+<body>
+	{$header}
+<main class="pun atf-page-shell atf-page atf-modcp" id="content">
+<div class="atf-stack">
+{$atf_modcp_global_navigation}
+{$atf_modcp_local_navigation}
+<header class="atf-modcp__header"><h1 class="atf-modcp__title">{$atf_modcp_title}</h1>{$atf_modcp_actions}</header>
+{$atf_modcp_notice}
+{$atf_modcp_before_content}
+<div class="atf-modcp__content">
+<table border="0" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" class="tborder">
+					<tr>
+						<td class="thead" colspan="4">
+							<div class="float_right"><a href="modcp.php?action=banuser">{$lang->ban_user}</a></div>
+						<strong>{$lang->ban_banned}</strong></td>
+					</tr>
+					<tr>
+						<td class="tcat" width="25%"><span class="smalltext"><strong>{$lang->username}</strong></span></td>
+						<td class="tcat" align="center" width="30%"><span class="smalltext"><strong>{$lang->reason}</strong></span></td>
+						<td class="tcat" align="center" width="25%"><span class="smalltext"><strong>{$lang->ban_length}</strong></span></td>
+						<td class="tcat" align="center" width="20%"><span class="smalltext"><strong>{$lang->ban_bannedby}</strong></span></td>
+					</tr>
+					{$bannedusers}
+				</table>
+				{$multipage}
+</div>
+{$atf_modcp_after_content}
+</div>
+</main>
+{$footer}
+</body>
+</html>
