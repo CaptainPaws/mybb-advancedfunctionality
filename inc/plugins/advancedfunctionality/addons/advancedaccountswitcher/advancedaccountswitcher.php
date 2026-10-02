@@ -25,6 +25,29 @@ function af_advancedaccountswitcher_menu_provider(): void
     af_menu_register_item(['key'=>'advanced_account_switcher','source_addon'=>AF_AAS_ID,'label'=>'Аккаунты','icon'=>'fa-solid fa-users','type'=>'modal','default_container'=>'secondary','default_sortorder'=>10,'visibility'=>'af_advancedaccountswitcher_menu_visible','action'=>['url'=>'usercp.php?action=af_aas','trigger_selector'=>'#af_aas_trigger','trigger_class'=>'af-aas-trigger','modal_selector'=>'#af_aas_modal','owner_template'=>'af_aas_panel_widget','trigger_renderer'=>'af_aas_render_menu_trigger']]);
 }
 
+/** Publish the safe GET destination only; AAS continues to own every POST action. */
+function af_aas_register_atf_ucp_navigation(): void
+{
+    $definition = [
+        'provider'=>AF_AAS_ID, 'key'=>'social.accounts', 'parent'=>'social',
+        'route'=>['script'=>'usercp.php','query'=>['action'=>'af_aas']],
+        'label'=>'af_aas_ucp_nav_label', 'icon'=>'users', 'weight'=>40,
+        'visibility'=>static function(): bool {
+            global $mybb;
+            $uid=(int)($mybb->user['uid']??0);
+            return !empty($mybb->settings['af_advancedaccountswitcher_enabled']) && $uid>0
+                && !empty($mybb->usergroup['canusercp']) && af_aas_user_allowed($uid);
+        },
+        'active'=>['scripts'=>['usercp.php'],'actions'=>['af_aas']], 'children'=>[],
+    ];
+    if (function_exists('af_adaptivethemeframework_ucp_register_navigation_provider')) {
+        af_adaptivethemeframework_ucp_seed_navigation();
+        af_adaptivethemeframework_ucp_register_navigation_provider($definition);
+    } else {
+        $GLOBALS['af_adaptivethemeframework_pending_ucp_navigation'][]=$definition;
+    }
+}
+
 /** AAS owns this trigger contract; AdvancedMenu owns only its placement. */
 function af_aas_render_menu_trigger(array $item): string
 {
@@ -342,6 +365,7 @@ function af_advancedaccountswitcher_init()
     $done = true;
 
     global $plugins, $mybb;
+    af_aas_register_atf_ucp_navigation();
 
     // ВАЖНО: ставим pre_output_page ПОЗЖЕ остальных аддонов,
     // чтобы нас не "перетирали" чужие pre_output-обработчики.

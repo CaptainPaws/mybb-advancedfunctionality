@@ -35,6 +35,33 @@ function af_advancedalertsandmentions_menu_badge(): int
     return (int)($af_aam_unread ?? 0);
 }
 
+/** Publish typed UCP navigation data; keep the legacy usercp_menu hook below as fallback. */
+function af_aam_register_atf_ucp_navigation(): void
+{
+    $definition = [
+        'provider' => AF_AAM_ID, 'key' => 'social.alerts', 'parent' => 'social',
+        'route' => ['script' => 'usercp.php', 'query' => ['action' => 'af_aam_list']],
+        'label' => 'af_aam_link_alerts', 'icon' => 'bell', 'weight' => 30,
+        'visibility' => static function(): bool {
+            global $mybb;
+            return af_aam_is_enabled() && (int)($mybb->user['uid'] ?? 0) > 0
+                && !empty($mybb->usergroup['canusercp']);
+        },
+        'active' => ['scripts' => ['usercp.php'], 'actions' => ['af_aam_list', 'af_aam_prefs']],
+        'badge' => 'af_advancedalertsandmentions_menu_badge',
+        'children' => [
+            'list' => ['route'=>['script'=>'usercp.php','query'=>['action'=>'af_aam_list']], 'label'=>'Alerts list', 'icon'=>'bell', 'weight'=>10, 'visibility'=>'af_advancedalertsandmentions_menu_visible', 'active'=>['scripts'=>['usercp.php'],'actions'=>['af_aam_list']]],
+            'preferences' => ['route'=>['script'=>'usercp.php','query'=>['action'=>'af_aam_prefs']], 'label'=>'Alert preferences', 'icon'=>'sliders', 'weight'=>20, 'visibility'=>'af_advancedalertsandmentions_menu_visible', 'active'=>['scripts'=>['usercp.php'],'actions'=>['af_aam_prefs']]],
+        ],
+    ];
+    if (function_exists('af_adaptivethemeframework_ucp_register_navigation_provider')) {
+        af_adaptivethemeframework_ucp_seed_navigation();
+        af_adaptivethemeframework_ucp_register_navigation_provider($definition);
+    } else {
+        $GLOBALS['af_adaptivethemeframework_pending_ucp_navigation'][] = $definition;
+    }
+}
+
 function af_advancedalertsandmentions_menu_provider(): void
 {
     af_menu_register_item(['key'=>'advanced_alerts','source_addon'=>AF_AAM_ID,'label'=>'Уведомления','icon'=>'fa-solid fa-bell','type'=>'modal','default_container'=>'secondary','default_sortorder'=>20,'visibility'=>'af_advancedalertsandmentions_menu_visible','action'=>['url'=>'misc.php?action=af_aam_list','trigger_selector'=>'#af_aam_header_link','modal_selector'=>'#af_aam_modal','owner_template'=>'af_aam_header_icon'],'badge_provider'=>'af_advancedalertsandmentions_menu_badge']);
@@ -243,6 +270,7 @@ function af_advancedalertsandmentions_init(): void
     // глобальная инициализация (подключение CSS/JS, шапка)
     af_aam_bootstrap();
     af_aam_backfill_type_titles();
+    af_aam_register_atf_ucp_navigation();
 
 
     // остальные хуки (после global_start)
