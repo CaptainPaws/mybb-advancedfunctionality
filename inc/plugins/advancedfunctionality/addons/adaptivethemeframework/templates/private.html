@@ -1,0 +1,47 @@
+<html>
+<head>
+<title>{$mybb->settings['bbname']} - {$lang->private_messaging}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+<main class="atf-pm" data-folder-id="{$fid}">
+	<nav class="atf-pm__navigation" aria-label="{$lang->private_messaging}">{$atf_pm_navigation}</nav>
+	{$atf_pm_before_content}
+	<header class="atf-pm__header atf-card">
+		<div class="atf-pm__heading">
+			<p class="atf-pm__eyebrow">{$lang->private_messaging}</p>
+			<h1 class="atf-pm__title">{$foldername}</h1>
+		</div>
+		<div class="atf-pm__links"><a href="private.php">{$lang->inbox}</a>{$atf_pm_actions} | <a href="private.php?action=folders">{$lang->manage_folders}</a></div>
+		<div class="atf-pm__quota">{$atf_pm_quota}</div>
+	</header>
+	<div class="atf-pm__notice">{$atf_pm_notice}</div>
+	<form action="private.php" method="post" name="pmForm" class="atf-pm__form">
+		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+		<section class="atf-pm__toolbar atf-card" aria-label="{$lang->search_pms}">
+			<div class="atf-pm__search">
+				<input type="text" name="keywords" value="{$lang->enter_keywords}" onfocus="if(this.value == '{$lang->enter_keywords}') { this.value = ''; }" onblur="if(this.value=='') { this.value='{$lang->enter_keywords}'; }" class="textbox" size="25" />
+				<input type="submit" class="button" name="quick_search" value="{$lang->search_pms}" />
+				<a href="private.php?action=advanced_search">{$lang->advanced_search}</a>
+			</div>
+			<div class="atf-pm__sort">
+				<span><a href="private.php?fid={$fid}&amp;sortby=subject&amp;order=asc">{$lang->message_title}</a> {$orderarrow['subject']}</span>
+				<span><a href="private.php?fid={$fid}&amp;sortby=username&amp;order=asc">{$sender}</a> {$orderarrow['username']}</span>
+				<span><a href="private.php?fid={$fid}&amp;sortby=dateline&amp;order=desc">{$lang->date_sent}</a> {$orderarrow['dateline']}</span>
+			</div>
+			<label class="atf-pm__select-all"><input name="allbox" title="{$lang->check_all}" type="checkbox" class="checkbox checkall" value="{$lang->check_all}" /> {$lang->check_all}</label>
+		</section>
+		<section class="atf-pm__messages" aria-live="polite">{$messagelist}</section>
+		<footer class="atf-pm__mass-actions atf-card">
+			<div class="atf-pm__selected-actions"><input type="submit" class="button" name="moveto" value="{$lang->move_to}" /> {$folderoplist} {$lang->or} <input type="submit" class="button" name="delete" value="{$lang->delete}" /> {$lang->selected_messages}</div>
+			<div class="atf-pm__folder-jump"><strong>{$lang->jump_folder}</strong> {$folderjump} <input type="submit" class="button" name="hop" value="{$lang->go}" /></div>
+		</footer>
+		<input type="hidden" name="action" value="do_stuff" />
+	</form>
+	<div class="atf-pm__pagination">{$atf_pm_pagination}</div>
+	{$atf_pm_after_content}
+</main>
+{$footer}
+</body>
+</html>

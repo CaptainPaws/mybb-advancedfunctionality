@@ -2,7 +2,9 @@
 
 ## Scope and evidence
 
-This is a preparation contract, not template ownership.  It was audited against
+This contract began as the preparation audit for PM ownership. Task 19 now
+owns only the folder-list surface and its inseparable row children through the
+generic ATF ledger. It was audited against
 the MyBB `mybb_1840` tag (resolved commit
 `bd2a3447939d3084a5926dd66ece04649e0e0d60`), specifically `private.php` and
 `install/resources/mybb_theme.xml`, and against the complete AF repository.
@@ -11,12 +13,16 @@ inferred from template names.  `private_messagebit_sep` is shipped in the theme
 XML but is not requested by 1.8.40 `private.php`; it is explicitly identified
 below instead of silently treating it as a live child.
 
-This work deliberately does **not** acquire, seed, patch, or replace a PM
-template, and does not change `private.php`, permissions, or either editor.
-ATF now exposes a data-only workspace contract on `private.php`: the generic
+ATF does not change `private.php`, permissions, or either editor. The list
+templates named in the folder-list graph are now acquired as one reversible
+ownership set; read, send, tracking, search, folders, empty and archive
+templates remain untouched. ATF also exposes a data-only workspace contract on
+`private.php`: the generic
 `pm.navigation`, `pm.quota`, `pm.notice`, `pm.pagination`, `pm.actions`,
-`pm.content`, `pm.before_content`, and `pm.after_content` slots. Consequently
-ATF off and ATF on both continue to render the current legacy PM templates.
+`pm.content`, `pm.before_content`, and `pm.after_content` slots. With ATF off the
+ledger restores the exact previous list-template bytes; with ATF on the folder
+list uses the card-based ATF seeds while all excluded PM surfaces continue to
+render their current templates.
 
 ## Verified template graph
 
@@ -208,13 +214,13 @@ layouts (`form` versus postbit/conversation).  Advanced-search criteria can
 share the form inner layout.  Archive download templates must remain standalone
 documents, not workspace-shell variants.
 
-## Recommended ownership order (future tasks only)
+## Ownership order
 
 1. **Extract and test a data-only PM workspace contract first**: rendered
    `usercpnav`, folder options/navigation, quota/warnings, pagination, canonical
    URLs and native token-bearing action fragments. Do not acquire a template.
-2. **Acquire `private` together with `private_messagebit` and its directly
-   conditional list children.** They are inseparable: the parent defines mass
+2. **Acquired in Task 19: `private` together with `private_messagebit` and its
+   directly conditional list children.** They are inseparable: the parent defines mass
    actions/selection while the row carries pmid/status. Include jump/move,
    multiple-recipient, order, empty-state and quota fragments in the same
    ownership release so rollback is exact.

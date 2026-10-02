@@ -370,3 +370,62 @@ body.atf-active .atf-profile__post-counter:empty, body.atf-active .atf-profile__
   body.atf-active { --atf-page-gap: var(--atf-space-2); --atf-component-gap: var(--atf-space-2); }
   body.atf-active .atf-button { width: 100%; }
 }
+
+/* PM list workspace. Native values and controls are retained, but the list is
+   deliberately card-based rather than a table adapted by runtime scripts. */
+body.atf-active .atf-pm { display: grid; gap: var(--atf-page-gap); min-width: 0; }
+body.atf-active .atf-pm__navigation { min-width: 0; }
+body.atf-active .atf-pm__header,
+body.atf-active .atf-pm__toolbar,
+body.atf-active .atf-pm__mass-actions { display: flex; flex-wrap: wrap; gap: var(--atf-space-4); align-items: center; justify-content: space-between; }
+body.atf-active .atf-pm__heading { min-width: 0; }
+body.atf-active .atf-pm__eyebrow { margin: 0; color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }
+body.atf-active .atf-pm__title { margin: 0; overflow-wrap: anywhere; }
+body.atf-active .atf-pm__links { min-width: 0; overflow-wrap: anywhere; }
+body.atf-active .atf-pm__quota { flex: 1 1 16rem; }
+body.atf-active .atf-pm__notice:empty,
+body.atf-active .atf-pm__pagination:empty,
+body.atf-active .atf-pm__before:empty,
+body.atf-active .atf-pm__after:empty { display: none; }
+body.atf-active .atf-pm__search,
+body.atf-active .atf-pm__sort,
+body.atf-active .atf-pm__selected-actions,
+body.atf-active .atf-pm__folder-jump { display: flex; flex-wrap: wrap; gap: var(--atf-space-2); align-items: center; min-width: 0; }
+body.atf-active .atf-pm__search { flex: 1 1 20rem; }
+body.atf-active .atf-pm__search .textbox { flex: 1 1 12rem; min-width: 0; }
+body.atf-active .atf-pm__sort { flex: 1 1 auto; }
+body.atf-active .atf-pm__select-all { display: inline-flex; gap: var(--atf-space-2); align-items: center; }
+body.atf-active .atf-pm__messages { display: grid; gap: var(--atf-space-2); min-width: 0; }
+body.atf-active .atf-pm-card { display: grid; grid-template-columns: auto auto minmax(0, 1fr) minmax(8rem, 0.4fr) auto auto; gap: var(--atf-space-3); align-items: center; min-width: 0; }
+body.atf-active .atf-pm-card__state img,
+body.atf-active .atf-pm-card__icon img { display: block; max-width: 1.5rem; height: auto; }
+body.atf-active .atf-pm-card__content,
+body.atf-active .atf-pm-card__correspondent,
+body.atf-active .atf-pm-card__date { min-width: 0; overflow-wrap: anywhere; }
+body.atf-active .atf-pm-card__subject { margin: 0; font-size: var(--atf-font-size-md); }
+body.atf-active .atf-pm-card__subject a.new_pm { font-weight: var(--atf-font-weight-bold); }
+body.atf-active .atf-pm-card__receipt { margin-block-start: var(--atf-space-1); }
+body.atf-active .atf-pm-card__date { color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); text-align: end; }
+body.atf-active .atf-pm-card__check { padding: var(--atf-space-2); }
+body.atf-active .atf-pm-warning { display: grid; gap: var(--atf-space-1); padding: var(--atf-space-4); color: #ffb4b4; background: var(--atf-color-surface); border: 1px solid currentColor; border-radius: var(--atf-radius-md); }
+body.atf-active .atf-pm-space { display: flex; gap: var(--atf-space-3); align-items: center; }
+body.atf-active .atf-pm-space__track { display: flex; flex: 1 1 12rem; min-width: 8rem; height: 1.25rem; overflow: hidden; background: var(--atf-color-page-subtle); border: 1px solid var(--atf-color-border); border-radius: var(--atf-radius-pill); }
+body.atf-active .atf-pm-space__used,
+body.atf-active .atf-pm-space__unused { display: block; overflow: hidden; font-size: var(--atf-font-size-sm); text-align: center; white-space: nowrap; }
+body.atf-active .atf-pm-space__used { color: var(--atf-color-page); background: var(--atf-color-accent); }
+body.atf-active .atf-pm-space.high .atf-pm-space__used { background: #d95c5c; }
+body.atf-active .atf-pm__folder-select { max-width: 100%; }
+body.atf-active .atf-pm__empty { text-align: center; }
+
+@media (max-width: 48rem) {
+  body.atf-active .atf-pm__header,
+  body.atf-active .atf-pm__toolbar,
+  body.atf-active .atf-pm__mass-actions { align-items: stretch; flex-direction: column; }
+  body.atf-active .atf-pm-card { grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: start; }
+  body.atf-active .atf-pm-card__content { grid-column: 3; }
+  body.atf-active .atf-pm-card__correspondent,
+  body.atf-active .atf-pm-card__date { grid-column: 3 / -1; text-align: start; }
+  body.atf-active .atf-pm-card__check { grid-column: 4; grid-row: 1; }
+}
+
+body.atf-active .atf-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
