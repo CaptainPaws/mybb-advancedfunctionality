@@ -1,0 +1,14 @@
+<section class="atf-forum-category" data-forum-id="{$forum['fid']}">
+  <header class="atf-forum-category__header{$expthead}">
+    <div class="atf-forum-category__collapse expcolimage">
+      <img src="{$theme['imgdir']}/{$expcolimage}" id="cat_{$forum['fid']}_img" class="expander" alt="{$expaltext}" title="{$expaltext}" />
+    </div>
+    <div class="atf-forum-category__identity">
+      <h2 class="atf-forum-category__title"><a href="{$forum_url}">{$forum['name']}</a></h2>
+      <div class="atf-forum-category__description">{$forum['description']}</div>
+    </div>
+  </header>
+  <div class="atf-forum-category__forums" style="{$expdisplay}" id="cat_{$forum['fid']}_e">
+    {$sub_forums}
+  </div>
+</section>

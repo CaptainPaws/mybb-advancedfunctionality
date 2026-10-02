@@ -101,6 +101,16 @@ body.atf-active .atf-index__section:empty { display: none; }
 body.atf-active .atf-index__forums { min-width: 0; }
 body.atf-active .atf-index__forums > * { max-width: 100%; }
 
+body.atf-active .atf-forum-category,
+body.atf-active .atf-forum-category__forums { width: 100%; min-width: 0; }
+body.atf-active .atf-forum-category__header { display: flex; align-items: start; gap: var(--atf-space-3); }
+body.atf-active .atf-forum-category__collapse { flex: 0 0 auto; }
+body.atf-active .atf-forum-category__identity { min-width: 0; }
+body.atf-active .atf-forum-category__title { margin: 0; }
+body.atf-active .atf-forum-category__description:empty { display: none; }
+/* Task 41 can opt this child container into a grid without changing ownership. */
+body.atf-active .atf-forum-category__forums { display: block; }
+
 body.atf-active .atf-forum-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto minmax(14rem, 0.75fr);
