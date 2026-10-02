@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.6');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.7');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1163,7 +1163,9 @@ function af_adaptivethemeframework_modcp_navigation(array $context=[]): array
 
 function af_adaptivethemeframework_render_modcp_navigation(string $level,array $context=[]): string
 {
-    $navigation=af_adaptivethemeframework_modcp_navigation($context);$parent=$navigation['current']===''?'':explode('.',$navigation['current'],2)[0];$links='';
+    $navigation=af_adaptivethemeframework_modcp_navigation($context);
+    if($level==='local' && $navigation['current']==='') return '';
+    $parent=$navigation['current']===''?'':explode('.',$navigation['current'],2)[0];$links='';
     foreach($navigation['items'] as $item){if(($level==='global'&&$item['parent']!=='')||($level==='local'&&$item['parent']!==$parent))continue;
         $query=$item['route']['query'];foreach($query as &$v){if($v==='{uid}')$v=$navigation['route']['uid'];elseif($v==='{aid}')$v=$navigation['route']['aid'];elseif($v==='{fid}')$v=$navigation['route']['fid'];}unset($v);
         $url='modcp.php'.($query?'?'.http_build_query($query,'','&',PHP_QUERY_RFC3986):'');$label=af_adaptivethemeframework_ucp_label($item['label']);
