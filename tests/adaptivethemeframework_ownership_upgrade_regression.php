@@ -22,6 +22,8 @@ class AtfDatabase {
             ['tid'=>10, 'title'=>'showthread', 'template'=>'APUI SHOWTHREAD BYTES', 'sid'=>1, 'version'=>'1840', 'status'=>'', 'dateline'=>20],
             ['tid'=>11, 'title'=>'postbit_classic', 'template'=>'MASTER CLASSIC POST', 'sid'=>-2, 'version'=>'1840', 'status'=>'', 'dateline'=>10],
             ['tid'=>12, 'title'=>'postbit_classic', 'template'=>'APUI CLASSIC POST BYTES', 'sid'=>1, 'version'=>'1840', 'status'=>'', 'dateline'=>20],
+            ['tid'=>13, 'title'=>'member_profile', 'template'=>'MASTER MEMBER PROFILE', 'sid'=>-2, 'version'=>'1840', 'status'=>'', 'dateline'=>10],
+            ['tid'=>14, 'title'=>'member_profile', 'template'=>'APUI MEMBER PROFILE BYTES', 'sid'=>1, 'version'=>'1840', 'status'=>'', 'dateline'=>20],
         ];
         $this->tables['templatesets'] = [['sid'=>1, 'title'=>'Default']];
         if ($legacy) {
@@ -127,7 +129,7 @@ $seed = af_adaptivethemeframework_index_seed();
 $db = new AtfDatabase();
 $previous = $db->tables['templates'][1]['template'];
 $originalTemplates = array_column(array_filter($db->tables['templates'], static fn($row) => (int)$row['sid'] === 1), 'template', 'title');
-if (!af_adaptivethemeframework_activate() || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 6 || $db->tables['templates'][1]['template'] !== $seed) throw new RuntimeException('fresh acquisition failed');
+if (!af_adaptivethemeframework_activate() || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 7 || $db->tables['templates'][1]['template'] !== $seed) throw new RuntimeException('fresh acquisition failed');
 $lease = $db->tables['af_adaptivethemeframework_template_ownership'][0];
 if ($lease['previous_content'] !== $previous || $lease['atf_seed_content'] !== $seed) throw new RuntimeException('SQL-safe lease did not round-trip raw template content');
 $master = $db->tables['templates'][0];
@@ -138,7 +140,7 @@ foreach ($originalTemplates as $title => $content) {
     if (count($restored) !== 1 || $restored[0]['template'] !== $content) throw new RuntimeException("deactivation did not restore {$title}");
 }
 af_adaptivethemeframework_activate();
-if (count($db->tables['af_adaptivethemeframework_template_ownership']) !== 6 || $db->tables['templates'][0] !== $master) throw new RuntimeException('repeat lifecycle made a backup chain or changed master');
+if (count($db->tables['af_adaptivethemeframework_template_ownership']) !== 7 || $db->tables['templates'][0] !== $master) throw new RuntimeException('repeat lifecycle made a backup chain or changed master');
 foreach ($db->tables['af_adaptivethemeframework_template_ownership'] as $row) {
     if ($row['previous_content'] !== $originalTemplates[$row['template_name']] || $row['ownership_state'] !== 'owned') throw new RuntimeException("repeat lifecycle lost backup for {$row['template_name']}");
 }
@@ -219,7 +221,7 @@ $db->tables['templates'][1]['template'] = $deployedSeed;
 $db->tables['af_adaptivethemeframework_template_ownership'][0]['ownership_state'] = 'migration_review';
 if (!af_adaptivethemeframework_acquire_template('index', $newSeedPath)) throw new RuntimeException('live current seed did not reconcile');
 $lease = $db->tables['af_adaptivethemeframework_template_ownership'][0];
-if ($lease['ownership_state'] !== 'owned' || $lease['previous_content'] !== $previous || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 6) throw new RuntimeException('current-seed reconciliation damaged backup');
+if ($lease['ownership_state'] !== 'owned' || $lease['previous_content'] !== $previous || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 7) throw new RuntimeException('current-seed reconciliation damaged backup');
 unlink($newSeedPath);
 
 $diagnostic = af_adaptivethemeframework_ownership_conflict('index', 1, 'manual_override', 'current-hash', 'previous-hash', 'installed-hash', 'seed-hash')->getMessage();
@@ -236,6 +238,6 @@ $override = array_values(array_filter($db->tables['templates'], static fn($row) 
 $templateInsert = array_values(array_filter($db->writeLog, static fn($write) => $write[0] === 'insert' && $write[1] === 'templates'));
 if (count($override) !== 1 || $override[0]['template'] !== $seed || count($templateInsert) !== 1) throw new RuntimeException('escaped index override was not inserted');
 if (!af_adaptivethemeframework_deactivate() || count(array_filter($db->tables['templates'], static fn($row) => (int)$row['sid'] === 1 && $row['title'] === 'index')) !== 0) throw new RuntimeException('inherited index override was not released');
-if (!af_adaptivethemeframework_activate() || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 6) throw new RuntimeException('override reacquisition made a backup chain');
+if (!af_adaptivethemeframework_activate() || count($db->tables['af_adaptivethemeframework_template_ownership']) !== 7) throw new RuntimeException('override reacquisition made a backup chain');
 
 echo "ATF ownership fresh/upgrade/conflict lifecycle passed.\n";

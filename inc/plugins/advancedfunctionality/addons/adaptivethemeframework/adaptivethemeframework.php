@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.9.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.10.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -197,8 +197,7 @@ function af_adaptivethemeframework_init(): void
         $plugins->add_hook('postbit_prev', 'af_adaptivethemeframework_compose_postbit', 1000);
         $plugins->add_hook('postbit_pm', 'af_adaptivethemeframework_compose_postbit', 1000);
         // Run after profile addons have produced their permission-filtered
-        // legacy values. The member_profile template is intentionally not
-        // owned by ATF yet; these globals are the hand-off for its next seed.
+        // values. The ATF-owned template consumes only these composed slots.
         $plugins->add_hook('member_profile_end', 'af_adaptivethemeframework_compose_profile', 1000);
     }
 }
@@ -257,7 +256,7 @@ function af_adaptivethemeframework_profile_context(array $member, array $values)
     ];
 }
 
-/** Resolve every profile slot without changing the current member_profile. */
+/** Resolve every profile slot for the ATF-owned member_profile template. */
 function af_adaptivethemeframework_compose_profile(): void
 {
     global $memprofile;
@@ -705,6 +704,7 @@ function af_adaptivethemeframework_template_seeds(): array
         'forumbit_depth2_forum' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum.html',
         'forumbit_depth2_forum_lastpost' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum_lastpost.html',
         'forumdisplay_thread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay_thread.html',
+        'member_profile' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/member_profile.html',
         'showthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread.html',
         'postbit_classic' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/postbit_classic.html',
     ];

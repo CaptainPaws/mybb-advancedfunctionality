@@ -325,15 +325,15 @@ function af_apui_render_atf_profile_hero(array $context): string
 {
     $i = (array)($context['identity'] ?? []);
     $uidClass = htmlspecialchars_uni((string)($context['appearance']['uid_class'] ?? ''));
-    return '<section class="af-apui-profile-hero ' . $uidClass . '" data-atf-profile-hero="1">'
-        . '<div class="af-apui-profile-avatar-frame">' . (string)($i['avatar'] ?? '') . '</div>'
-        . '<div class="af-apui-profile-name-wrap">' . (string)($i['formattedname'] ?? '') . '</div>'
-        . '<div class="af-apui-profile-rank-wrap">' . (string)($i['usertitle'] ?? '') . '</div>'
-        . (string)($i['groupimage'] ?? '') . (string)($i['userstars'] ?? '')
-        . '<div class="af-apui-profile-meta"><span class="af-apui-profile-meta-item">'
-        . (string)($i['memregdate'] ?? '') . '</span><span class="af-apui-profile-meta-item">'
-        . (string)($i['memlastvisitdate'] ?? '') . '</span></div>'
-        . '<div class="af-apui-profile-presence">' . (string)($i['online_status'] ?? '') . '</div>'
+    return '<section class="atf-profile-hero ' . $uidClass . '" data-atf-profile-hero="1">'
+        . '<div class="atf-profile-hero__avatar">' . (string)($i['avatar'] ?? '') . '</div>'
+        . '<div class="atf-profile-hero__identity"><div class="atf-profile-hero__name">' . (string)($i['formattedname'] ?? '') . '</div>'
+        . '<div class="atf-profile-hero__title">' . (string)($i['usertitle'] ?? '') . '</div>'
+        . '<div class="atf-profile-hero__rank">' . (string)($i['groupimage'] ?? '') . (string)($i['userstars'] ?? '') . '</div></div>'
+        . '<div class="atf-profile-hero__meta"><span>' . (string)($i['memregdate'] ?? '')
+        . '</span><span>' . (string)($i['memlastvisitdate'] ?? '') . '</span>'
+        . '<span>' . (string)($i['online_status'] ?? '') . '</span>'
+        . (string)($i['awaybit'] ?? '') . (string)($i['bannedbit'] ?? '') . '</div>'
         . '</section>';
 }
 
@@ -342,14 +342,18 @@ function af_apui_render_atf_profile_navigation(array $context): string
     $labels = ['info' => 'Основная информация', 'sheet' => 'Лист персонажа', 'application' => 'Анкета',
         'timeline' => 'Хронология', 'activity' => 'Активность'];
     $items = [];
-    foreach ((array)($context['sections'] ?? []) as $key => $html) {
+    $sections = (array)($context['sections'] ?? []);
+    $sections['info'] = (string)($sections['info'] ?? '')
+        . implode('', (array)($context['native'] ?? []))
+        . implode('', (array)($context['providers'] ?? []));
+    foreach ($sections as $key => $html) {
         if (trim((string)$html) === '' || !isset($labels[$key])) continue;
         $active = !$items;
-        $items[] = '<a class="af-apui-tab' . ($active ? ' is-active' : '') . '" href="#af-apui-tab-'
+        $items[] = '<a class="atf-profile-nav__item' . ($active ? ' is-active' : '') . '" href="#af-tab-'
             . htmlspecialchars_uni((string)$key) . '" data-tab="' . htmlspecialchars_uni((string)$key)
             . '" aria-selected="' . ($active ? 'true' : 'false') . '">' . $labels[$key] . '</a>';
     }
-    return $items ? '<nav class="af-apui-profile-tabs__nav" data-af-apui-tabs-nav="1">' . implode('', $items) . '</nav>' : '';
+    return $items ? '<nav class="atf-profile-nav" data-af-apui-tabs-nav="1" role="tablist" aria-label="Профиль">' . implode('', $items) . '</nav>' : '';
 }
 af_apui_register_atf_profile_providers();
 
