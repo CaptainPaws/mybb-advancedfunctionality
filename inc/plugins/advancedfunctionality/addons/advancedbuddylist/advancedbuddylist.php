@@ -3,12 +3,13 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
-define('AF_ABDL_ID', 'advancedbyddylist'); // Historical addon id; retained for upgrades.
+define('AF_ABDL_ID', 'advancedbuddylist');
+define('AF_ABDL_LEGACY_ID', 'advancedbyddylist');
 define('AF_ABDL_FRIENDSHIPS', 'af_buddy_friendships');
 define('AF_ABDL_IGNORES', 'af_buddy_ignores');
 define('AF_ABDL_PAGE_ALIAS_SIGNATURE', 'AF_ABDL_BUDDY_PAGE_ALIAS');
 
-function af_advancedbyddylist_menu_provider(): void
+function af_advancedbuddylist_menu_provider(): void
 {
     af_menu_register_item([
         'key' => 'friends', 'source_addon' => AF_ABDL_ID, 'label' => 'Друзья',
@@ -19,25 +20,28 @@ function af_advancedbyddylist_menu_provider(): void
     ]);
 }
 
-function af_advancedbyddylist_install(): void
+function af_advancedbuddylist_install(): void
 {
-    af_abdl_ensure_settings();
+    af_abdl_migrate_addon_identity();
     af_abdl_ensure_schema();
     af_abdl_migrate_legacy();
     af_abdl_install_page_alias();
 }
-function af_advancedbyddylist_activate(): void { af_advancedbyddylist_install(); }
-function af_advancedbyddylist_upgrade(): void { af_abdl_install_page_alias(); }
-function af_advancedbyddylist_deactivate(): void { /* Relations intentionally survive deactivation. */ }
-function af_advancedbyddylist_uninstall(): void
+function af_advancedbuddylist_activate(): void { af_advancedbuddylist_install(); }
+function af_advancedbuddylist_upgrade(): void { af_advancedbuddylist_install(); }
+function af_advancedbuddylist_deactivate(): void { /* Relations intentionally survive deactivation. */ }
+function af_advancedbuddylist_uninstall(): void
 {
     af_abdl_remove_settings();
     af_abdl_remove_page_alias();
     /* User relations are retained deliberately. */
 }
-function af_advancedbyddylist_init(): void
+function af_advancedbuddylist_init(): void
 {
     global $mybb;
+
+    // Also completes cleanup when AF loaded us through manifest legacy_ids.
+    af_abdl_migrate_addon_identity();
 
     // Only administrators visiting the frontend repair a deleted alias. Existing
     // files are never rewritten here, so normal requests incur no file writes.
@@ -121,7 +125,11 @@ function af_abdl_remove_page_alias(): bool
 function af_abdl_is_enabled(): bool
 {
     global $mybb;
-    return !isset($mybb->settings['af_abdl_enabled']) || !empty($mybb->settings['af_abdl_enabled']);
+    if (function_exists('af_is_addon_enabled')) {
+        return af_is_addon_enabled(AF_ABDL_ID);
+    }
+    return isset($mybb->settings['af_advancedbuddylist_enabled'])
+        && (string)$mybb->settings['af_advancedbuddylist_enabled'] === '1';
 }
 
 function af_abdl_ensure_schema(): void
@@ -326,18 +334,116 @@ function af_abdl_render_page(): void
         if(my_strlen($query)>=2){$esc=$db->escape_string_like($query);$q=$db->simple_select('users','uid,username,avatar,lastactive',"uid<>{$uid} AND username LIKE '%{$esc}%'",['order_by'=>'username','limit'=>25]);while($u=$db->fetch_array($q))$content.=af_abdl_card($u,af_abdl_action_buttons($uid,(int)$u['uid']));}$content.='</div>';
     }
     $base=rtrim((string)$mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/'.AF_ABDL_ID.'/assets/';
-    $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni($base.'advancedbyddylist.css?v=2').'"><script defer src="'.htmlspecialchars_uni($base.'advancedbyddylist.js?v=2').'"></script>';
+    $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni($base.'advancedbuddylist.css?v=2').'"><script defer src="'.htmlspecialchars_uni($base.'advancedbuddylist.js?v=2').'"></script>';
     $tabs='';foreach(['friends'=>'Друзья','ignore'=>'Игнор-лист','search'=>'Поиск'] as $key=>$label)$tabs.='<a class="af-abdl-tab '.($tab===$key?'is-active':'').'" href="buddy.php?tab='.$key.'">'.$label.'</a>';
     $page='<!doctype html><html><head><title>Друзья</title>'.$headerinclude.'</head><body>'.$header.'<main class="af-abdl-page"><header class="af-abdl-heading"><h1>Друзья</h1><nav class="af-abdl-tabs">'.$tabs.'</nav></header><div id="af-abdl-content">'.$content.'</div></main>'.$footer.'</body></html>';
     output_page($page);
 }
 function af_abdl_section(string $title,string $content): string { return '<section class="af-abdl-section"><h2>'.$title.'</h2>'.($content?:'<p class="af-abdl-empty">Пока пусто.</p>').'</section>'; }
 
-function af_abdl_ensure_settings(): void
+/**
+ * Migrate lifecycle ownership without touching friendship/ignore relations.
+ * Canonical > old AF lifecycle > old private switch > enabled-by-default.
+ */
+function af_abdl_migrate_addon_identity(): void
 {
-    global $db; $gid=(int)$db->fetch_field($db->simple_select('settinggroups','gid',"name='af_abdl'",['limit'=>1]),'gid');
-    if(!$gid){$db->insert_query('settinggroups',['name'=>'af_abdl','title'=>'AF: Advanced Buddy List','description'=>'Полноценная система друзей и игнорирования.','disporder'=>100,'isdefault'=>0]);$gid=(int)$db->insert_id();}
-    if(!$db->fetch_field($db->simple_select('settings','sid',"name='af_abdl_enabled'",['limit'=>1]),'sid'))$db->insert_query('settings',['name'=>'af_abdl_enabled','title'=>'Enable Advanced Buddy List','description'=>'Enable friendship system.','optionscode'=>'yesno','value'=>'1','disporder'=>1,'gid'=>$gid]);
+    global $db, $mybb;
+    static $migrated = false;
+    if ($migrated) return;
+    $migrated = true;
+    $names = ['af_advancedbuddylist_enabled', 'af_advancedbyddylist_enabled', 'af_abdl_enabled'];
+    $found = [];
+    $query = $db->simple_select('settings', 'sid,gid,name,value', "name IN ('".implode("','", $names)."')");
+    while ($row = $db->fetch_array($query)) $found[(string)$row['name']] = $row;
+    $value = af_abdl_select_lifecycle_value(array_map(static fn(array $row): string => (string)$row['value'], $found));
+    $changed = false;
+
+    $gid = (int)$db->fetch_field($db->simple_select('settinggroups','gid',"name='af_advancedbuddylist'",['limit'=>1]),'gid');
+    if (!$gid) {
+        $db->insert_query('settinggroups',['name'=>'af_advancedbuddylist','title'=>'AF: Advanced Buddy List','description'=>'Полноценная система друзей и игнорирования.','disporder'=>100,'isdefault'=>0]);
+        $gid=(int)$db->insert_id();
+        $changed = true;
+    }
+    if (!isset($found[$names[0]])) {
+        $db->insert_query('settings',['name'=>$names[0],'title'=>'Enable Advanced Buddy List','description'=>'Enable friendship system.','optionscode'=>'yesno','value'=>$value,'disporder'=>1,'gid'=>$gid]);
+        $changed = true;
+    } elseif ((int)$found[$names[0]]['gid'] !== $gid) {
+        $db->update_query('settings', ['gid'=>$gid], 'sid='.(int)$found[$names[0]]['sid']);
+        $changed = true;
+    }
+    if (isset($found[$names[1]]) || isset($found[$names[2]])) {
+        $db->delete_query('settings', "name IN ('af_advancedbyddylist_enabled','af_abdl_enabled')");
+        $changed = true;
+    }
+    foreach (['af_advancedbyddylist','af_abdl'] as $group) {
+        $legacyGid=(int)$db->fetch_field($db->simple_select('settinggroups','gid',"name='".$db->escape_string($group)."'",['limit'=>1]),'gid');
+        if ($legacyGid && !(int)$db->fetch_field($db->simple_select('settings','sid','gid='.$legacyGid,['limit'=>1]),'sid')) {
+            $db->delete_query('settinggroups','gid='.$legacyGid);
+            $changed = true;
+        }
+    }
+    af_abdl_migrate_theme_stylesheet_ownership();
+    if ($changed) rebuild_settings();
+    if (isset($mybb->settings) && is_array($mybb->settings)) {
+        $mybb->settings[$names[0]] = $value;
+        unset($mybb->settings[$names[1]], $mybb->settings[$names[2]]);
+    }
+}
+
+function af_abdl_select_lifecycle_value(array $settings): string
+{
+    foreach (['af_advancedbuddylist_enabled','af_advancedbyddylist_enabled','af_abdl_enabled'] as $name) {
+        if (array_key_exists($name, $settings)) return (string)$settings[$name];
+    }
+    return '1';
+}
+
+/** Generic AF manifest migration entry point. */
+function af_advancedbuddylist_migrate_identity(): void { af_abdl_migrate_addon_identity(); }
+
+function af_abdl_migrate_theme_stylesheet_ownership(): void
+{
+    global $db;
+    if (defined('AF_THEME_STYLESHEETS_TABLE') && $db->table_exists(AF_THEME_STYLESHEETS_TABLE)) {
+        $q=$db->simple_select(AF_THEME_STYLESHEETS_TABLE,'id,theme_tid,logical_id',"addon_id='advancedbyddylist'");
+        while($row=$db->fetch_array($q)) {
+            $logical=preg_replace('~^advancedbyddylist~','advancedbuddylist',(string)$row['logical_id']);
+            // Prefer the historical row because it may contain the site's
+            // manual override state; discard a newly auto-created duplicate.
+            $duplicate=$db->fetch_field($db->simple_select(AF_THEME_STYLESHEETS_TABLE,'id',
+                "theme_tid=".(int)$row['theme_tid']." AND addon_id='advancedbuddylist' AND logical_id='".$db->escape_string($logical)."'",['limit'=>1]),'id');
+            if ($duplicate && (int)$duplicate !== (int)$row['id']) $db->delete_query(AF_THEME_STYLESHEETS_TABLE,'id='.(int)$duplicate);
+            $db->update_query(AF_THEME_STYLESHEETS_TABLE,['addon_id'=>AF_ABDL_ID,'logical_id'=>$logical,'updated_at'=>TIME_NOW],'id='.(int)$row['id']);
+        }
+    }
+    if (!function_exists('af_theme_stylesheet_parse_bundle') || !function_exists('af_theme_stylesheet_encode_section')) return;
+    $q=$db->simple_select('themestylesheets','sid,stylesheet',"name='advancedstyles.css'");
+    while($row=$db->fetch_array($q)) {
+        $parsed=af_theme_stylesheet_parse_bundle((string)$row['stylesheet']);
+        if (empty($parsed['ok'])) continue;
+        $css=(string)$row['stylesheet']; $changed=false; $edits=[];
+        $sections=$parsed['sections'];
+        foreach($sections as $section) {
+            $meta=$section['meta'];
+            if (($meta['addon_id']??'') !== AF_ABDL_LEGACY_ID) continue;
+            $meta['addon_id']=AF_ABDL_ID;
+            foreach(['logical_id','source_file'] as $key) $meta[$key]=str_replace(AF_ABDL_LEGACY_ID,AF_ABDL_ID,(string)($meta[$key]??''));
+            $replacement=af_theme_stylesheet_encode_section($meta,(string)$section['body']);
+            $targetId=sha1((string)$meta['addon_id']."\0".(string)$meta['logical_id']."\0".(string)$meta['source_file']);
+            if (isset($sections[$targetId])) $edits[]=['start'=>$sections[$targetId]['start'],'end'=>$sections[$targetId]['end'],'body'=>''];
+            $edits[]=['start'=>$section['start'],'end'=>$section['end'],'body'=>$replacement]; $changed=true;
+        }
+        usort($edits,static fn(array $a,array $b): int=>$b['start']<=>$a['start']);
+        foreach($edits as $edit) $css=substr($css,0,$edit['start']).$edit['body'].substr($css,$edit['end']);
+        if ($changed) $db->update_query('themestylesheets',['stylesheet'=>$css,'lastmodified'=>TIME_NOW],'sid='.(int)$row['sid']);
+    }
+}
+
+function af_abdl_remove_settings(): void
+{
+    global $db;
+    $gid=(int)$db->fetch_field($db->simple_select('settinggroups','gid',"name='af_advancedbuddylist'",['limit'=>1]),'gid');
+    $db->delete_query('settings',"name='af_advancedbuddylist_enabled'");
+    if ($gid && !(int)$db->fetch_field($db->simple_select('settings','sid','gid='.$gid,['limit'=>1]),'sid')) $db->delete_query('settinggroups','gid='.$gid);
     rebuild_settings();
 }
-function af_abdl_remove_settings(): void { global $db; $db->delete_query('settings',"name='af_abdl_enabled'");$db->delete_query('settinggroups',"name='af_abdl'");rebuild_settings(); }

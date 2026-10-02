@@ -55,7 +55,7 @@ if (strpos($welcomeSource, "function_exists('af_advancedmenu_render_drawer_accou
     throw new RuntimeException('Legacy welcome addon does not yield frontend ownership to AdvancedMenu.');
 }
 
-$buddySource = file_get_contents(AF_ADDONS.'advancedbyddylist/advancedbyddylist.php');
+$buddySource = file_get_contents(AF_ADDONS.'advancedbuddylist/advancedbuddylist.php');
 foreach (["'key' => 'friends'", "'type' => 'link'", "'default_container' => 'user_drawer'", "'url' => 'buddy.php'"] as $needle) {
     if (strpos($buddySource, $needle) === false) throw new RuntimeException('Friends drawer contract missing: '.$needle);
 }
