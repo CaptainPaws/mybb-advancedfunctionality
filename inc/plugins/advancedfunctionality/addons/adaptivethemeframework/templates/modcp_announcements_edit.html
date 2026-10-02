@@ -4,7 +4,7 @@
 {$headerinclude}
 </head>
 <body>
-	{$header}
+{$header}
 <main class="pun atf-page-shell atf-page atf-modcp" id="content">
 <div class="atf-stack">
 {$atf_modcp_global_navigation}
@@ -12,76 +12,54 @@
 <header class="atf-modcp__header"><h1 class="atf-modcp__title">{$atf_modcp_title}</h1>{$atf_modcp_actions}</header>
 {$atf_modcp_notice}
 {$atf_modcp_before_content}
-<div class="atf-modcp__content">
-<form action="modcp.php" method="post" enctype="multipart/form-data">
-	<input type="hidden" name="action" value="do_edit_announcement" />
-	<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
-	<input type="hidden" name="fid" value="{$announcement['fid']}" />
-	<input type="hidden" name="aid" value="{$aid}" />
-		
-					{$errors}
-					{$preview}
-					<table border="0" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" class="tborder">
-						<tr>
-							<td class="thead" colspan="6"><strong>{$lang->edit_announcement}</strong></td>
-						</tr>
-						<tr>
-							<td class="trow1" valign="top" width="25%"><strong>{$lang->title}</strong></td>
-							<td class="trow1" valign="top" width="75%"><input type="text" class="textbox" name="title" size="40" value="{$title}" /></td>
-						</tr>
-						<tr>
-							<td class="trow1" colspan="1" valign="top" width="25%"><strong>{$lang->start_date}</strong></td>
-							<td class="trow1" valign="top"  width="75%">
-								<select name="starttime_day">
-								{$startdateday}
-								</select>
-								&nbsp;
-								<select name="starttime_month">
-								{$startdatemonth}
-								</select>
-								&nbsp;
-								<input type="text" name="starttime_year" value="{$startdateyear}" size="4" maxlength="4" class="textbox" />
-								 - {$lang->time} <input type="text" name="starttime_time" value="{$starttime_time}" size="10" class="textbox" />
-							</td>
-						</tr>
-						<tr>
-							<td class="trow1" colspan="1" valign="top" width="25%"><strong>{$lang->end_date}</strong></td>
-							<td class="trow1" valign="top"  width="75%">
-								<input type="radio" name="endtime_type" value="1"{$end_type_sel['finite']} />
-								<select name="endtime_day">
-								{$enddateday}
-								</select>
-								&nbsp;
-								<select name="endtime_month">
-								{$enddatemonth}
-								</select>
-								&nbsp;
-								<input type="text" name="endtime_year" value="{$enddateyear}" size="4" maxlength="4" class="textbox" />
-								 - {$lang->time} <input type="text" name="endtime_time" value="{$endtime_time}" size="10" class="textbox" />
-								<br /><input type="radio" name="endtime_type" value="2"{$end_type_sel['infinite']} /> {$lang->never}
-							</td>
-						</tr>
-						<tr>
-							<td class="trow1" valign="top" width="25%"><strong>{$lang->announcement}</strong><br />{$smilieinserter}</td>
-							<td class="trow1" valign="top" width="75%"><textarea id="message" name="message" rows="20" cols="70">{$message}</textarea>{$codebuttons}</td>
-						</tr>
-						{$allow_html}
-						<tr>
-							<td class="trow1" valign="top" width="25%"><strong>{$lang->allow_mycode}</strong></td>
-							<td class="trow1" valign="top" width="75%"><label><input type="radio" name="allowmycode" value="1"{$mycode_sel['yes']} />&nbsp;{$lang->yes}</label> &nbsp;&nbsp;<label><input type="radio" name="allowmycode" value="0"{$mycode_sel['no']} />&nbsp;{$lang->no}</label></td>
-						</tr>
-						<tr>
-							<td class="trow1" valign="top" width="25%"><strong>{$lang->allow_smilies}</strong></td>
-							<td class="trow1" valign="top" width="75%"><label><input type="radio" name="allowsmilies" value="1"{$smilies_sel['yes']} />&nbsp;{$lang->yes}</label> &nbsp;&nbsp;<label><input type="radio" name="allowsmilies" value="0"{$smilies_sel['no']} />&nbsp;{$lang->no}</label></td>
-						</tr>
-					</table>
-					<br />
-					<div align="center">
-						<input type="submit" class="button" value="{$lang->edit_announcement}" />&nbsp;&nbsp;
-						<input type="submit" class="button" name="preview" value="{$lang->preview}" />
-					</div>
-				
-	</form>
+<div class="atf-modcp__content atf-modcp-announcement-form">
+<form action="modcp.php" method="post" enctype="multipart/form-data" class="atf-stack">
+  <input type="hidden" name="action" value="do_edit_announcement" />
+  <input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+  <input type="hidden" name="fid" value="{$announcement['fid']}" />
+  <input type="hidden" name="aid" value="{$aid}" />
+  {$errors}
+  {$preview}
+  <section class="atf-card atf-form-section">
+    <h2>{$lang->edit_announcement}</h2>
+    <label class="atf-form-row"><span class="atf-form-row__label">{$lang->title}</span><input type="text" class="textbox" name="title" value="{$title}" /></label>
+    <div class="atf-form-row">
+      <span class="atf-form-row__label">{$lang->start_date}</span>
+      <div class="atf-form-row__controls atf-form-row__controls--date">
+        <select name="starttime_day">{$startdateday}</select>
+        <select name="starttime_month">{$startdatemonth}</select>
+        <input type="text" name="starttime_year" value="{$startdateyear}" size="4" maxlength="4" class="textbox" />
+        <input type="text" name="starttime_time" value="{$starttime_time}" size="10" class="textbox" aria-label="{$lang->time}" />
+      </div>
+    </div>
+    <fieldset class="atf-modcp-announcement-end">
+      <legend>{$lang->end_date}</legend>
+      <label class="atf-modcp-announcement-end__finite"><input type="radio" name="endtime_type" value="1"{$end_type_sel['finite']} />
+        <span class="atf-form-row__controls atf-form-row__controls--date">
+          <select name="endtime_day">{$enddateday}</select>
+          <select name="endtime_month">{$enddatemonth}</select>
+          <input type="text" name="endtime_year" value="{$enddateyear}" size="4" maxlength="4" class="textbox" />
+          <input type="text" name="endtime_time" value="{$endtime_time}" size="10" class="textbox" aria-label="{$lang->time}" />
+        </span>
+      </label>
+      <label><input type="radio" name="endtime_type" value="2"{$end_type_sel['infinite']} /> {$lang->never}</label>
+    </fieldset>
+    <div class="atf-form-row">
+      <span class="atf-form-row__label">{$lang->announcement}</span>
+      <div class="atf-modcp-announcement-editor">
+        <div class="atf-modcp-announcement-editor__smilies">{$smilieinserter}</div>
+        <div class="atf-modcp-announcement-editor__main"><textarea id="message" name="message" rows="20" cols="70">{$message}</textarea>{$codebuttons}</div>
+      </div>
+    </div>
+    {$allow_html}
+    <fieldset class="atf-modcp-choice-group"><legend>{$lang->allow_mycode}</legend><label><input type="radio" name="allowmycode" value="1"{$mycode_sel['yes']} /> {$lang->yes}</label><label><input type="radio" name="allowmycode" value="0"{$mycode_sel['no']} /> {$lang->no}</label></fieldset>
+    <fieldset class="atf-modcp-choice-group"><legend>{$lang->allow_smilies}</legend><label><input type="radio" name="allowsmilies" value="1"{$smilies_sel['yes']} /> {$lang->yes}</label><label><input type="radio" name="allowsmilies" value="0"{$smilies_sel['no']} /> {$lang->no}</label></fieldset>
+  </section>
+  <div class="atf-modcp-form__actions">
+    <input type="submit" class="button atf-button" value="{$lang->edit_announcement}" />
+    <input type="submit" class="button atf-button" name="preview" value="{$lang->preview}" />
+  </div>
+</form>
 </div>
 {$atf_modcp_after_content}
 </div>
