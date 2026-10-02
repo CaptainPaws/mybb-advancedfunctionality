@@ -485,8 +485,34 @@ body.atf-active .atf-pm-compose__buddy img { vertical-align: middle; }
 body.atf-active .atf-pm-compose__autocomplete { display: contents; }
 body.atf-active .atf-pm-compose .select2-container { width: 100% !important; max-width: 100%; }
 
+/* Receipt tracking keeps MyBB's read and unread forms, actions and pagination
+   independent while presenting both collections inside the PM workspace. */
+body.atf-active .atf-pm-tracking__section,
+body.atf-active .atf-pm-tracking__form,
+body.atf-active .atf-pm-tracking__messages { display: grid; gap: var(--atf-space-3); min-width: 0; }
+body.atf-active .atf-pm-tracking__section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--atf-space-3); }
+body.atf-active .atf-pm-tracking__section-head h2 { margin: 0; }
+body.atf-active .atf-pm-tracking__toolbar,
+body.atf-active .atf-pm-tracking-card { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(8rem, .35fr) minmax(8rem, .3fr) auto; gap: var(--atf-space-3); align-items: center; min-width: 0; }
+body.atf-active .atf-pm-tracking__toolbar { color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }
+body.atf-active .atf-pm-tracking-card__state img { display: block; max-width: 1.5rem; height: auto; }
+body.atf-active .atf-pm-tracking-card__subject { min-width: 0; margin: 0; font-size: var(--atf-font-size-md); overflow-wrap: anywhere; }
+body.atf-active .atf-pm-tracking-card__recipient,
+body.atf-active .atf-pm-tracking-card__date { min-width: 0; overflow-wrap: anywhere; }
+body.atf-active .atf-pm-tracking-card__date { color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); text-align: end; }
+body.atf-active .atf-pm-tracking-card__check { padding: var(--atf-space-2); }
+body.atf-active .atf-pm-tracking__actions { text-align: end; }
+body.atf-active .atf-pm-tracking__empty { text-align: center; }
+
 @media (max-width: 48rem) {
   body.atf-active .atf-pm-compose__actions { align-items: stretch; flex-direction: column; }
   body.atf-active .atf-pm-compose__actions .atf-button { width: 100%; }
   body.atf-active .atf-pm-compose__editor-tools { overflow-x: auto; }
+  body.atf-active .atf-pm-tracking__toolbar { display: none; }
+  body.atf-active .atf-pm-tracking-card { grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; }
+  body.atf-active .atf-pm-tracking-card__subject { grid-column: 2; }
+  body.atf-active .atf-pm-tracking-card__recipient,
+  body.atf-active .atf-pm-tracking-card__date { grid-column: 2 / -1; text-align: start; }
+  body.atf-active .atf-pm-tracking-card__check { grid-column: 3; grid-row: 1; }
+  body.atf-active .atf-pm-tracking__actions { text-align: start; }
 }

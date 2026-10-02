@@ -1,0 +1,7 @@
+<article class="atf-pm-tracking-card atf-pm-tracking-card--read atf-card" data-pm-id="{$readmessage['pmid']}">
+	<div class="atf-pm-tracking-card__state"><img src="{$theme['imgdir']}/old_pm.png" alt="" /></div>
+	<h3 class="atf-pm-tracking-card__subject">{$readmessage['subject']}</h3>
+	<div class="atf-pm-tracking-card__recipient">{$readmessage['profilelink']}</div>
+	<time class="atf-pm-tracking-card__date">{$readdate}</time>
+	<label class="atf-pm-tracking-card__check"><span class="atf-visually-hidden">{$readmessage['subject']}</span><input type="checkbox" class="checkbox" name="readcheck[{$readmessage['pmid']}]" value="1" /></label>
+</article>
