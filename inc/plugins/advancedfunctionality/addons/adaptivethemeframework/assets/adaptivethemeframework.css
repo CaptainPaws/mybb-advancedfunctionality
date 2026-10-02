@@ -872,6 +872,93 @@ body.atf-active .atf-modcp-editprofile__signature .atf-modcp-suspension {
   margin-block-start: var(--atf-space-3);
 }
 
+/* Task 49: ModCP bans. */
+body.atf-active .atf-modcp-bans,
+body.atf-active .atf-modcp-banuser,
+body.atf-active .atf-modcp-banuser__form {
+  display: grid;
+  gap: var(--atf-component-gap);
+  min-width: 0;
+  overflow: visible;
+}
+body.atf-active .atf-modcp-ban-card {
+  display: grid;
+  gap: var(--atf-space-3);
+  min-width: 0;
+}
+body.atf-active .atf-modcp-ban-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--atf-space-2);
+  align-items: flex-start;
+  justify-content: space-between;
+  min-width: 0;
+}
+body.atf-active .atf-modcp-ban-card__user,
+body.atf-active .atf-modcp-ban-card__reason,
+body.atf-active .atf-modcp-ban-card__actions {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+body.atf-active .atf-modcp-ban-card__actions:empty,
+body.atf-active .atf-modcp-banuser__lift:empty {
+  display: none;
+}
+body.atf-active .atf-modcp-ban-card__action-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--atf-space-2);
+}
+body.atf-active .atf-modcp-ban-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--atf-space-3) var(--atf-space-5);
+  margin: 0;
+}
+body.atf-active .atf-modcp-ban-card__meta > div {
+  display: grid;
+  gap: var(--atf-space-1);
+  min-width: 0;
+}
+body.atf-active .atf-modcp-ban-card__meta dt {
+  color: var(--atf-color-text-muted);
+  font-size: var(--atf-font-size-sm);
+}
+body.atf-active .atf-modcp-ban-card__meta dd {
+  min-width: 0;
+  margin: 0;
+}
+body.atf-active .atf-modcp-ban-card__remaining {
+  display: block;
+  margin-block-start: var(--atf-space-1);
+}
+body.atf-active .atf-modcp-ban-card__status {
+  display: inline-block;
+}
+body.atf-active .atf-modcp-banuser .atf-form-section {
+  display: grid;
+  gap: var(--atf-space-3);
+  min-width: 0;
+}
+body.atf-active .atf-modcp-banuser .atf-form-section > h2 {
+  margin: 0;
+}
+body.atf-active .atf-modcp-banuser :is(input[type="text"], select, textarea) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+body.atf-active .atf-modcp-banuser textarea {
+  min-width: 0;
+  resize: vertical;
+}
+body.atf-active .atf-modcp-ban-list--overview .atf-modcp-ban-card {
+  padding-block: var(--atf-space-3);
+}
+body.atf-active .atf-modcp-ban-list--overview .atf-modcp-ban-card + .atf-modcp-ban-card {
+  border-block-start: 1px solid var(--atf-color-border);
+}
+
 body.atf-active .atf-ucp__notices:empty,
 body.atf-active .atf-ucp__actions:empty,
 body.atf-active .atf-ucp__provided:empty,
