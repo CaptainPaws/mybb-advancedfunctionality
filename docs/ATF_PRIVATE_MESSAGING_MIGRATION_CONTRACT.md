@@ -2,27 +2,26 @@
 
 ## Scope and evidence
 
-This contract began as the preparation audit for PM ownership. Task 19 now
-owns only the folder-list surface and its inseparable row children through the
-generic ATF ledger. It was audited against
+This contract began as the preparation audit for PM ownership and now records
+the completed Phase 1 migration and final Task 26 audit. It was checked against
 the MyBB `mybb_1840` tag (resolved commit
 `bd2a3447939d3084a5926dd66ece04649e0e0d60`), specifically `private.php` and
 `install/resources/mybb_theme.xml`, and against the complete AF repository.
 The inventory below is therefore the MyBB 1.8.40 inventory, rather than a list
-inferred from template names.  `private_messagebit_sep` is shipped in the theme
-XML but is not requested by 1.8.40 `private.php`; it is explicitly identified
-below instead of silently treating it as a live child.
+inferred from template names. `private_messagebit_sep` is shipped in the theme
+XML but is not requested by 1.8.40 `private.php`; it remains deliberately
+unowned.
 
-ATF does not change `private.php`, permissions, or either editor. The list
-templates named in the folder-list graph are now acquired as one reversible
-ownership set; read, send, tracking, search, folders, empty and archive
-templates remain untouched. ATF also exposes a data-only workspace contract on
-`private.php`: the generic
-`pm.navigation`, `pm.quota`, `pm.notice`, `pm.pagination`, `pm.actions`,
-`pm.content`, `pm.before_content`, and `pm.after_content` slots. With ATF off the
-ledger restores the exact previous list-template bytes; with ATF on the folder
-list uses the card-based ATF seeds while all excluded PM surfaces continue to
-render their current templates.
+ATF does not change `private.php`, permissions, or either editor. Phase 1 owns
+the 44 interactive `private_*` templates listed in the final audit below
+through the generic reversible ledger. The eight archive download renderers
+and dormant separator remain untouched. ATF exposes a data-only workspace
+contract on `private.php`: the generic `pm.navigation`, `pm.quota`,
+`pm.notice`, `pm.pagination`, `pm.actions`, `pm.content`,
+`pm.before_content`, and `pm.after_content` slots. With ATF off the ledger
+restores exact previous bytes; with ATF on the interactive PM surfaces use the
+ATF seeds while native MyBB continues to own decisions, validation, actions,
+tokens, parsing, and export delivery.
 
 ## Verified template graph
 
@@ -216,6 +215,8 @@ documents, not workspace-shell variants.
 
 ## Ownership order
 
+The migration was completed in this order:
+
 1. **Extract and test a data-only PM workspace contract first**: rendered
    `usercpnav`, folder options/navigation, quota/warnings, pagination, canonical
    URLs and native token-bearing action fragments. Do not acquire a template.
@@ -237,11 +238,150 @@ documents, not workspace-shell variants.
 7. **Acquire folder management and empty-folder surfaces**, then the archive
    form. These reuse the form and workspace primitives but have destructive
    token-bearing actions.
-8. **Audit archive download templates separately and last.** If ownership is
-   useful, use format-specific non-ATF document seeds; do not put them under the
+8. **Audit archive download templates separately and last.** The audit found no
+   ownership need; they remain native format-specific documents outside the
    interactive shell.
 
-Each acquisition must use ATF's per-template-set ownership ledger and restore
-the exact pre-ATF bytes on release. Until those later tasks are implemented,
-ATF must not treat any `private_*` template as owned and must not add PM markup,
-selectors, or a compatibility replacement for Advanced Responsive Layout.
+Each completed acquisition uses ATF's per-template-set ownership ledger and
+restores the exact pre-ATF bytes on release. No migration stage added a
+compatibility replacement for Advanced Responsive Layout.
+
+## Task 26 final Phase 1 audit (2026-10-02)
+
+### Final ownership inventory
+
+The repository ownership map contains **44 PM templates**, grouped by the
+surface that evaluates them:
+
+- **Workspace/list (16):** `private`, `private_messagebit`,
+  `private_messagebit_icon`, `private_messagebit_denyreceipt`,
+  `private_multiple_recipients`, `private_multiple_recipients_user`,
+  `private_multiple_recipients_bcc`, `private_jump_folders`,
+  `private_jump_folders_folder`, `private_move`, `private_orderarrow`,
+  `private_pmspace`, `private_composelink`, `private_emptyexportlink`,
+  `private_limitwarning`, and `private_nomessages`.
+- **Search (5):** `private_advanced_search`,
+  `private_advanced_search_folders`, `private_search_results`,
+  `private_search_messagebit`, and `private_search_results_nomessages`.
+- **Read (5):** `private_read`, `private_read_action`, `private_read_to`,
+  `private_read_bcc`, and `private_quickreply`.
+- **Send (4):** `private_send`, `private_send_autocomplete`,
+  `private_send_buddyselect`, and `private_send_tracking`.
+- **Tracking (6):** `private_tracking`, `private_tracking_nomessage`,
+  `private_tracking_readmessage`, `private_tracking_unreadmessage`,
+  `private_tracking_readmessage_stop`, and
+  `private_tracking_unreadmessage_stop`.
+- **Folders/empty (5):** `private_folders`, `private_folders_folder`,
+  `private_folders_folder_unremovable`, `private_empty`, and
+  `private_empty_folder`.
+- **Archive form (3):** `private_archive`, `private_archive_folders`, and
+  `private_archive_folders_folder`.
+
+Every name has one non-empty seed file and is acquired for every real theme
+set (`sid > 0`); the master (`sid = -2`) is evidence/fallback and is never
+written. The unique `(template_sid, template_name)` index rules out duplicate
+leases. A fresh lease records the exact resolved pre-ATF content, its checksum,
+whether it was inherited, the installed seed and checksum, and the resulting
+template id. Reacquisition updates seed metadata but never replaces
+`previous_content`, `previous_checksum`, `previous_exists`, or
+`previous_dateline`, so it cannot form a backup chain.
+
+### Explicit non-ownership and export boundary
+
+The following remain non-owned: `private_archive_html`,
+`private_archive_html_folderhead`, `private_archive_html_message`,
+`private_archive_txt`, `private_archive_txt_folderhead`,
+`private_archive_txt_message`, `private_archive_csv`, and
+`private_archive_csv_message`. They are dynamically selected standalone export
+renderers. No matching ATF seed exists, so acquisition cannot add the page
+shell, header/footer, AdvancedMenu, or an `atf-active` body. MyBB retains the
+format-specific download headers, charset/encoding, escaping, and delivery.
+The archive **form** is interactive and owned; the generated download is not.
+
+`private_messagebit_sep` also remains non-owned: it is present in the stock
+XML but neither preloaded nor evaluated by stock MyBB 1.8.40 `private.php`.
+Adding a lease would have no runtime justification.
+
+### Ownership lifecycle result
+
+The full fixture now enumerates the production ownership map rather than a
+historical fixed count. Its OFF → ON → OFF → ON run establishes:
+
+1. OFF resolves the exact custom override or inherited master bytes for every
+   owned name and records those baseline values.
+2. ON creates exactly one lease per `(sid, name)`, installs the exact seed, and
+   verifies the live SHA-256 before marking it `owned`.
+3. OFF restores an existing override byte-for-byte (including its dateline) or
+   deletes the ATF override when the theme previously inherited the master.
+4. The second ON reuses the same lease and original backup; it does not create
+   duplicate rows or a backup chain.
+
+The conflict paths remain fail-closed: unattributed edits become
+`manual_override`, changed owned bytes become `restore_conflict`, and failed
+post-write verification becomes `write_failed`. A previous version restored
+by another addon is safe to reacquire because its checksum equals the immutable
+`previous_checksum`; an arbitrary between-cycle edit is intentionally not
+silently normalized. The only compatibility normalizer relevant to the shared
+ATF ownership system is AdvancedPosterAvatar's narrowly bounded legacy-marker
+cleanup for its historical forum templates. It does not target PM templates.
+AdvancedProfileUI checks the ATF seed map before writing shared profile/postbit
+surfaces and has no `private_*` writer, so no PM provider or normalizer is
+needed.
+
+### Foreign-writer and legacy-layout audit
+
+Repository-wide inspection found no AF install, activate, deactivate,
+`find_replace_templatesets`, direct template-table update, backup/restore
+routine, or compatibility normalizer that writes a `private_*` template.
+PM-related hooks in Advanced Account Switcher and Smart URL Titles operate on
+native data at core hook points; AdvancedMenu, AdvancedBuddyList, alerts, and
+FakeOnline only retain canonical `private.php` links/route identity.
+
+Advanced Responsive Layout remains deprecated and is not a compatibility
+target. None of the 44 ATF PM seeds contains `.pm_table`,
+`af-rwd-mobile-cards`, `af-rwd-script-private`, or its table/DOM-moving
+contract. Those selectors remain confined to that deprecated addon's own
+assets and are not required by the migrated pages.
+
+### Workspace, native behavior, and integration result
+
+PM providers register only when `THIS_SCRIPT === 'private.php'`. Navigation,
+quota, warning, pagination, and action providers transport already-rendered
+native fragments; empty `pm.content`, `pm.before_content`, or
+`pm.after_content` providers render as empty strings without changing the
+layout. Parent seeds place each slot once and do not also print the transported
+legacy variable. Folder visibility, quota and compose permissions, BCC
+visibility, validation, mass actions, tracking decisions, archive options,
+and CSRF checks remain in core `private.php`.
+
+The seed audit preserves the native field/action contract for list and search
+(`check[pmid]`, `action=do_stuff`, sorting, move/read/unread/delete), tracking
+(`readcheck[pmid]`, `unreadcheck[pmid]`, independent pagination and stop/cancel
+submits), folders (`fid[]`, `newfolder[]`), emptying (`empty[fid]`,
+`keepunread`), archive (`exportfolders[]` and export options), compose/quick
+reply (`#to`, `#bcc`, `#message`, `#quickreply_e`, editor fragments and
+`my_post_key`), and all hidden mode identifiers. Forms are owned by their
+parent templates; row/card children do not introduce nested forms or orphan
+submit controls.
+
+`private_read` evaluates the one native `build_postbit($pm, 2)` result. The ATF
+postbit provider passes through PM-specific reply, reply-all, forward, and
+delete buttons in the same single action slot. The read seed keeps
+`#posts_container`, `#posts`, `.post_date`, native permalink content, and the
+normal postbit subtree, so AdvancedJSBundle's generic permalink/quote-avatar
+runtime does not require a PM shim or showthread-only context. Compose retains
+the stock Select2 transport and maximum-recipient calculation, buddy selector,
+and core editor initialization.
+
+No PM attachments or other non-core feature was introduced. Static HTML/CSS
+inspection found no legacy row fragment in a non-table parent, duplicate parent
+form, or PM seed dependency on the old responsive addon. Existing ATF PM rules
+provide bounded controls/editors, fluid Select2 containers, wrapping action
+rows, stackable cards, and breakable subject/identity text as the Phase 1
+responsive baseline.
+
+### Phase 2 boundary
+
+Phase 1 has no known functional PM regression. Visual density, typography,
+spacing, and other cosmetic refinements remain Phase 2 work; they must not be
+folded into this audit. The next migration block is `memberlist/userlist`.
