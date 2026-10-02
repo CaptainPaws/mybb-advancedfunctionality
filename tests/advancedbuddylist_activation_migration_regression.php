@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+define('IN_MYBB', 1);
 
 $root = dirname(__DIR__);
 $source = file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancedbuddylist/advancedbuddylist.php');
