@@ -3035,32 +3035,60 @@ function af_discover_addon_css_candidates(?array $addons = null): array
 
     $indexed = [];
     $indexedByFile = [];
+    $priorities = [];
     foreach ($out as $row) {
         $addonId = (string)$row['addon_id'];
         $logicalId = (string)$row['logical_id'];
         if ($addonId === '' || $logicalId === '') {
             continue;
         }
+
         $k = $addonId.'|'.$logicalId;
-        if (!isset($indexed[$k])) {
+        $canonicalFile = function_exists('af_theme_stylesheet_canonical_source_file')
+            ? af_theme_stylesheet_canonical_source_file($addonId, (string)($row['source_file_rel'] ?? ''))
+            : strtolower(ltrim(str_replace('\\', '/', (string)($row['source_file_rel'] ?? '')), '/'));
+        $fileKey = $canonicalFile !== '' ? strtolower($addonId).'|'.$canonicalFile : '';
+
+        // Explicit theme_stylesheets metadata is authoritative for a physical
+        // source file. Manifest assets are next, bare assets/ discovery last.
+        $source = (string)($row['discovered_from'] ?? '');
+        $priority = $source === 'manifest_theme_stylesheets' ? 3
+            : ($source === 'manifest_assets' ? 2 : 1);
+
+        // De-duplicate by physical addon source first, not by logical id. A
+        // manifest entry may intentionally rename the logical id of a CSS file
+        // that was previously auto-discovered. Keeping both identities would
+        // emit the same stylesheet twice into advancedstyles.css.
+        if ($fileKey !== '' && isset($indexedByFile[$fileKey])) {
+            $existingKey = $indexedByFile[$fileKey];
+            $existingPriority = (int)($priorities[$existingKey] ?? 0);
+
+            if ($priority < $existingPriority) {
+                continue;
+            }
+
+            if ($priority > $existingPriority || $existingKey !== $k) {
+                unset($indexed[$existingKey], $priorities[$existingKey]);
+                $indexedByFile[$fileKey] = $k;
+                $indexed[$k] = $row;
+                $priorities[$k] = $priority;
+                continue;
+            }
+        }
+
+        if (isset($indexed[$k])) {
+            $existingPriority = (int)($priorities[$k] ?? 0);
+            if ($priority >= $existingPriority) {
+                $indexed[$k] = array_merge($indexed[$k], $row);
+                $priorities[$k] = $priority;
+            }
+        } else {
             $indexed[$k] = $row;
-            $fileKey = $addonId.'|'.strtolower((string)($row['source_file_rel'] ?? ''));
-            if ($fileKey !== $addonId.'|') {
-                $indexedByFile[$fileKey] = $k;
-            }
-            continue;
+            $priorities[$k] = $priority;
         }
-        $fileKey = $addonId.'|'.strtolower((string)($row['source_file_rel'] ?? ''));
-        if (($row['discovered_from'] ?? '') === 'manifest_theme_stylesheets') {
-            $indexed[$k] = array_merge($indexed[$k], $row);
-            if ($fileKey !== $addonId.'|' && isset($indexedByFile[$fileKey]) && $indexedByFile[$fileKey] !== $k) {
-                unset($indexed[$indexedByFile[$fileKey]]);
-                $indexedByFile[$fileKey] = $k;
-            }
-            continue;
-        }
-        if ($fileKey !== $addonId.'|' && isset($indexedByFile[$fileKey]) && $indexedByFile[$fileKey] !== $k) {
-            continue;
+
+        if ($fileKey !== '') {
+            $indexedByFile[$fileKey] = $k;
         }
     }
 
@@ -3784,19 +3812,97 @@ function af_theme_stylesheet_incremental_bundle(string $current, array $fresh): 
         return ['ok' => false, 'error' => empty($old['ok']) ? (string)($old['error'] ?? 'existing bundle invalid') : (string)($new['error'] ?? 'seed bundle invalid')];
     }
 
+    // Historical bundles can contain two identities for one physical file:
+    // an auto-discovered logical id and a later explicit manifest logical id.
+    // Build a source-key index so a fresh manifest section can consume its
+    // predecessor instead of preserving it forever as an inactive duplicate.
+    $oldBySource = [];
+    foreach ($old['sections'] as $oldId => $oldSection) {
+        $meta = (array)($oldSection['meta'] ?? []);
+        $addon = strtolower(trim((string)($meta['addon_id'] ?? '')));
+        $file = $addon !== ''
+            ? af_theme_stylesheet_canonical_source_file($addon, (string)($meta['source_file'] ?? ''))
+            : '';
+        if ($addon !== '' && $file !== '') {
+            $oldBySource[$addon.'|'.$file][] = (string)$oldId;
+        }
+    }
+
     $blocks = [];
     $manual = false;
     $added = 0;
     $updated = 0;
+    $consumedOldIds = [];
+
     foreach ($new['sections'] as $id => $seedSection) {
         $seedMeta = (array)$seedSection['meta'];
         $seedBody = (string)$seedSection['body'];
-        if (!isset($old['sections'][$id])) {
+        $seedAddon = strtolower(trim((string)($seedMeta['addon_id'] ?? '')));
+        $seedFile = $seedAddon !== ''
+            ? af_theme_stylesheet_canonical_source_file($seedAddon, (string)($seedMeta['source_file'] ?? ''))
+            : '';
+        $sourceKey = ($seedAddon !== '' && $seedFile !== '') ? $seedAddon.'|'.$seedFile : '';
+        $sourceCandidates = $sourceKey !== '' ? (array)($oldBySource[$sourceKey] ?? []) : [];
+
+        // Exact identity remains preferred, but source aliases are also
+        // consumed. If an alias carries the only manual edit, migrate that
+        // body to the new identity rather than dropping the customization.
+        $candidateIds = [];
+        if (isset($old['sections'][$id])) {
+            $candidateIds[] = (string)$id;
+        }
+        foreach ($sourceCandidates as $candidateId) {
+            if (!in_array($candidateId, $candidateIds, true)) {
+                $candidateIds[] = $candidateId;
+            }
+        }
+
+        $selectedId = '';
+        $editedCandidates = [];
+        foreach ($candidateIds as $candidateId) {
+            $candidate = $old['sections'][$candidateId] ?? null;
+            if (!is_array($candidate)) {
+                continue;
+            }
+            $candidateMeta = (array)($candidate['meta'] ?? []);
+            $candidateBody = (string)($candidate['body'] ?? '');
+            $candidateSeedBody = (string)($candidateMeta['seed_body_sha1'] ?? '');
+            $candidateEdited = !empty($candidateMeta['manual_override'])
+                || ($candidateSeedBody !== '' && !hash_equals($candidateSeedBody, sha1($candidateBody)));
+            if ($candidateEdited) {
+                $editedCandidates[$candidateId] = $candidateBody;
+            }
+        }
+
+        if (count($editedCandidates) > 1) {
+            $distinctBodies = array_values(array_unique(array_values($editedCandidates)));
+            if (count($distinctBodies) > 1) {
+                return [
+                    'ok' => false,
+                    'error' => 'conflicting manual stylesheet aliases for '.$seedAddon.':'.$seedFile,
+                ];
+            }
+        }
+
+        if ($editedCandidates) {
+            $selectedId = (string)array_key_first($editedCandidates);
+        } elseif (isset($old['sections'][$id])) {
+            $selectedId = (string)$id;
+        } elseif ($candidateIds) {
+            $selectedId = (string)$candidateIds[0];
+        }
+
+        if ($selectedId === '') {
             $blocks[] = af_theme_stylesheet_encode_section($seedMeta, $seedBody);
             $added++;
             continue;
         }
-        $existing = $old['sections'][$id];
+
+        foreach ($candidateIds as $candidateId) {
+            $consumedOldIds[$candidateId] = true;
+        }
+
+        $existing = $old['sections'][$selectedId];
         $oldMeta = (array)$existing['meta'];
         $oldBody = (string)$existing['body'];
         $previousSeedBody = (string)($oldMeta['seed_body_sha1'] ?? '');
@@ -3804,7 +3910,7 @@ function af_theme_stylesheet_incremental_bundle(string $current, array $fresh): 
             || ($previousSeedBody !== '' && !hash_equals($previousSeedBody, sha1($oldBody)));
 
         if (!$wasEdited && $previousSeedBody !== '' && !hash_equals($previousSeedBody, (string)($seedMeta['seed_body_sha1'] ?? ''))) {
-            // Upstream changed and the section still equals its old base.
+            // Upstream changed and the selected predecessor still equals its old base.
             $oldBody = $seedBody;
             $updated++;
         } elseif ($wasEdited) {
@@ -3814,21 +3920,25 @@ function af_theme_stylesheet_incremental_bundle(string $current, array $fresh): 
                 $seedMeta['seed_changed'] = true;
             }
         }
-        // Refresh identity/display metadata, but retain the body byte-for-byte.
+
+        // Always emit the fresh identity/display metadata. A predecessor body
+        // survives only when it is the authoritative manual customization.
         $blocks[] = af_theme_stylesheet_encode_section($seedMeta, $oldBody);
     }
 
-    // Preserve non-seed recovery/manual sections. Disabled addon sections are
-    // deliberately retained too, making Theme -> File -> Theme reversible.
+    // Preserve genuinely non-seed recovery/manual/disabled sections. Source
+    // aliases consumed above are intentionally omitted, collapsing duplicate
+    // buttons and duplicate CSS bodies without requiring Force Resync.
     foreach ($old['sections'] as $id => $section) {
-        if (isset($new['sections'][$id])) continue;
+        if (isset($new['sections'][$id]) || isset($consumedOldIds[(string)$id])) continue;
         $meta = (array)$section['meta'];
         $meta['inactive'] = true;
         $blocks[] = af_theme_stylesheet_encode_section($meta, (string)$section['body']);
         if (!empty($meta['manual_override'])) $manual = true;
     }
+
     $source = "/* AdvancedFunctionality theme bundle (structured v1). Edit sections in AF ACP.\n"
-        . " * Incremental synchronization preserves section bodies and only adds missing seeds.\n */\n\n".implode("\n", $blocks);
+        . " * Incremental synchronization preserves section bodies and reconciles historical source aliases.\n */\n\n".implode("\n", $blocks);
     $parsed = af_theme_stylesheet_parse_bundle($source);
     if (empty($parsed['ok'])) return ['ok' => false, 'error' => (string)($parsed['error'] ?? 'incremental validation failed')];
     return ['ok' => true, 'source' => $source, 'checksum' => sha1($source), 'sections' => $parsed['sections'], 'manual_override' => $manual, 'added' => $added, 'updated' => $updated];
