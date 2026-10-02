@@ -1,0 +1,35 @@
+<div class="atf-modcp-suspension atf-modcp-suspension--signature">
+<script type="text/javascript">
+<!--
+	var sig_checked = "{$checked}";
+
+	function toggleAction()
+	{
+		if($("#suspend_action").is(":visible") == true)
+		{
+			$("#suspend_action").hide();
+		}
+		else
+		{
+			$("#suspend_action").show();
+		}
+	}
+// -->
+</script>
+<label class="atf-form-row__choice"><input type="checkbox" name="suspendsignature" value="1" class="checkbox" {$checked_item} onclick="toggleAction();" /> {$lang->suspend_signature}</label>
+<div id="suspend_action" class="atf-modcp-suspension__details">
+  {$suspendsignature_info}
+  <div class="atf-form-row">
+    <span class="atf-form-row__label">{$lang->suspend_length}</span>
+    <div class="atf-form-row__controls"><input type="text" name="action_time" value="{$action_time}" class="textbox atf-modcp-duration" /> {$action_options}</div>
+  </div>
+</div>
+<script type="text/javascript">
+<!--
+	if(sig_checked == 0)
+	{
+		$("#suspend_action").hide();
+	}
+// -->
+</script>
+</div>

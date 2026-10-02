@@ -10,7 +10,7 @@
 </script>
 </head>
 <body>
-	{$header}
+{$header}
 <main class="pun atf-page-shell atf-page atf-modcp" id="content">
 <div class="atf-stack">
 {$atf_modcp_global_navigation}
@@ -18,181 +18,122 @@
 <header class="atf-modcp__header"><h1 class="atf-modcp__title">{$atf_modcp_title}</h1>{$atf_modcp_actions}</header>
 {$atf_modcp_notice}
 {$atf_modcp_before_content}
-<div class="atf-modcp__content">
-<form action="modcp.php" method="post">
-		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
-		
-					{$errors}
-					<table border="0" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" class="tborder">
-						<tr>
-							<td class="thead" colspan="2"><strong>{$lang->edit_profile}</strong></td>
-						</tr>
-						<tr>
-							<td width="50%" class="trow1" valign="top">
-								<fieldset class="trow2">
-									<legend><strong>{$lang->profile_required}</strong></legend>
-									<table cellspacing="0" cellpadding="{$theme['tablespace']}">
-										<tr>
-											<td><span class="smalltext">{$lang->current_username}</span></td>
-										</tr>
-										<tr>
-											<td><strong>{$profile_link}</strong></td>
-										</tr>
-										{$requiredfields}
-									</table>
-								</fieldset>
-								<br />
-								<fieldset class="trow2">
-									<legend><strong>{$lang->profile_optional}</strong></legend>
-									<table cellspacing="0" cellpadding="{$theme['tablespace']}">
-										<tr>
-											<td colspan="3"><span class="smalltext"><label><input type="checkbox" class="checkbox" name="remove_avatar" value="1" /> {$lang->remove_avatar}</label></span></td>
-										</tr>
+<div class="atf-modcp__content atf-modcp-editprofile">
+<form action="modcp.php" method="post" class="atf-stack atf-modcp-editprofile__form">
+<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+{$errors}
 
-										<tr>
-											<td colspan="3"><span class="smalltext">{$lang->birthday}</span></td>
-										</tr>
-										<tr>
-											<td>
-												<select name="birthday_day">
-													<option value="">&nbsp;</option>
-													{$bdaydaysel}
-												</select>
-											</td>
-											<td>
-												<select name="birthday_month">
-													<option value="">&nbsp;</option>
-													<option value="1" {$bdaymonthsel['1']}>{$lang->month_1}</option>
-													<option value="2" {$bdaymonthsel['2']}>{$lang->month_2}</option>
-													<option value="3" {$bdaymonthsel['3']}>{$lang->month_3}</option>
-													<option value="4" {$bdaymonthsel['4']}>{$lang->month_4}</option>
-													<option value="5" {$bdaymonthsel['5']}>{$lang->month_5}</option>
-													<option value="6" {$bdaymonthsel['6']}>{$lang->month_6}</option>
-													<option value="7" {$bdaymonthsel['7']}>{$lang->month_7}</option>
-													<option value="8" {$bdaymonthsel['8']}>{$lang->month_8}</option>
-													<option value="9" {$bdaymonthsel['9']}>{$lang->month_9}</option>
-													<option value="10" {$bdaymonthsel['10']}>{$lang->month_10}</option>
-													<option value="11" {$bdaymonthsel['11']}>{$lang->month_11}</option>
-													<option value="12" {$bdaymonthsel['12']}>{$lang->month_12}</option>
-												</select>
-											</td>
-											<td>
-												<input type="text" class="textbox" size="4" maxlength="4" name="birthday_year" value="{$birthday_year}" />
-											</td>
-										</tr>
-										<tr>
-											<td colspan="3"><span class="smalltext">{$lang->website_url}</span></td>
-										</tr>
-										<tr>
-											<td colspan="3"><input type="text" class="textbox" name="website" size="25" maxlength="75" value="{$user_website}" /></td>
-										</tr>
-									</table>
-								</fieldset>
-								{$customfields}
-							</td>
-							<td width="50%" class="trow1" valign="top">
-								<fieldset class="trow2">
-									<legend><strong>{$lang->custom_usertitle}</strong></legend>
-									<table cellspacing="0" cellpadding="{$theme['tablespace']}">
-										<tr>
-											<td><span class="smalltext">{$lang->custom_usertitle_note}</span></td>
-										</tr>
-										<tr>
-											<td><span class="smalltext">{$lang->default_usertitle}</span></td>
-										</tr>
-										<tr>
-											<td><span class="smalltext"><strong>{$defaulttitle}</strong></span></td>
-										</tr>
-										<tr>
-											<td><span class="smalltext">{$lang->current_custom_usertitle}</span></td>
-										</tr>
-										<tr>
-											<td><span class="smalltext"><strong>{$user['usertitle']}</strong></span></td>
-										</tr>
-										<tr>
-											<td><span class="smalltext">{$lang->new_custom_usertitle}</span></td>
-										</tr>
-										<tr>
-											<td><input type="text" class="textbox" name="usertitle" size="25" maxlength="{$mybb->settings['customtitlemaxlength']}" value="{$newtitle}" /></td>
-										</tr>
-										<tr>
-											<td><span class="smalltext"><input type="checkbox" name="reverttitle" id="reverttitle" class="checkbox" /> {$lang->revert_usertitle}</span></td>
-										</tr>
-									</table>
-								</fieldset>
-								<br />
-								<fieldset class="trow2">
-									<legend><strong>{$lang->moderation}</strong></legend>
-									<table cellspacing="0" cellpadding="{$theme['tablespace']}" width="100%">
-										<tr>
-											<td>
-<dl style="margin-top: 0; margin-bottom: 0;">
-<dt><label><input type="checkbox" name="moderateposting" value="1" {$modpost_checked} class="checkbox" onclick="toggleSuspend('modposts');" id="modpost" /> {$lang->moderate_posts}</label></dt>
-<dd style="margin-top: 4px;" id="modposts_action">
-<table cellpadding="4">
-{$moderateposts_info}
-	<tr>
-		<td width="35%">{$lang->modpost_length}</td>
-		<td><input type="text" name="modpost_time" value="{$modpost_time}" class="textbox" style="width: 2em;" /> {$modpost_options}</td>
-	</tr>
-</table>
-</dd>
-</dl>
-											</td>
-										</tr>
-										<tr>
-											<td>
-<dl style="margin-top: 0; margin-bottom: 0;">
-<dt><label><input type="checkbox" name="suspendposting" value="1" {$suspost_checked} class="checkbox" onclick="toggleSuspend('susposts');" id="suspost" /> {$lang->suspend_posts}</label></dt>
-<dd style="margin-top: 4px;" id="susposts_action">
-<table cellpadding="4">
-{$suspendposting_info}
-	<tr>
-		<td width="35%">{$lang->suspost_length}</td>
-		<td><input type="text" name="suspost_time" value="{$suspost_time}" class="textbox" style="width: 2em;" /> {$suspost_options}</td>
-	</tr>
-</table>
-</dd>
-</dl></td>
-										</tr>
-									</table>
-								</fieldset>
-								{$awaysection}
-							</td>
-						</tr>
-						<tr>
-							<td colspan="2" class="trow1" valign="top">
-								<fieldset class="trow1">
-									<legend><strong>{$lang->signature}</strong></legend>
-									<table cellspacing="0" cellpadding="{$theme['tablespace']}">
-<tr>
-<td class="trow1" width="80%">
-<textarea rows="15" cols="70" id="signature" name="signature">{$user['signature']}</textarea>
-{$codebuttons}
-</td>
-</tr>
-{$suspend_signature}
-									</table>
-								</fieldset>
-							</td>
-						</tr>
-						<tr>
-							<td colspan="2" class="trow1" valign="top">
-								<fieldset class="trow2">
-									<legend><strong>{$lang->mod_notes}</strong></legend>
-									<textarea name="usernotes" id="usernotes" rows="10" cols="70">{$user['usernotes']}</textarea>
-								</fieldset>
-							</td>
-						</tr>
-					</table>
-					<br />
-					<div align="center">
-						<input type="hidden" name="action" value="do_editprofile" />
-						<input type="hidden" name="uid" value="{$user['uid']}" />
-						<input type="submit" class="button" value="{$lang->update_profile}" />
-					</div>
-				
-	</form>
+<div class="atf-modcp-editprofile__grid">
+<section class="atf-card atf-form-section">
+  <h2>{$lang->profile_required}</h2>
+  <div class="atf-form-row">
+    <span class="atf-form-row__label">{$lang->current_username}</span>
+    <strong>{$profile_link}</strong>
+  </div>
+  <div class="atf-profile-fields-provider atf-modcp-editprofile__profilefields">
+    <table class="atf-modcp-editprofile__provider-table"><tbody>{$requiredfields}</tbody></table>
+  </div>
+</section>
+
+<section class="atf-card atf-form-section">
+  <h2>{$lang->profile_optional}</h2>
+  <label class="atf-form-row__choice"><input type="checkbox" class="checkbox" name="remove_avatar" value="1" /> {$lang->remove_avatar}</label>
+
+  <div class="atf-form-row">
+    <span class="atf-form-row__label">{$lang->birthday}</span>
+    <div class="atf-form-row__controls atf-form-row__controls--date">
+      <select name="birthday_day"><option value="">&nbsp;</option>{$bdaydaysel}</select>
+      <select name="birthday_month">
+        <option value="">&nbsp;</option>
+        <option value="1" {$bdaymonthsel['1']}>{$lang->month_1}</option>
+        <option value="2" {$bdaymonthsel['2']}>{$lang->month_2}</option>
+        <option value="3" {$bdaymonthsel['3']}>{$lang->month_3}</option>
+        <option value="4" {$bdaymonthsel['4']}>{$lang->month_4}</option>
+        <option value="5" {$bdaymonthsel['5']}>{$lang->month_5}</option>
+        <option value="6" {$bdaymonthsel['6']}>{$lang->month_6}</option>
+        <option value="7" {$bdaymonthsel['7']}>{$lang->month_7}</option>
+        <option value="8" {$bdaymonthsel['8']}>{$lang->month_8}</option>
+        <option value="9" {$bdaymonthsel['9']}>{$lang->month_9}</option>
+        <option value="10" {$bdaymonthsel['10']}>{$lang->month_10}</option>
+        <option value="11" {$bdaymonthsel['11']}>{$lang->month_11}</option>
+        <option value="12" {$bdaymonthsel['12']}>{$lang->month_12}</option>
+      </select>
+      <input type="text" class="textbox" size="4" maxlength="4" name="birthday_year" value="{$birthday_year}" />
+    </div>
+  </div>
+
+  <label class="atf-form-row">
+    <span class="atf-form-row__label">{$lang->website_url}</span>
+    <input type="text" class="textbox" name="website" size="25" maxlength="75" value="{$user_website}" />
+  </label>
+</section>
+
+<section class="atf-card atf-form-section">
+  <h2>{$lang->custom_usertitle}</h2>
+  <p class="atf-form-row__hint">{$lang->custom_usertitle_note}</p>
+  <dl class="atf-modcp-detail-list">
+    <div><dt>{$lang->default_usertitle}</dt><dd><strong>{$defaulttitle}</strong></dd></div>
+    <div><dt>{$lang->current_custom_usertitle}</dt><dd><strong>{$user['usertitle']}</strong></dd></div>
+  </dl>
+  <label class="atf-form-row">
+    <span class="atf-form-row__label">{$lang->new_custom_usertitle}</span>
+    <input type="text" class="textbox" name="usertitle" size="25" maxlength="{$mybb->settings['customtitlemaxlength']}" value="{$newtitle}" />
+  </label>
+  <label class="atf-form-row__choice"><input type="checkbox" name="reverttitle" id="reverttitle" class="checkbox" /> {$lang->revert_usertitle}</label>
+</section>
+
+<section class="atf-card atf-form-section atf-modcp-editprofile__moderation">
+  <h2>{$lang->moderation}</h2>
+
+  <div class="atf-modcp-suspension">
+    <label class="atf-form-row__choice"><input type="checkbox" name="moderateposting" value="1" {$modpost_checked} class="checkbox" onclick="toggleSuspend('modposts');" id="modpost" /> {$lang->moderate_posts}</label>
+    <div id="modposts_action" class="atf-modcp-suspension__details">
+      {$moderateposts_info}
+      <div class="atf-form-row">
+        <span class="atf-form-row__label">{$lang->modpost_length}</span>
+        <div class="atf-form-row__controls"><input type="text" name="modpost_time" value="{$modpost_time}" class="textbox atf-modcp-duration" /> {$modpost_options}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="atf-modcp-suspension">
+    <label class="atf-form-row__choice"><input type="checkbox" name="suspendposting" value="1" {$suspost_checked} class="checkbox" onclick="toggleSuspend('susposts');" id="suspost" /> {$lang->suspend_posts}</label>
+    <div id="susposts_action" class="atf-modcp-suspension__details">
+      {$suspendposting_info}
+      <div class="atf-form-row">
+        <span class="atf-form-row__label">{$lang->suspost_length}</span>
+        <div class="atf-form-row__controls"><input type="text" name="suspost_time" value="{$suspost_time}" class="textbox atf-modcp-duration" /> {$suspost_options}</div>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
+
+{$customfields}
+{$awaysection}
+
+<section class="atf-card atf-form-section atf-modcp-editprofile__signature">
+  <h2>{$lang->signature}</h2>
+  <div class="atf-form-row">
+    <textarea rows="15" cols="70" id="signature" name="signature">{$user['signature']}</textarea>
+    {$codebuttons}
+  </div>
+  {$suspend_signature}
+</section>
+
+<section class="atf-card atf-form-section">
+  <h2>{$lang->mod_notes}</h2>
+  <div class="atf-form-row">
+    <textarea name="usernotes" id="usernotes" rows="10" cols="70">{$user['usernotes']}</textarea>
+  </div>
+</section>
+
+<div class="atf-modcp-form__actions">
+  <input type="hidden" name="action" value="do_editprofile" />
+  <input type="hidden" name="uid" value="{$user['uid']}" />
+  <input type="submit" class="button atf-button" value="{$lang->update_profile}" />
+</div>
+</form>
 </div>
 {$atf_modcp_after_content}
 </div>

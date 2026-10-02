@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.3');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.4');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1815,6 +1815,12 @@ function af_adaptivethemeframework_template_seeds(): array
         'modcp_warninglogs_nologs' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_warninglogs_nologs.html',
         'modcp_finduser_user' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_finduser_user.html',
         'modcp_finduser_noresults' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_finduser_noresults.html',
+
+        // Task 48: only ModCP-exclusive edit-profile fragments are added to
+        // ownership. Shared usercp_profile_* templates remain under their
+        // existing UCP/APF ownership boundary and are reused as rendered data.
+        'modcp_editprofile_signature' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_editprofile_signature.html',
+        'modcp_editprofile_suspensions_info' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_editprofile_suspensions_info.html',
 
         'usercp' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp.html',
         'usercp_currentavatar' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_currentavatar.html',
