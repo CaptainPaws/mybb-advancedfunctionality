@@ -1561,6 +1561,12 @@ function af_adaptivethemeframework_template_seeds(): array
         'forumbit_depth2_forum' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum.html',
         'forumbit_depth2_forum_lastpost' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum_lastpost.html',
         'forumdisplay' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay.html',
+        // Own the list wrapper as well as its rows: putting semantic <article>
+        // cards directly in the stock <tbody> makes browsers foster-parent them
+        // outside the list and visually splits the last-post content.
+        'forumdisplay_threadlist' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay_threadlist.html',
+        'forumdisplay_threadlist_rating' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay_threadlist_rating.html',
+        'forumdisplay_threads_sep' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay_threads_sep.html',
         'forumdisplay_thread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay_thread.html',
         'member_profile' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/member_profile.html',
         // Task 37 proved these five stock member-list templates participate in
