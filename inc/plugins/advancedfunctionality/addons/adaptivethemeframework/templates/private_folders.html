@@ -1,0 +1,29 @@
+<html>
+<head>
+<title>{$mybb->settings['bbname']} - {$lang->pm_folders}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+<main class="atf-page atf-pm atf-pm-folders">
+	<nav class="atf-pm__navigation" aria-label="{$lang->private_messaging}">{$atf_pm_navigation}</nav>
+	<header class="atf-pm__header atf-card"><div class="atf-pm__heading"><p class="atf-pm__eyebrow">{$lang->private_messaging}</p><h1 class="atf-pm__title">{$lang->pm_folders}</h1></div></header>
+	<form action="private.php" method="post" class="atf-pm-folders__form atf-stack">
+		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+		<section class="atf-pm-folders__section atf-card atf-stack">
+			<h2>{$lang->existing_folders}</h2>
+			<p class="atf-form-row__hint">{$lang->edit_folder_note}</p>
+			<div class="atf-pm-folders__list atf-stack atf-stack--compact">{$folderlist}</div>
+		</section>
+		<section class="atf-pm-folders__section atf-card atf-stack">
+			<h2>{$lang->new_folders}</h2>
+			<p class="atf-form-row__hint">{$lang->add_folders_note}</p>
+			<div class="atf-pm-folders__list atf-stack atf-stack--compact">{$newfolders}</div>
+		</section>
+		<input type="hidden" name="action" value="do_folders" />
+		<div class="atf-pm-folders__actions"><input type="submit" class="atf-button" name="submit" value="{$lang->update_folders}" /></div>
+	</form>
+</main>
+{$footer}
+</body>
+</html>

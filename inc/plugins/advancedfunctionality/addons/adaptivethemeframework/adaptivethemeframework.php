@@ -858,6 +858,11 @@ function af_adaptivethemeframework_template_seeds(): array
         'private_tracking_unreadmessage' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_tracking_unreadmessage.html',
         'private_tracking_readmessage_stop' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_tracking_readmessage_stop.html',
         'private_tracking_unreadmessage_stop' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_tracking_unreadmessage_stop.html',
+        'private_folders' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_folders.html',
+        'private_folders_folder' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_folders_folder.html',
+        'private_folders_folder_unremovable' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_folders_folder_unremovable.html',
+        'private_empty' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_empty.html',
+        'private_empty_folder' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_empty_folder.html',
     ];
 }
 
