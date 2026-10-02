@@ -5,7 +5,9 @@ class AtfDatabase {
     public array $tables = [];
     public array $columns = [];
     public array $indexes = [];
-    public int $nextId = 100;
+    // Stay above the growing master-template fixture so inserted theme rows
+    // never collide with a master tid during repeated lifecycle checks.
+    public int $nextId = 1000;
     public array $writeLog = [];
     public function __construct(bool $legacy = false, array $legacyRows = []) {
         $previous = "<title>{\$mybb->settings['bbname']}</title>\n<script>\nvar x = '{\$lang->some_value}';\nvar path = \"C:\\\\themes\\\"atf\\\"\";\n</script>";

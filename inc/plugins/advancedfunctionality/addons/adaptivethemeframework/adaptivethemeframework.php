@@ -205,11 +205,13 @@ function af_adaptivethemeframework_init(): void
         // values. The ATF-owned template consumes only these composed slots.
         $plugins->add_hook('member_profile_end', 'af_adaptivethemeframework_compose_profile', 1000);
         if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'usercp.php') {
-            // Core fires this only for the account-summary surface. Other UCP
-            // forms keep their existing roots until they explicitly adopt the
-            // shared context and slots.
+            // Each migrated form keeps native core values and processing while
+            // adopting the shared navigation context at its final display hook.
             $plugins->add_hook('usercp_end', 'af_adaptivethemeframework_compose_ucp_overview', 1000);
-            foreach (['usercp_profile_end', 'usercp_avatar_end', 'usercp_editsig_end'] as $hook) {
+            foreach ([
+                'usercp_profile_end', 'usercp_avatar_end', 'usercp_editsig_end',
+                'usercp_options_end', 'usercp_password', 'usercp_email', 'usercp_changename_end',
+            ] as $hook) {
                 $plugins->add_hook($hook, 'af_adaptivethemeframework_compose_ucp_profile_surface', 1000);
             }
         }
@@ -231,7 +233,7 @@ function af_adaptivethemeframework_init(): void
     }
 }
 
-/** Compose navigation for the three ATF-owned Profile workspaces. */
+/** Compose navigation for the ATF-owned Profile, Preferences, and Security workspaces. */
 function af_adaptivethemeframework_compose_ucp_profile_surface(): void
 {
     global $mybb, $lang;
@@ -239,13 +241,17 @@ function af_adaptivethemeframework_compose_ucp_profile_surface(): void
         return;
     }
     $action = (string)($mybb->input['action'] ?? '');
-    if (!in_array($action, ['profile', 'avatar', 'editsig'], true)) {
+    if (!in_array($action, ['profile', 'avatar', 'editsig', 'options', 'password', 'email', 'changename'], true)) {
         return;
     }
     $titles = [
         'profile' => 'edit_profile',
         'avatar' => 'change_avatar',
         'editsig' => 'edit_sig',
+        'options' => 'edit_options',
+        'password' => 'change_password',
+        'email' => 'change_email',
+        'changename' => 'change_username',
     ];
     $titleKey = $titles[$action];
     $context = af_adaptivethemeframework_ucp_context([
@@ -1341,6 +1347,27 @@ function af_adaptivethemeframework_template_seeds(): array
         'usercp_editsig_current' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editsig_current.html',
         'usercp_editsig_preview' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editsig_preview.html',
         'usercp_editsig_suspended' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_editsig_suspended.html',
+        'usercp_options' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options.html',
+        'usercp_options_invisible' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_invisible.html',
+        'usercp_options_date_format' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_date_format.html',
+        'usercp_options_language' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_language.html',
+        'usercp_options_language_option' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_language_option.html',
+        'usercp_options_pms' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_pms.html',
+        'usercp_options_pms_from_buddys' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_pms_from_buddys.html',
+        'usercp_options_pppselect' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_pppselect.html',
+        'usercp_options_pppselect_option' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_pppselect_option.html',
+        'usercp_options_quick_reply' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_quick_reply.html',
+        'usercp_options_style' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_style.html',
+        'usercp_options_time_format' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_time_format.html',
+        'usercp_options_timezone' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_timezone.html',
+        'usercp_options_timezone_option' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_timezone_option.html',
+        'usercp_options_tppselect' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_tppselect.html',
+        'usercp_options_tppselect_option' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_options_tppselect_option.html',
+        'usercp_themeselector' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_themeselector.html',
+        'usercp_themeselector_option' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_themeselector_option.html',
+        'usercp_password' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_password.html',
+        'usercp_email' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_email.html',
+        'usercp_changename' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_changename.html',
         'showthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread.html',
         'postbit_classic' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/postbit_classic.html',
         'private' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private.html',
