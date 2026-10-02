@@ -9,7 +9,7 @@ return [
     'type'        => 'addon',
     'name'        => 'Advanced Buddy List',
     'description' => 'Взаимные друзья, заявки, односторонний игнор и поиск пользователей.',
-    'version'     => '2.1.0',
+    'version'     => '2.1.1',
     'compatibility' => '18*',
     'author'      => 'CaptainPaws',
     'website'     => 'https://github.com/CaptainPaws',
