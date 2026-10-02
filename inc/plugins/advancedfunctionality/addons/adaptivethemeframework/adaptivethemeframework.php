@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.2');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.3');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1802,6 +1802,19 @@ function af_adaptivethemeframework_template_seeds(): array
         'modcp_modqueue_attachments_attachment' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_attachments_attachment.html',
         'modcp_modqueue_attachments_empty' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_attachments_empty.html',
         'modcp_modqueue_masscontrols' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_masscontrols.html',
+
+        // Task 47: exclusive read/search presentation for IP Search, Warning
+        // Log and Find User. Shared edit-profile fragments stay untouched for
+        // Task 48; MyBB continues to own queries, filters and authorization.
+        'modcp_ipsearch_results' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_ipsearch_results.html',
+        'modcp_ipsearch_result' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_ipsearch_result.html',
+        'modcp_ipsearch_noresults' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_ipsearch_noresults.html',
+        'modcp_ipsearch_misc_info' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_ipsearch_misc_info.html',
+        'modcp_warninglogs_warning' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_warninglogs_warning.html',
+        'modcp_warninglogs_warning_revoked' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_warninglogs_warning_revoked.html',
+        'modcp_warninglogs_nologs' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_warninglogs_nologs.html',
+        'modcp_finduser_user' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_finduser_user.html',
+        'modcp_finduser_noresults' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_finduser_noresults.html',
 
         'usercp' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp.html',
         'usercp_currentavatar' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_currentavatar.html',

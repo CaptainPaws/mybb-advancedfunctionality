@@ -1,10 +1,10 @@
 <html>
 <head>
-	<title>{$mybb->settings['bbname']} - {$lang->ipsearch}</title>
-	{$headerinclude}
+<title>{$mybb->settings['bbname']} - {$lang->ipsearch}</title>
+{$headerinclude}
 </head>
 <body>
-	{$header}
+{$header}
 <main class="pun atf-page-shell atf-page atf-modcp" id="content">
 <div class="atf-stack">
 {$atf_modcp_global_navigation}
@@ -12,30 +12,23 @@
 <header class="atf-modcp__header"><h1 class="atf-modcp__title">{$atf_modcp_title}</h1>{$atf_modcp_actions}</header>
 {$atf_modcp_notice}
 {$atf_modcp_before_content}
-<div class="atf-modcp__content">
+<div class="atf-modcp__content atf-modcp-ipsearch">
 {$ipsearch_results}
-				<form action="modcp.php?action=ipsearch" method="post">
-					<table border="0" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" class="tborder">
-						<tr>
-							<td class="thead" colspan="2"><strong>{$lang->ipaddress_search}</strong></td>
-						</tr>
-						<tr>
-							<td class="trow1" width="25%"><strong>{$lang->ip_address}</strong></td>
-							<td class="trow1" width="75%"><input type="text" class="textbox" name="ipaddress" value="{$ipaddressvalue}" size="30" /></td>
-						</tr>
-						<tr>
-							<td class="trow1" width="25%" valign="top"><strong>{$lang->options}</strong></td>
-							<td class="trow1" width="75%">
-								<label><input type="checkbox" class="checkbox" name="search_users" value="1" {$usersearchselect} />{$lang->search_users}</label><br />
-								<label><input type="checkbox" class="checkbox" name="search_posts" value="1" {$postsearchselect} />{$lang->search_posts}</label>
-							</td>
-						</tr>
-					</table>
-					<br />
-					<div align="center">
-						<input type="submit" class="button" value="{$lang->find}" />
-					</div>
-				</form>
+<section class="atf-card atf-modcp-panel">
+  <header class="atf-modcp-panel__header"><h2>{$lang->ipaddress_search}</h2></header>
+  <form action="modcp.php?action=ipsearch" method="post" class="atf-stack">
+    <div class="atf-form-row">
+      <label class="atf-form-row__label" for="atf-modcp-ipaddress">{$lang->ip_address}</label>
+      <input type="text" class="textbox" name="ipaddress" id="atf-modcp-ipaddress" value="{$ipaddressvalue}" size="30" />
+    </div>
+    <fieldset class="atf-modcp-choice-group">
+      <legend>{$lang->options}</legend>
+      <label><input type="checkbox" class="checkbox" name="search_users" value="1" {$usersearchselect} /> {$lang->search_users}</label>
+      <label><input type="checkbox" class="checkbox" name="search_posts" value="1" {$postsearchselect} /> {$lang->search_posts}</label>
+    </fieldset>
+    <div class="atf-modcp-form__actions"><input type="submit" class="button atf-button" value="{$lang->find}" /></div>
+  </form>
+</section>
 </div>
 {$atf_modcp_after_content}
 </div>

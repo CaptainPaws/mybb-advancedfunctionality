@@ -1,0 +1,12 @@
+<article class="atf-modcp-list-card atf-modcp-warning-card">
+  <header class="atf-modcp-warning-card__header">
+    <div class="atf-modcp-warning-card__user">{$username_link}</div>
+    <a class="atf-button" href="warnings.php?action=view&amp;wid={$row['wid']}">{$lang->view}</a>
+  </header>
+  <div class="atf-modcp-warning-card__title">{$title} ({$points})</div>
+  <dl class="atf-modcp-warning-card__meta atf-meta">
+    <div><dt>{$lang->date_issued}</dt><dd>{$issued_date}</dd></div>
+    <div><dt>{$lang->expires}</dt><dd>{$expire_date}{$revoked_text}</dd></div>
+    <div><dt>{$lang->issued_by}</dt><dd>{$mod_username_link}</dd></div>
+  </dl>
+</article>
