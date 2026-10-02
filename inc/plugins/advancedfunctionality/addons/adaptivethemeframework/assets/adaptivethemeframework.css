@@ -959,6 +959,104 @@ body.atf-active .atf-modcp-ban-list--overview .atf-modcp-ban-card + .atf-modcp-b
   border-block-start: 1px solid var(--atf-color-border);
 }
 
+/* Task 50: ModCP announcements. */
+body.atf-active .atf-modcp-announcements,
+body.atf-active .atf-modcp-announcement-form,
+body.atf-active .atf-modcp-announcement-delete {
+  display: grid;
+  gap: var(--atf-component-gap);
+  min-width: 0;
+  overflow: visible;
+}
+body.atf-active .atf-modcp-announcement-list {
+  min-width: 0;
+}
+body.atf-active .atf-modcp-announcement-card,
+body.atf-active .atf-modcp-announcement-forum {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--atf-space-3);
+  align-items: center;
+  min-width: 0;
+  padding-inline-start: calc(var(--atf-space-4) + var(--atf-announcement-depth, 0px));
+}
+body.atf-active .atf-modcp-announcement-card__main,
+body.atf-active .atf-modcp-announcement-forum__name {
+  display: flex;
+  gap: var(--atf-space-2);
+  align-items: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+body.atf-active .atf-modcp-announcement-card__actions,
+body.atf-active .atf-modcp-announcement-forum__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--atf-space-2);
+  justify-content: flex-end;
+}
+body.atf-active .atf-modcp-announcement-forum.is-readonly {
+  grid-template-columns: minmax(0, 1fr);
+}
+body.atf-active .atf-modcp-announcement-form .atf-form-section {
+  display: grid;
+  gap: var(--atf-space-3);
+  min-width: 0;
+}
+body.atf-active .atf-modcp-announcement-form .atf-form-section > h2 {
+  margin: 0;
+}
+body.atf-active .atf-modcp-announcement-form :is(input[type="text"], select, textarea) {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+body.atf-active .atf-modcp-announcement-form textarea#message {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+}
+body.atf-active .atf-modcp-announcement-form .atf-form-row__controls--date {
+  display: grid;
+  grid-template-columns: minmax(5rem, .7fr) minmax(8rem, 1fr) minmax(5rem, .7fr) minmax(7rem, .8fr);
+  gap: var(--atf-space-2);
+  min-width: 0;
+}
+body.atf-active .atf-modcp-announcement-end {
+  display: grid;
+  gap: var(--atf-space-2);
+  min-width: 0;
+  padding: var(--atf-space-3);
+  margin: 0;
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-md);
+}
+body.atf-active .atf-modcp-announcement-end legend {
+  padding-inline: var(--atf-space-1);
+  font-weight: var(--atf-font-weight-medium);
+}
+body.atf-active .atf-modcp-announcement-end__finite {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--atf-space-2);
+  align-items: center;
+}
+body.atf-active .atf-modcp-announcement-editor {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--atf-space-4);
+  min-width: 0;
+}
+body.atf-active .atf-modcp-announcement-editor__smilies,
+body.atf-active .atf-modcp-announcement-editor__main {
+  min-width: 0;
+}
+body.atf-active .atf-modcp-announcement-editor__main {
+  overflow-x: auto;
+}
+body.atf-active .atf-modcp-announcement-delete .atf-modcp-panel p {
+  margin: 0;
+}
+
 body.atf-active .atf-ucp__notices:empty,
 body.atf-active .atf-ucp__actions:empty,
 body.atf-active .atf-ucp__provided:empty,
@@ -1118,6 +1216,15 @@ body.atf-active .atf-profile__post-counter:empty, body.atf-active .atf-profile__
   body.atf-active .atf-modcp-report-card,
   body.atf-active .atf-modcp-editprofile__grid { grid-template-columns: minmax(0, 1fr); }
   body.atf-active .atf-modcp-report-card__meta { grid-column: auto; }
+  body.atf-active .atf-modcp-announcement-card,
+  body.atf-active .atf-modcp-announcement-forum,
+  body.atf-active .atf-modcp-announcement-editor,
+  body.atf-active .atf-modcp-announcement-end__finite,
+  body.atf-active .atf-modcp-announcement-form .atf-form-row__controls--date { grid-template-columns: minmax(0, 1fr); }
+  body.atf-active .atf-modcp-announcement-card,
+  body.atf-active .atf-modcp-announcement-forum { padding-inline-start: var(--atf-space-4); }
+  body.atf-active .atf-modcp-announcement-card__actions,
+  body.atf-active .atf-modcp-announcement-forum__actions { justify-content: flex-start; }
   body.atf-active .atf-modcp-form__actions { justify-content: stretch; }
   body.atf-active .atf-ucp-summary__body { grid-template-columns: minmax(0, 1fr); }
   body.atf-active .atf-ucp__header { align-items: stretch; flex-direction: column; }
