@@ -1751,9 +1751,9 @@ function af_adaptivethemeframework_template_seeds(): array
         'memberlist_search' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/memberlist_search.html',
         'memberlist_error' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/memberlist_error.html',
         'memberlist_referrals_bit' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/memberlist_referrals_bit.html',
-        // Task 44 owns only the proven full-document ModCP roots. All native
-        // rows, forms, editor fragments, empty states and shared templates stay
-        // core-owned and are merely rendered inside these shells.
+        // Task 44 owns the proven full-document ModCP roots. Later staged
+        // tasks may add only the child presentation required by the surface
+        // being migrated; unrelated forms/fragments remain core-owned.
         'modcp' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp.html',
         'modcp_reports' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_reports.html',
         'modcp_reports_allreports' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_reports_allreports.html',
