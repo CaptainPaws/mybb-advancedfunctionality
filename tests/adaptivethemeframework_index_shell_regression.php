@@ -17,7 +17,7 @@ foreach (['forumbit_depth2_forum', 'forumbit_depth2_forum_lastpost', 'forumdispl
         throw new RuntimeException("ATF must own a semantic card template for {$title}.");
     }
 }
-if (!str_contains((string)$template, 'class="atf-page atf-index"')
+if (!str_contains((string)$template, 'class="pun atf-page-shell atf-page atf-index"')
     || !str_contains((string)$template, 'class="atf-index__section atf-index__forums"')) {
     throw new RuntimeException('ATF index page and compatibility section are missing.');
 }

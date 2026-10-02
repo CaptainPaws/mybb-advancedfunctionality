@@ -32,6 +32,7 @@ body.atf-active {
   --atf-page-gap: var(--atf-space-5);
   --atf-component-gap: var(--atf-space-4);
   --atf-content-max-width: 75rem;
+  --atf-page-max-width: var(--atf-content-max-width);
 
   /* Typography */
   --atf-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -55,15 +56,34 @@ body.atf-active {
   --atf-breakpoint-narrow: 30rem;
 }
 
-body.atf-active .atf-page {
+body.atf-active .pun.atf-page-shell {
   box-sizing: border-box;
-  width: min(100%, var(--atf-content-max-width));
+  width: 100%;
+  max-width: var(--atf-page-max-width);
   margin-inline: auto;
+  min-width: 0;
   padding-inline: var(--atf-page-gap);
+}
+
+body.atf-active .atf-page {
   color: var(--atf-color-text);
   font-family: var(--atf-font-family);
   font-size: var(--atf-font-size-md);
   line-height: var(--atf-line-height);
+}
+
+/* Every direct page participant must be allowed to shrink inside the shell. */
+body.atf-active .pun.atf-page-shell > *,
+body.atf-active .pun.atf-page-shell :is(
+  [class^="atf-forum-"], [class*=" atf-forum-"],
+  [class^="atf-thread-"], [class*=" atf-thread-"],
+  [class^="atf-user-"], [class*=" atf-user-"],
+  [class^="atf-ucp-"], [class*=" atf-ucp-"],
+  [class^="atf-pm-"], [class*=" atf-pm-"]
+) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
 }
 
 body.atf-active .atf-section { margin-block: var(--atf-space-6); }
