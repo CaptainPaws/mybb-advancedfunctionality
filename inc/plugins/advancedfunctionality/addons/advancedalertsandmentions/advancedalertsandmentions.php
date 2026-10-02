@@ -50,8 +50,8 @@ function af_aam_register_atf_ucp_navigation(): void
         'active' => ['scripts' => ['usercp.php'], 'actions' => ['af_aam_list', 'af_aam_prefs']],
         'badge' => 'af_advancedalertsandmentions_menu_badge',
         'children' => [
-            'list' => ['route'=>['script'=>'usercp.php','query'=>['action'=>'af_aam_list']], 'label'=>'Alerts list', 'icon'=>'bell', 'weight'=>10, 'visibility'=>'af_advancedalertsandmentions_menu_visible', 'active'=>['scripts'=>['usercp.php'],'actions'=>['af_aam_list']]],
-            'preferences' => ['route'=>['script'=>'usercp.php','query'=>['action'=>'af_aam_prefs']], 'label'=>'Alert preferences', 'icon'=>'sliders', 'weight'=>20, 'visibility'=>'af_advancedalertsandmentions_menu_visible', 'active'=>['scripts'=>['usercp.php'],'actions'=>['af_aam_prefs']]],
+            'list' => ['route'=>['script'=>'usercp.php','query'=>['action'=>'af_aam_list']], 'label'=>'af_aam_ucp_nav_list', 'icon'=>'bell', 'weight'=>10, 'visibility'=>'af_advancedalertsandmentions_menu_visible', 'active'=>['scripts'=>['usercp.php'],'actions'=>['af_aam_list']]],
+            'preferences' => ['route'=>['script'=>'usercp.php','query'=>['action'=>'af_aam_prefs']], 'label'=>'af_aam_ucp_nav_preferences', 'icon'=>'sliders', 'weight'=>20, 'visibility'=>'af_advancedalertsandmentions_menu_visible', 'active'=>['scripts'=>['usercp.php'],'actions'=>['af_aam_prefs']]],
         ],
     ];
     if (function_exists('af_adaptivethemeframework_ucp_register_navigation_provider')) {

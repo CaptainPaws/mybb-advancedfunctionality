@@ -1,0 +1,12 @@
+<article class="atf-ucp-thread-card {$bgcolor}">
+<div class="atf-ucp-thread-card__status"><span class="thread_status {$folder}" title="{$folder_label}" aria-label="{$folder_label}"></span>{$icon}</div>
+<div class="atf-ucp-thread-card__main">
+<h3 class="atf-ucp-thread-card__title">{$gotounread}{$thread['displayprefix']}<a href="{$thread['threadlink']}" class="{$new_class}">{$thread['subject']}</a></h3>
+<div class="atf-ucp-thread-card__meta"><span>{$thread['author']}</span><span><a href="forumdisplay.php?fid={$thread['fid']}">{$forums_cache[$thread['fid']]['name']}</a></span></div>
+</div>
+<dl class="atf-ucp-thread-card__stats">
+<div><dt>{$lang->replies}</dt><dd><a href="{$mybb->settings['bburl']}/misc.php?action=whoposted&amp;tid={$thread['tid']}" onclick="MyBB.whoPosted({$thread['tid']}); return false;">{$thread['replies']}</a></dd></div>
+<div><dt>{$lang->views}</dt><dd>{$thread['views']}</dd></div>
+</dl>
+<div class="atf-ucp-thread-card__lastpost"><time>{$lastpostdate}</time><span><a href="{$thread['lastpostlink']}">{$lang->lastpost}</a>: {$lastposterlink}</span></div>
+</article>
