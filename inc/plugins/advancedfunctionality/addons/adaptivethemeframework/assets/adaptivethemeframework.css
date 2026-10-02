@@ -665,3 +665,10 @@ body.atf-active .atf-signature-preview__body { margin-block-start: var(--atf-spa
   body.atf-active .atf-avatar-current { align-items: flex-start; flex-direction: column; }
   body.atf-active .atf-ucp-form :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { width: 100%; max-width: 100%; }
 }
+
+/* Preferences keeps its native option groups while using the shared ATF form system. */
+body.atf-active .atf-options-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+body.atf-active .atf-options-form fieldset > legend { padding-inline: var(--atf-space-2); }
+@media (max-width: 48rem) {
+  body.atf-active .atf-options-grid { grid-template-columns: minmax(0, 1fr); }
+}

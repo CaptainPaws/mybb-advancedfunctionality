@@ -1,0 +1,31 @@
+<html>
+<head>
+<title>{$mybb->settings['bbname']} - {$lang->change_email}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+<main class="atf-page atf-ucp atf-ucp-form" id="content">
+<div class="atf-stack">
+{$atf_ucp_global_navigation}
+{$atf_ucp_local_navigation}
+<header class="atf-ucp__header"><h1 class="atf-ucp__title">{$lang->change_email}</h1></header>
+{$errors}
+<form action="usercp.php" method="post" class="atf-stack atf-security-form">
+<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+<section class="atf-card atf-form-section">
+<h2>{$lang->password_confirmation}</h2>
+<label class="atf-form-row"><span class="atf-form-row__label">{$lang->current_password}</span><input type="password" class="textbox" name="password" size="25" autocomplete="current-password" /></label>
+</section>
+<section class="atf-card atf-form-section">
+<h2>{$lang->please_enter_confirm_new_email}</h2>
+<label class="atf-form-row"><span class="atf-form-row__label">{$lang->new_email}</span><input type="text" class="textbox" name="email" size="25" maxlength="150" value="{$email}" autocomplete="email" /></label>
+<label class="atf-form-row"><span class="atf-form-row__label">{$lang->confirm_email}</span><input type="text" class="textbox" name="email2" size="25" maxlength="150" value="{$email2}" autocomplete="email" /></label>
+</section>
+<div class="atf-form-actions"><input type="hidden" name="action" value="do_email" /><input type="submit" class="button atf-button" name="submit" value="{$lang->update_email}" /></div>
+</form>
+</div>
+</main>
+{$footer}
+</body>
+</html>
