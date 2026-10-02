@@ -146,12 +146,29 @@ function af_adaptivethemeframework_normalizer_diagnostic(string $seed, string $c
         }
     }
     $normalized = $compatibility === null ? $current : (string)$compatibility['normalized_content'];
-    $matches = hash_equals(af_adaptivethemeframework_checksum($seed), af_adaptivethemeframework_checksum($normalized));
+    $matchesExactSeed = hash_equals(af_adaptivethemeframework_checksum($seed), af_adaptivethemeframework_checksum($current));
+    $matchesCanonicalSeed = hash_equals(
+        af_adaptivethemeframework_canonical_template_checksum($seed),
+        af_adaptivethemeframework_canonical_template_checksum($current)
+    );
+    $matchesCompatibleSeed = $compatibility !== null && hash_equals(
+        af_adaptivethemeframework_checksum($seed),
+        af_adaptivethemeframework_checksum($normalized)
+    );
+    $matchesCanonicalCompatibleSeed = $compatibility !== null && hash_equals(
+        af_adaptivethemeframework_canonical_template_checksum($seed),
+        af_adaptivethemeframework_canonical_template_checksum($normalized)
+    );
     $limit = min(strlen($normalized), strlen($seed));
     $offset = $limit;
     for ($i = 0; $i < $limit; $i++) { if ($normalized[$i] !== $seed[$i]) { $offset = $i; break; } }
-    $lines[] = 'matches_seed=' . ($matches ? 'yes' : 'no');
-    if (!$matches) {
+    $lines[] = 'matches_exact_seed=' . ($matchesExactSeed ? 'yes' : 'no');
+    $lines[] = 'matches_canonical_seed=' . ($matchesCanonicalSeed ? 'yes' : 'no');
+    $lines[] = 'matches_compatible_seed=' . ($matchesCompatibleSeed ? 'yes' : 'no');
+    $lines[] = 'matches_canonical_compatible_seed=' . ($matchesCanonicalCompatibleSeed ? 'yes' : 'no');
+    // Retain the original field for consumers of the existing diagnostic.
+    $lines[] = 'matches_seed=' . (($matchesCompatibleSeed || ($compatibility === null && $matchesExactSeed)) ? 'yes' : 'no');
+    if (!$matchesCompatibleSeed && !($compatibility === null && $matchesExactSeed)) {
         $lines[] = 'length_current=' . strlen($current);
         $lines[] = 'length_seed=' . strlen($seed);
         $lines[] = 'first_differing_offset=' . $offset;
@@ -900,6 +917,14 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                     : null;
                 $matchesCompatibleSeed = $compatibility !== null
                     && hash_equals($seedChecksum, af_adaptivethemeframework_checksum($compatibility['normalized_content']));
+                $matchesCanonicalCompatibleSeed = $compatibility !== null
+                    && $previousValid
+                    && hash_equals(
+                        af_adaptivethemeframework_canonical_template_checksum($seed),
+                        af_adaptivethemeframework_canonical_template_checksum(
+                            (string)$compatibility['normalized_content']
+                        )
+                    );
                 $diagnostic = '';
                 if (!$matchesPrevious && !$matchesInstalled && !$matchesSeed) {
                     $diagnostic = af_adaptivethemeframework_normalizer_diagnostic($seed, $current, $compatibility)
@@ -911,7 +936,7 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
 
                 // Reconcile every activation from checksum evidence. States such as
                 // manual_override are diagnostic, not permanent locks.
-                if (!$matchesPrevious && !$matchesInstalled && !($matchesSeed && $previousValid) && !$matchesCanonicalSeed && !$matchesCompatibleSeed) {
+                if (!$matchesPrevious && !$matchesInstalled && !($matchesSeed && $previousValid) && !$matchesCanonicalSeed && !$matchesCompatibleSeed && !$matchesCanonicalCompatibleSeed) {
                     af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
                     $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => af_adaptivethemeframework_db_string('manual_override'), 'current_content' => af_adaptivethemeframework_db_string($current), 'updated_at' => $now], "id='".(int)$lease['id']."'");
                     throw af_adaptivethemeframework_ownership_conflict($templateName, $sid, (string)$lease['ownership_state'], $currentChecksum, $previousChecksum, $installedChecksum, $seedChecksum, $diagnostic);
@@ -920,7 +945,7 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                 // Preserve the original pre-ATF backup. Only normalize ownership
                 // and seed metadata; never replace previous_* during recovery.
                 af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
-                $provenInstalledChecksum = ($matchesSeed || $matchesCanonicalSeed || $matchesCompatibleSeed) ? $seedChecksum : $installedChecksum;
+                $provenInstalledChecksum = ($matchesSeed || $matchesCanonicalSeed || $matchesCompatibleSeed || $matchesCanonicalCompatibleSeed) ? $seedChecksum : $installedChecksum;
                 $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['atf_seed_content' => af_adaptivethemeframework_db_string($seed), 'atf_seed_checksum' => af_adaptivethemeframework_db_string($seedChecksum), 'atf_installed_checksum' => af_adaptivethemeframework_db_string($provenInstalledChecksum), 'atf_version' => af_adaptivethemeframework_db_string(AF_ADAPTIVETHEMEFRAMEWORK_VERSION), 'ownership_state' => af_adaptivethemeframework_db_string('owned'), 'current_content' => af_adaptivethemeframework_db_string(''), 'updated_at' => $now, 'restored_at' => 0], "id='".(int)$lease['id']."'");
                 if ($matchesSeed) {
                     continue;
