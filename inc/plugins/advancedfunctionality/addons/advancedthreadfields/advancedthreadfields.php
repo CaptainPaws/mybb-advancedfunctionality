@@ -445,6 +445,8 @@ function af_advancedthreadfields_init(): void
 {
     global $plugins;
 
+    af_atf_register_atf_compatibility_normalizer();
+
     if (!af_atf_is_enabled()) {
         return;
     }
@@ -597,7 +599,8 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         }
     }
 
-    if ((defined('THIS_SCRIPT') && THIS_SCRIPT === 'showthread.php')
+    if (!af_atf_template_is_atf_owned('showthread')
+        && (defined('THIS_SCRIPT') && THIS_SCRIPT === 'showthread.php')
         && !empty($GLOBALS['af_atf_showthread_block'])
         && strpos($page, AF_ATF_TPL_MARK_SHOW) === false
     ) {
@@ -2620,6 +2623,71 @@ function af_atf_boot_prefill_from_token(int $fid): void
     }
 
 
+}
+
+/** ATF owns every template in its seed catalogue while the framework is active. */
+function af_atf_template_is_atf_owned(string $templateName): bool
+{
+    return function_exists('af_is_addon_enabled')
+        && af_is_addon_enabled('adaptivethemeframework')
+        && function_exists('af_adaptivethemeframework_template_seeds')
+        && array_key_exists($templateName, af_adaptivethemeframework_template_seeds());
+}
+
+/** Register removal of this addon's obsolete template injections for ATF recovery. */
+function af_atf_register_atf_compatibility_normalizer(): bool
+{
+    if (!function_exists('af_adaptivethemeframework_register_compatibility_normalizer')) {
+        $GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizers'][AF_ATF_ID . '::legacy_markers']
+            = 'af_atf_normalize_atf_template';
+        $GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizer_prefixes'][AF_ATF_ID . '::legacy_markers']
+            = 'atf_fields';
+        return true;
+    }
+    return af_adaptivethemeframework_register_compatibility_normalizer(
+        AF_ATF_ID . '::legacy_markers',
+        'af_atf_normalize_atf_template',
+        'atf_fields'
+    );
+}
+
+/** @return array<string, mixed>|null */
+function af_atf_normalize_atf_template(string $templateName, string $current): ?array
+{
+    $legacy = [
+        'showthread' => [AF_ATF_TPL_MARK_SHOW, '{$af_atf_showthread_block}'],
+        'forumdisplay_thread' => [AF_ATF_TPL_MARK_CHIPS, '{$thread[\'af_atf_forum_chips\']}'],
+    ];
+    if (!isset($legacy[$templateName])) {
+        return null;
+    }
+
+    [$marker, $variable] = $legacy[$templateName];
+    $markerCount = substr_count($current, $marker);
+    $variableCount = substr_count($current, $variable);
+    if ($markerCount !== 1 || $variableCount !== 1) {
+        return null;
+    }
+
+    // Match only the exact legacy pair and whitespace introduced around it.
+    // Any unrelated byte survives and therefore continues to fail ATF's seed check.
+    $pattern = '~(?:\r?\n)?[ \t]*' . preg_quote($marker, '~')
+        . '[ \t]*\r?\n[ \t]*' . preg_quote($variable, '~') . '[ \t]*(?:\r?\n)?~';
+    $normalized = preg_replace($pattern, '', $current, 1, $replacements);
+    if ($replacements !== 1 || !is_string($normalized) || $normalized === $current) {
+        return null;
+    }
+
+    return [
+        'normalized_content' => $normalized,
+        'owner' => AF_ATF_ID,
+        'source' => 'legacy_template_injection',
+        'transformation_type' => 'exact_known_marker_and_variable_removal',
+        'diagnostic' => [
+            'marker_count' => $markerCount,
+            'variable_count' => $variableCount,
+        ],
+    ];
 }
 
 /** Resolve a group's archive, retaining the legacy global setting as fallback only. */
@@ -7162,6 +7230,10 @@ function af_atf_tpl_force_edit_by_title(string $title, string $tpl): string
 {
     $title = trim($title);
 
+    if (af_atf_template_is_atf_owned($title)) {
+        return $tpl;
+    }
+
     // что вставляем: маркер + переменная
     $insertInput = "\n" . AF_ATF_TPL_MARK_INPUT . "\n" . '{$af_atf_input_html}' . "\n";
     $insertShow  = "\n" . AF_ATF_TPL_MARK_SHOW  . "\n" . '{$af_atf_showthread_block}' . "\n";
@@ -7289,6 +7361,10 @@ function af_atf_apply_template_edits(): void
         foreach ($titles as $title) {
             $title = (string)$title;
 
+            if (af_atf_template_is_atf_owned($title)) {
+                continue;
+            }
+
             // 1) если запись есть — редактируем её
             $row = af_atf_tpl_load_one($sid, $title);
             if ($row) {
@@ -7343,6 +7419,9 @@ function af_atf_revert_template_edits(): void
         $sid = (int)$sid;
 
         foreach ($titles as $title) {
+            if (af_atf_template_is_atf_owned((string)$title)) {
+                continue;
+            }
             $titleEsc = $db->escape_string((string)$title);
 
             $q = $db->simple_select('templates', 'tid,template', "title='{$titleEsc}' AND sid={$sid}");
@@ -7789,6 +7868,9 @@ function af_atf_templates_have_marks(): bool
 
     foreach ($targets as $sid) {
         foreach ($need as $title => $parts) {
+            if (af_atf_template_is_atf_owned((string)$title)) {
+                continue;
+            }
             if (empty($tplMap[$sid][$title])) {
                 return false; // нет записи => точно не вставлено (и ты это видишь в ACP)
             }
