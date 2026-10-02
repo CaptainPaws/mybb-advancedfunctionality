@@ -7,7 +7,7 @@ $mybb = (object)['user'=>['uid'=>7], 'usergroup'=>['cancp'=>1,'canmodcp'=>1], 's
 require AF_ADDONS.'advancedmenu/advancedmenu.php';
 foreach (['advancedaccountswitcher','advancedalertsandmentions','advancedbuddylist','advancedcharacters','advancedpostcounter','advancedappearance'] as $id) require AF_ADDONS.$id.'/'.$id.'.php';
 $items = af_menu_collect_registry(true);
-$expected = ['advanced_account_switcher'=>'modal','advanced_alerts'=>'modal','friends'=>'link','modcp'=>'link','admincp'=>'link','new_posts'=>'link','post_activity'=>'link','presets'=>'link','fitting_room'=>'link'];
+$expected = ['advanced_account_switcher'=>'modal','advanced_alerts'=>'modal','modcp'=>'link','admincp'=>'link','new_posts'=>'link','post_activity'=>'link','presets'=>'link','fitting_room'=>'link'];
 foreach ($expected as $key=>$type) {
     if (!isset($items[$key])) throw new RuntimeException("missing registry item: $key");
     if ($items[$key]['type'] !== $type) throw new RuntimeException("wrong type for $key");
@@ -19,6 +19,7 @@ foreach (['presets', 'fitting_room', 'post_activity'] as $key) {
     if ($items[$key]['section'] !== 'links') throw new RuntimeException("$key has the wrong drawer section");
 }
 if (isset($items['characters'])) throw new RuntimeException('AdvancedCharacters must not register a navigation item');
+if (isset($items['friends'])) throw new RuntimeException('Advanced Buddy List must not auto-register the manually managed Friends link');
 $af_aam_unread = 12;
 if (af_menu_item_badge($items['advanced_alerts']) !== 12) throw new RuntimeException('dynamic alerts badge failed');
 if (!af_menu_item_is_visible($items['advanced_account_switcher'])) throw new RuntimeException('AAS visibility failed');

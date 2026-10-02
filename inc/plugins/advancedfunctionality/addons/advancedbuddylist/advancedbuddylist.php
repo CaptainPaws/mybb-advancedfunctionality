@@ -9,17 +9,6 @@ define('AF_ABDL_FRIENDSHIPS', 'af_buddy_friendships');
 define('AF_ABDL_IGNORES', 'af_buddy_ignores');
 define('AF_ABDL_PAGE_ALIAS_SIGNATURE', 'AF_ABDL_BUDDY_PAGE_ALIAS');
 
-function af_advancedbuddylist_menu_provider(): void
-{
-    af_menu_register_item([
-        'key' => 'friends', 'source_addon' => AF_ABDL_ID, 'label' => 'Друзья',
-        'icon' => 'fa-solid fa-user-group', 'type' => 'link', 'section' => 'links',
-        'default_container' => 'user_drawer', 'default_sortorder' => 30,
-        'visibility' => static function (): bool { global $mybb; return !empty($mybb->user['uid']) && af_abdl_is_enabled(); },
-        'action' => ['url' => 'buddy.php'],
-    ]);
-}
-
 function af_advancedbuddylist_install(): void
 {
     $stage = 'migrate_identity';
