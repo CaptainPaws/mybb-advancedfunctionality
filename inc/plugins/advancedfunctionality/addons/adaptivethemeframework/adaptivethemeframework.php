@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.1');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.25.2');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1788,6 +1788,20 @@ function af_adaptivethemeframework_template_seeds(): array
         'modcp_modlogs_multipage' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modlogs_multipage.html',
         'modcp_reports_allreport' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_reports_allreport.html',
         'modcp_reports_allnoreports' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_reports_allnoreports.html',
+
+        // Task 46: only the child presentation required by Open Reports and
+        // the three moderation queues. Core continues to own queries, scope,
+        // processing, radio values, report cookies and redirects.
+        'modcp_reports_report' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_reports_report.html',
+        'modcp_reports_noreports' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_reports_noreports.html',
+        'modcp_reports_selectall' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_reports_selectall.html',
+        'modcp_modqueue_threads_thread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_threads_thread.html',
+        'modcp_modqueue_threads_empty' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_threads_empty.html',
+        'modcp_modqueue_posts_post' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_posts_post.html',
+        'modcp_modqueue_posts_empty' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_posts_empty.html',
+        'modcp_modqueue_attachments_attachment' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_attachments_attachment.html',
+        'modcp_modqueue_attachments_empty' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_attachments_empty.html',
+        'modcp_modqueue_masscontrols' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/modcp_modqueue_masscontrols.html',
 
         'usercp' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp.html',
         'usercp_currentavatar' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_currentavatar.html',
