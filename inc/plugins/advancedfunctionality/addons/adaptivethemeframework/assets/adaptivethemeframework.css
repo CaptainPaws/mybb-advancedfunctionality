@@ -428,6 +428,22 @@ body.atf-active .atf-pm-card--search { grid-template-columns: auto auto minmax(0
 body.atf-active .atf-pm-card__snippet { margin-block-start: var(--atf-space-2); color: var(--atf-color-text-muted); overflow-wrap: anywhere; }
 body.atf-active .atf-pm-card__folder { min-width: 0; overflow-wrap: anywhere; text-align: center; }
 body.atf-active .atf-pm__search-headings { display: flex; flex-wrap: wrap; gap: var(--atf-space-3); color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }
+body.atf-active .atf-pm-read__header { display: grid; gap: var(--atf-space-2); }
+body.atf-active .atf-pm-read__action:empty { display: none; }
+body.atf-active .atf-pm-read__action { color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }
+body.atf-active .atf-pm-read__conversation,
+body.atf-active .atf-pm-read #posts_container,
+body.atf-active .atf-pm-read #posts { min-width: 0; max-width: 100%; }
+body.atf-active .atf-pm-read__conversation { overflow-x: clip; }
+body.atf-active .atf-pm-read__recipient { display: block; margin-block-start: var(--atf-space-1); color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }
+body.atf-active .atf-pm-quickreply { display: grid; gap: var(--atf-space-4); }
+body.atf-active .atf-pm-quickreply__header { display: flex; align-items: center; justify-content: space-between; gap: var(--atf-space-3); }
+body.atf-active .atf-pm-quickreply__header h2 { margin: 0; }
+body.atf-active .atf-pm-quickreply__body { display: grid; grid-template-columns: minmax(12rem, .35fr) minmax(0, 1fr); gap: var(--atf-space-4); }
+body.atf-active .atf-pm-quickreply__options { display: grid; align-content: start; gap: var(--atf-space-2); }
+body.atf-active .atf-pm-quickreply__editor,
+body.atf-active .atf-pm-quickreply__editor textarea { min-width: 0; width: 100%; max-width: 100%; box-sizing: border-box; }
+body.atf-active .atf-pm-quickreply__submit { display: flex; grid-column: 1 / -1; flex-wrap: wrap; justify-content: center; gap: var(--atf-space-2); }
 
 @media (max-width: 48rem) {
   body.atf-active .atf-pm__header,
@@ -440,6 +456,7 @@ body.atf-active .atf-pm__search-headings { display: flex; flex-wrap: wrap; gap: 
   body.atf-active .atf-pm-card__check { grid-column: 4; grid-row: 1; }
   body.atf-active .atf-pm-card--search { grid-template-columns: auto auto minmax(0, 1fr) auto; }
   body.atf-active .atf-pm-card--search .atf-pm-card__folder { grid-column: 3 / -1; text-align: start; }
+  body.atf-active .atf-pm-quickreply__body { grid-template-columns: minmax(0, 1fr); }
 }
 
 body.atf-active .atf-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

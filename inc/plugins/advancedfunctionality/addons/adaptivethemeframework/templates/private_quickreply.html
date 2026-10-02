@@ -1,0 +1,26 @@
+<form action="private.php" method="post" name="input" class="atf-pm-quickreply atf-card">
+	<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+	<input type="hidden" name="to" value="{$to}" />
+	<input type="hidden" name="bcc" value="{$bcc_form_val}" />
+	<input type="hidden" name="subject" value="Re: {$subject}" />
+	<input type="hidden" name="action" value="do_send" />
+	<input type="hidden" name="pmid" value="{$pmid}" />
+	<input type="hidden" name="replyto" value="{$pmid}" />
+	<input type="hidden" name="do" value="reply" />
+	<header class="atf-pm-quickreply__header">
+		<h2>{$lang->quick_reply}</h2>
+		<div class="expcolimage"><img src="{$theme['imgdir']}/collapse{$collapsedimg['quickreply']}.png" id="quickreply_img" class="expander" alt="{$expaltext}" title="{$expaltext}" /></div>
+	</header>
+	<div style="{$collapsed['quickreply_e']}" id="quickreply_e" class="atf-pm-quickreply__body">
+		<div class="atf-pm-quickreply__options">
+			<strong>{$lang->message}</strong>
+			<span class="smalltext">{$lang->message_note}</span>
+			<label><input type="checkbox" class="checkbox" name="options[signature]" value="1"{$optionschecked['signature']} /> {$lang->quickreply_signature}</label>
+			<label><input type="checkbox" class="checkbox" name="options[disablesmilies]" value="1"{$optionschecked['disablesmilies']} /> {$lang->quickreply_disable_smilies}</label>
+			<label><input type="checkbox" class="checkbox" name="options[savecopy]" value="1"{$optionschecked['savecopy']} /> {$lang->quickreply_save_copy}</label>
+			{$private_send_tracking}
+		</div>
+		<div class="atf-pm-quickreply__editor"><textarea rows="8" cols="80" name="message" id="message" tabindex="1">{$quoted_message}</textarea></div>
+		<div class="atf-pm-quickreply__submit"><input type="submit" class="button" value="{$lang->send_message}" tabindex="2" accesskey="s" /> <input type="submit" class="button" name="preview" value="{$lang->preview}" tabindex="3" /></div>
+	</div>
+</form>
