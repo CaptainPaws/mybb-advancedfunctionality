@@ -1316,8 +1316,11 @@ function af_aas_render_usercp_page()
         $lang->af_aas_ucp_title = 'Дополнительные аккаунты';
     }
 
+    $atfShell = function_exists('af_adaptivethemeframework_ucp_context');
     require_once MYBB_ROOT . 'inc/functions_user.php';
-    $usercpnav = usercp_menu();
+    if (!$atfShell) {
+        $usercpnav = usercp_menu();
+    }
 
     // гарантируем header/include/footer для полного шаблона
     if (is_object($templates)) {
@@ -1446,10 +1449,13 @@ function af_aas_render_usercp_page()
             eval('$af_aas_unlink_form = "'.$templates->get('af_aas_ucp_unlink_form').'";');
         }
 
-        if (is_object($templates) && $templates->get('af_aas_ucp_row') !== '') {
-            eval('$af_aas_list .= "'.$templates->get('af_aas_ucp_row').'";');
+        $rowTemplate = $atfShell ? 'af_aas_ucp_row_atf' : 'af_aas_ucp_row';
+        if (is_object($templates) && $templates->get($rowTemplate) !== '') {
+            eval('$af_aas_list .= "'.$templates->get($rowTemplate).'";');
         } else {
-            $af_aas_list .= '<tr>
+            $af_aas_list .= $atfShell ? '<article class="atf-group-card"><div>'
+                    . $af_aas_miniavatar . '<strong>'.$af_aas_username.'</strong> <span class="smalltext">(#'.$af_aas_uid.')</span></div>'
+                    . '<div class="af-aas-row-actions"><a class="button button_small" href="'.$af_aas_switch_url.'">Переключиться</a>'.$af_aas_unlink_form.'</div></article>' : '<tr>
                 <td class="'.$af_aas_row_class.'">'
                     . $af_aas_miniavatar .
                     '<strong>'.$af_aas_username.'</strong> <span class="smalltext">(#'.$af_aas_uid.')</span>
@@ -1463,10 +1469,11 @@ function af_aas_render_usercp_page()
     }
 
     if (trim($af_aas_list) === '') {
-        if (is_object($templates) && $templates->get('af_aas_ucp_empty') !== '') {
-            eval('$af_aas_list = "'.$templates->get('af_aas_ucp_empty').'";');
+        $emptyTemplate = $atfShell ? 'af_aas_ucp_empty_atf' : 'af_aas_ucp_empty';
+        if (is_object($templates) && $templates->get($emptyTemplate) !== '') {
+            eval('$af_aas_list = "'.$templates->get($emptyTemplate).'";');
         } else {
-            $af_aas_list = '<tr><td class="trow1" colspan="2">Пока нет других доступных аккаунтов.</td></tr>';
+            $af_aas_list = $atfShell ? '<p class="atf-empty">Пока нет других доступных аккаунтов.</p>' : '<tr><td class="trow1" colspan="2">Пока нет других доступных аккаунтов.</td></tr>';
         }
     }
 
@@ -1476,15 +1483,15 @@ function af_aas_render_usercp_page()
 
     if ($isMaster) {
         if (!empty($mybb->settings['af_advancedaccountswitcher_allow_create'])
-            && is_object($templates) && $templates->get('af_aas_ucp_form_create') !== ''
+            && is_object($templates) && $templates->get($atfShell ? 'af_aas_ucp_form_create_atf' : 'af_aas_ucp_form_create') !== ''
         ) {
-            eval('$af_aas_create_form = "'.$templates->get('af_aas_ucp_form_create').'";');
+            eval('$af_aas_create_form = "'.$templates->get($atfShell ? 'af_aas_ucp_form_create_atf' : 'af_aas_ucp_form_create').'";');
         }
 
         if (!empty($mybb->settings['af_advancedaccountswitcher_allow_link_existing'])
-            && is_object($templates) && $templates->get('af_aas_ucp_form_link') !== ''
+            && is_object($templates) && $templates->get($atfShell ? 'af_aas_ucp_form_link_atf' : 'af_aas_ucp_form_link') !== ''
         ) {
-            eval('$af_aas_link_form = "'.$templates->get('af_aas_ucp_form_link').'";');
+            eval('$af_aas_link_form = "'.$templates->get($atfShell ? 'af_aas_ucp_form_link_atf' : 'af_aas_ucp_form_link').'";');
         }
     }
 
@@ -1493,10 +1500,11 @@ function af_aas_render_usercp_page()
     $checked = (!empty($mybb->user['af_aas_hide_in_list']) && (int)$mybb->user['af_aas_hide_in_list'] === 1) ? ' checked="checked"' : '';
     $af_aas_privacy_checked = $checked;
 
-    if (is_object($templates) && $templates->get('af_aas_ucp_privacy_form') !== '') {
-        eval('$af_aas_privacy_form = "'.$templates->get('af_aas_ucp_privacy_form').'";');
+    $privacyTemplate = $atfShell ? 'af_aas_ucp_privacy_form_atf' : 'af_aas_ucp_privacy_form';
+    if (is_object($templates) && $templates->get($privacyTemplate) !== '') {
+        eval('$af_aas_privacy_form = "'.$templates->get($privacyTemplate).'";');
     } else {
-        $af_aas_privacy_form = '
+        $af_aas_privacy_form = $atfShell ? '<form method="post" action="'.$af_aas_ucp_action.'" class="af-aas-form atf-card atf-stack"><input type="hidden" name="my_post_key" value="'.$my_post_key.'"><input type="hidden" name="do" value="save_privacy"><h2>Приватность</h2><label><input type="checkbox" name="hide_in_list" value="1"'.$af_aas_privacy_checked.'> Не показывать связанные аккаунты в списке пользователей</label><div class="atf-form-actions"><button type="submit" class="button atf-button">Сохранить</button></div></form>' : '
         <form method="post" action="'.$af_aas_ucp_action.'" class="af-aas-form" style="margin-top:12px;">
             <input type="hidden" name="my_post_key" value="'.$my_post_key.'">
             <input type="hidden" name="do" value="save_privacy">
@@ -1513,10 +1521,19 @@ function af_aas_render_usercp_page()
 
     // ===== Рендер по канону: полный шаблон -> output_page одним куском
     $af_aas_usercpmain = '';
-    if (!is_object($templates) || $templates->get('af_aas_ucp_page') === '') {
+    if (!is_object($templates) || $templates->get($atfShell ? 'af_aas_ucp_page_atf' : 'af_aas_ucp_page') === '') {
         error('Не найден шаблон af_aas_ucp_page. Переустанови шаблоны аддона.');
     }
-    eval('$af_aas_usercpmain = "'.$templates->get('af_aas_ucp_page').'";');
+    $pageTemplate = $atfShell ? 'af_aas_ucp_page_atf' : 'af_aas_ucp_page';
+    eval('$af_aas_usercpmain = "'.$templates->get($pageTemplate).'";');
+
+    if ($atfShell) {
+        $context = af_adaptivethemeframework_ucp_context(['route'=>'usercp.php','action'=>'af_aas','uid'=>$uid,'title'=>(string)$af_aas_page_title], []);
+        $atf_ucp_global_navigation=$context['global_navigation']; $atf_ucp_local_navigation=$context['local_navigation'];
+        eval('$page = "'.$templates->get('af_aas_usercp_atf').'";');
+        output_page($page);
+        exit;
+    }
 
     $page = '';
     if (!is_object($templates) || $templates->get('af_aas_usercp') === '') {
@@ -2290,7 +2307,7 @@ function af_aas_usercp_menu()
 {
     global $mybb, $usercpnav, $lang;
 
-    if ((int)$mybb->user['uid'] <= 0) {
+    if (function_exists('af_adaptivethemeframework_ucp_context') || (int)$mybb->user['uid'] <= 0) {
         return;
     }
     if (empty($mybb->settings['af_advancedaccountswitcher_enabled'])) {

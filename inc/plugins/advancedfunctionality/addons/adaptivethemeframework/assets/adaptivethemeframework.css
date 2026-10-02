@@ -672,3 +672,11 @@ body.atf-active .atf-options-form fieldset > legend { padding-inline: var(--atf-
 @media (max-width: 48rem) {
   body.atf-active .atf-options-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Social workspace */
+.atf-social-list,.atf-group-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--atf-space-3,12px)}
+.atf-social-list{grid-template-columns:repeat(auto-fit,minmax(12rem,1fr))}
+.atf-social-person,.atf-social-request,.atf-group-card{display:flex;gap:var(--atf-space-3,12px);align-items:center;padding:var(--atf-space-3,12px);border:1px solid var(--atf-border-color,currentColor);border-radius:var(--atf-radius,8px)}
+.atf-social-requests{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:var(--atf-space-4,16px)}
+.atf-social-request-list{display:grid;gap:var(--atf-space-2,8px)}
+.atf-social-request time{margin-inline-start:auto}.atf-group-card{display:block}.atf-group-card h3{margin-top:0}.atf-group-card__actions{margin-top:var(--atf-space-3,12px)}
