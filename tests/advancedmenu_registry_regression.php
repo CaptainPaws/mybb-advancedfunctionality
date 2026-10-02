@@ -3,9 +3,9 @@ define('IN_MYBB', 1); define('AF_ADDONS', __DIR__.'/../inc/plugins/advancedfunct
 define('MYBB_ROOT', __DIR__.'/../'); define('TABLE_PREFIX', 'mybb_');
 class RegistryTestPlugins { public function add_hook(...$args): void {} }
 $plugins = new RegistryTestPlugins();
-$mybb = (object)['user'=>['uid'=>7], 'usergroup'=>['cancp'=>1,'canmodcp'=>1], 'settings'=>['af_advancedaccountswitcher_enabled'=>1,'af_aam_enabled'=>1,'af_advancedalertsandmentions_enabled'=>1,'af_abdl_enabled'=>1]];
+$mybb = (object)['user'=>['uid'=>7], 'usergroup'=>['cancp'=>1,'canmodcp'=>1], 'settings'=>['af_advancedaccountswitcher_enabled'=>1,'af_aam_enabled'=>1,'af_advancedalertsandmentions_enabled'=>1,'af_advancedbuddylist_enabled'=>'1']];
 require AF_ADDONS.'advancedmenu/advancedmenu.php';
-foreach (['advancedaccountswitcher','advancedalertsandmentions','advancedbyddylist','advancedcharacters','advancedpostcounter','advancedappearance'] as $id) require AF_ADDONS.$id.'/'.$id.'.php';
+foreach (['advancedaccountswitcher','advancedalertsandmentions','advancedbuddylist','advancedcharacters','advancedpostcounter','advancedappearance'] as $id) require AF_ADDONS.$id.'/'.$id.'.php';
 $items = af_menu_collect_registry(true);
 $expected = ['advanced_account_switcher'=>'modal','advanced_alerts'=>'modal','friends'=>'link','modcp'=>'link','admincp'=>'link','new_posts'=>'link','post_activity'=>'link','presets'=>'link','fitting_room'=>'link'];
 foreach ($expected as $key=>$type) {

@@ -1924,6 +1924,32 @@ function advancedfunctionality_bootstrap_addons()
         $id = $meta['id'] ?? '';
         if ($id === '') continue;
 
+        // A renamed addon cannot run its own upgrade while its new lifecycle
+        // setting is still absent. Manifests may therefore declare legacy_ids;
+        // the canonical bootstrap gets one migration-only call before the
+        // ordinary enabled check. This is generic and keeps aliases out of
+        // discovery (there is still exactly one addon).
+        $migrationNeeded = false;
+        foreach ((array)($meta['legacy_ids'] ?? []) as $legacyId) {
+            if (isset($GLOBALS['mybb']->settings['af_'.$legacyId.'_enabled'])) {
+                $migrationNeeded = true;
+                break;
+            }
+        }
+        foreach ((array)($meta['legacy_lifecycle_settings'] ?? []) as $legacySetting) {
+            if (isset($GLOBALS['mybb']->settings[(string)$legacySetting])) {
+                $migrationNeeded = true;
+                break;
+            }
+        }
+        if ($migrationNeeded && !empty($meta['bootstrap']) && is_file($meta['bootstrap'])) {
+            require_once $meta['bootstrap'];
+            $migrationFn = 'af_'.$id.'_migrate_identity';
+            if (function_exists($migrationFn)) {
+                $migrationFn();
+            }
+        }
+
         if (af_is_addon_enabled($id)) {
             // гарантируем языки (лениво), грузим их
             af_sync_addon_languages($meta, false);
