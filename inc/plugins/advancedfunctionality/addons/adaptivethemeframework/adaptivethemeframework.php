@@ -16,7 +16,7 @@ if (!defined('AF_ADDONS')) {
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.20.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.21.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1280,6 +1280,72 @@ function af_adaptivethemeframework_render_slot(string $slot, array $context = []
     return $html;
 }
 
+/** Whether another addon may hand its data DTO to the ATF presentation layer. */
+function af_adaptivethemeframework_presentation_is_active(): bool
+{
+    global $mybb;
+    return is_object($mybb)
+        && (string)($mybb->settings['af_adaptivethemeframework_enabled'] ?? '0') === '1';
+}
+
+/**
+ * Render the AAS-owned account-list DTO. AAS remains the route, query and
+ * privacy owner; this function deliberately receives no database object.
+ */
+function af_adaptivethemeframework_render_userlist(array $page): string
+{
+    $e = static fn($value): string => htmlspecialchars_uni((string)$value);
+    $filters = (array)($page['filters'] ?? []); $labels = (array)($filters['labels'] ?? []);
+    $selected = static fn(string $actual, string $expected): string => $actual === $expected ? ' selected="selected"' : '';
+    $checked = static fn(string $actual, string $expected): string => $actual === $expected ? ' checked="checked"' : '';
+    $controls = '<form action="'.$e($filters['action'] ?? 'userlist.php').'" method="get" class="atf-card atf-userlist__filters">'
+        .'<h2>'.$e($labels['title'] ?? '').'</h2><div class="atf-form-grid">'
+        .'<label>'.$e($labels['username'] ?? '').'<input type="text" class="textbox" name="username" value="'.$e($filters['username'] ?? '').'"></label>'
+        .'<label>'.$e($labels['match'] ?? '').'<select name="username_match"><option value="begins"'.$selected((string)($filters['username_match'] ?? ''),'begins').'>'.$e($labels['begins'] ?? '').'</option><option value="contains"'.$selected((string)($filters['username_match'] ?? ''),'contains').'>'.$e($labels['contains'] ?? '').'</option><option value="exact"'.$selected((string)($filters['username_match'] ?? ''),'exact').'>'.$e($labels['exact'] ?? '').'</option></select></label>'
+        .'<label>'.$e($labels['sort'] ?? '').'<select name="sort">';
+    foreach (['username','regdate','lastvisit','postnum','threadnum','reputation'] as $sortKey) {
+        $labelKey = ['username'=>'sort_username','regdate'=>'sort_regdate','lastvisit'=>'sort_last','postnum'=>'sort_posts','threadnum'=>'sort_threads','reputation'=>'sort_reputation'][$sortKey];
+        $controls .= '<option value="'.$sortKey.'"'.$selected((string)($filters['sort'] ?? ''),$sortKey).'>'.$e($labels[$labelKey] ?? '').'</option>';
+    }
+    $controls .= '</select></label><label>'.$e($labels['perpage'] ?? '').'<input type="number" name="perpage" min="1" max="500" value="'.max(1,(int)($filters['perpage'] ?? 20)).'"></label></div>'
+        .'<div class="atf-form-actions"><span>'.$e($labels['order'] ?? '').'</span><label><input type="radio" name="order" value="ascending"'.$checked((string)($filters['order'] ?? ''),'ascending').'>ASC</label><label><input type="radio" name="order" value="descending"'.$checked((string)($filters['order'] ?? ''),'descending').'>DESC</label><button type="submit" class="button">'.$e($labels['show'] ?? '').'</button><a class="button" href="userlist.php">'.$e($labels['reset'] ?? '').'</a></div></form>';
+    $letterData = (array)($page['letters'] ?? []); $letters = '<nav class="atf-userlist__letters" aria-label="'.$e($letterData['label'] ?? '').'">';
+    $common = '&amp;sort='.rawurlencode((string)($letterData['sort'] ?? 'username')).'&amp;order='.rawurlencode((string)($letterData['order'] ?? 'ascending')).'&amp;perpage='.max(1,(int)($letterData['perpage'] ?? 20));
+    foreach (range('A','Z') as $letter) $letters .= '<a href="userlist.php?letter='.$letter.$common.$e($letterData['search_query'] ?? '').'">'.$letter.'</a>';
+    $letters .= '<a href="userlist.php?letter=-1'.$common.$e($letterData['search_query'] ?? '').'">'.$e($letterData['other'] ?? '').'</a><a href="userlist.php?'.ltrim($common,'&amp;').$e($letterData['search_query'] ?? '').'">'.$e($letterData['reset'] ?? '').'</a></nav>';
+    $rows = '';
+    foreach ((array)($page['users'] ?? []) as $user) {
+        $uid = max(0, (int)($user['uid'] ?? 0));
+        if ($uid === 0) continue;
+        $context = ['surface'=>'aas_userlist', 'uid'=>$uid, 'user'=>$user];
+        $presence = (string)($user['presence']['state'] ?? 'hidden');
+        if (!in_array($presence, ['online', 'offline', 'hidden'], true)) $presence = 'hidden';
+        $presenceHtml = !empty($user['presence']['can_disclose'])
+            ? '<span class="atf-user-card__presence is-'.$presence.'" aria-label="'.$e($user['presence']['label'] ?? $presence).'"></span>' : '';
+        $master = (array)($user['master'] ?? []);
+        $masterHtml = !empty($master['visible'])
+            ? '<a href="'.$e($master['profile_url'] ?? '').'">'.$e($master['username_raw'] ?? '').'</a>' : '&mdash;';
+        $rows .= '<article class="atf-card atf-user-card is-presence-'.$presence.'" data-uid="'.$uid.'">'
+            .'<div class="atf-user-card__avatar">'.(string)($user['avatar']['html'] ?? '').$presenceHtml.'</div>'
+            .'<div class="atf-user-card__body"><h2 class="atf-user-card__name"><a href="'.$e($user['profile_url'] ?? '').'">'.$e($user['username_raw'] ?? '').'</a></h2>'
+            .'<dl class="atf-user-card__meta"><div><dt>'.$e($page['labels']['registered'] ?? '').'</dt><dd><time datetime="'.$e($user['registered_at'] ?? '').'">'.$e($user['registered_relative'] ?? '').'</time></dd></div>'
+            .'<div><dt>'.$e($page['labels']['active'] ?? '').'</dt><dd><time datetime="'.$e($user['last_active_at'] ?? '').'">'.$e($user['last_active_relative'] ?? '').'</time></dd></div>'
+            .'<div><dt>'.$e($page['labels']['posts'] ?? '').'</dt><dd>'.$e($user['post_count'] ?? 0).'</dd></div>'
+            .'<div><dt>'.$e($page['labels']['threads'] ?? '').'</dt><dd>'.$e($user['thread_count'] ?? 0).'</dd></div>'
+            .'<div><dt>'.$e($page['labels']['master'] ?? '').'</dt><dd>'.$masterHtml.'</dd></div></dl>'
+            .af_adaptivethemeframework_render_slot('userlist.card.meta', $context)
+            .'<div class="atf-user-card__actions">'.af_adaptivethemeframework_render_slot('userlist.card.actions', $context).'</div></div></article>';
+    }
+    if ($rows === '') $rows = '<p class="atf-empty-state">'.$e($page['empty'] ?? '').'</p>';
+    $context = ['surface'=>'aas_userlist', 'user_count'=>count((array)($page['users'] ?? []))];
+    return '<main class="atf-userlist"><header class="atf-userlist__header"><h1>'.$e($page['title'] ?? '').'</h1></header>'
+        .$controls.$letters.(string)($page['pagination'] ?? '')
+        .af_adaptivethemeframework_render_slot('userlist.before_list', $context)
+        .'<section class="atf-user-grid" aria-label="'.$e($page['title'] ?? '').'">'.$rows.'</section>'
+        .af_adaptivethemeframework_render_slot('userlist.after_list', $context)
+        .(string)($page['pagination'] ?? '').'</main>';
+}
+
 /**
  * Build the deliberately small context shared by future ATF thread cards.
  *
@@ -1346,6 +1412,13 @@ function af_adaptivethemeframework_template_seeds(): array
         'forumbit_depth2_forum_lastpost' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth2_forum_lastpost.html',
         'forumdisplay_thread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay_thread.html',
         'member_profile' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/member_profile.html',
+        // Task 37 proved these five stock member-list templates participate in
+        // layout. Nested avatar/group/star/order templates remain core-owned.
+        'memberlist' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/memberlist.html',
+        'memberlist_user' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/memberlist_user.html',
+        'memberlist_search' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/memberlist_search.html',
+        'memberlist_error' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/memberlist_error.html',
+        'memberlist_referrals_bit' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/memberlist_referrals_bit.html',
         'usercp' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp.html',
         'usercp_currentavatar' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_currentavatar.html',
         'usercp_notepad' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_notepad.html',

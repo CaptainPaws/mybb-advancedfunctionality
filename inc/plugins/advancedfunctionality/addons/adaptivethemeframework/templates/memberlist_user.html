@@ -1,0 +1,18 @@
+<article class="atf-card atf-user-card" data-uid="{$user['uid']}">
+  <div class="atf-user-card__avatar">{$user['avatar']}</div>
+  <div class="atf-user-card__body">
+    <h2 class="atf-user-card__name">{$user['profilelink']}</h2>
+    <div class="atf-user-card__role">
+      <span>{$user['usertitle']}</span>
+      {$usergroup['groupimage']}
+      {$user['userstars']}
+    </div>
+    <dl class="atf-user-card__meta">
+      <div><dt>{$lang->joined}</dt><dd>{$user['regdate']}</dd></div>
+      <div><dt>{$lang->lastvisit}</dt><dd>{$user['lastvisit']}</dd></div>
+      <div><dt>{$lang->posts}</dt><dd>{$user['postnum']}</dd></div>
+      <div><dt>{$lang->threads}</dt><dd>{$user['threadnum']}</dd></div>
+      {$referral_bit}
+    </dl>
+  </div>
+</article>
