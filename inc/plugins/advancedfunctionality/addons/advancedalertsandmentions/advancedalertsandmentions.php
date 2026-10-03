@@ -2108,7 +2108,7 @@ function af_aam_maybe_alert_buddy_request(): void
         $fromUid,
         [
             // можно расширять позже (например, дать прямую ссылку на профиль инициатора)
-            'url' => 'usercp.php?action=editlists',
+            'url' => $mybb->get_input('af_abdl_return') !== '' ? 'buddy.php?tab=friends' : 'usercp.php?action=editlists',
         ]
     );
 
