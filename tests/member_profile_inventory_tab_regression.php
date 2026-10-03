@@ -6,8 +6,11 @@ $root = dirname(__DIR__);
 $profileTemplate = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/templates/member_profile.html');
 $profileAddon = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/advancedprofileui.php');
 $profileJs = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/assets/advancedprofileui.js');
+$corePlugin = file_get_contents($root . '/inc/plugins/advancedfunctionality.php');
+$atfCss = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.css');
 $sheetTemplate = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/charactersheets/templates/charactersheet_inner.html');
 $inventoryEntry = file_get_contents($root . '/inventory.php');
+$inventoryJs = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/advancedinventory.js');
 
 function member_profile_inventory_assert(bool $condition, string $message): void
 {
@@ -17,7 +20,7 @@ function member_profile_inventory_assert(bool $condition, string $message): void
     }
 }
 
-foreach ([$profileTemplate, $profileAddon, $profileJs, $sheetTemplate, $inventoryEntry] as $source) {
+foreach ([$profileTemplate, $profileAddon, $profileJs, $corePlugin, $atfCss, $sheetTemplate, $inventoryEntry, $inventoryJs] as $source) {
     member_profile_inventory_assert($source !== false, 'A required source file could not be read');
 }
 
@@ -27,6 +30,17 @@ member_profile_inventory_assert(strpos($profileTemplate, 'af_apui_inventory_tab'
 member_profile_inventory_assert(strpos($profileAddon, 'af_advancedinventory_build_inventory_fragment($uid)') !== false, 'AdvancedInventory renderer is not reused');
 member_profile_inventory_assert(strpos($profileAddon, 'function af_apui_maybe_serve_lazy_profile_tab') !== false, 'Lazy profile API is missing');
 member_profile_inventory_assert(strpos($profileJs, "data-lazy-state') === 'loaded'") !== false, 'Client-side lazy cache is missing');
+member_profile_inventory_assert(strpos($corePlugin, "add_hook('global_start', 'advancedfunctionality_profile_lazy_endpoint_bridge', 2)") !== false, 'Lazy endpoint is not registered before global_start dispatch');
+member_profile_inventory_assert(strpos($profileJs, 'finally {') !== false && strpos($profileJs, "removeAttribute('aria-busy')") !== false, 'Lazy loading state is not cleared in finally');
+member_profile_inventory_assert(strpos($profileJs, "panel.setAttribute('data-lazy-state', 'loaded')") !== false, 'Successful tabs are not cached');
+member_profile_inventory_assert(strpos($profileJs, "panel.setAttribute('data-lazy-state', 'error')") !== false, 'Failed tabs are not retryable');
+member_profile_inventory_assert(strpos($inventoryJs, 'window.AFAdvancedInventoryInit = initAdvancedInventory') !== false, 'Lazy inventory has no idempotent initializer');
+member_profile_inventory_assert(strpos($profileAddon, "['sheet', 'inventory', 'timeline', 'activity']") !== false, 'Lazy tab allowlist is missing');
+member_profile_inventory_assert(strpos($profileAddon, 'af_charactersheets_build_sheet_inner_html') !== false, 'CharacterSheets renderer is not reused');
+member_profile_inventory_assert(strpos($profileAddon, 'Инвентарь пуст.') !== false, 'Inventory empty state is missing');
+member_profile_inventory_assert(strpos($profileAddon, 'Хронология пока пуста.') !== false, 'Timeline empty state is missing');
+member_profile_inventory_assert(strpos($profileAddon, 'Активность пока пуста.') !== false, 'Activity empty state is missing');
+member_profile_inventory_assert(strpos($atfCss, '.atf-profile-hero__identity { display: flex; flex: 1 1 auto; flex-direction: column;') !== false, 'Hero identity is not a vertical flexible block');
 
 preg_match_all('/data-tab="([^"]+)"/', $profileTemplate, $tabMatches);
 preg_match_all('/data-panel="([^"]+)"/', $profileTemplate, $panelMatches);
