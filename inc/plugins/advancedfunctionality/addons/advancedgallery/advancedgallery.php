@@ -1287,7 +1287,7 @@ function ag_render_album_view(): string
         '<a href="gallery.php?action=albums">'.htmlspecialchars_uni($lang->af_advancedgallery_albums ?? 'Альбомы').'</a>',
         htmlspecialchars_uni($uiTitle),
     ];
-    $ag_breadcrumbs = implode(' &raquo; ', $breadcrumbs);
+    $ag_breadcrumbs = implode('<span class="ag-breadcrumbs__sep" aria-hidden="true">›</span>', $breadcrumbs);
 
     $ag_album_title = htmlspecialchars_uni($uiTitle);
     $ag_album_desc = nl2br(htmlspecialchars_uni((string)$album['description']));
@@ -1900,14 +1900,14 @@ function ag_render_view(): string
         $album = ag_get_album($contextAlbumId);
         $albumTitle = $album ? htmlspecialchars_uni(ag_album_ui_title($album)) : ('#'.$contextAlbumId);
 
-        $ag_breadcrumbs = implode(' &raquo; ', [
+        $ag_breadcrumbs = implode('<span class="ag-breadcrumbs__sep" aria-hidden="true">›</span>', [
             '<a href="gallery.php">'.htmlspecialchars_uni($lang->af_advancedgallery_name ?? 'Галерея').'</a>',
             '<a href="gallery.php?action=albums">'.htmlspecialchars_uni($lang->af_advancedgallery_albums ?? 'Альбомы').'</a>',
             '<a href="gallery.php?action=album&id='.$contextAlbumId.'">'.$albumTitle.'</a>',
             htmlspecialchars_uni($curTitle),
         ]);
     } else {
-        $ag_breadcrumbs = implode(' &raquo; ', [
+        $ag_breadcrumbs = implode('<span class="ag-breadcrumbs__sep" aria-hidden="true">›</span>', [
             '<a href="gallery.php">'.htmlspecialchars_uni($lang->af_advancedgallery_name ?? 'Галерея').'</a>',
             htmlspecialchars_uni($curTitle),
         ]);

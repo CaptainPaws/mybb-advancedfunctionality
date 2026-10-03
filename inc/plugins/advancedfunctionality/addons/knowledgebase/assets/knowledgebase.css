@@ -293,9 +293,17 @@
 }
 
 .af-kb-breadcrumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding: 10px 14px;
     font-size: 0.9em;
-    color: #666;
-    margin-bottom: 6px;
+    color: inherit;
+    background: rgba(255,255,255,.035);
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 10px;
 }
 
 .af-kb-breadcrumbs a {
@@ -304,7 +312,8 @@
 }
 
 .af-kb-breadcrumbs a:hover {
-    text-decoration: underline;
+    text-decoration: none;
+    opacity: 1;
 }
 
 .af-kb-search {
