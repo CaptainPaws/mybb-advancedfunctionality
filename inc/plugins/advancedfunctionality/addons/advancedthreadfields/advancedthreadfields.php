@@ -5076,6 +5076,49 @@ function af_atf_character_bridge_store_thread_kb_link(int $tid, int $fid, int $u
     }
 }
 
+/**
+ * Backend DTO used by profile surfaces for an accepted character application.
+ * Values stay owned by ATF; consumers never scrape the rendered application.
+ */
+function af_atf_get_profile_character_payload(int $tid): array
+{
+    if ($tid <= 0) {
+        return ['tid' => 0, 'about_html' => '', 'fields' => []];
+    }
+
+    $stored = af_atf_get_values_by_tid($tid);
+    if (!$stored) {
+        return ['tid' => $tid, 'about_html' => '', 'fields' => []];
+    }
+
+    $wanted = [
+        'character_name_ru', 'character_origin', 'character_origin_variant',
+        'character_class', 'character_faction', 'character_weapon',
+        'character_activity', 'character_age', 'character_height',
+        'character_weight', 'character_gen', 'character_app',
+    ];
+    $payload = [];
+    foreach (af_atf_get_fields_cached() as $field) {
+        if (!is_array($field)) continue;
+        $name = trim((string)($field['name'] ?? ''));
+        $fieldId = (int)($field['fieldid'] ?? 0);
+        if (!in_array($name, $wanted, true) || $fieldId <= 0) continue;
+        $raw = trim((string)($stored[$fieldId] ?? ''));
+        if ($raw === '') continue;
+        $payload[$name] = [
+            'key' => $name,
+            'raw' => $raw,
+            'html' => af_atf_format_value_for_display($field, $raw),
+        ];
+    }
+
+    return [
+        'tid' => $tid,
+        'about_html' => (string)($payload['character_app']['html'] ?? ''),
+        'fields' => $payload,
+    ];
+}
+
 /** Update the existing Character metadata envelope without introducing storage. */
 function af_atf_bridge_update_canon_lifecycle(int $entryId, int $tid, int $uid, string $status): bool
 {

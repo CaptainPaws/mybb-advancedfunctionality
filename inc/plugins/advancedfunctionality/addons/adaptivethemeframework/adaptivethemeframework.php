@@ -899,7 +899,7 @@ function af_adaptivethemeframework_profile_context(array $member, array $values)
     global $mybb;
     $uid = max(0, (int)($member['uid'] ?? 0));
     $viewerUid = is_object($mybb) ? max(0, (int)($mybb->user['uid'] ?? 0)) : 0;
-    $memberKeys = ['uid', 'username', 'usergroup', 'displaygroup', 'avatar', 'usertitle', 'regdate', 'lastactive', 'af_advancedpostcounter'];
+    $memberKeys = ['uid', 'username', 'usergroup', 'displaygroup', 'avatar', 'usertitle', 'regdate', 'lastactive', 'postnum', 'threadnum', 'af_advancedpostcounter'];
     $avatars = function_exists('af_apui_get_profile_avatars')
         ? af_apui_get_profile_avatars($uid, false)
         : ['primary_avatar' => '', 'secondary_avatar' => '', 'display_avatar' => '', 'secondary_avatar_missing' => true];
@@ -954,7 +954,7 @@ function af_adaptivethemeframework_compose_profile(): void
     ];
     $context = af_adaptivethemeframework_profile_context($memprofile, $values);
     foreach (['hero', 'navigation', 'forum_info', 'character_sheet', 'application', 'timeline',
-        'activity', 'balance', 'post_counter', 'before_content', 'main', 'after_content'] as $name) {
+        'activity', 'stats', 'balance', 'post_counter', 'before_content', 'main', 'after_content'] as $name) {
         $GLOBALS['atf_profile_' . $name] = af_adaptivethemeframework_render_slot('profile.' . $name, $context);
     }
     $GLOBALS['atf_profile_context'] = $context;
@@ -1678,7 +1678,7 @@ function af_adaptivethemeframework_render_ucp_navigation(string $level, array $c
 function af_adaptivethemeframework_slots(): array
 {
     return [
-        'profile.hero', 'profile.navigation', 'profile.forum_info',
+        'profile.hero', 'profile.navigation', 'profile.forum_info', 'profile.stats',
         'profile.character_sheet', 'profile.application', 'profile.timeline',
         'profile.activity', 'profile.balance', 'profile.post_counter',
         'profile.before_content', 'profile.main', 'profile.after_content',

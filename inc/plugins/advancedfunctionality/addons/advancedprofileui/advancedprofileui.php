@@ -320,7 +320,11 @@ function af_apui_register_atf_profile_providers(): bool
     ]) || $registered;
     $registered = af_adaptivethemeframework_register_component([
         'owner' => AF_APUI_ID, 'key' => 'profile_portrait', 'slot' => 'profile.before_content',
-        'renderer' => 'af_apui_render_atf_profile_portrait',
+        'renderer' => 'af_apui_render_profile_character_workspace',
+    ]) || $registered;
+    $registered = af_adaptivethemeframework_register_component([
+        'owner' => AF_APUI_ID, 'key' => 'profile_stats', 'slot' => 'profile.stats',
+        'renderer' => 'af_apui_render_profile_stats',
     ]) || $registered;
     return $registered;
 }
@@ -330,7 +334,7 @@ function af_apui_render_atf_profile_hero(array $context): string
     $i = (array)($context['identity'] ?? []);
     $uidClass = htmlspecialchars_uni((string)($context['appearance']['uid_class'] ?? ''));
     return '<section class="atf-profile-hero ' . $uidClass . '" data-atf-profile-hero="1">'
-        . '<div class="atf-profile-hero__avatar">' . (string)($i['avatar'] ?? '') . '</div>'
+        . '<div class="atf-profile-hero__avatar">' . af_apui_render_avatar_image((string)($context['avatars']['display_avatar'] ?? ''), (string)($context['username'] ?? ''), 'atf-profile-hero__avatar-image') . '</div>'
         . '<div class="atf-profile-hero__identity"><div class="atf-profile-hero__name">' . (string)($i['formattedname'] ?? '') . '</div>'
         . '<div class="atf-profile-hero__title">' . (string)($i['usertitle'] ?? '') . '</div>'
         . '<div class="atf-profile-hero__rank">' . (string)($i['groupimage'] ?? '') . (string)($i['userstars'] ?? '') . '</div></div>'
@@ -339,6 +343,71 @@ function af_apui_render_atf_profile_hero(array $context): string
         . '<span>' . (string)($i['online_status'] ?? '') . '</span>'
         . (string)($i['awaybit'] ?? '') . (string)($i['bannedbit'] ?? '') . '</div>'
         . '</section>';
+}
+
+function af_apui_get_profile_character_payload(int $uid, array $sheetPayload = []): array
+{
+    if (!$sheetPayload) $sheetPayload = af_apui_get_charactersheet_postbit_payload($uid);
+    $application = (array)($sheetPayload['application'] ?? []);
+    $tid = (int)($application['tid'] ?? ($sheetPayload['application_tid'] ?? 0));
+    return $tid > 0 && function_exists('af_atf_get_profile_character_payload')
+        ? (array)af_atf_get_profile_character_payload($tid)
+        : ['tid' => $tid, 'about_html' => '', 'fields' => []];
+}
+
+function af_apui_render_profile_stats(array $context): string
+{
+    $member = (array)($context['member'] ?? []);
+    $uid = (int)($context['uid'] ?? 0);
+    $stats = [
+        ['Сообщения', my_number_format((int)($member['postnum'] ?? 0)), 'fa-solid fa-comments'],
+        ['Темы', my_number_format((int)($member['threadnum'] ?? 0)), 'fa-solid fa-copy'],
+        ['Посты', my_number_format((int)($member['af_advancedpostcounter'] ?? 0)), 'fa-solid fa-pen'],
+    ];
+    if ($uid > 0 && function_exists('af_balance_get_postbit_data')) {
+        $balance = af_balance_get_postbit_data($uid);
+        $stats[] = ['Кредиты', (string)($balance['credits_display'] ?? '0.00') . ' ' . (string)($balance['currency_symbol'] ?? '¢'), 'fa-solid fa-coins'];
+        $stats[] = ['Токены', (string)($balance['ability_tokens_display'] ?? '0.00'), 'fa-solid fa-gem'];
+        $stats[] = ['Уровень', (string)(int)($balance['level'] ?? 1), 'fa-solid fa-star'];
+        $stats[] = ['Опыт', (string)($balance['exp_display'] ?? '0') . ' / ' . (string)($balance['exp_need_display'] ?? '0'), 'fa-solid fa-chart-line'];
+    }
+    $html = '<div class="af-apui-profile-stats" aria-label="Статистика профиля">';
+    foreach ($stats as [$label, $value, $icon]) {
+        $html .= '<div class="af-apui-profile-stat"><i class="' . htmlspecialchars_uni($icon) . '" aria-hidden="true"></i>'
+            . '<span class="af-apui-profile-stat__label">' . htmlspecialchars_uni($label) . '</span>'
+            . '<strong class="af-apui-profile-stat__value">' . htmlspecialchars_uni($value) . '</strong></div>';
+    }
+    return $html . '</div>';
+}
+
+function af_apui_render_profile_character_workspace(array $context): string
+{
+    $uid = (int)($context['uid'] ?? 0);
+    $payload = af_apui_get_profile_character_payload($uid);
+    $fields = (array)($payload['fields'] ?? []);
+    $labels = [
+        'character_name_ru' => 'Имя', 'character_origin' => 'Происхождение',
+        'character_origin_variant' => 'Разновидность', 'character_class' => 'Архетип',
+        'character_faction' => 'Фракция', 'character_weapon' => 'Оружие',
+        'character_activity' => 'Деятельность', 'character_age' => 'Возраст',
+        'character_height' => 'Рост', 'character_weight' => 'Вес', 'character_gen' => 'Пол',
+    ];
+    $rows = '';
+    foreach ($labels as $key => $label) {
+        $value = trim((string)($fields[$key]['html'] ?? ''));
+        if ($value === '') continue;
+        $rows .= '<div class="af-apui-character-row"><dt>' . htmlspecialchars_uni($label) . '</dt><dd>' . $value . '</dd></div>';
+    }
+    $avatars = (array)($context['avatars'] ?? af_apui_get_profile_avatars($uid, true));
+    $portrait = af_apui_render_avatar_image((string)($avatars['display_avatar'] ?? ''), (string)($context['username'] ?? ''), 'af-apui-character-portrait__image');
+    $about = trim((string)($payload['about_html'] ?? ''));
+    if ($about === '') $about = '<p class="af-apui-empty">Описание персонажа пока не заполнено.</p>';
+    if ($rows === '') $rows = '<p class="af-apui-empty">Данные анкеты пока не заполнены.</p>';
+    return '<div class="af-apui-character-layout">'
+        . '<section class="af-apui-character-card af-apui-character-about"><h2>О персонаже</h2><div class="af-apui-character-about__body">' . $about . '</div></section>'
+        . '<figure class="af-apui-character-portrait">' . $portrait . '</figure>'
+        . '<section class="af-apui-character-card af-apui-character-infobox"><h2>Инфобокс</h2><dl>' . $rows . '</dl></section>'
+        . '</div>';
 }
 
 function af_apui_render_avatar_image(string $url, string $username, string $class): string
@@ -1549,6 +1618,8 @@ function af_apui_member_profile_init_vars(): void
         'af_apui_activity_tab',
         'af_apui_forum_info_grid',
         'af_apui_profilefields_grid',
+        'af_apui_profile_stats',
+        'af_apui_character_workspace',
     ] as $varName) {
         if (!isset($GLOBALS[$varName]) || !is_string($GLOBALS[$varName])) {
             $GLOBALS[$varName] = '';
@@ -1583,16 +1654,6 @@ function af_apui_member_profile_prepare_layout_vars(): void
             'value' => (string)$memlastvisitdate,
         ],
         [
-            'label' => (string)($lang->total_posts ?? 'Сообщения'),
-            'value' => (string)((int)($memprofile['postnum'] ?? 0))
-                . (!empty($lang->ppd_percent_total) ? ' <span class="af-apui-inline-note">(' . $lang->ppd_percent_total . ')</span>' : ''),
-        ],
-        [
-            'label' => (string)($lang->total_threads ?? 'Темы'),
-            'value' => (string)((int)($memprofile['threadnum'] ?? 0))
-                . (!empty($lang->tpd_percent_total) ? ' <span class="af-apui-inline-note">(' . $lang->tpd_percent_total . ')</span>' : ''),
-        ],
-        [
             'label' => (string)($lang->timeonline ?? 'Время онлайн'),
             'value' => (string)$timeonline,
         ],
@@ -1622,6 +1683,9 @@ function af_apui_member_profile_prepare_layout_vars(): void
 
     $uid = (int)($memprofile['uid'] ?? 0);
     $sheetPayload = af_apui_get_charactersheet_postbit_payload($uid);
+    $legacyContext = ['uid' => $uid, 'username' => (string)($memprofile['username'] ?? ''), 'member' => $memprofile, 'avatars' => $avatars];
+    $GLOBALS['af_apui_profile_stats'] = af_apui_render_profile_stats($legacyContext);
+    $GLOBALS['af_apui_character_workspace'] = af_apui_render_profile_character_workspace($legacyContext);
 
     $GLOBALS['af_apui_character_sheet_tab'] = af_apui_build_member_profile_sheet_tab($uid, $sheetPayload);
     $GLOBALS['af_apui_application_tab'] = af_apui_build_member_profile_application_tab($uid, $sheetPayload);
