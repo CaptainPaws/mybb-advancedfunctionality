@@ -363,10 +363,69 @@ body.atf-active .atf-card {
   border-radius: var(--atf-radius-lg);
 }
 
+/* Canonical structural contract for cards and card collections.  Feature
+   classes remain responsible for meaning and content; these classes only
+   describe anatomy, wrapping and responsive behaviour. */
+body.atf-active .atf-card__identity,
+body.atf-active .atf-card__body,
+body.atf-active .atf-card__metadata,
+body.atf-active .atf-card__status,
+body.atf-active .atf-card__actions { min-width: 0; max-width: 100%; }
+body.atf-active .atf-card__title {
+  min-width: 0;
+  margin-block: 0;
+  overflow-wrap: anywhere;
+}
+body.atf-active .atf-card__body,
+body.atf-active .atf-card__metadata,
+body.atf-active .atf-card__metadata :is(dt, dd, a),
+body.atf-active .atf-card__identity :is(a, span) { overflow-wrap: anywhere; }
+body.atf-active .atf-card__metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--atf-space-2) var(--atf-space-3);
+  margin: 0;
+}
+body.atf-active .atf-card__metadata > div { min-width: 0; }
+body.atf-active .atf-card__metadata :is(dt, dd) { margin: 0; }
+body.atf-active .atf-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--atf-space-2);
+}
+body.atf-active .atf-card__actions:empty,
+body.atf-active .atf-card__status:empty { display: none; }
+body.atf-active .atf-card__actions--danger { margin-inline-start: auto; }
+body.atf-active .atf-status { display: inline-flex; flex: 0 0 auto; align-items: center; max-width: 100%; }
+
+body.atf-active .atf-avatar {
+  display: block;
+  flex: 0 0 auto;
+  width: var(--atf-avatar-size, 3rem);
+  height: var(--atf-avatar-size, 3rem);
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+body.atf-active .atf-avatar > :is(a, span, .af-avatar),
+body.atf-active .atf-avatar :is(img, svg) { display: block; width: 100%; height: 100%; }
+body.atf-active .atf-avatar :is(img, svg) { max-width: none; object-fit: cover; object-position: center; }
+
+body.atf-active .atf-list,
+body.atf-active .atf-list__items,
+body.atf-active .atf-list__footer { min-width: 0; max-width: 100%; }
+body.atf-active .atf-list__items { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--atf-space-3); }
+body.atf-active .atf-list__footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--atf-space-3); }
+body.atf-active .atf-empty-state { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
+
 body.atf-active .atf-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   gap: var(--atf-component-gap);
+}
+
+@media (max-width: 48rem) {
+  body.atf-active .atf-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 body.atf-active .atf-stack { display: flex; flex-direction: column; gap: var(--atf-component-gap); }
@@ -1296,8 +1355,8 @@ body.atf-active .atf-pm__select-all { display: inline-flex; gap: var(--atf-space
 body.atf-active .atf-pm__messages { display: grid; gap: var(--atf-space-2); min-width: 0; }
 body.atf-active .atf-pm-card { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) auto; gap: var(--atf-space-3); align-items: center; min-width: 0; }
 body.atf-active .atf-pm-card__avatar { width: 2.75rem; min-width: 0; }
-body.atf-active .atf-pm-card__avatar :is(.af-avatar, img) { display: block; width: 100%; max-width: 100%; height: auto; }
-body.atf-active .atf-pm-card__avatar img { aspect-ratio: 1; object-fit: cover; border-radius: 50%; }
+body.atf-active .atf-pm-card__avatar :is(.af-avatar, img) { display: block; width: 100%; max-width: 100%; height: 100%; }
+body.atf-active .atf-pm-card__avatar img { aspect-ratio: 1; object-fit: cover; object-position: center; border-radius: 50%; }
 body.atf-active .atf-pm-card__state img,
 body.atf-active .atf-pm-card__icon img { display: block; max-width: 1.5rem; height: auto; }
 body.atf-active .atf-pm-card__content,

@@ -1,9 +1,9 @@
 <article id="pm_{$message['pmid']}" class="atf-pm-card atf-card {$bgcolor} {$msgstatus}" data-pm-id="{$message['pmid']}">
-	<div class="atf-pm-card__avatar"><atf-pm-avatar data-uid="{$tofromuid}"></atf-pm-avatar></div>
-	<div class="atf-pm-card__content">
-		<h2 class="atf-pm-card__subject"><a class="{$msgstatus}" href="private.php?action=read&amp;pmid={$message['pmid']}">{$message['subject']}</a></h2>
+	<div class="atf-pm-card__avatar atf-avatar"><atf-pm-avatar data-uid="{$tofromuid}"></atf-pm-avatar></div>
+	<div class="atf-pm-card__content atf-card__body">
+		<h2 class="atf-pm-card__subject atf-card__title"><a class="{$msgstatus}" href="private.php?action=read&amp;pmid={$message['pmid']}">{$message['subject']}</a></h2>
 		<div class="atf-pm-card__correspondent">{$tofromusername}</div>
-		<div class="atf-pm-card__meta"><span class="atf-pm-card__state"><img src="{$theme['imgdir']}/{$msgstatus}.png" alt="{$msgalt}" title="{$msgalt}" /></span><span class="atf-pm-card__icon">{$icon}</span><time class="atf-pm-card__date">{$senddate}</time></div>
+		<div class="atf-pm-card__meta atf-card__metadata"><span class="atf-pm-card__state"><img src="{$theme['imgdir']}/{$msgstatus}.png" alt="{$msgalt}" title="{$msgalt}" /></span><span class="atf-pm-card__icon">{$icon}</span><time class="atf-pm-card__date">{$senddate}</time></div>
 		<div class="atf-pm-card__receipt">{$denyreceipt}</div>
 	</div>
 	<label class="atf-pm-card__check"><span class="atf-visually-hidden">{$lang->select_message}</span><input type="checkbox" class="checkbox" name="check[{$message['pmid']}]" value="1" /></label>

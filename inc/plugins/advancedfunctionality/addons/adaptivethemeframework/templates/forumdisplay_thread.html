@@ -1,25 +1,25 @@
 <article class="atf-topic-card atf-card {$bgcolor}{$thread_type_class} atf-topic-card--{$folder}" data-thread-id="{$thread['tid']}">
-	<div class="atf-topic-card__status" role="img" aria-label="{$folder_label}" title="{$folder_label}">
+	<div class="atf-topic-card__status atf-card__status atf-status" role="img" aria-label="{$folder_label}" title="{$folder_label}">
 		<span class="thread_status {$folder}" aria-hidden="true">&nbsp;</span>
 		<span class="atf-topic-card__icon">{$icon}</span>
 	</div>
-	<div class="atf-topic-card__main">
+	<div class="atf-topic-card__main atf-card__identity">
 		{$attachment_count}
 		<div class="atf-topic-card__heading">
-			<h3 class="atf-topic-card__title">{$prefix} {$gotounread}{$thread['threadprefix']}<span class="{$inline_edit_class} {$new_class}" id="tid_{$inline_edit_tid}"><a href="{$thread['threadlink']}">{$thread['subject']}</a></span></h3>
+			<h3 class="atf-topic-card__title atf-card__title">{$prefix} {$gotounread}{$thread['threadprefix']}<span class="{$inline_edit_class} {$new_class}" id="tid_{$inline_edit_tid}"><a href="{$thread['threadlink']}">{$thread['subject']}</a></span></h3>
 			<div class="atf-topic-card__pages">{$thread['multipage']}</div>
 		</div>
 		<div class="atf-topic-card__byline atf-meta"><span class="author">{$thread['profilelink']}{$lang->comma}</span><time class="thread_start_datetime">{$thread['start_datetime']}</time></div>
-		<div class="atf-topic-card__metadata atf-meta">{$thread['atf_meta_chips']}</div>
+		<div class="atf-topic-card__metadata atf-card__metadata atf-meta">{$thread['atf_meta_chips']}</div>
 	</div>
-	<dl class="atf-topic-card__stats atf-meta">
+	<dl class="atf-topic-card__stats atf-card__metadata atf-meta">
 		<div class="atf-topic-card__stat"><dt>{$lang->replies}</dt><dd><a href="{$mybb->settings['bburl']}/misc.php?action=whoposted&amp;tid={$thread['tid']}" onclick="MyBB.whoPosted({$thread['tid']}); return false;">{$thread['replies']}</a>{$unapproved_posts}</dd></div>
 		<div class="atf-topic-card__stat"><dt>{$lang->views}</dt><dd>{$thread['views']}</dd></div>
 		<div class="atf-topic-card__rating">{$thread['atf_rating']}</div>
 	</dl>
 	<div class="atf-topic-card__lastpost">
-		<div class="atf-topic-card__avatar">{$thread['atf_lastposter_avatar']}<atf-thread-avatar uid="{$thread['lastposteruid']}"></atf-thread-avatar></div>
+		<div class="atf-topic-card__avatar atf-avatar">{$thread['atf_lastposter_avatar']}<atf-thread-avatar uid="{$thread['lastposteruid']}"></atf-thread-avatar></div>
 		<div class="atf-topic-card__lastpost-content"><span class="atf-topic-card__lastposter">{$lastposterlink}</span><a class="atf-topic-card__lasttime" href="{$thread['lastpostlink']}">{$lastpostdate}</a></div>
 	</div>
-	<div class="atf-topic-card__moderation">{$thread['atf_modbit']}</div>
+	<div class="atf-topic-card__moderation atf-card__actions">{$thread['atf_modbit']}</div>
 </article>

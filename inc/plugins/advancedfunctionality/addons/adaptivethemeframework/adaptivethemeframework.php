@@ -1703,24 +1703,24 @@ function af_adaptivethemeframework_render_userlist(array $page): string
         $masterHtml = '<div><dt>'.$e($page['labels']['master'] ?? '').'</dt><dd>'.$masterValue.'</dd></div>';
         $actions = af_adaptivethemeframework_render_slot('userlist.card.actions', $context);
         $rows .= '<article class="atf-card atf-user-card is-presence-'.$presence.'" data-uid="'.$uid.'">'
-            .'<div class="atf-user-card__avatar">'.(string)($user['avatar']['html'] ?? '').$presenceHtml.'</div>'
-            .'<div class="atf-user-card__body"><h2 class="atf-user-card__name"><a href="'.$e($user['profile_url'] ?? '').'">'.$e($user['username_raw'] ?? '').'</a></h2>'
-            .'<dl class="atf-user-card__meta"><div><dt>'.$e($page['labels']['registered'] ?? '').'</dt><dd><time datetime="'.$e($user['registered_at'] ?? '').'" title="'.$e($user['registered_title'] ?? '').'">'.$e($user['registered_text'] ?? '').'</time></dd></div>'
+            .'<div class="atf-user-card__avatar atf-avatar">'.(string)($user['avatar']['html'] ?? '').$presenceHtml.'</div>'
+            .'<div class="atf-user-card__body atf-card__body"><h2 class="atf-user-card__name atf-card__title"><a href="'.$e($user['profile_url'] ?? '').'">'.$e($user['username_raw'] ?? '').'</a></h2>'
+            .'<dl class="atf-user-card__meta atf-card__metadata"><div><dt>'.$e($page['labels']['registered'] ?? '').'</dt><dd><time datetime="'.$e($user['registered_at'] ?? '').'" title="'.$e($user['registered_title'] ?? '').'">'.$e($user['registered_text'] ?? '').'</time></dd></div>'
             .'<div><dt>'.$e($page['labels']['active'] ?? '').'</dt><dd><time datetime="'.$e($user['activity_datetime'] ?? '').'" title="'.$e($user['activity_title'] ?? '').'">'.$e($user['activity_text'] ?? '').'</time></dd></div>'
             .'<div><dt>'.$e($page['labels']['posts'] ?? '').'</dt><dd>'.$e($user['post_count'] ?? 0).'</dd></div>'
             .'<div><dt>'.$e($page['labels']['threads'] ?? '').'</dt><dd>'.$e($user['thread_count'] ?? 0).'</dd></div>'
             .$masterHtml.'</dl>'
             .af_adaptivethemeframework_render_slot('userlist.card.meta', $context)
-            .($actions !== '' ? '<div class="atf-user-card__actions">'.$actions.'</div>' : '').'</div></article>';
+            .($actions !== '' ? '<div class="atf-user-card__actions atf-card__actions">'.$actions.'</div>' : '').'</div></article>';
     }
     if ($rows === '') $rows = '<p class="atf-empty-state">'.$e($page['empty'] ?? '').'</p>';
     $context = ['surface'=>'aas_userlist', 'user_count'=>count((array)($page['users'] ?? []))];
     return '<main class="pun atf-page-shell atf-page atf-userlist"><header class="atf-userlist__header"><h1>'.$e($page['title'] ?? '').'</h1></header>'
-        .$controls.$letters.(string)($page['pagination'] ?? '')
+        .$controls.$letters
         .af_adaptivethemeframework_render_slot('userlist.before_list', $context)
-        .'<section class="atf-user-grid" aria-label="'.$e($page['title'] ?? '').'">'.$rows.'</section>'
+        .'<section class="atf-user-grid atf-grid atf-list__items" aria-label="'.$e($page['title'] ?? '').'">'.$rows.'</section>'
         .af_adaptivethemeframework_render_slot('userlist.after_list', $context)
-        .(string)($page['pagination'] ?? '').'</main>';
+        .((string)($page['pagination'] ?? '') !== '' ? '<footer class="atf-list__footer">'.(string)$page['pagination'].'</footer>' : '').'</main>';
 }
 
 /**
