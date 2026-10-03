@@ -5,7 +5,7 @@
 .af-balance-tab:hover{background:#eaf0f9;color:#1f2737;text-decoration:none}
 .af-balance-tab.is-active{background:#2f6feb;border-color:#2f6feb;color:#fff;box-shadow:0 2px 8px rgba(47,111,235,.2)}
 .af-balance-action{display:inline-flex;align-items:center;justify-content:center;margin:0 4px 4px 0}
-.af-balance-modal{position:fixed;inset:0;z-index:9999}
+.af-balance-modal{position:fixed;inset:0;z-index:1000}
 .af-balance-modal__backdrop{position:absolute;inset:0;background:rgba(0,0,0,.6)}
 .af-balance-modal__dialog{position:relative;z-index:1;background:#fff;color:#000;max-width:420px;margin:10vh auto;padding:16px;display:flex;flex-direction:column;gap:8px}
 .af-balance-modal__error{color:#b00020;min-height:18px}

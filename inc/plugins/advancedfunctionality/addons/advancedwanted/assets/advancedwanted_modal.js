@@ -23,7 +23,7 @@
       '<header class="af-wanted-modal-header">' +
       '<button type="button" class="af-wanted-modal-close" aria-label="Закрыть">&times;</button></header>' +
       '<div class="af-wanted-modal-body"></div></section>';
-    document.body.appendChild(modal);
+    (window.AFModalHost ? window.AFModalHost.mount(modal) : document.body.appendChild(modal));
     modal.addEventListener('click', function (event) {
       if (event.target === modal || event.target.closest('.af-wanted-modal-close')) closeModal();
     });

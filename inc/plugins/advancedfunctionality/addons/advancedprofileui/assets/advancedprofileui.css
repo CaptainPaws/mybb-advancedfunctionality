@@ -2015,7 +2015,7 @@ af-apf-postbit-field {
 .af-cs-modal {
   position: fixed;
   inset: 0;
-  z-index: 99999;
+  z-index: 1000;
   display: none;
   box-sizing: border-box;
   padding: max(var(--af-apui-modal-viewport-gap), env(safe-area-inset-top))

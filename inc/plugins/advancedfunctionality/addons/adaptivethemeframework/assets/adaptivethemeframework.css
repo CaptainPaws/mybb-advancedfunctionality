@@ -1538,6 +1538,24 @@ body.atf-active .atf-social-request time{margin-inline-start:auto}body.atf-activ
 
 /* Subscription and content UCP collections use cards rather than core tables. */
 body.atf-active :is(.atf-subscription-list,.atf-draft-list,.atf-attachment-list){display:grid;gap:var(--atf-space-3)}
+
+/* Global footer/modal composition contract. The host never occupies footer
+   flow; providers opt into the generic shell classes without surrendering
+   their data or close policy. Stack levels: backdrop 1000, dialog 1010,
+   transient provider UI 1020. */
+body.atf-active .atf-footer-composition{box-sizing:border-box;width:min(100%,var(--atf-page-max-width,90rem));margin-inline:auto;padding-inline:var(--atf-page-gutter,var(--atf-space-4));min-width:0}
+body.atf-active .atf-footer-composition:empty{display:none}
+body.atf-active .atf-global-modal-host{position:fixed;inset:0;z-index:1000;pointer-events:none;width:0;height:0;overflow:visible}
+body.atf-active .atf-global-modal-host>:is(.is-open,.is-active,[aria-hidden="false"]){pointer-events:auto}
+body.atf-active .atf-modal-overlay{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:clamp(.625rem,3vw,2rem);background:rgb(0 0 0/.68);overflow:hidden}
+body.atf-active .atf-modal-dialog{position:relative;z-index:1010;display:flex;flex-direction:column;box-sizing:border-box;width:min(42rem,100%);max-width:100%;max-height:calc(100dvh - 2 * clamp(.625rem,3vw,2rem));min-width:0;background:var(--atf-color-surface,#fff);color:var(--atf-color-text,inherit);border-radius:var(--atf-radius,.5rem);overflow:hidden}
+body.atf-active .atf-modal-header,body.atf-active .atf-modal-footer{display:flex;align-items:center;gap:var(--atf-space-3);padding:var(--atf-space-3) var(--atf-space-4);flex:0 0 auto}
+body.atf-active .atf-modal-title{min-width:0;margin:0;overflow-wrap:anywhere}
+body.atf-active .atf-modal-close{margin-inline-start:auto;flex:0 0 auto}
+body.atf-active .atf-modal-body{min-width:0;max-width:100%;padding:var(--atf-space-4);overflow:auto;overscroll-behavior:contain;overflow-wrap:anywhere}
+body.atf-active .atf-modal-loading{display:grid;place-items:center;min-height:8rem}
+body.atf-active .atf-modal-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--atf-space-2)}
+@media(max-width:36rem){body.atf-active .atf-modal-dialog{width:100%}body.atf-active .atf-modal-actions{align-items:stretch;flex-direction:column}body.atf-active .atf-modal-body{padding:var(--atf-space-3)}}
 body.atf-active .atf-collection-toolbar,body.atf-active .atf-bulk-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--atf-space-3)}
 body.atf-active :is(.atf-subscription-card,.atf-forum-subscription,.atf-draft-card,.atf-attachment-card){display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--atf-space-3);min-width:0}
 body.atf-active :is(.atf-subscription-card,.atf-forum-subscription,.atf-draft-card,.atf-attachment-card) h2{margin:0;font-size:var(--atf-font-size-md);overflow-wrap:anywhere}

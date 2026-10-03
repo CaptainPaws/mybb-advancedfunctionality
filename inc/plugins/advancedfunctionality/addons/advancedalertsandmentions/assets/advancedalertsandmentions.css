@@ -86,7 +86,7 @@
   background: #1e1e1e;
   border: 1px solid #444;
   display: none;
-  z-index: 9999;
+  z-index: 1020;
 }
 
 .af-aam-dropdown.af-aam-open {
@@ -190,7 +190,7 @@
 
 .af-aam-modal-window {
   position: fixed;
-  z-index: 9999;
+  z-index: 1010;
   top: 10%;
   left: 50%;
   transform: translateX(-50%);
@@ -357,7 +357,7 @@
 
 .af-aam-suggest-box {
   /* позиция выставляется JS (absolute/fixed), тут только внешний вид */
-  z-index: 9999;
+  z-index: 1020;
 
   min-width: 220px;
   max-width: 320px;
@@ -468,7 +468,7 @@
   position: fixed;
   right: 15px;
   bottom: 15px;
-  z-index: 9999;
+  z-index: 1020;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
