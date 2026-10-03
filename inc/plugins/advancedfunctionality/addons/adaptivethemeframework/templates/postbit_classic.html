@@ -3,8 +3,10 @@
 
 <article class="post classic atf-post af-atf-display {$unapproved_shade} {$post['af_aa_user_class']}" id="post_{$post['pid']}" data-author-uid="{$post['uid']}" data-element="{$post['af_atf_element']}" style="{$post_visibility}">
   <header class="post_head atf-post__topbar">
-    <div class="atf-post__moderation">{$post['modbit']}</div>
-    <div class="atf-post__sheet-action"><span class="atf-post__sheet-accent" aria-hidden="true"></span>{$post['af_atf_slots']['post.author.character']}</div>
+    <div class="atf-post__topbar-leading">
+      <div class="atf-post__moderation">{$post['modbit']}</div>
+      <div class="atf-post__sheet-action"><span class="atf-post__sheet-accent" aria-hidden="true"></span>{$post['af_atf_slots']['post.author.character']}</div>
+    </div>
     <div class="atf-post__identity-main">
       <div class="atf-post__name largetext">{$post['af_atf_slots']['post.author.identity']}</div>
       <div class="atf-post__title">{$post['usertitle']}</div>
@@ -30,13 +32,16 @@
       <div class="atf-post__sidebar-actions">{$post['af_atf_slots']['post.author.plaque']}{$post['af_atf_slots']['post.post_counter']}</div>
     </div></aside>
     <section class="post_content atf-post__content">
-      <div class="atf-post__management postbit_buttons">{$post['af_atf_slots']['post.actions']}</div>
       <div class="atf-post__slot atf-post__slot--before">{$post['af_atf_slots']['post.before_body']}</div>
       <div class="post_body scaleimages atf-post__message" id="pid_{$post['pid']}">{$post['message']}</div>
       <div class="atf-post__attachments">{$post['attachments']}</div><div class="atf-post__slot atf-post__slot--after">{$post['af_atf_slots']['post.after_body']}</div>
       <div class="atf-post__signature">{$post['signature']}</div>
       <div class="post_meta atf-post__meta" id="post_meta_{$post['pid']}">{$post['iplogged']}<span class="atf-post__status">{$post['poststatus']}</span></div>
-      <div class="atf-post__reputation-corner">{$post['af_atf_post_reputation_html']}</div>
+      <footer class="atf-post__footer">
+        <div class="atf-post__footer-spacer" aria-hidden="true"></div>
+        <div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">{$post['af_atf_slots']['post.actions']}</div>
+        <div class="atf-post__reputation-corner">{$post['af_atf_post_reputation_html']}</div>
+      </footer>
       {$post['input_editreason']}
     </section>
   </div>

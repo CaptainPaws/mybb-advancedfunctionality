@@ -1006,7 +1006,7 @@ function af_adaptivethemeframework_capture_post_text_count(array &$post): void
 function af_adaptivethemeframework_post_context(array $post): array
 {
     $profileActionKeys = [
-        'button_email', 'button_pm', 'button_www', 'button_find', 'button_rep',
+        'button_email', 'button_pm', 'button_find', 'button_rep',
     ];
     $actionKeys = [
         'button_edit', 'button_quickdelete', 'button_quickrestore', 'button_quote',
