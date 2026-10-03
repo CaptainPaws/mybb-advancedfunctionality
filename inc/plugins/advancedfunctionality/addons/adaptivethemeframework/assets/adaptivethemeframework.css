@@ -401,6 +401,8 @@ body.atf-active .atf-button {
 body.atf-active .atf-button:hover { filter: brightness(1.08); }
 body.atf-active .atf-button:focus-visible { outline: 0; box-shadow: var(--atf-focus-ring); }
 body.atf-active .atf-button--secondary { color: var(--atf-color-text); background: var(--atf-color-surface-raised); border-color: var(--atf-color-border); }
+body.atf-active .atf-button--danger { color: #fff; background: #b33a3a; border-color: transparent; }
+body.atf-active .atf-button--link { min-height: auto; padding: 0; color: var(--atf-color-accent); background: transparent; border: 0; }
 body.atf-active .atf-button[disabled], body.atf-active .atf-button[aria-disabled="true"] { cursor: not-allowed; opacity: 0.55; }
 
 body.atf-active .atf-tabs {
@@ -1421,8 +1423,6 @@ body.atf-active .atf-pm-empty__choice input,
 body.atf-active .atf-pm-empty__keep input { min-height: auto; padding: 0; }
 body.atf-active .atf-pm-empty__keep { display: flex; gap: var(--atf-space-2); align-items: center; justify-content: center; }
 body.atf-active .atf-pm-empty__actions { padding-block-start: var(--atf-space-4); border-block-start: 1px solid var(--atf-color-border); }
-body.atf-active .atf-button--danger { background: #b33a3a; }
-
 /* Archive is only the interactive export form. The standalone HTML, text and
    CSV renderers remain outside the ATF template lease and page shell. */
 body.atf-active .atf-pm-archive__form,
@@ -1567,3 +1567,51 @@ body.atf-active .atf-stat-grid{display:grid;grid-template-columns:repeat(auto-fi
 body.atf-active .atf-stat-grid>div{padding:var(--atf-space-3);border:1px solid var(--atf-color-border);border-radius:var(--atf-radius)}
 body.atf-active .atf-stat-grid :is(dt,dd){margin:0}body.atf-active .atf-stat-grid dt{color:var(--atf-color-text-muted);font-size:var(--atf-font-size-sm)}
 @media(max-width:48rem){body.atf-active :is(.atf-subscription-card,.atf-forum-subscription,.atf-draft-card,.atf-attachment-card){align-items:start;grid-template-columns:auto minmax(0,1fr) auto}body.atf-active .atf-forum-subscription__actions{grid-column:2/-1;flex-direction:row;text-align:start}body.atf-active .atf-bulk-actions{align-items:stretch;flex-direction:column}}
+/* Final form consistency pass. This deliberately lives behind the ATF body
+   marker: native MyBB templates and every ATF-off request keep core styling. */
+body.atf-active .atf-page form,
+body.atf-active .atf-page fieldset,
+body.atf-active .atf-page .atf-form-row,
+body.atf-active .atf-page .atf-form-row__controls { min-width: 0; max-width: 100%; }
+body.atf-active .atf-page form :is(input[type="text"], input[type="email"], input[type="password"], input[type="url"], input[type="number"], input[type="date"], input[type="search"], input[type="file"], select, textarea) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+body.atf-active .atf-page form :is(textarea, select[multiple]) { width: 100%; }
+body.atf-active .atf-page form textarea { resize: vertical; }
+body.atf-active .atf-page form :is(input, select, textarea):disabled,
+body.atf-active .atf-page form :is(input, textarea)[readonly] { cursor: not-allowed; opacity: .65; background-color: var(--atf-color-page-subtle); }
+body.atf-active .atf-page .atf-form-choice,
+body.atf-active .atf-page .atf-form-row__choice,
+body.atf-active .atf-page .atf-modcp-choice-group > label,
+body.atf-active .atf-page .atf-modcp-announcement-end > label { display: inline-flex; align-items: flex-start; gap: var(--atf-space-2); min-width: 0; }
+body.atf-active .atf-page :is(.atf-form-choice, .atf-form-row__choice, .atf-form-row__choices, .atf-modcp-choice-group, .atf-modcp-announcement-end) :is(input[type="checkbox"], input[type="radio"]) {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: auto;
+  margin-block-start: .2em;
+  padding: 0;
+}
+body.atf-active .atf-page .atf-form-row__hint { overflow-wrap: anywhere; }
+body.atf-active .atf-page :is(.error, .error_message, .atf-form-row__error, .atf-pm-compose__feedback) { max-width: 100%; overflow-wrap: anywhere; }
+
+/* SCEditor remains initialized exclusively by MyBB/AdvancedEditor. These rules
+   constrain its generated shell and keep the source textarea usable. */
+body.atf-active .atf-page .sceditor-container { box-sizing: border-box; width: 100% !important; min-width: 0; max-width: 100%; }
+body.atf-active .atf-page .sceditor-toolbar { display: flex; flex-wrap: wrap; max-width: 100%; overflow-x: auto; }
+body.atf-active .atf-page .sceditor-container :is(iframe, textarea.sceditor-source) { box-sizing: border-box; width: 100% !important; min-width: 0; max-width: 100%; }
+
+/* MyBB's existing Select2/autocomplete instances retain their IDs, endpoints,
+   and initialization. Only generated presentation is bounded here. */
+body.atf-active .atf-page .select2-container { width: 100% !important; min-width: 0; max-width: 100%; }
+body.atf-active .atf-page .select2-container :is(.select2-choice, .select2-choices) { box-sizing: border-box; max-width: 100%; }
+body.atf-active .atf-page :is(.select2-choices, .select2-search-choice, .autocomplete) { overflow-wrap: anywhere; }
+
+body.atf-active .atf-pm-compose__posticons { display: flex; flex-wrap: wrap; gap: var(--atf-space-2) var(--atf-space-3); min-width: 0; }
+body.atf-active .atf-pm-compose__posticons > * { max-width: 100%; }
+
+@media (max-width: 48rem) {
+  body.atf-active .atf-page :is(.atf-form-row__controls--date, .atf-modcp-announcement-end__finite, .atf-pm-archive__date) { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  body.atf-active .atf-page .atf-modcp-announcement-end__finite { display: grid; }
+}
