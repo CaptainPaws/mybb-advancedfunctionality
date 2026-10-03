@@ -1111,8 +1111,30 @@ function af_advancedpostcounter_register_atf_provider(): bool
     ]);
     return af_adaptivethemeframework_register_component([
         'owner' => AF_APC_ID, 'key' => 'profile_post_counter', 'slot' => 'profile.post_counter',
-        'renderer' => static fn(array $context): string => (string)($context['providers']['post_counter'] ?? ''),
+        'renderer' => 'af_advancedpostcounter_render_atf_profile_stat',
     ]) || $registered;
+}
+
+function af_advancedpostcounter_render_atf_profile_stat(array $context): string
+{
+    global $mybb, $lang;
+
+    $uid = (int)($context['uid'] ?? 0);
+    if ($uid <= 0) {
+        return '';
+    }
+
+    $total = (int)($context['member']['af_advancedpostcounter'] ?? 0);
+    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    $label = !empty($lang->af_apc_find_posts) ? (string)$lang->af_apc_find_posts : 'Найти все посты';
+    $url = ($bburl !== '' ? $bburl : '') . '/postsbyuser.php?uid=' . $uid;
+
+    return '<div class="atf-profile-stats atf-profile-stats--post-counter">'
+        . '<div class="atf-profile-stat">'
+        . '<div class="atf-profile-stat__label">Постов</div>'
+        . '<div class="atf-profile-stat__value">' . htmlspecialchars_uni(my_number_format($total)) . '</div>'
+        . '<div class="atf-profile-stat__meta"><a href="' . htmlspecialchars_uni($url) . '">' . htmlspecialchars_uni($label) . '</a></div>'
+        . '</div></div>';
 }
 
 function af_advancedpostcounter_member_profile_end(): void
@@ -1132,10 +1154,16 @@ function af_advancedpostcounter_member_profile_end(): void
 
     $marker = sprintf(AF_APC_MARK_PROF, $uid);
 
-    // Всегда задаём переменную для шаблона member_profile (если она там есть)
+    // Всегда задаём переменную для legacy member_profile (если она там есть).
     $memprofile['advancedpostcounter'] = $marker;
 
-    // -------- Каноничный путь вывода в member.php: fallback-маркер в $profilefields --------
+    // В ATF профильный слот рендерится напрямую из закрытого member context.
+    // Не добавляем legacy marker в $profilefields: иначе он дублирует карточку.
+    if (function_exists('af_adaptivethemeframework_compose_profile')) {
+        return;
+    }
+
+    // -------- Каноничный legacy-путь вывода в member.php: fallback-маркер в $profilefields --------
     if (!isset($GLOBALS['profilefields']) || !is_string($GLOBALS['profilefields'])) {
         return;
     }
