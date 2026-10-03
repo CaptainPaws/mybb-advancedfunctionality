@@ -1460,6 +1460,12 @@ body.atf-active .af-apui-character-infobox dl { display: grid; gap: 2px; margin:
 body.atf-active .af-apui-character-row { display: grid; grid-template-columns: minmax(5.5rem, .8fr) minmax(0, 1.2fr); gap: var(--atf-space-1); min-height: 15px; padding: 1px 0 3px; border-bottom: 1px solid var(--atf-color-border); font-size: var(--atf-font-size-xs); line-height: 1.15; }
 body.atf-active .af-apui-character-row dt { color: var(--atf-color-text-muted); font-size: 11px; text-transform: uppercase;}
 body.atf-active .af-apui-character-row dd { margin: 0; text-align: end; overflow-wrap: anywhere; font-size: 11px; text-transform: uppercase;}
+body.atf-active .af-apui-character-abilities { grid-column: 1 / -1; min-width: 0; border: 1px solid var(--atf-color-border); border-radius: var(--atf-radius-md); background: var(--atf-color-surface); }
+body.atf-active .af-apui-character-abilities summary { padding: var(--atf-space-3) var(--atf-space-4); cursor: pointer; font-weight: var(--atf-font-weight-bold); }
+body.atf-active .af-apui-character-abilities__body { min-width: 0; padding: 0 var(--atf-space-4) var(--atf-space-4); overflow-wrap: anywhere; }
+body.atf-active .atf-profile__panel, body.atf-active .af-apui-tab-card, body.atf-active .af-apui-tab-card__body, body.atf-active .af-apui-sheet-fragment { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+body.atf-active .af-apui-sheet-fragment { overflow-x: auto; overflow-y: visible; }
+body.atf-active .af-apui-sheet-fragment :is(table, .af-cs-grid, .af-cs-sheet, .af-charactersheet) { max-width: 100%; min-width: 0; box-sizing: border-box; }
 
 
 @media (max-width: 900px) {

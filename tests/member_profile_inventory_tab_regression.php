@@ -21,11 +21,12 @@ foreach ([$profileTemplate, $profileAddon, $profileJs, $sheetTemplate, $inventor
     member_profile_inventory_assert($source !== false, 'A required source file could not be read');
 }
 
-member_profile_inventory_assert(strpos($profileTemplate, 'data-tab="inventory"') === false, 'Standalone Inventory profile tab is still registered');
-member_profile_inventory_assert(strpos($profileTemplate, 'data-panel="inventory"') === false, 'Orphaned Inventory profile panel remains');
-member_profile_inventory_assert(strpos($profileTemplate, 'af_apui_inventory_tab') === false, 'Inventory profile template variable remains');
-member_profile_inventory_assert(strpos($profileAddon, 'af_apui_inventory_tab') === false, 'Inventory profile variable is still prepared');
-member_profile_inventory_assert(strpos($profileAddon, 'af_apui_build_member_profile_inventory_tab') === false, 'Inventory profile renderer remains');
+member_profile_inventory_assert(strpos($profileTemplate, 'data-tab="inventory"') !== false, 'Inventory profile tab is not registered');
+member_profile_inventory_assert(strpos($profileTemplate, 'data-panel="inventory"') !== false, 'Inventory profile panel is missing');
+member_profile_inventory_assert(strpos($profileTemplate, 'af_apui_inventory_tab') !== false, 'Inventory profile template variable is missing');
+member_profile_inventory_assert(strpos($profileAddon, 'af_advancedinventory_build_inventory_fragment($uid)') !== false, 'AdvancedInventory renderer is not reused');
+member_profile_inventory_assert(strpos($profileAddon, 'function af_apui_maybe_serve_lazy_profile_tab') !== false, 'Lazy profile API is missing');
+member_profile_inventory_assert(strpos($profileJs, "data-lazy-state') === 'loaded'") !== false, 'Client-side lazy cache is missing');
 
 preg_match_all('/data-tab="([^"]+)"/', $profileTemplate, $tabMatches);
 preg_match_all('/data-panel="([^"]+)"/', $profileTemplate, $panelMatches);

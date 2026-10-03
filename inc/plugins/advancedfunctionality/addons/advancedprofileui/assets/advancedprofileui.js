@@ -251,6 +251,7 @@
         panel.style.display = active ? '' : 'none';
 
         if (active) {
+          loadLazyPanel(panel);
           toggleEmptyState(panel);
         }
       });
@@ -258,6 +259,25 @@
       if (updateHash && window.history && typeof window.history.replaceState === 'function') {
         window.history.replaceState(null, '', '#af-tab-' + name);
       }
+    }
+
+    function loadLazyPanel(panel) {
+      var url = panel.getAttribute('data-lazy-url');
+      if (!url || panel.getAttribute('data-lazy-state') === 'loaded' || panel.getAttribute('data-lazy-state') === 'loading') return;
+      panel.setAttribute('data-lazy-state', 'loading');
+      fetch(url.replace(/&amp;/g, '&'), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (response) { if (!response.ok) throw new Error('HTTP ' + response.status); return response.text(); })
+        .then(function (html) {
+          panel.innerHTML = html;
+          panel.setAttribute('data-lazy-state', 'loaded');
+          panel.removeAttribute('aria-busy');
+          if (typeof window.AFAdvancedInventoryInit === 'function') window.AFAdvancedInventoryInit(panel);
+        })
+        .catch(function () {
+          panel.setAttribute('data-lazy-state', 'error');
+          panel.innerHTML = '<div class="af-apui-empty">Не удалось загрузить вкладку. Повторите попытку позже.</div>';
+        });
+      panel.setAttribute('aria-busy', 'true');
     }
 
     root.addEventListener('click', function (event) {

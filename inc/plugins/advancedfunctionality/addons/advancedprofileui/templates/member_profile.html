@@ -36,12 +36,12 @@
                         <span class="af-apui-profile-meta-value">{$memregdate}</span>
                     </div>
                     <div class="af-apui-profile-meta-item">
-                        <span class="af-apui-profile-meta-label">{$lang->date_of_birth}</span>
-                        <span class="af-apui-profile-meta-value">{$membday} {$membdayage}</span>
+                        <span class="af-apui-profile-meta-label">{$lang->lastvisit}</span>
+                        <span class="af-apui-profile-meta-value">{$memlastvisitdate}</span>
                     </div>
                     <div class="af-apui-profile-meta-item">
-                        <span class="af-apui-profile-meta-label">{$lang->local_time}</span>
-                        <span class="af-apui-profile-meta-value">{$localtime}</span>
+                        <span class="af-apui-profile-meta-label">{$lang->timeonline}</span>
+                        <span class="af-apui-profile-meta-value">{$timeonline}</span>
                     </div>
                 </div>
 
@@ -60,7 +60,7 @@
         <div class="af-apui-profile-tabs__nav" role="tablist" aria-label="Профиль">
             <button class="af-apui-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="af-apui-tab-info" data-tab="info">Основная информация</button>
             <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-sheet" data-tab="sheet">Лист персонажа</button>
-            <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-application" data-tab="application">Анкета</button>
+            <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-inventory" data-tab="inventory">Инвентарь</button>
             <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-timeline" data-tab="timeline">Хронология</button>
             <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-activity" data-tab="activity">Активность</button>
             <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-extra" data-tab="extra">Дополнительно</button>
@@ -95,19 +95,19 @@
                 </div>
             </article>
 
-            <article class="af-apui-panel" id="af-apui-tab-sheet" role="tabpanel" data-panel="sheet" hidden>
+            <article class="af-apui-panel" id="af-apui-tab-sheet" role="tabpanel" data-panel="sheet" data-lazy-url="member.php?action=profile&amp;uid={$memprofile['uid']}&amp;af_profile_tab=sheet" hidden>
                 {$af_apui_character_sheet_tab}
             </article>
 
-            <article class="af-apui-panel" id="af-apui-tab-application" role="tabpanel" data-panel="application" hidden>
-                {$af_apui_application_tab}
+            <article class="af-apui-panel" id="af-apui-tab-inventory" role="tabpanel" data-panel="inventory" data-lazy-url="member.php?action=profile&amp;uid={$memprofile['uid']}&amp;af_profile_tab=inventory" hidden>
+                {$af_apui_inventory_tab}
             </article>
 
-            <article class="af-apui-panel" id="af-apui-tab-timeline" role="tabpanel" data-panel="timeline" hidden>
+            <article class="af-apui-panel" id="af-apui-tab-timeline" role="tabpanel" data-panel="timeline" data-lazy-url="member.php?action=profile&amp;uid={$memprofile['uid']}&amp;af_profile_tab=timeline" hidden>
                 {$af_apui_timeline_tab}
             </article>
 
-            <article class="af-apui-panel" id="af-apui-tab-activity" role="tabpanel" data-panel="activity" hidden>
+            <article class="af-apui-panel" id="af-apui-tab-activity" role="tabpanel" data-panel="activity" data-lazy-url="member.php?action=profile&amp;uid={$memprofile['uid']}&amp;af_profile_tab=activity" hidden>
                 {$af_apui_activity_tab}
             </article>
 
