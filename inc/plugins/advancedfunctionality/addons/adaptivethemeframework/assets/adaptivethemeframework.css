@@ -429,9 +429,39 @@ body.atf-active .atf-post__avatar {
   overflow: hidden;
   border-radius: var(--atf-radius-md);
 }
-body.atf-active .atf-post__avatar:empty { display: none; }
-body.atf-active .atf-post__avatar :is(img, svg) { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center center; }
-body.atf-active .atf-post__avatars > .atf-post__avatar:only-child { grid-column: 1 / -1; width: min(200px, 100%); justify-self: start; }
+body.atf-active .atf-post__avatar :is(img, svg) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+}
+
+/* The APF second avatar is a separate postbit surface. Do not share the
+   primary avatar container class: legacy/theme rules often target it. */
+body.atf-active .atf-post__secondary-avatar {
+  min-width: 0;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border-radius: var(--atf-radius-md);
+}
+body.atf-active .atf-post__secondary-avatar:empty { display: none; }
+body.atf-active .atf-post__secondary-avatar :is(img, svg),
+body.atf-active .atf-post__secondary-avatar-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  object-position: center center;
+}
+body.atf-active .atf-post__avatars:has(.atf-post__secondary-avatar:empty) {
+  grid-template-columns: minmax(0, 1fr);
+}
+body.atf-active .atf-post__avatars:has(.atf-post__secondary-avatar:empty) > .atf-post__avatar {
+  width: min(200px, 100%);
+}
 body.atf-active .af-apui-profile-portrait { width: min(200px, 100%); aspect-ratio: 4 / 5; overflow: hidden; }
 body.atf-active .af-apui-profile-portrait__image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center center; }
 body.atf-active .atf-post__name { font-weight: var(--atf-font-weight-bold); overflow-wrap: anywhere; }
