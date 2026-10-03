@@ -478,6 +478,7 @@ function af_apui_normalize_atf_predecessor(string $templateName, string $current
     // not a generic "looks like MyBB" escape hatch; unrelated manual edits
     // remain fail-closed.
     $backupMatched = false;
+    $backupVariant = 'none';
     if (is_object($db) && $db->table_exists(AF_APUI_BACKUP_TABLE_NAME)) {
         $titleEsc = $db->escape_string($templateName);
         $query = $db->simple_select(
@@ -485,9 +486,33 @@ function af_apui_normalize_atf_predecessor(string $templateName, string $current
             'original_template,checksum',
             "title='" . $titleEsc . "'"
         );
-        $currentCanonical = function_exists('af_adaptivethemeframework_canonical_template_checksum')
-            ? af_adaptivethemeframework_canonical_template_checksum($current)
-            : hash('sha256', str_replace(["\r\n", "\r"], "\n", $current));
+
+        // APF historically added its profile-button marker to postbit_classic
+        // while APUI owned that template. A later APF deactivate could remove
+        // the marker but leave one boundary newline. Both variants are
+        // attributable and are safe to compare against APUI's persisted bytes.
+        $candidates = ['current' => $current];
+        if ($templateName === 'postbit_classic') {
+            $apfPattern = '~\\s*<!--\\s*af_apf_profile_btn\\s*-->.*?<!--\\s*/af_apf_profile_btn\\s*-->\\s*~is';
+            $withoutApf = preg_replace($apfPattern, '', $current, 1, $removedApf);
+            if ($removedApf === 1 && is_string($withoutApf)) {
+                $candidates['without_apf_profile_button'] = $withoutApf;
+            }
+            $withoutApfNewline = preg_replace($apfPattern, "\n", $current, 1, $removedApfNl);
+            if ($removedApfNl === 1 && is_string($withoutApfNewline)) {
+                $candidates['without_apf_profile_button_newline'] = $withoutApfNewline;
+            }
+        }
+
+        $canonicalChecksum = static function (string $value): string {
+            if (function_exists('af_adaptivethemeframework_canonical_template_checksum')) {
+                return af_adaptivethemeframework_canonical_template_checksum($value);
+            }
+            $value = str_replace(["\r\n", "\r"], "\n", $value);
+            $value = (string)preg_replace('/[ \\t]+(?=\\n)/', '', $value);
+            $value = (string)preg_replace('/\\n*\\z/', "\n", $value);
+            return hash('sha256', $value);
+        };
 
         while ($backup = $db->fetch_array($query)) {
             $original = (string)($backup['original_template'] ?? '');
@@ -495,21 +520,16 @@ function af_apui_normalize_atf_predecessor(string $templateName, string $current
             if ($original === '' || $storedSha1 === '' || !hash_equals($storedSha1, sha1($original))) {
                 continue;
             }
+            $originalCanonical = $canonicalChecksum($original);
 
-            $exact = hash_equals(hash('sha256', $original), hash('sha256', $current));
-            $canonical = function_exists('af_adaptivethemeframework_canonical_template_checksum')
-                ? hash_equals(
-                    af_adaptivethemeframework_canonical_template_checksum($original),
-                    $currentCanonical
-                )
-                : hash_equals(
-                    hash('sha256', str_replace(["\r\n", "\r"], "\n", $original)),
-                    $currentCanonical
-                );
-
-            if ($exact || $canonical) {
-                $backupMatched = true;
-                break;
+            foreach ($candidates as $variant => $candidate) {
+                $exact = hash_equals(hash('sha256', $original), hash('sha256', $candidate));
+                $canonical = hash_equals($originalCanonical, $canonicalChecksum($candidate));
+                if ($exact || $canonical) {
+                    $backupMatched = true;
+                    $backupVariant = $variant;
+                    break 2;
+                }
             }
         }
     }
@@ -527,6 +547,7 @@ function af_apui_normalize_atf_predecessor(string $templateName, string $current
             'start_marker_count' => $startCount,
             'end_marker_count' => $endCount,
             'backup_match' => 1,
+            'backup_variant' => $backupVariant,
         ],
     ];
 }
