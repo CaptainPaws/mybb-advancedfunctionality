@@ -8,9 +8,9 @@
     event.preventDefault();var card=form.closest('.af-abdl-card');if(card)card.classList.add('af-abdl-busy');
     var data=new FormData(form);data.set('ajax','1');
     fetch(form.action,{method:'POST',body:data,credentials:'same-origin',headers:{'X-Requested-With':'XMLHttpRequest'}})
-      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})
+      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status+' — '+r.url);return r.text();})
       .then(function(){return fetch(location.href,{credentials:'same-origin'});})
-      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})
+      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status+' — '+r.url);return r.text();})
       .then(replaceFrom)
       .catch(function(error){alert(error.message||'Не удалось выполнить действие.');if(card)card.classList.remove('af-abdl-busy');});
   });
