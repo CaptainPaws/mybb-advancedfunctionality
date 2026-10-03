@@ -237,7 +237,7 @@ it. This grouping also avoids presenting mutation handlers as destinations.
 | Section | Ordered local children |
 | --- | --- |
 | Overview | no route tabs; summary widgets may use in-page regions |
-| Profile | Edit profile; Avatar; Signature (permission gated); View public profile as an external/contextual action |
+| Profile | Edit profile; Avatar; Change username (permission gated); Signature (permission gated); View public profile as an external/contextual action |
 | Preferences | General preferences; AAM Alert preferences when its provider is enabled (alternatively reachable from Social / Alerts) |
 | Security | Password; Email; Username (permission gated) |
 | Social | Buddy & ignore; Group memberships; Alerts -> list/preferences (provider); Accounts (provider) |
@@ -304,12 +304,12 @@ HTML-escape once at the output boundary.
 | --- | --- | --- | --- |
 | `overview` | `usercp.php` | `uid && canusercp` | empty action, `do_notepad` |
 | `profile.edit` | `usercp.php?action=profile` | UCP access | `profile`, `do_profile` |
-| `profile.avatar` | `usercp.php?action=avatar` | core avatar capability/settings | `avatar`, `do_avatar` |
+| `profile.avatar` | `usercp.php?action=avatar` | UCP access; MyBB enforces avatar restrictions on the route | `avatar`, `do_avatar` |
+| `profile.username` | `usercp.php?action=changename` | `canchangename != 0` | `changename`, `do_changename` |
 | `profile.signature` | `usercp.php?action=editsig` | the exact `usercp_menu_profile()` signature rule | `editsig`, `do_editsig` |
 | `preferences.general` | `usercp.php?action=options` | UCP access | `options`, `do_options` |
 | `security.password` | `usercp.php?action=password` | UCP access | `password`, `do_password` |
 | `security.email` | `usercp.php?action=email` | UCP access | `email`, `do_email` |
-| `security.username` | `usercp.php?action=changename` | `canchangename != 0` | `changename`, `do_changename` |
 | `social.lists` | `usercp.php?action=editlists` | UCP access | `editlists`, `do_editlists`, request accept/decline/cancel |
 | `social.groups` | `usercp.php?action=usergroups` | UCP access | `usergroups` including its `do` states |
 | `subscriptions.threads` | `usercp.php?action=subscriptions` | UCP access | subscriptions plus thread add/remove contextual actions |
