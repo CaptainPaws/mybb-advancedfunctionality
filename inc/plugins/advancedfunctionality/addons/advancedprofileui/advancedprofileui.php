@@ -362,20 +362,24 @@ function af_apui_render_profile_stats(array $context): string
     $stats = [
         ['Сообщения', my_number_format((int)($member['postnum'] ?? 0)), 'fa-solid fa-comments'],
         ['Темы', my_number_format((int)($member['threadnum'] ?? 0)), 'fa-solid fa-copy'],
-        ['Посты', my_number_format((int)($member['af_advancedpostcounter'] ?? 0)), 'fa-solid fa-pen'],
+        ['Посты', my_number_format((int)($member['af_advancedpostcounter'] ?? 0)), 'fa-solid fa-pen', ''],
+        ['Репутация', (($member['reputation'] ?? 0) > 0 ? '+' : '') . my_number_format((int)($member['reputation'] ?? 0)), 'fa-solid fa-heart', 'reputation.php?uid=' . $uid],
     ];
     if ($uid > 0 && function_exists('af_balance_get_postbit_data')) {
         $balance = af_balance_get_postbit_data($uid);
-        $stats[] = ['Кредиты', (string)($balance['credits_display'] ?? '0.00') . ' ' . (string)($balance['currency_symbol'] ?? '¢'), 'fa-solid fa-coins'];
-        $stats[] = ['Токены', (string)($balance['ability_tokens_display'] ?? '0.00'), 'fa-solid fa-gem'];
-        $stats[] = ['Уровень', (string)(int)($balance['level'] ?? 1), 'fa-solid fa-star'];
-        $stats[] = ['Опыт', (string)($balance['exp_display'] ?? '0') . ' / ' . (string)($balance['exp_need_display'] ?? '0'), 'fa-solid fa-chart-line'];
+        $stats[] = ['Кредиты', (string)($balance['credits_display'] ?? '0.00') . ' ' . (string)($balance['currency_symbol'] ?? '¢'), 'fa-solid fa-coins', ''];
+        $stats[] = ['Токены', (string)($balance['ability_tokens_display'] ?? '0.00'), 'fa-solid fa-gem', ''];
+        $stats[] = ['Уровень', (string)(int)($balance['level'] ?? 1), 'fa-solid fa-star', ''];
+        $stats[] = ['Опыт', (string)($balance['exp_display'] ?? '0') . ' / ' . (string)($balance['exp_need_display'] ?? '0'), 'fa-solid fa-chart-line', ''];
     }
     $html = '<div class="af-apui-profile-stats" aria-label="Статистика профиля">';
-    foreach ($stats as [$label, $value, $icon]) {
-        $html .= '<div class="af-apui-profile-stat"><i class="' . htmlspecialchars_uni($icon) . '" aria-hidden="true"></i>'
+    foreach ($stats as $stat) {
+        [$label, $value, $icon] = $stat; $url = (string)($stat[3] ?? '');
+        $html .= ($url !== '' ? '<a class="af-apui-profile-stat" href="' . htmlspecialchars_uni($url) . '">' : '<div class="af-apui-profile-stat">')
+            . '<i class="' . htmlspecialchars_uni($icon) . '" aria-hidden="true"></i>'
             . '<span class="af-apui-profile-stat__label">' . htmlspecialchars_uni($label) . '</span>'
-            . '<strong class="af-apui-profile-stat__value">' . htmlspecialchars_uni($value) . '</strong></div>';
+            . '<strong class="af-apui-profile-stat__value">' . htmlspecialchars_uni($value) . '</strong>'
+            . ($url !== '' ? '</a>' : '</div>');
     }
     return $html . '</div>';
 }

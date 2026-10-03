@@ -20,6 +20,11 @@
       var roots = Array.prototype.slice.call(document.querySelectorAll(selector));
       if (!roots.length) return;
       var root = roots[0];
+      // MyBB's reputation popup owns the generic `.modal` selector. Keeping
+      // provider shells in that selector makes one reputation invocation adopt
+      // AAM/AAS as additional popup content. Providers already have namespaced
+      // classes and lifecycle handlers, so remove only the ambiguous class.
+      if (root.matches('#af_aas_modal, #af_aam_modal')) root.classList.remove('modal');
       roots.slice(1).forEach(function (duplicate) {
         if (duplicate !== root) duplicate.remove();
       });

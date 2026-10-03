@@ -902,7 +902,7 @@ function af_adaptivethemeframework_profile_context(array $member, array $values)
     global $mybb;
     $uid = max(0, (int)($member['uid'] ?? 0));
     $viewerUid = is_object($mybb) ? max(0, (int)($mybb->user['uid'] ?? 0)) : 0;
-    $memberKeys = ['uid', 'username', 'usergroup', 'displaygroup', 'avatar', 'usertitle', 'regdate', 'lastactive', 'postnum', 'threadnum', 'af_advancedpostcounter'];
+    $memberKeys = ['uid', 'username', 'usergroup', 'displaygroup', 'avatar', 'usertitle', 'regdate', 'lastactive', 'postnum', 'threadnum', 'reputation', 'af_advancedpostcounter'];
     $avatars = function_exists('af_apui_get_profile_avatars')
         ? af_apui_get_profile_avatars($uid, false)
         : ['primary_avatar' => '', 'secondary_avatar' => '', 'display_avatar' => '', 'secondary_avatar_missing' => true];
@@ -1073,12 +1073,68 @@ function af_adaptivethemeframework_resolve_post_secondary_avatar(array $post): s
         . '" class="af-apf-secondary-avatar-image atf-post__secondary-avatar-image" loading="lazy" decoding="async">';
 }
 
+/** Resolve the canonical ATF/KB character element key; colour remains owned by ATF's existing element CSS map. */
+function af_adaptivethemeframework_post_element(int $uid): string
+{
+    static $cache = [];
+    if ($uid <= 0) return '';
+    if (array_key_exists($uid, $cache)) return $cache[$uid];
+    $payload = function_exists('af_apui_get_profile_character_payload')
+        ? (array)af_apui_get_profile_character_payload($uid) : [];
+    $field = (array)((array)($payload['fields'] ?? []))['character_element'] ?? [];
+    $value = trim((string)($field['value'] ?? $field['raw'] ?? $field['key'] ?? ''));
+    return $cache[$uid] = preg_replace('~[^a-z0-9_-]+~', '', strtolower($value)) ?? '';
+}
+
+/** Load every reputation entry for a thread once, never once per post. */
+function af_adaptivethemeframework_thread_reputation(int $tid): array
+{
+    static $cache = [];
+    if ($tid <= 0) return [];
+    if (isset($cache[$tid])) return $cache[$tid];
+    global $db;
+    $cache[$tid] = [];
+    if (!is_object($db)) return [];
+    $query = $db->query("SELECT r.pid,r.adduid,r.reputation,r.comments,u.username
+        FROM {$db->table_prefix}reputation r
+        INNER JOIN {$db->table_prefix}posts p ON p.pid=r.pid
+        LEFT JOIN {$db->table_prefix}users u ON u.uid=r.adduid
+        WHERE p.tid=" . (int)$tid . " AND r.pid>0 ORDER BY r.dateline DESC");
+    while ($row = $db->fetch_array($query)) $cache[$tid][(int)$row['pid']][] = $row;
+    return $cache[$tid];
+}
+
+function af_adaptivethemeframework_post_reputation(array $post): string
+{
+    $pid = (int)($post['pid'] ?? 0); $uid = (int)($post['uid'] ?? 0);
+    $all = af_adaptivethemeframework_thread_reputation((int)($post['tid'] ?? 0));
+    $entries = (array)($all[$pid] ?? []); $score = 0; $rows = '';
+    foreach ($entries as $entry) {
+        $value = (int)$entry['reputation']; $score += $value;
+        $comment = trim((string)$entry['comments']);
+        if (function_exists('my_substr')) $comment = my_substr($comment, 0, 80);
+        else $comment = substr($comment, 0, 80);
+        $rows .= '<li><strong>' . htmlspecialchars_uni((string)($entry['username'] ?: 'Удалённый пользователь'))
+            . '</strong> <span>' . ($value > 0 ? '+' : '') . $value . '</span>'
+            . ($comment !== '' ? '<small>' . htmlspecialchars_uni($comment) . '</small>' : '') . '</li>';
+    }
+    $scoreText = ($score > 0 ? '+' : '') . $score;
+    $canAdd = trim((string)($post['button_rep'] ?? '')) !== '' && $uid > 0 && $pid > 0;
+    $heart = $canAdd ? '<button type="button" class="atf-post-reputation__heart" title="Оценить сообщение" aria-label="Оценить сообщение" onclick="event.stopPropagation(); MyBB.reputation('.$uid.','.$pid.'); return false;">&#9829;</button>' : '<span class="atf-post-reputation__heart" aria-hidden="true">&#9829;</span>';
+    return '<div class="atf-post-reputation">'.$heart.'<button type="button" class="atf-post-reputation__score" aria-haspopup="true" aria-expanded="false">'.htmlspecialchars_uni($scoreText).'</button>'
+        .'<div class="atf-post-reputation__popover" role="tooltip"><strong>Оценки сообщения</strong>'
+        .($rows !== '' ? '<ul>'.$rows.'</ul>' : '<span>Оценок пока нет</span>').'</div></div>';
+}
+
 function af_adaptivethemeframework_compose_postbit(array &$post): void
 {
     // Primary MyBB avatar and APF secondary avatar are separate surfaces.
     // Never overwrite $post['useravatar'] here.
     $post['af_atf_primary_avatar'] = (string)($post['useravatar'] ?? '');
     $post['af_atf_secondary_avatar'] = af_adaptivethemeframework_resolve_post_secondary_avatar($post);
+    $post['af_atf_element'] = af_adaptivethemeframework_post_element((int)($post['uid'] ?? 0));
+    $post['af_atf_online_indicator'] = strpos((string)($post['af_apui_presence_html'] ?? ''), 'presence-dot--online') !== false ? '<span class="atf-post__online-indicator" title="На форуме" aria-label="На форуме"></span>' : '';
+    $post['af_atf_post_reputation_html'] = af_adaptivethemeframework_post_reputation($post);
     if (!isset($post['af_post_char_count'])) {
         $post['af_post_char_count'] = af_adaptivethemeframework_post_text_count((string)($post['message'] ?? ''));
     }
@@ -2049,6 +2105,9 @@ function af_adaptivethemeframework_template_seeds(): array
         'forumdisplay_threads_sep' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay_threads_sep.html',
         'forumdisplay_thread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumdisplay_thread.html',
         'member_profile' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/member_profile.html',
+        'reputation' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/reputation.html',
+        'reputation_vote' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/reputation_vote.html',
+        'reputation_no_votes' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/reputation_no_votes.html',
         // Task 37 proved these five stock member-list templates participate in
         // layout. Nested avatar/group/star/order templates remain core-owned.
         'memberlist' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/memberlist.html',
