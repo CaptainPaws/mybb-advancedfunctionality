@@ -25,6 +25,13 @@ function af_cs_get_postbit_sheet_payload(int $uid): array
         return $payload;
     }
 
+    $activeApplication = function_exists('af_characterworkflow_resolve_active_application')
+        ? af_characterworkflow_resolve_active_application($uid)
+        : null;
+    if ($activeApplication === null) {
+        return $payload;
+    }
+
     if (!isset($lang->af_charactersheets_name)) {
         af_charactersheets_lang();
     }
@@ -72,21 +79,10 @@ function af_charactersheets_get_application_payload_by_uid(int $uid): array
         return (array)$cache[$uid];
     }
 
-    global $db;
-
-    $row = [];
-    if ($db->table_exists(AF_CS_TABLE)) {
-        $where = 'uid=' . (int)$uid;
-        $row = $db->fetch_array($db->simple_select(
-            AF_CS_TABLE,
-            'tid,accepted_pid,uid,sheet_slug,accepted,accepted_at',
-            $where,
-            ['order_by' => 'tid', 'order_dir' => 'DESC', 'limit' => 1]
-        ));
-        if (!is_array($row)) {
-            $row = [];
-        }
-    }
+    $active = function_exists('af_characterworkflow_resolve_active_application')
+        ? af_characterworkflow_resolve_active_application($uid)
+        : null;
+    $row = is_array($active) ? (array)($active['relation'] ?? []) : [];
 
     $tid = (int)($row['tid'] ?? 0);
     if ($tid <= 0) {
@@ -94,10 +90,8 @@ function af_charactersheets_get_application_payload_by_uid(int $uid): array
     }
 
     $pid = 0;
-    if (function_exists('get_thread')) {
-        $thread = get_thread($tid);
-        $pid = (int)($thread['firstpost'] ?? 0);
-    }
+    $thread = (array)($active['thread'] ?? []);
+    $pid = (int)($thread['firstpost'] ?? 0);
 
     if ($pid <= 0) {
         $pid = (int)($row['accepted_pid'] ?? 0);
