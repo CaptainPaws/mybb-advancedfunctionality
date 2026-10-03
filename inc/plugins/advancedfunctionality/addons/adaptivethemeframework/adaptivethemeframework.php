@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.10');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.11');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1005,9 +1005,30 @@ function af_adaptivethemeframework_post_context(array $post): array
 function af_adaptivethemeframework_resolve_post_secondary_avatar(array $post): string
 {
     $uid = max(0, (int)($post['uid'] ?? 0));
-    if ($uid <= 0) return '';
+    if ($uid <= 0) {
+        return '';
+    }
+
+    // Prefer APF's postbit payload when its hook already ran.
     $secondary = trim((string)($post['af_apf_secondary_avatar_url'] ?? ''));
-    if ($secondary === '') return '';
+
+    // Do not depend on APF's postbit hook being registered early enough:
+    // profile rendering already proves this canonical APF helper can resolve
+    // the stored second avatar for the same uid.
+    if ($secondary === '' && function_exists('af_apf_get_secondary_avatar')) {
+        $secondary = trim((string)af_apf_get_secondary_avatar($uid));
+    }
+
+    // APUI uses the same canonical resolver on member.php. Reuse it as a
+    // final application-level fallback so profile and postbit cannot diverge.
+    if ($secondary === '' && function_exists('af_apui_get_profile_avatars')) {
+        $avatars = af_apui_get_profile_avatars($uid, false);
+        $secondary = trim((string)($avatars['secondary_avatar'] ?? ''));
+    }
+
+    if ($secondary === '') {
+        return '';
+    }
 
     $username = (string)($post['username'] ?? '');
     return '<img src="' . htmlspecialchars_uni($secondary)
