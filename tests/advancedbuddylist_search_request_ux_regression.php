@@ -34,7 +34,7 @@ foreach ([
 if (!str_contains($css,'.af-abdl-icon-btn')) {
     throw new RuntimeException('Icon-only add-friend button styling is missing.');
 }
-if (!str_contains($js,"data.set('ajax','1')") || !str_contains($js,"fetch(form.action")) {
+if (!str_contains($js,"data.set('ajax','1')") || !str_contains($js,"fetch(actionUrl")) {
     throw new RuntimeException('Native User CP AJAX bridge is missing.');
 }
 if (!str_contains($aam,"\$mybb->get_input('af_abdl_return') !== '' ? 'buddy.php?tab=friends' : 'usercp.php?action=editlists'")) {
