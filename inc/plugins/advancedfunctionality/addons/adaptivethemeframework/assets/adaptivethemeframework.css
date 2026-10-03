@@ -110,6 +110,81 @@ body.atf-active .atf-index { padding-block: var(--atf-space-6); }
 /* The home page is already the root destination. Core's active breadcrumb is
    useful on inner pages but becomes a redundant board-name heading here. */
 body.atf-active.atf-index-page .navigation { display: none; }
+
+/* Canonical ATF breadcrumbs. MyBB/core/addons still own the route stack; ATF
+   only provides one responsive visual language for it. */
+body.atf-active .navigation.atf-breadcrumbs {
+  box-sizing: border-box;
+  width: min(100%, var(--atf-page-max-width));
+  margin: var(--atf-space-3) auto;
+  padding-inline: var(--atf-page-gap);
+  color: var(--atf-color-text-muted);
+  font-size: var(--atf-font-size-sm);
+}
+body.atf-active .atf-breadcrumbs__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  background: color-mix(in srgb, var(--atf-color-page-subtle) 92%, transparent);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-md);
+}
+body.atf-active .atf-breadcrumbs__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+body.atf-active .atf-breadcrumbs__item + .atf-breadcrumbs__item::before {
+  content: "";
+  width: .58rem;
+  height: .58rem;
+  margin-inline: .15rem .35rem;
+  border-block-start: 1px solid var(--atf-color-border-strong);
+  border-inline-end: 1px solid var(--atf-color-border-strong);
+  transform: rotate(45deg);
+  flex: 0 0 auto;
+}
+body.atf-active .atf-breadcrumbs__link,
+body.atf-active .atf-breadcrumbs__current {
+  display: block;
+  min-width: 0;
+  padding: .72rem .85rem;
+  overflow: hidden;
+  color: var(--atf-color-text-muted);
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  text-decoration: none;
+  white-space: nowrap;
+}
+body.atf-active .atf-breadcrumbs__link:hover,
+body.atf-active .atf-breadcrumbs__link:focus-visible {
+  color: var(--atf-color-accent);
+  background: color-mix(in srgb, var(--atf-color-surface) 70%, transparent);
+  outline: none;
+}
+body.atf-active .atf-breadcrumbs__item.is-current {
+  min-width: 0;
+  font-weight: var(--atf-font-weight-bold);
+}
+body.atf-active .atf-breadcrumbs__current {
+  color: var(--atf-color-text);
+}
+body.atf-active .atf-thread__breadcrumbs .navigation.atf-breadcrumbs {
+  width: 100%;
+  margin: 0;
+  padding-inline: 0;
+}
+body.atf-active .atf-thread__breadcrumbs--bottom {
+  margin-block: var(--atf-space-4) var(--atf-space-2);
+}
+
 body.atf-active .atf-index__section { margin-block: var(--atf-space-5); }
 body.atf-active .atf-index__section:empty { display: none; }
 body.atf-active .atf-index__forums { min-width: 0; }
@@ -1589,7 +1664,13 @@ body.atf-active .atf-userlist__filters .atf-form-grid{display:grid;grid-template
 body.atf-active .atf-userlist__filters label{display:grid;gap:var(--atf-space-1)}
 body.atf-active .atf-userlist__filters :is(input[type="text"],input[type="number"],select){box-sizing:border-box;width:100%;min-width:0}
 body.atf-active .atf-userlist__filters,body.atf-active .atf-userlist__filters .atf-form-actions{min-width:0;max-width:100%}
-@media(max-width:36rem){body.atf-active .atf-user-grid{grid-template-columns:minmax(0,1fr)}body.atf-active .atf-user-card__meta{grid-template-columns:minmax(0,1fr)}body.atf-active .atf-userlist__filters .atf-form-actions{align-items:stretch;flex-direction:column}}
+@media(max-width:36rem){
+  body.atf-active .navigation.atf-breadcrumbs { padding-inline: var(--atf-page-gap); }
+  body.atf-active .atf-breadcrumbs__list { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+  body.atf-active .atf-breadcrumbs__item { flex: 0 0 auto; }
+  body.atf-active .atf-breadcrumbs__link,
+  body.atf-active .atf-breadcrumbs__current { max-width: 15rem; }
+body.atf-active .atf-user-grid{grid-template-columns:minmax(0,1fr)}body.atf-active .atf-user-card__meta{grid-template-columns:minmax(0,1fr)}body.atf-active .atf-userlist__filters .atf-form-actions{align-items:stretch;flex-direction:column}}
 body.atf-active .atf-social-list{grid-template-columns:repeat(auto-fit,minmax(12rem,1fr))}
 body.atf-active :is(.atf-social-person,.atf-social-request,.atf-group-card){display:flex;gap:var(--atf-space-3,12px);align-items:center;padding:var(--atf-space-3,12px);border:1px solid var(--atf-border-color,currentColor);border-radius:var(--atf-radius,8px)}
 body.atf-active .atf-social-requests{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:var(--atf-space-4,16px)}
