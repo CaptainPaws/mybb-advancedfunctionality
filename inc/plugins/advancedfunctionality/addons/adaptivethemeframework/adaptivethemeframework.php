@@ -146,7 +146,7 @@ function af_adaptivethemeframework_normalizer_diagnostic(string $seed, string $c
         $lines[] = $prefix . 'called=yes';
         $lines[] = $prefix . 'returned=' . (string)($call['returned'] ?? 'null');
         if (array_key_exists('changed', $call)) $lines[] = $prefix . 'changed=' . ($call['changed'] ? 'yes' : 'no');
-        foreach (['start_marker_count', 'end_marker_count', 'marker_count', 'variable_count', 'backup_match', 'legacy_disable_match', 'normalized_checksum'] as $field) {
+        foreach (['start_marker_count', 'end_marker_count', 'marker_count', 'variable_count', 'backup_match', 'known_checksum_match', 'legacy_disable_match', 'normalized_checksum'] as $field) {
             if (array_key_exists($field, $call)) $lines[] = $field . '=' . $call[$field];
         }
     }
