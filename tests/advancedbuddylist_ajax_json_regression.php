@@ -11,7 +11,7 @@ foreach ([$buddy,$js,$manifest] as $source) {
 }
 
 foreach ([
-    "action=\"usercp.php\"",
+    "rtrim((string)(\$mybb->settings['bburl'] ?? ''), '/').'/usercp.php'",
     "'my_post_key'",
     "'af_abdl_return'=>'1'",
     "'action'=>'do_editlists'",
@@ -35,5 +35,5 @@ foreach (['application/json','JSON.parse(text)','buddy.php?ajax=1'] as $obsolete
     if (str_contains($js,$obsolete)) throw new RuntimeException('Obsolete private Buddy JSON API is still used: '.$obsolete);
 }
 
-if (!str_contains($manifest, "'version'     => '2.3.0'")) throw new RuntimeException('Advanced Buddy List version mismatch.');
+if (!str_contains($manifest, "'version'     => '2.3.1'")) throw new RuntimeException('Advanced Buddy List version mismatch.');
 echo "Advanced Buddy List native User CP action bridge regression: OK\n";
