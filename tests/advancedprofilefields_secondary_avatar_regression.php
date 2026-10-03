@@ -45,6 +45,10 @@ if (!str_contains($apf, 'function af_apf_normalize_atf_avatar_template')
     || !str_contains($apf, 'secondary_avatar_atf_seed_upgrade')) {
     throw new RuntimeException('APF must provide the ATF avatar seed-upgrade normalizer.');
 }
+if (!str_contains($apf, 'secondary_avatar_legacy_disable_output')
+    || !str_contains($apf, 'exact_known_legacy_disable_upgrade')) {
+    throw new RuntimeException('APF must recover the exact legacy disable output left in usercp_avatar.');
+}
 $provider = $manifest['compatibility_providers']['adaptivethemeframework'] ?? null;
 if (!is_array($provider)
     || ($provider['callback'] ?? '') !== 'af_apf_register_atf_compatibility_normalizer'
