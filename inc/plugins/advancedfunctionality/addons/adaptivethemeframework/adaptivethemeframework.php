@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.2');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.3');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1045,6 +1045,7 @@ function af_adaptivethemeframework_mark_page(string &$page): void
                 }
                 if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'index.php') {
                     $layout = ($GLOBALS['atf_forum_layout'] ?? 'full') === 'grid' ? 'grid' : 'full';
+                    $classes[] = 'atf-index-page';
                     $classes[] = 'atf-forum-layout--'.$layout;
                 }
                 $replacement = 'class=' . $classMatch[1][0] . implode(' ', array_filter($classes)) . $classMatch[1][0];
@@ -1053,7 +1054,7 @@ function af_adaptivethemeframework_mark_page(string &$page): void
                 $layoutClass = '';
                 if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'index.php') {
                     $layout = ($GLOBALS['atf_forum_layout'] ?? 'full') === 'grid' ? 'grid' : 'full';
-                    $layoutClass = ' atf-forum-layout--'.$layout;
+                    $layoutClass = ' atf-index-page atf-forum-layout--'.$layout;
                 }
                 $attributes .= ' class="atf-active'.$layoutClass.'"';
             }
