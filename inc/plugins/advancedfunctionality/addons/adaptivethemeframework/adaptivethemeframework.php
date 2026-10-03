@@ -732,7 +732,7 @@ function af_adaptivethemeframework_profile_semantic_rows(string $html, string $m
     $items = [];
     if (preg_match_all('~<tr\\b[^>]*>(.*?)</tr>~is', $html, $rows)) {
         foreach ($rows[1] as $rowHtml) {
-            if (preg_match('~<t[dh]\\b[^>]*class=["\\'][^"\\']*\\bthead\\b[^"\\']*["\\'][^>]*>~i', $rowHtml)) {
+            if (preg_match("~<t[dh]\\b[^>]*class=[\\\"'][^\\\"']*\\bthead\\b[^\\\"']*[\\\"'][^>]*>~i", $rowHtml)) {
                 continue;
             }
 
