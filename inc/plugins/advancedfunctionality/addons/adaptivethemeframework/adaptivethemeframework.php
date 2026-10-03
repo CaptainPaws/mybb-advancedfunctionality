@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.3');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.4');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1786,6 +1786,11 @@ function af_adaptivethemeframework_template_seeds(): array
 {
     return [
         'index' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/index.html',
+        // Global breadcrumb presentation while ATF owns the active theme. Core
+        // continues to build breadcrumb data/routes; ATF only replaces markup.
+        'nav' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/nav.html',
+        'nav_bit' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/nav_bit.html',
+        'nav_bit_active' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/nav_bit_active.html',
         // MyBB 1.8.40 build_forumbits() selects this template for each visible
         // top-level category and supplies its already permission-filtered children.
         'forumbit_depth1_cat' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/forumbit_depth1_cat.html',
