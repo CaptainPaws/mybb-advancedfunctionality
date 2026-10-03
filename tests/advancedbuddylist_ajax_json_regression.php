@@ -7,38 +7,33 @@ $js = file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advance
 $manifest = file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancedbuddylist/manifest.php');
 
 foreach ([$buddy,$js,$manifest] as $source) {
-    if (!is_string($source)) {
-        throw new RuntimeException('Unable to read Buddy List AJAX sources.');
-    }
+    if (!is_string($source)) throw new RuntimeException('Unable to read Buddy List native action sources.');
 }
 
 foreach ([
-    "!empty(\$_POST['ajax'])",
-    "!empty(\$_GET['ajax'])",
-    "HTTP_X_REQUESTED_WITH",
-    "Content-Type: application/json; charset=utf-8",
-    "JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES",
+    "action=\"usercp.php\"",
+    "'my_post_key'",
+    "'af_abdl_return'=>'1'",
+    "'action'=>'do_editlists'",
+    "'action'=>'acceptrequest'",
+    "'action'=>'declinerequest'",
+    "'action'=>'cancelrequest'",
 ] as $needle) {
-    if (!str_contains($buddy, $needle)) {
-        throw new RuntimeException('Missing server AJAX/JSON contract: '.$needle);
-    }
+    if (!str_contains($buddy,$needle)) throw new RuntimeException('Missing native User CP form contract: '.$needle);
 }
 
 foreach ([
-    "ajax=1",
-    "'Accept':'application/json'",
-    "r.headers.get('content-type')",
-    "application/json",
-    "Сервер вернул HTML вместо JSON",
-    "JSON.parse(text)",
+    "data.set('ajax','1')",
+    "fetch(form.action",
+    "return r.text()",
+    "fetch(location.href",
 ] as $needle) {
-    if (!str_contains($js, $needle)) {
-        throw new RuntimeException('Missing client AJAX/JSON contract: '.$needle);
-    }
+    if (!str_contains($js,$needle)) throw new RuntimeException('Missing native User CP AJAX bridge: '.$needle);
 }
 
-if (!str_contains($manifest, "'version'     => '2.2.2'")) {
-    throw new RuntimeException('Advanced Buddy List version mismatch.');
+foreach (['application/json','JSON.parse(text)','buddy.php?ajax=1'] as $obsolete) {
+    if (str_contains($js,$obsolete)) throw new RuntimeException('Obsolete private Buddy JSON API is still used: '.$obsolete);
 }
 
-echo "Advanced Buddy List AJAX JSON regression: OK\n";
+if (!str_contains($manifest, "'version'     => '2.3.0'")) throw new RuntimeException('Advanced Buddy List version mismatch.');
+echo "Advanced Buddy List native User CP action bridge regression: OK\n";
