@@ -1,49 +1,42 @@
 {$ignore_bit}{$deleted_bit}
 <a id="pid{$post['pid']}" name="pid{$post['pid']}"></a>
 
-<article class="post classic atf-post {$unapproved_shade} {$post['af_aa_user_class']}" id="post_{$post['pid']}" data-author-uid="{$post['uid']}" style="{$post_visibility}">
+<article class="post classic atf-post af-atf-display {$unapproved_shade} {$post['af_aa_user_class']}" id="post_{$post['pid']}" data-author-uid="{$post['uid']}" data-element="{$post['af_atf_element']}" style="{$post_visibility}">
   <header class="post_head atf-post__topbar">
-    <div class="atf-post__sheet-action">{$post['af_atf_slots']['post.author.character']}</div>
-
+    <div class="atf-post__moderation">{$post['modbit']}</div>
+    <div class="atf-post__sheet-action"><span class="atf-post__sheet-accent" aria-hidden="true"></span>{$post['af_atf_slots']['post.author.character']}</div>
     <div class="atf-post__identity-main">
-      <div class="atf-post__profile-actions">{$post['af_atf_slots']['post.author.profile_actions']}{$post['af_atf_slots']['post.author.meta']}</div>
       <div class="atf-post__name largetext">{$post['af_atf_slots']['post.author.identity']}</div>
       <div class="atf-post__title">{$post['usertitle']}</div>
       <div class="atf-post__rank">{$post['groupimage']}{$post['userstars']}</div>
-
       <div class="atf-post__meta-line">
-        <span class="atf-post__subject">{$post['icon']}{$post['subject']}{$post['subject_extra']}</span>
         <span class="atf-post__permalink">{$post['posturl']}</span>
         <time class="post_date atf-post__date">{$post['postdate']}</time>
         <span class="atf-post__char-count" title="Количество символов в сообщении">Символов: {$post['af_post_char_count_formatted']}</span>
         <span class="post_edit atf-post__edited" id="edited_by_{$post['pid']}">{$post['editedmsg']}</span>
-        <span class="atf-post__top-actions"><span class="postbit_buttons">{$post['af_atf_slots']['post.actions']}</span></span>
       </div>
     </div>
-
-    <div class="atf-post__primary-avatar atf-post__avatar atf-post__avatar--primary">{$post['af_atf_primary_avatar']}</div>
+    <div class="atf-post__author-tools">
+      <div class="atf-post__primary-avatar atf-post__avatar atf-post__avatar--primary">{$post['af_atf_primary_avatar']}{$post['af_atf_online_indicator']}</div>
+      <div class="atf-post__profile-actions">{$post['af_atf_slots']['post.author.profile_actions']}</div>
+    </div>
   </header>
 
   <div class="atf-post__layout">
-    <aside class="atf-post__sidebar" aria-label="Информация об авторе">
+    <aside class="atf-post__sidebar" aria-label="Информация об авторе"><div class="atf-post__sidebar-inner">
       <div class="atf-post__secondary-avatar">{$post['af_atf_secondary_avatar']}</div>
-      <section class="atf-post__personal-title">
-        <h3 class="atf-post__sidebar-heading">ЛЗ</h3>
-        <div class="atf-post__profile-fields">{$post['af_atf_slots']['post.author.profile_fields']}</div>
-      </section>
+      <section class="atf-post__personal-title"><h3 class="atf-post__sidebar-heading">ЛЗ</h3><div class="atf-post__profile-fields">{$post['af_atf_slots']['post.author.profile_fields']}</div></section>
       <div class="atf-post__statistics">{$post['af_atf_slots']['post.author.rail']}</div>
       <div class="atf-post__sidebar-actions">{$post['af_atf_slots']['post.author.plaque']}{$post['af_atf_slots']['post.post_counter']}</div>
-    </aside>
-
+    </div></aside>
     <section class="post_content atf-post__content">
+      <div class="atf-post__management postbit_buttons">{$post['af_atf_slots']['post.actions']}</div>
       <div class="atf-post__slot atf-post__slot--before">{$post['af_atf_slots']['post.before_body']}</div>
       <div class="post_body scaleimages atf-post__message" id="pid_{$post['pid']}">{$post['message']}</div>
-      <div class="atf-post__attachments">{$post['attachments']}</div>
-      <div class="atf-post__slot atf-post__slot--after">{$post['af_atf_slots']['post.after_body']}</div>
+      <div class="atf-post__attachments">{$post['attachments']}</div><div class="atf-post__slot atf-post__slot--after">{$post['af_atf_slots']['post.after_body']}</div>
       <div class="atf-post__signature">{$post['signature']}</div>
-      <div class="post_meta atf-post__meta" id="post_meta_{$post['pid']}">
-        {$post['iplogged']}<span class="atf-post__status">{$post['poststatus']}</span>
-      </div>
+      <div class="post_meta atf-post__meta" id="post_meta_{$post['pid']}">{$post['iplogged']}<span class="atf-post__status">{$post['poststatus']}</span></div>
+      <div class="atf-post__reputation-corner">{$post['af_atf_post_reputation_html']}</div>
       {$post['input_editreason']}
     </section>
   </div>
