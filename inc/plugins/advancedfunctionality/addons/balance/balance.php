@@ -98,6 +98,34 @@ function af_balance_build_manage_url(array $params = []): string
     return $url;
 }
 
+function af_balance_render_atf_profile_stats(array $context): string
+{
+    $uid = (int)($context['uid'] ?? 0);
+    if ($uid <= 0 || !function_exists('af_balance_get_postbit_data')) {
+        return '';
+    }
+
+    $labels = af_balance_default_labels();
+    $data = af_balance_get_postbit_data($uid);
+    $items = [
+        [$labels['credits'], htmlspecialchars_uni((string)($data['credits_display'] ?? '0.00')) . ' ' . htmlspecialchars_uni((string)($data['currency_symbol'] ?? '¢'))],
+    ];
+    if (!empty($data['ability_tokens_show_postbit'])) {
+        $items[] = [$labels['ability_tokens'], htmlspecialchars_uni((string)($data['ability_tokens_display'] ?? '0.00'))];
+    }
+    $items[] = [$labels['level'], (string)(int)($data['level'] ?? 1)];
+    $items[] = [$labels['exp'], htmlspecialchars_uni((string)($data['exp_display'] ?? '0')) . ' / ' . htmlspecialchars_uni((string)($data['exp_need_display'] ?? '0'))];
+
+    $html = '<div class="atf-profile-stats atf-profile-stats--balance">';
+    foreach ($items as [$label, $value]) {
+        $html .= '<div class="atf-profile-stat">'
+            . '<div class="atf-profile-stat__label">' . htmlspecialchars_uni((string)$label) . '</div>'
+            . '<div class="atf-profile-stat__value">' . $value . '</div>'
+            . '</div>';
+    }
+    return $html . '</div>';
+}
+
 function af_balance_init(): void
 {
     global $plugins;
@@ -105,7 +133,7 @@ function af_balance_init(): void
     if (function_exists('af_adaptivethemeframework_register_component')) {
         af_adaptivethemeframework_register_component([
             'owner' => 'balance', 'key' => 'profile_balance', 'slot' => 'profile.balance',
-            'renderer' => static fn(array $context): string => (string)($context['providers']['balance'] ?? ''),
+            'renderer' => 'af_balance_render_atf_profile_stats',
         ]);
     }
 
@@ -1812,6 +1840,13 @@ function af_balance_member_profile_end(): void
     $rows .= '<tr><td class="trow1"><strong>' . htmlspecialchars_uni($labels['exp']) . ':</strong></td><td class="trow1">' . htmlspecialchars_uni((string)($data['exp_display'] ?? '0')) . ' / ' . htmlspecialchars_uni((string)($data['exp_need_display'] ?? '0')) . '</td></tr>';
 
     $memprofile['balance'] = $rows;
+
+    // ATF renders Balance through profile.balance as semantic cards.  Do not
+    // inject the same rows into MyBB profilefields, otherwise the profile gets
+    // both the provider cards and a second legacy table copy.
+    if (function_exists('af_adaptivethemeframework_compose_profile')) {
+        return;
+    }
 
     $tplHasPlaceholder = false;
     $re = '~\{\$memprofile\[(?:\'|\")balance(?:\'|\")\]\}~i';
