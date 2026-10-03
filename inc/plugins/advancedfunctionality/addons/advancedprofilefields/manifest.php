@@ -16,7 +16,13 @@ return [
     // variable and a narrowly scoped seed-upgrade normalizer; it never patches
     // the ATF-owned template directly.
     'compatibility_providers' => [
-        'adaptivethemeframework' => 'af_apf_register_atf_compatibility_normalizer',
+        'adaptivethemeframework' => [
+            'callback' => 'af_apf_register_atf_compatibility_normalizer',
+            // The normalizer only recognizes the exact previous ATF seed. It
+            // must remain available even when APF is temporarily disabled,
+            // because a stale APF-era template can block ATF re-activation.
+            'load_when_disabled' => true,
+        ],
     ],
     'frontend' => [
         'mode' => 'contextual',
