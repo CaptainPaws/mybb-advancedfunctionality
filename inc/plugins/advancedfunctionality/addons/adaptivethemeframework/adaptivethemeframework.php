@@ -942,6 +942,19 @@ function af_adaptivethemeframework_topic_cell_content(string $html): string
     return $html;
 }
 
+/** Render a query-free native avatar when no optional avatar provider exists. */
+function af_adaptivethemeframework_lastposter_avatar_fallback(int $uid, string $username = ''): string
+{
+    $avatar = htmlspecialchars_uni(af_adaptivethemeframework_default_avatar_url());
+    $name = htmlspecialchars_uni($username);
+    $image = '<img src="'.$avatar.'" alt="'.$name.'" loading="lazy">';
+    if ($uid <= 0) {
+        return $image;
+    }
+    $url = function_exists('get_profile_link') ? get_profile_link($uid) : 'member.php?action=profile&amp;uid='.$uid;
+    return '<a href="'.htmlspecialchars_uni((string)$url).'">'.$image.'</a>';
+}
+
 /** Compose forumdisplay-only values consumed by the owned topic-card seed. */
 function af_adaptivethemeframework_compose_thread_card(): void
 {
@@ -967,10 +980,27 @@ function af_adaptivethemeframework_mark_page(string &$page): void
     $page = (string)preg_replace_callback(
         '~<atf-forum-avatar\s+fid="(\d+)"\s+uid="(\d+)"></atf-forum-avatar>~',
         static function (array $match): string {
-            return af_adaptivethemeframework_render_slot(
+            $avatar = af_adaptivethemeframework_render_slot(
                 'forum.lastposter_avatar',
                 ['fid' => (int)$match[1], 'lastposteruid' => (int)$match[2], 'lastposter' => '']
             );
+            return $avatar !== ''
+                ? $avatar
+                : af_adaptivethemeframework_lastposter_avatar_fallback((int)$match[2]);
+        },
+        $page
+    );
+
+    // Preserve an optional provider verbatim, or replace the server-only
+    // marker with the native fallback before HTML reaches the browser.
+    $page = (string)preg_replace_callback(
+        '~(<div class="atf-topic-card__avatar">)(.*?)(<atf-thread-avatar\s+uid="(\d+)"></atf-thread-avatar>)(</div>)~is',
+        static function (array $match): string {
+            $provided = trim((string)$match[2]);
+            $avatar = $provided !== ''
+                ? $provided
+                : af_adaptivethemeframework_lastposter_avatar_fallback((int)$match[4]);
+            return $match[1].$avatar.$match[5];
         },
         $page
     );
