@@ -717,25 +717,174 @@ function af_adaptivethemeframework_compose_pm_workspace(): void
     $GLOBALS['atf_pm_context'] = $context;
 }
 
-/** Native profile fragments stay rendered by MyBB, preserving its permissions. */
+/**
+ * Convert the small, permission-filtered MyBB profile fragments to semantic
+ * cards.  Core remains the data/permission owner; ATF only replaces the table
+ * presentation.
+ */
+function af_adaptivethemeframework_profile_semantic_rows(string $html, string $mode = 'info'): string
+{
+    $html = trim($html);
+    if ($html === '') {
+        return '';
+    }
+
+    $items = [];
+    if (preg_match_all('~<tr\\b[^>]*>(.*?)</tr>~is', $html, $rows)) {
+        foreach ($rows[1] as $rowHtml) {
+            if (preg_match('~<t[dh]\\b[^>]*class=["\\'][^"\\']*\\bthead\\b[^"\\']*["\\'][^>]*>~i', $rowHtml)) {
+                continue;
+            }
+
+            $cells = [];
+            if (!preg_match_all('~<t[dh]\\b[^>]*>(.*?)</t[dh]>~is', $rowHtml, $cellMatches)) {
+                continue;
+            }
+            foreach ($cellMatches[1] as $cellHtml) {
+                $cellHtml = trim((string)$cellHtml);
+                if ($cellHtml !== '') {
+                    $cells[] = $cellHtml;
+                }
+            }
+            if (!$cells) {
+                continue;
+            }
+
+            if ($mode === 'info' && count($cells) >= 2) {
+                $label = array_shift($cells);
+                $value = implode(' ', $cells);
+                $label = preg_replace('~^\\s*<(?:strong|b)\\b[^>]*>(.*?)</(?:strong|b)>\\s*:?\\s*$~is', '$1', $label) ?? $label;
+                $items[] = '<div class="atf-profile-native__item">'
+                    . '<div class="atf-profile-native__label">' . $label . '</div>'
+                    . '<div class="atf-profile-native__value">' . $value . '</div>'
+                    . '</div>';
+                continue;
+            }
+
+            $items[] = '<div class="atf-profile-action-item">' . implode(' ', $cells) . '</div>';
+        }
+    }
+
+    if (!$items && preg_match_all('~<li\\b[^>]*>(.*?)</li>~is', $html, $listItems)) {
+        foreach ($listItems[1] as $itemHtml) {
+            $itemHtml = trim((string)$itemHtml);
+            if ($itemHtml !== '') {
+                $items[] = '<div class="atf-profile-action-item">' . $itemHtml . '</div>';
+            }
+        }
+    }
+
+    if (!$items) {
+        $flat = preg_replace('~</?(?:table|tbody|thead|tfoot|tr|td|th|ul|ol)\\b[^>]*>~i', '', $html) ?? $html;
+        $flat = trim($flat);
+        if ($flat !== '') {
+            $items[] = '<div class="' . ($mode === 'info' ? 'atf-profile-native__item atf-profile-native__item--wide' : 'atf-profile-action-item') . '">' . $flat . '</div>';
+        }
+    }
+
+    if (!$items) {
+        return '';
+    }
+
+    $class = $mode === 'info' ? 'atf-profile-native__grid' : 'atf-profile-actions__grid';
+    return '<div class="' . $class . '">' . implode('', $items) . '</div>';
+}
+
+function af_adaptivethemeframework_render_profile_main(array $context): string
+{
+    $profileFields = af_adaptivethemeframework_profile_semantic_rows(
+        (string)($context['native']['profilefields'] ?? ''),
+        'info'
+    );
+    $contacts = af_adaptivethemeframework_profile_semantic_rows(
+        (string)($context['native']['contact_details'] ?? ''),
+        'info'
+    );
+    $signature = trim((string)($context['native']['signature'] ?? ''));
+
+    $html = '';
+    if ($profileFields !== '' || $contacts !== '') {
+        $html .= '<section class="atf-profile-native" aria-label="Дополнительная информация">';
+        if ($profileFields !== '') {
+            $html .= $profileFields;
+        }
+        if ($contacts !== '') {
+            $html .= $contacts;
+        }
+        $html .= '</section>';
+    }
+    if ($signature !== '') {
+        $html .= '<section class="atf-profile-signature">'
+            . '<div class="atf-profile-signature__title">Подпись</div>'
+            . '<div class="atf-profile-signature__body">' . $signature . '</div>'
+            . '</section>';
+    }
+
+    return $html;
+}
+
+function af_adaptivethemeframework_render_profile_actions(array $context): string
+{
+    $mod = af_adaptivethemeframework_profile_semantic_rows(
+        (string)($context['native']['modoptions'] ?? ''),
+        'actions'
+    );
+    $admin = af_adaptivethemeframework_profile_semantic_rows(
+        (string)($context['native']['adminoptions'] ?? ''),
+        'actions'
+    );
+
+    $html = '';
+    if ($mod !== '' || $admin !== '') {
+        $html .= '<details class="atf-profile-tools">';
+        $html .= '<summary class="atf-profile-tools__summary">'
+            . '<span>Функции модератора и администратора</span>'
+            . '<span class="atf-profile-tools__chevron" aria-hidden="true"></span>'
+            . '</summary>';
+        $html .= '<div class="atf-profile-tools__body">';
+        if ($mod !== '') {
+            $html .= '<section class="atf-profile-tools__group"><h3>Модератор</h3>' . $mod . '</section>';
+        }
+        if ($admin !== '') {
+            $html .= '<section class="atf-profile-tools__group"><h3>Администратор</h3>' . $admin . '</section>';
+        }
+        $html .= '</div></details>';
+    }
+
+    $userActions = [];
+    foreach ([
+        'buddy_options' => 'Друзья',
+        'ignore_options' => 'Игнорирование',
+        'report_options' => 'Жалоба',
+    ] as $key => $label) {
+        $content = af_adaptivethemeframework_profile_semantic_rows(
+            (string)($context['native'][$key] ?? ''),
+            'actions'
+        );
+        if ($content !== '') {
+            $userActions[] = '<section class="atf-profile-user-action">'
+                . '<div class="atf-profile-user-action__label">' . htmlspecialchars_uni($label) . '</div>'
+                . $content
+                . '</section>';
+        }
+    }
+    if ($userActions) {
+        $html .= '<div class="atf-profile-user-actions">' . implode('', $userActions) . '</div>';
+    }
+
+    return $html;
+}
+
+/** Native profile fragments remain permission-owned by MyBB; ATF owns presentation only. */
 function af_adaptivethemeframework_register_profile_providers(): bool
 {
     $registered = af_adaptivethemeframework_register_component([
         'owner' => 'mybb', 'key' => 'profile_main', 'slot' => 'profile.main',
-        'renderer' => static fn(array $context): string =>
-            (string)($context['native']['profilefields'] ?? '')
-            . (string)($context['native']['contact_details'] ?? '')
-            . (string)($context['native']['signature'] ?? ''),
+        'renderer' => 'af_adaptivethemeframework_render_profile_main',
     ]);
     $registered = af_adaptivethemeframework_register_component([
         'owner' => 'mybb', 'key' => 'profile_actions', 'slot' => 'profile.after_content',
-        'renderer' => static fn(array $context): string => implode('', [
-            (string)($context['native']['modoptions'] ?? ''),
-            (string)($context['native']['adminoptions'] ?? ''),
-            (string)($context['native']['buddy_options'] ?? ''),
-            (string)($context['native']['ignore_options'] ?? ''),
-            (string)($context['native']['report_options'] ?? ''),
-        ]),
+        'renderer' => 'af_adaptivethemeframework_render_profile_actions',
     ]) || $registered;
     return $registered;
 }
@@ -746,7 +895,7 @@ function af_adaptivethemeframework_profile_context(array $member, array $values)
     global $mybb;
     $uid = max(0, (int)($member['uid'] ?? 0));
     $viewerUid = is_object($mybb) ? max(0, (int)($mybb->user['uid'] ?? 0)) : 0;
-    $memberKeys = ['uid', 'username', 'usergroup', 'displaygroup', 'avatar', 'usertitle', 'regdate', 'lastactive'];
+    $memberKeys = ['uid', 'username', 'usergroup', 'displaygroup', 'avatar', 'usertitle', 'regdate', 'lastactive', 'af_advancedpostcounter'];
     return [
         'uid' => $uid,
         'username' => (string)($member['username'] ?? ''),
