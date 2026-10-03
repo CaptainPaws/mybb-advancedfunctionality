@@ -208,6 +208,9 @@ function af_adaptivethemeframework_init(): void
         // topic-card DOM or patching their legacy template variables.
         $plugins->add_hook('forumdisplay_thread_end', 'af_adaptivethemeframework_compose_thread_card', 100);
         $plugins->add_hook('showthread_end', 'af_adaptivethemeframework_compose_showthread', 100);
+        // Capture the unrendered message before MyBB's parser replaces it with
+        // HTML. The late composer below can then expose a truthful text count.
+        $plugins->add_hook('postbit_prev', 'af_adaptivethemeframework_capture_post_text_count', 1);
         $plugins->add_hook('postbit', 'af_adaptivethemeframework_compose_postbit', 1000);
         $plugins->add_hook('postbit_prev', 'af_adaptivethemeframework_compose_postbit', 1000);
         $plugins->add_hook('postbit_pm', 'af_adaptivethemeframework_compose_postbit', 1000);
@@ -963,10 +966,36 @@ function af_adaptivethemeframework_compose_profile(): void
 /** Register native controls as one indivisible, permission-safe provider. */
 function af_adaptivethemeframework_register_post_providers(): bool
 {
-    return af_adaptivethemeframework_register_component([
+    $registered = af_adaptivethemeframework_register_component([
         'owner' => 'mybb', 'key' => 'post_actions', 'slot' => 'post.actions',
         'renderer' => static fn(array $context): string => (string)($context['post']['actions_html'] ?? ''),
     ]);
+    return af_adaptivethemeframework_register_component([
+        'owner' => 'mybb', 'key' => 'post_profile_actions', 'slot' => 'post.author.profile_actions',
+        'renderer' => static fn(array $context): string => (string)($context['post']['profile_actions_html'] ?? ''),
+    ]) || $registered;
+}
+
+/** Count visible characters in the raw MyBB/BBCode message, never rendered HTML. */
+function af_adaptivethemeframework_post_text_count(string $message): int
+{
+    // Remove non-visible MyCode payload first, then tags while retaining their
+    // captions/content. This mirrors MyBB's text-oriented handling without
+    // coupling the presentation layer to the rendered parser output.
+    $message = preg_replace('~\[(?:img|video)(?:=[^\]]*)?\].*?\[/(?:img|video)\]~isu', '', $message) ?? $message;
+    $message = preg_replace('~\[(?:email|url)(?:=[^\]]*)?\](.*?)\[/(?:email|url)\]~isu', '$1', $message) ?? $message;
+    $message = preg_replace('~\[/?[a-z][a-z0-9]*(?:=[^\]]*)?\]~iu', '', $message) ?? $message;
+    $message = html_entity_decode(strip_tags($message), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $message = trim($message);
+    if ($message === '') return 0;
+    return function_exists('my_strlen') ? (int)my_strlen($message)
+        : (function_exists('mb_strlen') ? (int)mb_strlen($message, 'UTF-8') : strlen($message));
+}
+
+/** The postbit_prev hook is the last reliable source of raw message text. */
+function af_adaptivethemeframework_capture_post_text_count(array &$post): void
+{
+    $post['af_post_char_count'] = af_adaptivethemeframework_post_text_count((string)($post['message'] ?? ''));
 }
 
 /**
@@ -976,8 +1005,10 @@ function af_adaptivethemeframework_register_post_providers(): bool
  */
 function af_adaptivethemeframework_post_context(array $post): array
 {
-    $actionKeys = [
+    $profileActionKeys = [
         'button_email', 'button_pm', 'button_www', 'button_find', 'button_rep',
+    ];
+    $actionKeys = [
         'button_edit', 'button_quickdelete', 'button_quickrestore', 'button_quote',
         'button_multiquote', 'button_report', 'button_warn', 'button_purgespammer',
         'button_approve', 'button_unapprove', 'button_restore',
@@ -985,6 +1016,11 @@ function af_adaptivethemeframework_post_context(array $post): array
     ];
     $actions = '';
     foreach ($actionKeys as $key) $actions .= (string)($post[$key] ?? '');
+    $profileActions = '';
+    if (!empty($post['profilelink'])) {
+        $profileActions .= '<span class="atf-post__profile-link">' . (string)$post['profilelink'] . '</span>';
+    }
+    foreach ($profileActionKeys as $key) $profileActions .= (string)($post[$key] ?? '');
     $keys = [
         'username', 'profilelink', 'useravatar', 'usertitle', 'groupimage', 'userstars',
         'postdate', 'posturl', 'subject', 'subject_extra', 'icon', 'editedmsg',
@@ -993,8 +1029,9 @@ function af_adaptivethemeframework_post_context(array $post): array
         'af_apui_author_statistics_html', 'af_apui_actionbar_html', 'af_apui_rail_html',
         'af_apui_plaque_html', 'advancedpostcounter', 'af_apc_atf_html',
         'af_apui_secondary_avatar', 'af_apui_display_avatar', 'af_apf_secondary_avatar_url', 'af_atf_primary_avatar', 'af_atf_secondary_avatar',
+        'af_post_char_count', 'af_post_char_count_formatted',
     ];
-    $data = ['actions_html' => $actions];
+    $data = ['actions_html' => $actions, 'profile_actions_html' => $profileActions];
     foreach ($keys as $key) $data[$key] = (string)($post[$key] ?? '');
     return ['pid' => max(0, (int)($post['pid'] ?? 0)),
         'tid' => max(0, (int)($post['tid'] ?? 0)),
@@ -1042,6 +1079,12 @@ function af_adaptivethemeframework_compose_postbit(array &$post): void
     // Never overwrite $post['useravatar'] here.
     $post['af_atf_primary_avatar'] = (string)($post['useravatar'] ?? '');
     $post['af_atf_secondary_avatar'] = af_adaptivethemeframework_resolve_post_secondary_avatar($post);
+    if (!isset($post['af_post_char_count'])) {
+        $post['af_post_char_count'] = af_adaptivethemeframework_post_text_count((string)($post['message'] ?? ''));
+    }
+    $count = max(0, (int)$post['af_post_char_count']);
+    $post['af_post_char_count_formatted'] = function_exists('my_number_format')
+        ? (string)my_number_format($count) : number_format($count, 0, '.', ' ');
 
     $context = af_adaptivethemeframework_post_context($post);
     $post['af_atf_context'] = ['pid' => $context['pid'], 'tid' => $context['tid'], 'uid' => $context['uid']];
@@ -1682,7 +1725,7 @@ function af_adaptivethemeframework_slots(): array
         'profile.character_sheet', 'profile.application', 'profile.timeline',
         'profile.activity', 'profile.balance', 'profile.post_counter',
         'profile.before_content', 'profile.main', 'profile.after_content',
-        'post.author.identity', 'post.author.meta', 'post.author.profile_fields',
+        'post.author.identity', 'post.author.meta', 'post.author.profile_actions', 'post.author.profile_fields',
         'post.author.rail', 'post.author.plaque', 'post.author.character',
         'post.post_counter', 'post.before_body', 'post.after_body', 'post.actions',
         'thread.breadcrumbs', 'thread.meta', 'thread.atf_fields',

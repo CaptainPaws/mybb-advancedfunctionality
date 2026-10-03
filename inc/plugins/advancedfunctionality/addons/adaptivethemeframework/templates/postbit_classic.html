@@ -2,43 +2,49 @@
 <a id="pid{$post['pid']}" name="pid{$post['pid']}"></a>
 
 <article class="post classic atf-post {$unapproved_shade} {$post['af_aa_user_class']}" id="post_{$post['pid']}" data-author-uid="{$post['uid']}" style="{$post_visibility}">
-  <aside class="atf-post__author" aria-label="Post author">
-    <div class="atf-post__identity">
-      <div class="atf-post__avatars">
-        <div class="atf-post__avatar atf-post__avatar--primary">{$post['af_atf_primary_avatar']}</div>
-        <div class="atf-post__secondary-avatar">{$post['af_atf_secondary_avatar']}</div>
-      </div>
-      <div class="atf-post__identity-copy">
-        <div class="atf-post__name largetext">{$post['af_atf_slots']['post.author.identity']}</div>
-        <div class="atf-post__title">{$post['usertitle']}</div>
-        <div class="atf-post__rank">{$post['groupimage']}{$post['userstars']}</div>
-      </div>
-    </div>
-    <div class="atf-post__author-meta">{$post['af_atf_slots']['post.author.meta']}</div>
-    <div class="atf-post__profile-fields">{$post['af_atf_slots']['post.author.profile_fields']}</div>
-    <div class="atf-post__character">{$post['af_atf_slots']['post.author.character']}</div>
-    <div class="atf-post__rail">{$post['af_atf_slots']['post.author.rail']}</div>
-    <div class="atf-post__plaque">{$post['af_atf_slots']['post.author.plaque']}</div>
-    <div class="atf-post__counter">{$post['af_atf_slots']['post.post_counter']}</div>
-  </aside>
+  <header class="post_head atf-post__topbar">
+    <div class="atf-post__sheet-action">{$post['af_atf_slots']['post.author.character']}</div>
 
-  <div class="post_content atf-post__content">
-    <header class="post_head atf-post__header">
-      <div class="float_right atf-post__permalink">{$post['posturl']}</div>
-      <div class="atf-post__subject">{$post['icon']}{$post['subject']}{$post['subject_extra']}</div>
-      <div class="post_date atf-post__date">{$post['postdate']} <span class="post_edit" id="edited_by_{$post['pid']}">{$post['editedmsg']}</span></div>
-    </header>
-    <div class="atf-post__slot atf-post__slot--before">{$post['af_atf_slots']['post.before_body']}</div>
-    <div class="post_body scaleimages atf-post__message" id="pid_{$post['pid']}">{$post['message']}</div>
-    <div class="atf-post__attachments">{$post['attachments']}</div>
-    <div class="atf-post__slot atf-post__slot--after">{$post['af_atf_slots']['post.after_body']}</div>
-    <div class="atf-post__signature">{$post['signature']}</div>
-    <div class="post_meta atf-post__meta" id="post_meta_{$post['pid']}">
-      {$post['iplogged']}<span class="atf-post__status">{$post['poststatus']}</span>
+    <div class="atf-post__identity-main">
+      <div class="atf-post__profile-actions">{$post['af_atf_slots']['post.author.profile_actions']}{$post['af_atf_slots']['post.author.meta']}</div>
+      <div class="atf-post__name largetext">{$post['af_atf_slots']['post.author.identity']}</div>
+      <div class="atf-post__title">{$post['usertitle']}</div>
+      <div class="atf-post__rank">{$post['groupimage']}{$post['userstars']}</div>
+
+      <div class="atf-post__meta-line">
+        <span class="atf-post__subject">{$post['icon']}{$post['subject']}{$post['subject_extra']}</span>
+        <span class="atf-post__permalink">{$post['posturl']}</span>
+        <time class="post_date atf-post__date">{$post['postdate']}</time>
+        <span class="atf-post__char-count" title="Количество символов в сообщении">Символов: {$post['af_post_char_count_formatted']}</span>
+        <span class="post_edit atf-post__edited" id="edited_by_{$post['pid']}">{$post['editedmsg']}</span>
+        <span class="atf-post__top-actions"><span class="postbit_buttons">{$post['af_atf_slots']['post.actions']}</span></span>
+      </div>
     </div>
-    {$post['input_editreason']}
-    <footer class="post_controls atf-post__actions">
-      <div class="postbit_buttons">{$post['af_atf_slots']['post.actions']}</div>
-    </footer>
+
+    <div class="atf-post__primary-avatar atf-post__avatar atf-post__avatar--primary">{$post['af_atf_primary_avatar']}</div>
+  </header>
+
+  <div class="atf-post__layout">
+    <aside class="atf-post__sidebar" aria-label="Информация об авторе">
+      <div class="atf-post__secondary-avatar">{$post['af_atf_secondary_avatar']}</div>
+      <section class="atf-post__personal-title">
+        <h3 class="atf-post__sidebar-heading">ЛЗ</h3>
+        <div class="atf-post__profile-fields">{$post['af_atf_slots']['post.author.profile_fields']}</div>
+      </section>
+      <div class="atf-post__statistics">{$post['af_atf_slots']['post.author.rail']}</div>
+      <div class="atf-post__sidebar-actions">{$post['af_atf_slots']['post.author.plaque']}{$post['af_atf_slots']['post.post_counter']}</div>
+    </aside>
+
+    <section class="post_content atf-post__content">
+      <div class="atf-post__slot atf-post__slot--before">{$post['af_atf_slots']['post.before_body']}</div>
+      <div class="post_body scaleimages atf-post__message" id="pid_{$post['pid']}">{$post['message']}</div>
+      <div class="atf-post__attachments">{$post['attachments']}</div>
+      <div class="atf-post__slot atf-post__slot--after">{$post['af_atf_slots']['post.after_body']}</div>
+      <div class="atf-post__signature">{$post['signature']}</div>
+      <div class="post_meta atf-post__meta" id="post_meta_{$post['pid']}">
+        {$post['iplogged']}<span class="atf-post__status">{$post['poststatus']}</span>
+      </div>
+      {$post['input_editreason']}
+    </section>
   </div>
 </article>

@@ -403,82 +403,112 @@ body.atf-active .atf-thread__adjacent { display: flex; flex-wrap: wrap; justify-
 body.atf-active .atf-thread__controls { align-items: flex-start; margin-block: var(--atf-space-5); }
 body.atf-active .atf-thread__moderation { text-align: end; }
 
-/* One semantic classic-post layout; the author rail collapses in place. */
+/* Full-width post header above a sticky author sidebar and clean body. */
 body.atf-active .atf-post {
-  display: grid;
-  grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr);
   margin-block: var(--atf-space-4);
-  overflow: hidden;
+  overflow: visible;
   background: var(--atf-color-surface);
   border: 1px solid var(--atf-color-border);
   border-radius: var(--atf-radius-lg);
 }
-body.atf-active .atf-post__author { min-width: 0; padding: var(--atf-space-4); background: var(--atf-color-page-subtle); border-inline-end: 1px solid var(--atf-color-border); }
-body.atf-active .atf-post__identity { display: flex; flex-direction: column; gap: var(--atf-space-3); }
-body.atf-active .atf-post__avatars {
+body.atf-active .atf-post__topbar {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--atf-space-2);
-  width: 100%;
-  align-items: start;
-}
-body.atf-active .atf-post__avatar {
+  grid-template-columns: auto minmax(0, 1fr) clamp(5rem, 9vw, 6.875rem);
+  gap: var(--atf-space-4);
+  align-items: center;
   min-width: 0;
-  width: 100%;
-  aspect-ratio: 4 / 5;
-  overflow: hidden;
-  border-radius: var(--atf-radius-md);
+  padding: var(--atf-space-4);
+  background: var(--atf-color-page-subtle);
+  border-block-end: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-lg) var(--atf-radius-lg) 0 0;
 }
-body.atf-active .atf-post__avatar :is(img, svg) {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center center;
-}
-
-/* The APF second avatar is a separate postbit surface. Do not share the
-   primary avatar container class: legacy/theme rules often target it. */
-body.atf-active .atf-post__secondary-avatar {
-  min-width: 0;
-  width: 100%;
-  aspect-ratio: 4 / 5;
-  overflow: hidden;
-  border-radius: var(--atf-radius-md);
-}
-body.atf-active .atf-post__secondary-avatar:empty { display: none; }
-body.atf-active .atf-post__secondary-avatar :is(img, svg),
-body.atf-active .atf-post__secondary-avatar-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  object-fit: cover;
-  object-position: center center;
-}
-body.atf-active .atf-post__avatars:has(.atf-post__secondary-avatar:empty) {
-  grid-template-columns: minmax(0, 1fr);
-}
-body.atf-active .atf-post__avatars:has(.atf-post__secondary-avatar:empty) > .atf-post__avatar {
-  width: min(200px, 100%);
-}
-body.atf-active .af-apui-profile-portrait { width: min(200px, 100%); aspect-ratio: 4 / 5; overflow: hidden; }
-body.atf-active .af-apui-profile-portrait__image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center center; }
-body.atf-active .atf-post__name { font-weight: var(--atf-font-weight-bold); overflow-wrap: anywhere; }
-body.atf-active .atf-post__rank { display: flex; flex-wrap: wrap; gap: var(--atf-space-2); align-items: center; }
-body.atf-active .atf-post__author > :not(:first-child) { margin-block-start: var(--atf-space-3); }
-body.atf-active .atf-post__author > :empty,
+body.atf-active .atf-post__sheet-action:empty,
+body.atf-active .atf-post__profile-actions:empty,
+body.atf-active .atf-post__sidebar-actions:empty,
+body.atf-active .atf-post__personal-title:has(.atf-post__profile-fields:empty),
 body.atf-active .atf-post__slot:empty,
 body.atf-active .atf-post__attachments:empty,
 body.atf-active .atf-post__signature:empty { display: none; }
-body.atf-active .atf-post__content { min-width: 0; padding: var(--atf-space-4); }
-body.atf-active .atf-post__header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--atf-space-3); align-items: baseline; }
+body.atf-active .atf-post__sheet-action .af-apui-postbit-actions { display: block; }
+body.atf-active .atf-post__sheet-action .af-apui-postbit-action {
+  display: grid;
+  place-items: center;
+  width: 3.75rem;
+  height: 3.75rem;
+  padding: 0;
+  border-radius: var(--atf-radius-md);
+}
+body.atf-active .atf-post__sheet-action .af-apui-postbit-action__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+body.atf-active .atf-post__sheet-action .af-apui-postbit-action i { font-size: 1.65rem; }
+body.atf-active .atf-post__identity-main { min-width: 0; }
+body.atf-active .atf-post__profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--atf-space-2);
+  margin-block-end: var(--atf-space-2);
+  font-size: var(--atf-font-size-sm);
+}
+body.atf-active .atf-post__profile-actions :is(a, .postbit_button) { display: inline-flex; align-items: center; }
+body.atf-active .atf-post__name { font-size: clamp(1.5rem, 3vw, 2.5rem); font-weight: var(--atf-font-weight-bold); line-height: 1.05; overflow-wrap: anywhere; }
+body.atf-active .atf-post__title { margin-block-start: var(--atf-space-1); color: var(--atf-color-text-muted); }
+body.atf-active .atf-post__rank { display: flex; flex-wrap: wrap; gap: var(--atf-space-2); align-items: center; margin-block-start: var(--atf-space-2); }
+body.atf-active .atf-post__meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--atf-space-2) var(--atf-space-3);
+  margin-block-start: var(--atf-space-3);
+  color: var(--atf-color-text-muted);
+  font-size: var(--atf-font-size-sm);
+}
+body.atf-active .atf-post__meta-line > :not(:empty):not(:first-child)::before { content: "·"; margin-inline-end: var(--atf-space-3); color: var(--atf-color-border); }
 body.atf-active .atf-post__subject { min-width: 0; overflow-wrap: anywhere; }
-body.atf-active .atf-post__message { margin-block: var(--atf-space-4); overflow-wrap: anywhere; }
-body.atf-active .atf-post__meta,
-body.atf-active .atf-post__actions { margin-block-start: var(--atf-space-4); }
+body.atf-active .atf-post__top-actions { margin-inline-start: auto; }
+body.atf-active .atf-post__top-actions::before { display: none; }
+body.atf-active .atf-post__top-actions .postbit_buttons { display: flex; flex-wrap: wrap; gap: var(--atf-space-2); }
+body.atf-active .atf-post__primary-avatar {
+  width: clamp(5rem, 9vw, 6.875rem);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 3px solid var(--atf-color-surface);
+  border-radius: 50%;
+}
+body.atf-active .atf-post__primary-avatar :is(img, svg) { display: block; width: 100%; height: 100%; max-width: none; object-fit: cover; object-position: center; }
+body.atf-active .atf-post__layout {
+  display: grid;
+  grid-template-columns: minmax(13.75rem, 18.75rem) minmax(0, 1fr);
+  align-items: stretch;
+  min-width: 0;
+}
+body.atf-active .atf-post__sidebar {
+  position: sticky;
+  top: var(--atf-space-4);
+  align-self: start;
+  min-width: 0;
+  padding: var(--atf-space-4);
+  background: var(--atf-color-page-subtle);
+  border-inline-end: 1px solid var(--atf-color-border);
+}
+body.atf-active .atf-post__sidebar > :not(:first-child) { margin-block-start: var(--atf-space-4); }
+body.atf-active .atf-post__secondary-avatar { width: 100%; max-width: 17.5rem; margin-inline: auto; overflow: hidden; border-radius: var(--atf-radius-md); }
+body.atf-active .atf-post__secondary-avatar:empty { display: none; }
+body.atf-active .atf-post__secondary-avatar :is(img, svg),
+body.atf-active .atf-post__secondary-avatar-image { display: block; width: 100%; height: auto; max-width: 100%; object-fit: cover; object-position: center; }
+body.atf-active .atf-post__sidebar-heading { margin: 0 0 var(--atf-space-2); font-size: var(--atf-font-size-sm); text-transform: uppercase; letter-spacing: .08em; color: var(--atf-color-text-muted); }
+body.atf-active .atf-post__profile-fields .af-apf-postbit-field { display: block; }
+body.atf-active .atf-post__statistics .af-apui-postbit-rail { display: block; }
+body.atf-active .atf-post__statistics .af-apui-postbit-actions { display: none; }
+body.atf-active .atf-post__statistics .author_statistics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--atf-space-2); }
+body.atf-active .atf-post__statistics .af-apui-stat-item { min-width: 0; }
+body.atf-active .atf-post__content { min-width: 0; padding: var(--atf-space-5); }
+body.atf-active .atf-post__message { min-height: 10rem; margin: 0; overflow-wrap: anywhere; }
+body.atf-active .atf-post__attachments,
+body.atf-active .atf-post__signature,
+body.atf-active .atf-post__meta { margin-block-start: var(--atf-space-4); }
 body.atf-active .atf-post__status { float: inline-end; }
-body.atf-active .atf-post__actions .postbit_buttons { display: flex; flex-wrap: wrap; gap: var(--atf-space-2); }
+body.atf-active .af-apui-profile-portrait { width: min(200px, 100%); aspect-ratio: 4 / 5; overflow: hidden; }
+body.atf-active .af-apui-profile-portrait__image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center center; }
 
 body.atf-active .atf-card {
   padding: var(--atf-space-5);
@@ -1609,14 +1639,14 @@ body.atf-active .atf-profile__after { display: grid; gap: var(--atf-space-3); }
   body.atf-active .atf-thread__rating { margin-inline-start: 0; }
   body.atf-active .atf-thread__moderation { text-align: start; }
   body.atf-active .atf-thread :is(table, textarea, input, select) { max-width: 100%; }
-  body.atf-active .atf-post { grid-template-columns: minmax(0, 1fr); }
-  body.atf-active .atf-post__author { border-inline-end: 0; border-block-end: 1px solid var(--atf-color-border); }
-  body.atf-active .atf-post__identity { flex-direction: row; align-items: center; }
-  body.atf-active .atf-post__avatar { flex: 0 0 4rem; }
-  body.atf-active .atf-post__header { grid-template-columns: minmax(0, 1fr) auto; }
-  body.atf-active .atf-post__permalink { grid-column: 2; grid-row: 1; }
-  body.atf-active .atf-post__subject { grid-column: 1; grid-row: 1; }
-  body.atf-active .atf-post__date { grid-column: 1 / -1; }
+  body.atf-active .atf-post__topbar { grid-template-columns: auto minmax(0, 1fr) 4.5rem; gap: var(--atf-space-3); padding: var(--atf-space-3); }
+  body.atf-active .atf-post__primary-avatar { width: 4.5rem; }
+  body.atf-active .atf-post__sheet-action .af-apui-postbit-action { width: 3rem; height: 3rem; }
+  body.atf-active .atf-post__layout { grid-template-columns: minmax(0, 1fr); }
+  body.atf-active .atf-post__sidebar { position: static; border-inline-end: 0; border-block-end: 1px solid var(--atf-color-border); }
+  body.atf-active .atf-post__secondary-avatar { max-width: min(17.5rem, 100%); }
+  body.atf-active .atf-post__content { padding: var(--atf-space-4); }
+  body.atf-active .atf-post__top-actions { flex-basis: 100%; margin-inline-start: 0; }
   body.atf-active .atf-profile-hero { grid-template-columns: minmax(0, 1fr); align-items: start; padding: var(--atf-space-4); }
   body.atf-active .atf-profile-hero__avatar { width: min(7rem, 40vw); }
   body.atf-active .atf-profile-hero__meta { align-content: start; }

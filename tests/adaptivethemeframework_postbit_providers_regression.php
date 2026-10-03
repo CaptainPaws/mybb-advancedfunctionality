@@ -50,9 +50,11 @@ atf_post_assert(!isset($post['af_atf_context']['post']), 'Full post leaked into 
 atf_post_assert($post['af_atf_slots']['post.author.plaque'] === '<b>plaque</b>', 'Character/plaque slot missing.');
 atf_post_assert($post['af_atf_slots']['post.author.character'] === '<b>character</b>', 'Character slot missing.');
 atf_post_assert($post['af_atf_slots']['post.post_counter'] === '<af_apc_uid_56>', 'PostCounter slot missing.');
-foreach (['EDIT','DELETE','QUOTE','REPORT','MULTI','MENTION'] as $control) {
+foreach (['EDIT','DELETE','QUOTE','REPORT','MULTI'] as $control) {
     atf_post_assert(str_contains($post['af_atf_slots']['post.actions'], $control), 'Action lost: ' . $control);
 }
+atf_post_assert(str_contains($post['af_atf_slots']['post.author.profile_actions'], 'MENTION'), 'Profile action lost.');
+atf_post_assert(str_contains($post['af_atf_slots']['post.author.profile_actions'], '<a>User</a>'), 'Profile link lost.');
 
 $guest = ['pid' => 1, 'tid' => 2, 'uid' => 0, 'profilelink' => 'Guest'];
 af_adaptivethemeframework_compose_postbit($guest);
