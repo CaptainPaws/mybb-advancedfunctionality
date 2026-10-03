@@ -26,7 +26,7 @@ foreach ([
     "'action'=>'acceptrequest'",
     "'action'=>'declinerequest'",
     "'action'=>'cancelrequest'",
-    "\$assetVersion='2.3.0'",
+    "\$assetVersion='2.3.1'",
 ] as $needle) {
     if (!str_contains($buddy,$needle)) throw new RuntimeException('Buddy search/native request contract missing: '.$needle);
 }
@@ -40,7 +40,7 @@ if (!str_contains($js,"data.set('ajax','1')") || !str_contains($js,"fetch(form.a
 if (!str_contains($aam,"\$mybb->get_input('af_abdl_return') !== '' ? 'buddy.php?tab=friends' : 'usercp.php?action=editlists'")) {
     throw new RuntimeException('Native buddy request alert does not return to Buddy List.');
 }
-if (!str_contains($manifest,"'version'     => '2.3.0'")) {
+if (!str_contains($manifest,"'version'     => '2.3.1'")) {
     throw new RuntimeException('Advanced Buddy List version mismatch.');
 }
 
