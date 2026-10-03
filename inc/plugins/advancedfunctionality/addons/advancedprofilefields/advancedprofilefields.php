@@ -1080,10 +1080,11 @@ function af_apf_postbit_secondary_avatar(array &$post): void
         . '" alt="' . htmlspecialchars_uni($username)
         . '" class="af-apf-secondary-avatar-image" loading="lazy" decoding="async">';
 
-    // Stable presentation payloads for both legacy/APUI and ATF consumers.
+    // Secondary avatar is an independent surface. Never replace MyBB's
+    // primary avatar: both must remain available to APUI and ATF.
     $post['af_apui_secondary_avatar'] = $url;
-    $post['af_apui_display_avatar'] = $html;
-    $post['af_atf_display_avatar'] = $html;
+    $post['af_apui_secondary_avatar_html'] = $html;
+    $post['af_atf_secondary_avatar'] = $html;
 }
 
 /** Public, normalized URL for the APF-owned secondary avatar, or an empty string. */
