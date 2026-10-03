@@ -24,14 +24,16 @@ foreach ([
 
 foreach ([
     "data.set('ajax','1')",
-    "fetch(form.action",
+    "form.getAttribute('action')",
+    "new URL(",
+    "fetch(actionUrl",
     "return r.text()",
     "fetch(location.href",
 ] as $needle) {
     if (!str_contains($js,$needle)) throw new RuntimeException('Missing native User CP AJAX bridge: '.$needle);
 }
 
-foreach (['application/json','JSON.parse(text)','buddy.php?ajax=1'] as $obsolete) {
+foreach (['application/json','JSON.parse(text)','buddy.php?ajax=1','fetch(form.action'] as $obsolete) {
     if (str_contains($js,$obsolete)) throw new RuntimeException('Obsolete private Buddy JSON API is still used: '.$obsolete);
 }
 
