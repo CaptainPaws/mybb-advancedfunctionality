@@ -225,7 +225,7 @@ function af_abdl_native_ignore_form(array $user): string
         'action'=>'do_editlists',
         'manage'=>'ignored',
         'add_username'=>(string)$user['username'],
-    ], 'Добавить в игнор-лист', 'muted');
+    ], 'Игнорировать', 'muted', 'fa-user-slash');
 }
 
 function af_abdl_native_unignore_form(int $uid): string
@@ -261,7 +261,7 @@ function af_abdl_search_action(array $user,array $state): string
     if (isset($state['ignored'][$target])) return '<span class="af-abdl-chip">В игнор-листе</span>';
     if (isset($state['outgoing'][$target])) return '<span class="af-abdl-chip">Заявка отправлена</span>';
     if (isset($state['incoming'][$target])) return '<span class="af-abdl-chip">Входящая заявка</span>';
-    return af_abdl_native_add_friend_form($user);
+    return af_abdl_native_add_friend_form($user).af_abdl_native_ignore_form($user);
 }
 
 function af_abdl_card(array $u,string $actions='',bool $pm=false): string
@@ -342,7 +342,7 @@ function af_abdl_render_page(): void
     }
 
     $base=rtrim((string)$mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/'.AF_ABDL_ID.'/assets/';
-    $assetVersion='2.3.1';
+    $assetVersion='2.3.2';
     $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni($base.'advancedbuddylist.css?v='.$assetVersion).'"><script defer src="'.htmlspecialchars_uni($base.'advancedbuddylist.js?v='.$assetVersion).'"></script>';
     $tabs='';
     foreach(['friends'=>'Друзья','ignore'=>'Игнор-лист','search'=>'Поиск'] as $key=>$label) {
