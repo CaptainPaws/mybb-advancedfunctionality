@@ -5,6 +5,7 @@ $apf = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adva
 $apui = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/advancedprofileui.php');
 $atf = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/adaptivethemeframework.php');
 $template = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/templates/usercp_avatar.html');
+$manifest = require $root . '/inc/plugins/advancedfunctionality/addons/advancedprofilefields/manifest.php';
 $apuiPostbit = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/templates/postbit_classic.html');
 $atfPostbit = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/templates/postbit_classic.html');
 $apuiProfile = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/templates/member_profile.html');
@@ -43,6 +44,12 @@ if (!str_contains($template, '{$af_apf_secondary_avatar}')) {
 if (!str_contains($apf, 'function af_apf_normalize_atf_avatar_template')
     || !str_contains($apf, 'secondary_avatar_atf_seed_upgrade')) {
     throw new RuntimeException('APF must provide the ATF avatar seed-upgrade normalizer.');
+}
+$provider = $manifest['compatibility_providers']['adaptivethemeframework'] ?? null;
+if (!is_array($provider)
+    || ($provider['callback'] ?? '') !== 'af_apf_register_atf_compatibility_normalizer'
+    || empty($provider['load_when_disabled'])) {
+    throw new RuntimeException('APF avatar seed migration must remain discoverable while APF is disabled.');
 }
 if (str_contains($apf, "'usercp_avatar' => [")) {
     throw new RuntimeException('APF must not patch ATF-owned usercp_avatar directly.');
