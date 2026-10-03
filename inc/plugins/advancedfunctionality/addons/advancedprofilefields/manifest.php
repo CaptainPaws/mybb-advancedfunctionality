@@ -1,16 +1,16 @@
 <?php
 /**
  * AF Addon Manifest: AdvancedProfileFields
- * MyBB 1.8.38–1.8.39, PHP 8.0–8.4
+ * MyBB 1.8.40, PHP 8.0–8.5
  */
 
 return [
     'id'          => 'advancedprofilefields',
     'name'        => 'AdvancedProfileFields',
-    'version'     => '1.0.0',
+    'version'     => '1.1.0',
     'author'      => 'CaptainPaws',
     'authorsite'  => 'https://github.com/CaptainPaws',
-    'description' => 'Добавляет CSS-классы для дополнительных полей профиля (customfields) в профиле, UserCP, регистрации и постбите, а также помечает поля "Сообщений" и "Тем".',
+    'description' => 'Системные и дополнительные поля профиля, включая независимый аватар персонажа.',
     'bootstrap'   => 'advancedprofilefields.php',
     'frontend' => [
         'mode' => 'contextual',

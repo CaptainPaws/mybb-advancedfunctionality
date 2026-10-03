@@ -337,6 +337,30 @@ function af_apui_render_atf_profile_hero(array $context): string
         . '</section>';
 }
 
+/** Stable provider contract: primary remains MyBB-owned, secondary remains APF-owned. */
+function af_apui_get_profile_avatars(int $uid, bool $fallbackSecondaryToPrimary = false): array
+{
+    global $mybb;
+    $primary = '';
+    if ($uid > 0 && function_exists('get_user')) {
+        $user = get_user($uid);
+        $primary = trim((string)($user['avatar'] ?? ''));
+    }
+    if ($primary !== '' && !preg_match('~^(?:https?:)?//|^data:|^/~i', $primary)) {
+        $primary = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/' . ltrim($primary, './');
+    }
+    if ($primary === '' && function_exists('af_adaptivethemeframework_default_avatar_url')) {
+        $primary = af_adaptivethemeframework_default_avatar_url();
+    }
+    $secondary = function_exists('af_apf_get_secondary_avatar')
+        ? af_apf_get_secondary_avatar($uid) : '';
+    return [
+        'primary_avatar' => $primary,
+        'secondary_avatar' => $secondary !== '' ? $secondary : ($fallbackSecondaryToPrimary ? $primary : ''),
+        'secondary_avatar_missing' => $secondary === '',
+    ];
+}
+
 function af_apui_render_atf_profile_navigation(array $context): string
 {
     $labels = ['info' => 'Основная информация', 'sheet' => 'Лист персонажа', 'application' => 'Анкета',
