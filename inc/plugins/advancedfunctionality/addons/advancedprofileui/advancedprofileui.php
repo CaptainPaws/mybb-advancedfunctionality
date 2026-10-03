@@ -469,6 +469,32 @@ function af_apui_normalize_atf_predecessor(string $templateName, string $current
         ];
     }
 
+    // Known legacy restore snapshots created by the old APUI/APF template
+    // handoff before ATF became the sole full-template owner.  These are exact
+    // byte checksums taken from production diagnostics; accepting only the
+    // complete SHA-256 keeps arbitrary/manual templates fail-closed.
+    $knownLegacyRestoreChecksums = [
+        'postbit_classic' => [
+            '728ef10a7f0df416f11e75625cd576e01d00bba96b675d99723b6cd73b7bf551',
+        ],
+    ];
+    $currentChecksum = hash('sha256', $current);
+    if (isset($knownLegacyRestoreChecksums[$templateName])
+        && in_array($currentChecksum, $knownLegacyRestoreChecksums[$templateName], true)) {
+        return [
+            'normalized_content' => $seed,
+            'owner' => AF_APUI_ID,
+            'source' => 'apui_known_legacy_restore_checksum',
+            'transformation_type' => 'exact_legacy_snapshot_handoff',
+            'diagnostic' => [
+                'start_marker_count' => $startCount,
+                'end_marker_count' => $endCount,
+                'backup_match' => 0,
+                'known_checksum_match' => 1,
+            ],
+        ];
+    }
+
     // APUI restore_overrides() legitimately writes its saved pre-APUI bytes
     // back into the live template. Those bytes have no APUI wrapper markers,
     // so markers alone cannot prove the ATF -> APUI -> ATF lifecycle.
