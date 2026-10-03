@@ -1,7 +1,7 @@
 <?php
 /**
  * AF Addon: AdvancedProfileFields
- * MyBB 1.8.38–1.8.39, PHP 8.0–8.4
+ * MyBB 1.8.40, PHP 8.0–8.5
  */
 
 if (!defined('IN_MYBB')) { die('No direct access'); }
@@ -13,6 +13,9 @@ define('AF_APF_ASSETS_DIR', AF_APF_BASE . 'assets/');
 define('AF_APF_TPL_FILE', AF_APF_BASE . 'templates/advancedprofilefields.html');
 define('AF_APF_ASSET_MARK', '<!--af_apf_assets-->');
 define('AF_APF_SIG', 'af-apf-');
+define('AF_APF_VALUES_TABLE', 'af_apf_values');
+define('AF_APF_SECONDARY_AVATAR_KEY', 'profile_secondary_avatar');
+define('AF_APF_SECONDARY_AVATAR_DIR', 'uploads/avatars');
 
 /* -------------------- LANG -------------------- */
 
@@ -228,6 +231,8 @@ function af_advancedprofilefields_install(): void
 {
     global $db;
 
+    af_apf_ensure_values_schema();
+
     // settings group
     $gid = (int)$db->fetch_field(
         $db->simple_select('settinggroups', 'gid', "name='af_".AF_APF_ID."'", ['limit' => 1]),
@@ -303,6 +308,9 @@ function af_advancedprofilefields_uninstall(): void
     $db->delete_query('settings', "name LIKE 'af_".AF_APF_ID."_%'");
     $db->delete_query('settings', "name='af_apf_assets_blacklist'");
     $db->delete_query('settinggroups', "name='af_".AF_APF_ID."'");
+    if ($db->table_exists(AF_APF_VALUES_TABLE)) {
+        $db->drop_table(AF_APF_VALUES_TABLE);
+    }
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -313,6 +321,7 @@ function af_advancedprofilefields_uninstall(): void
 
 function af_advancedprofilefields_activate(): void
 {
+    af_apf_ensure_values_schema();
     af_apf_templates_install_or_update();
     af_apf_apply_template_patches(true);
 
@@ -701,6 +710,17 @@ function af_apf_apply_template_patches(bool $enable): void
             ],
         ],
 
+        // APF owns the secondary-avatar component; the native avatar form stays intact.
+        'usercp_avatar' => [
+            'enable' => [
+                ['~\\s*<!--\\s*af_apf_secondary_avatar\\s*-->.*?<!--\\s*/af_apf_secondary_avatar\\s*-->\\s*~is', "\n", -1],
+                ['~(</div>\\s*</main>)~i', "<!-- af_apf_secondary_avatar -->\n{\$af_apf_secondary_avatar}\n<!-- /af_apf_secondary_avatar -->\n$1", 1],
+            ],
+            'disable' => [
+                ['~\\s*<!--\\s*af_apf_secondary_avatar\\s*-->.*?<!--\\s*/af_apf_secondary_avatar\\s*-->\\s*~is', "\n", -1],
+            ],
+        ],
+
         /* =========================
            POSTBIT: author_statistics (posts/threads/registered)
            ========================= */
@@ -835,7 +855,13 @@ function af_apf_purge_templates_cache(array $sids = []): void
 
 function af_advancedprofilefields_init(): void
 {
-    // no-op
+    global $plugins;
+    if (!is_object($plugins) || !af_apf_is_enabled() || !empty($GLOBALS['af_apf_hooks_registered'])) {
+        return;
+    }
+    $GLOBALS['af_apf_hooks_registered'] = true;
+    $plugins->add_hook('usercp_start', 'af_apf_usercp_start', 5);
+    $plugins->add_hook('usercp_avatar_end', 'af_apf_usercp_avatar_end', 100);
 }
 
 function af_advancedprofilefields_pre_output(&$page = ''): void
@@ -875,4 +901,237 @@ function af_advancedprofilefields_pre_output(&$page = ''): void
     } else {
         $page .= "\n" . $tag;
     }
+}
+
+/** APF-owned storage for hidden/system fields; no column is added to users. */
+function af_apf_ensure_values_schema(): bool
+{
+    global $db;
+    if (!is_object($db) || $db->table_exists(AF_APF_VALUES_TABLE)) {
+        return true;
+    }
+    $collation = method_exists($db, 'build_create_table_collation')
+        ? $db->build_create_table_collation()
+        : 'ENGINE=InnoDB';
+    $db->write_query('CREATE TABLE IF NOT EXISTS ' . TABLE_PREFIX . AF_APF_VALUES_TABLE . " (
+        uid int unsigned NOT NULL,
+        field_key varchar(64) NOT NULL DEFAULT '',
+        field_value varchar(512) NOT NULL DEFAULT '',
+        updated_at int unsigned NOT NULL DEFAULT 0,
+        PRIMARY KEY (uid, field_key), KEY field_key (field_key)
+    ) {$collation}");
+    return true;
+}
+
+/** Read an APF system field without exposing it through MyBB custom fields. */
+function af_apf_get_system_value(int $uid, string $key): string
+{
+    global $db;
+    if ($uid <= 0 || !preg_match('~^[a-z0-9_]{1,64}$~', $key)
+        || !is_object($db) || !$db->table_exists(AF_APF_VALUES_TABLE)) {
+        return '';
+    }
+    return (string)$db->fetch_field($db->simple_select(
+        AF_APF_VALUES_TABLE,
+        'field_value',
+        "uid='" . $uid . "' AND field_key='" . $db->escape_string($key) . "'",
+        ['limit' => 1]
+    ), 'field_value');
+}
+
+function af_apf_set_system_value(int $uid, string $key, string $value): bool
+{
+    global $db;
+    if ($uid <= 0 || !preg_match('~^[a-z0-9_]{1,64}$~', $key) || !af_apf_ensure_values_schema()) {
+        return false;
+    }
+    if ($value === '') {
+        $db->delete_query(AF_APF_VALUES_TABLE, "uid='{$uid}' AND field_key='" . $db->escape_string($key) . "'");
+        return true;
+    }
+    $db->replace_query(AF_APF_VALUES_TABLE, [
+        'uid' => $uid,
+        'field_key' => $db->escape_string($key),
+        'field_value' => $db->escape_string($value),
+        'updated_at' => defined('TIME_NOW') ? TIME_NOW : time(),
+    ]);
+    return true;
+}
+
+/** Public, normalized URL for the APF-owned secondary avatar, or an empty string. */
+function af_apf_get_secondary_avatar(int $uid): string
+{
+    global $mybb;
+    $path = af_apf_get_system_value($uid, AF_APF_SECONDARY_AVATAR_KEY);
+    if (!preg_match('~^uploads/avatars/secondary_' . $uid . '_[a-f0-9]{32}\\.(?:jpe?g|png|webp|gif)$~', $path)) {
+        return '';
+    }
+    return rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/' . $path;
+}
+
+function af_apf_secondary_avatar_path(int $uid): string
+{
+    $path = af_apf_get_system_value($uid, AF_APF_SECONDARY_AVATAR_KEY);
+    return preg_match('~^uploads/avatars/secondary_' . $uid . '_[a-f0-9]{32}\\.(?:jpe?g|png|webp|gif)$~', $path)
+        ? $path : '';
+}
+
+/** Only remove a file whose normalized name proves that it belongs to this uid. */
+function af_apf_delete_secondary_avatar_file(int $uid, string $path): void
+{
+    if ($path === '' || !preg_match('~^uploads/avatars/secondary_' . $uid . '_[a-f0-9]{32}\\.(?:jpe?g|png|webp|gif)$~', $path)) {
+        return;
+    }
+    $absolute = rtrim((string)MYBB_ROOT, '/\\') . '/' . $path;
+    if (is_file($absolute)) {
+        @unlink($absolute);
+    }
+}
+
+function af_apf_usercp_start(): void
+{
+    global $mybb;
+    if (!defined('THIS_SCRIPT') || THIS_SCRIPT !== 'usercp.php'
+        || (string)$mybb->get_input('action') !== 'do_apf_secondary_avatar') {
+        return;
+    }
+    if (empty($mybb->user['uid'])) {
+        error_no_permission();
+    }
+    verify_post_check((string)$mybb->get_input('my_post_key'));
+
+    $uid = (int)$mybb->user['uid'];
+    $oldPath = af_apf_secondary_avatar_path($uid);
+    $error = '';
+
+    if (!empty($mybb->input['remove_secondary_avatar'])) {
+        if (af_apf_set_system_value($uid, AF_APF_SECONDARY_AVATAR_KEY, '')) {
+            af_apf_delete_secondary_avatar_file($uid, $oldPath);
+            redirect('usercp.php?action=avatar', 'Дополнительный аватар удалён.');
+        }
+        $error = 'Не удалось удалить дополнительный аватар.';
+    } else {
+        $file = $_FILES['secondary_avatar_upload'] ?? null;
+        $error = af_apf_validate_secondary_avatar_upload(is_array($file) ? $file : []);
+        if ($error === '') {
+            $tmp = (string)$file['tmp_name'];
+            $mime = af_apf_detect_image_mime($tmp);
+            $extensions = [
+                'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif',
+            ];
+            $directory = rtrim((string)MYBB_ROOT, '/\\') . '/' . AF_APF_SECONDARY_AVATAR_DIR;
+            if ((!is_dir($directory) && !@mkdir($directory, 0755, true)) || !is_writable($directory)) {
+                $error = 'Каталог аватаров недоступен для записи.';
+            } else {
+                try {
+                    $token = bin2hex(random_bytes(16));
+                } catch (Throwable $e) {
+                    $token = hash('sha256', $uid . ':' . microtime(true) . ':' . mt_rand());
+                    $token = substr($token, 0, 32);
+                }
+                $relative = AF_APF_SECONDARY_AVATAR_DIR . '/secondary_' . $uid . '_' . $token . '.' . $extensions[$mime];
+                $destination = rtrim((string)MYBB_ROOT, '/\\') . '/' . $relative;
+                if (!move_uploaded_file($tmp, $destination)) {
+                    $error = 'Не удалось сохранить загруженный файл.';
+                } elseif (!af_apf_set_system_value($uid, AF_APF_SECONDARY_AVATAR_KEY, $relative)) {
+                    @unlink($destination);
+                    $error = 'Не удалось сохранить дополнительный аватар.';
+                } else {
+                    @chmod($destination, 0644);
+                    af_apf_delete_secondary_avatar_file($uid, $oldPath);
+                    redirect('usercp.php?action=avatar', 'Дополнительный аватар обновлён.');
+                }
+            }
+        }
+    }
+
+    $GLOBALS['af_apf_secondary_avatar_error'] = $error;
+    // Let MyBB render its ordinary avatar page; its do_avatar pipeline is never entered.
+    $mybb->input['action'] = 'avatar';
+}
+
+function af_apf_detect_image_mime(string $path): string
+{
+    if ($path === '' || !is_file($path)) {
+        return '';
+    }
+    if (class_exists('finfo')) {
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mime = (string)$finfo->file($path);
+        if ($mime !== '') {
+            return strtolower($mime);
+        }
+    }
+    $info = @getimagesize($path);
+    return is_array($info) ? strtolower((string)($info['mime'] ?? '')) : '';
+}
+
+/** Return a localized validation error, or an empty string when the upload is safe. */
+function af_apf_validate_secondary_avatar_upload(array $file): string
+{
+    global $mybb;
+    $code = (int)($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($code === UPLOAD_ERR_NO_FILE) {
+        return 'Выберите изображение для загрузки.';
+    }
+    if ($code !== UPLOAD_ERR_OK) {
+        return $code === UPLOAD_ERR_INI_SIZE || $code === UPLOAD_ERR_FORM_SIZE
+            ? 'Файл превышает допустимый размер.' : 'Ошибка загрузки файла (код ' . $code . ').';
+    }
+    $tmp = (string)($file['tmp_name'] ?? '');
+    if ($tmp === '' || !is_uploaded_file($tmp)) {
+        return 'Загруженный файл не прошёл проверку HTTP upload.';
+    }
+    $maxKb = max(0, (int)($mybb->settings['maxavatarsize'] ?? 0));
+    $size = (int)($file['size'] ?? 0);
+    if ($size <= 0 || ($maxKb > 0 && $size > $maxKb * 1024)) {
+        return $maxKb > 0
+            ? 'Файл превышает лимит ' . $maxKb . ' КБ.' : 'Загружен пустой файл.';
+    }
+    $info = @getimagesize($tmp);
+    $mime = af_apf_detect_image_mime($tmp);
+    $allowed = ['image/jpeg' => IMAGETYPE_JPEG, 'image/png' => IMAGETYPE_PNG,
+        'image/webp' => IMAGETYPE_WEBP, 'image/gif' => IMAGETYPE_GIF];
+    if (!is_array($info) || !isset($allowed[$mime]) || (int)($info[2] ?? 0) !== $allowed[$mime]) {
+        return 'Разрешены только настоящие изображения JPG, PNG, WEBP и GIF.';
+    }
+    $dimensions = (string)($mybb->settings['maxavatardims'] ?? '');
+    if (preg_match('~^(\\d+)\\s*[x|]\\s*(\\d+)$~i', $dimensions, $match)) {
+        if ((int)$info[0] > (int)$match[1] || (int)$info[1] > (int)$match[2]) {
+            return 'Размер изображения не должен превышать ' . (int)$match[1] . '×' . (int)$match[2] . ' пикселей.';
+        }
+    }
+    return '';
+}
+
+function af_apf_usercp_avatar_end(): void
+{
+    global $mybb;
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    if ($uid <= 0) {
+        $GLOBALS['af_apf_secondary_avatar'] = '';
+        return;
+    }
+    $url = af_apf_get_secondary_avatar($uid);
+    $error = trim((string)($GLOBALS['af_apf_secondary_avatar_error'] ?? ''));
+    $preview = $url !== ''
+        ? '<img src="' . htmlspecialchars_uni($url) . '" alt="Текущий дополнительный аватар" loading="lazy">'
+        : '<span class="af-apf-secondary-avatar__empty">Дополнительный аватар отсутствует</span>';
+    $remove = $url !== ''
+        ? '<button type="submit" class="button atf-button atf-button--danger" name="remove_secondary_avatar" value="1">Удалить</button>' : '';
+    $errorHtml = $error !== '' ? '<div class="error af-apf-secondary-avatar__error" role="alert">' . htmlspecialchars_uni($error) . '</div>' : '';
+    $maxKb = max(0, (int)($mybb->settings['maxavatarsize'] ?? 0));
+    $dims = htmlspecialchars_uni((string)($mybb->settings['maxavatardims'] ?? ''));
+    $limits = trim(($maxKb > 0 ? $maxKb . ' КБ' : '') . ($dims !== '' ? ', ' . $dims . ' px' : ''), ', ');
+    $GLOBALS['af_apf_secondary_avatar'] = '<section class="atf-card atf-form-section af-apf-secondary-avatar" data-af-apf-secondary-avatar="1">'
+        . '<h2>Аватар персонажа</h2>' . $errorHtml
+        . '<div class="af-apf-secondary-avatar__layout"><div class="af-apf-secondary-avatar__preview">' . $preview . '</div>'
+        . '<form enctype="multipart/form-data" action="usercp.php" method="post" class="atf-stack af-apf-secondary-avatar__form">'
+        . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$mybb->post_code) . '">'
+        . '<input type="hidden" name="action" value="do_apf_secondary_avatar">'
+        . '<label class="atf-form-row"><span class="atf-form-row__label">Загрузить новое изображение</span>'
+        . '<span class="atf-form-row__hint">JPG, PNG, WEBP или GIF' . ($limits !== '' ? '; до ' . $limits : '') . '.</span>'
+        . '<input type="file" name="secondary_avatar_upload" class="fileupload" accept="image/jpeg,image/png,image/webp,image/gif"></label>'
+        . '<div class="atf-form-actions"><button type="submit" class="button atf-button">Сохранить дополнительный аватар</button>' . $remove . '</div>'
+        . '</form></div></section>';
 }

@@ -896,6 +896,9 @@ function af_adaptivethemeframework_profile_context(array $member, array $values)
     $uid = max(0, (int)($member['uid'] ?? 0));
     $viewerUid = is_object($mybb) ? max(0, (int)($mybb->user['uid'] ?? 0)) : 0;
     $memberKeys = ['uid', 'username', 'usergroup', 'displaygroup', 'avatar', 'usertitle', 'regdate', 'lastactive', 'af_advancedpostcounter'];
+    $avatars = function_exists('af_apui_get_profile_avatars')
+        ? af_apui_get_profile_avatars($uid, false)
+        : ['primary_avatar' => '', 'secondary_avatar' => '', 'secondary_avatar_missing' => true];
     return [
         'uid' => $uid,
         'username' => (string)($member['username'] ?? ''),
@@ -904,6 +907,7 @@ function af_adaptivethemeframework_profile_context(array $member, array $values)
             'formattedname', 'avatar', 'usertitle', 'groupimage', 'userstars',
             'online_status', 'memregdate', 'memlastvisitdate', 'awaybit', 'bannedbit',
         ])),
+        'avatars' => $avatars,
         'appearance' => [
             'uid_class' => $uid > 0 ? 'af-aa-profile-user-' . $uid : '',
             'payload' => $uid > 0 && function_exists('af_aa_build_user_css_payload')

@@ -36,3 +36,35 @@
 .postbit_buttons a.af-apf-postbit-profile .af-apf-title{
   line-height: 16px;
 }
+
+/* Secondary avatar is an APF system field, presented with the ATF card language. */
+.af-apf-secondary-avatar__layout{
+  display: grid;
+  grid-template-columns: minmax(96px, 180px) minmax(0, 1fr);
+  gap: var(--atf-space-lg, 24px);
+  align-items: start;
+}
+.af-apf-secondary-avatar__preview{
+  display: grid;
+  place-items: center;
+  min-height: 140px;
+  overflow: hidden;
+  border: 1px solid var(--atf-border-color, rgba(255,255,255,.12));
+  border-radius: var(--atf-radius-md, 10px);
+  background: var(--atf-surface-muted, rgba(0,0,0,.12));
+}
+.af-apf-secondary-avatar__preview img{
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+}
+.af-apf-secondary-avatar__empty{
+  padding: var(--atf-space-md, 16px);
+  color: var(--atf-text-muted, inherit);
+  text-align: center;
+}
+.af-apf-secondary-avatar__error{ margin-bottom: var(--atf-space-md, 16px); }
+@media (max-width: 640px){
+  .af-apf-secondary-avatar__layout{ grid-template-columns: 1fr; }
+}
