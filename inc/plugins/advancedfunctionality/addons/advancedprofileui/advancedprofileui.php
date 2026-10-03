@@ -423,29 +423,18 @@ af_apui_register_atf_profile_providers();
  */
 function af_apui_normalize_atf_predecessor(string $templateName, string $current): ?array
 {
+    global $db;
+
     $markers = [
         'member_profile' => ['<!-- AF_APUI member_profile START -->', '<!-- AF_APUI member_profile END -->'],
         'postbit_classic' => ['<!-- AF_APUI postbit_classic START -->', '<!-- AF_APUI postbit_classic END -->'],
         'showthread' => ['<!-- AF_APUI showthread START -->', '<!-- AF_APUI showthread END -->'],
     ];
-    if (!isset($markers[$templateName])) {
+    if (!isset($markers[$templateName])
+        || !function_exists('af_adaptivethemeframework_template_seeds')) {
         return null;
     }
 
-    [$start, $end] = $markers[$templateName];
-    if (substr_count($current, $start) !== 1 || substr_count($current, $end) !== 1) {
-        return null;
-    }
-
-    $trimmed = trim($current);
-    if (strpos($trimmed, $start) !== 0
-        || substr($trimmed, -strlen($end)) !== $end) {
-        return null;
-    }
-
-    if (!function_exists('af_adaptivethemeframework_template_seeds')) {
-        return null;
-    }
     $seeds = af_adaptivethemeframework_template_seeds();
     $seedPath = (string)($seeds[$templateName] ?? '');
     if ($seedPath === '' || !is_file($seedPath)) {
@@ -457,14 +446,87 @@ function af_apui_normalize_atf_predecessor(string $templateName, string $current
         return null;
     }
 
+    [$start, $end] = $markers[$templateName];
+    $startCount = substr_count($current, $start);
+    $endCount = substr_count($current, $end);
+    $trimmed = trim($current);
+    $markerOwned = $startCount === 1
+        && $endCount === 1
+        && strpos($trimmed, $start) === 0
+        && substr($trimmed, -strlen($end)) === $end;
+
+    if ($markerOwned) {
+        return [
+            'normalized_content' => $seed,
+            'owner' => AF_APUI_ID,
+            'source' => 'apui_full_template_owner_markers',
+            'transformation_type' => 'known_owner_template_handoff',
+            'diagnostic' => [
+                'start_marker_count' => 1,
+                'end_marker_count' => 1,
+                'backup_match' => 0,
+            ],
+        ];
+    }
+
+    // APUI restore_overrides() legitimately writes its saved pre-APUI bytes
+    // back into the live template. Those bytes have no APUI wrapper markers,
+    // so markers alone cannot prove the ATF -> APUI -> ATF lifecycle.
+    //
+    // Accept only an exact/canonical match against APUI's own persisted backup
+    // row whose SHA-1 metadata still validates. This is ownership evidence,
+    // not a generic "looks like MyBB" escape hatch; unrelated manual edits
+    // remain fail-closed.
+    $backupMatched = false;
+    if (is_object($db) && $db->table_exists(AF_APUI_BACKUP_TABLE_NAME)) {
+        $titleEsc = $db->escape_string($templateName);
+        $query = $db->simple_select(
+            AF_APUI_BACKUP_TABLE_NAME,
+            'original_template,checksum',
+            "title='" . $titleEsc . "'"
+        );
+        $currentCanonical = function_exists('af_adaptivethemeframework_canonical_template_checksum')
+            ? af_adaptivethemeframework_canonical_template_checksum($current)
+            : hash('sha256', str_replace(["\r\n", "\r"], "\n", $current));
+
+        while ($backup = $db->fetch_array($query)) {
+            $original = (string)($backup['original_template'] ?? '');
+            $storedSha1 = strtolower(trim((string)($backup['checksum'] ?? '')));
+            if ($original === '' || $storedSha1 === '' || !hash_equals($storedSha1, sha1($original))) {
+                continue;
+            }
+
+            $exact = hash_equals(hash('sha256', $original), hash('sha256', $current));
+            $canonical = function_exists('af_adaptivethemeframework_canonical_template_checksum')
+                ? hash_equals(
+                    af_adaptivethemeframework_canonical_template_checksum($original),
+                    $currentCanonical
+                )
+                : hash_equals(
+                    hash('sha256', str_replace(["\r\n", "\r"], "\n", $original)),
+                    $currentCanonical
+                );
+
+            if ($exact || $canonical) {
+                $backupMatched = true;
+                break;
+            }
+        }
+    }
+
+    if (!$backupMatched) {
+        return null;
+    }
+
     return [
         'normalized_content' => $seed,
         'owner' => AF_APUI_ID,
-        'source' => 'apui_full_template_owner_markers',
-        'transformation_type' => 'known_owner_template_handoff',
+        'source' => 'apui_persisted_backup_restore',
+        'transformation_type' => 'verified_backup_handoff',
         'diagnostic' => [
-            'start_marker_count' => 1,
-            'end_marker_count' => 1,
+            'start_marker_count' => $startCount,
+            'end_marker_count' => $endCount,
+            'backup_match' => 1,
         ],
     ];
 }
