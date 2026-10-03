@@ -398,7 +398,9 @@ body.atf-active .atf-thread__rating { margin-inline-start: auto; }
 body.atf-active .atf-thread__posts,
 body.atf-active #posts_container,
 body.atf-active #posts { min-width: 0; max-width: 100%; }
-body.atf-active .atf-thread__posts { overflow-x: clip; }
+/* Reputation popovers extend outside a post. Clipping this thread wrapper hid
+   them even though the post and content surfaces already allow overflow. */
+body.atf-active .atf-thread__posts { overflow: visible; }
 body.atf-active .atf-thread__adjacent { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--atf-space-3); padding-block: var(--atf-space-3); }
 body.atf-active .atf-thread__controls { align-items: flex-start; margin-block: var(--atf-space-5); }
 body.atf-active .atf-thread__moderation { text-align: end; }
@@ -2220,12 +2222,12 @@ body.atf-active .atf-post__statistics .af-apui-stat-item { display: grid; grid-t
 body.atf-active .atf-post__content { position: relative; padding-inline-end: calc(var(--atf-space-5) + 2.75rem); padding-block-end: calc(var(--atf-space-5) + 2.5rem); overflow: visible; }
 body.atf-active .atf-post__management { position: absolute; z-index: 3; inset-block-start: var(--atf-space-3); inset-inline-end: 0; display: flex; flex-direction: column; gap: .3rem; padding: .35rem; background: var(--atf-color-page-subtle); border: 1px solid var(--atf-color-border); border-inline-end: 0; border-radius: var(--atf-radius-md) 0 0 var(--atf-radius-md); }
 body.atf-active .atf-post__management :is(a,button) { display: grid; place-items: center; width: 2rem; min-height: 2rem; padding: 0; overflow: hidden; }
-body.atf-active .atf-post__reputation-corner { position: absolute; z-index: 2; right: 0; bottom: 0; min-width: 7rem; padding: 2.4rem .65rem .55rem 2.6rem; background: var(--atf-post-accent-gradient); border-radius: 100% 0 0 0; color: #fff; }
+body.atf-active .atf-post__reputation-corner { position: absolute; z-index: 10; right: 0; bottom: 0; min-width: 7rem; padding: 2.4rem .65rem .55rem 2.6rem; background: var(--atf-post-accent-gradient); border-radius: 100% 0 0 0; color: #fff; }
 body.atf-active .atf-post-reputation { position: relative; display: flex; justify-content: flex-end; align-items: center; gap: .35rem; }
 body.atf-active .atf-post-reputation :is(button,.atf-post-reputation__heart) { border: 0; color: inherit; background: transparent; font: inherit; }
 body.atf-active .atf-post-reputation__heart { font-size: 1.35rem; cursor: pointer; }
 body.atf-active .atf-post-reputation__score { cursor: help; }
-body.atf-active .atf-post-reputation__popover { position: absolute; right: 0; bottom: calc(100% + .65rem); display: none; width: min(19rem,70vw); padding: .75rem; color: var(--atf-color-text); background: var(--atf-color-surface); border: 1px solid var(--atf-post-accent); border-radius: var(--atf-radius-md); box-shadow: 0 .75rem 2rem rgb(0 0 0/.25); }
+body.atf-active .atf-post-reputation__popover { position: absolute; z-index: 100; right: 0; bottom: calc(100% + .65rem); display: none; width: min(19rem,70vw); padding: .75rem; color: var(--atf-color-text); background: var(--atf-color-surface); border: 1px solid var(--atf-post-accent); border-radius: var(--atf-radius-md); box-shadow: 0 .75rem 2rem rgb(0 0 0/.25); }
 body.atf-active .atf-post-reputation:is(:hover,:focus-within) .atf-post-reputation__popover { display: block; }
 body.atf-active .atf-post-reputation__popover ul { margin: .5rem 0 0; padding: 0; list-style: none; }
 body.atf-active .atf-post-reputation__popover li { display: grid; grid-template-columns: 1fr auto; gap: .2rem .5rem; padding-block: .3rem; }

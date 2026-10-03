@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.11');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.12');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1113,6 +1113,9 @@ function af_adaptivethemeframework_thread_reputation(int $tid): array
 
 function af_adaptivethemeframework_post_reputation(array $post): string
 {
+    $escape = static fn(string $value): string => function_exists('htmlspecialchars_uni')
+        ? htmlspecialchars_uni($value)
+        : htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $pid = (int)($post['pid'] ?? 0); $uid = (int)($post['uid'] ?? 0);
     $all = af_adaptivethemeframework_thread_reputation((int)($post['tid'] ?? 0));
     $entries = (array)($all[$pid] ?? []); $score = 0; $rows = '';
@@ -1121,14 +1124,14 @@ function af_adaptivethemeframework_post_reputation(array $post): string
         $comment = trim((string)$entry['comments']);
         if (function_exists('my_substr')) $comment = my_substr($comment, 0, 80);
         else $comment = substr($comment, 0, 80);
-        $rows .= '<li><strong>' . htmlspecialchars_uni((string)($entry['username'] ?: 'Удалённый пользователь'))
+        $rows .= '<li><strong>' . $escape((string)($entry['username'] ?: 'Удалённый пользователь'))
             . '</strong> <span>' . ($value > 0 ? '+' : '') . $value . '</span>'
-            . ($comment !== '' ? '<small>' . htmlspecialchars_uni($comment) . '</small>' : '') . '</li>';
+            . ($comment !== '' ? '<small>' . $escape($comment) . '</small>' : '') . '</li>';
     }
     $scoreText = ($score > 0 ? '+' : '') . $score;
     $canAdd = trim((string)($post['button_rep'] ?? '')) !== '' && $uid > 0 && $pid > 0;
     $heart = $canAdd ? '<button type="button" class="atf-post-reputation__heart" title="Оценить сообщение" aria-label="Оценить сообщение" onclick="event.stopPropagation(); MyBB.reputation('.$uid.','.$pid.'); return false;">&#9829;</button>' : '<span class="atf-post-reputation__heart" aria-hidden="true">&#9829;</span>';
-    return '<div class="atf-post-reputation">'.$heart.'<button type="button" class="atf-post-reputation__score" aria-haspopup="true" aria-expanded="false">'.htmlspecialchars_uni($scoreText).'</button>'
+    return '<div class="atf-post-reputation">'.$heart.'<button type="button" class="atf-post-reputation__score" aria-haspopup="true" aria-expanded="false">'.$escape($scoreText).'</button>'
         .'<div class="atf-post-reputation__popover" role="tooltip"><strong>Оценки сообщения</strong>'
         .($rows !== '' ? '<ul>'.$rows.'</ul>' : '<span>Оценок пока нет</span>').'</div></div>';
 }

@@ -359,11 +359,12 @@ function af_apui_render_profile_stats(array $context): string
 {
     $member = (array)($context['member'] ?? []);
     $uid = (int)($context['uid'] ?? 0);
+    $routes = af_apui_user_stat_routes($uid);
     $stats = [
-        ['Сообщения', my_number_format((int)($member['postnum'] ?? 0)), 'fa-solid fa-comments'],
-        ['Темы', my_number_format((int)($member['threadnum'] ?? 0)), 'fa-solid fa-copy'],
+        ['Сообщения', my_number_format((int)($member['postnum'] ?? 0)), 'fa-solid fa-comments', $routes['messages']],
+        ['Темы', my_number_format((int)($member['threadnum'] ?? 0)), 'fa-solid fa-copy', $routes['threads']],
         ['Посты', my_number_format((int)($member['af_advancedpostcounter'] ?? 0)), 'fa-solid fa-pen', ''],
-        ['Репутация', (($member['reputation'] ?? 0) > 0 ? '+' : '') . my_number_format((int)($member['reputation'] ?? 0)), 'fa-solid fa-heart', 'reputation.php?uid=' . $uid],
+        ['Репутация', (($member['reputation'] ?? 0) > 0 ? '+' : '') . my_number_format((int)($member['reputation'] ?? 0)), 'fa-solid fa-heart', $routes['reputation']],
     ];
     if ($uid > 0 && function_exists('af_balance_get_postbit_data')) {
         $balance = af_balance_get_postbit_data($uid);
@@ -382,6 +383,20 @@ function af_apui_render_profile_stats(array $context): string
             . ($url !== '' ? '</a>' : '</div>');
     }
     return $html . '</div>';
+}
+
+/** Canonical MyBB destinations shared by the profile and post author stats. */
+function af_apui_user_stat_routes(int $uid): array
+{
+    if ($uid <= 0) {
+        return ['messages' => '', 'threads' => '', 'reputation' => ''];
+    }
+
+    return [
+        'messages' => 'search.php?action=finduser&uid=' . $uid,
+        'threads' => 'search.php?action=finduserthreads&uid=' . $uid,
+        'reputation' => 'reputation.php?uid=' . $uid,
+    ];
 }
 
 function af_apui_render_profile_character_workspace(array $context): string
@@ -1562,18 +1577,20 @@ function af_apui_postbit_compose_userdetails(array &$post): void
     $post['af_apui_secondary_avatar'] = $secondaryAvatar;
     $post['af_apui_display_avatar'] = (string)($post['useravatar'] ?? '');
 
-    $levelValue = '1';
-
     $tooltipMessages = htmlspecialchars_uni('Сообщений');
     $tooltipThreads = htmlspecialchars_uni('Тем');
     $tooltipReputation = htmlspecialchars_uni('Репутация');
     $tooltipPosts = htmlspecialchars_uni('Постов');
-    $tooltipLevel = htmlspecialchars_uni('Уровень');
-
-    if ($uid > 0 && function_exists('af_balance_get_postbit_data')) {
-        $balanceData = af_balance_get_postbit_data($uid);
-        $levelValue = (string)((int)($balanceData['level'] ?? 1));
-    }
+    $routes = af_apui_user_stat_routes($uid);
+    $linkedStat = static function (string $class, string $url, string $title, string $icon, string $value): string {
+        $tag = $url !== '' ? 'a' : 'span';
+        $href = $url !== '' ? ' href="' . htmlspecialchars_uni($url) . '"' : '';
+        return '<' . $tag . ' class="af-apui-stat-item ' . $class . '"' . $href
+            . ' title="' . $title . '" data-af-title="' . $title . '">'
+            . '<span class="af-apui-stat-item__icon"><i class="' . $icon . '" aria-hidden="true"></i></span>'
+            . '<span class="af-apui-stat-item__value">' . htmlspecialchars_uni($value) . '</span>'
+            . '</' . $tag . '>';
+    };
 
     $isQuickReplyContext = (defined('THIS_SCRIPT') && strtolower((string)THIS_SCRIPT) === 'newreply.php') || defined('IN_XMLHTTP');
     $afApcPostbitHtml = $isQuickReplyContext ? '' : '<af_apc_uid_' . $uid . '>';
@@ -1586,11 +1603,10 @@ function af_apui_postbit_compose_userdetails(array &$post): void
 
     $statsHtml =
         '<div class="author_statistics af-apui-postbit-userdetails">'
-        . '<span class="af-apui-stat-item af-apui-stat-item--messages" title="' . $tooltipMessages . '" data-af-title="' . $tooltipMessages . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-comments" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($postsValue) . '</span></span>'
-        . '<span class="af-apui-stat-item af-apui-stat-item--threads" title="' . $tooltipThreads . '" data-af-title="' . $tooltipThreads . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-copy" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($threadsValue) . '</span></span>'
-        . '<span class="af-apui-stat-item af-apui-stat-item--reputation" title="' . $tooltipReputation . '" data-af-title="' . $tooltipReputation . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-heart" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($reputationValue) . '</span></span>'
+        . $linkedStat('af-apui-stat-item--messages', $routes['messages'], $tooltipMessages, 'fa-solid fa-comments', $postsValue)
+        . $linkedStat('af-apui-stat-item--threads', $routes['threads'], $tooltipThreads, 'fa-solid fa-copy', $threadsValue)
+        . $linkedStat('af-apui-stat-item--reputation', $routes['reputation'], $tooltipReputation, 'fa-solid fa-heart', $reputationValue)
         . '<span class="af-apui-stat-item af-apui-stat-item--posts" title="' . $tooltipPosts . '" data-af-title="' . $tooltipPosts . '" data-af-balance-posts="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-pen" aria-hidden="true"></i></span><span class="af-apui-stat-item__value"><span class="af-apc-slot" data-af-apc-slot="1" data-uid="' . $uid . '">' . $afApcPostbitHtml . '</span></span></span>'
-        . '<span class="af-apui-stat-item af-apui-stat-item--level" title="' . $tooltipLevel . '" data-af-title="' . $tooltipLevel . '" data-af-balance-level="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-signal" aria-hidden="true"></i></span><span class="af-apui-stat-item__value" data-af-balance-level-value="1">' . htmlspecialchars_uni($levelValue) . '</span></span>'
         . '</div>';
 
     $actionsHtml = af_apui_build_postbit_actionbar_html($post, $sheetPayload);
