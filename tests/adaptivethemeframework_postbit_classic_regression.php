@@ -15,7 +15,8 @@ atf_classic_assert(!isset($seeds['postbit']), 'Horizontal postbit must remain un
 $template = (string)file_get_contents($seeds['postbit_classic']);
 
 foreach ([
-    "{\$post['pid']}", "{\$post['uid']}", "{\$post['af_apui_display_avatar']}",
+    "{\$post['pid']}", "{\$post['uid']}", "{\$post['af_atf_primary_avatar']}",
+    "{\$post['af_atf_secondary_avatar']}",
     "{\$post['usertitle']}", "{\$post['groupimage']}", "{\$post['userstars']}",
     "{\$post['postdate']}", "{\$post['posturl']}", "{\$post['subject']}",
     "{\$post['message']}", "{\$post['editedmsg']}", "{\$post['attachments']}",

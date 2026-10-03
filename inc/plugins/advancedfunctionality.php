@@ -1896,6 +1896,14 @@ $plugins->add_hook('global_start', 'advancedfunctionality_outputbuffer_start', -
 
 $plugins->add_hook('xmlhttp', 'af_core_xmlhttp_bootstrap_addons', 1);
 
+// Provider hooks must be present when MyBB builds the request's hook list.
+// Addon bootstrap still happens at global_start, but registering this stable
+// bridge here prevents data providers from depending on a hook which is added
+// from inside another running hook.
+$plugins->add_hook('postbit', 'advancedfunctionality_apf_postbit_provider', 20);
+$plugins->add_hook('postbit_prev', 'advancedfunctionality_apf_postbit_provider', 20);
+$plugins->add_hook('postbit_pm', 'advancedfunctionality_apf_postbit_provider', 20);
+
 
 // XMLHTTP роутинг (аналог MyAlerts)
 $plugins->add_hook('xmlhttp', 'af_xmlhttp_router', -1);
@@ -1962,6 +1970,23 @@ function advancedfunctionality_bootstrap_addons()
                 if (function_exists($fn)) { $fn(); }
             }
         }
+    }
+}
+
+/**
+ * Early-registered bridge for the APF-owned secondary-avatar value.
+ *
+ * The bridge deliberately owns no rendering. APF resolves the URL and ATF
+ * later renders it. Calling the ordinary bootstrap here is an idempotent
+ * safety net for non-standard MyBB entry points which omit global_start.
+ */
+function advancedfunctionality_apf_postbit_provider(array &$post): void
+{
+    advancedfunctionality_bootstrap_addons();
+    if (function_exists('af_apf_is_enabled')
+        && af_apf_is_enabled()
+        && function_exists('af_apf_postbit_secondary_avatar')) {
+        af_apf_postbit_secondary_avatar($post);
     }
 }
 

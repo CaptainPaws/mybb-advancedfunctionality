@@ -939,11 +939,8 @@ function af_advancedprofilefields_init(): void
     $GLOBALS['af_apf_hooks_registered'] = true;
     $plugins->add_hook('usercp_start', 'af_apf_usercp_start', 5);
     $plugins->add_hook('usercp_avatar_end', 'af_apf_usercp_avatar_end', 100);
-    // Secondary avatar is APF-owned data. Materialize its post presentation
-    // before APUI/ATF compose their own postbit payloads.
-    $plugins->add_hook('postbit', 'af_apf_postbit_secondary_avatar', 20);
-    $plugins->add_hook('postbit_prev', 'af_apf_postbit_secondary_avatar', 20);
-    $plugins->add_hook('postbit_pm', 'af_apf_postbit_secondary_avatar', 20);
+    // Postbit provider bridges are registered by the core at plugin-load time.
+    // Do not add them here: this init itself runs from global_start.
 }
 
 function af_advancedprofilefields_pre_output(&$page = ''): void
@@ -1074,17 +1071,9 @@ function af_apf_postbit_secondary_avatar(array &$post): void
         return;
     }
 
+    // This is the sole postbit data contract. APF owns the URL; presentation
+    // addons consume it without replacing MyBB's $post['useravatar'].
     $post['af_apf_secondary_avatar_url'] = $url;
-    $username = (string)($post['username'] ?? '');
-    $html = '<img src="' . htmlspecialchars_uni($url)
-        . '" alt="' . htmlspecialchars_uni($username)
-        . '" class="af-apf-secondary-avatar-image" loading="lazy" decoding="async">';
-
-    // Secondary avatar is an independent surface. Never replace MyBB's
-    // primary avatar: both must remain available to APUI and ATF.
-    $post['af_apui_secondary_avatar'] = $url;
-    $post['af_apui_secondary_avatar_html'] = $html;
-    $post['af_atf_secondary_avatar'] = $html;
 }
 
 /** Public, normalized URL for the APF-owned secondary avatar, or an empty string. */

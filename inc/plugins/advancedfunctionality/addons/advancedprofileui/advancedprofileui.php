@@ -1484,13 +1484,6 @@ function af_apui_postbit_compose_userdetails(array &$post): void
     }
     $post['af_apui_secondary_avatar'] = $secondaryAvatar;
     $post['af_apui_display_avatar'] = (string)($post['useravatar'] ?? '');
-    $post['af_apui_secondary_avatar_html'] = $secondaryAvatar !== ''
-        ? af_apui_render_avatar_image(
-            $secondaryAvatar,
-            (string)($post['username'] ?? ''),
-            'af-apui-postbit-secondary-avatar__image'
-        )
-        : (string)($post['af_apui_secondary_avatar_html'] ?? '');
 
     $levelValue = '1';
 
