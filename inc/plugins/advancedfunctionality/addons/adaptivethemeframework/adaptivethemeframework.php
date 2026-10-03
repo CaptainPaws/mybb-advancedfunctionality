@@ -912,7 +912,7 @@ function af_adaptivethemeframework_profile_context(array $member, array $values)
         'member' => array_intersect_key($member, array_flip($memberKeys)),
         'identity' => array_intersect_key($values, array_flip([
             'formattedname', 'avatar', 'usertitle', 'groupimage', 'userstars',
-            'online_status', 'memregdate', 'memlastvisitdate', 'awaybit', 'bannedbit',
+            'online_status', 'memregdate', 'memlastvisitdate', 'timeonline', 'awaybit', 'bannedbit',
         ])),
         'avatars' => $avatars,
         'appearance' => [
@@ -938,7 +938,7 @@ function af_adaptivethemeframework_compose_profile(): void
     if (!is_array($memprofile)) return;
     $names = [
         'formattedname', 'avatar', 'usertitle', 'groupimage', 'userstars', 'online_status',
-        'memregdate', 'memlastvisitdate', 'awaybit', 'bannedbit', 'profilefields',
+        'memregdate', 'memlastvisitdate', 'timeonline', 'awaybit', 'bannedbit', 'profilefields',
         'contact_details', 'signature', 'modoptions', 'adminoptions', 'buddy_options',
         'ignore_options', 'report_options',
     ];
@@ -947,7 +947,7 @@ function af_adaptivethemeframework_compose_profile(): void
     $values['sections'] = [
         'info' => (string)($GLOBALS['af_apui_forum_info_grid'] ?? ''),
         'sheet' => (string)($GLOBALS['af_apui_character_sheet_tab'] ?? ''),
-        'application' => (string)($GLOBALS['af_apui_application_tab'] ?? ''),
+        'inventory' => (string)($GLOBALS['af_apui_inventory_tab'] ?? ''),
         'timeline' => (string)($GLOBALS['af_apui_timeline_tab'] ?? ''),
         'activity' => (string)($GLOBALS['af_apui_activity_tab'] ?? ''),
     ];
@@ -956,7 +956,7 @@ function af_adaptivethemeframework_compose_profile(): void
         'post_counter' => (string)($memprofile['advancedpostcounter'] ?? ''),
     ];
     $context = af_adaptivethemeframework_profile_context($memprofile, $values);
-    foreach (['hero', 'navigation', 'forum_info', 'character_sheet', 'application', 'timeline',
+    foreach (['hero', 'navigation', 'forum_info', 'character_sheet', 'inventory', 'timeline',
         'activity', 'stats', 'balance', 'post_counter', 'before_content', 'main', 'after_content'] as $name) {
         $GLOBALS['atf_profile_' . $name] = af_adaptivethemeframework_render_slot('profile.' . $name, $context);
     }

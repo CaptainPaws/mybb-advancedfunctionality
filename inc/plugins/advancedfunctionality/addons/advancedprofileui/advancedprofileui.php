@@ -301,7 +301,7 @@ function af_apui_register_atf_profile_providers(): bool
     if (!function_exists('af_adaptivethemeframework_register_component')) return false;
     $mapping = [
         'forum_info' => 'forum_info', 'character_sheet' => 'sheet',
-        'application' => 'application', 'timeline' => 'timeline', 'activity' => 'activity',
+        'inventory' => 'inventory', 'timeline' => 'timeline', 'activity' => 'activity',
     ];
     $registered = false;
     foreach ($mapping as $key => $section) {
@@ -338,8 +338,9 @@ function af_apui_render_atf_profile_hero(array $context): string
         . '<div class="atf-profile-hero__identity"><div class="atf-profile-hero__name">' . (string)($i['formattedname'] ?? '') . '</div>'
         . '<div class="atf-profile-hero__title">' . (string)($i['usertitle'] ?? '') . '</div>'
         . '<div class="atf-profile-hero__rank">' . (string)($i['groupimage'] ?? '') . (string)($i['userstars'] ?? '') . '</div></div>'
-        . '<div class="atf-profile-hero__meta"><span>' . (string)($i['memregdate'] ?? '')
-        . '</span><span>' . (string)($i['memlastvisitdate'] ?? '') . '</span>'
+        . '<div class="atf-profile-hero__meta"><span><b>Регистрация:</b> ' . (string)($i['memregdate'] ?? '')
+        . '</span><span><b>Последний визит:</b> ' . (string)($i['memlastvisitdate'] ?? '') . '</span>'
+        . '<span><b>На форуме:</b> ' . (string)($i['timeonline'] ?? '') . '</span>'
         . '<span>' . (string)($i['online_status'] ?? '') . '</span>'
         . (string)($i['awaybit'] ?? '') . (string)($i['bannedbit'] ?? '') . '</div>'
         . '</section>';
@@ -402,7 +403,8 @@ function af_apui_user_stat_routes(int $uid): array
 function af_apui_render_profile_character_workspace(array $context): string
 {
     $uid = (int)($context['uid'] ?? 0);
-    $payload = af_apui_get_profile_character_payload($uid);
+    $sheetPayload = (array)($context['sheet_payload'] ?? []);
+    $payload = af_apui_get_profile_character_payload($uid, $sheetPayload);
     $fields = (array)($payload['fields'] ?? []);
     $labels = [
         'character_name_ru' => 'Имя', 'character_origin' => 'Происхождение',
@@ -417,6 +419,11 @@ function af_apui_render_profile_character_workspace(array $context): string
         if ($value === '') continue;
         $rows .= '<div class="af-apui-character-row"><dt>' . htmlspecialchars_uni($label) . '</dt><dd>' . $value . '</dd></div>';
     }
+    $applicationUrl = af_apui_resolve_application_url(['uid' => $uid], $sheetPayload);
+    if ($applicationUrl !== '') {
+        $rows .= '<div class="af-apui-character-row af-apui-character-row--application"><dt>Анкета</dt><dd><a class="af-apui-application-link" href="'
+            . htmlspecialchars_uni($applicationUrl) . '">Открыть</a></dd></div>';
+    }
     $avatars = (array)($context['avatars'] ?? af_apui_get_profile_avatars($uid, true));
     $portraitUrl = (string)($avatars['secondary_avatar'] ?? '');
     if ($portraitUrl === '') {
@@ -426,11 +433,15 @@ function af_apui_render_profile_character_workspace(array $context): string
     $about = trim((string)($payload['about_html'] ?? ''));
     if ($about === '') $about = '<p class="af-apui-empty">Описание персонажа пока не заполнено.</p>';
     if ($rows === '') $rows = '<p class="af-apui-empty">Данные анкеты пока не заполнены.</p>';
+    $abilities = trim((string)($fields['character_abilities']['html'] ?? ''));
+    $abilitiesHtml = $abilities !== ''
+        ? '<details class="af-apui-character-abilities"><summary>Способности</summary><div class="af-apui-character-abilities__body">' . $abilities . '</div></details>'
+        : '';
     return '<div class="af-apui-character-layout">'
         . '<section class="af-apui-character-card af-apui-character-about"><h2>О персонаже</h2><div class="af-apui-character-about__body">' . $about . '</div></section>'
         . '<figure class="af-apui-character-portrait">' . $portrait . '</figure>'
         . '<section class="af-apui-character-card af-apui-character-infobox"><h2>Инфобокс</h2><dl>' . $rows . '</dl></section>'
-        . '</div>';
+        . '</div>' . $abilitiesHtml;
 }
 
 function af_apui_render_avatar_image(string $url, string $username, string $class): string
@@ -485,7 +496,7 @@ function af_apui_get_profile_avatars(int $uid, bool $fallbackSecondaryToPrimary 
 
 function af_apui_render_atf_profile_navigation(array $context): string
 {
-    $labels = ['info' => 'Основная информация', 'sheet' => 'Лист персонажа', 'application' => 'Анкета',
+    $labels = ['info' => 'Основная информация', 'sheet' => 'Лист персонажа', 'inventory' => 'Инвентарь',
         'timeline' => 'Хронология', 'activity' => 'Активность'];
     $items = [];
     $sections = (array)($context['sections'] ?? []);
@@ -1624,6 +1635,7 @@ function af_apui_global_start(): void
 
     if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'member.php') {
         af_apui_member_profile_init_vars();
+        af_apui_maybe_serve_lazy_profile_tab();
     }
 }
 
@@ -1637,7 +1649,7 @@ function af_apui_member_profile_init_vars(): void
 {
     foreach ([
         'af_apui_character_sheet_tab',
-        'af_apui_application_tab',
+        'af_apui_inventory_tab',
         'af_apui_timeline_tab',
         'af_apui_activity_tab',
         'af_apui_forum_info_grid',
@@ -1707,22 +1719,52 @@ function af_apui_member_profile_prepare_layout_vars(): void
 
     $uid = (int)($memprofile['uid'] ?? 0);
     $sheetPayload = af_apui_get_charactersheet_postbit_payload($uid);
-    $legacyContext = ['uid' => $uid, 'username' => (string)($memprofile['username'] ?? ''), 'member' => $memprofile, 'avatars' => $avatars];
+    $legacyContext = ['uid' => $uid, 'username' => (string)($memprofile['username'] ?? ''), 'member' => $memprofile, 'avatars' => $avatars, 'sheet_payload' => $sheetPayload];
     $GLOBALS['af_apui_profile_stats'] = af_apui_render_profile_stats($legacyContext);
     $GLOBALS['af_apui_character_workspace'] = af_apui_render_profile_character_workspace($legacyContext);
 
-    $GLOBALS['af_apui_character_sheet_tab'] = af_apui_build_member_profile_sheet_tab($uid, $sheetPayload);
-    $GLOBALS['af_apui_application_tab'] = af_apui_build_member_profile_application_tab($uid, $sheetPayload);
-    $GLOBALS['af_apui_timeline_tab'] = af_apui_build_member_profile_placeholder_tab(
-        'Хронология',
-        'Здесь появится временная линия персонажа: ключевые эпизоды, квесты и сюжетные вехи.',
-        'Слой подготовлен в AdvancedProfileUI и ждёт подключения реального источника данных.'
-    );
-    $GLOBALS['af_apui_activity_tab'] = af_apui_build_member_profile_placeholder_tab(
-        'Активность',
-        'Здесь появятся последние действия персонажа на форуме и в игровых модулях.',
-        'Можно будет подключить посты, ответы, покупки, изменения листа и другие события без перестройки шаблона.'
-    );
+    // Non-info tabs are intentionally represented by cheap shells. Their renderers
+    // (and their queries) run only in af_apui_maybe_serve_lazy_profile_tab().
+    foreach (['character_sheet' => 'sheet', 'inventory' => 'inventory', 'timeline' => 'timeline', 'activity' => 'activity'] as $var => $tab) {
+        $GLOBALS['af_apui_' . $var . '_tab'] = '<div class="af-apui-lazy-placeholder" data-af-apui-lazy-tab="' . $tab . '">Загрузка…</div>';
+    }
+}
+
+/** Serve one expensive profile surface without composing the full profile page. */
+function af_apui_maybe_serve_lazy_profile_tab(): void
+{
+    global $mybb;
+    $tab = trim((string)$mybb->get_input('af_profile_tab'));
+    if ($tab === '') return;
+
+    $allowed = ['sheet', 'inventory', 'timeline', 'activity'];
+    if (!in_array($tab, $allowed, true)) {
+        http_response_code(400);
+        echo 'Неизвестная вкладка.';
+        exit;
+    }
+    $uid = max(0, (int)$mybb->get_input('uid', MyBB::INPUT_INT));
+    if ($uid <= 0 || !function_exists('get_user') || !get_user($uid)) {
+        http_response_code(404);
+        echo 'Профиль не найден.';
+        exit;
+    }
+
+    if ($tab === 'sheet') {
+        $html = af_apui_build_member_profile_sheet_tab($uid, af_apui_get_charactersheet_postbit_payload($uid));
+    } elseif ($tab === 'inventory') {
+        $content = function_exists('af_advancedinventory_build_inventory_fragment')
+            ? af_advancedinventory_build_inventory_fragment($uid) : '';
+        $html = af_apui_build_member_profile_tab_shell('Инвентарь', '', $content !== '' ? $content : '<div class="af-apui-empty">Инвентарь недоступен.</div>');
+    } elseif ($tab === 'timeline') {
+        $html = af_apui_build_member_profile_placeholder_tab('Хронология', 'Ключевые эпизоды, квесты и сюжетные вехи персонажа.');
+    } else {
+        $html = af_apui_build_member_profile_placeholder_tab('Активность', 'Последние действия персонажа на форуме и в игровых модулях.');
+    }
+    header('Content-Type: text/html; charset=' . ($mybb->settings['charset'] ?? 'UTF-8'));
+    header('Cache-Control: private, no-store');
+    echo $html;
+    exit;
 }
 
 function af_apui_build_member_profile_placeholder_tab(string $title, string $lead, string $note = ''): string

@@ -39,9 +39,9 @@ if (!str_contains($template, '{$atf_profile_stats}')
 if (!str_contains($css, 'grid-template-columns: minmax(0, 1fr) minmax(240px, 320px) minmax(0, 1fr)')
     || !str_contains($css, '.af-apui-character-portrait__image')
     || !str_contains($css, 'object-fit: cover')
-    || !str_contains($css, 'max-height: 280px')
+    || !str_contains($css, 'max-height: 250px')
     || !str_contains($css, 'overflow-y: auto')
-    || !str_contains($css, 'max-width: 320px')) {
+    || !str_contains($css, 'max-width: 300px')) {
     throw new RuntimeException('Responsive three-column portrait composition is incomplete.');
 }
 

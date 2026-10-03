@@ -21,10 +21,10 @@
         <div class="atf-profile__native">{$atf_profile_main}</div>
         <div class="atf-profile__after">{$atf_profile_after_content}</div>
       </section>
-      <section class="atf-profile__panel" id="af-apui-tab-sheet" data-panel="sheet" hidden>{$atf_profile_character_sheet}</section>
-      <section class="atf-profile__panel" id="af-apui-tab-application" data-panel="application" hidden>{$atf_profile_application}</section>
-      <section class="atf-profile__panel" id="af-apui-tab-timeline" data-panel="timeline" hidden>{$atf_profile_timeline}</section>
-      <section class="atf-profile__panel" id="af-apui-tab-activity" data-panel="activity" hidden>{$atf_profile_activity}</section>
+      <section class="atf-profile__panel" id="af-apui-tab-sheet" data-panel="sheet" data-lazy-url="member.php?action=profile&amp;uid={$memprofile['uid']}&amp;af_profile_tab=sheet" hidden>{$atf_profile_character_sheet}</section>
+      <section class="atf-profile__panel" id="af-apui-tab-inventory" data-panel="inventory" data-lazy-url="member.php?action=profile&amp;uid={$memprofile['uid']}&amp;af_profile_tab=inventory" hidden>{$atf_profile_inventory}</section>
+      <section class="atf-profile__panel" id="af-apui-tab-timeline" data-panel="timeline" data-lazy-url="member.php?action=profile&amp;uid={$memprofile['uid']}&amp;af_profile_tab=timeline" hidden>{$atf_profile_timeline}</section>
+      <section class="atf-profile__panel" id="af-apui-tab-activity" data-panel="activity" data-lazy-url="member.php?action=profile&amp;uid={$memprofile['uid']}&amp;af_profile_tab=activity" hidden>{$atf_profile_activity}</section>
     </div>
 
   </section>
