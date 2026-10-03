@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.5');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.6');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -146,7 +146,7 @@ function af_adaptivethemeframework_normalizer_diagnostic(string $seed, string $c
         $lines[] = $prefix . 'called=yes';
         $lines[] = $prefix . 'returned=' . (string)($call['returned'] ?? 'null');
         if (array_key_exists('changed', $call)) $lines[] = $prefix . 'changed=' . ($call['changed'] ? 'yes' : 'no');
-        foreach (['start_marker_count', 'end_marker_count', 'marker_count', 'variable_count', 'normalized_checksum'] as $field) {
+        foreach (['start_marker_count', 'end_marker_count', 'marker_count', 'variable_count', 'backup_match', 'legacy_disable_match', 'normalized_checksum'] as $field) {
             if (array_key_exists($field, $call)) $lines[] = $field . '=' . $call[$field];
         }
     }
