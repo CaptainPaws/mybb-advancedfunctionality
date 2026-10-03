@@ -16,11 +16,15 @@ require AF_ADDONS.'advancedmenu/advancedmenu.php';
 $items = af_menu_collect_registry(true);
 $theme = $items['theme_switcher'] ?? null;
 if (!$theme || $theme['type'] !== 'widget') throw new RuntimeException('Theme switcher is not a widget.');
-if ($theme['section'] !== 'settings' || $theme['allowed_containers'] !== ['user_drawer']) {
+if ($theme['section'] !== 'theme' || $theme['allowed_containers'] !== ['user_drawer']) {
     throw new RuntimeException('Theme widget placement contract changed.');
 }
 if (($theme['widget_config']['provider'] ?? '') !== 'mybb_footer_theme_select') {
     throw new RuntimeException('Theme widget no longer declares the MyBB provider.');
+}
+$sections = af_menu_sections();
+if (($sections['theme'] ?? '') !== 'Тема') {
+    throw new RuntimeException('Theme tab is missing from drawer sections.');
 }
 if (isset($theme['action']['url'])) throw new RuntimeException('Widget must not expose a fake URL.');
 
