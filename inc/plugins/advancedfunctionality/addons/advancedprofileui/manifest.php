@@ -11,7 +11,12 @@ return [
     // ATF activation can safely hand off APUI-owned full templates by their
     // explicit owner markers after an ATF -> legacy/APUI -> ATF lifecycle.
     'compatibility_providers' => [
-        'adaptivethemeframework' => 'af_apui_register_atf_compatibility_normalizer',
+        'adaptivethemeframework' => [
+            'callback' => 'af_apui_register_atf_compatibility_normalizer',
+            // APUI may already be disabled when ATF is re-enabled, but its
+            // backup table still proves a legitimate APUI restore predecessor.
+            'load_when_disabled' => true,
+        ],
     ],
     'frontend' => [
         'mode' => 'contextual',
