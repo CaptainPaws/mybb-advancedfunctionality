@@ -898,7 +898,7 @@ function af_adaptivethemeframework_profile_context(array $member, array $values)
     $memberKeys = ['uid', 'username', 'usergroup', 'displaygroup', 'avatar', 'usertitle', 'regdate', 'lastactive', 'af_advancedpostcounter'];
     $avatars = function_exists('af_apui_get_profile_avatars')
         ? af_apui_get_profile_avatars($uid, false)
-        : ['primary_avatar' => '', 'secondary_avatar' => '', 'secondary_avatar_missing' => true];
+        : ['primary_avatar' => '', 'secondary_avatar' => '', 'display_avatar' => '', 'secondary_avatar_missing' => true];
     return [
         'uid' => $uid,
         'username' => (string)($member['username'] ?? ''),
@@ -988,6 +988,7 @@ function af_adaptivethemeframework_post_context(array $post): array
         'af_aa_user_class', 'af_apui_presence_html', 'af_apui_profile_fields_html',
         'af_apui_author_statistics_html', 'af_apui_actionbar_html', 'af_apui_rail_html',
         'af_apui_plaque_html', 'advancedpostcounter', 'af_apc_atf_html',
+        'af_apui_secondary_avatar', 'af_apui_display_avatar',
     ];
     $data = ['actions_html' => $actions];
     foreach ($keys as $key) $data[$key] = (string)($post[$key] ?? '');

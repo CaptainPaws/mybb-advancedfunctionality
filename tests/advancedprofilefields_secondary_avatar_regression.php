@@ -5,8 +5,13 @@ $apf = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adva
 $apui = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/advancedprofileui.php');
 $atf = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/adaptivethemeframework.php');
 $template = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/templates/usercp_avatar.html');
+$apuiPostbit = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/templates/postbit_classic.html');
+$atfPostbit = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/templates/postbit_classic.html');
+$apuiProfile = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/templates/member_profile.html');
+$apuiCss = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/assets/advancedprofileui.css');
+$atfCss = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.css');
 
-foreach ([$apf, $apui, $atf, $template] as $source) {
+foreach ([$apf, $apui, $atf, $template, $apuiPostbit, $atfPostbit, $apuiProfile, $apuiCss, $atfCss] as $source) {
     if ($source === false) {
         throw new RuntimeException('Secondary-avatar integration source is missing.');
     }
@@ -42,6 +47,28 @@ if (!str_contains($apui, 'function af_apui_get_profile_avatars')
 }
 if (!str_contains($atf, "'avatars' => " . '$avatars')) {
     throw new RuntimeException('ATF profile context does not transport the avatar provider.');
+}
+if (str_contains($apf, 'Размер изображения не должен превышать')
+    || !str_contains($apf, 'Рекомендуемый размер: 200×250 px')) {
+    throw new RuntimeException('Secondary-avatar dimensions must be a display recommendation, not upload validation.');
+}
+if (!str_contains($apf, 'af_apf_system_value_cache')) {
+    throw new RuntimeException('Secondary-avatar storage reads must use a request-local cache.');
+}
+foreach ([$apuiPostbit, $atfPostbit] as $postbit) {
+    if (!str_contains($postbit, "{\$post['af_apui_display_avatar']}")) {
+        throw new RuntimeException('A postbit surface does not use the secondary-avatar presentation payload.');
+    }
+}
+if (!str_contains($apuiProfile, '{$af_apui_profile_portrait}')
+    || !str_contains($apui, "'display_avatar'")
+    || !str_contains($atf, "'af_apui_display_avatar'")) {
+    throw new RuntimeException('Profile/ATF avatar transport is incomplete.');
+}
+foreach ([$apuiCss, $atfCss] as $css) {
+    if (!str_contains($css, 'object-fit: cover') || !str_contains($css, 'object-position: center center')) {
+        throw new RuntimeException('Avatar crop styling is incomplete.');
+    }
 }
 
 echo "AdvancedProfileFields secondary avatar regression checks passed.\n";

@@ -927,16 +927,32 @@ function af_apf_ensure_values_schema(): bool
 function af_apf_get_system_value(int $uid, string $key): string
 {
     global $db;
+    static $schemaAvailable = null;
     if ($uid <= 0 || !preg_match('~^[a-z0-9_]{1,64}$~', $key)
-        || !is_object($db) || !$db->table_exists(AF_APF_VALUES_TABLE)) {
+        || !is_object($db)) {
         return '';
     }
-    return (string)$db->fetch_field($db->simple_select(
+    if ($schemaAvailable === null) {
+        $schemaAvailable = $db->table_exists(AF_APF_VALUES_TABLE);
+    }
+    if (!$schemaAvailable) {
+        return '';
+    }
+    if (!isset($GLOBALS['af_apf_system_value_cache']) || !is_array($GLOBALS['af_apf_system_value_cache'])) {
+        $GLOBALS['af_apf_system_value_cache'] = [];
+    }
+    $cache =& $GLOBALS['af_apf_system_value_cache'];
+    $cacheKey = $uid . ':' . $key;
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
+    $cache[$cacheKey] = (string)$db->fetch_field($db->simple_select(
         AF_APF_VALUES_TABLE,
         'field_value',
         "uid='" . $uid . "' AND field_key='" . $db->escape_string($key) . "'",
         ['limit' => 1]
     ), 'field_value');
+    return $cache[$cacheKey];
 }
 
 function af_apf_set_system_value(int $uid, string $key, string $value): bool
@@ -945,8 +961,12 @@ function af_apf_set_system_value(int $uid, string $key, string $value): bool
     if ($uid <= 0 || !preg_match('~^[a-z0-9_]{1,64}$~', $key) || !af_apf_ensure_values_schema()) {
         return false;
     }
+    if (!isset($GLOBALS['af_apf_system_value_cache']) || !is_array($GLOBALS['af_apf_system_value_cache'])) {
+        $GLOBALS['af_apf_system_value_cache'] = [];
+    }
     if ($value === '') {
         $db->delete_query(AF_APF_VALUES_TABLE, "uid='{$uid}' AND field_key='" . $db->escape_string($key) . "'");
+        $GLOBALS['af_apf_system_value_cache'][$uid . ':' . $key] = '';
         return true;
     }
     $db->replace_query(AF_APF_VALUES_TABLE, [
@@ -955,6 +975,7 @@ function af_apf_set_system_value(int $uid, string $key, string $value): bool
         'field_value' => $db->escape_string($value),
         'updated_at' => defined('TIME_NOW') ? TIME_NOW : time(),
     ]);
+    $GLOBALS['af_apf_system_value_cache'][$uid . ':' . $key] = $value;
     return true;
 }
 
@@ -1095,12 +1116,6 @@ function af_apf_validate_secondary_avatar_upload(array $file): string
     if (!is_array($info) || !isset($allowed[$mime]) || (int)($info[2] ?? 0) !== $allowed[$mime]) {
         return 'Разрешены только настоящие изображения JPG, PNG, WEBP и GIF.';
     }
-    $dimensions = (string)($mybb->settings['maxavatardims'] ?? '');
-    if (preg_match('~^(\\d+)\\s*[x|]\\s*(\\d+)$~i', $dimensions, $match)) {
-        if ((int)$info[0] > (int)$match[1] || (int)$info[1] > (int)$match[2]) {
-            return 'Размер изображения не должен превышать ' . (int)$match[1] . '×' . (int)$match[2] . ' пикселей.';
-        }
-    }
     return '';
 }
 
@@ -1121,8 +1136,7 @@ function af_apf_usercp_avatar_end(): void
         ? '<button type="submit" class="button atf-button atf-button--danger" name="remove_secondary_avatar" value="1">Удалить</button>' : '';
     $errorHtml = $error !== '' ? '<div class="error af-apf-secondary-avatar__error" role="alert">' . htmlspecialchars_uni($error) . '</div>' : '';
     $maxKb = max(0, (int)($mybb->settings['maxavatarsize'] ?? 0));
-    $dims = htmlspecialchars_uni((string)($mybb->settings['maxavatardims'] ?? ''));
-    $limits = trim(($maxKb > 0 ? $maxKb . ' КБ' : '') . ($dims !== '' ? ', ' . $dims . ' px' : ''), ', ');
+    $fileLimit = $maxKb > 0 ? '; размер файла — до ' . $maxKb . ' КБ' : '';
     $GLOBALS['af_apf_secondary_avatar'] = '<section class="atf-card atf-form-section af-apf-secondary-avatar" data-af-apf-secondary-avatar="1">'
         . '<h2>Аватар персонажа</h2>' . $errorHtml
         . '<div class="af-apf-secondary-avatar__layout"><div class="af-apf-secondary-avatar__preview">' . $preview . '</div>'
@@ -1130,7 +1144,7 @@ function af_apf_usercp_avatar_end(): void
         . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$mybb->post_code) . '">'
         . '<input type="hidden" name="action" value="do_apf_secondary_avatar">'
         . '<label class="atf-form-row"><span class="atf-form-row__label">Загрузить новое изображение</span>'
-        . '<span class="atf-form-row__hint">JPG, PNG, WEBP или GIF' . ($limits !== '' ? '; до ' . $limits : '') . '.</span>'
+        . '<span class="atf-form-row__hint">JPG, PNG, WEBP или GIF' . $fileLimit . '. Рекомендуемый размер: 200×250 px. Изображения большего размера будут автоматически вписаны в область аватара при отображении.</span>'
         . '<input type="file" name="secondary_avatar_upload" class="fileupload" accept="image/jpeg,image/png,image/webp,image/gif"></label>'
         . '<div class="atf-form-actions"><button type="submit" class="button atf-button">Сохранить дополнительный аватар</button>' . $remove . '</div>'
         . '</form></div></section>';
