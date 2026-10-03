@@ -223,6 +223,14 @@ function af_menu_ensure_registry_overrides(?array $registry = null): void
             // Stage-2 defaults pointed at legacy aliases. Move only pristine
             // rows; an administrator-edited row has a different updated_at.
             $row = $db->fetch_array($db->simple_select(AF_AM_TABLE_OVERRIDES, '*', $where, ['limit'=>1]));
+            // Theme used to live in the generic settings section. This is a
+            // one-way presentation migration so existing installs get the new
+            // dedicated tab even when other placement fields were customized.
+            if ($row && $key === 'theme_switcher' && $source === 'mybb'
+                && (string)($row['section'] ?? '') === 'settings') {
+                $db->update_query(AF_AM_TABLE_OVERRIDES, ['section'=>'theme'], $where);
+                $row['section'] = 'theme';
+            }
             if ($row && (int)$row['created_at'] === (int)$row['updated_at']
                 && ((string)$row['container'] !== (string)$item['default_container']
                     || (string)($row['section'] ?? '') !== (string)$item['section'])) {
