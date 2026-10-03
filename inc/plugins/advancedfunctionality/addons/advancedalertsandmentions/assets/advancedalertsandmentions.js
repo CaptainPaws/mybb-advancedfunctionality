@@ -732,7 +732,8 @@
         function openModal() {
             renderModal();
             modal.classList.add('af-aam-modal-open');
-            modal.style.display = 'block';
+            modal.style.display = 'flex';
+            modal.setAttribute('aria-hidden', 'false');
 
             // "пробуждаем" звук от первого осознанного клика (по ссылке уведомлений)
             if (afAamSound && afAamUserSoundEnabled && !afAamSoundPrimed) {
@@ -749,6 +750,7 @@
         function closeModal() {
             modal.classList.remove('af-aam-modal-open');
             modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
         }
 
         // Клик по ссылке — открыть модалку
