@@ -17,16 +17,19 @@ foreach ([
     "['friends','ignore','search']",
     "function af_abdl_search_action",
     "fa-user-plus",
+    "fa-user-slash",
     "\$where=\"uid<>{\$uid}\"",
     "'order_by'=>'username','order_dir'=>'ASC','limit'=>50",
     "af_abdl_search_action(\$user,\$state)",
+    "af_abdl_native_add_friend_form(\$user).af_abdl_native_ignore_form(\$user)",
     "'action'=>'do_editlists'",
     "'manage'=>'buddy'",
+    "'manage'=>'ignored'",
     "'add_username'=>(string)\$user['username']",
     "'action'=>'acceptrequest'",
     "'action'=>'declinerequest'",
     "'action'=>'cancelrequest'",
-    "\$assetVersion='2.3.1'",
+    "\$assetVersion='2.3.2'",
 ] as $needle) {
     if (!str_contains($buddy,$needle)) throw new RuntimeException('Buddy search/native request contract missing: '.$needle);
 }
@@ -40,7 +43,7 @@ if (!str_contains($js,"data.set('ajax','1')") || !str_contains($js,"fetch(action
 if (!str_contains($aam,"\$mybb->get_input('af_abdl_return') !== '' ? 'buddy.php?tab=friends' : 'usercp.php?action=editlists'")) {
     throw new RuntimeException('Native buddy request alert does not return to Buddy List.');
 }
-if (!str_contains($manifest,"'version'     => '2.3.1'")) {
+if (!str_contains($manifest,"'version'     => '2.3.2'")) {
     throw new RuntimeException('Advanced Buddy List version mismatch.');
 }
 
