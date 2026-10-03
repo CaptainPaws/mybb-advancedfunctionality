@@ -19,7 +19,7 @@ foreach (get_included_files() as $includedFile) {
 }
 
 $required = [
-    'profile.hero', 'profile.navigation', 'profile.forum_info', 'profile.character_sheet',
+    'profile.hero', 'profile.navigation', 'profile.forum_info', 'profile.stats', 'profile.character_sheet',
     'profile.application', 'profile.timeline', 'profile.activity', 'profile.balance',
     'profile.post_counter', 'profile.before_content', 'profile.main', 'profile.after_content',
     'post.author.identity', 'post.author.meta', 'post.author.profile_fields', 'post.author.rail',
