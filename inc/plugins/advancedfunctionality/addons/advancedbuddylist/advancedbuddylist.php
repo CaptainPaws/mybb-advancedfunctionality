@@ -331,11 +331,21 @@ function af_abdl_render_page(): void
     if (empty($mybb->user['uid'])) error_no_permission();
     if (!af_abdl_is_enabled()) error('Advanced Buddy List отключён.');
     af_abdl_ensure_schema(); $uid=(int)$mybb->user['uid'];
-    $ajax=!empty($mybb->input['ajax']);
+    $ajax = !empty($mybb->input['ajax'])
+        || !empty($_POST['ajax'])
+        || !empty($_GET['ajax'])
+        || strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $valid=verify_post_check((string)($mybb->input['my_post_key'] ?? ''),true);
         $result=$valid ? af_abdl_apply_action((string)($mybb->input['action'] ?? ''),$uid,(int)($mybb->input['uid'] ?? 0)) : [false,'Неверный CSRF-токен.'];
-        if ($ajax) { header('Content-Type: application/json; charset=utf-8'); echo json_encode(['ok'=>$result[0],'message'=>$result[1]],JSON_UNESCAPED_UNICODE); exit; }
+        if ($ajax) {
+            if (!headers_sent()) {
+                header('Content-Type: application/json; charset=utf-8');
+                header('Cache-Control: no-store, no-cache, must-revalidate');
+            }
+            echo json_encode(['ok'=>(bool)$result[0],'message'=>(string)$result[1]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
         if (!$result[0]) error($result[1]);
         redirect('buddy.php?tab=' . (((string)$mybb->input['action']==='unignore'||(string)$mybb->input['action']==='ignore')?'ignore':'friends'),$result[1]);
     }
