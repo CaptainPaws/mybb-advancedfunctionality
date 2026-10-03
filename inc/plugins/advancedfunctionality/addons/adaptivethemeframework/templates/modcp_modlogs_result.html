@@ -1,10 +1,10 @@
-<article class="atf-modcp-list-card atf-modcp-log-card">
-  <div class="atf-modcp-log-card__primary">
+<article class="atf-card atf-modcp-list-card atf-modcp-log-card">
+  <div class="atf-modcp-log-card__primary atf-card__identity">
     <div class="atf-modcp-log-card__user">{$logitem['profilelink']}</div>
     <div class="atf-modcp-log-card__action">{$logitem['action']}</div>
   </div>
-  <div class="atf-modcp-log-card__information">{$information}</div>
-  <dl class="atf-modcp-log-card__meta atf-meta">
+  <div class="atf-modcp-log-card__information atf-card__body">{$information}</div>
+  <dl class="atf-modcp-log-card__meta atf-card__metadata atf-meta">
     <div><dt>{$lang->date}</dt><dd>{$log_date}</dd></div>
     <div><dt>{$lang->ip}</dt><dd>{$logitem['ipaddress']}</dd></div>
   </dl>
