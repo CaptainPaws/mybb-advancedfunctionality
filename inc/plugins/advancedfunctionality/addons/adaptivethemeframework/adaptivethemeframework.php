@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.7');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.8');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -992,7 +992,7 @@ function af_adaptivethemeframework_post_context(array $post): array
         'af_aa_user_class', 'af_apui_presence_html', 'af_apui_profile_fields_html',
         'af_apui_author_statistics_html', 'af_apui_actionbar_html', 'af_apui_rail_html',
         'af_apui_plaque_html', 'advancedpostcounter', 'af_apc_atf_html',
-        'af_apui_secondary_avatar', 'af_apui_display_avatar',
+        'af_apui_secondary_avatar', 'af_apui_display_avatar', 'af_apf_secondary_avatar_url', 'af_atf_display_avatar',
     ];
     $data = ['actions_html' => $actions];
     foreach ($keys as $key) $data[$key] = (string)($post[$key] ?? '');
@@ -1004,25 +1004,29 @@ function af_adaptivethemeframework_post_context(array $post): array
 /** Materialize every post slot without imposing a DOM or changing templates. */
 function af_adaptivethemeframework_resolve_post_display_avatar(array $post): string
 {
+    // APF's postbit hook is the canonical producer when it is enabled.
+    $materialized = trim((string)($post['af_atf_display_avatar']
+        ?? $post['af_apui_display_avatar']
+        ?? ''));
+    $secondaryUrl = trim((string)($post['af_apf_secondary_avatar_url']
+        ?? $post['af_apui_secondary_avatar']
+        ?? ''));
+
+    if ($secondaryUrl !== '' && $materialized !== '') {
+        return $materialized;
+    }
+
     $uid = max(0, (int)($post['uid'] ?? 0));
 
-    // APF owns the character/secondary avatar. ATF must not depend on
-    // AdvancedProfileUI being enabled merely to display that APF-owned value.
+    // Defensive fallback for load-order/custom-hook situations: resolve the
+    // APF value directly when its public helper is available.
     if ($uid > 0 && function_exists('af_apf_get_secondary_avatar')) {
         $secondary = trim((string)af_apf_get_secondary_avatar($uid));
         if ($secondary !== '') {
             $username = (string)($post['username'] ?? '');
-            if (function_exists('af_apui_render_avatar_image')) {
-                return af_apui_render_avatar_image(
-                    $secondary,
-                    $username,
-                    'af-apui-postbit-avatar__image atf-post__avatar-image'
-                );
-            }
-
             return '<img src="' . htmlspecialchars_uni($secondary)
                 . '" alt="' . htmlspecialchars_uni($username)
-                . '" class="atf-post__avatar-image" loading="lazy" decoding="async">';
+                . '" class="af-apf-secondary-avatar-image atf-post__avatar-image" loading="lazy" decoding="async">';
         }
     }
 
@@ -1035,11 +1039,25 @@ function af_adaptivethemeframework_compose_postbit(array &$post): void
     // The ATF-owned postbit template consumes a presentation value directly.
     // Materialize it here even when APUI is disabled or its postbit hook did
     // not run, so secondary avatars remain an APF -> ATF contract.
-    $post['af_apui_display_avatar'] = af_adaptivethemeframework_resolve_post_display_avatar($post);
-    $post['af_apui_secondary_avatar'] = '';
-    $uid = max(0, (int)($post['uid'] ?? 0));
-    if ($uid > 0 && function_exists('af_apf_get_secondary_avatar')) {
-        $post['af_apui_secondary_avatar'] = (string)af_apf_get_secondary_avatar($uid);
+    $displayAvatar = af_adaptivethemeframework_resolve_post_display_avatar($post);
+    $post['af_atf_display_avatar'] = $displayAvatar;
+    $post['af_apui_display_avatar'] = $displayAvatar;
+
+    // If APF has a secondary avatar, also replace the post-local MyBB avatar
+    // markup. This keeps older cached/custom postbit_classic templates that
+    // still consume {$post['useravatar']} consistent with the ATF seed.
+    $secondaryUrl = trim((string)($post['af_apf_secondary_avatar_url']
+        ?? $post['af_apui_secondary_avatar']
+        ?? ''));
+    if ($secondaryUrl === '') {
+        $uid = max(0, (int)($post['uid'] ?? 0));
+        if ($uid > 0 && function_exists('af_apf_get_secondary_avatar')) {
+            $secondaryUrl = trim((string)af_apf_get_secondary_avatar($uid));
+            $post['af_apui_secondary_avatar'] = $secondaryUrl;
+        }
+    }
+    if ($secondaryUrl !== '') {
+        $post['useravatar'] = $displayAvatar;
     }
 
     $context = af_adaptivethemeframework_post_context($post);
