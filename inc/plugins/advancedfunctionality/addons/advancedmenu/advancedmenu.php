@@ -32,7 +32,7 @@ function af_menu_containers(): array
 /** Drawer groups shared by providers and the ACP presentation controls. */
 function af_menu_sections(): array
 {
-    return ['profile'=>'Профиль', 'links'=>'Ссылки', 'settings'=>'Настройки'];
+    return ['profile'=>'Профиль', 'links'=>'Ссылки', 'settings'=>'Настройки', 'theme'=>'Тема'];
 }
 
 /** Return the stable storage key used by both custom and provider items. */
@@ -85,7 +85,7 @@ function af_menu_register_core_items(): void
     af_menu_register_item(['key'=>'todays_posts','label'=>'Сообщения за сегодня','icon'=>'fa-solid fa-calendar-day','type'=>'link','section'=>'links','default_container'=>'user_drawer','default_sortorder'=>60,'visibility'=>$member,'action'=>['url'=>'search.php?action=getdaily']]);
     af_menu_register_item(['key'=>'logout','label'=>'Выйти','icon'=>'fa-solid fa-right-from-bracket','type'=>'action/system','section'=>'settings','default_container'=>'user_drawer','default_sortorder'=>100,'visibility'=>$member,'action'=>['url'=>'member.php?action=logout&amp;logoutkey='.$postKey]]);
     af_menu_register_item(['key'=>'theme_switcher','label'=>'Тема','icon'=>'fa-solid fa-circle-half-stroke','type'=>'widget',
-        'section'=>'settings','default_container'=>'user_drawer','default_sortorder'=>80,'visibility'=>true,
+        'section'=>'theme','default_container'=>'user_drawer','default_sortorder'=>80,'visibility'=>true,
         'allowed_containers'=>['user_drawer'],'renderer'=>'af_advancedmenu_render_theme_widget',
         'widget_config'=>['provider'=>'mybb_footer_theme_select']]);
     af_menu_register_item(['key'=>'modcp','label'=>'Mod CP','icon'=>'fa-solid fa-shield-halved','type'=>'link','default_container'=>'secondary','default_sortorder'=>80,'visibility'=>$mod,'action'=>['url'=>'modcp.php']]);
@@ -224,8 +224,13 @@ function af_menu_ensure_registry_overrides(?array $registry = null): void
             // rows; an administrator-edited row has a different updated_at.
             $row = $db->fetch_array($db->simple_select(AF_AM_TABLE_OVERRIDES, '*', $where, ['limit'=>1]));
             if ($row && (int)$row['created_at'] === (int)$row['updated_at']
-                && (string)$row['container'] !== (string)$item['default_container']) {
-                $db->update_query(AF_AM_TABLE_OVERRIDES, ['container'=>$item['default_container'], 'sortorder'=>(int)$item['default_sortorder']], $where);
+                && ((string)$row['container'] !== (string)$item['default_container']
+                    || (string)($row['section'] ?? '') !== (string)$item['section'])) {
+                $db->update_query(AF_AM_TABLE_OVERRIDES, [
+                    'container'=>$item['default_container'],
+                    'section'=>(string)$item['section'],
+                    'sortorder'=>(int)$item['default_sortorder'],
+                ], $where);
             }
             continue; // Provider reloads must never overwrite administrator choices.
         }
@@ -1286,12 +1291,13 @@ function af_advancedmenu_build_drawer_html(): string
     $items = af_menu_configured_registry();
     $custom = af_advancedmenu_get_items();
     $seenProviders = [];
-    $out = '';
+    $panels = [];
+
     foreach ($sections as $section => $title) {
         $rows = [];
         foreach ($items as $item) {
             // Profile and logout are primary identity actions and are rendered
-            // in the drawer account card rather than repeated in the lists.
+            // in the drawer account card rather than repeated in the tabs.
             if (in_array((string)($item['key'] ?? ''), ['profile', 'logout'], true)) continue;
             if (($item['container'] ?? '') !== 'user_drawer' || ($item['section'] ?? 'links') !== $section
                 || empty($item['enabled']) || !af_menu_item_is_visible($item)) continue;
@@ -1309,12 +1315,39 @@ function af_advancedmenu_build_drawer_html(): string
         }
         if (!$rows) continue;
         usort($rows, static fn(array $a, array $b): int => [$a['sort'], $a['key']] <=> [$b['sort'], $b['key']]);
-        $out .= '<section class="af-am-drawer-section" aria-labelledby="af-am-section-'.$section.'">'
-            .'<h2 id="af-am-section-'.$section.'">'.$title.'</h2><ul class="af-am-drawer-list">'
-            .implode("\n", array_column($rows, 'html')).'</ul></section>';
+        $panels[$section] = [
+            'title'=>$title,
+            'html'=>implode("\n", array_column($rows, 'html')),
+        ];
     }
-    return $out;
+
+    if (!$panels) return '';
+
+    $tabs = '';
+    $content = '';
+    $first = true;
+    foreach ($panels as $section => $panel) {
+        $sectionEsc = htmlspecialchars_uni($section);
+        $titleEsc = htmlspecialchars_uni((string)$panel['title']);
+        $tabId = 'af-am-tab-'.$sectionEsc;
+        $panelId = 'af-am-panel-'.$sectionEsc;
+        $activeClass = $first ? ' is-active' : '';
+
+        $tabs .= '<button type="button" class="af-am-drawer-tab'.$activeClass.'" id="'.$tabId.'" role="tab"'
+            .' aria-selected="'.($first ? 'true' : 'false').'" aria-controls="'.$panelId.'" tabindex="'.($first ? '0' : '-1').'"'
+            .' data-af-am-tab="'.$sectionEsc.'">'.$titleEsc.'</button>';
+        $content .= '<section class="af-am-drawer-panel'.$activeClass.'" id="'.$panelId.'" role="tabpanel"'
+            .' aria-labelledby="'.$tabId.'" data-af-am-panel="'.$sectionEsc.'"'.($first ? '' : ' hidden').'>'
+            .'<ul class="af-am-drawer-list">'.$panel['html'].'</ul></section>';
+        $first = false;
+    }
+
+    return '<div class="af-am-drawer-tabs" data-af-am-tabs="1">'
+        .'<div class="af-am-drawer-tablist" role="tablist" aria-label="Разделы меню пользователя">'.$tabs.'</div>'
+        .'<div class="af-am-drawer-panels">'.$content.'</div></div>';
 }
+
+
 
 /** Render the drawer identity surface; avatar ownership stays with AdvancedAvatar. */
 function af_advancedmenu_render_drawer_account(): string
