@@ -710,16 +710,6 @@ function af_apf_apply_template_patches(bool $enable): void
             ],
         ],
 
-        // APF owns the secondary-avatar component; the native avatar form stays intact.
-        'usercp_avatar' => [
-            'enable' => [
-                ['~\\s*<!--\\s*af_apf_secondary_avatar\\s*-->.*?<!--\\s*/af_apf_secondary_avatar\\s*-->\\s*~is', "\n", -1],
-                ['~(</div>\\s*</main>)~i', "<!-- af_apf_secondary_avatar -->\n{\$af_apf_secondary_avatar}\n<!-- /af_apf_secondary_avatar -->\n$1", 1],
-            ],
-            'disable' => [
-                ['~\\s*<!--\\s*af_apf_secondary_avatar\\s*-->.*?<!--\\s*/af_apf_secondary_avatar\\s*-->\\s*~is', "\n", -1],
-            ],
-        ],
 
         /* =========================
            POSTBIT: author_statistics (posts/threads/registered)
@@ -850,6 +840,80 @@ function af_apf_purge_templates_cache(array $sids = []): void
         $cache->delete('templates--1');
     }
 }
+
+/* -------------------- ATF COMPATIBILITY -------------------- */
+
+function af_apf_normalize_atf_avatar_template(string $templateName, string $current): ?array
+{
+    if ($templateName !== 'usercp_avatar'
+        || strpos($current, '{$af_apf_secondary_avatar}') !== false
+        || strpos($current, '<!-- af_apf_secondary_avatar -->') !== false
+        || !function_exists('af_adaptivethemeframework_template_seeds')) {
+        return null;
+    }
+
+    $seeds = af_adaptivethemeframework_template_seeds();
+    $seedPath = (string)($seeds['usercp_avatar'] ?? '');
+    if ($seedPath === '' || !is_file($seedPath)) {
+        return null;
+    }
+
+    $seed = @file_get_contents($seedPath);
+    if (!is_string($seed) || $seed === '') {
+        return null;
+    }
+
+    $slotPattern = '~\r?\n[ \t]*<!--\s*af_apf_secondary_avatar\s*-->[ \t]*\r?\n'
+        . '[ \t]*\{\$af_apf_secondary_avatar\}[ \t]*\r?\n'
+        . '[ \t]*<!--\s*/af_apf_secondary_avatar\s*-->[ \t]*(?=\r?\n)~';
+    $predecessor = preg_replace($slotPattern, '', $seed, 1, $removed);
+    if ($removed !== 1 || !is_string($predecessor) || $predecessor === $seed) {
+        return null;
+    }
+
+    $canonicalChecksum = static function (string $value): string {
+        if (function_exists('af_adaptivethemeframework_canonical_template_checksum')) {
+            return af_adaptivethemeframework_canonical_template_checksum($value);
+        }
+        $value = str_replace(["\r\n", "\r"], "\n", $value);
+        return hash('sha256', $value);
+    };
+
+    if (!hash_equals($canonicalChecksum($predecessor), $canonicalChecksum($current))) {
+        return null;
+    }
+
+    return [
+        'normalized_content' => $seed,
+        'owner' => AF_APF_ID,
+        'source' => 'secondary_avatar_atf_seed_upgrade',
+        'transformation_type' => 'exact_known_predecessor_seed_upgrade',
+        'diagnostic' => [
+            'marker_count' => 0,
+            'variable_count' => 0,
+        ],
+    ];
+}
+
+function af_apf_register_atf_compatibility_normalizer(): bool
+{
+    $identity = AF_APF_ID . '::secondary_avatar_seed_upgrade';
+    if (function_exists('af_adaptivethemeframework_register_compatibility_normalizer')) {
+        return af_adaptivethemeframework_register_compatibility_normalizer(
+            $identity,
+            'af_apf_normalize_atf_avatar_template',
+            'apf'
+        );
+    }
+
+    $GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizers'][$identity]
+        = 'af_apf_normalize_atf_avatar_template';
+    $GLOBALS['af_adaptivethemeframework_pending_compatibility_normalizer_prefixes'][$identity]
+        = 'apf';
+    return true;
+}
+
+af_apf_register_atf_compatibility_normalizer();
 
 /* -------------------- FRONT HOOKS -------------------- */
 
