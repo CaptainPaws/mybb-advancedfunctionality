@@ -6,10 +6,15 @@ $template = file_get_contents($addon . '/templates/index.html');
 $php = file_get_contents($addon . '/adaptivethemeframework.php');
 $css = file_get_contents($addon . '/assets/adaptivethemeframework.css');
 
-foreach (['{$headerinclude}', '{$header}', '{$fastnews}', '{$forums}', '{$boardstats}', '{$footer}'] as $value) {
+foreach (['{$headerinclude}', '{$header}', '{$forums}', '{$boardstats}', '{$footer}'] as $value) {
     if (substr_count((string)$template, $value) !== 1) {
         throw new RuntimeException("Index compatibility value must render exactly once: {$value}");
     }
+}
+if (str_contains((string)$template, '{$fastnews}')
+    || str_contains((string)$template, 'atf-index__hero')
+    || str_contains((string)$template, 'atf-index__title')) {
+    throw new RuntimeException('ATF index must not duplicate FastNews or render a board-name hero.');
 }
 foreach (['forumbit_depth1_cat', 'forumbit_depth2_forum', 'forumbit_depth2_forum_lastpost', 'forumdisplay_thread'] as $title) {
     $card = file_get_contents($addon . '/templates/' . $title . '.html');

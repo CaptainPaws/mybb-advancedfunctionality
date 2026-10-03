@@ -107,8 +107,9 @@ body.atf-active .atf-section { margin-block: var(--atf-space-6); }
 
 /* Index page and forum-card composition. */
 body.atf-active .atf-index { padding-block: var(--atf-space-6); }
-body.atf-active .atf-index__hero { margin-block-end: var(--atf-space-6); }
-body.atf-active .atf-index__title { margin: 0; font-size: clamp(1.75rem, 4vw, 2.75rem); line-height: 1.15; }
+/* The home page is already the root destination. Core's active breadcrumb is
+   useful on inner pages but becomes a redundant board-name heading here. */
+body.atf-active.atf-index-page .navigation { display: none; }
 body.atf-active .atf-index__section { margin-block: var(--atf-space-5); }
 body.atf-active .atf-index__section:empty { display: none; }
 body.atf-active .atf-index__forums { min-width: 0; }
