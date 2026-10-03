@@ -36,10 +36,18 @@ if (!str_contains($template, '{$atf_profile_stats}')
     || str_contains($template, '{$atf_profile_post_counter}')) {
     throw new RuntimeException('ATF profile must render one unified statistics surface.');
 }
-if (!str_contains($css, 'grid-template-columns: minmax(0, 1fr) minmax(260px, 340px) minmax(0, 1fr)')
+if (!str_contains($css, 'grid-template-columns: minmax(0, 1fr) minmax(240px, 320px) minmax(0, 1fr)')
     || !str_contains($css, '.af-apui-character-portrait__image')
-    || !str_contains($css, 'object-fit: cover')) {
+    || !str_contains($css, 'object-fit: cover')
+    || !str_contains($css, 'max-height: 280px')
+    || !str_contains($css, 'overflow-y: auto')
+    || !str_contains($css, 'max-width: 320px')) {
     throw new RuntimeException('Responsive three-column portrait composition is incomplete.');
+}
+
+if (!str_contains($apui, "['primary_avatar'] ?? ''")
+    || !str_contains($apui, "['secondary_avatar'] ?? ''")) {
+    throw new RuntimeException('Hero and character portrait must consume independent avatar roles.');
 }
 
 echo "Member profile character composition regression checks passed.\n";

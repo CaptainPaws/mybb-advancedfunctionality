@@ -334,7 +334,7 @@ function af_apui_render_atf_profile_hero(array $context): string
     $i = (array)($context['identity'] ?? []);
     $uidClass = htmlspecialchars_uni((string)($context['appearance']['uid_class'] ?? ''));
     return '<section class="atf-profile-hero ' . $uidClass . '" data-atf-profile-hero="1">'
-        . '<div class="atf-profile-hero__avatar">' . af_apui_render_avatar_image((string)($context['avatars']['display_avatar'] ?? ''), (string)($context['username'] ?? ''), 'atf-profile-hero__avatar-image') . '</div>'
+        . '<div class="atf-profile-hero__avatar">' . af_apui_render_avatar_image((string)($context['avatars']['primary_avatar'] ?? ''), (string)($context['username'] ?? ''), 'atf-profile-hero__avatar-image') . '</div>'
         . '<div class="atf-profile-hero__identity"><div class="atf-profile-hero__name">' . (string)($i['formattedname'] ?? '') . '</div>'
         . '<div class="atf-profile-hero__title">' . (string)($i['usertitle'] ?? '') . '</div>'
         . '<div class="atf-profile-hero__rank">' . (string)($i['groupimage'] ?? '') . (string)($i['userstars'] ?? '') . '</div></div>'
@@ -399,7 +399,11 @@ function af_apui_render_profile_character_workspace(array $context): string
         $rows .= '<div class="af-apui-character-row"><dt>' . htmlspecialchars_uni($label) . '</dt><dd>' . $value . '</dd></div>';
     }
     $avatars = (array)($context['avatars'] ?? af_apui_get_profile_avatars($uid, true));
-    $portrait = af_apui_render_avatar_image((string)($avatars['display_avatar'] ?? ''), (string)($context['username'] ?? ''), 'af-apui-character-portrait__image');
+    $portraitUrl = (string)($avatars['secondary_avatar'] ?? '');
+    if ($portraitUrl === '') {
+        $portraitUrl = (string)($avatars['primary_avatar'] ?? '');
+    }
+    $portrait = af_apui_render_avatar_image($portraitUrl, (string)($context['username'] ?? ''), 'af-apui-character-portrait__image');
     $about = trim((string)($payload['about_html'] ?? ''));
     if ($about === '') $about = '<p class="af-apui-empty">Описание персонажа пока не заполнено.</p>';
     if ($rows === '') $rows = '<p class="af-apui-empty">Данные анкеты пока не заполнены.</p>';
@@ -1639,7 +1643,7 @@ function af_apui_member_profile_prepare_layout_vars(): void
     $uid = max(0, (int)($memprofile['uid'] ?? 0));
     $avatars = af_apui_get_profile_avatars($uid, true);
     $GLOBALS['af_apui_profile_portrait'] = af_apui_render_avatar_image(
-        (string)$avatars['display_avatar'],
+        (string)$avatars['primary_avatar'],
         (string)($memprofile['username'] ?? ''),
         'af-apui-profile-portrait__image'
     );
