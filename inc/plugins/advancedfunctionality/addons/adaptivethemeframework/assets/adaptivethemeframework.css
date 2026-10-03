@@ -69,6 +69,19 @@ body.atf-active .pun.atf-page-shell {
   box-shadow: none;
 }
 
+/* advresponsivelayout deliberately applies !important legacy page geometry to
+   #content/.pun below 1024px.  Keep an ATF root on this one canonical gutter
+   instead of allowing addon load order to choose a second mobile/tablet one. */
+@media (max-width: 64rem) {
+  body.atf-active.af-rwd-enabled .pun.atf-page-shell {
+    width: 100% !important;
+    max-width: var(--atf-page-max-width) !important;
+    min-width: 0 !important;
+    margin-inline: auto !important;
+    padding-inline: var(--atf-page-gap) !important;
+  }
+}
+
 body.atf-active .atf-page {
   color: var(--atf-color-text);
   font-family: var(--atf-font-family);
