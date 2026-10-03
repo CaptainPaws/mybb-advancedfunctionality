@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.1');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1366,18 +1366,21 @@ function af_adaptivethemeframework_ucp_seed_navigation(): void
         ]);
     };
     $def('overview','', 'usercp.php',[], 'atf_ucp_nav_overview','home',10,$access,['','do_notepad']);
-    $def('profile','', 'usercp.php',['action'=>'profile'], 'atf_ucp_nav_profile','user',20,$access,['profile','do_profile','avatar','do_avatar','editsig','do_editsig']);
+    $def('profile','', 'usercp.php',['action'=>'profile'], 'atf_ucp_nav_profile','user',20,$access,['profile','do_profile','avatar','do_avatar','changename','do_changename','editsig','do_editsig']);
     $def('profile.edit','profile','usercp.php',['action'=>'profile'],'ucp_nav_edit_profile','user',10,$access,['profile','do_profile']);
-    $def('profile.avatar','profile','usercp.php',['action'=>'avatar'],'ucp_nav_change_avatar','user',20,static function(): bool { global $mybb; return af_adaptivethemeframework_ucp_can_access() && !empty($mybb->usergroup['canchangeavatar']); },['avatar','do_avatar']);
-    $def('profile.signature','profile','usercp.php',['action'=>'editsig'],'ucp_nav_edit_sig','file',30,'af_adaptivethemeframework_ucp_signature_visible',['editsig','do_editsig']);
-    $def('profile.public','profile','member.php',['action'=>'profile','uid'=>'{uid}'],'atf_ucp_nav_public_profile','user',40,$access,[]);
+    // The route is a native MyBB UCP surface. Keep it discoverable in the
+    // profile navigation and let MyBB enforce the actual avatar restrictions
+    // when the page is opened.
+    $def('profile.avatar','profile','usercp.php',['action'=>'avatar'],'ucp_nav_change_avatar','user',20,$access,['avatar','do_avatar']);
+    $def('profile.username','profile','usercp.php',['action'=>'changename'],'atf_ucp_nav_username','user',30,static function(): bool { global $mybb; return af_adaptivethemeframework_ucp_can_access() && (int)($mybb->usergroup['canchangename'] ?? 0) !== 0; },['changename','do_changename']);
+    $def('profile.signature','profile','usercp.php',['action'=>'editsig'],'ucp_nav_edit_sig','file',40,'af_adaptivethemeframework_ucp_signature_visible',['editsig','do_editsig']);
+    $def('profile.public','profile','member.php',['action'=>'profile','uid'=>'{uid}'],'atf_ucp_nav_public_profile','user',50,$access,[]);
     $GLOBALS['af_adaptivethemeframework_ucp_navigation']['profile.public']['external'] = true;
     $def('preferences','', 'usercp.php',['action'=>'options'],'atf_ucp_nav_preferences','sliders',30,$access,['options','do_options']);
     $def('preferences.general','preferences','usercp.php',['action'=>'options'],'atf_ucp_nav_general_preferences','sliders',10,$access,['options','do_options']);
-    $def('security','', 'usercp.php',['action'=>'password'],'atf_ucp_nav_security','shield',40,$access,['password','do_password','email','do_email','changename','do_changename']);
+    $def('security','', 'usercp.php',['action'=>'password'],'atf_ucp_nav_security','shield',40,$access,['password','do_password','email','do_email']);
     $def('security.password','security','usercp.php',['action'=>'password'],'atf_ucp_nav_password','shield',10,$access,['password','do_password']);
     $def('security.email','security','usercp.php',['action'=>'email'],'atf_ucp_nav_email','envelope',20,$access,['email','do_email']);
-    $def('security.username','security','usercp.php',['action'=>'changename'],'atf_ucp_nav_username','user',30,static function(): bool { global $mybb; return af_adaptivethemeframework_ucp_can_access() && (int)($mybb->usergroup['canchangename'] ?? 0) !== 0; },['changename','do_changename']);
     $def('social','', 'usercp.php',['action'=>'editlists'],'atf_ucp_nav_social','users',50,$access,['editlists','do_editlists','acceptrequest','declinerequest','cancelrequest','usergroups']);
     $def('social.lists','social','usercp.php',['action'=>'editlists'],'atf_ucp_nav_buddy_ignore','users',10,$access,['editlists','do_editlists','acceptrequest','declinerequest','cancelrequest']);
     $def('social.groups','social','usercp.php',['action'=>'usergroups'],'atf_ucp_nav_group_memberships','users',20,$access,['usergroups']);
