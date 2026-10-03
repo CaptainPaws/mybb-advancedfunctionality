@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.4');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.5');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -29,14 +29,18 @@ function af_adaptivethemeframework_discover_compatibility_providers(): void
     foreach (af_discover_addons() as $manifest) {
         $id = strtolower(trim((string)($manifest['id'] ?? '')));
         $providers = $manifest['compatibility_providers'] ?? [];
-        $callback = is_array($providers) ? ($providers[AF_ADAPTIVETHEMEFRAMEWORK_ID] ?? null) : null;
-        if ($id === '' || !is_string($callback) || $callback === '') {
+        $provider = is_array($providers) ? ($providers[AF_ADAPTIVETHEMEFRAMEWORK_ID] ?? null) : null;
+        $callback = is_string($provider)
+            ? $provider
+            : (is_array($provider) ? (string)($provider['callback'] ?? '') : '');
+        $loadWhenDisabled = is_array($provider) && !empty($provider['load_when_disabled']);
+        if ($id === '' || $callback === '') {
             continue;
         }
         $enabled = function_exists('af_is_addon_enabled')
             ? af_is_addon_enabled($id)
             : (string)($mybb->settings['af_' . $id . '_enabled'] ?? '0') === '1';
-        if (!$enabled) {
+        if (!$enabled && !$loadWhenDisabled) {
             continue;
         }
         $bootstrap = (string)($manifest['bootstrap'] ?? '');
