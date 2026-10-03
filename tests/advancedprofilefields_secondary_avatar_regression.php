@@ -40,6 +40,13 @@ if (str_contains($apf, "ALTER TABLE") && str_contains($apf, "users")) {
 if (!str_contains($template, '{$af_apf_secondary_avatar}')) {
     throw new RuntimeException('ATF avatar page does not expose the APF component slot.');
 }
+if (!str_contains($apf, 'function af_apf_normalize_atf_avatar_template')
+    || !str_contains($apf, 'secondary_avatar_atf_seed_upgrade')) {
+    throw new RuntimeException('APF must provide the ATF avatar seed-upgrade normalizer.');
+}
+if (str_contains($apf, "'usercp_avatar' => [")) {
+    throw new RuntimeException('APF must not patch ATF-owned usercp_avatar directly.');
+}
 if (!str_contains($apui, 'function af_apui_get_profile_avatars')
     || !str_contains($apui, "'primary_avatar'")
     || !str_contains($apui, "'secondary_avatar'")) {
