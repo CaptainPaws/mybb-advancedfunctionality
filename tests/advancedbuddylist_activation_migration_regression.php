@@ -35,8 +35,6 @@ if ($mark === false || $themeMigration === false || $mark < $themeMigration) {
 
 foreach ([
     "\$stage = 'migrate_identity'",
-    "\$stage = 'ensure_schema'",
-    "\$stage = 'migrate_legacy_relations'",
     "\$stage = 'install_page_alias'",
     "af_store_addon_lifecycle_diagnostic(AF_ABDL_ID, 'enable', \$stage, \$error)",
     'throw $error;',
@@ -46,7 +44,7 @@ foreach ([
     }
 }
 
-if (($manifest['id'] ?? '') !== 'advancedbuddylist' || ($manifest['version'] ?? '') !== '2.1.2') {
+if (($manifest['id'] ?? '') !== 'advancedbuddylist' || ($manifest['version'] ?? '') !== '2.3.0') {
     throw new RuntimeException('Advanced Buddy List manifest version/id mismatch.');
 }
 
