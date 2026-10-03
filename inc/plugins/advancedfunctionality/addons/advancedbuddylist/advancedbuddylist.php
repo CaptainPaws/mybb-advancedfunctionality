@@ -192,7 +192,9 @@ function af_abdl_native_form(array $fields,string $label,string $class='',string
     $extraClass=$iconHtml!=='' ? ' af-abdl-icon-btn' : '';
     $formClass=$iconHtml!=='' ? ' af-abdl-icon-action' : '';
 
-    return '<form class="af-abdl-action'.$formClass.'" method="post" action="usercp.php">'
+    $actionUrl=rtrim((string)($mybb->settings['bburl'] ?? ''), '/').'/usercp.php';
+
+    return '<form class="af-abdl-action'.$formClass.'" method="post" action="'.htmlspecialchars_uni($actionUrl).'">'
         .$hidden
         .'<button class="af-abdl-btn '.$class.$extraClass.'" type="submit" title="'.htmlspecialchars_uni($label).'" aria-label="'.htmlspecialchars_uni($label).'">'
         .$labelHtml
@@ -340,7 +342,7 @@ function af_abdl_render_page(): void
     }
 
     $base=rtrim((string)$mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/'.AF_ABDL_ID.'/assets/';
-    $assetVersion='2.3.0';
+    $assetVersion='2.3.1';
     $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni($base.'advancedbuddylist.css?v='.$assetVersion).'"><script defer src="'.htmlspecialchars_uni($base.'advancedbuddylist.js?v='.$assetVersion).'"></script>';
     $tabs='';
     foreach(['friends'=>'Друзья','ignore'=>'Игнор-лист','search'=>'Поиск'] as $key=>$label) {

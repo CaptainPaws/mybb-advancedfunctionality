@@ -12,7 +12,7 @@ foreach ([
     "'action'=>'acceptrequest'",
     "'action'=>'declinerequest'",
     "'action'=>'cancelrequest'",
-    "action=\"usercp.php\"",
+    "rtrim((string)(\$mybb->settings['bburl'] ?? ''), '/').'/usercp.php'",
 ] as $needle) {
     if (!str_contains($source,$needle)) throw new RuntimeException('Missing native MyBB friendship contract: '.$needle);
 }
