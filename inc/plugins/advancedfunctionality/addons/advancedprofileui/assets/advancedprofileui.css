@@ -399,6 +399,22 @@ body.af-apui-thread-page .pun.af-apui-thread-pun {
   display: none !important;
 }
 
+.af-apui-profile-portrait {
+  width: min(200px, 100%);
+  aspect-ratio: 4 / 5;
+  margin: 16px auto;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.af-apui-profile-portrait__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+}
+
 .af-apui-profile-hero__inner {
   position: relative;
   z-index: 2;
@@ -773,13 +789,18 @@ body.af-apui-member-profile-page #af-apui-tab-application .af-apui-tab-card__bod
   background: rgba(19, 19, 19, 0.47);
   backdrop-filter: blur(6px);
   box-sizing: border-box;
+  width: min(200px, 100%);
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
 }
 
 .af-apui-postbit-avatar-frame img {
   display: block;
   border: 1px solid rgba(255,255,255,.2);
-  max-width: 100%;
-  height: auto;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
 }
 
 .af-apui-postbit-online {
@@ -2709,4 +2730,19 @@ body.af-apui-surface-body[data-af-apui-surface="achievements"] > :first-child,
   width: 100%;
   height: 100%;
   line-height: 1;
+}
+
+/* Character portraits keep a stable crop after legacy responsive avatar rules. */
+.af-apui-postbit-avatar-frame {
+  width: min(200px, 100%);
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+}
+
+.af-apui-postbit-avatar-frame img {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
+  object-fit: cover;
+  object-position: center center;
 }

@@ -318,6 +318,10 @@ function af_apui_register_atf_profile_providers(): bool
         'owner' => AF_APUI_ID, 'key' => 'profile_navigation', 'slot' => 'profile.navigation',
         'renderer' => 'af_apui_render_atf_profile_navigation',
     ]) || $registered;
+    $registered = af_adaptivethemeframework_register_component([
+        'owner' => AF_APUI_ID, 'key' => 'profile_portrait', 'slot' => 'profile.before_content',
+        'renderer' => 'af_apui_render_atf_profile_portrait',
+    ]) || $registered;
     return $registered;
 }
 
@@ -337,6 +341,24 @@ function af_apui_render_atf_profile_hero(array $context): string
         . '</section>';
 }
 
+function af_apui_render_avatar_image(string $url, string $username, string $class): string
+{
+    if (trim($url) === '') {
+        return '';
+    }
+    return '<img src="' . htmlspecialchars_uni($url) . '" alt="' . htmlspecialchars_uni($username)
+        . '" class="' . htmlspecialchars_uni($class) . '" loading="lazy" decoding="async">';
+}
+
+/** Character portrait for the profile workspace; the hero retains MyBB's account avatar. */
+function af_apui_render_atf_profile_portrait(array $context): string
+{
+    $avatars = (array)($context['avatars'] ?? []);
+    $url = (string)($avatars['display_avatar'] ?? '');
+    $image = af_apui_render_avatar_image($url, (string)($context['username'] ?? ''), 'af-apui-profile-portrait__image');
+    return $image === '' ? '' : '<aside class="af-apui-profile-portrait" aria-label="Портрет персонажа">' . $image . '</aside>';
+}
+
 /** Stable provider contract: primary remains MyBB-owned, secondary remains APF-owned. */
 function af_apui_get_profile_avatars(int $uid, bool $fallbackSecondaryToPrimary = false): array
 {
@@ -352,11 +374,19 @@ function af_apui_get_profile_avatars(int $uid, bool $fallbackSecondaryToPrimary 
     if ($primary === '' && function_exists('af_adaptivethemeframework_default_avatar_url')) {
         $primary = af_adaptivethemeframework_default_avatar_url();
     }
+    if ($primary === '') {
+        global $theme;
+        $primary = str_replace('{theme}', (string)($theme['imgdir'] ?? 'images'), (string)($mybb->settings['useravatar'] ?? 'images/default_avatar.png'));
+        if (!preg_match('~^(?:https?:)?//|^data:|^/~i', $primary)) {
+            $primary = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/' . ltrim($primary, './');
+        }
+    }
     $secondary = function_exists('af_apf_get_secondary_avatar')
         ? af_apf_get_secondary_avatar($uid) : '';
     return [
         'primary_avatar' => $primary,
         'secondary_avatar' => $secondary !== '' ? $secondary : ($fallbackSecondaryToPrimary ? $primary : ''),
+        'display_avatar' => $secondary !== '' ? $secondary : $primary,
         'secondary_avatar_missing' => $secondary === '',
     ];
 }
@@ -1339,6 +1369,12 @@ function af_apui_postbit_compose_userdetails(array &$post): void
     $uid = (int)($post['uid'] ?? 0);
     $pid = (int)($post['pid'] ?? 0);
     $post['af_aa_user_class'] = $uid > 0 ? 'af-aa-postbit-user-' . $uid : '';
+    $secondaryAvatar = $uid > 0 && function_exists('af_apf_get_secondary_avatar')
+        ? af_apf_get_secondary_avatar($uid) : '';
+    $post['af_apui_secondary_avatar'] = $secondaryAvatar;
+    $post['af_apui_display_avatar'] = $secondaryAvatar !== ''
+        ? af_apui_render_avatar_image($secondaryAvatar, (string)($post['username'] ?? ''), 'af-apui-postbit-avatar__image')
+        : (string)($post['useravatar'] ?? '');
 
     $levelValue = '1';
 
@@ -1419,6 +1455,14 @@ function af_apui_member_profile_prepare_layout_vars(): void
     if (!defined('THIS_SCRIPT') || THIS_SCRIPT !== 'member.php') {
         return;
     }
+
+    $uid = max(0, (int)($memprofile['uid'] ?? 0));
+    $avatars = af_apui_get_profile_avatars($uid, true);
+    $GLOBALS['af_apui_profile_portrait'] = af_apui_render_avatar_image(
+        (string)$avatars['display_avatar'],
+        (string)($memprofile['username'] ?? ''),
+        'af-apui-profile-portrait__image'
+    );
 
     $forumPairs = [
         [
