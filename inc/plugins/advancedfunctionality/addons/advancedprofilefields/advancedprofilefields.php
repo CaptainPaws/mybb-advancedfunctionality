@@ -939,6 +939,11 @@ function af_advancedprofilefields_init(): void
     $GLOBALS['af_apf_hooks_registered'] = true;
     $plugins->add_hook('usercp_start', 'af_apf_usercp_start', 5);
     $plugins->add_hook('usercp_avatar_end', 'af_apf_usercp_avatar_end', 100);
+    // Secondary avatar is APF-owned data. Materialize its post presentation
+    // before APUI/ATF compose their own postbit payloads.
+    $plugins->add_hook('postbit', 'af_apf_postbit_secondary_avatar', 20);
+    $plugins->add_hook('postbit_prev', 'af_apf_postbit_secondary_avatar', 20);
+    $plugins->add_hook('postbit_pm', 'af_apf_postbit_secondary_avatar', 20);
 }
 
 function af_advancedprofilefields_pre_output(&$page = ''): void
@@ -1054,6 +1059,31 @@ function af_apf_set_system_value(int $uid, string $key, string $value): bool
     ]);
     $GLOBALS['af_apf_system_value_cache'][$uid . ':' . $key] = $value;
     return true;
+}
+
+function af_apf_postbit_secondary_avatar(array &$post): void
+{
+    $uid = max(0, (int)($post['uid'] ?? 0));
+    $post['af_apf_secondary_avatar_url'] = '';
+    if ($uid <= 0) {
+        return;
+    }
+
+    $url = af_apf_get_secondary_avatar($uid);
+    if ($url === '') {
+        return;
+    }
+
+    $post['af_apf_secondary_avatar_url'] = $url;
+    $username = (string)($post['username'] ?? '');
+    $html = '<img src="' . htmlspecialchars_uni($url)
+        . '" alt="' . htmlspecialchars_uni($username)
+        . '" class="af-apf-secondary-avatar-image" loading="lazy" decoding="async">';
+
+    // Stable presentation payloads for both legacy/APUI and ATF consumers.
+    $post['af_apui_secondary_avatar'] = $url;
+    $post['af_apui_display_avatar'] = $html;
+    $post['af_atf_display_avatar'] = $html;
 }
 
 /** Public, normalized URL for the APF-owned secondary avatar, or an empty string. */
