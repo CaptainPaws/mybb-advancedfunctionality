@@ -6765,6 +6765,22 @@ function af_atf_parse_message(string $message, array $opts): string
     return $parser->parse_message($message, $options);
 }
 
+/**
+ * Resolve a stored character element to the key used by the shared element
+ * theme.  All element-aware surfaces must go through this allow-list rather
+ * than deriving a colour from unrelated profile data.
+ */
+function af_atf_resolve_element_theme_key(string $value): string
+{
+    $value = strtolower(trim($value));
+    $supported = [
+        'fire', 'water', 'air', 'wind', 'earth', 'ice', 'lightning', 'electric',
+        'nature', 'light', 'dark', 'space', 'void', 'mind', 'quantum', 'imaginary',
+        'aether', 'ether', 'anomaly', 'fusion', 'glacio', 'aero', 'havoc', 'spectro',
+    ];
+    return in_array($value, $supported, true) ? $value : '';
+}
+
 function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
 {
     global $templates;
@@ -6788,11 +6804,6 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
         return '';
     }
 
-    $supportedElements = [
-        'fire', 'water', 'air', 'wind', 'earth', 'ice', 'lightning', 'electric',
-        'nature', 'light', 'dark', 'space', 'void', 'mind', 'quantum', 'imaginary',
-        'aether', 'ether', 'anomaly', 'fusion', 'glacio', 'aero', 'havoc', 'spectro',
-    ];
     $elementThemeKey = '';
     $wikiTitle = '';
     $wikiElement = '';
@@ -6822,8 +6833,7 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
             continue;
         }
         if ($fieldName === 'character_element') {
-            $elementValue = strtolower($val);
-            $elementThemeKey = in_array($elementValue, $supportedElements, true) ? $elementValue : '';
+            $elementThemeKey = af_atf_resolve_element_theme_key($val);
         }
 
         $area = af_atf_get_wiki_area($f);
