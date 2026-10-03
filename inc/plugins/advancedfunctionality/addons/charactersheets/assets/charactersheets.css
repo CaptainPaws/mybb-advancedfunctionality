@@ -528,7 +528,7 @@
   justify-content: center;
   padding: 12px;
   box-sizing: border-box;
-  z-index: 9999;
+  z-index: 1000;
 }
 
 .af-cs-modal.is-open {
@@ -2289,7 +2289,7 @@
 .af-cs-confirm-modal {
   position: fixed;
   inset: 0;
-  z-index: 10001;
+  z-index: 1020;
   display: none;
   align-items: center;
   justify-content: center;
@@ -2515,7 +2515,7 @@
 
 .af-cs-equip-popover {
   position: fixed;
-  z-index: 10030;
+  z-index: 1020;
   width: min(320px, calc(100vw - 24px));
   border-radius: 12px;
   border: 1px solid rgba(92, 195, 255, 0.4);
@@ -2683,7 +2683,7 @@
 
 .af-cs-augment-popover {
   position: fixed;
-  z-index: 10060;
+  z-index: 1020;
   width: min(340px, calc(100vw - 20px));
   border-radius: 12px;
   border: 1px solid rgba(92, 195, 255, 0.45);

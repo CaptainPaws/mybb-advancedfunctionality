@@ -218,7 +218,7 @@
       });
     }
 
-    document.body.appendChild(modal);
+    (window.AFModalHost ? window.AFModalHost.mount(modal) : document.body.appendChild(modal));
     return modal;
   }
 

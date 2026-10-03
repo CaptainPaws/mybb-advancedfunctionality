@@ -332,7 +332,7 @@
         '</div>' +
       '</div>';
 
-    document.body.appendChild(wrap);
+    (window.AFModalHost ? window.AFModalHost.mount(wrap) : document.body.appendChild(wrap));
 
     return {
       modal: wrap,

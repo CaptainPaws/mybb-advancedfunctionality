@@ -157,7 +157,7 @@
 .af-wanted-chip-label { min-width: 0; overflow-wrap: anywhere; }
 .af-wanted-chip-image { display: block; width: 20px; max-width: 100%; height: 20px; object-fit: cover; object-position: center; }
 .af-wanted-chip-fallback { display: block; width: 20px; height: 20px; background: currentColor; opacity: .25; }
-.af-wanted-modal-backdrop { position: fixed; z-index: 10001; inset: 0; display: none; box-sizing: border-box; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,.45); }
+.af-wanted-modal-backdrop { position: fixed; z-index: 1000; inset: 0; display: none; box-sizing: border-box; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,.45); }
 .af-wanted-modal-backdrop.is-active { display: flex; }
 .af-wanted-modal { box-sizing: border-box; width: min(1100px, 100%); max-width: 100%; min-width: 0; max-height: calc(100vh - 40px); padding: 18px; overflow-y: auto; overflow-x: hidden; border-radius: 10px; background: #fff; color: #2f3b55; box-shadow: 0 12px 30px rgba(0,0,0,.2); }
 .af-wanted-modal-header { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
