@@ -44,7 +44,7 @@ foreach ([
     }
 }
 
-if (($manifest['id'] ?? '') !== 'advancedbuddylist' || ($manifest['version'] ?? '') !== '2.3.0') {
+if (($manifest['id'] ?? '') !== 'advancedbuddylist' || ($manifest['version'] ?? '') !== '2.3.1') {
     throw new RuntimeException('Advanced Buddy List manifest version/id mismatch.');
 }
 
