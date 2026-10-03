@@ -732,7 +732,7 @@
         function openModal() {
             renderModal();
             modal.classList.add('af-aam-modal-open');
-            modal.style.display = 'block';
+            modal.style.display = 'flex';
             modal.setAttribute('aria-hidden', 'false');
 
             // "пробуждаем" звук от первого осознанного клика (по ссылке уведомлений)
