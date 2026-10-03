@@ -73,9 +73,12 @@ if (str_contains($apf, 'Размер изображения не должен п
 if (!str_contains($apf, 'af_apf_system_value_cache')) {
     throw new RuntimeException('Secondary-avatar storage reads must use a request-local cache.');
 }
-foreach ([$apuiPostbit, $atfPostbit] as $postbit) {
-    if (!str_contains($postbit, "{\$post['af_apui_display_avatar']}")) {
-        throw new RuntimeException('A postbit surface does not use the secondary-avatar presentation payload.');
+if (!str_contains($apuiPostbit, "{\$post['af_apui_display_avatar']}")) {
+    throw new RuntimeException('APUI postbit does not preserve the MyBB avatar payload.');
+}
+foreach (["{\$post['af_atf_primary_avatar']}", "{\$post['af_atf_secondary_avatar']}"] as $avatarSlot) {
+    if (!str_contains($atfPostbit, $avatarSlot)) {
+        throw new RuntimeException('ATF postbit does not expose both independent avatar slots.');
     }
 }
 if (!str_contains($apuiProfile, '{$af_apui_profile_portrait}')

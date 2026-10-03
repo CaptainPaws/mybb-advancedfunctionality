@@ -992,7 +992,7 @@ function af_adaptivethemeframework_post_context(array $post): array
         'af_aa_user_class', 'af_apui_presence_html', 'af_apui_profile_fields_html',
         'af_apui_author_statistics_html', 'af_apui_actionbar_html', 'af_apui_rail_html',
         'af_apui_plaque_html', 'advancedpostcounter', 'af_apc_atf_html',
-        'af_apui_secondary_avatar', 'af_apui_display_avatar', 'af_apui_secondary_avatar_html', 'af_apf_secondary_avatar_url', 'af_atf_primary_avatar', 'af_atf_secondary_avatar',
+        'af_apui_secondary_avatar', 'af_apui_display_avatar', 'af_apf_secondary_avatar_url', 'af_atf_primary_avatar', 'af_atf_secondary_avatar',
     ];
     $data = ['actions_html' => $actions];
     foreach ($keys as $key) $data[$key] = (string)($post[$key] ?? '');
@@ -1002,58 +1002,11 @@ function af_adaptivethemeframework_post_context(array $post): array
 }
 
 /** Materialize every post slot without imposing a DOM or changing templates. */
-function af_adaptivethemeframework_resolve_secondary_avatar_url(int $uid, array $post = []): string
-{
-    static $cache = [];
-    if ($uid <= 0) return '';
-    if (array_key_exists($uid, $cache)) return $cache[$uid];
-
-    foreach (['af_apf_secondary_avatar_url', 'af_apui_secondary_avatar'] as $key) {
-        $value = trim((string)($post[$key] ?? ''));
-        if ($value !== '') return $cache[$uid] = $value;
-    }
-
-    if (function_exists('af_apf_get_secondary_avatar')) {
-        $value = trim((string)af_apf_get_secondary_avatar($uid));
-        if ($value !== '') return $cache[$uid] = $value;
-    }
-
-    if (function_exists('af_apui_get_profile_avatars')) {
-        $avatars = af_apui_get_profile_avatars($uid, false);
-        $value = trim((string)($avatars['secondary_avatar'] ?? ''));
-        if ($value !== '') return $cache[$uid] = $value;
-    }
-
-    global $db, $mybb;
-    if (is_object($db) && $db->table_exists('af_apf_values')) {
-        $row = $db->fetch_array($db->simple_select(
-            'af_apf_values',
-            'field_value',
-            "uid='" . (int)$uid . "' AND field_key='profile_secondary_avatar'",
-            ['limit' => 1]
-        ));
-        $path = trim((string)($row['field_value'] ?? ''));
-        if ($path !== '' && preg_match(
-            '~^uploads/avatars/secondary_' . (int)$uid . '_[a-f0-9]{32}\\.(?:jpe?g|png|webp|gif)$~i',
-            $path
-        )) {
-            return $cache[$uid] = rtrim((string)($mybb->settings['bburl'] ?? ''), '/')
-                . '/' . ltrim($path, '/');
-        }
-    }
-
-    return $cache[$uid] = '';
-}
-
 function af_adaptivethemeframework_resolve_post_secondary_avatar(array $post): string
 {
-    $materialized = trim((string)($post['af_atf_secondary_avatar']
-        ?? $post['af_apui_secondary_avatar_html']
-        ?? ''));
-    if ($materialized !== '') return $materialized;
-
     $uid = max(0, (int)($post['uid'] ?? 0));
-    $secondary = af_adaptivethemeframework_resolve_secondary_avatar_url($uid, $post);
+    if ($uid <= 0) return '';
+    $secondary = trim((string)($post['af_apf_secondary_avatar_url'] ?? ''));
     if ($secondary === '') return '';
 
     $username = (string)($post['username'] ?? '');
