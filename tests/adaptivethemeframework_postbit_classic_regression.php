@@ -53,6 +53,9 @@ foreach (['<article', 'atf-post__topbar', 'atf-post__layout', 'atf-post__sidebar
     atf_classic_assert(str_contains($template, $anchor), "Semantic post markup omits {$anchor}");
 }
 atf_classic_assert(!str_contains($template, 'af-apui-postbit'), 'ATF copied the APUI postbit hierarchy.');
+atf_classic_assert(!str_contains($template, "{\$post['subject']}"), 'Per-post subject is still rendered.');
+atf_classic_assert(strpos($template, 'atf-post__moderation') < strpos($template, 'atf-post__sheet-action'), 'Moderation is not the first leading control.');
+atf_classic_assert(strpos($template, 'atf-post__management') > strpos($template, 'atf-post__message'), 'Management is not below the post body.');
 
 $source = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/adaptivethemeframework.php');
 foreach (['button_edit', 'button_quickdelete', 'button_quickrestore', 'button_quote',
@@ -71,6 +74,10 @@ atf_classic_assert(str_contains($css, '.atf-post.af-atf-display[data-element]:no
 atf_classic_assert(str_contains($css, '.atf-post__name a { color: var(--atf-post-accent); }'), 'Nickname does not consume the post element accent.');
 atf_classic_assert(str_contains($css, 'border-radius: 100% 0 0 0'), 'Reputation decoration is not a distinct corner arc.');
 atf_classic_assert(!preg_match('~\.atf-post__sheet-accent[^}]*clip-path:\s*polygon~s', $css), 'Character Sheet decoration is still a polygon blob.');
+atf_classic_assert((bool)preg_match('~\.atf-post__topbar\s*\{[^}]*position:\s*sticky;[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto;~s', $css), 'The full-width topbar is not sticky or does not give identity the flexible column.');
+atf_classic_assert(str_contains($css, 'var(--af-apui-postbit-author-bg-image, none)'), 'ATF author panel ignores the AdvancedAppearance profile background.');
+atf_classic_assert(str_contains($css, 'var(--af-apui-postbit-name-bg-image, none)'), 'ATF nickname ignores the AdvancedAppearance nickname background.');
+atf_classic_assert((bool)preg_match('~@media \(max-width: 48rem\).*?\.atf-post__topbar \{ position: static;.*?\.atf-post__sidebar-inner \{ position: static;~s', $css), 'Mobile does not disable both sticky surfaces.');
 
 atf_classic_assert(af_adaptivethemeframework_post_element(101) === '', 'Missing element must resolve to neutral.');
 atf_classic_assert(af_adaptivethemeframework_post_element(102) === 'fire', 'Fire element was not preserved.');

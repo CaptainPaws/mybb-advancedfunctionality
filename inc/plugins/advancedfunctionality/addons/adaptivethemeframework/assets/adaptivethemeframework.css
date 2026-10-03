@@ -2257,3 +2257,105 @@ body.atf-active .atf-reputation-vote__actions { float: inline-end; }
 body.atf-active .atf-reputation-vote__post,body.atf-active .atf-reputation-vote .smalltext { color: var(--atf-color-text-muted); }
 body.atf-active .atf-reputation__filters { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--atf-space-2); }
 @media(max-width:600px){body.atf-active .atf-reputation__summary{grid-template-columns:minmax(5rem,1fr) repeat(3,minmax(2.5rem,.5fr));font-size:.8rem;padding:var(--atf-space-3)}}
+
+/* Final classic-post composition. Keep the same visible-overflow and bounded
+   sticky-inner mechanics as the legacy APUI postbit, while allowing ATF's
+   full-width header to remain pinned above the author rail. */
+body.atf-active .atf-post__topbar {
+  position: sticky;
+  top: var(--atf-sticky-offset, 0px);
+  z-index: 20;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+body.atf-active .atf-post__topbar-leading { display: flex; align-items: flex-start; gap: var(--atf-space-2); }
+body.atf-active .atf-post__moderation { order: -1; align-self: flex-start; }
+body.atf-active .atf-post__profile-actions :is(a, .postbit_button) { position: relative; font-size: 0; text-indent: 0; background-image: none; }
+body.atf-active .atf-post__profile-actions :is(a, .postbit_button)::before { font: 900 .85rem/1 "Font Awesome 6 Free"; }
+body.atf-active .atf-post__profile-link a::before { content: "\f007"; }
+body.atf-active .atf-post__profile-actions .postbit_email::before { content: "\f0e0"; }
+body.atf-active .atf-post__profile-actions .postbit_pm::before { content: "\f075"; }
+body.atf-active .atf-post__profile-actions .postbit_find::before { content: "\f002"; }
+body.atf-active .atf-post__profile-actions .postbit_rep::before { content: "\f004"; }
+body.atf-active .atf-post__name {
+  padding: var(--atf-space-2) var(--atf-space-3);
+  background-image: var(--af-apui-postbit-name-overlay, none), var(--af-apui-postbit-name-bg-image, none);
+  background-position: center;
+  background-size: cover;
+  border-radius: var(--atf-radius-md);
+}
+body.atf-active .atf-post__sidebar-inner {
+  position: sticky;
+  top: calc(var(--atf-sticky-offset, 0px) + var(--atf-post-topbar-height, 9rem) + var(--atf-space-2));
+  max-height: calc(100vh - var(--atf-sticky-offset, 0px) - var(--atf-post-topbar-height, 9rem) - var(--atf-space-4));
+  overflow-y: auto;
+  background-image: var(--af-apui-postbit-author-overlay, linear-gradient(180deg, var(--atf-post-accent-soft), transparent 42%)), var(--af-apui-postbit-author-bg-image, none);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+body.atf-active .atf-post__statistics .af-apui-stat-item__icon,
+body.atf-active .atf-post__statistics .af-apui-stat-item__value {
+  display: flex;
+  min-height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  line-height: 1;
+}
+body.atf-active .atf-post__content { display: flex; flex-direction: column; min-height: 22rem; padding-block-end: 0; }
+body.atf-active .atf-post__message { flex: 1 0 auto; }
+body.atf-active .atf-post__footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(7rem, 1fr);
+  align-items: end;
+  gap: var(--atf-space-3);
+  min-height: 5rem;
+  margin: var(--atf-space-5) calc(-1 * var(--atf-space-5)) 0;
+}
+body.atf-active .atf-post__management {
+  position: static;
+  align-self: end;
+  display: flex;
+  flex-flow: row wrap;
+  justify-content: center;
+  gap: .35rem;
+  padding: .4rem;
+  background: var(--atf-color-page-subtle);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-pill);
+}
+body.atf-active .atf-post__management :is(a, button) {
+  display: grid;
+  position: relative;
+  place-items: center;
+  width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0;
+  overflow: hidden;
+  color: var(--atf-post-accent);
+  font-size: 0;
+  text-indent: 0;
+  background-image: none;
+  border-radius: 50%;
+}
+body.atf-active .atf-post__management :is(a, button)::before { font: 900 1rem/1 "Font Awesome 6 Free"; }
+body.atf-active .atf-post__management .postbit_edit::before { content: "\f044"; }
+body.atf-active .atf-post__management :is(.postbit_qdelete, .postbit_delete)::before { content: "\f2ed"; }
+body.atf-active .atf-post__management :is(.postbit_quote, .postbit_reply)::before { content: "\f3e5"; }
+body.atf-active .atf-post__management .postbit_multiquote::before { content: "\f10d"; }
+body.atf-active .atf-post__management .postbit_report::before { content: "\f024"; }
+body.atf-active .atf-post__management .postbit_warn::before { content: "\f071"; }
+body.atf-active .atf-post__reputation-corner { position: static; justify-self: end; }
+
+@media (max-width: 48rem) {
+  body.atf-active .atf-post__topbar { position: static; grid-template-columns: minmax(0, 1fr); }
+  body.atf-active .atf-post__topbar-leading { justify-content: flex-start; }
+  body.atf-active .atf-post__identity-main { width: 100%; }
+  body.atf-active .atf-post__author-tools { grid-column: auto; width: 100%; }
+  body.atf-active .atf-post__primary-avatar { max-width: 100%; }
+  body.atf-active .atf-post__sidebar-inner { position: static; max-height: none; overflow: visible; }
+  body.atf-active .atf-post__footer { grid-template-columns: minmax(0, 1fr); margin-inline: calc(-1 * var(--atf-space-4)); }
+  body.atf-active .atf-post__footer-spacer { display: none; }
+  body.atf-active .atf-post__management { justify-self: center; }
+  body.atf-active .atf-post__reputation-corner { justify-self: end; }
+}
