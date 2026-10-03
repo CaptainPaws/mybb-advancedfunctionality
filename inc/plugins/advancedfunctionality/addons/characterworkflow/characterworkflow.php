@@ -237,6 +237,86 @@ function af_cwf_is_allowed_forum(int $fid): bool
     return in_array($fid, $allowedForumIds, true);
 }
 
+/**
+ * Resolve the live application which owns a user's character context.
+ *
+ * CharacterSheets' acceptance row is only a relation: it is never proof that
+ * the application still exists.  This resolver deliberately joins it to the
+ * live threads table and checks author and forum before exposing a tid to any
+ * profile/postbit consumer. Pending and accepted application forums are both
+ * valid. Results are request-cached, which also keeps postbit lookups to one
+ * query per distinct author rather than one query per post.
+ */
+function af_characterworkflow_resolve_active_application(int $uid): ?array
+{
+    static $cache = [];
+    global $db;
+
+    if ($uid <= 0 || !is_object($db)) {
+        return null;
+    }
+    if (array_key_exists($uid, $cache)) {
+        return $cache[$uid];
+    }
+
+    $relationTable = defined('AF_CS_TABLE') ? AF_CS_TABLE : 'af_charactersheets_accept';
+    if (!$db->table_exists($relationTable)) {
+        return $cache[$uid] = null;
+    }
+
+    $prefix = TABLE_PREFIX;
+    $query = $db->write_query(
+        "SELECT r.*, t.tid AS live_tid, t.uid AS thread_uid, t.fid, t.firstpost, t.subject
+         FROM {$prefix}{$relationTable} r
+         LEFT JOIN {$prefix}threads t ON t.tid=r.tid
+         WHERE r.uid=" . (int)$uid . "
+         ORDER BY r.tid DESC"
+    );
+    $allowedForums = af_cwf_get_pending_forum_ids();
+    $allowedForums = array_values(array_unique(array_merge($allowedForums, af_cwf_get_target_forum_ids())));
+
+    while ($row = $db->fetch_array($query)) {
+        $tid = (int)($row['tid'] ?? 0);
+        $liveTid = (int)($row['live_tid'] ?? 0);
+
+        if ($liveTid <= 0) {
+            // Only relation/cache rows are invalidated. KB, Wanted and the
+            // independently stored sheet remain untouched.
+            $db->delete_query($relationTable, 'tid=' . $tid . ' AND uid=' . (int)$uid);
+            if ($db->table_exists(AF_CWF_TABLE)) {
+                $db->delete_query(AF_CWF_TABLE, 'tid=' . $tid);
+            }
+            continue;
+        }
+        if ((int)($row['thread_uid'] ?? 0) !== $uid) {
+            // A corrupt ownership relation must not expose somebody else's
+            // thread. Do not delete the workflow row belonging to that thread.
+            $db->delete_query($relationTable, 'tid=' . $tid . ' AND uid=' . (int)$uid);
+            continue;
+        }
+        if (!in_array((int)($row['fid'] ?? 0), $allowedForums, true)) {
+            continue;
+        }
+
+        return $cache[$uid] = [
+            'tid' => $liveTid,
+            'uid' => $uid,
+            'fid' => (int)$row['fid'],
+            'pid' => (int)($row['firstpost'] ?? 0),
+            'thread' => [
+                'tid' => $liveTid,
+                'uid' => (int)$row['thread_uid'],
+                'fid' => (int)$row['fid'],
+                'firstpost' => (int)($row['firstpost'] ?? 0),
+                'subject' => (string)($row['subject'] ?? ''),
+            ],
+            'relation' => $row,
+        ];
+    }
+
+    return $cache[$uid] = null;
+}
+
 function af_cwf_get_transfer_group_ids(): array
 {
     global $mybb, $db;

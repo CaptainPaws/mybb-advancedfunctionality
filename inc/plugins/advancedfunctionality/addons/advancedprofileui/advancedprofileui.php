@@ -348,9 +348,14 @@ function af_apui_render_atf_profile_hero(array $context): string
 
 function af_apui_get_profile_character_payload(int $uid, array $sheetPayload = []): array
 {
+    $active = function_exists('af_characterworkflow_resolve_active_application')
+        ? af_characterworkflow_resolve_active_application($uid)
+        : null;
+    if ($active === null) {
+        return ['tid' => 0, 'about_html' => '', 'fields' => []];
+    }
     if (!$sheetPayload) $sheetPayload = af_apui_get_charactersheet_postbit_payload($uid);
-    $application = (array)($sheetPayload['application'] ?? []);
-    $tid = (int)($application['tid'] ?? ($sheetPayload['application_tid'] ?? 0));
+    $tid = (int)($active['tid'] ?? 0);
     return $tid > 0 && function_exists('af_atf_get_profile_character_payload')
         ? (array)af_atf_get_profile_character_payload($tid)
         : ['tid' => $tid, 'about_html' => '', 'fields' => []];
@@ -403,6 +408,10 @@ function af_apui_user_stat_routes(int $uid): array
 function af_apui_render_profile_character_workspace(array $context): string
 {
     $uid = (int)($context['uid'] ?? 0);
+    if (!function_exists('af_characterworkflow_resolve_active_application')
+        || af_characterworkflow_resolve_active_application($uid) === null) {
+        return '';
+    }
     $sheetPayload = (array)($context['sheet_payload'] ?? []);
     $payload = af_apui_get_profile_character_payload($uid, $sheetPayload);
     $fields = (array)($payload['fields'] ?? []);
@@ -1130,7 +1139,9 @@ function af_apui_build_surface_url(string $url, int $uid, string $surface): stri
 
 function af_apui_get_charactersheet_postbit_payload(int $uid): array
 {
-    if ($uid <= 0 || !function_exists('af_cs_get_postbit_sheet_payload')) {
+    if ($uid <= 0 || !function_exists('af_cs_get_postbit_sheet_payload')
+        || !function_exists('af_characterworkflow_resolve_active_application')
+        || af_characterworkflow_resolve_active_application($uid) === null) {
         return [];
     }
 
@@ -1751,7 +1762,11 @@ function af_apui_maybe_serve_lazy_profile_tab(): void
     }
 
     if ($tab === 'sheet') {
-        $html = af_apui_build_member_profile_sheet_tab($uid, af_apui_get_charactersheet_postbit_payload($uid));
+        $active = function_exists('af_characterworkflow_resolve_active_application')
+            ? af_characterworkflow_resolve_active_application($uid) : null;
+        $html = $active === null
+            ? af_apui_build_member_profile_placeholder_tab('Лист персонажа', 'Действующая анкета для этого профиля не найдена.', '')
+            : af_apui_build_member_profile_sheet_tab($uid, af_apui_get_charactersheet_postbit_payload($uid));
     } elseif ($tab === 'inventory') {
         $content = function_exists('af_advancedinventory_build_inventory_fragment')
             ? af_advancedinventory_build_inventory_fragment($uid) : '';
