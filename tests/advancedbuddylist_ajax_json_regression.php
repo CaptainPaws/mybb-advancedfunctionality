@@ -37,5 +37,5 @@ foreach (['application/json','JSON.parse(text)','buddy.php?ajax=1','fetch(form.a
     if (str_contains($js,$obsolete)) throw new RuntimeException('Obsolete private Buddy JSON API is still used: '.$obsolete);
 }
 
-if (!str_contains($manifest, "'version'     => '2.3.1'")) throw new RuntimeException('Advanced Buddy List version mismatch.');
+if (!str_contains($manifest, "'version'     => '2.3.2'")) throw new RuntimeException('Advanced Buddy List version mismatch.');
 echo "Advanced Buddy List native User CP action bridge regression: OK\n";
