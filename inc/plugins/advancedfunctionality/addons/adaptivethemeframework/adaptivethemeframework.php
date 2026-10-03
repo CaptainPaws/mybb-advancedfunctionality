@@ -1081,9 +1081,16 @@ function af_adaptivethemeframework_post_element(int $uid): string
     if (array_key_exists($uid, $cache)) return $cache[$uid];
     $payload = function_exists('af_apui_get_profile_character_payload')
         ? (array)af_apui_get_profile_character_payload($uid) : [];
-    $field = (array)((array)($payload['fields'] ?? []))['character_element'] ?? [];
+    $fields = (array)($payload['fields'] ?? []);
+    $field = (array)($fields['character_element'] ?? []);
     $value = trim((string)($field['value'] ?? $field['raw'] ?? $field['key'] ?? ''));
-    return $cache[$uid] = preg_replace('~[^a-z0-9_-]+~', '', strtolower($value)) ?? '';
+
+    // AdvancedThreadFields owns the canonical element allow-list and its CSS
+    // tokens. Unknown/missing values must remain neutral; never manufacture an
+    // accent from uid, group, appearance, or any other author attribute.
+    return $cache[$uid] = function_exists('af_atf_resolve_element_theme_key')
+        ? af_atf_resolve_element_theme_key($value)
+        : '';
 }
 
 /** Load every reputation entry for a thread once, never once per post. */
