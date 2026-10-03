@@ -1890,6 +1890,7 @@ $plugins->add_hook('global_start', 'advancedfunctionality_load_lang', 0);
 
 // Подключение аддонов
 $plugins->add_hook('global_start', 'advancedfunctionality_bootstrap_addons', 1);
+$plugins->add_hook('global_start', 'advancedfunctionality_profile_lazy_endpoint_bridge', 2);
 $plugins->add_hook('pre_output_page', 'advancedfunctionality_bootstrap_addons_preoutput', 1);
 // Буфер-страховка для страниц, которые печатаются без output_page() (особенно usercp/misc)
 $plugins->add_hook('global_start', 'advancedfunctionality_outputbuffer_start', -5);
@@ -1970,6 +1971,24 @@ function advancedfunctionality_bootstrap_addons()
                 if (function_exists($fn)) { $fn(); }
             }
         }
+    }
+}
+
+/**
+ * Dispatch APUI's profile-fragment endpoint from a hook registered before
+ * global_start begins. Addons are bootstrapped by the preceding hook, so an
+ * endpoint hook registered from inside an addon would otherwise miss the
+ * current global_start dispatch on MyBB 1.8.
+ */
+function advancedfunctionality_profile_lazy_endpoint_bridge(): void
+{
+    if (defined('IN_ADMINCP') || !defined('THIS_SCRIPT') || THIS_SCRIPT !== 'member.php') {
+        return;
+    }
+
+    advancedfunctionality_bootstrap_addons();
+    if (function_exists('af_apui_maybe_serve_lazy_profile_tab')) {
+        af_apui_maybe_serve_lazy_profile_tab();
     }
 }
 

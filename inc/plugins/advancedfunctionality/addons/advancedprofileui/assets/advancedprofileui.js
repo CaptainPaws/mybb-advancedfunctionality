@@ -261,23 +261,28 @@
       }
     }
 
-    function loadLazyPanel(panel) {
+    async function loadLazyPanel(panel) {
       var url = panel.getAttribute('data-lazy-url');
       if (!url || panel.getAttribute('data-lazy-state') === 'loaded' || panel.getAttribute('data-lazy-state') === 'loading') return;
       panel.setAttribute('data-lazy-state', 'loading');
-      fetch(url.replace(/&amp;/g, '&'), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(function (response) { if (!response.ok) throw new Error('HTTP ' + response.status); return response.text(); })
-        .then(function (html) {
-          panel.innerHTML = html;
-          panel.setAttribute('data-lazy-state', 'loaded');
-          panel.removeAttribute('aria-busy');
-          if (typeof window.AFAdvancedInventoryInit === 'function') window.AFAdvancedInventoryInit(panel);
-        })
-        .catch(function () {
-          panel.setAttribute('data-lazy-state', 'error');
-          panel.innerHTML = '<div class="af-apui-empty">Не удалось загрузить вкладку. Повторите попытку позже.</div>';
-        });
       panel.setAttribute('aria-busy', 'true');
+      panel.innerHTML = '<div class="af-apui-lazy-placeholder">Загрузка…</div>';
+      try {
+        var response = await fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        var html = await response.text();
+        if (!html.trim() || /<!doctype|<html[\s>]/i.test(html)) throw new Error('Invalid profile tab fragment');
+        panel.innerHTML = html;
+        panel.setAttribute('data-lazy-state', 'loaded');
+        if (typeof window.AFAdvancedInventoryInit === 'function') window.AFAdvancedInventoryInit(panel);
+        document.dispatchEvent(new CustomEvent('af:profile-tab-loaded', { detail: { panel: panel, tab: panel.getAttribute('data-panel') } }));
+      } catch (error) {
+        panel.setAttribute('data-lazy-state', 'error');
+        panel.innerHTML = '<div class="af-apui-empty">Не удалось загрузить содержимое вкладки.</div>';
+        if (window.console && typeof window.console.error === 'function') console.error('[AdvancedProfileUI] lazy tab failed', error);
+      } finally {
+        panel.removeAttribute('aria-busy');
+      }
     }
 
     root.addEventListener('click', function (event) {

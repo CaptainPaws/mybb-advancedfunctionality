@@ -611,22 +611,24 @@
       });
   }
 
-  onReady(function () {
+  function initAdvancedInventory(root) {
+    root = root && root.querySelector ? root : document;
     if (!document.getElementById('af-inv-support-modal-style')) {
       var style = document.createElement('style');
       style.id = 'af-inv-support-modal-style';
       style.textContent = '.af-inv-support-modal{position:fixed;inset:0;z-index:1000}.af-inv-support-modal[hidden]{display:none}.af-inv-support-modal__backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}.af-inv-support-modal__dialog{position:relative;max-width:560px;margin:8vh auto;background:#111827;color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}.af-inv-support-modal__header{display:flex;justify-content:space-between;align-items:center;gap:12px}.af-inv-support-modal__body{display:flex;flex-direction:column;gap:8px}.af-inv-muted{opacity:.8}';
       document.head.appendChild(style);
     }
-    var page = document.querySelector('.af-inv-page');
-    if (!page) {
+    var page = root.matches && root.matches('.af-inv-page') ? root : root.querySelector('.af-inv-page');
+    if (!page || page.__afAdvancedInventoryInit) {
       return;
     }
 
-    var panel = document.getElementById('af-inv-panel');
+    var panel = page.querySelector('#af-inv-panel');
     if (!panel) {
       return;
     }
+    page.__afAdvancedInventoryInit = true;
 
     var uid = page.getAttribute('data-owner') || '0';
     var cache = Object.create(null);
@@ -718,5 +720,8 @@
       page.dataset.currentUrl = initialBase + initialSep + 'entity=' + encodeURIComponent(defaultEntity) + '&sub=all&ajax=1';
     }
     bindPanelInteractions(page, panel);
-  });
+  }
+
+  window.AFAdvancedInventoryInit = initAdvancedInventory;
+  onReady(function () { initAdvancedInventory(document); });
 })();

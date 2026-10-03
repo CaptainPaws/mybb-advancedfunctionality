@@ -337,12 +337,12 @@ function af_apui_render_atf_profile_hero(array $context): string
         . '<div class="atf-profile-hero__avatar">' . af_apui_render_avatar_image((string)($context['avatars']['primary_avatar'] ?? ''), (string)($context['username'] ?? ''), 'atf-profile-hero__avatar-image') . '</div>'
         . '<div class="atf-profile-hero__identity"><div class="atf-profile-hero__name">' . (string)($i['formattedname'] ?? '') . '</div>'
         . '<div class="atf-profile-hero__title">' . (string)($i['usertitle'] ?? '') . '</div>'
-        . '<div class="atf-profile-hero__rank">' . (string)($i['groupimage'] ?? '') . (string)($i['userstars'] ?? '') . '</div></div>'
+        . '<div class="atf-profile-hero__rank">' . (string)($i['groupimage'] ?? '') . (string)($i['userstars'] ?? '') . '</div>'
         . '<div class="atf-profile-hero__meta"><span><b>Регистрация:</b> ' . (string)($i['memregdate'] ?? '')
         . '</span><span><b>Последний визит:</b> ' . (string)($i['memlastvisitdate'] ?? '') . '</span>'
         . '<span><b>На форуме:</b> ' . (string)($i['timeonline'] ?? '') . '</span>'
         . '<span>' . (string)($i['online_status'] ?? '') . '</span>'
-        . (string)($i['awaybit'] ?? '') . (string)($i['bannedbit'] ?? '') . '</div>'
+        . (string)($i['awaybit'] ?? '') . (string)($i['bannedbit'] ?? '') . '</div></div>'
         . '</section>';
 }
 
@@ -1646,7 +1646,9 @@ function af_apui_global_start(): void
 
     if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'member.php') {
         af_apui_member_profile_init_vars();
-        af_apui_maybe_serve_lazy_profile_tab();
+        // The endpoint is dispatched by the core's pre-registered bridge. An
+        // addon cannot reliably add a global_start callback while that hook is
+        // already being dispatched (the original cause of broken lazy tabs).
     }
 }
 
@@ -1761,20 +1763,26 @@ function af_apui_maybe_serve_lazy_profile_tab(): void
         exit;
     }
 
-    if ($tab === 'sheet') {
-        $active = function_exists('af_characterworkflow_resolve_active_application')
-            ? af_characterworkflow_resolve_active_application($uid) : null;
-        $html = $active === null
-            ? af_apui_build_member_profile_placeholder_tab('Лист персонажа', 'Действующая анкета для этого профиля не найдена.', '')
-            : af_apui_build_member_profile_sheet_tab($uid, af_apui_get_charactersheet_postbit_payload($uid));
-    } elseif ($tab === 'inventory') {
-        $content = function_exists('af_advancedinventory_build_inventory_fragment')
-            ? af_advancedinventory_build_inventory_fragment($uid) : '';
-        $html = af_apui_build_member_profile_tab_shell('Инвентарь', '', $content !== '' ? $content : '<div class="af-apui-empty">Инвентарь недоступен.</div>');
-    } elseif ($tab === 'timeline') {
-        $html = af_apui_build_member_profile_placeholder_tab('Хронология', 'Ключевые эпизоды, квесты и сюжетные вехи персонажа.');
-    } else {
-        $html = af_apui_build_member_profile_placeholder_tab('Активность', 'Последние действия персонажа на форуме и в игровых модулях.');
+    try {
+        if ($tab === 'sheet') {
+            $active = function_exists('af_characterworkflow_resolve_active_application')
+                ? af_characterworkflow_resolve_active_application($uid) : null;
+            $html = $active === null
+                ? af_apui_build_member_profile_placeholder_tab('Лист персонажа', 'Лист персонажа пока не создан.', '')
+                : af_apui_build_member_profile_sheet_tab($uid, af_apui_get_charactersheet_postbit_payload($uid));
+        } elseif ($tab === 'inventory') {
+            $content = function_exists('af_advancedinventory_build_inventory_fragment')
+                ? af_advancedinventory_build_inventory_fragment($uid) : '';
+            $html = af_apui_build_member_profile_tab_shell('Инвентарь', '', $content !== '' ? $content : '<div class="af-apui-empty">Инвентарь пуст.</div>');
+        } elseif ($tab === 'timeline') {
+            $html = af_apui_build_member_profile_placeholder_tab('Хронология', 'Хронология пока пуста.');
+        } else {
+            $html = af_apui_build_member_profile_placeholder_tab('Активность', 'Активность пока пуста.');
+        }
+    } catch (Throwable $error) {
+        error_log('[AdvancedProfileUI] lazy profile tab ' . $tab . ' failed: ' . $error->getMessage());
+        http_response_code(500);
+        $html = '<div class="af-apui-empty">Не удалось загрузить содержимое вкладки.</div>';
     }
     header('Content-Type: text/html; charset=' . ($mybb->settings['charset'] ?? 'UTF-8'));
     header('Cache-Control: private, no-store');

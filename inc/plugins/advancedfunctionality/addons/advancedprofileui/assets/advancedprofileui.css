@@ -2366,6 +2366,9 @@ af-apf-postbit-field {
 
 .af-apui-sheet-fragment .af-cs-page,
 .af-apui-inventory-fragment .af-inv-page {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
