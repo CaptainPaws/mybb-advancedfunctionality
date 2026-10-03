@@ -4,7 +4,10 @@
 <article class="post classic atf-post {$unapproved_shade} {$post['af_aa_user_class']}" id="post_{$post['pid']}" data-author-uid="{$post['uid']}" style="{$post_visibility}">
   <aside class="atf-post__author" aria-label="Post author">
     <div class="atf-post__identity">
-      <div class="atf-post__avatar">{$post['af_atf_display_avatar']}</div>
+      <div class="atf-post__avatars">
+        <div class="atf-post__avatar atf-post__avatar--primary">{$post['af_atf_primary_avatar']}</div>
+        <div class="atf-post__avatar atf-post__avatar--secondary">{$post['af_atf_secondary_avatar']}</div>
+      </div>
       <div class="atf-post__identity-copy">
         <div class="atf-post__name largetext">{$post['af_atf_slots']['post.author.identity']}</div>
         <div class="atf-post__title">{$post['usertitle']}</div>
