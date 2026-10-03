@@ -867,7 +867,10 @@ function af_apf_normalize_atf_avatar_template(string $templateName, string $curr
         . '[ \t]*\{\$af_apf_secondary_avatar\}[ \t]*\r?\n'
         . '[ \t]*<!--\s*/af_apf_secondary_avatar\s*-->[ \t]*\r?\n~';
     $predecessor = preg_replace($slotPattern, '', $seed, 1, $removed);
-    if ($removed !== 1 || !is_string($predecessor) || $predecessor === $seed) {
+    $legacyDisableResult = preg_replace($slotPattern, "\n", $seed, 1, $legacyRemoved);
+    if ($removed !== 1 || $legacyRemoved !== 1
+        || !is_string($predecessor) || !is_string($legacyDisableResult)
+        || $predecessor === $seed) {
         return null;
     }
 
@@ -876,21 +879,31 @@ function af_apf_normalize_atf_avatar_template(string $templateName, string $curr
             return af_adaptivethemeframework_canonical_template_checksum($value);
         }
         $value = str_replace(["\r\n", "\r"], "\n", $value);
+        $value = (string)preg_replace('/[ \\t]+(?=\\n)/', '', $value);
+        $value = (string)preg_replace('/\\n*\\z/', "\n", $value);
         return hash('sha256', $value);
     };
 
-    if (!hash_equals($canonicalChecksum($predecessor), $canonicalChecksum($current))) {
+    $currentCanonical = $canonicalChecksum($current);
+    $matchesPreviousSeed = hash_equals($canonicalChecksum($predecessor), $currentCanonical);
+    $matchesLegacyDisable = hash_equals($canonicalChecksum($legacyDisableResult), $currentCanonical);
+    if (!$matchesPreviousSeed && !$matchesLegacyDisable) {
         return null;
     }
 
     return [
         'normalized_content' => $seed,
         'owner' => AF_APF_ID,
-        'source' => 'secondary_avatar_atf_seed_upgrade',
-        'transformation_type' => 'exact_known_predecessor_seed_upgrade',
+        'source' => $matchesLegacyDisable
+            ? 'secondary_avatar_legacy_disable_output'
+            : 'secondary_avatar_atf_seed_upgrade',
+        'transformation_type' => $matchesLegacyDisable
+            ? 'exact_known_legacy_disable_upgrade'
+            : 'exact_known_predecessor_seed_upgrade',
         'diagnostic' => [
             'marker_count' => 0,
             'variable_count' => 0,
+            'legacy_disable_match' => $matchesLegacyDisable ? 1 : 0,
         ],
     ];
 }
