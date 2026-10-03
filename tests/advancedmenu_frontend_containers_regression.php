@@ -63,11 +63,11 @@ foreach (['af-am-shell', 'af-am-main', 'af-am-secondary', 'af-am-user-drawer', '
 foreach (['position: sticky', 'max-width: 100vw', '#header .top_links', '#header .panel_links', '#footer .upper', '.af-am-member #panel'] as $needle) {
     if (strpos($css, $needle) === false) throw new RuntimeException('Missing layout rule: '.$needle);
 }
-foreach (['#header .user_links', '.af-am-drawer-overlay', 'body.af-am-drawer-open', 'inset: auto auto 14px 14px'] as $needle) {
+foreach (['#header .user_links', '.af-am-drawer-overlay', 'body.af-am-drawer-open', 'inset: auto auto 14px 14px', '.af-am-drawer-tablist', '.af-am-drawer-tab.is-active', '.af-am-drawer-panel[hidden]'] as $needle) {
     if (strpos($css, $needle) === false) throw new RuntimeException('Missing user drawer layout rule: '.$needle);
 }
 $js = file_get_contents(AF_ADDONS.'advancedmenu/assets/advancedmenu.js');
-foreach (["event.key === 'Escape'", "setAttribute('aria-expanded'", "event.key !== 'Tab'", "overlay.addEventListener('click'"] as $needle) {
+foreach (["event.key === 'Escape'", "setAttribute('aria-expanded'", "event.key !== 'Tab'", "overlay.addEventListener('click'", "function activateTab", "event.key === 'ArrowRight'", "aria-selected", "data-af-am-panel"] as $needle) {
     if (strpos($js, $needle) === false) throw new RuntimeException('Missing accessible drawer behavior: '.$needle);
 }
 foreach (['af_advancedcharacters_menu_provider', 'af_characters_add_moderator_link', 'data-af-characters-mod-link'] as $needle) {
@@ -80,6 +80,9 @@ if (!preg_match('~<nav class="af-am-bar af-am-main"[^>]*>\'\s*\.\s*\'<ul class="
 
 if (substr_count($source, '<button class="af-am-burger"') !== 1) {
     throw new RuntimeException('Frontend renderer must define exactly one burger.');
+}
+foreach (['data-af-am-tabs="1"', 'role="tablist"', 'role="tabpanel"', 'data-af-am-tab="', 'data-af-am-panel="'] as $needle) {
+    if (strpos($source, $needle) === false) throw new RuntimeException('Missing drawer tab markup: '.$needle);
 }
 
 // AAS's legacy template puts the trigger and modal in one injected widget.
