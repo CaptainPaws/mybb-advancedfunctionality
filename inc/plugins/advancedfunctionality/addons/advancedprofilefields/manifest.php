@@ -12,6 +12,12 @@ return [
     'authorsite'  => 'https://github.com/CaptainPaws',
     'description' => 'Системные и дополнительные поля профиля, включая независимый аватар персонажа.',
     'bootstrap'   => 'advancedprofilefields.php',
+    // ATF owns usercp_avatar while enabled. APF only supplies the component
+    // variable and a narrowly scoped seed-upgrade normalizer; it never patches
+    // the ATF-owned template directly.
+    'compatibility_providers' => [
+        'adaptivethemeframework' => 'af_apf_register_atf_compatibility_normalizer',
+    ],
     'frontend' => [
         'mode' => 'contextual',
         'routes' => [],
