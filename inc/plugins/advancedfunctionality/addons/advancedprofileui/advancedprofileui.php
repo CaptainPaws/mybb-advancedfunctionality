@@ -1452,12 +1452,17 @@ function af_apui_postbit_compose_userdetails(array &$post): void
     $uid = (int)($post['uid'] ?? 0);
     $pid = (int)($post['pid'] ?? 0);
     $post['af_aa_user_class'] = $uid > 0 ? 'af-aa-postbit-user-' . $uid : '';
-    $secondaryAvatar = $uid > 0 && function_exists('af_apf_get_secondary_avatar')
-        ? af_apf_get_secondary_avatar($uid) : '';
+    $secondaryAvatar = trim((string)($post['af_apf_secondary_avatar_url'] ?? ''));
+    if ($secondaryAvatar === '' && $uid > 0 && function_exists('af_apf_get_secondary_avatar')) {
+        $secondaryAvatar = af_apf_get_secondary_avatar($uid);
+    }
     $post['af_apui_secondary_avatar'] = $secondaryAvatar;
     $post['af_apui_display_avatar'] = $secondaryAvatar !== ''
         ? af_apui_render_avatar_image($secondaryAvatar, (string)($post['username'] ?? ''), 'af-apui-postbit-avatar__image')
         : (string)($post['useravatar'] ?? '');
+    if ($secondaryAvatar !== '') {
+        $post['af_atf_display_avatar'] = $post['af_apui_display_avatar'];
+    }
 
     $levelValue = '1';
 
