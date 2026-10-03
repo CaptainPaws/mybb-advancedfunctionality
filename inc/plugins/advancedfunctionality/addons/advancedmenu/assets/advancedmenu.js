@@ -7,7 +7,40 @@
   if (!trigger || !shell || !drawer) return;
   var closeButton = shell.querySelector('.af-am-drawer-close');
   var overlay = shell.querySelector('.af-am-drawer-overlay');
+  var tabs = drawer.querySelectorAll('[role="tab"][data-af-am-tab]');
+  var panels = drawer.querySelectorAll('[role="tabpanel"][data-af-am-panel]');
   var lastFocus = null;
+
+  function activateTab(tab, moveFocus) {
+    if (!tab) return;
+    var target = tab.getAttribute('data-af-am-tab');
+    tabs.forEach(function (item) {
+      var active = item === tab;
+      item.classList.toggle('is-active', active);
+      item.setAttribute('aria-selected', active ? 'true' : 'false');
+      item.setAttribute('tabindex', active ? '0' : '-1');
+    });
+    panels.forEach(function (panel) {
+      var active = panel.getAttribute('data-af-am-panel') === target;
+      panel.hidden = !active;
+      panel.classList.toggle('is-active', active);
+    });
+    if (moveFocus) tab.focus();
+  }
+
+  tabs.forEach(function (tab, index) {
+    tab.addEventListener('click', function () { activateTab(tab, false); });
+    tab.addEventListener('keydown', function (event) {
+      var next = null;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = tabs[(index + 1) % tabs.length];
+      else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = tabs[(index - 1 + tabs.length) % tabs.length];
+      else if (event.key === 'Home') next = tabs[0];
+      else if (event.key === 'End') next = tabs[tabs.length - 1];
+      if (!next) return;
+      event.preventDefault();
+      activateTab(next, true);
+    });
+  });
 
   function focusables() {
     return drawer.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])');
