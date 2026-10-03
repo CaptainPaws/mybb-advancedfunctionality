@@ -865,7 +865,7 @@ function af_apf_normalize_atf_avatar_template(string $templateName, string $curr
 
     $slotPattern = '~\r?\n[ \t]*<!--\s*af_apf_secondary_avatar\s*-->[ \t]*\r?\n'
         . '[ \t]*\{\$af_apf_secondary_avatar\}[ \t]*\r?\n'
-        . '[ \t]*<!--\s*/af_apf_secondary_avatar\s*-->[ \t]*(?=\r?\n)~';
+        . '[ \t]*<!--\s*/af_apf_secondary_avatar\s*-->[ \t]*\r?\n~';
     $predecessor = preg_replace($slotPattern, '', $seed, 1, $removed);
     if ($removed !== 1 || !is_string($predecessor) || $predecessor === $seed) {
         return null;
