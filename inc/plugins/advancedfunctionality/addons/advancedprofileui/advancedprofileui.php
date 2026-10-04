@@ -279,6 +279,7 @@ function af_apui_register_atf_post_providers(): bool
         'identity' => ['post.author.identity', 'profilelink'],
         'meta' => ['post.author.meta', 'af_apui_presence_html'],
         'profile_fields' => ['post.author.profile_fields', 'af_apui_profile_fields_html'],
+        'character_name' => ['post.author.character_name', 'af_apui_character_name_html'],
         'rail' => ['post.author.rail', 'af_apui_author_statistics_html'],
         'plaque' => ['post.author.plaque', 'af_apui_plaque_html'],
         // CharacterSheets remains the renderer; this is its APUI-composed output.
@@ -1618,6 +1619,17 @@ function af_apui_postbit_compose_userdetails(array &$post): void
     $afApcPostbitHtml = $isQuickReplyContext ? '' : '<af_apc_uid_' . $uid . '>';
 
     $sheetPayload = af_apui_get_charactersheet_postbit_payload($uid);
+
+    $characterPayload = af_apui_get_profile_character_payload($uid, $sheetPayload);
+    $characterFields = (array)($characterPayload['fields'] ?? []);
+    $characterNameField = $characterFields['character_name_ru'] ?? '';
+    $characterName = trim((string)(is_array($characterNameField)
+        ? ($characterNameField['value'] ?? '')
+        : $characterNameField));
+    $post['af_apui_character_name_html'] = $characterName === ''
+        ? ''
+        : '<div class="atf-post__character-name" data-character-field="character_name_ru">'
+            . htmlspecialchars_uni($characterName) . '</div>';
 
     $post['af_apui_presence_html'] = af_apui_build_postbit_presence_html($post);
     $post['af_apui_profile_fields_html'] = $profileFields;

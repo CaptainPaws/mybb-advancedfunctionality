@@ -1362,6 +1362,30 @@
     } catch (e) {}
   }
 
+  function afAeApplyWysiwygAtfTheme(inst) {
+    try {
+      if (!document.body || !document.body.classList.contains('atf-active')
+          || !inst || typeof inst.getBody !== 'function') return;
+      var body = inst.getBody();
+      if (!body || !body.ownerDocument) return;
+      var doc = body.ownerDocument;
+      var head = doc.head || doc.getElementsByTagName('head')[0];
+      if (!head || doc.getElementById('af-ae-atf-iframe-theme')) return;
+      var host = window.getComputedStyle(document.body);
+      var surface = host.getPropertyValue('--atf-color-surface').trim() || '#171b29';
+      var text = host.getPropertyValue('--atf-color-text').trim() || '#eef2ff';
+      var muted = host.getPropertyValue('--atf-color-text-muted').trim() || '#aeb5ca';
+      var accent = host.getPropertyValue('--atf-color-accent').trim() || '#788dff';
+      var style = doc.createElement('style');
+      style.id = 'af-ae-atf-iframe-theme';
+      style.textContent = 'html,body{background:' + surface + ';color:' + text
+        + ';caret-color:' + accent + ';font:inherit}body{box-sizing:border-box;padding:.75rem}'
+        + 'a{color:' + accent + '}::placeholder{color:' + muted + ';opacity:.8}'
+        + '::-webkit-scrollbar-thumb{background:' + muted + ';border-radius:999px}';
+      head.appendChild(style);
+    } catch (e) {}
+  }
+
   function afAeApplyWysiwygCodeQuoteCss(inst) {
     try {
       if (!inst || typeof inst.getBody !== 'function') return;
@@ -1922,6 +1946,7 @@
       log('AE editor ready', { textareaName: ta.name || '', existing: true });
 
       try { afAeApplyWysiwygCodeQuoteCss(existing); } catch (e2) {}
+      try { afAeApplyWysiwygAtfTheme(existing); } catch (e2a) {}
       try { afAeApplyWysiwygLocalFontsCss(existing); } catch (e2b) {}
       try { bindRememberModeHooks(existing); } catch (e2c) {}
       try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.applyInstance === 'function') window.afAeWysiwygBbcodes.applyInstance(existing); } catch (eW1) {}
@@ -1967,6 +1992,7 @@
         log('AE editor ready', { textareaName: ta.name || '', existing: false });
 
         try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e5) {}
+        try { afAeApplyWysiwygAtfTheme(inst); } catch (e5a) {}
         try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e5b) {}
         try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.applyInstance === 'function') window.afAeWysiwygBbcodes.applyInstance(inst); } catch (eW2) {}
 
