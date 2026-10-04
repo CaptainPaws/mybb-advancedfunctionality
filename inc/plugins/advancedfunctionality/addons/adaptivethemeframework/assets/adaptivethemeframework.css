@@ -2248,11 +2248,11 @@ body.atf-active .atf-post__sheet-accent {
   inset-block-start: calc(-1 * var(--atf-space-5));
   inset-inline-start: calc(-1 * var(--atf-space-4));
   width: 9rem;
-  height: 7.5rem;
+  height: 10.5rem;
   overflow: visible;
   background: var(--atf-post-accent-gradient);
   border-radius: var(--atf-radius-lg) 0 65% 0;
-  clip-path: path("M 14 0 H 120 C 136 8 138 42 122 60 C 111 73 96 72 88 91 C 80 111 68 120 0 120 V 14 C 0 6 6 0 14 0 Z");
+  clip-path: path("M 14 0 H 120 C 136 8 138 42 122 60 C 111 73 96 72 88 91 C 80 111 68 120 52 128 C 34 137 24 155 0 168 V 14 C 0 6 6 0 14 0 Z");
   filter: drop-shadow(0 .4rem .8rem var(--atf-post-accent-soft));
 }
 body.atf-active .atf-post__sheet-action :is(a,button) { color: #fff; border: 0; background: transparent; }
