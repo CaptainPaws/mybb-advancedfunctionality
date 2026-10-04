@@ -1702,7 +1702,10 @@ body.atf-active .atf-profile__after { display: grid; gap: var(--atf-space-3); }
   body.atf-active .atf-post__topbar { grid-template-columns: auto minmax(0, 1fr) 4.5rem; gap: var(--atf-space-3); padding: var(--atf-space-3); }
   body.atf-active .atf-post__primary-avatar { width: 4.5rem; }
   body.atf-active .atf-post__sheet-action .af-apui-postbit-action { width: 3rem; height: 3rem; }
-  body.atf-active .atf-post__layout { grid-template-columns: minmax(0, 1fr); }
+  body.atf-active .atf-post__layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "meta" "sidebar" "content";
+  }
   body.atf-active .atf-post__sidebar { position: static; border-inline-end: 0; border-block-end: 1px solid var(--atf-color-border); }
   body.atf-active .atf-post__secondary-avatar { max-width: min(17.5rem, 100%); }
   body.atf-active .atf-post__content { padding: var(--atf-space-4); }
@@ -2325,6 +2328,7 @@ body.atf-active .atf-post__primary-avatar > .atf-post__online-indicator {
   box-shadow: 0 0 .6rem #45d483;
 }
 body.atf-active .atf-post__sidebar {
+  grid-area: sidebar;
   position: static;
   padding: 0;
   background: linear-gradient(180deg, var(--atf-post-accent-soft), transparent 42%), var(--atf-color-page-subtle);
@@ -2531,6 +2535,9 @@ body.atf-active .atf-post__reputation-corner { position: static; justify-self: e
    owned and clipped logically by their individual article. */
 body.atf-active .atf-post__layout {
   grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  grid-template-areas:
+    "meta meta"
+    "sidebar content";
   margin-top: -4px;
   overflow: hidden;
   border-radius: 0 0 var(--atf-radius-lg) var(--atf-radius-lg);
@@ -2594,6 +2601,7 @@ body.atf-active .atf-post__primary-avatar-media .author_avatar > a > :is(img, sv
 }
 body.atf-active .atf-post__content {
   position: relative;
+  grid-area: content;
   min-width: 0;
   overflow: visible;
 }
@@ -2644,7 +2652,12 @@ body.atf-active .atf-post__reputation-corner {
 body.atf-active .atf-post__meta-line {
   position: relative;
   z-index: 15;
+  grid-area: meta;
   box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding-inline: var(--atf-space-3);
   background: color-mix(in srgb, var(--atf-color-surface, var(--atf-color-page-subtle)) 86%, #fff 14%) !important;
 }
 body.atf-active .atf-post__meta-line > .atf-post__management {
