@@ -135,6 +135,10 @@ atf_classic_assert(!str_contains($sticky, 'var postRect = item.post.getBoundingC
     'Postbit sticky scroll path must not re-read document geometry on every frame.');
 atf_classic_assert(str_contains($sticky, 'return Math.ceil(navigation.getBoundingClientRect().height);'),
     'Postbit sticky offset must sit flush against the sticky AdvancedMenu navigation.');
+atf_classic_assert((bool)preg_match(
+    '~\\.atf-post__topbar\\[data-atf-sticky-translate\\]:not\\(\\[data-atf-sticky-translate="0"\\]\\)::before\\s*\\{[^}]*bottom:\\s*100%;[^}]*height:\\s*var\\(--atf-space-3\\);[^}]*background:\\s*var\\(--atf-color-page-subtle\\);~s',
+    $css
+), 'Sticky postbar does not mask the seam where scrolled post text can flash below the navigation.');
 atf_classic_assert(str_contains($sticky, 'postBottom - sidebarBottom'),
     'Topbar/sidebar/meta do not share the sidebar-bounded travel limit.');
 atf_classic_assert(!str_contains($source, 'adaptivethemeframework.postbit.js?v='), 'Postbit sticky controller must not depend on a separately deployed asset.');
