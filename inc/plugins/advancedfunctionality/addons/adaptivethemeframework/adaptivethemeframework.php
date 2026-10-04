@@ -1261,10 +1261,32 @@ function af_adaptivethemeframework_post_reputation(array $post): string
         .($rows !== '' ? '<ul>'.$rows.'</ul>' : '<span>Оценок пока нет</span>').'</div></div>';
 }
 
+function af_adaptivethemeframework_posturl_checkbox_first(string $html): string
+{
+    if ($html === '' || stripos($html, 'checkbox') === false) {
+        return $html;
+    }
+
+    if (!preg_match('~<input\b[^>]*\btype=(["\'])checkbox\1[^>]*>~i', $html, $match, PREG_OFFSET_CAPTURE)) {
+        return $html;
+    }
+
+    $checkbox = (string)$match[0][0];
+    $offset = (int)$match[0][1];
+    $without = trim(substr($html, 0, $offset) . substr($html, $offset + strlen($checkbox)));
+
+    if ($without === '') {
+        return $checkbox;
+    }
+
+    return $checkbox . ' ' . $without;
+}
+
 function af_adaptivethemeframework_compose_postbit(array &$post): void
 {
     // Primary MyBB avatar and APF secondary avatar are separate surfaces.
     // Never overwrite $post['useravatar'] here.
+    $post['posturl'] = af_adaptivethemeframework_posturl_checkbox_first((string)($post['posturl'] ?? ''));
     $post['af_atf_primary_avatar'] = (string)($post['useravatar'] ?? '');
     $post['af_atf_secondary_avatar'] = af_adaptivethemeframework_resolve_post_secondary_avatar($post);
     $post['af_atf_element'] = af_adaptivethemeframework_post_element((int)($post['uid'] ?? 0));
