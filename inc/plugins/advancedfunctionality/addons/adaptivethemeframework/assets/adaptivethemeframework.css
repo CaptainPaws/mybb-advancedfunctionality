@@ -2601,6 +2601,7 @@ body.atf-active .atf-post__content {
   position: relative;
   grid-area: content;
   min-width: 0;
+  padding-block-start: 0;
   padding-inline: var(--atf-space-5);
   overflow: visible;
 }
