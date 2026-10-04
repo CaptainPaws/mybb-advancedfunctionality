@@ -76,8 +76,18 @@ atf_classic_assert(str_contains($css, 'border-radius: 100% 0 0 0'), 'Reputation 
 atf_classic_assert(!preg_match('~\.atf-post__sheet-accent[^}]*clip-path:\s*polygon~s', $css), 'Character Sheet decoration is still a polygon blob.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar\s*\{[^}]*position:\s*sticky;[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto;~s', $css), 'The full-width topbar is not sticky or does not give identity the flexible column.');
 atf_classic_assert(str_contains($css, 'var(--af-apui-postbit-author-bg-image, none)'), 'ATF author panel ignores the AdvancedAppearance profile background.');
-atf_classic_assert(str_contains($css, 'var(--af-apui-postbit-name-bg-image, none)'), 'ATF nickname ignores the AdvancedAppearance nickname background.');
+atf_classic_assert((bool)preg_match('~\.atf-post__topbar\s*\{[^}]*var\(--af-apui-postbit-name-bg-image, none\)~s', $css), 'ATF topbar ignores the existing AdvancedAppearance name background.');
+atf_classic_assert(!preg_match('~\.atf-post__name\s*\{[^}]*background-image~s', $css), 'Nickname still owns the AdvancedAppearance background.');
+atf_classic_assert(str_contains($source, 'af_adaptivethemeframework_label_post_controls'), 'Native post controls do not receive tooltip labels.');
+atf_classic_assert(str_contains($source, "'button_www'"), 'Profile actions omit the native website control.');
 atf_classic_assert((bool)preg_match('~@media \(max-width: 48rem\).*?\.atf-post__topbar \{ position: static;.*?\.atf-post__sidebar-inner \{ position: static;~s', $css), 'Mobile does not disable both sticky surfaces.');
+
+$nativeControl = '<a class="postbit_qdelete" href="editpost.php?pid=42" onclick="return Post.deletePost(42);"><span>Удалить</span></a>';
+$labelledControl = af_adaptivethemeframework_label_post_controls($nativeControl, ['postbit_qdelete' => 'Удалить']);
+atf_classic_assert(str_contains($labelledControl, 'href="editpost.php?pid=42"'), 'Control labelling replaced the native href.');
+atf_classic_assert(str_contains($labelledControl, 'onclick="return Post.deletePost(42);"'), 'Control labelling removed the native JS handler.');
+atf_classic_assert(str_contains($labelledControl, 'title="Удалить" data-af-title="Удалить" aria-label="Удалить"'), 'Control labelling omits tooltip or accessibility attributes.');
+atf_classic_assert(str_contains($labelledControl, '<span>Удалить</span>'), 'Control labelling rebuilt the native control contents.');
 
 atf_classic_assert(af_adaptivethemeframework_post_element(101) === '', 'Missing element must resolve to neutral.');
 atf_classic_assert(af_adaptivethemeframework_post_element(102) === 'fire', 'Fire element was not preserved.');
