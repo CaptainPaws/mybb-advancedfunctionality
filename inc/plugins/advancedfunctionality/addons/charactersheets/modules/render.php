@@ -2065,6 +2065,29 @@ function af_charactersheets_arpg_render_item_detail(array $entry, array $rules):
     return $html;
 }
 
+/** Resolve the canonical inventory action and apply AdvancedInventory privacy. */
+function af_charactersheets_inventory_action_html(int $uid): string
+{
+    global $mybb;
+
+    if ($uid <= 0 || (int)($mybb->settings['af_advancedinventory_enabled'] ?? 0) !== 1) {
+        return '';
+    }
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    if (function_exists('af_inv_user_can_view') && !af_inv_user_can_view($viewerUid, $uid)) {
+        return '';
+    }
+
+    $url = function_exists('af_advancedinventory_url')
+        ? af_advancedinventory_url('inventory', ['uid' => $uid], false)
+        : 'inventory.php?uid=' . $uid;
+    if ($url === '') {
+        return '';
+    }
+
+    return '<a class="af-cs-btn af-cs-btn--ghost" href="' . htmlspecialchars_uni($url) . '">Открыть инвентарь</a>';
+}
+
 function af_charactersheets_build_arpg_equipment_html(array $build, bool $can_edit, int $uid = 0): string
 {
     $state = af_charactersheets_arpg_live_equipment_state($uid);
@@ -2121,9 +2144,10 @@ function af_charactersheets_build_arpg_equipment_html(array $build, bool $can_ed
             : '<div class="af-cs-arpg-support-empty"><span>' . htmlspecialchars_uni(substr($slotCode, -1)) . '</span></div>';
     }
 
+    $inventoryAction = af_charactersheets_inventory_action_html($uid);
     return '<div class="af-cs-arpg-equipment" data-afcs-arpg-equipment-root="1" data-afcs-equipment-can-edit="0">'
         . '<section class="af-cs-arpg-panel"><div class="af-cs-arpg-equip-head"><h2>Оружие и экипировка</h2>'
-        . ($can_edit ? '<a class="af-cs-btn af-cs-btn--ghost" href="inventory.php?uid=' . $uid . '">Открыть инвентарь</a>' : '')
+        . $inventoryAction
         . '</div><div class="af-cs-arpg-equip-grid">' . $weaponHtml . $equipmentCards . '</div></section>'
         . '<section class="af-cs-arpg-panel"><h2>Быстрые слоты</h2><div class="af-cs-arpg-support-grid">' . $supportCards . '</div></section>'
         . '</div>';
@@ -4589,6 +4613,7 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
     $gear_btn = $can_edit
         ? '<button type="button" class="af-cs-attrs__gear af-cs-equipment__gear" data-afcs-equipment-edit-toggle="1" aria-label="Редактировать экипировку" title="Редактировать экипировку"><i class="fa-solid fa-gear" aria-hidden="true"></i></button>'
         : '';
+    $inventory_action = af_charactersheets_inventory_action_html($uid);
 
     $info_preview_html = '<div class="af-cs-augment-preview af-cs-equipment-info-preview" data-afcs-equipment-info-preview="1">'
         . '<div class="af-cs-augment-preview__title">Выберите слот</div>'
@@ -4598,7 +4623,7 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
     $equipment_html = '<div class="af-cs-augmentations-ui af-cs-equipment-ui af-cs-equipment-ui--public" data-afcs-equipment-root="1" data-afcs-equipment-mode="public" data-afcs-equipment-can-edit="' . ($can_edit ? '1' : '0') . '">'
         . '<div class="af-cs-augmentations-top-row af-cs-equipment-top-row">'
             . '<div class="af-cs-augmentations-column af-cs-equipment-slots-column">'
-                . '<div class="af-cs-panel-title af-cs-panel-title--with-actions"><span>Надетая экипировка</span>' . $gear_btn . '</div>'
+                . '<div class="af-cs-panel-title af-cs-panel-title--with-actions"><span>Надетая экипировка</span><span class="af-cs-panel-actions">' . $inventory_action . $gear_btn . '</span></div>'
                 . '<div class="af-cs-equipment-preview" data-afcs-equipment-preview-root="1">' . implode('', $slots_grouped_html) . '</div>'
             . '</div>'
             . '<div class="af-cs-augmentations-column af-cs-augmentations-preview-column">'

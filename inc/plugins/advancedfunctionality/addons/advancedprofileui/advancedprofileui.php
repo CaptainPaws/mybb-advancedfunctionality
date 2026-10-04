@@ -1771,9 +1771,22 @@ function af_apui_maybe_serve_lazy_profile_tab(): void
                 ? af_apui_build_member_profile_placeholder_tab('Лист персонажа', 'Лист персонажа пока не создан.', '')
                 : af_apui_build_member_profile_sheet_tab($uid, af_apui_get_charactersheet_postbit_payload($uid));
         } elseif ($tab === 'inventory') {
-            $content = function_exists('af_advancedinventory_build_inventory_fragment')
-                ? af_advancedinventory_build_inventory_fragment($uid) : '';
-            $html = af_apui_build_member_profile_tab_shell('Инвентарь', '', $content !== '' ? $content : '<div class="af-apui-empty">Инвентарь пуст.</div>');
+            if (!function_exists('af_inventory_render_profile_inventory')) {
+                $content = '<div class="af-apui-empty">Инвентарь недоступен.</div>';
+            } else {
+                $inventory = af_inventory_render_profile_inventory($uid);
+                $status = (string)($inventory['status'] ?? 'unavailable');
+                if ($status === 'ok') {
+                    $content = (string)($inventory['html'] ?? '');
+                } elseif ($status === 'forbidden') {
+                    $content = '<div class="af-apui-empty">Инвентарь скрыт настройками доступа.</div>';
+                } elseif ($status === 'empty') {
+                    $content = '<div class="af-apui-empty">Инвентарь пуст.</div>';
+                } else {
+                    $content = '<div class="af-apui-empty">Инвентарь недоступен.</div>';
+                }
+            }
+            $html = af_apui_build_member_profile_tab_shell('Инвентарь', '', $content);
         } elseif ($tab === 'timeline') {
             $html = af_apui_build_member_profile_placeholder_tab('Хронология', 'Хронология пока пуста.');
         } else {

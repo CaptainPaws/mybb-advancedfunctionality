@@ -4244,9 +4244,27 @@ function af_advancedshop_kb_entry_url(int $kbId, string $type = '', string $entr
     return 'misc.php?action=kb';
 }
 
+function af_advancedshop_require_balance_runtime(): void
+{
+    if (function_exists('af_balance_get_currency_amount') || function_exists('af_balance_get')) {
+        return;
+    }
+    if (function_exists('af_is_addon_enabled') && !af_is_addon_enabled('balance')) {
+        return;
+    }
+    $bootstrap = AF_ADDONS . 'balance/balance.php';
+    if (is_file($bootstrap)) {
+        require_once $bootstrap;
+    }
+}
+
 function af_shop_get_balance(int $uid, string $currency_slug): int
 {
     $currency_slug = af_advancedshop_normalize_currency_slug($currency_slug);
+    af_advancedshop_require_balance_runtime();
+    if (function_exists('af_balance_get_currency_amount')) {
+        return af_balance_get_currency_amount($uid, $currency_slug);
+    }
     if (function_exists('af_balance_get')) {
         $bal = af_balance_get($uid);
         if ($currency_slug === 'credits') {

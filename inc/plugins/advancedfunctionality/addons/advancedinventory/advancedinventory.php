@@ -708,6 +708,32 @@ function af_advancedinventory_build_inventory_fragment(int $ownerUid): string
     return $inventory_inner;
 }
 
+/**
+ * Public profile provider for AdvancedProfileUI and other presentation layers.
+ *
+ * Keeping state classification here prevents consumers from treating a disabled
+ * addon or a privacy denial as an empty inventory. The HTML itself still comes
+ * from the same fragment builder used by inventory.php.
+ *
+ * @return array{status:string,html:string}
+ */
+function af_inventory_render_profile_inventory(int $ownerUid): array
+{
+    global $mybb;
+
+    if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 1) !== 1) {
+        return ['status' => 'unavailable', 'html' => ''];
+    }
+
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    if ($ownerUid <= 0 || !af_inv_user_can_view($viewerUid, $ownerUid)) {
+        return ['status' => 'forbidden', 'html' => ''];
+    }
+
+    $html = af_advancedinventory_build_inventory_fragment($ownerUid);
+    return ['status' => $html === '' ? 'empty' : 'ok', 'html' => $html];
+}
+
 function af_advancedinventory_build_abilities_fragment(int $ownerUid): string
 {
     global $mybb, $headerinclude, $templates, $db;

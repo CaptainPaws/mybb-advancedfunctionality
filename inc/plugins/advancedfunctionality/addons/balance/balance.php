@@ -786,6 +786,16 @@ function af_balance_get(int $uid): array
     return ['uid'=>$uid,'exp'=>(int)$row['exp'],'credits'=>(int)$row['credits'],'ability_tokens'=>(int)($row['ability_tokens'] ?? 0)];
 }
 
+/** Return a canonical backend amount in scaled/minor units (never formatted HTML). */
+function af_balance_get_currency_amount(int $uid, string $kind): int
+{
+    if (!in_array($kind, ['credits', 'ability_tokens', 'exp'], true)) {
+        return 0;
+    }
+    $balance = af_balance_get($uid);
+    return (int)($balance[$kind] ?? 0);
+}
+
 function af_balance_add($uid, string $kind, $amount, array $meta = []): array
 {
     global $mybb;

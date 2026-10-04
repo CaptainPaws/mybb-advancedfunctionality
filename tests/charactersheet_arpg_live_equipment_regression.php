@@ -30,7 +30,8 @@ foreach (['support_1', 'support_2', 'support_3', 'support_4'] as $slot) {
 arpg_equipment_assert(strpos($ui, '>Инфо</button>') !== false, 'The equipment detail action is not named Инфо');
 arpg_equipment_assert(strpos($ui, '>Снять</button>') === false, 'ARPG CharacterSheets still exposes unequip controls');
 arpg_equipment_assert(strpos($ui, 'data-afcs-equipment-equip=') === false, 'ARPG CharacterSheets still exposes equip controls');
-arpg_equipment_assert(strpos($ui, 'Открыть инвентарь') !== false, 'Owner Inventory navigation is missing');
+arpg_equipment_assert(strpos($ui, 'af_charactersheets_inventory_action_html($uid)') !== false, 'ARPG equipment does not use the Inventory action resolver');
+arpg_equipment_assert(strpos($render, 'Открыть инвентарь') !== false, 'Owner Inventory navigation is missing');
 
 arpg_equipment_assert(strpos($css, 'max-width:250px; aspect-ratio:1 / 1') !== false, 'Primary cards are not square and capped at 250px');
 arpg_equipment_assert(strpos($css, 'width:100px; height:100px; aspect-ratio:1 / 1') !== false, 'Quick-slot cards are not 100px squares');
