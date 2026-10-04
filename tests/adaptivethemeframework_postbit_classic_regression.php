@@ -98,6 +98,13 @@ atf_classic_assert(
     && strpos($template, 'atf-post__profile-actions') < strpos($template, 'atf-post__rank'),
     'Profile actions are not rendered directly below the author title.'
 );
+atf_classic_assert(
+    (bool)preg_match(
+        '~\\.atf-post__profile-actions\\s*\\{[^}]*margin-inline-start:\\s*clamp\\(1\\.5rem, 2\\.5vw, 2\\.5rem\\);~s',
+        $css
+    ),
+    'Profile actions are not horizontally aligned with the author title.'
+);
 atf_classic_assert(!str_contains($css, '.atf-post__author-tools .atf-post__profile-actions'), 'Profile actions are still laid out beside the avatar.');
 atf_classic_assert((bool)preg_match('~\\.atf-post__management \\.atf-post__management-action,\\s*body\\.atf-active \\.atf-post__profile-actions \\.atf-post__profile-action\\s*\\{~s', $css), 'Profile actions do not share the post management button styling.');
 atf_classic_assert(str_contains($css, '.postbit_find.atf-post__profile-action,'), 'Find profile action is not hidden from the profile action row.');
