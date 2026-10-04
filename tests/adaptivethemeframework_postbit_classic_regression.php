@@ -59,7 +59,7 @@ atf_classic_assert(strpos($template, 'atf-post__meta-line') > strpos($template, 
 atf_classic_assert(strpos($template, 'atf-post__meta-line') < strpos($template, 'atf-post__message'), 'Post metadata is not above the post body.');
 atf_classic_assert(substr_count($template, 'atf-post__meta-line') === 1, 'Post metadata is rendered more than once.');
 atf_classic_assert(!str_contains(substr($template, 0, strpos($template, 'atf-post__content')), 'atf-post__meta-line'), 'Post metadata remains in the topbar.');
-atf_classic_assert(strpos($template, 'atf-post__management') > strpos($template, 'atf-post__message'), 'Management is not below the post body.');
+atf_classic_assert(strpos($template, 'atf-post__management') > strpos($template, 'atf-post__char-count') && strpos($template, 'atf-post__management') < strpos($template, 'atf-post__message'), 'Management is not inside the metadata line above the post body.');
 
 $source = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/adaptivethemeframework.php');
 foreach (['button_edit', 'button_quickdelete', 'button_quickrestore', 'button_quote',
@@ -84,6 +84,9 @@ atf_classic_assert((bool)preg_match('~\.atf-post__topbar-leading\s*\{[^}]*overfl
 atf_classic_assert(!preg_match('~\\.atf-post__profile-actions[^}]*::before~s', $css), 'Profile actions still synthesize icons through CSS pseudo-elements.');
 atf_classic_assert(!preg_match('~\\.atf-post__profile-actions[^}]*content:\\s*"\\\\f[0-9a-f]+~is', $css), 'Profile actions still contain Font Awesome unicode content codes.');
 atf_classic_assert(str_contains($css, '.atf-post__profile-action > i'), 'Profile action CSS does not style real HTML icons.');
+atf_classic_assert(str_contains($source, "'atf-post__management-action'"), 'Management actions are not converted to real icon controls.');
+atf_classic_assert(str_contains($css, '.atf-post__management-action > i'), 'Management action CSS does not style real HTML icons.');
+atf_classic_assert(!preg_match('~\\.atf-post__management[^}]*content:\\s*"\\\\f[0-9a-f]+~is', $css), 'Management actions still depend on Font Awesome unicode pseudo-content.');
 atf_classic_assert((bool)preg_match('~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;~s', $css), 'The message does not consume the full content column.');
 atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*flex-wrap:\s*wrap;[^}]*justify-content:\s*flex-end;[^}]*max-width:\s*100%;~s', $css), 'Content metadata does not align right or wrap within its container.');
 atf_classic_assert((bool)preg_match('~\.atf-post__reputation-corner\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0;[^}]*bottom:\s*0;~s', $css), 'Reputation is not anchored to the content corner.');
@@ -95,15 +98,17 @@ atf_classic_assert(str_contains($source, "'button_www'"), 'Profile actions omit 
 atf_classic_assert((bool)preg_match('~@media \(max-width: 48rem\).*?\.atf-post__topbar \{ position: static;.*?\.atf-post__sidebar-inner \{ position: static;~s', $css), 'Mobile does not disable both sticky surfaces.');
 
 $sticky = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/assets/adaptivethemeframework.modals.js');
-foreach (['.atf-post__topbar', '.atf-post__sidebar-inner', "document.querySelector('.af-am-navigation')",
-          'item.postTop', 'item.postHeight', 'item.topbarHeight', 'item.sidebarHeight',
-          'ResizeObserver', "matchMedia('(min-width: 48.0625rem)')"] as $contract) {
+foreach (['.atf-post__topbar', '.atf-post__sidebar-inner', '.atf-post__meta-line', "document.querySelector('.af-am-navigation')",
+          'item.postTop', 'item.postHeight', 'item.topbarHeight', 'item.sidebarHeight', 'item.metaHeight',
+          'item.maxTravel', 'ResizeObserver', "matchMedia('(min-width: 48.0625rem)')"] as $contract) {
     atf_classic_assert(str_contains($sticky, $contract), "Bounded postbit sticky controller omits {$contract}");
 }
 atf_classic_assert(!str_contains($sticky, 'var postRect = item.post.getBoundingClientRect();\n    var postTop'),
     'Postbit sticky scroll path must not re-read document geometry on every frame.');
-atf_classic_assert(str_contains($sticky, 'Math.ceil(navigation.getBoundingClientRect().height) + 8'),
-    'Postbit sticky offset does not clear the sticky AdvancedMenu navigation.');
+atf_classic_assert(str_contains($sticky, 'Math.ceil(navigation.getBoundingClientRect().height) + 3'),
+    'Postbit sticky offset does not clear the sticky AdvancedMenu navigation with the corrected compact gap.');
+atf_classic_assert(str_contains($sticky, 'postBottom - sidebarBottom'),
+    'Topbar/sidebar/meta do not share the sidebar-bounded travel limit.');
 atf_classic_assert(!str_contains($source, 'adaptivethemeframework.postbit.js?v='), 'Postbit sticky controller must not depend on a separately deployed asset.');
 atf_classic_assert(str_contains($source, 'adaptivethemeframework.modals.js?v='), 'Bundled ATF frontend controller is not delivered.');
 
