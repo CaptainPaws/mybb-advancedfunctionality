@@ -145,6 +145,10 @@ atf_classic_assert((bool)preg_match(
     '~\.atf-post__content\s*\{[^}]*padding-block-start:\s*0;[^}]*padding-inline:\s*var\(--atf-space-5\);~s',
     $css
 ), 'Post content still adds idle top padding above the nested metadata line.');
+atf_classic_assert((bool)preg_match(
+    '~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*margin:\s*0;[^}]*padding-block-start:\s*0 !important;~s',
+    $css
+), 'Post body still adds its own top spacing above the nested metadata line.');
 atf_classic_assert((bool)preg_match('~\.atf-post__permalink\s*\{[^}]*display:\s*inline-flex;~s', $css), 'Permalink does not expose flex ordering for its checkbox.');
 atf_classic_assert(str_contains($source, 'af_adaptivethemeframework_posturl_checkbox_first'), 'Post URL checkbox ordering is not normalized server-side.');
 atf_classic_assert((bool)preg_match('~\.atf-post__char-count\s*\{[^}]*display:\s*inline-flex;[^}]*gap:\s*\.35rem;~s', $css), 'Character count icon and value are not laid out correctly.');
