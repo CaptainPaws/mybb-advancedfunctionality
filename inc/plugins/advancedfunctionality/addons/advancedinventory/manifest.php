@@ -13,6 +13,9 @@ return [
             ['script' => 'inventory.php'],
             ['script' => 'inventories.php'],
             ['script' => 'abilities.php'],
+            // The profile inventory is rendered lazily, but its CSS/JS must be
+            // present on the parent response before the fragment is fetched.
+            ['script' => 'member.php', 'action' => 'profile'],
             ['script' => 'misc.php', 'action' => 'inventory'],
             ['script' => 'misc.php', 'action' => 'abilities'],
             ['script' => 'misc.php', 'action' => 'inventories'],

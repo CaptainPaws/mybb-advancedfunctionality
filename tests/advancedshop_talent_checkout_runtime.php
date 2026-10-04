@@ -5,7 +5,12 @@
 define('IN_MYBB', 1);
 define('AF_ADDONS', dirname(__DIR__) . '/inc/plugins/advancedfunctionality/addons/');
 
-$testBalances = [7 => ['credits' => 0, 'ability_tokens' => 10000]];
+$testBalances = [
+    7 => ['credits' => 0, 'ability_tokens' => 10000],
+    8 => ['credits' => 39528, 'ability_tokens' => 0],
+    9 => ['credits' => 10000, 'ability_tokens' => 0],
+    10 => ['credits' => 9900, 'ability_tokens' => 0],
+];
 $testDeltas = [];
 
 function af_balance_get(int $uid): array
@@ -49,6 +54,19 @@ try {
 }
 checkout_assert($insufficientWasVisible, 'insufficient Ability Tokens must produce a specific checkout error');
 checkout_assert(af_shop_get_balance(7, 'ability_tokens') === 9000, 'failed debit must not change balance');
+
+af_shop_sub_balance(8, 'credits', 10000, 'shop_purchase');
+checkout_assert(af_shop_get_balance(8, 'credits') === 29528, '395.28 Credits minus 100.00 must leave 295.28');
+af_shop_sub_balance(9, 'credits', 10000, 'shop_purchase');
+checkout_assert(af_shop_get_balance(9, 'credits') === 0, 'a balance exactly equal to the price must be accepted');
+$creditsInsufficient = false;
+try {
+    af_shop_sub_balance(10, 'credits', 10000, 'shop_purchase');
+} catch (RuntimeException $e) {
+    $creditsInsufficient = strpos($e->getMessage(), 'Недостаточно Credits') !== false;
+}
+checkout_assert($creditsInsufficient, '99 Credits must not buy an item priced at 100 Credits');
+checkout_assert(af_shop_get_balance(10, 'credits') === 9900, 'an insufficient Credits balance must remain unchanged');
 
 $shopSource = file_get_contents(AF_ADDONS . 'advancedshop/advancedshop.php');
 $shopJs = file_get_contents(AF_ADDONS . 'advancedshop/assets/advancedshop.js');

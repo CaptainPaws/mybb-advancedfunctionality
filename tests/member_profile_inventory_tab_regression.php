@@ -11,6 +11,9 @@ $atfCss = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/a
 $sheetTemplate = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/charactersheets/templates/charactersheet_inner.html');
 $inventoryEntry = file_get_contents($root . '/inventory.php');
 $inventoryJs = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/advancedinventory.js');
+$inventoryManifest = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedinventory/manifest.php');
+$inventoryAddon = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedinventory/advancedinventory.php');
+$sheetRenderer = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/charactersheets/modules/render.php');
 
 function member_profile_inventory_assert(bool $condition, string $message): void
 {
@@ -20,14 +23,16 @@ function member_profile_inventory_assert(bool $condition, string $message): void
     }
 }
 
-foreach ([$profileTemplate, $profileAddon, $profileJs, $corePlugin, $atfCss, $sheetTemplate, $inventoryEntry, $inventoryJs] as $source) {
+foreach ([$profileTemplate, $profileAddon, $profileJs, $corePlugin, $atfCss, $sheetTemplate, $inventoryEntry, $inventoryJs, $inventoryManifest, $inventoryAddon, $sheetRenderer] as $source) {
     member_profile_inventory_assert($source !== false, 'A required source file could not be read');
 }
 
 member_profile_inventory_assert(strpos($profileTemplate, 'data-tab="inventory"') !== false, 'Inventory profile tab is not registered');
 member_profile_inventory_assert(strpos($profileTemplate, 'data-panel="inventory"') !== false, 'Inventory profile panel is missing');
 member_profile_inventory_assert(strpos($profileTemplate, 'af_apui_inventory_tab') !== false, 'Inventory profile template variable is missing');
-member_profile_inventory_assert(strpos($profileAddon, 'af_advancedinventory_build_inventory_fragment($uid)') !== false, 'AdvancedInventory renderer is not reused');
+member_profile_inventory_assert(strpos($profileAddon, 'af_inventory_render_profile_inventory($uid)') !== false, 'AdvancedInventory profile provider is not reused');
+member_profile_inventory_assert(strpos($inventoryAddon, 'function af_inventory_render_profile_inventory') !== false && strpos($inventoryAddon, 'af_advancedinventory_build_inventory_fragment($ownerUid)') !== false, 'Profile provider must delegate to the canonical inventory fragment');
+member_profile_inventory_assert(strpos($inventoryManifest, "['script' => 'member.php', 'action' => 'profile']") !== false, 'Inventory assets are unavailable on the lazy profile surface');
 member_profile_inventory_assert(strpos($profileAddon, 'function af_apui_maybe_serve_lazy_profile_tab') !== false, 'Lazy profile API is missing');
 member_profile_inventory_assert(strpos($profileJs, "data-lazy-state') === 'loaded'") !== false, 'Client-side lazy cache is missing');
 member_profile_inventory_assert(strpos($corePlugin, "add_hook('global_start', 'advancedfunctionality_profile_lazy_endpoint_bridge', 2)") !== false, 'Lazy endpoint is not registered before global_start dispatch');
@@ -38,6 +43,8 @@ member_profile_inventory_assert(strpos($inventoryJs, 'window.AFAdvancedInventory
 member_profile_inventory_assert(strpos($profileAddon, "['sheet', 'inventory', 'timeline', 'activity']") !== false, 'Lazy tab allowlist is missing');
 member_profile_inventory_assert(strpos($profileAddon, 'af_charactersheets_build_sheet_inner_html') !== false, 'CharacterSheets renderer is not reused');
 member_profile_inventory_assert(strpos($profileAddon, 'Инвентарь пуст.') !== false, 'Inventory empty state is missing');
+member_profile_inventory_assert(strpos($profileAddon, 'Инвентарь недоступен.') !== false, 'Inventory unavailable state is missing');
+member_profile_inventory_assert(strpos($sheetRenderer, 'af_charactersheets_inventory_action_html($uid)') !== false && strpos($sheetRenderer, 'Открыть инвентарь') !== false, 'Character Sheet equipment does not expose the canonical Inventory action');
 member_profile_inventory_assert(strpos($profileAddon, 'Хронология пока пуста.') !== false, 'Timeline empty state is missing');
 member_profile_inventory_assert(strpos($profileAddon, 'Активность пока пуста.') !== false, 'Activity empty state is missing');
 member_profile_inventory_assert(strpos($atfCss, '.atf-profile-hero__identity { display: flex; flex: 1 1 auto; flex-direction: column;') !== false, 'Hero identity is not a vertical flexible block');
