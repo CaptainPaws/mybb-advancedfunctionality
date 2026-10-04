@@ -491,6 +491,14 @@ body.atf-active .atf-post__permalink :is(input[type="checkbox"], .checkbox) {
   order: -1;
   margin: 0;
 }
+body.atf-active .atf-post__char-count {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+}
+body.atf-active .atf-post__char-count > i {
+  line-height: 1;
+}
 body.atf-active .atf-post__top-actions { margin-inline-start: auto; }
 body.atf-active .atf-post__top-actions::before { display: none; }
 body.atf-active .atf-post__top-actions .postbit_buttons { display: flex; flex-wrap: wrap; gap: var(--atf-space-2); }
