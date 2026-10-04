@@ -119,7 +119,7 @@
 
   function measure() {
     var scrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
-    stickyOffset = navigationOffset();
+    stickyOffset = Math.max(0, navigationOffset() - 8);
     items.forEach(function (item) { measureItem(item, scrollTop); });
   }
 
