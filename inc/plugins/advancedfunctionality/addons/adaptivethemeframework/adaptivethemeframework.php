@@ -2061,8 +2061,8 @@ function af_adaptivethemeframework_render_userlist(array $page): string
         $context = ['surface'=>'aas_userlist', 'uid'=>$uid, 'user'=>$user];
         $presence = (string)($user['presence']['state'] ?? 'hidden');
         if (!in_array($presence, ['online', 'offline', 'hidden'], true)) $presence = 'hidden';
-        $presenceHtml = !empty($user['presence']['can_disclose'])
-            ? '<span class="atf-user-card__presence is-'.$presence.'" aria-label="'.$e($user['presence']['label'] ?? $presence).'"></span>' : '';
+        $presenceHtml = $presence === 'online' && !empty($user['presence']['can_disclose'])
+            ? '<span class="atf-user-card__online-indicator" role="img" aria-label="'.$e($user['presence']['label'] ?? $presence).'"></span>' : '';
         $master = (array)($user['master'] ?? []);
         $masterValue = !empty($master['visible'])
             ? '<a href="'.$e($master['profile_url'] ?? '').'">'.$e($master['username_raw'] ?? '').'</a>'
