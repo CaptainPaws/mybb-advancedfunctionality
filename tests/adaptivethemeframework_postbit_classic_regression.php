@@ -47,7 +47,7 @@ foreach (array_filter(af_adaptivethemeframework_slots(), static fn(string $slot)
 
 foreach (['<article', 'atf-post__topbar', 'atf-post__layout', 'atf-post__sidebar',
           'atf-post__primary-avatar', 'atf-post__secondary-avatar',
-          'atf-post__profile-actions', 'atf-post__sheet-action',
+          'atf-post__primary-column', 'atf-post__profile-actions', 'atf-post__sheet-action',
           'atf-post__meta-line', 'atf-post__content', 'atf-post__message',
           'atf-post__management', 'atf-post__reputation-corner'] as $anchor) {
     atf_classic_assert(str_contains($template, $anchor), "Semantic post markup omits {$anchor}");
@@ -65,8 +65,7 @@ foreach (['button_edit', 'button_quickdelete', 'button_quickrestore', 'button_qu
 }
 
 $css = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/assets/adaptivethemeframework.css');
-atf_classic_assert(str_contains($css, 'grid-template-columns: minmax(13.75rem, 18.75rem) minmax(0, 1fr)'), 'Desktop author rail is missing.');
-atf_classic_assert((bool)preg_match('~\.atf-post__sidebar\s*\{\s*position:\s*sticky;~', $css), 'Desktop author rail is not sticky.');
+atf_classic_assert(str_contains($css, 'grid-template-columns: minmax(240px, 300px) minmax(0, 1fr)'), 'Desktop author rail has no bounded width.');
 atf_classic_assert((bool)preg_match('~\.atf-post\s*\{\s*margin-block:[^;]+;\s*overflow:\s*visible;~', $css), 'Post overflow still breaks sticky positioning.');
 atf_classic_assert((bool)preg_match('~@media \(max-width: 48rem\).*?\.atf-post__layout \{ grid-template-columns: minmax\(0, 1fr\); \}.*?\.atf-post__sidebar \{ position: static;~s', $css), 'The same post does not collapse or disable sticky on mobile.');
 atf_classic_assert(str_contains($css, '--atf-post-accent: var(--atf-neutral-accent)'), 'Posts without an element are not explicitly neutral.');
@@ -74,13 +73,21 @@ atf_classic_assert(str_contains($css, '.atf-post.af-atf-display[data-element]:no
 atf_classic_assert(str_contains($css, '.atf-post__name a { color: var(--atf-post-accent); }'), 'Nickname does not consume the post element accent.');
 atf_classic_assert(str_contains($css, 'border-radius: 100% 0 0 0'), 'Reputation decoration is not a distinct corner arc.');
 atf_classic_assert(!preg_match('~\.atf-post__sheet-accent[^}]*clip-path:\s*polygon~s', $css), 'Character Sheet decoration is still a polygon blob.');
-atf_classic_assert((bool)preg_match('~\.atf-post__topbar\s*\{[^}]*position:\s*sticky;[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto;~s', $css), 'The full-width topbar is not sticky or does not give identity the flexible column.');
+atf_classic_assert((bool)preg_match('~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;~s', $css), 'The message does not consume the full content column.');
+atf_classic_assert((bool)preg_match('~\.atf-post__reputation-corner\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0;[^}]*bottom:\s*0;~s', $css), 'Reputation is not anchored to the content corner.');
 atf_classic_assert(str_contains($css, 'var(--af-apui-postbit-author-bg-image, none)'), 'ATF author panel ignores the AdvancedAppearance profile background.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar\s*\{[^}]*var\(--af-apui-postbit-name-bg-image, none\)~s', $css), 'ATF topbar ignores the existing AdvancedAppearance name background.');
 atf_classic_assert(!preg_match('~\.atf-post__name\s*\{[^}]*background-image~s', $css), 'Nickname still owns the AdvancedAppearance background.');
 atf_classic_assert(str_contains($source, 'af_adaptivethemeframework_label_post_controls'), 'Native post controls do not receive tooltip labels.');
 atf_classic_assert(str_contains($source, "'button_www'"), 'Profile actions omit the native website control.');
 atf_classic_assert((bool)preg_match('~@media \(max-width: 48rem\).*?\.atf-post__topbar \{ position: static;.*?\.atf-post__sidebar-inner \{ position: static;~s', $css), 'Mobile does not disable both sticky surfaces.');
+
+$sticky = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/assets/adaptivethemeframework.postbit.js');
+foreach (['.atf-post__topbar', '.atf-post__sidebar-inner', 'postHeight - topbarHeight',
+          'postHeight - topbarHeight - sidebarHeight', "matchMedia('(min-width: 48.0625rem)')"] as $contract) {
+    atf_classic_assert(str_contains($sticky, $contract), "Bounded postbit sticky controller omits {$contract}");
+}
+atf_classic_assert(str_contains($source, 'adaptivethemeframework.postbit.js?v='), 'Postbit sticky controller is not delivered.');
 
 $nativeControl = '<a class="postbit_qdelete" href="editpost.php?pid=42" onclick="return Post.deletePost(42);"><span>Удалить</span></a>';
 $labelledControl = af_adaptivethemeframework_label_post_controls($nativeControl, ['postbit_qdelete' => 'Удалить']);
