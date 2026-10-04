@@ -30,6 +30,7 @@
         <span class="atf-post__permalink">{$post['posturl']}</span>
         <time class="post_date atf-post__date">{$post['postdate']}</time>
         <span class="atf-post__char-count" title="Количество символов в сообщении">Символов: {$post['af_post_char_count_formatted']}</span>
+        <div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">{$post['af_atf_slots']['post.actions']}</div>
       </div>
       <div class="atf-post__slot atf-post__slot--before">{$post['af_atf_slots']['post.before_body']}</div>
       <div class="post_body scaleimages atf-post__message" id="pid_{$post['pid']}">{$post['message']}</div>
@@ -38,7 +39,6 @@
       <div class="post_meta atf-post__meta" id="post_meta_{$post['pid']}">{$post['iplogged']}<span class="post_edit atf-post__edited" id="edited_by_{$post['pid']}">{$post['editedmsg']}</span><span class="atf-post__status">{$post['poststatus']}</span></div>
       <footer class="atf-post__footer">
         <div class="atf-post__footer-spacer" aria-hidden="true"></div>
-        <div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">{$post['af_atf_slots']['post.actions']}</div>
         <div class="atf-post__reputation-corner">{$post['af_atf_post_reputation_html']}</div>
       </footer>
       {$post['input_editreason']}
