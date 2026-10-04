@@ -141,6 +141,10 @@ atf_classic_assert((bool)preg_match('~\.post_body\.scaleimages\.atf-post__messag
 atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*flex-wrap:\s*wrap;[^}]*justify-content:\s*flex-end;[^}]*max-width:\s*100%;~s', $css), 'Content metadata does not align right or wrap within its container.');
 atf_classic_assert((bool)preg_match('~\.atf-post__layout\s*\{[^}]*grid-template-areas:\s*"sidebar content";~s', $css), 'Desktop post layout does not keep metadata scoped to the content column.');
 atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*margin:\s*0 0 var\(--atf-space-3\);[^}]*overflow:\s*hidden;~s', $css), 'Post metadata is not contained exactly within post_body boundaries.');
+atf_classic_assert((bool)preg_match(
+    '~\.atf-post__content\s*\{[^}]*padding-block-start:\s*0;[^}]*padding-inline:\s*var\(--atf-space-5\);~s',
+    $css
+), 'Post content still adds idle top padding above the nested metadata line.');
 atf_classic_assert((bool)preg_match('~\.atf-post__permalink\s*\{[^}]*display:\s*inline-flex;~s', $css), 'Permalink does not expose flex ordering for its checkbox.');
 atf_classic_assert(str_contains($source, 'af_adaptivethemeframework_posturl_checkbox_first'), 'Post URL checkbox ordering is not normalized server-side.');
 atf_classic_assert((bool)preg_match('~\.atf-post__char-count\s*\{[^}]*display:\s*inline-flex;[^}]*gap:\s*\.35rem;~s', $css), 'Character count icon and value are not laid out correctly.');
