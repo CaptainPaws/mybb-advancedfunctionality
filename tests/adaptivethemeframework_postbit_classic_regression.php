@@ -77,7 +77,7 @@ atf_classic_assert(str_contains($css, '.atf-post.af-atf-display[data-element]:no
 atf_classic_assert(str_contains($css, '.atf-post__name a { color: var(--atf-post-accent); }'), 'Nickname does not consume the post element accent.');
 atf_classic_assert(str_contains($css, 'border-radius: 100% 0 0 0'), 'Reputation decoration is not a distinct corner arc.');
 atf_classic_assert(!preg_match('~\.atf-post__sheet-accent[^}]*clip-path:\s*polygon~s', $css), 'Character Sheet decoration is still a polygon blob.');
-atf_classic_assert(str_contains($css, 'clip-path: path("M 14 0 H 130 C 138 0 144 6 144 14 V 28 C 110 28 119 65 84 68 C 48 71 57 108 0 120 V 14 C 0 6 6 0 14 0 Z")'), 'Character Sheet decoration does not use the established wave path.');
+atf_classic_assert(str_contains($css, 'clip-path: path("M 14 0 H 144 C 137 4 133 13 128 20 C 123 27 117 28 110 28 C 110 28 119 65 84 68 C 48 71 57 108 0 120 V 14 C 0 6 6 0 14 0 Z")'), 'Character Sheet decoration does not use the established wave path.');
 atf_classic_assert((bool)preg_match('~\.atf-post__sheet-accent\s*\{[^}]*width:\s*9rem;[^}]*height:\s*7\.5rem;[^}]*overflow:\s*visible;~s', $css), 'Character Sheet wave drawing box clips the established path.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar\s*\{[^}]*overflow:\s*visible;~s', $css), 'Post header clips the character-sheet wave.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar-leading\s*\{[^}]*overflow:\s*visible;~s', $css), 'Topbar leading clips the character-sheet accent.');
@@ -88,6 +88,7 @@ atf_classic_assert(str_contains($css, '.atf-post__profile-actions { order: 1;'),
 atf_classic_assert(str_contains($css, '.atf-post__primary-avatar { order: 2;'), 'Primary avatar does not follow profile actions in the desktop author tools row.');
 atf_classic_assert(str_contains($css, 'object-position: center center !important;'), 'Primary avatar crop is not force-centered across wrapper variants.');
 atf_classic_assert(str_contains($css, '.atf-post__primary-avatar > a {'), 'Wrapped primary avatars are not normalized to the full circular surface.');
+atf_classic_assert((bool)preg_match('~\\.atf-post__sheet-action \\.af-apui-postbit-action\\s*\\{[^}]*width:\\s*2\\.75rem;[^}]*height:\\s*2\\.75rem;[^}]*border:\\s*0 !important;[^}]*background:\\s*transparent !important;[^}]*box-shadow:\\s*none !important;[^}]*transform:\\s*translateY\\(-\\.75rem\\);~s', $css), 'Character Sheet action is not frameless or raised into the wave corner.');
 atf_classic_assert(str_contains($source, "'atf-post__management-action'"), 'Management actions are not converted to real icon controls.');
 atf_classic_assert(str_contains($css, '.atf-post__management-action > i'), 'Management action CSS does not style real HTML icons.');
 atf_classic_assert(!preg_match('~\\.atf-post__management[^}]*content:\\s*"\\\\f[0-9a-f]+~is', $css), 'Management actions still depend on Font Awesome unicode pseudo-content.');
