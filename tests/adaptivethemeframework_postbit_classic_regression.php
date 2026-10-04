@@ -75,10 +75,12 @@ atf_classic_assert((bool)preg_match('~@media \(max-width: 48rem\).*?\.atf-post__
 atf_classic_assert(str_contains($css, '--atf-post-accent: var(--atf-neutral-accent)'), 'Posts without an element are not explicitly neutral.');
 atf_classic_assert(str_contains($css, '.atf-post.af-atf-display[data-element]:not([data-element=""])'), 'Element tokens are not gated by a real element value.');
 atf_classic_assert(str_contains($css, '.atf-post__name a { color: var(--atf-post-accent); }'), 'Nickname does not consume the post element accent.');
-atf_classic_assert(str_contains($css, 'margin-inline-start: clamp(1.5rem, 2.5vw, 2.5rem);'), 'Nickname is not offset away from the decorative wave.');
-atf_classic_assert(str_contains($css, '--atf-sheet-icon-color: #18212b;'), 'Character Sheet icon has no readable default contrast color.');
-atf_classic_assert(str_contains($css, '--atf-sheet-icon-color: #f8fbff;'), 'Dark element waves do not switch the Character Sheet icon to a light contrast color.');
-atf_classic_assert(str_contains($css, 'color: var(--atf-sheet-icon-color) !important;'), 'Character Sheet action does not consume the element-aware contrast color.');
+atf_classic_assert(substr_count($css, 'margin-inline-start: clamp(1.5rem, 2.5vw, 2.5rem);') >= 2, 'Nickname and title are not both offset away from the decorative wave.');
+atf_classic_assert(str_contains($css, '--atf-sheet-icon-color: color-mix(in srgb, var(--atf-post-accent) 58%, #111 42%);'), 'Character Sheet icon default accent is not derived from the post element color.');
+atf_classic_assert(str_contains($css, '--atf-sheet-icon-color: color-mix(in srgb, var(--atf-post-accent) 48%, #fff 52%);'), 'Dark element waves do not derive a readable light accent from the post element color.');
+atf_classic_assert(str_contains($css, 'a.af-apui-postbit-action.af-apui-postbit-action--sheet.af-cs-plaque__btn:visited'), 'Character Sheet link states can still fall back to the global link color.');
+atf_classic_assert(str_contains($css, '.af-apui-postbit-action--sheet.af-cs-plaque__btn :is(.af-apui-postbit-action__icon, i, i::before)'), 'Character Sheet icon descendants do not inherit the element-aware accent.');
+atf_classic_assert(str_contains($css, 'color: var(--atf-sheet-icon-color) !important;'), 'Character Sheet action does not consume the element-aware accent color.');
 atf_classic_assert(str_contains($css, 'border-radius: 100% 0 0 0'), 'Reputation decoration is not a distinct corner arc.');
 atf_classic_assert(!preg_match('~\.atf-post__sheet-accent[^}]*clip-path:\s*polygon~s', $css), 'Character Sheet decoration is still a polygon blob.');
 atf_classic_assert(str_contains($css, 'clip-path: path("M 14 0 H 120 C 136 8 138 42 122 60 C 111 73 96 72 88 91 C 80 111 68 120 52 128 C 34 137 24 155 0 168 V 14 C 0 6 6 0 14 0 Z")'), 'Character Sheet decoration does not use the established wave path.');
