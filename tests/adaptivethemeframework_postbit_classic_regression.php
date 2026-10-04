@@ -84,8 +84,13 @@ atf_classic_assert((bool)preg_match('~\.atf-post__topbar-leading\s*\{[^}]*overfl
 atf_classic_assert(!preg_match('~\\.atf-post__profile-actions[^}]*::before~s', $css), 'Profile actions still synthesize icons through CSS pseudo-elements.');
 atf_classic_assert(!preg_match('~\\.atf-post__profile-actions[^}]*content:\\s*"\\\\f[0-9a-f]+~is', $css), 'Profile actions still contain Font Awesome unicode content codes.');
 atf_classic_assert(str_contains($css, '.atf-post__profile-action > i'), 'Profile action CSS does not style real HTML icons.');
-atf_classic_assert(str_contains($css, '.atf-post__profile-actions { order: 1;'), 'Profile actions are not positioned to the left of the primary avatar.');
-atf_classic_assert(str_contains($css, '.atf-post__primary-avatar { order: 2;'), 'Primary avatar does not follow profile actions in the desktop author tools row.');
+atf_classic_assert(
+    strpos($template, 'atf-post__profile-actions') > strpos($template, 'atf-post__title')
+    && strpos($template, 'atf-post__profile-actions') < strpos($template, 'atf-post__rank'),
+    'Profile actions are not rendered directly below the author title.'
+);
+atf_classic_assert(!str_contains($css, '.atf-post__author-tools .atf-post__profile-actions'), 'Profile actions are still laid out beside the avatar.');
+atf_classic_assert((bool)preg_match('~\\.atf-post__management \\.atf-post__management-action,\\s*body\\.atf-active \\.atf-post__profile-actions \\.atf-post__profile-action\\s*\\{~s', $css), 'Profile actions do not share the post management button styling.');
 atf_classic_assert(str_contains($css, 'object-position: center center !important;'), 'Primary avatar crop is not force-centered across wrapper variants.');
 atf_classic_assert(str_contains($css, '.atf-post__primary-avatar > a {'), 'Wrapped primary avatars are not normalized to the full circular surface.');
 atf_classic_assert((bool)preg_match('~\\.atf-post__sheet-action \\.af-apui-postbit-action\\s*\\{[^}]*width:\\s*2\\.75rem;[^}]*height:\\s*2\\.75rem;[^}]*border:\\s*0 !important;[^}]*background:\\s*transparent !important;[^}]*box-shadow:\\s*none !important;[^}]*transform:\\s*translateY\\(-\\.75rem\\);~s', $css), 'Character Sheet action is not frameless or raised into the wave corner.');
