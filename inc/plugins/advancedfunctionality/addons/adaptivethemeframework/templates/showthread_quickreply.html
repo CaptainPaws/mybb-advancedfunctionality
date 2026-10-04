@@ -1,0 +1,13 @@
+<form method="post" action="newreply.php?tid={$tid}&amp;processed=1" name="quick_reply_form" id="quick_reply_form" class="atf-editor atf-editor--quick-reply">
+  <header class="atf-editor__header"><h2 class="atf-editor__title">{$lang->quick_reply}</h2></header>
+  <div class="atf-editor__body">
+    <div class="atf-editor__meta">{$posticons}</div>
+    <div class="atf-editor__composer"><textarea style="width: 100%;" rows="8" cols="80" name="message" id="message" tabindex="1">{$message}</textarea>{$codebuttons}</div>
+  </div>
+  <footer class="atf-editor__actions">
+    <label class="atf-editor__option"><input type="checkbox" class="checkbox" name="postoptions[signature]" value="1"{$postoptionschecked['signature']}> {$lang->quickreply_signature}</label>
+    <label class="atf-editor__option"><input type="checkbox" class="checkbox" name="postoptions[subscriptionmethod]" value="email"{$postoptionschecked['subscriptionmethod']}> {$lang->quickreply_subscribe}</label>
+    <div class="atf-editor__buttons"><input type="submit" class="button atf-button atf-button--primary" value="{$lang->post_reply}" tabindex="2" accesskey="s" name="submit"><input type="submit" class="button atf-button" name="previewpost" value="{$lang->preview_post}" tabindex="3"></div>
+  </footer>
+  <input type="hidden" name="my_post_key" value="{$mybb->post_code}"><input type="hidden" name="subject" value="RE: {$thread['subject']}"><input type="hidden" name="action" value="do_newreply"><input type="hidden" name="posthash" value="{$posthash}"><input type="hidden" name="quoted_ids" value="" id="quoted_ids"><input type="hidden" name="lastpid" id="lastpid" value="{$last_pid}"><input type="hidden" name="from_page" value="{$page}"><input type="hidden" name="tid" value="{$tid}"><input type="hidden" name="method" value="quickreply">
+</form>

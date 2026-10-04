@@ -189,7 +189,8 @@
     var anchor = sc || ta;
     if (!anchor || !anchor.parentNode) return null;
 
-    if (document.querySelector('.af-ccp-wrap')) return null;
+    var scope = anchor.closest ? (anchor.closest('.atf-editor') || anchor.parentNode) : anchor.parentNode;
+    if (scope && scope.querySelector && scope.querySelector('.af-ccp-wrap')) return null;
 
     var wrap = document.createElement('div');
     wrap.className = 'af-ccp-wrap';
@@ -404,11 +405,12 @@
     }
 
 
-  function initFormCounterAndPreview() {
+  function initFormCounterAndPreview(taOverride) {
     if (!inAllowedForum(ALLOWED_FORM_FEATURE_FORUM_IDS, FORMFEATURE_SET)) return;
 
-    var ta = findTextarea();
+    var ta = taOverride || findTextarea();
     if (!ta) return;
+    if (ta.__afCcpEditorBound) return;
 
     var inst = getSceditorInstance(ta);
     var form = ta.closest('form') || document.querySelector('form#post') || ta.closest('form');
@@ -416,7 +418,8 @@
 
     var ui = buildUiAboveEditor(ta);
     if (!ui) ui = (function () {
-      var wrap = document.querySelector('.af-ccp-wrap');
+      var owner = ta.closest ? (ta.closest('.atf-editor') || ta.parentNode) : ta.parentNode;
+      var wrap = owner && owner.querySelector ? owner.querySelector('.af-ccp-wrap') : null;
       if (!wrap) return null;
       return {
         wrap: wrap,
@@ -426,6 +429,7 @@
       };
     })();
     if (!ui) return;
+    ta.__afCcpEditorBound = true;
 
     var upd = debounce(function () { updateCounter(ui, ta, inst); }, 120);
 
@@ -534,7 +538,9 @@
       var post = posts[i];
       // ATF renders the canonical server-side count in its content metadata.
       // Do not add the legacy client-side counter below the same post body.
-      if (post.querySelector('.atf-post__meta-line')) continue;
+      // ATF owns the published-post count. This also covers AJAX quick edit:
+      // never manufacture the legacy "Символов в посте" row in an ATF post.
+      if (document.body.classList.contains('atf-active') || post.querySelector('.atf-post__meta-line')) continue;
       if (post.querySelector('.af-ccp-postcount')) continue;
 
       var body = findPostBodies(post);
@@ -582,6 +588,21 @@
     initPostCounters();
     setTimeout(initFormCounterAndPreview, 300);
     setTimeout(initFormCounterAndPreview, 900);
+    if (window.MutationObserver) {
+      new MutationObserver(function (records) {
+        records.forEach(function (record) {
+          Array.prototype.forEach.call(record.addedNodes || [], function (node) {
+            if (!node || node.nodeType !== 1) return;
+            var editors = [];
+            if (node.tagName === 'TEXTAREA') editors.push(node);
+            if (node.querySelectorAll) editors = editors.concat(Array.prototype.slice.call(node.querySelectorAll('textarea')));
+            editors.forEach(function (textarea) {
+              setTimeout(function () { initFormCounterAndPreview(textarea); }, 120);
+            });
+          });
+        });
+      }).observe(document.body, { childList: true, subtree: true });
+    }
   });
 
 })();

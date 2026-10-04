@@ -1623,8 +1623,12 @@ function af_apui_postbit_compose_userdetails(array &$post): void
     $characterPayload = af_apui_get_profile_character_payload($uid, $sheetPayload);
     $characterFields = (array)($characterPayload['fields'] ?? []);
     $characterNameField = $characterFields['character_name_ru'] ?? '';
+    // AdvancedThreadFields' public DTO intentionally exposes the stored value
+    // as `raw` (plus a separately formatted `html` value).  It has never
+    // exposed `value`; reading that nonexistent key made the ATF slot empty for
+    // every valid application even though the application lookup succeeded.
     $characterName = trim((string)(is_array($characterNameField)
-        ? ($characterNameField['value'] ?? '')
+        ? ($characterNameField['raw'] ?? '')
         : $characterNameField));
     $post['af_apui_character_name_html'] = $characterName === ''
         ? ''
