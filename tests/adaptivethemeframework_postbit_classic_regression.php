@@ -127,6 +127,7 @@ atf_classic_assert(str_contains($css, '.atf-post__management-action > i'), 'Mana
 atf_classic_assert(!preg_match('~\\.atf-post__management[^}]*content:\\s*"\\\\f[0-9a-f]+~is', $css), 'Management actions still depend on Font Awesome unicode pseudo-content.');
 atf_classic_assert((bool)preg_match('~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;~s', $css), 'The message does not consume the full content column.');
 atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*flex-wrap:\s*wrap;[^}]*justify-content:\s*flex-end;[^}]*max-width:\s*100%;~s', $css), 'Content metadata does not align right or wrap within its container.');
+atf_classic_assert(str_contains($css, 'background: color-mix(in srgb, var(--atf-color-surface, var(--atf-color-page-subtle)) 90%, #fff 10%);'), 'Post meta line background is not slightly lighter than the base surface.');
 atf_classic_assert((bool)preg_match('~\.atf-post__reputation-corner\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0;[^}]*bottom:\s*0;~s', $css), 'Reputation is not anchored to the content corner.');
 atf_classic_assert((bool)preg_match(
     '~\.atf-post__topbar::after\s*\{[^}]*inset-inline-start:\s*9rem;[^}]*bottom:\s*0;[^}]*height:\s*1px;[^}]*background:\s*var\(--atf-post-accent\);~s',
