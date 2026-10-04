@@ -111,6 +111,10 @@ atf_classic_assert(str_contains($css, '.postbit_find.atf-post__profile-action,')
 atf_classic_assert(str_contains($css, '.postbit_reputation_add.atf-post__profile-action {'), 'Reputation-add profile action is not hidden from the profile action row.');
 atf_classic_assert(str_contains($css, 'object-position: center center !important;'), 'Primary avatar crop is not force-centered across wrapper variants.');
 atf_classic_assert(str_contains($css, '.atf-post__primary-avatar > a {'), 'Wrapped primary avatars are not normalized to the full circular surface.');
+atf_classic_assert((bool)preg_match('~\.atf-post\.af-atf-display\s*\{[^}]*border:\s*1px solid var\(--atf-post-accent\);~s', $css), 'Classic post shell does not use the main accent for its 1px frame.');
+atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar\s*\{[^}]*display:\s*grid;[^}]*place-items:\s*center;[^}]*overflow:\s*visible;~s', $css), 'Primary avatar is not centered or still clips the online indicator.');
+atf_classic_assert(str_contains($css, 'object-position: center center !important;'), 'Primary avatar image crop is not centered.');
+atf_classic_assert((bool)preg_match('~\.atf-post__online-indicator\s*\{[^}]*z-index:\s*5;[^}]*top:\s*-\.1rem;[^}]*right:\s*-\.1rem;[^}]*display:\s*block;~s', $css), 'Online activity indicator is not restored to the avatar top-right corner.');
 atf_classic_assert((bool)preg_match('~\\.atf-post__sheet-action \\.af-apui-postbit-action\\s*\\{[^}]*width:\\s*2\\.75rem;[^}]*height:\\s*2\\.75rem;[^}]*border:\\s*0 !important;[^}]*background:\\s*transparent !important;[^}]*box-shadow:\\s*none !important;[^}]*transform:\\s*translateY\\(-\\.75rem\\);~s', $css), 'Character Sheet action is not frameless or raised into the wave corner.');
 atf_classic_assert(str_contains($source, "'atf-post__management-action'"), 'Management actions are not converted to real icon controls.');
 atf_classic_assert(str_contains($css, '.atf-post__management-action > i'), 'Management action CSS does not style real HTML icons.');
@@ -119,9 +123,9 @@ atf_classic_assert((bool)preg_match('~\.post_body\.scaleimages\.atf-post__messag
 atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*flex-wrap:\s*wrap;[^}]*justify-content:\s*flex-end;[^}]*max-width:\s*100%;~s', $css), 'Content metadata does not align right or wrap within its container.');
 atf_classic_assert((bool)preg_match('~\.atf-post__reputation-corner\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0;[^}]*bottom:\s*0;~s', $css), 'Reputation is not anchored to the content corner.');
 atf_classic_assert((bool)preg_match(
-    '~\.atf-post__topbar::after\s*\{[^}]*bottom:\s*0;[^}]*height:\s*3px;[^}]*background:\s*var\(--atf-post-accent\);~s',
+    '~\.atf-post__topbar::after\s*\{[^}]*inset-inline-start:\s*9rem;[^}]*bottom:\s*0;[^}]*height:\s*1px;[^}]*background:\s*var\(--atf-post-accent\);~s',
     $css
-), 'Post header bottom accent line is missing or does not use the main post accent.');
+), 'Post header bottom accent line is missing, too thick, or overlaps the decorative wave.');
 atf_classic_assert(str_contains($css, 'var(--af-apui-postbit-author-bg-image, none)'), 'ATF author panel ignores the AdvancedAppearance profile background.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar\s*\{[^}]*var\(--af-apui-postbit-name-bg-image, none\)~s', $css), 'ATF topbar ignores the existing AdvancedAppearance name background.');
 atf_classic_assert(!preg_match('~\.atf-post__name\s*\{[^}]*background-image~s', $css), 'Nickname still owns the AdvancedAppearance background.');
