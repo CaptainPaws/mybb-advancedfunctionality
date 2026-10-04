@@ -453,7 +453,8 @@ body.atf-active .atf-post__profile-actions {
   align-items: center;
   justify-content: flex-start;
   gap: .35rem;
-  margin: .35rem 0 0;
+  margin-block-start: .35rem;
+  margin-inline-start: clamp(1.5rem, 2.5vw, 2.5rem);
   font-size: var(--atf-font-size-sm);
 }
 body.atf-active .atf-post__profile-actions .postbit_find.atf-post__profile-action,
