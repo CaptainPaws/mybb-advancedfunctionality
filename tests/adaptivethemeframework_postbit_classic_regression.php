@@ -73,6 +73,11 @@ foreach (['button_edit', 'button_quickdelete', 'button_quickrestore', 'button_qu
 
 $css = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/assets/adaptivethemeframework.css');
 atf_classic_assert(str_contains($css, 'grid-template-columns: minmax(240px, 300px) minmax(0, 1fr)'), 'Desktop author rail has no bounded width.');
+atf_classic_assert((bool)preg_match(
+    '~\.atf-post__layout\s*\{[^}]*overflow:\s*hidden;[^}]*border-radius:\s*0 0 var\(--atf-radius-lg\) var\(--atf-radius-lg\);~s',
+    $css
+), 'Post layout is not clipped to the article bottom corner radius.');
+atf_classic_assert(str_contains($css, 'border-end-start-radius: var(--atf-radius-lg);'), 'Sidebar does not respect the post bottom-left rounded corner.');
 atf_classic_assert((bool)preg_match('~\.atf-post\s*\{\s*margin-block:[^;]+;\s*overflow:\s*visible;~', $css), 'Post overflow still breaks sticky positioning.');
 atf_classic_assert((bool)preg_match('~@media \(max-width: 48rem\).*?\.atf-post__layout \{ grid-template-columns: minmax\(0, 1fr\); \}.*?\.atf-post__sidebar \{ position: static;~s', $css), 'The same post does not collapse or disable sticky on mobile.');
 atf_classic_assert(str_contains($css, '--atf-post-accent: var(--atf-neutral-accent)'), 'Posts without an element are not explicitly neutral.');
