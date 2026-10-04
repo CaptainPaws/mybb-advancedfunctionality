@@ -445,7 +445,7 @@ body.atf-active .atf-post__sheet-action .af-apui-postbit-action {
   transform: translateY(-.75rem);
 }
 body.atf-active .atf-post__sheet-action .af-apui-postbit-action__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-body.atf-active .atf-post__sheet-action .af-apui-postbit-action i { font-size: 1.65rem; }
+body.atf-active .atf-post__sheet-action .af-apui-postbit-action i { font-size: 2rem; }
 body.atf-active .atf-post__identity-main { min-width: 0; }
 body.atf-active .atf-post__profile-actions {
   display: flex;
@@ -2300,7 +2300,7 @@ body.atf-active .atf-post__content { position: relative; padding-inline-end: cal
 body.atf-active .atf-post__management { position: absolute; z-index: 3; inset-block-start: var(--atf-space-3); inset-inline-end: 0; display: flex; flex-direction: column; gap: .3rem; padding: .35rem; background: var(--atf-color-page-subtle); border: 1px solid var(--atf-color-border); border-inline-end: 0; border-radius: var(--atf-radius-md) 0 0 var(--atf-radius-md); }
 body.atf-active .atf-post__management :is(a,button) { display: grid; place-items: center; width: 2rem; min-height: 2rem; padding: 0; overflow: hidden; }
 body.atf-active .atf-post__reputation-corner { position: absolute; z-index: 10; right: 0; bottom: 0; min-width: 7rem; padding: 2.4rem .65rem .55rem 2.6rem; background: var(--atf-post-accent-gradient); border-radius: 100% 0 0 0; color: #fff; }
-body.atf-active .atf-post-reputation { position: relative; display: flex; justify-content: flex-end; align-items: center; gap: .35rem; }
+body.atf-active .atf-post-reputation { position: relative; display: flex; justify-content: flex-end; align-items: center; gap: .55rem; }
 body.atf-active .atf-post-reputation__heart {
   display: inline-flex;
   align-items: center;
