@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.17');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.18');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1430,6 +1430,21 @@ function af_adaptivethemeframework_compose_thread_card(): void
 /** Add the activation marker and resolve server-rendered forum-card slots. */
 function af_adaptivethemeframework_mark_page(string &$page): void
 {
+    // multipage() is still the sole owner of page calculation and URLs.  Give
+    // its server-rendered result an ATF component root instead of relying on a
+    // descendant CSS selector that leaves the stock MyBB DOM in place.
+    $page = (string)preg_replace_callback(
+        '~<div\s+class="pagination(?:\s+([^"<>]*))?"([^>]*)>(.*?)</div>~is',
+        static function (array $match): string {
+            $extraClass = trim((string)($match[1] ?? ''));
+            $classes = 'atf-pagination pagination' . ($extraClass !== '' ? ' ' . $extraClass : '');
+            return '<nav class="' . htmlspecialchars_uni($classes) . '" aria-label="Pagination"'
+                . (string)($match[2] ?? '') . '><span class="atf-pagination__items">'
+                . (string)$match[3] . '</span></nav>';
+        },
+        $page
+    );
+
     $page = (string)preg_replace_callback(
         '~<atf-forum-avatar\s+fid="(\d+)"\s+uid="(\d+)"></atf-forum-avatar>~',
         static function (array $match): string {
@@ -2466,6 +2481,7 @@ function af_adaptivethemeframework_template_seeds(): array
         'usercp_attachments_none' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_attachments_none.html',
         'delete_attachments_button' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/delete_attachments_button.html',
         'showthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread.html',
+        'showthread_quickreply' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread_quickreply.html',
         'postbit_classic' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/postbit_classic.html',
         'private' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private.html',
         'private_messagebit' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private_messagebit.html',

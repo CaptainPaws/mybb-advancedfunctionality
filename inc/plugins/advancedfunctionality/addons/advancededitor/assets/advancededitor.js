@@ -89,6 +89,49 @@
     return true;
   }
 
+  function enhanceAtfEditorShell(ta) {
+    if (!document.body || !document.body.classList.contains('atf-active') || !ta) return;
+    var container = ta.closest ? ta.closest('.sceditor-container') : null;
+    if (!container || container.closest('.atf-editor')) return;
+
+    var post = container.closest('.atf-post');
+    var shell = document.createElement('section');
+    shell.className = 'atf-editor' + (post ? ' atf-editor--quick-edit' : ' atf-editor--full');
+    shell.setAttribute('data-af-editor-shell', '1');
+
+    var header = document.createElement('header');
+    header.className = 'atf-editor__header';
+    var title = document.createElement('h2');
+    title.className = 'atf-editor__title';
+    title.textContent = post ? (window.lang && lang.quick_edit ? lang.quick_edit : 'Редактирование') : 'Редактор';
+    header.appendChild(title);
+
+    var body = document.createElement('div');
+    body.className = 'atf-editor__body';
+    var surface = document.createElement('div');
+    surface.className = 'atf-editor__composer atf-editor__surface';
+    container.parentNode.insertBefore(shell, container);
+    surface.appendChild(container);
+    body.appendChild(surface);
+    shell.appendChild(header);
+    shell.appendChild(body);
+
+    // MyBB's jEditable controls are created beside the textarea. Keep them in
+    // the post content column and present them through the shared ATF footer.
+    if (post) {
+      var form = shell.closest('form') || container.closest('form');
+      if (form) {
+        var buttons = form.querySelectorAll('input[type="submit"], input[type="button"], button');
+        if (buttons.length) {
+          var footer = document.createElement('footer');
+          footer.className = 'atf-editor__actions';
+          for (var i = 0; i < buttons.length; i++) footer.appendChild(buttons[i]);
+          shell.appendChild(footer);
+        }
+      }
+    }
+  }
+
   function normalizeLayout(x) {
     if (!x || typeof x !== 'object' || !Array.isArray(x.sections)) {
       return {
@@ -1955,6 +1998,7 @@
         decorateDropdownButtons(ta, out);
         decorateCustomButtons(ta);
         afAeEnsureFormatHelpEdge(ta);
+        enhanceAtfEditorShell(ta);
       } catch (e3) {}
 
       return true;
@@ -2004,6 +2048,7 @@
         decorateDropdownButtons(ta, out);
         decorateCustomButtons(ta);
         afAeEnsureFormatHelpEdge(ta);
+        enhanceAtfEditorShell(ta);
 
         return true;
       }

@@ -1534,7 +1534,7 @@ af-apf-postbit-field {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-start;
   min-height: 100%;
   padding: var(--af-apui-author-inner-pad);
@@ -1639,7 +1639,7 @@ af-apf-postbit-field {
   align-items: center;
   justify-content: center;
   gap: var(--af-apui-rail-gap);
-  width: min(88%, 260px);
+  width: 100%;
   min-height: 0;
   padding: 0;
   margin-top: -10px;
@@ -1651,12 +1651,12 @@ af-apf-postbit-field {
 
 .af-apui-postbit-rail .af-apui-postbit-userdetails,
 .af-apui-postbit-rail .af-apui-postbit-actions {
-  width: auto;
+  width: 100%;
   display: flex !important;
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  justify-content: space-evenly;
   gap: var(--af-apui-rail-gap);
   margin: 0 !important;
   padding: 0 !important;
@@ -1687,10 +1687,20 @@ af-apf-postbit-field {
   color: #d2d2d3;
 }
 
+.af-apui-postbit-rail .af-apui-stat-item {
+  flex-direction: row;
+  width: auto;
+  min-width: 0;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  gap: 4px;
+}
+
 .af-apui-postbit-rail .af-apui-postbit-action__icon,
 .af-apui-postbit-rail .af-apui-stat-item__icon {
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
   min-height: 0;
   display: inline-flex;
   align-items: center;
@@ -1705,27 +1715,25 @@ af-apf-postbit-field {
 }
 
 .af-apui-postbit-rail .af-apui-stat-item__value {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  transform: translateX(-50%) translateY(-30px);
+  position: static;
+  transform: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 48px;
+  min-width: 0;
   max-width: 180px;
-  padding: 6px 10px;
-  border: 1px solid var(--af-apui-rail-bubble-border);
-  border-radius: 999px;
-  background: var(--af-apui-rail-bubble-bg);
-  box-shadow: 0 8px 18px rgba(0,0,0,.22);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   color: #eef2ff;
   font-size: 11px;
   line-height: 1;
   white-space: nowrap;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
   z-index: 7;
 }
 
@@ -1734,7 +1742,7 @@ af-apf-postbit-field {
 .af-apui-postbit-rail .af-apui-stat-item.is-open .af-apui-stat-item__value {
   opacity: 1;
   visibility: visible;
-  transform: translateX(-50%) translateY(-30px);
+  transform: none;
   pointer-events: auto;
 }
 
