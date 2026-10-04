@@ -65,25 +65,58 @@
   var desktopQuery = window.matchMedia('(min-width: 48.0625rem)');
   var items = [];
   var frame = 0;
+  var resizeFrame = 0;
+  var stickyOffset = 8;
+  var resizeObserver = null;
 
   function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
   }
 
   function translate(element, value) {
+    var rounded = Math.round(value);
     var previous = Number(element.dataset.atfStickyTranslate || 0);
-    if (previous === value) return;
-    element.dataset.atfStickyTranslate = String(value);
-    element.style.transform = value ? 'translate3d(0,' + value + 'px,0)' : '';
-    element.style.willChange = value ? 'transform' : '';
+    if (previous === rounded) return;
+    element.dataset.atfStickyTranslate = String(rounded);
+    element.style.transform = rounded ? 'translate3d(0,' + rounded + 'px,0)' : '';
+    element.style.willChange = rounded ? 'transform' : '';
+  }
+
+  function navigationOffset() {
+    var navigation = document.querySelector('.af-am-navigation');
+    if (!navigation) return 8;
+    return Math.ceil(navigation.getBoundingClientRect().height) + 8;
+  }
+
+  function measureItem(item, scrollTop) {
+    var postRect = item.post.getBoundingClientRect();
+    item.postTop = scrollTop + postRect.top;
+    item.postHeight = item.post.offsetHeight;
+    item.topbarHeight = item.topbar.offsetHeight;
+    item.sidebarHeight = item.sidebar.offsetHeight;
+  }
+
+  function measure() {
+    var scrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
+    stickyOffset = navigationOffset();
+    items.forEach(function (item) { measureItem(item, scrollTop); });
   }
 
   function collect() {
     items = Array.prototype.map.call(document.querySelectorAll('.atf-post'), function (post) {
       var topbar = post.querySelector('.atf-post__topbar');
       var sidebar = post.querySelector('.atf-post__sidebar-inner');
-      return topbar && sidebar ? { post: post, topbar: topbar, sidebar: sidebar } : null;
+      return topbar && sidebar ? {
+        post: post,
+        topbar: topbar,
+        sidebar: sidebar,
+        postTop: 0,
+        postHeight: 0,
+        topbarHeight: 0,
+        sidebarHeight: 0
+      } : null;
     }).filter(Boolean);
+    measure();
   }
 
   function updateItem(item, scrollTop) {
@@ -93,18 +126,19 @@
       return;
     }
 
-    var postRect = item.post.getBoundingClientRect();
-    var postTop = scrollTop + postRect.top;
-    var postHeight = item.post.offsetHeight;
-    var topbarHeight = item.topbar.offsetHeight;
-    var sidebarHeight = item.sidebar.offsetHeight;
-    var topbarY = clamp(scrollTop - postTop, 0, Math.max(0, postHeight - topbarHeight));
-    var sidebarTop = postTop + topbarHeight;
-    var sidebarY = clamp(scrollTop + topbarHeight - sidebarTop, 0,
-      Math.max(0, postHeight - topbarHeight - sidebarHeight));
+    var topbarY = clamp(
+      scrollTop + stickyOffset - item.postTop,
+      0,
+      Math.max(0, item.postHeight - item.topbarHeight)
+    );
+    var sidebarY = clamp(
+      scrollTop + stickyOffset - item.postTop,
+      0,
+      Math.max(0, item.postHeight - item.topbarHeight - item.sidebarHeight)
+    );
 
-    translate(item.topbar, Math.round(topbarY));
-    translate(item.sidebar, Math.round(sidebarY));
+    translate(item.topbar, topbarY);
+    translate(item.sidebar, sidebarY);
   }
 
   function update() {
@@ -118,13 +152,30 @@
   }
 
   function refresh() {
-    collect();
-    schedule();
+    if (resizeFrame) return;
+    resizeFrame = window.requestAnimationFrame(function () {
+      resizeFrame = 0;
+      measure();
+      schedule();
+    });
+  }
+
+  function observeGeometry() {
+    if (!window.ResizeObserver) return;
+    resizeObserver = new ResizeObserver(refresh);
+    var navigation = document.querySelector('.af-am-navigation');
+    if (navigation) resizeObserver.observe(navigation);
+    items.forEach(function (item) {
+      resizeObserver.observe(item.post);
+      resizeObserver.observe(item.topbar);
+      resizeObserver.observe(item.sidebar);
+    });
   }
 
   function boot() {
     collect();
     if (!items.length) return;
+    observeGeometry();
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', refresh);
     window.addEventListener('load', refresh);
