@@ -55,13 +55,13 @@ foreach (['<article', 'atf-post__topbar', 'atf-post__layout', 'atf-post__sidebar
 atf_classic_assert(!str_contains($template, 'af-apui-postbit'), 'ATF copied the APUI postbit hierarchy.');
 atf_classic_assert(!str_contains($template, "{\$post['subject']}"), 'Per-post subject is still rendered.');
 atf_classic_assert(strpos($template, 'atf-post__moderation') < strpos($template, 'atf-post__sheet-action'), 'Moderation is not the first leading control.');
-atf_classic_assert(strpos($template, 'atf-post__meta-line') > strpos($template, 'atf-post__layout') && strpos($template, 'atf-post__meta-line') < strpos($template, 'atf-post__sidebar'), 'Post metadata does not span the full layout before sidebar/content.');
+atf_classic_assert(strpos($template, 'atf-post__meta-line') > strpos($template, 'atf-post__content'), 'Post metadata is not inside post_content.');
 atf_classic_assert(strpos($template, 'atf-post__meta-line') < strpos($template, 'atf-post__message'), 'Post metadata is not above the post body.');
 atf_classic_assert(substr_count($template, 'atf-post__meta-line') === 1, 'Post metadata is rendered more than once.');
 atf_classic_assert(str_contains($template, 'title="символов в посте"'), 'Character count icon has no required tooltip.');
 atf_classic_assert(str_contains($template, 'fa-solid fa-font'), 'Character count still uses a text label instead of an icon.');
 atf_classic_assert(!str_contains($template, 'Символов:'), 'Character count text label is still rendered.');
-atf_classic_assert(strpos($template, 'atf-post__meta-line') < strpos($template, 'atf-post__content'), 'Post metadata must precede the content column so it can span edge to edge.');
+atf_classic_assert(strpos($template, 'atf-post__meta-line') < strpos($template, 'atf-post__message'), 'Post metadata is not the first visible row inside post_content.');
 atf_classic_assert(strpos($template, 'atf-post__management') > strpos($template, 'atf-post__char-count') && strpos($template, 'atf-post__management') < strpos($template, 'atf-post__message'), 'Management is not inside the metadata line above the post body.');
 
 $source = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/adaptivethemeframework.php');
@@ -139,8 +139,8 @@ atf_classic_assert(str_contains($css, '.atf-post__management-action > i'), 'Mana
 atf_classic_assert(!preg_match('~\\.atf-post__management[^}]*content:\\s*"\\\\f[0-9a-f]+~is', $css), 'Management actions still depend on Font Awesome unicode pseudo-content.');
 atf_classic_assert((bool)preg_match('~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;~s', $css), 'The message does not consume the full content column.');
 atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*flex-wrap:\s*wrap;[^}]*justify-content:\s*flex-end;[^}]*max-width:\s*100%;~s', $css), 'Content metadata does not align right or wrap within its container.');
-atf_classic_assert((bool)preg_match('~\.atf-post__layout\s*\{[^}]*grid-template-areas:\s*"meta meta"\s*"sidebar content";~s', $css), 'Desktop post layout does not give metadata a full-width row.');
-atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*grid-area:\s*meta;[^}]*width:\s*100%;[^}]*max-width:\s*none;[^}]*margin:\s*0;~s', $css), 'Post metadata does not fill the full post width.');
+atf_classic_assert((bool)preg_match('~\.atf-post__layout\s*\{[^}]*grid-template-areas:\s*"sidebar content";~s', $css), 'Desktop post layout does not keep metadata scoped to the content column.');
+atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*width:\s*auto;[^}]*margin-inline:\s*calc\(-1 \* var\(--atf-space-5\)\);~s', $css), 'Post metadata does not bleed exactly to the post_content edges.');
 atf_classic_assert((bool)preg_match('~\.atf-post__permalink\s*\{[^}]*display:\s*inline-flex;~s', $css), 'Permalink does not expose flex ordering for its checkbox.');
 atf_classic_assert(str_contains($source, 'af_adaptivethemeframework_posturl_checkbox_first'), 'Post URL checkbox ordering is not normalized server-side.');
 atf_classic_assert((bool)preg_match('~\.atf-post__char-count\s*\{[^}]*display:\s*inline-flex;[^}]*gap:\s*\.35rem;~s', $css), 'Character count icon and value are not laid out correctly.');
