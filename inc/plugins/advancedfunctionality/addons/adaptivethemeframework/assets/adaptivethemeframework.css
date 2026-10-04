@@ -2329,6 +2329,7 @@ body.atf-active .atf-post__sidebar {
   padding: 0;
   background: linear-gradient(180deg, var(--atf-post-accent-soft), transparent 42%), var(--atf-color-page-subtle);
   border-inline-end: 0;
+  border-end-start-radius: var(--atf-radius-lg);
 }
 body.atf-active .atf-post__sidebar-inner {
   position: sticky;
@@ -2531,6 +2532,8 @@ body.atf-active .atf-post__reputation-corner { position: static; justify-self: e
 body.atf-active .atf-post__layout {
   grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   margin-top: -4px;
+  overflow: hidden;
+  border-radius: 0 0 var(--atf-radius-lg) var(--atf-radius-lg);
 }
 body.atf-active .atf-post__topbar,
 body.atf-active .atf-post__sidebar-inner {
