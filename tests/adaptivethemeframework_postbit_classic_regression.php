@@ -77,6 +77,12 @@ atf_classic_assert(str_contains($css, '.atf-post.af-atf-display[data-element]:no
 atf_classic_assert(str_contains($css, '.atf-post__name a { color: var(--atf-post-accent); }'), 'Nickname does not consume the post element accent.');
 atf_classic_assert(str_contains($css, 'border-radius: 100% 0 0 0'), 'Reputation decoration is not a distinct corner arc.');
 atf_classic_assert(!preg_match('~\.atf-post__sheet-accent[^}]*clip-path:\s*polygon~s', $css), 'Character Sheet decoration is still a polygon blob.');
+atf_classic_assert((bool)preg_match('~\.atf-post__sheet-accent\s*\{[^}]*clip-path:\s*ellipse\([^}]+~s', $css), 'Character Sheet decoration does not keep its curved silhouette inside the accent box.');
+atf_classic_assert((bool)preg_match('~\.atf-post__topbar-leading\s*\{[^}]*overflow:\s*visible;~s', $css), 'Topbar leading clips the character-sheet accent.');
+atf_classic_assert(str_contains($css, '"Font Awesome 6 Free", "Font Awesome 5 Free", FontAwesome'), 'Profile controls lack the same Font Awesome compatibility fallback as the regular postbit.');
+foreach (['postbit_email', 'postbit_pm', 'postbit_find', 'postbit_rep', 'postbit_www'] as $profileControl) {
+    atf_classic_assert((bool)preg_match('~\.atf-post__profile-actions \\.' . $profileControl . '::before\s*\{\s*content:\s*"\\\\f[0-9a-f]+";~i', $css), "Profile action {$profileControl} has no Font Awesome icon.");
+}
 atf_classic_assert((bool)preg_match('~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;~s', $css), 'The message does not consume the full content column.');
 atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*flex-wrap:\s*wrap;[^}]*justify-content:\s*flex-end;[^}]*max-width:\s*100%;~s', $css), 'Content metadata does not align right or wrap within its container.');
 atf_classic_assert((bool)preg_match('~\.atf-post__reputation-corner\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0;[^}]*bottom:\s*0;~s', $css), 'Reputation is not anchored to the content corner.');

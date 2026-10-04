@@ -2223,14 +2223,15 @@ body.atf-active .atf-post__sheet-action { position: relative; display: grid; pla
 body.atf-active .atf-post__sheet-accent {
   position: absolute;
   z-index: -1;
-  inset-block-start: calc(-1 * var(--atf-space-4));
-  inset-inline-start: calc(-1 * var(--atf-space-4));
-  width: 9rem;
-  height: 7.5rem;
-  overflow: hidden;
+  inset-block-start: calc(-1 * var(--atf-space-3));
+  inset-inline-start: calc(-1 * var(--atf-space-3));
+  width: 8.75rem;
+  height: 7rem;
   background: var(--atf-post-accent-gradient);
-  border-radius: var(--atf-radius-lg) 0 65% 0;
-  clip-path: path("M 0 0 H 144 V 28 C 110 28 119 65 84 68 C 48 71 57 108 0 120 Z");
+  /* Keep the whole silhouette inside its own box.  The previous fixed SVG
+     path ended on x=0, exposing a hard, apparently cropped vertical edge. */
+  border-radius: 48% 38% 58% 42% / 38% 34% 66% 62%;
+  clip-path: ellipse(70% 68% at 35% 28%);
   filter: drop-shadow(0 .4rem .8rem var(--atf-post-accent-soft));
 }
 body.atf-active .atf-post__sheet-action :is(a,button) { color: #fff; border: 0; background: transparent; }
@@ -2240,7 +2241,6 @@ body.atf-active .atf-post__primary-avatar { position: relative; overflow: visibl
 body.atf-active .atf-post__primary-avatar > :is(img,svg) { overflow: hidden; border-radius: 50%; }
 body.atf-active .atf-post__online-indicator { position: absolute; top: .25rem; right: .25rem; width: .85rem; height: .85rem; border: 2px solid var(--atf-color-surface); border-radius: 50%; background: #45d483; box-shadow: 0 0 .6rem #45d483; }
 body.atf-active .atf-post__author-tools .atf-post__profile-actions { justify-content: center; margin: 0; }
-body.atf-active .atf-post__author-tools .atf-post__profile-actions :is(a,.postbit_button) { width: 1.85rem; height: 1.85rem; justify-content: center; overflow: hidden; white-space: nowrap; text-indent: -9999px; border-radius: 50%; background: var(--atf-post-accent-soft); }
 body.atf-active .atf-post__sidebar { position: static; padding: 0; background: linear-gradient(180deg, var(--atf-post-accent-soft), transparent 42%), var(--atf-color-page-subtle); }
 body.atf-active .atf-post__sidebar-inner { position: sticky; top: var(--atf-sticky-offset, 1rem); max-height: calc(100vh - var(--atf-sticky-offset, 1rem) - 1rem); overflow-y: auto; padding: var(--atf-space-4); border-block-start: 3px solid var(--atf-post-accent); }
 body.atf-active .atf-post__sidebar-inner > :not(:first-child) { margin-block-start: var(--atf-space-4); padding-block-start: var(--atf-space-3); border-block-start: 1px solid var(--atf-color-border); }
@@ -2289,10 +2289,44 @@ body.atf-active .atf-post__topbar {
   z-index: 20;
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
-body.atf-active .atf-post__topbar-leading { display: flex; align-items: flex-start; gap: var(--atf-space-2); }
+body.atf-active .atf-post__topbar-leading { display: flex; align-items: flex-start; gap: var(--atf-space-2); min-width: 0; overflow: visible; }
 body.atf-active .atf-post__moderation { order: -1; align-self: flex-start; }
-body.atf-active .atf-post__profile-actions :is(a, .postbit_button) { position: relative; font-size: 0; text-indent: 0; background-image: none; }
-body.atf-active .atf-post__profile-actions :is(a, .postbit_button)::before { font: 900 .85rem/1 "Font Awesome 6 Free"; }
+body.atf-active .atf-post__profile-actions :is(a, .postbit_button) {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--atf-post-accent) 35%, transparent);
+  border-radius: var(--atf-radius-sm);
+  color: var(--atf-post-accent);
+  background: var(--atf-post-accent-soft);
+  background-image: none;
+  font-size: 0;
+  line-height: 1;
+  text-indent: 0;
+  text-decoration: none;
+}
+body.atf-active .atf-post__profile-actions :is(a, .postbit_button) > span { display: none; }
+body.atf-active .atf-post__profile-actions :is(a, .postbit_button)::before {
+  display: block;
+  font-family: "Font Awesome 6 Free", "Font Awesome 5 Free", FontAwesome;
+  font-size: .85rem;
+  font-style: normal;
+  font-variant: normal;
+  font-weight: 900;
+  line-height: 1;
+  text-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+}
+body.atf-active .atf-post__profile-actions :is(a, .postbit_button):is(:hover, :focus-visible) {
+  color: #fff;
+  background: var(--atf-post-accent);
+  outline: 2px solid var(--atf-post-accent-soft);
+  outline-offset: 2px;
+}
 body.atf-active .atf-post__profile-link a::before { content: "\f007"; }
 body.atf-active .atf-post__profile-actions .postbit_email::before { content: "\f0e0"; }
 body.atf-active .atf-post__profile-actions .postbit_pm::before { content: "\f075"; }
