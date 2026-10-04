@@ -2212,6 +2212,7 @@ body.atf-active .atf-post.af-atf-display[data-element]:not([data-element=""]) {
 }
 body.atf-active .atf-post__topbar {
   position: relative;
+  overflow: visible;
   background-color: var(--atf-color-page-subtle);
   background-image: var(--af-apui-postbit-name-overlay, none), linear-gradient(115deg, var(--atf-post-accent-soft), transparent 38%), var(--af-apui-postbit-name-bg-image, none);
   background-position: center;
@@ -2223,15 +2224,14 @@ body.atf-active .atf-post__sheet-action { position: relative; display: grid; pla
 body.atf-active .atf-post__sheet-accent {
   position: absolute;
   z-index: -1;
-  inset-block-start: calc(-1 * var(--atf-space-3));
-  inset-inline-start: calc(-1 * var(--atf-space-3));
-  width: 8.75rem;
-  height: 7rem;
+  inset-block-start: calc(-1 * var(--atf-space-4));
+  inset-inline-start: calc(-1 * var(--atf-space-4));
+  width: 9rem;
+  height: 7.5rem;
+  overflow: visible;
   background: var(--atf-post-accent-gradient);
-  /* Keep the whole silhouette inside its own box.  The previous fixed SVG
-     path ended on x=0, exposing a hard, apparently cropped vertical edge. */
-  border-radius: 48% 38% 58% 42% / 38% 34% 66% 62%;
-  clip-path: ellipse(70% 68% at 35% 28%);
+  border-radius: var(--atf-radius-lg) 0 65% 0;
+  clip-path: path("M 0 0 H 144 V 28 C 110 28 119 65 84 68 C 48 71 57 108 0 120 Z");
   filter: drop-shadow(0 .4rem .8rem var(--atf-post-accent-soft));
 }
 body.atf-active .atf-post__sheet-action :is(a,button) { color: #fff; border: 0; background: transparent; }
