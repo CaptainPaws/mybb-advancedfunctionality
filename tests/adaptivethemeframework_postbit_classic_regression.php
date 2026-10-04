@@ -79,10 +79,9 @@ atf_classic_assert(str_contains($css, 'border-radius: 100% 0 0 0'), 'Reputation 
 atf_classic_assert(!preg_match('~\.atf-post__sheet-accent[^}]*clip-path:\s*polygon~s', $css), 'Character Sheet decoration is still a polygon blob.');
 atf_classic_assert((bool)preg_match('~\.atf-post__sheet-accent\s*\{[^}]*clip-path:\s*ellipse\([^}]+~s', $css), 'Character Sheet decoration does not keep its curved silhouette inside the accent box.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar-leading\s*\{[^}]*overflow:\s*visible;~s', $css), 'Topbar leading clips the character-sheet accent.');
-atf_classic_assert(str_contains($css, '"Font Awesome 6 Free", "Font Awesome 5 Free", FontAwesome'), 'Profile controls lack the same Font Awesome compatibility fallback as the regular postbit.');
-foreach (['postbit_email', 'postbit_pm', 'postbit_find', 'postbit_rep', 'postbit_www'] as $profileControl) {
-    atf_classic_assert((bool)preg_match('~\.atf-post__profile-actions \\.' . $profileControl . '::before\s*\{\s*content:\s*"\\\\f[0-9a-f]+";~i', $css), "Profile action {$profileControl} has no Font Awesome icon.");
-}
+atf_classic_assert(!preg_match('~\\.atf-post__profile-actions[^}]*::before~s', $css), 'Profile actions still synthesize icons through CSS pseudo-elements.');
+atf_classic_assert(!preg_match('~\\.atf-post__profile-actions[^}]*content:\\s*"\\\\f[0-9a-f]+~is', $css), 'Profile actions still contain Font Awesome unicode content codes.');
+atf_classic_assert(str_contains($css, '.atf-post__profile-action > i'), 'Profile action CSS does not style real HTML icons.');
 atf_classic_assert((bool)preg_match('~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;~s', $css), 'The message does not consume the full content column.');
 atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*flex-wrap:\s*wrap;[^}]*justify-content:\s*flex-end;[^}]*max-width:\s*100%;~s', $css), 'Content metadata does not align right or wrap within its container.');
 atf_classic_assert((bool)preg_match('~\.atf-post__reputation-corner\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0;[^}]*bottom:\s*0;~s', $css), 'Reputation is not anchored to the content corner.');
