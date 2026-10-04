@@ -2294,7 +2294,7 @@ body.atf-active .atf-post__name, body.atf-active .atf-post__name a { color: var(
 body.atf-active .atf-post__author-tools { display: flex; align-items: flex-end; justify-content: flex-end; gap: var(--atf-space-2); min-width: 0; }
 body.atf-active .atf-post__primary-avatar { order: 2; position: relative; overflow: visible; border-color: var(--atf-post-accent-soft); box-shadow: 0 0 0 1px var(--atf-post-accent); }
 body.atf-active .atf-post__primary-avatar :is(img,svg) { overflow: hidden; border-radius: 50%; object-position: center center !important; }
-body.atf-active .atf-post__online-indicator {
+body.atf-active .atf-post__primary-avatar > .atf-post__online-indicator {
   position: absolute;
   z-index: 5;
   top: -.1rem;
@@ -2510,18 +2510,29 @@ body.atf-active .atf-post__primary-avatar {
   box-sizing: border-box;
   overflow: visible;
 }
-body.atf-active .atf-post__primary-avatar > a {
+body.atf-active .atf-post__primary-avatar-media {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  width: 100%;
-  height: 100%;
   overflow: hidden;
   border-radius: 50%;
 }
-body.atf-active .atf-post__primary-avatar > :is(img, svg),
-body.atf-active .atf-post__primary-avatar > a > :is(img, svg) {
+body.atf-active .atf-post__primary-avatar-media > a,
+body.atf-active .atf-post__primary-avatar-media > .author_avatar {
+  display: grid !important;
+  place-items: center;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border-radius: 50% !important;
+}
+body.atf-active .atf-post__primary-avatar-media :is(.author_avatar, img, svg),
+body.atf-active .atf-post__primary-avatar-media .author_avatar :is(img, svg) {
   display: block !important;
   width: 100% !important;
   height: 100% !important;
@@ -2531,7 +2542,6 @@ body.atf-active .atf-post__primary-avatar > a > :is(img, svg) {
   object-fit: cover !important;
   object-position: center center !important;
   border-radius: 50% !important;
-  clip-path: circle(50% at 50% 50%);
 }
 body.atf-active .atf-post__content {
   position: relative;
