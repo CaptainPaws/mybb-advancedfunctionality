@@ -34,7 +34,7 @@
           <span class="atf-post__char-count" title="символов в посте" data-af-title="символов в посте"><i class="fa-solid fa-font" aria-hidden="true"></i><span class="atf-post__char-count-value">{$post['af_post_char_count_formatted']}</span></span>
           <div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">{$post['af_atf_slots']['post.actions']}</div>
         </div>
-        {$post['message']}
+        <div class="atf-post__message-body">{$post['message']}</div>
       </div>
       <div class="atf-post__attachments">{$post['attachments']}</div><div class="atf-post__slot atf-post__slot--after">{$post['af_atf_slots']['post.after_body']}</div>
       <div class="atf-post__signature">{$post['signature']}</div>
