@@ -121,8 +121,12 @@ atf_classic_assert(str_contains($template, 'atf-post__primary-avatar-media'), 'P
 atf_classic_assert(str_contains($css, '.atf-post__primary-avatar-media > a,'), 'Wrapped primary avatars are not normalized inside the media wrapper.');
 atf_classic_assert((bool)preg_match('~\.atf-post\.af-atf-display\s*\{[^}]*border:\s*1px solid var\(--atf-post-accent\);~s', $css), 'Classic post shell does not use the main accent for its 1px frame.');
 atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar\s*\{[^}]*display:\s*grid;[^}]*place-items:\s*center;[^}]*overflow:\s*visible;~s', $css), 'Primary avatar is not centered or still clips the online indicator.');
+atf_classic_assert((bool)preg_match('~\.atf-post__sidebar\s*\{[^}]*border-inline-end:\s*0;~s', $css), 'Outer sidebar still owns the runaway divider.');
+atf_classic_assert((bool)preg_match('~\.atf-post__sidebar-inner\s*\{[^}]*border:\s*1px solid var\(--atf-post-accent\);~s', $css), 'Sticky sidebar inner does not own the stable accent frame.');
 atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar-media\s*\{[^}]*inset:\s*0;[^}]*overflow:\s*hidden;[^}]*border-radius:\s*50%;~s', $css), 'Primary avatar media is not clipped inside the circular frame.');
 atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar-media :is\(\.author_avatar, img, svg\)[^}]*object-position:\s*center center !important;~s', $css), 'author_avatar is not force-centered inside the primary avatar frame.');
+atf_classic_assert(str_contains($css, '.author_avatar > a {'), 'Nested author_avatar link is not normalized to the avatar frame.');
+atf_classic_assert(str_contains($css, 'transform: translate(-50%, -50%) !important;'), 'Primary avatar image is not explicitly centered inside the frame.');
 atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar > \.atf-post__online-indicator\s*\{[^}]*z-index:\s*5;[^}]*top:\s*-\.1rem;[^}]*right:\s*-\.1rem;[^}]*display:\s*block;~s', $css), 'Online activity indicator is not anchored to the primary avatar shell.');
 atf_classic_assert((bool)preg_match('~\\.atf-post__sheet-action \\.af-apui-postbit-action\\s*\\{[^}]*width:\\s*2\\.75rem;[^}]*height:\\s*2\\.75rem;[^}]*border:\\s*0 !important;[^}]*background:\\s*transparent !important;[^}]*box-shadow:\\s*none !important;[^}]*transform:\\s*translateY\\(-\\.75rem\\);~s', $css), 'Character Sheet action is not frameless or raised into the wave corner.');
 atf_classic_assert(str_contains($source, "'atf-post__management-action'"), 'Management actions are not converted to real icon controls.');
@@ -139,6 +143,8 @@ atf_classic_assert((bool)preg_match(
     '~\.atf-post__topbar::after\s*\{[^}]*z-index:\s*0;[^}]*inset-inline:\s*0;[^}]*bottom:\s*0;[^}]*height:\s*1px;[^}]*background:\s*var\(--atf-post-accent\);~s',
     $css
 ), 'Post header bottom accent line is not full width beneath the decorative wave.');
+atf_classic_assert(str_contains($css, '.atf-post__topbar > * {'), 'Topbar children do not establish a layer above the bottom accent line.');
+atf_classic_assert((bool)preg_match('~\.atf-post__topbar-leading\s*\{[^}]*z-index:\s*2;~s', $css), 'Wave container is not layered above the full-width bottom accent line.');
 atf_classic_assert((bool)preg_match('~\.atf-post__sheet-accent\s*\{[^}]*z-index:\s*1;~s', $css), 'Decorative wave does not layer above the full-width bottom accent line.');
 atf_classic_assert(str_contains($css, '.atf-post__sheet-action .af-apui-postbit-actions { position: relative; z-index: 2; display: block; }'), 'Character sheet action does not stay above the wave.');
 atf_classic_assert(str_contains($css, 'var(--af-apui-postbit-author-bg-image, none)'), 'ATF author panel ignores the AdvancedAppearance profile background.');
