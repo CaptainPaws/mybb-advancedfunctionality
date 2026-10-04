@@ -91,6 +91,8 @@ atf_classic_assert(
 );
 atf_classic_assert(!str_contains($css, '.atf-post__author-tools .atf-post__profile-actions'), 'Profile actions are still laid out beside the avatar.');
 atf_classic_assert((bool)preg_match('~\\.atf-post__management \\.atf-post__management-action,\\s*body\\.atf-active \\.atf-post__profile-actions \\.atf-post__profile-action\\s*\\{~s', $css), 'Profile actions do not share the post management button styling.');
+atf_classic_assert(str_contains($css, '.postbit_find.atf-post__profile-action,'), 'Find profile action is not hidden from the profile action row.');
+atf_classic_assert(str_contains($css, '.postbit_reputation_add.atf-post__profile-action {'), 'Reputation-add profile action is not hidden from the profile action row.');
 atf_classic_assert(str_contains($css, 'object-position: center center !important;'), 'Primary avatar crop is not force-centered across wrapper variants.');
 atf_classic_assert(str_contains($css, '.atf-post__primary-avatar > a {'), 'Wrapped primary avatars are not normalized to the full circular surface.');
 atf_classic_assert((bool)preg_match('~\\.atf-post__sheet-action \\.af-apui-postbit-action\\s*\\{[^}]*width:\\s*2\\.75rem;[^}]*height:\\s*2\\.75rem;[^}]*border:\\s*0 !important;[^}]*background:\\s*transparent !important;[^}]*box-shadow:\\s*none !important;[^}]*transform:\\s*translateY\\(-\\.75rem\\);~s', $css), 'Character Sheet action is not frameless or raised into the wave corner.');
