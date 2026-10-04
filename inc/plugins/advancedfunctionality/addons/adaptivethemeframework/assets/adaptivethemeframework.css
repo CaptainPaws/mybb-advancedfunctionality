@@ -2385,6 +2385,15 @@ body.atf-active .atf-post__topbar {
   z-index: 20;
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
+body.atf-active .atf-post__topbar[data-atf-sticky-translate]:not([data-atf-sticky-translate="0"])::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 100%;
+  height: var(--atf-space-3);
+  pointer-events: none;
+  background: var(--atf-color-page-subtle);
+}
 body.atf-active .atf-post__topbar-leading { position: relative; display: flex; align-self: stretch; align-items: flex-start; gap: var(--atf-space-2); min-width: 0; overflow: visible; isolation: isolate; }
 body.atf-active .atf-post__moderation { order: -1; align-self: flex-start; }
 body.atf-active .atf-post__moderation:empty { display: none; }
