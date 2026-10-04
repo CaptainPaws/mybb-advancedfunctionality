@@ -1016,6 +1016,42 @@ function af_adaptivethemeframework_label_post_controls(string $html, array $labe
     }, $html) ?? $html;
 }
 
+/**
+ * Replace only the presentational contents of one native postbit control.
+ * The opening tag is kept intact so MyBB URLs, onclick handlers, data
+ * attributes, tokens and permission-filtered presence remain authoritative.
+ */
+function af_adaptivethemeframework_iconize_post_control(string $html, string $label, string $icon): string
+{
+    if ($html === '') return '';
+
+    $html = af_adaptivethemeframework_label_post_controls($html, ['*' => $label]);
+    $icon = preg_replace('~[^a-z0-9-]~i', '', $icon) ?? '';
+    if ($icon === '') return $html;
+
+    return preg_replace_callback(
+        '~<(a|button)\\b([^>]*)>.*?</\\1>~is',
+        static function (array $match) use ($icon): string {
+            $tagName = strtolower($match[1]);
+            $attributes = $match[2];
+
+            if (preg_match('~\\bclass\\s*=\\s*(["\\'])(.*?)\\1~is', $attributes, $classMatch)) {
+                $classes = trim($classMatch[2]);
+                if (!preg_match('~(?:^|\\s)atf-post__profile-action(?:\\s|$)~', $classes)) {
+                    $replacement = 'class=' . $classMatch[1] . trim($classes . ' atf-post__profile-action') . $classMatch[1];
+                    $attributes = preg_replace('~\\bclass\\s*=\\s*(["\\'])(.*?)\\1~is', $replacement, $attributes, 1) ?? $attributes;
+                }
+            } else {
+                $attributes .= ' class="atf-post__profile-action"';
+            }
+
+            return '<' . $tagName . $attributes . '><i class="fa-solid ' . $icon . '" aria-hidden="true"></i></' . $tagName . '>';
+        },
+        $html,
+        1
+    ) ?? $html;
+}
+
 /** Count visible characters in the raw MyBB/BBCode message, never rendered HTML. */
 function af_adaptivethemeframework_post_text_count(string $message): int
 {
@@ -1067,18 +1103,25 @@ function af_adaptivethemeframework_post_context(array $post): array
     ]);
     $profileActions = '';
     if (!empty($post['profilelink'])) {
-        $profileLink = af_adaptivethemeframework_label_post_controls(
+        $profileActions .= af_adaptivethemeframework_iconize_post_control(
             (string)$post['profilelink'],
-            ['*' => 'Профиль']
+            'Профиль',
+            'fa-user'
         );
-        $profileActions .= '<span class="atf-post__profile-link">' . $profileLink . '</span>';
     }
-    foreach ($profileActionKeys as $key) $profileActions .= (string)($post[$key] ?? '');
-    $profileActions = af_adaptivethemeframework_label_post_controls($profileActions, [
-        'postbit_profile' => 'Профиль', 'postbit_email' => 'E-mail',
-        'postbit_pm' => 'ЛС', 'postbit_www' => 'Сайт',
-        'postbit_find' => 'Найти сообщения', 'postbit_rep' => 'Репутация',
-    ]);
+    $profileActionPresentation = [
+        'button_email' => ['E-mail', 'fa-envelope'],
+        'button_pm' => ['ЛС', 'fa-message'],
+        'button_www' => ['Сайт', 'fa-globe'],
+        'button_find' => ['Поиск', 'fa-magnifying-glass'],
+        'button_rep' => ['Оценить', 'fa-thumbs-up'],
+    ];
+    foreach ($profileActionKeys as $key) {
+        $control = (string)($post[$key] ?? '');
+        if ($control === '') continue;
+        [$label, $icon] = $profileActionPresentation[$key];
+        $profileActions .= af_adaptivethemeframework_iconize_post_control($control, $label, $icon);
+    }
     $keys = [
         'username', 'profilelink', 'useravatar', 'usertitle', 'groupimage', 'userstars',
         'postdate', 'posturl', 'subject', 'subject_extra', 'icon', 'editedmsg',
