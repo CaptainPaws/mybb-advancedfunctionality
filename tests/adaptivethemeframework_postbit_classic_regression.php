@@ -58,6 +58,9 @@ atf_classic_assert(strpos($template, 'atf-post__moderation') < strpos($template,
 atf_classic_assert(strpos($template, 'atf-post__meta-line') > strpos($template, 'atf-post__content'), 'Post metadata is not inside the content column.');
 atf_classic_assert(strpos($template, 'atf-post__meta-line') < strpos($template, 'atf-post__message'), 'Post metadata is not above the post body.');
 atf_classic_assert(substr_count($template, 'atf-post__meta-line') === 1, 'Post metadata is rendered more than once.');
+atf_classic_assert(str_contains($template, 'title="символов в посте"'), 'Character count icon has no required tooltip.');
+atf_classic_assert(str_contains($template, 'fa-solid fa-font'), 'Character count still uses a text label instead of an icon.');
+atf_classic_assert(!str_contains($template, 'Символов:'), 'Character count text label is still rendered.');
 atf_classic_assert(!str_contains(substr($template, 0, strpos($template, 'atf-post__content')), 'atf-post__meta-line'), 'Post metadata remains in the topbar.');
 atf_classic_assert(strpos($template, 'atf-post__management') > strpos($template, 'atf-post__char-count') && strpos($template, 'atf-post__management') < strpos($template, 'atf-post__message'), 'Management is not inside the metadata line above the post body.');
 
@@ -127,12 +130,17 @@ atf_classic_assert(str_contains($css, '.atf-post__management-action > i'), 'Mana
 atf_classic_assert(!preg_match('~\\.atf-post__management[^}]*content:\\s*"\\\\f[0-9a-f]+~is', $css), 'Management actions still depend on Font Awesome unicode pseudo-content.');
 atf_classic_assert((bool)preg_match('~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;~s', $css), 'The message does not consume the full content column.');
 atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*flex-wrap:\s*wrap;[^}]*justify-content:\s*flex-end;[^}]*max-width:\s*100%;~s', $css), 'Content metadata does not align right or wrap within its container.');
-atf_classic_assert(str_contains($css, 'background: color-mix(in srgb, var(--atf-color-surface, var(--atf-color-page-subtle)) 78%, #fff 22%) !important;'), 'Post meta line background is not visibly lighter than the post body.');
+atf_classic_assert((bool)preg_match('~\.atf-post__permalink\s*\{[^}]*display:\s*inline-flex;~s', $css), 'Permalink does not expose flex ordering for its checkbox.');
+atf_classic_assert((bool)preg_match('~\.atf-post__permalink :is\(input\[type="checkbox"\], \.checkbox\)\s*\{[^}]*order:\s*-1;~s', $css), 'Permalink checkbox is not moved before the link.');
+atf_classic_assert((bool)preg_match('~\.atf-post__char-count\s*\{[^}]*display:\s*inline-flex;[^}]*gap:\s*\.35rem;~s', $css), 'Character count icon and value are not laid out correctly.');
+atf_classic_assert(str_contains($css, 'background: color-mix(in srgb, var(--atf-color-surface, var(--atf-color-page-subtle)) 86%, #fff 14%) !important;'), 'Post meta line background is not a subtle lighter shade of the post body.');
 atf_classic_assert((bool)preg_match('~\.atf-post__reputation-corner\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0;[^}]*bottom:\s*0;~s', $css), 'Reputation is not anchored to the content corner.');
 atf_classic_assert((bool)preg_match(
-    '~\.atf-post__topbar::after\s*\{[^}]*inset-inline-start:\s*9rem;[^}]*bottom:\s*0;[^}]*height:\s*1px;[^}]*background:\s*var\(--atf-post-accent\);~s',
+    '~\.atf-post__topbar::after\s*\{[^}]*z-index:\s*0;[^}]*inset-inline:\s*0;[^}]*bottom:\s*0;[^}]*height:\s*1px;[^}]*background:\s*var\(--atf-post-accent\);~s',
     $css
-), 'Post header bottom accent line is missing, too thick, or overlaps the decorative wave.');
+), 'Post header bottom accent line is not full width beneath the decorative wave.');
+atf_classic_assert((bool)preg_match('~\.atf-post__sheet-accent\s*\{[^}]*z-index:\s*1;~s', $css), 'Decorative wave does not layer above the full-width bottom accent line.');
+atf_classic_assert(str_contains($css, '.atf-post__sheet-action .af-apui-postbit-actions { position: relative; z-index: 2; display: block; }'), 'Character sheet action does not stay above the wave.');
 atf_classic_assert(str_contains($css, 'var(--af-apui-postbit-author-bg-image, none)'), 'ATF author panel ignores the AdvancedAppearance profile background.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar\s*\{[^}]*var\(--af-apui-postbit-name-bg-image, none\)~s', $css), 'ATF topbar ignores the existing AdvancedAppearance name background.');
 atf_classic_assert(!preg_match('~\.atf-post__name\s*\{[^}]*background-image~s', $css), 'Nickname still owns the AdvancedAppearance background.');
