@@ -1255,7 +1255,7 @@ function af_adaptivethemeframework_post_reputation(array $post): string
     }
     $scoreText = ($score > 0 ? '+' : '') . $score;
     $canAdd = trim((string)($post['button_rep'] ?? '')) !== '' && $uid > 0 && $pid > 0;
-    $heart = $canAdd ? '<button type="button" class="atf-post-reputation__heart" title="Оценить сообщение" aria-label="Оценить сообщение" onclick="event.stopPropagation(); MyBB.reputation('.$uid.','.$pid.'); return false;">&#9829;</button>' : '<span class="atf-post-reputation__heart" aria-hidden="true">&#9829;</span>';
+    $heart = $canAdd ? '<button type="button" class="atf-post-reputation__heart" title="Оценить сообщение" aria-label="Оценить сообщение" onclick="event.stopPropagation(); MyBB.reputation('.$uid.','.$pid.'); return false;"><i class="fa-solid fa-heart" aria-hidden="true"></i></button>' : '<span class="atf-post-reputation__heart" aria-hidden="true"><i class="fa-solid fa-heart"></i></span>';
     return '<div class="atf-post-reputation">'.$heart.'<button type="button" class="atf-post-reputation__score" aria-haspopup="true" aria-expanded="false">'.$escape($scoreText).'</button>'
         .'<div class="atf-post-reputation__popover" role="tooltip"><strong>Оценки сообщения</strong>'
         .($rows !== '' ? '<ul>'.$rows.'</ul>' : '<span>Оценок пока нет</span>').'</div></div>';
