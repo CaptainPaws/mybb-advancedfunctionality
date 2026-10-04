@@ -2335,9 +2335,12 @@ body.atf-active .atf-post__sidebar-inner {
   top: var(--atf-sticky-offset, 1rem);
   box-sizing: border-box;
   max-height: calc(100vh - var(--atf-sticky-offset, 1rem) - 1rem);
+  margin-block-end: 15px;
   overflow-y: auto;
   padding: var(--atf-space-4);
-  border: 1px solid var(--atf-post-accent);
+  border: 0;
+  border-inline-end: 1px solid var(--atf-post-accent);
+  border-block-end: 1px solid var(--atf-post-accent);
 }
 body.atf-active .atf-post__sidebar-inner > :not(:first-child) { margin-block-start: var(--atf-space-4); padding-block-start: var(--atf-space-3); border-block-start: 1px solid var(--atf-color-border); }
 body.atf-active .atf-post__secondary-avatar { border: 1px solid var(--atf-post-accent); box-shadow: 0 .75rem 2rem var(--atf-post-accent-soft); }
@@ -2347,7 +2350,7 @@ body.atf-active .atf-post__content { position: relative; padding-inline-end: cal
 body.atf-active .atf-post__management { position: absolute; z-index: 3; inset-block-start: var(--atf-space-3); inset-inline-end: 0; display: flex; flex-direction: column; gap: .3rem; padding: .35rem; background: var(--atf-color-page-subtle); border: 1px solid var(--atf-color-border); border-inline-end: 0; border-radius: var(--atf-radius-md) 0 0 var(--atf-radius-md); }
 body.atf-active .atf-post__management :is(a,button) { display: grid; place-items: center; width: 2rem; min-height: 2rem; padding: 0; overflow: hidden; }
 body.atf-active .atf-post__reputation-corner { position: absolute; z-index: 10; right: 0; bottom: 0; min-width: 7rem; padding: 2.4rem .65rem .55rem 2.6rem; background: var(--atf-post-accent-gradient); border-radius: 100% 0 0 0; color: #fff; }
-body.atf-active .atf-post-reputation { position: relative; display: flex; justify-content: flex-end; align-items: center; gap: .55rem; }
+body.atf-active .atf-post-reputation { position: relative; display: flex; justify-content: flex-end; align-items: center; gap: .75rem; }
 body.atf-active .atf-post-reputation__heart {
   display: inline-flex;
   align-items: center;
@@ -2612,7 +2615,7 @@ body.atf-active .atf-post__reputation-corner {
   min-width: 0;
   padding: 2.8rem .65rem .55rem 2.4rem;
   overflow: visible;
-  border-radius: 100% 0 0 0;
+  border-radius: 100% 0 var(--atf-radius-lg) 0;
 }
 
 @media (max-width: 48rem) {
