@@ -66,7 +66,7 @@
   var items = [];
   var frame = 0;
   var resizeFrame = 0;
-  var stickyOffset = 3;
+  var stickyOffset = 0;
   var resizeObserver = null;
 
   function clamp(value, min, max) {
@@ -92,8 +92,8 @@
 
   function navigationOffset() {
     var navigation = document.querySelector('.af-am-navigation');
-    if (!navigation) return 3;
-    return Math.ceil(navigation.getBoundingClientRect().height) + 3;
+    if (!navigation) return 0;
+    return Math.ceil(navigation.getBoundingClientRect().height);
   }
 
   function measureItem(item, scrollTop) {
