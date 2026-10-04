@@ -2596,7 +2596,7 @@ body.atf-active .atf-post__meta-line {
   position: relative;
   z-index: 15;
   box-sizing: border-box;
-  background: var(--atf-color-surface, var(--atf-color-page-subtle));
+  background: color-mix(in srgb, var(--atf-color-surface, var(--atf-color-page-subtle)) 90%, #fff 10%);
 }
 body.atf-active .atf-post__meta-line > .atf-post__management {
   margin-inline-start: auto;
