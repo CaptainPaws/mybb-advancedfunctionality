@@ -95,10 +95,15 @@ atf_classic_assert(str_contains($source, "'button_www'"), 'Profile actions omit 
 atf_classic_assert((bool)preg_match('~@media \(max-width: 48rem\).*?\.atf-post__topbar \{ position: static;.*?\.atf-post__sidebar-inner \{ position: static;~s', $css), 'Mobile does not disable both sticky surfaces.');
 
 $sticky = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/assets/adaptivethemeframework.modals.js');
-foreach (['.atf-post__topbar', '.atf-post__sidebar-inner', 'postHeight - topbarHeight',
-          'postHeight - topbarHeight - sidebarHeight', "matchMedia('(min-width: 48.0625rem)')"] as $contract) {
+foreach (['.atf-post__topbar', '.atf-post__sidebar-inner', "document.querySelector('.af-am-navigation')",
+          'item.postTop', 'item.postHeight', 'item.topbarHeight', 'item.sidebarHeight',
+          'ResizeObserver', "matchMedia('(min-width: 48.0625rem)')"] as $contract) {
     atf_classic_assert(str_contains($sticky, $contract), "Bounded postbit sticky controller omits {$contract}");
 }
+atf_classic_assert(!str_contains($sticky, 'var postRect = item.post.getBoundingClientRect();\n    var postTop'),
+    'Postbit sticky scroll path must not re-read document geometry on every frame.');
+atf_classic_assert(str_contains($sticky, 'Math.ceil(navigation.getBoundingClientRect().height) + 8'),
+    'Postbit sticky offset does not clear the sticky AdvancedMenu navigation.');
 atf_classic_assert(!str_contains($source, 'adaptivethemeframework.postbit.js?v='), 'Postbit sticky controller must not depend on a separately deployed asset.');
 atf_classic_assert(str_contains($source, 'adaptivethemeframework.modals.js?v='), 'Bundled ATF frontend controller is not delivered.');
 
