@@ -2426,7 +2426,8 @@ body.atf-active .atf-post__moderation { order: -1; align-self: flex-start; }
 body.atf-active .atf-post__moderation:empty { display: none; }
 body.atf-active .atf-post__name {
   margin-inline-start: clamp(1.5rem, 2.5vw, 2.5rem);
-  padding: var(--atf-space-2) var(--atf-space-3);
+  padding-block: var(--atf-space-2);
+  padding-inline: 0;
 }
 body.atf-active .atf-post__sidebar-inner {
   position: sticky;
@@ -2510,19 +2511,27 @@ body.atf-active .atf-post__primary-avatar {
   overflow: visible;
 }
 body.atf-active .atf-post__primary-avatar > a {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
 }
 body.atf-active .atf-post__primary-avatar > :is(img, svg),
 body.atf-active .atf-post__primary-avatar > a > :is(img, svg) {
-  display: block;
+  display: block !important;
   width: 100% !important;
   height: 100% !important;
-  max-width: none !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
   margin: 0 !important;
   object-fit: cover !important;
   object-position: center center !important;
-  border-radius: inherit;
+  border-radius: 50% !important;
+  clip-path: circle(50% at 50% 50%);
 }
 body.atf-active .atf-post__content {
   position: relative;
