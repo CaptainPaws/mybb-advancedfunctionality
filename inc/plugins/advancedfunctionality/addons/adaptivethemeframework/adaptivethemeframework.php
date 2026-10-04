@@ -1030,16 +1030,21 @@ function af_adaptivethemeframework_iconize_post_control(string $html, string $la
     if ($icon === '') return $html;
 
     return preg_replace_callback(
-        '~<(a|button)\\b([^>]*)>.*?</\\1>~is',
+        '~<(a|button)\b([^>]*)>.*?</\1>~is',
         static function (array $match) use ($icon): string {
             $tagName = strtolower($match[1]);
             $attributes = $match[2];
 
-            if (preg_match('~\\bclass\\s*=\\s*(["\\'])(.*?)\\1~is', $attributes, $classMatch)) {
+            if (preg_match('~\bclass\s*=\s*(["\'])(.*?)\1~is', $attributes, $classMatch)) {
                 $classes = trim($classMatch[2]);
-                if (!preg_match('~(?:^|\\s)atf-post__profile-action(?:\\s|$)~', $classes)) {
+                if (!preg_match('~(?:^|\s)atf-post__profile-action(?:\s|$)~', $classes)) {
                     $replacement = 'class=' . $classMatch[1] . trim($classes . ' atf-post__profile-action') . $classMatch[1];
-                    $attributes = preg_replace('~\\bclass\\s*=\\s*(["\\'])(.*?)\\1~is', $replacement, $attributes, 1) ?? $attributes;
+                    $attributes = preg_replace(
+                        '~\bclass\s*=\s*(["\'])(.*?)\1~is',
+                        $replacement,
+                        $attributes,
+                        1
+                    ) ?? $attributes;
                 }
             } else {
                 $attributes .= ' class="atf-post__profile-action"';
