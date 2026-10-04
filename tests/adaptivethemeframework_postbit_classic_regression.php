@@ -81,6 +81,9 @@ atf_classic_assert(str_contains($css, 'clip-path: path("M 14 0 H 120 C 136 8 138
 atf_classic_assert((bool)preg_match('~\.atf-post__sheet-accent\s*\{[^}]*width:\s*9rem;[^}]*height:\s*7\.5rem;[^}]*overflow:\s*visible;~s', $css), 'Character Sheet wave drawing box clips the established path.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar\s*\{[^}]*overflow:\s*visible;~s', $css), 'Post header clips the character-sheet wave.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar-leading\s*\{[^}]*overflow:\s*visible;~s', $css), 'Topbar leading clips the character-sheet accent.');
+atf_classic_assert((bool)preg_match('~\.atf-post__topbar-leading\s*\{[^}]*position:\s*relative;[^}]*align-self:\s*stretch;[^}]*isolation:\s*isolate;~s', $css), 'Topbar leading does not provide a full-height positioning box for the wave.');
+atf_classic_assert((bool)preg_match('~\.atf-post__sheet-accent\s*\{[^}]*inset-block-start:\s*calc\(-1 \* var\(--atf-space-4\)\);[^}]*inset-inline-start:\s*calc\(-1 \* var\(--atf-space-4\)\);~s', $css), 'Character Sheet wave is not flush with the top and left edges of the topbar.');
+atf_classic_assert(str_contains($css, '.atf-post__moderation:empty { display: none; }'), 'Empty moderation slot still adds horizontal gap before the wave.');
 atf_classic_assert(!preg_match('~\\.atf-post__profile-actions[^}]*::before~s', $css), 'Profile actions still synthesize icons through CSS pseudo-elements.');
 atf_classic_assert(!preg_match('~\\.atf-post__profile-actions[^}]*content:\\s*"\\\\f[0-9a-f]+~is', $css), 'Profile actions still contain Font Awesome unicode content codes.');
 atf_classic_assert(str_contains($css, '.atf-post__profile-action > i'), 'Profile action CSS does not style real HTML icons.');
