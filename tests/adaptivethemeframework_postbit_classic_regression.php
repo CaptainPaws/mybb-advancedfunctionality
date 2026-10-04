@@ -57,6 +57,7 @@ atf_classic_assert(!str_contains($template, "{\$post['subject']}"), 'Per-post su
 atf_classic_assert(strpos($template, 'atf-post__moderation') < strpos($template, 'atf-post__sheet-action'), 'Moderation is not the first leading control.');
 atf_classic_assert(strpos($template, 'atf-post__meta-line') > strpos($template, 'post_body scaleimages atf-post__message'), 'Post metadata is not nested inside post_body.atf-post__message.');
 atf_classic_assert(strpos($template, 'atf-post__meta-line') < strpos($template, "{\$post['message']}"), 'Post metadata is not the first child before the message text.');
+atf_classic_assert(str_contains($template, '<div class="atf-post__message-body">{\$post[\'message\']}</div>'), 'Post message text is not wrapped separately from the edge-to-edge metadata bar.');
 atf_classic_assert(substr_count($template, 'atf-post__meta-line') === 1, 'Post metadata is rendered more than once.');
 atf_classic_assert(str_contains($template, 'title="символов в посте"'), 'Character count icon has no required tooltip.');
 atf_classic_assert(str_contains($template, 'fa-solid fa-font'), 'Character count still uses a text label instead of an icon.');
@@ -146,9 +147,10 @@ atf_classic_assert((bool)preg_match(
     $css
 ), 'Post content still adds idle top padding above the nested metadata line.');
 atf_classic_assert((bool)preg_match(
-    '~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*margin:\s*0;[^}]*padding-block-start:\s*0 !important;~s',
+    '~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*width:\s*calc\(100% \+ \(2 \* var\(--atf-space-5\)\)\);[^}]*margin-inline:\s*calc\(-1 \* var\(--atf-space-5\)\);[^}]*padding-block-start:\s*0 !important;~s',
     $css
-), 'Post body still adds its own top spacing above the nested metadata line.');
+), 'Post body does not cancel the content-column side padding for the metadata bar.');
+atf_classic_assert(str_contains($css, '.atf-post__message-body {\n  padding-inline: var(--atf-space-5);'), 'Message text does not restore the normal content padding below the metadata bar.');
 atf_classic_assert((bool)preg_match('~\.atf-post__permalink\s*\{[^}]*display:\s*inline-flex;~s', $css), 'Permalink does not expose flex ordering for its checkbox.');
 atf_classic_assert(str_contains($source, 'af_adaptivethemeframework_posturl_checkbox_first'), 'Post URL checkbox ordering is not normalized server-side.');
 atf_classic_assert((bool)preg_match('~\.atf-post__char-count\s*\{[^}]*display:\s*inline-flex;[^}]*gap:\s*\.35rem;~s', $css), 'Character count icon and value are not laid out correctly.');
