@@ -54,7 +54,7 @@ foreach (['EDIT','DELETE','QUOTE','REPORT','MULTI'] as $control) {
     atf_post_assert(str_contains($post['af_atf_slots']['post.actions'], $control), 'Action lost: ' . $control);
 }
 atf_post_assert(str_contains($post['af_atf_slots']['post.author.profile_actions'], 'MENTION'), 'Profile action lost.');
-atf_post_assert(str_contains($post['af_atf_slots']['post.author.profile_actions'], '<a>User</a>'), 'Profile link lost.');
+atf_post_assert(str_contains($post['af_atf_slots']['post.author.profile_actions'], '<a title="Профиль" data-af-title="Профиль" aria-label="Профиль">User</a>'), 'Profile link or its accessible tooltip was lost.');
 
 $guest = ['pid' => 1, 'tid' => 2, 'uid' => 0, 'profilelink' => 'Guest'];
 af_adaptivethemeframework_compose_postbit($guest);

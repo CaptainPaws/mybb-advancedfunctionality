@@ -976,6 +976,46 @@ function af_adaptivethemeframework_register_post_providers(): bool
     ]) || $registered;
 }
 
+/**
+ * Add accessible labels to MyBB's native post controls without replacing them.
+ *
+ * The original element, URL, onclick handler and permission-dependent markup
+ * remain byte-for-byte intact apart from the presentation attributes below.
+ */
+function af_adaptivethemeframework_label_post_controls(string $html, array $labels): string
+{
+    if ($html === '') return '';
+
+    return preg_replace_callback('~<(a|button)\b[^>]*>~i', static function (array $match) use ($labels): string {
+        $tag = $match[0];
+        $class = '';
+        if (preg_match('~\bclass\s*=\s*(["\'])(.*?)\1~is', $tag, $classMatch)) {
+            $class = ' ' . preg_replace('~\s+~', ' ', strtolower($classMatch[2])) . ' ';
+        }
+
+        $label = '';
+        foreach ($labels as $className => $candidate) {
+            if ($className === '*') {
+                $label = $candidate;
+                continue;
+            }
+            if (str_contains($class, ' ' . strtolower($className) . ' ')) {
+                $label = $candidate;
+                break;
+            }
+        }
+        if ($label === '') return $tag;
+
+        $escaped = htmlspecialchars($label, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $attributes = '';
+        if (!preg_match('~\btitle\s*=~i', $tag)) $attributes .= ' title="' . $escaped . '"';
+        if (!preg_match('~\bdata-af-title\s*=~i', $tag)) $attributes .= ' data-af-title="' . $escaped . '"';
+        if (!preg_match('~\baria-label\s*=~i', $tag)) $attributes .= ' aria-label="' . $escaped . '"';
+
+        return substr($tag, 0, -1) . $attributes . '>';
+    }, $html) ?? $html;
+}
+
 /** Count visible characters in the raw MyBB/BBCode message, never rendered HTML. */
 function af_adaptivethemeframework_post_text_count(string $message): int
 {
@@ -1006,7 +1046,7 @@ function af_adaptivethemeframework_capture_post_text_count(array &$post): void
 function af_adaptivethemeframework_post_context(array $post): array
 {
     $profileActionKeys = [
-        'button_email', 'button_pm', 'button_find', 'button_rep',
+        'button_email', 'button_pm', 'button_www', 'button_find', 'button_rep',
     ];
     $actionKeys = [
         'button_edit', 'button_quickdelete', 'button_quickrestore', 'button_quote',
@@ -1016,11 +1056,29 @@ function af_adaptivethemeframework_post_context(array $post): array
     ];
     $actions = '';
     foreach ($actionKeys as $key) $actions .= (string)($post[$key] ?? '');
+    $actions = af_adaptivethemeframework_label_post_controls($actions, [
+        'postbit_edit' => 'Редактировать', 'postbit_qdelete' => 'Удалить',
+        'postbit_delete' => 'Удалить', 'postbit_quickrestore' => 'Восстановить',
+        'postbit_restore' => 'Восстановить', 'postbit_reply' => 'Ответить',
+        'postbit_quote' => 'Ответить', 'postbit_multiquote' => 'Цитировать',
+        'postbit_report' => 'Пожаловаться', 'postbit_warn' => 'Предупредить',
+        'postbit_purgespammer' => 'Пометить спамером', 'postbit_approve' => 'Одобрить',
+        'postbit_unapprove' => 'Снять одобрение',
+    ]);
     $profileActions = '';
     if (!empty($post['profilelink'])) {
-        $profileActions .= '<span class="atf-post__profile-link">' . (string)$post['profilelink'] . '</span>';
+        $profileLink = af_adaptivethemeframework_label_post_controls(
+            (string)$post['profilelink'],
+            ['*' => 'Профиль']
+        );
+        $profileActions .= '<span class="atf-post__profile-link">' . $profileLink . '</span>';
     }
     foreach ($profileActionKeys as $key) $profileActions .= (string)($post[$key] ?? '');
+    $profileActions = af_adaptivethemeframework_label_post_controls($profileActions, [
+        'postbit_profile' => 'Профиль', 'postbit_email' => 'E-mail',
+        'postbit_pm' => 'ЛС', 'postbit_www' => 'Сайт',
+        'postbit_find' => 'Найти сообщения', 'postbit_rep' => 'Репутация',
+    ]);
     $keys = [
         'username', 'profilelink', 'useravatar', 'usertitle', 'groupimage', 'userstars',
         'postdate', 'posturl', 'subject', 'subject_extra', 'icon', 'editedmsg',

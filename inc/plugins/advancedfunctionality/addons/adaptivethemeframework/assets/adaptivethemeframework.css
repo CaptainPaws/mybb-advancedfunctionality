@@ -2207,11 +2207,29 @@ body.atf-active .atf-post.af-atf-display[data-element]:not([data-element=""]) {
   --atf-post-accent-soft: var(--af-element-soft, color-mix(in srgb, var(--atf-neutral-accent) 18%, transparent));
   --atf-post-accent-gradient: linear-gradient(135deg, var(--af-element-main, var(--atf-neutral-accent)), var(--af-element-accent, var(--atf-neutral-accent)));
 }
-body.atf-active .atf-post__topbar { position: relative; background: linear-gradient(115deg, var(--atf-post-accent-soft), transparent 38%), var(--atf-color-page-subtle); }
+body.atf-active .atf-post__topbar {
+  position: relative;
+  background-color: var(--atf-color-page-subtle);
+  background-image: var(--af-apui-postbit-name-overlay, none), linear-gradient(115deg, var(--atf-post-accent-soft), transparent 38%), var(--af-apui-postbit-name-bg-image, none);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
 body.atf-active .atf-post__moderation { align-self: start; z-index: 2; }
 body.atf-active .atf-post__sheet-action { position: relative; display: grid; place-items: center; width: 5rem; min-height: 5rem; isolation: isolate; }
-body.atf-active .atf-post__sheet-accent { position: absolute; z-index: -1; inset-block: -.65rem -1rem; inset-inline-start: calc(-1 * var(--atf-space-4)); width: 8rem; overflow: hidden; background: var(--atf-post-accent-gradient); border-radius: 0 58% 62% 0 / 0 42% 58% 0; filter: drop-shadow(0 .4rem .8rem var(--atf-post-accent-soft)); }
-body.atf-active .atf-post__sheet-accent::after { content: ""; position: absolute; right: -.7rem; bottom: -1.45rem; width: 5.4rem; height: 2.4rem; border-radius: 50%; background: var(--atf-color-page-subtle); transform: rotate(-8deg); }
+body.atf-active .atf-post__sheet-accent {
+  position: absolute;
+  z-index: -1;
+  inset-block-start: calc(-1 * var(--atf-space-4));
+  inset-inline-start: calc(-1 * var(--atf-space-4));
+  width: 9rem;
+  height: 7.5rem;
+  overflow: hidden;
+  background: var(--atf-post-accent-gradient);
+  border-radius: var(--atf-radius-lg) 0 65% 0;
+  clip-path: path("M 0 0 H 144 V 28 C 110 28 119 65 84 68 C 48 71 57 108 0 120 Z");
+  filter: drop-shadow(0 .4rem .8rem var(--atf-post-accent-soft));
+}
 body.atf-active .atf-post__sheet-action :is(a,button) { color: #fff; border: 0; background: transparent; }
 body.atf-active .atf-post__name, body.atf-active .atf-post__name a { color: var(--atf-post-accent); }
 body.atf-active .atf-post__author-tools { display: grid; justify-items: center; gap: var(--atf-space-2); min-width: 0; }
@@ -2277,12 +2295,9 @@ body.atf-active .atf-post__profile-actions .postbit_email::before { content: "\f
 body.atf-active .atf-post__profile-actions .postbit_pm::before { content: "\f075"; }
 body.atf-active .atf-post__profile-actions .postbit_find::before { content: "\f002"; }
 body.atf-active .atf-post__profile-actions .postbit_rep::before { content: "\f004"; }
+body.atf-active .atf-post__profile-actions .postbit_www::before { content: "\f0ac"; }
 body.atf-active .atf-post__name {
   padding: var(--atf-space-2) var(--atf-space-3);
-  background-image: var(--af-apui-postbit-name-overlay, none), var(--af-apui-postbit-name-bg-image, none);
-  background-position: center;
-  background-size: cover;
-  border-radius: var(--atf-radius-md);
 }
 body.atf-active .atf-post__sidebar-inner {
   position: sticky;
@@ -2346,6 +2361,9 @@ body.atf-active .atf-post__management :is(.postbit_quote, .postbit_reply)::befor
 body.atf-active .atf-post__management .postbit_multiquote::before { content: "\f10d"; }
 body.atf-active .atf-post__management .postbit_report::before { content: "\f024"; }
 body.atf-active .atf-post__management .postbit_warn::before { content: "\f071"; }
+body.atf-active .atf-post__management .postbit_purgespammer::before { content: "\f05e"; }
+body.atf-active .atf-post__management :is(.postbit_approve, .postbit_unapprove)::before { content: "\f00c"; }
+body.atf-active .atf-post__management :is(.postbit_quickrestore, .postbit_restore)::before { content: "\f2ea"; }
 body.atf-active .atf-post__reputation-corner { position: static; justify-self: end; }
 
 @media (max-width: 48rem) {
