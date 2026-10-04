@@ -48,10 +48,14 @@ $postReputation = af_adaptivethemeframework_post_reputation([
 ]);
 atf_reputation_assert(str_contains($postReputation, 'MyBB.reputation(73,19)'), 'Heart does not invoke MyBB post reputation.');
 atf_reputation_assert(str_contains($postReputation, 'atf-post-reputation__popover'), 'Post reputation voter popover is missing.');
+atf_reputation_assert(substr_count($postReputation, 'fa-solid fa-heart') >= 1, 'Post reputation does not use the canonical Font Awesome heart icon.');
 
 $css = file_get_contents(AF_ADDONS . 'adaptivethemeframework/assets/adaptivethemeframework.css');
 atf_reputation_assert(str_contains($css, '.atf-thread__posts { overflow: visible; }'), 'Thread container still clips the popover.');
 atf_reputation_assert((bool)preg_match('~\.atf-post-reputation__popover \{[^}]*z-index:\s*100~', $css), 'Popover has no explicit stacking layer.');
+atf_reputation_assert((bool)preg_match('~button\.atf-post-reputation__heart[^}]*cursor:\s*pointer~s', $css), 'Clickable reputation heart is not normalized as a bare icon button.');
+atf_reputation_assert((bool)preg_match('~\.atf-post-reputation__heart\s*\{[^}]*background:\s*transparent !important;[^}]*box-shadow:\s*none !important;~s', $css), 'Reputation heart still has button chrome.');
+atf_reputation_assert((bool)preg_match('~\.atf-post-reputation__score\s*\{[^}]*display:\s*inline-flex;[^}]*width:\s*auto !important;[^}]*white-space:\s*nowrap;~s', $css), 'Reputation score can still wrap the plus sign above the number.');
 
 $reputationTemplate = file_get_contents(AF_ADDONS . 'adaptivethemeframework/templates/reputation_vote.html');
 foreach (["reputation_vote['username']", 'vote_reputation', 'last_updated', 'postrep_given', "reputation_vote['comments']"] as $field) {
