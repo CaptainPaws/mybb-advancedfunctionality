@@ -451,11 +451,11 @@ body.atf-active .atf-post__profile-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--atf-space-2);
-  margin-block-end: var(--atf-space-2);
+  justify-content: flex-start;
+  gap: .35rem;
+  margin: .35rem 0 0;
   font-size: var(--atf-font-size-sm);
 }
-body.atf-active .atf-post__profile-actions :is(a, .postbit_button) { display: inline-flex; align-items: center; }
 body.atf-active .atf-post__name { font-size: clamp(1.5rem, 3vw, 2.5rem); font-weight: var(--atf-font-weight-bold); line-height: 1.05; overflow-wrap: anywhere; }
 body.atf-active .atf-post__title { margin-block-start: var(--atf-space-1); color: var(--atf-color-text-muted); }
 body.atf-active .atf-post__rank { display: flex; flex-wrap: wrap; gap: var(--atf-space-2); align-items: center; margin-block-start: var(--atf-space-2); }
@@ -2261,7 +2261,6 @@ body.atf-active .atf-post__author-tools { display: flex; align-items: flex-end; 
 body.atf-active .atf-post__primary-avatar { order: 2; position: relative; overflow: visible; border-color: var(--atf-post-accent-soft); box-shadow: 0 0 0 1px var(--atf-post-accent); }
 body.atf-active .atf-post__primary-avatar :is(img,svg) { overflow: hidden; border-radius: 50%; object-position: center center !important; }
 body.atf-active .atf-post__online-indicator { position: absolute; top: .25rem; right: .25rem; width: .85rem; height: .85rem; border: 2px solid var(--atf-color-surface); border-radius: 50%; background: #45d483; box-shadow: 0 0 .6rem #45d483; }
-body.atf-active .atf-post__author-tools .atf-post__profile-actions { order: 1; justify-content: flex-end; align-self: flex-end; gap: .35rem; margin: 0 0 .2rem; }
 body.atf-active .atf-post__sidebar { position: static; padding: 0; background: linear-gradient(180deg, var(--atf-post-accent-soft), transparent 42%), var(--atf-color-page-subtle); }
 body.atf-active .atf-post__sidebar-inner { position: sticky; top: var(--atf-sticky-offset, 1rem); max-height: calc(100vh - var(--atf-sticky-offset, 1rem) - 1rem); overflow-y: auto; padding: var(--atf-space-4); border-block-start: 3px solid var(--atf-post-accent); }
 body.atf-active .atf-post__sidebar-inner > :not(:first-child) { margin-block-start: var(--atf-space-4); padding-block-start: var(--atf-space-3); border-block-start: 1px solid var(--atf-color-border); }
@@ -2312,34 +2311,6 @@ body.atf-active .atf-post__topbar {
 }
 body.atf-active .atf-post__topbar-leading { display: flex; margin-top: -57px; margin-left: -8px; align-items: flex-start; gap: var(--atf-space-2); min-width: 0; overflow: visible; }
 body.atf-active .atf-post__moderation { order: -1; align-self: flex-start; }
-body.atf-active .atf-post__profile-actions :is(a, .postbit_button) {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  width: 1.85rem;
-  height: 1.85rem;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--atf-post-accent) 35%, transparent);
-  border-radius: var(--atf-radius-sm);
-  color: var(--atf-post-accent);
-  background: var(--atf-post-accent-soft);
-  background-image: none;
-  line-height: 1;
-  text-decoration: none;
-}
-body.atf-active .atf-post__profile-actions .atf-post__profile-action > i {
-  display: block;
-  font-size: .85rem;
-  line-height: 1;
-  pointer-events: none;
-}
-body.atf-active .atf-post__profile-actions :is(a, .postbit_button):is(:hover, :focus-visible) {
-  color: #fff;
-  background: var(--atf-post-accent);
-  outline: 2px solid var(--atf-post-accent-soft);
-  outline-offset: 2px;
-}
 body.atf-active .atf-post__name {
   padding: var(--atf-space-2) var(--atf-space-3);
 }
@@ -2464,7 +2435,6 @@ body.atf-active .atf-post__reputation-corner {
   body.atf-active .atf-post__topbar-leading { justify-content: flex-start; }
   body.atf-active .atf-post__identity-main { width: 100%; }
   body.atf-active .atf-post__author-tools { grid-column: auto; width: 100%; justify-content: flex-start; flex-wrap: wrap; }
-  body.atf-active .atf-post__author-tools .atf-post__profile-actions { order: 2; justify-content: flex-start; }
   body.atf-active .atf-post__primary-avatar { order: 1; }
   body.atf-active .atf-post__primary-avatar { max-width: 100%; }
   body.atf-active .atf-post__sidebar-inner { position: static; max-height: none; overflow: visible; }
@@ -2506,7 +2476,8 @@ body.atf-active .atf-post__management {
   border: 0;
   border-radius: 0;
 }
-body.atf-active .atf-post__management .atf-post__management-action {
+body.atf-active .atf-post__management .atf-post__management-action,
+body.atf-active .atf-post__profile-actions .atf-post__profile-action {
   position: relative;
   display: inline-grid;
   place-items: center;
@@ -2525,13 +2496,15 @@ body.atf-active .atf-post__management .atf-post__management-action {
   text-indent: 0;
   text-decoration: none;
 }
-body.atf-active .atf-post__management .atf-post__management-action > i {
+body.atf-active .atf-post__management .atf-post__management-action > i,
+body.atf-active .atf-post__profile-actions .atf-post__profile-action > i {
   display: block;
   font-size: .85rem;
   line-height: 1;
   pointer-events: none;
 }
-body.atf-active .atf-post__management .atf-post__management-action:is(:hover, :focus-visible) {
+body.atf-active .atf-post__management .atf-post__management-action:is(:hover, :focus-visible),
+body.atf-active .atf-post__profile-actions .atf-post__profile-action:is(:hover, :focus-visible) {
   color: #fff;
   background: var(--atf-post-accent);
   outline: 2px solid var(--atf-post-accent-soft);
