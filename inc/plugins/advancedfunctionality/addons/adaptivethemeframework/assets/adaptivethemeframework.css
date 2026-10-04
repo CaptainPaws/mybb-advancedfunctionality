@@ -2652,11 +2652,11 @@ body.atf-active .atf-post__meta-line {
   position: relative;
   z-index: 15;
   box-sizing: border-box;
-  width: auto;
-  max-width: none;
-  margin-block: calc(-1 * var(--atf-space-5)) var(--atf-space-3);
-  margin-inline: calc(-1 * var(--atf-space-5));
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 var(--atf-space-3);
   padding-inline: var(--atf-space-3);
+  overflow: hidden;
   background: color-mix(in srgb, var(--atf-color-surface, var(--atf-color-page-subtle)) 86%, #fff 14%) !important;
 }
 body.atf-active .atf-post__meta-line > .atf-post__management {
@@ -2718,8 +2718,7 @@ body.atf-active .atf-post__footer {
 }
 @media (max-width: 48rem) {
   body.atf-active .atf-post__meta-line {
-    margin-block-start: calc(-1 * var(--atf-space-4));
-    margin-inline: calc(-1 * var(--atf-space-4));
+    margin: 0 0 var(--atf-space-3);
     transform: none !important;
     will-change: auto !important;
   }
