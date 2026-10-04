@@ -114,13 +114,13 @@ atf_classic_assert((bool)preg_match('~\\.atf-post__management \\.atf-post__manag
 atf_classic_assert(str_contains($css, '.postbit_find.atf-post__profile-action,'), 'Find profile action is not hidden from the profile action row.');
 atf_classic_assert(str_contains($css, '.postbit_reputation_add.atf-post__profile-action {'), 'Reputation-add profile action is not hidden from the profile action row.');
 atf_classic_assert(str_contains($css, 'object-position: center center !important;'), 'Primary avatar crop is not force-centered across wrapper variants.');
-atf_classic_assert(str_contains($css, '.atf-post__primary-avatar > a {'), 'Wrapped primary avatars are not normalized to the full circular surface.');
+atf_classic_assert(str_contains($template, 'atf-post__primary-avatar-media'), 'Primary avatar media wrapper is missing from the classic post template.');
+atf_classic_assert(str_contains($css, '.atf-post__primary-avatar-media > a,'), 'Wrapped primary avatars are not normalized inside the media wrapper.');
 atf_classic_assert((bool)preg_match('~\.atf-post\.af-atf-display\s*\{[^}]*border:\s*1px solid var\(--atf-post-accent\);~s', $css), 'Classic post shell does not use the main accent for its 1px frame.');
 atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar\s*\{[^}]*display:\s*grid;[^}]*place-items:\s*center;[^}]*overflow:\s*visible;~s', $css), 'Primary avatar is not centered or still clips the online indicator.');
-atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar > a\s*\{[^}]*inset:\s*0;[^}]*overflow:\s*hidden;[^}]*border-radius:\s*50%;~s', $css), 'Wrapped primary avatar is not clipped inside the circular frame.');
-atf_classic_assert(str_contains($css, 'clip-path: circle(50% at 50% 50%);'), 'Primary avatar image can still escape the circular frame.');
-atf_classic_assert(str_contains($css, 'object-position: center center !important;'), 'Primary avatar image crop is not centered.');
-atf_classic_assert((bool)preg_match('~\.atf-post__online-indicator\s*\{[^}]*z-index:\s*5;[^}]*top:\s*-\.1rem;[^}]*right:\s*-\.1rem;[^}]*display:\s*block;~s', $css), 'Online activity indicator is not restored to the avatar top-right corner.');
+atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar-media\s*\{[^}]*inset:\s*0;[^}]*overflow:\s*hidden;[^}]*border-radius:\s*50%;~s', $css), 'Primary avatar media is not clipped inside the circular frame.');
+atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar-media :is\(\.author_avatar, img, svg\)[^}]*object-position:\s*center center !important;~s', $css), 'author_avatar is not force-centered inside the primary avatar frame.');
+atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar > \.atf-post__online-indicator\s*\{[^}]*z-index:\s*5;[^}]*top:\s*-\.1rem;[^}]*right:\s*-\.1rem;[^}]*display:\s*block;~s', $css), 'Online activity indicator is not anchored to the primary avatar shell.');
 atf_classic_assert((bool)preg_match('~\\.atf-post__sheet-action \\.af-apui-postbit-action\\s*\\{[^}]*width:\\s*2\\.75rem;[^}]*height:\\s*2\\.75rem;[^}]*border:\\s*0 !important;[^}]*background:\\s*transparent !important;[^}]*box-shadow:\\s*none !important;[^}]*transform:\\s*translateY\\(-\\.75rem\\);~s', $css), 'Character Sheet action is not frameless or raised into the wave corner.');
 atf_classic_assert(str_contains($source, "'atf-post__management-action'"), 'Management actions are not converted to real icon controls.');
 atf_classic_assert(str_contains($css, '.atf-post__management-action > i'), 'Management action CSS does not style real HTML icons.');
