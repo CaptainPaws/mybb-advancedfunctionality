@@ -11,12 +11,6 @@
       <div class="atf-post__name largetext">{$post['af_atf_slots']['post.author.identity']}</div>
       <div class="atf-post__title">{$post['usertitle']}</div>
       <div class="atf-post__rank">{$post['groupimage']}{$post['userstars']}</div>
-      <div class="atf-post__meta-line">
-        <span class="atf-post__permalink">{$post['posturl']}</span>
-        <time class="post_date atf-post__date">{$post['postdate']}</time>
-        <span class="atf-post__char-count" title="Количество символов в сообщении">Символов: {$post['af_post_char_count_formatted']}</span>
-        <span class="post_edit atf-post__edited" id="edited_by_{$post['pid']}">{$post['editedmsg']}</span>
-      </div>
     </div>
     <div class="atf-post__author-tools atf-post__primary-column">
       <div class="atf-post__primary-avatar atf-post__avatar atf-post__avatar--primary">{$post['af_atf_primary_avatar']}{$post['af_atf_online_indicator']}</div>
@@ -32,11 +26,16 @@
       <div class="atf-post__sidebar-actions">{$post['af_atf_slots']['post.author.plaque']}{$post['af_atf_slots']['post.post_counter']}</div>
     </div></aside>
     <section class="post_content atf-post__content">
+      <div class="atf-post__meta-line">
+        <span class="atf-post__permalink">{$post['posturl']}</span>
+        <time class="post_date atf-post__date">{$post['postdate']}</time>
+        <span class="atf-post__char-count" title="Количество символов в сообщении">Символов: {$post['af_post_char_count_formatted']}</span>
+      </div>
       <div class="atf-post__slot atf-post__slot--before">{$post['af_atf_slots']['post.before_body']}</div>
       <div class="post_body scaleimages atf-post__message" id="pid_{$post['pid']}">{$post['message']}</div>
       <div class="atf-post__attachments">{$post['attachments']}</div><div class="atf-post__slot atf-post__slot--after">{$post['af_atf_slots']['post.after_body']}</div>
       <div class="atf-post__signature">{$post['signature']}</div>
-      <div class="post_meta atf-post__meta" id="post_meta_{$post['pid']}">{$post['iplogged']}<span class="atf-post__status">{$post['poststatus']}</span></div>
+      <div class="post_meta atf-post__meta" id="post_meta_{$post['pid']}">{$post['iplogged']}<span class="post_edit atf-post__edited" id="edited_by_{$post['pid']}">{$post['editedmsg']}</span><span class="atf-post__status">{$post['poststatus']}</span></div>
       <footer class="atf-post__footer">
         <div class="atf-post__footer-spacer" aria-hidden="true"></div>
         <div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">{$post['af_atf_slots']['post.actions']}</div>

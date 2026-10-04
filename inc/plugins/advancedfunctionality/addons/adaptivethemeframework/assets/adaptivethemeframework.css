@@ -458,11 +458,15 @@ body.atf-active .atf-post__rank { display: flex; flex-wrap: wrap; gap: var(--atf
 body.atf-active .atf-post__meta-line {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--atf-space-2) var(--atf-space-3);
-  margin-block-start: var(--atf-space-3);
+  max-width: 100%;
+  margin-block-end: var(--atf-space-3);
   color: var(--atf-color-text-muted);
   font-size: var(--atf-font-size-sm);
+  overflow-wrap: anywhere;
+  text-align: end;
 }
 body.atf-active .atf-post__meta-line > :not(:empty):not(:first-child)::before { content: "·"; margin-inline-end: var(--atf-space-3); color: var(--atf-color-border); }
 body.atf-active .atf-post__top-actions { margin-inline-start: auto; }
