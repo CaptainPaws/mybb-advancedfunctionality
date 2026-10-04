@@ -56,7 +56,7 @@ atf_reputation_assert((bool)preg_match('~\.atf-post-reputation__popover \{[^}]*z
 atf_reputation_assert((bool)preg_match('~button\.atf-post-reputation__heart[^}]*cursor:\s*pointer~s', $css), 'Clickable reputation heart is not normalized as a bare icon button.');
 atf_reputation_assert((bool)preg_match('~\.atf-post-reputation__heart\s*\{[^}]*background:\s*transparent !important;[^}]*box-shadow:\s*none !important;~s', $css), 'Reputation heart still has button chrome.');
 atf_reputation_assert((bool)preg_match('~\.atf-post-reputation__score\s*\{[^}]*display:\s*inline-flex;[^}]*width:\s*auto !important;[^}]*white-space:\s*nowrap;~s', $css), 'Reputation score can still wrap the plus sign above the number.');
-atf_reputation_assert(str_contains($css, '.atf-post-reputation { position: relative; display: flex; justify-content: flex-end; align-items: center; gap: .55rem; }'), 'Reputation heart and score do not have the required spacing.');
+atf_reputation_assert(str_contains($css, '.atf-post-reputation { position: relative; display: flex; justify-content: flex-end; align-items: center; gap: .75rem; }'), 'Reputation heart and score do not have the required spacing.');
 atf_reputation_assert(str_contains($css, '.atf-post__sheet-action .af-apui-postbit-action i { font-size: 2rem; }'), 'Character Sheet icon was not enlarged inside the wave.');
 
 $reputationTemplate = file_get_contents(AF_ADDONS . 'adaptivethemeframework/templates/reputation_vote.html');
