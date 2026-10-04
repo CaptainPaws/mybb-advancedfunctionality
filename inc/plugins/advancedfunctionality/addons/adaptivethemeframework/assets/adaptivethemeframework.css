@@ -2609,7 +2609,8 @@ body.atf-active .post_body.scaleimages.atf-post__message {
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  margin-inline: 0;
+  margin: 0;
+  padding-block-start: 0 !important;
   box-sizing: border-box;
 }
 body.atf-active .atf-post__footer {
