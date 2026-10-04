@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.12');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.13');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1444,11 +1444,15 @@ function af_adaptivethemeframework_mark_page(string &$page): void
         $modalCompositionScript = htmlspecialchars($bburl
             . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.modals.js?v='
             . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $postbitCompositionScript = htmlspecialchars($bburl
+            . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.postbit.js?v='
+            . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $footer = "\n<div id=\"atf-footer-composition\" class=\"atf-footer-composition\" data-atf-footer-components>"
             . $components . "</div>\n"
             . '<div id="atf-global-modal-host" class="atf-global-modal-host" data-atf-modal-host aria-live="polite">'
             . $modals . "</div>\n"
-            . '<script src="' . $modalCompositionScript . '" defer></script>' . "\n";
+            . '<script src="' . $modalCompositionScript . '" defer></script>' . "\n"
+            . '<script src="' . $postbitCompositionScript . '" defer></script>' . "\n";
         $page = (string)preg_replace('~</body\s*>~i', $footer . '</body>', $page, 1);
     }
 
