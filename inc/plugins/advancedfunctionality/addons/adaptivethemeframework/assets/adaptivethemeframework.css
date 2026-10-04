@@ -1704,7 +1704,7 @@ body.atf-active .atf-profile__after { display: grid; gap: var(--atf-space-3); }
   body.atf-active .atf-post__sheet-action .af-apui-postbit-action { width: 3rem; height: 3rem; }
   body.atf-active .atf-post__layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "meta" "sidebar" "content";
+    grid-template-areas: "sidebar" "content";
   }
   body.atf-active .atf-post__sidebar { position: static; border-inline-end: 0; border-block-end: 1px solid var(--atf-color-border); }
   body.atf-active .atf-post__secondary-avatar { max-width: min(17.5rem, 100%); }
@@ -2535,9 +2535,7 @@ body.atf-active .atf-post__reputation-corner { position: static; justify-self: e
    owned and clipped logically by their individual article. */
 body.atf-active .atf-post__layout {
   grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
-  grid-template-areas:
-    "meta meta"
-    "sidebar content";
+  grid-template-areas: "sidebar content";
   margin-top: -4px;
   overflow: hidden;
   border-radius: 0 0 var(--atf-radius-lg) var(--atf-radius-lg);
@@ -2603,6 +2601,7 @@ body.atf-active .atf-post__content {
   position: relative;
   grid-area: content;
   min-width: 0;
+  padding-inline: var(--atf-space-5);
   overflow: visible;
 }
 body.atf-active .post_body.scaleimages.atf-post__message {
@@ -2652,11 +2651,11 @@ body.atf-active .atf-post__reputation-corner {
 body.atf-active .atf-post__meta-line {
   position: relative;
   z-index: 15;
-  grid-area: meta;
   box-sizing: border-box;
-  width: 100%;
+  width: auto;
   max-width: none;
-  margin: 0;
+  margin-block: calc(-1 * var(--atf-space-5)) var(--atf-space-3);
+  margin-inline: calc(-1 * var(--atf-space-5));
   padding-inline: var(--atf-space-3);
   background: color-mix(in srgb, var(--atf-color-surface, var(--atf-color-page-subtle)) 86%, #fff 14%) !important;
 }
@@ -2719,6 +2718,8 @@ body.atf-active .atf-post__footer {
 }
 @media (max-width: 48rem) {
   body.atf-active .atf-post__meta-line {
+    margin-block-start: calc(-1 * var(--atf-space-4));
+    margin-inline: calc(-1 * var(--atf-space-4));
     transform: none !important;
     will-change: auto !important;
   }
