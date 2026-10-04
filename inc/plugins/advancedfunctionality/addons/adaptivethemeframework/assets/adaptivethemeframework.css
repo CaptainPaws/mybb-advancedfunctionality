@@ -431,7 +431,7 @@ body.atf-active .atf-post__personal-title:has(.atf-post__profile-fields:empty),
 body.atf-active .atf-post__slot:empty,
 body.atf-active .atf-post__attachments:empty,
 body.atf-active .atf-post__signature:empty { display: none; }
-body.atf-active .atf-post__sheet-action .af-apui-postbit-actions { display: block; }
+body.atf-active .atf-post__sheet-action .af-apui-postbit-actions { position: relative; z-index: 2; display: block; }
 body.atf-active .atf-post__sheet-action .af-apui-postbit-action {
   display: grid;
   place-items: center;
@@ -482,6 +482,15 @@ body.atf-active .atf-post__meta-line {
   text-align: end;
 }
 body.atf-active .atf-post__meta-line > :not(:empty):not(:first-child)::before { content: "·"; margin-inline-end: var(--atf-space-3); color: var(--atf-color-border); }
+body.atf-active .atf-post__permalink {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+}
+body.atf-active .atf-post__permalink :is(input[type="checkbox"], .checkbox) {
+  order: -1;
+  margin: 0;
+}
 body.atf-active .atf-post__top-actions { margin-inline-start: auto; }
 body.atf-active .atf-post__top-actions::before { display: none; }
 body.atf-active .atf-post__top-actions .postbit_buttons { display: flex; flex-wrap: wrap; gap: var(--atf-space-2); }
@@ -2266,7 +2275,7 @@ body.atf-active .atf-post__moderation { align-self: start; z-index: 2; }
 body.atf-active .atf-post__sheet-action { position: static; display: grid; place-items: center; width: 5rem; min-height: 4rem; }
 body.atf-active .atf-post__sheet-accent {
   position: absolute;
-  z-index: -1;
+  z-index: 1;
   inset-block-start: calc(-1 * var(--atf-space-4));
   inset-inline-start: calc(-1 * var(--atf-space-4));
   width: 9rem;
@@ -2404,9 +2413,8 @@ body.atf-active .atf-post__topbar {
 body.atf-active .atf-post__topbar::after {
   content: "";
   position: absolute;
-  z-index: 3;
-  inset-inline-start: 9rem;
-  inset-inline-end: 0;
+  z-index: 0;
+  inset-inline: 0;
   bottom: 0;
   height: 1px;
   pointer-events: none;
@@ -2596,7 +2604,7 @@ body.atf-active .atf-post__meta-line {
   position: relative;
   z-index: 15;
   box-sizing: border-box;
-  background: color-mix(in srgb, var(--atf-color-surface, var(--atf-color-page-subtle)) 78%, #fff 22%) !important;
+  background: color-mix(in srgb, var(--atf-color-surface, var(--atf-color-page-subtle)) 86%, #fff 14%) !important;
 }
 body.atf-active .atf-post__meta-line > .atf-post__management {
   margin-inline-start: auto;
