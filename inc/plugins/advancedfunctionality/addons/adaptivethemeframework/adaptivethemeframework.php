@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.15');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.16');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1021,24 +1021,25 @@ function af_adaptivethemeframework_label_post_controls(string $html, array $labe
  * The opening tag is kept intact so MyBB URLs, onclick handlers, data
  * attributes, tokens and permission-filtered presence remain authoritative.
  */
-function af_adaptivethemeframework_iconize_post_control(string $html, string $label, string $icon): string
+function af_adaptivethemeframework_iconize_post_control(string $html, string $label, string $icon, string $presentationClass = 'atf-post__profile-action'): string
 {
     if ($html === '') return '';
 
     $html = af_adaptivethemeframework_label_post_controls($html, ['*' => $label]);
     $icon = preg_replace('~[^a-z0-9-]~i', '', $icon) ?? '';
-    if ($icon === '') return $html;
+    $presentationClass = preg_replace('~[^a-z0-9_-]~i', '', $presentationClass) ?? '';
+    if ($icon === '' || $presentationClass === '') return $html;
 
     return preg_replace_callback(
         '~<(a|button)\b([^>]*)>.*?</\1>~is',
-        static function (array $match) use ($icon): string {
+        static function (array $match) use ($icon, $presentationClass): string {
             $tagName = strtolower($match[1]);
             $attributes = $match[2];
 
             if (preg_match('~\bclass\s*=\s*(["\'])(.*?)\1~is', $attributes, $classMatch)) {
                 $classes = trim($classMatch[2]);
-                if (!preg_match('~(?:^|\s)atf-post__profile-action(?:\s|$)~', $classes)) {
-                    $replacement = 'class=' . $classMatch[1] . trim($classes . ' atf-post__profile-action') . $classMatch[1];
+                if (!preg_match('~(?:^|\s)' . preg_quote($presentationClass, '~') . '(?:\s|$)~', $classes)) {
+                    $replacement = 'class=' . $classMatch[1] . trim($classes . ' ' . $presentationClass) . $classMatch[1];
                     $attributes = preg_replace(
                         '~\bclass\s*=\s*(["\'])(.*?)\1~is',
                         $replacement,
@@ -1047,7 +1048,7 @@ function af_adaptivethemeframework_iconize_post_control(string $html, string $la
                     ) ?? $attributes;
                 }
             } else {
-                $attributes .= ' class="atf-post__profile-action"';
+                $attributes .= ' class="' . $presentationClass . '"';
             }
 
             return '<' . $tagName . $attributes . '><i class="fa-solid ' . $icon . '" aria-hidden="true"></i></' . $tagName . '>';
@@ -1095,17 +1096,35 @@ function af_adaptivethemeframework_post_context(array $post): array
         'button_approve', 'button_unapprove', 'button_restore',
         'button_reply_pm', 'button_replyall_pm', 'button_forward_pm', 'button_delete_pm',
     ];
+    $actionPresentation = [
+        'button_edit' => ['Редактировать', 'fa-pen-to-square'],
+        'button_quickdelete' => ['Удалить', 'fa-trash'],
+        'button_quickrestore' => ['Восстановить', 'fa-rotate-left'],
+        'button_quote' => ['Ответить', 'fa-reply'],
+        'button_multiquote' => ['Цитировать', 'fa-quote-left'],
+        'button_report' => ['Пожаловаться', 'fa-flag'],
+        'button_warn' => ['Предупредить', 'fa-triangle-exclamation'],
+        'button_purgespammer' => ['Пометить спамером', 'fa-ban'],
+        'button_approve' => ['Одобрить', 'fa-check'],
+        'button_unapprove' => ['Снять одобрение', 'fa-xmark'],
+        'button_restore' => ['Восстановить', 'fa-rotate-left'],
+        'button_reply_pm' => ['Ответить', 'fa-reply'],
+        'button_replyall_pm' => ['Ответить всем', 'fa-reply-all'],
+        'button_forward_pm' => ['Переслать', 'fa-share'],
+        'button_delete_pm' => ['Удалить', 'fa-trash'],
+    ];
     $actions = '';
-    foreach ($actionKeys as $key) $actions .= (string)($post[$key] ?? '');
-    $actions = af_adaptivethemeframework_label_post_controls($actions, [
-        'postbit_edit' => 'Редактировать', 'postbit_qdelete' => 'Удалить',
-        'postbit_delete' => 'Удалить', 'postbit_quickrestore' => 'Восстановить',
-        'postbit_restore' => 'Восстановить', 'postbit_reply' => 'Ответить',
-        'postbit_quote' => 'Ответить', 'postbit_multiquote' => 'Цитировать',
-        'postbit_report' => 'Пожаловаться', 'postbit_warn' => 'Предупредить',
-        'postbit_purgespammer' => 'Пометить спамером', 'postbit_approve' => 'Одобрить',
-        'postbit_unapprove' => 'Снять одобрение',
-    ]);
+    foreach ($actionKeys as $key) {
+        $control = (string)($post[$key] ?? '');
+        if ($control === '') continue;
+        [$label, $icon] = $actionPresentation[$key];
+        $actions .= af_adaptivethemeframework_iconize_post_control(
+            $control,
+            $label,
+            $icon,
+            'atf-post__management-action'
+        );
+    }
     $profileActions = '';
     if (!empty($post['profilelink'])) {
         $profileActions .= af_adaptivethemeframework_iconize_post_control(
