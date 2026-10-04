@@ -611,12 +611,12 @@ function af_apf_apply_template_patches(bool $enable): void
         'postbit_profilefield' => [
             'enable' => [
                 ['~<br\s*/?>\s*(?:<span[^>]*class="af-apf-postbit-field"[^>]*>\s*)*(?:<span[^>]*class="af-apf-name"[^>]*>\s*)*\{\$post\[\'fieldname\'\]\}(?:\s*</span>\s*)*[:：]?\s*(?:<span[^>]*class="af-apf-value[^"]*"[^>]*>\s*)*\{\$post\[\'fieldvalue\'\]\}(?:\s*</span>\s*)*(?:</span>\s*)*~is',
-                    '<br /><span class="af-apf-postbit-field"><span class="af-apf-name">{$post[\'fieldname\']}</span>: <span class="af-apf-value scaleimages">{$post[\'fieldvalue\']}</span></span>',
+                    '<br /><span class="af-apf-postbit-field af-apf-postbit-field--fid{$field[\'fid\']}" data-field-id="{$field[\'fid\']}"><span class="af-apf-name">{$post[\'fieldname\']}</span>: <span class="af-apf-value scaleimages">{$post[\'fieldvalue\']}</span></span>',
                     1
                 ],
             ],
             'disable' => [
-                ['~<br\s*/?>\s*<span class="af-apf-postbit-field"><span class="af-apf-name">\{\$post\[\'fieldname\'\]\}</span>:\s*<span class="af-apf-value scaleimages">\{\$post\[\'fieldvalue\'\]\}</span></span>~is',
+                ['~<br\s*/?>\s*<span class="af-apf-postbit-field(?: af-apf-postbit-field--fid\{\$field\[\'fid\'\]\})?"(?: data-field-id="\{\$field\[\'fid\'\]\}")?><span class="af-apf-name">\{\$post\[\'fieldname\'\]\}</span>:\s*<span class="af-apf-value scaleimages">\{\$post\[\'fieldvalue\'\]\}</span></span>~is',
                     '<br />{$post[\'fieldname\']}: {$post[\'fieldvalue\']}',
                     1
                 ],

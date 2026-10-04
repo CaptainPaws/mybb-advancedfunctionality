@@ -21,7 +21,8 @@
   <div class="atf-post__layout">
     <aside class="atf-post__sidebar" aria-label="Информация об авторе"><div class="atf-post__sidebar-inner">
       <div class="atf-post__secondary-avatar">{$post['af_atf_secondary_avatar']}</div>
-      <section class="atf-post__personal-title"><h3 class="atf-post__sidebar-heading">ЛЗ</h3><div class="atf-post__profile-fields">{$post['af_atf_slots']['post.author.profile_fields']}</div></section>
+      {$post['af_atf_slots']['post.author.character_name']}
+      <section class="atf-post__personal-title"><div class="atf-post__profile-fields">{$post['af_atf_slots']['post.author.profile_fields']}</div></section>
       <div class="atf-post__statistics">{$post['af_atf_slots']['post.author.rail']}</div>
       <div class="atf-post__sidebar-actions">{$post['af_atf_slots']['post.author.plaque']}{$post['af_atf_slots']['post.post_counter']}</div>
     </div></aside>

@@ -1939,7 +1939,7 @@ function af_adaptivethemeframework_slots(): array
         'profile.activity', 'profile.balance', 'profile.post_counter',
         'profile.before_content', 'profile.main', 'profile.after_content',
         'post.author.identity', 'post.author.meta', 'post.author.profile_actions', 'post.author.profile_fields',
-        'post.author.rail', 'post.author.plaque', 'post.author.character',
+        'post.author.rail', 'post.author.plaque', 'post.author.character', 'post.author.character_name',
         'post.post_counter', 'post.before_body', 'post.after_body', 'post.actions',
         'thread.breadcrumbs', 'thread.meta', 'thread.atf_fields',
         'thread.before_posts', 'thread.after_posts', 'forum.lastposter_avatar',
