@@ -456,6 +456,10 @@ body.atf-active .atf-post__profile-actions {
   margin: .35rem 0 0;
   font-size: var(--atf-font-size-sm);
 }
+body.atf-active .atf-post__profile-actions .postbit_find.atf-post__profile-action,
+body.atf-active .atf-post__profile-actions .postbit_reputation_add.atf-post__profile-action {
+  display: none !important;
+}
 body.atf-active .atf-post__name { font-size: clamp(1.5rem, 3vw, 2.5rem); font-weight: var(--atf-font-weight-bold); line-height: 1.05; overflow-wrap: anywhere; }
 body.atf-active .atf-post__title { margin-block-start: var(--atf-space-1); color: var(--atf-color-text-muted); }
 body.atf-active .atf-post__rank { display: flex; flex-wrap: wrap; gap: var(--atf-space-2); align-items: center; margin-block-start: var(--atf-space-2); }
