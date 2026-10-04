@@ -684,35 +684,21 @@ body.atf-active .atf-post__sidebar-inner::after {
   display: none;
 }
 
-/* Native MyBB pagination, presented as one ATF control without changing URLs. */
-body.atf-active .pagination {
-  display: flex;
-  flex-wrap: wrap;
+/* ATF owns pagination presentation while MyBB multipage() retains URL and
+   range calculation.  The jump popup remains adjacent to its trigger. */
+body.atf-active .atf-pagination {
+  display: inline-flex;
   align-items: center;
-  gap: .3rem;
+  max-width: 100%;
   margin: 0;
   padding: 0;
   color: var(--atf-color-text-muted);
 }
-body.atf-active .atf-pagination {
-  display: block;
-  width: max-content;
-  max-width: 100%;
-  padding: .3rem;
-  background: color-mix(in srgb, var(--atf-color-surface) 92%, var(--atf-color-accent));
-  border: 1px solid var(--atf-color-border);
-  border-radius: var(--atf-radius-lg);
-  box-shadow: var(--atf-shadow-sm);
-}
-body.atf-active .atf-pagination__items {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: .25rem;
-}
-body.atf-active .pagination .pages { display: none; }
-body.atf-active .pagination :is(a, .pagination_current, .pagination_page, .pagination_previous, .pagination_next) {
+body.atf-active .atf-pagination__summary { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+body.atf-active .atf-pagination__items { position: relative; display: inline-flex; flex-wrap: nowrap; align-items: center; gap: .3rem; white-space: nowrap; }
+body.atf-active .atf-pagination__items > :is(a, .pagination_current) {
   display: inline-grid;
+  flex: 0 0 auto;
   place-items: center;
   box-sizing: border-box;
   min-width: 2.25rem;
@@ -722,33 +708,33 @@ body.atf-active .pagination :is(a, .pagination_current, .pagination_page, .pagin
   color: var(--atf-color-text);
   line-height: 1;
   text-decoration: none;
-  background: var(--atf-color-surface);
+  background: var(--atf-color-page-subtle);
   border: 1px solid var(--atf-color-border);
   border-radius: var(--atf-radius-sm);
   box-shadow: none;
 }
-body.atf-active .pagination .pagination_current {
+body.atf-active .atf-pagination .pagination_current {
   color: var(--atf-color-on-accent, #fff);
   font-weight: 700;
   background: var(--atf-color-accent);
   border-color: var(--atf-color-accent);
 }
-body.atf-active .pagination a:hover {
+body.atf-active .atf-pagination a:hover {
   color: var(--atf-color-accent);
   background: var(--atf-color-page-subtle);
   border-color: var(--atf-color-accent);
 }
-body.atf-active .pagination a:focus-visible {
+body.atf-active .atf-pagination a:focus-visible {
   outline: 0;
   box-shadow: var(--atf-focus-ring);
 }
-body.atf-active .pagination :is(.disabled, [aria-disabled="true"]) {
+body.atf-active .atf-pagination :is(.disabled, [aria-disabled="true"]) {
   opacity: .45;
   pointer-events: none;
 }
 @media (max-width: 36rem) {
-  body.atf-active .pagination { gap: .2rem; }
-  body.atf-active .pagination :is(a, .pagination_current, .pagination_page, .pagination_previous, .pagination_next) {
+  body.atf-active .atf-pagination__items { gap: .2rem; }
+  body.atf-active .atf-pagination__items > :is(a, .pagination_current) {
     min-width: 2rem;
     height: 2rem;
     padding-inline: .45rem;
@@ -756,6 +742,25 @@ body.atf-active .pagination :is(.disabled, [aria-disabled="true"]) {
 }
 
 /* Shared editor surface: quick reply, full post forms, signatures and PMs. */
+body.atf-active .atf-editor {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+body.atf-active .atf-quick-reply { display: grid; gap: var(--atf-space-3); }
+body.atf-active .atf-quick-reply__header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--atf-space-2); }
+body.atf-active .atf-quick-reply__body { display: grid; gap: var(--atf-space-3); min-width: 0; }
+body.atf-active .atf-quick-reply__editor,
+body.atf-active .atf-quick-reply__editor textarea { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+body.atf-active .atf-quick-reply__editor textarea { min-height: 10rem; resize: vertical; }
+body.atf-active .atf-quick-reply__captcha { width: 100%; border: 0; border-collapse: collapse; }
+body.atf-active .atf-quick-reply__captcha:has(tbody:empty) { display: none; }
+body.atf-active .atf-quick-reply__footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--atf-space-3); }
+body.atf-active .atf-quick-reply__options,
+body.atf-active .atf-quick-reply__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--atf-space-2) var(--atf-space-3); }
+body.atf-active .atf-quick-reply__options label { display: inline-flex; align-items: center; gap: .4rem; }
+body.atf-active .atf-quick-reply__options br { display: none; }
 body.atf-active :is(.atf-thread__quick-reply, .atf-page) :is(#quick_reply_form, form:has(.sceditor-container)) {
   box-sizing: border-box;
   padding: var(--atf-space-4);
@@ -778,6 +783,22 @@ body.atf-active .sceditor-container {
   border-radius: var(--atf-radius-md);
   box-shadow: none;
 }
+/* AJAX quick edit stays inside the message area in the right post column. */
+body.atf-active .atf-post__content .atf-quick-edit {
+  display: grid;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  gap: var(--atf-space-3);
+  box-sizing: border-box;
+}
+body.atf-active .atf-post__content .atf-quick-edit :is(textarea, .sceditor-container, .af-ccp-wrap) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+body.atf-active .atf-post__content .atf-quick-edit :is(input[type="submit"], input[type="button"], button) { justify-self: start; }
 body.atf-active .sceditor-container .sceditor-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -857,44 +878,6 @@ body.atf-active :is(#quick_reply_form, form:has(.sceditor-container)) :is(input.
   outline: 0;
   box-shadow: var(--atf-focus-ring);
 }
-
-/* Semantic editor shell.  Quick reply is emitted this way server-side; full
-   and AJAX quick-edit editors receive the same structure from AdvancedEditor. */
-body.atf-active .atf-editor {
-  display: grid;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--atf-color-text);
-  background: var(--atf-color-surface);
-  border: 1px solid var(--atf-color-border);
-  border-radius: var(--atf-radius-lg);
-  box-shadow: var(--atf-shadow-sm);
-}
-body.atf-active .atf-editor__header,
-body.atf-active .atf-editor__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--atf-space-3);
-  padding: var(--atf-space-3) var(--atf-space-4);
-  background: var(--atf-color-page-subtle);
-}
-body.atf-active .atf-editor__header { border-bottom: 1px solid var(--atf-color-border); }
-body.atf-active .atf-editor__title { margin: 0; font-size: 1rem; }
-body.atf-active .atf-editor__body { min-width: 0; padding: var(--atf-space-4); }
-body.atf-active .atf-editor__composer { min-width: 0; }
-body.atf-active .atf-editor__actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  border-top: 1px solid var(--atf-color-border);
-}
-body.atf-active .atf-editor__buttons { display: flex; gap: var(--atf-space-2); margin-inline-start: auto; }
-body.atf-active .atf-editor__surface { min-width: 0; }
-body.atf-active .atf-editor__surface > .sceditor-container { border: 0 !important; border-radius: 0; }
-body.atf-active .atf-editor--quick-edit { width: 100%; max-width: 100%; box-shadow: none; }
-body.atf-active .atf-post__content,
-body.atf-active .atf-post__message,
-body.atf-active .atf-post__message-body { min-width: 0; }
-body.atf-active .atf-post__message-body > .atf-editor--quick-edit { grid-column: 1 / -1; }
 
 body.atf-active .atf-stack { display: flex; flex-direction: column; gap: var(--atf-component-gap); }
 body.atf-active .atf-stack--compact { gap: var(--atf-space-2); }
@@ -2618,8 +2601,10 @@ body.atf-active .atf-post__sidebar-inner {
 }
 body.atf-active .atf-post__sidebar-inner > :not(:first-child) { margin-block-start: var(--atf-space-4); padding-block-start: var(--atf-space-3); border-block-start: 1px solid var(--atf-color-border); }
 body.atf-active .atf-post__secondary-avatar { border: 1px solid var(--atf-post-accent); box-shadow: 0 .75rem 2rem var(--atf-post-accent-soft); }
-body.atf-active .atf-post__statistics .author_statistics { display: flex; flex-wrap: wrap; gap: .35rem; }
-body.atf-active .atf-post__statistics .af-apui-stat-item { display: inline-flex; flex: 1 1 auto; flex-direction: row; align-items: center; justify-content: center; gap: .25rem; padding: .35rem; text-align: center; background: var(--atf-post-accent-soft); border-radius: var(--atf-radius-sm); }
+/* Preserve the established two-column statistic layout: only the outer rail
+   grows to the sidebar's available width. */
+body.atf-active .atf-post__statistics .author_statistics { gap: .35rem; }
+body.atf-active .atf-post__statistics .af-apui-stat-item { display: grid; grid-template-rows: 1.5rem auto; place-items: center; padding: .35rem; text-align: center; background: var(--atf-post-accent-soft); border-radius: var(--atf-radius-sm); }
 body.atf-active .atf-post__content { position: relative; padding-inline-end: calc(var(--atf-space-5) + 2.75rem); padding-block-end: calc(var(--atf-space-5) + 2.5rem); overflow: visible; }
 body.atf-active .atf-post__management { position: absolute; z-index: 3; inset-block-start: var(--atf-space-3); inset-inline-end: 0; display: flex; flex-direction: column; gap: .3rem; padding: .35rem; background: var(--atf-color-page-subtle); border: 1px solid var(--atf-color-border); border-inline-end: 0; border-radius: var(--atf-radius-md) 0 0 var(--atf-radius-md); }
 body.atf-active .atf-post__management :is(a,button) { display: grid; place-items: center; width: 2rem; min-height: 2rem; padding: 0; overflow: hidden; }
@@ -2685,7 +2670,6 @@ body.atf-active .atf-post-reputation__popover small { grid-column: 1/-1; color: 
  body.atf-active .atf-post__sidebar-inner { position: static; max-height: none; overflow: visible; }
  body.atf-active .atf-post__management { position: static; flex-direction: row; flex-wrap: wrap; margin: calc(-1 * var(--atf-space-2)) 0 var(--atf-space-3); }
  body.atf-active .atf-post__content { padding-inline-end: var(--atf-space-4); padding-block-end: 5rem; }
- body.atf-active .atf-post__statistics .author_statistics { grid-template-columns: repeat(4,minmax(2.5rem,1fr)); }
 }
 body.atf-active .atf-reputation { display: grid; gap: var(--atf-space-4); padding-block: var(--atf-space-5); }
 body.atf-active .atf-reputation__hero h1,body.atf-active .atf-reputation__hero h2 { margin-block: 0 var(--atf-space-2); }
