@@ -77,7 +77,7 @@ atf_classic_assert(str_contains($css, '.atf-post.af-atf-display[data-element]:no
 atf_classic_assert(str_contains($css, '.atf-post__name a { color: var(--atf-post-accent); }'), 'Nickname does not consume the post element accent.');
 atf_classic_assert(str_contains($css, 'border-radius: 100% 0 0 0'), 'Reputation decoration is not a distinct corner arc.');
 atf_classic_assert(!preg_match('~\.atf-post__sheet-accent[^}]*clip-path:\s*polygon~s', $css), 'Character Sheet decoration is still a polygon blob.');
-atf_classic_assert(str_contains($css, 'clip-path: path("M 14 0 H 120 C 136 8 138 42 122 60 C 111 73 96 72 88 91 C 80 111 68 120 0 120 V 14 C 0 6 6 0 14 0 Z")'), 'Character Sheet decoration does not use the established wave path.');
+atf_classic_assert(str_contains($css, 'clip-path: path("M 14 0 H 120 C 136 8 138 42 122 60 C 111 73 96 72 88 91 C 80 111 68 120 52 128 C 34 137 24 155 0 168 V 14 C 0 6 6 0 14 0 Z")'), 'Character Sheet decoration does not use the established wave path.');
 atf_classic_assert((bool)preg_match('~\.atf-post__sheet-accent\s*\{[^}]*width:\s*9rem;[^}]*height:\s*7\.5rem;[^}]*overflow:\s*visible;~s', $css), 'Character Sheet wave drawing box clips the established path.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar\s*\{[^}]*overflow:\s*visible;~s', $css), 'Post header clips the character-sheet wave.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar-leading\s*\{[^}]*overflow:\s*visible;~s', $css), 'Topbar leading clips the character-sheet accent.');
