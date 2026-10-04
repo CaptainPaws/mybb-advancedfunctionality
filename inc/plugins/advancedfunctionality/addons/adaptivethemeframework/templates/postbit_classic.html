@@ -29,7 +29,7 @@
       <div class="atf-post__meta-line">
         <span class="atf-post__permalink">{$post['posturl']}</span>
         <time class="post_date atf-post__date">{$post['postdate']}</time>
-        <span class="atf-post__char-count" title="Количество символов в сообщении">Символов: {$post['af_post_char_count_formatted']}</span>
+        <span class="atf-post__char-count" title="символов в посте" data-af-title="символов в посте"><i class="fa-solid fa-font" aria-hidden="true"></i><span class="atf-post__char-count-value">{$post['af_post_char_count_formatted']}</span></span>
         <div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">{$post['af_atf_slots']['post.actions']}</div>
       </div>
       <div class="atf-post__slot atf-post__slot--before">{$post['af_atf_slots']['post.before_body']}</div>
