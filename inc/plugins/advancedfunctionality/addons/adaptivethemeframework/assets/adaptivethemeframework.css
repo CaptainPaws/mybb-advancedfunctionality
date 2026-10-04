@@ -2873,7 +2873,8 @@ body.atf-active .atf-post__meta-line {
   position: relative;
   z-index: 15;
   box-sizing: border-box;
-  width: 100%;
+  left: 16px;
+  width: 97%;
   max-width: 100%;
   margin: 0 0 var(--atf-space-3);
   padding-inline: var(--atf-space-3);
