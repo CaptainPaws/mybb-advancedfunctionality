@@ -19,6 +19,12 @@
   </header>
 
   <div class="atf-post__layout">
+    <div class="atf-post__meta-line">
+      <span class="atf-post__permalink">{$post['posturl']}</span>
+      <time class="post_date atf-post__date">{$post['postdate']}</time>
+      <span class="atf-post__char-count" title="символов в посте" data-af-title="символов в посте"><i class="fa-solid fa-font" aria-hidden="true"></i><span class="atf-post__char-count-value">{$post['af_post_char_count_formatted']}</span></span>
+      <div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">{$post['af_atf_slots']['post.actions']}</div>
+    </div>
     <aside class="atf-post__sidebar" aria-label="Информация об авторе"><div class="atf-post__sidebar-inner">
       <div class="atf-post__secondary-avatar">{$post['af_atf_secondary_avatar']}</div>
       <section class="atf-post__personal-title"><h3 class="atf-post__sidebar-heading">ЛЗ</h3><div class="atf-post__profile-fields">{$post['af_atf_slots']['post.author.profile_fields']}</div></section>
@@ -26,12 +32,6 @@
       <div class="atf-post__sidebar-actions">{$post['af_atf_slots']['post.author.plaque']}{$post['af_atf_slots']['post.post_counter']}</div>
     </div></aside>
     <section class="post_content atf-post__content">
-      <div class="atf-post__meta-line">
-        <span class="atf-post__permalink">{$post['posturl']}</span>
-        <time class="post_date atf-post__date">{$post['postdate']}</time>
-        <span class="atf-post__char-count" title="символов в посте" data-af-title="символов в посте"><i class="fa-solid fa-font" aria-hidden="true"></i><span class="atf-post__char-count-value">{$post['af_post_char_count_formatted']}</span></span>
-        <div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">{$post['af_atf_slots']['post.actions']}</div>
-      </div>
       <div class="atf-post__slot atf-post__slot--before">{$post['af_atf_slots']['post.before_body']}</div>
       <div class="post_body scaleimages atf-post__message" id="pid_{$post['pid']}">{$post['message']}</div>
       <div class="atf-post__attachments">{$post['attachments']}</div><div class="atf-post__slot atf-post__slot--after">{$post['af_atf_slots']['post.after_body']}</div>
