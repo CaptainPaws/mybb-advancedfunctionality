@@ -2385,6 +2385,16 @@ body.atf-active .atf-post__topbar {
   z-index: 20;
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
+body.atf-active .atf-post__topbar::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  inset-inline: 0;
+  bottom: 0;
+  height: 3px;
+  pointer-events: none;
+  background: var(--atf-post-accent);
+}
 body.atf-active .atf-post__topbar[data-atf-sticky-translate]:not([data-atf-sticky-translate="0"])::before {
   content: "";
   position: absolute;
