@@ -122,7 +122,7 @@ atf_classic_assert(str_contains($css, '.atf-post__primary-avatar-media > a,'), '
 atf_classic_assert((bool)preg_match('~\.atf-post\.af-atf-display\s*\{[^}]*border:\s*1px solid var\(--atf-post-accent\);~s', $css), 'Classic post shell does not use the main accent for its 1px frame.');
 atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar\s*\{[^}]*display:\s*grid;[^}]*place-items:\s*center;[^}]*overflow:\s*visible;~s', $css), 'Primary avatar is not centered or still clips the online indicator.');
 atf_classic_assert((bool)preg_match('~\.atf-post__sidebar\s*\{[^}]*border-inline-end:\s*0;~s', $css), 'Outer sidebar still owns the runaway divider.');
-atf_classic_assert((bool)preg_match('~\.atf-post__sidebar-inner\s*\{[^}]*border:\s*1px solid var\(--atf-post-accent\);~s', $css), 'Sticky sidebar inner does not own the stable accent frame.');
+atf_classic_assert((bool)preg_match('~\.atf-post__sidebar-inner\s*\{[^}]*margin-block-end:\s*15px;[^}]*border:\s*0;[^}]*border-inline-end:\s*1px solid var\(--atf-post-accent\);[^}]*border-block-end:\s*1px solid var\(--atf-post-accent\);~s', $css), 'Sticky sidebar inner does not use the stable right/bottom accent frame with bottom clearance.');
 atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar-media\s*\{[^}]*inset:\s*0;[^}]*overflow:\s*hidden;[^}]*border-radius:\s*50%;~s', $css), 'Primary avatar media is not clipped inside the circular frame.');
 atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar-media :is\(\.author_avatar, img, svg\)[^}]*object-position:\s*center center !important;~s', $css), 'author_avatar is not force-centered inside the primary avatar frame.');
 atf_classic_assert(str_contains($css, '.author_avatar > a {'), 'Nested author_avatar link is not normalized to the avatar frame.');
@@ -139,6 +139,7 @@ atf_classic_assert((bool)preg_match('~\.atf-post__permalink :is\(input\[type="ch
 atf_classic_assert((bool)preg_match('~\.atf-post__char-count\s*\{[^}]*display:\s*inline-flex;[^}]*gap:\s*\.35rem;~s', $css), 'Character count icon and value are not laid out correctly.');
 atf_classic_assert(str_contains($css, 'background: color-mix(in srgb, var(--atf-color-surface, var(--atf-color-page-subtle)) 86%, #fff 14%) !important;'), 'Post meta line background is not a subtle lighter shade of the post body.');
 atf_classic_assert((bool)preg_match('~\.atf-post__reputation-corner\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0;[^}]*bottom:\s*0;~s', $css), 'Reputation is not anchored to the content corner.');
+atf_classic_assert(str_contains($css, 'border-radius: 100% 0 var(--atf-radius-lg) 0;'), 'Reputation corner does not match the post layout bottom-right rounding.');
 atf_classic_assert((bool)preg_match(
     '~\.atf-post__topbar::after\s*\{[^}]*z-index:\s*0;[^}]*inset-inline:\s*0;[^}]*bottom:\s*0;[^}]*height:\s*1px;[^}]*background:\s*var\(--atf-post-accent\);~s',
     $css
@@ -164,6 +165,8 @@ atf_classic_assert(!str_contains($sticky, 'var postRect = item.post.getBoundingC
     'Postbit sticky scroll path must not re-read document geometry on every frame.');
 atf_classic_assert(str_contains($sticky, 'return Math.ceil(navigation.getBoundingClientRect().height);'),
     'Postbit sticky offset must sit flush against the sticky AdvancedMenu navigation.');
+atf_classic_assert(str_contains($sticky, 'stickyOffset = Math.max(0, navigationOffset() - 8);'),
+    'Sticky post stack is not raised by 8px to hide the body corner below navigation.');
 atf_classic_assert((bool)preg_match(
     '~\\.atf-post__topbar\\[data-atf-sticky-translate\\]:not\\(\\[data-atf-sticky-translate="0"\\]\\)::before\\s*\\{[^}]*bottom:\\s*100%;[^}]*height:\\s*var\\(--atf-space-3\\);[^}]*background:\\s*var\\(--atf-color-page-subtle\\);~s',
     $css
