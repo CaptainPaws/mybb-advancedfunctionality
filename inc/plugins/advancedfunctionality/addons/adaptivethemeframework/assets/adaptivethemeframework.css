@@ -2377,16 +2377,6 @@ body.atf-active .atf-post__management :is(a, button) {
   background-image: none;
   border-radius: 50%;
 }
-body.atf-active .atf-post__management :is(a, button)::before { font: 900 1rem/1 "Font Awesome 6 Free"; }
-body.atf-active .atf-post__management .postbit_edit::before { content: "\f044"; }
-body.atf-active .atf-post__management :is(.postbit_qdelete, .postbit_delete)::before { content: "\f2ed"; }
-body.atf-active .atf-post__management :is(.postbit_quote, .postbit_reply)::before { content: "\f3e5"; }
-body.atf-active .atf-post__management .postbit_multiquote::before { content: "\f10d"; }
-body.atf-active .atf-post__management .postbit_report::before { content: "\f024"; }
-body.atf-active .atf-post__management .postbit_warn::before { content: "\f071"; }
-body.atf-active .atf-post__management .postbit_purgespammer::before { content: "\f05e"; }
-body.atf-active .atf-post__management :is(.postbit_approve, .postbit_unapprove)::before { content: "\f00c"; }
-body.atf-active .atf-post__management :is(.postbit_quickrestore, .postbit_restore)::before { content: "\f2ea"; }
 body.atf-active .atf-post__reputation-corner { position: static; justify-self: end; }
 
 /* The postbit controller reuses APUI's bounded-translation model rather than
@@ -2463,4 +2453,76 @@ body.atf-active .atf-post__reputation-corner {
   body.atf-active .atf-post__topbar,
   body.atf-active .atf-post__sidebar-inner { position: static; transform: none !important; will-change: auto !important; }
   body.atf-active .atf-post__reputation-corner { position: absolute; right: 0; bottom: 0; }
+}
+
+
+/* ATF 0.26.16: bounded sticky stack and native management controls with real icons. */
+body.atf-active .atf-post__meta-line {
+  position: relative;
+  z-index: 15;
+  box-sizing: border-box;
+  background: var(--atf-color-surface, var(--atf-color-page-subtle));
+}
+body.atf-active .atf-post__meta-line > .atf-post__management {
+  margin-inline-start: auto;
+}
+body.atf-active .atf-post__meta-line > .atf-post__management::before {
+  display: none;
+  content: none;
+}
+body.atf-active .atf-post__management {
+  position: static;
+  align-self: center;
+  display: flex;
+  flex-flow: row nowrap;
+  justify-content: flex-end;
+  gap: .35rem;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+body.atf-active .atf-post__management .atf-post__management-action {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  min-height: 1.85rem;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--atf-post-accent) 35%, transparent);
+  border-radius: var(--atf-radius-sm);
+  color: var(--atf-post-accent);
+  background: var(--atf-post-accent-soft);
+  background-image: none;
+  font-size: inherit;
+  line-height: 1;
+  text-indent: 0;
+  text-decoration: none;
+}
+body.atf-active .atf-post__management .atf-post__management-action > i {
+  display: block;
+  font-size: .85rem;
+  line-height: 1;
+  pointer-events: none;
+}
+body.atf-active .atf-post__management .atf-post__management-action:is(:hover, :focus-visible) {
+  color: #fff;
+  background: var(--atf-post-accent);
+  outline: 2px solid var(--atf-post-accent-soft);
+  outline-offset: 2px;
+}
+body.atf-active .atf-post__footer {
+  grid-template-columns: minmax(0, 1fr) 90px;
+}
+@media (max-width: 48rem) {
+  body.atf-active .atf-post__meta-line {
+    transform: none !important;
+    will-change: auto !important;
+  }
+  body.atf-active .atf-post__management {
+    flex-wrap: wrap;
+  }
 }
