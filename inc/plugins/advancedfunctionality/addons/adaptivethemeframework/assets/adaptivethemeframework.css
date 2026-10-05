@@ -3464,3 +3464,472 @@ body.atf-active .atf-thread__moderation :is(select, input[type="submit"], button
     width: 100%;
   }
 }
+
+
+/* ATF thread browsers and moderation.php refresh. */
+body.atf-active .atf-thread__browsing {
+  display: flex;
+  align-items: center;
+  gap: var(--atf-space-3);
+  min-height: 3.25rem;
+  padding: .6rem .8rem;
+}
+
+body.atf-active .atf-thread-browsers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .55rem .7rem;
+  width: 100%;
+}
+
+body.atf-active .atf-thread-browsers__label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  padding: .28rem .65rem;
+  color: var(--atf-color-text);
+  font-size: .74rem;
+  font-weight: var(--atf-font-weight-bold);
+  letter-spacing: .025em;
+  text-transform: uppercase;
+  background: var(--atf-color-surface);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-pill);
+}
+
+body.atf-active .atf-thread-browsers__avatars {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+body.atf-active .atf-thread-browser {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  margin-inline-start: -.35rem;
+  overflow: hidden;
+  background: var(--atf-color-surface);
+  border: 2px solid var(--atf-color-page-subtle);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--atf-color-border);
+  transition: transform 140ms ease, z-index 140ms ease, box-shadow 140ms ease;
+}
+
+body.atf-active .atf-thread-browser:first-child { margin-inline-start: 0; }
+body.atf-active .atf-thread-browser:is(:hover, :focus-visible) {
+  z-index: 2;
+  transform: translateY(-2px) scale(1.07);
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--atf-color-accent);
+}
+
+body.atf-active .atf-thread-browser img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+body.atf-active .atf-thread-browsers__meta {
+  color: var(--atf-color-text-muted);
+  font-size: .78rem;
+}
+
+body.atf-active .atf-thread__tools .thread_tools,
+body.atf-active .atf-thread__tools .thread_tools > li {
+  list-style: none !important;
+  background-image: none !important;
+}
+
+body.atf-active .atf-thread__tools .thread_tools img,
+body.atf-active .atf-thread__tools .thread_tools svg,
+body.atf-active .atf-thread__tools .thread_tools > li > img,
+body.atf-active .atf-thread__tools .thread_tools > li > svg {
+  display: none !important;
+}
+
+body.atf-active .atf-thread__tools .thread_tools a {
+  padding-inline-start: .7rem !important;
+  background-image: none !important;
+}
+
+body.atf-active .atf-thread__moderation.atf-thread-control {
+  padding: .55rem .65rem;
+  align-content: center;
+}
+
+body.atf-active .atf-thread__moderation {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: .5rem;
+}
+
+body.atf-active .atf-thread__moderation > br {
+  display: none;
+}
+
+body.atf-active .atf-thread__moderation > form {
+  display: grid !important;
+  grid-template-columns: minmax(9rem, auto) minmax(12rem, 1fr) auto;
+  align-items: center;
+  gap: .45rem;
+  width: 100%;
+  margin: 0 !important;
+}
+
+body.atf-active .atf-thread__moderation > form > .smalltext {
+  white-space: nowrap;
+}
+
+body.atf-active .atf-thread__moderation > form > select {
+  width: 100%;
+  min-width: 0;
+}
+
+body.atf-active .atf-thread__moderation > form > .button {
+  min-width: 5.4rem;
+}
+
+body.atf-active.atf-moderation-page .pun.atf-page-shell {
+  padding-block: var(--atf-space-5) var(--atf-space-6);
+}
+
+body.atf-active .atf-moderation {
+  display: grid;
+  gap: var(--atf-space-4);
+  width: 100%;
+}
+
+body.atf-active .atf-moderation__form {
+  display: grid;
+  gap: var(--atf-space-3);
+}
+
+body.atf-active .atf-moderation__header,
+body.atf-active .atf-moderation__panel,
+body.atf-active .atf-moderation__actions {
+  min-width: 0;
+  background: color-mix(in srgb, var(--atf-color-page-subtle) 88%, transparent);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-lg);
+}
+
+body.atf-active .atf-moderation__header {
+  position: relative;
+  padding: var(--atf-space-4) var(--atf-space-5);
+  overflow: hidden;
+}
+
+body.atf-active .atf-moderation__header::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  background: var(--atf-color-accent);
+}
+
+body.atf-active .atf-moderation__header h1,
+body.atf-active .atf-moderation__panel h2 {
+  margin: 0;
+  color: var(--atf-color-text);
+}
+
+body.atf-active .atf-moderation__header h1 {
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+}
+
+body.atf-active .atf-moderation__eyebrow {
+  display: block;
+  margin-block-end: .25rem;
+  color: var(--atf-color-text-muted);
+  font-size: .72rem;
+  font-weight: var(--atf-font-weight-bold);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+body.atf-active .atf-moderation__panel {
+  display: grid;
+  gap: var(--atf-space-4);
+  padding: var(--atf-space-5);
+}
+
+body.atf-active .atf-moderation__confirm {
+  justify-items: center;
+  text-align: center;
+}
+
+body.atf-active .atf-moderation__confirm > p {
+  max-width: 48rem;
+  margin: 0;
+  color: var(--atf-color-text-muted);
+  font-size: 1rem;
+}
+
+body.atf-active .atf-moderation__field {
+  display: grid;
+  grid-template-columns: minmax(10rem, .35fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--atf-space-3) var(--atf-space-4);
+}
+
+body.atf-active .atf-moderation__label {
+  color: var(--atf-color-text);
+  font-weight: var(--atf-font-weight-bold);
+}
+
+body.atf-active .atf-moderation__label small,
+body.atf-active .atf-moderation__details dt small {
+  display: block;
+  margin-block-start: .25rem;
+  color: var(--atf-color-text-muted);
+  font-weight: 400;
+}
+
+body.atf-active .atf-moderation :is(input[type="text"], input[type="number"], select, textarea) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-height: var(--atf-control-height);
+  padding: .55rem .75rem;
+  color: var(--atf-color-text);
+  font: inherit;
+  background: var(--atf-color-surface);
+  border: 1px solid var(--atf-color-border-strong);
+  border-radius: var(--atf-radius-md);
+}
+
+body.atf-active .atf-moderation textarea {
+  min-height: 11rem;
+  resize: vertical;
+}
+
+body.atf-active .atf-moderation :is(input, select, textarea):focus-visible {
+  outline: 0;
+  border-color: var(--atf-color-accent);
+  box-shadow: var(--atf-focus-ring);
+}
+
+body.atf-active .atf-moderation__small-input {
+  width: 5rem !important;
+  min-width: 5rem;
+}
+
+body.atf-active .atf-moderation__choices {
+  display: grid;
+  gap: .55rem;
+  margin: 0;
+  padding: var(--atf-space-4);
+  background: color-mix(in srgb, var(--atf-color-surface) 72%, transparent);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-md);
+}
+
+body.atf-active .atf-moderation__choices legend {
+  padding-inline: .4rem;
+  color: var(--atf-color-text);
+  font-weight: var(--atf-font-weight-bold);
+}
+
+body.atf-active .atf-moderation__choices label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .45rem;
+  min-height: 2.25rem;
+  padding: .45rem .6rem;
+  color: var(--atf-color-text-muted);
+  cursor: pointer;
+  border-radius: var(--atf-radius-sm);
+}
+
+body.atf-active .atf-moderation__choices label:hover {
+  color: var(--atf-color-text);
+  background: var(--atf-color-surface-raised);
+}
+
+body.atf-active .atf-moderation__choices :is(input[type="radio"], input[type="checkbox"]) {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--atf-color-accent);
+}
+
+body.atf-active .atf-moderation__choices small {
+  color: var(--atf-color-text-muted);
+}
+
+body.atf-active .atf-moderation__actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--atf-space-3) var(--atf-space-4);
+}
+
+body.atf-active .atf-moderation__actions .button,
+body.atf-active.atf-moderation-page #content > form > div[align="center"] .button {
+  min-height: var(--atf-control-height);
+  padding: .55rem 1rem;
+  color: var(--atf-color-on-accent, #fff);
+  font: inherit;
+  font-weight: var(--atf-font-weight-bold);
+  cursor: pointer;
+  background: var(--atf-color-accent);
+  border: 1px solid var(--atf-color-accent);
+  border-radius: var(--atf-radius-pill);
+}
+
+body.atf-active .atf-moderation__danger-button {
+  background: #a73b43 !important;
+  border-color: #c75861 !important;
+}
+
+body.atf-active .atf-moderation__identity {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-collapse: collapse;
+  background: transparent;
+}
+
+body.atf-active .atf-moderation__identity td {
+  padding: .5rem .65rem;
+  color: var(--atf-color-text-muted);
+  background: transparent !important;
+  border: 0;
+}
+
+body.atf-active .atf-moderation__identity td:first-child {
+  width: 10rem;
+  color: var(--atf-color-text);
+}
+
+body.atf-active .atf-moderation__details {
+  display: grid;
+  gap: .35rem;
+  margin: 0;
+}
+
+body.atf-active .atf-moderation__details > div {
+  display: grid;
+  grid-template-columns: minmax(10rem, .35fr) minmax(0, 1fr);
+  gap: var(--atf-space-4);
+  padding: .7rem .8rem;
+  border-block-end: 1px solid var(--atf-color-border);
+}
+
+body.atf-active .atf-moderation__details dt {
+  color: var(--atf-color-text);
+  font-weight: var(--atf-font-weight-bold);
+}
+
+body.atf-active .atf-moderation__details dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--atf-color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+body.atf-active .atf-moderation__table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+body.atf-active .atf-moderation__legacy-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 0;
+}
+
+body.atf-active .atf-moderation__legacy-table :is(th, td) {
+  padding: .7rem .75rem;
+  color: var(--atf-color-text-muted);
+  background: transparent !important;
+  border-block-end: 1px solid var(--atf-color-border);
+}
+
+body.atf-active .atf-moderation__legacy-table th {
+  color: var(--atf-color-text);
+  font-size: .76rem;
+  text-align: start;
+  text-transform: uppercase;
+}
+
+/* Fallback for moderation.php actions whose stock roots are still MyBB-owned. */
+body.atf-active.atf-moderation-page #content > form,
+body.atf-active.atf-moderation-page #content > .tborder {
+  max-width: var(--atf-page-max-width);
+  margin-inline: auto;
+}
+
+body.atf-active.atf-moderation-page #content .tborder {
+  overflow: hidden;
+  color: var(--atf-color-text);
+  background: color-mix(in srgb, var(--atf-color-page-subtle) 90%, transparent);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-lg);
+  box-shadow: none;
+}
+
+body.atf-active.atf-moderation-page #content .tborder :is(.thead, .tcat) {
+  color: var(--atf-color-text);
+  background: var(--atf-color-surface-raised);
+  border-color: var(--atf-color-border);
+}
+
+body.atf-active.atf-moderation-page #content .tborder :is(.trow1, .trow2, .tfoot) {
+  color: var(--atf-color-text-muted);
+  background: transparent;
+  border-color: var(--atf-color-border);
+}
+
+body.atf-active.atf-moderation-page #content :is(input[type="text"], input[type="number"], select, textarea) {
+  color: var(--atf-color-text);
+  background: var(--atf-color-surface);
+  border: 1px solid var(--atf-color-border-strong);
+  border-radius: var(--atf-radius-md);
+}
+
+@media (max-width: 64rem) {
+  body.atf-active .atf-thread__moderation > form {
+    grid-template-columns: minmax(8rem, auto) minmax(0, 1fr) auto;
+  }
+}
+
+@media (max-width: 48rem) {
+  body.atf-active .atf-thread__browsing,
+  body.atf-active .atf-thread-browsers {
+    align-items: flex-start;
+  }
+
+  body.atf-active .atf-thread__moderation > form,
+  body.atf-active .atf-moderation__field,
+  body.atf-active .atf-moderation__details > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.atf-active .atf-thread__moderation > form > .button {
+    width: 100%;
+  }
+
+  body.atf-active .atf-moderation__header,
+  body.atf-active .atf-moderation__panel {
+    padding: var(--atf-space-4);
+  }
+
+  body.atf-active .atf-moderation__actions {
+    justify-content: stretch;
+  }
+
+  body.atf-active .atf-moderation__actions .button {
+    width: 100%;
+  }
+}
