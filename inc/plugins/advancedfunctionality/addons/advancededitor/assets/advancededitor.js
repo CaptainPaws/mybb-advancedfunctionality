@@ -1379,7 +1379,7 @@
       var style = doc.createElement('style');
       style.id = 'af-ae-atf-iframe-theme';
       style.textContent = 'html,body{background:' + surface + ';color:' + text
-        + ';caret-color:' + accent + ';font:inherit}body{box-sizing:border-box;padding:.75rem}'
+        + ';caret-color:' + accent + ';font:inherit}body{box-sizing:border-box}'
         + 'a{color:' + accent + '}::placeholder{color:' + muted + ';opacity:.8}'
         + '::-webkit-scrollbar-thumb{background:' + muted + ';border-radius:999px}';
       head.appendChild(style);
