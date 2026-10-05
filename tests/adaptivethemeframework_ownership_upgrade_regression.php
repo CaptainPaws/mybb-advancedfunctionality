@@ -268,8 +268,37 @@ if (af_adaptivethemeframework_matches_legacy_compose_cleanup(
     $newthreadSeed,
     $newthreadMissingBoundary
 )) {
-    throw new RuntimeException('compose cleanup recovery leaked to a non-compose template');
+    throw new RuntimeException('showthread cleanup recovery accepted a form-boundary mutation');
 }
+
+// Historical SHOW fallback could live immediately before </body>. On CRLF
+// deployments, the greedy legacy cleanup could therefore remove exactly the
+// two-byte "\r\n" after </script>. Canonical recovery must recognize that
+// one logical missing newline and nothing else.
+$showthreadSeed = (string)file_get_contents($addon . '/templates/showthread.html');
+$showthreadSeedCrlf = str_replace("\n", "\r\n", $showthreadSeed);
+$bodyBoundary = strpos($showthreadSeedCrlf, "\r\n</body>");
+if ($bodyBoundary === false) {
+    throw new RuntimeException('showthread regression fixture has no CRLF body boundary');
+}
+$showthreadMissingBoundary = substr($showthreadSeedCrlf, 0, $bodyBoundary)
+    . substr($showthreadSeedCrlf, $bodyBoundary + 2);
+if (!af_adaptivethemeframework_matches_legacy_compose_cleanup(
+    'showthread',
+    $showthreadSeedCrlf,
+    $showthreadMissingBoundary
+)) {
+    throw new RuntimeException('known showthread CRLF cleanup boundary was not recovered');
+}
+$showthreadManualEdit = substr_replace($showthreadSeedCrlf, '', max(0, $bodyBoundary - 1), 1);
+if (af_adaptivethemeframework_matches_legacy_compose_cleanup(
+    'showthread',
+    $showthreadSeedCrlf,
+    $showthreadManualEdit
+)) {
+    throw new RuntimeException('showthread cleanup recovery concealed an unrelated byte deletion');
+}
+
 $newthreadManualEdit = substr_replace($newthreadSeed, '', max(0, $formBoundary - 1), 1);
 if (af_adaptivethemeframework_matches_legacy_compose_cleanup(
     'newthread',
