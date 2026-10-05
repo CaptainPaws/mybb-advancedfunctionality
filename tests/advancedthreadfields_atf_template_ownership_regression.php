@@ -11,6 +11,8 @@ function af_is_addon_enabled(string $id): bool
 function af_adaptivethemeframework_template_seeds(): array
 {
     return [
+        'newthread' => '/seed/newthread.html',
+        'editpost' => '/seed/editpost.html',
         'showthread' => '/seed/showthread.html',
         'forumdisplay_thread' => '/seed/forumdisplay_thread.html',
     ];
@@ -47,9 +49,9 @@ if (af_atf_tpl_force_edit_by_title('showthread', $showSeed) !== $showSeed
     || af_atf_tpl_force_edit_by_title('forumdisplay_thread', $threadSeed) !== $threadSeed) {
     throw new RuntimeException('An ATF-owned template was legacy-patched.');
 }
-if (af_atf_tpl_force_edit_by_title('newthread', $formSeed) === $formSeed
-    || af_atf_tpl_force_edit_by_title('editpost', $formSeed) === $formSeed) {
-    throw new RuntimeException('Unmanaged form templates were incorrectly skipped.');
+if (af_atf_tpl_force_edit_by_title('newthread', $formSeed) !== $formSeed
+    || af_atf_tpl_force_edit_by_title('editpost', $formSeed) !== $formSeed) {
+    throw new RuntimeException('ATF-owned compose templates were legacy-patched.');
 }
 
 // D: exact legacy bytes (including their surrounding whitespace) normalize to
@@ -62,6 +64,24 @@ if (!is_array($recovery)
     || $recovery['diagnostic']['marker_count'] !== 1
     || $recovery['diagnostic']['variable_count'] !== 1) {
     throw new RuntimeException('Exact showthread legacy delta did not normalize to its seed.');
+}
+
+// D2: compose templates historically received the exact INPUT marker + variable
+// before ATF started owning newthread/editpost. That known delta must normalize
+// back to the seed so activation can recover the old lease safely.
+foreach (['newthread', 'editpost'] as $name) {
+    $composeCurrent = str_replace(
+        '</form>',
+        AF_ATF_TPL_MARK_INPUT . "\n{\$af_atf_input_html}\n</form>",
+        $formSeed
+    );
+    $composeRecovery = af_atf_normalize_atf_template($name, $composeCurrent);
+    if (!is_array($composeRecovery)
+        || $composeRecovery['normalized_content'] !== $formSeed
+        || $composeRecovery['diagnostic']['marker_count'] !== 1
+        || $composeRecovery['diagnostic']['variable_count'] !== 1) {
+        throw new RuntimeException("Exact {$name} legacy INPUT delta did not normalize to its seed.");
+    }
 }
 
 // E: normalization removes only attributable bytes; an unrelated edit remains
