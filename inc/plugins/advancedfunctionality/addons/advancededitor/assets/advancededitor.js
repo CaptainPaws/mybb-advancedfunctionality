@@ -2024,7 +2024,11 @@
 
     var content = ta.closest ? ta.closest('.atf-post__content') : null;
     var form = ta.form || (ta.closest ? ta.closest('form') : null);
-    if (content && form) form.classList.add('atf-quick-edit');
+    if (content && form) {
+      form.classList.add('atf-editor');
+      form.classList.add('atf-editor--quick-edit');
+      form.classList.add('atf-quick-edit');
+    }
 
     try {
       document.dispatchEvent(new CustomEvent('af:editor-ready', {

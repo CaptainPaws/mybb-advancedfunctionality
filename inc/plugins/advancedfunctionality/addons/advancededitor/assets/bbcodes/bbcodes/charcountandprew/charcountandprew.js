@@ -415,9 +415,24 @@
     var form = ta.closest('form') || document.querySelector('form#post') || ta.closest('form');
     if (!form) return;
 
+    // DOM-ready retries and af:editor-ready can target the same textarea.
+    // Keep one binding/poller per editor surface, but refresh immediately when
+    // the SCEditor instance becomes available after an earlier source-only run.
+    if (ta.__afCcpBinding) {
+      ta.__afCcpBinding.instance = inst || ta.__afCcpBinding.instance;
+      ta.__afCcpBinding.update();
+      return;
+    }
+
     var ui = buildUiAboveEditor(ta);
     if (!ui) ui = (function () {
-      var wrap = document.querySelector('.af-ccp-wrap');
+      var anchor = null;
+      try { anchor = ta.closest('.sceditor-container'); } catch (e) { anchor = null; }
+      anchor = anchor || ta;
+      var parent = anchor && anchor.parentNode ? anchor.parentNode : null;
+      var wrap = parent && parent.querySelector
+        ? parent.querySelector(':scope > .af-ccp-wrap')
+        : null;
       if (!wrap) return null;
       return {
         wrap: wrap,
@@ -428,7 +443,14 @@
     })();
     if (!ui) return;
 
-    var upd = debounce(function () { updateCounter(ui, ta, inst); }, 120);
+    var binding = {
+      instance: inst,
+      interval: null,
+      update: function () { updateCounter(ui, ta, binding.instance); }
+    };
+    ta.__afCcpBinding = binding;
+
+    var upd = debounce(binding.update, 120);
 
     ta.addEventListener('input', upd, { passive: true });
     ta.addEventListener('keyup', upd, { passive: true });
@@ -436,15 +458,21 @@
     ta.addEventListener('cut', function () { setTimeout(upd, 0); }, { passive: true });
 
     var last = '';
-    setInterval(function () {
-      var now = getEditorRawText(ta, inst);
+    binding.interval = setInterval(function () {
+      if (!ta.isConnected) {
+        clearInterval(binding.interval);
+        if (ta.__afCcpBinding === binding) ta.__afCcpBinding = null;
+        return;
+      }
+
+      var now = getEditorRawText(ta, binding.instance);
       if (now !== last) {
         last = now;
-        updateCounter(ui, ta, inst);
+        binding.update();
       }
     }, 600);
 
-    updateCounter(ui, ta, inst);
+    binding.update();
 
     var previewBtn = findPreviewButton(form);
     var useNativePreview = isAtfHiddenEditorMode();

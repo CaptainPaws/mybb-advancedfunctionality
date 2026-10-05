@@ -792,6 +792,10 @@ body.atf-active .atf-post__content .atf-quick-edit {
   gap: var(--atf-space-3);
   box-sizing: border-box;
 }
+body.atf-active .atf-post__content .atf-editor--quick-edit .sceditor-container :is(iframe, textarea.sceditor-source) {
+  min-height: 8rem;
+  height: 8rem !important;
+}
 body.atf-active .atf-post__content .atf-quick-edit :is(textarea, .sceditor-container, .af-ccp-wrap) {
   width: 100%;
   max-width: 100%;
