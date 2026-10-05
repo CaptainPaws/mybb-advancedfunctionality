@@ -2736,7 +2736,16 @@ function af_adaptivethemeframework_matches_legacy_compose_cleanup(
     string $seed,
     string $candidate
 ): bool {
-    if (!in_array($templateName, ['newthread', 'editpost'], true)) {
+    // These are the exact fallback boundaries used by the historical
+    // AdvancedThreadFields template patcher before ATF owned the templates.
+    // Its revert regex wrapped marker+variable in greedy \\s*, so it could
+    // consume the line break immediately adjacent to the fallback boundary.
+    $boundaries = [
+        'newthread' => '</form>',
+        'editpost' => '</form>',
+        'showthread' => '</body>',
+    ];
+    if (!isset($boundaries[$templateName])) {
         return false;
     }
 
@@ -2747,31 +2756,28 @@ function af_adaptivethemeframework_matches_legacy_compose_cleanup(
         return true;
     }
 
-    $formPos = strpos($seedCanonical, '</form>');
-    if ($formPos === false) {
+    $boundary = $boundaries[$templateName];
+    $boundaryPos = strpos($seedCanonical, $boundary);
+    if ($boundaryPos === false) {
         return false;
     }
 
-    // The historical INPUT fallback lived immediately before </form>. Only
-    // newline bytes directly adjacent to that boundary may have been eaten.
-    $maxMissing = 2;
-    for ($missing = 1; $missing <= $maxMissing; $missing++) {
+    // EOL canonicalization turns a consumed CRLF into one missing "\n".
+    // Permit at most two logical newlines and only immediately before the
+    // historical fallback boundary. No markup/text differences are accepted.
+    for ($missing = 1; $missing <= 2; $missing++) {
         if (strlen($seedCanonical) !== strlen($candidateCanonical) + $missing) {
             continue;
         }
 
-        $start = $formPos - $missing;
-        if ($start < 0) {
-            continue;
-        }
-
-        $removed = substr($seedCanonical, $start, $missing);
-        if ($removed !== str_repeat("\n", $missing)) {
+        $start = $boundaryPos - $missing;
+        if ($start < 0
+            || substr($seedCanonical, $start, $missing) !== str_repeat("\n", $missing)) {
             continue;
         }
 
         $recovered = substr($seedCanonical, 0, $start)
-            . substr($seedCanonical, $formPos);
+            . substr($seedCanonical, $boundaryPos);
 
         if (hash_equals(
             af_adaptivethemeframework_checksum($recovered),
