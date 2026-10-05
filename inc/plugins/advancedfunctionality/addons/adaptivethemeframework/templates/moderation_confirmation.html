@@ -1,0 +1,15 @@
+<html>
+<head><title>{$mybb->settings['bbname']} - {$lang->confirm_execute_tool}</title>{$headerinclude}</head>
+<body>
+{$header}
+<main class="pun atf-page-shell atf-page atf-moderation" id="content">
+  <form action="moderation.php" method="post" class="atf-moderation__form">
+    <input type="hidden" name="my_post_key" value="{$mybb->post_code}" /><input type="hidden" name="action" value="{$action}" /><input type="hidden" name="modtype" value="{$modtype}" /><input type="hidden" name="tid" value="{$tid}" /><input type="hidden" name="pid" value="{$pid}" /><input type="hidden" name="fid" value="{$fid}" /><input type="hidden" name="pmid" value="{$pmid}" /><input type="hidden" name="confirm" value="1" /><input type="hidden" name="inlinetype" value="{$inlinetype}" /><input type="hidden" name="searchid" value="{$searchid}" /><input type="hidden" name="url" value="{$url}" />
+    <header class="atf-moderation__header"><span class="atf-moderation__eyebrow">Подтверждение</span><h1>{$thread['subject']} — {$lang->confirm_execute_tool}</h1></header>
+    <section class="atf-moderation__panel atf-moderation__confirm"><p>{$lang->confirm_execute_tool_desc}</p><table class="atf-moderation__identity"><tbody>{$loginbox}</tbody></table></section>
+    <footer class="atf-moderation__actions"><input type="submit" class="button" name="submit" value="{$lang->confirm_execute_tool}" /></footer>
+  </form>
+</main>
+{$footer}
+</body>
+</html>
