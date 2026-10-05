@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.27.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.27.1');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -2902,10 +2902,49 @@ function af_adaptivethemeframework_schema_readiness(): bool
     }
 }
 
+/**
+ * Validate every declared template seed before activation mutates any template
+ * ownership state. This keeps activation atomic when a deployment is missing a
+ * newly declared seed file.
+ *
+ * @throws RuntimeException
+ */
+function af_adaptivethemeframework_validate_template_seeds(): void
+{
+    foreach (af_adaptivethemeframework_template_seeds() as $templateName => $seedPath) {
+        af_adaptivethemeframework_activation_stage('validate_template_seed[template=' . $templateName . ']');
+
+        if (!is_file($seedPath) || !is_readable($seedPath)) {
+            throw new RuntimeException(
+                'template seed is missing or unreadable: template=' . $templateName
+                . '; path=' . $seedPath
+            );
+        }
+
+        $seed = file_get_contents($seedPath);
+        if (!is_string($seed) || $seed === '') {
+            throw new RuntimeException(
+                'template seed is empty or unreadable: template=' . $templateName
+                . '; path=' . $seedPath
+            );
+        }
+    }
+}
+
 /** Acquire reversible, per-template-set leases. Master sid=-2 is read only. */
 function af_adaptivethemeframework_acquire_templates(): bool
 {
     af_adaptivethemeframework_discover_compatibility_providers();
+
+    try {
+        // Preflight the complete seed set first. If a deployment forgot one
+        // file, fail before the first template lease/write instead of leaving a
+        // partially acquired ATF ownership state.
+        af_adaptivethemeframework_validate_template_seeds();
+    } catch (Throwable $error) {
+        return af_adaptivethemeframework_activation_failure($error);
+    }
+
     foreach (af_adaptivethemeframework_template_seeds() as $name => $path) {
         if (!af_adaptivethemeframework_acquire_template($name, $path)) {
             return false;
