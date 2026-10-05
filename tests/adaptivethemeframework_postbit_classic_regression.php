@@ -53,10 +53,10 @@ foreach (['<article', 'atf-post__topbar', 'atf-post__layout', 'atf-post__sidebar
 atf_classic_assert(!str_contains($template, 'af-apui-postbit'), 'ATF copied the APUI postbit hierarchy.');
 atf_classic_assert(!str_contains($template, "{\$post['subject']}"), 'Per-post subject is still rendered.');
 atf_classic_assert(strpos($template, 'atf-post__moderation') < strpos($template, 'atf-post__sheet-action'), 'Moderation is not the first leading control.');
-atf_classic_assert(strpos($template, "{\$post['af_atf_meta_line']}") > strpos($template, 'post_body scaleimages atf-post__message'), 'Post metadata provider is not nested inside post_body.atf-post__message.');
+atf_classic_assert(strpos($template, "{\$post['af_atf_meta_line']}") < strpos($template, 'post_body scaleimages atf-post__message'), 'Stable post metadata must remain outside the replaceable native Quick Edit host.');
 atf_classic_assert(strpos($template, "{\$post['af_atf_meta_line']}") < strpos($template, "{\$post['message']}"), 'Post metadata provider is not the first child before the message text.');
-atf_classic_assert(str_contains($template, '<div class="atf-post__message-body" id="pid_{$post[\'pid\']}">{$post[\'message\']}</div>'), 'The MyBB pid host must wrap only message text, not the stable metadata bar.');
-atf_classic_assert(!str_contains($template, 'atf-post__message" id="pid_'), 'The replaceable MyBB pid host must not include ATF metadata.');
+atf_classic_assert(str_contains($template, '<div class="post_body scaleimages atf-post__message" id="pid_{$post[\'pid\']}">'), 'The native MyBB .post_body pid host is required for Thread.quickEdit().');
+atf_classic_assert(str_contains($template, '<div class="atf-post__message-body">{$post[\'message\']}</div>'), 'The message body wrapper must remain inside the native pid host.');
 
 $source = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/adaptivethemeframework.php');
 foreach (['atf-post__meta-line', 'title="символов в посте"', 'fa-solid fa-font', 'atf-post__management'] as $anchor) {

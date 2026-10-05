@@ -50,7 +50,7 @@ foreach ([
 }
 
 if (!str_contains($editorJs, 'bindDynamicTextareaObserver()')
-    || !str_contains($editorJs, 'scheduleScan(added, 6, 90)')) {
+    || !str_contains($editorJs, 'scanAndInit(added);')) {
     throw new RuntimeException('AdvancedEditor no longer initializes dynamic KB block textareas.');
 }
 

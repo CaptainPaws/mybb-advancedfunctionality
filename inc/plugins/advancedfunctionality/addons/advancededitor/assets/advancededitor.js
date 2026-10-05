@@ -82,10 +82,10 @@
     return false;
   }
 
-  // MyBB's AJAX Quick Edit does not use the normal posting field name.  Keep
-  // this contract deliberately stricter than a global name="value" selector:
-  // the numeric textarea id must agree with the MyBB message host inside the
-  // same ATF post and the node must belong to the injected edit form.
+  // MyBB's jEditable Quick Edit inserts a textarea into #pid_PID and only
+  // assigns quickedit_PID after it has triggered the edit event. Do not depend
+  // on ATF-only intermediate wrappers: the pid host and owning form are the
+  // stable native MyBB contract.
   function isQuickEditTextarea(ta) {
     if (!ta || ta.nodeType !== 1 || ta.tagName !== 'TEXTAREA') return false;
     if (!isShowthreadPage()) return false;
@@ -96,11 +96,9 @@
 
     var form = ta.form || ta.closest('form');
     var post = ta.closest('.post');
-    var content = ta.closest('.atf-post__content');
-    var message = ta.closest('.atf-post__message, .post_body');
     var host = ta.closest('#pid_' + match[1]);
 
-    return !!(form && post && content && message && host && post.contains(form));
+    return !!(form && post && host && host.contains(form) && post.contains(host));
   }
 
   function isEligibleTextarea(ta) {
@@ -2165,21 +2163,6 @@
     }
   }
 
-  function scheduleScan(root, attempts, delay) {
-    attempts = Number(attempts || 1);
-    if (!isFinite(attempts) || attempts < 1) attempts = 1;
-    delay = Number(delay || 80);
-    if (!isFinite(delay) || delay < 0) delay = 80;
-
-    function tick(left) {
-      scanAndInit(root || document);
-      if (left <= 1) return;
-      setTimeout(function () { tick(left - 1); }, delay);
-    }
-
-    tick(attempts);
-  }
-
   function bindDynamicTextareaObserver() {
     if (window.__afAeDynamicObserverBound) return;
     window.__afAeDynamicObserverBound = true;
@@ -2197,7 +2180,10 @@
             if (!added || added.nodeType !== 1) continue;
 
             if (added.tagName === 'TEXTAREA' || (added.querySelector && added.querySelector('textarea'))) {
-              scheduleScan(added, 6, 90);
+              // Inspect only the newly inserted editor surface. SCEditor is
+              // already available when this observer is installed, so retry
+              // scans (especially scans rooted at document) add no value.
+              scanAndInit(added);
             }
           }
         }
@@ -2218,23 +2204,6 @@
     });
   }
 
-  function bindQuickEditLateInitHints() {
-    if (window.__afAeQuickEditHintsBound) return;
-    window.__afAeQuickEditHintsBound = true;
-
-    document.addEventListener('click', function (event) {
-      var target = event && event.target ? event.target : null;
-      if (!target || !target.closest) return;
-
-      var quickEditTrigger = target.closest(
-        'a[id^="quick_edit_"], a[onclick*="quick_edit"], a[href*="action=edit_post"], a[href*="action=editpost"]'
-      );
-      if (!quickEditTrigger) return;
-
-      scheduleScan(document, 6, 110);
-    }, true);
-  }
-
   function boot() {
     log('AE init');
     var tries = 0;
@@ -2244,7 +2213,6 @@
         initGlobalEditorEnvironment();
         scanAndInit(document);
         bindDynamicTextareaObserver();
-        bindQuickEditLateInitHints();
         bindEditpostFormGuards(document);
         return;
       }

@@ -553,10 +553,16 @@
     return text;
   }
 
-  function applyPostCountersOnce() {
+  function applyPostCountersOnce(root) {
     if (!inAllowedForum(ALLOWED_POSTCOUNT_FORUM_IDS, POSTCOUNT_SET)) return;
 
-    var posts = document.querySelectorAll('.post');
+    root = root || document;
+    var posts = [];
+    if (root.nodeType === 1 && root.matches && root.matches('.post')) posts.push(root);
+    if (root.querySelectorAll) {
+      var descendants = root.querySelectorAll('.post');
+      for (var p = 0; p < descendants.length; p++) posts.push(descendants[p]);
+    }
     if (!posts || !posts.length) return;
 
     for (var i = 0; i < posts.length; i++) {
@@ -590,8 +596,10 @@
       var mo = new MutationObserver(function (ml) {
         for (var i = 0; i < ml.length; i++) {
           if (ml[i].addedNodes && ml[i].addedNodes.length) {
-            applyPostCountersOnce();
-            break;
+            for (var j = 0; j < ml[i].addedNodes.length; j++) {
+              var added = ml[i].addedNodes[j];
+              if (added && added.nodeType === 1) applyPostCountersOnce(added);
+            }
           }
         }
       });
