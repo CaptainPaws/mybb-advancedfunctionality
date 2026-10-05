@@ -246,6 +246,39 @@ $lease = $db->tables['af_adaptivethemeframework_template_ownership'][0];
 if ($lease['ownership_state'] !== 'owned' || $lease['previous_content'] !== $previous || count($db->tables['af_adaptivethemeframework_template_ownership']) !== $ownedTemplateCount) throw new RuntimeException('current-seed reconciliation damaged backup');
 unlink($newSeedPath);
 
+// Legacy AdvancedThreadFields cleanup could consume the line break directly
+// before </form> after removing its INPUT marker. This must be recoverable for
+// ATF-owned compose templates, including CRLF-vs-LF transport differences.
+$newthreadSeed = (string)file_get_contents($addon . '/templates/newthread.html');
+$formBoundary = strpos($newthreadSeed, "\n</form>");
+if ($formBoundary === false) {
+    throw new RuntimeException('newthread regression fixture has no form boundary newline');
+}
+$newthreadMissingBoundary = substr($newthreadSeed, 0, $formBoundary)
+    . substr($newthreadSeed, $formBoundary + 1);
+if (!af_adaptivethemeframework_matches_legacy_compose_cleanup(
+    'newthread',
+    $newthreadSeed,
+    $newthreadMissingBoundary
+)) {
+    throw new RuntimeException('known newthread legacy cleanup boundary was not recovered');
+}
+if (af_adaptivethemeframework_matches_legacy_compose_cleanup(
+    'showthread',
+    $newthreadSeed,
+    $newthreadMissingBoundary
+)) {
+    throw new RuntimeException('compose cleanup recovery leaked to a non-compose template');
+}
+$newthreadManualEdit = substr_replace($newthreadSeed, '', max(0, $formBoundary - 1), 1);
+if (af_adaptivethemeframework_matches_legacy_compose_cleanup(
+    'newthread',
+    $newthreadSeed,
+    $newthreadManualEdit
+)) {
+    throw new RuntimeException('compose cleanup recovery concealed an unrelated byte deletion');
+}
+
 $diagnostic = af_adaptivethemeframework_ownership_conflict('index', 1, 'manual_override', 'current-hash', 'previous-hash', 'installed-hash', 'seed-hash')->getMessage();
 foreach (['template=index', 'sid=1', 'state=manual_override', 'current=current-hash', 'previous=previous-hash', 'installed=installed-hash', 'seed=seed-hash'] as $field) {
     if (!str_contains($diagnostic, $field)) throw new RuntimeException("ownership diagnostic omits {$field}");
