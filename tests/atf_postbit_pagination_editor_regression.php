@@ -16,7 +16,7 @@ foreach ([$atf, $template, $css, $apui, $apf, $editorJs] as $source) {
         throw new RuntimeException('A required postbit/editor source is missing.');
     }
 }
-foreach (['class="atf-editor atf-quick-reply"', '{$option_signature}', '{$lang->disable_smilies}', 'atf-quick-reply__options', 'atf-quick-reply__actions'] as $needle) {
+foreach (['class="atf-card atf-editor atf-quick-reply"', '{$option_signature}', '{$lang->disable_smilies}', 'atf-quick-reply__options', 'atf-quick-reply__actions'] as $needle) {
     if (!str_contains($quickReplyTemplate, $needle)) {
         throw new RuntimeException("ATF quick-reply markup is missing {$needle}.");
     }

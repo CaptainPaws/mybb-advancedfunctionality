@@ -30,9 +30,8 @@ $template = (string)file_get_contents($seeds['postbit_classic']);
 foreach ([
     "{\$post['pid']}", "{\$post['uid']}", "{\$post['af_atf_primary_avatar']}",
     "{\$post['af_atf_secondary_avatar']}",
-    "{\$post['af_post_char_count_formatted']}",
+    "{\$post['af_atf_meta_line']}",
     "{\$post['usertitle']}", "{\$post['groupimage']}", "{\$post['userstars']}",
-    "{\$post['postdate']}", "{\$post['posturl']}",
     "{\$post['message']}", "{\$post['editedmsg']}", "{\$post['attachments']}",
     "{\$post['signature']}", "{\$post['iplogged']}", "{\$post['poststatus']}",
     "{\$post['input_editreason']}", "{\$post['af_aa_user_class']}",
@@ -41,31 +40,27 @@ foreach ([
 }
 
 foreach (array_filter(af_adaptivethemeframework_slots(), static fn(string $slot): bool => str_starts_with($slot, 'post.')) as $slot) {
-    if ($slot === 'post.author.meta') continue; // Reserved compatibility slot; native meta is composed in the template.
+    if (in_array($slot, ['post.author.meta', 'post.actions'], true)) continue; // Metadata/actions are emitted by the preview-aware provider.
     atf_classic_assert(str_contains($template, "{\$post['af_atf_slots']['{$slot}']}"), "Classic post does not render {$slot}");
 }
 
 foreach (['<article', 'atf-post__topbar', 'atf-post__layout', 'atf-post__sidebar',
           'atf-post__primary-avatar', 'atf-post__secondary-avatar',
           'atf-post__primary-column', 'atf-post__profile-actions', 'atf-post__sheet-action',
-          'atf-post__meta-line', 'atf-post__content', 'atf-post__message',
-          'atf-post__management', 'atf-post__reputation-corner'] as $anchor) {
+          'atf-post__content', 'atf-post__message', 'atf-post__reputation-corner'] as $anchor) {
     atf_classic_assert(str_contains($template, $anchor), "Semantic post markup omits {$anchor}");
 }
 atf_classic_assert(!str_contains($template, 'af-apui-postbit'), 'ATF copied the APUI postbit hierarchy.');
 atf_classic_assert(!str_contains($template, "{\$post['subject']}"), 'Per-post subject is still rendered.');
 atf_classic_assert(strpos($template, 'atf-post__moderation') < strpos($template, 'atf-post__sheet-action'), 'Moderation is not the first leading control.');
-atf_classic_assert(strpos($template, 'atf-post__meta-line') > strpos($template, 'post_body scaleimages atf-post__message'), 'Post metadata is not nested inside post_body.atf-post__message.');
-atf_classic_assert(strpos($template, 'atf-post__meta-line') < strpos($template, "{\$post['message']}"), 'Post metadata is not the first child before the message text.');
-atf_classic_assert(str_contains($template, '<div class="atf-post__message-body">{\$post[\'message\']}</div>'), 'Post message text is not wrapped separately from the edge-to-edge metadata bar.');
-atf_classic_assert(substr_count($template, 'atf-post__meta-line') === 1, 'Post metadata is rendered more than once.');
-atf_classic_assert(str_contains($template, 'title="символов в посте"'), 'Character count icon has no required tooltip.');
-atf_classic_assert(str_contains($template, 'fa-solid fa-font'), 'Character count still uses a text label instead of an icon.');
-atf_classic_assert(!str_contains($template, 'Символов:'), 'Character count text label is still rendered.');
-atf_classic_assert(strpos($template, 'atf-post__meta-line') < strpos($template, "{\$post['message']}"), 'Post metadata is not the first visible row inside post_body.');
-atf_classic_assert(strpos($template, 'atf-post__management') > strpos($template, 'atf-post__char-count') && strpos($template, 'atf-post__management') < strpos($template, "{\$post['message']}"), 'Management is not inside the metadata line before the message text.');
+atf_classic_assert(strpos($template, "{\$post['af_atf_meta_line']}") > strpos($template, 'post_body scaleimages atf-post__message'), 'Post metadata provider is not nested inside post_body.atf-post__message.');
+atf_classic_assert(strpos($template, "{\$post['af_atf_meta_line']}") < strpos($template, "{\$post['message']}"), 'Post metadata provider is not the first child before the message text.');
+atf_classic_assert(str_contains($template, '<div class="atf-post__message-body">{$post[\'message\']}</div>'), 'Post message text is not wrapped separately from the edge-to-edge metadata bar.');
 
 $source = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/adaptivethemeframework.php');
+foreach (['atf-post__meta-line', 'title="символов в посте"', 'fa-solid fa-font', 'atf-post__management'] as $anchor) {
+    atf_classic_assert(str_contains($source, $anchor), "Metadata provider omits {$anchor}");
+}
 foreach (['button_edit', 'button_quickdelete', 'button_quickrestore', 'button_quote',
           'button_multiquote', 'button_report', 'button_warn', 'button_purgespammer',
           'button_approve', 'button_unapprove', 'button_restore', 'button_rep'] as $control) {

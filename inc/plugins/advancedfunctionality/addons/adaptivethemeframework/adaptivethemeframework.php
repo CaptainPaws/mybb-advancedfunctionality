@@ -1078,6 +1078,9 @@ function af_adaptivethemeframework_post_text_count(string $message): int
 function af_adaptivethemeframework_capture_post_text_count(array &$post): void
 {
     $post['af_post_char_count'] = af_adaptivethemeframework_post_text_count((string)($post['message'] ?? ''));
+    // This hook only runs for a composed preview. Keep the post presentation,
+    // but do not manufacture permalink/date/actions metadata for an unpublished post.
+    $post['af_atf_is_preview'] = true;
 }
 
 /**
@@ -1306,6 +1309,16 @@ function af_adaptivethemeframework_compose_postbit(array &$post): void
         if (strncmp($slot, 'post.', 5) === 0) {
             $post['af_atf_slots'][$slot] = af_adaptivethemeframework_render_slot($slot, $context);
         }
+    }
+    $post['af_atf_meta_line'] = '';
+    if (empty($post['af_atf_is_preview'])) {
+        $post['af_atf_meta_line'] = '<div class="atf-post__meta-line">'
+            . '<span class="atf-post__permalink">' . (string)($post['posturl'] ?? '') . '</span>'
+            . '<time class="post_date atf-post__date">' . (string)($post['postdate'] ?? '') . '</time>'
+            . '<span class="atf-post__char-count" title="символов в посте" data-af-title="символов в посте"><i class="fa-solid fa-font" aria-hidden="true"></i><span class="atf-post__char-count-value">'
+            . $post['af_post_char_count_formatted'] . '</span></span>'
+            . '<div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">'
+            . (string)($post['af_atf_slots']['post.actions'] ?? '') . '</div></div>';
     }
 }
 
