@@ -174,6 +174,12 @@ function af_adaptivethemeframework_normalizer_diagnostic(string $seed, string $c
     $matchesCompatibleBoundaryNewlineSeed = $compatibility !== null
         && af_adaptivethemeframework_matches_compatible_boundary_newline($seed, $normalized);
     $lines[] = 'matches_compatible_boundary_newline_seed=' . ($matchesCompatibleBoundaryNewlineSeed ? 'yes' : 'no');
+    $matchesLegacyComposeCleanupSeed = af_adaptivethemeframework_matches_legacy_compose_cleanup(
+        (string)($trace['template'] ?? ''),
+        $seed,
+        $current
+    );
+    $lines[] = 'matches_legacy_compose_cleanup_seed=' . ($matchesLegacyComposeCleanupSeed ? 'yes' : 'no');
     // Retain the original field for consumers of the existing diagnostic.
     $lines[] = 'matches_seed=' . (($matchesCompatibleSeed || ($compatibility === null && $matchesExactSeed)) ? 'yes' : 'no');
     if (!$matchesCompatibleSeed && !($compatibility === null && $matchesExactSeed)) {
@@ -2716,6 +2722,68 @@ function af_adaptivethemeframework_matches_compatible_boundary_newline(string $s
         === $candidateCanonical;
 }
 
+/**
+ * Recover the exact historical AdvancedThreadFields compose cleanup state.
+ *
+ * Older ATF-field cleanup used a greedy whitespace regex around
+ * <!--AF_ATF_INPUT--> + {$af_atf_input_html}. When that legacy block was
+ * removed after ATF had taken ownership of newthread/editpost, one or two LF
+ * bytes immediately before </form> could be consumed with it. Accept only that
+ * proven boundary shape; no other whitespace or markup difference is allowed.
+ */
+function af_adaptivethemeframework_matches_legacy_compose_cleanup(
+    string $templateName,
+    string $seed,
+    string $candidate
+): bool {
+    if (!in_array($templateName, ['newthread', 'editpost'], true)) {
+        return false;
+    }
+
+    $seedCanonical = af_adaptivethemeframework_canonical_template_content($seed);
+    $candidateCanonical = af_adaptivethemeframework_canonical_template_content($candidate);
+
+    if ($seedCanonical === $candidateCanonical) {
+        return true;
+    }
+
+    $formPos = strpos($seedCanonical, '</form>');
+    if ($formPos === false) {
+        return false;
+    }
+
+    // The historical INPUT fallback lived immediately before </form>. Only
+    // newline bytes directly adjacent to that boundary may have been eaten.
+    $maxMissing = 2;
+    for ($missing = 1; $missing <= $maxMissing; $missing++) {
+        if (strlen($seedCanonical) !== strlen($candidateCanonical) + $missing) {
+            continue;
+        }
+
+        $start = $formPos - $missing;
+        if ($start < 0) {
+            continue;
+        }
+
+        $removed = substr($seedCanonical, $start, $missing);
+        if ($removed !== str_repeat("\n", $missing)) {
+            continue;
+        }
+
+        $recovered = substr($seedCanonical, 0, $start)
+            . substr($seedCanonical, $formPos);
+
+        if (hash_equals(
+            af_adaptivethemeframework_checksum($recovered),
+            af_adaptivethemeframework_checksum($candidateCanonical)
+        )) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /** Return bounded, escaped byte evidence without logging the whole template. */
 function af_adaptivethemeframework_byte_diff_diagnostic(string $current, string $seed): string
 {
@@ -3045,6 +3113,12 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                         $seed,
                         (string)$compatibility['normalized_content']
                     );
+                $matchesLegacyComposeCleanupSeed = $previousValid
+                    && af_adaptivethemeframework_matches_legacy_compose_cleanup(
+                        $templateName,
+                        $seed,
+                        $current
+                    );
                 $diagnostic = '';
                 if (!$matchesPrevious && !$matchesInstalled && !$matchesSeed) {
                     $diagnostic = af_adaptivethemeframework_normalizer_diagnostic($seed, $current, $compatibility)
@@ -3056,7 +3130,7 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
 
                 // Reconcile every activation from checksum evidence. States such as
                 // manual_override are diagnostic, not permanent locks.
-                if (!$matchesPrevious && !$matchesInstalled && !($matchesSeed && $previousValid) && !$matchesCanonicalSeed && !$matchesCompatibleSeed && !$matchesCanonicalCompatibleSeed && !$matchesCompatibleBoundaryNewlineSeed) {
+                if (!$matchesPrevious && !$matchesInstalled && !($matchesSeed && $previousValid) && !$matchesCanonicalSeed && !$matchesCompatibleSeed && !$matchesCanonicalCompatibleSeed && !$matchesCompatibleBoundaryNewlineSeed && !$matchesLegacyComposeCleanupSeed) {
                     af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
                     $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['ownership_state' => af_adaptivethemeframework_db_string('manual_override'), 'current_content' => af_adaptivethemeframework_db_string($current), 'updated_at' => $now], "id='".(int)$lease['id']."'");
                     throw af_adaptivethemeframework_ownership_conflict($templateName, $sid, (string)$lease['ownership_state'], $currentChecksum, $previousChecksum, $installedChecksum, $seedChecksum, $diagnostic);
@@ -3065,7 +3139,7 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                 // Preserve the original pre-ATF backup. Only normalize ownership
                 // and seed metadata; never replace previous_* during recovery.
                 af_adaptivethemeframework_activation_stage('update_lease[template=' . $templateName . ',sid=' . $sid . ']');
-                $provenInstalledChecksum = ($matchesSeed || $matchesCanonicalSeed || $matchesCompatibleSeed || $matchesCanonicalCompatibleSeed || $matchesCompatibleBoundaryNewlineSeed) ? $seedChecksum : $installedChecksum;
+                $provenInstalledChecksum = ($matchesSeed || $matchesCanonicalSeed || $matchesCompatibleSeed || $matchesCanonicalCompatibleSeed || $matchesCompatibleBoundaryNewlineSeed || $matchesLegacyComposeCleanupSeed) ? $seedChecksum : $installedChecksum;
                 $db->update_query(AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME, ['atf_seed_content' => af_adaptivethemeframework_db_string($seed), 'atf_seed_checksum' => af_adaptivethemeframework_db_string($seedChecksum), 'atf_installed_checksum' => af_adaptivethemeframework_db_string($provenInstalledChecksum), 'atf_version' => af_adaptivethemeframework_db_string(AF_ADAPTIVETHEMEFRAMEWORK_VERSION), 'ownership_state' => af_adaptivethemeframework_db_string('owned'), 'current_content' => af_adaptivethemeframework_db_string(''), 'updated_at' => $now, 'restored_at' => 0], "id='".(int)$lease['id']."'");
                 if ($matchesSeed) {
                     continue;
