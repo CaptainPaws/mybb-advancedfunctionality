@@ -2655,6 +2655,12 @@ function af_atf_register_atf_compatibility_normalizer(): bool
 function af_atf_normalize_atf_template(string $templateName, string $current): ?array
 {
     $legacy = [
+        // Before ATF took ownership of the compose templates, AdvancedThreadFields
+        // patched these two templates directly with its input marker/variable.
+        // Activation must be able to prove and remove that exact historical
+        // injection; unrelated bytes still fail closed below.
+        'newthread' => [AF_ATF_TPL_MARK_INPUT, '{$af_atf_input_html}'],
+        'editpost' => [AF_ATF_TPL_MARK_INPUT, '{$af_atf_input_html}'],
         'showthread' => [AF_ATF_TPL_MARK_SHOW, '{$af_atf_showthread_block}'],
         'forumdisplay_thread' => [AF_ATF_TPL_MARK_CHIPS, '{$thread[\'af_atf_forum_chips\']}'],
     ];
