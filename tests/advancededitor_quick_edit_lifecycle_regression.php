@@ -21,9 +21,10 @@ PHP)) {
 if (!str_contains($editorPhp, "'textarea[name=\"message\"]'")) {
     throw new RuntimeException('Ordinary textarea[name=message] editor support was lost.');
 }
-if (!str_contains($postbit, '<div class="atf-post__message-body" id="pid_{$post[\'pid\']}">{$post[\'message\']}</div>')
-    || str_contains($postbit, 'atf-post__message" id="pid_')) {
-    throw new RuntimeException('MyBB pid host still includes the stable ATF meta-line.');
+if (!str_contains($postbit, '<div class="post_body scaleimages atf-post__message" id="pid_{$post[\'pid\']}">')
+    || !str_contains($postbit, '<div class="atf-post__message-body">{$post[\'message\']}</div>')
+    || strpos($postbit, '{$post[\'af_atf_meta_line\']}') > strpos($postbit, 'id="pid_{$post[\'pid\']}"')) {
+    throw new RuntimeException('The native MyBB .post_body#pid_PID Quick Edit host is missing.');
 }
 
 foreach ([
@@ -31,9 +32,9 @@ foreach ([
     'function isQuickEditTextarea(ta)',
     "match(/^quickedit_(\\d+)$/)",
     "(ta.getAttribute('name') || '') !== 'value'",
-    "ta.closest('.atf-post__content')",
-    "ta.closest('.atf-post__message, .post_body')",
     "ta.closest('#pid_' + match[1])",
+    'host.contains(form)',
+    'post.contains(host)',
     'if (isQuickEditTextarea(root)',
     "root.querySelectorAll('textarea[id^=\"quickedit_\"][name=\"value\"]')",
     'if (!isEligibleTextarea(ta)) return false;',
@@ -49,6 +50,26 @@ foreach ([
     if (!str_contains($editor, $needle)) {
         throw new RuntimeException("Quick-edit editor lifecycle is missing {$needle}.");
     }
+}
+
+// MyBB 1.8.40 initializes jEditable from `.post_body`, reads its pid from
+// that same node, inserts the form into #pid_PID, then assigns quickedit_PID.
+// This fixture models that actual relationship rather than an ATF-only shape.
+$nativeFixture = [
+    'post_body_class' => true,
+    'host_id' => 'pid_699',
+    'form_inside_host' => true,
+    'textarea_id' => 'quickedit_699',
+    'textarea_name' => 'value',
+];
+$pid = preg_replace('/\D+/', '', $nativeFixture['host_id']);
+if (!$nativeFixture['post_body_class'] || !$nativeFixture['form_inside_host']
+    || $nativeFixture['textarea_id'] !== 'quickedit_' . $pid
+    || $nativeFixture['textarea_name'] !== 'value') {
+    throw new RuntimeException('The MyBB 1.8.40 Quick Edit DOM fixture is not eligible.');
+}
+if (str_contains($editor, 'scheduleScan(document') || str_contains($editor, 'scheduleScan(added')) {
+    throw new RuntimeException('Quick Edit still starts a retry/full-document scan loop.');
 }
 
 // The positive contract must be numeric and exact. These negative fixtures

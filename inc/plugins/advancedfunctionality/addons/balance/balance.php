@@ -335,6 +335,8 @@ function af_balance_templates_install_or_update(): void
 function af_balance_get_postbit_data(int $uid): array
 {
     global $mybb;
+    static $requestCache = [];
+    $cacheEnabled = defined('THIS_SCRIPT') && THIS_SCRIPT === 'showthread.php';
 
     $uid = (int)$uid;
     if ($uid <= 0) {
@@ -356,6 +358,14 @@ function af_balance_get_postbit_data(int $uid): array
         ];
     }
 
+    // A post can be composed by both Balance's ATF provider and other
+    // postbit consumers. Keep the formatted snapshot request-local so those
+    // providers perform one balance lookup/calculation per distinct author,
+    // rather than one lookup for every provider on every post.
+    if ($cacheEnabled && array_key_exists($uid, $requestCache)) {
+        return $requestCache[$uid];
+    }
+
     $bal = af_balance_get($uid);
     $expScaled = (int)($bal['exp'] ?? 0);
 
@@ -363,7 +373,7 @@ function af_balance_get_postbit_data(int $uid): array
     $expCurrent = (float)($levelData['exp_current'] ?? 0.0);
     $expNeed = (float)($levelData['exp_need'] ?? 0.0);
 
-    return [
+    $result = [
         'credits_display' => af_balance_format_credits((int)($bal['credits'] ?? 0)),
         'currency_symbol' => (string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'),
         'ability_tokens_display' => af_balance_format_ability_tokens((int)($bal['ability_tokens'] ?? 0)),
@@ -379,6 +389,10 @@ function af_balance_get_postbit_data(int $uid): array
         'exp_display' => af_balance_format_level_exp_value($expCurrent),
         'exp_need_display' => af_balance_format_level_exp_value($expNeed),
     ];
+    if ($cacheEnabled) {
+        $requestCache[$uid] = $result;
+    }
+    return $result;
 }
 
 
