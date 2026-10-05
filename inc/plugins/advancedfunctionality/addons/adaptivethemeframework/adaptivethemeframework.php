@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.20');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.27.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -2465,6 +2465,25 @@ function af_adaptivethemeframework_template_seeds(): array
         'usercp_attachments_attachment' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_attachments_attachment.html',
         'usercp_attachments_none' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/usercp_attachments_none.html',
         'delete_attachments_button' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/delete_attachments_button.html',
+        // MyBB 1.8.40 posting routes share this semantic compose shell and
+        // its layout-bearing option, icon, poll and attachment fragments.
+        'newthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/newthread.html',
+        'newreply' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/newreply.html',
+        'editpost' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/editpost.html',
+        'newthread_postoptions' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/newthread_postoptions.html',
+        'newreply_postoptions' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/newreply_postoptions.html',
+        'editpost_postoptions' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/editpost_postoptions.html',
+        'editpost_reason' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/editpost_reason.html',
+        'newreply_modoptions' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/newreply_modoptions.html',
+        'newthread_postpoll' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/newthread_postpoll.html',
+        'post_subscription_method' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/post_subscription_method.html',
+        'posticons' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/posticons.html',
+        'posticons_icon' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/posticons_icon.html',
+        'post_attachments' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/post_attachments.html',
+        'post_attachments_new' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/post_attachments_new.html',
+        'post_attachments_attachment' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/post_attachments_attachment.html',
+        'post_attachments_attachment_unapproved' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/post_attachments_attachment_unapproved.html',
+        'editpost_delete' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/editpost_delete.html',
         'showthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread.html',
         'showthread_quickreply' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread_quickreply.html',
         'multipage' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/multipage.html',
