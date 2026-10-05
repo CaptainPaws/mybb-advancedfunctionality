@@ -1,0 +1,20 @@
+<html>
+<head><title>{$mybb->settings['bbname']} - {$lang->merge_threads}</title>{$headerinclude}</head>
+<body>
+{$header}
+<main class="pun atf-page-shell atf-page atf-moderation" id="content">
+  <form action="moderation.php" method="post" class="atf-moderation__form">
+    <input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+    <header class="atf-moderation__header"><span class="atf-moderation__eyebrow">Модерация темы</span><h1>{$lang->merge_threads}</h1></header>
+    <section class="atf-moderation__panel">
+      <table class="atf-moderation__identity"><tbody>{$loginbox}</tbody></table>
+      <div class="atf-moderation__field"><label class="atf-moderation__label" for="atf-mod-merge-subject">{$lang->new_subject}</label><input id="atf-mod-merge-subject" type="text" class="textbox" name="subject" value="{$thread['subject']}" /></div>
+      <div class="atf-moderation__field"><label class="atf-moderation__label" for="atf-mod-merge-url">{$lang->thread_to_merge_with}<small>{$lang->merge_with_note}</small></label><input id="atf-mod-merge-url" type="text" class="textbox" name="threadurl" /></div>
+    </section>
+    <footer class="atf-moderation__actions"><input type="submit" class="button" name="submit" value="{$lang->merge_threads}" /></footer>
+    <input type="hidden" name="action" value="do_merge" /><input type="hidden" name="tid" value="{$tid}" />
+  </form>
+</main>
+{$footer}
+</body>
+</html>
