@@ -74,6 +74,35 @@
     return false;
   }
 
+  function isShowthreadPage() {
+    try {
+      var path = String((window.location && window.location.pathname) || '').toLowerCase();
+      return /(?:^|\/)showthread\.php$/.test(path);
+    } catch (e) {}
+    return false;
+  }
+
+  // MyBB's AJAX Quick Edit does not use the normal posting field name.  Keep
+  // this contract deliberately stricter than a global name="value" selector:
+  // the numeric textarea id must agree with the MyBB message host inside the
+  // same ATF post and the node must belong to the injected edit form.
+  function isQuickEditTextarea(ta) {
+    if (!ta || ta.nodeType !== 1 || ta.tagName !== 'TEXTAREA') return false;
+    if (!isShowthreadPage()) return false;
+    if ((ta.getAttribute('name') || '') !== 'value') return false;
+
+    var match = String(ta.id || '').match(/^quickedit_(\d+)$/);
+    if (!match || !ta.closest) return false;
+
+    var form = ta.form || ta.closest('form');
+    var post = ta.closest('.post');
+    var content = ta.closest('.atf-post__content');
+    var message = ta.closest('.atf-post__message, .post_body');
+    var host = ta.closest('#pid_' + match[1]);
+
+    return !!(form && post && content && message && host && post.contains(form));
+  }
+
   function isEligibleTextarea(ta) {
     if (!ta || ta.nodeType !== 1 || ta.tagName !== 'TEXTAREA') return false;
 
@@ -82,6 +111,8 @@
     if (/\bsceditor-textarea\b/i.test(cls)) return false;
 
     if (ta.getAttribute('data-af-ae-skip') === '1') return false;
+
+    if (isQuickEditTextarea(ta)) return true;
 
     var name = (ta.getAttribute('name') || '').toLowerCase();
     if (name === 'subject') return false;
@@ -1586,6 +1617,7 @@
     var inst = safeGetInstance($ta);
     if (!inst) {
       ta.__afAeInited = false;
+      restoreQuickEditPresentation(ta);
       return;
     }
 
@@ -1603,6 +1635,33 @@
       log('[AE] destroy error', e2);
     } finally {
       ta.__afAeInited = false;
+      restoreQuickEditPresentation(ta);
+    }
+  }
+
+  function setQuickEditPresentation(ta) {
+    if (!isQuickEditTextarea(ta)) return;
+    var post = ta.closest('.post');
+    if (!post) return;
+    var count = post.querySelector('.af-ccp-postcount');
+    if (count && !count.hasAttribute('data-af-ae-was-hidden')) {
+      count.setAttribute('data-af-ae-was-hidden', count.hidden ? '1' : '0');
+      count.hidden = true;
+    }
+  }
+
+  function restoreQuickEditPresentation(ta) {
+    if (!ta || !ta.closest) return;
+    var post = ta.closest('.post');
+    if (!post) return;
+    var count = post.querySelector('.af-ccp-postcount[data-af-ae-was-hidden]');
+    if (count) {
+      count.hidden = count.getAttribute('data-af-ae-was-hidden') === '1';
+      count.removeAttribute('data-af-ae-was-hidden');
+    }
+    var form = ta.form || ta.closest('form');
+    if (form) {
+      form.classList.remove('atf-editor', 'atf-editor--quick-edit', 'atf-quick-edit');
     }
   }
 
@@ -1966,6 +2025,14 @@
       // регаем всё ДО создания инстанса
       ensurePostKeyInput(ta.form);
 
+      if (isQuickEditTextarea(ta)) {
+        // MyBB writes a measured pixel width inline. SCEditor reads it during
+        // construction, so normalize only this verified dynamic surface.
+        ta.style.width = '100%';
+        ta.style.maxWidth = '100%';
+        ta.style.boxSizing = 'border-box';
+      }
+
       var startupMode = resolveStartupEditorMode();
       var startInSourceMode = (startupMode === 'source');
 
@@ -2011,6 +2078,10 @@
 
         return true;
       }
+
+      if (isQuickEditTextarea(ta)) {
+        log('[AE] quick-edit instance contract failed', { id: ta.id || '', name: ta.name || '' });
+      }
     } catch (e) {
       log('[AE] init error', e);
     }
@@ -2022,17 +2093,19 @@
     if (!ta || ta.__afAeReadyAnnounced) return;
     ta.__afAeReadyAnnounced = true;
 
-    var content = ta.closest ? ta.closest('.atf-post__content') : null;
+    var quickEdit = isQuickEditTextarea(ta);
+    var content = quickEdit && ta.closest ? ta.closest('.atf-post__content') : null;
     var form = ta.form || (ta.closest ? ta.closest('form') : null);
     if (content && form) {
       form.classList.add('atf-editor');
       form.classList.add('atf-editor--quick-edit');
       form.classList.add('atf-quick-edit');
+      setQuickEditPresentation(ta);
     }
 
     try {
       document.dispatchEvent(new CustomEvent('af:editor-ready', {
-        detail: { textarea: ta, instance: inst || null, quickEdit: !!content }
+        detail: { textarea: ta, instance: inst || null, quickEdit: quickEdit }
       }));
     } catch (e) {}
   }
@@ -2046,7 +2119,14 @@
   function collectTargets(root) {
     var sel = getEditorSelector();
     if (sel) {
-      try { return root.querySelectorAll(sel); } catch (e) {}
+      try {
+        var normal = Array.prototype.slice.call(root.querySelectorAll(sel));
+        var quick = root.querySelectorAll('textarea[id^="quickedit_"][name="value"]');
+        for (var i = 0; i < quick.length; i++) {
+          if (isQuickEditTextarea(quick[i]) && normal.indexOf(quick[i]) === -1) normal.push(quick[i]);
+        }
+        return normal;
+      } catch (e) {}
     }
     return root.querySelectorAll('textarea');
   }
@@ -2060,7 +2140,7 @@
     // scanning its descendants.
     if (root.nodeType === 1 && root.tagName === 'TEXTAREA') {
       var rootSelector = getEditorSelector();
-      if (!rootSelector || (root.matches && root.matches(rootSelector))) {
+      if (isQuickEditTextarea(root) || !rootSelector || (root.matches && root.matches(rootSelector))) {
         initOneTextarea(root);
       }
     }

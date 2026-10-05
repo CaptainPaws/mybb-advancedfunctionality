@@ -55,7 +55,8 @@ atf_classic_assert(!str_contains($template, "{\$post['subject']}"), 'Per-post su
 atf_classic_assert(strpos($template, 'atf-post__moderation') < strpos($template, 'atf-post__sheet-action'), 'Moderation is not the first leading control.');
 atf_classic_assert(strpos($template, "{\$post['af_atf_meta_line']}") > strpos($template, 'post_body scaleimages atf-post__message'), 'Post metadata provider is not nested inside post_body.atf-post__message.');
 atf_classic_assert(strpos($template, "{\$post['af_atf_meta_line']}") < strpos($template, "{\$post['message']}"), 'Post metadata provider is not the first child before the message text.');
-atf_classic_assert(str_contains($template, '<div class="atf-post__message-body">{$post[\'message\']}</div>'), 'Post message text is not wrapped separately from the edge-to-edge metadata bar.');
+atf_classic_assert(str_contains($template, '<div class="atf-post__message-body" id="pid_{$post[\'pid\']}">{$post[\'message\']}</div>'), 'The MyBB pid host must wrap only message text, not the stable metadata bar.');
+atf_classic_assert(!str_contains($template, 'atf-post__message" id="pid_'), 'The replaceable MyBB pid host must not include ATF metadata.');
 
 $source = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/adaptivethemeframework.php');
 foreach (['atf-post__meta-line', 'title="символов в посте"', 'fa-solid fa-font', 'atf-post__management'] as $anchor) {
@@ -189,7 +190,7 @@ atf_classic_assert(!str_contains($source, 'adaptivethemeframework.postbit.js?v='
 atf_classic_assert(str_contains($source, 'adaptivethemeframework.modals.js?v='), 'Bundled ATF frontend controller is not delivered.');
 
 $editorCounter = (string)file_get_contents(AF_ADDONS . 'advancededitor/assets/bbcodes/bbcodes/charcountandprew/charcountandprew.js');
-atf_classic_assert(str_contains($editorCounter, "post.querySelector('.atf-post__meta-line')"), 'AdvancedEditor still duplicates the ATF character count below the post body.');
+atf_classic_assert(str_contains($editorCounter, "post.querySelector('.atf-post__content .atf-post__message')"), 'AdvancedEditor still duplicates the ATF character count below the post body.');
 
 $posturlWithCheckbox = '<a href="showthread.php?pid=260#pid260">#260</a> <input type="checkbox" class="checkbox" name="inlinemod_260" value="1">';
 $posturlCheckboxFirst = af_adaptivethemeframework_posturl_checkbox_first($posturlWithCheckbox);

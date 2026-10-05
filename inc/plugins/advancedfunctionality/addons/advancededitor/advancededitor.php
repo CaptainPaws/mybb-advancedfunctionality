@@ -1178,6 +1178,9 @@ table #post_options, table #postoptions{display:none!important;}
         if ($editorSelector !== '') {
             $payload['cfg']['editorSelector'] = $editorSelector;
         }
+        // Inform diagnostics/integrations about MyBB's AJAX-only field shape.
+        // Runtime still applies its strict showthread/post/message-host guard.
+        $payload['cfg']['quickEditSelector'] = 'textarea[id^="quickedit_"][name="value"]';
 
         $json = json_encode(
             $payload,
