@@ -1,0 +1,13 @@
+<html>
+<head><title>{$mybb->settings['bbname']} - {$lang->split_thread}</title>{$headerinclude}</head>
+<body>{$header}
+<main class="pun atf-page-shell atf-page atf-moderation" id="content"><form action="moderation.php" method="post" class="atf-moderation__form">
+<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+<header class="atf-moderation__header"><span class="atf-moderation__eyebrow">Модерация темы</span><h1>{$lang->split_thread}</h1></header>
+<section class="atf-moderation__panel"><table class="atf-moderation__identity"><tbody>{$loginbox}</tbody></table>
+<div class="atf-moderation__field"><label class="atf-moderation__label" for="atf-mod-split-full-subject">{$lang->new_subject}</label><input id="atf-mod-split-full-subject" type="text" class="textbox" name="newsubject" value="{$lang->split_thread_subject} {$thread['subject']}" /></div>
+<div class="atf-moderation__field"><label class="atf-moderation__label">{$lang->new_forum}</label><div class="atf-moderation__control">{$forumselect}</div></div></section>
+<section class="atf-moderation__panel"><h2>{$lang->posts_to_split}</h2><table class="atf-moderation__legacy-table"><tbody>{$posts}</tbody></table></section>
+<footer class="atf-moderation__actions"><input type="submit" class="button" name="submit" value="{$lang->split_thread}" /></footer>
+<input type="hidden" name="action" value="do_split" /><input type="hidden" name="tid" value="{$tid}" />
+</form></main>{$footer}</body></html>
