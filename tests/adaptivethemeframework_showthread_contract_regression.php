@@ -41,6 +41,32 @@ if (!str_contains(file_get_contents(AF_ADDONS . 'adaptivethemeframework/adaptive
     throw new RuntimeException('Showthread composition hook is not registered.');
 }
 
+$quickReply = file_get_contents($seeds['showthread_quickreply'] ?? '');
+if (!str_contains($quickReply, 'class="atf-card atf-editor atf-quick-reply"')
+    || !preg_match('~name="postoptions\[disablesmilies\]"[^>]*>\s*<span>~', $quickReply)) {
+    throw new RuntimeException('Quick Reply is not a labelled, width-contained ATF card.');
+}
+if (!str_contains($showthread, 'atf-thread__tools atf-thread-control')
+    || !str_contains($showthread, 'atf-thread__moderation atf-thread-control')) {
+    throw new RuntimeException('Thread tools and moderation do not retain separate ATF component identities.');
+}
+
+$postbit = file_get_contents($seeds['postbit_classic'] ?? '');
+if (!str_contains($postbit, '{$post[\'af_atf_meta_line\']}')) {
+    throw new RuntimeException('Postbit does not consume the preview-aware metadata provider.');
+}
+$previewPost = ['message' => 'Preview text'];
+af_adaptivethemeframework_capture_post_text_count($previewPost);
+af_adaptivethemeframework_compose_postbit($previewPost);
+if (($previewPost['af_atf_meta_line'] ?? null) !== '') {
+    throw new RuntimeException('Preview post rendered published-post metadata.');
+}
+$publishedPost = ['message' => 'Published text', 'posturl' => '#post', 'postdate' => 'now'];
+af_adaptivethemeframework_compose_postbit($publishedPost);
+if (!str_contains((string)($publishedPost['af_atf_meta_line'] ?? ''), 'atf-post__meta-line')) {
+    throw new RuntimeException('Published post lost its metadata line.');
+}
+
 $threadFields = file_get_contents(AF_ADDONS . 'advancedthreadfields/advancedthreadfields.php');
 if (!str_contains($threadFields, "'slot' => 'thread.atf_fields'")
     || !preg_match('~function af_atf_render_showthread_fields.*?return af_atf_build_display_block_for_tid_fid\(\$tid, \$fid\);~s', $threadFields)) {
