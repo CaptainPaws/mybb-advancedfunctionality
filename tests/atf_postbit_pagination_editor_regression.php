@@ -92,7 +92,7 @@ foreach (['af:editor-ready', "form.classList.add('atf-quick-edit')", 'announceEd
     }
 }
 $counterJs = file_get_contents($addons . 'advancededitor/assets/bbcodes/bbcodes/charcountandprew/charcountandprew.js');
-foreach (['detail.quickEdit', 'initFormCounterAndPreview(detail.textarea)', "post.querySelector('.atf-post__meta-line')"] as $needle) {
+foreach (['detail.quickEdit', 'initFormCounterAndPreview(detail.textarea)', "post.querySelector('.atf-post__content .atf-post__message')"] as $needle) {
     if (!str_contains($counterJs, $needle)) {
         throw new RuntimeException("Quick-edit counter contract is missing {$needle}.");
     }

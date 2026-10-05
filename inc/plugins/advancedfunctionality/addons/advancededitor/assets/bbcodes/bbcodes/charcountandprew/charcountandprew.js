@@ -562,8 +562,9 @@
     for (var i = 0; i < posts.length; i++) {
       var post = posts[i];
       // ATF renders the canonical server-side count in its content metadata.
-      // Do not add the legacy client-side counter below the same post body.
-      if (post.querySelector('.atf-post__meta-line')) continue;
+      // Identify ATF by its stable post structure rather than by the meta-line:
+      // MyBB temporarily replaces the pid host during AJAX Quick Edit.
+      if (post.querySelector('.atf-post__content .atf-post__message')) continue;
       if (post.querySelector('.af-ccp-postcount')) continue;
 
       var body = findPostBodies(post);
