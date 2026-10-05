@@ -1366,16 +1366,88 @@ function af_adaptivethemeframework_showthread_context(array $thread, int $fid, a
 }
 
 /** Compose the five ATF thread slots after MyBB has rendered every control. */
+function af_adaptivethemeframework_compose_thread_browsers(): void
+{
+    global $db, $mybb, $lang, $usersbrowsing, $doneusers, $guestcount, $inviscount;
+
+    if (!defined('THIS_SCRIPT') || THIS_SCRIPT !== 'showthread.php' || !is_object($db) || !is_object($mybb)) {
+        return;
+    }
+    $uids = array_values(array_unique(array_filter(array_map('intval', array_keys((array)($doneusers ?? []))))));
+    $avatars = '';
+    if ($uids) {
+        $query = $db->simple_select(
+            'users',
+            'uid,username,avatar,invisible,usergroup,displaygroup',
+            'uid IN (' . implode(',', $uids) . ')',
+            ['order_by' => 'username', 'order_dir' => 'ASC']
+        );
+        $fallback = htmlspecialchars_uni(af_adaptivethemeframework_default_avatar_url());
+        while ($user = $db->fetch_array($query)) {
+            $uid = (int)($user['uid'] ?? 0);
+            if ($uid <= 0) {
+                continue;
+            }
+            $visible = (int)($user['invisible'] ?? 0) !== 1
+                || (int)($mybb->usergroup['canviewwolinvis'] ?? 0) === 1
+                || $uid === (int)($mybb->user['uid'] ?? 0);
+            if (!$visible) {
+                continue;
+            }
+            $username = trim(strip_tags((string)($user['username'] ?? '')));
+            $avatar = trim((string)($user['avatar'] ?? ''));
+            if ($avatar === '') {
+                $avatar = $fallback;
+            } else {
+                $avatar = htmlspecialchars_uni($avatar);
+            }
+            $profile = function_exists('get_profile_link')
+                ? get_profile_link($uid)
+                : 'member.php?action=profile&amp;uid=' . $uid;
+            $label = htmlspecialchars_uni($username !== '' ? $username : ('#' . $uid));
+            $avatars .= '<a class="atf-thread-browser" href="' . htmlspecialchars_uni((string)$profile)
+                . '" title="' . $label . '" aria-label="' . $label . '">'
+                . '<img src="' . $avatar . '" alt="" loading="lazy" decoding="async"></a>';
+        }
+    }
+
+    $meta = [];
+    $guests = max(0, (int)($guestcount ?? 0));
+    if ($guests > 0) {
+        $meta[] = $guests . ' ' . ($guests === 1 ? 'гость' : 'гостей');
+    }
+    $hidden = max(0, (int)($inviscount ?? 0));
+    if ($hidden > 0 && (int)($mybb->usergroup['canviewwolinvis'] ?? 0) !== 1) {
+        $meta[] = $hidden . ' скрыт.';
+    }
+
+    if ($avatars === '' && !$meta) {
+        $usersbrowsing = '';
+        return;
+    }
+
+    $labelText = isset($lang->users_browsing_thread)
+        ? rtrim(strip_tags((string)$lang->users_browsing_thread), " \t\n\r\0\x0B:")
+        : 'Пользователи, просматривающие тему';
+    $usersbrowsing = '<div class="atf-thread-browsers">'
+        . '<span class="atf-thread-browsers__label">' . htmlspecialchars_uni($labelText) . '</span>'
+        . '<span class="atf-thread-browsers__avatars">' . $avatars . '</span>'
+        . ($meta ? '<span class="atf-thread-browsers__meta">' . htmlspecialchars_uni(implode(' · ', $meta)) . '</span>' : '')
+        . '</div>';
+}
+
+/** Compose the showthread shell after core has prepared all native values. */
 function af_adaptivethemeframework_compose_showthread(): void
 {
     global $thread, $fid, $header, $posts, $quickreply, $moderationoptions, $pollbox,
-           $multipage, $printthread, $sendthread, $addremovesubscription, $addpoll;
+           $multipage, $printthread, $sendthread, $addremovesubscription, $addpoll, $usersbrowsing;
     global $atf_thread_breadcrumbs, $atf_thread_meta, $atf_thread_fields,
            $atf_thread_before_posts, $atf_thread_after_posts;
 
     if (!is_array($thread)) {
         return;
     }
+    af_adaptivethemeframework_compose_thread_browsers();
     // The stock header contains the same late-bound token. Move it rather than
     // duplicating the breadcrumb trail in the ATF shell.
     $header = str_replace('<navigation>', '', (string)$header);
@@ -1514,6 +1586,9 @@ function af_adaptivethemeframework_mark_page(string &$page): void
                     $classes[] = 'atf-index-page';
                     $classes[] = 'atf-forum-layout--'.$layout;
                 }
+                if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'moderation.php') {
+                    $classes[] = 'atf-moderation-page';
+                }
                 $replacement = 'class=' . $classMatch[1][0] . implode(' ', array_filter($classes)) . $classMatch[1][0];
                 $attributes = substr_replace($attributes, $replacement, (int)$classMatch[0][1], strlen($classMatch[0][0]));
             } else {
@@ -1521,6 +1596,9 @@ function af_adaptivethemeframework_mark_page(string &$page): void
                 if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'index.php') {
                     $layout = ($GLOBALS['atf_forum_layout'] ?? 'full') === 'grid' ? 'grid' : 'full';
                     $layoutClass = ' atf-index-page atf-forum-layout--'.$layout;
+                }
+                if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'moderation.php') {
+                    $layoutClass .= ' atf-moderation-page';
                 }
                 $attributes .= ' class="atf-active'.$layoutClass.'"';
             }
@@ -2499,6 +2577,23 @@ function af_adaptivethemeframework_template_seeds(): array
         'editpost_delete' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/editpost_delete.html',
         'showthread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread.html',
         'showthread_quickreply' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/showthread_quickreply.html',
+        // moderation.php keeps MyBB's controller, permissions and POST contracts,
+        // while ATF owns the common full-page presentation roots.
+        'moderation_move' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_move.html',
+        'moderation_inline_movethreads' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_inline_movethreads.html',
+        'moderation_deletethread' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_deletethread.html',
+        'moderation_deletepoll' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_deletepoll.html',
+        'moderation_confirmation' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_confirmation.html',
+        'moderation_merge' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_merge.html',
+        'moderation_inline_deleteposts' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_inline_deleteposts.html',
+        'moderation_inline_deletethreads' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_inline_deletethreads.html',
+        'moderation_inline_mergeposts' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_inline_mergeposts.html',
+        'moderation_inline_splitposts' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_inline_splitposts.html',
+        'moderation_inline_moveposts' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_inline_moveposts.html',
+        'moderation_split' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_split.html',
+        'moderation_purgespammer' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_purgespammer.html',
+        'moderation_getip' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_getip.html',
+        'moderation_threadnotes' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/moderation_threadnotes.html',
         'multipage' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/multipage.html',
         'postbit_classic' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/postbit_classic.html',
         'private' => AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/private.html',
