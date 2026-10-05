@@ -3543,6 +3543,8 @@ body.atf-active .atf-thread-browsers__meta {
 body.atf-active .atf-thread__tools .thread_tools,
 body.atf-active .atf-thread__tools .thread_tools > li {
   list-style: none !important;
+  list-style-image: none !important;
+  background: none !important;
   background-image: none !important;
 }
 
