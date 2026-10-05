@@ -112,10 +112,8 @@ function af_ajsb_allowed_assets_for_page(): array
 
 /**
  * pre_output_page:
- * 1) берём наш блок между маркерами как есть,
- * 2) чистим у него любые query в src/href (если вдруг появились),
- * 3) удаляем все <script src="...assets/<file>.js..."> и <link href="...assets/<file>.css..."> по всей странице,
- * 4) вставляем наш блок обратно (один раз).
+ * Resolve the final manifest-permitted set and replace the owned placeholder
+ * once. Assets which are not allowed are never rendered into the response.
  */
 function af_advancedjsbandle_pre_output(string &$page = ''): void
 {
@@ -135,35 +133,19 @@ function af_advancedjsbandle_pre_output(string &$page = ''): void
         return;
     }
 
-    $jsFiles  = af_ajsb_list_js_files();
-    $cssFiles = af_ajsb_list_css_files();
     $allowed  = af_ajsb_allowed_assets_for_page();
 
-    // array_intersect is intentionally oriented this way to retain catalog
-    // order rather than scandir/natural-sort order.
-    $allowedJs = array_values(array_intersect($allowed['js'], $jsFiles));
-    $allowedCss = array_values(array_intersect($allowed['css'], $cssFiles));
-
-    if (!$jsFiles && !$cssFiles) {
-        return;
-    }
-
-    $styles  = af_ajsb_build_link_tags($allowedCss, false);
-    $scripts = af_ajsb_build_script_tags($allowedJs, false);
+    // The manifest/catalog is the source of truth.  Do not scan the assets
+    // directory and then scrub the completed response once per file: that was
+    // O(response size * asset count) on large threads.
+    $styles  = af_ajsb_build_link_tags($allowed['css'], false);
+    $scripts = af_ajsb_build_script_tags($allowed['js'], false);
     $cleanBlock = "\n" . AF_AJSB_MARK_START . "\n"
         . ($styles ? $styles . "\n" : '')
         . ($scripts ? $scripts . "\n" : '')
         . AF_AJSB_MARK_END . "\n";
 
-    // 2) вырезаем ВСЕ наши скрипты/стили по всей странице (и с query и без)
-    foreach ($jsFiles as $fname) {
-        $page = af_ajsb_remove_script_tags_for_file($page, $fname);
-    }
-    foreach ($cssFiles as $fname) {
-        $page = af_ajsb_remove_link_tags_for_file($page, $fname);
-    }
-
-    // 3) возвращаем наш блок ровно один раз
+    // Replace the owned placeholder once; forbidden assets are never emitted.
     $pattern = '#'.preg_quote(AF_AJSB_MARK_START, '#').'.*?'.preg_quote(AF_AJSB_MARK_END, '#').'#si';
     $page = preg_replace($pattern, $cleanBlock, $page, 1);
 }
@@ -251,9 +233,9 @@ function af_ajsb_asset_url_base(bool $template = false): string
     return $base . '/inc/plugins/advancedfunctionality/addons/' . AF_AJSB_ID . '/assets/';
 }
 
-function af_ajsb_build_script_tags(array $files = [], bool $template = true): string
+function af_ajsb_build_script_tags(?array $files = null, bool $template = true): string
 {
-    if (!$files) {
+    if ($files === null) {
         $files = af_ajsb_list_js_files();
     }
     if (!$files) {
@@ -347,9 +329,9 @@ function af_ajsb_list_css_files(): array
     return $cache;
 }
 
-function af_ajsb_build_link_tags(array $files = [], bool $template = true): string
+function af_ajsb_build_link_tags(?array $files = null, bool $template = true): string
 {
-    if (!$files) {
+    if ($files === null) {
         $files = af_ajsb_list_css_files();
     }
     if (!$files) {

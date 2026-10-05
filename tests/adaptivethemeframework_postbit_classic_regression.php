@@ -168,7 +168,7 @@ atf_classic_assert(str_contains($source, 'af_adaptivethemeframework_label_post_c
 atf_classic_assert(str_contains($source, "'button_www'"), 'Profile actions omit the native website control.');
 atf_classic_assert((bool)preg_match('~@media \(max-width: 48rem\).*?\.atf-post__topbar \{ position: static;.*?\.atf-post__sidebar-inner \{ position: static;~s', $css), 'Mobile does not disable both sticky surfaces.');
 
-$sticky = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/assets/adaptivethemeframework.modals.js');
+$sticky = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/assets/adaptivethemeframework.postbit-sticky.js');
 foreach (['.atf-post__topbar', '.atf-post__sidebar-inner', '.atf-post__meta-line', "document.querySelector('.af-am-navigation')",
           'item.postTop', 'item.postHeight', 'item.topbarHeight', 'item.sidebarHeight', 'item.metaHeight',
           'item.maxTravel', 'ResizeObserver', "matchMedia('(min-width: 48.0625rem)')"] as $contract) {
@@ -186,8 +186,8 @@ atf_classic_assert((bool)preg_match(
 ), 'Sticky postbar does not mask the seam where scrolled post text can flash below the navigation.');
 atf_classic_assert(str_contains($sticky, 'postBottom - sidebarBottom'),
     'Topbar/sidebar/meta do not share the sidebar-bounded travel limit.');
-atf_classic_assert(!str_contains($source, 'adaptivethemeframework.postbit.js?v='), 'Postbit sticky controller must not depend on a separately deployed asset.');
-atf_classic_assert(str_contains($source, 'adaptivethemeframework.modals.js?v='), 'Bundled ATF frontend controller is not delivered.');
+atf_classic_assert(str_contains($source, 'adaptivethemeframework.postbit-sticky.js?v='), 'Scoped ATF postbit controller is not delivered.');
+atf_classic_assert(str_contains($source, 'adaptivethemeframework.modals.js?v='), 'ATF modal controller is not delivered.');
 
 $editorCounter = (string)file_get_contents(AF_ADDONS . 'advancededitor/assets/bbcodes/bbcodes/charcountandprew/charcountandprew.js');
 atf_classic_assert(str_contains($editorCounter, "post.querySelector('.atf-post__content .atf-post__message')"), 'AdvancedEditor still duplicates the ATF character count below the post body.');

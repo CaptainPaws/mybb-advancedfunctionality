@@ -1515,7 +1515,8 @@ function af_adaptivethemeframework_compose_thread_card(): void
 /** Add the activation marker and resolve server-rendered forum-card slots. */
 function af_adaptivethemeframework_mark_page(string &$page): void
 {
-    $page = (string)preg_replace_callback(
+    if (strpos($page, '<atf-forum-avatar') !== false) {
+        $page = (string)preg_replace_callback(
         '~<atf-forum-avatar\s+fid="(\d+)"\s+uid="(\d+)"></atf-forum-avatar>~',
         static function (array $match): string {
             $avatar = af_adaptivethemeframework_render_slot(
@@ -1527,11 +1528,13 @@ function af_adaptivethemeframework_mark_page(string &$page): void
                 : af_adaptivethemeframework_lastposter_avatar_fallback((int)$match[2]);
         },
         $page
-    );
+        );
+    }
 
     // Preserve an optional provider verbatim, or replace the server-only
     // marker with the native fallback before HTML reaches the browser.
-    $page = (string)preg_replace_callback(
+    if (strpos($page, '<atf-thread-avatar') !== false) {
+        $page = (string)preg_replace_callback(
         '~(<div class="atf-topic-card__avatar">)(.*?)(<atf-thread-avatar\s+uid="(\d+)"></atf-thread-avatar>)(</div>)~is',
         static function (array $match): string {
             $provided = trim((string)$match[2]);
@@ -1541,7 +1544,8 @@ function af_adaptivethemeframework_mark_page(string &$page): void
             return $match[1].$avatar.$match[5];
         },
         $page
-    );
+        );
+    }
 
     // The nested stock avatar template remains MyBB-owned. Normalize only an
     // image already rendered inside our card viewport; this adds no lookup,
@@ -1621,14 +1625,22 @@ function af_adaptivethemeframework_mark_page(string &$page): void
         $components = af_adaptivethemeframework_render_slot('footer.components', $context);
         $modals = af_adaptivethemeframework_render_slot('footer.modals', $context);
         $bburl = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/');
-        $modalCompositionScript = htmlspecialchars($bburl
+        $assetBase = $bburl
             . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.modals.js?v='
-            . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION);
+        $scripts = '';
+        $hasModalRuntime = trim($modals) !== '' || preg_match('~data-[^=]*(?:modal|dialog)|data-afcs-open~i', $components);
+        if ($hasModalRuntime) {
+            $scripts .= '<script src="' . htmlspecialchars($assetBase, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '" defer></script>' . "\n";
+        }
+        if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'showthread.php' && strpos($page, 'class="atf-post') !== false) {
+            $stickyScript = $bburl . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.postbit-sticky.js?v=' . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION);
+            $scripts .= '<script src="' . htmlspecialchars($stickyScript, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '" defer></script>' . "\n";
+        }
         $footer = "\n<div id=\"atf-footer-composition\" class=\"atf-footer-composition\" data-atf-footer-components>"
             . $components . "</div>\n"
             . '<div id="atf-global-modal-host" class="atf-global-modal-host" data-atf-modal-host aria-live="polite">'
-            . $modals . "</div>\n"
-            . '<script src="' . $modalCompositionScript . '" defer></script>' . "\n";
+            . $modals . "</div>\n" . $scripts;
         $page = (string)preg_replace('~</body\s*>~i', $footer . '</body>', $page, 1);
     }
 

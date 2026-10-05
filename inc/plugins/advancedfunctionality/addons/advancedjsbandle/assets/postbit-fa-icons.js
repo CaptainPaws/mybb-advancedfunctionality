@@ -78,7 +78,8 @@
         }
       }
     });
-    mo.observe(document.documentElement, { childList: true, subtree: true });
+    var posts = document.getElementById('posts') || document.querySelector('.atf-posts, .posts');
+    if (posts) mo.observe(posts, { childList: true, subtree: true });
   }
 
   onReady(function () {

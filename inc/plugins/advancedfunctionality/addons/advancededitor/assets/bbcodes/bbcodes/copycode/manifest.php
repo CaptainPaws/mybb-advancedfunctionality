@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'runtime' => ['view' => true, 'editor' => true],
     'id'    => 'copycode',
     'title' => 'Копирование кода',
     'tags'  => ['code', 'copy'],

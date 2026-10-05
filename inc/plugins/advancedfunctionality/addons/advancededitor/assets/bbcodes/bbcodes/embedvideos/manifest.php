@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'runtime' => ['view' => true, 'editor' => true],
     'id'    => 'embedvideos',
     'title' => 'Вставить видео',
 

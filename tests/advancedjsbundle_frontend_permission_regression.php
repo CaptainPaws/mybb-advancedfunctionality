@@ -21,12 +21,12 @@ if ($manifest['frontend']['directory_fallback'] !== false) {
 }
 
 $permission = strpos($bundle, "af_frontend_asset_allowed(AF_AJSB_ID, \$file)");
-$emit = strpos($bundle, 'af_ajsb_build_script_tags($allowedJs, false)');
+$emit = strpos($bundle, "af_ajsb_build_script_tags(\$allowed['js'], false)");
 if ($permission === false || $emit === false || $permission > $emit) {
     throw new RuntimeException('Resource permission must determine the emitted source set');
 }
-if (!str_contains($bundle, "array_intersect(\$allowed['js'], \$jsFiles)")) {
-    throw new RuntimeException('Bundle must preserve declared executable order');
+if (str_contains($bundle, 'array_intersect') || !str_contains($bundle, "'js' => ['scroll-buttons.js'")) {
+    throw new RuntimeException('Bundle must preserve declared executable order without filesystem discovery');
 }
 
 $inject = strpos($core, '$page = af_inject_enabled_addon_assets($page);');

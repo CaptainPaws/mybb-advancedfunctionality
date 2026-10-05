@@ -3,6 +3,31 @@ if (!defined('IN_MYBB')) {
     die('No direct access');
 }
 
+/** Preload sheet slugs for every author with a constant number of queries. */
+function af_charactersheets_preload_postbit_metadata(array $uids): void
+{
+    global $db;
+    $uids = array_values(array_unique(array_filter(array_map('intval', $uids))));
+    $cache = array_fill_keys($uids, '');
+    if (!$uids) {
+        $GLOBALS['af_cs_postbit_slug_cache'] = $cache;
+        return;
+    }
+    $in = implode(',', $uids);
+    if ($db->table_exists(AF_CS_SHEETS_TABLE)) {
+        $q = $db->simple_select(AF_CS_SHEETS_TABLE, 'uid,slug,id', "uid IN ($in) AND slug<>''", ['order_by' => 'id', 'order_dir' => 'ASC']);
+        while ($row = $db->fetch_array($q)) $cache[(int)$row['uid']] = (string)$row['slug'];
+    }
+    if ($db->table_exists(AF_CS_TABLE)) {
+        $q = $db->simple_select(AF_CS_TABLE, 'uid,sheet_slug,tid', "uid IN ($in) AND sheet_slug<>''", ['order_by' => 'tid', 'order_dir' => 'ASC']);
+        while ($row = $db->fetch_array($q)) {
+            $uid = (int)$row['uid'];
+            if (($cache[$uid] ?? '') === '') $cache[$uid] = (string)$row['sheet_slug'];
+        }
+    }
+    $GLOBALS['af_cs_postbit_slug_cache'] = $cache;
+}
+
 function af_cs_get_postbit_sheet_payload(int $uid): array
 {
     global $lang;
@@ -121,6 +146,10 @@ function af_charactersheets_get_sheet_slug_by_uid(int $uid): string
     }
     if (array_key_exists($uid, $cache)) {
         return (string)$cache[$uid];
+    }
+    if (isset($GLOBALS['af_cs_postbit_slug_cache'])
+        && array_key_exists($uid, $GLOBALS['af_cs_postbit_slug_cache'])) {
+        return $cache[$uid] = (string)$GLOBALS['af_cs_postbit_slug_cache'][$uid];
     }
 
     global $db;

@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'runtime' => ['view' => true, 'editor' => true],
     'id'    => 'accordion',
     'title' => 'Accordion',
     'tags'  => ['accordion', 'accitem'],

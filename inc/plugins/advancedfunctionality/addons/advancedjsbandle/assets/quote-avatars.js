@@ -131,28 +131,6 @@
     return { byUid: byUid, byName: byName };
   }
 
-  // fallback: пытаемся добыть аватар с профиля
-  function fetchAvatarFromProfile(uid) {
-    // относительный путь — это важно, чтобы не зависеть от bburl
-    var url = 'member.php?uid=' + encodeURIComponent(String(uid));
-
-    return fetch(url, { credentials: 'same-origin' })
-      .then(function (r) { return r.text(); })
-      .then(function (html) {
-        // Быстрый хак: если в HTML прямо встречается uploads/avatars/... — вытащим первую ссылку.
-        // Это часто работает лучше, чем угадывать DOM.
-        var m = html.match(/(https?:\/\/[^"' ]+uploads\/avatars\/[^"' ]+|\/uploads\/avatars\/[^"' ]+)/i);
-        if (m && m[1]) return m[1];
-
-        // Если нет — парсим DOM и пробуем найти подходящий img
-        var doc = new DOMParser().parseFromString(html, 'text/html');
-        var img = pickBestAvatarImg(doc);
-        if (!img) return '';
-        return String(img.getAttribute('src') || '');
-      })
-      .catch(function () { return ''; });
-  }
-
   function insertAvatarIntoHeader(headerEl, src) {
     if (!headerEl || !src) return;
 
@@ -215,16 +193,8 @@
         return;
       }
 
-      // fallback: если есть uid, пробуем профиль
-      if (uid) {
-        fetchAvatarFromProfile(uid).then(function (remoteSrc) {
-          if (!remoteSrc) return;
-          // кешируем
-          index.byUid.set(uid, remoteSrc);
-          if (name) index.byName.set(name.toLowerCase(), remoteSrc);
-          insertAvatarIntoHeader(header, remoteSrc);
-        });
-      }
+      // Missing local data is deliberately harmless. Profile HTML is never
+      // fetched from a thread; a server-provided map can extend this index.
     });
   }
 
@@ -240,7 +210,8 @@
         }
       }
     });
-    mo.observe(document.documentElement, { childList: true, subtree: true });
+    var posts = document.getElementById('posts') || document.querySelector('.atf-posts, .posts');
+    if (posts) mo.observe(posts, { childList: true, subtree: true });
   }
 
   onReady(function () {
