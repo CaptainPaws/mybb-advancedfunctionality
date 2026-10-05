@@ -1,0 +1,24 @@
+<html>
+<head><title>{$mybb->settings['bbname']} - {$lang->move_threads}</title>{$headerinclude}</head>
+<body>
+{$header}
+<main class="pun atf-page-shell atf-page atf-moderation" id="content">
+  <form action="moderation.php" method="post" class="atf-moderation__form">
+    <input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+    <header class="atf-moderation__header"><span class="atf-moderation__eyebrow">Массовая модерация</span><h1>{$lang->move_threads}</h1></header>
+    <section class="atf-moderation__panel">
+      <table class="atf-moderation__identity"><tbody>{$loginbox}</tbody></table>
+      <div class="atf-moderation__field"><label class="atf-moderation__label">{$lang->new_forum}</label><div class="atf-moderation__control">{$forumselect}</div></div>
+      <fieldset class="atf-moderation__choices"><legend>{$lang->method}</legend>
+        <label><input type="radio" class="radio" name="method" value="move" /><span>{$lang->method_move}</span></label>
+        <label class="atf-moderation__choice--redirect"><input type="radio" class="radio" name="method" value="redirect" checked="checked" /><span>{$lang->method_move_redirect}</span><input type="text" class="textbox atf-moderation__small-input" name="redirect_expire" size="3" /><small>{$lang->redirect_expire_note}</small></label>
+        <label><input type="radio" class="radio" name="method" value="copy" /><span>{$lang->method_copy}</span></label>
+      </fieldset>
+    </section>
+    <footer class="atf-moderation__actions"><input type="submit" class="button" name="submit" value="{$lang->move_threads}" /></footer>
+    <input type="hidden" name="action" value="do_multimovethreads" /><input type="hidden" name="fid" value="{$fid}" /><input type="hidden" name="threads" value="{$inlineids}" /><input type="hidden" name="url" value="{$return_url}" />
+  </form>
+</main>
+{$footer}
+</body>
+</html>
