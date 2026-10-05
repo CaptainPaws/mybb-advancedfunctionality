@@ -1,0 +1,12 @@
+<html>
+<head><title>{$mybb->settings['bbname']} - {$lang->thread_notes_editor}</title>{$headerinclude}</head>
+<body>{$header}
+<main class="pun atf-page-shell atf-page atf-moderation" id="content">
+<form action="moderation.php" method="post" class="atf-moderation__form"><input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+<header class="atf-moderation__header"><span class="atf-moderation__eyebrow">Заметки модераторов</span><h1>{$lang->thread_notes_editor}</h1></header>
+<section class="atf-moderation__panel"><table class="atf-moderation__identity"><tbody>{$loginbox}</tbody></table><p class="atf-moderation__hint">{$lang->below_notes}</p><textarea name="threadnotes" rows="10" tabindex="1">{$thread['notes']}</textarea></section>
+<footer class="atf-moderation__actions"><input type="submit" class="button" name="submit" value="{$lang->update_notes}" tabindex="2" /></footer>
+<input type="hidden" name="action" value="do_threadnotes" /><input type="hidden" name="tid" value="{$tid}" /></form>
+<section class="atf-moderation__panel"><h2>{$lang->mod_logs}</h2><div class="atf-moderation__table-scroll"><table class="atf-moderation__legacy-table"><thead><tr><th>{$lang->mod_username}</th><th>{$lang->mod_date}</th><th>{$lang->mod_actions}</th><th>{$lang->mod_information}</th></tr></thead><tbody>{$modactions}</tbody></table></div></section>
+<section class="atf-moderation__panel"><h2>{$lang->delayed_mod_queue}</h2><div class="atf-moderation__table-scroll"><table class="atf-moderation__legacy-table"><thead><tr><th>{$lang->mod_username}</th><th>{$lang->time_to_perform_action}</th><th>{$lang->mod_actions}</th><th>{$lang->mod_information}</th></tr></thead><tbody>{$delayedmods}</tbody></table></div></section>
+</main>{$footer}</body></html>
