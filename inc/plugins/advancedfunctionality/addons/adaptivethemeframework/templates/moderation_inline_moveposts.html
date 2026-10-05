@@ -1,0 +1,11 @@
+<html>
+<head><title>{$mybb->settings['bbname']} - {$lang->move_posts}</title>{$headerinclude}</head>
+<body>{$header}
+<main class="pun atf-page-shell atf-page atf-moderation" id="content"><form action="moderation.php" method="post" class="atf-moderation__form">
+<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+<header class="atf-moderation__header"><span class="atf-moderation__eyebrow">Массовая модерация</span><h1>{$lang->move_posts}</h1></header>
+<section class="atf-moderation__panel"><table class="atf-moderation__identity"><tbody>{$loginbox}</tbody></table>
+<div class="atf-moderation__field"><label class="atf-moderation__label" for="atf-mod-move-posts">{$lang->thread_to_move_to}<small>{$lang->move_post_note}</small></label><input id="atf-mod-move-posts" type="text" class="textbox" name="threadurl" /></div></section>
+<footer class="atf-moderation__actions"><input type="submit" class="button" name="submit" value="{$lang->move_posts}" /></footer>
+<input type="hidden" name="action" value="do_multimoveposts" /><input type="hidden" name="tid" value="{$tid}" /><input type="hidden" name="posts" value="{$inlineids}" /><input type="hidden" name="url" value="{$return_url}" />
+</form></main>{$footer}</body></html>
