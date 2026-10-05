@@ -17,7 +17,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.19');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.26.20');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void

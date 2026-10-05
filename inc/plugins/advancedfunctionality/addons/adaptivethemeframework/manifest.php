@@ -6,7 +6,7 @@ return [
     'id' => 'adaptivethemeframework',
     'name' => 'Adaptive Theme Framework',
     'description' => 'Presentation framework for adaptive AF component-slot layouts.',
-    'version' => '0.26.19',
+    'version' => '0.26.20',
     'author' => 'AdvancedFunctionality',
     'bootstrap' => 'adaptivethemeframework.php',
 
