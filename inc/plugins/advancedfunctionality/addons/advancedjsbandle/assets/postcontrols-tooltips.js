@@ -57,6 +57,7 @@
   var activeEl = null;
   var activeTitle = '';
   var restoreTimer = 0;
+  var positionFrame = 0;
 
   function setText(txt) {
     inner.textContent = txt;
@@ -168,13 +169,16 @@
     showFor(el, e.clientX, e.clientY);
   }, true);
 
-  document.addEventListener('mousemove', function (e) {
-    if (!activeEl || tip.style.display === 'none') return;
-    // при движении — держим рядом с элементом, а не с мышью (устойчиво)
-    var rect = null;
-    try { rect = activeEl.getBoundingClientRect(); } catch (err) { rect = null; }
-    positionTip(e.clientX, e.clientY, rect);
-  }, true);
+  function schedulePosition() {
+    if (!activeEl || tip.style.display === 'none' || positionFrame) return;
+    positionFrame = window.requestAnimationFrame(function () {
+      positionFrame = 0;
+      if (!activeEl) return;
+      var rect = null;
+      try { rect = activeEl.getBoundingClientRect(); } catch (err) { rect = null; }
+      positionTip(0, 0, rect);
+    });
+  }
 
   document.addEventListener('mouseout', function (e) {
     // если ушли с активного элемента (или его детей) — скрываем
@@ -210,17 +214,7 @@
   }, true);
 
   // При скролле/ресайзе — перепозиционируем
-  window.addEventListener('scroll', function () {
-    if (!activeEl || tip.style.display === 'none') return;
-    var rect = null;
-    try { rect = activeEl.getBoundingClientRect(); } catch (e) { rect = null; }
-    positionTip(0, 0, rect);
-  }, true);
+  window.addEventListener('scroll', schedulePosition, true);
 
-  window.addEventListener('resize', function () {
-    if (!activeEl || tip.style.display === 'none') return;
-    var rect = null;
-    try { rect = activeEl.getBoundingClientRect(); } catch (e) { rect = null; }
-    positionTip(0, 0, rect);
-  }, true);
+  window.addEventListener('resize', schedulePosition, true);
 })();

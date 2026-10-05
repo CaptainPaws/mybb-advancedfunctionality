@@ -75,6 +75,15 @@ function af_charactersheets_init(): void
 
 function af_charactersheets_showthread_start(): void
 {
+    global $db, $tid;
+    if ((int)$tid > 0) {
+        $uids = [];
+        $query = $db->simple_select('posts', 'DISTINCT uid', 'tid=' . (int)$tid . ' AND uid>0');
+        while ($row = $db->fetch_array($query)) {
+            $uids[] = (int)$row['uid'];
+        }
+        af_charactersheets_preload_postbit_metadata($uids);
+    }
     af_charactersheets_showthread_start_impl();
 }
 

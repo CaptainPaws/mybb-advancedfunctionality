@@ -881,7 +881,8 @@ function af_advancededitor_response_facts(string $page): array
     $hasMessage = (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']message["\'])[^>]*>~i', $page);
     $hasKbEditor = (bool)preg_match('~<textarea\b(?=[^>]*\bclass=["\'][^"\']*\baf-kb-editor\b)[^>]*>~i', $page);
     $hasAtfEditor = (bool)preg_match('~<textarea\b(?=[^>]*\bclass=["\'][^"\']*\baf-atf-bbcode-editor\b)[^>]*>~i', $page);
-    $hasPostContent = stripos($page, 'class="post_body"') !== false
+    $hasPostContent = (defined('THIS_SCRIPT') && THIS_SCRIPT === 'showthread.php')
+        || stripos($page, 'class="post_body"') !== false
         || (bool)preg_match('~class=["\'][^"\']*\bpost_body\b~i', $page)
         || (bool)preg_match('~id=["\']posts["\']~i', $page);
     return [
@@ -906,7 +907,9 @@ function af_advancededitor_pre_output(string &$page = ''): void
     if ($bburl === '') return;
 
     // ---- чистим возможный старый мусор (чтобы можно было переинжектить) ----
-    af_advancededitor_strip_own_assets($page);
+    if (strpos($page, '<!--af_advancededitor-->') !== false) {
+        af_advancededitor_strip_own_assets($page);
+    }
 
     $facts = af_advancededitor_response_facts($page);
     if (function_exists('af_frontend_asset_allowed')
@@ -974,13 +977,16 @@ function af_advancededitor_pre_output(string &$page = ''): void
      */
 
     // базовый CSS аддона (общие правила/переменные/иконки тулбара и т.п.)
-    $injectHead .= af_advancededitor_build_css_tag_for_asset($assetsBase . 'advancededitor.css', $bburl, $buildVer);
+    if ($hasTextarea) {
+        $injectHead .= af_advancededitor_build_css_tag_for_asset($assetsBase . 'advancededitor.css', $bburl, $buildVer);
+    }
 
 
 
     // CSS паков (table/float/copycode/…)
-    if (!empty($packs['css']) && is_array($packs['css'])) {
-        foreach ($packs['css'] as $u) {
+    $packCssAssets = $hasTextarea ? $packs['css'] : $packs['view_css'];
+    if (!empty($packCssAssets) && is_array($packCssAssets)) {
+        foreach ($packCssAssets as $u) {
             $u = (string)$u;
             if ($u === '') continue;
             $injectHead .= af_advancededitor_build_css_tag_for_asset($u, $bburl, $buildVer);
@@ -988,8 +994,9 @@ function af_advancededitor_pre_output(string &$page = ''): void
     }
 
     // JS паков (copycode.js должен быть тут всегда, чтобы работал у гостя в showthread)
-    if (!empty($packs['js']) && is_array($packs['js'])) {
-        foreach ($packs['js'] as $u) {
+    $packJsAssets = $hasTextarea ? $packs['js'] : $packs['view_js'];
+    if (!empty($packJsAssets) && is_array($packJsAssets)) {
+        foreach ($packJsAssets as $u) {
             $u = (string)$u;
             if ($u === '') continue;
             $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($u, $buildVer)) . '"></script>' . "\n";
@@ -2510,6 +2517,10 @@ function af_advancededitor_get_custom_button_defs(string $bburl): array
  */
 function af_advancededitor_discover_bbcode_packs(string $bburl): array
 {
+    static $requestCache = [];
+    if (isset($requestCache[$bburl])) {
+        return $requestCache[$bburl];
+    }
     // Поддерживаем оба legacy-расположения паков:
     // - assets/bbcodes/<pack>
     // - assets/bbcodes/bbcodes/<pack>
@@ -2524,6 +2535,8 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
         'buttons' => [], // flattened list of buttons
         'js'      => [],
         'css'     => [],
+        'view_js' => [],
+        'view_css' => [],
         'parsers' => [], // absolute fs paths
         // детальная карта паков (полезно для дебага/будущего)
         'packs'   => [], // id => ['id','title','tags','buttons','assets','parser_abs','manifest_path']
@@ -2670,9 +2683,17 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             }
         }
 
-        // merge assets
+        $runtime = is_array($m['runtime'] ?? null) ? $m['runtime'] : [];
+        $viewRuntime = !empty($runtime['view']);
+
+        // Editor mode receives all declared pack assets. Published views only
+        // receive packs whose own manifest explicitly opts into view runtime.
         foreach ($packCss as $u) $out['css'][] = $u;
         foreach ($packJs as $u)  $out['js'][]  = $u;
+        if ($viewRuntime) {
+            foreach ($packCss as $u) $out['view_css'][] = $u;
+            foreach ($packJs as $u) $out['view_js'][] = $u;
+        }
 
         if (isset($out['packs'][$packId])) {
             continue;
@@ -2686,6 +2707,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             'assets'        => ['css' => $packCss, 'js' => $packJs],
             'parser_abs'    => $parserAbs,
             'manifest_path' => $manifestFile,
+            'runtime'       => ['view' => $viewRuntime, 'editor' => true],
         ];
         }
     }
@@ -2693,11 +2715,13 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
     // дедуп ассетов, чтобы не дублировать <link>/<script>
     $out['css'] = array_values(array_unique(array_filter($out['css'], 'is_string')));
     $out['js']  = array_values(array_unique(array_filter($out['js'], 'is_string')));
+    $out['view_css'] = array_values(array_unique(array_filter($out['view_css'], 'is_string')));
+    $out['view_js'] = array_values(array_unique(array_filter($out['view_js'], 'is_string')));
 
     // parsers тоже дедуп
     $out['parsers'] = array_values(array_unique(array_filter($out['parsers'], 'is_string')));
 
-    return $out;
+    return $requestCache[$bburl] = $out;
 }
 
 

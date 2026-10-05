@@ -653,9 +653,9 @@ function af_charactersheets_pre_output_impl(&$page): void
         $page = af_charactersheets_canonicalize_assets_html($page);
     }
 
-    if (!$assetsDisabled && !empty($GLOBALS['af_charactersheets_needs_modal'])) {
-        $page = af_charactersheets_inject_modal($page);
-    }
+    // The browser runtime owns the shell and creates its empty iframe on the
+    // first user interaction. Keeping a second PHP-owned shell inflated every
+    // showthread response and made ownership ambiguous.
 
 
     if (empty($GLOBALS['af_charactersheets_accept_button'])) {
