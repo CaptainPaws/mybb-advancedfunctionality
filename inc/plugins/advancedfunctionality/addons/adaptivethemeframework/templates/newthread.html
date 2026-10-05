@@ -1,0 +1,20 @@
+<html>
+<head><title>{$lang->newthread_in}</title>{$headerinclude}{$post_javascript}</head>
+<body class="atf-compose-page atf-compose-page--new-thread">
+{$header}
+<main class="pun atf-page-shell atf-page atf-compose" id="content">
+{$preview}{$thread_errors}{$attacherror}{$moderation_notice}
+<form action="newthread.php?fid={$fid}&amp;processed=1" method="post" enctype="multipart/form-data" name="input" class="atf-compose__form">
+<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+<header class="atf-compose__header"><p class="atf-compose__eyebrow">{$lang->newthread_in}</p><h1>{$lang->post_new_thread}</h1></header>
+{$loginbox}
+<section class="atf-compose__section atf-compose__section--content">
+<div class="atf-compose__field"><label class="atf-compose__label" for="subject">{$lang->thread_subject}</label><div class="atf-compose__control atf-compose__subject">{$prefixselect}<input type="text" class="textbox" id="subject" name="subject" maxlength="85" value="{$subject}" tabindex="1" /></div></div>
+{$posticons}
+<div class="atf-compose__field atf-compose__field--editor"><label class="atf-compose__label" for="message">{$lang->your_message}</label><div class="atf-compose__editor">{$smilieinserter}<textarea name="message" id="message" rows="20" cols="70" tabindex="2">{$message}</textarea>{$codebuttons}{$multiquote_external}</div></div>
+</section>
+<div class="atf-compose__options">{$postoptions}{$modoptions}{$subscriptionmethod}{$pollbox}{$captcha}</div>
+<div class="atf-compose__attachments">{$attachbox}</div>
+<div class="atf-compose__actions"><input type="submit" class="button atf-button atf-button--primary" name="submit" value="{$lang->post_thread}" tabindex="4" accesskey="s" /><input type="submit" class="button atf-button atf-button--secondary" name="previewpost" value="{$lang->preview_post}" tabindex="5" />{$savedraftbutton}</div>
+<input type="hidden" name="action" value="do_newthread" /><input type="hidden" name="posthash" value="{$posthash}" /><input type="hidden" name="attachmentaid" value="" /><input type="hidden" name="attachmentact" value="" /><input type="hidden" name="quoted_ids" value="{$quoted_ids}" /><input type="hidden" name="tid" value="{$tid}" />{$editdraftpid}
+</form>{$forumrules}</main>{$footer}</body></html>
