@@ -1,0 +1,9 @@
+<html>
+<head><title>{$lang->purgespammer}</title>{$headerinclude}</head>
+<body>{$header}
+<main class="pun atf-page-shell atf-page atf-moderation" id="content"><form method="post" action="moderation.php" class="atf-moderation__form atf-moderation__form--danger">
+<input type="hidden" name="action" value="do_purgespammer" /><input type="hidden" name="uid" value="{$uid}" /><input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+<header class="atf-moderation__header"><span class="atf-moderation__eyebrow">Опасное действие</span><h1>{$lang->purgespammer_purge}</h1></header>
+<section class="atf-moderation__panel atf-moderation__confirm"><p>{$lang->purgespammer_purge_desc}</p></section>
+<footer class="atf-moderation__actions"><input class="button atf-moderation__danger-button" type="submit" value="{$lang->purgespammer_submit}" /></footer>
+</form></main>{$footer}</body></html>
