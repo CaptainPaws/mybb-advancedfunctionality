@@ -4116,7 +4116,7 @@ function af_atf_kb_build_chip(string $kbType, string $key, string $optionsRaw = 
     $keySafe = htmlspecialchars_uni($key);
     $typeSafe = htmlspecialchars_uni($kbType);
 
-    return '<span class="af_kb_chip" data-kb-type="' . $typeSafe . '" data-kb-key="' . $keySafe . '">' . $titleSafe . '</span>';
+    return '<span class="af_kb_chip af-kb-chip" data-kb-type="' . $typeSafe . '" data-kb-key="' . $keySafe . '">' . $titleSafe . '</span>';
 }
 
 /* -------------------- SF POINTBUY HELPERS -------------------- */
