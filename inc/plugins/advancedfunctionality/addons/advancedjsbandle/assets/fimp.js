@@ -18,6 +18,12 @@ $(function () {
 	var checkboxSelector = 'input[type="checkbox"][name^="inlinemod_"], input[type="checkbox"][id^="inlinemod_"]';
 	function selectedCheckboxes() { return $(checkboxSelector).filter(':checked'); }
 	if (!$(checkboxSelector).length) return;
+	// MyBB inlineModeration requires an inlinemod_PID ID for cookie updates.
+	$(checkboxSelector).each(function () {
+		if (this.id) return;
+		var match = String(this.name || '').match(/^inlinemod_(\d+)$/);
+		if (match) this.id = 'inlinemod_' + match[1];
+	});
 	window.__afFimpInit = true;
 
 	// guard на случай, если уже добавили блок
@@ -96,9 +102,11 @@ $(function () {
 		var action = String($(this).data('action') || '');
 		if (!action) return;
 
-		// выставляем action в select
+		// Keep the native MyBB action/confirmation and prevent invalid submits.
+		if ($(this).prop('disabled') || !selectedCheckboxes().length) return;
 		var $sel = icc.find('select[name="action"]');
-		if ($sel.length) $sel.val(action);
+		if (!$sel.length || !$sel.find('option').filter(function () { return this.value === action; }).length) return;
+		$sel.val(action);
 
 		$('#fimp>span').html("<span class='loader'></span>");
 
