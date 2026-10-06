@@ -2075,7 +2075,9 @@
 
       $ta.sceditor({
         format: 'bbcode',
-        toolbar: out.toolbar,
+        // The lightweight shell already owns the ONLY visible toolbar.
+        // Native SCEditor buttons would create a nested duplicate toolbar.
+        toolbar: ta.__afAeShell ? '' : out.toolbar,
 
         // ВАЖНО: WYSIWYG iframe CSS
         style: (P.sceditorContentCss || P.sceditorCss || ''),
