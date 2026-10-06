@@ -1431,11 +1431,14 @@
 
       var style = doc.createElement('style');
       style.id = 'af-ae-atf-iframe-theme';
-      style.textContent = 'html,body{background:' + surface + ';color:' + text
+      style.textContent = 'html{background:' + surface + ';color:' + text
         + ';caret-color:' + accent + ';font-family:' + family + ';font-size:' + size
         + ';font-weight:' + weight + ';line-height:' + lineHeight
-        + ';letter-spacing:' + letterSpacing + ';margin:0;padding:10px;box-sizing:border-box}'
-        + 'body{min-height:100%}'
+        + ';letter-spacing:' + letterSpacing + ';margin:0;padding:0;box-sizing:border-box}'
+        + 'body{background:' + surface + ';color:' + text + ';caret-color:' + accent
+        + ';font-family:' + family + ';font-size:' + size + ';font-weight:' + weight
+        + ';line-height:' + lineHeight + ';letter-spacing:' + letterSpacing
+        + ';box-sizing:border-box;min-height:100%;margin:0;padding:10px}'
         + 'a{color:' + accent + '}::placeholder{color:' + muted + ';opacity:.8}'
         + '::-webkit-scrollbar-thumb{background:' + muted + ';border-radius:999px}';
       head.appendChild(style);
