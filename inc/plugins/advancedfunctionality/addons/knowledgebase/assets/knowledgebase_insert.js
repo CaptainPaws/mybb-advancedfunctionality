@@ -679,6 +679,10 @@
 
     function ensureToolbarButton(toolbarEl, editorInstance) {
         if (!toolbarEl) return;
+        // AdvancedEditor's source shell owns one toolbar and one KB command.
+        // Do not add another KB button to SCEditor's hidden internal toolbar.
+        var shell = toolbarEl.closest && toolbarEl.closest('[data-af-editor-shell]');
+        if (shell) return;
 
         // Already exists?
         if (toolbarEl.querySelector('.sceditor-button-af_kb_insert')) return;
