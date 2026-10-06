@@ -484,7 +484,7 @@
     }
     // External addons publish metadata under their own frontend permission gate.
     (window.afAeButtons || []).forEach(function (b) {
-      if (wrapper.querySelector('[data-af-command="' + b.cmd + '"]')) return;
+      if (b.cmd === 'af_formathelp' || wrapper.querySelector('[data-af-command="' + b.cmd + '"]')) return;
       var a = document.createElement('a'); a.href = '#'; a.className = 'sceditor-button sceditor-button-' + b.cmd;
       a.setAttribute('role', 'button'); a.setAttribute('data-af-command', b.cmd); a.title = b.title; a.setAttribute('aria-label', b.title);
       var visual = document.createElement('div'); visual.textContent = b.label || b.title; a.appendChild(visual);
