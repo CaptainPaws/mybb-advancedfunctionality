@@ -73,3 +73,10 @@ html body .af-ae-shell.sceditor-container .sceditor-button > div {
 html body .af-ae-shell.sceditor-container > textarea {
   display: block !important; width: 100% !important; max-width: 100% !important;
 }
+
+/* SCEditor hides the original textarea after activation. The shell must not
+   force it visible: the plugin creates its own source/WYSIWYG surface. */
+html body .af-ae-shell.sceditor-container > textarea.sceditor-textarea,
+html body .af-ae-shell.sceditor-container > textarea[data-af-ae-wys-active="1"] {
+  display: none !important;
+}
