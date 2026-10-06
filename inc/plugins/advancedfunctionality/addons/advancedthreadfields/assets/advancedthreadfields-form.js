@@ -1,0 +1,1300 @@
+/* AdvancedThreadFields (AF_ATF) */
+(function () {
+  "use strict";
+
+  const AF_ATF = {
+    debounce(fn, wait) {
+      let t = null;
+      return function (...args) {
+        clearTimeout(t);
+        t = setTimeout(() => fn.apply(this, args), wait);
+      };
+    },
+
+    qs(sel, root) {
+      return (root || document).querySelector(sel);
+    },
+
+    qsa(sel, root) {
+      return Array.prototype.slice.call((root || document).querySelectorAll(sel));
+    },
+
+    escapeAttr(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    },
+
+    getKbEndpoint() {
+      const meta = document.querySelector('meta[name="af-atf-kb-endpoint"]');
+      if (meta && meta.content) return meta.content;
+      return "/misc.php?action=af_kb_get";
+    },
+
+    // --- 1) hide editor if meta flag present (НЕ трогаем остальное) ---
+    applyHideEditor() {
+      const meta = document.querySelector('meta[name="af-atf-hide-editor"][content="1"]');
+      if (!meta) return;
+
+      const ta = document.querySelector('textarea[name="message"]');
+      if (!ta) return;
+
+      // MyBB: чаще всего textarea лежит в <tr> таблицы
+      const tr = ta.closest("tr");
+      if (tr) {
+        tr.style.display = "none";
+      } else {
+        // запасной вариант
+        ta.style.display = "none";
+      }
+
+      // иногда рядом есть “toolbar”/контейнеры — прячем ближайшее окружение аккуратно
+      const editorWrap = ta.closest(".sceditor-container") || ta.closest(".editor") || ta.closest(".message") || null;
+      if (editorWrap) {
+        editorWrap.style.display = "none";
+      }
+    },
+
+    // --- 2) userchips init ---
+    initUserChipsAll() {
+      const blocks = AF_ATF.qsa(".af-atf-userchips");
+      if (!blocks.length) return;
+
+      blocks.forEach((wrap) => AF_ATF.initUserChipsOne(wrap));
+    },
+
+    initKbSelects() {
+      const blocks = AF_ATF.qsa(".af-atf-kb-select");
+      if (!blocks.length) return;
+
+      blocks.forEach((wrap) => {
+        const select = AF_ATF.qs(".af-atf-kb-select-input", wrap);
+        const preview = AF_ATF.qs(".af-atf-kb-preview", wrap);
+        if (!select || !preview) return;
+
+        const kbType = wrap.getAttribute("data-kb-type") || "";
+
+        function renderPreview() {
+          const key = String(select.value || "").trim();
+          if (!key) {
+            preview.innerHTML = "";
+            return;
+          }
+          const label = select.options[select.selectedIndex]
+            ? select.options[select.selectedIndex].textContent
+            : key;
+          const chip = document.createElement("span");
+          chip.className = "af_kb_chip";
+          chip.setAttribute("data-kb-type", kbType);
+          chip.setAttribute("data-kb-key", key);
+          chip.textContent = label;
+          preview.innerHTML = "";
+          preview.appendChild(chip);
+        }
+
+        select.addEventListener("change", renderPreview);
+        renderPreview();
+      });
+    },
+
+    initKbChips() {
+      if (AF_ATF.__kbChipsInited) return;
+      AF_ATF.__kbChipsInited = true;
+
+      const cache = new Map();
+      const endpoint = AF_ATF.getKbEndpoint();
+      let modalState = window.__afAtfKbModal || null;
+      let requestCounter = 0;
+      let activeRequestId = 0;
+
+      function destroyExistingModal() {
+        AF_ATF.qsa(".af-atf-kb-modal").forEach((node) => node.remove());
+        AF_ATF.qsa(".af-atf-kb-modal-backdrop").forEach((node) => node.remove());
+        document.body.classList.remove("modal-open");
+        if (modalState) {
+          modalState.closeBtn.removeEventListener("click", modalState.onClose);
+          modalState.backdrop.removeEventListener("click", modalState.onBackdrop);
+          document.removeEventListener("keydown", modalState.onKeydown);
+        }
+        modalState = null;
+        window.__afAtfKbModal = null;
+      }
+
+      function buildModal() {
+        destroyExistingModal();
+
+        const backdrop = document.createElement("div");
+        backdrop.className = "af-atf-kb-modal-backdrop";
+        backdrop.hidden = true;
+
+        const modal = document.createElement("div");
+        modal.className = "af-atf-kb-modal";
+
+        const header = document.createElement("div");
+        header.style.display = "flex";
+        header.style.gap = "10px";
+        header.style.alignItems = "center";
+
+        const title = document.createElement("div");
+        title.className = "af-atf-kb-modal-title";
+
+        const close = document.createElement("button");
+        close.type = "button";
+        close.className = "af-atf-kb-modal-close";
+        close.textContent = "×";
+
+        header.appendChild(title);
+        header.appendChild(close);
+
+        const body = document.createElement("div");
+        body.className = "af-atf-kb-modal-body";
+
+        modal.appendChild(header);
+        modal.appendChild(body);
+        backdrop.appendChild(modal);
+        document.body.appendChild(backdrop);
+
+        const onClose = (event) => {
+          if (event) event.preventDefault();
+          destroyExistingModal();
+        };
+
+        const onBackdrop = (event) => {
+          if (event.target === backdrop) onClose(event);
+        };
+
+        const onKeydown = (event) => {
+          if (event.key === "Escape" && !backdrop.hidden) {
+            onClose(event);
+          }
+        };
+
+        close.addEventListener("click", onClose);
+        backdrop.addEventListener("click", onBackdrop);
+        document.addEventListener("keydown", onKeydown);
+
+        modalState = {
+          backdrop,
+          title,
+          body,
+          closeBtn: close,
+          onClose,
+          onBackdrop,
+          onKeydown,
+          show(entry) {
+            title.textContent = entry.title || "";
+            body.innerHTML = "";
+
+            if (entry.banner_url) {
+              const banner = document.createElement("img");
+              banner.className = "af-kb-banner";
+              banner.src = entry.banner_url;
+              banner.alt = "";
+              banner.loading = "lazy";
+              body.appendChild(banner);
+            }
+
+            if (entry.body_html) {
+              const bodyBlock = document.createElement("div");
+              bodyBlock.className = "af-kb-modal-main";
+              bodyBlock.innerHTML = entry.body_html;
+              body.appendChild(bodyBlock);
+            }
+
+            // sections_html is rendered by KB itself, including localized labels,
+            // rich text, links and supported embedded media. ATF only places that
+            // canonical display data in its modal; it must not render raw blocks.
+            if (Array.isArray(entry.sections_html)) {
+              entry.sections_html.forEach((block) => {
+                if (!block) return;
+                const blockTitle = String(block.label || "");
+                const blockHtml = String(block.html || "");
+                if (!blockTitle && !blockHtml) return;
+
+                const section = document.createElement("section");
+                section.className = "af-kb-modal-block";
+                if (blockTitle) {
+                  const h4 = document.createElement("h4");
+                  h4.textContent = blockTitle;
+                  section.appendChild(h4);
+                }
+                if (blockHtml) {
+                  const bodyWrap = document.createElement("div");
+                  bodyWrap.innerHTML = blockHtml;
+                  section.appendChild(bodyWrap);
+                }
+                body.appendChild(section);
+              });
+            }
+
+            backdrop.hidden = false;
+          }
+        };
+
+        window.__afAtfKbModal = modalState;
+        return modalState;
+      }
+
+      async function fetchEntry(type, key) {
+        const cacheKey = `${type}:${key}`;
+        if (cache.has(cacheKey)) {
+          return cache.get(cacheKey);
+        }
+
+        const url = new URL(endpoint, window.location.origin);
+        url.searchParams.set("type", type);
+        url.searchParams.set("key", key);
+
+        const resp = await fetch(url.toString(), {
+          method: "GET",
+          credentials: "same-origin"
+        });
+        const data = await resp.json();
+        if (!data || data.ok !== 1 || !data.entry) {
+          return null;
+        }
+        cache.set(cacheKey, data.entry);
+        return data.entry;
+      }
+
+      document.addEventListener("click", async (e) => {
+        const chip = e.target.closest(".af_kb_chip");
+        if (!chip) return;
+        e.preventDefault();
+
+        const type = chip.getAttribute("data-kb-type") || "";
+        const key = chip.getAttribute("data-kb-key") || "";
+        if (!type || !key) return;
+
+        const requestId = ++requestCounter;
+        activeRequestId = requestId;
+        destroyExistingModal();
+
+        try {
+          const entry = await fetchEntry(type, key);
+          if (requestId !== activeRequestId || !entry) return;
+          const modal = modalState || buildModal();
+          if (requestId !== activeRequestId) return;
+          modal.show(entry);
+        } catch (err) {
+          // ignore fetch errors
+        }
+      });
+    },
+
+    initKbCatalogCtaModal() {
+      if (AF_ATF.__kbCatalogCtaInited) return;
+      AF_ATF.__kbCatalogCtaInited = true;
+
+      function normalizeTarget(target) {
+        if (!target) return null;
+        if (target.nodeType === 3) {
+          return target.parentElement || null;
+        }
+        return target instanceof Element ? target : null;
+      }
+
+      function decorateOpener(opener) {
+        if (!opener || opener.__afAtfKbCatalogDecorated) return;
+
+        const href = String(opener.getAttribute("href") || "").trim();
+        if (!href || href === "#" || href.toLowerCase().indexOf("javascript:") === 0) {
+          return;
+        }
+
+        opener.setAttribute("target", "_blank");
+        opener.setAttribute("rel", "noopener noreferrer");
+        opener.__afAtfKbCatalogDecorated = true;
+      }
+
+      function decorateAll(root) {
+        AF_ATF.qsa("[data-af-atf-kb-catalog-cta]", root || document).forEach((opener) => {
+          decorateOpener(opener);
+        });
+      }
+
+      // Первичный проход по уже отрисованным CTA
+      decorateAll(document);
+
+      // Страховка: если кнопка появилась позже/перерисовалась
+      document.addEventListener("click", (event) => {
+        const target = normalizeTarget(event.target);
+        if (!target) return;
+
+        const opener = target.closest("[data-af-atf-kb-catalog-cta]");
+        if (!opener) return;
+
+        decorateOpener(opener);
+        // НИЧЕГО НЕ БЛОКИРУЕМ:
+        // пусть ссылка открывается нативно в новой вкладке
+      }, true);
+    },
+
+    initPointBuyAll() {
+      const blocks = AF_ATF.qsa(".af-atf-pointbuy");
+      if (!blocks.length) return;
+      blocks.forEach((wrap) => AF_ATF.initPointBuyOne(wrap));
+    },
+
+    initPointBuyOne(wrap) {
+      if (!wrap || wrap.__af_atf_pointbuy) return;
+      wrap.__af_atf_pointbuy = true;
+
+      const hidden = AF_ATF.qs(".af-atf-pointbuy-hidden", wrap);
+      const inputs = AF_ATF.qsa(".af-atf-pointbuy-input", wrap);
+      if (!hidden || !inputs.length) return;
+
+      const total = parseInt(wrap.getAttribute("data-total") || "0", 10);
+      const min = parseInt(wrap.getAttribute("data-min") || "0", 10);
+      const max = parseInt(wrap.getAttribute("data-max") || "0", 10);
+      const base = parseInt(wrap.getAttribute("data-base") || "0", 10);
+      const allowNegative = wrap.getAttribute("data-allow-negative") === "1";
+      const requireExact = wrap.getAttribute("data-require-exact") === "1";
+      const errOver = wrap.getAttribute("data-err-overbudget") || "Over budget";
+      const errRange = wrap.getAttribute("data-err-out-of-range") || "Out of range";
+      const errExact = wrap.getAttribute("data-err-not-exact") || "Not exact";
+      let curve = {};
+      try {
+        curve = JSON.parse(wrap.getAttribute("data-cost-curve") || "{}");
+      } catch (e) {
+        curve = {};
+      }
+
+      const spentEl = AF_ATF.qs(".af-atf-pointbuy-spent", wrap);
+      const remainingEl = AF_ATF.qs(".af-atf-pointbuy-remaining", wrap);
+      const errorEl = AF_ATF.qs(".af-atf-pointbuy-errors", wrap);
+
+      function stepCost(from, to) {
+        if (!curve || !curve.costs) return null;
+        const key = `${from}->${to}`;
+        if (Object.prototype.hasOwnProperty.call(curve.costs, key)) {
+          return parseInt(curve.costs[key], 10);
+        }
+        return null;
+      }
+
+      function calcCost(value) {
+        if (value === base) return { cost: 0, invalid: false };
+        let cost = 0;
+        if (value > base) {
+          for (let i = base; i < value; i += 1) {
+            const step = stepCost(i, i + 1);
+            if (step === null) return { cost: 0, invalid: true };
+            cost += step;
+          }
+          return { cost, invalid: false };
+        }
+        for (let i = base; i > value; i -= 1) {
+          const step = stepCost(i - 1, i);
+          if (step === null) return { cost: 0, invalid: true };
+          cost -= step;
+        }
+        return { cost, invalid: false };
+      }
+
+      function collectValues() {
+        const values = {};
+        inputs.forEach((input) => {
+          const code = input.getAttribute("data-attr");
+          if (!code) return;
+          values[code] = parseInt(input.value || "0", 10);
+        });
+        return values;
+      }
+
+      function update() {
+        const values = collectValues();
+        let spent = 0;
+        let hasRangeError = false;
+        let hasCostError = false;
+
+        Object.keys(values).forEach((code) => {
+          const val = values[code];
+          if (Number.isNaN(val) || val < min || val > max) {
+            hasRangeError = true;
+            return;
+          }
+          const result = calcCost(val);
+          if (result.invalid) {
+            hasCostError = true;
+            return;
+          }
+          spent += result.cost;
+        });
+
+        const remaining = total - spent;
+        if (spentEl) spentEl.textContent = String(spent);
+        if (remainingEl) remainingEl.textContent = String(remaining);
+
+        const errors = [];
+        if (hasRangeError || hasCostError) errors.push(errRange);
+        if (!allowNegative && spent > total) errors.push(errOver);
+        if (requireExact && spent !== total) errors.push(errExact);
+
+        if (errorEl) {
+          errorEl.textContent = errors.join(" · ");
+        }
+
+        hidden.value = JSON.stringify(values);
+      }
+
+      inputs.forEach((input) => {
+        input.addEventListener("input", update);
+        input.addEventListener("change", update);
+      });
+
+      update();
+    },
+
+    initDynamicKbPreviews() {
+      AF_ATF.qsa(".af-atf-kb-dynamic").forEach((wrap) => {
+        const preview = AF_ATF.qs(".af-atf-kb-dynamic-preview[data-preview-role='element']", wrap);
+        const select = AF_ATF.qs("select", wrap);
+        if (!preview || !select) return;
+
+        function render() {
+          const option = select.options[select.selectedIndex] || null;
+          const key = option ? String(option.value || "").trim() : "";
+          if (!key) {
+            preview.innerHTML = "";
+            return;
+          }
+
+          const label = option ? String(option.textContent || key) : key;
+          const iconUrl = option ? String(option.getAttribute("data-icon-url") || "").trim() : "";
+          const iconClass = option ? String(option.getAttribute("data-icon-class") || "").trim() : "";
+          const tooltip = option ? String(option.getAttribute("data-tooltip") || "").trim() : "";
+
+          const chip = document.createElement("span");
+          chip.className = "af_kb_chip af-atf-element-chip";
+          if (tooltip) chip.title = tooltip;
+
+          if (iconUrl) {
+            const img = document.createElement("img");
+            img.className = "af-atf-element-icon";
+            img.src = iconUrl;
+            img.alt = "";
+            chip.appendChild(img);
+          } else if (iconClass) {
+            const icon = document.createElement("i");
+            icon.className = `af-atf-element-icon ${iconClass}`;
+            chip.appendChild(icon);
+          }
+
+          const text = document.createElement("span");
+          text.className = "af-atf-element-label";
+          text.textContent = label;
+          chip.appendChild(text);
+
+          preview.innerHTML = "";
+          preview.appendChild(chip);
+        }
+
+        select.addEventListener("change", render);
+        render();
+      });
+    },
+
+    initOriginVariantDependency() {
+      const wrap = AF_ATF.qs(".af-atf-origin-variant");
+      if (!wrap) return;
+      const variantSelect = AF_ATF.qs("select", wrap);
+      const originWrap = AF_ATF.qs("[data-character-field='character_origin']")
+        || AF_ATF.qs("[data-character-field='character_race']");
+      const originSelect = originWrap ? AF_ATF.qs("select", originWrap) : null;
+      const container = wrap.closest(".af-atf-character-top-grid-item") || wrap.closest("tr");
+      const endpoint = String(wrap.getAttribute("data-endpoint") || "");
+      if (!variantSelect || !originSelect || !endpoint) return;
+
+      let requestId = 0;
+      const setVisible = (visible) => {
+        if (container) container.style.display = visible ? "" : "none";
+        variantSelect.disabled = !visible;
+      };
+      const replaceOptions = (items, selected) => {
+        variantSelect.innerHTML = '<option value=""></option>';
+        (Array.isArray(items) ? items : []).forEach((item) => {
+          const value = item && item.value ? String(item.value) : "";
+          if (!value) return;
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = item.label ? String(item.label) : value;
+          variantSelect.appendChild(option);
+        });
+        if (selected && Array.from(variantSelect.options).some((option) => option.value === selected)) {
+          variantSelect.value = selected;
+        }
+        setVisible(variantSelect.options.length > 1);
+      };
+
+      const load = async (preserveCurrent) => {
+        const currentRequest = ++requestId;
+        const origin = String(originSelect.value || "").trim();
+        const selected = preserveCurrent ? String(variantSelect.value || "") : "";
+        replaceOptions([], "");
+        if (!origin) return;
+        try {
+          const url = new URL(endpoint, window.location.origin);
+          url.searchParams.set("origin", origin);
+          const response = await fetch(url.toString(), { credentials: "same-origin" });
+          const data = await response.json();
+          if (currentRequest !== requestId || !data || data.ok !== 1) return;
+          replaceOptions(data.items, selected);
+        } catch (e) {
+          if (currentRequest === requestId) replaceOptions([], "");
+        }
+      };
+
+      originSelect.addEventListener("change", () => load(false));
+      // Validate and restore the server-prefilled variant only after Origin is
+      // known and its dependent option set has been loaded.
+      load(true);
+    },
+
+    initCharacterMechanic() {
+      const switcher = AF_ATF.qs(".af-atf-character-mechanic");
+      if (!switcher) return;
+
+      function parseOptions(raw) {
+        try {
+          const parsed = JSON.parse(raw || "{}");
+          return parsed && typeof parsed === "object" ? parsed : {};
+        } catch (e) {
+          return {};
+        }
+      }
+
+      function renderMechanicSelects(mode) {
+        AF_ATF.qsa(".af-atf-kb-mechanic").forEach((wrap) => {
+          const select = AF_ATF.qs("select", wrap);
+          if (!select) return;
+          const optionsByMode = parseOptions(wrap.getAttribute("data-options"));
+          const options = Array.isArray(optionsByMode[mode]) ? optionsByMode[mode] : [];
+          const current = String(select.value || "");
+
+          let html = '<option value=""></option>';
+          let hasCurrent = false;
+          options.forEach((item) => {
+            const key = item && item.key ? String(item.key) : "";
+            if (!key) return;
+            if (key === current) hasCurrent = true;
+            const title = item && item.title ? String(item.title) : key;
+            html += `<option value="${AF_ATF.escapeAttr(key)}">${AF_ATF.escapeAttr(title)}</option>`;
+          });
+          if (current && !hasCurrent) {
+            html += `<option value="${AF_ATF.escapeAttr(current)}">${AF_ATF.escapeAttr(current)}</option>`;
+          }
+
+          select.innerHTML = html;
+          if (current) select.value = current;
+        });
+      }
+
+      function applyMode(mode) {
+        const activeMode = mode === "arpg" ? "arpg" : "dnd";
+
+        AF_ATF.qsa(".af-atf-kb-dynamic").forEach((wrap) => {
+          const scope = String(wrap.getAttribute("data-mechanic-scope") || "").trim();
+          const row = wrap.closest("tr");
+          const shouldShow = !scope || scope === activeMode;
+          if (row) {
+            row.style.display = shouldShow ? "" : "none";
+          }
+          if (!shouldShow) {
+            const select = AF_ATF.qs("select", wrap);
+            if (select) select.value = "";
+          }
+        });
+
+        renderMechanicSelects(activeMode);
+        AF_ATF.initDynamicKbPreviews();
+      }
+
+      switcher.addEventListener("change", () => applyMode(String(switcher.value || "dnd")));
+      applyMode(String(switcher.value || "dnd"));
+    },
+
+    initCharacterAbilities() {
+      const blocks = AF_ATF.qsa(".af-atf-abilities");
+      if (!blocks.length) return;
+
+      const createAbility = (seed) => {
+        const source = seed && typeof seed === "object" ? seed : {};
+        const ability = { ...source };
+        const rawType = String(source.type || source.ability_type || "active").toLowerCase();
+        ability.title = String(source.title || source.ability_name || "");
+        ability.ability_name = ability.title;
+        ability.icon = String(source.icon || source.icon_url || "");
+        ability.icon_url = ability.icon;
+        ability.type = rawType || "active";
+        ability.subtype = String(source.subtype || "");
+        ability.slot = String(source.slot || "");
+        ability.damage_type = String(source.damage_type || "");
+        ability.target = String(source.target || source.targeting || "");
+        ability.targeting = ability.target;
+        ability.range = String(source.range ?? "");
+        ability.formula_profile = String(source.formula_profile || "");
+        ability.duration_value = String(source.duration_value || source.duration || "");
+        ability.cooldown_value = String(source.cooldown_value ?? "");
+        ability.cooldown_unit = String(source.cooldown_unit || "own_turn");
+        ability.cost_value = String(source.cost_value ?? "");
+        ability.cost_resource = String(source.cost_resource || "");
+        ability.effects = Array.isArray(source.effects) ? source.effects.map((effect) => {
+          const item = effect && typeof effect === "object" ? { ...effect } : {};
+          return {
+            effect_type: String(item.effect_type || item.kind || ""), value: String(item.value ?? ""),
+            formula_profile: String(item.formula_profile || item.formula_ref || ""), coefficient: String(item.coefficient ?? ""),
+            target: String(item.target || item.targeting || ""), damage_type: String(item.damage_type || ""), element: String(item.element || ""),
+            duration_value: String(item.duration_value ?? item.duration ?? ""), duration_unit: String(item.duration_unit || "target_turn"),
+            status_key: String(item.status_key || ""), stat_key: String(item.stat_key || ""), operation: String(item.operation || ""),
+            resource_key: String(item.resource_key || ""), notes: String(item.notes || "")
+          };
+        }) : [];
+        const abilityDescription = String(source.ability_description || source.description || source.desc || "");
+        ability.ability_description = abilityDescription;
+        ability.description = abilityDescription;
+        ability.desc = abilityDescription;
+        ability.slot_index = Number.isFinite(Number(source.slot_index)) ? Number(source.slot_index) : 0;
+        ability.sortorder = Number.isFinite(Number(source.sortorder)) ? Number(source.sortorder) : 0;
+        return ability;
+      };
+
+      blocks.forEach((wrap) => {
+        if (wrap.__afAbilitiesInited) return;
+        wrap.__afAbilitiesInited = true;
+
+        const hidden = AF_ATF.qs(".af-atf-abilities-hidden", wrap);
+        const optionsScript = AF_ATF.qs(".af-atf-abilities-options", wrap);
+        const list = AF_ATF.qs(".af-atf-abilities-list", wrap);
+        const addBtn = AF_ATF.qs(".af-atf-abilities-add", wrap);
+        const maxItems = parseInt(wrap.getAttribute("data-max-items") || "8", 10) || 8;
+        if (!hidden || !list || !addBtn) return;
+        let selectOptions = {};
+        try {
+          selectOptions = JSON.parse(String(optionsScript && optionsScript.textContent ? optionsScript.textContent : "{}")) || {};
+        } catch (e) {
+          selectOptions = {};
+        }
+        const optionLabel = (row) => {
+          if (!row || typeof row !== "object") return "";
+          return String(row.label_ru || row.label_en || row.key || "");
+        };
+        const renderSelectOptions = (setName, currentValue) => {
+          let html = '<option value=""></option>';
+          const rows = Array.isArray(selectOptions[setName]) ? selectOptions[setName] : [];
+          const seen = new Set();
+          rows.forEach((row) => {
+            if (!row || typeof row !== "object") return;
+            const key = String(row.key || "").trim();
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            const help = String(row.description || row.description_ru || "");
+            html += `<option value="${AF_ATF.escapeAttr(key)}"${help ? ` title="${AF_ATF.escapeAttr(help)}"` : ""}${String(currentValue) === key ? " selected" : ""}>${AF_ATF.escapeAttr(optionLabel(row) || key)}</option>`;
+          });
+          const raw = String(currentValue || "").trim();
+          if (raw && !seen.has(raw)) {
+            html += `<option value="${AF_ATF.escapeAttr(raw)}" selected>${AF_ATF.escapeAttr(raw)}</option>`;
+          }
+          return html;
+        };
+        let state = [];
+        try {
+          const parsed = JSON.parse(String(hidden.value || "[]"));
+          if (Array.isArray(parsed)) {
+            state = parsed.map((row) => createAbility(row)).slice(0, maxItems);
+          }
+        } catch (e) {
+          state = [];
+        }
+
+        function getAbilityDescriptionValue(row) {
+          const textarea = AF_ATF.qs(".af-atf-ability-description", row);
+          if (!textarea) return "";
+
+          if (window.jQuery && typeof window.jQuery === "function") {
+            try {
+              const instance = window.jQuery(textarea).sceditor("instance");
+              if (instance && typeof instance.val === "function") {
+                const richValue = instance.val();
+                if (richValue !== null && richValue !== undefined) {
+                  return String(richValue);
+                }
+              }
+            } catch (e) {
+              // SCEditor may not be attached
+            }
+          }
+
+          return String(textarea.value || "");
+        }
+
+        function collectAbilityFromRow(row, index) {
+          const descriptionValue = getAbilityDescriptionValue(row);
+          const current = state[index] || {};
+          const collected = createAbility({
+            ...current,
+            slot_index: AF_ATF.qs(".af-atf-ability-slot-index", row).value,
+            title: AF_ATF.qs(".af-atf-ability-name", row).value,
+            icon: AF_ATF.qs(".af-atf-ability-icon-url", row).value,
+            type: AF_ATF.qs(".af-atf-ability-type", row).value,
+            subtype: AF_ATF.qs(".af-atf-ability-subtype", row).value,
+            slot: AF_ATF.qs(".af-atf-ability-slot", row).value,
+            damage_type: AF_ATF.qs(".af-atf-ability-damage-type", row).value,
+            target: AF_ATF.qs(".af-atf-ability-targeting", row).value,
+            range: AF_ATF.qs(".af-atf-ability-range", row).value,
+            formula_profile: AF_ATF.qs(".af-atf-ability-formula-profile", row).value,
+            duration_value: current.duration_value || current.duration || "",
+            cooldown_value: AF_ATF.qs(".af-atf-ability-cooldown-value", row).value,
+            cooldown_unit: "own_turn",
+            cost_value: AF_ATF.qs(".af-atf-ability-cost-value", row).value,
+            cost_resource: AF_ATF.qs(".af-atf-ability-cost-resource", row).value,
+            ability_description: descriptionValue,
+            sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
+          });
+          // Preserve object identity: nested-effect callbacks close over this
+          // object. Replacing it made Add/Remove Effect write to a stale object
+          // after any ordinary ability field had been edited.
+          Object.keys(current).forEach((key) => { delete current[key]; });
+          Object.assign(current, collected);
+          state[index] = current;
+          return current;
+        }
+
+        function syncStateFromDom() {
+          AF_ATF.qsa(".af-atf-ability-item", list).forEach((row, index) => {
+            state[index] = collectAbilityFromRow(row, index);
+          });
+        }
+
+        function sync() {
+          hidden.value = JSON.stringify(state.slice(0, maxItems));
+          addBtn.disabled = state.length >= maxItems;
+        }
+
+        function render() {
+          list.innerHTML = "";
+          state.forEach((ability, index) => {
+            const row = document.createElement("div");
+            row.className = "af-atf-ability-item";
+            row.innerHTML = `
+              <div class="af-atf-ability-header">
+                <strong>Способность #${index + 1}</strong>
+                <button type="button" class="button af-atf-ability-remove">Удалить</button>
+              </div>
+              <div class="af-atf-ability-grid">
+                <label class="af-atf-ability-field">
+                  <span class="af-atf-ability-label">Название способности</span>
+                  <input type="text" class="textbox text_input af-atf-input af-atf-ability-name" placeholder="Название способности" value="${AF_ATF.escapeAttr(ability.title)}" />
+                </label>
+                <label class="af-atf-ability-field">
+                  <span class="af-atf-ability-label">Иконка</span>
+                  <input type="url" class="textbox text_input af-atf-input af-atf-ability-icon-url" placeholder="https://..." value="${AF_ATF.escapeAttr(ability.icon)}" />
+                </label>
+                <label class="af-atf-ability-field">
+                  <span class="af-atf-ability-label">Тип</span>
+                  <select class="select af-atf-input af-atf-ability-type">${renderSelectOptions("type", ability.type)}</select>
+                </label>
+                <label class="af-atf-ability-field">
+                  <span class="af-atf-ability-label">Подтип</span>
+                  <select class="select af-atf-input af-atf-ability-subtype">${renderSelectOptions("subtype", ability.subtype)}</select>
+                </label>
+                <label class="af-atf-ability-field">
+                  <span class="af-atf-ability-label">Слот</span>
+                  <select class="select af-atf-input af-atf-ability-slot">${renderSelectOptions("slot", ability.slot)}</select>
+                </label>
+                <label class="af-atf-ability-field">
+                  <span class="af-atf-ability-label">Тип урона</span>
+                  <select class="select af-atf-input af-atf-ability-damage-type">${renderSelectOptions("damage_type", ability.damage_type)}</select>
+                </label>
+                <label class="af-atf-ability-field">
+                  <span class="af-atf-ability-label">Цель</span>
+                  <select class="select af-atf-input af-atf-ability-targeting">${renderSelectOptions("targeting", ability.target)}</select>
+                </label>
+                <label class="af-atf-ability-field">
+                  <span class="af-atf-ability-label">Дальность</span>
+                  <select class="select af-atf-input af-atf-ability-range">${renderSelectOptions("range", ability.range)}</select>
+                </label>
+                <label class="af-atf-ability-field">
+                  <span class="af-atf-ability-label">Схема расчёта <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Выбирает точную формулу из справочника механик; описание выбранной схемы приведено в подсказке списка.">?</button></span>
+                  <select class="select af-atf-input af-atf-ability-formula-profile">${renderSelectOptions("formula_profile", ability.formula_profile)}</select>
+                </label>
+                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Кулдаун <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Количество собственных ходов персонажа до повторного использования способности.">?</button></span><input type="number" step="1" min="0" class="textbox text_input af-atf-input af-atf-ability-cooldown-value" value="${AF_ATF.escapeAttr(ability.cooldown_value)}" /><span class="af-atf-field-suffix">ходов персонажа</span></label>
+                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Стоимость <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Количество выбранного ресурса, которое тратится при использовании способности.">?</button></span><input type="number" step="any" class="textbox text_input af-atf-input af-atf-ability-cost-value" value="${AF_ATF.escapeAttr(ability.cost_value)}" /></label>
+                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Ресурс</span><select class="select af-atf-input af-atf-ability-cost-resource">${renderSelectOptions("resource", ability.cost_resource)}</select></label>
+                <label class="af-atf-ability-field">
+                  <span class="af-atf-ability-label">Порядок</span>
+                  <input type="number" class="textbox text_input af-atf-input af-atf-ability-sortorder" placeholder="sortorder" value="${AF_ATF.escapeAttr(ability.sortorder || index + 1)}" />
+                </label>
+              </div>
+              <label class="af-atf-ability-description-wrap">
+                <span class="af-atf-ability-label">Описание способности</span>
+                <textarea class="textbox textarea af-atf-input af-atf-ability-description" rows="4" placeholder="Описание способности">${AF_ATF.escapeAttr(ability.ability_description)}</textarea>
+              </label>
+              <div class="af-atf-effects"><strong>Эффекты</strong><div class="af-atf-effects-list"></div><button type="button" class="button af-atf-effect-add">Добавить эффект</button></div>
+              <label style="display:none;">
+                <input type="number" class="textbox text_input af-atf-ability-slot-index" value="${AF_ATF.escapeAttr(ability.slot_index || index + 1)}" />
+              </label>
+            `;
+
+            const effectsList = AF_ATF.qs(".af-atf-effects-list", row);
+            const renderEffects = () => {
+              effectsList.innerHTML = "";
+              ability.effects.forEach((effect, effectIndex) => {
+                const effectRow = document.createElement("div");
+                effectRow.className = "af-atf-effect-item";
+                effectRow.innerHTML = `<div class="af-atf-effect-header"><strong>Эффект #${effectIndex + 1}</strong><button type="button" class="button af-atf-effect-remove">Удалить эффект</button></div>
+                  <label>Тип эффекта<select class="select af-atf-effect-type">${renderSelectOptions("effect_type", effect.effect_type)}</select></label>
+                  <label data-for="value"><span><span class="af-atf-effect-value-label">Значение</span> <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Числовое значение, используемое выбранной схемой расчёта.">?</button></span><input type="number" step="any" class="textbox af-atf-effect-value" value="${AF_ATF.escapeAttr(effect.value)}"></label>
+                  <label data-for="formula"><span>Схема расчёта <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Выбирает формулу вычисления эффекта из справочника механик.">?</button></span><select class="select af-atf-effect-formula">${renderSelectOptions("formula_profile", effect.formula_profile)}</select></label>
+                  <label data-for="target">Цель<select class="select af-atf-effect-target">${renderSelectOptions("targeting", effect.target)}</select></label>
+                  <label data-for="damage_type">Тип урона<select class="select af-atf-effect-damage-type">${renderSelectOptions("damage_type", effect.damage_type)}</select></label>
+                  <label data-for="element">Стихия<select class="select af-atf-effect-element">${renderSelectOptions("element", effect.element)}</select></label>
+                  <label data-for="duration"><span>Длительность (ходов цели) <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Количество ходов цели, в течение которых действует эффект.">?</button></span><input type="number" step="1" min="0" class="textbox af-atf-effect-duration" value="${AF_ATF.escapeAttr(effect.duration_value)}"></label>
+                  <label data-for="status"><span>Статус / контроль <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Статус или контроль, накладываемый на выбранную цель.">?</button></span><select class="select af-atf-effect-status">${renderSelectOptions("status", effect.status_key)}</select></label>
+                  <label data-for="stat">Характеристика<select class="select af-atf-effect-stat">${renderSelectOptions("stat", effect.stat_key)}</select></label>
+                  <label data-for="operation"><span>Операция <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Определяет, как указанное значение изменяет текущую характеристику или ресурс.">?</button></span><select class="select af-atf-effect-operation">${renderSelectOptions("operation", effect.operation)}</select></label>
+                  <label data-for="resource">Ресурс<select class="select af-atf-effect-resource">${renderSelectOptions("resource", effect.resource_key)}</select></label>
+                  <label data-for="notes" style="display:none">Примечание<textarea class="textbox af-atf-effect-notes">${AF_ATF.escapeAttr(effect.notes)}</textarea></label>
+                  `;
+                const collectEffect = () => {
+                  effect.effect_type = AF_ATF.qs('.af-atf-effect-type', effectRow).value;
+                  const map = {value:'value', formula:'formula_profile', target:'target', 'damage-type':'damage_type', element:'element', duration:'duration_value', status:'status_key', stat:'stat_key', operation:'operation', resource:'resource_key', notes:'notes'};
+                  Object.keys(map).forEach((suffix) => { const input = AF_ATF.qs('.af-atf-effect-' + suffix, effectRow); if (input) effect[map[suffix]] = input.value; });
+                  effect.duration_unit = 'target_turn';
+                  const relevant = {damage:['value','formula','target','damage_type','element'], heal:['value','formula','target'], shield:['value','formula','target','duration'], status:['status','target','duration'], control:['status','target','duration'], stat_modifier:['stat','operation','value','target','duration'], resource:['resource','operation','value','target']};
+                  const valueLabels = {damage:'Значение урона',heal:'Значение лечения',shield:'Прочность щита',stat_modifier:'Величина модификатора',resource:'Изменение ресурса'};
+                  const valueLabel = AF_ATF.qs('.af-atf-effect-value-label', effectRow); if (valueLabel) valueLabel.textContent = valueLabels[effect.effect_type] || 'Значение';
+                  AF_ATF.qsa('[data-for]', effectRow).forEach((field) => { field.style.display = (relevant[effect.effect_type] || []).includes(field.dataset.for) ? '' : 'none'; });
+                  state[index] = ability;
+                  sync();
+                };
+                AF_ATF.qsa('input,select,textarea', effectRow).forEach((el) => { el.addEventListener('input', collectEffect); el.addEventListener('change', collectEffect); });
+                AF_ATF.qs('.af-atf-effect-remove', effectRow).addEventListener('click', () => { ability.effects.splice(effectIndex, 1); state[index] = ability; renderEffects(); sync(); });
+                effectsList.appendChild(effectRow); collectEffect();
+              });
+            };
+            AF_ATF.qs('.af-atf-effect-add', row).addEventListener('click', () => { ability.effects.push(createAbility({effects:[{}]}).effects[0]); state[index] = ability; renderEffects(); sync(); });
+            renderEffects();
+
+            const setValue = () => {
+              state[index] = collectAbilityFromRow(row, index);
+              sync();
+            };
+
+            AF_ATF.qsa("input,select,textarea", row).forEach((el) => {
+              el.addEventListener("input", setValue);
+              el.addEventListener("change", setValue);
+            });
+
+            AF_ATF.qs(".af-atf-ability-remove", row).addEventListener("click", () => {
+              state.splice(index, 1);
+              render();
+              sync();
+            });
+
+            list.appendChild(row);
+          });
+          sync();
+        }
+
+        addBtn.addEventListener("click", () => {
+          if (state.length >= maxItems) return;
+          state.push(createAbility({ sortorder: state.length + 1, slot_index: state.length + 1 }));
+          render();
+          sync();
+        });
+
+        const form = wrap.closest("form");
+        if (form && !form.__afAtfAbilitiesSubmitSync) {
+          form.__afAtfAbilitiesSubmitSync = true;
+          form.addEventListener("submit", () => {
+            AF_ATF.qsa(".af-atf-abilities", form).forEach((block) => {
+              if (typeof block.__afAtfSyncStateFromDom === "function") {
+                block.__afAtfSyncStateFromDom();
+              }
+              if (typeof block.__afAtfSyncHidden === "function") {
+                block.__afAtfSyncHidden();
+              }
+            });
+          });
+        }
+
+        wrap.__afAtfSyncStateFromDom = syncStateFromDom;
+        wrap.__afAtfSyncHidden = sync;
+
+        if (!state.length) {
+          state.push(createAbility({ sortorder: 1, slot_index: 1 }));
+        }
+        render();
+      });
+    },
+
+    initCharacterStats() {
+      const blocks = AF_ATF.qsa(".af-atf-character-stats");
+      if (!blocks.length) return;
+
+      blocks.forEach((wrap) => {
+        if (wrap.__afCharacterStatsInited) return;
+        wrap.__afCharacterStatsInited = true;
+
+        const hidden = AF_ATF.qs(".af-atf-character-stats-hidden", wrap);
+        const inputs = AF_ATF.qsa(".af-atf-character-stats-input", wrap);
+        if (!hidden || !inputs.length) return;
+
+        function parseHidden(raw) {
+          try {
+            const parsed = JSON.parse(String(raw || "{}"));
+            return parsed && typeof parsed === "object" ? parsed : {};
+          } catch (e) {
+            return {};
+          }
+        }
+
+        const state = parseHidden(hidden.value);
+        inputs.forEach((input) => {
+          const key = String(input.getAttribute("data-key") || "").trim();
+          if (!key) return;
+          if (Object.prototype.hasOwnProperty.call(state, key) && state[key] !== null && state[key] !== "") {
+            input.value = String(state[key]);
+          }
+        });
+
+        function sync() {
+          const payload = {};
+          inputs.forEach((input) => {
+            const key = String(input.getAttribute("data-key") || "").trim();
+            if (!key) return;
+            const raw = String(input.value || "").trim();
+            if (!raw) return;
+            const normalized = raw.replace(",", ".");
+            if (!Number.isNaN(Number(normalized))) {
+              payload[key] = Number(normalized);
+            }
+          });
+          hidden.value = JSON.stringify(payload);
+        }
+
+        inputs.forEach((input) => {
+          input.addEventListener("input", sync);
+          input.addEventListener("change", sync);
+        });
+
+        sync();
+      });
+    },
+
+    initUserChipsOne(wrap) {
+      if (!wrap || wrap.__af_atf_inited) return;
+      wrap.__af_atf_inited = true;
+
+      const hidden = AF_ATF.qs(".af-atf-userchips-hidden", wrap);
+      const chipsBox = AF_ATF.qs(".af-atf-userchips-chips", wrap);
+      const input = AF_ATF.qs(".af-atf-userchips-input", wrap);
+      const dd = AF_ATF.qs(".af-atf-userchips-dd", wrap);
+
+      if (!hidden || !chipsBox || !input || !dd) return;
+
+      const suggestUrl = wrap.getAttribute("data-suggest") || "";
+      const resolveUrl = wrap.getAttribute("data-resolve") || "";
+      const max = parseInt(wrap.getAttribute("data-max") || "0", 10) || 0;
+
+      const state = {
+        items: [],            // текущие подсказки dropdown
+        activeIndex: -1,      // навигация клавиатурой
+        selected: new Map(),  // uid -> username
+        suggestUrl,
+        resolveUrl,
+        max
+      };
+
+      // ---- helpers: selected -> hidden csv ----
+      function syncHidden() {
+        const uids = Array.from(state.selected.keys());
+        hidden.value = uids.join(",");
+      }
+
+      function canAddMore() {
+        if (!state.max || state.max <= 0) return true;
+        return state.selected.size < state.max;
+      }
+
+      function renderChips() {
+        chipsBox.innerHTML = "";
+        for (const [uid, username] of state.selected.entries()) {
+          const chip = document.createElement("span");
+          chip.className = "af-atf-userchip";
+          chip.setAttribute("data-uid", String(uid));
+
+          const name = document.createElement("span");
+          name.className = "af-atf-userchip-name";
+          name.textContent = username;
+
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "af-atf-userchip-x";
+          btn.textContent = "×";
+          btn.title = "Убрать";
+
+          btn.addEventListener("click", () => {
+            state.selected.delete(uid);
+            syncHidden();
+            renderChips();
+          });
+
+          chip.appendChild(name);
+          chip.appendChild(btn);
+          chipsBox.appendChild(chip);
+        }
+      }
+
+      function closeDropdown() {
+        dd.hidden = true;
+        dd.innerHTML = "";
+        state.items = [];
+        state.activeIndex = -1;
+      }
+
+      function openDropdown(items) {
+        state.items = Array.isArray(items) ? items : [];
+        state.activeIndex = -1;
+
+        dd.innerHTML = "";
+
+        if (!state.items.length) {
+          closeDropdown();
+          return;
+        }
+
+        const ul = document.createElement("div");
+        ul.className = "af-atf-userchips-dd-list";
+
+        state.items.forEach((it, idx) => {
+          const row = document.createElement("div");
+          row.className = "af-atf-userchips-dd-item";
+          row.setAttribute("data-index", String(idx));
+
+          const uname = (it && it.username) ? String(it.username) : "";
+          const uid = (it && it.uid) ? parseInt(it.uid, 10) : 0;
+
+          row.textContent = uname;
+
+          row.addEventListener("mousedown", (e) => {
+            // mousedown, чтобы не потерять фокус до клика
+            e.preventDefault();
+            if (!uid || !uname) return;
+            addSelected(uid, uname);
+          });
+
+          ul.appendChild(row);
+        });
+
+        dd.appendChild(ul);
+        dd.hidden = false;
+      }
+
+      function setActive(index) {
+        state.activeIndex = index;
+        const rows = dd.querySelectorAll(".af-atf-userchips-dd-item");
+        rows.forEach((el) => el.classList.remove("is-active"));
+        if (index >= 0 && index < rows.length) {
+          rows[index].classList.add("is-active");
+          // ensure visible
+          rows[index].scrollIntoView({ block: "nearest" });
+        }
+      }
+
+      function addSelected(uid, username) {
+        uid = parseInt(uid, 10);
+        username = String(username || "").trim();
+        if (!uid || !username) return;
+
+        if (state.selected.has(uid)) {
+          input.value = "";
+          closeDropdown();
+          return;
+        }
+
+        if (!canAddMore()) {
+          // лимит — просто закрываем и не добавляем
+          input.value = "";
+          closeDropdown();
+          return;
+        }
+
+        state.selected.set(uid, username);
+        syncHidden();
+        renderChips();
+
+        input.value = "";
+        closeDropdown();
+      }
+
+      // ---- network ----
+      async function fetchSuggest(query) {
+        if (!state.suggestUrl) return [];
+        const url = new URL(state.suggestUrl, window.location.origin);
+        url.searchParams.set("query", query);
+
+        const r = await fetch(url.toString(), {
+          method: "GET",
+          credentials: "same-origin"
+        });
+
+        // если сервер вернул HTML, тут будет не json -> упадём в catch
+        const data = await r.json();
+        if (!data || data.ok !== 1 || !Array.isArray(data.items)) return [];
+        return data.items;
+      }
+
+      async function fetchResolve(uidsCsv) {
+        if (!state.resolveUrl) return [];
+        const url = new URL(state.resolveUrl, window.location.origin);
+        url.searchParams.set("uids", uidsCsv);
+
+        const r = await fetch(url.toString(), {
+          method: "GET",
+          credentials: "same-origin"
+        });
+
+        const data = await r.json();
+        if (!data || data.ok !== 1 || !Array.isArray(data.items)) return [];
+        return data.items;
+      }
+
+      // ---- input listeners ----
+      const doSuggest = AF_ATF.debounce(async () => {
+        const q = String(input.value || "").trim();
+        if (!q) {
+          closeDropdown();
+          return;
+        }
+
+        // если уже лимит — подсказки не нужны
+        if (!canAddMore()) {
+          closeDropdown();
+          return;
+        }
+
+        try {
+          const items = await fetchSuggest(q);
+
+          // фильтр: убираем уже выбранных
+          const filtered = items.filter((it) => {
+            const uid = it && it.uid ? parseInt(it.uid, 10) : 0;
+            return uid > 0 && !state.selected.has(uid);
+          });
+
+          openDropdown(filtered);
+        } catch (e) {
+          // молча закрываем, чтобы не ломать страницу
+          closeDropdown();
+        }
+      }, 200);
+
+      input.addEventListener("input", () => {
+        doSuggest();
+      });
+
+      input.addEventListener("keydown", (e) => {
+        if (dd.hidden) return;
+
+        const maxIndex = state.items.length - 1;
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          const next = state.activeIndex < maxIndex ? state.activeIndex + 1 : 0;
+          setActive(next);
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          const prev = state.activeIndex > 0 ? state.activeIndex - 1 : maxIndex;
+          setActive(prev);
+        } else if (e.key === "Enter") {
+          if (state.activeIndex >= 0 && state.activeIndex < state.items.length) {
+            e.preventDefault();
+            const it = state.items[state.activeIndex];
+            if (it && it.uid && it.username) {
+              addSelected(it.uid, it.username);
+            }
+          }
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          closeDropdown();
+        }
+      });
+
+      // blur: закрываем dropdown (но даём mousedown на item сработать)
+      input.addEventListener("blur", () => {
+        setTimeout(() => closeDropdown(), 150);
+      });
+
+      // click outside wrap -> close
+      document.addEventListener("mousedown", (e) => {
+        if (!wrap.contains(e.target)) {
+          closeDropdown();
+        }
+      });
+
+      // ---- init from existing hidden value ----
+      (async function initFromHidden() {
+        const csv = String(hidden.value || "").trim();
+        if (!csv) {
+          renderChips();
+          return;
+        }
+
+        try {
+          const items = await fetchResolve(csv);
+          items.forEach((it) => {
+            const uid = it && it.uid ? parseInt(it.uid, 10) : 0;
+            const username = it && it.username ? String(it.username) : "";
+            if (uid > 0 && username) {
+              state.selected.set(uid, username);
+            }
+          });
+
+          // respect max
+          if (state.max > 0 && state.selected.size > state.max) {
+            const trimmed = new Map();
+            let i = 0;
+            for (const [uid, username] of state.selected.entries()) {
+              trimmed.set(uid, username);
+              i++;
+              if (i >= state.max) break;
+            }
+            state.selected = trimmed;
+          }
+
+          syncHidden();
+          renderChips();
+        } catch (e) {
+          // если resolve упал — оставим как есть, но не ломаем форму
+          renderChips();
+        }
+      })();
+    }
+  };
+
+  function boot() {
+    AF_ATF.applyHideEditor();
+    AF_ATF.initUserChipsAll();
+    AF_ATF.initKbSelects();
+    AF_ATF.initKbChips();
+    AF_ATF.initKbCatalogCtaModal();
+    AF_ATF.initPointBuyAll();
+    AF_ATF.initCharacterMechanic();
+    AF_ATF.initOriginVariantDependency();
+    AF_ATF.initDynamicKbPreviews();
+    AF_ATF.initCharacterAbilities();
+    AF_ATF.initCharacterStats();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+
+  // на всякий случай: если страница частично перерисовывается скриптами темы
+  window.AF_ATF = window.AF_ATF || AF_ATF;
+})();
