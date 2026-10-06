@@ -69,10 +69,19 @@
       }).attr('data-action', value);
 
       var symbol = value.replace(/threads|posts/ig, '');
-      if (sprite) {
-        var $icon = $('<svg>', { class: 'icon', 'aria-hidden': 'true' });
-        $icon.append($('<use>').attr('href', sprite + '#' + symbol));
-        $button.append($icon);
+      var knownSymbols = [
+        'multisoftdelete', 'multirestore', 'multidelete', 'multimerge',
+        'multisplit', 'multimove', 'multiapprove', 'multiunapprove',
+        'delayedmoderation', 'multiclose', 'multiopen', 'multistick', 'multiunstick'
+      ];
+      if (sprite && knownSymbols.indexOf(symbol) !== -1) {
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'icon');
+        svg.setAttribute('aria-hidden', 'true');
+        var use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        use.setAttribute('href', sprite + '#' + symbol);
+        svg.appendChild(use);
+        $button.append(svg);
       } else {
         $button.text(title);
       }
