@@ -378,6 +378,12 @@
     ta.style.setProperty('display', 'none', 'important');
     editor = currentEditor(ta);
     bindEditorSurface(ta, editor);
+    applySurfaceMetrics(ta, ta.__afAeShell);
+    try {
+      if (editor && typeof editor.resizeTo === 'function' && ta.__afAeSurfaceMetrics) {
+        editor.resizeTo('100%', ta.__afAeSurfaceMetrics.height);
+      }
+    } catch (e) {}
     return editor;
   }
 
@@ -475,8 +481,46 @@
     if (ta.classList.contains('sceditor-textarea') && currentEditor(ta) && !currentEditor(ta).__afAeSourceAdapter) return false;
     return isQuickEdit(ta) || ta.matches((P.cfg || {}).editorSelector || 'textarea[name="message"]');
   }
+  function captureSurfaceMetrics(ta) {
+    if (!ta || ta.__afAeSurfaceMetrics) return;
+    try {
+      var cs = window.getComputedStyle(ta);
+      var rect = ta.getBoundingClientRect();
+      var height = Math.max(1, Math.round(rect.height || ta.offsetHeight || 180));
+      ta.__afAeSurfaceMetrics = {
+        height: height,
+        fontFamily: cs.fontFamily || 'Verdana, Arial, Helvetica, sans-serif',
+        fontSize: cs.fontSize || '14px',
+        fontWeight: cs.fontWeight || '400',
+        lineHeight: cs.lineHeight && cs.lineHeight !== 'normal' ? cs.lineHeight : '1.25',
+        letterSpacing: cs.letterSpacing || 'normal'
+      };
+    } catch (e) {
+      ta.__afAeSurfaceMetrics = {
+        height: 180,
+        fontFamily: 'Verdana, Arial, Helvetica, sans-serif',
+        fontSize: '14px',
+        fontWeight: '400',
+        lineHeight: '1.25',
+        letterSpacing: 'normal'
+      };
+    }
+  }
+
+  function applySurfaceMetrics(ta, wrapper) {
+    var m = ta && ta.__afAeSurfaceMetrics;
+    if (!m || !wrapper) return;
+    wrapper.style.setProperty('--af-ae-surface-height', m.height + 'px');
+    wrapper.style.setProperty('--af-ae-surface-font-family', m.fontFamily);
+    wrapper.style.setProperty('--af-ae-surface-font-size', m.fontSize);
+    wrapper.style.setProperty('--af-ae-surface-font-weight', m.fontWeight);
+    wrapper.style.setProperty('--af-ae-surface-line-height', m.lineHeight);
+    wrapper.style.setProperty('--af-ae-surface-letter-spacing', m.letterSpacing);
+  }
+
   function init(ta) {
     if (!eligible(ta) || ta.__afAeShell) return;
+    captureSurfaceMetrics(ta);
     var wrapper = ta.parentElement;
     if (!wrapper || !wrapper.hasAttribute('data-af-editor-shell')) {
       wrapper = document.createElement('div'); wrapper.className = 'sceditor-container af-ae-shell'; wrapper.setAttribute('data-af-editor-shell', '1');
@@ -484,6 +528,7 @@
       ta.parentNode.insertBefore(wrapper, ta); wrapper.appendChild(ta);
       if (P.counterHtml) wrapper.insertAdjacentHTML('beforebegin', P.counterHtml);
     }
+    applySurfaceMetrics(ta, wrapper);
     ta.__afAeShellAbort = new AbortController();
     var signal = ta.__afAeShellAbort.signal;
     ta.__afAeHistory = { values: [ta.value], index: 0, restoring: false };
