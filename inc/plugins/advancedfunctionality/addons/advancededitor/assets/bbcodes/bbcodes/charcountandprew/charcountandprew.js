@@ -270,7 +270,7 @@
 
   function findPreviewButton(form) {
     if (!form) return null;
-    return form.querySelector('input[name="previewpost"]');
+    return form.querySelector('input[name="previewpost"], button[name="previewpost"]');
   }
 
   function isAtfHiddenEditorMode() {
