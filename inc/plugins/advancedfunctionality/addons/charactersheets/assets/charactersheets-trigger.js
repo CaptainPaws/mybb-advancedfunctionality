@@ -5,6 +5,8 @@
 
   var modal = null;
   var keyHandler = null;
+  var loadingState = null;
+  var previousFocus = null;
 
   function normalizeUrl(raw) {
     var url = String(raw || '').trim();
@@ -19,7 +21,7 @@
   }
 
   function resolveTriggerUrl(trigger) {
-    var url = trigger.getAttribute('data-afcs-sheet') || trigger.getAttribute('href') || '';
+    var url = trigger.getAttribute('data-afcs-sheet') || trigger.getAttribute('data-afcs-application') || trigger.getAttribute('href') || '';
     if (!url) {
       var slug = trigger.getAttribute('data-slug') || '';
       if (slug) url = 'charactersheets.php?slug=' + encodeURIComponent(slug);
@@ -27,8 +29,57 @@
     return normalizeUrl(url);
   }
 
+  // Also used by APUI's application fragment/iframe paths. No sheet runtime.
+  function beginLoading(body, fallbackUrl) {
+    var loader = document.createElement('div');
+    loader.className = 'af-cs-modal__loader';
+    loader.setAttribute('role', 'status');
+    loader.setAttribute('aria-live', 'polite');
+    loader.textContent = 'Загрузка…';
+    body.setAttribute('aria-busy', 'true');
+    body.appendChild(loader);
+    var disposed = false;
+    var fadeTimer = null;
+    var timer = window.setTimeout(fail, 30000);
+    function fail() {
+      if (disposed) return;
+      window.clearTimeout(timer);
+      body.setAttribute('aria-busy', 'false');
+      loader.classList.add('is-error');
+      loader.textContent = 'Не удалось загрузить содержимое. ';
+      if (fallbackUrl) {
+        var link = document.createElement('a');
+        link.href = fallbackUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = 'Открыть отдельно';
+        loader.appendChild(link);
+      }
+    }
+    return {
+      fail: fail,
+      finish: function () {
+        if (disposed) return;
+        window.clearTimeout(timer);
+        body.setAttribute('aria-busy', 'false');
+        loader.classList.add('is-loaded');
+        fadeTimer = window.setTimeout(function () { loader.hidden = true; }, 180);
+      },
+      dispose: function () {
+        disposed = true;
+        window.clearTimeout(timer);
+        window.clearTimeout(fadeTimer);
+        body.setAttribute('aria-busy', 'false');
+        loader.remove();
+      }
+    };
+  }
+  window.AFCharacterSheetsTrigger = { beginLoading: beginLoading };
+
   function cleanup() {
     if (!modal) return;
+    if (loadingState) loadingState.dispose();
+    loadingState = null;
     var frame = modal.querySelector('[data-afcs-frame]');
     if (frame) frame.removeAttribute('src');
     if (keyHandler) document.removeEventListener('keydown', keyHandler);
@@ -36,10 +87,12 @@
     modal = null;
     keyHandler = null;
     document.body.classList.remove('af-cs-modal-open');
+    if (previousFocus && previousFocus.isConnected) previousFocus.focus();
   }
 
   function buildModal(url) {
     cleanup();
+    previousFocus = document.activeElement;
 
     modal = document.createElement('div');
     modal.className = 'af-cs-modal is-open';
@@ -51,15 +104,22 @@
         '<button type="button" class="af-cs-modal__close" data-afcs-close="1" aria-label="Закрыть">×</button>' +
         '<div class="af-cs-modal__body">' +
           '<iframe class="af-cs-modal__frame" data-afcs-frame="1" title="Лист персонажа"></iframe>' +
-          '<div class="af-cs-modal__loader" data-afcs-loader="1" role="status" aria-live="polite">Загрузка листа персонажа…</div>' +
         '</div>' +
       '</div>';
 
     var frame = modal.querySelector('[data-afcs-frame]');
-    var loader = modal.querySelector('[data-afcs-loader]');
+    loadingState = beginLoading(modal.querySelector('.af-cs-modal__body'), url);
+    var currentLoading = loadingState;
     frame.addEventListener('load', function () {
-      if (loader) loader.hidden = true;
-    }, { once: true });
+      // Ignore the initial empty document and loads belonging to a closed shell.
+      if (!frame.getAttribute('src') || !frame.isConnected) return;
+      try {
+        if (frame.contentDocument && frame.contentDocument.URL === 'about:blank') return;
+      } catch (_) { /* Cross-origin frames still have a load lifecycle. */ }
+      frame.classList.add('is-loaded');
+      currentLoading.finish();
+    });
+    frame.addEventListener('error', function () { currentLoading.fail(); });
 
     modal.addEventListener('click', function (event) {
       if (event.target.closest('[data-afcs-close="1"]')) {
@@ -78,11 +138,13 @@
 
     // This is deliberately the first point where the iframe receives a URL.
     frame.setAttribute('src', url);
+    modal.querySelector('button[data-afcs-close="1"]').focus();
   }
 
   document.addEventListener('click', function (event) {
     var trigger = event.target && event.target.closest
-      ? event.target.closest('[data-afcs-open="1"], [data-afcs-sheet]')
+      ? (event.target.closest('[data-afcs-open="1"], [data-afcs-sheet]')
+        || event.target.closest('[data-afcs-application]'))
       : null;
     if (!trigger) return;
 
@@ -93,5 +155,10 @@
     event.stopPropagation();
     if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
     buildModal(url);
+    if (trigger.hasAttribute('data-afcs-application')) {
+      modal.setAttribute('data-af-modal-kind', 'application');
+      modal.querySelector('[role="dialog"]').setAttribute('aria-label', 'Анкета');
+      modal.querySelector('[data-afcs-frame]').title = 'Анкета';
+    }
   }, true);
 })(window, document);

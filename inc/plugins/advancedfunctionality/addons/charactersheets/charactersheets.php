@@ -69,11 +69,23 @@ $afCsTriggerContext = in_array($afCsScript, ['showthread.php', 'member.php'], tr
 if ($afCsTriggerContext) {
     af_charactersheets_require_modules(['permissions', 'metadata', 'postbit', 'frontend']);
 } elseif ($afCsScript === 'charactersheets.php') {
-    af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render', 'ajax']);
+    af_charactersheets_require_route_modules();
 } elseif (defined('IN_ADMINCP')) {
     af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
 } elseif (in_array($afCsScript, ['newthread.php', 'editpost.php'], true)) {
     af_charactersheets_require_modules(['permissions', 'metadata']);
+}
+
+/** API responses reuse render fragment builders; view pages never need API handlers. */
+function af_charactersheets_require_route_modules(): void
+{
+    global $mybb;
+    $action = is_object($mybb) ? (string)$mybb->get_input('action') : '';
+    // Preserve the dependency order: bootstrap declares settings used by CRUD.
+    af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render']);
+    if ($action === 'api' || $action === 'af_charactersheet_api' || strpos($action, 'ajax_') === 0) {
+        af_charactersheets_require_modules(['ajax']);
+    }
 }
 
 function af_charactersheets_is_installed(): bool
@@ -196,7 +208,7 @@ function af_charactersheets_misc_start(): void
     $legacyRoutes = ['af_charactersheet', 'af_charactersheets', 'af_charactersheet_api', 'cs_modal_profile', 'cs_modal_application'];
 
     if (in_array($action, $legacyRoutes, true)) {
-        af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render', 'ajax']);
+        af_charactersheets_require_route_modules();
     } elseif ($action === 'af_charactersheets_accept') {
         af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud']);
     } elseif ($action === 'af_charactersheets_transfer') {

@@ -549,7 +549,7 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         $assetVersion = '1';
         if (defined('MYBB_ROOT')) {
             $versionFile = $jsRel !== '' ? $jsRel : AF_ATF_ASSET_CSS;
-            $assetMtime = @filemtime(MYBB_ROOT . $versionFile);
+            $assetMtime = max((int)@filemtime(MYBB_ROOT . $versionFile), (int)@filemtime(MYBB_ROOT . AF_ATF_ASSET_CSS));
             if (is_int($assetMtime) && $assetMtime > 0) {
                 $assetVersion = (string)$assetMtime;
             }
@@ -3326,6 +3326,39 @@ function af_atf_character_resolve_active_mechanic(int $fid, array $fields, array
     return af_atf_character_infer_mechanic($fields, $valuesByFieldId);
 }
 
+/** Batch every possible KB type before mechanic/provider resolution probes entries. */
+function af_atf_preload_field_kb_entries(array $fields, array $values): void
+{
+    $pairs = [];
+    foreach ($fields as $field) {
+        $value = trim((string)($values[(int)($field['fieldid'] ?? 0)] ?? ''));
+        if ($value === '') continue;
+        $type = (string)($field['type'] ?? '');
+        $options = af_atf_parse_options((string)($field['options'] ?? ''));
+        $types = [];
+        if (isset(['kb_race' => 1, 'kb_class' => 1, 'kb_theme' => 1][$type])) {
+            $types[] = substr($type, 3);
+        } elseif (in_array($type, ['kb_dynamic', 'kb_mechanic'], true)) {
+            $types[] = (string)($options['kb_type'] ?? '');
+            $provider = trim((string)($options['provider'] ?? ''));
+            if ($provider !== '') {
+                foreach (['arpg', 'dnd'] as $mode) {
+                    $types[] = af_atf_character_provider_type($provider, $mode);
+                }
+            }
+            $types[] = af_atf_character_arpg_contract_type((string)($field['name'] ?? ''));
+        }
+        // Mechanic detection also probes legacy race/class keys.
+        if (in_array((string)($field['name'] ?? ''), ['character_race', 'character_class'], true)) {
+            $types[] = $field['name'] === 'character_race' ? 'arpg_origin' : 'arpg_archetype';
+        }
+        foreach (array_unique($types) as $kbType) {
+            if ($kbType !== '') $pairs[] = ['type' => $kbType, 'key' => $value];
+        }
+    }
+    af_atf_kb_preload_entries($pairs);
+}
+
 function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
 {
     global $templates;
@@ -3334,6 +3367,7 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
         return '';
     }
 
+    af_atf_preload_field_kb_entries($fields, $valuesByFieldId);
     $rows = '';
     $hasCharacterContract = false;
     foreach ($fields as $f) {
@@ -3409,10 +3443,10 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
             $requiredMark = $required ? '<span class="af-atf-required">*</span>' : '';
             $input = af_atf_build_input_html($f, (string)$item['value']);
 
-            $gridHtml .= '<div class="af-atf-character-top-grid-item">'
-                . '<label class="af-atf-character-top-grid-label">' . $title . $requiredMark . '</label>'
-                . ($desc !== '' ? '<div class="af-atf-character-top-grid-desc">' . $desc . '</div>' : '')
-                . '<div class="af-atf-character-top-grid-control">' . $input . '</div>'
+            $gridHtml .= '<div class="af-atf-character-top-grid-item af-atf-form-field">'
+                . '<label class="af-atf-character-top-grid-label af-atf-field-label">' . $title . $requiredMark . '</label>'
+                . ($desc !== '' ? '<div class="af-atf-character-top-grid-desc af-atf-field-help">' . $desc . '</div>' : '')
+                . '<div class="af-atf-character-top-grid-control af-atf-field-control">' . $input . '</div>'
                 . '</div>';
         }
         $gridHtml .= '</div>';
@@ -3437,6 +3471,9 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
 
         $requiredMark = $required ? '<span class="af-atf-required">*</span>' : '';
 
+        $fieldSectionClass = in_array((string)$f['type'], ['textarea', 'abilities', 'character_abilities'], true)
+            || strpos($input, 'af-atf-abilities') !== false
+            ? ' af-atf-form-section' : '';
         $row = '';
         eval("\$row = \"".$templates->get('af_atf_input_row')."\";");
         $rows .= $row;
@@ -6265,21 +6302,9 @@ function af_atf_forumdisplay_start(): void
 
 function af_atf_forumdisplay_thread(): void
 {
-    global $thread, $fid;
-
-    $fid = (int)$fid;
-    $tid = (int)($thread['tid'] ?? 0);
-    if ($tid <= 0) {
-        $thread['af_atf_forum_chips'] = '';
-        return;
-    }
-
-    $html = af_atf_render_forum_chips(['tid' => $tid, 'fid' => $fid]);
-    // ATF owns composition while active. Keep the installed marker/variable
-    // untouched for rollback, but do not render the same provider twice.
-    $thread['af_atf_forum_chips'] = af_atf_theme_is_active() || $html === ''
-        ? ''
-        : "\n" . AF_ATF_TPL_MARK_CHIPS . "\n" . $html . "\n";
+    global $thread;
+    // No field reads or HTML construction on topic cards, including legacy themes.
+    $thread['af_atf_forum_chips'] = '';
 }
 
 function af_atf_theme_is_active(): bool
@@ -6294,19 +6319,13 @@ function af_atf_register_theme_provider(): bool
     if (!af_atf_theme_is_active()) {
         return false;
     }
-    $forum = af_adaptivethemeframework_register_component([
-        'owner' => AF_ATF_ID,
-        'key' => 'forum_meta_chips',
-        'slot' => 'thread.meta_chips',
-        'renderer' => 'af_atf_render_forum_chips',
-    ]);
     $showthread = af_adaptivethemeframework_register_component([
         'owner' => AF_ATF_ID,
         'key' => 'showthread_fields',
         'slot' => 'thread.atf_fields',
         'renderer' => 'af_atf_render_showthread_fields',
     ]);
-    return $forum || $showthread;
+    return $showthread;
 }
 
 /**
@@ -6326,52 +6345,8 @@ function af_atf_render_showthread_fields(array $context): string
 /** Provider contract: only the positive topic and forum ids are required. */
 function af_atf_render_forum_chips(array $context): string
 {
-    global $templates;
-    $fid = (int)($context['fid'] ?? 0);
-    $tid = (int)($context['tid'] ?? 0);
-    if ($fid <= 0 || $tid <= 0 || !is_object($templates)) {
-        return '';
-    }
-
-    $fields = af_atf_get_fields_for_forum($fid);
-    if (empty($fields)) {
-        return '';
-    }
-
-    $values = af_atf_get_values_by_tid($tid);
-
-    $chips = '';
-    foreach ($fields as $f) {
-        if ((int)($f['show_forum'] ?? 0) !== 1) {
-            continue;
-        }
-
-        $fieldid = (int)($f['fieldid'] ?? 0);
-        if ($fieldid <= 0) {
-            continue;
-        }
-
-        $val = $values[$fieldid] ?? '';
-        if (!is_string($val) || trim($val) === '') {
-            continue;
-        }
-
-        $label = htmlspecialchars_uni((string)$f['title']);
-        $valueHtml = af_atf_format_value_for_display($f, (string)$val);
-        if ($valueHtml === '') {
-            continue;
-        }
-
-        $chip = '';
-        eval("\$chip = \"".$templates->get('af_atf_forum_chip')."\";");
-        $chips .= $chip;
-    }
-
-    if ($chips === '') {
-        return '';
-    }
-
-    return '<span class="af-atf-chips">'.$chips.'</span>';
+    // Compatibility entrypoint for stale/third-party registrations: no SQL/render.
+    return '';
 }
 
 /* -------------------- DISPLAY FORMAT / PARSER -------------------- */
@@ -6847,6 +6822,7 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
     $GLOBALS['af_atf_context_fields'] = $fields;
     $GLOBALS['af_atf_context_values'] = $values;
 
+    af_atf_preload_field_kb_entries($fields, $values);
     $kbPairs = [];
     foreach ($fields as $field) {
         $fieldId = (int)($field['fieldid'] ?? 0);

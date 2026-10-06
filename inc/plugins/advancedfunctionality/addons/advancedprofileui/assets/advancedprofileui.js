@@ -449,7 +449,20 @@
     return /(?:^|[?&])(ajax=1|action=(?:af_charactersheet_api|cs_[^&]*_ajax))(?:&|$)/i.test(raw);
   }
 
+  var sharedLoadingState = null;
+  function startSharedLoading(modalParts, url) {
+    if (window.AFCharacterSheetsTrigger) {
+      sharedLoadingState = window.AFCharacterSheetsTrigger.beginLoading(
+        modalParts.modal.querySelector('.af-cs-modal__body'), url
+      );
+    }
+  }
+  function finishSharedLoading() {
+    if (sharedLoadingState) sharedLoadingState.finish();
+  }
   function clearUniversalModalState(modalParts) {
+    if (sharedLoadingState) sharedLoadingState.dispose();
+    sharedLoadingState = null;
     modalParts = modalParts || ensureSharedModal();
 
     if (modalState.controller && typeof modalState.controller.abort === 'function') {
@@ -461,6 +474,8 @@
 
     if (modalParts.frame) {
       modalParts.frame.onload = null;
+      modalParts.frame.onerror = null;
+      modalParts.frame.classList.remove('is-loaded');
       modalParts.frame.style.visibility = 'hidden';
       modalParts.frame.style.display = 'none';
       setFrameSrc(modalParts.frame, 'about:blank');
@@ -679,7 +694,8 @@
     }
 
     modalParts.content.style.display = 'block';
-    modalParts.content.innerHTML = '<div class="af-apui-modal-loading">Загрузка…</div>';
+    modalParts.content.innerHTML = '<div class="af-apui-modal-loading" role="status">Загрузка…</div>';
+    startSharedLoading(modalParts, fallbackUrl);
 
     modalState.controller = typeof window.AbortController === 'function'
       ? new window.AbortController()
@@ -713,6 +729,7 @@
 
         modalParts.content.innerHTML = fragmentHtml;
         normalizeApplicationModalFragmentLayout(modalParts);
+        finishSharedLoading();
       })
       .catch(function (error) {
         if (token !== modalState.token) {
@@ -723,6 +740,7 @@
           return;
         }
 
+        finishSharedLoading();
         modalParts.content.innerHTML =
           '<div class="af-apui-modal-error">' +
             '<p>Не удалось загрузить анкету в модалку.</p>' +
@@ -830,6 +848,10 @@
 
     modalParts.frame.style.display = 'block';
     modalParts.frame.style.visibility = 'hidden';
+    startSharedLoading(modalParts, loadUrl);
+    modalParts.frame.onerror = function () {
+      if (token === modalState.token && sharedLoadingState) sharedLoadingState.fail();
+    };
     modalParts.frame.onload = function () {
       if (token !== modalState.token) {
         return;
@@ -840,6 +862,8 @@
       }
 
       modalParts.frame.style.visibility = '';
+      modalParts.frame.classList.add('is-loaded');
+      finishSharedLoading();
     };
 
     setFrameSrc(modalParts.frame, 'about:blank');

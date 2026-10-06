@@ -215,6 +215,7 @@ function af_adaptivethemeframework_init(): void
         // Compose provider slots here rather than teaching providers about the
         // topic-card DOM or patching their legacy template variables.
         $plugins->add_hook('forumdisplay_thread_end', 'af_adaptivethemeframework_compose_thread_card', 100);
+        $plugins->add_hook('forumdisplay_end', 'af_adaptivethemeframework_compose_forumdisplay', 100);
         $plugins->add_hook('showthread_end', 'af_adaptivethemeframework_compose_showthread', 100);
         // Capture the unrendered message before MyBB's parser replaces it with
         // HTML. The late composer below can then expose a truthful text count.
@@ -1499,6 +1500,13 @@ function af_adaptivethemeframework_lastposter_avatar_fallback(int $uid, string $
     }
     $url = function_exists('get_profile_link') ? get_profile_link($uid) : 'member.php?action=profile&amp;uid='.$uid;
     return '<a href="'.htmlspecialchars_uni((string)$url).'">'.$image.'</a>';
+}
+
+/** The owned forumdisplay template owns the single late-bound navigation token. */
+function af_adaptivethemeframework_compose_forumdisplay(): void
+{
+    global $header;
+    $header = str_replace('<navigation>', '', (string)$header);
 }
 
 /** Compose forumdisplay-only values consumed by the owned topic-card seed. */

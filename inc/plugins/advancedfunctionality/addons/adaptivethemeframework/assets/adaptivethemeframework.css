@@ -176,6 +176,7 @@ body.atf-active .atf-breadcrumbs__item.is-current {
 body.atf-active .atf-breadcrumbs__current {
   color: var(--atf-color-text);
 }
+body.atf-active .atf-forumdisplay__breadcrumbs .navigation.atf-breadcrumbs,
 body.atf-active .atf-thread__breadcrumbs .navigation.atf-breadcrumbs {
   width: 100%;
   margin: 0;

@@ -7,16 +7,15 @@
 {$rows}
 
 <!-- TEMPLATE: af_atf_input_row -->
-<tr>
-  <td class="trow2" style="width: 20%;">
-    <strong>{$title}</strong>{$requiredMark}<br />
-    <span class="smalltext">{$desc}</span>
-  </td>
-  <td class="trow2">
-    {$input}
+<tr class="af-atf-form-row">
+  <td class="trow2" colspan="2">
+    <section class="af-atf-form-field{$fieldSectionClass}">
+      <div class="af-atf-field-label">{$title}{$requiredMark}</div>
+      <div class="af-atf-field-help smalltext">{$desc}</div>
+      <div class="af-atf-field-control">{$input}</div>
+    </section>
   </td>
 </tr>
-
 
 <!-- TEMPLATE: display_block -->
 <div class="af-atf-display">
