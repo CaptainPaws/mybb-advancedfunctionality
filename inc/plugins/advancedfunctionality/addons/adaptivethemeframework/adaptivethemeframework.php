@@ -1822,7 +1822,15 @@ function af_adaptivethemeframework_render_footer(bool $hasPosts = false, string 
         if ($manifest === null) $manifest = require __DIR__ . '/manifest.php';
         foreach ($manifest['theme_stylesheets'] as $source) {
             if (($source['id'] ?? '') === 'surface_modals') {
-                $scripts .= '<link rel="stylesheet" href="' . $escape($assetBase . $source['file'] . $version) . '">' . "\n";
+                $styleDecision = function_exists('af_theme_stylesheet_delivery_decision')
+                    ? af_theme_stylesheet_delivery_decision(AF_ADAPTIVETHEMEFRAMEWORK_ID, (string)$source['file'])
+                    : ['include_file' => true, 'theme_href' => ''];
+                $styleHref = !empty($styleDecision['use_theme_stylesheet'])
+                    ? (string)($styleDecision['theme_href'] ?? '')
+                    : $assetBase . $source['file'] . $version;
+                if ($styleHref !== '') {
+                    $scripts .= '<link rel="stylesheet" href="' . $escape($styleHref) . '">' . "\n";
+                }
                 break;
             }
         }
