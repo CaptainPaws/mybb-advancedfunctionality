@@ -189,7 +189,7 @@ atf_classic_assert(str_contains($sticky, 'postBottom - sidebarBottom'),
 atf_classic_assert(str_contains($source, 'adaptivethemeframework.postbit-sticky.js?v='), 'Scoped ATF postbit controller is not delivered.');
 atf_classic_assert(str_contains($source, 'adaptivethemeframework.modals.js?v='), 'ATF modal controller is not delivered.');
 
-$editorCounter = (string)file_get_contents(AF_ADDONS . 'advancededitor/assets/bbcodes/bbcodes/charcountandprew/charcountandprew.js');
+$editorCounter = (string)file_get_contents(AF_ADDONS . 'advancededitor/assets/bbcodes/charcountandprew/charcountandprew.js');
 atf_classic_assert(str_contains($editorCounter, "post.querySelector('.atf-post__content .atf-post__message')"), 'AdvancedEditor still duplicates the ATF character count below the post body.');
 
 $posturlWithCheckbox = '<a href="showthread.php?pid=260#pid260">#260</a> <input type="checkbox" class="checkbox" name="inlinemod_260" value="1">';
