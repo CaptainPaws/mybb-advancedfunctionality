@@ -354,8 +354,8 @@ class AF_Admin
 
         if ($action === 'sync_theme_stylesheets') {
             verify_post_check($mybb->get_input('my_post_key'));
-            af_sync_theme_stylesheets(true);
-            flash_message('AF theme stylesheets resynced from seed files.', 'success');
+            $sync = af_sync_theme_stylesheets(false);
+            flash_message(af_theme_stylesheets_action_message('sync_all', $sync, $lang), empty($sync['errors']) ? 'success' : 'error');
             admin_redirect('index.php?module='.AF_PLUGIN_ID.'&_='.TIME_NOW);
         }
 
@@ -767,6 +767,10 @@ class AF_Admin
                 $statusHint = '';
                 if ($statusRaw === 'manual_override') {
                     $statusHint = isset($lang->af_theme_stylesheets_status_manual_override_help) ? (string)$lang->af_theme_stylesheets_status_manual_override_help : '';
+                    $statusHint .= ' State: '.(string)($row['sync_state'] ?? 'customized')
+                        .'; seed changed: '.(!empty($row['seed_changed']) ? 'yes' : 'no')
+                        .'; installed checksum: '.(string)($row['installed_checksum'] ?? '')
+                        .'; current checksum: '.(string)($row['current_checksum'] ?? '');
                 }
                 $attached = self::shortCell($attachedRaw, 36);
                 $seedFile = self::shortCell($seedRaw, 38);
@@ -913,7 +917,7 @@ class AF_Admin
 
     private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'all', ?int $themeTid = null, string $logicalId = '', string $variant = 'primary', array $extra = []): string
     {
-        global $mybb;
+        global $mybb, $lang;
 
         $html = '<form method="post" action="index.php?module='.AF_PLUGIN_ID.'" style="margin:0;'.($inline ? 'display:inline-block;' : '').'">';
         $html .= '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">';
@@ -938,7 +942,13 @@ class AF_Admin
         }
         $buttonClass = $inline ? 'button' : 'submit_button';
         $buttonClass .= ($variant === 'secondary') ? ' af-ts-btn-secondary' : ' af-ts-btn-primary';
-        $confirmAttr = $confirm ? ' onclick="return confirm(&amp;quot;'.htmlspecialchars_uni($action === 'theme_stylesheets_force_resync' ? 'All manual advancedstyles.css changes will be replaced.' : 'Create a recovery copy and migrate advancedstyles.css?').'&amp;quot;);"' : '';
+        $confirmMessage = $action === 'theme_stylesheets_force_resync'
+            ? (string)($lang->af_theme_stylesheets_force_confirm ?? 'Force Resync replaces Theme CSS with the addon physical CSS file and removes manual edits.')
+            : 'Create a recovery copy and migrate advancedstyles.css?';
+        $confirmLiteral = json_encode($confirmMessage, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
+        $confirmAttr = $confirm && $confirmLiteral !== false
+            ? ' onclick="return confirm('.htmlspecialchars_uni($confirmLiteral).');"'
+            : '';
         $html .= '<input type="submit" class="'.$buttonClass.'"'.$confirmAttr.' value="'.htmlspecialchars_uni($label).'">';
         $html .= '</form>';
 
@@ -1625,7 +1635,7 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_help_file_mode' => 'использовать исходный CSS-файл аддона.',
             'af_theme_stylesheets_help_theme_mode' => 'использовать theme stylesheet из ACP.',
             'af_theme_stylesheets_help_sync_addon' => 'синхронизирует данные конкретного аддона.',
-            'af_theme_stylesheets_help_force_resync' => 'форсированно пересобирает stylesheet/integration state.',
+            'af_theme_stylesheets_help_force_resync' => 'заменяет Theme CSS содержимым физического CSS-файла аддона; обычная синхронизация сохраняет ручные правки.',
             'af_theme_stylesheets_help_rebuild_missing' => 'восстанавливает отсутствующие stylesheet-записи.',
             'af_theme_stylesheets_filter_addon' => 'Фильтр по аддону',
             'af_theme_stylesheets_filter_all_addons' => 'Все аддоны',
@@ -1634,7 +1644,7 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_filter_all_themes' => 'Все темы',
             'af_theme_stylesheets_apply_filter' => 'Применить фильтр',
             'af_theme_stylesheets_clear_filter' => 'Сбросить',
-            'af_theme_stylesheets_force_confirm' => 'Все ручные изменения advancedstyles.css будут заменены. Требуется явное подтверждение.',
+            'af_theme_stylesheets_force_confirm' => 'Force Resync заменит Theme CSS содержимым физического CSS-файла аддона и удалит ручные правки. Требуется явное подтверждение.',
             'af_theme_stylesheets_diag_found' => 'найдено в теме',
             'af_theme_stylesheets_diag_seed' => 'контрольная сумма seed',
             'af_theme_stylesheets_diag_duplicate' => 'риск дубликата',
@@ -1742,7 +1752,7 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_help_file_mode' => 'use addon source CSS file.',
             'af_theme_stylesheets_help_theme_mode' => 'use theme stylesheet from ACP.',
             'af_theme_stylesheets_help_sync_addon' => 'synchronizes data for a specific addon.',
-            'af_theme_stylesheets_help_force_resync' => 'force-rebuilds stylesheet/integration state.',
+            'af_theme_stylesheets_help_force_resync' => 'replaces Theme CSS with the addon physical CSS file; regular sync preserves manual edits.',
             'af_theme_stylesheets_help_rebuild_missing' => 'restores missing stylesheet records.',
             'af_theme_stylesheets_filter_addon' => 'Addon filter',
             'af_theme_stylesheets_filter_all_addons' => 'All addons',
@@ -1751,7 +1761,7 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_filter_all_themes' => 'All themes',
             'af_theme_stylesheets_apply_filter' => 'Apply filter',
             'af_theme_stylesheets_clear_filter' => 'clear',
-            'af_theme_stylesheets_force_confirm' => 'All manual advancedstyles.css changes will be replaced. Explicit confirmation is required.',
+            'af_theme_stylesheets_force_confirm' => 'Force Resync replaces Theme CSS with the addon physical CSS file and removes manual edits. Explicit confirmation is required.',
             'af_theme_stylesheets_diag_found' => 'found in theme',
             'af_theme_stylesheets_diag_seed' => 'seed checksum',
             'af_theme_stylesheets_diag_duplicate' => 'duplicate risk',
@@ -2882,6 +2892,9 @@ function af_theme_stylesheets_install_schema(): void
                 source_file varchar(255) NOT NULL default '',
                 seed_file varchar(255) NOT NULL default '',
                 seed_checksum char(40) NOT NULL default '',
+                installed_checksum char(40) NOT NULL default '',
+                current_checksum char(40) NOT NULL default '',
+                sync_state varchar(32) NOT NULL default 'uninitialized',
                 last_synced_checksum char(40) NOT NULL default '',
                 is_integrated tinyint(1) NOT NULL default 0,
                 delivery_mode varchar(20) NOT NULL default 'auto',
@@ -2902,9 +2915,8 @@ function af_theme_stylesheets_install_schema(): void
 
     $columns = af_db_table_columns(AF_THEME_STYLESHEETS_TABLE);
     $queries = [];
-    // Some pre-registry installations already have this table, but with only
-    // the original identity columns.  Activation must finish that migration
-    // before the bundle synchronizer selects or writes the newer fields.
+    // Some installations predate the per-source ownership checksums. Finish
+    // these additive schema migrations before source sync reads or writes them.
     if (!isset($columns['source_file'])) {
         $queries[] = "ALTER TABLE {$table} ADD COLUMN source_file varchar(255) NOT NULL default '' AFTER stylesheet_name";
     }
@@ -2914,8 +2926,17 @@ function af_theme_stylesheets_install_schema(): void
     if (!isset($columns['seed_checksum'])) {
         $queries[] = "ALTER TABLE {$table} ADD COLUMN seed_checksum char(40) NOT NULL default '' AFTER seed_file";
     }
+    if (!isset($columns['installed_checksum'])) {
+        $queries[] = "ALTER TABLE {$table} ADD COLUMN installed_checksum char(40) NOT NULL default '' AFTER seed_checksum";
+    }
+    if (!isset($columns['current_checksum'])) {
+        $queries[] = "ALTER TABLE {$table} ADD COLUMN current_checksum char(40) NOT NULL default '' AFTER installed_checksum";
+    }
+    if (!isset($columns['sync_state'])) {
+        $queries[] = "ALTER TABLE {$table} ADD COLUMN sync_state varchar(32) NOT NULL default 'uninitialized' AFTER current_checksum";
+    }
     if (!isset($columns['last_synced_checksum'])) {
-        $queries[] = "ALTER TABLE {$table} ADD COLUMN last_synced_checksum char(40) NOT NULL default '' AFTER seed_checksum";
+        $queries[] = "ALTER TABLE {$table} ADD COLUMN last_synced_checksum char(40) NOT NULL default '' AFTER sync_state";
     }
     if (!isset($columns['is_integrated'])) {
         $queries[] = "ALTER TABLE {$table} ADD COLUMN is_integrated tinyint(1) NOT NULL default 0 AFTER last_synced_checksum";
@@ -4337,7 +4358,7 @@ function af_theme_stylesheet_sync_bundle(int $themeTid, bool $force = false): ar
     ];
 }
 
-function af_mark_theme_stylesheet_managed(int $themeTid, int $sid, array $entry, array $seed, bool $manualOverride, ?string $resolvedName = null): void
+function af_mark_theme_stylesheet_managed(int $themeTid, int $sid, array $entry, array $seed, bool $manualOverride, ?string $resolvedName = null, string $installedChecksum = '', string $currentChecksum = '', string $syncState = 'clean'): void
 {
     global $db;
 
@@ -4365,7 +4386,11 @@ function af_mark_theme_stylesheet_managed(int $themeTid, int $sid, array $entry,
         'source_file'          => ltrim(str_replace('\\', '/', (string)($entry['file'] ?? '')), '/'),
         'seed_file'            => str_replace('\\', '/', str_replace(AF_BASE, '', (string)$seed['path'])),
         'seed_checksum'        => (string)$seed['checksum'],
-        'last_synced_checksum' => (string)$seed['checksum'],
+        'installed_checksum'   => $installedChecksum,
+        'current_checksum'     => $currentChecksum,
+        'sync_state'           => $syncState,
+        // Keep the previous column populated for legacy bundle diagnostics.
+        'last_synced_checksum' => $installedChecksum,
         'is_integrated'        => $sid > 0 ? 1 : (int)($existing['is_integrated'] ?? 0),
         'delivery_mode'        => (string)($existing['delivery_mode'] ?? ($entry['delivery_hint'] ?? 'auto')),
         'discovered_from'      => (string)($entry['discovered_from'] ?? ''),
@@ -4451,10 +4476,18 @@ function af_register_theme_stylesheet(int $themeTid, array $meta, array $entry, 
         }
     }
 
-    $seedChecksum      = (string)$seed['checksum'];
-    $manualOverride    = ((int)($state['manual_override'] ?? 0) === 1);
-    $mustWriteSeed     = false;
-    $cssForCacheWrite  = $seedCssRaw;
+    $seedChecksum = (string)$seed['checksum'];
+    $installedChecksum = (string)($state['installed_checksum'] ?? '');
+    if ($installedChecksum === '') {
+        // Earlier per-source releases recorded the last installed seed in
+        // last_synced_checksum. Use it as the ownership baseline on upgrade.
+        $installedChecksum = (string)($state['last_synced_checksum'] ?? '');
+    }
+    $manualOverride = false;
+    $mustWriteSeed = false;
+    $cssForCacheWrite = $seedCssRaw;
+    $currentChecksum = '';
+    $syncState = 'clean';
 
     if (!$row) {
         $sid = (int)$db->insert_query('themestylesheets', [
@@ -4468,6 +4501,8 @@ function af_register_theme_stylesheet(int $themeTid, array $meta, array $entry, 
 
         $mustWriteSeed  = true;
         $manualOverride = false;
+        $installedChecksum = $seedChecksum;
+        $currentChecksum = $seedChecksum;
         $row = [
             'sid'        => $sid,
             'name'       => (string)$entry['stylesheet_name'],
@@ -4476,20 +4511,39 @@ function af_register_theme_stylesheet(int $themeTid, array $meta, array $entry, 
     } else {
         $currentCss          = (string)($row['stylesheet'] ?? '');
         $currentChecksum     = sha1($currentCss);
-        $lastSyncedChecksum  = (string)($state['last_synced_checksum'] ?? '');
 
         if ($force) {
-            $mustWriteSeed  = true;
-            $manualOverride = false;
-        } elseif ($lastSyncedChecksum === '') {
-            $mustWriteSeed  = ($currentChecksum === $seedChecksum);
-            $manualOverride = !$mustWriteSeed;
-        } elseif ($currentChecksum !== $lastSyncedChecksum) {
-            $mustWriteSeed  = false;
+            if ($currentChecksum !== $seedChecksum) {
+                $backup = af_theme_stylesheet_create_recovery($themeTid, $row, $currentCss);
+                if (empty($backup['ok'])) {
+                    throw new RuntimeException('Force resync stopped: '.(string)($backup['message'] ?? 'could not create recovery snapshot'));
+                }
+            }
+            $mustWriteSeed = true;
+            $installedChecksum = $seedChecksum;
+        } elseif ($currentChecksum === $seedChecksum) {
+            // An administrator may intentionally restore the stylesheet to
+            // the current file seed. Content evidence clears the override.
+            $installedChecksum = $seedChecksum;
+        } elseif ($installedChecksum !== '' && $currentChecksum === $installedChecksum) {
+            // The Theme CSS is still exactly AF's installed version. Only this
+            // case authorizes a regular sync to install a changed seed.
+            if ($seedChecksum !== $installedChecksum) {
+                $mustWriteSeed = true;
+                $installedChecksum = $seedChecksum;
+            }
+        } else {
             $manualOverride = true;
-        } elseif ($seedChecksum !== $lastSyncedChecksum) {
-            $mustWriteSeed  = true;
-            $manualOverride = false;
+        }
+
+        if ($manualOverride) {
+            $syncState = $installedChecksum === ''
+                ? 'customized_untracked'
+                : ($seedChecksum !== $installedChecksum ? 'customized_seed_changed' : 'customized');
+        } elseif ($currentChecksum === $seedChecksum || $mustWriteSeed) {
+            $syncState = 'clean';
+        } elseif ($installedChecksum === '') {
+            $syncState = 'customized_untracked';
         }
 
         $resolvedName = trim((string)($row['name'] ?? ''));
@@ -4515,6 +4569,12 @@ function af_register_theme_stylesheet(int $themeTid, array $meta, array $entry, 
         if ($mustWriteSeed) {
             $row['stylesheet'] = $seedCssRaw;
         }
+    }
+
+    $currentChecksum = $mustWriteSeed ? $seedChecksum : sha1((string)($row['stylesheet'] ?? ''));
+    if (!$manualOverride && $currentChecksum === $seedChecksum) {
+        $installedChecksum = $seedChecksum;
+        $syncState = 'clean';
     }
 
     if (!function_exists('cache_stylesheet') || !function_exists('update_theme_stylesheet_list')) {
@@ -4543,13 +4603,19 @@ function af_register_theme_stylesheet(int $themeTid, array $meta, array $entry, 
         $entry,
         $seed,
         $manualOverride,
-        (string)($row['name'] ?? $entry['stylesheet_name'])
+        (string)($row['name'] ?? $entry['stylesheet_name']),
+        $installedChecksum,
+        $currentChecksum,
+        $syncState
     );
 
     return [
         'sid'               => $sid,
         'updated_from_seed' => $mustWriteSeed,
         'manual_override'   => $manualOverride,
+        'installed_checksum' => $installedChecksum,
+        'current_checksum' => $currentChecksum,
+        'sync_state' => $syncState,
         'name'              => (string)($row['name'] ?? $entry['stylesheet_name']),
     ];
 }
@@ -4619,11 +4685,14 @@ function af_ensure_theme_stylesheet_registry_row(int $themeTid, array $entry): v
         'source_file' => ltrim(str_replace('\\', '/', (string)($entry['file'] ?? '')), '/'),
         'seed_file' => '',
         'seed_checksum' => '',
+        'installed_checksum' => '',
+        'current_checksum' => '',
+        'sync_state' => 'uninitialized',
         'last_synced_checksum' => '',
-        // This flag means that the source participates in the generated
-        // bundle; it no longer implies ownership of a per-source MyBB SID.
-        'is_integrated' => 1,
-        'delivery_mode' => 'auto',
+        // Registration has not created/verified the source stylesheet yet.
+        'is_integrated' => 0,
+        'delivery_mode' => in_array(strtolower((string)($entry['delivery_hint'] ?? 'auto')), ['file', 'theme', 'auto'], true)
+            ? strtolower((string)($entry['delivery_hint'] ?? 'auto')) : 'auto',
         'discovered_from' => (string)($entry['discovered_from'] ?? ''),
         'is_admin_only' => !empty($entry['is_admin_only']) ? 1 : 0,
         'last_synced_at' => 0,
@@ -4936,8 +5005,11 @@ function af_collect_theme_stylesheet_diagnostics(?string $onlyAddonId = null): a
             $expectedAttach = af_build_theme_stylesheet_attach_string((array)$entry['attach']);
             $foundInTheme = !empty($sheet);
             $currentChecksum = $foundInTheme ? sha1((string)$sheet['stylesheet']) : '';
+            $installedChecksum = (string)($state['installed_checksum'] ?? ($state['last_synced_checksum'] ?? ''));
             $lastSyncedChecksum = (string)($state['last_synced_checksum'] ?? '');
             $manualOverride = ((int)($state['manual_override'] ?? 0) === 1);
+            $syncState = (string)($state['sync_state'] ?? ($manualOverride ? 'customized' : 'uninitialized'));
+            $seedChanged = $installedChecksum !== '' && $seedChecksum !== $installedChecksum;
             $duplicateQ = $db->simple_select('themestylesheets', 'COUNT(*) AS c', "tid='".(int)$themeTid."' AND name='{$nameEsc}'");
             $duplicateCount = (int)$db->fetch_field($duplicateQ, 'c');
             $duplicateRisk = $duplicateCount > 1;
@@ -4947,6 +5019,7 @@ function af_collect_theme_stylesheet_diagnostics(?string $onlyAddonId = null): a
 
             $status = $mode === 'file' ? 'file_source' : 'theme_source';
             if (!$foundInTheme) $status = 'source_missing';
+            elseif ($manualOverride) $status = 'manual_override';
             elseif ($mode !== 'file' && $attachedTo !== $expectedAttach) $status = 'stylesheet_detached';
             elseif ($duplicateRisk) $status = 'duplicate_risk';
 
@@ -4975,12 +5048,15 @@ function af_collect_theme_stylesheet_diagnostics(?string $onlyAddonId = null): a
                 'bundle_section_present' => $foundInTheme,
                 'section_id' => '',
                 'section_meta' => [],
-                'seed_changed' => false,
+                'seed_changed' => $seedChanged,
                 'is_integrated' => $foundInTheme,
                 'attached_to' => $mode === 'file' ? '—' : $attachedTo,
                 'expected_attach' => $mode === 'file' ? '' : $expectedAttach,
                 'last_synced_at' => (int)($state['last_synced_at'] ?? 0),
                 'manual_override' => $manualOverride,
+                'sync_state' => $syncState,
+                'installed_checksum' => $installedChecksum,
+                'current_checksum' => $currentChecksum,
                 'found_in_theme' => $foundInTheme,
                 'seed_checksum_match' => ($seedChecksum !== '' && (string)($state['seed_checksum'] ?? '') === $seedChecksum),
                 'duplicate_risk' => $duplicateRisk,

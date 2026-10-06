@@ -3,63 +3,78 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
-$core = file_get_contents($root . '/inc/plugins/advancedfunctionality.php');
-$router = $core;
+$core = file_get_contents($root.'/inc/plugins/advancedfunctionality.php');
 
+function extractedFunction(string $source, string $name): string
+{
+    $start = strpos($source, 'function '.$name.'(');
+    if ($start === false) return '';
+    $brace = strpos($source, '{', $start);
+    $depth = 0;
+    for ($i = $brace, $length = strlen($source); $i < $length; $i++) {
+        if ($source[$i] === '{') $depth++;
+        elseif ($source[$i] === '}' && --$depth === 0) return substr($source, $start, $i - $start + 1);
+    }
+    return '';
+}
+
+$sync = extractedFunction($core, 'af_sync_theme_stylesheets');
+$delivery = extractedFunction($core, 'af_theme_stylesheet_delivery_decision');
+$registration = extractedFunction($core, 'af_register_theme_stylesheet');
+$setMode = extractedFunction($core, 'af_theme_stylesheet_set_delivery_mode');
+$actions = extractedFunction($core, 'af_theme_stylesheets_execute_action');
 $checks = [
-    'fixed bundle name' => "define('AF_THEME_BUNDLE_NAME', 'advancedstyles.css')",
-    'deterministic source sort' => "strtolower((string)\$a['addon_id'])",
-    'authenticated section marker' => 'AF-SECTION-V1',
-    'length delimited parser' => "\$bytes = (int)\$meta['bytes']",
-    'optimistic conflict check' => "advancedstyles.css changed after this section was opened",
-    'byte preserving replacement' => "substr(\$current, 0, (int)\$section['start']).\$replacement.substr(\$current, (int)\$section['end'])",
-    'external structure recovery' => 'structure repaired; external recovery',
-    'legacy classification' => "'status' => 'legacy'",
-    'explicit legacy migration' => 'af_theme_stylesheet_migrate_legacy_bundle',
-    'migration optimistic lock' => 'CSS changed after the migration page was opened',
-    'recovery directory' => "'/css_recovery'",
-    'normal sync manual guard' => "|| (!\$manual && \$currentHash !== (string)\$bundle['checksum'])",
-    'pre-registry bundle preservation' => '$adoptingExistingBundle = (bool)($row && !$state && !$force)',
-    'pre-registry current hash adoption' => "? sha1((string)(\$row['stylesheet'] ?? ''))",
-    'stale registry sid fallback' => 'stale sid after a theme import',
-    'legacy override migration' => 'Preserved legacy ACP override',
-    'legacy rows retained' => 'Migration is intentionally non-destructive',
-    'bundle delivery precedence' => 'Unified mode has precedence',
-    'file mode detaches bundle' => "\$mode === 'theme' ? 'global' : ''",
-    'source metadata has no sid' => "['stylesheet_sid' => 0, 'updated_at' => TIME_NOW]",
-    'bundle source status' => "\$status = \$mode === 'file' ? 'file_source' : 'bundle_source'",
-    'bundle detached status' => "\$status = 'bundle_detached'",
-    'raw DB stylesheet payload' => "'stylesheet' => (string)\$bundle['source']",
-    'database CSS fallback' => "'/css.php?stylesheet='",
-    'content hash cache busting' => "substr(sha1((string)(\$themeRow['stylesheet'] ?? '')), 0, 16)",
-    'legacy duplicate cleanup' => 'af_theme_stylesheet_deduplicate_registry',
-    'disabled source reconciliation' => 'af_disable_theme_stylesheet_sources',
-    'disabled source detached state' => "'is_integrated' => 0",
-    'section chips' => 'af-ts-section-chip',
+    'per-source basename' => "basename(\$sourceFileRel)",
+    'readable collision fallback' => "\$owner.'-'.$stem",
+    'canonical source path registry identity' => "'source_file'          => ltrim(str_replace('\\\\', '/', (string)(\$entry['file'] ?? '')), '/')",
+    'manifest attachment persisted' => "af_build_theme_stylesheet_attach_string((array)\$entry['attach'])",
+    'theme stylesheet seed created per source' => "'stylesheet'         => \$seedCssEsc",
+    'installed checksum ownership field' => "'installed_checksum'   => \$installedChecksum",
+    'theme checksum recorded' => "'current_checksum'     => \$currentChecksum",
+    'manual state persisted' => "'sync_state'           => \$syncState",
+    'legacy bundle migration retained' => 'af_theme_stylesheet_migrate_legacy_bundle',
+    'recovery directory retained' => "'/css_recovery'",
+    'legacy rows remain non-destructive' => 'Migration is intentionally non-destructive',
+    'force warning says physical seed' => 'Force Resync replaces Theme CSS with the addon physical CSS file',
+    'force confirmation is required' => "if (!\$confirmed)",
+    'bundle section editor retained only for legacy migration' => 'theme_stylesheet_section',
 ];
-
 $failed = [];
 foreach ($checks as $label => $needle) {
-    if (strpos($core, $needle) === false) {
-        $failed[] = $label;
-    }
+    if (strpos($core, $needle) === false) $failed[] = $label;
 }
-if (strpos($router, 'AF_THEME_BUNDLE_NAME') === false || strpos($router, 'theme_stylesheets_set_file_mode') === false) {
-    $failed[] = 'ACP bundle controls';
+
+if (strpos($sync, 'af_register_theme_stylesheet') === false || strpos($sync, 'af_theme_stylesheet_sync_bundle') !== false) {
+    $failed[] = 'normal sync uses per-source registration';
 }
-if (strpos($router, 'theme_stylesheet_section') === false || strpos($router, 'theme_stylesheets_save_section') === false) {
-    $failed[] = 'ACP section editor';
+if (strpos($delivery, 'AF_THEME_BUNDLE_NAME') !== false
+    || strpos($delivery, 'af_theme_stylesheet_bundle_state') !== false
+    || strpos($delivery, 'advancedstyles.css') !== false) {
+    $failed[] = 'frontend delivery is independent from the legacy bundle';
+}
+if (strpos($registration, 'currentChecksum === $seedChecksum') === false
+    || strpos($registration, 'currentChecksum === $installedChecksum') === false
+    || strpos($registration, 'customized_seed_changed') === false) {
+    $failed[] = 'checksum evidence controls seed replacement';
+}
+if (strpos($setMode, 'af_theme_stylesheet_sync_bundle') !== false
+    || strpos($setMode, "'stylesheet'") !== false) {
+    $failed[] = 'mode switch preserves existing Theme CSS';
+}
+if (strpos($actions, "af_sync_theme_stylesheets(true, \$addonId)") === false
+    || strpos($actions, "if (!\$confirmed)") === false) {
+    $failed[] = 'only confirmed Force Resync invokes destructive sync';
 }
 if (preg_match("~delete_query\\(\\s*'themestylesheets'.*AF_THEME_BUNDLE~s", $core)) {
     $failed[] = 'bundle/legacy destructive deletion';
 }
 if (preg_match("~af_ensure_theme_stylesheet_registry_row.*?insert_query\\('themestylesheets'~s", $core)) {
-    $failed[] = 'source registry creates a MyBB stylesheet';
+    $failed[] = 'registry placeholder creates a MyBB stylesheet';
 }
 
 if ($failed) {
-    fwrite(STDERR, "FAIL: " . implode(', ', $failed) . PHP_EOL);
+    fwrite(STDERR, 'FAIL: '.implode(', ', $failed).PHP_EOL);
     exit(1);
 }
 
-echo "AF unified theme stylesheet regression checks passed." . PHP_EOL;
+echo "AF per-source Theme stylesheet regression checks passed.\n";
