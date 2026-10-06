@@ -1442,6 +1442,45 @@
         ".codeblock .title{padding:8px 10px;font-weight:700;opacity:.85;border-bottom:1px solid rgba(255,255,255,.10)}\n" +
         ".codeblock .body{padding:10px 12px}\n";
 
+      // Match the actual theme's rendered quotation rather than shipping a
+      // second hard-coded visual for WYSIWYG. The preview uses the live forum
+      // CSS, while the iframe otherwise cannot inherit that CSS.
+      try {
+        var host = document.querySelector('.post_body, .atf-post__message, .post-content, .af-ccp-preview-body');
+        var quoteSample = document.querySelector('.post_body blockquote.mycode_quote, .atf-post__message blockquote.mycode_quote');
+        var generated = false;
+        if (!quoteSample && host) {
+          quoteSample = document.createElement('blockquote');
+          quoteSample.className = 'mycode_quote';
+          quoteSample.innerHTML = '<cite>Цитата</cite><span>Текст цитаты</span>';
+          quoteSample.style.position = 'absolute';
+          quoteSample.style.visibility = 'hidden';
+          quoteSample.style.pointerEvents = 'none';
+          host.appendChild(quoteSample);
+          generated = true;
+        }
+        if (quoteSample) {
+          var computed = window.getComputedStyle(quoteSample);
+          var properties = ['background-color', 'background-image', 'color',
+            'border-top', 'border-right', 'border-bottom', 'border-left',
+            'border-radius', 'padding', 'margin', 'box-shadow', 'font-family',
+            'font-size', 'line-height', 'text-align'];
+          var declaration = properties.map(function (prop) {
+            return prop + ':' + computed.getPropertyValue(prop) + ';';
+          }).join('');
+          css += '\nblockquote.mycode_quote,blockquote{' + declaration + '}\n';
+          var citeSample = quoteSample.querySelector('cite');
+          if (citeSample) {
+            var citeStyle = window.getComputedStyle(citeSample);
+            css += 'blockquote cite{display:' + citeStyle.display +
+              ';color:' + citeStyle.color + ';font-weight:' + citeStyle.fontWeight +
+              ';font-style:' + citeStyle.fontStyle + ';margin:' + citeStyle.margin +
+              ';padding:' + citeStyle.padding + ';}\n';
+          }
+          if (generated) quoteSample.remove();
+        }
+      } catch (eMatch) {}
+
       var style = doc.createElement('style');
       style.id = 'af-ae-wysiwyg-codequote';
       style.type = 'text/css';
