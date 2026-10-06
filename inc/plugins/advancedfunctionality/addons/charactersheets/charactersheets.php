@@ -52,42 +52,46 @@ function af_charactersheets_require_modules(array $modules): void
     }
 }
 
-af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap']);
-
 $afCsScript = strtolower(defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '');
-if ($afCsScript === 'charactersheets.php') {
-    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax']);
-}
-if (defined('IN_ADMINCP')) {
-    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
+$afCsTriggerContext = in_array($afCsScript, ['showthread.php', 'member.php'], true);
+
+if ($afCsTriggerContext) {
+    af_charactersheets_require_modules(['permissions', 'metadata', 'postbit', 'frontend']);
+} elseif ($afCsScript === 'charactersheets.php') {
+    af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'bootstrap']);
+} elseif (defined('IN_ADMINCP')) {
+    af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills', 'bootstrap']);
+} elseif (in_array($afCsScript, ['newthread.php', 'editpost.php'], true)) {
+    af_charactersheets_require_modules(['permissions', 'metadata']);
 }
 
 function af_charactersheets_is_installed(): bool
 {
-    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
+    af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills', 'bootstrap']);
     return af_charactersheets_is_installed_impl();
 }
 
 function af_charactersheets_install(): void
 {
-    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
+    af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills', 'bootstrap']);
     af_charactersheets_install_impl();
 }
 
 function af_charactersheets_activate(): bool
 {
-    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
+    af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills', 'bootstrap']);
     return af_charactersheets_activate_impl();
 }
 
 function af_charactersheets_deactivate(): bool
 {
+    af_charactersheets_require_modules(['bootstrap']);
     return af_charactersheets_deactivate_impl();
 }
 
 function af_charactersheets_uninstall(): void
 {
-    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
+    af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills', 'bootstrap']);
     af_charactersheets_uninstall_impl();
 }
 
@@ -96,6 +100,7 @@ function af_charactersheets_init(): void
     global $plugins;
 
     $plugins->add_hook('showthread_start', 'af_charactersheets_showthread_start');
+    $plugins->add_hook('postbit', 'af_charactersheets_postbit_preload_current_page', 1);
     $plugins->add_hook('pre_output_page', 'af_charactersheets_pre_output');
     $plugins->add_hook('misc_start', 'af_charactersheets_misc_start');
     $plugins->add_hook('class_moderation_move_simple', 'af_charactersheets_handle_thread_move_for_acceptance');
@@ -104,19 +109,62 @@ function af_charactersheets_init(): void
 
 function af_charactersheets_showthread_start(): void
 {
-    global $db, $tid;
-    if ((int)$tid > 0) {
-        $uids = [];
+    af_charactersheets_showthread_start_impl();
+}
+
+/**
+ * Batch metadata for authors actually rendered on the current showthread page.
+ * MyBB has already built the current-page $pids list before the first postbit
+ * hook in linear mode, so this avoids scanning every author in the thread.
+ */
+function af_charactersheets_postbit_preload_current_page(&$post): void
+{
+    static $done = false;
+
+    if ($done || !defined('THIS_SCRIPT') || THIS_SCRIPT !== 'showthread.php') {
+        return;
+    }
+    $done = true;
+
+    global $db, $pids, $tid;
+
+    $uids = [];
+    $pagePids = [];
+    if (is_string($pids) && $pids !== '' && preg_match_all('~\d+~', $pids, $matches)) {
+        $pagePids = array_values(array_unique(array_filter(array_map('intval', $matches[0]))));
+    }
+
+    if (is_object($db) && $pagePids) {
+        $query = $db->simple_select(
+            'posts',
+            'DISTINCT uid',
+            'pid IN (' . implode(',', $pagePids) . ') AND uid>0'
+        );
+        while ($row = $db->fetch_array($query)) {
+            $uids[] = (int)($row['uid'] ?? 0);
+        }
+    } elseif (is_object($db) && (int)$tid > 0) {
+        // Threaded mode has no linear current-page pid list.
         $query = $db->simple_select('posts', 'DISTINCT uid', 'tid=' . (int)$tid . ' AND uid>0');
         while ($row = $db->fetch_array($query)) {
-            $uids[] = (int)$row['uid'];
+            $uids[] = (int)($row['uid'] ?? 0);
         }
-        if (function_exists('af_characterworkflow_preload_active_applications')) {
-            af_characterworkflow_preload_active_applications($uids);
-        }
+    }
+
+    $currentUid = is_array($post) ? (int)($post['uid'] ?? 0) : 0;
+    if (!$uids && $currentUid > 0) {
+        $uids[] = $currentUid;
+    }
+
+    $uids = array_values(array_unique(array_filter(array_map('intval', $uids))));
+    $GLOBALS['af_cs_showthread_page_uids'] = $uids;
+
+    if (function_exists('af_characterworkflow_preload_active_applications')) {
+        af_characterworkflow_preload_active_applications($uids);
+    }
+    if (function_exists('af_charactersheets_preload_postbit_metadata')) {
         af_charactersheets_preload_postbit_metadata($uids);
     }
-    af_charactersheets_showthread_start_impl();
 }
 
 function af_charactersheets_pre_output(&$page): void
@@ -127,17 +175,27 @@ function af_charactersheets_pre_output(&$page): void
 function af_charactersheets_misc_start(): void
 {
     global $mybb;
+
     $action = strtolower((string)$mybb->get_input('action'));
-    if (in_array($action, ['af_charactersheet', 'af_charactersheets', 'af_charactersheet_api', 'cs_modal_profile', 'cs_modal_application'], true)) {
-        af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax']);
-    } elseif (in_array($action, ['af_charactersheets_accept', 'af_charactersheets_transfer', 'af_charactersheets_create_sheet'], true)) {
-        af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render']);
+    $legacyRoutes = ['af_charactersheet', 'af_charactersheets', 'af_charactersheet_api', 'cs_modal_profile', 'cs_modal_application'];
+
+    if (in_array($action, $legacyRoutes, true)) {
+        af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'bootstrap']);
+    } elseif ($action === 'af_charactersheets_accept') {
+        af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'bootstrap']);
+    } elseif ($action === 'af_charactersheets_transfer') {
+        af_charactersheets_require_modules(['permissions', 'sheets_crud', 'bootstrap']);
+    } elseif ($action === 'af_charactersheets_create_sheet') {
+        af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'bootstrap']);
+    } else {
+        return;
     }
+
     af_charactersheets_misc_start_impl();
 }
 
 function af_charactersheets_handle_thread_move_for_acceptance(array $args): void
 {
-    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render']);
+    af_charactersheets_require_modules(['permissions', 'sheets_crud', 'bootstrap']);
     af_charactersheets_handle_thread_move_for_acceptance_impl($args);
 }

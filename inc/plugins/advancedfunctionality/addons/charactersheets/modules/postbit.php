@@ -7,25 +7,51 @@ if (!defined('IN_MYBB')) {
 function af_charactersheets_preload_postbit_metadata(array $uids): void
 {
     global $db;
+
     $uids = array_values(array_unique(array_filter(array_map('intval', $uids))));
-    $cache = array_fill_keys($uids, '');
-    if (!$uids) {
-        $GLOBALS['af_cs_postbit_slug_cache'] = $cache;
+    if (!isset($GLOBALS['af_cs_postbit_slug_cache']) || !is_array($GLOBALS['af_cs_postbit_slug_cache'])) {
+        $GLOBALS['af_cs_postbit_slug_cache'] = [];
+    }
+    $cache =& $GLOBALS['af_cs_postbit_slug_cache'];
+
+    $missing = array_values(array_filter(
+        $uids,
+        static fn(int $uid): bool => !array_key_exists($uid, $cache)
+    ));
+    if (!$missing) {
         return;
     }
-    $in = implode(',', $uids);
-    if ($db->table_exists(AF_CS_SHEETS_TABLE)) {
-        $q = $db->simple_select(AF_CS_SHEETS_TABLE, 'uid,slug,id', "uid IN ($in) AND slug<>''", ['order_by' => 'id', 'order_dir' => 'ASC']);
-        while ($row = $db->fetch_array($q)) $cache[(int)$row['uid']] = (string)$row['slug'];
-    }
-    if ($db->table_exists(AF_CS_TABLE)) {
-        $q = $db->simple_select(AF_CS_TABLE, 'uid,sheet_slug,tid', "uid IN ($in) AND sheet_slug<>''", ['order_by' => 'tid', 'order_dir' => 'ASC']);
-        while ($row = $db->fetch_array($q)) {
-            $uid = (int)$row['uid'];
-            if (($cache[$uid] ?? '') === '') $cache[$uid] = (string)$row['sheet_slug'];
+
+    $sheetLookupUids = [];
+    $activeCache = is_array($GLOBALS['af_cwf_active_application_cache'] ?? null)
+        ? $GLOBALS['af_cwf_active_application_cache']
+        : [];
+
+    foreach ($missing as $uid) {
+        $relation = is_array($activeCache[$uid] ?? null)
+            ? (array)(($activeCache[$uid]['relation'] ?? []))
+            : [];
+        $relationSlug = trim((string)($relation['sheet_slug'] ?? ''));
+        $cache[$uid] = $relationSlug;
+        if ($relationSlug === '') {
+            $sheetLookupUids[] = $uid;
         }
     }
-    $GLOBALS['af_cs_postbit_slug_cache'] = $cache;
+
+    if (!$sheetLookupUids || !$db->table_exists(AF_CS_SHEETS_TABLE)) {
+        return;
+    }
+
+    $in = implode(',', $sheetLookupUids);
+    $q = $db->simple_select(
+        AF_CS_SHEETS_TABLE,
+        'uid,slug,id',
+        "uid IN ($in) AND slug<>''",
+        ['order_by' => 'id', 'order_dir' => 'ASC']
+    );
+    while ($row = $db->fetch_array($q)) {
+        $cache[(int)$row['uid']] = (string)$row['slug'];
+    }
 }
 
 function af_cs_get_postbit_sheet_payload(int $uid): array
@@ -58,10 +84,12 @@ function af_cs_get_postbit_sheet_payload(int $uid): array
     }
 
     if (!isset($lang->af_charactersheets_name)) {
-        af_charactersheets_lang();
+        af_charactersheets_load_lang();
     }
 
-    $slug = af_charactersheets_get_sheet_slug_by_uid($uid);
+    $relation = (array)($activeApplication['relation'] ?? []);
+    $relationSlug = trim((string)($relation['sheet_slug'] ?? ''));
+    $slug = $relationSlug !== '' ? $relationSlug : af_charactersheets_get_sheet_slug_by_uid($uid);
     if ($slug !== '') {
         $payload['enabled'] = true;
         $payload['sheet_url'] = af_charactersheets_url(['slug' => $slug]);
@@ -69,7 +97,7 @@ function af_cs_get_postbit_sheet_payload(int $uid): array
         $payload['button_label'] = (string)($lang->af_charactersheets_sheet_button ?? 'Лист персонажа');
     }
 
-    $application = af_charactersheets_get_application_payload_by_uid($uid);
+    $application = af_charactersheets_get_application_payload_by_uid($uid, $activeApplication, true);
     if ($application) {
         $payload['application'] = $application;
         $payload['application_tid'] = (int)($application['tid'] ?? 0);
@@ -92,7 +120,11 @@ function af_cs_get_postbit_sheet_payload(int $uid): array
     return $payload;
 }
 
-function af_charactersheets_get_application_payload_by_uid(int $uid): array
+function af_charactersheets_get_application_payload_by_uid(
+    int $uid,
+    ?array $activeApplication = null,
+    bool $activeApplicationResolved = false
+): array
 {
     static $cache = [];
 
@@ -104,9 +136,12 @@ function af_charactersheets_get_application_payload_by_uid(int $uid): array
         return (array)$cache[$uid];
     }
 
-    $active = function_exists('af_characterworkflow_resolve_active_application')
-        ? af_characterworkflow_resolve_active_application($uid)
-        : null;
+    $active = $activeApplication;
+    if (!$activeApplicationResolved) {
+        $active = function_exists('af_characterworkflow_resolve_active_application')
+            ? af_characterworkflow_resolve_active_application($uid)
+            : null;
+    }
     $row = is_array($active) ? (array)($active['relation'] ?? []) : [];
 
     $tid = (int)($row['tid'] ?? 0);
