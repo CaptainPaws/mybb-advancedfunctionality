@@ -171,8 +171,8 @@
     var knownPostIds = Object.create(null);
     function recordPostIds() {
       if (!posts) return;
-      Array.prototype.forEach.call(posts.querySelectorAll('[id^="pid_"]'), function (node) {
-        knownPostIds[node.id] = true;
+      Array.prototype.forEach.call(posts.querySelectorAll('[id^="pid"], [id^="post_"]'), function (node) {
+        if (/^(?:pid_?\d+|post_\d+)$/.test(node.id)) knownPostIds[node.id] = true;
       });
     }
     recordPostIds();
@@ -199,13 +199,13 @@
             var node = nodes[j];
             if (node.nodeType !== 1) continue;
             var candidates = [];
-            if (node.id && /^pid_\d+$/.test(node.id)) candidates.push(node);
+            if (node.id && /^(?:pid_?\d+|post_\d+)$/.test(node.id)) candidates.push(node);
             if (node.querySelectorAll) {
-              Array.prototype.push.apply(candidates, node.querySelectorAll('[id^="pid_"]'));
+              Array.prototype.push.apply(candidates, node.querySelectorAll('[id^="pid"], [id^="post_"]'));
             }
             for (var k = 0; k < candidates.length; k++) {
               var candidate = candidates[k];
-              if (!/^pid_\d+$/.test(candidate.id) || knownPostIds[candidate.id]) continue;
+              if (!/^(?:pid_?\d+|post_\d+)$/.test(candidate.id) || knownPostIds[candidate.id]) continue;
               recordPostIds();
               waitingForPost = false;
               finishPublished();
