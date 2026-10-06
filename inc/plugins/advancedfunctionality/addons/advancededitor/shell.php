@@ -87,11 +87,30 @@ function af_advancededitor_shell_registry(array $available, array $custom, array
 function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $help = []): string
 {
     $map = array_column($buttons, null, 'cmd');
+    $layoutWasDefault = !isset($layout['sections']) || !is_array($layout['sections']);
     if (!isset($layout['sections']) || !is_array($layout['sections'])) {
         $layout = ['sections' => [
             ['type' => 'group', 'items' => ['bold','italic','underline','strike','subscript','superscript','|','font','size','color','removeformat','|','undo','redo','pastetext','horizontalrule','|','left','center','right','justify','|','bulletlist','orderedlist','|','quote','code','|','link','unlink','email','image','youtube','emoticon','af_stikers','|','maximize']],
             ['type' => 'group', 'items' => []],
         ]];
+    }
+    // The no-configuration fallback must include installed pack buttons too.
+    // Otherwise advanced features vanish entirely when there is no saved ACP
+    // toolbar layout (including when ATF changes the surrounding templates).
+    if ($layoutWasDefault ?? false) {
+        $visible = [];
+        foreach ($layout['sections'] as $section) {
+            foreach ((array)($section['items'] ?? []) as $cmd) $visible[$cmd] = true;
+        }
+        $extra = [];
+        foreach ($buttons as $definition) {
+            $cmd = (string)($definition['cmd'] ?? '');
+            if ($cmd !== '' && !isset($visible[$cmd]) &&
+                (!empty($definition['packId']) || str_starts_with($cmd, 'af_'))) {
+                $extra[] = $cmd;
+            }
+        }
+        if ($extra) $layout['sections'][] = ['type' => 'group', 'items' => $extra];
     }
     if (!empty($help['enabled']) && isset($map['af_formathelp'])) {
         $present = false;
