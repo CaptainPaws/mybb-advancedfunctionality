@@ -121,7 +121,7 @@ html body .af-ae-shell > .sceditor-container.wysiwygMode > iframe { display: blo
 .af-ae-shell .sceditor-button i.fa-solid,
 .af-ae-shell .sceditor-button i.fa-regular,
 .af-ae-shell .sceditor-button i.fa-brands { display: inline-block; width: 16px; text-align: center; font-size: 13px; line-height: 16px; color: currentColor; }
-.af-ae-popup.sceditor-dropdown {
+.af-ae-popup {
   position: fixed !important;
   inset: auto;
   z-index: 2147483000 !important;
@@ -139,6 +139,18 @@ html body .af-ae-shell > .sceditor-container.wysiwygMode > iframe { display: blo
 }
 .af-ae-popup.af-ae-format-help { width: min(420px, calc(100vw - 16px)); }
 .af-ae-popup .af-ae-format-help-body { font: 14px/1.5 sans-serif; }
+.af-ae-popup.af-ae-extra-menu {
+  box-sizing: border-box;
+  padding: 6px !important;
+  width: auto !important;
+  min-width: 238px;
+  max-width: min(320px, calc(100vw - 16px));
+  background: var(--atf-color-surface, var(--atf-surface, #fff)) !important;
+  color: var(--atf-color-text, #333) !important;
+  border: 1px solid rgba(140,170,210,.35) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 5px 24px rgba(0,0,0,.25) !important;
+}
 .af-ae-popup .af-ae-shell-menu {
   position: static;
   display: flex;
@@ -151,14 +163,27 @@ html body .af-ae-shell > .sceditor-container.wysiwygMode > iframe { display: blo
 }
 .af-ae-popup .af-ae-shell-menu[hidden] { display: none; }
 .af-ae-popup .af-ae-shell-menu .sceditor-button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: auto;
-  min-height: 34px;
-  padding: 5px 8px;
-  color: inherit;
-  text-decoration: none;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  box-sizing: border-box !important;
+  float: none !important;
+  width: 100% !important;
+  min-height: 34px !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 5px 8px !important;
+  color: inherit !important;
+  text-decoration: none !important;
+  border: 1px solid transparent !important;
+  border-radius: 5px !important;
+  background: transparent !important;
+}
+.af-ae-popup .af-ae-shell-menu .sceditor-button:hover,
+.af-ae-popup .af-ae-shell-menu .sceditor-button:focus-visible {
+  background: rgba(255,255,255,.06) !important;
+  border-color: rgba(140,170,210,.25) !important;
 }
 .af-ae-popup .af-ae-shell-menu .sceditor-button > div {
   display: flex !important;

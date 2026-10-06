@@ -350,7 +350,10 @@
           restoreContent = function () { marker.replaceWith(node); node.hidden = true; };
         }
         popup = document.createElement('div');
-        popup.className = 'sceditor-dropdown af-ae-popup ' + name;
+        // The compiled extra menu is owned by AdvancedEditor. Giving it the
+        // native SCEditor dropdown class lets lazy-loaded SCEditor CSS restyle
+        // and mutate its visual contract after the first mode switch.
+        popup.className = (name === 'af-ae-extra-menu' ? 'af-ae-popup ' : 'sceditor-dropdown af-ae-popup ') + name;
         popup.id = 'sceditor-' + name;
         popup.setAttribute('data-af-popup-owner', ta.id || ta.name);
         popup.appendChild(node);
@@ -730,8 +733,9 @@
         var menu = wrapper.querySelector('[data-af-menu="' + cmd + '"]');
         if (menu) {
           var opening = menu.hidden;
-          currentEditor(ta).closeDropDown();
-          if (opening) { menu.hidden = false; currentEditor(ta).createDropDown(caller, 'af-ae-extra-menu', menu); }
+          var shellPopup = ta.__afAeAdapter;
+          shellPopup.closeDropDown();
+          if (opening) { menu.hidden = false; shellPopup.createDropDown(caller, 'af-ae-extra-menu', menu); }
         }
         return;
       }
@@ -783,7 +787,7 @@
       });
     });
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['id'] });
-    document.addEventListener('mousedown', function (e) { document.querySelectorAll('.af-ae-shell').forEach(function (wrapper) { if (!wrapper.contains(e.target) && !e.target.closest('.sceditor-dropdown')) { var ta = wrapper.__afAeTextarea; if (ta && ta.__afAeAdapter) ta.__afAeAdapter.closeDropDown(); } }); });
+    document.addEventListener('mousedown', function (e) { document.querySelectorAll('.af-ae-shell').forEach(function (wrapper) { if (!wrapper.contains(e.target) && !e.target.closest('.af-ae-popup')) { var ta = wrapper.__afAeTextarea; if (ta && ta.__afAeAdapter) ta.__afAeAdapter.closeDropDown(); } }); });
     document.addEventListener('af:editor-ready', function(e) {
       var detail = e.detail || {}; if (detail.instance && !detail.instance.__afAeSourceAdapter && detail.textarea.__afAeCountUpdate) detail.instance.bind('valuechanged', detail.textarea.__afAeCountUpdate);
     });

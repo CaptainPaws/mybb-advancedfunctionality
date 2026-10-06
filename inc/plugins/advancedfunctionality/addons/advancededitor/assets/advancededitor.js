@@ -1317,7 +1317,7 @@
       }
 
       out.menus.forEach(function (m) {
-        var a = tb.querySelector('a.sceditor-button-' + m.cmd);
+        var a = tb.querySelector(':scope > .sceditor-group > a.sceditor-button-' + m.cmd);
         if (!a) return;
 
         // чтобы currentColor работал
@@ -1607,7 +1607,7 @@
       Object.keys(customDefs).forEach(function (cmd) {
         if (!cmd || !/^af_/i.test(cmd)) return;
 
-        var a = tb.querySelector('a.sceditor-button-' + cmd);
+        var a = tb.querySelector(':scope > .sceditor-group > a.sceditor-button-' + cmd);
         if (!a) return;
 
         var b = customDefs[cmd] || {};
