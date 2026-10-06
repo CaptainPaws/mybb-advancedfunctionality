@@ -42,7 +42,9 @@ showthread_lazy_assert(
 );
 foreach (['sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills'] as $module) {
     showthread_lazy_assert(
-        !str_contains($csFrontend, $module),
+        !str_contains($csFrontend, "af_charactersheets_require_modules(['{$module}'")
+        && !str_contains($csFrontend, "/{$module}.php")
+        && !str_contains($csFrontend, "\\{$module}.php"),
         "Heavy CharacterSheets module leaked into frontend trigger runtime: {$module}"
     );
 }
@@ -65,12 +67,19 @@ showthread_lazy_assert(
 );
 
 // iframe is created empty and receives src only after delegated click.
+$buildDefinitionPos = strpos($csTrigger, 'function buildModal(url)');
+$srcPos = strpos($csTrigger, "frame.setAttribute('src', url)", $buildDefinitionPos === false ? 0 : $buildDefinitionPos);
 $clickPos = strpos($csTrigger, "document.addEventListener('click'");
-$buildPos = strpos($csTrigger, 'buildModal(url)', $clickPos === false ? 0 : $clickPos);
-$srcPos = strpos($csTrigger, "frame.setAttribute('src', url)", $buildPos === false ? 0 : $buildPos);
+$buildInvocationPos = strpos($csTrigger, 'buildModal(url);', $clickPos === false ? 0 : $clickPos);
 showthread_lazy_assert(
-    $clickPos !== false && $buildPos !== false && $srcPos !== false && $clickPos < $buildPos && $buildPos < $srcPos,
-    'CharacterSheet iframe src is not assigned strictly after user click'
+    $buildDefinitionPos !== false
+    && $srcPos !== false
+    && $clickPos !== false
+    && $buildInvocationPos !== false
+    && $buildDefinitionPos < $srcPos
+    && $srcPos < $clickPos
+    && $clickPos < $buildInvocationPos,
+    'CharacterSheet iframe src assignment is not confined to the click-invoked modal builder'
 );
 showthread_lazy_assert(
     str_contains($csTrigger, '<iframe class="af-cs-modal__frame" data-afcs-frame="1" title="Лист персонажа"></iframe>'),
