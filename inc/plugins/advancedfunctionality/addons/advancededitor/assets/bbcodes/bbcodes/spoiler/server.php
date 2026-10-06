@@ -210,7 +210,7 @@ function af_ae_bbcode_spoiler_parse_end(&$message): void
 
     $patternNested =
         '~(?P<outer_open><blockquote\b[^>]*\bclass="[^"]*\bmycode_quote\b[^"]*"[^>]*>)\s*'
-      . '(?P<cite><cite\b[^>]*>.*?</cite>)\s*'
+      . '(?:(?P<cite><cite\b[^>]*>.*?</cite>)\s*)?'
       . '(?P<inner_open><blockquote\b[^>]*>)(?P<inner>.*?)(?P<inner_close></blockquote>)\s*'
       . '(?P<outer_close></blockquote>)~is';
 
@@ -222,7 +222,7 @@ function af_ae_bbcode_spoiler_parse_end(&$message): void
 
     $patternFlat =
         '~(?P<outer_open><blockquote\b[^>]*\bclass="[^"]*\bmycode_quote\b[^"]*"[^>]*>)\s*'
-      . '(?P<cite><cite\b[^>]*>.*?</cite>)\s*'
+      . '(?:(?P<cite><cite\b[^>]*>.*?</cite>)\s*)?'
       . '(?P<inner>.*?)(?P<outer_close></blockquote>)~is';
 
     $message = preg_replace_callback($patternFlat, function ($m) use ($build) {
