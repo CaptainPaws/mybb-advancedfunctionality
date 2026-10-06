@@ -482,6 +482,9 @@
 
 
   function afAeEnsureFormatHelpEdge(ta) {
+    // The lightweight shell has its own dedicated help button. Do not inject
+    // another one into the hidden native SCEditor toolbar.
+    if (ta && ta.__afAeShell) return;
     var cfg = getFormatHelpConfig();
     if (!cfg.enabled || !ta) return;
 
@@ -2078,6 +2081,7 @@
         // The lightweight shell already owns the ONLY visible toolbar.
         // Native SCEditor buttons would create a nested duplicate toolbar.
         toolbar: ta.__afAeShell ? '' : out.toolbar,
+        toolbarExclude: ta.__afAeShell ? 'source' : '',
 
         // ВАЖНО: WYSIWYG iframe CSS
         style: (P.sceditorContentCss || P.sceditorCss || ''),
