@@ -169,6 +169,11 @@ function af_charactersheets_postbit_preload_current_page(&$post): void
 
 function af_charactersheets_pre_output(&$page): void
 {
+    if (!defined('THIS_SCRIPT') || !in_array(THIS_SCRIPT, ['showthread.php', 'member.php'], true)) {
+        return;
+    }
+
+    af_charactersheets_require_modules(['permissions', 'metadata', 'postbit', 'frontend']);
     af_charactersheets_pre_output_impl($page);
 }
 
