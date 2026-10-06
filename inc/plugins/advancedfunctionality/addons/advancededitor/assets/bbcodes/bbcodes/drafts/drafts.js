@@ -237,25 +237,25 @@
       form._afAeDraftsLast = '';
     }
 
-    // 1) Если пришли после отправки — это сигнал очистки
-    if (consumeJustSubmitted(key)) {
-      form._afAeDraftsLocked = true;
-      deleteNow();
-      setEditorBBCode(ta, '');
-      scheduleHardClear(form, ta);
-    } else {
-      // 2) Восстановить черновик только если поле пустое
-      try {
-        var existing = localStorage.getItem(key);
-        var current = asText(getEditorBBCode(ta)).trim();
-        if (existing && !current) {
-          setEditorBBCode(ta, existing);
-          form._afAeDraftsLast = asText(existing);
-        } else {
-          form._afAeDraftsLast = asText(getEditorBBCode(ta));
-        }
-      } catch (e3) {}
-    }
+    // Retain drafts through refresh, navigation and validation errors. A pending
+    // submit is confirmed only on a fresh, empty editor after navigation to the
+    // thread; an error response with the submitted textarea retains its draft.
+    var submitted = consumeJustSubmitted(key);
+    try {
+      var existing = localStorage.getItem(key);
+      var current = asText(getEditorBBCode(ta)).trim();
+      var landedOnThread = /(?:^|\\/)showthread\\.php$/.test(location.pathname);
+      var validationError = !!document.querySelector('.error, .error_message, #error, .alert--error');
+      if (submitted && landedOnThread && !current && !validationError) {
+        deleteNow();
+        setEditorBBCode(ta, '');
+      } else if (existing && !current) {
+        setEditorBBCode(ta, existing);
+        form._afAeDraftsLast = asText(existing);
+      } else {
+        form._afAeDraftsLast = asText(getEditorBBCode(ta));
+      }
+    } catch (e3) {}
 
     // 3) Автосохранение раз в минуту (как бэкап)
     form._afAeDraftsTimer = window.setInterval(function () {
@@ -305,35 +305,35 @@
       listen(window, 'beforeunload', function () { saveNow(true); }, true);
     } catch (eU) {}
 
-    // 4) Submit: удаляем черновик + ставим флаг для очистки после перезагрузки
+    // Submission can fail due to validation, network, moderation or AJAX.
+    // Do NOT clear the textarea or storage on submit: preserve until success.
     listen(form, 'submit', function () {
-      form._afAeDraftsLocked = true;
-
-      try {
-        if (form._afAeDraftsTimer) {
-          window.clearInterval(form._afAeDraftsTimer);
-          form._afAeDraftsTimer = 0;
-        }
-      } catch (e4) {}
-
-      deleteNow();
+      saveNow(true);
       markJustSubmitted(key);
-
-      scheduleHardClear(form, ta);
     }, true);
 
-    // 5) BFCache: если вернулись назад — и флаг ещё жив, добить очистку
-    try {
-      listen(window, 'pageshow', function () {
-        if (!form || !form._afAeDraftsKey) return;
-        if (consumeJustSubmitted(form._afAeDraftsKey)) {
-          form._afAeDraftsLocked = true;
-          try { localStorage.removeItem(form._afAeDraftsKey); } catch (e9) {}
-          try { hardClearEditor(form, ta); } catch (e10) {}
-        }
-      });
-    } catch (e11) {}
+    // Native AJAX reply success commonly resets the message field without
+    // navigating. Only that actual reset clears an in-flight submission draft.
+    listen(form, 'reset', function () {
+      if (!consumeJustSubmitted(key)) return;
+      window.setTimeout(function () {
+        if (asText(getEditorBBCode(ta)).trim() === '') deleteNow();
+      }, 0);
+    });
   }
+
+  // Drafts are a baseline safety feature, not an opt-in toolbar dialog.
+  function bootDrafts() {
+    findFormsWithMessageTextarea().forEach(function (form) {
+      installOnForm(form, findMessageTextarea(form));
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootDrafts);
+  else bootDrafts();
+  document.addEventListener('af:editor-ready', function (event) {
+    var ta = event.detail && event.detail.textarea;
+    if (ta && ta.name === 'message' && ta.form) installOnForm(ta.form, ta);
+  });
 
   window.af_ae_drafts_exec = function (editor, definition, caller) {
     var owner = caller && caller.closest('[data-af-editor-shell]');
