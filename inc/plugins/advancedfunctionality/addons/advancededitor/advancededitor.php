@@ -800,6 +800,7 @@ function af_advancededitor_resolve_sceditor_theme_css_url(string $bburl): string
     $bburl = rtrim($bburl, '/');
 
     $candidates = [
+        '/jscripts/sceditor/themes/mybb.css',
         '/jscripts/sceditor/themes/default.min.css',
         '/jscripts/sceditor/themes/default.css',
         '/jscripts/sceditor/themes/modern.min.css',
@@ -1001,18 +1002,34 @@ function af_advancededitor_pre_output(string &$page = ''): void
         // Critical standalone fallback for deployments with missing/stale shell CSS.
         // A theme or CDN must never collapse the editor into a vertical list.
         $injectHead .= '<style id="af-ae-shell-critical">'
-            . '.af-ae-shell.sceditor-container{display:block;box-sizing:border-box;width:100%;max-width:100%}'
-            . '.af-ae-shell.sceditor-container>.sceditor-toolbar{display:flex!important;flex-flow:row wrap!important;align-items:center!important;justify-content:flex-start!important;height:auto!important;width:auto!important;min-height:34px;padding:4px}'
-            . '.af-ae-shell.sceditor-container>.sceditor-toolbar>.sceditor-group{display:inline-flex!important;flex-flow:row nowrap!important;align-items:center!important;width:auto!important;height:auto!important;float:none!important}'
-            . '.af-ae-shell.sceditor-container .sceditor-group>.sceditor-button{display:inline-flex!important;align-items:center;justify-content:center;width:28px!important;height:28px!important;box-sizing:border-box!important;float:none!important;padding:3px!important}'
-            . '.af-ae-shell.sceditor-container .sceditor-button>div{display:flex!important;align-items:center;justify-content:center;width:16px!important;height:16px!important;margin:0!important}'
-            . '.af-ae-shell.sceditor-container>textarea:not(.sceditor-textarea):not([data-af-ae-wys-active]){display:block!important;width:100%!important;max-width:100%!important}'
-            . '.af-ae-shell.sceditor-container .af-ae-shell-menu[hidden]{display:none!important}'
+            . '.af-ae-shell{display:block;box-sizing:border-box;width:100%;max-width:100%}'
+            . '.af-ae-shell>.sceditor-toolbar{display:flex!important;flex-flow:row wrap!important;align-items:center!important;justify-content:flex-start!important;height:auto!important;width:auto!important;min-height:34px;padding:4px}'
+            . '.af-ae-shell>.sceditor-toolbar>.sceditor-group{display:inline-flex!important;flex-flow:row nowrap!important;align-items:center!important;width:auto!important;height:auto!important;float:none!important}'
+            . '.af-ae-shell .sceditor-group>.sceditor-button{display:inline-flex!important;align-items:center;justify-content:center;width:28px!important;height:28px!important;box-sizing:border-box!important;float:none!important;padding:3px!important}'
+            . '.af-ae-shell .sceditor-button>div{display:flex!important;align-items:center;justify-content:center;width:16px!important;height:16px!important;margin:0!important}'
+            . '.af-ae-shell>textarea:not(.sceditor-textarea):not([data-af-ae-wys-active]){display:block!important;width:100%!important;max-width:100%!important}'
+            . '.af-ae-shell .af-ae-shell-menu[hidden]{display:none!important}'
             . '</style>' . "\n";
         if (isset($themeFeatureMap['shell_override'])) $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_url($themeFeatureMap['shell_override'])) . '" />';
     }
 
 
+
+    // Small content observer handles the first spoiler/table inserted by AJAX,
+    // even when no such markup existed in the initial response.
+    $contentCapabilities = [];
+    foreach ($packs['packs'] as $pack) {
+        if (empty($pack['view_markers'])) continue;
+        $contentCapabilities[] = ['markers' => $pack['view_markers'],
+            'js' => array_map(static fn($url) => af_advancededitor_add_ver($url, $buildVer), $pack['view_assets']['js']),
+            'css' => array_values(array_filter(array_map(static function ($url) use ($bburl, $buildVer) {
+                $tag = af_advancededitor_build_css_tag_for_asset($url, $bburl, $buildVer);
+                return preg_match('~href="([^"]+)"~', $tag, $match)
+                    ? html_entity_decode($match[1], ENT_QUOTES, 'UTF-8') : '';
+            }, $pack['view_assets']['css'])))];
+    }
+    $injectHead .= '<script>window.afAeContentCapabilities=' . json_encode($contentCapabilities, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';</script>';
+    $injectHead .= '<script defer src="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor_content.js', $buildVer)) . '"></script>';
 
     // CSS паков (table/float/copycode/…)
     $packCssAssets = $packs['view_css'];
@@ -1716,6 +1733,9 @@ function af_ae_bbcode_dispatch_parse_message_end(&$message): void
         return;
     }
 
+    require_once __DIR__ . '/quote_metadata.php';
+    $message = af_advancededitor_quote_html_metadata($message);
+
     // быстрый skip
     if (strpos($message, '[') === false && stripos($message, '<blockquote') === false) {
         return;
@@ -1816,6 +1836,9 @@ function af_ae_bbcode_dispatch_parse_message_start(&$message): void
     if (!is_string($message) || $message === '') {
         return;
     }
+
+    require_once __DIR__ . '/quote_metadata.php';
+    $message = af_advancededitor_quote_source_metadata($message);
 
     // быстрый skip
     if (strpos($message, '[') === false) {
@@ -2463,6 +2486,7 @@ function af_advancededitor_resolve_sceditor_css_url(string $bburl): string
     $bburl = rtrim($bburl, '/');
 
     $candidates = [
+        '/jscripts/sceditor/themes/mybb.css',
         '/jscripts/sceditor/themes/default.min.css',
         '/jscripts/sceditor/themes/default.css',
         '/jscripts/sceditor/themes/modern.min.css',

@@ -51,87 +51,6 @@
     return '';
   }
 
-  function normalizeLegacyAlignBbcode(value) {
-    value = asText(value);
-
-    value = value.replace(/\[left\]([\s\S]*?)\[\/left\]/gi, '[align=left]$1[/align]');
-    value = value.replace(/\[center\]([\s\S]*?)\[\/center\]/gi, '[align=center]$1[/align]');
-    value = value.replace(/\[right\]([\s\S]*?)\[\/right\]/gi, '[align=right]$1[/align]');
-    value = value.replace(/\[justify\]([\s\S]*?)\[\/justify\]/gi, '[align=justify]$1[/align]');
-
-    value = value.replace(/\[(\/?)left\]/gi, '[$1align=left]').replace(/\[\/align=left\]/gi, '[/align]');
-    value = value.replace(/\[(\/?)center\]/gi, '[$1align=center]').replace(/\[\/align=center\]/gi, '[/align]');
-    value = value.replace(/\[(\/?)right\]/gi, '[$1align=right]').replace(/\[\/align=right\]/gi, '[/align]');
-    value = value.replace(/\[(\/?)justify\]/gi, '[$1align=justify]').replace(/\[\/align=justify\]/gi, '[/align]');
-
-    return value;
-  }
-
-  function collapseSameAlignBbcode(value) {
-    value = normalizeLegacyAlignBbcode(asText(value));
-
-    var guard = 0;
-    var changed = true;
-
-    while (changed && guard < 30) {
-      guard += 1;
-      changed = false;
-
-      value = value.replace(
-        /\[align=([^\]]+)\]\s*\[align=([^\]]+)\]([\s\S]*?)\[\/align\]\s*\[\/align\]/gi,
-        function (full, a1, a2, inner) {
-          var outer = normalizeAlign(a1);
-          var innerAlign = normalizeAlign(a2);
-
-          if (outer && outer === innerAlign) {
-            changed = true;
-            return '[align=' + outer + ']' + inner + '[/align]';
-          }
-
-          return full;
-        }
-      );
-    }
-
-    return value;
-  }
-
-  function normalizeAllAlignBbcode(value) {
-    return collapseSameAlignBbcode(normalizeLegacyAlignBbcode(value));
-  }
-
-  function registerNormalizer() {
-    if (window.__afAeAlignNormalizerRegistered) return;
-    window.__afAeAlignNormalizerRegistered = true;
-    window.afAeBbcodeNormalizers.push(normalizeAllAlignBbcode);
-  }
-
-  function unwrapSameOuterAlignBbcode(content, expectedAlign) {
-    content = normalizeAllAlignBbcode(content);
-    expectedAlign = normalizeAlign(expectedAlign);
-
-    if (!content || !expectedAlign) {
-      return content;
-    }
-
-    var guard = 0;
-    var pattern = /^\s*\[align\s*=\s*([^\]]+)\]([\s\S]*?)\[\/align\]\s*$/i;
-
-    while (guard < 20) {
-      guard += 1;
-
-      var match = content.match(pattern);
-      if (!match) break;
-
-      var foundAlign = normalizeAlign(match[1]);
-      if (foundAlign !== expectedAlign) break;
-
-      content = asText(match[2]);
-    }
-
-    return content;
-  }
-
   function resolveEditor(ctx) {
     if (!ctx) return null;
     if (typeof ctx.insert === 'function' || typeof ctx.insertText === 'function') return ctx;
@@ -579,18 +498,6 @@
     return insertAlignSource(editorOrTextarea, align);
   }
 
-  function normalizeFormatContent(content, align) {
-    var cleaned = stripInvisible(content);
-    cleaned = normalizeAllAlignBbcode(cleaned);
-    cleaned = unwrapSameOuterAlignBbcode(cleaned, align);
-
-    if (/^(?:\s|(?:\[br\]|\[br\/\]|<br\s*\/?>|&nbsp;))+$/i.test(cleaned)) {
-      return '';
-    }
-
-    return cleaned;
-  }
-
   function makeAlignFormat(defaultAlign) {
     return {
       isInline: false,
@@ -606,7 +513,7 @@
         );
 
         var align = normalizeAlign(raw);
-        var cleanedContent = normalizeFormatContent(content, align);
+        var cleanedContent = stripInvisible(content);
 
         if (!align) {
           return cleanedContent;
@@ -616,7 +523,7 @@
           return '';
         }
 
-        return '[align=' + align + ']' + cleanedContent + '[/align]';
+        return '[' + (defaultAlign || ('align=' + align)) + ']' + cleanedContent + '[/' + (defaultAlign || 'align') + ']';
       },
       html: function (token, attrs, content) {
         var align = normalizeAlign(defaultAlign || (attrs && (attrs.defaultattr || attrs.align)) || '');
@@ -624,7 +531,7 @@
           return content;
         }
 
-        return '<div class="af-bb-align" data-af-align="' + escHtml(align) + '" style="text-align:' + escHtml(align) + ';">' + asText(content) + '</div>';
+        return '<div class="af-bb-align" data-af-align-tag="' + (defaultAlign || 'align') + '" data-af-align="' + escHtml(align) + '" style="text-align:' + escHtml(align) + ';">' + asText(content) + '</div>';
       }
     };
   }
@@ -652,9 +559,7 @@
         h5: { 'data-af-align': null },
         h6: { 'data-af-align': null }
       },
-      styles: {
-        'text-align': 'defaultattr'
-      },
+      styles: null,
       isInline: false,
       allowsEmpty: true,
       breakBefore: true,
@@ -668,7 +573,7 @@
         );
 
         var align = normalizeAlign(raw);
-        var cleanedContent = normalizeFormatContent(content, align);
+        var cleanedContent = stripInvisible(content);
 
         if (!align) {
           return cleanedContent;
@@ -678,7 +583,8 @@
           return '';
         }
 
-        return '[align=' + align + ']' + cleanedContent + '[/align]';
+        var tag = element.getAttribute('data-af-align-tag') || 'align';
+        return '[' + (tag === 'align' ? 'align=' + align : tag) + ']' + cleanedContent + '[/' + tag + ']';
       },
       html: function (token, attrs, content) {
         attrs = attrs || {};
@@ -693,19 +599,19 @@
     });
 
     sc.formats.bbcode.set('left', Object.assign(makeAlignFormat('left'), {
-      styles: { 'text-align': ['left'] }
+      tags: null, styles: null
     }));
 
     sc.formats.bbcode.set('center', Object.assign(makeAlignFormat('center'), {
-      styles: { 'text-align': ['center'] }
+      tags: null, styles: null
     }));
 
     sc.formats.bbcode.set('right', Object.assign(makeAlignFormat('right'), {
-      styles: { 'text-align': ['right'] }
+      tags: null, styles: null
     }));
 
     sc.formats.bbcode.set('justify', Object.assign(makeAlignFormat('justify'), {
-      styles: { 'text-align': ['justify'] }
+      tags: null, styles: null
     }));
 
     return true;
@@ -815,7 +721,6 @@
   }
 
   function boot() {
-    registerNormalizer();
     registerBuiltinHandlers();
 
   function registerWysiwyg() { registerBbcodeFormat(); registerCommands(); enhanceAllEditors(); }

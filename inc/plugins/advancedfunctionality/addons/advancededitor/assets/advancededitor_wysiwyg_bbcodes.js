@@ -11,10 +11,12 @@ var PARTIAL_CACHE = null;
 
 /* ------------------------------------------------ */
 function hasSceditor(){
-  return !!(window.jQuery && jQuery.sceditor && jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode);
+  return !!(getBb(null));
 }
 
 function getBb(inst){
+  var sc = window.sceditor || (window.jQuery && jQuery.sceditor);
+  if (sc && sc.formats && sc.formats.bbcode) return sc.formats.bbcode;
   try{
     var p = inst && typeof inst.getPlugin === 'function' ? inst.getPlugin('bbcode') : null;
     if (p && p.bbcode && typeof p.bbcode.set === 'function') return p.bbcode;
@@ -259,7 +261,7 @@ function buildAttrString(attrs){
 
     if(k==='defaultattr'){
 
-      if(v!=='') parts.push('='+v);
+      parts.unshift('="'+v.replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"');
 
     }else{
 
@@ -282,6 +284,7 @@ function createUniversalDef(tag, hasClose){
 
   return{
 
+    tags: (function () { var tags = {}; tags[inline ? 'span' : 'div'] = { 'data-af-bb': [tag] }; return tags; })(),
     isInline:inline,
 
     html:function(token,attrs,content){
@@ -348,6 +351,7 @@ function createPassthroughDef(tag,hasClose){
 
   return{
 
+    tags: { span: { 'data-af-bb': [tag] } },
     isInline:true,
 
     html:function(token,attrs,content){
@@ -358,7 +362,7 @@ function createPassthroughDef(tag,hasClose){
 
       var close=hasClose?'[/'+tag+']':'';
 
-      return escHtml(open+(content||'')+close);
+      return '<span data-af-bb="'+escHtml(tag)+'" data-af-bb-attrs="'+escHtml(JSON.stringify(a))+'">'+escHtml(open)+(content||'')+escHtml(close)+'</span>';
 
     },
 
@@ -421,6 +425,165 @@ function hasCustomWysiwygRenderer(tag){
 
 /* ------------------------------------------------ */
 /* REGISTER */
+// SCEditor 3 uses formats.bbcode; older releases expose plugins.bbcode.
+function installMybbQuote(bb) {
+  bb.set('quote', {
+    tags: { blockquote: null }, isInline: false, quoteType: 1,
+    html: function (token, attrs, content) {
+      var a = collectAttrs(attrs);
+      // Empty defaultattr is legal for a MyBB post quote. Undefined is not.
+      if (attrs && Object.prototype.hasOwnProperty.call(attrs, 'defaultattr') && attrs.defaultattr == null) a.defaultattr = '';
+      var author = a.defaultattr || '';
+      var post = /^\d+$/.test(a.pid || '') && document.getElementById('post_' + a.pid);
+      var link = post && post.querySelector('.atf-post__author a[href*="uid="], .atf-post__username a, .author_information a[href*="uid="], .post_author a[href*="uid="], a[href*="member.php"][href*="uid="]');
+      if (!author && link) author = link.textContent.trim();
+      // The displayed name is separate from the stored BBCode attributes.
+      return '<blockquote class="mycode_quote" data-af-quote-attrs="' + escHtml(JSON.stringify(a)) + '"' +
+        (a.pid ? ' data-pid="' + escHtml(a.pid) + '"' : '') + ' data-author="' + escHtml(author) + '">' +
+        '<cite class="sceditor-ignore" contenteditable="false">' + escHtml(author || 'Цитата') + '</cite>' + (content || '') + '</blockquote>';
+    },
+    format: function (element, content) {
+      var attrs = {}, raw = element.getAttribute('data-af-quote-attrs');
+      if (raw) { try { attrs = collectAttrs(JSON.parse(raw)); } catch (e) {} }
+      else {
+        var author = element.getAttribute('data-author');
+        var cite = element.querySelector(':scope > cite');
+        if (author || cite) attrs.defaultattr = author || cite.textContent;
+        var pid = element.getAttribute('data-pid');
+        if (pid) attrs.pid = pid;
+      }
+      // Native quotes inserted by execCommand may have an editable cite.
+      // Exclude the header structurally, without re-running alignment on the
+      // entire blockquote (the native formatter did exactly that).
+      var header = element.querySelector(':scope > cite:not(.sceditor-ignore)');
+      if (header && this.elementToBbcode) {
+        header.classList.add('sceditor-ignore');
+        var clone = element.cloneNode(true);
+        clone.querySelector(':scope > cite').remove();
+        content = this.elementToBbcode(clone);
+      }
+      return '[quote' + buildAttrString(attrs) + ']' + (content || '') + '[/quote]';
+    }
+  });
+}
+
+// Patch the token boundary inside the addon, never MyBB's library. In 3.2.1
+// parseAttrs uses `unquote(empty) || fallback`, producing undefined for ="".
+// Its serializer then treats that defaultattr as a named attribute. Serialize
+// the parsed structure with presence checks, retaining legitimate empty author.
+function installTokenSerializer() {
+  var sc = window.sceditor || (window.jQuery && jQuery.sceditor);
+  if (!sc || !sc.BBCodeParser || sc.BBCodeParser.__afQuoteSafe) return;
+  var NativeParser = sc.BBCodeParser;
+  function Parser(options) {
+    var parser = new NativeParser(options), tokenize = parser.tokenize;
+    parser.tokenize = function (value) {
+      var tokens = tokenize.call(this, value);
+      tokens.forEach(function (token) {
+        var attrs = token.attrs;
+        if (!attrs) return;
+        Object.keys(attrs).forEach(function (key) {
+          if (attrs[key] == null) {
+            if (key === 'defaultattr' && token.name === 'quote' && /^\[quote\s*=\s*(["'])\1(?:\s|\])/i.test(token.val)) attrs[key] = '';
+            else delete attrs[key];
+          }
+        });
+      });
+      return tokens;
+    };
+    parser.toBBCode = function (value, preserveNewlines) {
+      var opts = parser.opts;
+      function attr(value, rule, name) {
+        value = String(value);
+        if (typeof rule === 'function') return rule(value, name);
+        if (rule === 2 || (rule === 3 && !/\s|=/.test(value))) return value;
+        return '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+      }
+      function render(tokens) {
+        return tokens.map(function (token) {
+          var def = sc.formats.bbcode.get(token.name);
+          if (token.type !== 'open') return token.val;
+          if (!def) return token.val + render(token.children || []) + (token.closing ? token.closing.val : '');
+          var block = def.isInline === false, self = def.isSelfClosing;
+          var rule = def.quoteType || opts.quoteType || 3;
+          var out = ((block && opts.breakBeforeBlock && def.breakBefore !== false) || def.breakBefore) ? '\n' : '';
+          out += '[' + token.name;
+          var attrs = collectAttrs(token.attrs);
+          if (Object.prototype.hasOwnProperty.call(attrs, 'defaultattr')) {
+            out += '=' + attr(attrs.defaultattr, rule, 'defaultattr');
+            delete attrs.defaultattr;
+          }
+          Object.keys(attrs).forEach(function (key) { out += ' ' + key + '=' + attr(attrs[key], rule, key); });
+          out += ']';
+          if ((block && !self && opts.breakStartBlock && def.breakStart !== false) || def.breakStart) out += '\n';
+          out += render(token.children || []);
+          if (!self && !def.excludeClosing) {
+            if ((block && opts.breakEndBlock && def.breakEnd !== false) || def.breakEnd) out += '\n';
+            out += '[/' + token.name + ']';
+          }
+          if ((block && opts.breakAfterBlock && def.breakAfter !== false) || def.breakAfter) out += '\n';
+          if (self && token.closing) out += token.closing.val;
+          return out;
+        }).join('');
+      }
+      return render(parser.parse(value, preserveNewlines));
+    };
+    return parser;
+  }
+  Object.keys(NativeParser).forEach(function (key) { Parser[key] = NativeParser[key]; });
+  Parser.prototype = NativeParser.prototype;
+  Parser.__afQuoteSafe = true;
+  sc.BBCodeParser = Parser;
+  // The native format closes over NativeParser. Install its DOM converter
+  // with the safe token serializer rather than cleaning its serialized text.
+  var NativeFormat = sc.formats.bbcode;
+  function Format() {
+    var plugin = new NativeFormat(), init = plugin.init;
+    plugin.init = function () {
+      init.apply(this, arguments);
+      function toSource(fragment, html, doc, parent) {
+        doc = doc || document;
+        var outer = doc.createElement('div'), root = doc.createElement('div');
+        root.innerHTML = html;
+        outer.style.visibility = 'hidden'; outer.appendChild(root); doc.body.appendChild(outer);
+        if (fragment) { outer.prepend(doc.createTextNode('#')); outer.appendChild(doc.createTextNode('#')); }
+        if (parent) root.style.whiteSpace = sc.dom.css(parent, 'whiteSpace');
+        root.querySelectorAll('.sceditor-ignore').forEach(function (node) { node.remove(); });
+        sc.dom.removeWhiteSpace(outer);
+        var raw = plugin.elementToBbcode(root, !!(parent && sc.dom.closest(parent, 'code')));
+        outer.remove();
+        var value = new sc.BBCodeParser(plugin.opts.parserOptions).toBBCode(raw, true);
+        return plugin.opts.bbcodeTrim ? value.trim() : value;
+      }
+      plugin.toSource = toSource.bind(null, false);
+      plugin.fragmentToSource = toSource.bind(null, true);
+      var editor = this;
+      editor.toBBCode = plugin.toSource;
+      editor.__afAeRefreshBbcodes = function () {
+        var fresh = new NativeFormat();
+        fresh.init.call(editor);
+        plugin.opts = fresh.opts;
+        plugin.elementToBbcode = fresh.elementToBbcode;
+        plugin.toHtml = fresh.toHtml;
+        plugin.fragmentToHtml = fresh.fragmentToHtml;
+        editor.toBBCode = plugin.toSource;
+      };
+    };
+    return plugin;
+  }
+  Object.keys(NativeFormat).forEach(function (key) { Format[key] = NativeFormat[key]; });
+  Format.prototype = NativeFormat.prototype;
+  sc.formats.bbcode = Format;
+  document.addEventListener('af:capability-ready', function () {
+    // Native SCEditor caches DOM/BBCode mappings during format.init. Rebuild
+    // that cache when a lazy pack registers converters, keeping the instance.
+    document.querySelectorAll('textarea').forEach(function (ta) {
+      var editor = ta._sceditor;
+      if (editor && editor.__afAeRefreshBbcodes) editor.__afAeRefreshBbcodes();
+    });
+  });
+}
+
 
 function register(inst){
 
@@ -432,13 +595,16 @@ function register(inst){
 
   bb.__afAeUniversalWysiwygPatched=true;
 
+  installTokenSerializer();
+  installMybbQuote(bb);
   var tags=collectTagDefs();
 
   var partial=isPartialMode();
 
   Object.keys(tags).forEach(function(tag){
     if(isStructuralTableTag(tag)) return;
-    if(tag === 'align') return;
+    // Never overwrite native semantic formats or dedicated pack converters.
+    if(bb.get && bb.get(tag)) return;
     if(hasCustomWysiwygRenderer(tag)) return;
 
     var def=tags[tag];
@@ -477,23 +643,6 @@ function register(inst){
 
 /* ------------------------------------------------ */
 /* FORCE RENDER */
-
-function forceRender(inst){
-
-  try{
-
-    if(!inst) return;
-
-    if(typeof inst.sourceMode!=='function') return;
-
-    var src=inst.sourceMode();
-
-    inst.sourceMode(!src);
-    inst.sourceMode(src);
-
-  }catch(e){}
-
-}
 
 /* ------------------------------------------------ */
 /* CSS */
@@ -536,7 +685,7 @@ window.afAeWysiwygBbcodes = {
 
     if(inst){
       injectCss(inst);
-      forceRender(inst);
+      // Definitions are registered before creation; a mode switch is not init.
     }
 
   },
@@ -547,7 +696,7 @@ window.afAeWysiwygBbcodes = {
 
     injectCss(inst);
 
-    forceRender(inst);
+    // No destroy/create or synthetic mode transitions.
 
   }
 

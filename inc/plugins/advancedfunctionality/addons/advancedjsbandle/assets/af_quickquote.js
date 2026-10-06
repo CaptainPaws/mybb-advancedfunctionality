@@ -132,6 +132,7 @@
   function extractUsername(postEl) {
     if (!postEl) return '';
     var cand =
+      postEl.querySelector('.atf-post__name a[href*="uid="]') ||
       postEl.querySelector('.author_information .largetext a') ||
       postEl.querySelector('.post_author a') ||
       postEl.querySelector('.author_information a') ||
@@ -164,6 +165,7 @@
   function extractPostText(postEl) {
     if (!postEl) return '';
     var body =
+      postEl.querySelector('.atf-post__message-body') ||
       postEl.querySelector('.post_body') ||
       postEl.querySelector('.post_content') ||
       postEl.querySelector('.post_message');

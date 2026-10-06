@@ -1,6 +1,6 @@
 /* Visual shell; feature dialogs and SCEditor iframe styles load on use. */
 #quickreply_e tr td.trow1:first-child { display: none; }
-.af-ae-shell.sceditor-container { position: relative; box-sizing: border-box; width: 100%; border: 1px solid rgba(0,0,0,.18); border-radius: 12px; overflow: visible; background: var(--atf-surface, #fff); }
+.af-ae-shell { position: relative; box-sizing: border-box; width: 100%; border: 1px solid rgba(0,0,0,.18); border-radius: 12px; overflow: visible; background: var(--atf-surface, #fff); }
 .af-ae-shell > .sceditor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0; padding: 3px 5px; background: var(--atf-surface-subtle, #f7f7f7); border-bottom: 1px solid rgba(0,0,0,.08); border-radius: 12px 12px 0 0; }
 .af-ae-shell .sceditor-group { position: relative; display: inline-flex; align-items: center; margin: 1px 5px 1px 0; padding: 0; border: 1px solid rgba(0,0,0,.12); border-radius: 3px; background: var(--atf-surface-subtle, #ddd); }
 .af-ae-shell .sceditor-button { display: inline-flex; align-items: center; justify-content: center; box-sizing: content-box; width: 16px; height: 20px; padding: 3px 5px; margin: 0; color: inherit; cursor: pointer; text-decoration: none; border: 1px solid transparent; border-radius: 3px; }
@@ -9,19 +9,13 @@
 .af-ae-shell .sceditor-button img { width: 16px; height: 16px; max-width: none; }
 .af-ae-shell .sceditor-button:hover, .af-ae-shell .sceditor-button:focus-visible { background: rgba(0,0,0,.08); border-color: rgba(0,0,0,.15); }
 .af-ae-shell .sceditor-button[aria-busy="true"] { opacity: .6; }
-.af-ae-shell.sceditor-container > textarea { display: block; box-sizing: border-box; width: 100%; min-height: var(--af-ae-surface-height, 180px); height: var(--af-ae-surface-height, 180px); padding: 10px; margin: 0; border: 0; border-radius: 0 0 12px 12px; background: transparent; color: inherit; resize: vertical; font-family: var(--af-ae-surface-font-family, Verdana, Arial, Helvetica, sans-serif); font-size: var(--af-ae-surface-font-size, 14px); font-weight: var(--af-ae-surface-font-weight, 400); line-height: var(--af-ae-surface-line-height, 1.25); letter-spacing: var(--af-ae-surface-letter-spacing, normal); }
+.af-ae-shell > textarea { display: block; box-sizing: border-box; width: 100%; min-height: var(--af-ae-surface-height, 180px); height: var(--af-ae-surface-height, 180px); padding: 10px; margin: 0; border: 0; border-radius: 0 0 12px 12px; background: transparent; color: inherit; resize: vertical; font-family: var(--af-ae-surface-font-family, Verdana, Arial, Helvetica, sans-serif); font-size: var(--af-ae-surface-font-size, 14px); font-weight: var(--af-ae-surface-font-weight, 400); line-height: var(--af-ae-surface-line-height, 1.25); letter-spacing: var(--af-ae-surface-letter-spacing, normal); }
 .af-ae-shell > .sceditor-container { border: 0; margin: 0; border-radius: 0 0 12px 12px; }
-/* The native SCEditor widget lives inside our shell. Only the outer shell
-   toolbar is visible, even when the SCEditor library changes its wrapper. */
-.af-ae-shell .sceditor-container .sceditor-toolbar { display: none !important; }
-.af-ae-shell > .sceditor-container > .sceditor-toolbar { display: none !important; }
 .af-ae-shell-menu { position: absolute; top: 100%; left: 0; z-index: 2147483000; min-width: 220px; padding: 6px; border-radius: 10px; background: var(--atf-surface, #fff); box-shadow: 0 5px 20px rgba(0,0,0,.2); }
 .af-ae-shell-menu[hidden] { display: none; }
 .af-ae-shell-menu .sceditor-button { display: flex; width: auto; justify-content: flex-start; }
 .af-ae-shell-menu-label { margin-left: 8px; font-size: 13px; white-space: nowrap; }
 .af-ae-shell-error { position: absolute; left: 4px; bottom: 4px; z-index: 10; max-width: calc(100% - 8px); padding: 6px; border-radius: 6px; background: var(--atf-surface, #fff); box-shadow: 0 1px 8px rgba(0,0,0,.18); font-size: 12px; }
-.af-ae-shell-maximized { position: fixed; inset: 12px; z-index: 2147482000; width: auto; }
-.af-ae-shell-maximized > textarea { height: calc(100% - 80px); }
 .sceditor-dropdown { max-width: calc(100vw - 16px); padding: 6px; border-radius: 10px; background: var(--atf-surface, #fff); box-shadow: 0 4px 20px rgba(0,0,0,.2); }
 .af-ccp-wrap {
   margin: 10px 0 10px 0;
@@ -51,185 +45,125 @@
 /* Standalone shell: MyBB's original SCEditor stylesheet is deliberately lazy.
    Keep the toolbar usable with or without Adaptive Theme Framework and prevent
    legacy theme rules from stacking buttons into a vertical column. */
-html body .af-ae-shell.sceditor-container { display: block; width: 100%; max-width: 100%; }
-html body .af-ae-shell.sceditor-container > .sceditor-toolbar {
+html body .af-ae-shell { display: block; width: 100%; max-width: 100%; }
+html body .af-ae-shell > .sceditor-toolbar {
   display: flex !important; flex-flow: row wrap !important;
   align-items: center !important; justify-content: flex-start !important;
   width: auto !important; height: auto !important; min-height: 34px;
   visibility: visible !important; float: none !important;
 }
-html body .af-ae-shell.sceditor-container > .sceditor-toolbar > .sceditor-group {
+html body .af-ae-shell > .sceditor-toolbar > .sceditor-group {
   display: inline-flex !important; flex-flow: row nowrap !important;
   align-items: center !important; width: auto !important;
   height: auto !important; float: none !important; position: relative;
 }
-html body .af-ae-shell.sceditor-container .sceditor-group > .sceditor-button {
+html body .af-ae-shell .sceditor-group > .sceditor-button {
   display: inline-flex !important; float: none !important;
   width: 28px !important; height: 28px !important;
   align-items: center; justify-content: center;
   box-sizing: border-box !important; padding: 3px !important;
 }
-html body .af-ae-shell.sceditor-container .sceditor-button > div {
+html body .af-ae-shell .sceditor-button > div {
   display: flex !important; width: 16px !important; height: 16px !important;
   align-items: center; justify-content: center; margin: 0 !important;
 }
-html body .af-ae-shell.sceditor-container > textarea {
+html body .af-ae-shell > textarea {
   display: block !important; width: 100% !important; max-width: 100% !important;
 }
 
 /* SCEditor hides the original textarea after activation. The shell must not
    force it visible: the plugin creates its own source/WYSIWYG surface. */
-html body .af-ae-shell.sceditor-container > textarea.sceditor-textarea,
-html body .af-ae-shell.sceditor-container > textarea[data-af-ae-wys-active="1"] {
+html body .af-ae-shell > textarea[data-af-ae-wys-active="1"] {
   display: none !important;
 }
 
-/* One editor surface: SCEditor is an implementation, not a second card. */
-html body .af-ae-shell[data-af-editor-shell="1"] {
-  isolation: isolate;
-  overflow: visible !important;
-}
+/* The shell is never a native SCEditor container. Its surface is one native
+   widget after lazy activation; SCEditor owns mode visibility. */
 html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container {
-  position: relative;
-  display: block !important;
-  box-sizing: border-box !important;
+  box-sizing: border-box;
   width: 100% !important;
-  max-width: 100% !important;
-  height: auto !important;
-  min-height: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border: 0 !important;
-  border-radius: 0 0 10px 10px !important;
-  box-shadow: none !important;
-  background: transparent !important;
-  overflow: hidden !important;
-}
-html body .af-ae-shell[data-af-editor-shell="1"] .sceditor-container .sceditor-toolbar,
-html body .af-ae-shell[data-af-editor-shell="1"] .af-ae-help-edge,
-html body .af-ae-shell[data-af-editor-shell="1"] .af-ae-toolbar-row > .af-ae-help-edge {
-  display: none !important;
-}
-html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container > :is(iframe.sceditor-wysiwyg, .sceditor-wysiwyg, textarea) {
-  box-sizing: border-box !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  min-height: var(--af-ae-surface-height, 180px) !important;
-  height: var(--af-ae-surface-height, 180px) !important;
-  margin: 0 !important;
-  padding: 10px !important;
-  border: 0 !important;
-  border-radius: 0 0 10px 10px !important;
-  background: var(--atf-color-surface, var(--atf-surface, #1b2433)) !important;
-  color: var(--atf-color-text, inherit) !important;
-  font-family: var(--af-ae-surface-font-family, Verdana, Arial, Helvetica, sans-serif) !important;
-  font-size: var(--af-ae-surface-font-size, 14px) !important;
-  font-weight: var(--af-ae-surface-font-weight, 400) !important;
-  line-height: var(--af-ae-surface-line-height, 1.25) !important;
-  letter-spacing: var(--af-ae-surface-letter-spacing, normal) !important;
-  box-shadow: none !important;
-  resize: vertical;
-}
-html body .af-ae-shell[data-af-editor-shell="1"] .sceditor-container > iframe.sceditor-wysiwyg {
-  padding: 0 !important;
-  border: 0 !important;
-}
-/* SCEditor may append grip/status chrome under the active surface. In the AF
-   shell that chrome is redundant and must not reserve extra height. */
-html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container > *:not(.sceditor-toolbar):not(textarea):not(iframe):not(.sceditor-wysiwyg) {
-  display: none !important;
-}
-/* Exactly one internal editing surface is visible after lazy activation.
-   Explicit state beats legacy MyBB/theme rules that may force display:block.
-   Do not affect editors that are not owned by the AdvancedEditor shell. */
-html body .af-ae-shell[data-af-editor-shell="1"][data-af-ae-active-surface="wysiwyg"] > .sceditor-container > textarea,
-html body .af-ae-shell[data-af-editor-shell="1"][data-af-ae-active-surface="source"] > .sceditor-container > :is(iframe.sceditor-wysiwyg, .sceditor-wysiwyg) {
-  display: none !important;
-}
-html body .af-ae-shell[data-af-editor-shell="1"][data-af-ae-active-surface="wysiwyg"] > .sceditor-container > :is(iframe.sceditor-wysiwyg, .sceditor-wysiwyg),
-html body .af-ae-shell[data-af-editor-shell="1"][data-af-ae-active-surface="source"] > .sceditor-container > textarea {
-  display: block !important;
-}
-/* SCEditor's resize/status chrome belongs to its standalone skin. Inside the
-   AF shell it creates a second visual field below the active surface. */
-html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container > :is(.sceditor-grip, .sceditor-resize-cover, .sceditor-statusbar) {
-  display: none !important;
-}
-/* The original textarea is the serialization source, never a visible layer. */
-html body .af-ae-shell[data-af-editor-shell="1"] > textarea.af-ae-original-textarea {
-  display: none !important;
-}
-/* Formatting Help has its own edge slot outside the toolbar groups. */
-html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-toolbar {
-  padding-right: 39px !important;
-  overflow: visible !important;
-}
-html body .af-ae-shell[data-af-editor-shell="1"]:has(> .af-ae-shell-help-edge[data-af-help-position="left"]) > .sceditor-toolbar {
-  padding-left: 39px !important;
-  padding-right: 5px !important;
-}
-.af-ae-shell > .af-ae-shell-help-edge {
-  position: absolute;
-  z-index: 4;
-  top: 5px;
-  right: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
+  height: var(--af-ae-surface-height, 180px);
+  min-height: 0;
+  margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--atf-color-accent, #48bfff);
-  font: 700 16px/1 sans-serif;
-  cursor: pointer;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
 }
-.af-ae-shell > .af-ae-shell-help-edge[data-af-help-position="left"] {
-  right: auto;
-  left: 6px;
+html body .af-ae-shell > .sceditor-container > :is(iframe, textarea) {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  padding: 10px !important;
+  background: var(--atf-surface, #fff);
+  color: inherit;
+  font-family: var(--af-ae-surface-font-family);
+  font-size: var(--af-ae-surface-font-size);
+  font-weight: var(--af-ae-surface-font-weight);
+  line-height: var(--af-ae-surface-line-height);
+  letter-spacing: var(--af-ae-surface-letter-spacing);
 }
-.af-ae-shell > .af-ae-shell-help-edge:hover { background: rgba(100,155,255,.12); }
-html body .af-ae-shell[data-af-editor-shell="1"] .sceditor-group {
-  overflow: visible !important;
-}
-html body .af-ae-shell .af-ae-shell-menu {
+html body .af-ae-shell > .sceditor-container > iframe { padding: 0 !important; }
+html body .af-ae-shell > .sceditor-container.sourceMode > iframe,
+html body .af-ae-shell > .sceditor-container.wysiwygMode > textarea,
+html body .af-ae-shell > textarea.af-ae-original-textarea { display: none !important; }
+html body .af-ae-shell > .sceditor-container.sourceMode > textarea,
+html body .af-ae-shell > .sceditor-container.wysiwygMode > iframe { display: block; }
+.af-ae-shell > .af-ccp-wrap { flex: 0 0 auto; margin: 0; }
+.af-ae-shell .af-ccp-bar { border-radius: 0 0 12px 12px; }
+.af-ae-format-help-trigger { margin-right: auto; cursor: pointer; color: inherit; font: inherit; }
+.af-ae-popup.sceditor-dropdown {
   position: fixed !important;
+  inset: auto;
   z-index: 2147483000 !important;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px;
+  max-width: calc(100vw - 16px);
+  max-height: min(65vh, 450px);
+  overflow: auto;
+  background: var(--atf-surface, #fff);
+  color: var(--atf-color-text, #333);
+  border: 1px solid rgba(140,170,210,.35);
+  border-radius: 10px;
+  box-shadow: 0 5px 24px rgba(0,0,0,.25);
+}
+.af-ae-popup.af-ae-format-help { width: min(420px, calc(100vw - 16px)); }
+.af-ae-popup .af-ae-format-help-body { font: 14px/1.5 sans-serif; }
+.af-ae-popup .af-ae-shell-menu {
+  position: static;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  max-height: min(65vh, 390px);
-  overflow-x: hidden;
-  overflow-y: auto;
-  min-width: 225px;
-  max-width: calc(100vw - 16px);
+  min-width: 220px;
+  padding: 0;
   margin: 0;
-  border: 1px solid rgba(140,170,210,.25);
+  box-shadow: none;
+  background: transparent;
 }
-html body .af-ae-shell .af-ae-shell-menu[hidden] { display: none !important; }
-html body .af-ae-shell .af-ae-shell-menu > .sceditor-button {
-  width: 100% !important;
-  height: auto !important;
-  min-height: 34px;
-  padding: 5px 8px !important;
-  justify-content: flex-start !important;
+.af-ae-popup .af-ae-shell-menu[hidden] { display: none; }
+.af-ae-popup .af-ae-shell-menu .sceditor-button {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  box-sizing: border-box !important;
+  width: auto;
+  min-height: 34px;
+  padding: 5px 8px;
+  color: inherit;
+  text-decoration: none;
 }
-html body .af-ae-shell .af-ae-shell-menu-label { white-space: normal; }
-body .sceditor-dropdown {
-  z-index: 2147483000 !important;
-  max-height: min(65vh, 450px);
-  max-width: calc(100vw - 16px);
-  overflow-y: auto;
-}
-/* The shell, iframe, and source editor expand as one viewport-sized surface. */
+.af-ae-popup .af-ae-shell-menu .sceditor-button > div { width: 16px; height: 16px; }
+.af-ae-popup .af-ae-shell-menu-label { font-size: 13px; }
 html body .af-ae-shell.af-ae-shell-maximized {
   position: fixed !important;
   inset: 0 !important;
   z-index: 2147482000 !important;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
   width: 100vw !important;
   height: 100dvh !important;
   max-width: none !important;
@@ -237,18 +171,13 @@ html body .af-ae-shell.af-ae-shell-maximized {
   border-radius: 0 !important;
   display: flex !important;
   flex-direction: column;
-  background: var(--atf-surface, #1b2433);
+  background: var(--atf-surface, #fff);
 }
 html body .af-ae-shell.af-ae-shell-maximized > .sceditor-toolbar { flex: 0 0 auto; }
 html body .af-ae-shell.af-ae-shell-maximized > textarea:not(.af-ae-original-textarea),
 html body .af-ae-shell.af-ae-shell-maximized > .sceditor-container {
-  flex: 1 1 auto !important;
+  flex: 1 1 0 !important;
   min-height: 0 !important;
-  height: calc(100dvh - 50px) !important;
+  height: auto !important;
 }
-html body .af-ae-shell.af-ae-shell-maximized .sceditor-wysiwyg,
-html body .af-ae-shell.af-ae-shell-maximized textarea.sceditor-source {
-  height: 100% !important;
-  min-height: 0 !important;
-}
-html.af-ae-shell-fullscreen-active { overflow: hidden !important; }
+html.af-ae-shell-fullscreen-active, html.af-ae-shell-fullscreen-active body { overflow: hidden !important; }

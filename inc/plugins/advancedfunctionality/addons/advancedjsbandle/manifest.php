@@ -22,8 +22,8 @@ return [
             'kill-threaded-mode-link.js' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'forumdisplay.php']]],
             'postbit-fa-icons.css' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'forumdisplay.php'], ['script' => 'private.php', 'action' => 'read']]],
             'postbit-fa-icons.js' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'forumdisplay.php'], ['script' => 'private.php', 'action' => 'read']]],
-            'quote-avatars.css' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'private.php', 'action' => 'read']]],
-            'quote-avatars.js' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'private.php', 'action' => 'read']]],
+            'quote-avatars.css' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'newreply.php'], ['script' => 'newthread.php'], ['script' => 'editpost.php'], ['script' => 'private.php', 'action' => 'read'], ['script' => 'private.php', 'action' => 'send']]],
+            'quote-avatars.js' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'newreply.php'], ['script' => 'newthread.php'], ['script' => 'editpost.php'], ['script' => 'private.php', 'action' => 'read'], ['script' => 'private.php', 'action' => 'send']]],
         ],
     ],
     'theme_stylesheets' => [

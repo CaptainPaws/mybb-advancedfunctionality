@@ -6,7 +6,7 @@ The response compiler renders the complete configured toolbar before first paint
 
 Initial editor assets are `assets/advancededitor_shell.css`, `assets/advancededitor_shell.js`, icon files, and the existing local-font stylesheet when configured. jQuery remains a MyBB dependency. Published-post assets are separate: the small `charcountandprew_view.js` can run for post counters, and content-only `_view.js`/`_view.css` files follow the declared rendered-content markers. A published table never loads its editor dialog.
 
-`advancededitor/shell.php` compiles button metadata and renders groups, icons, titles, dropdown triggers, configured help placement, and the source wrapper. Pack discovery runs once per PHP request, never on clicks. The compiler is the boundary for a future persistent registry.
+`advancededitor/shell.php` compiles button metadata and renders groups, icons, titles, dropdown triggers and the source wrapper. Formatting Help is a separate control in the bottom status panel. Pack discovery runs once per PHP request, never on clicks. The compiler is the boundary for a future persistent registry.
 
 A pack manifest retains its existing `assets` and `buttons` and adds declarations such as:
 
@@ -107,3 +107,5 @@ Measured fixture sample (2026-10-06):
 | Load, ms | 595.5 | 269.6 |
 
 Raw measurement and full suite outputs are included in the task deliverables.
+
+Lifecycle, quote metadata, popup/fullscreen, AJAX spoiler and FIMP fixes are documented in [advancededitor-lifecycle-fixes.md](advancededitor-lifecycle-fixes.md). The additional browser suite exercises actual MyBB 1.8.40 assets with a broad textarea selector and ten mode switches.

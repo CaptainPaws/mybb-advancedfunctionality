@@ -2,7 +2,7 @@
  * Fancy Inline Moderation Popup.
  *
  * FIMP is a presentation-only frontend for MyBB's inline moderation FORM.
- * It must never rewrite the selected action (or guess an action from an icon).
+ * Actions start neutral and are set only by an explicit enabled-button click.
  */
 (function ($, window, document) {
   'use strict';
@@ -40,6 +40,15 @@
       if (this.id) return;
       var match = String(this.name || '').match(/^inlinemod_(\d+)$/);
       if (match) this.id = 'inlinemod_' + match[1];
+    });
+
+    var currentAction = null;
+    // The native select defaults to its first option (often merge).
+    // A neutral option prevents checkbox changes/Enter from choosing it.
+    var $none = $('<option>', { value: '', text: 'Выберите действие' });
+    $select.prepend($none).val('');
+    $form.on('submit.afFimp', function (event) {
+      if (!currentAction || $select.val() !== currentAction) event.preventDefault();
     });
 
     var $panel = $('<div>', { id: 'fimp', class: 'control-group' });
@@ -95,10 +104,13 @@
     function updateCount() {
       // Always read current DOM: ATF can insert posts with AJAX.
       var count = $(checkboxSelector).filter(':checked').length;
+      currentAction = null;
+      $select.val('');
+      $panel.attr('data-current-action', '');
       $count.text(count);
       $panel.find('button.fimp').each(function () {
         var action = this.getAttribute('data-action') || '';
-        $(this).prop('disabled', action === 'multimergeposts' && count < 2);
+        $(this).prop('disabled', !count || (action === 'multimergeposts' && count < 2));
       });
       $panel.stop(true, true);
       if (count) $panel.fadeIn(100);
@@ -115,6 +127,8 @@
       // A second form means a modified/stale MyBB template. Never submit
       // moderation actions when the target form is ambiguous.
       if ($('form#inlinemoderation_options').length !== 1) return;
+      currentAction = value;
+      $panel.attr('data-current-action', value);
       $select.val(value);
       if (String($select.val() || '') !== value) return;
       var form = $form[0];

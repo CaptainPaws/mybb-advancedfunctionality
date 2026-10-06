@@ -13,8 +13,8 @@ $check = static function ($condition, $message) {
 };
 $check(str_contains($wys, "toolbar: ta.__afAeShell ? '' : out.toolbar"),
     'The shell must suppress the nested native SCEditor toolbar.');
-$check(str_contains($css, '.af-ae-shell .sceditor-container .sceditor-toolbar { display: none !important; }'),
-    'A nested SCEditor toolbar must not be visible through theme overrides.');
+$check(str_contains($wys, "toolbarContainer: ta.__afAeShell ? document.createElement('div') : null"),
+    'Native toolbar chrome must remain outside the live DOM, not be hidden with CSS.');
 $check(str_contains($shell, 'function finishPublished()'),
     'Draft storage and editor content must be cleared together after success.');
 $check(str_contains($shell, 'postObserver.observe(posts'),

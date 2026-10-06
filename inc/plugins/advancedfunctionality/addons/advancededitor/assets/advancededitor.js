@@ -104,9 +104,9 @@
   function isEligibleTextarea(ta) {
     if (!ta || ta.nodeType !== 1 || ta.tagName !== 'TEXTAREA') return false;
 
+    if (ta.closest('.sceditor-container')) return false;
     var cls = ta.className || '';
     if (/\bsceditor-source\b/i.test(cls)) return false;
-    if (/\bsceditor-textarea\b/i.test(cls)) return false;
 
     if (ta.getAttribute('data-af-ae-skip') === '1') return false;
 
@@ -1434,8 +1434,8 @@
       style.textContent = 'html,body{background:' + surface + ';color:' + text
         + ';caret-color:' + accent + ';font-family:' + family + ';font-size:' + size
         + ';font-weight:' + weight + ';line-height:' + lineHeight
-        + ';letter-spacing:' + letterSpacing + ';margin:0;padding:10px;box-sizing:border-box}'
-        + 'body{min-height:100%}'
+        + ';letter-spacing:' + letterSpacing + ';margin:0;padding:0;box-sizing:border-box}'
+        + 'body{box-sizing:border-box}body{min-height:100%;padding:10px}'
         + 'a{color:' + accent + '}::placeholder{color:' + muted + ';opacity:.8}'
         + '::-webkit-scrollbar-thumb{background:' + muted + ';border-radius:999px}';
       head.appendChild(style);
@@ -1491,7 +1491,7 @@
           var properties = ['background-color', 'background-image', 'color',
             'border-top', 'border-right', 'border-bottom', 'border-left',
             'border-radius', 'padding', 'margin', 'box-shadow', 'font-family',
-            'font-size', 'line-height', 'text-align'];
+            'font-size', 'line-height'];
           var declaration = properties.map(function (prop) {
             return prop + ':' + computed.getPropertyValue(prop) + ';';
           }).join('');
@@ -2041,6 +2041,9 @@
   }
 
   function initOneTextarea(ta) {
+    var existingInstance = ta && window.jQuery && safeGetInstance(window.jQuery(ta));
+    if (existingInstance) return true;
+    if (ta && ta.__afAeLifecycle === 'initializing') return false;
     if (!isEligibleTextarea(ta)) return false;
     if (isHidden(ta)) return false;
 
@@ -2100,27 +2103,36 @@
       var startupMode = ta.__afAeRequestedMode || resolveStartupEditorMode();
       var startInSourceMode = (startupMode === 'source');
 
+      ta.__afAeLifecycle = 'initializing';
       $ta.sceditor({
         format: 'bbcode',
         // The lightweight shell already owns the ONLY visible toolbar.
         // Native SCEditor buttons would create a nested duplicate toolbar.
         toolbar: ta.__afAeShell ? '' : out.toolbar,
         toolbarExclude: ta.__afAeShell ? 'source' : '',
+        toolbarContainer: ta.__afAeShell ? document.createElement('div') : null,
 
         // ВАЖНО: WYSIWYG iframe CSS
         style: (P.sceditorContentCss || P.sceditorCss || ''),
 
-        height: 180,
+        height: ta.__afAeSurfaceMetrics ? ta.__afAeSurfaceMetrics.height : 180,
         width: '100%',
         resizeEnabled: true,
+        resizeWidth: false,
         autoExpand: false,
         startInSourceMode: startInSourceMode
       });
 
       var inst = safeGetInstance($ta);
       if (inst) {
+        ta.__afAeLifecycle = 'initialized';
         ta.__afAeInited = true;
         inst.__afAeOwned = true;
+        // Normalize the supported SCEditor APIs once; integrations always
+        // resolve the same instance and its actual native surface.
+        if (!inst.resizeTo && inst.dimensions) inst.resizeTo = function (width, height) { return inst.dimensions(width, height); };
+        if (!inst.getContainer) inst.getContainer = function () { return inst.getContentAreaContainer().parentNode; };
+        if (!inst.getSourceEditor) inst.getSourceEditor = function () { return inst.getContainer().querySelector('textarea'); };
         inst.__afAeToolbarSig = asText(out.toolbar);
 
         try { bindSubmitSync(ta.form, ta); } catch (e4) {}
@@ -2150,9 +2162,11 @@
         log('[AE] quick-edit instance contract failed', { id: ta.id || '', name: ta.name || '' });
       }
     } catch (e) {
+      ta.__afAeLifecycle = 'uninitialized';
       log('[AE] init error', e);
     }
 
+    ta.__afAeLifecycle = 'uninitialized';
     return false;
   }
 
@@ -2295,17 +2309,13 @@
   window.afAdvancedEditorWysiwyg = {
     init: function (ta) {
       initGlobalEditorEnvironment();
-      ta.__afAeInited = false;
-      // SCEditor refuses creation inside any .sceditor-container ancestor.
+      var existing = safeGetInstance(window.jQuery(ta));
+      if (existing) return true;
+      if (ta.__afAeLifecycle === 'initializing') return false;
       var source = String(ta.value || '');
-      var shell = ta.__afAeShell;
-      if (shell) shell.classList.remove('sceditor-container');
-      try {
-        var ready = initOneTextarea(ta);
-        if (ready) preserveInitialSource(ta, safeGetInstance(window.jQuery(ta)), source);
-        return ready;
-      }
-      finally { if (shell) shell.classList.add('sceditor-container'); }
+      var ready = initOneTextarea(ta);
+      if (ready) preserveInitialSource(ta, safeGetInstance(window.jQuery(ta)), source);
+      return ready;
     },
     destroy: destroyTextareaInstance
   };

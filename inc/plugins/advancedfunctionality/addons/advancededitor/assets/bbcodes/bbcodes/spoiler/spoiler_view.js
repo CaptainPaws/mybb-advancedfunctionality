@@ -60,9 +60,9 @@
   function setOpen(sp, open) {
     if (!sp) return;
 
-    var head = sp.querySelector('.af-aqr-spoiler-head');
-    var body = sp.querySelector('.af-aqr-spoiler-body');
-    var foot = sp.querySelector('.af-aqr-spoiler-foot');
+    var head = sp.querySelector(':scope > .af-aqr-spoiler-head');
+    var body = sp.querySelector(':scope > .af-aqr-spoiler-body');
+    var foot = sp.querySelector(':scope > .af-aqr-spoiler-foot');
 
     sp.setAttribute('data-open', open ? '1' : '0');
 
@@ -81,51 +81,23 @@
     setOpen(sp, !isOpen);
   }
 
-  function bindSpoilers(root) {
-    root = root || document;
-
-    var list = root.querySelectorAll('blockquote.af-aqr-spoiler');
-    for (var i = 0; i < list.length; i++) {
-      var sp = list[i];
-      if (sp.__afSpoilerBound) continue;
-      sp.__afSpoilerBound = true;
-
-      var head = sp.querySelector('.af-aqr-spoiler-head');
-      var collapse = sp.querySelector('.af-aqr-spoiler-collapse');
-
-      if (head) {
-        head.addEventListener('click', function (e) {
-          e.preventDefault();
-          toggleSpoiler(this.closest('blockquote.af-aqr-spoiler'));
-        });
-
-        head.addEventListener('keydown', function (e) {
-          if (!e) return;
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            toggleSpoiler(this.closest('blockquote.af-aqr-spoiler'));
-          }
-        });
-      }
-
-      if (collapse) {
-        collapse.addEventListener('click', function (e) {
-          e.preventDefault();
-          var sp2 = this.closest('blockquote.af-aqr-spoiler');
-          setOpen(sp2, false);
-          try {
-            var h = sp2 && sp2.querySelector ? sp2.querySelector('.af-aqr-spoiler-head') : null;
-            if (h) h.focus();
-          } catch (e2) {}
-        });
-      }
-
-      setOpen(sp, false);
-    }
-  }
-
-  function boot() { bindSpoilers(document); }
-  document.addEventListener("af:preview-updated", function(e) { bindSpoilers(e.detail && e.detail.root || document); });
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
-
+  if (window.__afSpoilerViewBound) return;
+  window.__afSpoilerViewBound = true;
+  // Delegation includes AJAX posts, nested spoilers and preview. The parser
+  // emits hidden bodies, so no per-node initializer is required.
+  document.addEventListener('click', function (e) {
+    var control = e.target.closest('.af-aqr-spoiler-head, .af-aqr-spoiler-collapse');
+    if (!control) return;
+    var sp = control.closest('blockquote.af-aqr-spoiler');
+    if (!sp) return;
+    e.preventDefault();
+    if (control.classList.contains('af-aqr-spoiler-collapse')) setOpen(sp, false);
+    else toggleSpoiler(sp);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var head = e.target.closest('.af-aqr-spoiler-head');
+    if (!head) return;
+    e.preventDefault(); toggleSpoiler(head.closest('blockquote.af-aqr-spoiler'));
+  });
 })(window, document);

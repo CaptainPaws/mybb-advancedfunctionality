@@ -26,6 +26,7 @@
   // MyBB цитата: "Имя Написал:" / "Имя wrote:" / "Имя schrieb:" и т.п.
   function extractAuthorName(text) {
     var t = normalizeName(text);
+    if (/^(?:написал|написала|писал|писала|wrote|posted|schrieb)\s*:?$/iu.test(t)) return '';
 
     // чаще всего: "Hanna Sinclair Написал:"
     var m = t.match(/^(.*?)(?:\s+(?:написал|написала|писал|писала|wrote|posted|schrieb))\s*:\s*$/iu);
@@ -159,7 +160,9 @@
     root = root || document;
 
     // На практике лучше не ловить "любой blockquote", а только те, что реально цитаты.
-    var quotes = root.querySelectorAll('blockquote.mycode_quote, blockquote.quote, blockquote[class*="quote"]');
+    var selector = 'blockquote.mycode_quote, blockquote.quote, blockquote[class*="quote"]';
+    var quotes = Array.from(root.querySelectorAll(selector));
+    if (root.matches && root.matches(selector)) quotes.unshift(root);
     if (!quotes.length) return;
 
     quotes.forEach(function (bq) {
@@ -170,6 +173,18 @@
       if (header.getAttribute('data-af-qa') === '1') return;
 
       var link = findProfileLinkIn(header);
+      var postLink = header.querySelector('a[href*="pid="]');
+      var pidMatch = postLink && postLink.getAttribute('href').match(/[?&]pid=(\d+)/);
+      var pid = bq.getAttribute('data-pid') || (pidMatch && pidMatch[1]);
+      var post = pid && document.getElementById('post_' + pid);
+      var authorLink = post && post.querySelector('.atf-post__name a[href*="uid="], .author_information a[href*="uid="], .post_author a[href*="uid="]');
+      if (!link && authorLink) {
+        var headerText = header.cloneNode(true);
+        headerText.querySelectorAll('a[href*="pid="]').forEach(function (node) { node.remove(); });
+        var existingName = extractAuthorName(headerText.textContent || '');
+        if (!existingName) { link = authorLink.cloneNode(true); header.insertBefore(link, header.firstChild); }
+        else link = authorLink;
+      }
       var uid = link ? uidFromHref(link.getAttribute('href')) : 0;
 
       var name = '';
@@ -186,7 +201,7 @@
       }
 
       // помечаем, чтобы не обрабатывать бесконечно
-      header.setAttribute('data-af-qa', '1');
+      if (src) header.setAttribute('data-af-qa', '1');
 
       if (src) {
         insertAvatarIntoHeader(header, src);
@@ -218,6 +233,7 @@
     var index = buildAvatarIndex();
     enhanceQuotes(document, index);
     observeQuotes(index);
+    document.addEventListener('af:preview-updated', function(e) { enhanceQuotes(e.detail && e.detail.root || document, buildAvatarIndex()); });
   });
 
 })();

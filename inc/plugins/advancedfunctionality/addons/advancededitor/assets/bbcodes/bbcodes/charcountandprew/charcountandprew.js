@@ -183,6 +183,7 @@
 
   // ====== FORM UI: bar + preview box ======
     function buildUiAboveEditor(ta) {
+    if (ta.__afAeShell && ta.__afAeShell.querySelector(':scope > .af-ccp-wrap')) return null;
     var sc = null;
     try { sc = ta.closest('.sceditor-container'); } catch (e) { sc = null; }
 
@@ -430,9 +431,9 @@
       try { anchor = ta.closest('.sceditor-container'); } catch (e) { anchor = null; }
       anchor = ta.__afAeShell || anchor || ta;
       var parent = anchor && anchor.parentNode ? anchor.parentNode : null;
-      var wrap = parent && parent.querySelector
+      var wrap = ta.__afAeShell ? ta.__afAeShell.querySelector(':scope > .af-ccp-wrap') : (parent && parent.querySelector
         ? parent.querySelector(':scope > .af-ccp-wrap')
-        : null;
+        : null);
       if (!wrap) return null;
       return {
         wrap: wrap,

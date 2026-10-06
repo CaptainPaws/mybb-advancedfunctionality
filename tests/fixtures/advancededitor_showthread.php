@@ -12,10 +12,10 @@ class DB {
 }
 $db=new DB; $mybb=(object)['settings'=>['bburl'=>'http://127.0.0.1:8765','af_advancededitor_enabled'=>'1'],'user'=>['uid'=>1,'usergroup'=>2], 'post_code'=>'fixture'];
 require MYBB_ROOT.'inc/plugins/advancedfunctionality/addons/advancededitor/advancededitor.php';
-$layout=['sections'=>[['type'=>'group','title'=>'Full toolbar','items'=>['bold','italic','underline','strike','quote','code','link','image','bulletlist','left','color','af_tables','af_stikers','af_drafts','af_font','af_fontsize','af_spoiler','af_accordion','af_tabs','af_embedvideos','af_resizeimg','af_tquote','af_lockcontent','af_abbr','af_mark','af_togglemode']],['type'=>'dropdown','title'=>'★','items'=>['af_indent','af_floatbb','af_htmlbb']]]];
+$layout=['sections'=>[['type'=>'group','title'=>'Full toolbar','items'=>['bold','italic','underline','strike','quote','code','link','image','bulletlist','left','center','right','justify','maximize','color','af_tables','af_stikers','af_drafts','af_font','af_fontsize','af_spoiler','af_accordion','af_tabs','af_embedvideos','af_resizeimg','af_tquote','af_lockcontent','af_abbr','af_mark','af_togglemode']],['type'=>'dropdown','title'=>'Доп. меню','items'=>['af_indent','af_floatbb','af_htmlbb']]]];
 // This DB returns only the configured toolbar layout; other settings stay at defaults.
 class FixtureDB extends DB {
- public function fetch_field($q,$f) { global $layout; return str_contains($q['where'],'af_advancededitor_toolbar_layout') ? json_encode($layout) : ''; }
+ public function fetch_field($q,$f) { global $layout; if (str_contains($q['where'],'af_advancededitor_help_enabled')) return '1'; return str_contains($q['where'],'af_advancededitor_toolbar_layout') ? json_encode($layout) : ''; }
 }
 $db=new FixtureDB;
 $GLOBALS['af_ae_external_capabilities']['kb-insert'] = ['activation'=>'click','requires'=>[],'js'=>[$mybb->settings['bburl'].'/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase_insert.js'],'css'=>[$mybb->settings['bburl'].'/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase_insert.css']];

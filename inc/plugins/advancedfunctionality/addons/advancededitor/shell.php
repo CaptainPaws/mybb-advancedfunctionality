@@ -165,12 +165,6 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
         $html .= '<div class="sceditor-group">' . $button($cmd, $map[$cmd]) . '</div>';
     }
     $html .= '<!--af-ae-toolbar-end--></div>';
-    if (!empty($help['enabled']) && isset($map['af_formathelp'])) {
-        $pos = ($help['position'] ?? 'right') === 'left' ? 'left' : 'right';
-        $html .= '<button type="button" class="af-ae-shell-help-edge" data-af-command="af_formathelp"'
-            . ' data-af-help-position="' . $pos . '" aria-label="Подсказка по форматированию"'
-            . ' title="Подсказка по форматированию">?</button>';
-    }
     return $html;
 }
 
@@ -180,7 +174,7 @@ function af_advancededitor_render_shells(string $page, string $toolbar, bool $co
     return preg_replace_callback('~<textarea\b([^>]*)>(.*?)</textarea>~is', static function ($m) use ($toolbar, $counter) {
         if (!preg_match('~\bname\s*=\s*(["\'])message\1|\bclass\s*=\s*(["\'])[^"\']*\b(?:af-atf-bbcode-editor|af-kb-editor)\b~i', $m[1])
             || preg_match('~data-af-ae-skip\s*=\s*(["\'])1\1~i', $m[1])) return $m[0];
-        return ($counter ? af_advancededitor_shell_counter_html() : '') . '<div class="sceditor-container af-ae-shell" data-af-editor-shell="1">' . $toolbar . $m[0] . '</div>';
+        return '<div class="af-ae-shell" data-af-editor-shell="1">' . $toolbar . $m[0] . ($counter ? af_advancededitor_shell_counter_html() : '') . '</div>';
     }, $page) ?? $page;
 }
 

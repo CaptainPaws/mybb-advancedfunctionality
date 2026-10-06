@@ -264,7 +264,27 @@
 
   // Existing pack dialogs use this source-mode API without requiring SCEditor.
   function adapter(ta, wrapper) {
-    var popup = null;
+    var popup = null, restoreContent = null, trigger = null;
+    function close() {
+      if (restoreContent) { restoreContent(); restoreContent = null; }
+      if (trigger) trigger.setAttribute('aria-expanded', 'false');
+      if (popup) popup.remove();
+      popup = trigger = null;
+    }
+    function position() {
+      if (!popup || !trigger || !trigger.isConnected) return;
+      var bounds = trigger.getBoundingClientRect();
+      popup.style.left = Math.max(8, Math.min(bounds.left, innerWidth - popup.offsetWidth - 8)) + 'px';
+      popup.style.top = Math.max(8, Math.min(innerHeight - popup.offsetHeight - 8,
+        bounds.bottom + popup.offsetHeight + 8 > innerHeight ? bounds.top - popup.offsetHeight - 4 : bounds.bottom + 4)) + 'px';
+    }
+    var signal = ta.__afAeShellAbort.signal;
+    window.addEventListener('resize', position, { signal: signal });
+    window.addEventListener('scroll', position, { capture: true, signal: signal });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); }, { signal: signal });
+    document.addEventListener('mousedown', function (e) {
+      if (popup && !popup.contains(e.target) && !(trigger && trigger.contains(e.target))) close();
+    }, { signal: signal });
     var api = {
       textarea: ta, sourceEditor: ta, __afAeSourceAdapter: true,
       inSourceMode: function () { return true; }, sourceMode: function () { return true; },
@@ -277,21 +297,39 @@
       getSourceEditorValue: function () { return ta.value; },
       getSourceEditor: function () { return ta; },
       bind: function () {},
-      closeDropDown: function () { if (popup) popup.remove(); popup = null; },
+      closeDropDown: close,
       createDropDown: function (caller, name, content) {
-        api.closeDropDown();
+        close();
+        trigger = caller && caller.jquery ? caller[0] : caller;
+        trigger = trigger || wrapper;
+        var node = content.jquery ? content[0] : content;
+        if (node.isConnected) {
+          var marker = document.createComment('af-popup-content');
+          node.before(marker);
+          restoreContent = function () { marker.replaceWith(node); node.hidden = true; };
+        }
         popup = document.createElement('div');
-        popup.className = 'sceditor-dropdown ' + name;
+        popup.className = 'sceditor-dropdown af-ae-popup ' + name;
         popup.id = 'sceditor-' + name;
-        popup.appendChild(content.jquery ? content[0] : content);
+        popup.setAttribute('data-af-popup-owner', ta.id || ta.name);
+        popup.appendChild(node);
         document.body.appendChild(popup);
-        var bounds = (caller || wrapper).getBoundingClientRect();
-        popup.style.position = 'fixed'; popup.style.zIndex = '2147483000';
-        popup.style.maxHeight = 'min(60vh, 420px)';
-        popup.style.overflowY = 'auto';
-        popup.style.left = Math.max(8, Math.min(bounds.left, window.innerWidth - popup.offsetWidth - 8)) + 'px';
-        popup.style.top = Math.max(8, bounds.bottom + popup.offsetHeight + 8 > window.innerHeight
-          ? bounds.top - popup.offsetHeight - 4 : bounds.bottom + 4) + 'px';
+        // Browser top layer also sits above a fullscreen shell. Neither UI
+        // node is reparented on mode/fullscreen transitions.
+        if (typeof popup.showPopover === 'function') {
+          popup.setAttribute('popover', 'manual'); popup.showPopover();
+        }
+        popup.addEventListener('mousedown', function (e) { if (e.target.closest('[data-af-command]')) e.preventDefault(); });
+        popup.addEventListener('click', function (e) {
+          var button = e.target.closest('[data-af-command]');
+          if (!button) return;
+          e.preventDefault();
+          var definition = buttons[button.getAttribute('data-af-command')];
+          if (definition) { var anchor = trigger; close(); activate(ta, definition, anchor); }
+        });
+        trigger.setAttribute('aria-expanded', 'true');
+        position();
+        return popup;
       },
       destroy: function () { api.closeDropDown(); }
     };
@@ -343,11 +381,23 @@
   function bindEditorSurface(ta, editor) {
     if (!editor || editor.__afAeSourceAdapter) return;
     if (!editor.__afAeShellSurfaceBound) {
+      // SCEditor 3 has unclassed internal nodes. Claim them through its API
+      // before MutationObserver can mistake them for new original textareas.
+      var internalSource = editor.getSourceEditor();
+      if (internalSource.jquery) internalSource = internalSource[0];
+      internalSource.setAttribute('data-af-ae-skip', '1');
+      internalSource.classList.add('sceditor-source');
+      var frame = editor.getBody().ownerDocument.defaultView.frameElement;
+      frame.classList.add('sceditor-wysiwyg');
+      var nativeClose = editor.closeDropDown;
+      editor.createDropDown = ta.__afAeAdapter.createDropDown;
+      editor.closeDropDown = function () { ta.__afAeAdapter.closeDropDown(); if (nativeClose) nativeClose.call(editor); };
       editor.__afAeShellSurfaceBound = true;
       ['toggleSourceMode', 'sourceMode'].forEach(function (method) {
         var original = editor[method];
         if (typeof original !== 'function') return;
         editor[method] = function () {
+          if (method === 'toggleSourceMode' || arguments.length > 0) this.closeDropDown();
           var result = original.apply(this, arguments);
           if (method === 'toggleSourceMode' || arguments.length > 0) syncEditorSurface(ta, this);
           return result;
@@ -357,12 +407,32 @@
     syncEditorSurface(ta, editor);
   }
 
+  function setFullscreen(ta, active) {
+    var shell = ta.__afAeShell;
+    if (!shell) return;
+    currentEditor(ta).closeDropDown();
+    if (active) {
+      // Top layer escapes ancestor overflow/transform without moving the
+      // iframe, losing its document, or breaking form ownership.
+      if (typeof shell.showPopover === 'function') {
+        shell.setAttribute('popover', 'manual'); shell.showPopover();
+      }
+    } else if (shell.hasAttribute('popover')) {
+      if (shell.matches(':popover-open')) shell.hidePopover();
+      shell.removeAttribute('popover');
+    }
+    shell.classList.toggle('af-ae-shell-maximized', active);
+    document.documentElement.classList.toggle('af-ae-shell-fullscreen-active', !!document.querySelector('.af-ae-shell-maximized'));
+  }
+
   function ensureWysiwyg(ta) {
     var editor = currentEditor(ta);
     if (editor && !editor.__afAeSourceAdapter) {
       bindEditorSurface(ta, editor);
       return editor;
     }
+    // Capture a user-resized source surface before SCEditor hides it.
+    if (ta.__afAeSurfaceMetrics) ta.__afAeSurfaceMetrics.height = Math.round(ta.getBoundingClientRect().height || ta.__afAeSurfaceMetrics.height);
     if (!window.afAdvancedEditorWysiwyg) throw new Error('WYSIWYG runtime did not register');
     ta.__afAeRequestedMode = (P.cfg || {}).wysiwygMode === 'full' ? 'full' : 'partial';
     if (!window.afAdvancedEditorWysiwyg.init(ta)) throw new Error('WYSIWYG initialization failed');
@@ -437,13 +507,8 @@
       }
       if (!editor.__afAeSourceAdapter && typeof editor.execCommand === 'function' && b.cmd !== 'maximize' && b.cmd !== 'af_formathelp') { editor.execCommand(b.cmd); return; }
       if (b.cmd === 'maximize') {
-        var maximized = wrapper.classList.toggle('af-ae-shell-maximized');
-        document.documentElement.classList.toggle('af-ae-shell-fullscreen-active', maximized);
-        if (editor && !editor.__afAeSourceAdapter && typeof editor.resizeTo === 'function') {
-          // The SCEditor container must track the shell, including its iframe.
-          try { editor.resizeTo('100%', maximized ? Math.max(200, innerHeight - 95) : 180); } catch (e) {}
-        }
-        caller.setAttribute('aria-pressed', String(maximized));
+        setFullscreen(ta, !wrapper.classList.contains('af-ae-shell-maximized'));
+        caller.setAttribute('aria-pressed', String(wrapper.classList.contains('af-ae-shell-maximized')));
         return;
       }
       if (b.cmd === 'undo' || b.cmd === 'redo') {
@@ -461,8 +526,9 @@
       }
       if (b.cmd === 'emoticon') { var smile = window.prompt('Смайл', ':)'); if (smile !== null) editor.insertText(smile); return; }
       if (b.cmd === 'af_formathelp') {
-        var modal = document.createElement('div'); modal.className = 'sceditor-dropdown af-ae-format-help';
-        modal.innerHTML = (P.formatHelp || {}).content || ''; editor.createDropDown(caller, 'af-ae-format-help', modal); return;
+        var content = document.createElement('div'); content.className = 'af-ae-format-help-body';
+        content.innerHTML = (P.formatHelp || {}).content || '';
+        editor.createDropDown(caller, 'af-ae-format-help', content); return;
       }
       throw new Error('Command has no runtime: ' + b.cmd);
     }).catch(function (error) { report(wrapper, b, error); }).finally(function () { caller.removeAttribute('aria-busy'); });
@@ -478,6 +544,7 @@
     if (!ta || ta.tagName !== 'TEXTAREA' || ta.getAttribute('data-af-ae-skip') === '1') return false;
     // A native MyBB textarea may retain the SCEditor class even after its eager
     // runtime was stripped. Do not disable the lightweight editor for that class.
+    if (ta.closest('.sceditor-container')) return false;
     if (ta.classList.contains('sceditor-textarea') && currentEditor(ta) && !currentEditor(ta).__afAeSourceAdapter) return false;
     return isQuickEdit(ta) || ta.matches((P.cfg || {}).editorSelector || 'textarea[name="message"]');
   }
@@ -523,10 +590,10 @@
     captureSurfaceMetrics(ta);
     var wrapper = ta.parentElement;
     if (!wrapper || !wrapper.hasAttribute('data-af-editor-shell')) {
-      wrapper = document.createElement('div'); wrapper.className = 'sceditor-container af-ae-shell'; wrapper.setAttribute('data-af-editor-shell', '1');
+      wrapper = document.createElement('div'); wrapper.className = 'af-ae-shell'; wrapper.setAttribute('data-af-editor-shell', '1');
       wrapper.innerHTML = P.shellToolbar || '';
       ta.parentNode.insertBefore(wrapper, ta); wrapper.appendChild(ta);
-      if (P.counterHtml) wrapper.insertAdjacentHTML('beforebegin', P.counterHtml);
+      if (P.counterHtml) wrapper.insertAdjacentHTML('beforeend', P.counterHtml);
     }
     applySurfaceMetrics(ta, wrapper);
     ta.__afAeShellAbort = new AbortController();
@@ -540,12 +607,26 @@
     setupDraft(ta, signal);
     wrapper.__afAeTextarea = ta;
     ta.__afAeForm = ta.form; ta.__afAePost = ta.closest('.post');
-    var counter = wrapper.previousElementSibling;
+    ta.__afAeLifecycle = 'uninitialized';
+    var counter = wrapper.querySelector(':scope > .af-ccp-wrap');
+    var help = P.formatHelp || {};
+    if (help.enabled) {
+      if (!counter) {
+        counter = document.createElement('div'); counter.className = 'af-ccp-wrap';
+        counter.innerHTML = '<div class="af-ccp-bar"></div>'; wrapper.appendChild(counter);
+      }
+      var helpButton = document.createElement('button');
+      helpButton.type = 'button'; helpButton.className = 'af-ae-format-help-trigger';
+      helpButton.setAttribute('data-af-command', 'af_formathelp');
+      helpButton.textContent = help.title || 'Подсказка по форматированию';
+      counter.querySelector('.af-ccp-bar').prepend(helpButton);
+    }
     if (counter && counter.classList.contains('af-ccp-wrap')) {
       var update = function () {
         var text = currentEditor(ta).val();
         if (!P.countBbcode) text = text.replace(/\[mask\b[\s\S]*?\[\/mask\]/gi, '').replace(/\[img\b[^\]]*\][\s\S]*?\[\/img\]/gi, '').replace(/\[(\/?)[^\]\s=]+(?:=[^\]]+)?\]/g, '');
-        counter.querySelector('.af-ccp-value').textContent = String(Array.from(text).length);
+        var value = counter.querySelector('.af-ccp-value');
+        if (value) value.textContent = String(Array.from(text).length);
       };
       ta.addEventListener('input', update, { signal: signal }); update(); ta.__afAeCountUpdate = update;
     }
@@ -579,16 +660,8 @@
         var menu = wrapper.querySelector('[data-af-menu="' + cmd + '"]');
         if (menu) {
           var opening = menu.hidden;
-          wrapper.querySelectorAll('.af-ae-shell-menu').forEach(function (other) { other.hidden = true; });
-          menu.hidden = !opening;
-          caller.setAttribute('aria-expanded', String(opening));
-          if (opening) {
-            var rect = caller.getBoundingClientRect();
-            menu.style.left = Math.max(8, Math.min(rect.left, innerWidth - 260)) + 'px';
-            menu.style.top = (rect.bottom + 260 > innerHeight && rect.top > 270
-              ? Math.max(8, rect.top - Math.min(260, menu.scrollHeight || 260))
-              : rect.bottom + 4) + 'px';
-          }
+          currentEditor(ta).closeDropDown();
+          if (opening) { menu.hidden = false; currentEditor(ta).createDropDown(caller, 'af-ae-extra-menu', menu); }
         }
         return;
       }
@@ -607,6 +680,7 @@
   function destroy(ta) {
     if (!ta.__afAeShell) return;
     var wrapper = ta.__afAeShell;
+    setFullscreen(ta, false);
     if (ta.__afAeShellAbort) ta.__afAeShellAbort.abort();
     wrapper.removeAttribute('data-af-ae-active-surface');
     ta.removeAttribute('data-af-ae-wys-active');
@@ -621,6 +695,7 @@
     if (ta.__afAeAdapter && editor !== ta.__afAeAdapter) ta.__afAeAdapter.destroy();
     document.dispatchEvent(new CustomEvent('af:editor-destroyed', { detail: { textarea: ta } }));
     if (ta.__afAeForm) { ta.__afAeForm.__afAeTriggersBound = false; ta.__afAeForm.classList.remove('atf-editor', 'atf-editor--quick-edit', 'atf-quick-edit'); }
+    ta.__afAeLifecycle = 'destroyed';
     ta.__afAeReadyAnnounced = ta.__afAeInited = false;
     ta.__afAeShell = ta.__afAeAdapter = ta.__afAeHistory = ta.__afAeForm = ta.__afAePost = null;
   }

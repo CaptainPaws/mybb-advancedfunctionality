@@ -755,6 +755,7 @@
     }
 
     function hookSceditorCreate() {
+        if (window.afAdvancedEditorShell) return true;
         var $ = getJQ();
         if (!$ || !$.fn || typeof $.fn.sceditor !== 'function') return false;
 
@@ -769,7 +770,8 @@
         var wrapped = function (options) {
             ensureCommandRegistered();
             try {
-                if (options && typeof options === 'object' && typeof options.toolbar === 'string') {
+                if (options && typeof options === 'object' && typeof options.toolbar === 'string' &&
+                    !Array.prototype.some.call(this, function (ta) { return ta.closest && ta.closest('[data-af-editor-shell]'); })) {
                     options.toolbar = patchToolbarString(options.toolbar);
                 }
             } catch (e) {}

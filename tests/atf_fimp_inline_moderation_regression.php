@@ -18,7 +18,7 @@ $assert(!str_contains($showthread, '{$inlinemod}'), 'Inline moderation is alread
 $assert(str_contains($fimp, 'name^="inlinemod_"'), 'FIMP must recognize native named checkbox fields.');
 $assert(str_contains($fimp, "this.id = 'inlinemod_'"), 'MyBB checkbox IDs must be normalized before native initialization.');
 $assert(str_contains($fimp, 'change.afFimp'), 'FIMP should track dynamically inserted moderation checkboxes.');
-$assert(str_contains($fimp, "if ($forms.length > 1)"), 'FIMP must fail closed when native moderation forms are duplicated.');
+$assert(str_contains($fimp, "if (\$forms.length > 1)"), 'FIMP must fail closed when native moderation forms are duplicated.');
 $assert(str_contains($fimp, "form.requestSubmit(submit)"), 'FIMP must submit using native MyBB form events.');
 $assert(str_contains($fimp, "this.value === value"), 'FIMP must match the selected exact native option value.');
 $assert(!str_contains($fimp, "inlineModeration.submit("), 'There is no inlineModeration.submit API in MyBB 1.8.40.');
