@@ -80,6 +80,109 @@
     ta.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
+
+  // Drafts are a safety feature of the initial textarea, not an optional
+  // toolbar runtime. No SCEditor, timers or network requests are required.
+  var draftPrefix = 'af_ae_draft_v2:';
+  function draftKey(ta) {
+    if (!ta || ta.name !== 'message' || !ta.form) return '';
+    var form = ta.form;
+    var findId = function (name) {
+      var el = form.querySelector('input[name="' + name + '"]');
+      return el && /^\d+$/.test(el.value) ? el.value : '';
+    };
+    var query = new URLSearchParams(window.location.search);
+    var tid = findId('tid') || ( /^\d+$/.test(query.get('tid') || '') ? query.get('tid') : '');
+    var fid = findId('fid') || ( /^\d+$/.test(query.get('fid') || '') ? query.get('fid') : '');
+    var uid = (window.MyBBSettings && window.MyBBSettings.uid) || 'guest';
+    var page = location.pathname.split('/').pop();
+    var context = tid ? 'thread:' + tid : fid ? 'forum:' + fid + ':' + page : 'page:' + location.pathname + location.search;
+    return draftPrefix + String(uid) + ':' + context;
+  }
+  function editorBbcode(ta) {
+    try {
+      var ed = currentEditor(ta);
+      if (ed && !ed.__afAeSourceAdapter && typeof ed.val === 'function') return String(ed.val() || '');
+    } catch (e) {}
+    return String(ta.value || '');
+  }
+  function setupDraft(ta, signal) {
+    var key = draftKey(ta);
+    if (!key) return;
+    var form = ta.form;
+    var pendingKey = key + ':pending';
+    var pending = '';
+    try { pending = sessionStorage.getItem(pendingKey) || ''; } catch (e) {}
+    var last = '';
+    try {
+      // Only a confirmed post-redirect identifies successful submission.
+      var query = new URLSearchParams(location.search);
+      var anchor = location.hash;
+      var posted = /(?:^|\/)showthread\.php$/.test(location.pathname)
+        && (/^(?:#pid_?\d+|#post\d+)$/i.test(anchor)
+          || /^\d+$/.test(query.get('pid') || ''));
+      if (pending && posted && !ta.value.trim() && !document.querySelector('.error, .error_message, .alert--error')) {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(pendingKey);
+      } else {
+        var saved = localStorage.getItem(key);
+        if (saved && !ta.value.trim()) {
+          ta.value = saved;
+          ta.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+      last = editorBbcode(ta);
+    } catch (e) { last = editorBbcode(ta); }
+    function save() {
+      var value = editorBbcode(ta);
+      if (value === last) return;
+      last = value;
+      try {
+        if (value) localStorage.setItem(key, value);
+        else if (!pending) localStorage.removeItem(key);
+      } catch (e) {}
+    }
+    function flush() {
+      try { if (ta.isConnected) save(); } catch (e) {}
+    }
+    ta.addEventListener('input', flush, { signal: signal });
+    ta.addEventListener('change', flush, { signal: signal });
+    window.addEventListener('pagehide', flush, { signal: signal });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') flush();
+    }, { signal: signal });
+    form.addEventListener('submit', function (event) {
+      if (event.defaultPrevented || (event.submitter && event.submitter.name === 'previewpost')) return;
+      flush();
+      try { sessionStorage.setItem(pendingKey, String(Date.now())); } catch (e) {}
+      pending = '1';
+    }, { signal: signal });
+    // SCEditor updates an iframe instead of the original textarea. Bind after
+    // its real instance exists, and preserve the same localStorage entry.
+    document.addEventListener('af:editor-ready', function (event) {
+      if (!event.detail || event.detail.textarea !== ta) return;
+      var ed = event.detail.instance;
+      if (!ed || ed.__afAeSourceAdapter || typeof ed.bind !== 'function') return;
+      if (ed.__afAeDraftBound) return;
+      ed.__afAeDraftBound = true;
+      ed.bind('valuechanged', flush);
+      try {
+        var body = ed.getBody && ed.getBody();
+        if (body) body.addEventListener('input', flush, { signal: signal });
+        var source = ed.getSourceEditor && ed.getSourceEditor();
+        if (source && source.jquery) source = source[0];
+        if (source && source.addEventListener) source.addEventListener('input', flush, { signal: signal });
+      } catch (e) {}
+    }, { signal: signal });
+    // A confirmed native/AJAX success may notify listeners explicitly.
+    document.addEventListener('af:post-published', function (event) {
+      var detail = event.detail || {};
+      if (detail.form && detail.form !== form) return;
+      try { localStorage.removeItem(key); sessionStorage.removeItem(pendingKey); } catch (e) {}
+      last = '';
+    }, { signal: signal });
+  }
+
   // Existing pack dialogs use this source-mode API without requiring SCEditor.
   function adapter(ta, wrapper) {
     var popup = null;
@@ -227,6 +330,7 @@
       h.values.splice(h.index + 1); h.values.push(ta.value); if (h.values.length > 100) h.values.shift(); h.index = h.values.length - 1;
     }, { signal: signal });
     ta.__afAeShell = wrapper; ta.__afAeAdapter = adapter(ta, wrapper);
+    setupDraft(ta, signal);
     wrapper.__afAeTextarea = ta;
     ta.__afAeForm = ta.form; ta.__afAePost = ta.closest('.post');
     var counter = wrapper.previousElementSibling;
@@ -311,7 +415,7 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') document.querySelectorAll('.af-ae-shell').forEach(function (w) { if (w.__afAeTextarea) w.__afAeTextarea.__afAeAdapter.closeDropDown(); }); });
     Object.keys(registry).forEach(function (id) { if (registry[id].activation === 'initial') loadCapability(id).catch(function (error) { console.warn('[AdvancedEditor]', error); }); });
   }
-  window.afAdvancedEditorShell = { loadCapability: loadCapability, states: states, registry: registry, insert: insert, init: init, destroy: destroy, activate: activate };
+  window.afAdvancedEditorShell = { draftsManaged: true, loadCapability: loadCapability, states: states, registry: registry, insert: insert, init: init, destroy: destroy, activate: activate };
   window.afAeIsSourceMode = function (ed) { return !!(ed && typeof ed.inSourceMode === 'function' && ed.inSourceMode()); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })(window, document);
