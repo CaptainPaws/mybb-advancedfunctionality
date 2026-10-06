@@ -396,6 +396,26 @@ class AF_Admin
 
         af_reload_settings_runtime();
 
+        if ($view === 'theme_stylesheets') {
+            $adminCssUrl = af_asset_build_url('/inc/plugins/advancedfunctionality/assets/af-theme-stylesheets-admin.css');
+            if ($adminCssUrl !== '') {
+                $page->extra_header .= '<link rel="stylesheet" href="'.htmlspecialchars_uni($adminCssUrl).'">';
+            }
+            $codeMirrorRoot = rtrim((string)MYBB_ROOT, '/\\').'/jscripts/codemirror';
+            if (is_file($codeMirrorRoot.'/lib/codemirror.js')) {
+                $page->extra_header .= "\n<link rel=\"stylesheet\" href=\"./jscripts/codemirror/lib/codemirror.css?ver=1813\">\n";
+                $page->extra_header .= "<link rel=\"stylesheet\" href=\"./jscripts/codemirror/addon/dialog/dialog-mybb.css?ver=1813\">\n";
+                $page->extra_header .= "<script src=\"./jscripts/codemirror/lib/codemirror.js?ver=1813\"></script>\n";
+                $page->extra_header .= "<script src=\"./jscripts/codemirror/mode/css/css.js?ver=1813\"></script>\n";
+                $page->extra_header .= "<script src=\"./jscripts/codemirror/addon/dialog/dialog.js?ver=1813\"></script>\n";
+                $page->extra_header .= "<script src=\"./jscripts/codemirror/addon/search/searchcursor.js?ver=1813\"></script>\n";
+                $page->extra_header .= "<script src=\"./jscripts/codemirror/addon/search/search.js?ver=1821\"></script>\n";
+                if (is_file($codeMirrorRoot.'/addon/edit/matchbrackets.js')) {
+                    $page->extra_header .= '<script src="./jscripts/codemirror/addon/edit/matchbrackets.js?ver=1813"></script>';
+                }
+            }
+        }
+
         $page->output_header($lang->af_admin_title);
 
         if ($view === 'theme_stylesheets') {
@@ -781,36 +801,8 @@ class AF_Admin
             }
         }
 
-        echo '<style>
-            .af-ts-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:10px 0 14px}
-            .af-ts-tools label{display:inline-flex;flex-direction:column;gap:3px}
-            .af-ts-tools select,.af-ts-tools input[type=search]{min-width:150px;padding:5px}
-            .af-ts-actions{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0 14px}
-            .af-ts-workspace{display:grid;grid-template-columns:minmax(210px,270px) minmax(0,1fr);gap:14px;align-items:start}
-            .af-ts-sidebar,.af-ts-editor{border:1px solid #c7c7c7;background:#fff;border-radius:4px}
-            .af-ts-sidebar{padding:10px;max-height:72vh;overflow:auto}
-            .af-ts-sidebar h3,.af-ts-editor h3{margin:4px 0 10px}
-            .af-ts-plugin{display:block;padding:9px 10px;margin:3px 0;border-radius:4px;color:inherit;text-decoration:none;border-left:3px solid transparent}
-            .af-ts-plugin:hover,.af-ts-plugin.selected{background:#f1edf0;text-decoration:none;border-left-color:#4e243b}
-            .af-ts-plugin-name{display:block;font-weight:700}
-            .af-ts-plugin-status{display:block;margin-top:3px;font-size:11px;color:#666}
-            .af-ts-editor{padding:14px;min-width:0}
-            .af-ts-editor-head{display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap}
-            .af-ts-badges{display:flex;gap:6px;flex-wrap:wrap}
-            .af-ts-badge{display:inline-block;border-radius:12px;padding:3px 9px;background:#eee;font-size:11px;font-weight:700}
-            .af-ts-badge.ok{background:#e5f3e5;color:#28602a}.af-ts-badge.warn{background:#fff2d6;color:#805700}.af-ts-badge.bad{background:#f8e3e3;color:#8b2020}
-            .af-ts-source-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0;border-bottom:1px solid #ddd;padding-bottom:8px}
-            .af-ts-source-tabs a{padding:6px 10px;border:1px solid #ccc;border-radius:4px;text-decoration:none}
-            .af-ts-source-tabs a.selected{background:#4e243b;color:#fff;border-color:#4e243b}
-            .af-ts-source-meta{display:flex;gap:18px;flex-wrap:wrap;margin:8px 0 12px}
-            .af-ts-source-meta span{display:block}
-            .af-ts-css{box-sizing:border-box;width:100%;min-height:55vh;font:13px/1.45 monospace;white-space:pre;tab-size:4}
-            .af-ts-css[readonly]{background:#f5f5f5;color:#555}
-            .af-ts-editor-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
-            .af-ts-tech{margin-top:14px}
-            @media(max-width:760px){.af-ts-workspace{grid-template-columns:1fr}.af-ts-sidebar{max-height:250px}.af-ts-css{min-height:42vh}}
-        </style>';
-
+        $unsavedMessage = $ui('unsaved_confirm', 'There are unsaved CSS changes. Leave this page?');
+        echo '<div class="af-theme-editor" data-unsaved-message="'.htmlspecialchars_uni($unsavedMessage).'">';
         echo '<h2>'.htmlspecialchars_uni($lang->af_theme_stylesheets_title).'</h2>';
         echo '<form method="get" action="index.php" class="af-ts-tools">';
         echo '<input type="hidden" name="module" value="'.AF_PLUGIN_ID.'"><input type="hidden" name="af_view" value="theme_stylesheets">';
@@ -903,14 +895,16 @@ class AF_Admin
                 echo '<input type="hidden" name="theme_tid" value="'.(int)$themeTid.'"><input type="hidden" name="theme_scope" value="current">';
                 echo '<input type="hidden" name="status_filter" value="'.htmlspecialchars_uni($statusFilter).'"><input type="hidden" name="q" value="'.htmlspecialchars_uni($search).'">';
                 echo '<input type="hidden" name="opened_checksum" value="'.sha1($css).'">';
-                echo '<textarea class="af-ts-css" name="source_css" spellcheck="false">'.htmlspecialchars_uni($css).'</textarea>';
-                echo '<div class="af-ts-editor-actions"><button type="submit" class="submit_button">'.htmlspecialchars_uni($ui('save', 'Save')).'</button>';
-                echo '</form>';
+                echo '<div class="af-ts-code-panel"><div class="af-ts-editor-toolbar"><span><strong>'.htmlspecialchars_uni($name).'</strong><span class="af-ts-toolbar-kind">CSS</span></span><span class="af-ts-unsaved" hidden>'.htmlspecialchars_uni($ui('unsaved', 'Unsaved changes')).'</span></div>';
+                echo '<textarea class="af-ts-css" id="af-ts-css-source" name="source_css" spellcheck="false">'.htmlspecialchars_uni($css).'</textarea></div>';
+                echo '<div class="af-ts-editor-actions"><button type="submit" class="submit_button">'.htmlspecialchars_uni($ui('save', 'Save')).'</button></div>';
+                echo '</form><div class="af-ts-editor-actions">';
                 echo self::renderThemeStylesheetActionForm('theme_stylesheets_restore_source', $ui('restore', 'Restore from file'), $addonFilter, true, true, 'current', $themeTid, $logicalFilter, 'secondary', ['status_filter' => $statusFilter, 'q' => $search]);
                 echo self::renderThemeStylesheetActionForm('theme_stylesheets_set_file_mode', $ui('switch_file', 'Switch to File mode'), $addonFilter, true, false, 'current', $themeTid, $logicalFilter, 'secondary', ['status_filter' => $statusFilter, 'q' => $search]);
                 echo '</div>';
             } else {
-                echo '<textarea class="af-ts-css" readonly="readonly" spellcheck="false">'.htmlspecialchars_uni($css).'</textarea>';
+                echo '<div class="af-ts-code-panel"><div class="af-ts-editor-toolbar"><span><strong>'.htmlspecialchars_uni($name).'</strong><span class="af-ts-toolbar-kind">CSS · READ ONLY</span></span></div>';
+                echo '<textarea class="af-ts-css" id="af-ts-css-source" readonly="readonly" spellcheck="false">'.htmlspecialchars_uni($css).'</textarea></div>';
                 echo '<div class="af-ts-editor-actions">';
                 echo self::renderThemeStylesheetActionForm('theme_stylesheets_set_theme_mode', $ui('switch_theme', 'Switch to Theme mode'), $addonFilter, true, false, 'current', $themeTid, $logicalFilter, 'primary', ['status_filter' => $statusFilter, 'q' => $search]);
                 echo '</div><p class="smalltext">'.htmlspecialchars_uni($ui('file_readonly', 'The physical CSS file is read-only in this editor.')).'</p>';
@@ -939,6 +933,11 @@ class AF_Admin
         }
         echo '<pre style="white-space:pre-wrap;max-height:360px;overflow:auto">'.htmlspecialchars_uni(json_encode($lastSync, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '').'</pre>';
         echo '</details>';
+        if ($selected) {
+            $editorJsUrl = af_asset_build_url('/inc/plugins/advancedfunctionality/assets/af-theme-stylesheets-editor.js');
+            if ($editorJsUrl !== '') echo '<script src="'.htmlspecialchars_uni($editorJsUrl).'"></script>';
+        }
+        echo '</div>';
     }
 
     private static function renderThemeStylesheetSectionEditor(): void
@@ -1745,6 +1744,8 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_ui_file_readonly' => 'Физический CSS доступен только для чтения в этом редакторе.',
             'af_theme_stylesheets_ui_technical' => 'Техническая информация',
             'af_theme_stylesheets_ui_diagnostics' => 'Диагностика синхронизации',
+            'af_theme_stylesheets_ui_unsaved' => 'Есть несохранённые изменения',
+            'af_theme_stylesheets_ui_unsaved_confirm' => 'В CSS есть несохранённые изменения. Покинуть страницу и потерять их?',
             'af_theme_stylesheets_sections' => 'Секции аддонов',
             'af_theme_stylesheets_structure_error' => 'Структура секций повреждена. Содержимое не перезаписано',
             'af_theme_stylesheets_legacy_status' => 'Старый формат advancedstyles.css',
@@ -1889,6 +1890,8 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_ui_file_readonly' => 'The physical CSS file is read-only in this editor.',
             'af_theme_stylesheets_ui_technical' => 'Technical information',
             'af_theme_stylesheets_ui_diagnostics' => 'Sync diagnostics',
+            'af_theme_stylesheets_ui_unsaved' => 'Unsaved changes',
+            'af_theme_stylesheets_ui_unsaved_confirm' => 'There are unsaved CSS changes. Leave this page and discard them?',
             'af_theme_stylesheets_sections' => 'Addon sections',
             'af_theme_stylesheets_structure_error' => 'Section structure is corrupt. Content was not overwritten',
             'af_theme_stylesheets_legacy_status' => 'Legacy advancedstyles.css format',
