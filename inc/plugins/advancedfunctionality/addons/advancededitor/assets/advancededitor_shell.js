@@ -523,7 +523,7 @@
     captureSurfaceMetrics(ta);
     var wrapper = ta.parentElement;
     if (!wrapper || !wrapper.hasAttribute('data-af-editor-shell')) {
-      wrapper = document.createElement('div'); wrapper.className = 'sceditor-container af-ae-shell'; wrapper.setAttribute('data-af-editor-shell', '1');
+      wrapper = document.createElement('div'); wrapper.className = 'af-ae-shell'; wrapper.setAttribute('data-af-editor-shell', '1');
       wrapper.innerHTML = P.shellToolbar || '';
       ta.parentNode.insertBefore(wrapper, ta); wrapper.appendChild(ta);
       if (P.counterHtml) wrapper.insertAdjacentHTML('beforebegin', P.counterHtml);
