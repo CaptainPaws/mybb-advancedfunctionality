@@ -326,9 +326,43 @@
     return (registry[id].requires || []).some(function (child) { return requiresCapability(child, dependency, seen.concat(id)); });
   }
 
+  // Keep the shell's single visible editing surface in sync with SCEditor.
+  // The library toggles its own iframe/source textarea; theme rules must not
+  // reveal the inactive surface when switching modes.
+  function syncEditorSurface(ta, editor) {
+    var shell = ta && ta.__afAeShell;
+    if (!shell || !editor || editor.__afAeSourceAdapter) return;
+    var source = false;
+    try {
+      if (typeof editor.sourceMode === 'function') source = !!editor.sourceMode();
+      else if (typeof editor.inSourceMode === 'function') source = !!editor.inSourceMode();
+    } catch (e) { return; }
+    shell.setAttribute('data-af-ae-active-surface', source ? 'source' : 'wysiwyg');
+  }
+
+  function bindEditorSurface(ta, editor) {
+    if (!editor || editor.__afAeSourceAdapter) return;
+    if (!editor.__afAeShellSurfaceBound) {
+      editor.__afAeShellSurfaceBound = true;
+      ['toggleSourceMode', 'sourceMode'].forEach(function (method) {
+        var original = editor[method];
+        if (typeof original !== 'function') return;
+        editor[method] = function () {
+          var result = original.apply(this, arguments);
+          if (method === 'toggleSourceMode' || arguments.length > 0) syncEditorSurface(ta, this);
+          return result;
+        };
+      });
+    }
+    syncEditorSurface(ta, editor);
+  }
+
   function ensureWysiwyg(ta) {
     var editor = currentEditor(ta);
-    if (editor && !editor.__afAeSourceAdapter) return editor;
+    if (editor && !editor.__afAeSourceAdapter) {
+      bindEditorSurface(ta, editor);
+      return editor;
+    }
     if (!window.afAdvancedEditorWysiwyg) throw new Error('WYSIWYG runtime did not register');
     ta.__afAeRequestedMode = (P.cfg || {}).wysiwygMode === 'full' ? 'full' : 'partial';
     if (!window.afAdvancedEditorWysiwyg.init(ta)) throw new Error('WYSIWYG initialization failed');
@@ -342,7 +376,9 @@
     };
     ta.classList.add('af-ae-original-textarea');
     ta.style.setProperty('display', 'none', 'important');
-    return currentEditor(ta);
+    editor = currentEditor(ta);
+    bindEditorSurface(ta, editor);
+    return editor;
   }
 
   function activate(ta, b, caller) {
@@ -527,6 +563,7 @@
     if (!ta.__afAeShell) return;
     var wrapper = ta.__afAeShell;
     if (ta.__afAeShellAbort) ta.__afAeShellAbort.abort();
+    wrapper.removeAttribute('data-af-ae-active-surface');
     ta.removeAttribute('data-af-ae-wys-active');
     if (ta.__afAeOriginalDisplay) {
       ta.style.setProperty('display', ta.__afAeOriginalDisplay.value, ta.__afAeOriginalDisplay.priority);
