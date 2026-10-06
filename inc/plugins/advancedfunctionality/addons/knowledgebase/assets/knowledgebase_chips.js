@@ -183,59 +183,105 @@
         body.innerHTML = banner + bodyText + blocksHtml;
     }
 
+    function previewChip(chip) {
+        if (!chip) return;
+
+        var cachedHtml = chip.__afKbTooltipHtml;
+        if (cachedHtml) {
+            showTooltip(chip, {
+                html: cachedHtml,
+                iconHtml: chip.__afKbTooltipIconHtml || ''
+            });
+            return;
+        }
+
+        var techHint = chip.getAttribute('data-tech-hint');
+        if (techHint) {
+            showTooltip(chip, {
+                text: techHint,
+                iconHtml: chip.querySelector('.af-kb-chip-icon') ? chip.querySelector('.af-kb-chip-icon').innerHTML : ''
+            });
+            return;
+        }
+
+        var type = chip.getAttribute('data-kb-type');
+        var key = chip.getAttribute('data-kb-key');
+        if (!type || !key) return;
+
+        if (tooltipTimer) clearTimeout(tooltipTimer);
+        tooltipTimer = setTimeout(function () {
+            fetchEntry(type, key).then(function (data) {
+                if (!data || !data.entry) return;
+                var hint = data.entry.tech_hint || '';
+                var tooltipHtml = data.entry.tooltip_html || '';
+                chip.__afKbTooltipIconHtml = buildIconHtml(data.entry);
+                if (tooltipHtml) {
+                    chip.__afKbTooltipHtml = tooltipHtml;
+                    showTooltip(chip, {
+                        html: tooltipHtml,
+                        iconHtml: chip.__afKbTooltipIconHtml
+                    });
+                    return;
+                }
+                if (hint) {
+                    chip.setAttribute('data-tech-hint', hint);
+                    showTooltip(chip, {
+                        text: hint,
+                        iconHtml: chip.__afKbTooltipIconHtml
+                    });
+                }
+            });
+        }, 150);
+    }
+
+    function openChip(chip, event) {
+        if (!chip) return;
+
+        // Do not hijack modified/non-primary clicks. Bootstrap replays a plain
+        // serializable event context after the runtime finishes loading.
+        if (event && typeof event.button === 'number' && event.button !== 0) return;
+        if (event && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
+
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+
+        var type = chip.getAttribute('data-kb-type');
+        var key = chip.getAttribute('data-kb-key');
+        if (!type || !key) return;
+
+        fetchEntry(type, key).then(function (data) {
+            var backdrop = getOrBuildModal();
+            renderModal(data);
+            backdrop.classList.add('is-active');
+        });
+    }
+
+    function handleChipInteraction(context) {
+        if (!context) return;
+        var chip = context.chip;
+        if (!chip || !chip.matches || !chip.matches('.af-kb-chip')) return;
+
+        var type = String(context.type || '').toLowerCase();
+        if (type === 'click') {
+            openChip(chip, context.event || context);
+            return;
+        }
+        if (type === 'mouseout' || type === 'pointerout' || type === 'focusout') {
+            hideTooltip();
+            return;
+        }
+        if (type === 'mouseover' || type === 'pointerover' || type === 'focusin' || type === 'focus') {
+            previewChip(chip);
+        }
+    }
+
     function initChips() {
         if (window.__afKbChipsInit) return;
         window.__afKbChipsInit = true;
 
         document.addEventListener('mouseover', function (event) {
             var chip = event.target && event.target.closest ? event.target.closest('.af-kb-chip') : null;
-            if (!chip) return;
-
-            var cachedHtml = chip.__afKbTooltipHtml;
-            if (cachedHtml) {
-                showTooltip(chip, {
-                    html: cachedHtml,
-                    iconHtml: chip.__afKbTooltipIconHtml || ''
-                });
-                return;
-            }
-
-            var techHint = chip.getAttribute('data-tech-hint');
-            if (techHint) {
-                showTooltip(chip, {
-                    text: techHint,
-                    iconHtml: chip.querySelector('.af-kb-chip-icon') ? chip.querySelector('.af-kb-chip-icon').innerHTML : ''
-                });
-                return;
-            }
-
-            var type = chip.getAttribute('data-kb-type');
-            var key = chip.getAttribute('data-kb-key');
-            if (!type || !key) return;
-
-            tooltipTimer = setTimeout(function () {
-                fetchEntry(type, key).then(function (data) {
-                    if (!data || !data.entry) return;
-                    var hint = data.entry.tech_hint || '';
-                    var tooltipHtml = data.entry.tooltip_html || '';
-                    chip.__afKbTooltipIconHtml = buildIconHtml(data.entry);
-                    if (tooltipHtml) {
-                        chip.__afKbTooltipHtml = tooltipHtml;
-                        showTooltip(chip, {
-                            html: tooltipHtml,
-                            iconHtml: chip.__afKbTooltipIconHtml
-                        });
-                        return;
-                    }
-                    if (hint) {
-                        chip.setAttribute('data-tech-hint', hint);
-                        showTooltip(chip, {
-                            text: hint,
-                            iconHtml: chip.__afKbTooltipIconHtml
-                        });
-                    }
-                });
-            }, 150);
+            if (chip) previewChip(chip);
         }, true);
 
         document.addEventListener('mouseout', function (event) {
@@ -243,27 +289,20 @@
             if (chip) hideTooltip();
         }, true);
 
+        document.addEventListener('focusin', function (event) {
+            var chip = event.target && event.target.closest ? event.target.closest('.af-kb-chip') : null;
+            if (chip) previewChip(chip);
+        }, true);
+
+        document.addEventListener('focusout', function (event) {
+            var chip = event.target && event.target.closest ? event.target.closest('.af-kb-chip') : null;
+            if (chip) hideTooltip();
+        }, true);
+
         document.addEventListener('click', function (event) {
             var chip = event.target && event.target.closest ? event.target.closest('.af-kb-chip') : null;
-            if (!chip) return;
-
-            // не ломаем спец-клики
-            if (event.defaultPrevented) return;
-            if (typeof event.button === 'number' && event.button !== 0) return;
-            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            var type = chip.getAttribute('data-kb-type');
-            var key = chip.getAttribute('data-kb-key');
-            if (!type || !key) return;
-
-            fetchEntry(type, key).then(function (data) {
-                var backdrop = getOrBuildModal();
-                renderModal(data);
-                backdrop.classList.add('is-active');
-            });
+            if (!chip || event.defaultPrevented) return;
+            openChip(chip, event);
         }, true);
     }
 
@@ -476,12 +515,20 @@
         syncFields();
     }
 
-    // Экспортируем, чтобы другой файл мог гарантированно поднять чипы
+    // Public hooks are intentionally tiny: the bootstrap replays only the
+    // first interaction that caused this runtime to be downloaded.
     window.afKbInitChips = initChips;
+    window.afKbHandleChipInteraction = handleChipInteraction;
 
-    document.addEventListener('DOMContentLoaded', function () {
+    function bootViewRuntime() {
         if (document.querySelector('.af-kb-chip')) initChips();
         initCharacterAjaxFilters();
         initCharacterStatusModal();
-    });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootViewRuntime, { once: true });
+    } else {
+        bootViewRuntime();
+    }
 })();
