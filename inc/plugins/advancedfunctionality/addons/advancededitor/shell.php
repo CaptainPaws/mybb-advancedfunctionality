@@ -224,6 +224,11 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
     unset($section);
     $escape = static fn($s) => htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $button = static function ($cmd, $b, bool $menuItem = false) use ($escape): string {
+        if ($menuItem) {
+            $title = $escape($b['title'] ?? $cmd);
+            return '<a href="#" role="button" class="sceditor-button sceditor-button-' . $escape($cmd) . '" data-af-command="' . $escape($cmd) . '" data-af-shell-menu-item="1" title="' . $title . '" aria-label="' . $title . '"><span class="af-ae-shell-menu-label">' . $title . '</span></a>';
+        }
+
         $icon = trim((string)($b['icon'] ?? ''));
         $iconSvg = trim((string)($b['iconSvg'] ?? ''));
         $fa = trim((string)($b['iconClass'] ?? af_advancededitor_shell_fa_icon((string)$cmd)));
@@ -241,9 +246,7 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
                 $visual = '<span class="af-ae-shell-icon" style="--af-ae-icon-url:url(&quot;' . $escape($cssUrl) . '&quot;)"></span>';
             }
         }
-        $label = $menuItem ? '<span class="af-ae-shell-menu-label">' . $escape($b['title'] ?? $cmd) . '</span>' : '';
-        $owned = $menuItem ? ' data-af-shell-menu-item="1"' : '';
-        return '<a href="#" role="button" class="sceditor-button sceditor-button-' . $escape($cmd) . '" data-af-command="' . $escape($cmd) . '"' . $owned . ' title="' . $escape($b['title'] ?? $cmd) . '" aria-label="' . $escape($b['title'] ?? $cmd) . '"><div>' . $visual . '</div>' . $label . '</a>';
+        return '<a href="#" role="button" class="sceditor-button sceditor-button-' . $escape($cmd) . '" data-af-command="' . $escape($cmd) . '" title="' . $escape($b['title'] ?? $cmd) . '" aria-label="' . $escape($b['title'] ?? $cmd) . '"><div>' . $visual . '</div></a>';
     };
     $html = '<div class="sceditor-toolbar" role="toolbar" aria-label="AdvancedEditor">';
     $n = 0;

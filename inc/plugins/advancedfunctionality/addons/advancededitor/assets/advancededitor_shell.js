@@ -46,52 +46,20 @@
     });
   }
 
-  function ensureShellMenuIcons(root) {
+  function ensureShellMenuTextOnly(root) {
     if (!root || !root.querySelectorAll) return;
     root.querySelectorAll('.af-ae-shell-menu [data-af-shell-menu-item="1"]').forEach(function (item) {
-      var cmd = item.getAttribute('data-af-command');
-      var b = buttons[cmd] || {};
-      var iconSvg = String(b.iconSvg || '').trim();
-      var visual = item.querySelector(':scope > div');
-      if (!visual) return;
-      if (iconSvg.indexOf('<svg') === 0 && iconSvg.indexOf('</svg>') !== -1) {
-        var currentSvg = visual.querySelector('svg.af-ae-menu-svg');
-        if (!currentSvg) visual.innerHTML = iconSvg;
-        visual.style.backgroundImage = 'none';
-        visual.style.textIndent = '0';
-        visual.style.webkitMaskImage = 'none';
-        visual.style.maskImage = 'none';
-        visual.style.backgroundColor = '';
-        return;
+      Array.prototype.forEach.call(item.children, function (child) {
+        if (!child.classList || !child.classList.contains('af-ae-shell-menu-label')) child.remove();
+      });
+      item.querySelectorAll('svg, i, img, .af-ae-shell-icon, .af-ae-menu-svg').forEach(function (node) { node.remove(); });
+      var label = item.querySelector('.af-ae-shell-menu-label');
+      if (!label) {
+        label = document.createElement('span');
+        label.className = 'af-ae-shell-menu-label';
+        label.textContent = item.getAttribute('title') || item.getAttribute('aria-label') || item.getAttribute('data-af-command') || '';
+        item.appendChild(label);
       }
-      var iconClass = String(b.iconClass || '').trim();
-      var svgOwned = ['horizontalrule','subscript','superscript','af_mark','af_abbr','af_tabs','af_accordion','af_ul_disc','af_ul_square','af_ul_decimal','af_ul_upper_roman','af_ul_upper_alpha','af_ul_lower_alpha'];
-      if (!iconClass && svgOwned.indexOf(String(cmd || '')) !== -1) return;
-      if (!iconClass) iconClass = String(cmd || '').indexOf('af_') === 0 ? 'fa-solid fa-code' : 'fa-solid fa-circle';
-      var glyph = String(b.iconGlyph || '');
-      var current = visual.querySelector('i.fa-solid, i.fa-regular, i.fa-brands');
-      var icon = current;
-      if (!icon || icon.className !== iconClass) {
-        visual.replaceChildren();
-        icon = document.createElement('i');
-        icon.className = iconClass + ' af-ae-fa-glyph';
-        icon.setAttribute('aria-hidden', 'true');
-        visual.appendChild(icon);
-      }
-      icon.classList.add('af-ae-fa-glyph');
-      if (glyph && icon.textContent !== glyph) icon.textContent = glyph;
-      var isBrand = icon.classList.contains('fa-brands');
-      var isRegular = icon.classList.contains('fa-regular');
-      icon.style.setProperty('font-family', isBrand ? '"Font Awesome 6 Brands"' : '"Font Awesome 6 Free"', 'important');
-      icon.style.setProperty('font-weight', isBrand || isRegular ? '400' : '900', 'important');
-      icon.style.setProperty('font-style', 'normal', 'important');
-      icon.style.setProperty('font-variant', 'normal', 'important');
-      icon.style.setProperty('line-height', '1', 'important');
-      visual.style.backgroundImage = 'none';
-      visual.style.textIndent = '0';
-      visual.style.webkitMaskImage = 'none';
-      visual.style.maskImage = 'none';
-      visual.style.backgroundColor = '';
     });
   }
 
@@ -508,7 +476,7 @@
       });
     }
     dedupeKbButtons(ta.__afAeShell);
-    ensureShellMenuIcons(ta.__afAeShell);
+    ensureShellMenuTextOnly(ta.__afAeShell);
     syncEditorSurface(ta, editor);
   }
 
@@ -775,7 +743,7 @@
       wrapper.querySelector('.sceditor-toolbar').appendChild(a);
     });
     dedupeKbButtons(wrapper);
-    ensureShellMenuIcons(wrapper);
+    ensureShellMenuTextOnly(wrapper);
     wrapper.addEventListener('mousedown', function (e) { if (e.target.closest('[data-af-command]')) e.preventDefault(); });
     wrapper.addEventListener('click', function (e) {
       var caller = e.target.closest('[data-af-command]'); if (!caller || !wrapper.contains(caller)) return;
@@ -787,7 +755,7 @@
           var shellPopup = ta.__afAeAdapter;
           shellPopup.closeDropDown();
           if (opening) {
-            ensureShellMenuIcons(wrapper);
+            ensureShellMenuTextOnly(wrapper);
             menu.hidden = false;
             shellPopup.createDropDown(caller, 'af-ae-extra-menu', menu);
           }

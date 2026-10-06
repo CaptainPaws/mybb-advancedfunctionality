@@ -185,56 +185,23 @@ html body .af-ae-shell > .sceditor-container.wysiwygMode > iframe { display: blo
   background: rgba(255,255,255,.06) !important;
   border-color: rgba(140,170,210,.25) !important;
 }
-.af-ae-popup .af-ae-shell-menu .sceditor-button > div {
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  width: 16px !important;
-  height: 16px !important;
-  margin: 0 !important;
-  background: none !important;
-  background-image: none !important;
-  background-position: center !important;
-  text-indent: 0 !important;
+.af-ae-popup.af-ae-extra-menu .af-ae-shell-menu .sceditor-button {
+  gap: 0 !important;
 }
-.af-ae-popup .af-ae-shell-menu .af-ae-menu-svg {
-  display: block !important;
-  flex: 0 0 16px;
-  width: 16px !important;
-  height: 16px !important;
-  overflow: visible;
-  color: currentColor;
-  pointer-events: none;
-}
-.af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-solid,
-.af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-regular,
-.af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-brands {
-  display: inline-block !important;
-  width: 16px;
-  text-align: center;
-  font-size: 13px;
-  line-height: 16px !important;
-  font-style: normal !important;
-  font-variant: normal !important;
-  color: currentColor;
-}
-.af-ae-popup .af-ae-shell-menu .sceditor-button i.af-ae-fa-glyph::before {
-  content: none !important;
+.af-ae-popup.af-ae-extra-menu .af-ae-shell-menu .sceditor-button > div,
+.af-ae-popup.af-ae-extra-menu .af-ae-shell-menu svg,
+.af-ae-popup.af-ae-extra-menu .af-ae-shell-menu i,
+.af-ae-popup.af-ae-extra-menu .af-ae-shell-menu img,
+.af-ae-popup.af-ae-extra-menu .af-ae-shell-menu .af-ae-shell-icon,
+.af-ae-popup.af-ae-extra-menu .af-ae-shell-menu .af-ae-menu-svg {
   display: none !important;
 }
-.af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-solid {
-  font-family: "Font Awesome 6 Free" !important;
-  font-weight: 900 !important;
+.af-ae-popup .af-ae-shell-menu-label {
+  display: block;
+  width: 100%;
+  font-size: 13px;
 }
-.af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-regular {
-  font-family: "Font Awesome 6 Free" !important;
-  font-weight: 400 !important;
-}
-.af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-brands {
-  font-family: "Font Awesome 6 Brands" !important;
-  font-weight: 400 !important;
-}
-.af-ae-popup .af-ae-shell-menu-label { font-size: 13px; }
+
 html body .af-ae-shell.af-ae-shell-maximized {
   position: fixed !important;
   inset: 0 !important;
