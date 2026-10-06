@@ -1,5 +1,15 @@
 <?php
 /** Metadata compiler boundary. No filesystem or AJAX work is needed on a click. */
+function af_advancededitor_shell_icon_url(string $name): string
+{
+    foreach (['assets/img/', 'assets/img/img/'] as $base) {
+        if (is_file(__DIR__ . '/' . $base . basename($name))) {
+            return af_advancededitor_addon_file_url($base . basename($name));
+        }
+    }
+    return '';
+}
+
 function af_advancededitor_shell_registry(array $available, array $custom, array $packs): array
 {
     $buttons = [];
@@ -67,16 +77,16 @@ function af_advancededitor_shell_registry(array $available, array $custom, array
         if (in_array($cmd, ['af_togglemode', 'source'], true)) $b['capability'] = 'wysiwyg';
         $icon = (string)($b['icon'] ?? '');
         if ($icon === '') {
-            $rel = 'assets/img/img/' . $cmd . '.svg';
-            if (is_file(__DIR__ . '/' . $rel)) $b['icon'] = af_advancededitor_addon_file_url($rel);
+            // Command aliases share the existing vector controls.
+            $iconNames = ['af_togglemode' => 'source', 'spoiler' => 'spoilerbb', 'af_kb_insert' => 'book'];
+            $b['icon'] = af_advancededitor_shell_icon_url(($iconNames[$cmd] ?? $cmd) . '.svg');
         } else {
             // Retain legacy packs with assets/img/img while resolving icons independently of JS.
             $prefix = af_advancededitor_addon_file_url('assets/img/');
             if (str_starts_with($icon, $prefix)) {
                 $name = substr($icon, strlen($prefix));
-                if (!is_file(__DIR__ . '/assets/img/' . $name) && is_file(__DIR__ . '/assets/img/img/' . $name)) {
-                    $b['icon'] = $prefix . 'img/' . $name;
-                }
+                $resolvedIcon = af_advancededitor_shell_icon_url($name);
+                if ($resolvedIcon !== '') $b['icon'] = $resolvedIcon;
             }
         }
     }
@@ -143,8 +153,8 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
         }
         if (($section['type'] ?? 'group') === 'dropdown') {
             $cmd = 'af_menu_dropdown' . ++$n;
-            $title = (string)($section['title'] ?? '★');
-            $html .= '<div class="sceditor-group">' . $button($cmd, ['title' => strip_tags($title), 'label' => $title, 'icon' => (str_starts_with($title, '<svg') || preg_match('~^(?:https?:)?//|^/~', $title)) ? $title : '']) . '<div class="af-ae-shell-menu" data-af-menu="'.$escape($cmd).'" hidden>';
+            $title = (string)($section['title'] ?? 'Доп. меню');
+            $html .= '<div class="sceditor-group">' . $button($cmd, ['title' => strip_tags($title), 'label' => $title, 'icon' => (str_starts_with($title, '<svg') || preg_match('~^(?:https?:)?//|^/~', $title)) ? $title : af_advancededitor_shell_icon_url('starmenu.svg')]) . '<div class="af-ae-shell-menu" data-af-menu="'.$escape($cmd).'" hidden>';
             foreach ($items as $item) if ($item !== '|') $html .= $button($item, $map[$item], true);
             $html .= '</div></div>';
             continue;
@@ -166,6 +176,23 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
     }
     $html .= '<!--af-ae-toolbar-end--></div>';
     return $html;
+}
+
+/** Attach late addon metadata once to each compiled toolbar. */
+function af_advancededitor_shell_attach_button(string $page, array $button): string
+{
+    $registry = af_advancededitor_shell_registry([$button], [], ['packs' => []]);
+    $toolbar = af_advancededitor_shell_toolbar($registry['buttons'], ['sections' => [
+        ['type' => 'group', 'items' => [$button['cmd']]],
+    ]]);
+    // Only this command's first group; other external metadata may also exist.
+    preg_match('~<div class="sceditor-group">.*?</a></div>~s', $toolbar, $rendered);
+    $group = $rendered[0] ?? '';
+    return preg_replace_callback('~(<div\b[^>]*class="sceditor-toolbar"[^>]*>)(.*?)(<!--af-ae-toolbar-end-->)~s',
+        static function ($match) use ($button, $group) {
+            $command = 'data-af-command="' . htmlspecialchars((string)$button['cmd'], ENT_QUOTES, 'UTF-8') . '"';
+            return $match[1] . $match[2] . (str_contains($match[2], $command) ? '' : $group) . $match[3];
+        }, $page) ?? $page;
 }
 
 function af_advancededitor_render_shells(string $page, string $toolbar, bool $counter = true): string

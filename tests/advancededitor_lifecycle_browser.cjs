@@ -3,20 +3,21 @@
 const {chromium}=require('playwright'), fs=require('fs'), path=require('path'), assert=require('node:assert/strict');
 const args=Object.fromEntries(process.argv.slice(2).reduce((a,v,i,all)=>v.startsWith('--')?a.concat([[v.slice(2),all[i+1]]]):a,[]));
 if (!args.html || !args['mybb-assets']) throw Error('--html and --mybb-assets required');
-const root=path.resolve(__dirname,'..'), addon='/inc/plugins/advancedfunctionality/addons/';
-const checks=[], errors=[], requests=[];
+const root=path.resolve(args.root||path.resolve(__dirname,'..')), addon='/inc/plugins/advancedfunctionality/addons/';
+const checks=[], errors=[], requests=[], failedAssets=[];
 let browser;
 const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><button class="af-aqr-spoiler-head" aria-expanded="false">Spoiler</button><div class="af-aqr-spoiler-body" hidden>Secret</div><div class="af-aqr-spoiler-foot" hidden><button class="af-aqr-spoiler-collapse">Close</button></div></blockquote>';
 (async()=>{
  browser=await chromium.launch({executablePath:args.chromium||'/usr/bin/chromium',args:['--no-sandbox']});
  const page=await browser.newPage({viewport:{width:1100,height:850}});
  page.on('pageerror',e=>errors.push(e.message));
+ page.on('response',r=>{if(r.status()>=400 && r.url().includes('/assets/') && /\.(js|css|svg)(?:\?|$)/.test(r.url()))failedAssets.push(r.url());});
  await page.route('**/*',async route=>{
   const url=new URL(route.request().url());requests.push(url.pathname);
   if(url.pathname==='/showthread.php'&&route.request().method()==='POST') {
    return route.fulfill({contentType:'text/html',body:'<div id="preview_post"><div class="post_body"><blockquote class="mycode_quote"><cite><a href="showthread.php?pid=703#pid703">↗</a> Wrote:</cite>Lorem ipsum</blockquote></div></div>'});
   }
-  let file=url.pathname==='/showthread.php'?args.html:url.pathname.startsWith('/jscripts/')?path.join(args['mybb-assets'],url.pathname):path.join(root,url.pathname);
+  let file=url.pathname==='/work/theme.css'?args['theme-css']:url.pathname==='/showthread.php'?args.html:url.pathname.startsWith('/jscripts/')?path.join(args['mybb-assets'],url.pathname):path.join(root,url.pathname);
   try {
    let body=fs.readFileSync(file);
    if(url.pathname==='/showthread.php') {
@@ -24,6 +25,7 @@ const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><bu
      let payload=JSON.parse(json);payload.cfg.editorSelector='textarea';
      return 'window.afAdvancedEditorPayload='+JSON.stringify(payload)+';</script>';
     });
+    if(args['theme-css']) html=html.replace('<head>','<head><link rel="stylesheet" href="/work/theme.css">').replace('<body>','<body class="atf-active"><div class="atf-page">').replace('</body>','</div></body>');
     html=html.replace('</head>','<style>.mycode_quote{text-align:left}</style></head>')
       .replace('<textarea name="message" id="message">','<textarea class="sceditor-textarea" name="message" id="message">');
     html=html.replace('</body>','<div id="posts"><article class="post" id="post_703"><div class="atf-post__name"><a href="member.php?action=profile&uid=42">Тестовый Автор</a></div><div class="atf-post__avatar"><img src="/uploads/avatars/avatar_42.png" width="48" height="48"></div><div class="post_body" id="pid_703">Lorem ipsum</div></article></div></body>');
@@ -35,11 +37,22 @@ const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><bu
  await page.goto('http://127.0.0.1:8765/showthread.php');
  const cmd=name=>page.locator('#quick_reply_form [data-af-command="'+name+'"]');
  const shell=page.locator('#quick_reply_form > .af-ae-shell');
- const dimensions=()=>shell.evaluate(e=>({height:e.getBoundingClientRect().height,fields:e.querySelectorAll('textarea').length,native:e.querySelectorAll('.sceditor-container').length,toolbar:e.querySelectorAll('.sceditor-toolbar').length,kb:e.querySelectorAll('[data-af-command=af_kb_insert]').length}));
+ const dimensions=()=>shell.evaluate(e=>({height:e.getBoundingClientRect().height,fields:e.querySelectorAll('textarea').length,native:e.querySelectorAll('.sceditor-container').length,toolbar:e.querySelectorAll('.sceditor-toolbar').length,kb:e.querySelectorAll('.sceditor-button-af_kb_insert').length}));
  assert.equal(await page.evaluate(()=>!!jQuery.fn.sceditor),false);
  assert.equal(await shell.count(),1);assert.equal(await cmd('af_kb_insert').count(),1);
  assert.equal(await shell.locator('.af-ccp-bar [data-af-command=af_formathelp]').count(),1);
  assert.equal(await shell.locator('.sceditor-toolbar [data-af-command=af_formathelp]').count(),0);
+ const icon=page.locator('#quick_reply_form [data-af-command=af_menu_dropdown1] > div');
+ assert.equal((await icon.textContent()).trim(),'');
+ assert.equal(await icon.locator('.af-ae-shell-icon, img, svg').count(),1);
+ assert.equal(await cmd('af_kb_insert').locator('.af-ae-shell-icon, img, svg').count(),1);
+ const palette=()=>shell.evaluate(e=>({color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor,source:getComputedStyle(e.querySelector('textarea:not(.af-ae-original-textarea)')||e.querySelector('textarea')).color}));
+ const initialPalette=await palette();
+ assert.notEqual(initialPalette.color,initialPalette.background);
+ assert.equal(initialPalette.source,initialPalette.color);
+ await page.setViewportSize({width:375,height:850});
+ assert.equal(await shell.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,'Mobile toolbar must wrap');
+ await page.setViewportSize({width:1100,height:850});
  const initial=await dimensions();
  await page.locator('#message').fill('Текст 😀');
  async function popup(command,selector) {
@@ -63,6 +76,13 @@ const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><bu
  assert.equal((await dimensions()).native,1);assert.equal((await dimensions()).toolbar,1);
  assert.equal((await dimensions()).fields,2); // Original data field + ONE native source view.
  const activated=await dimensions();assert.equal(activated.height,initial.height);
+ assert.equal(await page.evaluate(()=>getComputedStyle(jQuery('#message').sceditor('instance').getBody()).color),initialPalette.color);
+ await page.evaluate(()=>jQuery('#message').sceditor('instance').sourceMode(true));
+ assert.equal(await shell.locator('.sceditor-source').evaluate(e=>getComputedStyle(e).color),initialPalette.color);
+ await page.evaluate(()=>jQuery('#message').sceditor('instance').sourceMode(false));
+ await page.evaluate(()=>jQuery('#message').sceditor('instance').val('[color=#ff0000]Red[/color]'));
+ assert.equal(await page.evaluate(()=>getComputedStyle(jQuery('#message').sceditor('instance').getBody().querySelector('[style*=color], font[color]')).color),'rgb(255, 0, 0)');
+ await page.evaluate(()=>jQuery('#message').sceditor('instance').val('Текст 😀'));
  await page.evaluate(()=>{window.__testedInstance=jQuery('#message').sceditor('instance');window.__testedFrame=__testedInstance.getContentAreaContainer();});
  for(let i=0;i<10;i++) {
   await cmd('af_togglemode').click();await page.waitForTimeout(20);
@@ -185,6 +205,8 @@ const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><bu
  await page.locator('[name=inlinemod_703]').uncheck();await page.locator('[name=inlinemod_704]').uncheck();assert.equal(await action(),'');
  assert.equal(await page.locator('#fimp').getAttribute('data-current-action'),'');
  checks.push('K: action none, disabled merge ignored, delete/merge/approve/unapprove/move/split exact actions and reset');
+ if(args.screenshot)await shell.screenshot({path:args.screenshot});
+ assert.deepEqual(failedAssets,[],'Editor assets must return successful responses');
  assert.deepEqual(errors,[]);
  if(args.report)fs.writeFileSync(args.report,JSON.stringify({initial,activated,checks,errors,requests},null,2));
  console.log(checks.join('\n'));

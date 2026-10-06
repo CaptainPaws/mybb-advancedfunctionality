@@ -1,8 +1,8 @@
 /* Visual shell; feature dialogs and SCEditor iframe styles load on use. */
 #quickreply_e tr td.trow1:first-child { display: none; }
-.af-ae-shell { position: relative; box-sizing: border-box; width: 100%; border: 1px solid rgba(0,0,0,.18); border-radius: 12px; overflow: visible; background: var(--atf-surface, #fff); }
-.af-ae-shell > .sceditor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0; padding: 3px 5px; background: var(--atf-surface-subtle, #f7f7f7); border-bottom: 1px solid rgba(0,0,0,.08); border-radius: 12px 12px 0 0; }
-.af-ae-shell .sceditor-group { position: relative; display: inline-flex; align-items: center; margin: 1px 5px 1px 0; padding: 0; border: 1px solid rgba(0,0,0,.12); border-radius: 3px; background: var(--atf-surface-subtle, #ddd); }
+.af-ae-shell { position: relative; box-sizing: border-box; width: 100%; border: 1px solid rgba(0,0,0,.18); border-radius: 12px; overflow: visible; background: var(--atf-color-surface, var(--atf-surface, #fff)); color: var(--atf-color-text, #333); }
+.af-ae-shell > .sceditor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0; padding: 3px 5px; background: var(--atf-color-page-subtle, var(--atf-surface-subtle, #f7f7f7)); border-bottom: 1px solid rgba(0,0,0,.08); border-radius: 12px 12px 0 0; }
+.af-ae-shell .sceditor-group { position: relative; display: inline-flex; align-items: center; margin: 1px 5px 1px 0; padding: 0; border: 1px solid rgba(0,0,0,.12); border-radius: 3px; background: var(--atf-color-page-subtle, var(--atf-surface-subtle, #eee)); }
 .af-ae-shell .sceditor-button { display: inline-flex; align-items: center; justify-content: center; box-sizing: content-box; width: 16px; height: 20px; padding: 3px 5px; margin: 0; color: inherit; cursor: pointer; text-decoration: none; border: 1px solid transparent; border-radius: 3px; }
 .af-ae-shell .sceditor-button > div { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 11px; font-weight: 700; line-height: 16px; color: inherit; background-image: none; margin: 0; overflow: visible; }
 .af-ae-shell-icon { display: block; width: 16px; height: 16px; background: var(--af-ae-icon-color, currentColor); -webkit-mask: var(--af-ae-icon-url) center / contain no-repeat; mask: var(--af-ae-icon-url) center / contain no-repeat; }
@@ -11,12 +11,12 @@
 .af-ae-shell .sceditor-button[aria-busy="true"] { opacity: .6; }
 .af-ae-shell > textarea { display: block; box-sizing: border-box; width: 100%; min-height: var(--af-ae-surface-height, 180px); height: var(--af-ae-surface-height, 180px); padding: 10px; margin: 0; border: 0; border-radius: 0 0 12px 12px; background: transparent; color: inherit; resize: vertical; font-family: var(--af-ae-surface-font-family, Verdana, Arial, Helvetica, sans-serif); font-size: var(--af-ae-surface-font-size, 14px); font-weight: var(--af-ae-surface-font-weight, 400); line-height: var(--af-ae-surface-line-height, 1.25); letter-spacing: var(--af-ae-surface-letter-spacing, normal); }
 .af-ae-shell > .sceditor-container { border: 0; margin: 0; border-radius: 0 0 12px 12px; }
-.af-ae-shell-menu { position: absolute; top: 100%; left: 0; z-index: 2147483000; min-width: 220px; padding: 6px; border-radius: 10px; background: var(--atf-surface, #fff); box-shadow: 0 5px 20px rgba(0,0,0,.2); }
+.af-ae-shell-menu { position: absolute; top: 100%; left: 0; z-index: 2147483000; min-width: 220px; padding: 6px; border-radius: 10px; background: var(--atf-color-surface, var(--atf-surface, #fff)); box-shadow: 0 5px 20px rgba(0,0,0,.2); }
 .af-ae-shell-menu[hidden] { display: none; }
 .af-ae-shell-menu .sceditor-button { display: flex; width: auto; justify-content: flex-start; }
 .af-ae-shell-menu-label { margin-left: 8px; font-size: 13px; white-space: nowrap; }
-.af-ae-shell-error { position: absolute; left: 4px; bottom: 4px; z-index: 10; max-width: calc(100% - 8px); padding: 6px; border-radius: 6px; background: var(--atf-surface, #fff); box-shadow: 0 1px 8px rgba(0,0,0,.18); font-size: 12px; }
-.sceditor-dropdown { max-width: calc(100vw - 16px); padding: 6px; border-radius: 10px; background: var(--atf-surface, #fff); box-shadow: 0 4px 20px rgba(0,0,0,.2); }
+.af-ae-shell-error { position: static; flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; padding: 0; font-size: 12px; color: var(--atf-color-text, #333); }
+.sceditor-dropdown { max-width: calc(100vw - 16px); padding: 6px; border-radius: 10px; background: var(--atf-color-surface, var(--atf-surface, #fff)); box-shadow: 0 4px 20px rgba(0,0,0,.2); }
 .af-ccp-wrap {
   margin: 10px 0 10px 0;
 }
@@ -24,6 +24,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 6px 10px;
   border-radius: 10px;
@@ -53,7 +54,7 @@ html body .af-ae-shell > .sceditor-toolbar {
   visibility: visible !important; float: none !important;
 }
 html body .af-ae-shell > .sceditor-toolbar > .sceditor-group {
-  display: inline-flex !important; flex-flow: row nowrap !important;
+  display: inline-flex !important; flex-flow: row wrap !important; max-width: 100%;
   align-items: center !important; width: auto !important;
   height: auto !important; float: none !important; position: relative;
 }
@@ -99,7 +100,7 @@ html body .af-ae-shell > .sceditor-container > :is(iframe, textarea) {
   margin: 0 !important;
   border: 0 !important;
   padding: 10px !important;
-  background: var(--atf-surface, #fff);
+  background: var(--atf-color-surface, var(--atf-surface, #fff));
   color: inherit;
   font-family: var(--af-ae-surface-font-family);
   font-size: var(--af-ae-surface-font-size);
@@ -115,7 +116,7 @@ html body .af-ae-shell > .sceditor-container.sourceMode > textarea,
 html body .af-ae-shell > .sceditor-container.wysiwygMode > iframe { display: block; }
 .af-ae-shell > .af-ccp-wrap { flex: 0 0 auto; margin: 0; }
 .af-ae-shell .af-ccp-bar { border-radius: 0 0 12px 12px; }
-.af-ae-format-help-trigger { margin-right: auto; cursor: pointer; color: inherit; font: inherit; }
+.af-ae-format-help-trigger { margin-right: auto; cursor: pointer; color: inherit; font: inherit; padding: 4px 8px; background: transparent; border: 1px solid var(--atf-color-border, #ccc); border-radius: 5px; }
 .af-ae-popup.sceditor-dropdown {
   position: fixed !important;
   inset: auto;
@@ -126,7 +127,7 @@ html body .af-ae-shell > .sceditor-container.wysiwygMode > iframe { display: blo
   max-width: calc(100vw - 16px);
   max-height: min(65vh, 450px);
   overflow: auto;
-  background: var(--atf-surface, #fff);
+  background: var(--atf-color-surface, var(--atf-surface, #fff));
   color: var(--atf-color-text, #333);
   border: 1px solid rgba(140,170,210,.35);
   border-radius: 10px;
@@ -171,7 +172,7 @@ html body .af-ae-shell.af-ae-shell-maximized {
   border-radius: 0 !important;
   display: flex !important;
   flex-direction: column;
-  background: var(--atf-surface, #fff);
+  background: var(--atf-color-surface, var(--atf-surface, #fff));
 }
 html body .af-ae-shell.af-ae-shell-maximized > .sceditor-toolbar { flex: 0 0 auto; }
 html body .af-ae-shell.af-ae-shell-maximized > textarea:not(.af-ae-original-textarea),
@@ -181,3 +182,14 @@ html body .af-ae-shell.af-ae-shell-maximized > .sceditor-container {
   height: auto !important;
 }
 html.af-ae-shell-fullscreen-active, html.af-ae-shell-fullscreen-active body { overflow: hidden !important; }
+
+/* Standalone toolbar shares the ATF palette without impersonating SCEditor. */
+.af-ae-shell > .sceditor-toolbar { gap: 4px; padding: 5px; }
+.af-ae-shell .sceditor-group { gap: 2px; margin: 0; border: 0; border-right: 1px solid var(--atf-color-border, #ccc); border-radius: 0; padding-right: 4px; background: transparent; }
+.af-ae-shell .sceditor-group:last-child { border-right: 0; }
+.af-ae-shell .sceditor-button { color: var(--atf-color-text-muted, #444); border-radius: 4px; }
+.af-ae-shell .sceditor-button.active, .af-ae-shell .sceditor-button[aria-pressed="true"] { color: var(--atf-color-accent, #345c99); background: color-mix(in srgb, currentColor 14%, transparent); }
+.af-ae-shell .sceditor-button.disabled, .af-ae-shell .sceditor-button[aria-disabled="true"] { opacity: .45; cursor: default; }
+.af-ae-shell textarea::placeholder { color: var(--atf-color-text-muted, #666); opacity: .8; }
+.af-ae-shell textarea::selection { background: var(--atf-color-accent, #bdd5ff); color: var(--atf-color-accent-contrast, #111); }
+.af-ae-shell .af-ccp-bar { color: var(--atf-color-text, #333); }

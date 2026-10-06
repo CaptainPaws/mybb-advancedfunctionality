@@ -6,7 +6,7 @@
   var buttons = Object.create(null), states = Object.create(null), assets = Object.create(null);
   (P.available || []).concat(window.afAeButtons || []).forEach(function (b) { buttons[b.cmd] = b; });
 
-  Object.keys(registry).forEach(function(id) { states[id] = { state: 'unloaded', promise: null }; });
+  Object.keys(registry).forEach(function(id) { states[id] = { state: 'idle', promise: null }; });
 
   function loadAsset(url, type) {
     var resolved = new URL(url, document.baseURI);
@@ -50,9 +50,10 @@
     if (path.indexOf(id) !== -1) return Promise.reject(new Error('Capability dependency cycle: ' + id));
     var definition = registry[id];
     if (!definition) return Promise.reject(new Error('Unknown capability: ' + id));
-    var state = states[id] || (states[id] = { state: 'unloaded', promise: null });
+    var state = states[id] || (states[id] = { state: 'idle', promise: null });
     if (state.state === 'loading' || state.state === 'loaded') return state.promise;
     state.state = 'loading';
+    state.error = null;
     state.promise = Promise.resolve().then(function () {
       validateDependencies(id, []);
       return Promise.all((definition.requires || []).map(function (dependency) { return loadCapability(dependency, path.concat(id)); }));
@@ -65,7 +66,7 @@
     }).then(function () {
       state.state = 'loaded';
       document.dispatchEvent(new CustomEvent('af:capability-ready', { detail: { capability: id } }));
-    }).catch(function (error) { state.state = 'failed'; throw error; });
+    }).catch(function (error) { state.state = 'failed'; state.error = error; state.promise = null; throw error; });
     return state.promise;
   }
 
@@ -341,9 +342,19 @@
     return ta.__afAeAdapter;
   }
 
+  function serviceBar(wrapper) {
+    var bar = wrapper.querySelector('.af-ccp-bar');
+    if (!bar) {
+      var wrap = document.createElement('div'); wrap.className = 'af-ccp-wrap';
+      bar = document.createElement('div'); bar.className = 'af-ccp-bar';
+      wrap.appendChild(bar); wrapper.appendChild(wrap);
+    }
+    return bar;
+  }
+
   function report(wrapper, b, error) {
     var notice = wrapper.querySelector('.af-ae-shell-error');
-    if (!notice) { notice = document.createElement('div'); notice.className = 'af-ae-shell-error'; notice.setAttribute('role', 'status'); wrapper.appendChild(notice); }
+    if (!notice) { notice = document.createElement('div'); notice.className = 'af-ae-shell-error'; notice.setAttribute('role', 'status'); serviceBar(wrapper).appendChild(notice); }
     notice.textContent = (b.title || b.cmd) + ': не удалось загрузить. Нажмите кнопку ещё раз для повтора.';
     console.warn('[AdvancedEditor]', error);
   }
@@ -435,7 +446,7 @@
     if (ta.__afAeSurfaceMetrics) ta.__afAeSurfaceMetrics.height = Math.round(ta.getBoundingClientRect().height || ta.__afAeSurfaceMetrics.height);
     if (!window.afAdvancedEditorWysiwyg) throw new Error('WYSIWYG runtime did not register');
     ta.__afAeRequestedMode = (P.cfg || {}).wysiwygMode === 'full' ? 'full' : 'partial';
-    if (!window.afAdvancedEditorWysiwyg.init(ta)) throw new Error('WYSIWYG initialization failed');
+    if (!window.afAdvancedEditorWysiwyg.init(ta)) throw ta.__afAeInitError || new Error('WYSIWYG initialization failed');
     // The original textarea is a hidden data source after SCEditor activation.
     // The lightweight shell must never display it next to the editor widget.
     ta.setAttribute('data-af-ae-wys-active', '1');
@@ -649,7 +660,11 @@
       if (b.cmd === 'af_formathelp' || wrapper.querySelector('[data-af-command="' + b.cmd + '"]')) return;
       var a = document.createElement('a'); a.href = '#'; a.className = 'sceditor-button sceditor-button-' + b.cmd;
       a.setAttribute('role', 'button'); a.setAttribute('data-af-command', b.cmd); a.title = b.title; a.setAttribute('aria-label', b.title);
-      var visual = document.createElement('div'); visual.textContent = b.label || b.title; a.appendChild(visual);
+      var visual = document.createElement('div');
+      if (b.icon) {
+        var icon = document.createElement('img'); icon.src = b.icon; icon.alt = ''; icon.width = icon.height = 16; visual.appendChild(icon);
+      } else visual.textContent = b.label || b.title;
+      a.appendChild(visual);
       wrapper.querySelector('.sceditor-toolbar').appendChild(a);
     });
     wrapper.addEventListener('mousedown', function (e) { if (e.target.closest('[data-af-command]')) e.preventDefault(); });

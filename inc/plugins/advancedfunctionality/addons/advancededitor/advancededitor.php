@@ -1237,7 +1237,9 @@ table #post_options, table #postoptions{display:none!important;}
         ];
         $payload['capabilities']['wysiwyg'] = [
             'activation' => 'click', 'requires' => [],
-            'js' => array_values(array_filter([$core, $bb, $mybbBridge, $assetsBase . 'bbcodes/bbcodes/align/align.js', $assetsBase . 'advancededitor_wysiwyg_bbcodes.js', $assetsBase . 'advancededitor.js'])),
+            'js' => array_values(array_filter(array_merge([$core, $bb, $mybbBridge],
+                (array)($packs['packs']['align']['assets']['js'] ?? []),
+                [$assetsBase . 'advancededitor_wysiwyg_bbcodes.js', $assetsBase . 'advancededitor.js']))),
             'css' => [$sceditorThemeCss, af_advancededitor_feature_css_url('assets/advancededitor.css')],
         ];
         $payload['shellToolbar'] = af_advancededitor_shell_toolbar($available, $layout, $payload['formatHelp']);
@@ -2589,6 +2591,25 @@ function af_advancededitor_get_custom_button_defs(string $bburl): array
 }
 
 
+/** Resolve editor and published-view assets through the same installed pack path. */
+function af_advancededitor_pack_asset_rel(string $rel, string $packDir, string $addonBaseFs): string
+{
+    $rel = ltrim(trim($rel), '/');
+    if ($rel === '') return '';
+    $candidates = [
+        MYBB_ROOT . af_advancededitor_base_rel() . 'assets/' . $rel,
+        MYBB_ROOT . af_advancededitor_base_rel() . 'assets/bbcodes/' . $rel,
+        $packDir . $rel,
+        $packDir . basename($rel),
+    ];
+    foreach ($candidates as $candidate) {
+        $abs = af_advancededitor_realpath_safe($candidate);
+        if (!is_file($abs) || !af_advancededitor_is_path_inside($abs, $addonBaseFs)) continue;
+        return ltrim(str_replace($addonBaseFs, '', $abs), '/\\');
+    }
+    return af_advancededitor_addon_file_rel_from_web_rel('assets/' . $rel);
+}
+
 /**
  * Скан BB-паков
  */
@@ -2660,25 +2681,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             foreach ($m['assets']['css'] as $rel) {
                 $rel = trim((string)$rel);
                 if ($rel === '') continue;
-                $candidatesAbs = [
-                    MYBB_ROOT . af_advancededitor_base_rel() . 'assets/' . ltrim($rel, '/'),
-                    MYBB_ROOT . af_advancededitor_base_rel() . 'assets/bbcodes/' . ltrim($rel, '/'),
-                    $packDir . ltrim($rel, '/'),
-                    $packDir . basename($rel),
-                ];
-
-                $fileRel = '';
-                foreach ($candidatesAbs as $abs) {
-                    $abs = af_advancededitor_realpath_safe($abs);
-                    if (!is_file($abs)) continue;
-                    if (!af_advancededitor_is_path_inside($abs, $addonBaseFs)) continue;
-                    $fileRel = ltrim(str_replace($addonBaseFs, '', $abs), '/\\');
-                    if ($fileRel !== '') break;
-                }
-
-                if ($fileRel === '') {
-                    $fileRel = af_advancededitor_addon_file_rel_from_web_rel('assets/' . ltrim($rel, '/'));
-                }
+                $fileRel = af_advancededitor_pack_asset_rel($rel, $packDir, $addonBaseFs);
 
                 $resolvedCss = af_advancededitor_feature_css_url($fileRel);
                 if ($resolvedCss !== '') {
@@ -2690,25 +2693,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             foreach ($m['assets']['js'] as $rel) {
                 $rel = trim((string)$rel);
                 if ($rel === '') continue;
-                $candidatesAbs = [
-                    MYBB_ROOT . af_advancededitor_base_rel() . 'assets/' . ltrim($rel, '/'),
-                    MYBB_ROOT . af_advancededitor_base_rel() . 'assets/bbcodes/' . ltrim($rel, '/'),
-                    $packDir . ltrim($rel, '/'),
-                    $packDir . basename($rel),
-                ];
-
-                $fileRel = '';
-                foreach ($candidatesAbs as $abs) {
-                    $abs = af_advancededitor_realpath_safe($abs);
-                    if (!is_file($abs)) continue;
-                    if (!af_advancededitor_is_path_inside($abs, $addonBaseFs)) continue;
-                    $fileRel = ltrim(str_replace($addonBaseFs, '', $abs), '/\\');
-                    if ($fileRel !== '') break;
-                }
-
-                if ($fileRel === '') {
-                    $fileRel = af_advancededitor_addon_file_rel_from_web_rel('assets/' . ltrim($rel, '/'));
-                }
+                $fileRel = af_advancededitor_pack_asset_rel($rel, $packDir, $addonBaseFs);
 
                 $packJs[] = af_advancededitor_addon_file_url($fileRel);
             }
@@ -2772,9 +2757,13 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
         // receive packs whose own manifest explicitly opts into view runtime.
         foreach ($packCss as $u) $out['css'][] = $u;
         foreach ($packJs as $u)  $out['js'][]  = $u;
-        if ($viewRuntime) {
-            foreach ((array)($m['view_assets']['css'] ?? []) as $rel) $out['view_css'][] = af_advancededitor_addon_file_url('assets/' . $rel);
-            foreach ((array)($m['view_assets']['js'] ?? []) as $rel) $out['view_js'][] = af_advancededitor_addon_file_url('assets/' . $rel);
+        $viewAssets = ['css' => [], 'js' => []];
+        foreach (['css', 'js'] as $type) {
+            foreach ((array)($m['view_assets'][$type] ?? []) as $rel) {
+                $fileRel = af_advancededitor_pack_asset_rel((string)$rel, $packDir, $addonBaseFs);
+                if ($fileRel !== '') $viewAssets[$type][] = af_advancededitor_addon_file_url($fileRel);
+            }
+            if ($viewRuntime) $out['view_' . $type] = array_merge($out['view_' . $type], $viewAssets[$type]);
         }
 
         if (isset($out['packs'][$packId])) {
@@ -2787,8 +2776,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             'tags'          => $tags,
             'buttons'       => $packButtons,
             'assets'        => ['css' => $packCss, 'js' => $packJs],
-            'view_assets' => ['css' => array_map(static fn($rel) => af_advancededitor_addon_file_url('assets/' . $rel), (array)($m['view_assets']['css'] ?? [])),
-                'js' => array_map(static fn($rel) => af_advancededitor_addon_file_url('assets/' . $rel), (array)($m['view_assets']['js'] ?? []))],
+            'view_assets' => $viewAssets,
             'parser_abs'    => $parserAbs,
             'manifest_path' => $manifestFile,
             'view_markers' => (array)($m['view_markers'] ?? []),

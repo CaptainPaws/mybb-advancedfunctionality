@@ -22,6 +22,10 @@ $GLOBALS['af_ae_external_capabilities']['kb-insert'] = ['activation'=>'click','r
 $GLOBALS['af_ae_external_buttons']['af_kb_insert'] = ['cmd'=>'af_kb_insert','title'=>'Insert KB','label'=>'KB','handler'=>'kb_insert','capability'=>'kb-insert'];
 $page='<!doctype html><html><head><meta charset="UTF-8"><script src="/jscripts/jquery.js"></script></head><body><form id="quick_reply_form"><input name="tid" value="14"><textarea name="message" id="message">Привет 😀</textarea><button type="submit">Submit</button><button name="previewpost" type="submit">Preview</button></form><div class="post" id="post_699"><div class="atf-post__content"><div class="atf-post__meta-line">Meta</div><div class="post_body atf-post__message" id="pid_699"><div class="atf-post__message-body">Body</div></div><div class="af-ccp-postcount">100</div></div></div></body></html>';
 af_advancededitor_pre_output($page);
+if (function_exists('af_advancededitor_shell_attach_button')) {
+    $page = af_advancededitor_shell_attach_button($page, $GLOBALS['af_ae_external_buttons']['af_kb_insert']);
+    $page = af_advancededitor_shell_attach_button($page, $GLOBALS['af_ae_external_buttons']['af_kb_insert']);
+}
 if (!function_exists('af_advancededitor_shell_registry')) {
     $page = str_replace('</head>', '<link rel="stylesheet" href="/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase_kbui.css"><script src="/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase_insert.js"></script></head>', $page);
 }

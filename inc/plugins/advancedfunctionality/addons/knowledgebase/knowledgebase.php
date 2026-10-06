@@ -8396,14 +8396,15 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                             'css' => [$assetsBase.'/knowledgebase_insert.css?v='.af_kb_asset_version('knowledgebase_insert.css')],
                         ];
                         $kbInsertButton = ['cmd' => 'af_kb_insert', 'label' => 'KB',
+                            'icon' => function_exists('af_advancededitor_shell_icon_url') ? af_advancededitor_shell_icon_url('book.svg')
+                                : rtrim((string)$mybb->settings['bburl'], '/') . '/inc/plugins/advancedfunctionality/addons/advancededitor/assets/img/book.svg',
                             'title' => $lang->af_kb_kb_insert_title ?? 'Insert KB',
                             'handler' => 'kb_insert', 'capability' => 'kb-insert'];
                         // Also share metadata with the later AdvancedEditor pre-output compiler.
                         $GLOBALS['af_ae_external_capabilities']['kb-insert'] = $kbInsertRuntime;
                         $GLOBALS['af_ae_external_buttons']['af_kb_insert'] = $kbInsertButton;
-                        if (function_exists('af_advancededitor_shell_toolbar') && str_contains($page, '<!--af-ae-toolbar-end-->')) {
-                            $kbButtonHtml = '<div class="sceditor-group"><a href="#" role="button" class="sceditor-button sceditor-button-af_kb_insert" data-af-command="af_kb_insert" title="'.htmlspecialchars_uni($kbInsertButton['title']).'" aria-label="'.htmlspecialchars_uni($kbInsertButton['title']).'"><div>KB</div></a></div>';
-                            $page = str_replace('<!--af-ae-toolbar-end-->', $kbButtonHtml.'<!--af-ae-toolbar-end-->', $page);
+                        if (function_exists('af_advancededitor_shell_attach_button')) {
+                            $page = af_advancededitor_shell_attach_button($page, $kbInsertButton);
                         }
                         $insertJs = '<script>window.afAeCapabilities=window.afAeCapabilities||{};window.afAeCapabilities["kb-insert"]='
                             .json_encode($kbInsertRuntime, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)

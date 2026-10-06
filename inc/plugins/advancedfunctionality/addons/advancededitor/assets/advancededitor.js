@@ -1400,16 +1400,18 @@
 
   function afAeApplyWysiwygAtfTheme(inst) {
     try {
-      if (!document.body || !document.body.classList.contains('atf-active')
-          || !inst || typeof inst.getBody !== 'function') return;
+      if (!document.body || !inst || typeof inst.getBody !== 'function') return;
       var body = inst.getBody();
       if (!body || !body.ownerDocument) return;
       var doc = body.ownerDocument;
       var head = doc.head || doc.getElementsByTagName('head')[0];
       if (!head || doc.getElementById('af-ae-atf-iframe-theme')) return;
-      var host = window.getComputedStyle(document.body);
-      var surface = host.getPropertyValue('--atf-color-surface').trim() || '#171b29';
-      var text = host.getPropertyValue('--atf-color-text').trim() || '#eef2ff';
+      var frame = doc.defaultView && doc.defaultView.frameElement;
+      var shell = frame && frame.closest('[data-af-editor-shell="1"]');
+      if (!shell && !document.body.classList.contains('atf-active')) return;
+      var host = window.getComputedStyle(shell || document.body);
+      var surface = host.getPropertyValue('--atf-color-surface').trim() || host.backgroundColor || '#fff';
+      var text = host.getPropertyValue('--atf-color-text').trim() || host.color || '#333';
       var muted = host.getPropertyValue('--atf-color-text-muted').trim() || '#aeb5ca';
       var accent = host.getPropertyValue('--atf-color-accent').trim() || '#788dff';
 
@@ -2103,6 +2105,7 @@
       var startupMode = ta.__afAeRequestedMode || resolveStartupEditorMode();
       var startInSourceMode = (startupMode === 'source');
 
+      ta.__afAeInitError = null;
       ta.__afAeLifecycle = 'initializing';
       $ta.sceditor({
         format: 'bbcode',
@@ -2163,6 +2166,7 @@
       }
     } catch (e) {
       ta.__afAeLifecycle = 'uninitialized';
+      ta.__afAeInitError = e;
       log('[AE] init error', e);
     }
 
