@@ -4641,7 +4641,7 @@ function af_kb_strip_assets_from_html(string &$html): void
         '~\s*' . preg_quote(AF_KB_MARK, '~') . '\s*~i',
         '~\s*<link[^>]+href=["\"][^"\"]*/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase(?:_kbui)?\.css(?:\?[^"\"]*)?["\"][^>]*>\s*~i',
         '~\s*<script[^>]+src=["\"][^"\"]*/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase\.js(?:\?[^"\"]*)?["\"][^>]*>\s*</script>\s*~i',
-        '~\s*<script[^>]+src=["\"][^"\"]*/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase(?:_chips|_insert)?\.js(?:\?[^"\"]*)?["\"][^>]*>\s*</script>\s*~i',
+        '~\s*<script[^>]+src=["\"][^"\"]*/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase(?:_chips(?:_bootstrap)?|_insert)?\.js(?:\?[^"\"]*)?["\"][^>]*>\s*</script>\s*~i',
         '~\s*<script[^>]*>\s*window\.afKbLang\s*=.*?</script>\s*~is',
         '~\s*<script[^>]*>\s*window\.afKbEndpoints\s*=.*?</script>\s*~is',
         '~\s*<script[^>]*>\s*window\.afKbRuntimeMode\s*=.*?</script>\s*~is',
@@ -8329,9 +8329,15 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 if ($isKbEditorPage) {
                     // Heavy editor runtime must stay only on KB edit/create paths.
                     $jsTag  .= '<script src="'.$assetsBase.'/knowledgebase.js?v='.af_kb_asset_version('knowledgebase.js').'"></script>';
-                } else {
-                    // Lightweight runtime for KB view/list/category/modal pages.
+                } elseif ($isKbViewPage) {
+                    // Real KB view/list pages need the full view runtime for
+                    // character filters, status modal and chip interaction.
                     $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?v='.af_kb_asset_version('knowledgebase_chips.js').'"></script>';
+                } elseif ($chipAssetsAllowed) {
+                    // Embedded chips on showthread/member/forumdisplay/sheets
+                    // get only the event bootstrap. The main chip runtime is
+                    // fetched after the first real pointer/focus/click.
+                    $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips_bootstrap.js?v='.af_kb_asset_version('knowledgebase_chips_bootstrap.js').'"></script>';
                 }
 
                 // ✅ ВАЖНО: фон для body — инжектим в конец <head>, с !important
@@ -8391,7 +8397,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
 
                     if (!empty($mybb->settings['af_advancededitor_enabled'])) {
                         $kbInsertRuntime = [
-                            'activation' => 'click', 'requires' => [],
+                            'activation' => 'editor-focus', 'requires' => [],
                             'js' => [$assetsBase.'/knowledgebase_insert.js?v='.af_kb_asset_version('knowledgebase_insert.js')],
                             'css' => [$assetsBase.'/knowledgebase_insert.css?v='.af_kb_asset_version('knowledgebase_insert.css')],
                         ];
