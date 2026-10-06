@@ -1140,12 +1140,11 @@ function af_apui_build_surface_url(string $url, int $uid, string $surface): stri
 
 function af_apui_get_charactersheet_postbit_payload(int $uid): array
 {
-    if ($uid <= 0 || !function_exists('af_cs_get_postbit_sheet_payload')
-        || !function_exists('af_characterworkflow_resolve_active_application')
-        || af_characterworkflow_resolve_active_application($uid) === null) {
+    if ($uid <= 0 || !function_exists('af_cs_get_postbit_sheet_payload')) {
         return [];
     }
 
+    // CharacterSheets owns the active-application gate and request cache.
     $payload = af_cs_get_postbit_sheet_payload($uid);
 
     return is_array($payload) ? $payload : [];
