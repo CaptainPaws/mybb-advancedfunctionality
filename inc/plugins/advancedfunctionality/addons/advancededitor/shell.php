@@ -112,15 +112,12 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
         }
         if ($extra) $layout['sections'][] = ['type' => 'group', 'items' => $extra];
     }
-    if (!empty($help['enabled']) && isset($map['af_formathelp'])) {
-        $present = false;
-        foreach ($layout['sections'] as $section) if (in_array('af_formathelp', (array)($section['items'] ?? []), true)) $present = true;
-        if (!$present) {
-            $section = ['type' => 'group', 'items' => ['af_formathelp']];
-            if (($help['position'] ?? 'right') === 'left') array_unshift($layout['sections'], $section);
-            else $layout['sections'][] = $section;
-        }
+    // Help is an independent edge control; never place it in a BBCode group.
+    foreach ($layout['sections'] as &$section) {
+        $section['items'] = array_values(array_filter((array)($section['items'] ?? []),
+            static fn($cmd) => $cmd !== 'af_formathelp'));
     }
+    unset($section);
     $escape = static fn($s) => htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $button = static function ($cmd, $b, bool $menuItem = false) use ($escape): string {
         $icon = trim((string)($b['icon'] ?? ''));
@@ -152,10 +149,16 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
         }
         $html .= '</div>';
     }
-    foreach ((array)($GLOBALS['af_ae_external_buttons'] ?? []) as $cmd => $b) {
-        $html .= '<div class="sceditor-group">' . $button($cmd, $b) . '</div>';
+    // External button definitions already belong to the compiled registry.
+    // Rendering them a second time duplicates KB integrations.
+    $html .= '<!--af-ae-toolbar-end--></div>';
+    if (!empty($help['enabled']) && isset($map['af_formathelp'])) {
+        $pos = ($help['position'] ?? 'right') === 'left' ? 'left' : 'right';
+        $html .= '<button type="button" class="af-ae-shell-help-edge" data-af-command="af_formathelp"'
+            . ' data-af-help-position="' . $pos . '" aria-label="Подсказка по форматированию"'
+            . ' title="Подсказка по форматированию">?</button>';
     }
-    return $html . '<!--af-ae-toolbar-end--></div>';
+    return $html;
 }
 
 function af_advancededitor_render_shells(string $page, string $toolbar, bool $counter = true): string
