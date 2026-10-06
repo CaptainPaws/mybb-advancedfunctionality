@@ -12,52 +12,59 @@ function showthread_lazy_assert(bool $condition, string $message): void
 $root = dirname(__DIR__);
 $cs = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/charactersheets/charactersheets.php');
 $csBootstrap = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/charactersheets/modules/bootstrap.php');
+$csFrontend = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/charactersheets/modules/frontend.php');
+$csMetadata = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/charactersheets/modules/metadata.php');
+$csPostbit = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/charactersheets/modules/postbit.php');
 $csTrigger = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/charactersheets/assets/charactersheets-trigger.js');
+$csTriggerCss = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/charactersheets/assets/charactersheets-trigger.css');
+$apui = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/advancedprofileui.php');
 $atf = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedthreadfields/advancedthreadfields.php');
 $atfForm = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedthreadfields/assets/advancedthreadfields-form.js');
 $atfView = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedthreadfields/assets/advancedthreadfields-view.js');
 $cwf = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/characterworkflow/characterworkflow.php');
 
 showthread_lazy_assert(
-    is_string($cs) && is_string($csBootstrap) && is_string($csTrigger)
+    is_string($cs) && is_string($csBootstrap) && is_string($csFrontend)
+    && is_string($csMetadata) && is_string($csPostbit) && is_string($csTrigger)
+    && is_string($csTriggerCss) && is_string($apui)
     && is_string($atf) && is_string($atfForm) && is_string($atfView) && is_string($cwf),
     'Unable to read showthread lazy-runtime sources'
 );
 
-// CharacterSheets: only lightweight modules are unconditional.
+// Initial showthread: lightweight modules only.
 showthread_lazy_assert(
-    str_contains($cs, "af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap']);"),
-    'CharacterSheets minimal bootstrap contract is missing'
+    str_contains($cs, "af_charactersheets_require_modules(['permissions', 'metadata', 'postbit', 'frontend']);"),
+    'CharacterSheets trigger module plan is missing'
+);
+showthread_lazy_assert(
+    !str_contains($cs, "af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap']);"),
+    'Legacy heavy showthread bootstrap is still present'
 );
 foreach (['sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills'] as $module) {
     showthread_lazy_assert(
-        !str_contains(
-            $cs,
-            "require_once AF_CS_MODULES . '{$module}.php'"
-        ),
-        "Heavy CharacterSheets module remains unconditional: {$module}"
+        !str_contains($csFrontend, $module),
+        "Heavy CharacterSheets module leaked into frontend trigger runtime: {$module}"
     );
 }
 showthread_lazy_assert(
-    str_contains($cs, "if (\$afCsScript === 'charactersheets.php')")
-    && str_contains($cs, "af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax']);"),
-    'Full CharacterSheets route modules are not route-gated'
+    !str_contains($csFrontend, 'bootstrap.php'),
+    'Full CharacterSheets bootstrap leaked into trigger frontend'
 );
 
-// showthread/member use trigger-only frontend assets.
+// Trigger assets are lightweight and component-gated.
 showthread_lazy_assert(
-    str_contains($csBootstrap, "return in_array(\$script, ['showthread.php', 'member.php'], true);")
-    && str_contains($csBootstrap, "charactersheets-trigger.js")
-    && str_contains($csBootstrap, "charactersheets-trigger.css"),
-    'CharacterSheets trigger context/assets are missing'
+    str_contains($csFrontend, 'charactersheets-trigger.js')
+    && str_contains($csFrontend, 'charactersheets-trigger.css')
+    && str_contains($csFrontend, "['has_charactersheet_component' => $hasComponent]"),
+    'CharacterSheets trigger assets are missing or not manifest-gated'
 );
 showthread_lazy_assert(
-    str_contains($csBootstrap, "charactersheets.js")
-    && str_contains($csBootstrap, "if (af_charactersheets_is_trigger_context())"),
-    'Full CharacterSheets runtime is not explicitly excluded from trigger pages'
+    str_contains($csFrontend, 'charactersheets.js')
+    && str_contains($csFrontend, 'if (af_charactersheets_is_trigger_context())'),
+    'Full CharacterSheets runtime is not explicitly removed from trigger pages'
 );
 
-// Trigger creates and populates iframe only after a delegated click.
+// iframe is created empty and receives src only after delegated click.
 $clickPos = strpos($csTrigger, "document.addEventListener('click'");
 $buildPos = strpos($csTrigger, 'buildModal(url)', $clickPos === false ? 0 : $clickPos);
 $srcPos = strpos($csTrigger, "frame.setAttribute('src', url)", $buildPos === false ? 0 : $buildPos);
@@ -65,28 +72,88 @@ showthread_lazy_assert(
     $clickPos !== false && $buildPos !== false && $srcPos !== false && $clickPos < $buildPos && $buildPos < $srcPos,
     'CharacterSheet iframe src is not assigned strictly after user click'
 );
+showthread_lazy_assert(
+    str_contains($csTrigger, '<iframe class="af-cs-modal__frame" data-afcs-frame="1" title="Лист персонажа"></iframe>'),
+    'Trigger runtime creates an eager iframe src'
+);
 foreach ([
     "closest('[data-afcs-open=\"1\"], [data-afcs-sheet]')",
     "frame.removeAttribute('src')",
     "event.key === 'Escape'",
     "modal.remove()",
+    "data-afcs-close=\"1\"",
 ] as $needle) {
     showthread_lazy_assert(str_contains($csTrigger, $needle), 'CharacterSheets trigger lost modal lifecycle: ' . $needle);
 }
 
-// Active application metadata is one batch query for all page authors.
+// Current-page batch preload.
 showthread_lazy_assert(
-    str_contains($cs, 'af_characterworkflow_preload_active_applications($uids);'),
-    'CharacterSheets does not batch-preload active applications'
+    str_contains($cs, "add_hook('postbit', 'af_charactersheets_postbit_preload_current_page', 1)")
+    && str_contains($cs, '$pagePids')
+    && str_contains($cs, 'pid IN (')
+    && str_contains($cs, 'af_cs_showthread_page_uids'),
+    'CharacterSheets current-page author preload is missing'
 );
+showthread_lazy_assert(
+    !str_contains($cs, "function af_charactersheets_showthread_start(): void\n{\n    global $db, $tid;"),
+    'showthread_start still scans all thread authors'
+);
+
+// Read-only metadata replaces CRUD reads.
+showthread_lazy_assert(
+    str_contains($csMetadata, 'function af_charactersheets_get_accept_row(int $tid): array')
+    && str_contains($csMetadata, 'function af_charactersheets_get_sheet_by_tid(int $tid): array')
+    && !str_contains($csMetadata, 'insert_query(')
+    && !str_contains($csMetadata, 'update_query('),
+    'CharacterSheets lightweight metadata layer is missing or mutating'
+);
+
+// CharacterWorkflow is batched once for the page, with request-level cache.
 showthread_lazy_assert(
     str_contains($cwf, 'function af_characterworkflow_preload_active_applications(array $uids): void')
     && str_contains($cwf, 'WHERE r.uid IN ({$in})'),
     'CharacterWorkflow active application resolver is still per-author SQL'
 );
 showthread_lazy_assert(
-    str_contains($cwf, "if (!array_key_exists(\$uid, \$cache)) {\n        af_characterworkflow_preload_active_applications([\$uid]);"),
+    str_contains($cwf, "if (!array_key_exists($uid, $cache)) {\n        af_characterworkflow_preload_active_applications([$uid]);"),
     'Single-item fallback no longer shares the batch request cache'
+);
+
+// CharacterSheets resolves active application once; APUI reuses it.
+showthread_lazy_assert(
+    str_contains($csPostbit, 'af_charactersheets_get_application_payload_by_uid($uid, $activeApplication, true)')
+    && str_contains($csPostbit, 'af_charactersheets_load_lang();')
+    && !str_contains($csPostbit, 'af_charactersheets_lang();'),
+    'CharacterSheets postbit repeats resolver work or depends on render.php'
+);
+$apuiPayloadStart = strpos($apui, 'function af_apui_get_charactersheet_postbit_payload');
+$apuiPayloadEnd = strpos($apui, 'function af_apui_extract_query_int_from_url', $apuiPayloadStart);
+$apuiPayloadSource = substr($apui, $apuiPayloadStart, $apuiPayloadEnd - $apuiPayloadStart);
+showthread_lazy_assert(
+    !str_contains($apuiPayloadSource, 'af_characterworkflow_resolve_active_application'),
+    'AdvancedProfileUI still resolves active application separately'
+);
+
+// Active relation owns slug; acceptance-table SQL is not repeated.
+showthread_lazy_assert(
+    str_contains($csPostbit, 'relationSlug')
+    && str_contains($csPostbit, 'af_charactersheets_get_sheet_slug_by_uid($uid)'),
+    'Sheet slug resolution is not tied to the active application'
+);
+$preloadStart = strpos($csPostbit, 'function af_charactersheets_preload_postbit_metadata');
+$preloadEnd = strpos($csPostbit, 'function af_cs_get_postbit_sheet_payload', $preloadStart);
+$preloadSource = substr($csPostbit, $preloadStart, $preloadEnd - $preloadStart);
+showthread_lazy_assert(
+    !str_contains($preloadSource, 'simple_select(AF_CS_TABLE'),
+    'Postbit slug preload still repeats acceptance-table SQL'
+);
+
+// ATF moderation button must not require CharacterSheets render.php.
+$atfModerationStart = strpos($atf, 'function af_atf_render_character_kb_moderation_button');
+$atfModerationSource = substr($atf, $atfModerationStart, 900);
+showthread_lazy_assert(
+    !str_contains($atfModerationSource, "function_exists('af_charactersheets_resolve_character_kb_entry')"),
+    'ATF moderation button still depends on CharacterSheets render.php'
 );
 
 // ATF: form code is isolated and showthread intentionally has no JS runtime.
