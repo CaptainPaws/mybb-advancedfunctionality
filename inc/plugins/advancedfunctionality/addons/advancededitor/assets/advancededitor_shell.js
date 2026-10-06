@@ -368,8 +368,19 @@
       // literal [align] strings (otherwise the tags appear in the iframe).
       if (!editor.__afAeSourceAdapter && /^(left|center|right|justify)$/.test(b.cmd)
           && typeof editor.sourceMode === 'function' && !editor.sourceMode()) {
-        editor.insert('<div class="af-ae-wys-align" data-af-ae-align="' + b.cmd +
-          '" style="text-align:' + b.cmd + '">', '</div>');
+        // Use the original Align pack: it edits selected block nodes and
+        // registers the [align=...] HTML/BBCode round-trip converter.
+        var handler = window.afAeBuiltinHandlers && window.afAeBuiltinHandlers[b.cmd];
+        if (typeof handler === 'function' && handler(editor)) return;
+        var commandName = {left:'justifyLeft', center:'justifyCenter',
+          right:'justifyRight', justify:'justifyFull'}[b.cmd];
+        try {
+          var body = editor.getBody && editor.getBody();
+          if (body && body.ownerDocument) {
+            editor.focus();
+            body.ownerDocument.execCommand(commandName, false, null);
+          }
+        } catch (e) {}
         return;
       }
       if (b.opentag || b.closetag) {
