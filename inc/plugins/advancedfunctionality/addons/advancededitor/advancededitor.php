@@ -1886,7 +1886,7 @@ function af_ae_bbcode_dispatch_collect_packs(): array
 {
     $roots = [
         __DIR__ . '/assets/bbcodes',
-        __DIR__ . '/assets/bbcodes/bbcodes',
+        __DIR__ . '/assets/bbcodes',
     ];
 
     $packs = [];
@@ -2619,12 +2619,9 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
     if (isset($requestCache[$bburl])) {
         return $requestCache[$bburl];
     }
-    // Поддерживаем оба legacy-расположения паков:
-    // - assets/bbcodes/<pack>
-    // - assets/bbcodes/bbcodes/<pack>
+    // Каноническое расположение паков: assets/bbcodes/<pack>.
     $baseDirsAbs = [
         MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/',
-        MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/bbcodes/',
     ];
     $addonBaseFs = af_advancededitor_realpath_safe(MYBB_ROOT . af_advancededitor_base_rel());
 
