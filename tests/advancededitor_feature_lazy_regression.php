@@ -32,6 +32,9 @@ lazy_assert($registry['capabilities']['custom:af_custom_dialog']['requires'] ===
 lazy_assert(($buttons['horizontalrule']['iconClass'] ?? '') === 'fa-solid fa-minus', 'Native horizontalrule Font Awesome metadata lost');
 lazy_assert(($buttons['subscript']['iconClass'] ?? '') === 'fa-solid fa-subscript', 'Native subscript Font Awesome metadata lost');
 lazy_assert(($buttons['superscript']['iconClass'] ?? '') === 'fa-solid fa-superscript', 'Native superscript Font Awesome metadata lost');
+lazy_assert(($buttons['horizontalrule']['iconGlyph'] ?? '') === "", 'Native horizontalrule Font Awesome glyph lost');
+lazy_assert(($buttons['subscript']['iconGlyph'] ?? '') === "", 'Native subscript Font Awesome glyph lost');
+lazy_assert(($buttons['superscript']['iconGlyph'] ?? '') === "", 'Native superscript Font Awesome glyph lost');
 foreach ([
     'af_mark' => 'fa-solid fa-highlighter',
     'af_abbr' => 'fa-solid fa-circle-info',
@@ -39,6 +42,7 @@ foreach ([
     'af_accordion' => 'fa-solid fa-bars-staggered',
 ] as $cmd => $iconClass) {
     lazy_assert(($buttons[$cmd]['iconClass'] ?? '') === $iconClass, "Pack Font Awesome metadata missing: {$cmd}");
+    lazy_assert(!empty($buttons[$cmd]['iconGlyph']), "Pack Font Awesome glyph missing: {$cmd}");
 }
 foreach ($packs['packs'] as $id => $pack) {
     lazy_assert(isset($pack['runtime']['activation']), "Pack has no activation metadata: {$id}");

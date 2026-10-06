@@ -14,6 +14,7 @@ return [
             'name'    => 'tables',
             'title'   => 'Таблица',
             'iconClass'=> 'fa-solid fa-table-cells',
+            'iconGlyph'=> "\u{F00A}",
             'icon'    => 'img/tablebb.svg',
             'handler' => 'tables',
         ],

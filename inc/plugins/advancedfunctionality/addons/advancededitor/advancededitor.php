@@ -237,6 +237,7 @@ function af_advancededitor_collect_bbcode_packs(): array
             'hint'     => isset($b['hint']) ? (string)$b['hint'] : '',
             'icon'     => isset($b['icon']) ? (string)$b['icon'] : '',
             'iconClass'=> isset($b['iconClass']) ? (string)$b['iconClass'] : '',
+            'iconGlyph'=> isset($b['iconGlyph']) ? (string)$b['iconGlyph'] : '',
             'opentag'  => isset($b['opentag']) ? (string)$b['opentag'] : '',
             'closetag' => isset($b['closetag']) ? (string)$b['closetag'] : '',
         ];
@@ -2581,6 +2582,7 @@ function af_advancededitor_get_custom_button_defs(string $bburl): array
                 'title' => (string)($b['title'] ?? $b['cmd']),
                 'icon' => (string)($b['icon'] ?? ''),
                 'iconClass' => (string)($b['iconClass'] ?? ''),
+                'iconGlyph' => (string)($b['iconGlyph'] ?? ''),
                 'handler' => (string)($b['handler'] ?? ''),
                 'capability' => (string)($b['capability'] ?? ''),
                 'opentag' => (string)($b['opentag'] ?? ''),
@@ -2735,6 +2737,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
                     'title'   => ($title !== '' ? $title : $cmd),
                     'icon'    => $icon,
                     'iconClass' => trim((string)($b['iconClass'] ?? '')),
+                    'iconGlyph' => (string)($b['iconGlyph'] ?? ''),
                     'handler' => $handler,
                     'opentag' => (string)($b['opentag'] ?? ''),
                     'closetag' => (string)($b['closetag'] ?? ''),
@@ -2833,8 +2836,8 @@ function af_advancededitor_get_available_buttons(string $bburl, array $customDef
         ['cmd' => 'italic', 'label' => 'I', 'hint' => 'SCEditor: italic', 'title' => 'Курсив'],
         ['cmd' => 'underline', 'label' => 'U', 'hint' => 'SCEditor: underline', 'title' => 'Подчёркнутый'],
         ['cmd' => 'strike', 'label' => 'S', 'hint' => 'SCEditor: strike', 'title' => 'Зачёркнутый'],
-        ['cmd' => 'subscript', 'label' => 'x₂', 'hint' => 'SCEditor: subscript', 'title' => 'Нижний индекс', 'iconClass' => 'fa-solid fa-subscript'],
-        ['cmd' => 'superscript', 'label' => 'x²', 'hint' => 'SCEditor: superscript', 'title' => 'Верхний индекс', 'iconClass' => 'fa-solid fa-superscript'],
+        ['cmd' => 'subscript', 'label' => 'x₂', 'hint' => 'SCEditor: subscript', 'title' => 'Нижний индекс', 'iconClass' => 'fa-solid fa-subscript', 'iconGlyph' => ""],
+        ['cmd' => 'superscript', 'label' => 'x²', 'hint' => 'SCEditor: superscript', 'title' => 'Верхний индекс', 'iconClass' => 'fa-solid fa-superscript', 'iconGlyph' => ""],
 
         ['cmd' => 'font', 'label' => 'F', 'hint' => 'SCEditor: font', 'title' => 'Шрифт'],
         ['cmd' => 'size', 'label' => 'Sz', 'hint' => 'SCEditor: size', 'title' => 'Размер'],
@@ -2844,7 +2847,7 @@ function af_advancededitor_get_available_buttons(string $bburl, array $customDef
         ['cmd' => 'undo', 'label' => '↶', 'hint' => 'SCEditor: undo', 'title' => 'Отменить'],
         ['cmd' => 'redo', 'label' => '↷', 'hint' => 'SCEditor: redo', 'title' => 'Повторить'],
         ['cmd' => 'pastetext', 'label' => 'Tx', 'hint' => 'SCEditor: pastetext', 'title' => 'Вставить как текст'],
-        ['cmd' => 'horizontalrule', 'label' => '—', 'hint' => 'Горизонтальная линия', 'title' => 'Горизонтальная линия', 'iconClass' => 'fa-solid fa-minus'],
+        ['cmd' => 'horizontalrule', 'label' => '—', 'hint' => 'Горизонтальная линия', 'title' => 'Горизонтальная линия', 'iconClass' => 'fa-solid fa-minus', 'iconGlyph' => ""],
 
         ['cmd' => 'left', 'label' => 'L', 'hint' => 'SCEditor: left', 'title' => 'По левому краю'],
         ['cmd' => 'center', 'label' => 'C', 'hint' => 'SCEditor: center', 'title' => 'По центру'],
@@ -2889,6 +2892,7 @@ function af_advancededitor_get_available_buttons(string $bburl, array $customDef
                 'title' => $t,
                 'icon'  => (string)($b['icon'] ?? ''),
                 'iconClass' => (string)($b['iconClass'] ?? ''),
+                'iconGlyph' => (string)($b['iconGlyph'] ?? ''),
             ];
         }
     }
@@ -2909,6 +2913,7 @@ function af_advancededitor_get_available_buttons(string $bburl, array $customDef
                 'title' => (string)($d['title'] ?? $cmd),
                 'icon'  => (string)($d['icon'] ?? ''),
                 'iconClass' => (string)($d['iconClass'] ?? ''),
+                'iconGlyph' => (string)($d['iconGlyph'] ?? ''),
             ];
         }
     }

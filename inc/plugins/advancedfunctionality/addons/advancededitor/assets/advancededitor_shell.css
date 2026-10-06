@@ -209,6 +209,10 @@ html body .af-ae-shell > .sceditor-container.wysiwygMode > iframe { display: blo
   font-variant: normal !important;
   color: currentColor;
 }
+.af-ae-popup .af-ae-shell-menu .sceditor-button i.af-ae-fa-glyph::before {
+  content: none !important;
+  display: none !important;
+}
 .af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-solid {
   font-family: "Font Awesome 6 Free" !important;
   font-weight: 900 !important;

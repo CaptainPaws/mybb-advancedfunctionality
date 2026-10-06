@@ -14,6 +14,7 @@ return [
             'name'     => 'mark',
             'title'    => 'Маркер',
             'iconClass'=> 'fa-solid fa-highlighter',
+            'iconGlyph'=> "\u{F591}",
             'handler'  => 'mark',
             'opentag'  => '[mark]',
             'closetag' => '[/mark]',

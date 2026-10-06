@@ -219,9 +219,10 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
     $button = static function ($cmd, $b, bool $menuItem = false) use ($escape): string {
         $icon = trim((string)($b['icon'] ?? ''));
         $fa = trim((string)($b['iconClass'] ?? af_advancededitor_shell_fa_icon((string)$cmd)));
+        $glyph = (string)($b['iconGlyph'] ?? '');
         if (str_starts_with($icon, '<svg') && str_contains($icon, '</svg>')) $icon = 'data:image/svg+xml,' . rawurlencode($icon);
         if ($menuItem && $fa !== '') {
-            $visual = '<i class="' . $escape($fa) . '" aria-hidden="true"></i>';
+            $visual = '<i class="' . $escape($fa) . ' af-ae-fa-glyph" aria-hidden="true">' . $escape($glyph) . '</i>';
         } else {
             $visual = $icon !== '' ? '<img src="' . $escape($icon) . '" alt="" width="16" height="16" />'
                 : ($fa !== '' ? '<i class="' . $escape($fa) . '" aria-hidden="true"></i>' : $escape($b['label'] ?? $b['name'] ?? $cmd));

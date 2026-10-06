@@ -53,6 +53,7 @@
       var b = buttons[cmd] || {};
       var iconClass = String(b.iconClass || '').trim();
       if (!iconClass) iconClass = String(cmd || '').indexOf('af_') === 0 ? 'fa-solid fa-code' : 'fa-solid fa-circle';
+      var glyph = String(b.iconGlyph || '');
       var visual = item.querySelector(':scope > div');
       if (!visual) return;
       var current = visual.querySelector('i.fa-solid, i.fa-regular, i.fa-brands');
@@ -60,10 +61,12 @@
       if (!icon || icon.className !== iconClass) {
         visual.replaceChildren();
         icon = document.createElement('i');
-        icon.className = iconClass;
+        icon.className = iconClass + ' af-ae-fa-glyph';
         icon.setAttribute('aria-hidden', 'true');
         visual.appendChild(icon);
       }
+      icon.classList.add('af-ae-fa-glyph');
+      if (glyph && icon.textContent !== glyph) icon.textContent = glyph;
       var isBrand = icon.classList.contains('fa-brands');
       var isRegular = icon.classList.contains('fa-regular');
       icon.style.setProperty('font-family', isBrand ? '"Font Awesome 6 Brands"' : '"Font Awesome 6 Free"', 'important');

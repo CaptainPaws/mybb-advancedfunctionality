@@ -14,6 +14,7 @@ return [
             'name'     => 'abbr',
             'title'    => 'Поясняющий текст',
             'iconClass'=> 'fa-solid fa-circle-info',
+            'iconGlyph'=> "\u{F05A}",
             'hint'     => 'Вставить [abbr="подсказка"]текст[/abbr]',
             'handler'  => 'abbr',
             'opentag'  => '[abbr=""]',

@@ -14,6 +14,7 @@ return [
             'name'     => 'accordion',
             'title'    => 'Аккордеон',
             'iconClass'=> 'fa-solid fa-bars-staggered',
+            'iconGlyph'=> "\u{F550}",
             'hint'     => 'Вставить [accordion] с двумя [accitem]',
             'icon'     => 'img/starmenu.svg',
             'handler'  => '',
