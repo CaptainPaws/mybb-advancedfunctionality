@@ -132,8 +132,15 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
     };
     $html = '<div class="sceditor-toolbar" role="toolbar" aria-label="AdvancedEditor">';
     $n = 0;
+    $renderedCommands = [];
     foreach ($layout['sections'] as $section) {
-        $items = array_filter((array)($section['items'] ?? []), static fn($cmd) => $cmd === '|' || isset($map[$cmd]));
+        $items = [];
+        foreach ((array)($section['items'] ?? []) as $cmd) {
+            if ($cmd === '|') { $items[] = $cmd; continue; }
+            if (!isset($map[$cmd]) || isset($renderedCommands[$cmd]) || $cmd === 'af_formathelp') continue;
+            $renderedCommands[$cmd] = true;
+            $items[] = $cmd;
+        }
         if (($section['type'] ?? 'group') === 'dropdown') {
             $cmd = 'af_menu_dropdown' . ++$n;
             $title = (string)($section['title'] ?? '★');
@@ -149,8 +156,14 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
         }
         $html .= '</div>';
     }
-    // External button definitions already belong to the compiled registry.
-    // Rendering them a second time duplicates KB integrations.
+    // External definitions belong to the compiled registry. Append only
+    // commands absent from the configured layout; never duplicate KB buttons.
+    foreach ((array)($GLOBALS['af_ae_external_buttons'] ?? []) as $externalKey => $external) {
+        $cmd = (string)($external['cmd'] ?? $externalKey);
+        if ($cmd === '' || isset($renderedCommands[$cmd]) || !isset($map[$cmd])) continue;
+        $renderedCommands[$cmd] = true;
+        $html .= '<div class="sceditor-group">' . $button($cmd, $map[$cmd]) . '</div>';
+    }
     $html .= '<!--af-ae-toolbar-end--></div>';
     if (!empty($help['enabled']) && isset($map['af_formathelp'])) {
         $pos = ($help['position'] ?? 'right') === 'left' ? 'left' : 'right';
