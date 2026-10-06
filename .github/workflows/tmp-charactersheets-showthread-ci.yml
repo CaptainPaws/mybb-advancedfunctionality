@@ -1,0 +1,52 @@
+name: Temporary CharacterSheets showthread CI
+
+on:
+  push:
+    branches:
+      - perf/charactersheets-showthread-lazy-v2
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: PHP syntax
+        run: |
+          php -l inc/plugins/advancedfunctionality/addons/charactersheets/charactersheets.php
+          php -l inc/plugins/advancedfunctionality/addons/charactersheets/modules/frontend.php
+          php -l inc/plugins/advancedfunctionality/addons/charactersheets/modules/metadata.php
+          php -l inc/plugins/advancedfunctionality/addons/charactersheets/modules/postbit.php
+          php -l inc/plugins/advancedfunctionality/addons/advancedprofileui/advancedprofileui.php
+          php -l inc/plugins/advancedfunctionality/addons/advancedthreadfields/advancedthreadfields.php
+          php -l tests/showthread_character_atf_lazy_regression.php
+
+      - name: JavaScript syntax
+        run: |
+          node --check inc/plugins/advancedfunctionality/addons/charactersheets/assets/charactersheets-trigger.js
+
+      - name: CharacterSheets and showthread regressions
+        run: |
+          php tests/showthread_character_atf_lazy_regression.php
+          php tests/active_application_profile_gate_regression.php
+          php tests/atf_postbit_pagination_editor_regression.php
+          php tests/member_profile_character_composition_regression.php
+          php tests/charactersheet_owner_profile_chip_regression.php
+          php tests/canon_character_lifecycle_regression.php
+          php tests/application_archive_lifecycle_regression.php
+          php tests/frontend_asset_permission_regression.php
+          php tests/global_addon_frontend_manifest_regression.php
+          php tests/contextual_profile_addon_frontend_regression.php
+          php tests/advancedthreadfields_atf_provider_regression.php
+          php tests/advancedthreadfields_atf_template_ownership_regression.php
+          php tests/showthread_performance_architecture_regression.php
+          php tests/showthread_performance_contract_regression.php
