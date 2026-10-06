@@ -121,7 +121,10 @@
       var posted = /(?:^|\/)showthread\.php$/.test(location.pathname)
         && (/^(?:#pid_?\d+|#post\d+)$/i.test(anchor)
           || /^\d+$/.test(query.get('pid') || ''));
-      if (pending && posted && !ta.value.trim() && !document.querySelector('.error, .error_message, .alert--error')) {
+      var submittedFrom = '';
+      try { submittedFrom = JSON.parse(pending).from || ''; } catch (e) {}
+      if (pending && posted && submittedFrom && submittedFrom !== location.href
+          && !ta.value.trim() && !document.querySelector('.error, .error_message, .alert--error')) {
         localStorage.removeItem(key);
         sessionStorage.removeItem(pendingKey);
       } else {
@@ -154,7 +157,7 @@
     form.addEventListener('submit', function (event) {
       if (event.defaultPrevented || (event.submitter && event.submitter.name === 'previewpost')) return;
       flush();
-      try { sessionStorage.setItem(pendingKey, String(Date.now())); } catch (e) {}
+      try { sessionStorage.setItem(pendingKey, JSON.stringify({ from: location.href, at: Date.now() })); } catch (e) {}
       pending = '1';
     }, { signal: signal });
     // SCEditor updates an iframe instead of the original textarea. Bind after
