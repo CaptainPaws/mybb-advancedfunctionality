@@ -6823,6 +6823,14 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
         return '';
     }
 
+    $cacheKey = $tid . ':' . $fid;
+    if (!isset($GLOBALS['af_atf_display_block_cache']) || !is_array($GLOBALS['af_atf_display_block_cache'])) {
+        $GLOBALS['af_atf_display_block_cache'] = [];
+    }
+    if (array_key_exists($cacheKey, $GLOBALS['af_atf_display_block_cache'])) {
+        return (string)$GLOBALS['af_atf_display_block_cache'][$cacheKey];
+    }
+
     $values = af_atf_get_values_by_tid($tid);
     if (empty($values)) {
         return $GLOBALS['af_atf_display_block_cache'][$cacheKey] = '';
@@ -7011,14 +7019,9 @@ function af_atf_postbit(&$post): void
         return;
     }
 
-    // Кешируем на один рендер страницы, чтобы не собирать блок заново
-    static $blockCache = [];
-
-    if (!array_key_exists($tid, $blockCache)) {
-        $blockCache[$tid] = af_atf_build_display_block_for_tid_fid($tid, $fid);
-    }
-
-    $block = (string)$blockCache[$tid];
+    // The builder owns the single request cache shared by postbit,
+    // theme providers, CharacterSheets and profile/modal integrations.
+    $block = af_atf_build_display_block_for_tid_fid($tid, $fid);
     if ($block === '') {
         return;
     }
