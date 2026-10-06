@@ -40,10 +40,13 @@ kb_lazy_assert(
     'AdvancedEditor does not wait for a real editor focus'
 );
 
-$editorRuntimePos = strpos($php, "knowledgebase.js?v=");
-$editorGuardPos = strpos($php, 'if ($isKbEditorPage)');
 kb_lazy_assert(
-    $editorRuntimePos !== false && $editorGuardPos !== false && $editorGuardPos < $editorRuntimePos,
+    str_contains(
+        $php,
+        "if (\$isKbEditorPage) {\n"
+        . "                    // Heavy editor runtime must stay only on KB edit/create paths.\n"
+        . "                    \$jsTag  .= '<script src=\"'.\$assetsBase.'/knowledgebase.js?v='"
+    ),
     'knowledgebase.js is no longer guarded by KB editor page context'
 );
 
