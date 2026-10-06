@@ -83,3 +83,143 @@ html body .af-ae-shell.sceditor-container > textarea.sceditor-textarea,
 html body .af-ae-shell.sceditor-container > textarea[data-af-ae-wys-active="1"] {
   display: none !important;
 }
+
+/* One editor surface: SCEditor is an implementation, not a second card. */
+html body .af-ae-shell[data-af-editor-shell="1"] {
+  isolation: isolate;
+  overflow: visible !important;
+}
+html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container {
+  position: relative;
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 0 10px 10px !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  overflow: visible !important;
+}
+html body .af-ae-shell[data-af-editor-shell="1"] .sceditor-container .sceditor-toolbar,
+html body .af-ae-shell[data-af-editor-shell="1"] .af-ae-help-edge,
+html body .af-ae-shell[data-af-editor-shell="1"] .af-ae-toolbar-row > .af-ae-help-edge {
+  display: none !important;
+}
+html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container > .sceditor-wysiwyg,
+html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container > textarea.sceditor-source {
+  display: block;
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 100%;
+  min-height: 180px;
+  margin: 0 !important;
+  padding: 10px !important;
+  border: 0 !important;
+  border-radius: 0 0 10px 10px;
+  background: var(--atf-surface, #1b2433) !important;
+  color: var(--atf-color-text, inherit) !important;
+  box-shadow: none !important;
+}
+html body .af-ae-shell[data-af-editor-shell="1"] .sceditor-container > iframe.sceditor-wysiwyg {
+  padding: 0 !important;
+  border: 0 !important;
+}
+/* The original textarea is the serialization source, never a visible layer. */
+html body .af-ae-shell[data-af-editor-shell="1"] > textarea.af-ae-original-textarea {
+  display: none !important;
+}
+/* Formatting Help has its own edge slot outside the toolbar groups. */
+html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-toolbar {
+  padding-right: 39px !important;
+  overflow: visible !important;
+}
+html body .af-ae-shell[data-af-editor-shell="1"]:has(> .af-ae-shell-help-edge[data-af-help-position="left"]) > .sceditor-toolbar {
+  padding-left: 39px !important;
+  padding-right: 5px !important;
+}
+.af-ae-shell > .af-ae-shell-help-edge {
+  position: absolute;
+  z-index: 4;
+  top: 5px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--atf-color-accent, #48bfff);
+  font: 700 16px/1 sans-serif;
+  cursor: pointer;
+}
+.af-ae-shell > .af-ae-shell-help-edge[data-af-help-position="left"] {
+  right: auto;
+  left: 6px;
+}
+.af-ae-shell > .af-ae-shell-help-edge:hover { background: rgba(100,155,255,.12); }
+html body .af-ae-shell[data-af-editor-shell="1"] .sceditor-group {
+  overflow: visible !important;
+}
+html body .af-ae-shell .af-ae-shell-menu {
+  position: fixed !important;
+  z-index: 2147483000 !important;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(65vh, 390px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-width: 225px;
+  max-width: calc(100vw - 16px);
+  margin: 0;
+  border: 1px solid rgba(140,170,210,.25);
+}
+html body .af-ae-shell .af-ae-shell-menu[hidden] { display: none !important; }
+html body .af-ae-shell .af-ae-shell-menu > .sceditor-button {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 34px;
+  padding: 5px 8px !important;
+  justify-content: flex-start !important;
+  gap: 8px;
+  box-sizing: border-box !important;
+}
+html body .af-ae-shell .af-ae-shell-menu-label { white-space: normal; }
+body .sceditor-dropdown {
+  z-index: 2147483000 !important;
+  max-height: min(65vh, 450px);
+  max-width: calc(100vw - 16px);
+  overflow-y: auto;
+}
+/* The shell, iframe, and source editor expand as one viewport-sized surface. */
+html body .af-ae-shell.af-ae-shell-maximized {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147482000 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  display: flex !important;
+  flex-direction: column;
+  background: var(--atf-surface, #1b2433);
+}
+html body .af-ae-shell.af-ae-shell-maximized > .sceditor-toolbar { flex: 0 0 auto; }
+html body .af-ae-shell.af-ae-shell-maximized > textarea:not(.af-ae-original-textarea),
+html body .af-ae-shell.af-ae-shell-maximized > .sceditor-container {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: calc(100dvh - 50px) !important;
+}
+html body .af-ae-shell.af-ae-shell-maximized .sceditor-wysiwyg,
+html body .af-ae-shell.af-ae-shell-maximized textarea.sceditor-source {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+html.af-ae-shell-fullscreen-active { overflow: hidden !important; }
