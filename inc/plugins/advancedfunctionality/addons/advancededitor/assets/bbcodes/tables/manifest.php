@@ -12,7 +12,8 @@ return [
         [
             'cmd'     => 'af_tables',
             'name'    => 'tables',
-            'title'   => 'Таблица',            'icon'    => 'img/tablebb.svg',
+            'title'   => 'Таблица',
+            'icon'    => 'img/tablebb.svg',
             'handler' => 'tables',
         ],
     ],
