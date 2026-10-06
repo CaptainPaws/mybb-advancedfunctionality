@@ -1001,13 +1001,13 @@ function af_advancededitor_pre_output(string &$page = ''): void
         // Critical standalone fallback for deployments with missing/stale shell CSS.
         // A theme or CDN must never collapse the editor into a vertical list.
         $injectHead .= '<style id="af-ae-shell-critical">'
-            . '.af-ae-shell{display:block;box-sizing:border-box;width:100%;max-width:100%}'
-            . '.af-ae-shell>.sceditor-toolbar{display:flex!important;flex-flow:row wrap!important;align-items:center!important;justify-content:flex-start!important;height:auto!important;width:auto!important;min-height:34px;padding:4px}'
-            . '.af-ae-shell>.sceditor-toolbar>.sceditor-group{display:inline-flex!important;flex-flow:row nowrap!important;align-items:center!important;width:auto!important;height:auto!important;float:none!important}'
-            . '.af-ae-shell .sceditor-group>.sceditor-button{display:inline-flex!important;align-items:center;justify-content:center;width:28px!important;height:28px!important;box-sizing:border-box!important;float:none!important;padding:3px!important}'
-            . '.af-ae-shell .sceditor-button>div{display:flex!important;align-items:center;justify-content:center;width:16px!important;height:16px!important;margin:0!important}'
-            . '.af-ae-shell>textarea:not(.sceditor-textarea):not([data-af-ae-wys-active]){display:block!important;width:100%!important;max-width:100%!important}'
-            . '.af-ae-shell .af-ae-shell-menu[hidden]{display:none!important}'
+            . '.af-ae-shell.sceditor-container{display:block;box-sizing:border-box;width:100%;max-width:100%}'
+            . '.af-ae-shell.sceditor-container>.sceditor-toolbar{display:flex!important;flex-flow:row wrap!important;align-items:center!important;justify-content:flex-start!important;height:auto!important;width:auto!important;min-height:34px;padding:4px}'
+            . '.af-ae-shell.sceditor-container>.sceditor-toolbar>.sceditor-group{display:inline-flex!important;flex-flow:row nowrap!important;align-items:center!important;width:auto!important;height:auto!important;float:none!important}'
+            . '.af-ae-shell.sceditor-container .sceditor-group>.sceditor-button{display:inline-flex!important;align-items:center;justify-content:center;width:28px!important;height:28px!important;box-sizing:border-box!important;float:none!important;padding:3px!important}'
+            . '.af-ae-shell.sceditor-container .sceditor-button>div{display:flex!important;align-items:center;justify-content:center;width:16px!important;height:16px!important;margin:0!important}'
+            . '.af-ae-shell.sceditor-container>textarea:not(.sceditor-textarea):not([data-af-ae-wys-active]){display:block!important;width:100%!important;max-width:100%!important}'
+            . '.af-ae-shell.sceditor-container .af-ae-shell-menu[hidden]{display:none!important}'
             . '</style>' . "\n";
         if (isset($themeFeatureMap['shell_override'])) $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_url($themeFeatureMap['shell_override'])) . '" />';
     }
