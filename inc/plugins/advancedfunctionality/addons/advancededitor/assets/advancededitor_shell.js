@@ -286,9 +286,12 @@
         popup.appendChild(content.jquery ? content[0] : content);
         document.body.appendChild(popup);
         var bounds = (caller || wrapper).getBoundingClientRect();
-        popup.style.position = 'absolute'; popup.style.zIndex = '2147483000';
-        popup.style.left = Math.max(8, Math.min(bounds.left + window.scrollX, window.scrollX + window.innerWidth - popup.offsetWidth - 8)) + 'px';
-        popup.style.top = bounds.bottom + window.scrollY + 'px';
+        popup.style.position = 'fixed'; popup.style.zIndex = '2147483000';
+        popup.style.maxHeight = 'min(60vh, 420px)';
+        popup.style.overflowY = 'auto';
+        popup.style.left = Math.max(8, Math.min(bounds.left, window.innerWidth - popup.offsetWidth - 8)) + 'px';
+        popup.style.top = Math.max(8, bounds.bottom + popup.offsetHeight + 8 > window.innerHeight
+          ? bounds.top - popup.offsetHeight - 4 : bounds.bottom + 4) + 'px';
       },
       destroy: function () { api.closeDropDown(); }
     };
@@ -361,9 +364,35 @@
       }
       if (capability && requiresCapability(capability, 'wysiwyg')) editor = ensureWysiwyg(ta);
       if (b.handler) return runHandler(editor, b, caller);
-      if (b.opentag || b.closetag) { editor.insert(b.opentag || '', b.closetag || ''); return; }
+      // Source accepts BBCode; WYSIWYG must receive editable HTML, not
+      // literal [align] strings (otherwise the tags appear in the iframe).
+      if (!editor.__afAeSourceAdapter && /^(left|center|right|justify)$/.test(b.cmd)
+          && typeof editor.sourceMode === 'function' && !editor.sourceMode()) {
+        editor.insert('<div class="af-ae-wys-align" data-af-ae-align="' + b.cmd +
+          '" style="text-align:' + b.cmd + '">', '</div>');
+        return;
+      }
+      if (b.opentag || b.closetag) {
+        // WYSIWYG inserts HTML for known visual commands; the SCEditor BBCode
+        // plugin handles serialisation. Keep direct BBCode insertion in Source.
+        if (!editor.__afAeSourceAdapter && typeof editor.sourceMode === 'function' &&
+            !editor.sourceMode() && typeof editor.execCommand === 'function' &&
+            /^(bold|italic|underline|strike)$/.test(b.cmd)) {
+          editor.execCommand(b.cmd); return;
+        }
+        editor.insert(b.opentag || '', b.closetag || ''); return;
+      }
       if (!editor.__afAeSourceAdapter && typeof editor.execCommand === 'function' && b.cmd !== 'maximize' && b.cmd !== 'af_formathelp') { editor.execCommand(b.cmd); return; }
-      if (b.cmd === 'maximize') { wrapper.classList.toggle('af-ae-shell-maximized'); return; }
+      if (b.cmd === 'maximize') {
+        var maximized = wrapper.classList.toggle('af-ae-shell-maximized');
+        document.documentElement.classList.toggle('af-ae-shell-fullscreen-active', maximized);
+        if (editor && !editor.__afAeSourceAdapter && typeof editor.resizeTo === 'function') {
+          // The SCEditor container must track the shell, including its iframe.
+          try { editor.resizeTo('100%', maximized ? Math.max(200, innerHeight - 95) : 180); } catch (e) {}
+        }
+        caller.setAttribute('aria-pressed', String(maximized));
+        return;
+      }
       if (b.cmd === 'undo' || b.cmd === 'redo') {
         if (!editor.__afAeSourceAdapter && editor.execCommand) editor.execCommand(b.cmd);
         else { var history = ta.__afAeHistory, next = history.index + (b.cmd === 'undo' ? -1 : 1);
@@ -454,7 +483,24 @@
     wrapper.addEventListener('click', function (e) {
       var caller = e.target.closest('[data-af-command]'); if (!caller || !wrapper.contains(caller)) return;
       e.preventDefault(); var cmd = caller.getAttribute('data-af-command');
-      if (/^af_menu_dropdown\d+$/.test(cmd)) { var menu = wrapper.querySelector('[data-af-menu="' + cmd + '"]'); if (menu) { menu.hidden = !menu.hidden; caller.setAttribute('aria-expanded', String(!menu.hidden)); } return; }
+      if (/^af_menu_dropdown\d+$/.test(cmd)) {
+        var menu = wrapper.querySelector('[data-af-menu="' + cmd + '"]');
+        if (menu) {
+          var opening = menu.hidden;
+          wrapper.querySelectorAll('.af-ae-shell-menu').forEach(function (other) { other.hidden = true; });
+          menu.hidden = !opening;
+          caller.setAttribute('aria-expanded', String(opening));
+          if (opening) {
+            var rect = caller.getBoundingClientRect();
+            menu.style.left = Math.max(8, Math.min(rect.left, innerWidth - 260)) + 'px';
+            menu.style.top = (rect.bottom + 260 > innerHeight && rect.top > 270
+              ? Math.max(8, rect.top - Math.min(260, menu.scrollHeight || 260))
+              : rect.bottom + 4) + 'px';
+          }
+        }
+        return;
+      }
+      wrapper.querySelectorAll('.af-ae-shell-menu').forEach(function (menu) { menu.hidden = true; });
       if (buttons[cmd]) activate(ta, buttons[cmd], caller);
     });
     var quick = isQuickEdit(ta);
