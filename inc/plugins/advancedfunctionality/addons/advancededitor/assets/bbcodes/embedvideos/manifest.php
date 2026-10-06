@@ -2,7 +2,7 @@
 
 return [
     'view_markers' => ['af-ev-embed'],
-    'view_assets' => ['js' => ['bbcodes/bbcodes/embedvideos/embedvideos_view.js'], 'css' => ['bbcodes/bbcodes/embedvideos/embedvideos_view.css']],
+    'view_assets' => ['js' => ['bbcodes/embedvideos/embedvideos_view.js'], 'css' => ['bbcodes/embedvideos/embedvideos_view.css']],
     'runtime' => ['view' => true, 'activation' => 'click', 'requires' => [], 'editor' => true],
     'id'    => 'embedvideos',
     'title' => 'Вставить видео',

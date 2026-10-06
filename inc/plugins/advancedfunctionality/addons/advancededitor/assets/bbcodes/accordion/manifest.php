@@ -2,7 +2,7 @@
 
 return [
     'view_markers' => ['data-af-accordion'],
-    'view_assets' => ['js' => ['bbcodes/bbcodes/accordion/accordion_view.js'], 'css' => ['bbcodes/bbcodes/accordion/accordion_view.css']],
+    'view_assets' => ['js' => ['bbcodes/accordion/accordion_view.js'], 'css' => ['bbcodes/accordion/accordion_view.css']],
     'runtime' => ['view' => true, 'activation' => 'click', 'requires' => [], 'editor' => true],
     'id'    => 'accordion',
     'title' => 'Accordion',

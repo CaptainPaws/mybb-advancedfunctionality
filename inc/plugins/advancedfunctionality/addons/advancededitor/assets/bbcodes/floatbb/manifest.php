@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'view_assets' => ['js' => [], 'css' => ['bbcodes/bbcodes/floatbb/floatbb_view.css']],
+    'view_assets' => ['js' => [], 'css' => ['bbcodes/floatbb/floatbb_view.css']],
     'view_markers' => ['af-floatbb'],
     'runtime' => ['activation' => 'click', 'requires' => []],
     'id'    => 'floatbb',
