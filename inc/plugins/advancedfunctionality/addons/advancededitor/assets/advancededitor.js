@@ -1412,10 +1412,30 @@
       var text = host.getPropertyValue('--atf-color-text').trim() || '#eef2ff';
       var muted = host.getPropertyValue('--atf-color-text-muted').trim() || '#aeb5ca';
       var accent = host.getPropertyValue('--atf-color-accent').trim() || '#788dff';
+
+      // WYSIWYG lives in an iframe and cannot inherit typography from the
+      // source textarea. Reuse the exact metrics captured before SCEditor init
+      // so Source and WYSIWYG do not jump between different default fonts.
+      var metrics = null;
+      try {
+        var frame = doc.defaultView && doc.defaultView.frameElement;
+        var shell = frame && frame.closest ? frame.closest('[data-af-editor-shell="1"]') : null;
+        var sourceTa = shell && shell.__afAeTextarea;
+        metrics = sourceTa && sourceTa.__afAeSurfaceMetrics ? sourceTa.__afAeSurfaceMetrics : null;
+      } catch (eMetrics) {}
+      var family = metrics && metrics.fontFamily ? metrics.fontFamily : 'Verdana, Arial, Helvetica, sans-serif';
+      var size = metrics && metrics.fontSize ? metrics.fontSize : '14px';
+      var weight = metrics && metrics.fontWeight ? metrics.fontWeight : '400';
+      var lineHeight = metrics && metrics.lineHeight ? metrics.lineHeight : '1.25';
+      var letterSpacing = metrics && metrics.letterSpacing ? metrics.letterSpacing : 'normal';
+
       var style = doc.createElement('style');
       style.id = 'af-ae-atf-iframe-theme';
       style.textContent = 'html,body{background:' + surface + ';color:' + text
-        + ';caret-color:' + accent + ';font:inherit}body{box-sizing:border-box}'
+        + ';caret-color:' + accent + ';font-family:' + family + ';font-size:' + size
+        + ';font-weight:' + weight + ';line-height:' + lineHeight
+        + ';letter-spacing:' + letterSpacing + ';margin:0;padding:10px;box-sizing:border-box}'
+        + 'body{min-height:100%}'
         + 'a{color:' + accent + '}::placeholder{color:' + muted + ';opacity:.8}'
         + '::-webkit-scrollbar-thumb{background:' + muted + ';border-radius:999px}';
       head.appendChild(style);
