@@ -29,6 +29,8 @@ define('AF_ATF_MARK', '<!--af_atf_assets-->');
 
 define('AF_ATF_ASSET_CSS', 'inc/plugins/advancedfunctionality/addons/'.AF_ATF_ID.'/assets/advancedthreadfields.css');
 define('AF_ATF_ASSET_JS',  'inc/plugins/advancedfunctionality/addons/'.AF_ATF_ID.'/assets/advancedthreadfields.js');
+define('AF_ATF_ASSET_FORM_JS', 'inc/plugins/advancedfunctionality/addons/'.AF_ATF_ID.'/assets/advancedthreadfields-form.js');
+define('AF_ATF_ASSET_VIEW_JS', 'inc/plugins/advancedfunctionality/addons/'.AF_ATF_ID.'/assets/advancedthreadfields-view.js');
 
 define('AF_ATF_TPL_MARK_INPUT', '<!--AF_ATF_INPUT-->');
 define('AF_ATF_TPL_MARK_SHOW',  '<!--AF_ATF_SHOW-->');
@@ -532,28 +534,38 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         global $mybb;
 
         $base = rtrim((string)$mybb->settings['bburl'], '/');
-        // The ability editor lives in this JavaScript asset.  Keep its URL tied
-        // to the deployed file, otherwise browsers can keep the old repeater
-        // indefinitely after a plugin update.
+        $script = strtolower(defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '');
+        $jsRel = '';
+        if (in_array($script, ['newthread.php', 'editpost.php'], true)) {
+            $jsRel = AF_ATF_ASSET_FORM_JS;
+        } elseif ($script === 'forumdisplay.php' && !empty($GLOBALS['af_atf_forum_catalog_cta_html'])) {
+            $jsRel = AF_ATF_ASSET_VIEW_JS;
+        }
+        // showthread is fully server-rendered. Interactive KB chips belong to
+        // Knowledge Base and therefore do not justify an ATF view runtime.
+
         $assetVersion = '1';
         if (defined('MYBB_ROOT')) {
-            $assetMtime = @filemtime(MYBB_ROOT . AF_ATF_ASSET_JS);
+            $versionFile = $jsRel !== '' ? $jsRel : AF_ATF_ASSET_CSS;
+            $assetMtime = @filemtime(MYBB_ROOT . $versionFile);
             if (is_int($assetMtime) && $assetMtime > 0) {
                 $assetVersion = (string)$assetMtime;
             }
         }
-        $css  = $base.'/'.AF_ATF_ASSET_CSS.'?v='.$assetVersion;
-        $js   = $base.'/'.AF_ATF_ASSET_JS.'?v='.$assetVersion;
+        $css = $base.'/'.AF_ATF_ASSET_CSS.'?v='.$assetVersion;
+        $js = $jsRel !== '' ? $base.'/'.$jsRel.'?v='.$assetVersion : '';
 
         $extra = '';
         if (!empty($GLOBALS['af_atf_hide_editor'])) {
             $extra .= "\n<meta name=\"af-atf-hide-editor\" content=\"1\" />\n";
         }
-        $extra .= "\n<meta name=\"af-atf-kb-endpoint\" content=\"{$base}/misc.php?action=af_kb_get\" />\n";
+        if ($jsRel === AF_ATF_ASSET_FORM_JS) {
+            $extra .= "\n<meta name=\"af-atf-kb-endpoint\" content=\"{$base}/misc.php?action=af_kb_get\" />\n";
+        }
 
         $tag = "\n".AF_ATF_MARK
              . "\n<link rel=\"stylesheet\" href=\"{$css}\" />"
-             . "\n<script src=\"{$js}\" defer></script>\n"
+             . ($js !== '' ? "\n<script src=\"{$js}\" defer></script>\n" : "\n")
              . $extra;
 
         if (stripos($page, '</head>') !== false) {
@@ -4026,41 +4038,51 @@ function af_atf_kb_get_list_by_type(string $type): array
     return $items;
 }
 
+function af_atf_kb_preload_entries(array $pairs): void
+{
+    global $db;
+    if (!isset($GLOBALS['af_atf_kb_entry_cache']) || !is_array($GLOBALS['af_atf_kb_entry_cache'])) {
+        $GLOBALS['af_atf_kb_entry_cache'] = [];
+    }
+    $cache =& $GLOBALS['af_atf_kb_entry_cache'];
+    $wanted = [];
+    foreach ($pairs as $pair) {
+        $type = strtolower(trim((string)($pair['type'] ?? '')));
+        $key = strtolower(trim((string)($pair['key'] ?? '')));
+        if ($type === '' || $key === '') continue;
+        $cacheKey = $type . ':' . $key;
+        if (!array_key_exists($cacheKey, $cache)) {
+            $wanted[$cacheKey] = ['type' => $type, 'key' => $key];
+            $cache[$cacheKey] = [];
+        }
+    }
+    if (!$wanted || !is_object($db) || !$db->table_exists('af_kb_entries')) return;
+
+    $clauses = [];
+    foreach ($wanted as $pair) {
+        $clauses[] = "(type='" . $db->escape_string($pair['type']) . "' AND `key`='" . $db->escape_string($pair['key']) . "')";
+    }
+    $q = $db->simple_select('af_kb_entries', '*', '(' . implode(' OR ', $clauses) . ') AND active=1');
+    while ($row = $db->fetch_array($q)) {
+        $type = strtolower(trim((string)($row['type'] ?? '')));
+        $key = strtolower(trim((string)($row['key'] ?? '')));
+        if ($type !== '' && $key !== '') $cache[$type . ':' . $key] = $row;
+    }
+}
+
 function af_atf_kb_get_entry(string $type, string $key): array
 {
-    static $cacheEntryByTypeKey = [];
-
     $type = strtolower(trim($type));
     $key = strtolower(trim($key));
-    if ($type === '' || $key === '') {
-        return [];
-    }
+    if ($type === '' || $key === '') return [];
 
     $cacheKey = $type . ':' . $key;
-    if (isset($cacheEntryByTypeKey[$cacheKey])) {
-        return $cacheEntryByTypeKey[$cacheKey];
+    $cache =& $GLOBALS['af_atf_kb_entry_cache'];
+    if (!is_array($cache)) $cache = [];
+    if (!array_key_exists($cacheKey, $cache)) {
+        af_atf_kb_preload_entries([['type' => $type, 'key' => $key]]);
     }
-
-    global $db;
-    if (!is_object($db) || !$db->table_exists('af_kb_entries')) {
-        $cacheEntryByTypeKey[$cacheKey] = [];
-        return [];
-    }
-
-    $row = $db->fetch_array($db->simple_select(
-        'af_kb_entries',
-        '*',
-        "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."' AND active=1",
-        ['limit' => 1]
-    ));
-
-    if (!is_array($row) || empty($row)) {
-        $cacheEntryByTypeKey[$cacheKey] = [];
-        return [];
-    }
-
-    $cacheEntryByTypeKey[$cacheKey] = $row;
-    return $row;
+    return is_array($cache[$cacheKey] ?? null) ? $cache[$cacheKey] : [];
 }
 
 function af_atf_kb_resolve_label(string $optionsRaw, string $key): string
@@ -4094,7 +4116,7 @@ function af_atf_kb_build_chip(string $kbType, string $key, string $optionsRaw = 
     $keySafe = htmlspecialchars_uni($key);
     $typeSafe = htmlspecialchars_uni($kbType);
 
-    return '<span class="af_kb_chip" data-kb-type="' . $typeSafe . '" data-kb-key="' . $keySafe . '">' . $titleSafe . '</span>';
+    return '<span class="af_kb_chip af-kb-chip" data-kb-type="' . $typeSafe . '" data-kb-key="' . $keySafe . '">' . $titleSafe . '</span>';
 }
 
 /* -------------------- SF POINTBUY HELPERS -------------------- */
@@ -6801,17 +6823,50 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
         return '';
     }
 
+    $cacheKey = $tid . ':' . $fid;
+    if (!isset($GLOBALS['af_atf_display_block_cache']) || !is_array($GLOBALS['af_atf_display_block_cache'])) {
+        $GLOBALS['af_atf_display_block_cache'] = [];
+    }
+    if (array_key_exists($cacheKey, $GLOBALS['af_atf_display_block_cache'])) {
+        return (string)$GLOBALS['af_atf_display_block_cache'][$cacheKey];
+    }
+
     $values = af_atf_get_values_by_tid($tid);
     if (empty($values)) {
-        return '';
+        return $GLOBALS['af_atf_display_block_cache'][$cacheKey] = '';
     }
 
     $fields = af_atf_is_application_archive_forum($fid, $tid)
         ? af_atf_get_archive_display_fields($values)
         : af_atf_get_fields_for_forum($fid);
     if (empty($fields)) {
-        return '';
+        return $GLOBALS['af_atf_display_block_cache'][$cacheKey] = '';
     }
+
+
+    $GLOBALS['af_atf_context_fid'] = $fid;
+    $GLOBALS['af_atf_context_fields'] = $fields;
+    $GLOBALS['af_atf_context_values'] = $values;
+
+    $kbPairs = [];
+    foreach ($fields as $field) {
+        $fieldId = (int)($field['fieldid'] ?? 0);
+        $value = trim((string)($values[$fieldId] ?? ''));
+        if ($fieldId <= 0 || $value === '') continue;
+        $type = (string)($field['type'] ?? '');
+        $kbType = '';
+        if (in_array($type, ['kb_race', 'kb_class', 'kb_theme'], true)) {
+            $kbType = ['kb_race' => 'race', 'kb_class' => 'class', 'kb_theme' => 'theme'][$type];
+        } elseif ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
+            $fieldName = trim((string)($field['name'] ?? ''));
+            $kbType = af_atf_character_arpg_contract_type($fieldName);
+            if ($kbType === '' || af_atf_character_active_mechanic() !== 'arpg') {
+                $kbType = af_atf_character_resolve_kb_type($field, $value);
+            }
+        }
+        if ($kbType !== '') $kbPairs[] = ['type' => $kbType, 'key' => $value];
+    }
+    af_atf_kb_preload_entries($kbPairs);
 
     $elementThemeKey = '';
     $wikiTitle = '';
@@ -6895,7 +6950,7 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
     }
 
     if ($wikiTitle === '' && $wikiElement === '' && empty($wikiInfoboxRows) && empty($wikiMainSections)) {
-        return '';
+        return $GLOBALS['af_atf_display_block_cache'][$cacheKey] = '';
     }
     if ($wikiTitle === '') {
         $wikiTitle = htmlspecialchars_uni('Анкета персонажа');
@@ -6913,7 +6968,7 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
     }
 
     // Обёртка именно “внутри поста”, чтобы можно было отдельно стилизовать
-    return '<div class="af-atf-inpost">'.$block.'</div>';
+    return $GLOBALS['af_atf_display_block_cache'][$cacheKey] = '<div class="af-atf-inpost">'.$block.'</div>';
 }
 
 function af_atf_message_is_effectively_empty(string $htmlMessage): bool
@@ -6964,14 +7019,9 @@ function af_atf_postbit(&$post): void
         return;
     }
 
-    // Кешируем на один рендер страницы, чтобы не собирать блок заново
-    static $blockCache = [];
-
-    if (!array_key_exists($tid, $blockCache)) {
-        $blockCache[$tid] = af_atf_build_display_block_for_tid_fid($tid, $fid);
-    }
-
-    $block = (string)$blockCache[$tid];
+    // The builder owns the single request cache shared by postbit,
+    // theme providers, CharacterSheets and profile/modal integrations.
+    $block = af_atf_build_display_block_for_tid_fid($tid, $fid);
     if ($block === '') {
         return;
     }

@@ -1055,6 +1055,11 @@ function af_charactersheets_handle_create_sheet_action(): void
 
 function af_charactersheets_resolve_existing_sheet_for_thread(int $tid, int $uid, array $acceptRow = []): array
 {
+    // This helper is hit from moderation controls on application threads.
+    // Ordinary showthread/postbit requests do not need the CRUD module.
+    if (!function_exists('af_charactersheets_get_sheet_by_tid') && function_exists('af_charactersheets_require_modules')) {
+        af_charactersheets_require_modules(['sheets_crud']);
+    }
     if ($tid > 0) {
         $sheet = af_charactersheets_get_sheet_by_tid($tid);
         if (!empty($sheet['id'])) {
@@ -1795,26 +1800,32 @@ function af_charactersheets_set_accept_template(string $template): void
     ], 'id=1');
 }
 
-function af_charactersheets_get_asset_urls(): array
+function af_charactersheets_get_asset_urls(bool $lightweight = false): array
 {
     global $mybb;
     $baseUrl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
-    return [
-        'css' => $baseUrl . '/inc/plugins/advancedfunctionality/addons/' . AF_CS_ID . '/assets/charactersheets.css',
-        'js' => $baseUrl . '/inc/plugins/advancedfunctionality/addons/' . AF_CS_ID . '/assets/charactersheets.js',
-    ];
+    $prefix = $baseUrl . '/inc/plugins/advancedfunctionality/addons/' . AF_CS_ID . '/assets/';
+    return $lightweight
+        ? ['css' => $prefix . 'charactersheets-trigger.css', 'js' => $prefix . 'charactersheets-trigger.js']
+        : ['css' => $prefix . 'charactersheets.css', 'js' => $prefix . 'charactersheets.js'];
 }
 
-function af_charactersheets_get_asset_version(): string
+function af_charactersheets_is_trigger_context(): bool
 {
-    $css = AF_CS_BASE . 'assets/charactersheets.css';
-    $js = AF_CS_BASE . 'assets/charactersheets.js';
+    $script = strtolower(defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '');
+    return in_array($script, ['showthread.php', 'member.php'], true);
+}
+
+function af_charactersheets_get_asset_version(bool $lightweight = false): string
+{
+    $files = $lightweight
+        ? [AF_CS_BASE . 'assets/charactersheets-trigger.css', AF_CS_BASE . 'assets/charactersheets-trigger.js']
+        : [AF_CS_BASE . 'assets/charactersheets.css', AF_CS_BASE . 'assets/charactersheets.js'];
     $timestamps = [];
-    if (is_file($css)) {
-        $timestamps[] = (int)filemtime($css);
-    }
-    if (is_file($js)) {
-        $timestamps[] = (int)filemtime($js);
+    foreach ($files as $file) {
+        if (is_file($file)) {
+            $timestamps[] = (int)filemtime($file);
+        }
     }
     if (!$timestamps) {
         return AF_CS_ASSET_FALLBACK_VERSION;
@@ -1883,12 +1894,14 @@ function af_charactersheets_enqueue_assets(): void
         return;
     }
 
-    $assets = af_charactersheets_get_asset_urls();
+    $lightweight = af_charactersheets_is_trigger_context();
+    $assets = af_charactersheets_get_asset_urls($lightweight);
+    $version = af_charactersheets_get_asset_version($lightweight);
     if (function_exists('af_add_css_once')) {
-        af_add_css_once((string)($assets['css'] ?? ''));
+        af_add_css_once((string)($assets['css'] ?? '') . '?v=' . rawurlencode($version));
     }
     if (function_exists('af_add_js_once')) {
-        af_add_js_once((string)($assets['js'] ?? ''));
+        af_add_js_once((string)($assets['js'] ?? '') . '?v=' . rawurlencode($version));
     }
 }
 
@@ -1901,15 +1914,26 @@ function af_charactersheets_canonicalize_assets_html(string $html): string
 {
     if (af_cs_assets_disabled_for_current_page()) {
         $html = preg_replace(
-            '~<link\b[^>]*href=("|\')[^"\']*charactersheets\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
+            '~<link\b[^>]*href=("|\')[^"\']*charactersheets(?:-trigger)?\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
             '',
             $html
         );
         $html = preg_replace(
-            '~<script\b[^>]*src=("|\')[^"\']*charactersheets\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i',
+            '~<script\b[^>]*src=("|\')[^"\']*charactersheets(?:-trigger)?\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i',
             '',
             $html
         );
+    }
+
+    // Enforce one ownership mode per response: trigger pages must never retain
+    // the full UI runtime, while real CharacterSheets pages must not retain the
+    // lightweight trigger if another integration injected it earlier.
+    if (af_charactersheets_is_trigger_context()) {
+        $html = preg_replace('~<link\b[^>]*href=("|\')[^"\']*/charactersheets\.css(?:\?[^"\']*)?\1[^>]*>\s*~i', '', $html);
+        $html = preg_replace('~<script\b[^>]*src=("|\')[^"\']*/charactersheets\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i', '', $html);
+    } else {
+        $html = preg_replace('~<link\b[^>]*href=("|\')[^"\']*/charactersheets-trigger\.css(?:\?[^"\']*)?\1[^>]*>\s*~i', '', $html);
+        $html = preg_replace('~<script\b[^>]*src=("|\')[^"\']*/charactersheets-trigger\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i', '', $html);
     }
 
     return $html;
