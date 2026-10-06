@@ -1104,6 +1104,10 @@ body.af-atf-kb-catalog-modal-open {
   max-width: 100%;
   box-sizing: border-box;
   min-height: 42px;
+  color: inherit;
+  font: inherit;
+  background: var(--atf-color-surface, rgba(127,127,127,.08));
+  border: 1px solid var(--atf-color-border, rgba(127,127,127,.3));
   padding: 10px 12px;
   border-radius: 8px;
   margin: 0;

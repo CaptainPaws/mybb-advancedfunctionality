@@ -9,11 +9,19 @@ const requests = [];
 const server = http.createServer((req,res) => {
   requests.push(req.url);
   res.setHeader('content-type', /\.js$/.test(req.url) ? 'application/javascript' : /\.css$/.test(req.url) ? 'text/css' : 'text/html; charset=utf-8');
-  if (req.url.startsWith('/slow')) return setTimeout(() => res.end('<h1>Loaded</h1>'), 350);
+  if (req.url.startsWith('/slow')) return setTimeout(() => res.end('<div class="post_body">Loaded application</div>'), 350);
   if (req.url.startsWith('/never')) return; // timeout state uses the production timeout, accelerated in the test.
   if (req.url.startsWith(assets)) return res.end(fs.readFileSync(path.join(root, req.url)));
+  if (req.url.startsWith('/forum')) {
+    const dir=path.join(root,assets,'adaptivethemeframework/templates');
+    const nav=fs.readFileSync(path.join(dir,'nav.html'),'utf8').replace('{$nav}', '<li class="atf-breadcrumbs__item"><a href="/forum">Forum</a></li>').replace('{$activebit}', '<li class="atf-breadcrumbs__current">Category</li>');
+    let html=fs.readFileSync(path.join(dir,'forumdisplay.html'),'utf8').replace('{$header}', '<header>Site header</header>').replace('<navigation>',nav).replace('{$threadslist}', '<div>Topic list</div><a href="/forum?page=2">Page 2</a>').replace(/\{\$[^}]+\}/g,'');
+    html=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,''); // Native MyBB scripts are outside this layout fixture.
+    html=html.replace('<body>','<body class="atf-active" style="--atf-content-max-width:1000px;--atf-space-5:24px;--atf-space-3:12px;--atf-space-4:16px">').replace('</head>',`<link rel="stylesheet" href="${assets}adaptivethemeframework/assets/adaptivethemeframework.css"></head>`);
+    return res.end(html);
+  }
   if (req.url === '/form') return res.end(`<html><head><link rel="stylesheet" href="${assets}advancedthreadfields/assets/advancedthreadfields.css"></head><body style="margin:16px;background:#181b24;color:#eee">${form}<script src="${assets}advancedthreadfields/assets/advancedthreadfields-form.js"></script></body></html>`);
-  res.end(`<html><head><link rel="stylesheet" href="${assets}charactersheets/assets/charactersheets-trigger.css"></head><body><a data-afcs-open="1" data-afcs-sheet="/slow?sheet=1" href="/slow?sheet=1">Sheet</a><a data-afcs-application="/slow?application=1" href="/slow?application=1">Application</a><a data-afcs-sheet="/never">Timeout</a><script src="${assets}charactersheets/assets/charactersheets-trigger.js"></script></body></html>`);
+  res.end(`<html><head><link rel="stylesheet" href="${assets}charactersheets/assets/charactersheets-trigger.css"></head><body><a data-afcs-open="1" data-afcs-sheet="/slow?sheet=1" href="/slow?sheet=1">Sheet</a><a data-afcs-application="/slow?application=1" href="/slow?application=1">Application</a><a data-afcs-sheet="/never">Timeout</a><a data-af-apui-modal-owner="1" data-af-apui-modal-url="/slow?apui=1" data-af-apui-modal-kind="application" href="/slow?apui=1">APUI application</a><a data-af-apui-modal-owner="1" data-af-apui-modal-url="/slow?frame=1" data-af-apui-modal-kind="sheet" href="/slow?frame=1">APUI frame</a><script src="${assets}charactersheets/assets/charactersheets-trigger.js"></script><script src="${assets}advancedprofileui/assets/advancedprofileui.js"></script></body></html>`);
 });
 (async () => {
   await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
@@ -53,6 +61,29 @@ const server = http.createServer((req,res) => {
     await page.locator('iframe').dispatchEvent('error');
     await page.locator('.af-cs-modal__loader.is-error a').waitFor();
     await page.keyboard.press('Escape');
+    await page.goto(base); // Restore production timer before APUI integration checks.
+    for (const kind of ['application','sheet']) {
+      for (let repeat=0;repeat<2;repeat++) {
+        await page.locator(`[data-af-apui-modal-kind="${kind}"]`).click();
+        await page.locator('[data-af-apui-modal] .af-cs-modal__loader').waitFor({state:'visible'});
+        assert.equal(await page.locator('[data-af-apui-modal] .af-cs-modal__body').getAttribute('aria-busy'),'true');
+        await page.locator('[data-af-apui-modal] .af-cs-modal__loader').waitFor({state:'hidden'});
+        assert.equal(await page.locator('[data-af-apui-modal] .af-cs-modal__body').getAttribute('aria-busy'),'false');
+        await page.locator('button[data-af-apui-modal-close]').click();
+      }
+    }
+    for (const width of [1440,375]) {
+      await page.setViewportSize({width,height:900});
+      for (const suffix of ['', '?page=2']) {
+        await page.goto(base+'/forum'+suffix);
+        const ownership=await page.evaluate(()=> {
+          const nav=document.querySelector('.atf-breadcrumbs'),main=document.querySelector('main.atf-forumdisplay');
+          const n=nav.getBoundingClientRect(),m=main.getBoundingClientRect();
+          return {inside:main.contains(nav),bounded:n.left>=m.left&&n.right<=m.right,count:document.querySelectorAll('.atf-breadcrumbs').length,overflow:document.documentElement.scrollWidth>innerWidth};
+        });
+        assert.deepEqual(ownership,{inside:true,bounded:true,count:1,overflow:false});
+      }
+    }
     const geometry=[];
     for (const [width, columns] of [[1440,4],[1000,2],[600,1],[375,1]]) {
       await page.setViewportSize({width,height:1000}); await page.goto(base+'/form');

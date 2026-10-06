@@ -5,7 +5,7 @@ define('MYBB_ROOT', dirname(__DIR__, 2) . '/');
 define('AF_ADDONS', MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/');
 define('TABLE_PREFIX', 'mybb_');
 function htmlspecialchars_uni($value): string { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
-$mybb = (object)['settings' => ['bburl' => '', 'af_atf_enabled' => 1]];
+$mybb = (object)['settings' => ['bburl' => '', 'af_advancedthreadfields_enabled' => 1]];
 $cache = new class { public function read($name): array { return ['fields' => [], 'groups' => []]; } };
 $db = new class {
     public function table_exists($table): bool { return false; }

@@ -1,7 +1,7 @@
 <?php
 $root = $argv[1] ?? dirname(__DIR__);
 $fixture = __DIR__ . '/fixtures/charactersheets_runtime.php';
-foreach (['full', 'embed', 'showthread', 'threaded', 'member', 'escalate', 'moderation', 'acp', 'lifecycle', 'accept', 'transfer', 'create_sheet', 'legacy'] as $mode) {
+foreach (['full', 'embed', 'api', 'application_plan', 'showthread', 'threaded', 'member', 'escalate', 'moderation', 'acp', 'lifecycle', 'accept', 'transfer', 'create_sheet', 'legacy'] as $mode) {
     $process = proc_open([PHP_BINARY, '-c', php_ini_loaded_file() ?: '', '-d', 'display_errors=stderr', $fixture, $root, $mode], [1=>['pipe','w'], 2=>['pipe','w']], $pipes);
     $output = stream_get_contents($pipes[1]);
     $errors = stream_get_contents($pipes[2]);

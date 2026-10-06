@@ -2964,9 +2964,12 @@ function af_atf_kb_get_list_by_type_any(string $type): array
         return af_atf_kb_get_list_by_type($type);
     }
 
+    static $listCache = [];
+    if (array_key_exists($type, $listCache)) return $listCache[$type];
+
     global $db;
     if (!is_object($db) || !$db->table_exists('af_kb_entries')) {
-        return [];
+        return $listCache[$type] = [];
     }
 
     $items = [];
@@ -2986,7 +2989,7 @@ function af_atf_kb_get_list_by_type_any(string $type): array
         ];
     }
 
-    return $items;
+    return $listCache[$type] = $items;
 }
 
 function af_atf_character_infer_mechanic(array $fields, array $valuesByFieldId): string
@@ -3119,6 +3122,8 @@ function af_atf_character_arpg_contract_type(string $fieldName): string
 
 function af_atf_get_character_ability_select_payload(): array
 {
+    static $payloadCache = null;
+    if ($payloadCache !== null) return $payloadCache;
     $setMap = [
         'type' => 'ability_type',
         'subtype' => 'ability_subtype',
@@ -3178,7 +3183,7 @@ function af_atf_get_character_ability_select_payload(): array
         $payload['stat'][] = ['key' => $key, 'label_ru' => $label, 'label_en' => $label];
     }
 
-    return $payload;
+    return $payloadCache = $payload;
 }
 
 function af_atf_get_arpg_mechanics_select_options(string $setKey): array

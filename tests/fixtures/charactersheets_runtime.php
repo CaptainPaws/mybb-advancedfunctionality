@@ -53,7 +53,7 @@ class CsMybb {
     public string $post_code = 'key';
     public string $request_method = 'POST';
     public function get_input($key, ...$args) {
-        return ['slug'=>'thread-52', 'embed'=>$GLOBALS['mode'] === 'embed' ? '1' : '0', 'my_post_key'=>'key', 'action'=>match($GLOBALS['mode']) { 'accept'=>'af_charactersheets_accept', 'transfer'=>'af_charactersheets_transfer', 'create_sheet'=>'af_charactersheets_create_sheet', 'legacy'=>'af_charactersheet', default=>'' }][$key] ?? '';
+        return ['slug'=>'thread-52', 'embed'=>$GLOBALS['mode'] === 'embed' ? '1' : '0', 'my_post_key'=>'key', 'action'=>match($GLOBALS['mode']) { 'accept'=>'af_charactersheets_accept', 'transfer'=>'af_charactersheets_transfer', 'create_sheet'=>'af_charactersheets_create_sheet', 'legacy'=>'af_charactersheet', 'api'=>'api', 'application_plan'=>'application', default=>'' }][$key] ?? '';
     }
 }
 class CsTemplates {
@@ -81,6 +81,7 @@ function output_page($html) {
     $urls = json_encode($GLOBALS['assets']);
     cs_check(str_contains($urls, 'charactersheets.js') && str_contains($urls, 'charactersheets.css'), 'Full route assets missing');
     cs_check(!str_contains($urls, 'charactersheets-trigger'), 'Trigger runtime leaked into full route');
+    cs_check(!in_array('ajax.php', cs_modules(), true), 'API handlers leaked into a view route');
     if (getenv('AF_TEST_HTML')) echo $html;
     else echo json_encode(['mode'=>$GLOBALS['mode'], 'rendered'=>true, 'modules'=>cs_modules(), 'queries'=>$GLOBALS['db']->queries, 'warnings'=>$GLOBALS['warnings']]);
 }
@@ -132,6 +133,8 @@ try {
         foreach (['bootstrap.php', 'render.php', 'calculator.php', 'ajax.php', 'sheets_crud.php', 'acp_skills.php'] as $heavy) cs_check(!in_array($heavy, cs_modules(), true), 'Heavy module on initial showthread: ' . $heavy);
         echo json_encode(['mode'=>$mode, 'modules'=>cs_modules(), 'queries'=>$db->queries, 'query_per_author'=>false]);
     } else {
+        if ($mode === 'api') cs_check(in_array('ajax.php', cs_modules(), true), 'API route did not load its handlers');
+        if ($mode === 'application_plan') cs_check(function_exists('af_charactersheets_render_modal_application_page') && !in_array('ajax.php', cs_modules(), true), 'Application route module plan is invalid');
         if (in_array($mode, ['accept','transfer','create_sheet','legacy'], true)) {
             try { af_charactersheets_misc_start(); } catch (CsActionBoundary $e) {}
             cs_check(in_array('bootstrap.php', cs_modules(), true) && in_array('sheets_crud.php', cs_modules(), true), 'Action wrapper did not load its dependencies');

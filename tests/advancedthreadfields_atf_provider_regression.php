@@ -48,17 +48,19 @@ require AF_ADDONS . 'advancedthreadfields/advancedthreadfields.php';
 if (!af_atf_register_theme_provider()) throw new RuntimeException('Thread metadata provider was not registered.');
 if (af_atf_register_theme_provider()) throw new RuntimeException('Duplicate thread metadata provider was accepted.');
 $components = af_adaptivethemeframework_components_for_slot('thread.meta_chips');
-if (count($components) !== 1 || key($components) !== 'advancedthreadfields::forum_meta_chips') {
-    throw new RuntimeException('Stable thread metadata provider identity is missing.');
+if (count($components) !== 0) {
+    throw new RuntimeException('Forumdisplay field provider must not be registered.');
+}
+if (count(af_adaptivethemeframework_components_for_slot('thread.atf_fields')) !== 1) {
+    throw new RuntimeException('Showthread field provider must remain registered.');
 }
 
 $context = af_adaptivethemeframework_thread_card_context([
     'tid' => 11, 'subject' => 'Topic', 'lastposteruid' => 7, 'lastposter' => 'User',
 ], 3);
 $slot = af_adaptivethemeframework_render_slot('thread.meta_chips', $context);
-if (!str_contains($slot, 'af-atf-chips') || !str_contains($slot, 'https://example.test')
-    || str_contains($slot, AF_ATF_TPL_MARK_CHIPS)) {
-    throw new RuntimeException('ATF thread metadata slot output is invalid or marker-dependent.');
+if ($slot !== '' || af_atf_render_forum_chips($context) !== '') {
+    throw new RuntimeException('Forumdisplay field output must be disabled.');
 }
 
 $thread = ['tid' => 11];
@@ -78,9 +80,8 @@ if (af_adaptivethemeframework_render_slot('thread.atf_fields', ['tid' => 11, 'fi
 $GLOBALS['test_enabled']['advancedthreadfields'] = true;
 $GLOBALS['test_enabled']['adaptivethemeframework'] = false;
 af_atf_forumdisplay_thread();
-if (!str_contains($thread['af_atf_forum_chips'], AF_ATF_TPL_MARK_CHIPS)
-    || !str_contains($thread['af_atf_forum_chips'], 'af-atf-chips')) {
-    throw new RuntimeException('ATF-off legacy marker output was not preserved.');
+if ($thread['af_atf_forum_chips'] !== '') {
+    throw new RuntimeException('Legacy forumdisplay must also omit field output.');
 }
 
 echo "AdvancedThreadFields ATF provider passed.\n";
