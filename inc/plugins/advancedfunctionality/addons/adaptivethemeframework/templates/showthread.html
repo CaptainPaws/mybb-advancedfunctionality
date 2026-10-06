@@ -28,7 +28,7 @@
 <script src="{$mybb->asset_url}/jscripts/jeditable/jeditable.min.js"></script>
 <script type="text/javascript" src="{$mybb->asset_url}/jscripts/thread.js?ver=1838"></script>
 </head>
-<body class="af-apui-thread-page af-aa-user-{$thread['uid']}">
+<body class="atf-active af-apui-thread-page af-aa-user-{$thread['uid']}" data-atf-owned="1">
 {$header}
 <main class="pun atf-page-shell atf-page atf-thread" id="content">
   <div class="atf-thread__breadcrumbs">{$atf_thread_breadcrumbs}</div>
@@ -91,5 +91,6 @@
 		$("#moderator_options_selector option.option_mirage").attr("disabled","disabled");
 	}
 </script>
+<atf-footer-placement></atf-footer-placement>
 </body>
 </html>

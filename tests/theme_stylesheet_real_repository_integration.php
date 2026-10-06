@@ -41,10 +41,11 @@ $bundle = af_theme_stylesheet_build_bundle();
 if (!$addons) throw new RuntimeException('Real addon discovery returned no addons');
 if (!$entries) throw new RuntimeException('Real manifest/CSS discovery returned no entries');
 if ($themes !== [1, 2]) throw new RuntimeException('Real theme query did not retain Theme #1 and Theme #2');
-if (count($bundle['sources']) !== count($entries)) throw new RuntimeException('Enabled real CSS source count differs from discovery count');
-if (count($bundle['sections']) !== count($entries)) throw new RuntimeException('Real bundle omitted manifest CSS sections');
+$integratedEntries = array_filter($entries, static fn(array $entry): bool => empty($entry['disable_theme_integration']));
+if (count($bundle['sources']) !== count($integratedEntries)) throw new RuntimeException('Enabled real CSS source count differs from discovery count');
+if (count($bundle['sections']) !== count($integratedEntries)) throw new RuntimeException('Real bundle omitted manifest CSS sections');
 foreach ($bundle['source_diagnostics'] as $source) {
-    if (empty($source['included'])) throw new RuntimeException('Enabled source was skipped: '.json_encode($source));
+    if (empty($source['included']) && $source['reason'] !== 'manifest_file_delivery') throw new RuntimeException('Enabled source was skipped: '.json_encode($source));
 }
 
 printf(

@@ -5149,6 +5149,32 @@ function af_atf_character_bridge_store_thread_kb_link(int $tid, int $fid, int $u
  * Backend DTO used by profile surfaces for an accepted character application.
  * Values stay owned by ATF; consumers never scrape the rendered application.
  */
+/** Return canonical author elements from live applications in one values query. */
+function af_atf_preload_author_elements(array $uids): array
+{
+    global $db;
+    $result = $authors = [];
+    foreach ($uids as $uid) {
+        $uid = (int)$uid;
+        $result[$uid] = '';
+        $active = function_exists('af_characterworkflow_resolve_active_application')
+            ? af_characterworkflow_resolve_active_application($uid) : null;
+        if ((int)($active['tid'] ?? 0) > 0) $authors[(int)$active['tid']][] = $uid;
+    }
+    if (!$authors || !is_object($db) || !$db->table_exists(AF_ATF_TABLE_VALUES)) return $result;
+    $fieldId = 0;
+    foreach (af_atf_get_fields_cached() as $field) {
+        if (($field['name'] ?? '') === 'character_element') { $fieldId = (int)$field['fieldid']; break; }
+    }
+    if ($fieldId <= 0) return $result;
+    $query = $db->simple_select(AF_ATF_TABLE_VALUES, 'tid,value',
+        'tid IN (' . implode(',', array_keys($authors)) . ') AND fieldid=' . $fieldId);
+    while ($row = $db->fetch_array($query)) {
+        foreach (($authors[(int)$row['tid']] ?? []) as $uid) $result[$uid] = af_atf_resolve_element_theme_key((string)$row['value']);
+    }
+    return $result;
+}
+
 function af_atf_get_profile_character_payload(int $tid): array
 {
     if ($tid <= 0) {

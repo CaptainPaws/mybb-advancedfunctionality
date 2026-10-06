@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+define('AF_PLUGIN_ID', 'advancedfunctionality');
 
 $core = (string)file_get_contents(dirname(__DIR__).'/inc/plugins/advancedfunctionality.php');
 function extractAfFunction(string $source, string $name): string {
@@ -12,7 +13,7 @@ function extractAfFunction(string $source, string $name): string {
     }
     throw new RuntimeException("unterminated {$name}");
 }
-foreach (['af_theme_stylesheet_section_id','af_theme_stylesheet_encode_section','af_theme_stylesheet_parse_bundle','af_theme_stylesheet_incremental_bundle'] as $fn) eval(extractAfFunction($core, $fn));
+foreach (['af_theme_stylesheet_canonical_source_file','af_theme_stylesheet_section_id','af_theme_stylesheet_encode_section','af_theme_stylesheet_parse_bundle','af_theme_stylesheet_incremental_bundle'] as $fn) eval(extractAfFunction($core, $fn));
 function section(string $addon, string $logical, string $file, string $body, string $seed): string {
     return af_theme_stylesheet_encode_section([
         'addon_id'=>$addon, 'logical_id'=>$logical, 'source_file'=>$file,

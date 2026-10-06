@@ -6,7 +6,7 @@ return [
     'id' => 'adaptivethemeframework',
     'name' => 'Adaptive Theme Framework',
     'description' => 'Presentation framework for adaptive AF component-slot layouts.',
-    'version' => '0.27.1',
+    'version' => '0.28.0',
     'author' => 'AdvancedFunctionality',
     'bootstrap' => 'adaptivethemeframework.php',
 
@@ -17,22 +17,105 @@ return [
         'directory_fallback' => false,
     ],
 
-    // CSS is a normal AF theme source and is therefore composed into
-    // advancedstyles.css. It is deliberately not queued as a direct asset.
-    'assets' => [
-        'front' => [
-            'css' => [],
-            'js' => [],
+    // Core remains ACP-managed. Surface sources retain manifest ownership but
+    // are delivered as files: advancedstyles.css is a global stylesheet.
+    // The normal delivery decision suppresses this fallback when the core
+    // section is already owned by the attached advancedstyles.css.
+    'assets' => ['front' => ['css' => ['assets/adaptivethemeframework.css'], 'js' => []]],
+    'theme_stylesheets' => [
+        [
+            'id' => 'adaptivethemeframework_design_system',
+            'file' => 'assets/adaptivethemeframework.css',
+            'stylesheet_name' => 'af_adaptivethemeframework.css',
+            'attach' => [['file' => 'global']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+        ],
+        [
+            'id' => 'surface_navigation',
+            'file' => 'assets/surfaces/navigation.css',
+            'attach' => [['file' => 'global']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+            'disable_theme_integration' => true,
+        ],
+        [
+            'id' => 'surface_forum',
+            'file' => 'assets/surfaces/forum.css',
+            'attach' => [['file' => 'index.php'], ['file' => 'forumdisplay.php']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+            'disable_theme_integration' => true,
+        ],
+        [
+            'id' => 'surface_showthread',
+            'file' => 'assets/surfaces/showthread.css',
+            'attach' => [['file' => 'showthread.php']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+            'disable_theme_integration' => true,
+        ],
+        [
+            'id' => 'surface_postbit',
+            'file' => 'assets/surfaces/postbit.css',
+            'attach' => [['file' => 'showthread.php'], ['file' => 'newreply.php'], ['file' => 'newthread.php'], ['file' => 'editpost.php'], ['file' => 'private.php'], ['file' => 'announcements.php'], ['file' => 'misc.php'], ['file' => 'reputation.php']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+            'disable_theme_integration' => true,
+        ],
+        [
+            'id' => 'surface_compose',
+            'file' => 'assets/surfaces/compose.css',
+            'attach' => [['file' => 'showthread.php'], ['file' => 'newreply.php'], ['file' => 'newthread.php'], ['file' => 'editpost.php'], ['file' => 'private.php'], ['file' => 'usercp.php'], ['file' => 'modcp.php'], ['file' => 'member.php'], ['file' => 'memberlist.php'], ['file' => 'userlist.php'], ['file' => 'polls.php'], ['file' => 'moderation.php']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+            'disable_theme_integration' => true,
+        ],
+        [
+            'id' => 'surface_profile',
+            'file' => 'assets/surfaces/profile.css',
+            'attach' => [['file' => 'member.php']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+            'disable_theme_integration' => true,
+        ],
+        [
+            'id' => 'surface_memberlist',
+            'file' => 'assets/surfaces/memberlist.css',
+            'attach' => [['file' => 'memberlist.php'], ['file' => 'userlist.php']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+            'disable_theme_integration' => true,
+        ],
+        [
+            'id' => 'surface_usercp',
+            'file' => 'assets/surfaces/usercp.css',
+            'attach' => [['file' => 'usercp.php'], ['file' => 'usercp2.php']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+            'disable_theme_integration' => true,
+        ],
+        [
+            'id' => 'surface_private',
+            'file' => 'assets/surfaces/private.css',
+            'attach' => [['file' => 'private.php']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+            'disable_theme_integration' => true,
+        ],
+        [
+            'id' => 'surface_modcp',
+            'file' => 'assets/surfaces/modcp.css',
+            'attach' => [['file' => 'modcp.php']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+            'disable_theme_integration' => true,
+        ],
+        [
+            'id' => 'surface_moderation',
+            'file' => 'assets/surfaces/moderation.css',
+            'attach' => [['file' => 'moderation.php']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+            'disable_theme_integration' => true,
+        ],
+        [
+            'id' => 'surface_modals',
+            'file' => 'assets/surfaces/modals.css',
+            'attach' => [],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+            'disable_theme_integration' => true,
+            'conditional' => true, // Footer composition detects actual providers/triggers.
         ],
     ],
-
-    'theme_stylesheets' => [[
-        'id' => 'adaptivethemeframework_design_system',
-        'file' => 'assets/adaptivethemeframework.css',
-        'stylesheet_name' => 'af_adaptivethemeframework.css',
-        'attach' => [],
-        'enabled_setting' => 'af_adaptivethemeframework_enabled',
-    ]],
 
     'lang' => [
         'russian' => [

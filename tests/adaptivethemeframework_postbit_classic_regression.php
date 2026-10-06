@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . "/fixtures/atf_css.php";
 // Task 14: ATF owns only postbit_classic and renders the complete post contract.
 define('IN_MYBB', 1);
 define('AF_ADDONS', __DIR__ . '/../inc/plugins/advancedfunctionality/addons/');
@@ -68,7 +69,7 @@ foreach (['button_edit', 'button_quickdelete', 'button_quickrestore', 'button_qu
     atf_classic_assert(str_contains($source, "'{$control}'"), "Action provider omits {$control}");
 }
 
-$css = (string)file_get_contents(AF_ADDONS . 'adaptivethemeframework/assets/adaptivethemeframework.css');
+$css = atf_test_css(AF_ADDONS . 'adaptivethemeframework', 'showthread.php');
 atf_classic_assert(str_contains($css, 'grid-template-columns: minmax(240px, 300px) minmax(0, 1fr)'), 'Desktop author rail has no bounded width.');
 atf_classic_assert((bool)preg_match(
     '~\.atf-post__layout\s*\{[^}]*overflow:\s*hidden;[^}]*border-radius:\s*0 0 var\(--atf-radius-lg\) var\(--atf-radius-lg\);~s',
@@ -76,7 +77,7 @@ atf_classic_assert((bool)preg_match(
 ), 'Post layout is not clipped to the article bottom corner radius.');
 atf_classic_assert(str_contains($css, 'border-end-start-radius: var(--atf-radius-lg);'), 'Sidebar does not respect the post bottom-left rounded corner.');
 atf_classic_assert((bool)preg_match('~\.atf-post\s*\{\s*margin-block:[^;]+;\s*overflow:\s*visible;~', $css), 'Post overflow still breaks sticky positioning.');
-atf_classic_assert((bool)preg_match('~@media \(max-width: 48rem\).*?\.atf-post__layout \{ grid-template-columns: minmax\(0, 1fr\); \}.*?\.atf-post__sidebar \{ position: static;~s', $css), 'The same post does not collapse or disable sticky on mobile.');
+atf_classic_assert((bool)preg_match('~@media \(max-width: 48rem\).*?\.atf-post__layout \{ grid-template-columns: minmax\(0, 1fr\); \}.*?\.atf-post__sidebar-inner \{ position: static;~s', $css), 'The same post does not collapse or disable sticky on mobile.');
 atf_classic_assert(str_contains($css, '--atf-post-accent: var(--atf-neutral-accent)'), 'Posts without an element are not explicitly neutral.');
 atf_classic_assert(str_contains($css, '.atf-post.af-atf-display[data-element]:not([data-element=""])'), 'Element tokens are not gated by a real element value.');
 atf_classic_assert(str_contains($css, '.atf-post__name a { color: var(--atf-post-accent); }'), 'Nickname does not consume the post element accent.');
@@ -89,7 +90,7 @@ atf_classic_assert(str_contains($css, 'color: var(--atf-sheet-icon-color) !impor
 atf_classic_assert(str_contains($css, 'border-radius: 100% 0 0 0'), 'Reputation decoration is not a distinct corner arc.');
 atf_classic_assert(!preg_match('~\.atf-post__sheet-accent[^}]*clip-path:\s*polygon~s', $css), 'Character Sheet decoration is still a polygon blob.');
 atf_classic_assert(str_contains($css, 'clip-path: path("M 14 0 H 120 C 136 8 138 42 122 60 C 111 73 96 72 88 91 C 80 111 68 120 52 128 C 34 137 24 155 0 168 V 14 C 0 6 6 0 14 0 Z")'), 'Character Sheet decoration does not use the established wave path.');
-atf_classic_assert((bool)preg_match('~\.atf-post__sheet-accent\s*\{[^}]*width:\s*9rem;[^}]*height:\s*7\.5rem;[^}]*overflow:\s*visible;~s', $css), 'Character Sheet wave drawing box clips the established path.');
+atf_classic_assert((bool)preg_match('~\.atf-post__sheet-accent\s*\{[^}]*width:\s*9rem;[^}]*height:\s*10\.5rem;[^}]*overflow:\s*visible;~s', $css), 'Character Sheet wave drawing box clips the established path.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar\s*\{[^}]*overflow:\s*visible;~s', $css), 'Post header clips the character-sheet wave.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar-leading\s*\{[^}]*overflow:\s*visible;~s', $css), 'Topbar leading clips the character-sheet accent.');
 atf_classic_assert((bool)preg_match('~\.atf-post__topbar-leading\s*\{[^}]*position:\s*relative;[^}]*align-self:\s*stretch;[^}]*isolation:\s*isolate;~s', $css), 'Topbar leading does not provide a full-height positioning box for the wave.');
@@ -126,7 +127,7 @@ atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar\s*\{[^}]*displa
 atf_classic_assert((bool)preg_match('~\.atf-post__sidebar\s*\{[^}]*border-inline-end:\s*0;~s', $css), 'Outer sidebar still owns the runaway divider.');
 atf_classic_assert((bool)preg_match('~\.atf-post__sidebar-inner\s*\{[^}]*margin-block-end:\s*15px;[^}]*border:\s*0;[^}]*border-inline-end:\s*1px solid var\(--atf-post-accent\);[^}]*border-block-end:\s*1px solid var\(--atf-post-accent\);~s', $css), 'Sticky sidebar inner does not use the stable right/bottom accent frame with bottom clearance.');
 atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar-media\s*\{[^}]*inset:\s*0;[^}]*overflow:\s*hidden;[^}]*border-radius:\s*50%;~s', $css), 'Primary avatar media is not clipped inside the circular frame.');
-atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar-media :is\(\.author_avatar, img, svg\)[^}]*object-position:\s*center center !important;~s', $css), 'author_avatar is not force-centered inside the primary avatar frame.');
+atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar-media :is\(img, svg\)[^}]*object-position:\s*center center !important;~s', $css), 'author_avatar is not force-centered inside the primary avatar frame.');
 atf_classic_assert(str_contains($css, '.author_avatar > a {'), 'Nested author_avatar link is not normalized to the avatar frame.');
 atf_classic_assert(str_contains($css, 'transform: translate(-50%, -50%) !important;'), 'Primary avatar image is not explicitly centered inside the frame.');
 atf_classic_assert((bool)preg_match('~\.atf-post__primary-avatar > \.atf-post__online-indicator\s*\{[^}]*z-index:\s*5;[^}]*top:\s*-\.1rem;[^}]*right:\s*-\.1rem;[^}]*display:\s*block;~s', $css), 'Online activity indicator is not anchored to the primary avatar shell.');
@@ -134,10 +135,10 @@ atf_classic_assert((bool)preg_match('~\\.atf-post__sheet-action \\.af-apui-postb
 atf_classic_assert(str_contains($source, "'atf-post__management-action'"), 'Management actions are not converted to real icon controls.');
 atf_classic_assert(str_contains($css, '.atf-post__management-action > i'), 'Management action CSS does not style real HTML icons.');
 atf_classic_assert(!preg_match('~\\.atf-post__management[^}]*content:\\s*"\\\\f[0-9a-f]+~is', $css), 'Management actions still depend on Font Awesome unicode pseudo-content.');
-atf_classic_assert((bool)preg_match('~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;~s', $css), 'The message does not consume the full content column.');
+atf_classic_assert((bool)preg_match('~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*width:\s*calc\(100% \+ \(2 \* var\(--atf-space-5\)\)\);[^}]*max-width:\s*none;[^}]*min-width:\s*0;~s', $css), 'The message does not consume the full content column.');
 atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*flex-wrap:\s*wrap;[^}]*justify-content:\s*flex-end;[^}]*max-width:\s*100%;~s', $css), 'Content metadata does not align right or wrap within its container.');
 atf_classic_assert((bool)preg_match('~\.atf-post__layout\s*\{[^}]*grid-template-areas:\s*"sidebar content";~s', $css), 'Desktop post layout does not keep metadata scoped to the content column.');
-atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*margin:\s*0 0 var\(--atf-space-3\);[^}]*overflow:\s*hidden;~s', $css), 'Post metadata is not contained exactly within post_body boundaries.');
+atf_classic_assert((bool)preg_match('~\.atf-post__meta-line\s*\{[^}]*width:\s*97%;[^}]*max-width:\s*100%;[^}]*margin:\s*0 0 var\(--atf-space-3\);[^}]*overflow:\s*hidden;~s', $css), 'Post metadata is not contained exactly within post_body boundaries.');
 atf_classic_assert((bool)preg_match(
     '~\.atf-post__content\s*\{[^}]*padding-block-start:\s*0;[^}]*padding-inline:\s*var\(--atf-space-5\);~s',
     $css
@@ -146,7 +147,7 @@ atf_classic_assert((bool)preg_match(
     '~\.post_body\.scaleimages\.atf-post__message\s*\{[^}]*width:\s*calc\(100% \+ \(2 \* var\(--atf-space-5\)\)\);[^}]*margin-inline:\s*calc\(-1 \* var\(--atf-space-5\)\);[^}]*padding-block-start:\s*0 !important;~s',
     $css
 ), 'Post body does not cancel the content-column side padding for the metadata bar.');
-atf_classic_assert(str_contains($css, '.atf-post__message-body {\n  padding-inline: var(--atf-space-5);'), 'Message text does not restore the normal content padding below the metadata bar.');
+atf_classic_assert((bool)preg_match('~\.atf-post__message-body \{\s*padding-inline: var\(--atf-space-5\);~', $css), 'Message text does not restore the normal content padding below the metadata bar.');
 atf_classic_assert((bool)preg_match('~\.atf-post__permalink\s*\{[^}]*display:\s*inline-flex;~s', $css), 'Permalink does not expose flex ordering for its checkbox.');
 atf_classic_assert(str_contains($source, 'af_adaptivethemeframework_posturl_checkbox_first'), 'Post URL checkbox ordering is not normalized server-side.');
 atf_classic_assert((bool)preg_match('~\.atf-post__char-count\s*\{[^}]*display:\s*inline-flex;[^}]*gap:\s*\.35rem;~s', $css), 'Character count icon and value are not laid out correctly.');

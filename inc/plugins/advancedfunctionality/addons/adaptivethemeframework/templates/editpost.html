@@ -1,6 +1,6 @@
 <html>
 <head><title>{$mybb->settings['bbname']} - {$lang->edit_post}</title>{$headerinclude}{$post_javascript}</head>
-<body class="atf-compose-page atf-compose-page--edit-post">{$header}
+<body class="atf-active atf-compose-page atf-compose-page--edit-post" data-atf-owned="1">{$header}
 <main class="pun atf-page-shell atf-page atf-compose" id="content">{$preview}{$post_errors}{$attacherror}{$moderation_notice}{$deletebox}
 <form id="editpost" action="editpost.php?pid={$pid}&amp;processed=1" method="post" enctype="multipart/form-data" name="input" class="atf-compose__form"><input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 <header class="atf-compose__header"><h1>{$lang->edit_post}</h1></header>{$loginbox}
@@ -8,4 +8,5 @@
 <div class="atf-compose__field atf-compose__field--editor"><label class="atf-compose__label" for="message">{$lang->your_message}</label><div class="atf-compose__editor">{$smilieinserter}<textarea name="message" id="message" rows="20" cols="70" tabindex="3">{$message}</textarea>{$codebuttons}</div></div>{$editreason}</section>
 <div class="atf-compose__options">{$postoptions}{$subscriptionmethod}{$pollbox}</div><div class="atf-compose__attachments">{$attachbox}</div>
 <div class="atf-compose__actions"><input type="submit" class="button atf-button atf-button--primary" name="submitbutton" value="{$lang->update_post}" tabindex="3" accesskey="s" /><input type="submit" class="button atf-button atf-button--secondary" name="previewpost" value="{$lang->preview_post}" tabindex="4" /><a class="atf-button atf-button--secondary" href="showthread.php?tid={$tid}&amp;pid={$pid}#pid{$pid}">{$lang->cancel_edit}</a></div>
-<input type="hidden" name="action" value="do_editpost" /><input type="hidden" name="attachmentaid" value="" /><input type="hidden" name="attachmentact" value="" /></form></main>{$footer}</body></html>
+<input type="hidden" name="action" value="do_editpost" /><input type="hidden" name="attachmentaid" value="" /><input type="hidden" name="attachmentact" value="" /></form></main>{$footer}<atf-footer-placement></atf-footer-placement>
+</body></html>

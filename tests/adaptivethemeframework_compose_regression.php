@@ -1,10 +1,11 @@
 <?php
+require_once __DIR__ . "/fixtures/atf_css.php";
 $root = dirname(__DIR__);
 $addon = $root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework';
 $php = file_get_contents($addon . '/adaptivethemeframework.php');
 define('IN_MYBB', true);
 require_once $addon . '/ownership.php';
-$css = file_get_contents($addon . '/assets/adaptivethemeframework.css');
+$css = atf_test_css($addon, 'newreply.php');
 
 $roots = ['newthread', 'newreply', 'editpost'];
 foreach ($roots as $name) {
@@ -37,7 +38,7 @@ foreach (['posticons', 'post_subscription_method', 'newthread_postpoll', 'editpo
 if (str_contains($php, "'codebuttons' => AF_ADAPTIVETHEMEFRAMEWORK_BASE")) {
     throw new RuntimeException('ATF must not own or alter SCEditor initialization.');
 }
-$composeCss = strstr($css, '/* ATF compose:');
+$composeCss = file_get_contents($addon . '/assets/surfaces/compose.css');
 if ($composeCss === false || str_contains($composeCss, '100vw')) {
     throw new RuntimeException('Compose CSS is missing its scope or introduces viewport width sizing.');
 }

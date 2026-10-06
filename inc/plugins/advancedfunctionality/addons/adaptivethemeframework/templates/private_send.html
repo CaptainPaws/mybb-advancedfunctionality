@@ -4,7 +4,7 @@
 {$headerinclude}
 <script type="text/javascript" src="{$mybb->asset_url}/jscripts/usercp.js?ver=1827"></script>
 </head>
-<body>
+<body class="atf-active" data-atf-owned="1">
 {$header}
 <main class="pun atf-page-shell atf-page atf-pm atf-pm-compose">
 	<div class="atf-pm__global-navigation">{$atf_ucp_global_navigation}</div>
@@ -62,5 +62,6 @@ if($("#bcc_area").length > 0 && $("#bcc").val() == "") { $("#bcc_area").css("dis
 function showBcc() { if($("#bcc_area").css("display") == "none") { $("#bcc_area").css("display", ""); } else { $("#bcc_area").css("display", "none"); } }
 </script>
 {$autocompletejs}
+<atf-footer-placement></atf-footer-placement>
 </body>
 </html>

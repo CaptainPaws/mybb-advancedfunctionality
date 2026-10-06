@@ -1,9 +1,10 @@
 <?php
+require_once __DIR__ . "/fixtures/atf_css.php";
 
 $root = dirname(__DIR__);
 $addon = $root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework';
 $manifest = require $addon . '/manifest.php';
-$css = file_get_contents($addon . '/assets/adaptivethemeframework.css');
+$css = atf_test_css($addon, 'showthread.php');
 if (!is_string($css) || $css === '') {
     throw new RuntimeException('ATF design system CSS is missing.');
 }
@@ -15,7 +16,7 @@ foreach ($required as $component) {
     }
 }
 foreach (['.trow1', '.trow2', '.thead', '.af-apui-'] as $legacy) {
-    if (str_contains($css, $legacy)) {
+    if (str_contains(file_get_contents($addon . '/assets/adaptivethemeframework.css'), $legacy)) {
         throw new RuntimeException("ATF CSS depends on legacy selector: {$legacy}");
     }
 }

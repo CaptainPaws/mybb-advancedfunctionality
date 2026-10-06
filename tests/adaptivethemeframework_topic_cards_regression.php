@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . "/fixtures/atf_css.php";
 
 define('IN_MYBB', true);
 define('AF_ADDONS', dirname(__DIR__) . '/inc/plugins/advancedfunctionality/addons/');
@@ -14,7 +15,7 @@ function atf_topic_assert(bool $condition, string $message): void
 $base = AF_ADDONS . 'adaptivethemeframework/';
 $template = (string)file_get_contents($base . 'templates/forumdisplay_thread.html');
 $listTemplate = (string)file_get_contents($base . 'templates/forumdisplay_threadlist.html');
-$css = (string)file_get_contents($base . 'assets/adaptivethemeframework.css');
+$css = atf_test_css($base, 'forumdisplay.php');
 $php = (string)file_get_contents($base . 'adaptivethemeframework.php');
 
 atf_topic_assert(!str_contains($template, '<tr') && !str_contains($template, '<td'), 'Topic card must not skin the stock table row.');

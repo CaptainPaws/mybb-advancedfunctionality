@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . "/fixtures/atf_css.php";
 
 $root = dirname(__DIR__);
 $addons = $root . '/inc/plugins/advancedfunctionality/addons/';
@@ -6,7 +7,7 @@ $atf = file_get_contents($addons . 'adaptivethemeframework/adaptivethemeframewor
 $template = file_get_contents($addons . 'adaptivethemeframework/templates/postbit_classic.html');
 $paginationTemplate = file_get_contents($addons . 'adaptivethemeframework/templates/multipage.html');
 $quickReplyTemplate = file_get_contents($addons . 'adaptivethemeframework/templates/showthread_quickreply.html');
-$css = file_get_contents($addons . 'adaptivethemeframework/assets/adaptivethemeframework.css');
+$css = atf_test_css($addons . 'adaptivethemeframework', 'showthread.php');
 $apui = file_get_contents($addons . 'advancedprofileui/advancedprofileui.php');
 $apf = file_get_contents($addons . 'advancedprofilefields/advancedprofilefields.php');
 $editorJs = file_get_contents($addons . 'advancededitor/assets/advancededitor.js');

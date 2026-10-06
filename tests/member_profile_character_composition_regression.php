@@ -1,10 +1,11 @@
 <?php
+require_once __DIR__ . "/fixtures/atf_css.php";
 
 $root = dirname(__DIR__);
 $apui = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/advancedprofileui.php');
 $atf = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedthreadfields/advancedthreadfields.php');
 $template = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/templates/member_profile.html');
-$css = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.css');
+$css = atf_test_css($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework', 'member.php');
 
 foreach ([$apui, $atf, $template, $css] as $source) {
     if ($source === false) throw new RuntimeException('Profile composition source is missing.');

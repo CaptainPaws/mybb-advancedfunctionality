@@ -1,10 +1,11 @@
 <?php
+require_once __DIR__ . "/fixtures/atf_css.php";
 
 $root = dirname(__DIR__) . '/inc/plugins/advancedfunctionality/addons/';
 $editor = file_get_contents($root . 'advancededitor/assets/advancededitor.js');
 $editorPhp = file_get_contents($root . 'advancededitor/advancededitor.php');
 $counter = file_get_contents($root . 'advancededitor/assets/bbcodes/charcountandprew/charcountandprew.js');
-$css = file_get_contents($root . 'adaptivethemeframework/assets/adaptivethemeframework.css');
+$css = atf_test_css($root . 'adaptivethemeframework', 'showthread.php');
 $postbit = file_get_contents($root . 'adaptivethemeframework/templates/postbit_classic.html');
 
 foreach ([$editor, $editorPhp, $counter, $css, $postbit] as $source) {

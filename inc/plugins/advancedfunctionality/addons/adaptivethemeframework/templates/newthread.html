@@ -1,6 +1,6 @@
 <html>
 <head><title>{$lang->newthread_in}</title>{$headerinclude}{$post_javascript}</head>
-<body class="atf-compose-page atf-compose-page--new-thread">
+<body class="atf-active atf-compose-page atf-compose-page--new-thread" data-atf-owned="1">
 {$header}
 <main class="pun atf-page-shell atf-page atf-compose" id="content">
 {$preview}{$thread_errors}{$attacherror}{$moderation_notice}
@@ -17,4 +17,5 @@
 <div class="atf-compose__attachments">{$attachbox}</div>
 <div class="atf-compose__actions"><input type="submit" class="button atf-button atf-button--primary" name="submit" value="{$lang->post_thread}" tabindex="4" accesskey="s" /><input type="submit" class="button atf-button atf-button--secondary" name="previewpost" value="{$lang->preview_post}" tabindex="5" />{$savedraftbutton}</div>
 <input type="hidden" name="action" value="do_newthread" /><input type="hidden" name="posthash" value="{$posthash}" /><input type="hidden" name="attachmentaid" value="" /><input type="hidden" name="attachmentact" value="" /><input type="hidden" name="quoted_ids" value="{$quoted_ids}" /><input type="hidden" name="tid" value="{$tid}" />{$editdraftpid}
-</form>{$forumrules}</main>{$footer}</body></html>
+</form>{$forumrules}</main>{$footer}<atf-footer-placement></atf-footer-placement>
+</body></html>

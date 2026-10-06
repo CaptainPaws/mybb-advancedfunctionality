@@ -1,0 +1,145 @@
+/* ATF modals surface. Ownership and routes: manifest.php. */
+
+body.atf-active .atf-modal-overlay{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:clamp(.625rem,3vw,2rem);background:rgb(0 0 0/.68);overflow:hidden}
+body.atf-active .atf-modal-dialog{position:relative;z-index:1010;display:flex;flex-direction:column;box-sizing:border-box;width:min(42rem,100%);max-width:100%;max-height:calc(100dvh - 2 * clamp(.625rem,3vw,2rem));min-width:0;background:var(--atf-color-surface,#fff);color:var(--atf-color-text,inherit);border-radius:var(--atf-radius,.5rem);overflow:hidden}
+body.atf-active .atf-modal-header,
+body.atf-active .atf-modal-footer{display:flex;align-items:center;gap:var(--atf-space-3);padding:var(--atf-space-3) var(--atf-space-4);flex:0 0 auto}
+body.atf-active .atf-modal-title{min-width:0;margin:0;overflow-wrap:anywhere}
+body.atf-active .atf-modal-close{margin-inline-start:auto;flex:0 0 auto}
+body.atf-active .atf-modal-body{min-width:0;max-width:100%;padding:var(--atf-space-4);overflow:auto;overscroll-behavior:contain;overflow-wrap:anywhere}
+body.atf-active .atf-modal-loading{display:grid;place-items:center;min-height:8rem}
+body.atf-active .atf-modal-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--atf-space-2)}
+body.atf-active :is(#af_aam_modal,#af_aas_modal){
+  box-sizing:border-box;
+  padding:clamp(.75rem,5vh,4rem) clamp(.75rem,3vw,2rem);
+  align-items:flex-start;
+  justify-content:center;
+}
+body.atf-active :is(#af_aam_modal,#af_aas_modal) :is(.af-aam-modal-backdrop,.af-aas-modal-backdrop){
+  background:rgb(0 0 0/.68);
+}
+body.atf-active :is(.af-aam-modal-table,.af-aas-modal-table){
+  box-sizing:border-box;
+  width:min(42rem,calc(100vw - 2rem));
+  max-width:100%;
+  max-height:calc(100dvh - 2rem);
+  margin:0 auto;
+  border:1px solid var(--atf-color-border);
+  border-radius:var(--atf-radius-lg);
+  border-spacing:0;
+  overflow:hidden;
+  background:var(--atf-color-surface);
+  color:var(--atf-color-text);
+  box-shadow:0 1.25rem 3.5rem rgb(0 0 0/.45);
+}
+body.atf-active :is(.af-aam-modal-table,.af-aas-modal-table) :is(.thead,.tfoot,.trow1,.trow2){
+  background:transparent;
+  color:inherit;
+  border-color:var(--atf-color-border);
+}
+body.atf-active :is(.af-aam-modal-table,.af-aas-modal-table) thead .thead{
+  position:relative;
+  padding:var(--atf-space-4) var(--atf-space-5);
+  text-align:start;
+  background:var(--atf-color-surface-raised);
+  border:0;
+  border-bottom:1px solid var(--atf-color-border);
+  font-size:var(--atf-font-size-lg);
+}
+body.atf-active :is(.af-aam-modal-table,.af-aas-modal-table) tbody td{
+  padding:var(--atf-space-3) var(--atf-space-4);
+  border:0;
+  border-bottom:1px solid var(--atf-color-border);
+}
+body.atf-active :is(.af-aam-modal-table,.af-aas-modal-table) tbody tr:last-child td{border-bottom:0}
+body.atf-active :is(.af-aam-modal-table,.af-aas-modal-table) tfoot .tfoot{
+  padding:var(--atf-space-4);
+  background:var(--atf-color-page-subtle);
+  border:0;
+  border-top:1px solid var(--atf-color-border);
+}
+body.atf-active :is(.af-aam-modal-close,.af-aas-modal-close){
+  position:absolute;
+  inset-block-start:50%;
+  inset-inline-end:var(--atf-space-4);
+  transform:translateY(-50%);
+  display:inline-grid;
+  place-items:center;
+  width:2rem;
+  height:2rem;
+  margin:0;
+  padding:0;
+  float:none;
+  border:1px solid transparent;
+  border-radius:var(--atf-radius-md);
+  background:transparent;
+  color:var(--atf-color-text);
+  font-size:1.1rem;
+  line-height:1;
+  cursor:pointer;
+}
+body.atf-active :is(.af-aam-modal-close,.af-aas-modal-close):is(:hover,:focus-visible){
+  background:var(--atf-color-page-subtle);
+  border-color:var(--atf-color-border);
+  outline:none;
+}
+body.atf-active #alerts_content .alert__avatar,
+body.atf-active #af_aas_modal_body .af-aas-modal-avatar{width:3.25rem}
+body.atf-active :is(#alerts_content,#af_aas_modal_body) img{
+  object-fit:cover;
+  object-position:center;
+}
+body.atf-active #alerts_content .alert__content{min-width:0;overflow-wrap:anywhere}
+body.atf-active #alerts_content .alert__time{white-space:nowrap;color:var(--atf-color-text-muted);font-size:var(--atf-font-size-sm)}
+body.atf-active #af_aam_modal :is(a,.markAllReadButton,#af_aam_prefs_toggle),
+body.atf-active #af_aas_modal a{color:var(--atf-color-accent)}
+body.atf-active #af_aam_modal :is(.markReadAlertButton,.markUnreadAlertButton,.deleteAlertButton),
+body.atf-active #af_aas_modal :is(.button,.button_small,.af-aas-footer-link){
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:2rem;
+  padding:.35rem .65rem;
+  border:1px solid var(--atf-color-border);
+  border-radius:var(--atf-radius-md);
+  background:var(--atf-color-page-subtle);
+  color:var(--atf-color-text);
+  text-decoration:none;
+  box-shadow:none;
+}
+body.atf-active #af_aam_modal :is(.markReadAlertButton,.markUnreadAlertButton,.deleteAlertButton):hover,
+body.atf-active #af_aas_modal :is(.button,.button_small,.af-aas-footer-link):hover{
+  border-color:var(--atf-color-border-strong);
+  background:var(--atf-color-surface-raised);
+}
+body.atf-active #af_aam_prefs_inline{
+  margin-block-start:var(--atf-space-3);
+  padding:var(--atf-space-3);
+  border:1px solid var(--atf-color-border);
+  border-radius:var(--atf-radius-md);
+  background:var(--atf-color-surface);
+}
+body.atf-active .af-aam-modal-footer,
+body.atf-active .af-aas-modal-footer{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:var(--atf-space-2);
+  justify-content:space-between;
+}
+body.atf-active .af-aas-modal-avatar .af-aas-avatar,
+body.atf-active #alerts_content .af-aam-avatar{
+  width:2.5rem;
+  height:2.5rem;
+  border-radius:var(--atf-radius-md);
+  background:var(--atf-color-page-subtle);
+}
+@media(max-width:36rem){
+  body.atf-active .atf-modal-dialog{width:100%}
+  body.atf-active .atf-modal-actions{align-items:stretch;flex-direction:column}
+  body.atf-active .atf-modal-body{padding:var(--atf-space-3)}
+  body.atf-active :is(#af_aam_modal,#af_aas_modal){padding:.75rem}
+  body.atf-active :is(.af-aam-modal-table,.af-aas-modal-table){width:calc(100vw - 1.5rem);max-height:calc(100dvh - 1.5rem)}
+  body.atf-active :is(.af-aam-modal-table,.af-aas-modal-table) tbody td{padding:var(--atf-space-2)}
+  body.atf-active #alerts_content .alert__time{white-space:normal}
+}

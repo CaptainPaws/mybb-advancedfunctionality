@@ -3349,6 +3349,13 @@ function af_theme_stylesheet_build_bundle(?string $onlyAddonId = null): array
             $sourceDiagnostics[] = $sourceDiagnostic;
             continue;
         }
+        // Explicit file delivery is manifest-owned, but cannot be integrated
+        // into a global stylesheet without losing its surface attachments.
+        if (!empty($entry['disable_theme_integration'])) {
+            $sourceDiagnostic['reason'] = 'manifest_file_delivery';
+            $sourceDiagnostics[] = $sourceDiagnostic;
+            continue;
+        }
         $seed = af_get_theme_stylesheet_source((array)$entry['addon_meta'], $entry);
         if (!$seed) {
             $sourceDiagnostic['reason'] = 'source_unreadable';
@@ -6933,6 +6940,13 @@ function af_theme_stylesheet_delivery_decision(string $addonId, string $fileRel)
         ];
     }
 
+    $candidate = af_find_css_candidate_for_file($addonId, $fileRel);
+    if (!empty($candidate['disable_theme_integration'])) {
+        return ['mode' => 'file', 'state_found' => false, 'is_integrated' => false,
+            'include_file' => true, 'use_theme_stylesheet' => false, 'theme_href' => '',
+            'reason' => 'manifest_file_delivery'];
+    }
+
     $currentThemeTid = af_current_theme_tid();
     $themeTids       = af_get_theme_inheritance_tids($currentThemeTid);
 
@@ -7172,6 +7186,23 @@ function af_collect_enabled_addon_assets(): array
         }
         if (af_is_blacklisted($id)) {
             continue;
+        }
+
+        // Positive route ownership, independent of global bundle delivery.
+        // Conditional sources are mounted by the provider that detects their
+        // actual surface (for example a lazy modal trigger).
+        foreach ((array)($meta['theme_stylesheets'] ?? []) as $source) {
+            if (empty($source['disable_theme_integration']) || !empty($source['conditional'])
+                || !empty($source['exclude_autodiscovery'])) continue;
+            $setting = (string)($source['enabled_setting'] ?? '');
+            if ($setting !== '' && (string)($GLOBALS['mybb']->settings[$setting] ?? '0') !== '1') continue;
+            if (!af_theme_stylesheet_is_attached_to_request(af_build_theme_stylesheet_attach_string(
+                af_normalize_theme_stylesheet_attach($source['attach'] ?? [])
+            ))) continue;
+            $file = ltrim(str_replace('\\', '/', (string)($source['file'] ?? '')), '/');
+            if ($file === '') continue;
+            af_add_css_once('/inc/plugins/' . AF_PLUGIN_ID . '/addons/' . $id . '/' . $file,
+                ['scope' => 'front', 'version' => (string)($meta['version'] ?? '')]);
         }
 
         $manifestAssets = $meta['assets'] ?? null;

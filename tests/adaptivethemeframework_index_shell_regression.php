@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . "/fixtures/atf_css.php";
 
 $root = dirname(__DIR__);
 $addon = $root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework';
@@ -6,7 +7,7 @@ $template = file_get_contents($addon . '/templates/index.html');
 $php = file_get_contents($addon . '/adaptivethemeframework.php');
 define('IN_MYBB', true);
 require_once $addon . '/ownership.php';
-$css = file_get_contents($addon . '/assets/adaptivethemeframework.css');
+$css = atf_test_css($addon, 'index.php');
 
 foreach (['{$headerinclude}', '{$header}', '{$forums}', '{$boardstats}', '{$footer}'] as $value) {
     if (substr_count((string)$template, $value) !== 1) {

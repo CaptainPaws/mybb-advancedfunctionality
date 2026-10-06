@@ -1,13 +1,14 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . "/fixtures/atf_css.php";
 
 $root = dirname(__DIR__);
 $profileTemplate = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/templates/member_profile.html');
 $profileAddon = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/advancedprofileui.php');
 $profileJs = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/assets/advancedprofileui.js');
 $corePlugin = file_get_contents($root . '/inc/plugins/advancedfunctionality.php');
-$atfCss = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.css');
+$atfCss = atf_test_css($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework', 'member.php');
 $sheetTemplate = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/charactersheets/templates/charactersheet_inner.html');
 $inventoryEntry = file_get_contents($root . '/inventory.php');
 $inventoryJs = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/advancedinventory.js');

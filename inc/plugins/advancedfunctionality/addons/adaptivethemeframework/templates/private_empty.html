@@ -3,7 +3,7 @@
 <title>{$mybb->settings['bbname']} - {$lang->empty_folders}</title>
 {$headerinclude}
 </head>
-<body>
+<body class="atf-active" data-atf-owned="1">
 {$header}
 <main class="pun atf-page-shell atf-page atf-pm atf-pm-folders atf-pm-empty">
 	<div class="atf-pm__global-navigation">{$atf_ucp_global_navigation}</div>
@@ -22,5 +22,6 @@
 	</form>
 </main>
 {$footer}
+<atf-footer-placement></atf-footer-placement>
 </body>
 </html>

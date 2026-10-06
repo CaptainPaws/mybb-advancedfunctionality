@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . "/fixtures/atf_css.php";
 
 $root = dirname(__DIR__);
 $apf = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofilefields/advancedprofilefields.php');
@@ -10,7 +11,7 @@ $apuiPostbit = file_get_contents($root . '/inc/plugins/advancedfunctionality/add
 $atfPostbit = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/templates/postbit_classic.html');
 $apuiProfile = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/templates/member_profile.html');
 $apuiCss = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/advancedprofileui/assets/advancedprofileui.css');
-$atfCss = file_get_contents($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.css');
+$atfCss = atf_test_css($root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework', 'showthread.php');
 
 foreach ([$apf, $apui, $atf, $template, $apuiPostbit, $atfPostbit, $apuiProfile, $apuiCss, $atfCss] as $source) {
     if ($source === false) {

@@ -1,6 +1,6 @@
 <html>
 <head><title>{$mybb->settings['bbname']} - {$lang->merge_posts}</title>{$headerinclude}</head>
-<body>{$header}
+<body class="atf-active atf-moderation-page" data-atf-owned="1">{$header}
 <main class="pun atf-page-shell atf-page atf-moderation" id="content"><form action="moderation.php" method="post" class="atf-moderation__form">
 <input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 <header class="atf-moderation__header"><span class="atf-moderation__eyebrow">Массовая модерация</span><h1>{$lang->merge_posts}</h1></header>
@@ -9,4 +9,5 @@
 <div class="atf-moderation__legacy-list">{$postlist}</div></section>
 <footer class="atf-moderation__actions"><input type="submit" class="button" name="submit" value="{$lang->merge_posts}" /></footer>
 <input type="hidden" name="action" value="do_multimergeposts" /><input type="hidden" name="tid" value="{$tid}" /><input type="hidden" name="url" value="{$return_url}" />
-</form></main>{$footer}</body></html>
+</form></main>{$footer}<atf-footer-placement></atf-footer-placement>
+</body></html>

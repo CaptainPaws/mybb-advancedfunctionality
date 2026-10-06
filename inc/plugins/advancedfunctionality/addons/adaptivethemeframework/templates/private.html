@@ -3,7 +3,7 @@
 <title>{$mybb->settings['bbname']} - {$lang->private_messaging}</title>
 {$headerinclude}
 </head>
-<body>
+<body class="atf-active" data-atf-owned="1">
 {$header}
 <main class="pun atf-page-shell atf-page atf-pm" data-folder-id="{$fid}">
 	<div class="atf-pm__global-navigation">{$atf_ucp_global_navigation}</div>
@@ -44,5 +44,6 @@
 	{$atf_pm_after_content}
 </main>
 {$footer}
+<atf-footer-placement></atf-footer-placement>
 </body>
 </html>

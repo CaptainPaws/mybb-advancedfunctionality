@@ -17,7 +17,7 @@ const server = http.createServer((req,res) => {
     const nav=fs.readFileSync(path.join(dir,'nav.html'),'utf8').replace('{$nav}', '<li class="atf-breadcrumbs__item"><a href="/forum">Forum</a></li>').replace('{$activebit}', '<li class="atf-breadcrumbs__current">Category</li>');
     let html=fs.readFileSync(path.join(dir,'forumdisplay.html'),'utf8').replace('{$header}', '<header>Site header</header>').replace('<navigation>',nav).replace('{$threadslist}', '<div>Topic list</div><a href="/forum?page=2">Page 2</a>').replace(/\{\$[^}]+\}/g,'');
     html=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,''); // Native MyBB scripts are outside this layout fixture.
-    html=html.replace('<body>','<body class="atf-active" style="--atf-content-max-width:1000px;--atf-space-5:24px;--atf-space-3:12px;--atf-space-4:16px">').replace('</head>',`<link rel="stylesheet" href="${assets}adaptivethemeframework/assets/adaptivethemeframework.css"></head>`);
+    html=html.replace('<body>','<body class="atf-active" style="--atf-content-max-width:1000px;--atf-space-5:24px;--atf-space-3:12px;--atf-space-4:16px">').replace('</head>',`<link rel="stylesheet" href="${assets}adaptivethemeframework/assets/adaptivethemeframework.css"><link rel="stylesheet" href="${assets}adaptivethemeframework/assets/surfaces/navigation.css"><link rel="stylesheet" href="${assets}adaptivethemeframework/assets/surfaces/forum.css"></head>`);
     return res.end(html);
   }
   if (req.url === '/form') return res.end(`<html><head><link rel="stylesheet" href="${assets}advancedthreadfields/assets/advancedthreadfields.css"></head><body style="margin:16px;background:#181b24;color:#eee">${form}<script src="${assets}advancedthreadfields/assets/advancedthreadfields-form.js"></script></body></html>`);

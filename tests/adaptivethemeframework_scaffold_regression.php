@@ -17,7 +17,7 @@ if (($manifest['frontend'] ?? []) !== [
     throw new RuntimeException('Adaptive Theme Framework must declare a global manifest frontend context.');
 }
 
-if (($manifest['assets']['front'] ?? null) !== ['css' => [], 'js' => []]) {
+if (($manifest['assets']['front'] ?? null) !== ['css' => ['assets/adaptivethemeframework.css'], 'js' => []]) {
     throw new RuntimeException('Adaptive Theme Framework must not bypass theme stylesheet delivery.');
 }
 

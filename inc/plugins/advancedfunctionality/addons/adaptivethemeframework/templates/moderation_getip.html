@@ -1,8 +1,9 @@
 <html>
 <head><title>{$mybb->settings['bbname']} - {$lang->get_post_ip}</title>{$headerinclude}</head>
-<body>{$header}
+<body class="atf-active atf-moderation-page" data-atf-owned="1">{$header}
 <main class="pun atf-page-shell atf-page atf-moderation" id="content">
 <header class="atf-moderation__header"><span class="atf-moderation__eyebrow">Информация</span><h1>{$lang->get_post_ip}</h1></header>
 <section class="atf-moderation__panel"><dl class="atf-moderation__details"><div><dt>{$lang->username}</dt><dd>{$username}</dd></div><div><dt>{$lang->ip_address}</dt><dd>{$post['ipaddress']}</dd></div><div><dt>{$lang->hostname}<small>{$lang->if_resolvable}</small></dt><dd>{$hostname}</dd></div></dl>
 <table class="atf-moderation__legacy-table"><tbody>{$modoptions}</tbody></table></section>
-</main>{$footer}</body></html>
+</main>{$footer}<atf-footer-placement></atf-footer-placement>
+</body></html>

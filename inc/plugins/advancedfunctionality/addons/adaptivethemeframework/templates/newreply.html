@@ -1,6 +1,6 @@
 <html>
 <head><title>{$lang->post_reply_to}</title>{$headerinclude}{$post_javascript}</head>
-<body class="atf-compose-page atf-compose-page--new-reply">{$header}
+<body class="atf-active atf-compose-page atf-compose-page--new-reply" data-atf-owned="1">{$header}
 <main class="pun atf-page-shell atf-page atf-compose" id="content">
 {$preview}{$maximageserror}{$attacherror}{$reply_errors}{$moderation_notice}
 <form action="newreply.php?tid={$tid}&amp;processed=1" method="post" enctype="multipart/form-data" name="input" class="atf-compose__form">
@@ -11,4 +11,5 @@
 <div class="atf-compose__options">{$postoptions}{$modoptions}{$subscriptionmethod}{$captcha}</div><div class="atf-compose__attachments">{$attachbox}</div>
 <div class="atf-compose__actions"><input type="submit" class="button atf-button atf-button--primary" name="submit" value="{$lang->post_reply}" tabindex="3" accesskey="s" /><input type="submit" class="button atf-button atf-button--secondary" name="previewpost" value="{$lang->preview_post}" tabindex="4" />{$savedraftbutton}</div>
 <input type="hidden" name="action" value="do_newreply" /><input type="hidden" name="replyto" value="{$replyto}" /><input type="hidden" name="posthash" value="{$posthash}" /><input type="hidden" name="attachmentaid" value="" /><input type="hidden" name="attachmentact" value="" /><input type="hidden" name="quoted_ids" value="{$quoted_ids}" /><input type="hidden" name="tid" value="{$tid}" />{$editdraftpid}
-</form>{$forumrules}{$threadreview}</main>{$footer}</body></html>
+</form>{$forumrules}{$threadreview}</main>{$footer}<atf-footer-placement></atf-footer-placement>
+</body></html>

@@ -50,6 +50,7 @@ $post = [
     'button_find' => '<a class="postbit_find" href="search.php?action=finduser&amp;uid=56"><span>Поиск</span></a>',
     'button_rep' => '<a class="postbit_rep" href="javascript:void(0)" onclick="MyBB.reputation(56); return false;" data-native="rep"><span>Оценить</span></a>',
 ];
+af_adaptivethemeframework_preload_postbit_data($post);
 af_adaptivethemeframework_compose_postbit($post);
 atf_post_assert($post['af_atf_context'] === ['pid' => 12, 'tid' => 34, 'uid' => 56], 'Closed identifiers mismatch.');
 atf_post_assert(!isset($post['af_atf_context']['post']), 'Full post leaked into public context metadata.');
@@ -87,6 +88,7 @@ foreach (['>E-mail<', '>ЛС<', '>WWW<', '>Поиск<', '>Оценить<'] as 
 }
 
 $guest = ['pid' => 1, 'tid' => 2, 'uid' => 0, 'profilelink' => 'Guest'];
+af_adaptivethemeframework_preload_postbit_data($guest);
 af_adaptivethemeframework_compose_postbit($guest);
 atf_post_assert($guest['af_atf_slots']['post.author.identity'] === 'Guest', 'Guest identity unavailable.');
 atf_post_assert($guest['af_atf_slots']['post.post_counter'] === '', 'Guest counter must be empty.');

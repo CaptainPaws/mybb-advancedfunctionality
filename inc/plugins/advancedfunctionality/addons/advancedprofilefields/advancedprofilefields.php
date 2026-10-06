@@ -1003,6 +1003,23 @@ function af_apf_ensure_values_schema(): bool
 }
 
 /** Read an APF system field without exposing it through MyBB custom fields. */
+/** Preload one system field for current-page authors, including missing values. */
+function af_apf_preload_system_values(array $uids, string $key): void
+{
+    global $db;
+    if (!is_object($db) || !preg_match('~^[a-z0-9_]{1,64}$~', $key)) return;
+    $cache =& $GLOBALS['af_apf_system_value_cache'];
+    if (!is_array($cache)) $cache = [];
+    $uids = array_values(array_unique(array_filter(array_map('intval', $uids),
+        static fn(int $uid): bool => $uid > 0 && !array_key_exists($uid . ':' . $key, $cache))));
+    if (!$uids) return;
+    foreach ($uids as $uid) $cache[$uid . ':' . $key] = '';
+    if (!$db->table_exists(AF_APF_VALUES_TABLE)) return;
+    $query = $db->simple_select(AF_APF_VALUES_TABLE, 'uid,field_value',
+        'uid IN (' . implode(',', $uids) . ") AND field_key='" . $db->escape_string($key) . "'");
+    while ($row = $db->fetch_array($query)) $cache[(int)$row['uid'] . ':' . $key] = (string)$row['field_value'];
+}
+
 function af_apf_get_system_value(int $uid, string $key): string
 {
     global $db;

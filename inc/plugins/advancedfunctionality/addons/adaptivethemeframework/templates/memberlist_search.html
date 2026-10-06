@@ -1,6 +1,6 @@
 <html>
 <head><title>{$mybb->settings['bbname']} - {$lang->search_member_list}</title>{$headerinclude}</head>
-<body>{$header}
+<body class="atf-active" data-atf-owned="1">{$header}
 <main class="pun atf-page-shell atf-page atf-userlist"><form method="post" action="memberlist.php" class="atf-card atf-userlist__filters">
   <h1>{$lang->search_member_list}</h1><h2>{$lang->search_criteria}</h2>
   <div class="atf-form-grid">
@@ -10,4 +10,5 @@
     <label for="perpage">{$lang->per_page}<input type="number" class="textbox" min="1" max="500" name="perpage" id="perpage" value="15" /></label>
   </div>
   <div class="atf-form-actions"><label><input type="radio" name="order" value="ascending" />{$lang->order_asc}</label><label><input type="radio" name="order" value="descending" checked="checked" />{$lang->order_desc}</label><input type="submit" class="button" value="{$lang->search}" /></div>
-</form></main>{$footer}</body></html>
+</form></main>{$footer}<atf-footer-placement></atf-footer-placement>
+</body></html>

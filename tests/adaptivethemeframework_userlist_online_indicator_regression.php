@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . "/fixtures/atf_css.php";
 
 define('IN_MYBB', true);
 define('AF_ADDONS', dirname(__DIR__) . '/inc/plugins/advancedfunctionality/addons/');
@@ -21,7 +22,7 @@ function atf_userlist_indicator_assert(bool $condition, string $message): void
 
 $GLOBALS['af_adaptivethemeframework_components'] = [];
 $base = AF_ADDONS . 'adaptivethemeframework/';
-$css = (string)file_get_contents($base . 'assets/adaptivethemeframework.css');
+$css = atf_test_css($base, 'memberlist.php');
 $page = [
     'title' => 'Users',
     'users' => [

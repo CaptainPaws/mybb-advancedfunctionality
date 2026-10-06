@@ -3,7 +3,7 @@
 <title>{$mybb->settings['bbname']} - {$lang->advanced_private_message_search}</title>
 {$headerinclude}
 </head>
-<body>
+<body class="atf-active" data-atf-owned="1">
 {$header}
 <main class="pun atf-page-shell atf-page atf-pm atf-pm-search">
 	<div class="atf-pm__global-navigation">{$atf_ucp_global_navigation}</div>
@@ -32,5 +32,6 @@
 <script type="text/javascript">
 if(use_xmlhttprequest == "1") { MyBB.select2(); $("#sender").select2({placeholder: "{$lang->search_user}", minimumInputLength: 2, multiple: false, allowClear: true, ajax: {url: "xmlhttp.php?action=get_users", dataType: 'json', data: function (term) { return {query: term}; }, results: function (data) { return {results: data}; }}, initSelection: function(element, callback) { var value = $(element).val(); if (value !== "") { callback({id: value, text: value}); } }}); }
 </script>
+<atf-footer-placement></atf-footer-placement>
 </body>
 </html>

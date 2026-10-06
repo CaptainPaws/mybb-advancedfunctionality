@@ -19,7 +19,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.27.1');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.28.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -196,13 +196,12 @@ function af_adaptivethemeframework_normalizer_diagnostic(string $seed, string $c
 function af_adaptivethemeframework_init(): void
 {
     global $plugins;
-    af_adaptivethemeframework_ensure_preferences_schema();
     $GLOBALS['af_theme_switcher_preference_providers']['adaptivethemeframework'] = 'af_adaptivethemeframework_render_theme_preferences';
     af_adaptivethemeframework_register_thread_providers();
     af_adaptivethemeframework_register_post_providers();
     af_adaptivethemeframework_register_profile_providers();
-    af_adaptivethemeframework_ucp_seed_navigation();
-    af_adaptivethemeframework_modcp_seed_navigation();
+    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'usercp.php') af_adaptivethemeframework_ucp_seed_navigation();
+    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'modcp.php') af_adaptivethemeframework_modcp_seed_navigation();
     $isPrivateRoute = defined('THIS_SCRIPT') && THIS_SCRIPT === 'private.php';
     if ($isPrivateRoute) {
         af_adaptivethemeframework_register_pm_providers();
@@ -220,6 +219,9 @@ function af_adaptivethemeframework_init(): void
         // Capture the unrendered message before MyBB's parser replaces it with
         // HTML. The late composer below can then expose a truthful text count.
         $plugins->add_hook('postbit_prev', 'af_adaptivethemeframework_capture_post_text_count', 1);
+        foreach (['postbit', 'postbit_prev', 'postbit_pm'] as $hook) {
+            $plugins->add_hook($hook, 'af_adaptivethemeframework_preload_postbit_data', 5);
+        }
         $plugins->add_hook('postbit', 'af_adaptivethemeframework_compose_postbit', 1000);
         $plugins->add_hook('postbit_prev', 'af_adaptivethemeframework_compose_postbit', 1000);
         $plugins->add_hook('postbit_pm', 'af_adaptivethemeframework_compose_postbit', 1000);
@@ -285,11 +287,25 @@ function af_adaptivethemeframework_ensure_preferences_schema(): bool
     return true;
 }
 
+/** Read-only readiness, checked lazily once when preferences are used. */
+function af_adaptivethemeframework_preferences_available(): bool
+{
+    static $available = null;
+    if ($available !== null) return $available;
+    $db = $GLOBALS['db'] ?? null;
+    $available = is_object($db) && $db->table_exists(AF_PRESENTATION_PREFERENCES_TABLE_NAME);
+    if (!$available) {
+        $GLOBALS['af_adaptivethemeframework_diagnostics']['preferences_schema_missing'] = true;
+        error_log('[ATF] preferences schema missing; using defaults. Run install/activate/upgrade.');
+    }
+    return $available;
+}
+
 function af_adaptivethemeframework_forum_layout(): string
 {
     global $db, $mybb;
     $uid = (int)($mybb->user['uid'] ?? 0);
-    if ($uid <= 0 || !is_object($db) || !$db->table_exists(AF_PRESENTATION_PREFERENCES_TABLE_NAME)) return 'full';
+    if ($uid <= 0 || !af_adaptivethemeframework_preferences_available()) return 'full';
     $value = (string)$db->fetch_field($db->simple_select(
         AF_PRESENTATION_PREFERENCES_TABLE_NAME,
         'preference_value',
@@ -332,6 +348,7 @@ function af_adaptivethemeframework_save_presentation_preference(): void
     verify_post_check($mybb->get_input('my_post_key'));
     $value = (string)$mybb->get_input('forum_layout');
     if (!in_array($value, ['full', 'grid'], true)) $value = 'full';
+    if (!af_adaptivethemeframework_preferences_available()) { redirect('index.php'); return; }
     $row = ['uid' => (int)$mybb->user['uid'], 'preference_key' => 'forum_layout',
         'preference_value' => $db->escape_string($value), 'updated_at' => TIME_NOW];
     $db->replace_query(AF_PRESENTATION_PREFERENCES_TABLE_NAME, $row);
@@ -1104,7 +1121,10 @@ function af_adaptivethemeframework_iconize_post_control(string $html, string $la
     $presentationClass = preg_replace('~[^a-z0-9_-]~i', '', $presentationClass) ?? '';
     if ($icon === '' || $presentationClass === '') return $html;
 
-    return preg_replace_callback(
+    static $cache = [];
+    $cacheKey = $html . "\0" . $label . "\0" . $icon . "\0" . $presentationClass;
+    if (isset($cache[$cacheKey])) return $cache[$cacheKey];
+    return $cache[$cacheKey] = preg_replace_callback(
         '~<(a|button)\b([^>]*)>.*?</\1>~is',
         static function (array $match) use ($icon, $presentationClass): string {
             $tagName = strtolower($match[1]);
@@ -1251,19 +1271,7 @@ function af_adaptivethemeframework_resolve_post_secondary_avatar(array $post): s
     // Prefer APF's postbit payload when its hook already ran.
     $secondary = trim((string)($post['af_apf_secondary_avatar_url'] ?? ''));
 
-    // Do not depend on APF's postbit hook being registered early enough:
-    // profile rendering already proves this canonical APF helper can resolve
-    // the stored second avatar for the same uid.
-    if ($secondary === '' && function_exists('af_apf_get_secondary_avatar')) {
-        $secondary = trim((string)af_apf_get_secondary_avatar($uid));
-    }
-
-    // APUI uses the same canonical resolver on member.php. Reuse it as a
-    // final application-level fallback so profile and postbit cannot diverge.
-    if ($secondary === '' && function_exists('af_apui_get_profile_avatars')) {
-        $avatars = af_apui_get_profile_avatars($uid, false);
-        $secondary = trim((string)($avatars['secondary_avatar'] ?? ''));
-    }
+    if ($secondary === '') $secondary = (string)($GLOBALS['af_adaptivethemeframework_author_data'][$uid]['secondary'] ?? '');
 
     if ($secondary === '') {
         return '';
@@ -1310,7 +1318,7 @@ function af_adaptivethemeframework_thread_reputation(int $tid): array
         LEFT JOIN {$db->table_prefix}users u ON u.uid=r.adduid
         WHERE p.tid=" . (int)$tid . " AND r.pid>0 ORDER BY r.dateline DESC");
     while ($row = $db->fetch_array($query)) $cache[$tid][(int)$row['pid']][] = $row;
-    return $cache[$tid];
+    return $GLOBALS['af_adaptivethemeframework_reputation'][$tid] = $cache[$tid];
 }
 
 function af_adaptivethemeframework_post_reputation(array $post): string
@@ -1319,7 +1327,11 @@ function af_adaptivethemeframework_post_reputation(array $post): string
         ? htmlspecialchars_uni($value)
         : htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $pid = (int)($post['pid'] ?? 0); $uid = (int)($post['uid'] ?? 0);
-    $all = af_adaptivethemeframework_thread_reputation((int)($post['tid'] ?? 0));
+    $tid = (int)($post['tid'] ?? 0);
+    $canAdd = trim((string)($post['button_rep'] ?? '')) !== '' && $uid > 0 && $pid > 0;
+    $memoKey = $tid . ':' . $pid . ':' . $uid . ':' . (int)$canAdd;
+    if (isset($GLOBALS['af_adaptivethemeframework_reputation_html'][$memoKey])) return $GLOBALS['af_adaptivethemeframework_reputation_html'][$memoKey];
+    $all = (array)($GLOBALS['af_adaptivethemeframework_reputation'][$tid] ?? []);
     $entries = (array)($all[$pid] ?? []); $score = 0; $rows = '';
     foreach ($entries as $entry) {
         $value = (int)$entry['reputation']; $score += $value;
@@ -1333,7 +1345,7 @@ function af_adaptivethemeframework_post_reputation(array $post): string
     $scoreText = ($score > 0 ? '+' : '') . $score;
     $canAdd = trim((string)($post['button_rep'] ?? '')) !== '' && $uid > 0 && $pid > 0;
     $heart = $canAdd ? '<button type="button" class="atf-post-reputation__heart" title="Оценить сообщение" aria-label="Оценить сообщение" onclick="event.stopPropagation(); MyBB.reputation('.$uid.','.$pid.'); return false;"><i class="fa-solid fa-heart" aria-hidden="true"></i></button>' : '<span class="atf-post-reputation__heart" aria-hidden="true"><i class="fa-solid fa-heart"></i></span>';
-    return '<div class="atf-post-reputation">'.$heart.'<button type="button" class="atf-post-reputation__score" aria-haspopup="true" aria-expanded="false">'.$escape($scoreText).'</button>'
+    return $GLOBALS['af_adaptivethemeframework_reputation_html'][$memoKey] = '<div class="atf-post-reputation">'.$heart.'<button type="button" class="atf-post-reputation__score" aria-haspopup="true" aria-expanded="false">'.$escape($scoreText).'</button>'
         .'<div class="atf-post-reputation__popover" role="tooltip"><strong>Оценки сообщения</strong>'
         .($rows !== '' ? '<ul>'.$rows.'</ul>' : '<span>Оценок пока нет</span>').'</div></div>';
 }
@@ -1359,6 +1371,64 @@ function af_adaptivethemeframework_posturl_checkbox_first(string $html): string
     return $checkbox . ' ' . $without;
 }
 
+/** Data hook: all lookups happen before the late, query-free layout hook. */
+function af_adaptivethemeframework_preload_postbit_data(array &$post): void
+{
+    global $db, $pids;
+    $uid = max(0, (int)($post['uid'] ?? 0));
+    $tid = max(0, (int)($post['tid'] ?? 0));
+    $pagePids = is_string($pids) ? array_map('intval', explode(',', $pids)) : [];
+    $pagePids[] = (int)($post['pid'] ?? 0);
+    $pagePids = array_values(array_unique(array_filter($pagePids, static fn(int $id): bool => $id > 0)));
+    if ($tid > 0 && is_object($db)) {
+        $missingPids = array_values(array_filter($pagePids, static fn(int $id): bool =>
+            !isset($GLOBALS['af_adaptivethemeframework_reputation_pids'][$tid][$id])));
+        if ($missingPids) {
+            foreach ($missingPids as $id) {
+                $GLOBALS['af_adaptivethemeframework_reputation_pids'][$tid][$id] = true;
+                $GLOBALS['af_adaptivethemeframework_reputation'][$tid][$id] = [];
+            }
+            $query = $db->query("SELECT r.pid,r.adduid,r.reputation,r.comments,u.username
+                FROM {$db->table_prefix}reputation r
+                LEFT JOIN {$db->table_prefix}users u ON u.uid=r.adduid
+                WHERE r.pid IN (" . implode(',', $missingPids) . ") ORDER BY r.dateline DESC");
+            while ($row = $db->fetch_array($query)) $GLOBALS['af_adaptivethemeframework_reputation'][$tid][(int)$row['pid']][] = $row;
+            $GLOBALS['af_adaptivethemeframework_reputation_html'] = [];
+        }
+    }
+    $uids = $uid > 0 ? [$uid] : [];
+    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'showthread.php'
+        && empty($GLOBALS['af_adaptivethemeframework_authors_preloaded'])) {
+        $GLOBALS['af_adaptivethemeframework_authors_preloaded'] = true;
+        if (isset($GLOBALS['af_cs_showthread_page_uids'])) {
+            $uids = array_merge($uids, (array)$GLOBALS['af_cs_showthread_page_uids']);
+        } elseif (is_object($db) && is_string($pids) && $pids !== '') {
+            $ids = array_values(array_unique(array_filter(array_map('intval', explode(',', $pids)), static fn(int $id): bool => $id > 0)));
+            if ($ids) {
+                $query = $db->simple_select('posts', 'DISTINCT uid', 'pid IN (' . implode(',', $ids) . ') AND uid>0');
+                while ($row = $db->fetch_array($query)) $uids[] = (int)$row['uid'];
+            }
+        }
+    }
+    $uids = array_values(array_unique(array_filter($uids, static fn(int $id): bool => $id > 0
+        && !isset($GLOBALS['af_adaptivethemeframework_author_data'][$id]))));
+    if (!$uids) return;
+    if (function_exists('af_apf_preload_system_values') && defined('AF_APF_SECONDARY_AVATAR_KEY')) {
+        af_apf_preload_system_values($uids, AF_APF_SECONDARY_AVATAR_KEY);
+    }
+    if (function_exists('af_characterworkflow_preload_active_applications')) {
+        af_characterworkflow_preload_active_applications($uids);
+    }
+    $elements = null;
+    if (function_exists('af_atf_preload_author_elements')) $elements = af_atf_preload_author_elements($uids);
+    foreach ($uids as $id) {
+        $GLOBALS['af_adaptivethemeframework_author_data'][$id] = [
+            'secondary' => function_exists('af_apf_get_secondary_avatar') ? af_apf_get_secondary_avatar($id) : '',
+            'element' => $elements !== null ? (string)($elements[$id] ?? '') : af_adaptivethemeframework_post_element($id),
+        ];
+    }
+}
+
 function af_adaptivethemeframework_compose_postbit(array &$post): void
 {
     // Primary MyBB avatar and APF secondary avatar are separate surfaces.
@@ -1366,7 +1436,7 @@ function af_adaptivethemeframework_compose_postbit(array &$post): void
     $post['posturl'] = af_adaptivethemeframework_posturl_checkbox_first((string)($post['posturl'] ?? ''));
     $post['af_atf_primary_avatar'] = (string)($post['useravatar'] ?? '');
     $post['af_atf_secondary_avatar'] = af_adaptivethemeframework_resolve_post_secondary_avatar($post);
-    $post['af_atf_element'] = af_adaptivethemeframework_post_element((int)($post['uid'] ?? 0));
+    $post['af_atf_element'] = (string)($GLOBALS['af_adaptivethemeframework_author_data'][(int)($post['uid'] ?? 0)]['element'] ?? '');
     $post['af_atf_online_indicator'] = strpos((string)($post['af_apui_presence_html'] ?? ''), 'presence-dot--online') !== false ? '<span class="atf-post__online-indicator" title="На форуме" aria-label="На форуме"></span>' : '';
     $post['af_atf_post_reputation_html'] = af_adaptivethemeframework_post_reputation($post);
     if (!isset($post['af_post_char_count'])) {
@@ -1379,11 +1449,10 @@ function af_adaptivethemeframework_compose_postbit(array &$post): void
     $context = af_adaptivethemeframework_post_context($post);
     $post['af_atf_context'] = ['pid' => $context['pid'], 'tid' => $context['tid'], 'uid' => $context['uid']];
     $post['af_atf_slots'] = [];
-    foreach (af_adaptivethemeframework_slots() as $slot) {
-        if (strncmp($slot, 'post.', 5) === 0) {
-            $post['af_atf_slots'][$slot] = af_adaptivethemeframework_render_slot($slot, $context);
-        }
-    }
+    static $postSlots = null;
+    if ($postSlots === null) $postSlots = array_values(array_filter(af_adaptivethemeframework_slots(),
+        static fn(string $slot): bool => strncmp($slot, 'post.', 5) === 0));
+    foreach ($postSlots as $slot) $post['af_atf_slots'][$slot] = af_adaptivethemeframework_render_slot($slot, $context);
     $post['af_atf_meta_line'] = '';
     if (empty($post['af_atf_is_preview'])) {
         $post['af_atf_meta_line'] = '<div class="atf-post__meta-line">'
@@ -1596,7 +1665,8 @@ function af_adaptivethemeframework_compose_thread_card(): void
 /** Add the activation marker and resolve server-rendered forum-card slots. */
 function af_adaptivethemeframework_mark_page(string &$page): void
 {
-    if (strpos($page, '<atf-forum-avatar') !== false) {
+    $script = defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '';
+    if (in_array($script, ['index.php', 'forumdisplay.php'], true) && strpos($page, '<atf-forum-avatar') !== false) {
         $page = (string)preg_replace_callback(
         '~<atf-forum-avatar\s+fid="(\d+)"\s+uid="(\d+)"></atf-forum-avatar>~',
         static function (array $match): string {
@@ -1614,7 +1684,7 @@ function af_adaptivethemeframework_mark_page(string &$page): void
 
     // Preserve an optional provider verbatim, or replace the server-only
     // marker with the native fallback before HTML reaches the browser.
-    if (strpos($page, '<atf-thread-avatar') !== false) {
+    if ($script === 'forumdisplay.php' && strpos($page, '<atf-thread-avatar') !== false) {
         $page = (string)preg_replace_callback(
         '~(<div class="atf-topic-card__avatar">)(.*?)(<atf-thread-avatar\s+uid="(\d+)"></atf-thread-avatar>)(</div>)~is',
         static function (array $match): string {
@@ -1631,7 +1701,7 @@ function af_adaptivethemeframework_mark_page(string &$page): void
     // The nested stock avatar template remains MyBB-owned. Normalize only an
     // image already rendered inside our card viewport; this adds no lookup,
     // permission decision, or dependency on another addon's DOM.
-    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'memberlist.php') {
+    if ($script === 'memberlist.php' && strpos($page, 'atf-user-card__avatar') !== false) {
         $fallback = htmlspecialchars_uni(af_adaptivethemeframework_default_avatar_url());
         $page = (string)preg_replace_callback(
             '~(<div class="atf-user-card__avatar">)(.*?)(</div>)~is',
@@ -1654,10 +1724,29 @@ function af_adaptivethemeframework_mark_page(string &$page): void
         );
     }
 
-    if ($page === '' || stripos($page, '<body') === false) {
+    if ($page === '') return;
+    // Owned seeds already carry body classes and an explicit footer position.
+    // Resolve one literal marker after all late providers have prepared data.
+    $marker = '<atf-footer-placement></atf-footer-placement>';
+    $position = strpos($page, $marker);
+    if ($position !== false) {
+        $footer = af_adaptivethemeframework_render_footer(
+            $script === 'showthread.php' && strpos($page, 'class="atf-post') !== false,
+            $page
+        );
+        $page = substr_replace($page, $footer, $position, strlen($marker));
         return;
     }
-    $page = (string)preg_replace_callback(
+    // A repeated invocation on an owned response is entirely inert.
+    $bodyStart = stripos($page, '<body');
+    if ($bodyStart === false) return;
+    $bodyEnd = strpos($page, '>', $bodyStart);
+    if ($bodyEnd === false) return;
+    $body = substr($page, $bodyStart, $bodyEnd - $bodyStart + 1);
+    if (strpos($body, 'data-atf-owned') !== false) return;
+    // Legacy/custom templates retain an opening-tag-only activation fallback.
+    if (strpos($body, 'atf-active') === false) {
+        $body = (string)preg_replace_callback(
         '~<body\b([^>]*)>~i',
         static function (array $match): string {
             $attributes = $match[1];
@@ -1689,42 +1778,63 @@ function af_adaptivethemeframework_mark_page(string &$page): void
             }
             return '<body' . $attributes . '>';
         },
-        $page,
+        $body,
         1
     );
 
-    // The two footer slots have one canonical location on every ATF page.
-    // Providers still own their markup and behaviour; this layer only gives
-    // them a stable, out-of-flow mount point.  Inject at final output time so
-    // legacy templates do not need to be patched and ATF-off remains inert.
-    if (stripos($page, 'id="atf-footer-composition"') === false
-        && stripos($page, '</body') !== false) {
-        $context = [
-            'script' => defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '',
-            'uid' => isset($GLOBALS['mybb']->user['uid']) ? (int)$GLOBALS['mybb']->user['uid'] : 0,
-        ];
-        $components = af_adaptivethemeframework_render_slot('footer.components', $context);
-        $modals = af_adaptivethemeframework_render_slot('footer.modals', $context);
-        $bburl = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/');
-        $assetBase = $bburl
-            . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.modals.js?v='
-            . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION);
-        $scripts = '';
-        $hasModalRuntime = trim($modals) !== '' || preg_match('~data-[^=]*(?:modal|dialog)|data-afcs-open~i', $components);
-        if ($hasModalRuntime) {
-            $scripts .= '<script src="' . htmlspecialchars($assetBase, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '" defer></script>' . "\n";
-        }
-        if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'showthread.php' && strpos($page, 'class="atf-post') !== false) {
-            $stickyScript = $bburl . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.postbit-sticky.js?v=' . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION);
-            $scripts .= '<script src="' . htmlspecialchars($stickyScript, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '" defer></script>' . "\n";
-        }
-        $footer = "\n<div id=\"atf-footer-composition\" class=\"atf-footer-composition\" data-atf-footer-components>"
-            . $components . "</div>\n"
-            . '<div id="atf-global-modal-host" class="atf-global-modal-host" data-atf-modal-host aria-live="polite">'
-            . $modals . "</div>\n" . $scripts;
-        $page = (string)preg_replace('~</body\s*>~i', $footer . '</body>', $page, 1);
+        $page = substr_replace($page, $body, $bodyStart, $bodyEnd - $bodyStart + 1);
     }
+    if (strpos($page, 'id="atf-footer-composition"') === false) {
+        $position = strripos($page, '</body');
+        if ($position !== false) $page = substr_replace($page,
+            af_adaptivethemeframework_render_footer($script === 'showthread.php' && strpos($page, 'class="atf-post') !== false, $page),
+            $position, 0);
+    }
+}
 
+/** Detect real providers/triggers, including lazy providers outside footer slots. */
+function af_adaptivethemeframework_has_modal_surface(string $html): bool
+{
+    if ($html === '' || (strpos($html, 'data-') === false
+        && strpos($html, 'af-') === false && strpos($html, 'af_') === false)) return false;
+    // One guarded presence check, no transformation. An alternation avoids
+    // scanning a large post body separately for each lazy provider marker.
+    return (bool)preg_match('~data-(?:afcs-(?:open|sheet|application)|af-(?:apui-modal|shop-modal|balance-modal|kb-status-(?:modal|open))|atf-modal-trigger)|af_(?:aas|aam)_modal|af-(?:wanted-modal-(?:host|backdrop)|kb-(?:modal-host|chip|insert)|character-sheet-modal-host|atf-kb-modal-backdrop|inv-support-modal|buy-now|checkout)~', $html);
+}
+
+/** Single canonical footer, shared by owned seeds and the legacy fallback. */
+function af_adaptivethemeframework_render_footer(bool $hasPosts = false, string $page = ''): string
+{
+    $context = ['script' => defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '',
+        'uid' => (int)($GLOBALS['mybb']->user['uid'] ?? 0)];
+    $components = af_adaptivethemeframework_render_slot('footer.components', $context);
+    $modals = af_adaptivethemeframework_render_slot('footer.modals', $context);
+    $hasModalRuntime = trim($modals) !== ''
+        || af_adaptivethemeframework_has_modal_surface($components)
+        || af_adaptivethemeframework_has_modal_surface($page);
+    $bburl = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/');
+    $assetBase = $bburl . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/';
+    $version = '?v=' . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION);
+    $escape = static fn(string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $scripts = '';
+    if ($hasModalRuntime) {
+        static $manifest = null;
+        if ($manifest === null) $manifest = require __DIR__ . '/manifest.php';
+        foreach ($manifest['theme_stylesheets'] as $source) {
+            if (($source['id'] ?? '') === 'surface_modals') {
+                $scripts .= '<link rel="stylesheet" href="' . $escape($assetBase . $source['file'] . $version) . '">' . "\n";
+                break;
+            }
+        }
+        $scripts .= '<script src="' . $escape($assetBase . 'assets/adaptivethemeframework.modals.js?v=' . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION)) . '" defer></script>' . "\n";
+    }
+    if ($hasPosts) {
+        $scripts .= '<script src="' . $escape($assetBase . 'assets/adaptivethemeframework.postbit-sticky.js?v=' . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION)) . '" defer></script>' . "\n";
+    }
+    return "\n<div id=\"atf-footer-composition\" class=\"atf-footer-composition\" data-atf-footer-components>"
+        . $components . "</div>\n"
+        . '<div id="atf-global-modal-host" class="atf-global-modal-host" data-atf-modal-host aria-live="polite">'
+        . $modals . "</div>\n" . $scripts;
 }
 
 /** The core ModCP entry gate; section predicates deliberately build on it. */
@@ -2190,6 +2300,8 @@ function af_adaptivethemeframework_register_component(array $component): bool
     $component['identity'] = $identity;
     $component['legacy_position'] = $component['legacy_position'] === 'before' ? 'before' : 'after';
     $GLOBALS['af_adaptivethemeframework_components'][$identity] = $component;
+    unset($GLOBALS['af_adaptivethemeframework_prepared_slots']);
+    $GLOBALS['af_adaptivethemeframework_component_memo'] = [];
     return true;
 }
 
@@ -2230,30 +2342,44 @@ function af_adaptivethemeframework_component_matches_context(array $component, a
 /** @return array<string, mixed> */
 function af_adaptivethemeframework_components_for_slot(string $slot, array $context = []): array
 {
-    if (!in_array($slot, af_adaptivethemeframework_slots(), true)) {
-        return [];
+    static $knownSlots = null;
+    if ($knownSlots === null) $knownSlots = array_fill_keys(af_adaptivethemeframework_slots(), true);
+    if (!isset($knownSlots[$slot])) return [];
+    $registryCount = count($GLOBALS['af_adaptivethemeframework_components'] ?? []);
+    if (!isset($GLOBALS['af_adaptivethemeframework_prepared_slots'])
+        || ($GLOBALS['af_adaptivethemeframework_prepared_count'] ?? -1) !== $registryCount) {
+        $prepared = [];
+        foreach (($GLOBALS['af_adaptivethemeframework_components'] ?? []) as $identity => $component) {
+            $visible = $component['visibility'];
+            if (!is_callable($visible) && ((!is_bool($visible) && !is_int($visible)) || !$visible)) continue;
+            // Request-only callbacks opt into one evaluation. Post-dependent
+            // visibility/context callbacks always keep their per-post contract.
+            if (is_callable($visible) && ($component['visibility_scope'] ?? '') === 'request') {
+                if (!array_key_exists($identity, $GLOBALS['af_adaptivethemeframework_request_visibility'] ?? [])) {
+                    $GLOBALS['af_adaptivethemeframework_request_visibility'][$identity] = (bool)$visible([
+                    'script' => defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '',
+                    'uid' => (int)($GLOBALS['mybb']->user['uid'] ?? 0),
+                    ], $component);
+                }
+                $component['visibility'] = $GLOBALS['af_adaptivethemeframework_request_visibility'][$identity];
+                if (!$component['visibility']) continue;
+            }
+            $prepared[$component['slot']][$identity] = $component;
+        }
+        foreach ($prepared as &$components) uasort($components, static fn(array $a, array $b): int =>
+            [$a['sortorder'], $a['identity']] <=> [$b['sortorder'], $b['identity']]);
+        unset($components);
+        $GLOBALS['af_adaptivethemeframework_prepared_slots'] = $prepared;
+        $GLOBALS['af_adaptivethemeframework_prepared_count'] = $registryCount;
     }
     $result = [];
-    foreach (($GLOBALS['af_adaptivethemeframework_components'] ?? []) as $identity => $component) {
-        if ($component['slot'] !== $slot || !af_adaptivethemeframework_owner_is_enabled($component['owner'])) {
-            continue;
-        }
+    foreach (($GLOBALS['af_adaptivethemeframework_prepared_slots'][$slot] ?? []) as $identity => $component) {
+        if (!af_adaptivethemeframework_owner_is_enabled($component['owner'])) continue;
         $visible = $component['visibility'];
-        if (is_callable($visible)) {
-            $visible = $visible($context, $component);
-        } elseif (!is_bool($visible) && !is_int($visible)) {
-            // An unresolved callback name must not become visible merely
-            // because a non-empty string is truthy.
-            $visible = false;
-        }
-        if (!$visible || !af_adaptivethemeframework_component_matches_context($component, $context)) {
-            continue;
-        }
+        if (is_callable($visible) && !$visible($context, $component)) continue;
+        if (!af_adaptivethemeframework_component_matches_context($component, $context)) continue;
         $result[$identity] = $component;
     }
-    uasort($result, static fn(array $a, array $b): int =>
-        [$a['sortorder'], $a['identity']] <=> [$b['sortorder'], $b['identity']]
-    );
     return $result;
 }
 
@@ -2279,13 +2405,24 @@ function af_adaptivethemeframework_render_slot(string $slot, array $context = []
     }
     $html = '';
     foreach (af_adaptivethemeframework_components_for_slot($slot, $context) as $component) {
+        $memoKey = null;
+        if (is_callable($component['memo_key'] ?? null)) {
+            $key = $component['memo_key']($context, $component);
+            if (is_scalar($key)) $memoKey = $component['identity'] . ':' . (string)$key;
+        }
+        if ($memoKey !== null && array_key_exists($memoKey, $GLOBALS['af_adaptivethemeframework_component_memo'] ?? [])) {
+            $html .= $GLOBALS['af_adaptivethemeframework_component_memo'][$memoKey];
+            continue;
+        }
         $rendered = array_key_exists('html', $component)
             ? (string)$component['html']
             : af_adaptivethemeframework_render_value($component['renderer'], $context, $component);
         $legacy = af_adaptivethemeframework_render_value($component['legacy'], $context, $component);
-        $html .= $component['legacy_position'] === 'before'
+        $output = $component['legacy_position'] === 'before'
             ? $legacy . $rendered
             : $rendered . $legacy;
+        if ($memoKey !== null) $GLOBALS['af_adaptivethemeframework_component_memo'][$memoKey] = $output;
+        $html .= $output;
     }
     return $html;
 }
@@ -2397,6 +2534,11 @@ function af_adaptivethemeframework_is_installed(): bool
 }
 
 function af_adaptivethemeframework_activate(): bool
+{
+    return af_adaptivethemeframework_acquire_templates();
+}
+
+function af_adaptivethemeframework_upgrade(): bool
 {
     return af_adaptivethemeframework_acquire_templates();
 }

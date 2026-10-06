@@ -1,6 +1,6 @@
 <html>
 <head><title>{$mybb->settings['bbname']} - {$lang->split_thread}</title>{$headerinclude}</head>
-<body>{$header}
+<body class="atf-active atf-moderation-page" data-atf-owned="1">{$header}
 <main class="pun atf-page-shell atf-page atf-moderation" id="content"><form action="moderation.php" method="post" class="atf-moderation__form">
 <input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 <header class="atf-moderation__header"><span class="atf-moderation__eyebrow">Массовая модерация</span><h1>{$lang->split_thread}</h1></header>
@@ -9,4 +9,5 @@
 <div class="atf-moderation__field"><label class="atf-moderation__label">{$lang->new_forum}</label><div class="atf-moderation__control">{$forumselect}</div></div></section>
 <footer class="atf-moderation__actions"><input type="submit" class="button" name="submit" value="{$lang->split_thread}" /></footer>
 <input type="hidden" name="action" value="do_multisplitposts" /><input type="hidden" name="tid" value="{$tid}" /><input type="hidden" name="posts" value="{$inlineids}" /><input type="hidden" name="url" value="{$return_url}" />
-</form></main>{$footer}</body></html>
+</form></main>{$footer}<atf-footer-placement></atf-footer-placement>
+</body></html>
