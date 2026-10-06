@@ -22,6 +22,7 @@ $sync = extractedFunction($core, 'af_sync_theme_stylesheets');
 $delivery = extractedFunction($core, 'af_theme_stylesheet_delivery_decision');
 $registration = extractedFunction($core, 'af_register_theme_stylesheet');
 $setMode = extractedFunction($core, 'af_theme_stylesheet_set_delivery_mode');
+$migration = extractedFunction($core, 'af_theme_stylesheet_migrate_bundle_to_sources');
 $actions = extractedFunction($core, 'af_theme_stylesheets_execute_action');
 $checks = [
     'per-source basename' => "basename(\$sourceFileRel)",
@@ -35,6 +36,11 @@ $checks = [
     'legacy bundle migration retained' => 'af_theme_stylesheet_migrate_legacy_bundle',
     'recovery directory retained' => "'/css_recovery'",
     'legacy rows remain non-destructive' => 'Migration is intentionally non-destructive',
+    'structured legacy migration uses parser' => 'af_theme_stylesheet_parse_bundle($legacyCss)',
+    'legacy customization compares stored seed body' => 'hash_equals($storedSeedHash, sha1($sectionBody))',
+    'custom section body is imported verbatim' => "'stylesheet' => af_theme_stylesheet_db_css($body)",
+    'legacy backup gets detached migration marker' => "'legacy_migrated_detached'",
+    'migration failure leaves old bundle' => 'Unmapped legacy section:',
     'force warning says physical seed' => 'Force Resync replaces Theme CSS with the addon physical CSS file',
     'force confirmation is required' => "if (!\$confirmed)",
     'bundle section editor retained only for legacy migration' => 'theme_stylesheet_section',
@@ -46,6 +52,15 @@ foreach ($checks as $label => $needle) {
 
 if (strpos($sync, 'af_register_theme_stylesheet') === false || strpos($sync, 'af_theme_stylesheet_sync_bundle') !== false) {
     $failed[] = 'normal sync uses per-source registration';
+}
+if (strpos($sync, 'af_theme_stylesheet_migrate_bundle_to_sources') === false
+    || strpos($migration, 'af_theme_stylesheet_parse_bundle') === false
+    || strpos($migration, "'attachedto' => ''") === false) {
+    $failed[] = 'sync migrates and detaches the structured legacy bundle';
+}
+if (strpos($migration, 'legacy_migrated_detached') === false
+    || strpos($migration, "'status' => 'already_migrated'") === false) {
+    $failed[] = 'legacy bundle migration is idempotent';
 }
 if (strpos($delivery, 'AF_THEME_BUNDLE_NAME') !== false
     || strpos($delivery, 'af_theme_stylesheet_bundle_state') !== false
@@ -64,6 +79,9 @@ if (strpos($setMode, 'af_theme_stylesheet_sync_bundle') !== false
 if (strpos($actions, "af_sync_theme_stylesheets(true, \$addonId)") === false
     || strpos($actions, "if (!\$confirmed)") === false) {
     $failed[] = 'only confirmed Force Resync invokes destructive sync';
+}
+if (substr_count($core, 'af_theme_stylesheet_migrate_legacy_bundle(') !== 1) {
+    $failed[] = 'ACP migration does not generate a replacement advancedstyles.css';
 }
 if (preg_match("~delete_query\\(\\s*'themestylesheets'.*AF_THEME_BUNDLE~s", $core)) {
     $failed[] = 'bundle/legacy destructive deletion';
