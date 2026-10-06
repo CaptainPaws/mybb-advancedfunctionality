@@ -1045,15 +1045,15 @@ function af_adaptivethemeframework_profile_navigation_control(string $html): str
         static function (array $match): string {
             $attributes = $match[1];
             $isMentionTrigger = preg_match(
-                '~(?:^|\\s)class\\s*=\\s*(["\\'])(?:(?!\\1).)*\\b(?:af-aam-mention-user|mention_user)\\b(?:(?!\\1).)*\\1~is',
+                '~(?:^|\\s)class\\s*=\\s*(["\'])(?:(?!\\1).)*\\b(?:af-aam-mention-user|mention_user)\\b(?:(?!\\1).)*\\1~is',
                 $attributes
-            ) || preg_match('~\\sdata-mention\\s*=\\s*(["\\'])1\\1~i', $attributes);
+            ) || preg_match('~\\sdata-mention\\s*=\\s*(["\'])1\\1~i', $attributes);
 
             if (!$isMentionTrigger) {
                 return $match[0];
             }
 
-            if (preg_match('~\\bclass\\s*=\\s*(["\\'])(.*?)\\1~is', $attributes, $classMatch)) {
+            if (preg_match('~\\bclass\\s*=\\s*(["\'])(.*?)\\1~is', $attributes, $classMatch)) {
                 $classes = preg_split('~\\s+~', trim($classMatch[2])) ?: [];
                 $classes = array_values(array_filter(
                     $classes,
@@ -1067,14 +1067,14 @@ function af_adaptivethemeframework_profile_navigation_control(string $html): str
                 if ($classes) {
                     $replacement = 'class=' . $classMatch[1] . implode(' ', $classes) . $classMatch[1];
                     $attributes = preg_replace(
-                        '~\\bclass\\s*=\\s*(["\\'])(.*?)\\1~is',
+                        '~\\bclass\\s*=\\s*(["\'])(.*?)\\1~is',
                         $replacement,
                         $attributes,
                         1
                     ) ?? $attributes;
                 } else {
                     $attributes = preg_replace(
-                        '~\\s*\\bclass\\s*=\\s*(["\\'])(.*?)\\1~is',
+                        '~\\s*\\bclass\\s*=\\s*(["\'])(.*?)\\1~is',
                         '',
                         $attributes,
                         1
@@ -1083,7 +1083,7 @@ function af_adaptivethemeframework_profile_navigation_control(string $html): str
             }
 
             $attributes = preg_replace(
-                '~\\s+data-(?:uid|username|mention)\\s*=\\s*(["\\'])(?:(?!\\1).)*\\1~is',
+                '~\\s+data-(?:uid|username|mention)\\s*=\\s*(["\'])(?:(?!\\1).)*\\1~is',
                 '',
                 $attributes
             ) ?? $attributes;
