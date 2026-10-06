@@ -2296,16 +2296,13 @@
     init: function (ta) {
       initGlobalEditorEnvironment();
       ta.__afAeInited = false;
-      // SCEditor refuses creation inside any .sceditor-container ancestor.
+      // The AF shell intentionally does not use SCEditor's container class.
+      // This prevents the native SCEditor stylesheet from imposing its own
+      // fixed height/flex layout on the outer editor shell after lazy load.
       var source = String(ta.value || '');
-      var shell = ta.__afAeShell;
-      if (shell) shell.classList.remove('sceditor-container');
-      try {
-        var ready = initOneTextarea(ta);
-        if (ready) preserveInitialSource(ta, safeGetInstance(window.jQuery(ta)), source);
-        return ready;
-      }
-      finally { if (shell) shell.classList.add('sceditor-container'); }
+      var ready = initOneTextarea(ta);
+      if (ready) preserveInitialSource(ta, safeGetInstance(window.jQuery(ta)), source);
+      return ready;
     },
     destroy: destroyTextareaInstance
   };
