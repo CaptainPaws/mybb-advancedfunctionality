@@ -111,6 +111,9 @@ function af_charactersheets_showthread_start(): void
         while ($row = $db->fetch_array($query)) {
             $uids[] = (int)$row['uid'];
         }
+        if (function_exists('af_characterworkflow_preload_active_applications')) {
+            af_characterworkflow_preload_active_applications($uids);
+        }
         af_charactersheets_preload_postbit_metadata($uids);
     }
     af_charactersheets_showthread_start_impl();
