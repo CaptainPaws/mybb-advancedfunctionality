@@ -27,28 +27,56 @@ define('AF_CS_TPL_DIR', AF_CS_BASE . 'templates/');
 define('AF_CS_MODULES', AF_CS_BASE . 'modules/');
 define('AF_CS_ASSETS', AF_CS_BASE . 'assets/');
 
-require_once AF_CS_MODULES . 'permissions.php';
-require_once AF_CS_MODULES . 'experience.php';
-require_once AF_CS_MODULES . 'sheets_crud.php';
-require_once AF_CS_MODULES . 'calculator.php';
-require_once AF_CS_MODULES . 'render.php';
-require_once AF_CS_MODULES . 'ajax.php';
-require_once AF_CS_MODULES . 'postbit.php';
-require_once AF_CS_MODULES . 'acp_skills.php';
-require_once AF_CS_MODULES . 'bootstrap.php';
+/**
+ * Route-aware module loader.
+ *
+ * The addon bootstrap is loaded on every MyBB request, so showthread must not
+ * parse/render the full sheet editor stack. Keep only modules needed to expose
+ * postbit metadata and lightweight integration there; heavy modules are pulled
+ * when a route/action actually executes them.
+ */
+function af_charactersheets_require_modules(array $modules): void
+{
+    static $loaded = [];
+
+    foreach ($modules as $module) {
+        $module = trim((string)$module);
+        if ($module === '' || isset($loaded[$module])) {
+            continue;
+        }
+        $path = AF_CS_MODULES . $module . '.php';
+        if (is_file($path)) {
+            require_once $path;
+            $loaded[$module] = true;
+        }
+    }
+}
+
+af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap']);
+
+$afCsScript = strtolower(defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '');
+if ($afCsScript === 'charactersheets.php') {
+    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax']);
+}
+if (defined('IN_ADMINCP')) {
+    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
+}
 
 function af_charactersheets_is_installed(): bool
 {
+    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
     return af_charactersheets_is_installed_impl();
 }
 
 function af_charactersheets_install(): void
 {
+    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
     af_charactersheets_install_impl();
 }
 
 function af_charactersheets_activate(): bool
 {
+    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
     return af_charactersheets_activate_impl();
 }
 
@@ -59,6 +87,7 @@ function af_charactersheets_deactivate(): bool
 
 function af_charactersheets_uninstall(): void
 {
+    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
     af_charactersheets_uninstall_impl();
 }
 
@@ -94,6 +123,13 @@ function af_charactersheets_pre_output(&$page): void
 
 function af_charactersheets_misc_start(): void
 {
+    global $mybb;
+    $action = strtolower((string)$mybb->get_input('action'));
+    if (in_array($action, ['af_charactersheet', 'af_charactersheets', 'af_charactersheet_api', 'cs_modal_profile', 'cs_modal_application'], true)) {
+        af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render', 'ajax']);
+    } elseif (in_array($action, ['af_charactersheets_accept', 'af_charactersheets_transfer', 'af_charactersheets_create_sheet'], true)) {
+        af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render']);
+    }
     af_charactersheets_misc_start_impl();
 }
 
