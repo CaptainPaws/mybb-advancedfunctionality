@@ -180,7 +180,7 @@ function af_advancededitor_render_shells(string $page, string $toolbar, bool $co
     return preg_replace_callback('~<textarea\b([^>]*)>(.*?)</textarea>~is', static function ($m) use ($toolbar, $counter) {
         if (!preg_match('~\bname\s*=\s*(["\'])message\1|\bclass\s*=\s*(["\'])[^"\']*\b(?:af-atf-bbcode-editor|af-kb-editor)\b~i', $m[1])
             || preg_match('~data-af-ae-skip\s*=\s*(["\'])1\1~i', $m[1])) return $m[0];
-        return ($counter ? af_advancededitor_shell_counter_html() : '') . '<div class="sceditor-container af-ae-shell" data-af-editor-shell="1">' . $toolbar . $m[0] . '</div>';
+        return ($counter ? af_advancededitor_shell_counter_html() : '') . '<div class="af-ae-shell" data-af-editor-shell="1">' . $toolbar . $m[0] . '</div>';
     }, $page) ?? $page;
 }
 
