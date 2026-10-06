@@ -86,7 +86,7 @@
             ? select.options[select.selectedIndex].textContent
             : key;
           const chip = document.createElement("span");
-          chip.className = "af_kb_chip";
+          chip.className = "af_kb_chip af-kb-chip";
           chip.setAttribute("data-kb-type", kbType);
           chip.setAttribute("data-kb-key", key);
           chip.textContent = label;
@@ -96,191 +96,6 @@
 
         select.addEventListener("change", renderPreview);
         renderPreview();
-      });
-    },
-
-    initKbChips() {
-      if (AF_ATF.__kbChipsInited) return;
-      AF_ATF.__kbChipsInited = true;
-
-      const cache = new Map();
-      const endpoint = AF_ATF.getKbEndpoint();
-      let modalState = window.__afAtfKbModal || null;
-      let requestCounter = 0;
-      let activeRequestId = 0;
-
-      function destroyExistingModal() {
-        AF_ATF.qsa(".af-atf-kb-modal").forEach((node) => node.remove());
-        AF_ATF.qsa(".af-atf-kb-modal-backdrop").forEach((node) => node.remove());
-        document.body.classList.remove("modal-open");
-        if (modalState) {
-          modalState.closeBtn.removeEventListener("click", modalState.onClose);
-          modalState.backdrop.removeEventListener("click", modalState.onBackdrop);
-          document.removeEventListener("keydown", modalState.onKeydown);
-        }
-        modalState = null;
-        window.__afAtfKbModal = null;
-      }
-
-      function buildModal() {
-        destroyExistingModal();
-
-        const backdrop = document.createElement("div");
-        backdrop.className = "af-atf-kb-modal-backdrop";
-        backdrop.hidden = true;
-
-        const modal = document.createElement("div");
-        modal.className = "af-atf-kb-modal";
-
-        const header = document.createElement("div");
-        header.style.display = "flex";
-        header.style.gap = "10px";
-        header.style.alignItems = "center";
-
-        const title = document.createElement("div");
-        title.className = "af-atf-kb-modal-title";
-
-        const close = document.createElement("button");
-        close.type = "button";
-        close.className = "af-atf-kb-modal-close";
-        close.textContent = "×";
-
-        header.appendChild(title);
-        header.appendChild(close);
-
-        const body = document.createElement("div");
-        body.className = "af-atf-kb-modal-body";
-
-        modal.appendChild(header);
-        modal.appendChild(body);
-        backdrop.appendChild(modal);
-        document.body.appendChild(backdrop);
-
-        const onClose = (event) => {
-          if (event) event.preventDefault();
-          destroyExistingModal();
-        };
-
-        const onBackdrop = (event) => {
-          if (event.target === backdrop) onClose(event);
-        };
-
-        const onKeydown = (event) => {
-          if (event.key === "Escape" && !backdrop.hidden) {
-            onClose(event);
-          }
-        };
-
-        close.addEventListener("click", onClose);
-        backdrop.addEventListener("click", onBackdrop);
-        document.addEventListener("keydown", onKeydown);
-
-        modalState = {
-          backdrop,
-          title,
-          body,
-          closeBtn: close,
-          onClose,
-          onBackdrop,
-          onKeydown,
-          show(entry) {
-            title.textContent = entry.title || "";
-            body.innerHTML = "";
-
-            if (entry.banner_url) {
-              const banner = document.createElement("img");
-              banner.className = "af-kb-banner";
-              banner.src = entry.banner_url;
-              banner.alt = "";
-              banner.loading = "lazy";
-              body.appendChild(banner);
-            }
-
-            if (entry.body_html) {
-              const bodyBlock = document.createElement("div");
-              bodyBlock.className = "af-kb-modal-main";
-              bodyBlock.innerHTML = entry.body_html;
-              body.appendChild(bodyBlock);
-            }
-
-            // sections_html is rendered by KB itself, including localized labels,
-            // rich text, links and supported embedded media. ATF only places that
-            // canonical display data in its modal; it must not render raw blocks.
-            if (Array.isArray(entry.sections_html)) {
-              entry.sections_html.forEach((block) => {
-                if (!block) return;
-                const blockTitle = String(block.label || "");
-                const blockHtml = String(block.html || "");
-                if (!blockTitle && !blockHtml) return;
-
-                const section = document.createElement("section");
-                section.className = "af-kb-modal-block";
-                if (blockTitle) {
-                  const h4 = document.createElement("h4");
-                  h4.textContent = blockTitle;
-                  section.appendChild(h4);
-                }
-                if (blockHtml) {
-                  const bodyWrap = document.createElement("div");
-                  bodyWrap.innerHTML = blockHtml;
-                  section.appendChild(bodyWrap);
-                }
-                body.appendChild(section);
-              });
-            }
-
-            backdrop.hidden = false;
-          }
-        };
-
-        window.__afAtfKbModal = modalState;
-        return modalState;
-      }
-
-      async function fetchEntry(type, key) {
-        const cacheKey = `${type}:${key}`;
-        if (cache.has(cacheKey)) {
-          return cache.get(cacheKey);
-        }
-
-        const url = new URL(endpoint, window.location.origin);
-        url.searchParams.set("type", type);
-        url.searchParams.set("key", key);
-
-        const resp = await fetch(url.toString(), {
-          method: "GET",
-          credentials: "same-origin"
-        });
-        const data = await resp.json();
-        if (!data || data.ok !== 1 || !data.entry) {
-          return null;
-        }
-        cache.set(cacheKey, data.entry);
-        return data.entry;
-      }
-
-      document.addEventListener("click", async (e) => {
-        const chip = e.target.closest(".af_kb_chip");
-        if (!chip) return;
-        e.preventDefault();
-
-        const type = chip.getAttribute("data-kb-type") || "";
-        const key = chip.getAttribute("data-kb-key") || "";
-        if (!type || !key) return;
-
-        const requestId = ++requestCounter;
-        activeRequestId = requestId;
-        destroyExistingModal();
-
-        try {
-          const entry = await fetchEntry(type, key);
-          if (requestId !== activeRequestId || !entry) return;
-          const modal = modalState || buildModal();
-          if (requestId !== activeRequestId) return;
-          modal.show(entry);
-        } catch (err) {
-          // ignore fetch errors
-        }
       });
     },
 
@@ -468,7 +283,7 @@
           const tooltip = option ? String(option.getAttribute("data-tooltip") || "").trim() : "";
 
           const chip = document.createElement("span");
-          chip.className = "af_kb_chip af-atf-element-chip";
+          chip.className = "af_kb_chip af-kb-chip af-atf-element-chip";
           if (tooltip) chip.title = tooltip;
 
           if (iconUrl) {
@@ -1279,7 +1094,6 @@
     AF_ATF.applyHideEditor();
     AF_ATF.initUserChipsAll();
     AF_ATF.initKbSelects();
-    AF_ATF.initKbChips();
     AF_ATF.initKbCatalogCtaModal();
     AF_ATF.initPointBuyAll();
     AF_ATF.initCharacterMechanic();
