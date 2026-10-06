@@ -61,7 +61,17 @@ function af_advancededitor_shell_command_key(string $cmd, array $button = []): s
 {
     $cmd = strtolower(trim($cmd));
     $handler = strtolower(trim((string)($button['handler'] ?? '')));
-    if ($handler === 'kb_insert' || in_array($cmd, ['kb','kb_insert','af_kb','af_kb_insert','knowledgebase','knowledgebase_insert'], true)) {
+    $capability = strtolower(trim((string)($button['capability'] ?? '')));
+    $title = trim((string)($button['title'] ?? ''));
+    $label = trim((string)($button['label'] ?? ''));
+    $isKbLabel = strcasecmp($title, 'KB') === 0
+        || strcasecmp($label, 'KB') === 0
+        || strcasecmp($title, 'Insert KB') === 0
+        || $title === 'Вставить KB';
+    if ($handler === 'kb_insert'
+        || $capability === 'kb-insert'
+        || $isKbLabel
+        || in_array($cmd, ['kb','kb_insert','af_kb','af_kb_insert','knowledgebase','knowledgebase_insert'], true)) {
         return 'af_kb_insert';
     }
     return $cmd;
@@ -149,6 +159,18 @@ function af_advancededitor_shell_registry(array $available, array $custom, array
         }
     }
     unset($b);
+
+    // Keep one canonical KB definition even when ACP/custom metadata exposes a
+    // second legacy command with another cmd but the same KB capability/title.
+    if (isset($buttons['af_kb_insert'])) {
+        foreach (array_keys($buttons) as $buttonCmd) {
+            if ($buttonCmd === 'af_kb_insert') continue;
+            if (af_advancededitor_shell_command_key((string)$buttonCmd, (array)$buttons[$buttonCmd]) === 'af_kb_insert') {
+                unset($buttons[$buttonCmd]);
+            }
+        }
+    }
+
     return ['buttons' => array_values($buttons), 'capabilities' => $capabilities];
 }
 

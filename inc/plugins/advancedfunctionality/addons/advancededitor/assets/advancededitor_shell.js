@@ -6,6 +6,46 @@
   var buttons = Object.create(null), states = Object.create(null), assets = Object.create(null);
   (P.available || []).concat(window.afAeButtons || []).forEach(function (b) { buttons[b.cmd] = b; });
 
+  function isKbDefinition(b) {
+    if (!b) return false;
+    var cmd = String(b.cmd || '').toLowerCase();
+    var handler = String(b.handler || '').toLowerCase();
+    var capability = String(b.capability || '').toLowerCase();
+    var title = String(b.title || '').trim().toLowerCase();
+    var label = String(b.label || '').trim().toLowerCase();
+    return handler === 'kb_insert' || capability === 'kb-insert'
+      || ['kb','kb_insert','af_kb','af_kb_insert','knowledgebase','knowledgebase_insert'].indexOf(cmd) !== -1
+      || title === 'kb' || label === 'kb' || title === 'insert kb' || title === 'вставить kb';
+  }
+
+  function isKbButtonElement(node) {
+    if (!node) return false;
+    var cmd = String(node.getAttribute('data-af-command') || node.getAttribute('data-sceditor-command') || '').toLowerCase();
+    var title = String(node.getAttribute('title') || node.getAttribute('aria-label') || '').trim().toLowerCase();
+    if (['kb','kb_insert','af_kb','af_kb_insert','knowledgebase','knowledgebase_insert'].indexOf(cmd) !== -1) return true;
+    if (node.classList && node.classList.contains('sceditor-button-af_kb_insert')) return true;
+    var def = buttons[cmd];
+    return isKbDefinition(def) || title === 'kb' || title === 'insert kb' || title === 'вставить kb';
+  }
+
+  function dedupeKbButtons(wrapper) {
+    if (!wrapper) return;
+    var toolbar = wrapper.querySelector(':scope > .sceditor-toolbar');
+    if (!toolbar) return;
+    var found = Array.prototype.filter.call(toolbar.querySelectorAll('.sceditor-button'), isKbButtonElement);
+    if (found.length < 2) return;
+    var keep = found.find(function (node) {
+      return String(node.getAttribute('data-af-command') || '').toLowerCase() === 'af_kb_insert';
+    }) || found[0];
+    found.forEach(function (node) {
+      if (node === keep) return;
+      var group = node.parentElement;
+      node.remove();
+      if (group && group.classList && group.classList.contains('sceditor-group')
+          && !group.querySelector('.sceditor-button, .af-ae-shell-menu')) group.remove();
+    });
+  }
+
   Object.keys(registry).forEach(function(id) { states[id] = { state: 'idle', promise: null }; });
 
   function loadAsset(url, type) {
@@ -415,6 +455,7 @@
         };
       });
     }
+    dedupeKbButtons(ta.__afAeShell);
     syncEditorSurface(ta, editor);
   }
 
@@ -661,8 +702,12 @@
       }, { capture: true, signal: signal });
     }
     // External addons publish metadata under their own frontend permission gate.
+    // Normalize KB ownership before and after late metadata attachment.
+    dedupeKbButtons(wrapper);
     (window.afAeButtons || []).forEach(function (b) {
       if (b.cmd === 'af_formathelp' || wrapper.querySelector('[data-af-command="' + b.cmd + '"]')) return;
+      if (isKbDefinition(b) && Array.prototype.some.call(
+          wrapper.querySelectorAll(':scope > .sceditor-toolbar .sceditor-button'), isKbButtonElement)) return;
       var a = document.createElement('a'); a.href = '#'; a.className = 'sceditor-button sceditor-button-' + b.cmd;
       a.setAttribute('role', 'button'); a.setAttribute('data-af-command', b.cmd); a.title = b.title; a.setAttribute('aria-label', b.title);
       var visual = document.createElement('div');
@@ -676,6 +721,7 @@
       a.appendChild(visual);
       wrapper.querySelector('.sceditor-toolbar').appendChild(a);
     });
+    dedupeKbButtons(wrapper);
     wrapper.addEventListener('mousedown', function (e) { if (e.target.closest('[data-af-command]')) e.preventDefault(); });
     wrapper.addEventListener('click', function (e) {
       var caller = e.target.closest('[data-af-command]'); if (!caller || !wrapper.contains(caller)) return;

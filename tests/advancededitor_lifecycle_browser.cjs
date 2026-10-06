@@ -69,6 +69,7 @@ const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><bu
  await popup('af_font','.af-ff-dd');await popup('af_fontsize','.af-ae-fontsize-picker');
  await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup .af-ae-shell-menu').waitFor({state:'visible'});
  assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button').evaluateAll(nodes=>nodes.every(n=>!!n.querySelector('i.fa-solid, i.fa-regular, i.fa-brands'))),true,'Every extra-menu command must have a Font Awesome icon');
+ assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button > div').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).backgroundImage==='none' && getComputedStyle(n).textIndent==='0px')),true,'Source extra-menu icons must not inherit SCEditor sprites');
  await page.keyboard.press('Escape');
  await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup [data-af-command=af_indent]').click();
  await page.waitForFunction(()=>afAdvancedEditorShell.states.indent.state==='loaded');
@@ -80,6 +81,14 @@ const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><bu
  const ed=()=>page.evaluate(()=>jQuery('#message').sceditor('instance').val());
  assert.equal((await dimensions()).native,1);assert.equal((await dimensions()).toolbar,1);
  assert.equal(await cmd('af_kb_insert').count(),1,'KB must remain single after WYSIWYG activation');
+ assert.equal(await shell.locator(':scope > .sceditor-toolbar .sceditor-button').evaluateAll(nodes=>nodes.filter(n=>{
+   const cmd=(n.getAttribute('data-af-command')||n.getAttribute('data-sceditor-command')||'').toLowerCase();
+   const title=(n.getAttribute('title')||n.getAttribute('aria-label')||'').trim().toLowerCase();
+   return ['kb','kb_insert','af_kb','af_kb_insert','knowledgebase','knowledgebase_insert'].includes(cmd) || title==='kb' || title==='insert kb' || title==='вставить kb';
+ }).length),1,'Only one semantic KB toolbar control may exist');
+ await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup .af-ae-shell-menu').waitFor({state:'visible'});
+ assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button > div').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).backgroundImage==='none' && getComputedStyle(n).textIndent==='0px')),true,'WYSIWYG extra-menu icons must keep Font Awesome visuals after SCEditor CSS loads');
+ await page.keyboard.press('Escape');
  assert.equal((await dimensions()).fields,2); // Original data field + ONE native source view.
  const activated=await dimensions();assert.equal(activated.height,initial.height);
  assert.equal(await page.evaluate(()=>getComputedStyle(jQuery('#message').sceditor('instance').getBody()).color),initialPalette.color);

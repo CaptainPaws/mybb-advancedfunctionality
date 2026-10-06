@@ -46,6 +46,17 @@ $helpInGroup = af_advancededitor_shell_toolbar(array_merge($registry['buttons'],
 lazy_assert(!str_contains($helpInGroup, 'data-af-command="af_formathelp"'), 'Legacy layouts must not add Formatting Help to the toolbar');
 $inlineToolbar = af_advancededitor_shell_toolbar([['cmd'=>'af_icon','title'=>'Custom','icon'=>'<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>']], ['sections'=>[['type'=>'group','items'=>['af_icon']]]]);
 lazy_assert(str_contains($inlineToolbar, 'data:image/svg+xml,') && str_contains($inlineToolbar, 'af-ae-shell-icon'), 'Custom SVG icon requires runtime');
+
+$kbRegistry = af_advancededitor_shell_registry([
+    ['cmd'=>'af_kb_insert','title'=>'Вставить KB','label'=>'KB','handler'=>'kb_insert','capability'=>'kb-insert'],
+    ['cmd'=>'af_old_kb_button','title'=>'KB','label'=>'AF','opentag'=>'[kb]','closetag'=>'[/kb]'],
+], [], ['packs'=>[]]);
+$kbButtons = array_column($kbRegistry['buttons'], null, 'cmd');
+lazy_assert(isset($kbButtons['af_kb_insert']) && !isset($kbButtons['af_old_kb_button']), 'Semantic KB duplicate survived registry normalization');
+$kbToolbar = af_advancededitor_shell_toolbar($kbRegistry['buttons'], ['sections'=>[
+    ['type'=>'group','items'=>['af_old_kb_button','af_kb_insert','af_kb_insert']],
+]]);
+lazy_assert(substr_count($kbToolbar, 'data-af-command="af_kb_insert"') === 1, 'Toolbar rendered more than one canonical KB command');
 $manifest = require MYBB_ROOT.'inc/plugins/advancedfunctionality/addons/advancededitor/manifest.php';
 foreach ($manifest['theme_stylesheets'] as $entry) {
     if ($entry['file'] === 'assets/advancededitor_shell.css') continue;

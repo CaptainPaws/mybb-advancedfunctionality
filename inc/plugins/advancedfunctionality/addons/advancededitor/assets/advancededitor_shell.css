@@ -160,7 +160,28 @@ html body .af-ae-shell > .sceditor-container.wysiwygMode > iframe { display: blo
   color: inherit;
   text-decoration: none;
 }
-.af-ae-popup .af-ae-shell-menu .sceditor-button > div { width: 16px; height: 16px; }
+.af-ae-popup .af-ae-shell-menu .sceditor-button > div {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 16px !important;
+  height: 16px !important;
+  margin: 0 !important;
+  background: none !important;
+  background-image: none !important;
+  background-position: center !important;
+  text-indent: 0 !important;
+}
+.af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-solid,
+.af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-regular,
+.af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-brands {
+  display: inline-block !important;
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 16px;
+  color: currentColor;
+}
 .af-ae-popup .af-ae-shell-menu-label { font-size: 13px; }
 html body .af-ae-shell.af-ae-shell-maximized {
   position: fixed !important;
