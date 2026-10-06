@@ -1431,14 +1431,11 @@
 
       var style = doc.createElement('style');
       style.id = 'af-ae-atf-iframe-theme';
-      style.textContent = 'html{background:' + surface + ';color:' + text
+      style.textContent = 'html,body{background:' + surface + ';color:' + text
         + ';caret-color:' + accent + ';font-family:' + family + ';font-size:' + size
         + ';font-weight:' + weight + ';line-height:' + lineHeight
-        + ';letter-spacing:' + letterSpacing + ';margin:0;padding:0;box-sizing:border-box}'
-        + 'body{background:' + surface + ';color:' + text + ';caret-color:' + accent
-        + ';font-family:' + family + ';font-size:' + size + ';font-weight:' + weight
-        + ';line-height:' + lineHeight + ';letter-spacing:' + letterSpacing
-        + ';box-sizing:border-box;min-height:100%;margin:0;padding:10px}'
+        + ';letter-spacing:' + letterSpacing + ';margin:0;padding:10px;box-sizing:border-box}'
+        + 'body{min-height:100%}'
         + 'a{color:' + accent + '}::placeholder{color:' + muted + ';opacity:.8}'
         + '::-webkit-scrollbar-thumb{background:' + muted + ';border-radius:999px}';
       head.appendChild(style);
@@ -2299,13 +2296,16 @@
     init: function (ta) {
       initGlobalEditorEnvironment();
       ta.__afAeInited = false;
-      // The AF shell intentionally does not use SCEditor's container class.
-      // This prevents the native SCEditor stylesheet from imposing its own
-      // fixed height/flex layout on the outer editor shell after lazy load.
+      // SCEditor refuses creation inside any .sceditor-container ancestor.
       var source = String(ta.value || '');
-      var ready = initOneTextarea(ta);
-      if (ready) preserveInitialSource(ta, safeGetInstance(window.jQuery(ta)), source);
-      return ready;
+      var shell = ta.__afAeShell;
+      if (shell) shell.classList.remove('sceditor-container');
+      try {
+        var ready = initOneTextarea(ta);
+        if (ready) preserveInitialSource(ta, safeGetInstance(window.jQuery(ta)), source);
+        return ready;
+      }
+      finally { if (shell) shell.classList.add('sceditor-container'); }
     },
     destroy: destroyTextareaInstance
   };
