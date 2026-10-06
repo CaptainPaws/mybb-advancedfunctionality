@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  if (window.__afAeDraftsBooted) return;
+  // The lightweight shell owns automatic persistence. Avoid competing legacy\n  // listeners, deletion rules and storage keys when its manager is present.\n  if (window.afAdvancedEditorShell && window.afAdvancedEditorShell.draftsManaged) {\n    window.af_ae_drafts_exec = function (editor) { if (editor && editor.focus) editor.focus(); };\n    return;\n  }\n  if (window.__afAeDraftsBooted) return;
   window.__afAeDraftsBooted = true;
 
   // ====== CONFIG ======
