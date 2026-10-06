@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'runtime' => ['activation' => 'initial', 'requires' => []],
+    'runtime' => ['activation' => 'click', 'requires' => []],
     'id'    => 'drafts',
     'title' => 'Черновики',
 
