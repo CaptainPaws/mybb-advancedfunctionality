@@ -1055,6 +1055,11 @@ function af_charactersheets_handle_create_sheet_action(): void
 
 function af_charactersheets_resolve_existing_sheet_for_thread(int $tid, int $uid, array $acceptRow = []): array
 {
+    // This helper is hit from moderation controls on application threads.
+    // Ordinary showthread/postbit requests do not need the CRUD module.
+    if (!function_exists('af_charactersheets_get_sheet_by_tid') && function_exists('af_charactersheets_require_modules')) {
+        af_charactersheets_require_modules(['sheets_crud']);
+    }
     if ($tid > 0) {
         $sheet = af_charactersheets_get_sheet_by_tid($tid);
         if (!empty($sheet['id'])) {
