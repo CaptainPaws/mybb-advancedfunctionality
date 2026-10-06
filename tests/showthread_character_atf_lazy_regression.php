@@ -108,6 +108,12 @@ showthread_lazy_assert(
     'showthread_start still scans all thread authors'
 );
 
+showthread_lazy_assert(
+    str_contains($cs, "if (!defined('THIS_SCRIPT') || !in_array(THIS_SCRIPT, ['showthread.php', 'member.php'], true))")
+    && str_contains($cs, "af_charactersheets_require_modules(['permissions', 'metadata', 'postbit', 'frontend']);\n    af_charactersheets_pre_output_impl($page);"),
+    'Global pre_output hook can call an unloaded CharacterSheets frontend implementation'
+);
+
 // Read-only metadata replaces CRUD reads.
 showthread_lazy_assert(
     str_contains($csMetadata, 'function af_charactersheets_get_accept_row(int $tid): array')
