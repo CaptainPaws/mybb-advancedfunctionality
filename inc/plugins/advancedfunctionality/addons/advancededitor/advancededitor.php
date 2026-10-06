@@ -1220,7 +1220,7 @@ table #post_options, table #postoptions{display:none!important;}
         ];
         $payload['capabilities']['wysiwyg'] = [
             'activation' => 'click', 'requires' => [],
-            'js' => array_values(array_filter([$core, $bb, $mybbBridge, $assetsBase . 'advancededitor_wysiwyg_bbcodes.js', $assetsBase . 'advancededitor.js'])),
+            'js' => array_values(array_filter([$core, $bb, $mybbBridge, $assetsBase . 'bbcodes/bbcodes/align/align.js', $assetsBase . 'advancededitor_wysiwyg_bbcodes.js', $assetsBase . 'advancededitor.js'])),
             'css' => [$sceditorThemeCss, af_advancededitor_feature_css_url('assets/advancededitor.css')],
         ];
         $payload['shellToolbar'] = af_advancededitor_shell_toolbar($available, $layout, $payload['formatHelp']);
