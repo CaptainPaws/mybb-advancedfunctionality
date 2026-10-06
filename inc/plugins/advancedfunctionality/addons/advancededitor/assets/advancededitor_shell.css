@@ -11,6 +11,9 @@
 .af-ae-shell .sceditor-button[aria-busy="true"] { opacity: .6; }
 .af-ae-shell.sceditor-container > textarea { display: block; box-sizing: border-box; width: 100%; min-height: 180px; padding: 10px; margin: 0; border: 0; border-radius: 0 0 12px 12px; background: transparent; color: inherit; resize: vertical; font-family: Verdana, Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.25; }
 .af-ae-shell > .sceditor-container { border: 0; margin: 0; border-radius: 0 0 12px 12px; }
+/* The native SCEditor widget lives inside our shell. Only the outer shell
+   toolbar is visible, even when the SCEditor library changes its wrapper. */
+.af-ae-shell .sceditor-container .sceditor-toolbar { display: none !important; }
 .af-ae-shell > .sceditor-container > .sceditor-toolbar { display: none !important; }
 .af-ae-shell-menu { position: absolute; top: 100%; left: 0; z-index: 2147483000; min-width: 220px; padding: 6px; border-radius: 10px; background: var(--atf-surface, #fff); box-shadow: 0 5px 20px rgba(0,0,0,.2); }
 .af-ae-shell-menu[hidden] { display: none; }
