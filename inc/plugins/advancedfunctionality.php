@@ -401,7 +401,7 @@ class AF_Admin
             if ($adminCssUrl !== '') {
                 $page->extra_header .= '<link rel="stylesheet" href="'.htmlspecialchars_uni($adminCssUrl).'">';
             }
-            $codeMirrorRoot = rtrim((string)MYBB_ROOT, '/\\').'/jscripts/codemirror';
+            $codeMirrorRoot = rtrim((string)MYBB_ADMIN_DIR, '/\\').'/jscripts/codemirror';
             if (is_file($codeMirrorRoot.'/lib/codemirror.js')) {
                 $page->extra_header .= "\n<link rel=\"stylesheet\" href=\"./jscripts/codemirror/lib/codemirror.css?ver=1813\">\n";
                 $page->extra_header .= "<link rel=\"stylesheet\" href=\"./jscripts/codemirror/addon/dialog/dialog-mybb.css?ver=1813\">\n";
