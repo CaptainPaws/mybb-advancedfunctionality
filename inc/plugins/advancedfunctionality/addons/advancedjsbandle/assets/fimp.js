@@ -1,122 +1,147 @@
 /**
- * Fancy Inline Moderation Popup
- * @description A jQuery MyBB addon to make inline moderation tool modern and fancy
+ * Fancy Inline Moderation Popup.
+ *
+ * FIMP is a presentation-only frontend for MyBB's inline moderation FORM.
+ * It must never rewrite the selected action (or guess an action from an icon).
  */
+(function ($, window, document) {
+  'use strict';
 
-$(function () {
-	// 1) FIMP НЕ ДОЛЖЕН работать на moderation.php (иначе прячет confirm-формы!)
-	var path = (location.pathname || '').toLowerCase();
-	if (path.indexOf('moderation.php') !== -1) return;
+  $(function () {
+    if (/(?:^|\/)moderation\.php$/i.test(location.pathname)) return;
+    if (window.__afFimpInit) return;
 
-	// ATF uses the native MyBB modbit, sometimes without an id attribute.
-	// Do not set the initialized flag until the real form is present.
-	if (window.__afFimpInit) return;
-	var icc = $('#inlinemoderation_options').filter('form').first();
-	if (!icc.length) return;
-	var modType = String(icc.find('input[name="modtype"]').val() || '');
-	if (modType !== 'inlinepost' && modType !== 'inlinethread') return;
-	var checkboxSelector = 'input[type="checkbox"][name^="inlinemod_"], input[type="checkbox"][id^="inlinemod_"]';
-	function selectedCheckboxes() { return $(checkboxSelector).filter(':checked'); }
-	if (!$(checkboxSelector).length) return;
-	// MyBB inlineModeration requires an inlinemod_PID ID for cookie updates.
-	$(checkboxSelector).each(function () {
-		if (this.id) return;
-		var match = String(this.name || '').match(/^inlinemod_(\d+)$/);
-		if (match) this.id = 'inlinemod_' + match[1];
-	});
-	window.__afFimpInit = true;
+    // MyBB's showthread_moderationoptions already includes $inlinemod.
+    // Fail closed on duplicate forms: submitting an arbitrarily selected form
+    // can execute a DIFFERENT moderation action than the button the user chose.
+    var $forms = $('form#inlinemoderation_options');
+    if ($forms.length !== 1) {
+      if ($forms.length > 1) {
+        console.warn('[FIMP] Duplicate native inline moderation forms. Keeping original controls visible.');
+      }
+      return;
+    }
+    var $form = $forms.eq(0);
+    var modType = String($form.find('input[name="modtype"]').val() || '');
+    if (modType !== 'inlinepost' && modType !== 'inlinethread') return;
 
-	// guard на случай, если уже добавили блок
-	if ($('#fimp').length) return;
+    var $select = $form.find('select[name="action"]').first();
+    var $submit = $form.find('input[type="submit"][name="go"], button[type="submit"][name="go"]').first();
+    if (!$select.length || !$submit.length) return;
 
-	$('body').append('<div id="fimp" class="control-group"><span></span></div>');
+    var checkboxSelector = modType === 'inlinepost'
+      ? 'input[type="checkbox"][name^="inlinemod_"]'
+      : 'input[type="checkbox"][name^="inlinemod_"]';
+    var $checkboxes = $(checkboxSelector);
+    if (!$checkboxes.length) return;
 
-	// Build absolute path to fimp.svg next to this script
-	var fimpSvgBase = (function () {
-		try {
-			var cs = document.currentScript;
-			if (cs && cs.src) return cs.src.replace(/[^\/]+$/, 'fimp.svg');
-		} catch (e) {}
+    // Do not alter already-valid MyBB checkbox identities.
+    $checkboxes.each(function () {
+      if (this.id) return;
+      var match = String(this.name || '').match(/^inlinemod_(\d+)$/);
+      if (match) this.id = 'inlinemod_' + match[1];
+    });
 
-		try {
-			var scripts = document.getElementsByTagName('script');
-			for (var k = scripts.length - 1; k >= 0; k--) {
-				var s = scripts[k];
-				if (s && s.src && /fimp(\.min)?\.js(\?.*)?$/i.test(s.src)) {
-					return s.src.replace(/[^\/]+$/, 'fimp.svg');
-				}
-			}
-		} catch (e2) {}
+    var $panel = $('<div>', { id: 'fimp', class: 'control-group' });
+    var $count = $('<span>', { title: 'Снять выделение', role: 'button', tabindex: 0 });
+    $panel.append($count);
 
-		return 'fimp.svg';
-	})();
+    // SVG sprite path is resolved without depending on document.currentScript
+    // (which is null when a deferred script's ready callback executes).
+    var sprite = '';
+    $('script[src]').each(function () {
+      var src = String(this.src || '');
+      if (/\/fimp(?:\.min)?\.js(?:\?.*)?$/i.test(src)) sprite = src.replace(/[^/]+(?:\?.*)?$/, 'fimp.svg');
+    });
 
-	var ict = '<button type="button" class="fimp" title="{t}" data-action="{v}">{l}</button>',
-		ico = '<svg class="icon"><use href="' + fimpSvgBase + '#{i}" /></svg>';
+    // Read the native options directly. Map each button to the EXACT option
+    // value, not a label, translated text, index, or guessed icon name.
+    $select.find('option').each(function () {
+      var value = String(this.value || '');
+      if (!value || this.disabled) return;
+      var title = String($(this).text() || '').trim();
+      if (!title) return;
+      var $button = $('<button>', {
+        type: 'button',
+        class: 'fimp',
+        title: title,
+        'aria-label': title
+      }).attr('data-action', value);
 
-	// Скрываем стандартную форму выбора (ТОЛЬКО на showthread)
-	icc.hide();
+      var symbol = value.replace(/threads|posts/ig, '');
+      if (sprite) {
+        var $icon = $('<svg>', { class: 'icon', 'aria-hidden': 'true' });
+        $icon.append($('<use>').attr('href', sprite + '#' + symbol));
+        $button.append($icon);
+      } else {
+        $button.text(title);
+      }
+      $panel.append($button);
+    });
+    if (!$panel.find('button.fimp').length) return;
 
-	// Build buttons из option, но пропускаем пустые/placeholder
-	icc.find('option').each(function () {
-		var val = String($(this).val() || '');
-		var txt = String($(this).text() || '');
+    $('body').append($panel);
+    window.__afFimpInit = true;
 
-		if (!val) return; // "Выберите инструмент"
-		if (!txt) return;
+    function updateCount() {
+      // Always read current DOM: ATF can insert posts with AJAX.
+      var count = $(checkboxSelector).filter(':checked').length;
+      $count.text(count);
+      $panel.find('button.fimp').each(function () {
+        var action = this.getAttribute('data-action') || '';
+        $(this).prop('disabled', action === 'multimergeposts' && count < 2);
+      });
+      $panel.stop(true, true);
+      if (count) $panel.fadeIn(100);
+      else $panel.fadeOut(100);
+    }
+    $(document).on('change.afFimp click.afFimp', checkboxSelector, updateCount);
+    updateCount();
 
-		var iid = val.replace(/threads|posts/ig, "");
-		$('#fimp').append(
-			ict.replace('{t}', txt).replace('{v}', val).replace('{l}', ico.replace('{i}', iid))
-		);
-	});
+    function submitNativeAction(value) {
+      if (!$select.find('option').filter(function () {
+        return this.value === value && !this.disabled;
+      }).length) return;
 
-	function updateCount() {
-		var x = selectedCheckboxes().length;
+      // A second form means a modified/stale MyBB template. Never submit
+      // moderation actions when the target form is ambiguous.
+      if ($('form#inlinemoderation_options').length !== 1) return;
+      $select.val(value);
+      if (String($select.val() || '') !== value) return;
+      var form = $form[0];
+      var submit = $submit[0];
 
-		$('#fimp').find('span').text(x);
+      // requestSubmit runs native constraint checks and MyBB's "submit"
+      // listeners. Native form.submit() bypasses those safety checks.
+      if (typeof form.requestSubmit === 'function') form.requestSubmit(submit);
+      else $submit.trigger('click');
+    }
 
-		if (x < 2) $('.fimp[data-action=multimergeposts]').attr("disabled", true);
-		else $('.fimp[data-action=multimergeposts]').removeAttr("disabled");
+    $panel.on('click', 'button.fimp', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (this.disabled || !$(checkboxSelector).filter(':checked').length) return;
+      var action = this.getAttribute('data-action') || '';
+      if (!action) return;
+      submitNativeAction(action);
+    });
 
-		if (x > 0) $('#fimp').fadeIn();
-		else $('#fimp').fadeOut();
-	}
+    function clearChecked() {
+      if (window.inlineModeration && typeof window.inlineModeration.clearChecked === 'function') {
+        window.inlineModeration.clearChecked();
+      } else {
+        $(checkboxSelector).prop('checked', false).trigger('change');
+      }
+      updateCount();
+    }
+    $count.on('click', clearChecked).on('keydown', function (event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        clearChecked();
+      }
+    });
 
-	updateCount();
-	$(document).on('change.afFimp', checkboxSelector, updateCount);
-
-	function runInlineModeration(formEl) {
-		// Используем родной механизм MyBB — он сам соберёт выбранные pid и покажет confirm
-		if (window.inlineModeration && typeof window.inlineModeration.submit === 'function') {
-			window.inlineModeration.submit(formEl);
-			return;
-		}
-
-		// fallback на крайний случай
-		if (formEl && typeof formEl.requestSubmit === 'function') formEl.requestSubmit();
-		else if (formEl && typeof formEl.submit === 'function') formEl.submit();
-	}
-
-	$(document).on('click', '#fimp .fimp', function () {
-		var action = String($(this).data('action') || '');
-		if (!action) return;
-
-		// Keep the native MyBB action/confirmation and prevent invalid submits.
-		if ($(this).prop('disabled') || !selectedCheckboxes().length) return;
-		var $sel = icc.find('select[name="action"]');
-		if (!$sel.length || !$sel.find('option').filter(function () { return this.value === action; }).length) return;
-		$sel.val(action);
-
-		$('#fimp>span').html("<span class='loader'></span>");
-
-		runInlineModeration(icc.get(0));
-	});
-
-	$('#fimp>span').on('click', function () {
-		if (window.inlineModeration && typeof window.inlineModeration.clearChecked === 'function') {
-			window.inlineModeration.clearChecked();
-		}
-		updateCount();
-	});
-});
+    // Hide the ORIGINAL form only after successfully binding all controls.
+    $form.hide();
+  });
+})(jQuery, window, document);
