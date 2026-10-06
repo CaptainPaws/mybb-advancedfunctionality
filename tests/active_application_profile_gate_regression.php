@@ -29,9 +29,9 @@ active_application_gate_assert(
     'The resolver does not validate the live thread, owner and application forum'
 );
 active_application_gate_assert(
-    strpos($workflow, "\$db->delete_query(\$relationTable, 'tid=' . \$tid") !== false
-        && strpos($workflow, "\$db->delete_query(AF_CWF_TABLE, 'tid=' . \$tid)") !== false,
-    'Orphan application relations are not invalidated'
+    strpos($workflow, '$cache[$uid] = null;') !== false
+        && strpos($workflow, '$liveTid <= 0') !== false,
+    'Orphan application relations are not excluded from the read-only batch cache'
 );
 active_application_gate_assert(
     substr_count($profile, 'af_characterworkflow_resolve_active_application') >= 4,

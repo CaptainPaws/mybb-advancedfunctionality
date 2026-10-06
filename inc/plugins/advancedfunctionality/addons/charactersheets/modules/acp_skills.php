@@ -1,46 +1,5 @@
 <?php
-if (!defined('IN_MYBB')) {
-    die('No direct access');
-}
+if (!defined('IN_MYBB')) { die('No direct access'); }
 
-function af_cs_get_attribute_catalog(): array
-{
-    $is_ru = af_charactersheets_is_ru();
-
-    if ($is_ru) {
-        return [
-            'str' => 'Сила',
-            'dex' => 'Ловкость',
-            'con' => 'Телосложение',
-            'int' => 'Интеллект',
-            'wis' => 'Мудрость',
-            'cha' => 'Харизма',
-        ];
-    }
-
-    return [
-        'str' => 'Strength',
-        'dex' => 'Dexterity',
-        'con' => 'Constitution',
-        'int' => 'Intelligence',
-        'wis' => 'Wisdom',
-        'cha' => 'Charisma',
-    ];
-}
-
-function af_charactersheets_get_attribute_labels(): array
-{
-    return af_cs_get_attribute_catalog();
-}
-
-function af_charactersheets_default_attributes(): array
-{
-    $catalog = af_cs_get_attribute_catalog();
-    return array_fill_keys(array_keys($catalog), 0);
-}
-
-function af_charactersheets_zero_attributes(): array
-{
-    $catalog = af_cs_get_attribute_catalog();
-    return array_fill_keys(array_keys($catalog), 0);
-}
+// Compatibility entry point for ACP consumers. The catalogue is shared runtime data.
+require_once __DIR__ . '/attributes.php';

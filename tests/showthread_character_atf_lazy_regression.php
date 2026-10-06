@@ -57,7 +57,7 @@ showthread_lazy_assert(
 showthread_lazy_assert(
     str_contains($csFrontend, 'charactersheets-trigger.js')
     && str_contains($csFrontend, 'charactersheets-trigger.css')
-    && str_contains($csFrontend, "['has_charactersheet_component' => $hasComponent]"),
+    && str_contains($csFrontend, "['has_charactersheet_component' => \$hasComponent]"),
     'CharacterSheets trigger assets are missing or not manifest-gated'
 );
 showthread_lazy_assert(
@@ -104,13 +104,13 @@ showthread_lazy_assert(
     'CharacterSheets current-page author preload is missing'
 );
 showthread_lazy_assert(
-    !str_contains($cs, "function af_charactersheets_showthread_start(): void\n{\n    global $db, $tid;"),
+    !str_contains($cs, "function af_charactersheets_showthread_start(): void\n{\n    global \$db, \$tid;"),
     'showthread_start still scans all thread authors'
 );
 
 showthread_lazy_assert(
     str_contains($cs, "if (!defined('THIS_SCRIPT') || !in_array(THIS_SCRIPT, ['showthread.php', 'member.php'], true))")
-    && str_contains($cs, "af_charactersheets_require_modules(['permissions', 'metadata', 'postbit', 'frontend']);\n    af_charactersheets_pre_output_impl($page);"),
+    && str_contains($cs, "af_charactersheets_require_modules(['permissions', 'metadata', 'postbit', 'frontend']);\n    af_charactersheets_pre_output_impl(\$page);"),
     'Global pre_output hook can call an unloaded CharacterSheets frontend implementation'
 );
 
@@ -130,7 +130,7 @@ showthread_lazy_assert(
     'CharacterWorkflow active application resolver is still per-author SQL'
 );
 showthread_lazy_assert(
-    str_contains($cwf, "if (!array_key_exists($uid, $cache)) {\n        af_characterworkflow_preload_active_applications([$uid]);"),
+    str_contains($cwf, "if (!array_key_exists(\$uid, \$cache)) {\n        af_characterworkflow_preload_active_applications([\$uid]);"),
     'Single-item fallback no longer shares the batch request cache'
 );
 

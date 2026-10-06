@@ -8,15 +8,7 @@ function af_is_addon_enabled(string $id): bool
 {
     return $id === 'adaptivethemeframework' && $GLOBALS['atf_framework_enabled'];
 }
-function af_adaptivethemeframework_template_seeds(): array
-{
-    return [
-        'newthread' => '/seed/newthread.html',
-        'editpost' => '/seed/editpost.html',
-        'showthread' => '/seed/showthread.html',
-        'forumdisplay_thread' => '/seed/forumdisplay_thread.html',
-    ];
-}
+
 
 require AF_ADDONS . 'advancedthreadfields/advancedthreadfields.php';
 

@@ -2,32 +2,14 @@
 
 $root = dirname(__DIR__);
 $addon = $root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework';
-$source = (string)file_get_contents($addon . '/adaptivethemeframework.php');
-
-if ($source === '') {
-    throw new RuntimeException('ATF bootstrap is unreadable.');
-}
-
-if (!preg_match('~function\\s+af_adaptivethemeframework_template_seeds\\s*\\(\\)\\s*:\\s*array\\s*\\{(.*?)\\n\\}~s', $source, $match)) {
-    throw new RuntimeException('ATF template seed map was not found.');
-}
-
-preg_match_all(
-    "~'([^']+)'\\s*=>\\s*AF_ADAPTIVETHEMEFRAMEWORK_BASE\\s*\\.\\s*'templates/([^']+)'~",
-    $match[1],
-    $entries,
-    PREG_SET_ORDER
-);
-
-if (!$entries) {
-    throw new RuntimeException('ATF template seed map is empty.');
-}
+define('IN_MYBB', true);
+require_once $addon . '/ownership.php';
+$entries = af_adaptivethemeframework_template_seeds();
+if (!$entries) throw new RuntimeException('ATF template seed map is empty.');
 
 $seen = [];
-foreach ($entries as $entry) {
-    $template = (string)$entry[1];
-    $relative = (string)$entry[2];
-    $path = $addon . '/templates/' . $relative;
+foreach ($entries as $template => $path) {
+    $relative = basename($path);
 
     if (isset($seen[$template])) {
         throw new RuntimeException('Duplicate ATF template seed declaration: ' . $template);

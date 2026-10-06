@@ -369,13 +369,13 @@ function af_charactersheets_get_asset_version(bool $lightweight = false): string
     return (string)max($timestamps);
 }
 
-function af_cs_assets_disabled_for_current_page(): bool
+function af_cs_assets_disabled_for_current_page(?bool $hasComponent = null): bool
 {
-    $hasComponent = !empty($GLOBALS['af_charactersheets_has_frontend_component']);
+    $hasComponent = $hasComponent ?? !empty($GLOBALS['af_charactersheets_has_frontend_component']);
     if (function_exists('af_frontend_asset_allowed')) {
         return !af_frontend_asset_allowed(
             AF_CS_ID,
-            'trigger_runtime',
+            af_charactersheets_is_trigger_context() ? 'trigger_runtime' : 'runtime',
             null,
             ['has_charactersheet_component' => $hasComponent]
         );

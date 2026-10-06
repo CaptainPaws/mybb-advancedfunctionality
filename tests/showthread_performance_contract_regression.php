@@ -16,7 +16,7 @@ foreach ([$balance, $apf, $threadFields, $editor, $counter] as $source) {
 foreach ([
     'balance' => [$balance, 'static $requestCache = [];', 'array_key_exists($uid, $requestCache)'],
     'APF' => [$apf, '$cacheKey = $uid . \':\' . $key;', 'array_key_exists($cacheKey, $cache)'],
-    'thread fields' => [$threadFields, 'static $blockCache = [];', 'array_key_exists($tid, $blockCache)'],
+    'thread fields' => [$threadFields, "\$GLOBALS['af_atf_display_block_cache']", 'array_key_exists($cacheKey, $GLOBALS[\'af_atf_display_block_cache\'])'],
 ] as $provider => [$source, $cache, $hit]) {
     if (!str_contains($source, $cache) || !str_contains($source, $hit)) {
         throw new RuntimeException("{$provider} lost its request-level showthread cache.");

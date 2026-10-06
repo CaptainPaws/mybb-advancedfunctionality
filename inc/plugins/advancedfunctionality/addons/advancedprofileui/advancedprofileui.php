@@ -7,6 +7,8 @@ if (!defined('AF_ADDONS')) {
     die('AdvancedFunctionality core required');
 }
 
+require_once dirname(__DIR__) . '/adaptivethemeframework/ownership.php';
+
 define('AF_APUI_ID', 'advancedprofileui');
 define('AF_APUI_BASE', AF_ADDONS . AF_APUI_ID . '/');
 define('AF_APUI_TEMPLATES_DIR', AF_APUI_BASE . 'templates/');
@@ -543,8 +545,7 @@ function af_apui_normalize_atf_predecessor(string $templateName, string $current
         'postbit_classic' => ['<!-- AF_APUI postbit_classic START -->', '<!-- AF_APUI postbit_classic END -->'],
         'showthread' => ['<!-- AF_APUI showthread START -->', '<!-- AF_APUI showthread END -->'],
     ];
-    if (!isset($markers[$templateName])
-        || !function_exists('af_adaptivethemeframework_template_seeds')) {
+    if (!isset($markers[$templateName])) {
         return null;
     }
 
@@ -2768,10 +2769,7 @@ function af_apui_restore_overrides(): void
 /** ATF's generic lease is authoritative while it owns a full template. */
 function af_apui_template_is_atf_owned(string $templateName): bool
 {
-    return function_exists('af_is_addon_enabled')
-        && af_is_addon_enabled('adaptivethemeframework')
-        && function_exists('af_adaptivethemeframework_template_seeds')
-        && array_key_exists($templateName, af_adaptivethemeframework_template_seeds());
+    return af_adaptivethemeframework_reserves_template($templateName);
 }
 
 function af_apui_backup_template_row(array $row): void

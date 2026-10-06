@@ -3,17 +3,8 @@ if (!defined('IN_MYBB')) {
     die('No direct access');
 }
 
-function af_charactersheets_get_accept_row(int $tid): array
-{
-    global $db;
-
-    if ($tid <= 0) {
-        return [];
-    }
-
-    $row = $db->fetch_array($db->simple_select(AF_CS_TABLE, '*', 'tid=' . $tid, ['limit' => 1]));
-    return is_array($row) ? $row : [];
-}
+require_once __DIR__ . '/metadata.php';
+require_once __DIR__ . '/attributes.php';
 
 function af_charactersheets_get_accept_row_by_slug(string $slug): array
 {
@@ -154,47 +145,11 @@ function af_charactersheets_get_sheet_by_id(int $sheet_id): array
     return is_array($row) ? $row : [];
 }
 
-function af_charactersheets_get_sheet_by_tid(int $tid): array
-{
-    global $db;
 
-    if ($tid <= 0 || !$db->table_exists(AF_CS_SHEETS_TABLE)) {
-        return [];
-    }
 
-    $row = $db->fetch_array($db->simple_select(AF_CS_SHEETS_TABLE, '*', 'tid=' . $tid, ['limit' => 1]));
-    return is_array($row) ? $row : [];
-}
 
-function af_charactersheets_get_sheet_by_uid(int $uid): array
-{
-    global $db;
 
-    if ($uid <= 0 || !$db->table_exists(AF_CS_SHEETS_TABLE)) {
-        return [];
-    }
 
-    $row = $db->fetch_array($db->simple_select(AF_CS_SHEETS_TABLE, '*', 'uid=' . $uid, ['limit' => 1]));
-    return is_array($row) ? $row : [];
-}
-
-function af_charactersheets_get_sheet_by_slug(string $slug): array
-{
-    global $db;
-
-    $slug = trim($slug);
-    if ($slug === '' || !$db->table_exists(AF_CS_SHEETS_TABLE)) {
-        return [];
-    }
-
-    if (!preg_match('~^[a-z0-9][a-z0-9\-]*$~i', $slug)) {
-        return [];
-    }
-
-    $slug_esc = $db->escape_string($slug);
-    $row = $db->fetch_array($db->simple_select(AF_CS_SHEETS_TABLE, '*', "slug='{$slug_esc}'", ['limit' => 1]));
-    return is_array($row) ? $row : [];
-}
 
 function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): array
 {

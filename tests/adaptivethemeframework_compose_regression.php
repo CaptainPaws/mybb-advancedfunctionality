@@ -2,6 +2,8 @@
 $root = dirname(__DIR__);
 $addon = $root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework';
 $php = file_get_contents($addon . '/adaptivethemeframework.php');
+define('IN_MYBB', true);
+require_once $addon . '/ownership.php';
 $css = file_get_contents($addon . '/assets/adaptivethemeframework.css');
 
 $roots = ['newthread', 'newreply', 'editpost'];
@@ -15,7 +17,7 @@ foreach ($roots as $name) {
     if (preg_match('~<(?:table|tr|td|thead|tfoot)\\b|class="[^"]*\\b(?:thead|trow1|trow2|tfoot)\\b~i', $template)) {
         throw new RuntimeException($name . ' contains legacy table presentation.');
     }
-    if (!str_contains($php, "'{$name}' => AF_ADAPTIVETHEMEFRAMEWORK_BASE")) {
+    if (!array_key_exists($name, af_adaptivethemeframework_template_seeds())) {
         throw new RuntimeException($name . ' is not registered for ATF ownership.');
     }
 }

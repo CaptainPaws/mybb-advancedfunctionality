@@ -4,6 +4,8 @@ $root = dirname(__DIR__);
 $addon = $root . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework';
 $template = file_get_contents($addon . '/templates/index.html');
 $php = file_get_contents($addon . '/adaptivethemeframework.php');
+define('IN_MYBB', true);
+require_once $addon . '/ownership.php';
 $css = file_get_contents($addon . '/assets/adaptivethemeframework.css');
 
 foreach (['{$headerinclude}', '{$header}', '{$forums}', '{$boardstats}', '{$footer}'] as $value) {
@@ -18,7 +20,7 @@ if (str_contains((string)$template, '{$fastnews}')
 }
 foreach (['forumbit_depth1_cat', 'forumbit_depth2_forum', 'forumbit_depth2_forum_lastpost', 'forumdisplay_thread'] as $title) {
     $card = file_get_contents($addon . '/templates/' . $title . '.html');
-    if (!is_string($card) || !str_contains($php, "'{$title}' =>") || str_contains($card, '<tr')) {
+    if (!is_string($card) || !array_key_exists($title, af_adaptivethemeframework_template_seeds()) || str_contains($card, '<tr')) {
         throw new RuntimeException("ATF must own a semantic card template for {$title}.");
     }
 }

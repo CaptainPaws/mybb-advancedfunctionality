@@ -18,6 +18,8 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
+require_once dirname(__DIR__) . '/adaptivethemeframework/ownership.php';
+
 define('AF_ATF_ID', 'advancedthreadfields');
 define('AF_ATF_TABLE_FIELDS', 'af_atf_fields');
 define('AF_ATF_TABLE_VALUES', 'af_atf_values');
@@ -2640,10 +2642,7 @@ function af_atf_boot_prefill_from_token(int $fid): void
 /** ATF owns every template in its seed catalogue while the framework is active. */
 function af_atf_template_is_atf_owned(string $templateName): bool
 {
-    return function_exists('af_is_addon_enabled')
-        && af_is_addon_enabled('adaptivethemeframework')
-        && function_exists('af_adaptivethemeframework_template_seeds')
-        && array_key_exists($templateName, af_adaptivethemeframework_template_seeds());
+    return af_adaptivethemeframework_reserves_template($templateName);
 }
 
 /** Register removal of this addon's obsolete template injections for ATF recovery. */

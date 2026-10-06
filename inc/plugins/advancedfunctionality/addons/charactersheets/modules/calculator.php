@@ -3,6 +3,8 @@ if (!defined('IN_MYBB')) {
     die('No direct access');
 }
 
+require_once __DIR__ . '/attributes.php';
+
 function af_cs_kb_meta_reader(array $entry): array
 {
     $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));

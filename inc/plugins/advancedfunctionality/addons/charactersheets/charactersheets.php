@@ -38,12 +38,23 @@ define('AF_CS_ASSETS', AF_CS_BASE . 'assets/');
 function af_charactersheets_require_modules(array $modules): void
 {
     static $loaded = [];
+    // Shared APIs have one declaration owner. Dependencies also cover a later
+    // escalation from trigger metadata to moderation/lifecycle/full runtime.
+    $dependencies = [
+        'bootstrap' => ['permissions', 'metadata', 'postbit', 'frontend', 'attributes'],
+        'sheets_crud' => ['metadata', 'attributes', 'bootstrap'],
+        'calculator' => ['attributes', 'experience', 'sheets_crud'],
+        'render' => ['calculator', 'postbit'],
+        'ajax' => ['render'],
+        'acp_skills' => ['attributes', 'bootstrap'],
+    ];
 
     foreach ($modules as $module) {
         $module = trim((string)$module);
         if ($module === '' || isset($loaded[$module])) {
             continue;
         }
+        af_charactersheets_require_modules($dependencies[$module] ?? []);
         $path = AF_CS_MODULES . $module . '.php';
         if (is_file($path)) {
             require_once $path;

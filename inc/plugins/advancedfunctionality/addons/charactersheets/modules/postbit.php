@@ -111,7 +111,7 @@ function af_cs_get_postbit_sheet_payload(int $uid): array
     $hasComponent = ($payload['enabled'] || !empty($application));
     $assetsAllowed = !function_exists('af_frontend_asset_allowed')
         || af_frontend_asset_allowed(AF_CS_ID, 'caller_runtime', null, ['has_charactersheet_component' => $hasComponent]);
-    if ($hasComponent && $assetsAllowed && !af_cs_assets_disabled_for_current_page()) {
+    if ($hasComponent && $assetsAllowed && !af_cs_assets_disabled_for_current_page($hasComponent)) {
         $GLOBALS['af_charactersheets_has_frontend_component'] = true;
         $GLOBALS['af_charactersheets_needs_assets'] = true;
         $GLOBALS['af_charactersheets_needs_modal'] = true;

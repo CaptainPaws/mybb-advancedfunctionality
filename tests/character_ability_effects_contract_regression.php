@@ -27,7 +27,7 @@ foreach ([
 ability_effect_assert(strpos($atfJs, 'Object.assign(current, collected)') !== false, 'ATF ability editing does not preserve nested repeater object identity');
 ability_effect_assert(substr_count($atfJs, 'state[index] = ability;') >= 3, 'ATF nested effect add/edit/remove does not synchronize the owning ability');
 ability_effect_assert(strpos($atfPhp, "'range' => 'ability_range'") !== false, 'ATF Range does not use the shared KB mechanics option set');
-ability_effect_assert(strpos($atfPhp, "filemtime(MYBB_ROOT . AF_ATF_ASSET_JS)") !== false && strpos($atfPhp, "'?v='") !== false, 'ATF editor JavaScript is not cache-busted after deployment');
+ability_effect_assert(strpos($atfPhp, "filemtime(MYBB_ROOT . \$versionFile)") !== false && strpos($atfPhp, "'?v='") !== false, 'ATF editor JavaScript is not cache-busted after deployment');
 foreach (['effect_type', 'value', 'formula_profile', 'coefficient', 'target', 'damage_type', 'element', 'duration_value', 'duration_unit', 'status_key', 'stat_key', 'operation', 'resource_key', 'notes'] as $key) {
     ability_effect_assert(strpos($atfPhp, "'{$key}'") !== false, "ATF effect contract misses {$key}");
     ability_effect_assert(strpos($kbPhp, "['key' => '{$key}'") !== false, "KB effect contract misses {$key}");
