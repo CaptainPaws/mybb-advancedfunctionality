@@ -678,6 +678,18 @@
     }, { signal: signal });
     ta.__afAeShell = wrapper; ta.__afAeAdapter = adapter(ta, wrapper);
     setupDraft(ta, signal);
+    // External editor integrations may declare a small runtime that should
+    // arrive only after the user actually enters an editor surface. This
+    // keeps the visual toolbar available on initial showthread while avoiding
+    // eager addon runtimes such as Knowledge Base.
+    ta.addEventListener('focus', function () {
+      Object.keys(registry).forEach(function (id) {
+        if (!registry[id] || registry[id].activation !== 'editor-focus') return;
+        loadCapability(id).catch(function (error) {
+          console.warn('[AdvancedEditor] editor-focus capability failed:', id, error);
+        });
+      });
+    }, { once: true, signal: signal });
     wrapper.__afAeTextarea = ta;
     ta.__afAeForm = ta.form; ta.__afAePost = ta.closest('.post');
     ta.__afAeLifecycle = 'uninitialized';
