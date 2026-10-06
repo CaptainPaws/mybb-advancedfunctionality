@@ -2993,6 +2993,44 @@ function af_adaptivethemeframework_acquire_template(string $templateName, string
                 $currentChecksum = af_adaptivethemeframework_checksum($current);
                 $previousChecksum = (string)$lease['previous_checksum'];
                 $installedChecksum = (string)$lease['atf_installed_checksum'];
+
+                // A completed release ends ATF ownership for this template. If
+                // the template changes while ATF is inactive, those bytes are
+                // the new pre-ATF baseline on the next acquisition; comparing
+                // them forever with the first-ever previous_content produces a
+                // false manual_override conflict. A failed reacquisition changes
+                // the diagnostic state to manual_override, but deliberately
+                // leaves restored_at intact, so the next attempt can still prove
+                // that no active ATF lease owned the intervening edits.
+                $releasedLease = (int)($lease['restored_at'] ?? 0) > 0
+                    && in_array((string)($lease['ownership_state'] ?? ''), ['restored', 'manual_override'], true);
+                if ($releasedLease) {
+                    $previousChecksum = $currentChecksum;
+                    $lease['previous_content'] = $current;
+                    $lease['previous_checksum'] = $currentChecksum;
+                    $lease['previous_exists'] = $exists ? 1 : 0;
+                    $lease['previous_dateline'] = (int)($exists
+                        ? ($live['dateline'] ?? 0)
+                        : ($master['dateline'] ?? 0));
+
+                    af_adaptivethemeframework_activation_stage(
+                        'rebase_released_lease[template=' . $templateName . ',sid=' . $sid . ']'
+                    );
+                    $db->update_query(
+                        AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME,
+                        [
+                            'template_tid' => $exists ? (int)$live['tid'] : 0,
+                            'previous_exists' => $exists ? 1 : 0,
+                            'previous_content' => af_adaptivethemeframework_db_string($current),
+                            'previous_checksum' => af_adaptivethemeframework_db_string($currentChecksum),
+                            'previous_dateline' => (int)$lease['previous_dateline'],
+                            'current_content' => af_adaptivethemeframework_db_string(''),
+                            'updated_at' => $now,
+                        ],
+                        "id='" . (int)$lease['id'] . "'"
+                    );
+                }
+
                 $previousValid = $previousChecksum !== ''
                     && hash_equals($previousChecksum, af_adaptivethemeframework_checksum((string)$lease['previous_content']));
                 $matchesPrevious = $previousValid && hash_equals($previousChecksum, $currentChecksum);
