@@ -8416,7 +8416,10 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                             .json_encode($kbInsertRuntime, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
                             .';window.afAeButtons=window.afAeButtons||[];window.afAeButtons.push('
                             .json_encode($kbInsertButton, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT).');</script>';
-                    } else {
+                    } elseif ($isKbEditorPage) {
+                        // Legacy/plain KB editor fallback stays local to KB
+                        // edit/create pages. Ordinary showthread must never
+                        // eager-load the insert integration.
                         $cssTag .= '<link rel="stylesheet" href="'.$assetsBase.'/knowledgebase_insert.css?v='.af_kb_asset_version('knowledgebase_insert.css').'" />';
                         $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?v='.af_kb_asset_version('knowledgebase_insert.js').'"></script>';
                     }
