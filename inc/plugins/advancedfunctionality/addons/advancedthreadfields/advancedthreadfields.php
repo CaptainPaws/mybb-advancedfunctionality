@@ -4993,7 +4993,7 @@ function af_atf_render_character_kb_moderation_button(int $tid, int $uid, array 
 {
     global $lang, $mybb;
 
-    if ($tid <= 0 || !function_exists('af_charactersheets_resolve_character_kb_entry')) {
+    if ($tid <= 0) {
         return '';
     }
 
