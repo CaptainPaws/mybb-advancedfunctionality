@@ -29,6 +29,8 @@ define('AF_ATF_MARK', '<!--af_atf_assets-->');
 
 define('AF_ATF_ASSET_CSS', 'inc/plugins/advancedfunctionality/addons/'.AF_ATF_ID.'/assets/advancedthreadfields.css');
 define('AF_ATF_ASSET_JS',  'inc/plugins/advancedfunctionality/addons/'.AF_ATF_ID.'/assets/advancedthreadfields.js');
+define('AF_ATF_ASSET_FORM_JS', 'inc/plugins/advancedfunctionality/addons/'.AF_ATF_ID.'/assets/advancedthreadfields-form.js');
+define('AF_ATF_ASSET_VIEW_JS', 'inc/plugins/advancedfunctionality/addons/'.AF_ATF_ID.'/assets/advancedthreadfields-view.js');
 
 define('AF_ATF_TPL_MARK_INPUT', '<!--AF_ATF_INPUT-->');
 define('AF_ATF_TPL_MARK_SHOW',  '<!--AF_ATF_SHOW-->');
@@ -532,28 +534,38 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         global $mybb;
 
         $base = rtrim((string)$mybb->settings['bburl'], '/');
-        // The ability editor lives in this JavaScript asset.  Keep its URL tied
-        // to the deployed file, otherwise browsers can keep the old repeater
-        // indefinitely after a plugin update.
+        $script = strtolower(defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '');
+        $jsRel = '';
+        if (in_array($script, ['newthread.php', 'editpost.php'], true)) {
+            $jsRel = AF_ATF_ASSET_FORM_JS;
+        } elseif ($script === 'forumdisplay.php' && !empty($GLOBALS['af_atf_forum_catalog_cta_html'])) {
+            $jsRel = AF_ATF_ASSET_VIEW_JS;
+        }
+        // showthread is fully server-rendered. Interactive KB chips belong to
+        // Knowledge Base and therefore do not justify an ATF view runtime.
+
         $assetVersion = '1';
         if (defined('MYBB_ROOT')) {
-            $assetMtime = @filemtime(MYBB_ROOT . AF_ATF_ASSET_JS);
+            $versionFile = $jsRel !== '' ? $jsRel : AF_ATF_ASSET_CSS;
+            $assetMtime = @filemtime(MYBB_ROOT . $versionFile);
             if (is_int($assetMtime) && $assetMtime > 0) {
                 $assetVersion = (string)$assetMtime;
             }
         }
-        $css  = $base.'/'.AF_ATF_ASSET_CSS.'?v='.$assetVersion;
-        $js   = $base.'/'.AF_ATF_ASSET_JS.'?v='.$assetVersion;
+        $css = $base.'/'.AF_ATF_ASSET_CSS.'?v='.$assetVersion;
+        $js = $jsRel !== '' ? $base.'/'.$jsRel.'?v='.$assetVersion : '';
 
         $extra = '';
         if (!empty($GLOBALS['af_atf_hide_editor'])) {
             $extra .= "\n<meta name=\"af-atf-hide-editor\" content=\"1\" />\n";
         }
-        $extra .= "\n<meta name=\"af-atf-kb-endpoint\" content=\"{$base}/misc.php?action=af_kb_get\" />\n";
+        if ($jsRel === AF_ATF_ASSET_FORM_JS) {
+            $extra .= "\n<meta name=\"af-atf-kb-endpoint\" content=\"{$base}/misc.php?action=af_kb_get\" />\n";
+        }
 
         $tag = "\n".AF_ATF_MARK
              . "\n<link rel=\"stylesheet\" href=\"{$css}\" />"
-             . "\n<script src=\"{$js}\" defer></script>\n"
+             . ($js !== '' ? "\n<script src=\"{$js}\" defer></script>\n" : "\n")
              . $extra;
 
         if (stripos($page, '</head>') !== false) {
