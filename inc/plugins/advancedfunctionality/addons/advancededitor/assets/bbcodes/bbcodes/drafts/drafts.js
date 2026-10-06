@@ -244,7 +244,7 @@
     try {
       var existing = localStorage.getItem(key);
       var current = asText(getEditorBBCode(ta)).trim();
-      var landedOnThread = /(?:^|\\/)showthread\\.php$/.test(location.pathname);
+            var landedOnThread = /(?:^|\/)showthread\.php$/.test(location.pathname);
       var validationError = !!document.querySelector('.error, .error_message, #error, .alert--error');
       if (submitted && landedOnThread && !current && !validationError) {
         deleteNow();
