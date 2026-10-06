@@ -147,6 +147,9 @@
     if (!window.afAdvancedEditorWysiwyg) throw new Error('WYSIWYG runtime did not register');
     ta.__afAeRequestedMode = (P.cfg || {}).wysiwygMode === 'full' ? 'full' : 'partial';
     if (!window.afAdvancedEditorWysiwyg.init(ta)) throw new Error('WYSIWYG initialization failed');
+    // The original textarea is a hidden data source after SCEditor activation.
+    // The lightweight shell must never display it next to the editor widget.
+    ta.setAttribute('data-af-ae-wys-active', '1');
     return currentEditor(ta);
   }
 
@@ -277,6 +280,7 @@
     if (!ta.__afAeShell) return;
     var wrapper = ta.__afAeShell;
     if (ta.__afAeShellAbort) ta.__afAeShellAbort.abort();
+    ta.removeAttribute('data-af-ae-wys-active');
     var post = ta.__afAePost || wrapper.closest('.post');
     if (post) { var count = post.querySelector('.af-ccp-postcount[data-af-ae-was-hidden]'); if (count) { count.hidden = count.getAttribute('data-af-ae-was-hidden') === '1'; count.removeAttribute('data-af-ae-was-hidden'); } }
     var editor = currentEditor(ta); if (editor && typeof editor.destroy === 'function') editor.destroy();
