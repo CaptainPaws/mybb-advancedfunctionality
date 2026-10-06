@@ -9,7 +9,7 @@
 .af-ae-shell .sceditor-button img { width: 16px; height: 16px; max-width: none; }
 .af-ae-shell .sceditor-button:hover, .af-ae-shell .sceditor-button:focus-visible { background: rgba(0,0,0,.08); border-color: rgba(0,0,0,.15); }
 .af-ae-shell .sceditor-button[aria-busy="true"] { opacity: .6; }
-.af-ae-shell.sceditor-container > textarea { display: block; box-sizing: border-box; width: 100%; min-height: 180px; padding: 10px; margin: 0; border: 0; border-radius: 0 0 12px 12px; background: transparent; color: inherit; resize: vertical; font-family: Verdana, Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.25; }
+.af-ae-shell.sceditor-container > textarea { display: block; box-sizing: border-box; width: 100%; min-height: var(--af-ae-surface-height, 180px); height: var(--af-ae-surface-height, 180px); padding: 10px; margin: 0; border: 0; border-radius: 0 0 12px 12px; background: transparent; color: inherit; resize: vertical; font-family: var(--af-ae-surface-font-family, Verdana, Arial, Helvetica, sans-serif); font-size: var(--af-ae-surface-font-size, 14px); font-weight: var(--af-ae-surface-font-weight, 400); line-height: var(--af-ae-surface-line-height, 1.25); letter-spacing: var(--af-ae-surface-letter-spacing, normal); }
 .af-ae-shell > .sceditor-container { border: 0; margin: 0; border-radius: 0 0 12px 12px; }
 /* The native SCEditor widget lives inside our shell. Only the outer shell
    toolbar is visible, even when the SCEditor library changes its wrapper. */
@@ -114,20 +114,30 @@ html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container > :is(ifr
   box-sizing: border-box !important;
   width: 100% !important;
   max-width: 100% !important;
-  min-height: 180px !important;
-  height: 180px !important;
+  min-height: var(--af-ae-surface-height, 180px) !important;
+  height: var(--af-ae-surface-height, 180px) !important;
   margin: 0 !important;
   padding: 10px !important;
   border: 0 !important;
   border-radius: 0 0 10px 10px !important;
   background: var(--atf-color-surface, var(--atf-surface, #1b2433)) !important;
   color: var(--atf-color-text, inherit) !important;
+  font-family: var(--af-ae-surface-font-family, Verdana, Arial, Helvetica, sans-serif) !important;
+  font-size: var(--af-ae-surface-font-size, 14px) !important;
+  font-weight: var(--af-ae-surface-font-weight, 400) !important;
+  line-height: var(--af-ae-surface-line-height, 1.25) !important;
+  letter-spacing: var(--af-ae-surface-letter-spacing, normal) !important;
   box-shadow: none !important;
   resize: vertical;
 }
 html body .af-ae-shell[data-af-editor-shell="1"] .sceditor-container > iframe.sceditor-wysiwyg {
   padding: 0 !important;
   border: 0 !important;
+}
+/* SCEditor may append grip/status chrome under the active surface. In the AF
+   shell that chrome is redundant and must not reserve extra height. */
+html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container > *:not(.sceditor-toolbar):not(textarea):not(iframe):not(.sceditor-wysiwyg) {
+  display: none !important;
 }
 /* Exactly one internal editing surface is visible after lazy activation.
    Explicit state beats legacy MyBB/theme rules that may force display:block.
