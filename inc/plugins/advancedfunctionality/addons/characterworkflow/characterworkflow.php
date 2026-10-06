@@ -247,58 +247,70 @@ function af_cwf_is_allowed_forum(int $fid): bool
  * valid. Results are request-cached, which also keeps postbit lookups to one
  * query per distinct author rather than one query per post.
  */
-function af_characterworkflow_resolve_active_application(int $uid): ?array
+function af_characterworkflow_active_application_cache(): array
 {
-    static $cache = [];
+    if (!isset($GLOBALS['af_cwf_active_application_cache']) || !is_array($GLOBALS['af_cwf_active_application_cache'])) {
+        $GLOBALS['af_cwf_active_application_cache'] = [];
+    }
+    return $GLOBALS['af_cwf_active_application_cache'];
+}
+
+function af_characterworkflow_preload_active_applications(array $uids): void
+{
     global $db;
 
-    if ($uid <= 0 || !is_object($db)) {
-        return null;
+    $uids = array_values(array_unique(array_filter(array_map('intval', $uids))));
+    if (!$uids || !is_object($db)) {
+        return;
     }
-    if (array_key_exists($uid, $cache)) {
-        return $cache[$uid];
+
+    $cache =& $GLOBALS['af_cwf_active_application_cache'];
+    if (!is_array($cache)) {
+        $cache = [];
+    }
+
+    $missing = array_values(array_filter($uids, static fn(int $uid): bool => !array_key_exists($uid, $cache)));
+    if (!$missing) {
+        return;
+    }
+    foreach ($missing as $uid) {
+        $cache[$uid] = null;
     }
 
     $relationTable = defined('AF_CS_TABLE') ? AF_CS_TABLE : 'af_charactersheets_accept';
     if (!$db->table_exists($relationTable)) {
-        return $cache[$uid] = null;
+        return;
     }
 
     $prefix = TABLE_PREFIX;
+    $in = implode(',', $missing);
     $query = $db->write_query(
         "SELECT r.*, t.tid AS live_tid, t.uid AS thread_uid, t.fid, t.firstpost, t.subject
          FROM {$prefix}{$relationTable} r
          LEFT JOIN {$prefix}threads t ON t.tid=r.tid
-         WHERE r.uid=" . (int)$uid . "
-         ORDER BY r.tid DESC"
+         WHERE r.uid IN ({$in})
+         ORDER BY r.uid ASC, r.tid DESC"
     );
-    $allowedForums = af_cwf_get_pending_forum_ids();
-    $allowedForums = array_values(array_unique(array_merge($allowedForums, af_cwf_get_target_forum_ids())));
+
+    $allowedForums = array_values(array_unique(array_merge(
+        af_cwf_get_pending_forum_ids(),
+        af_cwf_get_target_forum_ids()
+    )));
 
     while ($row = $db->fetch_array($query)) {
-        $tid = (int)($row['tid'] ?? 0);
-        $liveTid = (int)($row['live_tid'] ?? 0);
-
-        if ($liveTid <= 0) {
-            // Only relation/cache rows are invalidated. KB, Wanted and the
-            // independently stored sheet remain untouched.
-            $db->delete_query($relationTable, 'tid=' . $tid . ' AND uid=' . (int)$uid);
-            if ($db->table_exists(AF_CWF_TABLE)) {
-                $db->delete_query(AF_CWF_TABLE, 'tid=' . $tid);
-            }
+        $uid = (int)($row['uid'] ?? 0);
+        if ($uid <= 0 || !array_key_exists($uid, $cache) || is_array($cache[$uid])) {
             continue;
         }
-        if ((int)($row['thread_uid'] ?? 0) !== $uid) {
-            // A corrupt ownership relation must not expose somebody else's
-            // thread. Do not delete the workflow row belonging to that thread.
-            $db->delete_query($relationTable, 'tid=' . $tid . ' AND uid=' . (int)$uid);
+        $liveTid = (int)($row['live_tid'] ?? 0);
+        if ($liveTid <= 0 || (int)($row['thread_uid'] ?? 0) !== $uid) {
             continue;
         }
         if (!in_array((int)($row['fid'] ?? 0), $allowedForums, true)) {
             continue;
         }
 
-        return $cache[$uid] = [
+        $cache[$uid] = [
             'tid' => $liveTid,
             'uid' => $uid,
             'fid' => (int)$row['fid'],
@@ -313,8 +325,28 @@ function af_characterworkflow_resolve_active_application(int $uid): ?array
             'relation' => $row,
         ];
     }
+}
 
-    return $cache[$uid] = null;
+/**
+ * Resolve the live application which owns a user's character context.
+ * Batch callers should preload all page authors first; the fallback keeps
+ * non-list/profile callers compatible without changing the public API.
+ */
+function af_characterworkflow_resolve_active_application(int $uid): ?array
+{
+    if ($uid <= 0) {
+        return null;
+    }
+
+    $cache =& $GLOBALS['af_cwf_active_application_cache'];
+    if (!is_array($cache)) {
+        $cache = [];
+    }
+    if (!array_key_exists($uid, $cache)) {
+        af_characterworkflow_preload_active_applications([$uid]);
+    }
+
+    return is_array($cache[$uid] ?? null) ? $cache[$uid] : null;
 }
 
 function af_cwf_get_transfer_group_ids(): array
