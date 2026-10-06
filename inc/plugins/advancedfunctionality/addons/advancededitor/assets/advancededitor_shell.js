@@ -201,7 +201,10 @@
     return !!(host && post && ta.form && host.contains(ta.form) && post.contains(host));
   }
   function eligible(ta) {
-    if (!ta || ta.tagName !== 'TEXTAREA' || ta.getAttribute('data-af-ae-skip') === '1' || ta.classList.contains('sceditor-textarea')) return false;
+    if (!ta || ta.tagName !== 'TEXTAREA' || ta.getAttribute('data-af-ae-skip') === '1') return false;
+    // A native MyBB textarea may retain the SCEditor class even after its eager
+    // runtime was stripped. Do not disable the lightweight editor for that class.
+    if (ta.classList.contains('sceditor-textarea') && currentEditor(ta) && !currentEditor(ta).__afAeSourceAdapter) return false;
     return isQuickEdit(ta) || ta.matches((P.cfg || {}).editorSelector || 'textarea[name="message"]');
   }
   function init(ta) {
