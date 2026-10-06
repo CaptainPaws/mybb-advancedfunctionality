@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'view_assets' => ['js' => [], 'css' => ['bbcodes/bbcodes/lists/lists_view.css']],
+    'view_assets' => ['js' => [], 'css' => ['bbcodes/lists/lists_view.css']],
     'view_markers' => ['af-ae-list'],
     'runtime' => ['activation' => 'click', 'requires' => []],
     'id'    => 'lists',

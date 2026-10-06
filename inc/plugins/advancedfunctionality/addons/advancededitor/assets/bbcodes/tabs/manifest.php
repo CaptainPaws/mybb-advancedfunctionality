@@ -2,7 +2,7 @@
 
 return [
     'view_markers' => ['data-af-tabs-root'],
-    'view_assets' => ['js' => ['bbcodes/bbcodes/tabs/tabs_view.js'], 'css' => ['bbcodes/bbcodes/tabs/tabs_view.css']],
+    'view_assets' => ['js' => ['bbcodes/tabs/tabs_view.js'], 'css' => ['bbcodes/tabs/tabs_view.css']],
     'runtime' => ['view' => true, 'activation' => 'click', 'requires' => [], 'editor' => true],
     'id'    => 'tabs',
     'title' => 'Табы',

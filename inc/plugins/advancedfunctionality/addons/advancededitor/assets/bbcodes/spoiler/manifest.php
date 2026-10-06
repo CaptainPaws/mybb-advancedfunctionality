@@ -2,7 +2,7 @@
 
 return [
     'view_markers' => ['af-aqr-spoiler'],
-    'view_assets' => ['js' => ['bbcodes/bbcodes/spoiler/spoiler_view.js'], 'css' => ['bbcodes/bbcodes/spoiler/spoiler_view.css']],
+    'view_assets' => ['js' => ['bbcodes/spoiler/spoiler_view.js'], 'css' => ['bbcodes/spoiler/spoiler_view.css']],
     'runtime' => ['view' => true, 'activation' => 'click', 'requires' => [], 'editor' => true],
     'id'    => 'spoiler',
     'title' => 'Спойлер',
