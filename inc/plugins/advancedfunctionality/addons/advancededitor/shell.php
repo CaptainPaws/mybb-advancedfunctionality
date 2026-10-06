@@ -142,7 +142,13 @@ function af_advancededitor_shell_registry(array $available, array $custom, array
             $capabilities[$id] = $b['runtime']; $b['capability'] = $id;
         }
         if (in_array($cmd, ['af_togglemode', 'source'], true)) $b['capability'] = 'wysiwyg';
-        $b['iconClass'] = trim((string)($b['iconClass'] ?? '')) ?: af_advancededitor_shell_fa_icon((string)$cmd);
+        $iconSvg = trim((string)($b['iconSvg'] ?? ''));
+        if ($iconSvg !== '') {
+            $b['iconClass'] = '';
+            $b['iconGlyph'] = '';
+        } else {
+            $b['iconClass'] = trim((string)($b['iconClass'] ?? '')) ?: af_advancededitor_shell_fa_icon((string)$cmd);
+        }
         $icon = (string)($b['icon'] ?? '');
         if ($icon === '') {
             // Command aliases share the existing vector controls.
@@ -218,10 +224,13 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
     $escape = static fn($s) => htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $button = static function ($cmd, $b, bool $menuItem = false) use ($escape): string {
         $icon = trim((string)($b['icon'] ?? ''));
+        $iconSvg = trim((string)($b['iconSvg'] ?? ''));
         $fa = trim((string)($b['iconClass'] ?? af_advancededitor_shell_fa_icon((string)$cmd)));
         $glyph = (string)($b['iconGlyph'] ?? '');
         if (str_starts_with($icon, '<svg') && str_contains($icon, '</svg>')) $icon = 'data:image/svg+xml,' . rawurlencode($icon);
-        if ($menuItem && $fa !== '') {
+        if ($menuItem && str_starts_with($iconSvg, '<svg') && str_contains($iconSvg, '</svg>')) {
+            $visual = $iconSvg;
+        } elseif ($menuItem && $fa !== '') {
             $visual = '<i class="' . $escape($fa) . ' af-ae-fa-glyph" aria-hidden="true">' . $escape($glyph) . '</i>';
         } else {
             $visual = $icon !== '' ? '<img src="' . $escape($icon) . '" alt="" width="16" height="16" />'

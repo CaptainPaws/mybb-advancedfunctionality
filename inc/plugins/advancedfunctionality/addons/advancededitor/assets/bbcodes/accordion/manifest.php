@@ -13,10 +13,8 @@ return [
             'cmd'      => 'af_accordion',
             'name'     => 'accordion',
             'title'    => 'Аккордеон',
-            'iconClass'=> 'fa-solid fa-bars-staggered',
-            'iconGlyph'=> "\u{F550}",
+            'iconSvg'  => '<svg class="af-ae-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="4.5" width="16" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="4" y="10" width="16" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="4" y="15.5" width="16" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M17 6.5l1 1 1-1M17 12l1 1 1-1M17 17.5l1 1 1-1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
             'hint'     => 'Вставить [accordion] с двумя [accitem]',
-            'icon'     => 'img/starmenu.svg',
             'handler'  => '',
             'opentag'  => '[accordion]
 [accitem title="Заголовок 1"]

@@ -238,6 +238,7 @@ function af_advancededitor_collect_bbcode_packs(): array
             'icon'     => isset($b['icon']) ? (string)$b['icon'] : '',
             'iconClass'=> isset($b['iconClass']) ? (string)$b['iconClass'] : '',
             'iconGlyph'=> isset($b['iconGlyph']) ? (string)$b['iconGlyph'] : '',
+            'iconSvg'  => isset($b['iconSvg']) ? (string)$b['iconSvg'] : '',
             'opentag'  => isset($b['opentag']) ? (string)$b['opentag'] : '',
             'closetag' => isset($b['closetag']) ? (string)$b['closetag'] : '',
         ];
@@ -2583,6 +2584,7 @@ function af_advancededitor_get_custom_button_defs(string $bburl): array
                 'icon' => (string)($b['icon'] ?? ''),
                 'iconClass' => (string)($b['iconClass'] ?? ''),
                 'iconGlyph' => (string)($b['iconGlyph'] ?? ''),
+                'iconSvg' => (string)($b['iconSvg'] ?? ''),
                 'handler' => (string)($b['handler'] ?? ''),
                 'capability' => (string)($b['capability'] ?? ''),
                 'opentag' => (string)($b['opentag'] ?? ''),
@@ -2738,6 +2740,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
                     'icon'    => $icon,
                     'iconClass' => trim((string)($b['iconClass'] ?? '')),
                     'iconGlyph' => (string)($b['iconGlyph'] ?? ''),
+                    'iconSvg' => (string)($b['iconSvg'] ?? ''),
                     'handler' => $handler,
                     'opentag' => (string)($b['opentag'] ?? ''),
                     'closetag' => (string)($b['closetag'] ?? ''),
@@ -2836,8 +2839,8 @@ function af_advancededitor_get_available_buttons(string $bburl, array $customDef
         ['cmd' => 'italic', 'label' => 'I', 'hint' => 'SCEditor: italic', 'title' => 'Курсив'],
         ['cmd' => 'underline', 'label' => 'U', 'hint' => 'SCEditor: underline', 'title' => 'Подчёркнутый'],
         ['cmd' => 'strike', 'label' => 'S', 'hint' => 'SCEditor: strike', 'title' => 'Зачёркнутый'],
-        ['cmd' => 'subscript', 'label' => 'x₂', 'hint' => 'SCEditor: subscript', 'title' => 'Нижний индекс', 'iconClass' => 'fa-solid fa-subscript', 'iconGlyph' => ""],
-        ['cmd' => 'superscript', 'label' => 'x²', 'hint' => 'SCEditor: superscript', 'title' => 'Верхний индекс', 'iconClass' => 'fa-solid fa-superscript', 'iconGlyph' => ""],
+        ['cmd' => 'subscript', 'label' => 'x₂', 'hint' => 'SCEditor: subscript', 'title' => 'Нижний индекс', 'iconSvg' => '<svg class="af-ae-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4.5 5.5l7 10m0-10l-7 10M14 15.5c.4-1.2 1.4-1.8 2.8-1.8 1.6 0 2.7.9 2.7 2.1 0 1.4-1.2 2.1-3.7 4.1h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+        ['cmd' => 'superscript', 'label' => 'x²', 'hint' => 'SCEditor: superscript', 'title' => 'Верхний индекс', 'iconSvg' => '<svg class="af-ae-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4.5 8.5l7 10m0-10l-7 10M14 4.5c.4-1.2 1.4-1.8 2.8-1.8 1.6 0 2.7.9 2.7 2.1 0 1.4-1.2 2.1-3.7 4.1h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
 
         ['cmd' => 'font', 'label' => 'F', 'hint' => 'SCEditor: font', 'title' => 'Шрифт'],
         ['cmd' => 'size', 'label' => 'Sz', 'hint' => 'SCEditor: size', 'title' => 'Размер'],
@@ -2847,7 +2850,7 @@ function af_advancededitor_get_available_buttons(string $bburl, array $customDef
         ['cmd' => 'undo', 'label' => '↶', 'hint' => 'SCEditor: undo', 'title' => 'Отменить'],
         ['cmd' => 'redo', 'label' => '↷', 'hint' => 'SCEditor: redo', 'title' => 'Повторить'],
         ['cmd' => 'pastetext', 'label' => 'Tx', 'hint' => 'SCEditor: pastetext', 'title' => 'Вставить как текст'],
-        ['cmd' => 'horizontalrule', 'label' => '—', 'hint' => 'Горизонтальная линия', 'title' => 'Горизонтальная линия', 'iconClass' => 'fa-solid fa-minus', 'iconGlyph' => ""],
+        ['cmd' => 'horizontalrule', 'label' => '—', 'hint' => 'Горизонтальная линия', 'title' => 'Горизонтальная линия', 'iconSvg' => '<svg class="af-ae-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'],
 
         ['cmd' => 'left', 'label' => 'L', 'hint' => 'SCEditor: left', 'title' => 'По левому краю'],
         ['cmd' => 'center', 'label' => 'C', 'hint' => 'SCEditor: center', 'title' => 'По центру'],
@@ -2893,6 +2896,7 @@ function af_advancededitor_get_available_buttons(string $bburl, array $customDef
                 'icon'  => (string)($b['icon'] ?? ''),
                 'iconClass' => (string)($b['iconClass'] ?? ''),
                 'iconGlyph' => (string)($b['iconGlyph'] ?? ''),
+                'iconSvg' => (string)($b['iconSvg'] ?? ''),
             ];
         }
     }
@@ -2914,6 +2918,7 @@ function af_advancededitor_get_available_buttons(string $bburl, array $customDef
                 'icon'  => (string)($d['icon'] ?? ''),
                 'iconClass' => (string)($d['iconClass'] ?? ''),
                 'iconGlyph' => (string)($d['iconGlyph'] ?? ''),
+                'iconSvg' => (string)($d['iconSvg'] ?? ''),
             ];
         }
     }

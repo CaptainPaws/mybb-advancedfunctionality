@@ -13,7 +13,7 @@ return [
             'cmd'     => 'af_tabs',
             'name'    => 'tabs',
             'title'   => 'Табы',
-            'icon'    => 'img/tablebb.svg',
+            'iconSvg'  => '<svg class="af-ae-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 8V5h5v3M9 8V5h5v3M14 8V5h6v15H4V8h16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
             'handler' => 'tabs',
         ],
     ],

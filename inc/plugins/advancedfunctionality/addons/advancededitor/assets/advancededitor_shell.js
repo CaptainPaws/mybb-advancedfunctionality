@@ -51,11 +51,22 @@
     root.querySelectorAll('.af-ae-shell-menu [data-af-shell-menu-item="1"]').forEach(function (item) {
       var cmd = item.getAttribute('data-af-command');
       var b = buttons[cmd] || {};
+      var iconSvg = String(b.iconSvg || '').trim();
+      var visual = item.querySelector(':scope > div');
+      if (!visual) return;
+      if (iconSvg.indexOf('<svg') === 0 && iconSvg.indexOf('</svg>') !== -1) {
+        var currentSvg = visual.querySelector('svg.af-ae-menu-svg');
+        if (!currentSvg) visual.innerHTML = iconSvg;
+        visual.style.backgroundImage = 'none';
+        visual.style.textIndent = '0';
+        visual.style.webkitMaskImage = 'none';
+        visual.style.maskImage = 'none';
+        visual.style.backgroundColor = '';
+        return;
+      }
       var iconClass = String(b.iconClass || '').trim();
       if (!iconClass) iconClass = String(cmd || '').indexOf('af_') === 0 ? 'fa-solid fa-code' : 'fa-solid fa-circle';
       var glyph = String(b.iconGlyph || '');
-      var visual = item.querySelector(':scope > div');
-      if (!visual) return;
       var current = visual.querySelector('i.fa-solid, i.fa-regular, i.fa-brands');
       var icon = current;
       if (!icon || icon.className !== iconClass) {

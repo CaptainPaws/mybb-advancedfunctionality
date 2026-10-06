@@ -197,6 +197,15 @@ html body .af-ae-shell > .sceditor-container.wysiwygMode > iframe { display: blo
   background-position: center !important;
   text-indent: 0 !important;
 }
+.af-ae-popup .af-ae-shell-menu .af-ae-menu-svg {
+  display: block !important;
+  flex: 0 0 16px;
+  width: 16px !important;
+  height: 16px !important;
+  overflow: visible;
+  color: currentColor;
+  pointer-events: none;
+}
 .af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-solid,
 .af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-regular,
 .af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-brands {

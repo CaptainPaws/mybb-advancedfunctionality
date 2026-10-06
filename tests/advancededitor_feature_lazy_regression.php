@@ -29,21 +29,14 @@ foreach (['bold','italic','underline','strike','quote','code','link','image','bu
 }
 lazy_assert($buttons['af_custom_dialog']['capability'] === 'custom:af_custom_dialog', 'Custom runtime capability missing');
 lazy_assert($registry['capabilities']['custom:af_custom_dialog']['requires'] === ['tables'], 'Custom dependencies lost');
-lazy_assert(($buttons['horizontalrule']['iconClass'] ?? '') === 'fa-solid fa-minus', 'Native horizontalrule Font Awesome metadata lost');
-lazy_assert(($buttons['subscript']['iconClass'] ?? '') === 'fa-solid fa-subscript', 'Native subscript Font Awesome metadata lost');
-lazy_assert(($buttons['superscript']['iconClass'] ?? '') === 'fa-solid fa-superscript', 'Native superscript Font Awesome metadata lost');
-lazy_assert(($buttons['horizontalrule']['iconGlyph'] ?? '') === "", 'Native horizontalrule Font Awesome glyph lost');
-lazy_assert(($buttons['subscript']['iconGlyph'] ?? '') === "", 'Native subscript Font Awesome glyph lost');
-lazy_assert(($buttons['superscript']['iconGlyph'] ?? '') === "", 'Native superscript Font Awesome glyph lost');
-foreach ([
-    'af_mark' => 'fa-solid fa-highlighter',
-    'af_abbr' => 'fa-solid fa-circle-info',
-    'af_tables' => 'fa-solid fa-table-cells',
-    'af_accordion' => 'fa-solid fa-bars-staggered',
-] as $cmd => $iconClass) {
-    lazy_assert(($buttons[$cmd]['iconClass'] ?? '') === $iconClass, "Pack Font Awesome metadata missing: {$cmd}");
-    lazy_assert(!empty($buttons[$cmd]['iconGlyph']), "Pack Font Awesome glyph missing: {$cmd}");
+foreach (['horizontalrule','subscript','superscript','af_mark','af_abbr','af_tabs','af_accordion'] as $cmd) {
+    lazy_assert(str_starts_with((string)($buttons[$cmd]['iconSvg'] ?? ''), '<svg'), "Inline SVG metadata missing: {$cmd}");
+    lazy_assert(empty($buttons[$cmd]['iconClass']), "Font Awesome must not own SVG menu command: {$cmd}");
 }
+foreach (['af_ul_disc','af_ul_square','af_ul_decimal','af_ul_upper_roman','af_ul_upper_alpha','af_ul_lower_alpha'] as $cmd) {
+    lazy_assert(str_starts_with((string)($buttons[$cmd]['iconSvg'] ?? ''), '<svg'), "List SVG metadata missing: {$cmd}");
+}
+lazy_assert(empty($buttons['af_tables']['iconClass'] ?? ''), 'Tables must not carry the Tabs menu Font Awesome icon');
 foreach ($packs['packs'] as $id => $pack) {
     lazy_assert(isset($pack['runtime']['activation']), "Pack has no activation metadata: {$id}");
     foreach ($pack['buttons'] as $button) {

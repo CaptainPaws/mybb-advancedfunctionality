@@ -69,18 +69,17 @@ const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><bu
  await popup('af_font','.af-ff-dd');await popup('af_fontsize','.af-ae-fontsize-picker');
  await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup .af-ae-shell-menu').waitFor({state:'visible'});
  assert.equal(await page.locator('.af-ae-popup').getAttribute('class').then(v=>v.includes('sceditor-dropdown')),false,'AdvancedEditor extra menu must not use native SCEditor dropdown class');
- assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button').evaluateAll(nodes=>nodes.every(n=>n.getAttribute('data-af-shell-menu-item')==='1' && !!n.querySelector('i.fa-solid, i.fa-regular, i.fa-brands'))),true,'Every owned extra-menu command must have a Font Awesome icon');
- assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu i.fa-solid').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).fontFamily.includes('Font Awesome 6 Free') && getComputedStyle(n).fontWeight==='900')),true,'Source extra-menu solid icons must use Font Awesome 6 Free');
- assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu i.af-ae-fa-glyph').evaluateAll(nodes=>nodes.every(n=>n.textContent.length>0 && getComputedStyle(n,'::before').content==='none')),true,'Source extra-menu must use real FA glyph text, not ::before');
+ assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu [data-af-shell-menu-item="1"]').evaluateAll(nodes=>nodes.every(n=>!!n.querySelector('svg.af-ae-menu-svg'))),true,'Every configured extra-menu command must render inline SVG');
+ window.__afExtraMenuSvgBefore=await page.locator('.af-ae-popup .af-ae-shell-menu svg.af-ae-menu-svg').evaluateAll(nodes=>nodes.map(n=>n.outerHTML).join('|'));
  assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button > div').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).backgroundImage==='none' && getComputedStyle(n).textIndent==='0px')),true,'Source extra-menu icons must not inherit SCEditor sprites');
  window.__afExtraMenuIconsBefore=await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button i').evaluateAll(nodes=>nodes.map(n=>n.className).join('|'));
  window.__afExtraMenuStyleBefore=await page.locator('.af-ae-popup').evaluate(e=>{const c=getComputedStyle(e);return [c.padding,c.borderRadius,c.backgroundColor,c.minWidth].join('|');});
  await page.keyboard.press('Escape');
  // Simulate any legacy runtime destroying one owned icon. The shell must repair
  // it before the next menu opening / WYSIWYG lifecycle.
- await page.evaluate(()=>{const i=document.querySelector('.af-ae-shell-menu [data-af-shell-menu-item="1"] i'); if(i)i.remove();});
+ await page.evaluate(()=>{const i=document.querySelector('.af-ae-shell-menu [data-af-shell-menu-item="1"] svg'); if(i)i.remove();});
  await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup .af-ae-shell-menu').waitFor({state:'visible'});
- assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu [data-af-shell-menu-item="1"]').first().locator('i.fa-solid, i.fa-regular, i.fa-brands').count(),1,'Shell must self-heal a removed menu icon');
+ assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu [data-af-shell-menu-item="1"]').first().locator('svg.af-ae-menu-svg').count(),1,'Shell must self-heal a removed SVG menu icon');
  await page.keyboard.press('Escape');
  await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup [data-af-command=af_indent]').click();
  await page.waitForFunction(()=>afAdvancedEditorShell.states.indent.state==='loaded');
@@ -99,16 +98,15 @@ const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><bu
  }).length),1,'Only one semantic KB toolbar control may exist');
  await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup .af-ae-shell-menu').waitFor({state:'visible'});
  assert.equal(await page.locator('.af-ae-popup').getAttribute('class').then(v=>v.includes('sceditor-dropdown')),false,'WYSIWYG extra menu must stay outside native SCEditor dropdown styling');
- assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button').evaluateAll(nodes=>nodes.every(n=>!!n.querySelector('i.fa-solid, i.fa-regular, i.fa-brands'))),true,'WYSIWYG must not remove Font Awesome nodes from extra menu');
- assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu i.fa-solid').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).fontFamily.includes('Font Awesome 6 Free') && getComputedStyle(n).fontWeight==='900')),true,'WYSIWYG extra-menu solid icons must retain Font Awesome font contract');
- assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu i.af-ae-fa-glyph').evaluateAll(nodes=>nodes.every(n=>n.textContent.length>0 && getComputedStyle(n,'::before').content==='none')),true,'WYSIWYG extra-menu must retain real FA glyph text');
+ assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu [data-af-shell-menu-item="1"]').evaluateAll(nodes=>nodes.every(n=>!!n.querySelector('svg.af-ae-menu-svg'))),true,'WYSIWYG must preserve inline SVG nodes in extra menu');
+ assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu svg.af-ae-menu-svg').evaluateAll(nodes=>nodes.map(n=>n.outerHTML).join('|')),window.__afExtraMenuSvgBefore,'WYSIWYG must preserve exact extra-menu SVG DOM');
  assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button > div').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).backgroundImage==='none' && getComputedStyle(n).textIndent==='0px')),true,'WYSIWYG extra-menu icons must keep Font Awesome visuals after SCEditor CSS loads');
- assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button i').evaluateAll(nodes=>nodes.map(n=>n.className).join('|')),window.__afExtraMenuIconsBefore,'WYSIWYG must preserve exact extra-menu icon DOM');
+
  assert.equal(await page.locator('.af-ae-popup').evaluate(e=>{const c=getComputedStyle(e);return [c.padding,c.borderRadius,c.backgroundColor,c.minWidth].join('|');}),window.__afExtraMenuStyleBefore,'WYSIWYG must preserve extra-menu visual contract');
  await page.keyboard.press('Escape');
  await cmd('af_togglemode').click();await page.waitForTimeout(20);
  await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup .af-ae-shell-menu').waitFor({state:'visible'});
- assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button i').evaluateAll(nodes=>nodes.map(n=>n.className).join('|')),window.__afExtraMenuIconsBefore,'Returning to Source must preserve extra-menu icons');
+ assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu svg.af-ae-menu-svg').evaluateAll(nodes=>nodes.map(n=>n.outerHTML).join('|')),window.__afExtraMenuSvgBefore,'Returning to Source must preserve extra-menu SVG icons');
  await page.keyboard.press('Escape');
  assert.equal((await dimensions()).fields,2); // Original data field + ONE native source view.
  const activated=await dimensions();assert.equal(activated.height,initial.height);
