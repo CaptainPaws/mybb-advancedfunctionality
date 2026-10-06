@@ -41,7 +41,12 @@ foreach ($packs['packs'] as $id => $pack) {
     }
 }
 $helpToolbar = af_advancededitor_shell_toolbar(array_merge($registry['buttons'], [['cmd'=>'af_formathelp','title'=>'Help','label'=>'?']]), ['sections'=>[['type'=>'group','items'=>['bold']]]], ['enabled'=>true,'position'=>'left']);
-lazy_assert(strpos($helpToolbar, 'data-af-command="af_formathelp"') < strpos($helpToolbar, 'data-af-command="bold"'), 'Configured help placement lost');
+lazy_assert(substr_count($helpToolbar, 'data-af-command="af_formathelp"') === 1, 'Formatting help button duplicated');
+lazy_assert(strpos($helpToolbar, '<!--af-ae-toolbar-end--></div>') < strpos($helpToolbar, 'class="af-ae-shell-help-edge"'), 'Help must be outside toolbar groups');
+lazy_assert(str_contains($helpToolbar, 'data-af-help-position="left"'), 'Configured help position lost');
+$helpInGroup = af_advancededitor_shell_toolbar(array_merge($registry['buttons'], [['cmd'=>'af_formathelp','title'=>'Help','label'=>'?']]), ['sections'=>[['type'=>'group','items'=>['bold','af_formathelp','italic']]]], ['enabled'=>true,'position'=>'right']);
+lazy_assert(substr_count($helpInGroup, 'data-af-command="af_formathelp"') === 1, 'Legacy layout inserts formatting help into BBCode groups');
+lazy_assert(str_contains($helpInGroup, 'data-af-help-position="right"'), 'Right edge help position lost');
 $inlineToolbar = af_advancededitor_shell_toolbar([['cmd'=>'af_icon','title'=>'Custom','icon'=>'<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>']], ['sections'=>[['type'=>'group','items'=>['af_icon']]]]);
 lazy_assert(str_contains($inlineToolbar, 'data:image/svg+xml,') && str_contains($inlineToolbar, 'af-ae-shell-icon'), 'Custom SVG icon requires runtime');
 $manifest = require MYBB_ROOT.'inc/plugins/advancedfunctionality/addons/advancededitor/manifest.php';
