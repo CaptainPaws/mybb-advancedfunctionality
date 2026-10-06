@@ -253,6 +253,13 @@
     // The original textarea is a hidden data source after SCEditor activation.
     // The lightweight shell must never display it next to the editor widget.
     ta.setAttribute('data-af-ae-wys-active', '1');
+    // SCEditor owns its own source textarea. Hide only the ORIGINAL field,
+    // including when a theme overrides SCEditor's native visibility rules.
+    if (!ta.__afAeOriginalDisplay) ta.__afAeOriginalDisplay = {
+      value: ta.style.getPropertyValue('display'), priority: ta.style.getPropertyPriority('display')
+    };
+    ta.classList.add('af-ae-original-textarea');
+    ta.style.setProperty('display', 'none', 'important');
     return currentEditor(ta);
   }
 
@@ -385,6 +392,11 @@
     var wrapper = ta.__afAeShell;
     if (ta.__afAeShellAbort) ta.__afAeShellAbort.abort();
     ta.removeAttribute('data-af-ae-wys-active');
+    if (ta.__afAeOriginalDisplay) {
+      ta.style.setProperty('display', ta.__afAeOriginalDisplay.value, ta.__afAeOriginalDisplay.priority);
+      ta.__afAeOriginalDisplay = null;
+    }
+    ta.classList.remove('af-ae-original-textarea');
     var post = ta.__afAePost || wrapper.closest('.post');
     if (post) { var count = post.querySelector('.af-ccp-postcount[data-af-ae-was-hidden]'); if (count) { count.hidden = count.getAttribute('data-af-ae-was-hidden') === '1'; count.removeAttribute('data-af-ae-was-hidden'); } }
     var editor = currentEditor(ta); if (editor && typeof editor.destroy === 'function') editor.destroy();
