@@ -138,5 +138,6 @@ function af_charactersheets_misc_start(): void
 
 function af_charactersheets_handle_thread_move_for_acceptance(array $args): void
 {
+    af_charactersheets_require_modules(['sheets_crud', 'calculator', 'render']);
     af_charactersheets_handle_thread_move_for_acceptance_impl($args);
 }
