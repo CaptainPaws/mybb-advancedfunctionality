@@ -109,7 +109,7 @@ html body .af-ae-shell[data-af-editor-shell="1"] .af-ae-toolbar-row > .af-ae-hel
 }
 html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container > .sceditor-wysiwyg,
 html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container > textarea.sceditor-source {
-  display: block;
+  /* Never force display here: native SCEditor switches these surfaces. */
   box-sizing: border-box;
   width: 100% !important;
   max-width: 100%;
@@ -125,6 +125,17 @@ html body .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container > textare
 html body .af-ae-shell[data-af-editor-shell="1"] .sceditor-container > iframe.sceditor-wysiwyg {
   padding: 0 !important;
   border: 0 !important;
+}
+/* Exactly one internal editing surface is visible after lazy activation.
+   Explicit state beats legacy MyBB/theme rules that may force display:block.
+   Do not affect editors that are not owned by the AdvancedEditor shell. */
+html body .af-ae-shell[data-af-editor-shell="1"][data-af-ae-active-surface="wysiwyg"] > .sceditor-container > textarea.sceditor-source,
+html body .af-ae-shell[data-af-editor-shell="1"][data-af-ae-active-surface="source"] > .sceditor-container > .sceditor-wysiwyg {
+  display: none !important;
+}
+html body .af-ae-shell[data-af-editor-shell="1"][data-af-ae-active-surface="wysiwyg"] > .sceditor-container > .sceditor-wysiwyg,
+html body .af-ae-shell[data-af-editor-shell="1"][data-af-ae-active-surface="source"] > .sceditor-container > textarea.sceditor-source {
+  display: block !important;
 }
 /* The original textarea is the serialization source, never a visible layer. */
 html body .af-ae-shell[data-af-editor-shell="1"] > textarea.af-ae-original-textarea {
