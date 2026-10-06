@@ -72,3 +72,21 @@
     transform: rotate(360deg);
   }
 }/*# sourceMappingURL=fimp.css.map */
+/* ATF sticky headers and post controls must not cover the moderation popup. */
+body.atf-active #fimp {
+  z-index: 2100;
+  right: 16px;
+  transform: translateY(-50%);
+  margin: 0;
+  overflow: visible;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .28);
+}
+body.atf-active #fimp .fimp {
+  cursor: pointer;
+  color: var(--atf-color-text, #eef2ff);
+  background: var(--atf-color-surface, #202636);
+  border: 1px solid var(--atf-color-border, rgba(255,255,255,.15));
+}
+body.atf-active #fimp .fimp:hover:not(:disabled) {
+  color: var(--atf-color-accent, #80bfff);
+}
