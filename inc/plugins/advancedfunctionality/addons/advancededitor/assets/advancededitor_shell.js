@@ -56,12 +56,21 @@
       var visual = item.querySelector(':scope > div');
       if (!visual) return;
       var current = visual.querySelector('i.fa-solid, i.fa-regular, i.fa-brands');
-      if (current && current.className === iconClass) return;
-      visual.replaceChildren();
-      var icon = document.createElement('i');
-      icon.className = iconClass;
-      icon.setAttribute('aria-hidden', 'true');
-      visual.appendChild(icon);
+      var icon = current;
+      if (!icon || icon.className !== iconClass) {
+        visual.replaceChildren();
+        icon = document.createElement('i');
+        icon.className = iconClass;
+        icon.setAttribute('aria-hidden', 'true');
+        visual.appendChild(icon);
+      }
+      var isBrand = icon.classList.contains('fa-brands');
+      var isRegular = icon.classList.contains('fa-regular');
+      icon.style.setProperty('font-family', isBrand ? '"Font Awesome 6 Brands"' : '"Font Awesome 6 Free"', 'important');
+      icon.style.setProperty('font-weight', isBrand || isRegular ? '400' : '900', 'important');
+      icon.style.setProperty('font-style', 'normal', 'important');
+      icon.style.setProperty('font-variant', 'normal', 'important');
+      icon.style.setProperty('line-height', '1', 'important');
       visual.style.backgroundImage = 'none';
       visual.style.textIndent = '0';
       visual.style.webkitMaskImage = 'none';

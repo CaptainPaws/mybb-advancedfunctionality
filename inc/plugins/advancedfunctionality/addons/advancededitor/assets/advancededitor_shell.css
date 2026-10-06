@@ -204,8 +204,22 @@ html body .af-ae-shell > .sceditor-container.wysiwygMode > iframe { display: blo
   width: 16px;
   text-align: center;
   font-size: 13px;
-  line-height: 16px;
+  line-height: 16px !important;
+  font-style: normal !important;
+  font-variant: normal !important;
   color: currentColor;
+}
+.af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-solid {
+  font-family: "Font Awesome 6 Free" !important;
+  font-weight: 900 !important;
+}
+.af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-regular {
+  font-family: "Font Awesome 6 Free" !important;
+  font-weight: 400 !important;
+}
+.af-ae-popup .af-ae-shell-menu .sceditor-button i.fa-brands {
+  font-family: "Font Awesome 6 Brands" !important;
+  font-weight: 400 !important;
 }
 .af-ae-popup .af-ae-shell-menu-label { font-size: 13px; }
 html body .af-ae-shell.af-ae-shell-maximized {

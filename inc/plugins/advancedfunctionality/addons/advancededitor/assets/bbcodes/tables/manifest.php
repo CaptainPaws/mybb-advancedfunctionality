@@ -13,6 +13,7 @@ return [
             'cmd'     => 'af_tables',
             'name'    => 'tables',
             'title'   => 'Таблица',
+            'iconClass'=> 'fa-solid fa-table-cells',
             'icon'    => 'img/tablebb.svg',
             'handler' => 'tables',
         ],

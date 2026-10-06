@@ -13,6 +13,7 @@ return [
             'cmd'      => 'af_mark',
             'name'     => 'mark',
             'title'    => 'Маркер',
+            'iconClass'=> 'fa-solid fa-highlighter',
             'handler'  => 'mark',
             'opentag'  => '[mark]',
             'closetag' => '[/mark]',

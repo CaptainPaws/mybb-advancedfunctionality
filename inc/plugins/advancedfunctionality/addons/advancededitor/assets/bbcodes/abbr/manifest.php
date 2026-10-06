@@ -13,6 +13,7 @@ return [
             'cmd'      => 'af_abbr',
             'name'     => 'abbr',
             'title'    => 'Поясняющий текст',
+            'iconClass'=> 'fa-solid fa-circle-info',
             'hint'     => 'Вставить [abbr="подсказка"]текст[/abbr]',
             'handler'  => 'abbr',
             'opentag'  => '[abbr=""]',

@@ -13,6 +13,7 @@ return [
             'cmd'      => 'af_accordion',
             'name'     => 'accordion',
             'title'    => 'Аккордеон',
+            'iconClass'=> 'fa-solid fa-bars-staggered',
             'hint'     => 'Вставить [accordion] с двумя [accitem]',
             'icon'     => 'img/starmenu.svg',
             'handler'  => '',
