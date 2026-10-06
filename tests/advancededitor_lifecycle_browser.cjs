@@ -44,8 +44,11 @@ const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><bu
  assert.equal(await shell.locator('.sceditor-toolbar [data-af-command=af_formathelp]').count(),0);
  const icon=page.locator('#quick_reply_form [data-af-command=af_menu_dropdown1] > div');
  assert.equal((await icon.textContent()).trim(),'');
- assert.equal(await icon.locator('.af-ae-shell-icon, img, svg').count(),1);
- assert.equal(await cmd('af_kb_insert').locator('.af-ae-shell-icon, img, svg').count(),1);
+ assert.equal(await icon.locator('.af-ae-shell-icon, img, svg, i.fa-solid, i.fa-regular, i.fa-brands').count(),1);
+ assert.equal(await cmd('af_kb_insert').locator('.af-ae-shell-icon, img, svg, i.fa-solid, i.fa-regular, i.fa-brands').count(),1);
+ const helpTrigger=shell.locator('.af-ae-format-help-trigger');
+ assert.equal((await helpTrigger.textContent()).trim(),'');
+ assert.equal(await helpTrigger.locator('i.fa-circle-question').count(),1);
  const palette=()=>shell.evaluate(e=>({color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor,source:getComputedStyle(e.querySelector('textarea:not(.af-ae-original-textarea)')||e.querySelector('textarea')).color}));
  const initialPalette=await palette();
  assert.notEqual(initialPalette.color,initialPalette.background);
@@ -64,7 +67,9 @@ const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><bu
  }
  await popup('af_formathelp','.af-ae-format-help-body');
  await popup('af_font','.af-ff-dd');await popup('af_fontsize','.af-ae-fontsize-picker');
- await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup .af-ae-shell-menu').waitFor({state:'visible'});await page.keyboard.press('Escape');
+ await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup .af-ae-shell-menu').waitFor({state:'visible'});
+ assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button').evaluateAll(nodes=>nodes.every(n=>!!n.querySelector('i.fa-solid, i.fa-regular, i.fa-brands'))),true,'Every extra-menu command must have a Font Awesome icon');
+ await page.keyboard.press('Escape');
  await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup [data-af-command=af_indent]').click();
  await page.waitForFunction(()=>afAdvancedEditorShell.states.indent.state==='loaded');
  await page.locator('.af-ae-popup').waitFor({state:'visible'});await page.keyboard.press('Escape');
@@ -74,6 +79,7 @@ const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><bu
  await page.waitForTimeout(50);
  const ed=()=>page.evaluate(()=>jQuery('#message').sceditor('instance').val());
  assert.equal((await dimensions()).native,1);assert.equal((await dimensions()).toolbar,1);
+ assert.equal(await cmd('af_kb_insert').count(),1,'KB must remain single after WYSIWYG activation');
  assert.equal((await dimensions()).fields,2); // Original data field + ONE native source view.
  const activated=await dimensions();assert.equal(activated.height,initial.height);
  assert.equal(await page.evaluate(()=>getComputedStyle(jQuery('#message').sceditor('instance').getBody()).color),initialPalette.color);

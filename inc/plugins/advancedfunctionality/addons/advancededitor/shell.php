@@ -10,6 +10,63 @@ function af_advancededitor_shell_icon_url(string $name): string
     return '';
 }
 
+function af_advancededitor_shell_fa_icon(string $cmd): string
+{
+    $map = [
+        'horizontalrule' => 'fa-solid fa-minus',
+        'subscript' => 'fa-solid fa-subscript',
+        'superscript' => 'fa-solid fa-superscript',
+        'bulletlist' => 'fa-solid fa-list-ul',
+        'orderedlist' => 'fa-solid fa-list-ol',
+        'left' => 'fa-solid fa-align-left',
+        'center' => 'fa-solid fa-align-center',
+        'right' => 'fa-solid fa-align-right',
+        'justify' => 'fa-solid fa-align-justify',
+        'quote' => 'fa-solid fa-quote-right',
+        'code' => 'fa-solid fa-code',
+        'link' => 'fa-solid fa-link',
+        'unlink' => 'fa-solid fa-link-slash',
+        'image' => 'fa-solid fa-image',
+        'youtube' => 'fa-brands fa-youtube',
+        'emoticon' => 'fa-regular fa-face-smile',
+        'maximize' => 'fa-solid fa-expand',
+        'af_togglemode' => 'fa-solid fa-code',
+        'af_mark' => 'fa-solid fa-highlighter',
+        'af_abbr' => 'fa-solid fa-circle-info',
+        'af_tables' => 'fa-solid fa-table-cells',
+        'af_accordion' => 'fa-solid fa-bars-staggered',
+        'af_tabs' => 'fa-solid fa-table-columns',
+        'af_indent' => 'fa-solid fa-indent',
+        'af_floatbb' => 'fa-solid fa-align-left',
+        'af_htmlbb' => 'fa-solid fa-file-code',
+        'af_tquote' => 'fa-solid fa-quote-left',
+        'af_anchor' => 'fa-solid fa-anchor',
+        'af_anchorlink' => 'fa-solid fa-link',
+        'af_font' => 'fa-solid fa-font',
+        'af_fontsize' => 'fa-solid fa-text-height',
+        'af_embedvideos' => 'fa-solid fa-video',
+        'af_lockcontent' => 'fa-solid fa-lock',
+        'af_resizeimg' => 'fa-solid fa-up-right-and-down-left-from-center',
+        'af_spoiler' => 'fa-solid fa-eye-slash',
+        'af_drafts' => 'fa-solid fa-file-pen',
+        'af_stikers' => 'fa-regular fa-face-laugh',
+        'af_kb_insert' => 'fa-solid fa-book-open',
+        'af_formathelp' => 'fa-regular fa-circle-question',
+    ];
+    if (isset($map[$cmd])) return $map[$cmd];
+    return str_starts_with($cmd, 'af_') ? 'fa-solid fa-code' : '';
+}
+
+function af_advancededitor_shell_command_key(string $cmd, array $button = []): string
+{
+    $cmd = strtolower(trim($cmd));
+    $handler = strtolower(trim((string)($button['handler'] ?? '')));
+    if ($handler === 'kb_insert' || in_array($cmd, ['kb','kb_insert','af_kb','af_kb_insert','knowledgebase','knowledgebase_insert'], true)) {
+        return 'af_kb_insert';
+    }
+    return $cmd;
+}
+
 function af_advancededitor_shell_registry(array $available, array $custom, array $packs): array
 {
     $buttons = [];
@@ -75,6 +132,7 @@ function af_advancededitor_shell_registry(array $available, array $custom, array
             $capabilities[$id] = $b['runtime']; $b['capability'] = $id;
         }
         if (in_array($cmd, ['af_togglemode', 'source'], true)) $b['capability'] = 'wysiwyg';
+        $b['iconClass'] = trim((string)($b['iconClass'] ?? '')) ?: af_advancededitor_shell_fa_icon((string)$cmd);
         $icon = (string)($b['icon'] ?? '');
         if ($icon === '') {
             // Command aliases share the existing vector controls.
@@ -123,19 +181,32 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
         if ($extra) $layout['sections'][] = ['type' => 'group', 'items' => $extra];
     }
     // Help is an independent edge control; never place it in a BBCode group.
+    $hasCanonicalKb = isset($map['af_kb_insert']);
     foreach ($layout['sections'] as &$section) {
-        $section['items'] = array_values(array_filter((array)($section['items'] ?? []),
-            static fn($cmd) => $cmd !== 'af_formathelp'));
+        $normalized = [];
+        foreach ((array)($section['items'] ?? []) as $cmd) {
+            if ($cmd === 'af_formathelp') continue;
+            $key = af_advancededitor_shell_command_key((string)$cmd, $map[$cmd] ?? []);
+            if ($hasCanonicalKb && $key === 'af_kb_insert') $cmd = 'af_kb_insert';
+            $normalized[] = $cmd;
+        }
+        $section['items'] = array_values($normalized);
     }
     unset($section);
     $escape = static fn($s) => htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $button = static function ($cmd, $b, bool $menuItem = false) use ($escape): string {
         $icon = trim((string)($b['icon'] ?? ''));
+        $fa = trim((string)($b['iconClass'] ?? af_advancededitor_shell_fa_icon((string)$cmd)));
         if (str_starts_with($icon, '<svg') && str_contains($icon, '</svg>')) $icon = 'data:image/svg+xml,' . rawurlencode($icon);
-        $visual = $icon !== '' ? '<img src="' . $escape($icon) . '" alt="" width="16" height="16" />' : $escape($b['label'] ?? $b['name'] ?? $cmd);
-        if ($icon !== '' && (str_contains(strtolower($icon), '.svg') || str_starts_with($icon, 'data:image/svg'))) {
-            $cssUrl = str_replace(['"', "\n", "\r"], ['%22', '', ''], $icon);
-            $visual = '<span class="af-ae-shell-icon" style="--af-ae-icon-url:url(&quot;' . $escape($cssUrl) . '&quot;)"></span>';
+        if ($menuItem && $fa !== '') {
+            $visual = '<i class="' . $escape($fa) . '" aria-hidden="true"></i>';
+        } else {
+            $visual = $icon !== '' ? '<img src="' . $escape($icon) . '" alt="" width="16" height="16" />'
+                : ($fa !== '' ? '<i class="' . $escape($fa) . '" aria-hidden="true"></i>' : $escape($b['label'] ?? $b['name'] ?? $cmd));
+            if ($icon !== '' && (str_contains(strtolower($icon), '.svg') || str_starts_with($icon, 'data:image/svg'))) {
+                $cssUrl = str_replace(['"', "\n", "\r"], ['%22', '', ''], $icon);
+                $visual = '<span class="af-ae-shell-icon" style="--af-ae-icon-url:url(&quot;' . $escape($cssUrl) . '&quot;)"></span>';
+            }
         }
         $label = $menuItem ? '<span class="af-ae-shell-menu-label">' . $escape($b['title'] ?? $cmd) . '</span>' : '';
         return '<a href="#" role="button" class="sceditor-button sceditor-button-' . $escape($cmd) . '" data-af-command="' . $escape($cmd) . '" title="' . $escape($b['title'] ?? $cmd) . '" aria-label="' . $escape($b['title'] ?? $cmd) . '"><div>' . $visual . '</div>' . $label . '</a>';
@@ -147,8 +218,10 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
         $items = [];
         foreach ((array)($section['items'] ?? []) as $cmd) {
             if ($cmd === '|') { $items[] = $cmd; continue; }
-            if (!isset($map[$cmd]) || isset($renderedCommands[$cmd]) || $cmd === 'af_formathelp') continue;
-            $renderedCommands[$cmd] = true;
+            if (!isset($map[$cmd]) || $cmd === 'af_formathelp') continue;
+            $commandKey = af_advancededitor_shell_command_key((string)$cmd, $map[$cmd]);
+            if (isset($renderedCommands[$commandKey])) continue;
+            $renderedCommands[$commandKey] = true;
             $items[] = $cmd;
         }
         if (($section['type'] ?? 'group') === 'dropdown') {
@@ -170,8 +243,10 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
     // commands absent from the configured layout; never duplicate KB buttons.
     foreach ((array)($GLOBALS['af_ae_external_buttons'] ?? []) as $externalKey => $external) {
         $cmd = (string)($external['cmd'] ?? $externalKey);
-        if ($cmd === '' || isset($renderedCommands[$cmd]) || !isset($map[$cmd])) continue;
-        $renderedCommands[$cmd] = true;
+        if ($cmd === '' || !isset($map[$cmd])) continue;
+        $commandKey = af_advancededitor_shell_command_key($cmd, $map[$cmd]);
+        if (isset($renderedCommands[$commandKey])) continue;
+        $renderedCommands[$commandKey] = true;
         $html .= '<div class="sceditor-group">' . $button($cmd, $map[$cmd]) . '</div>';
     }
     $html .= '<!--af-ae-toolbar-end--></div>';
@@ -190,8 +265,15 @@ function af_advancededitor_shell_attach_button(string $page, array $button): str
     $group = $rendered[0] ?? '';
     return preg_replace_callback('~(<div\b[^>]*class="sceditor-toolbar"[^>]*>)(.*?)(<!--af-ae-toolbar-end-->)~s',
         static function ($match) use ($button, $group) {
-            $command = 'data-af-command="' . htmlspecialchars((string)$button['cmd'], ENT_QUOTES, 'UTF-8') . '"';
-            return $match[1] . $match[2] . (str_contains($match[2], $command) ? '' : $group) . $match[3];
+            $key = af_advancededitor_shell_command_key((string)($button['cmd'] ?? ''), $button);
+            $present = false;
+            if ($key === 'af_kb_insert') {
+                $present = (bool)preg_match('~data-af-command="(?:kb|kb_insert|af_kb|af_kb_insert|knowledgebase|knowledgebase_insert)"~i', $match[2]);
+            } else {
+                $command = 'data-af-command="' . htmlspecialchars((string)$button['cmd'], ENT_QUOTES, 'UTF-8') . '"';
+                $present = str_contains($match[2], $command);
+            }
+            return $match[1] . $match[2] . ($present ? '' : $group) . $match[3];
         }, $page) ?? $page;
 }
 

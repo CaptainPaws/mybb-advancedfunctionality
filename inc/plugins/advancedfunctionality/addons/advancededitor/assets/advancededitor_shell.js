@@ -629,7 +629,12 @@
       var helpButton = document.createElement('button');
       helpButton.type = 'button'; helpButton.className = 'af-ae-format-help-trigger';
       helpButton.setAttribute('data-af-command', 'af_formathelp');
-      helpButton.textContent = help.title || 'Подсказка по форматированию';
+      helpButton.title = help.title || 'Подсказка по форматированию';
+      helpButton.setAttribute('aria-label', helpButton.title);
+      var helpIcon = document.createElement('i');
+      helpIcon.className = 'fa-regular fa-circle-question';
+      helpIcon.setAttribute('aria-hidden', 'true');
+      helpButton.appendChild(helpIcon);
       counter.querySelector('.af-ccp-bar').prepend(helpButton);
     }
     if (counter && counter.classList.contains('af-ccp-wrap')) {
@@ -663,7 +668,11 @@
       var visual = document.createElement('div');
       if (b.icon) {
         var icon = document.createElement('img'); icon.src = b.icon; icon.alt = ''; icon.width = icon.height = 16; visual.appendChild(icon);
-      } else visual.textContent = b.label || b.title;
+      } else if (b.iconClass) {
+        var fa = document.createElement('i'); fa.className = b.iconClass; fa.setAttribute('aria-hidden', 'true'); visual.appendChild(fa);
+      } else {
+        var fallback = document.createElement('i'); fallback.className = String(b.cmd || '').indexOf('af_') === 0 ? 'fa-solid fa-code' : 'fa-solid fa-circle'; fallback.setAttribute('aria-hidden', 'true'); visual.appendChild(fallback);
+      }
       a.appendChild(visual);
       wrapper.querySelector('.sceditor-toolbar').appendChild(a);
     });

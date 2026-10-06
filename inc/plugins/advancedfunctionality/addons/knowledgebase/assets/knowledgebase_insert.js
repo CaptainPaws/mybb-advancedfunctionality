@@ -834,6 +834,11 @@
             window.afKbInitChips();
         }
 
+        // AdvancedEditor shell is the sole toolbar owner. Its lazy handler
+        // window.af_ae_kb_insert_exec is already registered above, so legacy
+        // SCEditor toolbar patching here would only create a second KB button.
+        if (window.afAdvancedEditorShell) return;
+
         var hasTextarea = document.querySelector('textarea[name="message"], textarea#message');
         var hasSceditor = !!(getJQ() && getJQ().fn && typeof getJQ().fn.sceditor === 'function');
 

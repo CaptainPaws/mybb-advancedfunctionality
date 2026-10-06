@@ -4,7 +4,7 @@
 .af-ae-shell > .sceditor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0; padding: 3px 5px; background: var(--atf-color-page-subtle, var(--atf-surface-subtle, #f7f7f7)); border-bottom: 1px solid rgba(0,0,0,.08); border-radius: 12px 12px 0 0; }
 .af-ae-shell .sceditor-group { position: relative; display: inline-flex; align-items: center; margin: 1px 5px 1px 0; padding: 0; border: 1px solid rgba(0,0,0,.12); border-radius: 3px; background: var(--atf-color-page-subtle, var(--atf-surface-subtle, #eee)); }
 .af-ae-shell .sceditor-button { display: inline-flex; align-items: center; justify-content: center; box-sizing: content-box; width: 16px; height: 20px; padding: 3px 5px; margin: 0; color: inherit; cursor: pointer; text-decoration: none; border: 1px solid transparent; border-radius: 3px; }
-.af-ae-shell .sceditor-button > div { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 11px; font-weight: 700; line-height: 16px; color: inherit; background-image: none; margin: 0; overflow: visible; }
+.af-ae-shell .sceditor-button > div { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 11px; font-weight: 700; line-height: 16px; color: inherit; background-image: none !important; background-position: center !important; text-indent: 0 !important; margin: 0; overflow: visible; }
 .af-ae-shell-icon { display: block; width: 16px; height: 16px; background: var(--af-ae-icon-color, currentColor); -webkit-mask: var(--af-ae-icon-url) center / contain no-repeat; mask: var(--af-ae-icon-url) center / contain no-repeat; }
 .af-ae-shell .sceditor-button img { width: 16px; height: 16px; max-width: none; }
 .af-ae-shell .sceditor-button:hover, .af-ae-shell .sceditor-button:focus-visible { background: rgba(0,0,0,.08); border-color: rgba(0,0,0,.15); }
@@ -116,7 +116,11 @@ html body .af-ae-shell > .sceditor-container.sourceMode > textarea,
 html body .af-ae-shell > .sceditor-container.wysiwygMode > iframe { display: block; }
 .af-ae-shell > .af-ccp-wrap { flex: 0 0 auto; margin: 0; }
 .af-ae-shell .af-ccp-bar { border-radius: 0 0 12px 12px; }
-.af-ae-format-help-trigger { margin-right: auto; cursor: pointer; color: inherit; font: inherit; padding: 4px 8px; background: transparent; border: 1px solid var(--atf-color-border, #ccc); border-radius: 5px; }
+.af-ae-format-help-trigger { margin-right: auto; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; box-sizing: border-box; cursor: pointer; color: inherit; font: inherit; padding: 0; background: transparent; border: 1px solid var(--atf-color-border, #ccc); border-radius: 5px; }
+.af-ae-format-help-trigger i { font-size: 14px; line-height: 1; pointer-events: none; }
+.af-ae-shell .sceditor-button i.fa-solid,
+.af-ae-shell .sceditor-button i.fa-regular,
+.af-ae-shell .sceditor-button i.fa-brands { display: inline-block; width: 16px; text-align: center; font-size: 13px; line-height: 16px; color: currentColor; }
 .af-ae-popup.sceditor-dropdown {
   position: fixed !important;
   inset: auto;
