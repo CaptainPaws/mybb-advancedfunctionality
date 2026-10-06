@@ -199,13 +199,13 @@
             var node = nodes[j];
             if (node.nodeType !== 1) continue;
             var candidates = [];
-            if (node.id && /^pid_\\d+$/.test(node.id)) candidates.push(node);
+            if (node.id && /^pid_\d+$/.test(node.id)) candidates.push(node);
             if (node.querySelectorAll) {
               Array.prototype.push.apply(candidates, node.querySelectorAll('[id^="pid_"]'));
             }
             for (var k = 0; k < candidates.length; k++) {
               var candidate = candidates[k];
-              if (!/^pid_\\d+$/.test(candidate.id) || knownPostIds[candidate.id]) continue;
+              if (!/^pid_\d+$/.test(candidate.id) || knownPostIds[candidate.id]) continue;
               recordPostIds();
               waitingForPost = false;
               finishPublished();
