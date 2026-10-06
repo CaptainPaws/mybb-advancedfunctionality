@@ -231,7 +231,8 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
             }
         }
         $label = $menuItem ? '<span class="af-ae-shell-menu-label">' . $escape($b['title'] ?? $cmd) . '</span>' : '';
-        return '<a href="#" role="button" class="sceditor-button sceditor-button-' . $escape($cmd) . '" data-af-command="' . $escape($cmd) . '" title="' . $escape($b['title'] ?? $cmd) . '" aria-label="' . $escape($b['title'] ?? $cmd) . '"><div>' . $visual . '</div>' . $label . '</a>';
+        $owned = $menuItem ? ' data-af-shell-menu-item="1"' : '';
+        return '<a href="#" role="button" class="sceditor-button sceditor-button-' . $escape($cmd) . '" data-af-command="' . $escape($cmd) . '"' . $owned . ' title="' . $escape($b['title'] ?? $cmd) . '" aria-label="' . $escape($b['title'] ?? $cmd) . '"><div>' . $visual . '</div>' . $label . '</a>';
     };
     $html = '<div class="sceditor-toolbar" role="toolbar" aria-label="AdvancedEditor">';
     $n = 0;

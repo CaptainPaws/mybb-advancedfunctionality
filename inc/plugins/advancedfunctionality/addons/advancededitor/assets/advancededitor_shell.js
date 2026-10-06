@@ -46,6 +46,30 @@
     });
   }
 
+  function ensureShellMenuIcons(root) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('.af-ae-shell-menu [data-af-shell-menu-item="1"]').forEach(function (item) {
+      var cmd = item.getAttribute('data-af-command');
+      var b = buttons[cmd] || {};
+      var iconClass = String(b.iconClass || '').trim();
+      if (!iconClass) iconClass = String(cmd || '').indexOf('af_') === 0 ? 'fa-solid fa-code' : 'fa-solid fa-circle';
+      var visual = item.querySelector(':scope > div');
+      if (!visual) return;
+      var current = visual.querySelector('i.fa-solid, i.fa-regular, i.fa-brands');
+      if (current && current.className === iconClass) return;
+      visual.replaceChildren();
+      var icon = document.createElement('i');
+      icon.className = iconClass;
+      icon.setAttribute('aria-hidden', 'true');
+      visual.appendChild(icon);
+      visual.style.backgroundImage = 'none';
+      visual.style.textIndent = '0';
+      visual.style.webkitMaskImage = 'none';
+      visual.style.maskImage = 'none';
+      visual.style.backgroundColor = '';
+    });
+  }
+
   Object.keys(registry).forEach(function(id) { states[id] = { state: 'idle', promise: null }; });
 
   function loadAsset(url, type) {
@@ -459,6 +483,7 @@
       });
     }
     dedupeKbButtons(ta.__afAeShell);
+    ensureShellMenuIcons(ta.__afAeShell);
     syncEditorSurface(ta, editor);
   }
 
@@ -725,6 +750,7 @@
       wrapper.querySelector('.sceditor-toolbar').appendChild(a);
     });
     dedupeKbButtons(wrapper);
+    ensureShellMenuIcons(wrapper);
     wrapper.addEventListener('mousedown', function (e) { if (e.target.closest('[data-af-command]')) e.preventDefault(); });
     wrapper.addEventListener('click', function (e) {
       var caller = e.target.closest('[data-af-command]'); if (!caller || !wrapper.contains(caller)) return;
@@ -735,7 +761,11 @@
           var opening = menu.hidden;
           var shellPopup = ta.__afAeAdapter;
           shellPopup.closeDropDown();
-          if (opening) { menu.hidden = false; shellPopup.createDropDown(caller, 'af-ae-extra-menu', menu); }
+          if (opening) {
+            ensureShellMenuIcons(wrapper);
+            menu.hidden = false;
+            shellPopup.createDropDown(caller, 'af-ae-extra-menu', menu);
+          }
         }
         return;
       }

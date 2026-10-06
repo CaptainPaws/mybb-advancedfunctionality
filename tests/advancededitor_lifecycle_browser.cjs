@@ -69,10 +69,16 @@ const spoiler='<blockquote class="mycode_quote af-aqr-spoiler" data-open="0"><bu
  await popup('af_font','.af-ff-dd');await popup('af_fontsize','.af-ae-fontsize-picker');
  await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup .af-ae-shell-menu').waitFor({state:'visible'});
  assert.equal(await page.locator('.af-ae-popup').getAttribute('class').then(v=>v.includes('sceditor-dropdown')),false,'AdvancedEditor extra menu must not use native SCEditor dropdown class');
- assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button').evaluateAll(nodes=>nodes.every(n=>!!n.querySelector('i.fa-solid, i.fa-regular, i.fa-brands'))),true,'Every extra-menu command must have a Font Awesome icon');
+ assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button').evaluateAll(nodes=>nodes.every(n=>n.getAttribute('data-af-shell-menu-item')==='1' && !!n.querySelector('i.fa-solid, i.fa-regular, i.fa-brands'))),true,'Every owned extra-menu command must have a Font Awesome icon');
  assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button > div').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).backgroundImage==='none' && getComputedStyle(n).textIndent==='0px')),true,'Source extra-menu icons must not inherit SCEditor sprites');
  window.__afExtraMenuIconsBefore=await page.locator('.af-ae-popup .af-ae-shell-menu .sceditor-button i').evaluateAll(nodes=>nodes.map(n=>n.className).join('|'));
  window.__afExtraMenuStyleBefore=await page.locator('.af-ae-popup').evaluate(e=>{const c=getComputedStyle(e);return [c.padding,c.borderRadius,c.backgroundColor,c.minWidth].join('|');});
+ await page.keyboard.press('Escape');
+ // Simulate any legacy runtime destroying one owned icon. The shell must repair
+ // it before the next menu opening / WYSIWYG lifecycle.
+ await page.evaluate(()=>{const i=document.querySelector('.af-ae-shell-menu [data-af-shell-menu-item="1"] i'); if(i)i.remove();});
+ await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup .af-ae-shell-menu').waitFor({state:'visible'});
+ assert.equal(await page.locator('.af-ae-popup .af-ae-shell-menu [data-af-shell-menu-item="1"]').first().locator('i.fa-solid, i.fa-regular, i.fa-brands').count(),1,'Shell must self-heal a removed menu icon');
  await page.keyboard.press('Escape');
  await cmd('af_menu_dropdown1').click();await page.locator('.af-ae-popup [data-af-command=af_indent]').click();
  await page.waitForFunction(()=>afAdvancedEditorShell.states.indent.state==='loaded');

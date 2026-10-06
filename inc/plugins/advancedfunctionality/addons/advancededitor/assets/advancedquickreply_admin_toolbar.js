@@ -1467,8 +1467,8 @@
         }
 
         out.menus.forEach(function (m) {
-          var a = tb.querySelector('a.sceditor-button-' + m.cmd);
-          if (!a) return;
+          var a = tb.querySelector(':scope > .sceditor-group > a.sceditor-button-' + m.cmd);
+          if (!a || a.hasAttribute('data-af-shell-menu-item')) return;
 
           // даём кнопке цвет, чтобы currentColor работал
           try { a.style.color = 'var(--af-aqr-icon-color, currentColor)'; } catch (e0) {}
@@ -1572,8 +1572,8 @@
         // Декорируем ТОЛЬКО кастомные af_* кнопки
         if (!/^af_/i.test(cmd)) return;
 
-        var a = tb.querySelector('a.sceditor-button-' + cmd);
-        if (!a) return;
+        var a = tb.querySelector(':scope > .sceditor-group > a.sceditor-button-' + cmd);
+        if (!a || a.hasAttribute('data-af-shell-menu-item')) return;
 
         // tooltip
         var t = String(b.title || b.hint || cmd).trim();
