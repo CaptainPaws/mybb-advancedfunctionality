@@ -382,6 +382,8 @@
         .map(function (x) { return String(x == null ? '' : x).trim(); })
         .filter(function (cmd) {
           if (!cmd) return false;
+          // Formatting Help is a dedicated edge control, never a toolbar group item.
+          if (cmd === 'af_formathelp') return false;
           if (cmd === '|') return true;
 
           // канон dropdown-команд
@@ -410,7 +412,9 @@
       var type = String(sec.type || 'group').toLowerCase();
       var id = String(sec.id || ('sec' + idx));
       var title = String(sec.title || '');
-      var items = Array.isArray(sec.items) ? sec.items.slice() : [];
+      var items = Array.isArray(sec.items) ? sec.items.filter(function (cmd) {
+          return cmd !== 'af_formathelp';
+        }) : [];
 
       if (type === 'dropdown') {
         dropdownN++;
@@ -484,7 +488,7 @@
   function afAeEnsureFormatHelpEdge(ta) {
     // The lightweight shell has its own dedicated help button. Do not inject
     // another one into the hidden native SCEditor toolbar.
-    if (ta && ta.__afAeShell) return;
+    if (ta && (ta.__afAeShell || (ta.closest && ta.closest('[data-af-editor-shell="1"]')))) return;
     var cfg = getFormatHelpConfig();
     if (!cfg.enabled || !ta) return;
 
