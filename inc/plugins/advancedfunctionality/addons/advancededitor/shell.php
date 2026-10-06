@@ -12,10 +12,15 @@ function af_advancededitor_shell_icon_url(string $name): string
 
 function af_advancededitor_shell_fa_icon(string $cmd): string
 {
+    $svgOwned = [
+        'horizontalrule','subscript','superscript',
+        'af_mark','af_abbr','af_tabs','af_accordion',
+        'af_ul_disc','af_ul_square','af_ul_decimal',
+        'af_ul_upper_roman','af_ul_upper_alpha','af_ul_lower_alpha',
+    ];
+    if (in_array($cmd, $svgOwned, true)) return '';
+
     $map = [
-        'horizontalrule' => 'fa-solid fa-minus',
-        'subscript' => 'fa-solid fa-subscript',
-        'superscript' => 'fa-solid fa-superscript',
         'bulletlist' => 'fa-solid fa-list-ul',
         'orderedlist' => 'fa-solid fa-list-ol',
         'left' => 'fa-solid fa-align-left',
@@ -31,11 +36,7 @@ function af_advancededitor_shell_fa_icon(string $cmd): string
         'emoticon' => 'fa-regular fa-face-smile',
         'maximize' => 'fa-solid fa-expand',
         'af_togglemode' => 'fa-solid fa-code',
-        'af_mark' => 'fa-solid fa-highlighter',
-        'af_abbr' => 'fa-solid fa-circle-info',
         'af_tables' => 'fa-solid fa-table-cells',
-        'af_accordion' => 'fa-solid fa-bars-staggered',
-        'af_tabs' => 'fa-solid fa-table-columns',
         'af_indent' => 'fa-solid fa-indent',
         'af_floatbb' => 'fa-solid fa-align-left',
         'af_htmlbb' => 'fa-solid fa-file-code',

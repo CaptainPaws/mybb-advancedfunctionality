@@ -65,6 +65,8 @@
         return;
       }
       var iconClass = String(b.iconClass || '').trim();
+      var svgOwned = ['horizontalrule','subscript','superscript','af_mark','af_abbr','af_tabs','af_accordion','af_ul_disc','af_ul_square','af_ul_decimal','af_ul_upper_roman','af_ul_upper_alpha','af_ul_lower_alpha'];
+      if (!iconClass && svgOwned.indexOf(String(cmd || '')) !== -1) return;
       if (!iconClass) iconClass = String(cmd || '').indexOf('af_') === 0 ? 'fa-solid fa-code' : 'fa-solid fa-circle';
       var glyph = String(b.iconGlyph || '');
       var current = visual.querySelector('i.fa-solid, i.fa-regular, i.fa-brands');
