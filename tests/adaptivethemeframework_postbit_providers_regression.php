@@ -37,7 +37,8 @@ atf_post_assert(!af_adaptivethemeframework_register_component([
 ]), 'Duplicate provider identity accepted.');
 
 $post = [
-    'pid' => 12, 'tid' => 34, 'uid' => 56, 'profilelink' => '<a href="member.php?action=profile&amp;uid=56">User</a>',
+    'pid' => 12, 'tid' => 34, 'uid' => 56,
+    'profilelink' => '<a class="formattedname af-aam-mention-user" href="member.php?action=profile&amp;uid=56" data-uid="56" data-username="User">User</a>',
     'af_apui_presence_html' => '<i>online</i>', 'af_apui_profile_fields_html' => '<b>fields</b>',
     'af_apui_author_statistics_html' => '<b>rail</b>', 'af_apui_plaque_html' => '<b>plaque</b>',
     'af_apui_actionbar_html' => '<b>character</b>', 'af_apc_atf_html' => '<af_apc_uid_56>',
@@ -73,6 +74,11 @@ foreach ([
     atf_post_assert(str_contains($profileActions, '<i class="fa-solid ' . $icon . '" aria-hidden="true"></i>'), "Profile action {$label} lost its real Font Awesome icon.");
 }
 atf_post_assert(str_contains($profileActions, 'href="member.php?action=profile&amp;uid=56"'), 'Native profile href was lost.');
+atf_post_assert(str_contains($profileActions, 'class="formattedname atf-post__profile-action"'), 'Non-mention profile classes were not preserved.');
+atf_post_assert(!str_contains($profileActions, 'af-aam-mention-user'), 'Profile navigation icon still acts as an AAM mention trigger.');
+atf_post_assert(!str_contains($profileActions, 'data-uid='), 'Mention uid metadata leaked into the profile navigation icon.');
+atf_post_assert(!str_contains($profileActions, 'data-username='), 'Mention username metadata leaked into the profile navigation icon.');
+atf_post_assert(str_contains($post['af_atf_slots']['post.author.identity'], 'af-aam-mention-user'), 'Author identity lost its intended mention trigger.');
 atf_post_assert(str_contains($profileActions, 'onclick="MyBB.reputation(56); return false;"'), 'Native reputation onclick was lost.');
 atf_post_assert(str_contains($profileActions, 'data-native="rep"'), 'Native reputation data attribute was lost.');
 atf_post_assert(!str_contains($profileActions, '>User<'), 'Username leaked into profile actions.');

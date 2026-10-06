@@ -1030,6 +1030,71 @@ function af_adaptivethemeframework_label_post_controls(string $html, array $labe
  * The opening tag is kept intact so MyBB URLs, onclick handlers, data
  * attributes, tokens and permission-filtered presence remain authoritative.
  */
+/**
+ * The author name may be decorated by AdvancedAlertsAndMentions as a mention
+ * trigger. The profile icon is a second presentation of the same native
+ * profile link and must remain ordinary navigation, not another mention
+ * trigger. Strip only AAM's trigger metadata from this copied control.
+ */
+function af_adaptivethemeframework_profile_navigation_control(string $html): string
+{
+    if ($html === '') return '';
+
+    return preg_replace_callback(
+        '~<a\\b([^>]*)>~i',
+        static function (array $match): string {
+            $attributes = $match[1];
+            $isMentionTrigger = preg_match(
+                '~(?:^|\\s)class\\s*=\\s*(["\\'])(?:(?!\\1).)*\\b(?:af-aam-mention-user|mention_user)\\b(?:(?!\\1).)*\\1~is',
+                $attributes
+            ) || preg_match('~\\sdata-mention\\s*=\\s*(["\\'])1\\1~i', $attributes);
+
+            if (!$isMentionTrigger) {
+                return $match[0];
+            }
+
+            if (preg_match('~\\bclass\\s*=\\s*(["\\'])(.*?)\\1~is', $attributes, $classMatch)) {
+                $classes = preg_split('~\\s+~', trim($classMatch[2])) ?: [];
+                $classes = array_values(array_filter(
+                    $classes,
+                    static fn(string $class): bool => !in_array(
+                        strtolower($class),
+                        ['af-aam-mention-user', 'mention_user'],
+                        true
+                    )
+                ));
+
+                if ($classes) {
+                    $replacement = 'class=' . $classMatch[1] . implode(' ', $classes) . $classMatch[1];
+                    $attributes = preg_replace(
+                        '~\\bclass\\s*=\\s*(["\\'])(.*?)\\1~is',
+                        $replacement,
+                        $attributes,
+                        1
+                    ) ?? $attributes;
+                } else {
+                    $attributes = preg_replace(
+                        '~\\s*\\bclass\\s*=\\s*(["\\'])(.*?)\\1~is',
+                        '',
+                        $attributes,
+                        1
+                    ) ?? $attributes;
+                }
+            }
+
+            $attributes = preg_replace(
+                '~\\s+data-(?:uid|username|mention)\\s*=\\s*(["\\'])(?:(?!\\1).)*\\1~is',
+                '',
+                $attributes
+            ) ?? $attributes;
+
+            return '<a' . $attributes . '>';
+        },
+        $html,
+        1
+    ) ?? $html;
+}
+
 function af_adaptivethemeframework_iconize_post_control(string $html, string $label, string $icon, string $presentationClass = 'atf-post__profile-action'): string
 {
     if ($html === '') return '';
@@ -1140,7 +1205,7 @@ function af_adaptivethemeframework_post_context(array $post): array
     $profileActions = '';
     if (!empty($post['profilelink'])) {
         $profileActions .= af_adaptivethemeframework_iconize_post_control(
-            (string)$post['profilelink'],
+            af_adaptivethemeframework_profile_navigation_control((string)$post['profilelink']),
             'Профиль',
             'fa-user'
         );
