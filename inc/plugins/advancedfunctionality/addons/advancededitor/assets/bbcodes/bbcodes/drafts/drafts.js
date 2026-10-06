@@ -203,13 +203,20 @@
   }
 
   // ====== core installer ======
-  function installOnForm(form) {
+  function installOnForm(form, preferredTextarea) {
     if (!form || form.nodeType !== 1) return;
     if (form._afAeDraftsInstalled) return;
     form._afAeDraftsInstalled = true;
 
-    var ta = findMessageTextarea(form);
+    var ta = preferredTextarea || findMessageTextarea(form);
     if (!ta) return;
+    var listeners = [];
+    function listen(target, type, callback, options) { target.addEventListener(type, callback, options); listeners.push([target, type, callback, options]); }
+    form._afAeDraftsDispose = function () {
+      form._afAeDraftsLocked = true; clearInterval(form._afAeDraftsTimer);
+      listeners.forEach(function(l) { l[0].removeEventListener(l[1], l[2], l[3]); }); listeners = [];
+      form._afAeDraftsInstalled = false;
+    };
 
     var key = getStorageKey(form);
     form._afAeDraftsKey = key;
@@ -260,9 +267,9 @@
 
     // textarea input/keyup
     try {
-      ta.addEventListener('input', saveSoon, true);
-      ta.addEventListener('keyup', saveSoon, true);
-      ta.addEventListener('change', function () { saveNow(true); }, true);
+      listen(ta, 'input', saveSoon, true);
+      listen(ta, 'keyup', saveSoon, true);
+      listen(ta, 'change', function () { saveNow(true); }, true);
     } catch (eIn) {}
 
     // SCEditor: чтобы ловить ввод в iframe, подписываемся на body
@@ -275,8 +282,8 @@
         if (!body || body._afAeDraftsBodyBound) return true;
         body._afAeDraftsBodyBound = true;
 
-        body.addEventListener('input', saveSoon, true);
-        body.addEventListener('keyup', saveSoon, true);
+        listen(body, 'input', saveSoon, true);
+        listen(body, 'keyup', saveSoon, true);
         return true;
       } catch (eB) { return false; }
     }
@@ -288,18 +295,18 @@
 
     // 3.2) Перед уходом/скрытием вкладки — сохранить принудительно
     try {
-      document.addEventListener('visibilitychange', function () {
+      listen(document, 'visibilitychange', function () {
         if (document.visibilityState === 'hidden') saveNow(true);
       }, true);
     } catch (eV) {}
 
     try {
-      window.addEventListener('pagehide', function () { saveNow(true); }, true);
-      window.addEventListener('beforeunload', function () { saveNow(true); }, true);
+      listen(window, 'pagehide', function () { saveNow(true); }, true);
+      listen(window, 'beforeunload', function () { saveNow(true); }, true);
     } catch (eU) {}
 
     // 4) Submit: удаляем черновик + ставим флаг для очистки после перезагрузки
-    form.addEventListener('submit', function () {
+    listen(form, 'submit', function () {
       form._afAeDraftsLocked = true;
 
       try {
@@ -317,7 +324,7 @@
 
     // 5) BFCache: если вернулись назад — и флаг ещё жив, добить очистку
     try {
-      window.addEventListener('pageshow', function () {
+      listen(window, 'pageshow', function () {
         if (!form || !form._afAeDraftsKey) return;
         if (consumeJustSubmitted(form._afAeDraftsKey)) {
           form._afAeDraftsLocked = true;
@@ -328,45 +335,22 @@
     } catch (e11) {}
   }
 
-  function installAll() {
-    var forms = findFormsWithMessageTextarea();
-    for (var i = 0; i < forms.length; i++) {
-      try { installOnForm(forms[i]); } catch (e0) {}
+  window.af_ae_drafts_exec = function (editor, definition, caller) {
+    var owner = caller && caller.closest('[data-af-editor-shell]');
+    var ta = owner && owner.__afAeTextarea || editor && editor.textarea;
+    if (ta && ta.jquery) ta = ta[0];
+    if ((!ta || !ta.form) && editor && editor.getContainer) {
+      var container = editor.getContainer(); if (container && container.jquery) container = container[0];
+      var shell = container && container.closest('[data-af-editor-shell]');
+      ta = (shell || container) && (shell || container).querySelector('textarea:not(.sceditor-textarea)');
     }
-  }
-
-  function boot() {
-    try { installAll(); } catch (e0) {}
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () {
-      window.setTimeout(boot, 0);
-      window.setTimeout(boot, 250);
-      window.setTimeout(boot, 800);
-    });
-  } else {
-    window.setTimeout(boot, 0);
-    window.setTimeout(boot, 250);
-  }
-
-  // если textarea/редактор появляется позже
-  document.addEventListener('focusin', function (e) {
-    var t = e && e.target;
-    if (!t || t.nodeType !== 1) return;
-
-    if (t.tagName === 'TEXTAREA' && (t.id === 'message' || t.name === 'message')) {
-      try {
-        var f = t.form || (t.closest ? t.closest('form') : null);
-        if (f) installOnForm(f);
-      } catch (e1) {}
-      return;
-    }
-
-    try {
-      var f2 = t.closest ? t.closest('form') : null;
-      if (f2 && findMessageTextarea(f2)) installOnForm(f2);
-    } catch (e2) {}
-  }, true);
-
+    if (!ta || !ta.form) return;
+    installOnForm(ta.form, ta);
+    editor.focus();
+  };
+  document.addEventListener('af:editor-destroyed', function (event) {
+    var ta = event.detail.textarea;
+    var form = ta && (ta.form || ta.__afAeForm);
+    if (form && form._afAeDraftsDispose) form._afAeDraftsDispose();
+  });
 })();

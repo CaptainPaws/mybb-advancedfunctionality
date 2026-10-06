@@ -2576,8 +2576,13 @@
     }
   });
 
-  window.setInterval(enhanceAllEditors, INSTANCE_SCAN_DELAY);
+  document.addEventListener('af:editor-ready', function (event) {
+    var instance = event.detail && event.detail.instance;
+    if (instance && !instance.__afAeSourceAdapter) enhanceEditorInstance(instance);
+  });
+  document.addEventListener('af:editor-destroyed', function() { hideTableToolbar(); if (builderState.isOpen) requestBuilderClose(); });
 
+  document.addEventListener('af:capability-ready', function(e) { if (e.detail.capability === 'wysiwyg') { registerBbcodeFormats(); registerCommand(); } });
   enhanceAllEditors();
   registerBbcodeFormats();
   registerBuiltinHandler();

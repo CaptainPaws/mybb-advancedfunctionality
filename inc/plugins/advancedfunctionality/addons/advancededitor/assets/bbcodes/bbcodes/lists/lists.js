@@ -686,18 +686,8 @@
   }
 
   registerHandlers();
-  for (var r = 1; r <= 10; r++) setTimeout(registerHandlers, r * 200);
-
-  waitAnd(function () {
-    var ok1 = registerSceditorCommands();
-    patchInstances();
-    return ok1;
-  }, 120);
-
-  var patchTry = 0;
-  (function patchTick() {
-    patchTry++;
-    patchInstances();
-    if (patchTry < 40) setTimeout(patchTick, 150);
-  })();
+  function registerWysiwyg() { registerSceditorCommands(); patchInstances(); }
+  registerWysiwyg();
+  document.addEventListener('af:capability-ready', function(e) { if (e.detail.capability === 'wysiwyg') registerWysiwyg(); });
+  document.addEventListener('af:editor-ready', function(e) { if (e.detail && e.detail.instance && !e.detail.instance.__afAeSourceAdapter) patchInstances(); });
 })();

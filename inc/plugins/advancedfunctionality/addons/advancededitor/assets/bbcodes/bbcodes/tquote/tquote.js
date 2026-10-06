@@ -1686,17 +1686,10 @@
   });
 
   registerHandlers();
-  waitAnd(registerTquoteBbcode, 150);
-  waitAnd(patchSceditorTquoteCommand, 150);
-  waitAnd(function () {
-    enhanceAllEditors();
-    return false;
-  }, 20);
+  function registerWysiwyg() { registerTquoteBbcode(); patchSceditorTquoteCommand(); }
+  registerWysiwyg();
+  document.addEventListener('af:capability-ready', function(e) { if (e.detail.capability === 'wysiwyg') registerWysiwyg(); });
 
-  window.setInterval(enhanceAllEditors, INSTANCE_SCAN_DELAY);
+  document.addEventListener('af:editor-ready', function(e) { if (e.detail && e.detail.instance && !e.detail.instance.__afAeSourceAdapter) enhanceAllEditors(); });
 
-  for (var i = 1; i <= 20; i += 1) {
-    setTimeout(registerHandlers, i * 250);
-    setTimeout(enhanceAllEditors, i * 300);
-  }
 })(window, document);

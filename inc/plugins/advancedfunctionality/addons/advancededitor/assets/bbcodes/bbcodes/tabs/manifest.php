@@ -1,7 +1,9 @@
 <?php
 
 return [
-    'runtime' => ['view' => true, 'editor' => true],
+    'view_markers' => ['data-af-tabs-root'],
+    'view_assets' => ['js' => ['bbcodes/bbcodes/tabs/tabs_view.js'], 'css' => ['bbcodes/bbcodes/tabs/tabs_view.css']],
+    'runtime' => ['view' => true, 'activation' => 'click', 'requires' => [], 'editor' => true],
     'id'    => 'tabs',
     'title' => 'Табы',
     'tags'  => ['tabs', 'tab'],

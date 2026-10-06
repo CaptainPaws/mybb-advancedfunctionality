@@ -1,6 +1,9 @@
 <?php
 
 return [
+    'view_assets' => ['js' => [], 'css' => ['bbcodes/bbcodes/tables/tables_view.css']],
+    'view_markers' => ['af-bb-table'],
+    'runtime' => ['activation' => 'click', 'requires' => []],
     'id'    => 'tables',
     'title' => 'Таблицы',
     'tags'  => ['table', 'tr', 'td', 'th'],

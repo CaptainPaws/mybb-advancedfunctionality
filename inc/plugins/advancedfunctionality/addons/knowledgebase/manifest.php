@@ -40,6 +40,7 @@ return [
         'controller' => 'admin.php',
     ],
     'theme_stylesheets' => [
+        ['id' => 'knowledgebase_insert', 'file' => 'assets/knowledgebase_insert.css', 'exclude_autodiscovery' => true, 'disable_theme_integration' => true],
         [
             'id' => 'knowledgebase_main',
             'file' => 'assets/knowledgebase.css',

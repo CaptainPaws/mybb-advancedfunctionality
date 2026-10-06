@@ -2031,7 +2031,7 @@
         ta.style.boxSizing = 'border-box';
       }
 
-      var startupMode = resolveStartupEditorMode();
+      var startupMode = ta.__afAeRequestedMode || resolveStartupEditorMode();
       var startInSourceMode = (startupMode === 'source');
 
       $ta.sceditor({
@@ -2204,25 +2204,40 @@
     });
   }
 
-  function boot() {
-    log('AE init');
-    var tries = 0;
-    (function wait() {
-      tries++;
-      if (hasSceditor()) {
-        initGlobalEditorEnvironment();
-        scanAndInit(document);
-        bindDynamicTextareaObserver();
-        bindEditpostFormGuards(document);
-        return;
-      }
-      if (tries < 80) return setTimeout(wait, 50);
-    })();
+  // Preserve the source spelling until WYSIWYG actually changes it. Native
+  // serializers otherwise normalize untouched tags/newlines during Submit.
+  function preserveInitialSource(ta, inst, source) {
+    if (!inst || inst.__afAeInitialSourceWrapped || typeof inst.val !== 'function') return;
+    var nativeVal = inst.val;
+    var baseline = String(nativeVal.call(inst) || '');
+    var pristine = true;
+    inst.__afAeInitialSourceWrapped = true;
+    inst.val = function () {
+      if (arguments.length) { pristine = false; return nativeVal.apply(this, arguments); }
+      var value = nativeVal.call(this);
+      if (pristine && String(value || '') === baseline) return source;
+      pristine = false;
+      return value;
+    };
+    ta.value = source;
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
-  }
+  // The source shell owns discovery and lifecycle. This runtime is capability-only.
+  window.afAdvancedEditorWysiwyg = {
+    init: function (ta) {
+      initGlobalEditorEnvironment();
+      ta.__afAeInited = false;
+      // SCEditor refuses creation inside any .sceditor-container ancestor.
+      var source = String(ta.value || '');
+      var shell = ta.__afAeShell;
+      if (shell) shell.classList.remove('sceditor-container');
+      try {
+        var ready = initOneTextarea(ta);
+        if (ready) preserveInitialSource(ta, safeGetInstance(window.jQuery(ta)), source);
+        return ready;
+      }
+      finally { if (shell) shell.classList.add('sceditor-container'); }
+    },
+    destroy: destroyTextareaInstance
+  };
 })();

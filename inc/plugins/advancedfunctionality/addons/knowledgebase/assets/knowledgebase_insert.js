@@ -723,6 +723,10 @@
         });
     }
 
+    window.af_ae_kb_insert_exec = function (editor) {
+        openInsertModal(editor && editor.__afAeSourceAdapter ? editor.textarea : editor);
+    };
+
     // ─────────────────────────────────────────────────────────────
     // SCEditor command registration + init hooks
     // ─────────────────────────────────────────────────────────────
@@ -782,7 +786,7 @@
         // Leave only for visible plain editors (not SCEditor quick reply)
         var targets = document.querySelectorAll('textarea[name="message"], textarea#message');
         targets.forEach(function (textarea) {
-            if (!isElementVisible(textarea)) return;
+            if (!isElementVisible(textarea) || textarea.closest('[data-af-editor-shell]')) return;
 
             // Skip SCEditor internal ones
             var cls = textarea.className || '';
@@ -818,7 +822,7 @@
         } catch (e) {}
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
+    function bootInsert() {
         // Поднять чипы (если knowledgebase_chips.js подключён)
         if (typeof window.afKbInitChips === 'function') {
             window.afKbInitChips();
@@ -841,6 +845,7 @@
 
         if (hasTextarea) attachPlainTextareaButtons();
 
-        installObserver();
-    });
+        if (!window.afAdvancedEditorShell) installObserver();
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootInsert); else bootInsert();
 })();

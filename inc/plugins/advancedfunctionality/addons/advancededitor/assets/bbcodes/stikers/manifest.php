@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'runtime' => ['activation' => 'click', 'requires' => []],
     'id' => 'stikers',
     'title' => 'Стикеры',
     'tags' => [],

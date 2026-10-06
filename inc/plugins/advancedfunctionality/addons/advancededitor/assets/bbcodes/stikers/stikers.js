@@ -369,8 +369,11 @@
     document.body.appendChild(wrap);
 
     function close() {
+      document.removeEventListener('af:editor-destroyed', onDestroy);
       wrap.remove();
     }
+    function onDestroy(event) { if (event.detail && event.detail.textarea === ed.textarea) close(); }
+    document.addEventListener('af:editor-destroyed', onDestroy);
 
     wrap.querySelector('.af-ae-stikers-close').addEventListener('click', close);
     wrap.querySelector('.af-ae-stikers-backdrop').addEventListener('click', close);

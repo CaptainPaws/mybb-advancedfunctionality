@@ -1,6 +1,9 @@
 <?php
 
 return [
+    'view_assets' => ['js' => [], 'css' => ['bbcodes/bbcodes/tquote/tquote_view.css']],
+    'view_markers' => ['af-aqr-tquote'],
+    'runtime' => ['activation' => 'click', 'requires' => []],
     'id'    => 'tquote',
     'title' => 'Типографическая цитата',
 

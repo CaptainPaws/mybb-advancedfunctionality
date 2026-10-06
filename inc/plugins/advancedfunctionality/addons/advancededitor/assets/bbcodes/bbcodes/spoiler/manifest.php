@@ -1,7 +1,9 @@
 <?php
 
 return [
-    'runtime' => ['view' => true, 'editor' => true],
+    'view_markers' => ['af-aqr-spoiler'],
+    'view_assets' => ['js' => ['bbcodes/bbcodes/spoiler/spoiler_view.js'], 'css' => ['bbcodes/bbcodes/spoiler/spoiler_view.css']],
+    'runtime' => ['view' => true, 'activation' => 'click', 'requires' => [], 'editor' => true],
     'id'    => 'spoiler',
     'title' => 'Спойлер',
 

@@ -1,0 +1,19 @@
+.mycode_quote.af-aqr-lc-quote {
+  position: relative;
+}
+.mycode_quote.af-aqr-lc-quote::after {
+  content: "";
+  position: absolute;
+  top: 0px;
+  right: 0px;
+  width: 40px;
+  height: 40px;
+  background: url("../../img/locked.svg") no-repeat center / contain;
+  opacity: .15;
+  transform: rotate(-12deg);
+  pointer-events: none;
+  filter: grayscale(1);
+}
+.mycode_quote.af-aqr-lc-quote > cite {
+  display: none;
+}

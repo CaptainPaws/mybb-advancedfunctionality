@@ -1,7 +1,9 @@
 <?php
 
 return [
-    'runtime' => ['view' => true, 'editor' => true],
+    'view_markers' => ['data-af-accordion'],
+    'view_assets' => ['js' => ['bbcodes/bbcodes/accordion/accordion_view.js'], 'css' => ['bbcodes/bbcodes/accordion/accordion_view.css']],
+    'runtime' => ['view' => true, 'activation' => 'click', 'requires' => [], 'editor' => true],
     'id'    => 'accordion',
     'title' => 'Accordion',
     'tags'  => ['accordion', 'accitem'],
@@ -13,19 +15,22 @@ return [
             'title'    => 'Аккордеон',
             'hint'     => 'Вставить [accordion] с двумя [accitem]',
             'icon'     => 'img/starmenu.svg',
-            'handler'  => 'accordion',
-            'opentag'  => '[accordion]',
-            'closetag' => '[/accordion]',
+            'handler'  => '',
+            'opentag'  => '[accordion]
+[accitem title="Заголовок 1"]
+Контент 1
+[/accitem]
+[accitem title="Заголовок 2"]
+Контент 2
+[/accitem]
+[/accordion]',
+            'closetag' => '',
         ],
     ],
 
     'assets' => [
-        'css' => [
-            'bbcodes/accordion/accordion.css',
-        ],
-        'js' => [
-            'bbcodes/accordion/accordion.js',
-        ],
+        'css' => [],
+        'js' => [],
     ],
 
     'parser' => 'accordion.php',

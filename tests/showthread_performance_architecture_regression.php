@@ -12,7 +12,7 @@ perf_assert(strpos($quotes, 'mo.observe(posts') !== false && strpos($quotes, 'do
 $icons = file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancedjsbandle/assets/postbit-fa-icons.js');
 perf_assert(strpos($icons, 'mo.observe(posts') !== false && strpos($icons, 'mo.observe(document.documentElement') === false, 'postbit icon observer is global');
 $editor = file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancededitor/advancededitor.php');
-foreach (["'view_js'", "'view_css'", '$hasTextarea ? $packs[\'js\'] : $packs[\'view_js\']', "static \$requestCache"] as $needle) {
+foreach (["'view_js'", "'view_css'", '$packJsAssets = $packs[\'view_js\']', "static \$requestCache"] as $needle) {
     perf_assert(strpos($editor, $needle) !== false, 'editor runtime/cache contract missing: '.$needle);
 }
 foreach (['copycode','spoiler','tabs','accordion','embedvideos'] as $pack) {

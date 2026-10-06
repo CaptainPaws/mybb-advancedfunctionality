@@ -1,0 +1,71 @@
+{
+  "method": "Local PHP/compiler fixture, Chromium cold contexts, gzip; includes jQuery and published-post counters; not live production timings",
+  "performance": {
+    "before": {
+      "requests": 31,
+      "transferred": 267580,
+      "decoded": 948056,
+      "domContentLoaded": 474.5,
+      "load": 595.5,
+      "urls": [
+        "http://127.0.0.1:8765/jscripts/jquery.js",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/stikers/stikers.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/abbr/abbr.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/accordion/accordion.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/align/align.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/anchors/anchors.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/charcountandprew/charcountandprew.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/copycode/copycode.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/drafts/drafts.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/embedvideos/embedvideos.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/floatbb/floatbb.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/fontsize/fontsize.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/fontfamily/fontfamily.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/htmlbb/htmlbb.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/jscolorpiker/jscolor.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/indent/indent.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/lists/lists.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/jscolorpiker/jscolorpiker.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/mark/mark.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/lockcontent/lockcontent.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/spoiler/spoiler.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/resizeimg/resizeimg.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/jscolorpiker/jscolor.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/tables/tables.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/tabs/tabs.js?v=1791229967",
+        "http://127.0.0.1:8765/jscripts/sceditor/jquery.sceditor.min.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/tquote/tquote.js?v=1791229967",
+        "http://127.0.0.1:8765/jscripts/sceditor/jquery.sceditor.bbcode.min.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/advancededitor_wysiwyg_bbcodes.js?v=1791229967",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase_insert.js",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/advancededitor.js?v=1791229967"
+      ],
+      "scripting": 261.78000000000003
+    },
+    "after": {
+      "requests": 3,
+      "transferred": 40526,
+      "decoded": 117090,
+      "domContentLoaded": 267.59999999962747,
+      "load": 269.59999999962747,
+      "urls": [
+        "http://127.0.0.1:8765/jscripts/jquery.js",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/charcountandprew/charcountandprew_view.js?v=1791269443",
+        "http://127.0.0.1:8765/inc/plugins/advancedfunctionality/addons/advancededitor/assets/advancededitor_shell.js?v=1791269443"
+      ],
+      "scripting": 77.071
+    }
+  },
+  "browser_checks": "passed",
+  "php_suite": {
+    "before": {
+      "passed": 112,
+      "failed": 12
+    },
+    "after": {
+      "passed": 114,
+      "failed": 12
+    },
+    "new_failures": []
+  }
+}

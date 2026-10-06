@@ -852,25 +852,11 @@
   function boot() {
     registerBuiltinHandlers();
     enhanceAllEditors();
-    window.setInterval(enhanceAllEditors, INSTANCE_SCAN_DELAY);
+    document.addEventListener('af:editor-ready', function(e) { if (e.detail && e.detail.instance && !e.detail.instance.__afAeSourceAdapter) enhanceAllEditors(); });
 
-    var tries = 0;
-
-    (function waitForSceditor() {
-      var okFormat = registerBbcodeFormat();
-      var okCmd = registerCommands();
-
-      if (okFormat && okCmd) {
-        return;
-      }
-
-      tries += 1;
-      if (tries > 150) {
-        return;
-      }
-
-      window.setTimeout(waitForSceditor, 100);
-    })();
+    function registerWysiwyg() { registerBbcodeFormat(); registerCommands(); }
+    registerWysiwyg();
+    document.addEventListener('af:capability-ready', function(e) { if (e.detail.capability === 'wysiwyg') registerWysiwyg(); });
   }
 
   boot();

@@ -8389,7 +8389,30 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                         . json_encode(af_kb_get_catalog_active_mechanic_key(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                         . ';</script>';
 
-                    $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?v='.af_kb_asset_version('knowledgebase_insert.js').'"></script>';
+                    if (!empty($mybb->settings['af_advancededitor_enabled'])) {
+                        $kbInsertRuntime = [
+                            'activation' => 'click', 'requires' => [],
+                            'js' => [$assetsBase.'/knowledgebase_insert.js?v='.af_kb_asset_version('knowledgebase_insert.js')],
+                            'css' => [$assetsBase.'/knowledgebase_insert.css?v='.af_kb_asset_version('knowledgebase_insert.css')],
+                        ];
+                        $kbInsertButton = ['cmd' => 'af_kb_insert', 'label' => 'KB',
+                            'title' => $lang->af_kb_kb_insert_title ?? 'Insert KB',
+                            'handler' => 'kb_insert', 'capability' => 'kb-insert'];
+                        // Also share metadata with the later AdvancedEditor pre-output compiler.
+                        $GLOBALS['af_ae_external_capabilities']['kb-insert'] = $kbInsertRuntime;
+                        $GLOBALS['af_ae_external_buttons']['af_kb_insert'] = $kbInsertButton;
+                        if (function_exists('af_advancededitor_shell_toolbar') && str_contains($page, '<!--af-ae-toolbar-end-->')) {
+                            $kbButtonHtml = '<div class="sceditor-group"><a href="#" role="button" class="sceditor-button sceditor-button-af_kb_insert" data-af-command="af_kb_insert" title="'.htmlspecialchars_uni($kbInsertButton['title']).'" aria-label="'.htmlspecialchars_uni($kbInsertButton['title']).'"><div>KB</div></a></div>';
+                            $page = str_replace('<!--af-ae-toolbar-end-->', $kbButtonHtml.'<!--af-ae-toolbar-end-->', $page);
+                        }
+                        $insertJs = '<script>window.afAeCapabilities=window.afAeCapabilities||{};window.afAeCapabilities["kb-insert"]='
+                            .json_encode($kbInsertRuntime, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
+                            .';window.afAeButtons=window.afAeButtons||[];window.afAeButtons.push('
+                            .json_encode($kbInsertButton, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT).');</script>';
+                    } else {
+                        $cssTag .= '<link rel="stylesheet" href="'.$assetsBase.'/knowledgebase_insert.css?v='.af_kb_asset_version('knowledgebase_insert.css').'" />';
+                        $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?v='.af_kb_asset_version('knowledgebase_insert.js').'"></script>';
+                    }
                 }
 
                 if ($isKbEditorPage) {

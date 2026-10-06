@@ -1,6 +1,9 @@
 <?php
 
 return [
+    'view_assets' => ['js' => [], 'css' => ['bbcodes/bbcodes/align/align_view.css']],
+    'view_markers' => ['af-bb-align'],
+    'runtime' => ['activation' => 'click', 'requires' => []],
     'id'    => 'align',
     'title' => 'Выравнивание текста',
 

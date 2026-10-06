@@ -1,6 +1,9 @@
 <?php
 
 return [
+    'view_assets' => ['js' => [], 'css' => ['bbcodes/bbcodes/lockcontent/lockcontent_view.css']],
+    'view_markers' => ['af-aqr-lc-quote'],
+    'runtime' => ['activation' => 'click', 'requires' => []],
     'id'    => 'lockcontent',
     'title' => 'Скрыть содержимое',
     'tags' => ['hide'],

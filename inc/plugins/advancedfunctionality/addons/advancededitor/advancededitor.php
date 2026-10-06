@@ -138,6 +138,8 @@ function af_advancededitor_is_path_inside(string $path, string $baseDir): bool
 }
 
 require_once __DIR__ . '/assets/bbcodes/stikers/stikers.php';
+require_once __DIR__ . '/shell.php';
+require_once __DIR__ . '/theme_capabilities.php';
 
 /**
  * === AE: scan bbcodes packs ===
@@ -915,6 +917,7 @@ function af_advancededitor_pre_output(string &$page = ''): void
     if (function_exists('af_frontend_asset_allowed')
         && !af_frontend_asset_allowed(AF_AE_ID, 'pre_output', null, $facts)) return;
 
+    $themeFeatureMap = af_advancededitor_feature_theme_map();
     // Шрифты по ТЗ грузим на всех страницах.
     $injectHead = "\n<!--af_advancededitor-->\n";
     $fontsCssUrl = af_advancededitor_ensure_local_fonts_css_file();
@@ -940,6 +943,17 @@ function af_advancededitor_pre_output(string &$page = ''): void
 
     // Пакеты BB-кнопок/стилей (включая copycode)
     $packs = af_advancededitor_discover_bbcode_packs($bburl);
+    // Content runtime is independent of editor runtime and only follows published markup.
+    $packs['view_js'] = $packs['view_css'] = [];
+    foreach ($packs['packs'] as $pack) {
+        foreach ($pack['view_markers'] as $marker) {
+            if ($marker !== '' && stripos($page, $marker) !== false) {
+                foreach ($pack['view_assets']['js'] as $url) $packs['view_js'][] = $url;
+                foreach ($pack['view_assets']['css'] as $url) $packs['view_css'][] = $url;
+                break;
+            }
+        }
+    }
 
     // Если это не страница с редактором и не похоже на страницу с контентом —
     // оставляем только шрифты.
@@ -969,7 +983,7 @@ function af_advancededitor_pre_output(string &$page = ''): void
     $verCss   = af_advancededitor_asset_ver($aeCssAbs);
     $verJs    = af_advancededitor_asset_ver($aeJsAbs);
     $verWysiwygJs = af_advancededitor_asset_ver($aeWysiwygJsAbs);
-    $buildVer = max($verCss, $verJs, $verWysiwygJs, 1);
+    $buildVer = max($verCss, $verJs, $verWysiwygJs, af_advancededitor_asset_ver(__DIR__ . '/assets/advancededitor_shell.js'), af_advancededitor_asset_ver(__DIR__ . '/assets/advancededitor_shell.css'), af_advancededitor_asset_ver(__DIR__ . '/shell.php'), 1);
 
     /**
      * ===== ВСЕГДА (контентные страницы + страницы с textarea) =====
@@ -978,13 +992,14 @@ function af_advancededitor_pre_output(string &$page = ''): void
 
     // базовый CSS аддона (общие правила/переменные/иконки тулбара и т.п.)
     if ($hasTextarea) {
-        $injectHead .= af_advancededitor_build_css_tag_for_asset($assetsBase . 'advancededitor.css', $bburl, $buildVer);
+        $injectHead .= af_advancededitor_build_css_tag_for_asset($assetsBase . 'advancededitor_shell.css', $bburl, $buildVer);
+        if (isset($themeFeatureMap['shell_override'])) $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_url($themeFeatureMap['shell_override'])) . '" />';
     }
 
 
 
     // CSS паков (table/float/copycode/…)
-    $packCssAssets = $hasTextarea ? $packs['css'] : $packs['view_css'];
+    $packCssAssets = $packs['view_css'];
     if (!empty($packCssAssets) && is_array($packCssAssets)) {
         foreach ($packCssAssets as $u) {
             $u = (string)$u;
@@ -994,7 +1009,7 @@ function af_advancededitor_pre_output(string &$page = ''): void
     }
 
     // JS паков (copycode.js должен быть тут всегда, чтобы работал у гостя в showthread)
-    $packJsAssets = $hasTextarea ? $packs['js'] : $packs['view_js'];
+    $packJsAssets = $packs['view_js'];
     if (!empty($packJsAssets) && is_array($packJsAssets)) {
         foreach ($packJsAssets as $u) {
             $u = (string)$u;
@@ -1037,7 +1052,7 @@ function af_advancededitor_pre_output(string &$page = ''): void
 
         // SCEditor: theme css (для тулбара)
         $sceditorThemeCss = af_advancededitor_resolve_sceditor_theme_css_url($bburl);
-        $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($sceditorThemeCss, $buildVer)) . '" />' . "\n";
+
 
         // SCEditor: content css (для iframe WYSIWYG)
         $sceditorContentCssBase = af_advancededitor_resolve_sceditor_content_css_url($bburl);
@@ -1050,15 +1065,7 @@ function af_advancededitor_pre_output(string &$page = ''): void
         $bb = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.bbcode.min.js');
         if ($bb === '') $bb = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.bbcode.js');
 
-        if ($core !== '') $injectHead .= '<script src="' . htmlspecialchars_uni(af_advancededitor_add_ver($core, $buildVer)) . '"></script>' . "\n";
-        if ($bb !== '')   $injectHead .= '<script src="' . htmlspecialchars_uni(af_advancededitor_add_ver($bb, $buildVer)) . '"></script>' . "\n";
-
-        // MyBB bridge (submit-sync)
         $mybbBridge = af_advancededitor_resolve_sceditor_mybb_js_url($bburl);
-        if ($mybbBridge !== '') {
-            $injectHead .= '<script src="' . htmlspecialchars_uni(af_advancededitor_add_ver($mybbBridge, $buildVer)) . '"></script>' . "\n";
-        }
-
         // layout/fonts/settings
         $customDefs = af_advancededitor_get_custom_button_defs($bburl);
         $available  = af_advancededitor_get_available_buttons($bburl, $customDefs);
@@ -1140,8 +1147,13 @@ table #post_options, table #postoptions{display:none!important;}
             $customDefs[] = $helpButtonDef;
         }
 
+        $shellRegistry = af_advancededitor_shell_registry($available, $customDefs, $packs);
+        $available = $shellRegistry['buttons'];
+        $compiledButtons = array_column($available, null, 'cmd');
+        $customDefs = array_map(static fn($b) => array_replace($b, $compiledButtons[$b['cmd']] ?? []), $customDefs);
         $payload = [
-            'v'                => 4,
+            'v'                => 5,
+            'capabilities' => $shellRegistry['capabilities'],
             'assetVer'          => $buildVer,
 
             'bburl'             => $bburl,
@@ -1173,6 +1185,7 @@ table #post_options, table #postoptions{display:none!important;}
                 'wysiwygWhitelist' => (string)$partialWhitelistRaw,
                 'defaultEditorMode' => (string)$defaultEditorModeRaw,
                 'rememberModeEnabled' => (int)$rememberModeEnabled,
+                'forumId' => (int)($GLOBALS['thread']['fid'] ?? $GLOBALS['forum']['fid'] ?? 0),
             ],
             'formatHelp' => [
                 'enabled' => $helpFeatureEnabled,
@@ -1182,6 +1195,16 @@ table #post_options, table #postoptions{display:none!important;}
             ],
             'stikers' => af_advancededitor_stikers_get_client_config(),
         ];
+        $payload['capabilities']['wysiwyg'] = [
+            'activation' => 'click', 'requires' => [],
+            'js' => array_values(array_filter([$core, $bb, $mybbBridge, $assetsBase . 'advancededitor_wysiwyg_bbcodes.js', $assetsBase . 'advancededitor.js'])),
+            'css' => [$sceditorThemeCss, af_advancededitor_feature_css_url('assets/advancededitor.css')],
+        ];
+        $payload['shellToolbar'] = af_advancededitor_shell_toolbar($available, $layout, $payload['formatHelp']);
+        $counterForums = array_filter(array_map('intval', explode(',', $formfeatureCsv)));
+        $payload['shellCounter'] = !$counterForums || in_array($payload['cfg']['forumId'], $counterForums, true);
+        $payload['counterHtml'] = $payload['shellCounter'] ? af_advancededitor_shell_counter_html() : '';
+        $page = af_advancededitor_render_shells($page, $payload['shellToolbar'], $payload['shellCounter']);
         if ($editorSelector !== '') {
             $payload['cfg']['editorSelector'] = $editorSelector;
         }
@@ -1204,8 +1227,8 @@ table #post_options, table #postoptions{display:none!important;}
         $injectHead .= '<script>window.afAePayload=window.afAdvancedEditorPayload;</script>' . "\n";
 
         // WYSIWYG bbcode bridge + advancededitor.js
-        $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor_wysiwyg_bbcodes.js', $buildVer)) . '"></script>' . "\n";
-        $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor.js', $buildVer)) . '"></script>' . "\n";
+
+        $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor_shell.js', $buildVer)) . '"></script>' . "\n";
     }
 
     // ---- вставляем в </head> ----
@@ -2478,8 +2501,11 @@ function af_advancededitor_get_custom_button_defs(string $bburl): array
         $open = (string)($r['opentag'] ?? '');
         $close = (string)($r['closetag'] ?? '');
 
-        // минимальная защита от пустых тегов
-        if (trim($open) === '' && trim($close) === '') {
+        $handler = trim((string)($r['handler'] ?? ''));
+        $capability = trim((string)($r['capability'] ?? ''));
+        $runtime = json_decode((string)($r['runtime'] ?? ''), true);
+        // Current DB buttons are tag pairs; optional runtime metadata may be supplied by extensions.
+        if (trim($open) === '' && trim($close) === '' && $handler === '' && $capability === '') {
             continue;
         }
 
@@ -2489,6 +2515,9 @@ function af_advancededitor_get_custom_button_defs(string $bburl): array
                 'icon'     => $icon,
                 'opentag'  => $open,
                 'closetag' => $close,
+                'handler' => $handler,
+                'capability' => $capability,
+                'runtime' => is_array($runtime) ? $runtime : null,
             ];
         }
     }
@@ -2502,6 +2531,7 @@ function af_advancededitor_get_custom_button_defs(string $bburl): array
                 'title' => (string)($b['title'] ?? $b['cmd']),
                 'icon' => (string)($b['icon'] ?? ''),
                 'handler' => (string)($b['handler'] ?? ''),
+                'capability' => (string)($b['capability'] ?? ''),
                 'opentag' => (string)($b['opentag'] ?? ''),
                 'closetag' => (string)($b['closetag'] ?? ''),
             ];
@@ -2585,6 +2615,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
                 if ($rel === '') continue;
                 $candidatesAbs = [
                     MYBB_ROOT . af_advancededitor_base_rel() . 'assets/' . ltrim($rel, '/'),
+                    MYBB_ROOT . af_advancededitor_base_rel() . 'assets/bbcodes/' . ltrim($rel, '/'),
                     $packDir . ltrim($rel, '/'),
                     $packDir . basename($rel),
                 ];
@@ -2602,7 +2633,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
                     $fileRel = af_advancededitor_addon_file_rel_from_web_rel('assets/' . ltrim($rel, '/'));
                 }
 
-                $resolvedCss = af_advancededitor_resolve_css_delivery_url($fileRel);
+                $resolvedCss = af_advancededitor_feature_css_url($fileRel);
                 if ($resolvedCss !== '') {
                     $packCss[] = $resolvedCss;
                 }
@@ -2614,6 +2645,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
                 if ($rel === '') continue;
                 $candidatesAbs = [
                     MYBB_ROOT . af_advancededitor_base_rel() . 'assets/' . ltrim($rel, '/'),
+                    MYBB_ROOT . af_advancededitor_base_rel() . 'assets/bbcodes/' . ltrim($rel, '/'),
                     $packDir . ltrim($rel, '/'),
                     $packDir . basename($rel),
                 ];
@@ -2672,6 +2704,9 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
                     'title'   => ($title !== '' ? $title : $cmd),
                     'icon'    => $icon,
                     'handler' => $handler,
+                    'opentag' => (string)($b['opentag'] ?? ''),
+                    'closetag' => (string)($b['closetag'] ?? ''),
+                    'capability' => (string)($b['capability'] ?? $packId),
 
                     // meta
                     'packId'    => $packId,
@@ -2691,8 +2726,8 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
         foreach ($packCss as $u) $out['css'][] = $u;
         foreach ($packJs as $u)  $out['js'][]  = $u;
         if ($viewRuntime) {
-            foreach ($packCss as $u) $out['view_css'][] = $u;
-            foreach ($packJs as $u) $out['view_js'][] = $u;
+            foreach ((array)($m['view_assets']['css'] ?? []) as $rel) $out['view_css'][] = af_advancededitor_addon_file_url('assets/' . $rel);
+            foreach ((array)($m['view_assets']['js'] ?? []) as $rel) $out['view_js'][] = af_advancededitor_addon_file_url('assets/' . $rel);
         }
 
         if (isset($out['packs'][$packId])) {
@@ -2705,9 +2740,12 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             'tags'          => $tags,
             'buttons'       => $packButtons,
             'assets'        => ['css' => $packCss, 'js' => $packJs],
+            'view_assets' => ['css' => array_map(static fn($rel) => af_advancededitor_addon_file_url('assets/' . $rel), (array)($m['view_assets']['css'] ?? [])),
+                'js' => array_map(static fn($rel) => af_advancededitor_addon_file_url('assets/' . $rel), (array)($m['view_assets']['js'] ?? []))],
             'parser_abs'    => $parserAbs,
             'manifest_path' => $manifestFile,
-            'runtime'       => ['view' => $viewRuntime, 'editor' => true],
+            'view_markers' => (array)($m['view_markers'] ?? []),
+            'runtime'       => array_merge(['view' => $viewRuntime, 'editor' => true, 'activation' => 'click', 'requires' => []], $runtime),
         ];
         }
     }

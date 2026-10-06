@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'runtime' => ['activation' => 'click', 'requires' => []],
     'id'    => 'jscolorpiker',
     'title' => 'Расширенный выбор цвета (jscolor)',
     'tags'  => ['color'],

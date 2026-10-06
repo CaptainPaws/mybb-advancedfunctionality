@@ -1006,13 +1006,8 @@
     })();
   }
 
-  waitAnd(registerBbcodeFormats, 150);
-  waitAnd(function () {
-    enhanceAllEditors();
-    return false;
-  }, 20);
-
-  for (var i = 1; i <= 20; i += 1) {
-    setTimeout(enhanceAllEditors, i * 300);
-  }
+  function registerWysiwyg() { registerBbcodeFormats(); }
+  registerWysiwyg();
+  document.addEventListener('af:capability-ready', function(e) { if (e.detail.capability === 'wysiwyg') registerWysiwyg(); });
+  document.addEventListener('af:editor-ready', function(e) { if (e.detail && e.detail.instance && !e.detail.instance.__afAeSourceAdapter) enhanceAllEditors(); });
 })(window, document);

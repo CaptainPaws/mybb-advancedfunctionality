@@ -1,6 +1,9 @@
 <?php
 
 return [
+    'view_assets' => ['js' => [], 'css' => ['bbcodes/bbcodes/mark/mark_view.css']],
+    'view_markers' => ['af-ae-mark-render'],
+    'runtime' => ['activation' => 'click', 'requires' => []],
     'id'    => 'mark',
     'title' => 'Маркер',
     'tags'  => ['mark'],

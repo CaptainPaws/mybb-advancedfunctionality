@@ -1,6 +1,9 @@
 <?php
 
 return [
+    'view_assets' => ['js' => [], 'css' => ['bbcodes/bbcodes/resizeimg/resizeimg_view.css']],
+    'view_markers' => ['af-resizeimg'],
+    'runtime' => ['activation' => 'click', 'requires' => []],
     'id'    => 'resizeimg',
     'title' => 'Ресайз изображений',
 

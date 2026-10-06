@@ -1,0 +1,46 @@
+/* Visual shell; feature dialogs and SCEditor iframe styles load on use. */
+#quickreply_e tr td.trow1:first-child { display: none; }
+.af-ae-shell.sceditor-container { position: relative; box-sizing: border-box; width: 100%; border: 1px solid rgba(0,0,0,.18); border-radius: 12px; overflow: visible; background: var(--atf-surface, #fff); }
+.af-ae-shell > .sceditor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0; padding: 3px 5px; background: var(--atf-surface-subtle, #f7f7f7); border-bottom: 1px solid rgba(0,0,0,.08); border-radius: 12px 12px 0 0; }
+.af-ae-shell .sceditor-group { position: relative; display: inline-flex; align-items: center; margin: 1px 5px 1px 0; padding: 0; border: 1px solid rgba(0,0,0,.12); border-radius: 3px; background: var(--atf-surface-subtle, #ddd); }
+.af-ae-shell .sceditor-button { display: inline-flex; align-items: center; justify-content: center; box-sizing: content-box; width: 16px; height: 20px; padding: 3px 5px; margin: 0; color: inherit; cursor: pointer; text-decoration: none; border: 1px solid transparent; border-radius: 3px; }
+.af-ae-shell .sceditor-button > div { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 11px; font-weight: 700; line-height: 16px; color: inherit; background-image: none; margin: 0; overflow: visible; }
+.af-ae-shell-icon { display: block; width: 16px; height: 16px; background: var(--af-ae-icon-color, currentColor); -webkit-mask: var(--af-ae-icon-url) center / contain no-repeat; mask: var(--af-ae-icon-url) center / contain no-repeat; }
+.af-ae-shell .sceditor-button img { width: 16px; height: 16px; max-width: none; }
+.af-ae-shell .sceditor-button:hover, .af-ae-shell .sceditor-button:focus-visible { background: rgba(0,0,0,.08); border-color: rgba(0,0,0,.15); }
+.af-ae-shell .sceditor-button[aria-busy="true"] { opacity: .6; }
+.af-ae-shell.sceditor-container > textarea { display: block; box-sizing: border-box; width: 100%; min-height: 180px; padding: 10px; margin: 0; border: 0; border-radius: 0 0 12px 12px; background: transparent; color: inherit; resize: vertical; font-family: Verdana, Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.25; }
+.af-ae-shell > .sceditor-container { border: 0; margin: 0; border-radius: 0 0 12px 12px; }
+.af-ae-shell > .sceditor-container > .sceditor-toolbar { display: none !important; }
+.af-ae-shell-menu { position: absolute; top: 100%; left: 0; z-index: 2147483000; min-width: 220px; padding: 6px; border-radius: 10px; background: var(--atf-surface, #fff); box-shadow: 0 5px 20px rgba(0,0,0,.2); }
+.af-ae-shell-menu[hidden] { display: none; }
+.af-ae-shell-menu .sceditor-button { display: flex; width: auto; justify-content: flex-start; }
+.af-ae-shell-menu-label { margin-left: 8px; font-size: 13px; white-space: nowrap; }
+.af-ae-shell-error { position: absolute; left: 4px; bottom: 4px; z-index: 10; max-width: calc(100% - 8px); padding: 6px; border-radius: 6px; background: var(--atf-surface, #fff); box-shadow: 0 1px 8px rgba(0,0,0,.18); font-size: 12px; }
+.af-ae-shell-maximized { position: fixed; inset: 12px; z-index: 2147482000; width: auto; }
+.af-ae-shell-maximized > textarea { height: calc(100% - 80px); }
+.sceditor-dropdown { max-width: calc(100vw - 16px); padding: 6px; border-radius: 10px; background: var(--atf-surface, #fff); box-shadow: 0 4px 20px rgba(0,0,0,.2); }
+.af-ccp-wrap {
+  margin: 10px 0 10px 0;
+}
+.af-ccp-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,.08);
+  background: rgba(0,0,0,.02);
+  font-size: 12px;
+}
+.af-ccp-label {
+  opacity: .9;
+}
+.af-ccp-value {
+  font-weight: 700;
+}
+.af-ccp-muted {
+  opacity: .75;
+}
+.af-ccp-preview[hidden] { display: none !important; }

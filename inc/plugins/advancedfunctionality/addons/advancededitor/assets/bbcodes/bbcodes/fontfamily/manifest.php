@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'runtime' => ['activation' => 'click', 'requires' => [], 'commands' => ['font']],
     'id'    => 'fontfamily',
     'title' => 'Шрифт (семейства)',
 

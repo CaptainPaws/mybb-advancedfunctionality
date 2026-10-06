@@ -1,6 +1,9 @@
 <?php
 
 return [
+    'view_assets' => ['js' => [], 'css' => ['bbcodes/bbcodes/indent/indent_view.css']],
+    'view_markers' => ['af-indent'],
+    'runtime' => ['activation' => 'click', 'requires' => []],
     'id'    => 'indent',
     'title' => 'Отступ абзаца (1–3em)',
 

@@ -1,7 +1,9 @@
 <?php
 
 return [
-    'runtime' => ['view' => true, 'editor' => true],
+    'view_markers' => ['codeblock'],
+    'view_assets' => ['js' => ['bbcodes/bbcodes/copycode/copycode.js'], 'css' => ['bbcodes/bbcodes/copycode/copycode.css']],
+    'runtime' => ['view' => true, 'activation' => 'click', 'requires' => [], 'editor' => true],
     'id'    => 'copycode',
     'title' => 'Копирование кода',
     'tags'  => ['code', 'copy'],

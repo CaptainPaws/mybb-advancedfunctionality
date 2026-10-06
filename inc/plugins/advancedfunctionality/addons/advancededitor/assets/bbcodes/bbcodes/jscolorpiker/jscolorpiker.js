@@ -716,14 +716,9 @@
   bindEditorTracker();
   bindOutsideCloser();
 
-  var tries = 0;
-  (function waitSceditor() {
-    if (registerCommands()) return;
+  function registerWysiwyg() { registerCommands(); }
+  registerWysiwyg();
+  document.addEventListener('af:capability-ready', function(e) { if (e.detail.capability === 'wysiwyg') registerWysiwyg(); });
 
-    tries += 1;
-    if (tries < 120) {
-      window.setTimeout(waitSceditor, 100);
-    }
-  })();
 
 })(window, document);

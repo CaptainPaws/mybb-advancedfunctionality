@@ -623,16 +623,9 @@
     window.af_ae_mark_exec(editor);
   };
 
-  waitAnd(function () {
-    return ensureBbcodeDef(null);
-  }, 150);
+  function registerWysiwyg() { ensureBbcodeDef(null); patchSceditorMarkCommand(); }
+  registerWysiwyg();
+  document.addEventListener('af:capability-ready', function(e) { if (e.detail.capability === 'wysiwyg') registerWysiwyg(); });
 
-  waitAnd(patchSceditorMarkCommand, 150);
-
-  waitAnd(function () {
-    enhanceAllEditors();
-    return false;
-  }, 20);
-
-  window.setInterval(enhanceAllEditors, INSTANCE_SCAN_DELAY);
+  document.addEventListener('af:editor-ready', function(e) { if (e.detail && e.detail.instance && !e.detail.instance.__afAeSourceAdapter) enhanceAllEditors(); });
 })(window, document);

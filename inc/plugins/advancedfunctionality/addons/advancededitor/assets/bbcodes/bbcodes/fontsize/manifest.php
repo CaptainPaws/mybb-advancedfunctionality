@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'runtime' => ['activation' => 'click', 'requires' => [], 'commands' => ['size']],
     'id'    => 'fontsize',
     'title' => 'Размер шрифта (px)',
 

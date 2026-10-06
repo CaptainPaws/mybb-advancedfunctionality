@@ -186,7 +186,7 @@
     var sc = null;
     try { sc = ta.closest('.sceditor-container'); } catch (e) { sc = null; }
 
-    var anchor = sc || ta;
+    var anchor = ta.__afAeShell || sc || ta;
     if (!anchor || !anchor.parentNode) return null;
 
     var parent = anchor.parentNode;
@@ -428,7 +428,7 @@
     if (!ui) ui = (function () {
       var anchor = null;
       try { anchor = ta.closest('.sceditor-container'); } catch (e) { anchor = null; }
-      anchor = anchor || ta;
+      anchor = ta.__afAeShell || anchor || ta;
       var parent = anchor && anchor.parentNode ? anchor.parentNode : null;
       var wrap = parent && parent.querySelector
         ? parent.querySelector(':scope > .af-ccp-wrap')
@@ -617,14 +617,22 @@
 
   onReady(function () {
     initFormCounterAndPreview();
-    initPostCounters();
-    setTimeout(initFormCounterAndPreview, 300);
-    setTimeout(initFormCounterAndPreview, 900);
+
+
+  });
+
+  document.addEventListener('af:editor-destroyed', function(e) {
+    var ta = e.detail.textarea;
+    if (ta && ta.__afCcpBinding) { clearInterval(ta.__afCcpBinding.interval); ta.__afCcpBinding = null; }
+  });
+
+  document.addEventListener('af:capability-activate', function (event) {
+    if (event.detail && event.detail.textarea) initFormCounterAndPreview(event.detail.textarea);
   });
 
   document.addEventListener('af:editor-ready', function (event) {
     var detail = event && event.detail ? event.detail : {};
-    if (!detail.textarea || !detail.quickEdit) return;
+    if (!detail.textarea) return;
     initFormCounterAndPreview(detail.textarea);
   });
 

@@ -100,12 +100,17 @@ foreach ([
     "parent.querySelector(':scope > .af-ccp-wrap')",
     'if (!ta.isConnected)',
     'clearInterval(binding.interval)',
-    'detail.quickEdit',
     "post.querySelector('.atf-post__content .atf-post__message')",
 ] as $needle) {
     if (!str_contains($counter, $needle)) {
         throw new RuntimeException("Quick-edit counter lifecycle is missing {$needle}.");
     }
+}
+
+
+$shell = file_get_contents($root . 'advancededitor/assets/advancededitor_shell.js');
+foreach (['quickEdit: quick', "post.querySelector('.af-ccp-postcount[data-af-ae-was-hidden]')", "count.hidden = true"] as $needle) {
+    if (!str_contains($shell, $needle)) throw new RuntimeException("Source-shell Quick Edit counter lifecycle is missing {$needle}.");
 }
 
 if (!str_contains($css, '.atf-post__content .atf-editor--quick-edit')) {

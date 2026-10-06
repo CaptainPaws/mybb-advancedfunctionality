@@ -818,25 +818,11 @@
     registerNormalizer();
     registerBuiltinHandlers();
 
-    var tries = 0;
+  function registerWysiwyg() { registerBbcodeFormat(); registerCommands(); enhanceAllEditors(); }
+  registerWysiwyg();
+  document.addEventListener('af:capability-ready', function(e) { if (e.detail.capability === 'wysiwyg') registerWysiwyg(); });
+  document.addEventListener('af:editor-ready', function(e) { if (e.detail && e.detail.instance && !e.detail.instance.__afAeSourceAdapter) enhanceAllEditors(); });
 
-    (function waitForSceditor() {
-      var okFormat = registerBbcodeFormat();
-      var okCmd = registerCommands();
-
-      enhanceAllEditors();
-
-      if (okFormat && okCmd) {
-        return;
-      }
-
-      tries += 1;
-      if (tries > 150) {
-        return;
-      }
-
-      window.setTimeout(waitForSceditor, 100);
-    })();
   }
 
   boot();

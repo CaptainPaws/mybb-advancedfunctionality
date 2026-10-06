@@ -1,0 +1,22 @@
+.af-bb-table-wrap {
+  overflow-x: auto;
+  margin: 6px 0;
+}
+.af-bb-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  max-width: 100%;
+}
+.af-bb-table td, .af-bb-table th {
+  min-width: 72px;
+  min-height: 34px;
+  word-break: break-word;
+}
+.af-bb-table th {
+  font-weight: 700;
+}
+.af-bb-table [data-af-cell-filler="1"] {
+  display: inline-block;
+  width: 100%;
+  min-height: 1em;
+}

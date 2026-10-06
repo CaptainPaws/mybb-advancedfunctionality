@@ -1,0 +1,118 @@
+/* Insert picker; activated with kb-insert capability. */
+.af-kb-modal-backdrop.af-kb-insert {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+.af-kb-modal-backdrop.af-kb-insert.is-active {
+    display: flex;
+}
+.af-kb-insert .af-kb-modal {
+    background: #fff;
+    border-radius: 10px;
+    max-width: 720px;
+    width: 100%;
+    max-height: 80vh;
+    overflow: auto;
+    padding: 18px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+}
+.af-kb-insert .af-kb-modal-body {
+    color: #2f3b55;
+    line-height: 1.5;
+}
+.af-kb-insert .af-kb-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.af-kb-insert .af-kb-modal-header h3 {
+    margin: 0;
+}
+.af-kb-insert .af-kb-modal-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.af-kb-insert .af-kb-modal-title .af-kb-chip-icon {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+.af-kb-insert .af-kb-modal-title .af-kb-chip-title {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.af-kb-insert .af-kb-modal-title .af-kb-icon-img {
+    width: 20px;
+    height: 20px;
+}
+.af-kb-insert .af-kb-modal-title i {
+    line-height: 1;
+}
+.af-kb-insert .af-kb-modal-close {
+    border: none;
+    background: transparent;
+    font-size: 1.2em;
+    cursor: pointer;
+}
+.af-kb-insert-controls {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.af-kb-insert-select {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #ccd2dd;
+    background: #fff;
+}
+.af-kb-insert-list {
+    display: grid;
+    gap: 8px;
+}
+.af-kb-insert-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 12px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #dcdfe6;
+}
+.af-kb-insert-item-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.af-kb-insert-item-meta {
+    grid-column: 1 / 2;
+    color: #667085;
+    font-size: 0.9em;
+}
+.af-kb-insert-search {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #ccd2dd;
+}
+.af-kb-insert-empty {
+    color: #667085;
+    font-style: italic;
+}
+.af-kb-insert-hint {
+    color: #667085;
+    font-style: italic;
+    margin-bottom: 8px;
+}
+.af-kb-insert .af-kb-modal-block + .af-kb-modal-block {
+    margin-top: 12px;
+}

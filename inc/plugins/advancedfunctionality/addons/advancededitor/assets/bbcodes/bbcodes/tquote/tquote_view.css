@@ -1,0 +1,63 @@
+.af-aqr-tquote, .mycode_quote.af-aqr-tquote {
+  position: relative;
+  display: block;
+  margin: 10px 0;
+  padding: 40px 35px;
+  border-radius: 10px;
+  background: var(--af-tq-bg, rgba(255, 255, 255, .06));
+  color: var(--af-tq-text, #f5f7fa) !important;
+  overflow: hidden;
+  text-align: justify;
+  border: none !important;
+  box-shadow: none !important;
+}
+.af-aqr-tquote *, .mycode_quote.af-aqr-tquote * {
+  color: inherit;
+}
+.af-aqr-tquote[data-side="left"], .mycode_quote.af-aqr-tquote[data-side="left"] {
+  border-left: none !important;
+  border-right: 4px solid var(--af-tq-accent, rgba(255, 255, 255, .35)) !important;
+}
+.af-aqr-tquote[data-side="right"], .mycode_quote.af-aqr-tquote[data-side="right"] {
+  border-right: none !important;
+  border-left: 4px solid var(--af-tq-accent, rgba(255, 255, 255, .35)) !important;
+}
+.af-aqr-tquote > cite, .mycode_quote.af-aqr-tquote > cite {
+  display: none !important;
+}
+.af-aqr-tquote::before, .mycode_quote.af-aqr-tquote::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  width: 56px;
+  height: 56px;
+  opacity: .16;
+  pointer-events: none;
+  background-color: var(--af-tq-accent, rgba(255, 255, 255, .35));
+
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='black' d='M10 28c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H10V28zm26 0c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H36V28z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='black' d='M10 28c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H10V28zm26 0c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H36V28z'/%3E%3C/svg%3E");
+}
+.af-aqr-tquote[data-side="left"]::before, .mycode_quote.af-aqr-tquote[data-side="left"]::before {
+  left: 2px;
+  transform: rotate(-190deg) scaleX(-1);
+}
+.af-aqr-tquote[data-side="right"]::before, .mycode_quote.af-aqr-tquote[data-side="right"]::before {
+  right: 2px;
+  transform: rotate(190deg);
+}
+.af-aqr-tquote::after, .mycode_quote.af-aqr-tquote::after {
+  content: "";
+  position: absolute;
+  inset: -40% -30%;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, .10), transparent 60%);
+  opacity: .35;
+  pointer-events: none;
+}
