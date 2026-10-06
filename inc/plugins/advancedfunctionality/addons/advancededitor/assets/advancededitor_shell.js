@@ -148,17 +148,93 @@
     function flush() {
       try { if (ta.isConnected) save(); } catch (e) {}
     }
+    // A successful reply must clear both storage and the *live* editing
+    // surface. Native redirects are handled on the next page; AJAX replies
+    // are confirmed by a new post entering MyBB's actual #posts container.
+    function finishPublished() {
+      try { localStorage.removeItem(key); sessionStorage.removeItem(pendingKey); } catch (e) {}
+      pending = '';
+      last = '';
+      try {
+        var ed = currentEditor(ta);
+        if (ed && !ed.__afAeSourceAdapter && typeof ed.val === 'function') {
+          ed.val('');
+          if (typeof ed.updateOriginal === 'function') ed.updateOriginal();
+        }
+        ta.value = '';
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+      } catch (e) { ta.value = ''; }
+      last = '';
+      if (ta.__afAeCountUpdate) ta.__afAeCountUpdate();
+    }
+    var posts = document.querySelector('#posts');
+    var knownPostIds = Object.create(null);
+    function recordPostIds() {
+      if (!posts) return;
+      Array.prototype.forEach.call(posts.querySelectorAll('[id^="pid_"]'), function (node) {
+        knownPostIds[node.id] = true;
+      });
+    }
+    recordPostIds();
+    var waitingForPost = false;
+    var submitStartedAt = 0;
+    function markSubmission() {
+      flush();
+      recordPostIds();
+      waitingForPost = true;
+      submitStartedAt = Date.now();
+      pending = '1';
+      try {
+        sessionStorage.setItem(pendingKey, JSON.stringify({
+          from: location.href, at: submitStartedAt
+        }));
+      } catch (e) {}
+    }
+    if (posts && typeof MutationObserver !== 'undefined') {
+      var postObserver = new MutationObserver(function (records) {
+        if (!waitingForPost || Date.now() - submitStartedAt > 120000) return;
+        for (var i = 0; i < records.length; i++) {
+          var nodes = records[i].addedNodes;
+          for (var j = 0; j < nodes.length; j++) {
+            var node = nodes[j];
+            if (node.nodeType !== 1) continue;
+            var candidates = [];
+            if (node.id && /^pid_\\d+$/.test(node.id)) candidates.push(node);
+            if (node.querySelectorAll) {
+              Array.prototype.push.apply(candidates, node.querySelectorAll('[id^="pid_"]'));
+            }
+            for (var k = 0; k < candidates.length; k++) {
+              var candidate = candidates[k];
+              if (!/^pid_\\d+$/.test(candidate.id) || knownPostIds[candidate.id]) continue;
+              recordPostIds();
+              waitingForPost = false;
+              finishPublished();
+              return;
+            }
+          }
+        }
+      });
+      postObserver.observe(posts, { childList: true, subtree: true });
+      signal.addEventListener('abort', function () { postObserver.disconnect(); }, { once: true });
+    }
     ta.addEventListener('input', flush, { signal: signal });
     ta.addEventListener('change', flush, { signal: signal });
     window.addEventListener('pagehide', flush, { signal: signal });
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'hidden') flush();
     }, { signal: signal });
+    // MyBB quick reply is often AJAX. Its click handler can prevent a native
+    // submit event, so capture the *send* action as well as normal submits.
+    form.addEventListener('click', function (event) {
+      var control = event.target.closest('button, input[type="submit"]');
+      if (!control || control.form !== form || control.name === 'previewpost') return;
+      if (control.id === 'quick_reply_submit' || control.type === 'submit') {
+        markSubmission();
+      }
+    }, { capture: true, signal: signal });
     form.addEventListener('submit', function (event) {
-      if (event.defaultPrevented || (event.submitter && event.submitter.name === 'previewpost')) return;
-      flush();
-      try { sessionStorage.setItem(pendingKey, JSON.stringify({ from: location.href, at: Date.now() })); } catch (e) {}
-      pending = '1';
+      if (event.submitter && event.submitter.name === 'previewpost') return;
+      markSubmission();
     }, { signal: signal });
     // SCEditor updates an iframe instead of the original textarea. Bind after
     // its real instance exists, and preserve the same localStorage entry.
@@ -181,8 +257,8 @@
     document.addEventListener('af:post-published', function (event) {
       var detail = event.detail || {};
       if (detail.form && detail.form !== form) return;
-      try { localStorage.removeItem(key); sessionStorage.removeItem(pendingKey); } catch (e) {}
-      last = '';
+      waitingForPost = false;
+      finishPublished();
     }, { signal: signal });
   }
 
