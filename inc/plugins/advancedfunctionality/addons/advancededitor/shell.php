@@ -36,6 +36,12 @@ function af_advancededitor_shell_registry(array $available, array $custom, array
             'triggers' => array_values((array)($runtime['triggers'] ?? [])),
         ];
         foreach ($pack['buttons'] as $b) {
+            // Pack commands must activate their runtime before invoking its handler.
+            // Merely emitting the button without a capability caused first clicks
+            // to fail because the corresponding feature JS was never requested.
+            if (empty($b['capability']) && !empty($b['handler'])) {
+                $b['capability'] = $id;
+            }
             $buttons[$b['cmd']] = array_merge($buttons[$b['cmd']] ?? [], $b);
         }
         foreach ((array)($runtime['commands'] ?? []) as $cmd) {
