@@ -16,13 +16,13 @@ $registered = [];
 foreach ((array)($manifest['theme_stylesheets'] ?? []) as $entry) {
     $registered[(string)($entry['file'] ?? '')] = (string)($entry['id'] ?? '');
 }
-foreach (['assets/advancededitor.css', 'assets/bbcodes/bbcodes/tables/tables.css'] as $requiredCss) {
+foreach (['assets/advancededitor.css', 'assets/bbcodes/tables/tables.css'] as $requiredCss) {
     if (empty($registered[$requiredCss])) {
         throw new RuntimeException("AdvancedEditor theme CSS is not registered: {$requiredCss}");
     }
 }
 
-$tableCss = file_get_contents(__DIR__.'/../inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/tables/tables.css');
+$tableCss = file_get_contents(__DIR__.'/../inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/tables/tables.css');
 if (!is_string($tableCss) || !str_contains($tableCss, '.af-ae-tables-dropdown') || !str_contains($tableCss, '.af-ae-tables-dropdown__grid')) {
     throw new RuntimeException('Registered table picker CSS lost its scoped popup/grid selectors.');
 }

@@ -16,7 +16,7 @@ foreach (["'view_js'", "'view_css'", '$packJsAssets = $packs[\'view_js\']', "sta
     perf_assert(strpos($editor, $needle) !== false, 'editor runtime/cache contract missing: '.$needle);
 }
 foreach (['copycode','spoiler','tabs','accordion','embedvideos'] as $pack) {
-    $manifest = file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/'.$pack.'/manifest.php');
+    $manifest = file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/'.$pack.'/manifest.php');
     perf_assert(strpos($manifest, "'runtime' => ['view' => true") !== false, $pack.' lacks declarative view runtime');
 }
 $modals = file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.modals.js');

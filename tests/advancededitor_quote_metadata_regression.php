@@ -53,7 +53,7 @@ if (!empty($argv[1])) {
     $native=af_advancededitor_quote_html_metadata($native);
     $check(str_contains($native,'Автор 😀') && str_contains($native,'pid=703'), 'Native MyBB quote parser must accept normalized attributes');
     $check(str_contains($native,'af-qa-avatar'), 'Native preview HTML must receive its mini-avatar');
-    require dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/bbcodes/spoiler/server.php';
+    require dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/spoiler/server.php';
     $spoilers = '[quote="Author" pid="703"][spoiler]One[/spoiler][spoiler="Title"]Two[/spoiler][/quote]';
     af_ae_bbcode_spoiler_parse_start($spoilers);
     $spoilers = $parser->mycode_parse_quotes($spoilers);

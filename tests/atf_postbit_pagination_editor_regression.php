@@ -91,7 +91,7 @@ foreach (['af:editor-ready', "form.classList.add('atf-quick-edit')", 'announceEd
         throw new RuntimeException("AJAX quick-edit lifecycle is missing {$needle}.");
     }
 }
-$counterJs = file_get_contents($addons . 'advancededitor/assets/bbcodes/bbcodes/charcountandprew/charcountandprew.js');
+$counterJs = file_get_contents($addons . 'advancededitor/assets/bbcodes/charcountandprew/charcountandprew.js');
 foreach (['af:capability-activate', 'initFormCounterAndPreview(detail.textarea)', "post.querySelector('.atf-post__content .atf-post__message')"] as $needle) {
     if (!str_contains($counterJs, $needle)) {
         throw new RuntimeException("Quick-edit counter contract is missing {$needle}.");

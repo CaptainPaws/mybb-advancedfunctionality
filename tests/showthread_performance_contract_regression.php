@@ -5,7 +5,7 @@ $balance = file_get_contents($root . 'balance/balance.php');
 $apf = file_get_contents($root . 'advancedprofilefields/advancedprofilefields.php');
 $threadFields = file_get_contents($root . 'advancedthreadfields/advancedthreadfields.php');
 $editor = file_get_contents($root . 'advancededitor/assets/advancededitor.js');
-$counter = file_get_contents($root . 'advancededitor/assets/bbcodes/bbcodes/charcountandprew/charcountandprew.js');
+$counter = file_get_contents($root . 'advancededitor/assets/bbcodes/charcountandprew/charcountandprew.js');
 
 foreach ([$balance, $apf, $threadFields, $editor, $counter] as $source) {
     if ($source === false) {

@@ -10,7 +10,7 @@ foreach (['af_theme_stylesheet_section_id','af_theme_stylesheet_encode_section',
 }
 define('AF_AE_ID', 'advancededitor');
 require dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/advancededitor/theme_capabilities.php';
-$file = 'assets/bbcodes/bbcodes/tables/tables.css';
+$file = 'assets/bbcodes/tables/tables.css';
 $edited = ".af-bb-table{color:purple}\n.af-ae-tables-dropdown{border-radius:13px}";
 $target = af_theme_stylesheet_encode_section(['addon_id'=>'advancededitor','logical_id'=>'legacy_tables','source_file'=>$file,'manual_override'=>true], $edited);
 $unrelated = af_theme_stylesheet_encode_section(['addon_id'=>'knowledgebase','logical_id'=>'kb_main','source_file'=>'assets/knowledgebase.css'], '.af-kb-chip{color:green}');
