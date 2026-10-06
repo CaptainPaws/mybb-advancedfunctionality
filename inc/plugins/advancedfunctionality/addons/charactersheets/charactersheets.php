@@ -58,28 +58,28 @@ $afCsTriggerContext = in_array($afCsScript, ['showthread.php', 'member.php'], tr
 if ($afCsTriggerContext) {
     af_charactersheets_require_modules(['permissions', 'metadata', 'postbit', 'frontend']);
 } elseif ($afCsScript === 'charactersheets.php') {
-    af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'bootstrap']);
+    af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render', 'ajax']);
 } elseif (defined('IN_ADMINCP')) {
-    af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills', 'bootstrap']);
+    af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
 } elseif (in_array($afCsScript, ['newthread.php', 'editpost.php'], true)) {
     af_charactersheets_require_modules(['permissions', 'metadata']);
 }
 
 function af_charactersheets_is_installed(): bool
 {
-    af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills', 'bootstrap']);
+    af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
     return af_charactersheets_is_installed_impl();
 }
 
 function af_charactersheets_install(): void
 {
-    af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills', 'bootstrap']);
+    af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
     af_charactersheets_install_impl();
 }
 
 function af_charactersheets_activate(): bool
 {
-    af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills', 'bootstrap']);
+    af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
     return af_charactersheets_activate_impl();
 }
 
@@ -91,7 +91,7 @@ function af_charactersheets_deactivate(): bool
 
 function af_charactersheets_uninstall(): void
 {
-    af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills', 'bootstrap']);
+    af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
     af_charactersheets_uninstall_impl();
 }
 
@@ -185,13 +185,13 @@ function af_charactersheets_misc_start(): void
     $legacyRoutes = ['af_charactersheet', 'af_charactersheets', 'af_charactersheet_api', 'cs_modal_profile', 'cs_modal_application'];
 
     if (in_array($action, $legacyRoutes, true)) {
-        af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'ajax', 'bootstrap']);
+        af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render', 'ajax']);
     } elseif ($action === 'af_charactersheets_accept') {
-        af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'bootstrap']);
+        af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud']);
     } elseif ($action === 'af_charactersheets_transfer') {
-        af_charactersheets_require_modules(['permissions', 'sheets_crud', 'bootstrap']);
+        af_charactersheets_require_modules(['permissions', 'postbit', 'bootstrap', 'sheets_crud']);
     } elseif ($action === 'af_charactersheets_create_sheet') {
-        af_charactersheets_require_modules(['permissions', 'experience', 'sheets_crud', 'calculator', 'render', 'bootstrap']);
+        af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render']);
     } else {
         return;
     }
@@ -201,6 +201,6 @@ function af_charactersheets_misc_start(): void
 
 function af_charactersheets_handle_thread_move_for_acceptance(array $args): void
 {
-    af_charactersheets_require_modules(['permissions', 'sheets_crud', 'bootstrap']);
+    af_charactersheets_require_modules(['permissions', 'postbit', 'bootstrap', 'sheets_crud']);
     af_charactersheets_handle_thread_move_for_acceptance_impl($args);
 }
