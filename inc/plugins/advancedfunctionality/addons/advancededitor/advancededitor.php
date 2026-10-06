@@ -992,7 +992,12 @@ function af_advancededitor_pre_output(string &$page = ''): void
 
     // базовый CSS аддона (общие правила/переменные/иконки тулбара и т.п.)
     if ($hasTextarea) {
-        $injectHead .= af_advancededitor_build_css_tag_for_asset($assetsBase . 'advancededitor_shell.css', $bburl, $buildVer);
+        // The shell is critical UI, not a lazily delivered feature stylesheet.
+        // Never route it through theme integration: a suppressed link leaves an
+        // unstyled toolbar and makes all controls appear broken without ATF.
+        $injectHead .= '<link rel="stylesheet" data-af-ae-shell-css="1" href="'
+            . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor_shell.css', $buildVer))
+            . '" />' . "\n";
         if (isset($themeFeatureMap['shell_override'])) $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_url($themeFeatureMap['shell_override'])) . '" />';
     }
 
