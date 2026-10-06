@@ -8,17 +8,17 @@ $(function () {
 	var path = (location.pathname || '').toLowerCase();
 	if (path.indexOf('moderation.php') !== -1) return;
 
-	// guard от двойной загрузки/инициализации
+	// ATF uses the native MyBB modbit, sometimes without an id attribute.
+	// Do not set the initialized flag until the real form is present.
 	if (window.__afFimpInit) return;
-	window.__afFimpInit = true;
-
-	// 2) Нам нужна именно inlinepost-форма (не thread moderation)
-	var icc = $('#inlinemoderation_options');
+	var icc = $('#inlinemoderation_options').filter('form').first();
 	if (!icc.length) return;
-
-	// 3) И должны существовать чекбоксы inline moderation (иначе это не showthread-режим)
-	var ica = $('input[id^=inlinemod]');
-	if (!ica.length) return;
+	var modType = String(icc.find('input[name="modtype"]').val() || '');
+	if (modType !== 'inlinepost' && modType !== 'inlinethread') return;
+	var checkboxSelector = 'input[type="checkbox"][name^="inlinemod_"], input[type="checkbox"][id^="inlinemod_"]';
+	function selectedCheckboxes() { return $(checkboxSelector).filter(':checked'); }
+	if (!$(checkboxSelector).length) return;
+	window.__afFimpInit = true;
 
 	// guard на случай, если уже добавили блок
 	if ($('#fimp').length) return;
@@ -66,7 +66,7 @@ $(function () {
 	});
 
 	function updateCount() {
-		var x = ica.filter(':checked').length;
+		var x = selectedCheckboxes().length;
 
 		$('#fimp').find('span').text(x);
 
@@ -78,7 +78,7 @@ $(function () {
 	}
 
 	updateCount();
-	ica.on('change', updateCount);
+	$(document).on('change.afFimp', checkboxSelector, updateCount);
 
 	function runInlineModeration(formEl) {
 		// Используем родной механизм MyBB — он сам соберёт выбранные pid и покажет confirm
@@ -100,7 +100,7 @@ $(function () {
 		var $sel = icc.find('select[name="action"]');
 		if ($sel.length) $sel.val(action);
 
-		$('#fimp>span').html("<span class='loader'>");
+		$('#fimp>span').html("<span class='loader'></span>");
 
 		runInlineModeration(icc.get(0));
 	});
@@ -109,6 +109,6 @@ $(function () {
 		if (window.inlineModeration && typeof window.inlineModeration.clearChecked === 'function') {
 			window.inlineModeration.clearChecked();
 		}
-		ica.trigger('change');
+		updateCount();
 	});
 });
