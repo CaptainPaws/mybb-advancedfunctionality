@@ -1008,7 +1008,7 @@ function af_advancededitor_pre_output(string &$page = ''): void
             . '.af-ae-shell.sceditor-container .sceditor-button>div{display:flex!important;align-items:center;justify-content:center;width:16px!important;height:16px!important;margin:0!important}'
             . '.af-ae-shell.sceditor-container>textarea{display:block!important;width:100%!important;max-width:100%!important}'
             . '.af-ae-shell.sceditor-container .af-ae-shell-menu[hidden]{display:none!important}'
-            . '</style>' . "\\n";
+            . '</style>' . "\n";
         if (isset($themeFeatureMap['shell_override'])) $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_url($themeFeatureMap['shell_override'])) . '" />';
     }
 
