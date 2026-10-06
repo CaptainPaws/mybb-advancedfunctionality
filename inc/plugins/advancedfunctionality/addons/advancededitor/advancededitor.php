@@ -1126,7 +1126,14 @@ function af_advancededitor_pre_output(string &$page = ''): void
         if ($helpEnabled && $helpContentRaw !== '') {
             $helpContentHtml = af_advancededitor_render_help_content_html($helpContentRaw);
         }
-        $helpFeatureEnabled = ($helpEnabled && $helpContentHtml !== '') ? 1 : 0;
+        // Button visibility follows the ACP setting, not whether an optional
+        // custom help body was entered. Preserve the configured left/right slot.
+        $helpFeatureEnabled = $helpEnabled ? 1 : 0;
+        if ($helpFeatureEnabled && $helpContentHtml === '') {
+            $helpContentHtml = '<div class="af-ae-format-help-default"><strong>Форматирование BBCode</strong>'
+                . '<p>[b]жирный[/b], [i]курсив[/i], [url=https://example.com]ссылка[/url], '
+                . '[quote]цитата[/quote], [code]код[/code].</p></div>';
+        }
 
         if ($hidePostOptions) {
             $injectHead .= "<style id=\"af-ae-hide-postoptions\">
