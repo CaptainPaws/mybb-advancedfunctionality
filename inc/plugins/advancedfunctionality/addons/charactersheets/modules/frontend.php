@@ -148,55 +148,41 @@ function af_charactersheets_showthread_start_impl(): void
         return;
     }
 
-    $was_accepted = af_charactersheets_is_accepted($tid);
-
-    // Если тему вернули обратно в pending после принятия —
-    // открываем (чтобы можно было редактировать). Делать это безопасно только для тех,
-    // кто имеет право принимать.
-
-    if ($was_accepted) {
-        // В MyBB поле closed: '' или '0' = открыта, '1' = закрыта
-        $closed = (string)($thread['closed'] ?? '');
-        if ($closed === '1') {
-            require_once MYBB_ROOT . 'inc/class_moderation.php';
-            $moderation = new Moderation;
-            // Открываем тему. Если по какой-то причине нет прав — MyBB сам отработает.
-            $moderation->open_threads([$tid]);
-
-            // Обновим локально, чтоб не было странностей дальше
-            $thread['closed'] = '0';
-        }
-    }
-
-    $isPendingForum = function_exists('af_cwf_is_pending_forum')
-        ? af_cwf_is_pending_forum($fid)
-        : false;
-    $isAcceptedForum = af_charactersheets_is_in_accepted_forum($fid);
+    $acceptRow = af_charactersheets_get_accept_row($tid);
+    $workflowContext = function_exists('af_cwf_get_context')
+        ? af_cwf_get_context($tid, $thread, $acceptRow)
+        : [];
+    $was_accepted = !empty($workflowContext['was_accepted']) || af_charactersheets_is_accepted($tid);
 
     $acceptText = $was_accepted
         ? ($lang->af_charactersheets_accept_button_reaccept ?? 'Принять заново')
         : ($lang->af_charactersheets_accept_button ?? 'Принять анкету');
 
-    $acceptRow = af_charactersheets_get_accept_row($tid);
     $uid = (int)($thread['uid'] ?? 0);
 
     $sheetExists = af_charactersheets_resolve_existing_sheet_for_thread($tid, $uid, $acceptRow);
 
     $acceptUrl = af_charactersheets_url(['action' => 'af_charactersheets_accept', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
     $transferUrl = af_charactersheets_url(['action' => 'af_charactersheets_transfer', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
+    $revisionUrl = af_charactersheets_url(['action' => 'af_charactersheets_request_revision', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
     $sheetUrl = af_charactersheets_url(['action' => 'af_charactersheets_create_sheet', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
 
     $buttons = [];
     $canAccept = function_exists('af_cwf_can_accept') ? af_cwf_can_accept($tid, $thread, $acceptRow) : false;
     $canTransfer = function_exists('af_cwf_can_transfer') ? af_cwf_can_transfer($tid, $thread, $acceptRow) : false;
+    $canRequestRevision = function_exists('af_cwf_can_request_revision') ? af_cwf_can_request_revision($tid, $thread, $acceptRow) : false;
     $canCreateSheet = function_exists('af_cwf_can_create_sheet') ? af_cwf_can_create_sheet($tid, $thread, $acceptRow) : empty($sheetExists);
 
     if ($canAccept) {
-        $buttons[] = '<a class="button af-cs-accept-button" href="' . htmlspecialchars_uni($acceptUrl) . '"><span>' . htmlspecialchars_uni($acceptText) . '</span></a>';
+        $buttons[] = '<a class="atf-button af-cs-workflow-button" href="' . htmlspecialchars_uni($acceptUrl) . '"><span>' . htmlspecialchars_uni($acceptText) . '</span></a>';
     }
     if ($canTransfer) {
         $transferText = $lang->af_charactersheets_transfer_button ?? 'Перенести анкету';
-        $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--transfer" href="' . htmlspecialchars_uni($transferUrl) . '"><span>' . htmlspecialchars_uni($transferText) . '</span></a>';
+        $buttons[] = '<a class="atf-button atf-button--secondary af-cs-workflow-button af-cs-workflow-button--transfer" href="' . htmlspecialchars_uni($transferUrl) . '"><span>' . htmlspecialchars_uni($transferText) . '</span></a>';
+    }
+    if ($canRequestRevision) {
+        $revisionText = $lang->af_charactersheets_request_revision_button ?? 'Отправить на доработку';
+        $buttons[] = '<a class="atf-button atf-button--secondary af-cs-workflow-button af-cs-workflow-button--revision" href="' . htmlspecialchars_uni($revisionUrl) . '"><span>' . htmlspecialchars_uni($revisionText) . '</span></a>';
     }
     if (function_exists('af_atf_render_character_kb_moderation_button')) {
         $kbButton = (string)af_atf_render_character_kb_moderation_button($tid, $uid, $acceptRow, (string)$mybb->post_code);
@@ -205,14 +191,14 @@ function af_charactersheets_showthread_start_impl(): void
         }
     }
     if ($canCreateSheet) {
-        $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--sheet" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($sheetUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_create_sheet_button ?? 'Создать лист персонажа') . '</span></a>';
+        $buttons[] = '<a class="atf-button atf-button--secondary af-cs-workflow-button af-cs-workflow-button--sheet" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($sheetUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_create_sheet_button ?? 'Создать лист персонажа') . '</span></a>';
     }
 
     if (empty($buttons)) {
         return;
     }
 
-    $GLOBALS['af_charactersheets_accept_button'] = implode("\n", $buttons);
+    $GLOBALS['af_charactersheets_accept_button'] = '<div class="af-cs-workflow-actions">' . implode("\n", $buttons) . '</div>';
 }
 
 function af_charactersheets_pre_output_impl(&$page): void

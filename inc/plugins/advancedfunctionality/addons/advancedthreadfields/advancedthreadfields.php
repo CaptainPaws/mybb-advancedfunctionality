@@ -5128,7 +5128,7 @@ function af_atf_render_character_kb_moderation_button(int $tid, int $uid, array 
         . "window.setTimeout(function(){if(f.parentNode){f.parentNode.removeChild(f);}},30000);"
         . "})();return false;";
 
-    return '<button type="button" class="button af-cs-accept-button af-cs-accept-button--kb" onclick="' . htmlspecialchars_uni($onClick) . '"><span>' . htmlspecialchars_uni($label) . '</span></button>';
+    return '<button type="button" class="atf-button atf-button--secondary af-cs-workflow-button af-cs-workflow-button--kb" onclick="' . htmlspecialchars_uni($onClick) . '"><span>' . htmlspecialchars_uni($label) . '</span></button>';
 }
 
 function af_atf_character_bridge_store_thread_kb_link(int $tid, int $fid, int $uid): void

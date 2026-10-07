@@ -218,6 +218,8 @@ function af_charactersheets_misc_start(): void
         af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud']);
     } elseif ($action === 'af_charactersheets_transfer') {
         af_charactersheets_require_modules(['permissions', 'postbit', 'bootstrap', 'sheets_crud']);
+    } elseif ($action === 'af_charactersheets_request_revision') {
+        af_charactersheets_require_modules(['permissions', 'postbit', 'bootstrap', 'sheets_crud']);
     } elseif ($action === 'af_charactersheets_create_sheet') {
         af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render']);
     } else {

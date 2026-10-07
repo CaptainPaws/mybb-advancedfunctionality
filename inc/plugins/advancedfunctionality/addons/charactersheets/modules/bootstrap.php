@@ -294,6 +294,10 @@ function af_charactersheets_dispatch(): void
         af_charactersheets_handle_transfer_action();
         return;
     }
+    if ($action === 'af_charactersheets_request_revision') {
+        af_charactersheets_handle_request_revision_action();
+        return;
+    }
     if ($action === 'af_charactersheets_create_sheet') {
         af_charactersheets_handle_create_sheet_action();
         return;
@@ -540,6 +544,8 @@ function af_charactersheets_misc_start_impl(): void
         af_charactersheets_handle_accept_action();
     } elseif ($action === 'af_charactersheets_transfer') {
         af_charactersheets_handle_transfer_action();
+    } elseif ($action === 'af_charactersheets_request_revision') {
+        af_charactersheets_handle_request_revision_action();
     } elseif ($action === 'af_charactersheets_create_sheet') {
         af_charactersheets_handle_create_sheet_action();
     }
@@ -577,7 +583,14 @@ function af_charactersheets_handle_accept_action(): void
     }
 
     $existingRow = af_charactersheets_get_accept_row($tid);
-    $accepted_pid = af_charactersheets_resolve_existing_accept_post_pid($tid, $existingRow);
+    $workflowBeforeAccept = function_exists('af_cwf_get_row') ? af_cwf_get_row($tid) : [];
+    $wasPreviouslyAccepted = !empty($existingRow['accepted'])
+        || in_array((string)($workflowBeforeAccept['state'] ?? ''), ['needs_revision', 'accepted', 'transferred'], true)
+        || (int)($workflowBeforeAccept['accepted_at'] ?? 0) > 0
+        || (int)($workflowBeforeAccept['transferred_at'] ?? 0) > 0;
+    $accepted_pid = $wasPreviouslyAccepted
+        ? 0
+        : af_charactersheets_resolve_existing_accept_post_pid($tid, $existingRow);
     if ($accepted_pid <= 0 && function_exists('af_cwf_create_acceptance_greeting_post')) {
         $accepted_pid = (int)af_cwf_create_acceptance_greeting_post($tid, $thread, (int)($mybb->user['uid'] ?? 0));
     }
@@ -595,7 +608,9 @@ function af_charactersheets_handle_accept_action(): void
         'accepted_at' => TIME_NOW,
     ]);
 
-    af_charactersheets_handle_accept_exp($tid, (int)$mybb->user['uid']);
+    if (!$wasPreviouslyAccepted) {
+        af_charactersheets_handle_accept_exp($tid, (int)$mybb->user['uid']);
+    }
 
     if (function_exists('af_cwf_accept_character_application')) {
         af_cwf_accept_character_application($tid, (int)$mybb->user['uid'], [
@@ -678,6 +693,71 @@ function af_charactersheets_handle_transfer_action(): void
 
     $msg = $lang->af_charactersheets_transfer_done ?? 'Анкета перенесена.';
     redirect('showthread.php?tid=' . $tid, $msg);
+}
+
+function af_charactersheets_handle_request_revision_action(): void
+{
+    global $mybb, $db, $lang;
+
+    af_charactersheets_load_lang();
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $tid = (int)$mybb->get_input('tid');
+    if ($tid <= 0) {
+        af_charactersheets_deny('Invalid revision tid', ['tid' => $tid]);
+    }
+
+    $thread = (array)$db->fetch_array($db->simple_select('threads', '*', 'tid=' . $tid, ['limit' => 1]));
+    if (empty($thread)) {
+        af_charactersheets_deny('Revision thread not found', ['tid' => $tid]);
+    }
+
+    $fid = (int)($thread['fid'] ?? 0);
+    $acceptRow = af_charactersheets_get_accept_row($tid);
+    if (!function_exists('af_cwf_is_allowed_forum')
+        || !af_cwf_is_allowed_forum($fid)
+        || !function_exists('af_cwf_can_request_revision')
+        || !af_cwf_can_request_revision($tid, $thread, $acceptRow)) {
+        af_charactersheets_deny('Thread cannot be returned for revision', ['tid' => $tid, 'fid' => $fid]);
+    }
+    if (!af_charactersheets_user_can_accept($mybb->user ?? [], $fid)) {
+        af_charactersheets_deny('User cannot return thread for revision', ['tid' => $tid, 'uid' => $mybb->user['uid'] ?? 0]);
+    }
+
+    $pendingFid = function_exists('af_cwf_resolve_revision_forum_id')
+        ? af_cwf_resolve_revision_forum_id($tid, $thread)
+        : 0;
+    if ($pendingFid <= 0 || $pendingFid === $fid) {
+        af_charactersheets_log('Revision forum is not configured or invalid', ['tid' => $tid, 'current_fid' => $fid]);
+        $message = $lang->af_charactersheets_request_revision_error ?? 'Не удалось вернуть анкету на доработку.';
+        redirect('showthread.php?tid=' . $tid, $message);
+    }
+
+    require_once MYBB_ROOT . 'inc/class_moderation.php';
+    $moderation = new Moderation;
+    $moderation->move_thread($tid, $pendingFid, 0);
+
+    $updatedThread = (array)$db->fetch_array($db->simple_select('threads', 'tid,fid,closed', 'tid=' . $tid, ['limit' => 1]));
+    if ((int)($updatedThread['fid'] ?? 0) !== $pendingFid) {
+        af_charactersheets_log('Revision move did not reach pending forum', [
+            'tid' => $tid,
+            'expected_fid' => $pendingFid,
+            'actual_fid' => (int)($updatedThread['fid'] ?? 0),
+        ]);
+        $message = $lang->af_charactersheets_request_revision_error ?? 'Не удалось вернуть анкету на доработку.';
+        redirect('showthread.php?tid=' . $tid, $message);
+    }
+
+    if ((string)($updatedThread['closed'] ?? '') === '1') {
+        $moderation->open_threads([$tid]);
+    }
+
+    if (function_exists('af_cwf_mark_needs_revision')) {
+        af_cwf_mark_needs_revision($tid, (int)($mybb->user['uid'] ?? 0));
+    }
+
+    $message = $lang->af_charactersheets_request_revision_done ?? 'Анкета возвращена автору на доработку.';
+    redirect('showthread.php?tid=' . $tid, $message);
 }
 
 function af_charactersheets_resolve_existing_accept_post_pid(int $tid, array $row = []): int

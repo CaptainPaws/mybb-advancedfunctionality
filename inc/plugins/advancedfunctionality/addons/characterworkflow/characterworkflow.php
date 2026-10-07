@@ -96,10 +96,13 @@ function af_cwf_ensure_schema(): void
         if ($addedWantedColumn || $missingWantedIndex) {
             $db->write_query('ALTER TABLE '.TABLE_PREFIX.AF_CWF_TABLE.' ADD KEY wanted_id (wanted_id)');
         }
+        if (!$db->field_exists('source_fid', AF_CWF_TABLE)) {
+            $db->add_column(AF_CWF_TABLE, 'source_fid', 'INT UNSIGNED NOT NULL DEFAULT 0 AFTER state');
+        }
         return;
     }
 
-    $db->write_query("\n        CREATE TABLE " . TABLE_PREFIX . AF_CWF_TABLE . " (\n          tid INT UNSIGNED NOT NULL,\n          state VARCHAR(32) NOT NULL DEFAULT 'draft',\n          kb_entry_id INT UNSIGNED DEFAULT NULL,\n          sheet_id INT UNSIGNED DEFAULT NULL,\n          sheet_slug VARCHAR(190) DEFAULT NULL,\n          greeting_post_id INT UNSIGNED DEFAULT NULL,\n          wanted_id INT UNSIGNED DEFAULT NULL,\n          reviewed_by INT UNSIGNED DEFAULT NULL,\n          accepted_by_uid INT UNSIGNED DEFAULT NULL,\n          transferred_by_uid INT UNSIGNED DEFAULT NULL,\n          accepted_at INT UNSIGNED NOT NULL DEFAULT 0,\n          transferred_at INT UNSIGNED NOT NULL DEFAULT 0,\n          revision_requested_at INT UNSIGNED NOT NULL DEFAULT 0,\n          updated_at INT UNSIGNED NOT NULL DEFAULT 0,\n          PRIMARY KEY (tid),\n          KEY state (state),\n          KEY kb_entry_id (kb_entry_id),\n          KEY sheet_id (sheet_id),\n          KEY greeting_post_id (greeting_post_id),\n          KEY wanted_id (wanted_id)\n        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n    ");
+    $db->write_query("\n        CREATE TABLE " . TABLE_PREFIX . AF_CWF_TABLE . " (\n          tid INT UNSIGNED NOT NULL,\n          state VARCHAR(32) NOT NULL DEFAULT 'draft',\n          source_fid INT UNSIGNED NOT NULL DEFAULT 0,\n          kb_entry_id INT UNSIGNED DEFAULT NULL,\n          sheet_id INT UNSIGNED DEFAULT NULL,\n          sheet_slug VARCHAR(190) DEFAULT NULL,\n          greeting_post_id INT UNSIGNED DEFAULT NULL,\n          wanted_id INT UNSIGNED DEFAULT NULL,\n          reviewed_by INT UNSIGNED DEFAULT NULL,\n          accepted_by_uid INT UNSIGNED DEFAULT NULL,\n          transferred_by_uid INT UNSIGNED DEFAULT NULL,\n          accepted_at INT UNSIGNED NOT NULL DEFAULT 0,\n          transferred_at INT UNSIGNED NOT NULL DEFAULT 0,\n          revision_requested_at INT UNSIGNED NOT NULL DEFAULT 0,\n          updated_at INT UNSIGNED NOT NULL DEFAULT 0,\n          PRIMARY KEY (tid),\n          KEY state (state),\n          KEY kb_entry_id (kb_entry_id),\n          KEY sheet_id (sheet_id),\n          KEY greeting_post_id (greeting_post_id),\n          KEY wanted_id (wanted_id)\n        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n    ");
 }
 
 function af_cwf_get_row(int $tid): array
@@ -124,6 +127,7 @@ function af_cwf_upsert_row(int $tid, array $data): void
 
     $defaults = [
         'state' => 'draft',
+        'source_fid' => 0,
         'kb_entry_id' => null,
         'sheet_id' => null,
         'sheet_slug' => null,
@@ -421,6 +425,33 @@ function af_cwf_resolve_transfer_target_forum_id(int $currentFid = 0): int
     return 0;
 }
 
+function af_cwf_resolve_revision_forum_id(int $tid, array $thread = []): int
+{
+    if ($tid <= 0) {
+        return 0;
+    }
+
+    $workflow = af_cwf_get_row($tid);
+    $sourceFid = (int)($workflow['source_fid'] ?? 0);
+    $pendingForumIds = af_cwf_get_pending_forum_ids();
+    $currentFid = (int)($thread['fid'] ?? 0);
+    if ($sourceFid > 0
+        && $sourceFid !== $currentFid
+        && in_array($sourceFid, $pendingForumIds, true)
+        && af_cwf_forum_exists_and_is_postable($sourceFid)) {
+        return $sourceFid;
+    }
+
+    foreach ($pendingForumIds as $pendingFid) {
+        $pendingFid = (int)$pendingFid;
+        if ($pendingFid > 0 && $pendingFid !== $currentFid && af_cwf_forum_exists_and_is_postable($pendingFid)) {
+            return $pendingFid;
+        }
+    }
+
+    return 0;
+}
+
 function af_cwf_detect_character_kind(int $tid, int $uid, array $acceptRow = []): string
 {
     if (!function_exists('af_charactersheets_resolve_character_kb_entry')) {
@@ -540,13 +571,22 @@ function af_cwf_has_linked_kb_character(int $tid, array $acceptRow = []): array
 function af_cwf_can_accept(int $tid, array $thread = [], array $acceptRow = []): bool
 {
     $ctx = af_cwf_get_context($tid, $thread, $acceptRow);
-    return !empty($ctx['is_pending_forum']);
+    if (empty($ctx['is_pending_forum'])) {
+        return false;
+    }
+
+    $state = (string)($ctx['state'] ?? '');
+    // A return for revision can be accepted again. Other pending applications
+    // remain actionable unless they are already approved or explicitly archived.
+    return !in_array($state, [AF_CWF_STATE_APPROVED, AF_CWF_STATE_ARCHIVED], true);
 }
 
 function af_cwf_can_transfer(int $tid, array $thread = [], array $acceptRow = []): bool
 {
     $ctx = af_cwf_get_context($tid, $thread, $acceptRow);
-    return !empty($ctx['was_accepted']) && empty($ctx['is_target_forum']);
+    return !empty($ctx['was_accepted'])
+        && empty($ctx['is_target_forum'])
+        && !in_array((string)($ctx['state'] ?? ''), [AF_CWF_STATE_NEEDS_REVISION, AF_CWF_STATE_ARCHIVED], true);
 }
 
 function af_cwf_can_create_sheet(int $tid, array $thread = [], array $acceptRow = []): bool
@@ -610,7 +650,7 @@ function af_cwf_validate_source_kb(int $tid, array $thread = [], array $acceptRo
 function af_cwf_can_request_revision(int $tid, array $thread = [], array $acceptRow = []): bool
 {
     $ctx = af_cwf_get_context($tid, $thread, $acceptRow);
-    return !empty($ctx['was_accepted']) || !empty($ctx['is_pending_forum']);
+    return !empty($ctx['was_accepted']) && !empty($ctx['is_target_forum']);
 }
 
 function af_cwf_accept_character_application(int $tid, int $actorUid, array $context = []): array
@@ -636,6 +676,10 @@ function af_cwf_accept_character_application(int $tid, int $actorUid, array $con
 
     if (!empty($thread)) {
         $tid = (int)($thread['tid'] ?? $tid);
+        $sourceFid = (int)($thread['fid'] ?? 0);
+        if ($sourceFid > 0 && af_cwf_is_pending_forum($sourceFid)) {
+            $update['source_fid'] = $sourceFid;
+        }
     }
 
     af_cwf_upsert_row($tid, $update);
@@ -769,6 +813,11 @@ function af_cwf_transfer_character_application(int $tid, int $actorUid, array $c
         'transferred_by_uid' => $actorUid > 0 ? $actorUid : null,
         'transferred_at' => TIME_NOW,
     ];
+
+    $sourceFid = (int)($thread['fid'] ?? 0);
+    if ($sourceFid > 0 && af_cwf_is_pending_forum($sourceFid)) {
+        $update['source_fid'] = $sourceFid;
+    }
 
     $targetFid = (int)($context['target_fid'] ?? 0);
     if ($targetFid > 0) {

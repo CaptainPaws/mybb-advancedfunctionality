@@ -233,6 +233,18 @@ body.atf-active .atf-quick-reply__actions {
   gap: var(--atf-space-2);
 }
 
+body.atf-active .af-cs-workflow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--atf-space-2);
+  margin-block: var(--atf-space-2);
+}
+
+body.atf-active .af-cs-workflow-actions > .atf-button {
+  margin: 0;
+}
+
 body.atf-active .atf-quick-reply__actions .button {
   min-width: 7.5rem;
   min-height: 2.35rem;
