@@ -2104,6 +2104,13 @@ af-apf-postbit-field {
   box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
 }
 
+/* The sheet trigger has only a close button and body, without a header div.
+   Span both dialog tracks instead of leaving the flexible second row empty. */
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-modal__dialog > .af-cs-modal__body:first-of-type,
+.af-cs-modal[data-af-apui-modal-kind="sheet"] .af-cs-modal__dialog > .af-cs-modal__body:first-of-type {
+  grid-row: 1 / -1;
+}
+
 .af-cs-modal__header {
   display: flex;
   align-items: center;
