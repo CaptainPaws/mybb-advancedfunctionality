@@ -4962,13 +4962,26 @@ function af_atf_handle_character_kb_bridge_action(bool $syncOnly): void
     }
 
     $fid = (int)($thread['fid'] ?? 0);
-    if (!function_exists('af_cwf_is_allowed_forum')
+    if ($fid <= 0
+        || !function_exists('af_cwf_is_allowed_forum')
         || !af_cwf_is_allowed_forum($fid)
-        || !function_exists('af_cwf_forum_exists_and_is_postable')
-        || !af_cwf_forum_exists_and_is_postable($fid)) {
+        || !function_exists('af_cwf_forum_exists')) {
         error_no_permission();
     }
-    if (!function_exists('af_charactersheets_user_can_accept') || !af_charactersheets_user_can_accept($mybb->user ?? [], $fid)) {
+    if (!af_cwf_forum_exists($fid)) {
+        error_no_permission();
+    }
+    // Sync updates an existing KB relation; destination/postable rules apply
+    // only to the create action, not to an already accepted source thread.
+    if (!$syncOnly
+        && (!function_exists('af_cwf_forum_exists_and_is_postable')
+            || !af_cwf_forum_exists_and_is_postable($fid))) {
+        error_no_permission();
+    }
+    // This action needs workflow management permission, not the separate
+    // acceptance gate (which also depends on CharacterWorkflow being enabled).
+    if (!function_exists('af_charactersheets_user_is_admin_or_moderator')
+        || !af_charactersheets_user_is_admin_or_moderator($mybb->user ?? [], $fid)) {
         error_no_permission();
     }
     $acceptRow = function_exists('af_charactersheets_get_accept_row') ? af_charactersheets_get_accept_row($tid) : [];

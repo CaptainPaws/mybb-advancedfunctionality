@@ -370,7 +370,7 @@ function af_cwf_get_transfer_group_ids(): array
 }
 
 
-function af_cwf_forum_exists_and_is_postable(int $fid): bool
+function af_cwf_forum_exists(int $fid): bool
 {
     global $db;
 
@@ -383,7 +383,21 @@ function af_cwf_forum_exists_and_is_postable(int $fid): bool
         return false;
     }
 
-    return (string)($forum['type'] ?? 'f') !== 'c';
+    return true;
+}
+
+function af_cwf_forum_exists_and_is_postable(int $fid): bool
+{
+    global $db;
+
+    if ($fid <= 0 || !is_object($db)) {
+        return false;
+    }
+
+    $forum = $db->fetch_array($db->simple_select('forums', 'fid,type', 'fid=' . $fid, ['limit' => 1]));
+    return is_array($forum)
+        && (int)($forum['fid'] ?? 0) > 0
+        && (string)($forum['type'] ?? 'f') !== 'c';
 }
 
 function af_cwf_resolve_transfer_target_forum_id(int $currentFid = 0): int
