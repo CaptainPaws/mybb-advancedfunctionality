@@ -5199,7 +5199,10 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
         'theme_tids' => $themeTids,
         'enabled_source_count' => count(array_filter($sourceDiagnostics, static fn(array $row): bool => !empty($row['included']))),
         'source_diagnostics' => $sourceDiagnostics, 'themes' => [],
-        'created_or_updated' => 0, 'manual_override' => 0, 'skipped' => 0, 'errors' => [],
+        'created_or_updated' => 0, 'manual_override' => 0, 'skipped' => 0,
+        'skipped_migration_blocked' => 0, 'skipped_disabled' => 0,
+        'skipped_source_missing' => 0, 'skipped_file_mode' => 0,
+        'warnings' => [], 'errors' => [],
     ];
     if (!$themeTids) {
         $result['errors'][] = ['theme_tid' => 0, 'message' => 'No MyBB themes were discovered'];
@@ -5208,7 +5211,6 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
     }
 
     $result['legacy_bundle_migrations'] = [];
-    $migrationBlockedThemes = [];
     foreach ($themeTids as $themeTid) {
         try {
             $migration = af_theme_stylesheet_diagnostic_call(
@@ -5220,27 +5222,39 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
                 $result['legacy_bundle_migrations'][] = $migration;
             }
             if (empty($migration['ok'])) {
-                $migrationBlockedThemes[(int)$themeTid] = true;
-                $result['errors'][] = [
+                // An unmappable legacy bundle is a recovery concern. The
+                // independent manifest sources below must still sync.
+                $result['warnings'][] = [
                     'theme_tid' => (int)$themeTid,
                     'addon_id' => AF_THEME_BUNDLE_ADDON_ID,
                     'logical_id' => AF_THEME_BUNDLE_LOGICAL_ID,
+                    'status' => (string)($migration['status'] ?? 'blocked'),
                     'message' => (string)($migration['message'] ?? 'Legacy bundle migration blocked'),
                 ];
             }
         } catch (Throwable $error) {
-            if (function_exists('update_theme_stylesheet_list')) update_theme_stylesheet_list((int)$themeTid);
-            $migrationBlockedThemes[(int)$themeTid] = true;
             $diagnostic = [
                 'ok' => false, 'status' => 'blocked', 'theme_tid' => (int)$themeTid,
                 'migrated_sections' => 0, 'customized_sections' => 0,
                 'message' => 'Legacy bundle migration stopped safely: '.$error->getMessage(),
             ];
             $result['legacy_bundle_migrations'][] = $diagnostic;
-            $result['errors'][] = [
+            $result['warnings'][] = [
                 'theme_tid' => (int)$themeTid, 'addon_id' => AF_THEME_BUNDLE_ADDON_ID,
-                'logical_id' => AF_THEME_BUNDLE_LOGICAL_ID, 'message' => $diagnostic['message'],
+                'logical_id' => AF_THEME_BUNDLE_LOGICAL_ID, 'status' => 'blocked',
+                'message' => $diagnostic['message'],
             ];
+            if (function_exists('update_theme_stylesheet_list')) {
+                try {
+                    update_theme_stylesheet_list((int)$themeTid);
+                } catch (Throwable $rebuildError) {
+                    $result['warnings'][] = [
+                        'theme_tid' => (int)$themeTid, 'addon_id' => AF_THEME_BUNDLE_ADDON_ID,
+                        'logical_id' => AF_THEME_BUNDLE_LOGICAL_ID, 'status' => 'rebuild_failed',
+                        'message' => 'Theme stylesheet list rebuild also failed: '.$rebuildError->getMessage(),
+                    ];
+                }
+            }
         }
     }
 
@@ -5253,6 +5267,10 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
         $enabledSetting = (string)$entry['enabled_setting'];
         if ($enabledSetting !== '') {
             if (!isset($mybb->settings[$enabledSetting]) || (string)$mybb->settings[$enabledSetting] !== '1') {
+                foreach ($themeTids as $_themeTid) {
+                    $result['skipped']++;
+                    $result['skipped_disabled']++;
+                }
                 continue;
             }
         }
@@ -5260,10 +5278,6 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
         $seed = af_get_theme_stylesheet_source((array)$entry['addon_meta'], $entry);
 
         foreach ($themeTids as $themeTid) {
-            if (!empty($migrationBlockedThemes[(int)$themeTid])) {
-                $result['skipped']++;
-                continue;
-            }
             $context = $addonId.':'.(string)$entry['logical_id'].':theme='.(int)$themeTid;
             af_theme_stylesheet_diagnostic_call('af_theme_stylesheet_repair_legacy_registry_row', $context,
                 static fn() => af_theme_stylesheet_repair_legacy_registry_row($themeTid, $entry));
@@ -5273,6 +5287,7 @@ function af_sync_theme_stylesheets(bool $force = false, ?string $onlyAddonId = n
                 static fn() => af_reconcile_theme_stylesheet_registry_state($themeTid, $entry, $seed ?: null));
             if (!$seed) {
                 $result['skipped']++;
+                $result['skipped_source_missing']++;
                 continue;
             }
             try {
@@ -5646,6 +5661,22 @@ function af_theme_stylesheets_action_message(string $action, array $result, $lan
         'skipped' => (int)($result['skipped'] ?? 0),
     ];
     $suffix = " (synced: {$base['created_or_updated']}, restored: {$base['restored']}, manual override: {$base['manual_override']}, skipped: {$base['skipped']})";
+    $skipReasons = [];
+    foreach ([
+        'disabled' => (int)($result['skipped_disabled'] ?? 0),
+        'source missing' => (int)($result['skipped_source_missing'] ?? 0),
+        'file mode' => (int)($result['skipped_file_mode'] ?? 0),
+        'migration blocked' => (int)($result['skipped_migration_blocked'] ?? 0),
+    ] as $reason => $count) {
+        if ($count > 0) $skipReasons[] = $reason.': '.$count;
+    }
+    if ($skipReasons) $suffix .= ' (skip reasons: '.implode(', ', $skipReasons).')';
+    foreach ((array)($result['warnings'] ?? []) as $warning) {
+        if (($warning['addon_id'] ?? '') !== AF_THEME_BUNDLE_ADDON_ID) continue;
+        $message = trim((string)($warning['message'] ?? 'Legacy bundle migration warning'));
+        if ($message !== '') $suffix .= ' (legacy migration warning: '.$message.')';
+        break;
+    }
 
     $map = [
         'integrate' => 'af_theme_stylesheets_msg_integrate',
