@@ -2162,7 +2162,8 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
         af_front_ensure_header_bits();
     }
 
-    if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 0) === 1 && function_exists('af_advancedinventory_append_embedded_assets')) {
+    // Tab requests reuse the sheet's already-loaded runtime and must stay lean.
+    if ($only_tab === '' && (int)($mybb->settings['af_advancedinventory_enabled'] ?? 0) === 1 && function_exists('af_advancedinventory_append_embedded_assets')) {
         af_advancedinventory_append_embedded_assets($headerinclude, true);
     }
 
@@ -2215,10 +2216,64 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     if (empty($sheet)) {
         return '<div class="af-cs-page"><div class="af-cs-muted">Лист не найден. Запись анкеты помечена для восстановления: откройте тему анкеты и повторно создайте лист.</div></div>';
     }
+
+    // Arsenal is an AdvancedInventory fragment. Resolve its approved sheet owner
+    // and return before loading thread fields, KB character data, or sheet math.
+    if ($only_tab === 'arsenal') {
+        return function_exists('af_advancedinventory_build_equipment_fragment')
+            ? (string)af_advancedinventory_build_equipment_fragment((int)($sheet['uid'] ?? 0))
+            : '<div class="af-cs-muted">Арсенал недоступен.</div>';
+    }
+
+    // Talent tree and loadout fragments need the saved build plus permissions,
+    // not the full sheet view model, character profile, or ATF field index.
+    $lazyTab = preg_replace('/^arpg-/', '', trim($only_tab));
+    if (in_array($lazyTab, ['talents', 'equipment'], true) && strpos($only_tab, 'arpg-') === 0) {
+        global $mybb;
+        $build = af_charactersheets_normalize_build(af_charactersheets_json_decode((string)($sheet['build_json'] ?? '')));
+        $ownerUid = (int)($sheet['uid'] ?? 0);
+        $viewer = (array)($mybb->user ?? []);
+        $canEdit = af_charactersheets_user_can_edit_sheet($sheet, $viewer);
+        if (!$canEdit) {
+            $fid = 0;
+            $tid = (int)($accept_row['tid'] ?? 0);
+            if ($tid > 0) {
+                $threadRow = $db->fetch_array($db->simple_select('threads', 'fid', 'tid=' . $tid, ['limit' => 1]));
+                $fid = (int)($threadRow['fid'] ?? 0);
+            }
+            $canEdit = af_charactersheets_user_is_admin_or_moderator($viewer, $fid);
+        }
+
+        if ($lazyTab === 'equipment') {
+            return af_charactersheets_build_arpg_equipment_html($build, $canEdit, $ownerUid);
+        }
+
+        $balance = function_exists('af_balance_get') ? af_balance_get($ownerUid) : ['ability_tokens' => 0];
+        $tokens = (int)($balance['ability_tokens'] ?? 0);
+        $minimalVm = [
+            'uid' => $ownerUid,
+            'build' => $build,
+            'wallet' => [
+                'ability_tokens' => function_exists('af_balance_format_ability_tokens')
+                    ? af_balance_format_ability_tokens($tokens)
+                    : number_format($tokens / 100, 2, '.', ' '),
+                'ability_symbol' => (string)($mybb->settings['af_balance_ability_tokens_symbol'] ?? '♦'),
+            ],
+        ];
+        return af_charactersheets_arpg_render_talent_tree_html($minimalVm, $canEdit);
+    }
+
     $GLOBALS['af_charactersheets_has_frontend_component'] = true;
     $character_source = af_charactersheets_resolve_character_kb_entry($tid, $uid, $accept_row);
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
     $character_stats = (array)(($character_source['payload'] ?? [])['stats'] ?? []);
+    $element_value = trim((string)($character_profile['character_element'] ?? ''));
+    if ($element_value === '') {
+        $element_value = af_charactersheets_pick_field_value($atf_index, ['character_element', 'element']);
+    }
+    $sheet_element_theme_key = function_exists('af_atf_resolve_element_theme_key')
+        ? htmlspecialchars_uni(af_atf_resolve_element_theme_key($element_value))
+        : '';
 
     $character_name_en = trim((string)($character_profile['character_name'] ?? ''));
     if ($character_name_en === '') {
@@ -2268,11 +2323,6 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
 
     if ($only_tab !== '') {
         $tab = preg_replace('/^arpg-/', '', trim($only_tab));
-        if ($tab === 'arsenal') {
-            return function_exists('af_advancedinventory_build_equipment_fragment')
-                ? (string)af_advancedinventory_build_equipment_fragment($sheet_owner_uid_for_loadout)
-                : '<div class="af-cs-muted">Арсенал недоступен.</div>';
-        }
         if ($tab === 'talents' && $sheet_render_profile === 'arpg') {
             $vm = af_charactersheets_build_arpg_view_model($sheet, $sheet_view, $atf_index, $build, $character_source, $sheet_owner_uid_for_loadout, false);
             return af_charactersheets_arpg_render_talent_tree_html($vm, $can_edit_loadout);
@@ -2352,6 +2402,9 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     $sheet_profile_chip_html = af_charactersheets_build_owner_profile_chip($sheet_owner_uid);
     $bonus_items_json = htmlspecialchars_uni(af_charactersheets_json_encode((array)($sheet_view['bonus_items'] ?? [])));
     $sheet_tab_url = htmlspecialchars_uni(af_charactersheets_url(['action' => 'tab', 'slug' => $slug, 'ajax' => 1]));
+    $sheet_arsenal_url = function_exists('af_advancedinventory_url')
+        ? htmlspecialchars_uni(af_advancedinventory_url('equipment_fragment', ['uid' => $sheet_owner_uid], false))
+        : '';
 
     $sheet_mode_attr = htmlspecialchars_uni($sheet_mode);
     $sheet_render_profile_attr = htmlspecialchars_uni($sheet_render_profile);

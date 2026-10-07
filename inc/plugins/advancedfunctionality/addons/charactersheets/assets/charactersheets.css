@@ -3120,3 +3120,108 @@
 
 .af-cs-arpg-ability-card .af-ability-meta > summary { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border:1px solid currentColor; border-radius:999px; cursor:pointer; list-style:none; transition:background-color .15s ease,transform .15s ease; }
 .af-cs-arpg-ability-card .af-ability-meta > summary::-webkit-details-marker{display:none}.af-cs-arpg-ability-card .af-ability-meta > summary::before{content:'▸'}.af-cs-arpg-ability-card .af-ability-meta[open] > summary::before{content:'▾'}.af-cs-arpg-ability-card .af-ability-meta > summary:hover{background:rgba(127,127,127,.1)}.af-cs-arpg-ability-card .af-ability-meta > summary:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+
+/* Shared elemental tokens and the layered surface language used by the talent tree. */
+.af-cs-page {
+  --af-cs-accent: var(--af-element-accent, #8bd3ff);
+  --af-cs-accent-soft: var(--af-element-soft, rgba(78, 166, 255, .16));
+  --af-cs-accent-strong: var(--af-element-main, #4ea6ff);
+  --af-cs-accent-glow: 0 0 18px var(--af-cs-accent-soft);
+  --af-cs-accent-gradient: linear-gradient(125deg, var(--af-cs-accent-soft), rgba(255,255,255,.025) 72%, transparent);
+  --af-cs-accent-border: var(--af-element-border, rgba(139,211,255,.34));
+}
+
+.af-cs-page .af-cs-section,
+.af-cs-page .af-cs-summary__info,
+.af-cs-page .af-cs-level,
+.af-cs-page .af-cs-arpg-panel,
+.af-cs-page .af-cs-arpg-top__art {
+  border: 1px solid transparent;
+  background: linear-gradient(145deg, rgba(26,31,40,.96), rgba(15,19,27,.96)) padding-box,
+    linear-gradient(120deg, var(--af-cs-accent-border), rgba(255,255,255,.08) 46%, transparent 92%) border-box;
+  box-shadow: inset 0 1px rgba(255,255,255,.035), 0 12px 28px rgba(0,0,0,.14);
+}
+
+.af-cs-page .af-cs-section h2,
+.af-cs-page .af-cs-arpg-panel h2,
+.af-cs-page .af-cs-arpg-talent-toolbar h3 {
+  color: var(--af-cs-accent);
+  text-shadow: 0 0 14px var(--af-cs-accent-soft);
+}
+
+.af-cs-page .af-cs-section h2::after,
+.af-cs-page .af-cs-arpg-panel h2::after {
+  content: '';
+  display: block;
+  width: min(180px, 42%);
+  height: 1px;
+  margin-top: 8px;
+  background: linear-gradient(90deg, var(--af-cs-accent), transparent);
+  opacity: .65;
+}
+
+.af-cs-page .af-cs-tabs__nav button,
+.af-cs-page .af-cs-btn,
+.af-cs-page .af-cs-tab-btn {
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.af-cs-page .af-cs-tabs__nav button {
+  border-color: rgba(255,255,255,.12);
+  background: linear-gradient(160deg, rgba(255,255,255,.055), rgba(0,0,0,.12));
+}
+
+.af-cs-page .af-cs-tabs__nav button:hover {
+  border-color: var(--af-cs-accent-border);
+  box-shadow: 0 0 12px var(--af-cs-accent-soft);
+  transform: translateY(-1px);
+}
+
+.af-cs-page .af-cs-tabs__nav button.is-active {
+  color: var(--af-cs-accent);
+  background: linear-gradient(125deg, var(--af-cs-accent-soft), rgba(255,255,255,.045) 78%);
+  border-color: var(--af-cs-accent-border);
+  box-shadow: inset 0 1px rgba(255,255,255,.08), 0 0 14px var(--af-cs-accent-soft);
+}
+
+.af-cs-page .af-cs-tab[data-afcs-lazy] > .af-cs-muted[role="status"] {
+  min-height: 76px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+  background: linear-gradient(120deg, var(--af-cs-accent-soft), rgba(255,255,255,.018) 60%);
+}
+
+.af-cs-page .af-cs-tab[data-afcs-loading="1"] { min-height: 92px; }
+
+.af-cs-page--arpg {
+  background: radial-gradient(ellipse at top, var(--af-cs-accent-soft), rgba(10,12,18,.92) 66%);
+}
+
+.af-cs-page .af-cs-arpg-element,
+.af-cs-page .af-cs-arpg-stat-value,
+.af-cs-page .af-cs-arpg-talent-currency strong {
+  color: var(--af-cs-accent);
+}
+
+/* Keep Inventory's standalone styling untouched; only the embedded fragment inherits sheet accents. */
+.af-cs-page .af-cs-arsenal .af-inv-entity-page { min-width: 0; }
+.af-cs-page .af-cs-arsenal .af-inv-subfilters { gap: 7px; padding-bottom: 10px; border-bottom: 1px solid transparent; border-image: linear-gradient(90deg, var(--af-cs-accent-border), transparent) 1; }
+.af-cs-page .af-cs-arsenal .af-inv-subfilter,
+.af-cs-page .af-cs-arsenal .af-inv-action { transition: color .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.af-cs-page .af-cs-arsenal .af-inv-subfilter:hover,
+.af-cs-page .af-cs-arsenal .af-inv-action:hover { border-color: var(--af-cs-accent-border); box-shadow: 0 0 12px var(--af-cs-accent-soft); }
+.af-cs-page .af-cs-arsenal .af-inv-subfilter.is-active { color: var(--af-cs-accent); border-color: var(--af-cs-accent-border); background: linear-gradient(125deg, var(--af-cs-accent-soft), rgba(255,255,255,.04)); box-shadow: 0 0 12px var(--af-cs-accent-soft); }
+.af-cs-page .af-cs-arsenal .af-inv-workspace { gap: 14px; }
+.af-cs-page .af-cs-arsenal .af-inv-slots-pane,
+.af-cs-page .af-cs-arsenal .af-inv-preview-pane { padding: 10px; border: 1px solid transparent; border-radius: 14px; background: linear-gradient(145deg, rgba(255,255,255,.045), rgba(0,0,0,.12)) padding-box, linear-gradient(130deg, var(--af-cs-accent-border), rgba(255,255,255,.07) 65%) border-box; }
+.af-cs-page .af-cs-arsenal .af-inv-slot:hover { border-color: var(--af-cs-accent-border); box-shadow: 0 0 14px var(--af-cs-accent-soft); }
+.af-cs-page .af-cs-arsenal .af-inv-slot.is-selected,
+.af-cs-page .af-cs-arsenal .af-inv-preview-card.is-active { border-color: var(--af-cs-accent); box-shadow: 0 0 0 1px var(--af-cs-accent-soft), 0 0 18px var(--af-cs-accent-soft); }
+
+@media (max-width: 640px) {
+  .af-cs-page .af-cs-arsenal .af-inv-workspace { grid-template-columns: minmax(0, 1fr); }
+  .af-cs-page .af-cs-arsenal .af-inv-slots-pane { max-height: none; overflow: visible; }
+  .af-cs-page .af-cs-arsenal .af-inv-subfilters { gap: 6px; }
+}

@@ -274,9 +274,13 @@
       if (!base) return;
       panel.dataset.afcsLoading = '1';
       panel.innerHTML = '<div class="af-cs-muted" role="status">Загрузка…</div>';
-      var url = new URL(base, document.baseURI);
-      url.searchParams.set('tab', name);
-      url.searchParams.set('ajax', '1');
+      var arsenalUrl = sheet && sheet.getAttribute('data-afcs-arsenal-url');
+      var url = new URL(name === 'arsenal' && arsenalUrl ? arsenalUrl : base, document.baseURI);
+      if (name !== 'arsenal' || !arsenalUrl) {
+        url.searchParams.set('tab', name);
+        url.searchParams.set('ajax', '1');
+      }
+      panel.setAttribute('aria-busy', 'true');
       fetch(url.toString(), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(function (response) {
           if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -291,7 +295,10 @@
         .catch(function () {
           panel.innerHTML = '<div class="af-cs-muted">Не удалось загрузить раздел. <button type="button" data-afcs-retry="1">Повторить</button></div>';
         })
-        .finally(function () { delete panel.dataset.afcsLoading; });
+        .finally(function () {
+          delete panel.dataset.afcsLoading;
+          panel.removeAttribute('aria-busy');
+        });
     }
 
     document.addEventListener('click', function (event) {

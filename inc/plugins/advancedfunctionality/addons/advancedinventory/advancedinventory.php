@@ -516,7 +516,7 @@ function af_advancedinventory_misc_router(): void
 {
     global $mybb;
     $action = (string)$mybb->get_input('action');
-    if (!in_array($action, ['inventory', 'abilities', 'inventories', 'tab', 'entity', 'equipment_fragment', 'equipment_items', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_appearance_apply', 'api_appearance_unapply', 'api_update', 'api_delete', 'api_bulk_delete', 'api_sell', 'api_bind_support_slot', 'api_unbind_support_slot', 'api_support_slots_state'], true)) {
+    if (!in_array($action, ['inventory', 'abilities', 'inventories', 'tab', 'entity', 'equipment_fragment', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_appearance_apply', 'api_appearance_unapply', 'api_update', 'api_delete', 'api_bulk_delete', 'api_sell', 'api_bind_support_slot', 'api_unbind_support_slot', 'api_support_slots_state'], true)) {
         return;
     }
     if (!af_advancedinventory_alias_available()) {
@@ -558,7 +558,6 @@ function af_advancedinventory_dispatch(string $action): void
         case 'tab':
         case 'entity': af_advancedinventory_render_tab(); return;
         case 'equipment_fragment': af_advancedinventory_render_equipment_fragment(); return;
-        case 'equipment_items': af_advancedinventory_render_equipment_items(); return;
         case 'api_list': af_advancedinventory_api_list(); return;
         case 'api_equip': af_advancedinventory_api_equip(); return;
         case 'api_unequip': af_advancedinventory_api_unequip(); return;
@@ -576,7 +575,7 @@ function af_advancedinventory_dispatch(string $action): void
     error_no_permission();
 }
 
-/** CharacterSheets Arsenal: the existing Inventory equip controls without its page shell or category navigation. */
+/** CharacterSheets Arsenal: the existing equipment entity view without Inventory's page shell or top-level tabs. */
 function af_advancedinventory_render_equipment_fragment(): void
 {
     global $mybb;
@@ -591,50 +590,11 @@ function af_advancedinventory_build_equipment_fragment(int $ownerUid): string
     $viewerUid = (int)($mybb->user['uid'] ?? 0);
     if ($ownerUid <= 0) $ownerUid = $viewerUid;
     if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 1) !== 1 || !af_inv_user_can_view($viewerUid, $ownerUid)) return '';
-    $itemsHtml = af_advancedinventory_render_equipment_items_html($ownerUid);
-    $apiBase = af_advancedinventory_url('', [], false);
-    $itemsUrl = af_advancedinventory_url('equipment_items', ['uid' => $ownerUid, 'ajax' => 1], false);
-    return '<div class="af-inv-page af-aa-context af-aa-context--inventory af-cs-arsenal" data-owner="' . $ownerUid . '" data-default-tab="equipment" data-first-url="' . htmlspecialchars_uni($itemsUrl) . '">'
-        . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$mybb->post_code) . '">'
-        . '<div class="af-inv-tab-content"><div id="af-inv-panel">'
-        . '<div class="af-inv-api" data-api-base="' . htmlspecialchars_uni($apiBase) . '" data-owner="' . $ownerUid . '" data-can-manage="0" data-can-edit="' . (af_inv_can_manage_owner($viewerUid, $ownerUid) ? '1' : '0') . '"></div>'
-        . $itemsHtml . '</div></div></div>';
-}
-
-function af_advancedinventory_render_equipment_items(): void
-{
-    global $mybb;
-    $viewerUid = (int)($mybb->user['uid'] ?? 0);
-    $ownerUid = (int)$mybb->get_input('uid');
-    if ($ownerUid <= 0) $ownerUid = $viewerUid;
-    if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 1) !== 1 || !af_inv_user_can_view($viewerUid, $ownerUid)) {
-        error_no_permission();
-    }
-    echo af_advancedinventory_render_equipment_items_html($ownerUid);
-    exit;
-}
-
-function af_advancedinventory_render_equipment_items_html(int $ownerUid): string
-{
-    global $mybb;
-    $data = af_inv_get_items($ownerUid, ['entity' => 'equipment', 'subtypes' => ['weapon', 'armor', 'gear', 'artifact', 'ammo'], 'page' => 1, 'perPage' => 500, 'enrich' => true]);
-    $equipable = [];
-    foreach ((array)($data['items'] ?? []) as $item) {
-        if (!is_array($item)) continue;
-        $subtype = trim((string)($item['subtype'] ?? ''));
-        if ($subtype === '') {
-            $subtype = af_advinv_classify_equipment_from_kb_meta(af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')), (string)($item['kb_type'] ?? 'item'));
-        }
-        if (in_array($subtype, ['weapon', 'armor', 'gear', 'artifact', 'ammo'], true)) {
-            $item['subtype'] = $subtype;
-            $equipable[] = $item;
-        }
-    }
-    $canEdit = af_inv_can_manage_owner((int)($mybb->user['uid'] ?? 0), $ownerUid);
-    $equipped = af_inv_get_equipped($ownerUid);
-    return '<div class="af-inv-workspace af-cs-arsenal__workspace"><div class="af-inv-grid">'
-        . af_advinv_render_tab_cards($equipable, false, $canEdit, $equipped)
-        . '</div></div>';
+    $entityUrl = af_advancedinventory_url('entity', ['uid' => $ownerUid], false);
+    $firstUrl = af_advancedinventory_url('entity', ['uid' => $ownerUid, 'entity' => 'equipment', 'sub' => 'all', 'ajax' => 1], false);
+    $content = af_advinv_render_entity_tab('equipment', $ownerUid, 'all', 1, true);
+    return '<div class="af-inv-page af-aa-context af-aa-context--inventory af-cs-arsenal" data-owner="' . $ownerUid . '" data-default-tab="equipment" data-entity-base="' . htmlspecialchars_uni($entityUrl) . '" data-first-url="' . htmlspecialchars_uni($firstUrl) . '">'
+        . '<div class="af-inv-tab-content"><div id="af-inv-panel">' . $content . '</div></div></div>';
 }
 
 function af_advancedinventory_render_abilities(): void
@@ -3148,15 +3108,9 @@ function af_inv_get_items(int $uid, array $filters = []): array
     if ($entityFilter !== '') {
         $where[] = "entity='" . $db->escape_string(af_advancedinventory_normalize_entity($entityFilter)) . "'";
     }
-    $subtypes = array_values(array_filter(array_map('strval', (array)($filters['subtypes'] ?? [])), static function (string $value): bool { return $value !== ''; }));
-    if ($subtypes) {
-        $quoted = array_map(static function (string $value) use ($db): string { return "'" . $db->escape_string($value) . "'"; }, $subtypes);
-        $where[] = "(subtype IN (" . implode(',', $quoted) . ") OR subtype='')";
-    } else {
-        $activeSubtype = af_advinv_resolve_active_subfilter($entityFilter, (string)($filters['subtype'] ?? 'all'));
-        if ($activeSubtype !== 'all') {
-            $where[] = "subtype='" . $db->escape_string($activeSubtype) . "'";
-        }
+    $activeSubtype = af_advinv_resolve_active_subfilter($entityFilter, (string)($filters['subtype'] ?? 'all'));
+    if ($activeSubtype !== 'all') {
+        $where[] = "subtype='" . $db->escape_string($activeSubtype) . "'";
     }
     if (($filters['search'] ?? '') !== '') {
         $like = $db->escape_string_like((string)$filters['search']);
