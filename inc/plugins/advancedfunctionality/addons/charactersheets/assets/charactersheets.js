@@ -57,6 +57,18 @@
 
     modalRoot.classList.add('af-cs-modal--sheet-frame');
     dialog.style.position = 'relative';
+    dialog.style.overflow = 'visible';
+
+    var close = dialog.querySelector('.af-cs-modal__close');
+    if (close) {
+      close.style.position = 'absolute';
+      close.style.top = '0';
+      close.style.right = '0';
+      close.style.margin = '0';
+      close.style.transform = 'translate(50%, -50%)';
+      close.style.zIndex = '5';
+    }
+
     body.style.position = 'absolute';
     body.style.inset = '0';
     body.style.width = 'auto';
