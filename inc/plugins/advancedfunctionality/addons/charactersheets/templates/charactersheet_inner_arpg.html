@@ -5,12 +5,12 @@
      data-uid="{$sheet_owner_uid}"
      data-afcs-sheet
      data-afcs-sheet-id="{$sheet_id}"
+     data-afcs-tab-url="{$sheet_tab_url}"
      data-afcs-sheet-mode="{$sheet_mode_attr}"
      data-afcs-render-profile="{$sheet_render_profile_attr}"
      data-afcs-render-override="{$sheet_render_override_mode}"
      data-afcs-post-key="{$sheet_post_key}"
-     data-afcs-bonus-items="{$bonus_items_json}"
-     data-afcs-arpg-vm="{$sheet_arpg_vm_json}">
+     data-afcs-bonus-items="{$bonus_items_json}">
   <div class="af-cs-inline-error" data-afcs-error="1" hidden></div>
   <div class="af-cs-toast" data-afcs-toast="1" hidden></div>
 
@@ -32,41 +32,25 @@
         <button class="is-active" type="button" data-afcs-tab="arpg-main">Основная информация</button>
         <button type="button" data-afcs-tab="arpg-talents">Таланты</button>
         <button type="button" data-afcs-tab="arpg-abilities">Способности</button>
-        <button type="button" data-afcs-tab="arpg-inventory">Инвентарь</button>
+        <button type="button" data-afcs-tab="arpg-arsenal">Арсенал</button>
         <button type="button" data-afcs-tab="arpg-equipment">Экипировка</button>
-        <button type="button" data-afcs-tab="arpg-achievements">Достижения</button>
       </div>
       <div class="af-cs-tabs__content">
-        <div class="af-cs-tab is-active" data-afcs-tab-content="arpg-main">
+        <div class="af-cs-tab is-active" data-afcs-tab-content="arpg-main" data-afcs-main-refresh>
           {$sheet_arpg_stats_block_html}
           {$sheet_arpg_description_block_html}
         </div>
 
-        <div class="af-cs-tab" data-afcs-tab-content="arpg-talents">
-          {$sheet_arpg_talents_block_html}
+        <div class="af-cs-tab" data-afcs-tab-content="arpg-talents" data-afcs-lazy="1">
         </div>
 
-        <div class="af-cs-tab" data-afcs-tab-content="arpg-abilities">
-          <section class="af-cs-arpg-panel">
-            <h2>Активные способности</h2>
-            <div class="af-cs-arpg-ability-grid">{$sheet_arpg_active_abilities_html}</div>
-          </section>
-          <section class="af-cs-arpg-panel">
-            <h2>Пассивные способности</h2>
-            <div class="af-cs-arpg-ability-grid">{$sheet_arpg_passive_abilities_html}</div>
-          </section>
+        <div class="af-cs-tab" data-afcs-tab-content="arpg-abilities" data-afcs-lazy="1">
         </div>
 
-        <div class="af-cs-tab" data-afcs-tab-content="arpg-inventory">
-          <div data-afcs-block="inventory">{$sheet_inventory_html}</div>
+        <div class="af-cs-tab" data-afcs-tab-content="arpg-arsenal" data-afcs-lazy="1">
         </div>
 
-        <div class="af-cs-tab" data-afcs-tab-content="arpg-equipment">
-          <div data-afcs-block="equipment">{$sheet_equipment_html}</div>
-        </div>
-
-        <div class="af-cs-tab" data-afcs-tab-content="arpg-achievements">
-          {$sheet_arpg_achievements_block_html}
+        <div class="af-cs-tab" data-afcs-tab-content="arpg-equipment" data-afcs-lazy="1">
         </div>
       </div>
   </section>

@@ -255,6 +255,17 @@ function af_charactersheets_dispatch(): void
         return;
     }
 
+    if ($action === 'tab') {
+        $slug = trim((string)$mybb->get_input('slug'));
+        $tab = trim((string)$mybb->get_input('tab'));
+        if ($slug === '' || $tab === '' || (string)$mybb->get_input('ajax') !== '1') {
+            error_no_permission();
+            exit;
+        }
+        echo af_charactersheets_build_sheet_inner_html($slug, $tab);
+        exit;
+    }
+
     if ($action === 'list' || $action === 'af_charactersheets') {
         af_charactersheets_render_catalog_page();
         return;

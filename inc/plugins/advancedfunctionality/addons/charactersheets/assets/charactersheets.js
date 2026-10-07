@@ -263,17 +263,86 @@
       panels.forEach(function (p) {
         p.classList.toggle('is-active', p.getAttribute('data-afcs-tab-content') === name);
       });
+      var panel = root.querySelector('[data-afcs-tab-content="' + name + '"]');
+      if (panel && panel.hasAttribute('data-afcs-lazy')) loadLazyTab(panel, root, name);
+    }
+
+    function loadLazyTab(panel, tabsRoot, name) {
+      if (panel.dataset.afcsLoaded === '1' || panel.dataset.afcsLoading === '1') return;
+      var sheet = panel.closest('[data-afcs-sheet]');
+      var base = sheet ? sheet.getAttribute('data-afcs-tab-url') : '';
+      if (!base) return;
+      panel.dataset.afcsLoading = '1';
+      panel.innerHTML = '<div class="af-cs-muted" role="status">Загрузка…</div>';
+      var url = new URL(base, document.baseURI);
+      url.searchParams.set('tab', name);
+      url.searchParams.set('ajax', '1');
+      fetch(url.toString(), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (response) {
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          return response.text();
+        })
+        .then(function (html) {
+          if (!html.trim()) throw new Error('Empty fragment');
+          panel.innerHTML = html;
+          panel.dataset.afcsLoaded = '1';
+          if (window.AFAdvancedInventoryInit) window.AFAdvancedInventoryInit(panel);
+        })
+        .catch(function () {
+          panel.innerHTML = '<div class="af-cs-muted">Не удалось загрузить раздел. <button type="button" data-afcs-retry="1">Повторить</button></div>';
+        })
+        .finally(function () { delete panel.dataset.afcsLoading; });
     }
 
     document.addEventListener('click', function (event) {
       var tabBtn = event.target.closest('[data-afcs-tab]');
-      if (!tabBtn) return;
+      var tabLink = event.target.closest('[data-afcs-tab-link]');
+      if (tabLink) {
+        event.preventDefault();
+        var desired = tabLink.getAttribute('data-afcs-tab-link') || 'arsenal';
+        var sheetRoot = tabLink.closest('[data-afcs-sheet]');
+        var button = sheetRoot && (sheetRoot.querySelector('[data-afcs-tab="' + desired + '"]') || sheetRoot.querySelector('[data-afcs-tab="arpg-' + desired + '"]'));
+        if (button) {
+          var tabRoot = findTabsRoot(button);
+          activateTabInRoot(tabRoot, button.getAttribute('data-afcs-tab'));
+        }
+        return;
+      }
+      if (!tabBtn) {
+        var retry = event.target.closest('[data-afcs-retry]');
+        if (retry) {
+          var lazyPanel = retry.closest('[data-afcs-tab-content]');
+          if (lazyPanel) loadLazyTab(lazyPanel, findTabsRoot(lazyPanel), lazyPanel.getAttribute('data-afcs-tab-content'));
+        }
+        return;
+      }
 
       event.preventDefault();
 
       var name = tabBtn.getAttribute('data-afcs-tab');
       var root = findTabsRoot(tabBtn);
       activateTabInRoot(root, name);
+    });
+
+    document.addEventListener('afcs:equipment-changed', function (event) {
+      var sheet = event.target && event.target.closest ? event.target.closest('[data-afcs-sheet]') : null;
+      if (!sheet) return;
+      var base = sheet.getAttribute('data-afcs-tab-url') || '';
+      if (!base) return;
+      var loadedEquipment = sheet.querySelector('[data-afcs-tab-content="equipment"][data-afcs-loaded="1"], [data-afcs-tab-content="arpg-equipment"][data-afcs-loaded="1"]');
+      var mainTarget = sheet.getAttribute('data-afcs-render-profile') === 'arpg' ? sheet.querySelector('[data-afcs-main-refresh]') : null;
+      [loadedEquipment, mainTarget].filter(Boolean).forEach(function (target) {
+        var url = new URL(base, document.baseURI);
+        url.searchParams.set('tab', target.getAttribute('data-afcs-tab-content'));
+        url.searchParams.set('ajax', '1');
+        fetch(url.toString(), { credentials: 'same-origin' }).then(function (response) {
+          if (!response.ok) throw new Error('refresh failed');
+          return response.text();
+        }).then(function (html) {
+          target.innerHTML = html;
+          if (window.AFAdvancedInventoryInit) window.AFAdvancedInventoryInit(target);
+        }).catch(function () {});
+      });
     });
 
     (function initCatalog() {

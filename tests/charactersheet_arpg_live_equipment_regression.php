@@ -15,7 +15,7 @@ arpg_equipment_assert(is_string($render) && is_string($css), 'Unable to read Cha
 arpg_equipment_assert(strpos($render, 'af_advinv_export_charactersheet_equipment_state($uid)') !== false, 'ARPG equipment does not use the live Inventory export');
 
 $collectorStart = strpos($render, 'function af_charactersheets_arpg_collect_equipment_rule_sources');
-$collectorEnd = strpos($render, 'function af_charactersheets_arpg_collect_inventory_items', $collectorStart);
+$collectorEnd = strpos($render, 'function af_charactersheets_arpg_collect_abilities', $collectorStart);
 $collector = substr($render, $collectorStart, $collectorEnd - $collectorStart);
 arpg_equipment_assert(strpos($collector, "['equipment']['slots']") === false, 'ARPG rule sources still read build_json equipment slots');
 arpg_equipment_assert(strpos($collector, 'af_charactersheets_arpg_live_equipment_state($uid)') !== false, 'ARPG rule sources are not resolved from live bindings');
@@ -30,8 +30,8 @@ foreach (['support_1', 'support_2', 'support_3', 'support_4'] as $slot) {
 arpg_equipment_assert(strpos($ui, '>Инфо</button>') !== false, 'The equipment detail action is not named Инфо');
 arpg_equipment_assert(strpos($ui, '>Снять</button>') === false, 'ARPG CharacterSheets still exposes unequip controls');
 arpg_equipment_assert(strpos($ui, 'data-afcs-equipment-equip=') === false, 'ARPG CharacterSheets still exposes equip controls');
-arpg_equipment_assert(strpos($ui, 'af_charactersheets_inventory_action_html($uid)') !== false, 'ARPG equipment does not use the Inventory action resolver');
-arpg_equipment_assert(strpos($render, 'Открыть инвентарь') !== false, 'Owner Inventory navigation is missing');
+arpg_equipment_assert(strpos($ui, 'af_charactersheets_arsenal_action_html($uid)') !== false, 'ARPG equipment does not use the Arsenal tab action');
+arpg_equipment_assert(strpos($render, 'data-afcs-tab-link="arsenal">Открыть арсенал') !== false, 'Owner Arsenal navigation is missing');
 
 arpg_equipment_assert(strpos($css, 'max-width:250px; aspect-ratio:1 / 1') !== false, 'Primary cards are not square and capped at 250px');
 arpg_equipment_assert(strpos($css, 'width:100px; height:100px; aspect-ratio:1 / 1') !== false, 'Quick-slot cards are not 100px squares');

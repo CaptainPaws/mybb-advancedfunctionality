@@ -106,10 +106,16 @@
     if (!base) {
       base = 'inventory.php';
     }
-    if (base.indexOf('?') === -1) {
-      return base + '?action=' + encodeURIComponent(action);
+    try {
+      var parsed = new URL(base, window.location.href);
+      parsed.searchParams.set('action', action);
+      return parsed.pathname + parsed.search;
+    } catch (e) {
+      if (base.indexOf('?') === -1) {
+        return base + '?action=' + encodeURIComponent(action);
+      }
+      return base + '&action=' + encodeURIComponent(action);
     }
-    return base + '&action=' + encodeURIComponent(action);
   }
 
   function clearMessage(page) {
@@ -487,8 +493,10 @@
             showMessage(page, 'Изменения сохранены.', false, { autohide: true });
           } else if (action === 'equip') {
             showMessage(page, 'Предмет надет.', false, { autohide: true });
+            page.dispatchEvent(new CustomEvent('afcs:equipment-changed', { bubbles: true }));
           } else if (action === 'unequip') {
             showMessage(page, 'Предмет снят.', false, { autohide: true });
+            page.dispatchEvent(new CustomEvent('afcs:equipment-changed', { bubbles: true }));
           } else if (action === 'unbind_support_slot') {
             showMessage(page, 'Предмет убран из быстрого слота.', false, { autohide: true });
           }

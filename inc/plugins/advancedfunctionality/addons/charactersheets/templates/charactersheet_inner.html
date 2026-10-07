@@ -1,4 +1,4 @@
-<div class="af-cs-page af-aa-context af-aa-context--sheet" data-af-apui-surface="sheet" data-af-modal-kind="sheet" data-af-apui-owner-uid="{$sheet_owner_uid}" data-uid="{$sheet_owner_uid}" data-afcs-sheet data-afcs-sheet-id="{$sheet_id}" data-afcs-sheet-mode="{$sheet_mode_attr}" data-afcs-post-key="{$sheet_post_key}" data-afcs-bonus-items="{$bonus_items_json}">
+<div class="af-cs-page af-aa-context af-aa-context--sheet" data-af-apui-surface="sheet" data-af-modal-kind="sheet" data-af-apui-owner-uid="{$sheet_owner_uid}" data-uid="{$sheet_owner_uid}" data-afcs-sheet data-afcs-sheet-id="{$sheet_id}" data-afcs-tab-url="{$sheet_tab_url}" data-afcs-sheet-mode="{$sheet_mode_attr}" data-afcs-post-key="{$sheet_post_key}" data-afcs-bonus-items="{$bonus_items_json}">
   <div class="af-cs-inline-error" data-afcs-error="1" hidden></div>
   <div class="af-cs-toast" data-afcs-toast="1" hidden></div>
   <div class="af-cs-hero">
@@ -38,13 +38,12 @@
         <button type="button" data-afcs-tab="skills">Навыки</button>
         <button type="button" data-afcs-tab="knowledge">Знания</button>
         <button type="button" data-afcs-tab="abilities">Способности</button>
-        <button type="button" data-afcs-tab="inventory">Инвентарь</button>
+        <button type="button" data-afcs-tab="arsenal">Арсенал</button>
         <button type="button" data-afcs-tab="augments">Аугментации</button>
         <button type="button" data-afcs-tab="equipment">Экипировка</button>
-        <button type="button" data-afcs-tab="achievements">Достижения</button>
       </div>
       <div class="af-cs-tabs__content">
-        <div class="af-cs-tab is-active" data-afcs-tab-content="main">
+        <div class="af-cs-tab is-active" data-afcs-tab-content="main" data-afcs-main-refresh>
             <section class="af-cs-section">
             <div data-afcs-block="attributes">
               {$sheet_attributes_html}
@@ -59,43 +58,19 @@
             </section>
           {$sheet_bonus_html}
         </div>
-        <div class="af-cs-tab" data-afcs-tab-content="skills">
-          <div data-afcs-block="skills">
-            {$sheet_skills_html}
-          </div>
+        <div class="af-cs-tab" data-afcs-tab-content="skills" data-afcs-lazy="1">
         </div>
-        <div class="af-cs-tab" data-afcs-tab-content="application">
-          <section class="af-cs-section">
-            {$sheet_application_html}
-          </section>
+        <div class="af-cs-tab" data-afcs-tab-content="application" data-afcs-lazy="1">
         </div>
-        <div class="af-cs-tab" data-afcs-tab-content="knowledge">
-          <div data-afcs-block="knowledge">
-            {$sheet_knowledge_html}
-          </div>
+        <div class="af-cs-tab" data-afcs-tab-content="knowledge" data-afcs-lazy="1">
         </div>
-        <div class="af-cs-tab" data-afcs-tab-content="abilities">
-          <div data-afcs-block="abilities">
-            {$sheet_abilities_html}
-          </div>
+        <div class="af-cs-tab" data-afcs-tab-content="abilities" data-afcs-lazy="1">
         </div>
-        <div class="af-cs-tab" data-afcs-tab-content="inventory">
-          <div data-afcs-block="inventory">
-            {$sheet_inventory_html}
-          </div>
+        <div class="af-cs-tab" data-afcs-tab-content="arsenal" data-afcs-lazy="1">
         </div>
-        <div class="af-cs-tab" data-afcs-tab-content="augments">
-          <div data-afcs-block="augmentations">
-            {$sheet_augments_html}
-          </div>
+        <div class="af-cs-tab" data-afcs-tab-content="augments" data-afcs-lazy="1">
         </div>
-        <div class="af-cs-tab" data-afcs-tab-content="equipment">
-          <div data-afcs-block="equipment">
-            {$sheet_equipment_html}
-          </div>
-        </div>
-        <div class="af-cs-tab" data-afcs-tab-content="achievements">
-          {$sheet_achievements_html}
+        <div class="af-cs-tab" data-afcs-tab-content="equipment" data-afcs-lazy="1">
         </div>
       </div>
     </div>
