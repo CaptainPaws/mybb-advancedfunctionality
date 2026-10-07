@@ -1,0 +1,22 @@
+.af-et-admin { max-width: 1200px; }
+.af-et-admin h4 { margin: 24px 0 12px; }
+.af-et-back { display: inline-block; margin: 12px 0; }
+.af-et-kb { padding: 16px; margin-bottom: 24px; border: 1px solid #d4d9df; border-radius: 6px; background: #f6f8fa; }
+.af-et-kb h4 { margin-top: 0; }
+.af-et-kb dl { display: grid; grid-template-columns: 100px 1fr; gap: 6px; }
+.af-et-kb dd { margin: 0; }
+.af-et-filters, .af-et-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
+.af-et-filters a, .af-et-tab { display: inline-block; padding: 10px 16px; border: 1px solid #c9d2dc; border-radius: 5px; text-decoration: none; }
+.af-et-filters a[aria-current], .af-et-tab.is-active { background: #174b73; color: #fff; border-color: #174b73; }
+.af-et-list small { display: block; margin-top: 4px; color: #626c75; }
+.af-et-swatches { display: flex; gap: 5px; }
+.af-et-swatch { display: inline-block; width: 24px; height: 24px; border: 1px solid #aab3bc; border-radius: 4px; }
+.af-et-color-row { margin: 16px 0; padding: 10px; border-bottom: 1px solid #e0e5ea; }
+.af-et-color-row label, .af-et-color-row small { display: block; margin-bottom: 6px; }
+.af-et-color-row input[type=text] { width: min(70%, 550px); margin-right: 8px; }
+.af-et-color-row input[type=color] { width: 42px; height: 32px; padding: 2px; vertical-align: middle; }
+.af-et-color-row small { margin-top: 6px; color: #626c75; overflow-wrap: anywhere; }
+.af-et-extra input { box-sizing: border-box; width: 100%; }
+.af-et-editor textarea { box-sizing: border-box; width: 100%; padding: 12px; font-family: monospace; font-size: 14px; }
+.af-et-save { margin: 16px 0; padding: 10px 24px; }
+.af-et-diagnostic { overflow-wrap: anywhere; }

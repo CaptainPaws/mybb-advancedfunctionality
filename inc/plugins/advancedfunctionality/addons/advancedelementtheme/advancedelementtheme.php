@@ -1,5 +1,6 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
+require_once __DIR__ . '/css.php';
 
 function af_advancedelementtheme_install(): bool
 {
@@ -39,20 +40,42 @@ function af_elementtheme_normalize_key(string $value): string
     return preg_match('/^[a-z0-9][a-z0-9_-]{0,189}$/D', $value) ? $value : '';
 }
 
-/** Active public KB entries only; no persistent identity/title mirror. */
+/** Load declarations only, never KB init, lifecycle or frontend hooks/assets. */
+function af_elementtheme_load_kb_api(): bool
+{
+    if (function_exists('af_kb_get_public_type_options')) return true;
+    $bootstrap = function_exists('af_get_addon_bootstrap_path') ? af_get_addon_bootstrap_path('knowledgebase') : null;
+    if ($bootstrap && is_readable($bootstrap)) require_once $bootstrap;
+    return function_exists('af_kb_get_public_type_options');
+}
+
+/** Active public KB entries only; request-local identity and availability are separate. */
 function af_elementtheme_get_elements(): array
 {
     if (isset($GLOBALS['af_elementtheme_elements'])) return $GLOBALS['af_elementtheme_elements'];
     $elements = [];
-    if (function_exists('af_kb_get_public_type_options')) {
-        try {
-            foreach (af_kb_get_public_type_options('arpg_element', 1000) as $row) {
-                $key = af_elementtheme_normalize_key((string)($row['key'] ?? ''));
-                if ($key !== '') $elements[$key] = $row;
-            }
-        } catch (Throwable $e) { $elements = []; }
+    $GLOBALS['af_elementtheme_registry_status'] = ['loaded' => false, 'error' => ''];
+    try {
+        if (!af_elementtheme_load_kb_api()) throw new RuntimeException('KB public API is unavailable');
+        if (function_exists('af_kb_public_type_options_available') && !af_kb_public_type_options_available()) {
+            throw new RuntimeException('KB public registry storage is unavailable');
+        }
+        foreach (af_kb_get_public_type_options('arpg_element', 1000) as $row) {
+            $key = af_elementtheme_normalize_key((string)($row['key'] ?? ''));
+            if ($key !== '') $elements[$key] = $row;
+        }
+        $GLOBALS['af_elementtheme_registry_status']['loaded'] = true;
+    } catch (Throwable $e) {
+        $elements = [];
+        $GLOBALS['af_elementtheme_registry_status']['error'] = $e->getMessage();
+        error_log('[AF ElementTheme] KB registry: ' . $e->getMessage());
     }
     return $GLOBALS['af_elementtheme_elements'] = $elements;
+}
+function af_elementtheme_registry_status(): array
+{
+    af_elementtheme_get_elements();
+    return $GLOBALS['af_elementtheme_registry_status'];
 }
 
 /** Compatibility reads only. A real KB key always takes precedence over an alias. */
@@ -71,19 +94,46 @@ function af_elementtheme_is_known_key(string $key): bool
 }
 function af_elementtheme_surfaces(): array { return ['application', 'sheet', 'postbit', 'profile']; }
 
-/** Safe color values only; never accept CSS declarations, URLs or arbitrary functions. */
+/** Compatibility for callers of the original four-token API. */
 function af_elementtheme_validate_palette(array $palette): array
 {
-    $out = [];
-    foreach (['main', 'accent', 'soft', 'border'] as $token) {
-        $value = trim((string)($palette[$token] ?? ''));
-        if ($value === '') continue;
-        if (!preg_match('/^(?:#(?:[a-f0-9]{3}|[a-f0-9]{4}|[a-f0-9]{6}|[a-f0-9]{8})|transparent|(?:rgb|rgba|hsl|hsla)\(\s*[0-9.%+,\s-]+\))$/iD', $value)) {
-            throw new InvalidArgumentException('Недопустимый цвет: ' . $token);
-        }
-        $out[$token] = $value;
+    return af_elementtheme_palette_from_variables(af_elementtheme_normalize_metadata($palette)['variables']);
+}
+function af_elementtheme_standard_tokens(): array { return ['main', 'accent', 'soft', 'border', 'contrast']; }
+function af_elementtheme_palette_from_variables(array $variables): array
+{
+    $palette = [];
+    foreach ($variables as $name => $value) {
+        $token = substr($name, strlen('--af-element-'));
+        $palette[in_array($token, af_elementtheme_standard_tokens(), true) ? $token : $name] = $value;
     }
-    return $out;
+    return $palette;
+}
+function af_elementtheme_variables_from_palette(array $palette): array
+{
+    $variables = [];
+    foreach ($palette as $token => $value) $variables[str_starts_with($token, '--af-element-') ? $token : '--af-element-' . $token] = $value;
+    return $variables;
+}
+
+/** JSON adapter: old palette maps remain readable without any table migration. */
+function af_elementtheme_normalize_metadata(array $data): array
+{
+    $variables = array_key_exists('variables', $data) ? $data['variables'] : af_elementtheme_variables_from_palette($data);
+    if (!is_array($variables)) throw new InvalidArgumentException('Variables должны быть объектом.');
+    $out = [];
+    foreach ($variables as $name => $value) {
+        if (!is_string($name) || !preg_match('/^--af-element-[a-z][a-z0-9_-]*$/D', $name)) throw new InvalidArgumentException('Недопустимое имя CSS variable. Разрешены --af-element-*.');
+        if (!is_scalar($value)) throw new InvalidArgumentException('Недопустимое значение CSS variable.');
+        $value = trim((string)$value);
+        if ($value === '') continue;
+        af_elementtheme_validate_value($value);
+        $out[$name] = $value;
+    }
+    $customCss = $data['custom_css'] ?? '';
+    if (!is_string($customCss)) throw new InvalidArgumentException('Custom CSS должен быть строкой.');
+    af_elementtheme_validate_custom_css($customCss);
+    return ['variables' => $out, 'custom_css' => trim($customCss)];
 }
 
 /** Source file is the default registry of styles, including unbound legacy keys. */
@@ -95,9 +145,9 @@ function af_elementtheme_default_styles(): array
     preg_match_all('/([^{}]+)\{([^{}]*)\}/', $css, $blocks, PREG_SET_ORDER);
     foreach ($blocks as $block) {
         preg_match_all('/\[data-element="([a-z0-9_-]+)"\]/', $block[1], $keys);
-        preg_match_all('/--af-element-(main|accent|soft|border)\s*:\s*([^;]+);/', $block[2], $tokens, PREG_SET_ORDER);
+        preg_match_all('/--af-element-([a-z][a-z0-9_-]*)\s*:\s*([^;]+);/', $block[2], $tokens, PREG_SET_ORDER);
         $palette = [];
-        foreach ($tokens as $token) $palette[$token[1]] = trim($token[2]);
+        foreach ($tokens as $token) $palette[in_array($token[1], af_elementtheme_standard_tokens(), true) ? $token[1] : '--af-element-' . $token[1]] = trim($token[2]);
         foreach ($keys[1] as $key) $styles[$key] = $palette;
     }
     return $GLOBALS['af_elementtheme_defaults'] = $styles;
@@ -109,8 +159,8 @@ function af_elementtheme_overrides(): array
     global $db, $cache;
     if (isset($GLOBALS['af_elementtheme_overrides'])) return $GLOBALS['af_elementtheme_overrides'];
     $data = is_object($cache) ? $cache->read('af_elementtheme') : false;
-    if (!is_array($data) || !isset($data['styles'], $data['surfaces'], $data['css'])) {
-        $data = ['styles' => [], 'surfaces' => [], 'css' => ''];
+    if (!is_array($data) || ($data['format'] ?? 0) !== 2 || !isset($data['styles'], $data['surfaces'], $data['css'])) {
+        $data = ['format' => 2, 'styles' => [], 'surfaces' => [], 'css' => ''];
         if (is_object($db)) {
             foreach (['styles', 'surfaces'] as $kind) {
                 $table = 'af_element_theme_' . $kind;
@@ -119,7 +169,7 @@ function af_elementtheme_overrides(): array
                 while ($row = $db->fetch_array($query)) {
                     $key = af_elementtheme_normalize_key((string)$row['element_key']);
                     if ($key === '') continue;
-                    try { $palette = af_elementtheme_validate_palette((array)json_decode($row['palette_json'], true)); }
+                    try { $palette = af_elementtheme_normalize_metadata((array)json_decode($row['palette_json'], true)); }
                     catch (InvalidArgumentException $e) { continue; }
                     if ($kind === 'styles') $data['styles'][$key] = $palette;
                     elseif (in_array($row['surface'], af_elementtheme_surfaces(), true)) $data['surfaces'][$key][$row['surface']] = $palette;
@@ -135,45 +185,65 @@ function af_elementtheme_overrides(): array
 function af_elementtheme_compile_overrides(array $data): string
 {
     $css = '';
-    foreach ($data['styles'] as $key => $palette) {
-        $css .= af_elementtheme_css_rule('[data-element="' . $key . '"]', $palette);
+    foreach ($data['styles'] as $key => $metadata) {
+        $css .= af_elementtheme_compile_style($key, $metadata);
     }
     foreach ($data['surfaces'] as $key => $surfaces) {
-        foreach ($surfaces as $surface => $palette) {
-            $css .= af_elementtheme_css_rule('[data-element="' . $key . '"][data-element-surface="' . $surface . '"]', $palette);
-        }
+        foreach ($surfaces as $surface => $metadata) $css .= af_elementtheme_compile_style($key, $metadata, $surface);
     }
     return $css;
 }
-function af_elementtheme_css_rule(string $selector, array $palette): string
+function af_elementtheme_compile_style(string $key, array $metadata, string $surface = ''): string
 {
-    if (!$palette) return '';
+    if (af_elementtheme_normalize_key($key) !== $key || ($surface !== '' && !in_array($surface, af_elementtheme_surfaces(), true))) throw new InvalidArgumentException('Недопустимый CSS scope.');
+    $metadata = af_elementtheme_normalize_metadata($metadata);
+    $selector = '[data-element="' . $key . '"]' . ($surface === '' ? '' : '[data-element-surface="' . $surface . '"]');
     $declarations = '';
-    foreach ($palette as $token => $value) $declarations .= '--af-element-' . $token . ':' . $value . ';';
-    return $selector . '{' . $declarations . '}';
+    foreach ($metadata['variables'] as $name => $value) $declarations .= $name . ':' . $value . ';';
+    $css = $declarations === '' ? '' : $selector . '{' . $declarations . '}';
+    // Native scope confines complex selectors and :scope to the root/subtree and
+    // stops at nested element roots. Conditional @rules remain inside this scope.
+    if ($metadata['custom_css'] !== '') $css .= '@scope (' . $selector . ') to (:scope [data-element]) {' . $metadata['custom_css'] . '}';
+    return $css;
 }
-
-/** Presentation lookup can inspect an unbound key; runtime identity still uses resolve_key(). */
-function af_elementtheme_get_style(string $key): array
+function af_elementtheme_get_metadata(string $key, string $surface = ''): array
 {
     $key = af_elementtheme_normalize_key($key);
-    return array_replace(af_elementtheme_default_styles()[$key] ?? [], af_elementtheme_overrides()['styles'][$key] ?? []);
+    $stored = af_elementtheme_overrides();
+    return ($surface === '' ? ($stored['styles'][$key] ?? null) : ($stored['surfaces'][$key][$surface] ?? null))
+        ?? ['variables' => [], 'custom_css' => ''];
+}
+function af_elementtheme_get_variables(string $key, string $surface = ''): array
+{
+    $key = af_elementtheme_normalize_key($key);
+    $variables = array_replace(af_elementtheme_variables_from_palette(af_elementtheme_default_styles()[$key] ?? []), af_elementtheme_get_metadata($key)['variables']);
+    return $surface === '' ? $variables : array_replace($variables, af_elementtheme_get_metadata($key, $surface)['variables']);
+}
+/** Keep the public palette lookup shape used by existing consumers. */
+function af_elementtheme_get_style(string $key): array
+{
+    return af_elementtheme_palette_from_variables(af_elementtheme_get_variables($key));
 }
 function af_elementtheme_get_surface_style(string $key, string $surface): array
 {
-    $key = af_elementtheme_normalize_key($key);
-    return array_replace(af_elementtheme_get_style($key), af_elementtheme_overrides()['surfaces'][$key][$surface] ?? []);
+    return af_elementtheme_palette_from_variables(af_elementtheme_get_variables($key, $surface));
 }
 function af_elementtheme_get_rows(): array
 {
     $elements = af_elementtheme_get_elements();
-    $keys = array_unique(array_merge(array_keys($elements), array_keys(af_elementtheme_default_styles()), array_keys(af_elementtheme_overrides()['styles']), array_keys(af_elementtheme_overrides()['surfaces'])));
+    $loaded = af_elementtheme_registry_status()['loaded'];
+    $stored = af_elementtheme_overrides();
+    $keys = array_unique(array_merge(array_keys($elements), array_keys(af_elementtheme_default_styles()), array_keys($stored['styles']), array_keys($stored['surfaces'])));
     $rows = [];
     foreach ($keys as $key) {
         $bound = isset($elements[$key]);
         $style = af_elementtheme_get_style($key);
-        $rows[$key] = ['key' => $key, 'element' => $elements[$key] ?? [], 'in_kb' => $bound, 'has_style' => (bool)$style,
-            'state' => $bound ? ($style ? 'Bound' : 'Missing style') : 'Legacy / unbound'];
+        $metadata = af_elementtheme_get_metadata($key);
+        $hasStyle = (bool)$style || $metadata['custom_css'] !== '' || !empty($stored['surfaces'][$key]);
+        $alias = !$bound ? (af_elementtheme_aliases()[$key] ?? '') : '';
+        $state = !$loaded ? 'KB unavailable' : ($alias !== '' ? 'Alias → ' . $alias : ($bound ? ($hasStyle ? 'Bound' : 'Missing style') : 'Legacy / unbound'));
+        $rows[$key] = ['key' => $key, 'element' => $elements[$key] ?? [], 'in_kb' => $loaded ? $bound : null, 'has_style' => $hasStyle, 'alias' => $alias,
+            'kind' => !$loaded ? 'KB binding unavailable' : ($bound ? 'Canonical element' : ($alias !== '' ? 'Legacy alias' : 'Legacy standalone/unbound style')), 'state' => $state];
     }
     return $rows;
 }
@@ -189,16 +259,20 @@ function af_elementtheme_save_style(string $key, array $palette, string $surface
     $key = af_elementtheme_normalize_key($key);
     if ($key === '' || ($surface !== '' && !in_array($surface, af_elementtheme_surfaces(), true))) throw new InvalidArgumentException('Недопустимый key/surface.');
     // Existing unbound styles remain editable, but aliases are never new identities.
+    if (!af_elementtheme_registry_status()['loaded']) throw new InvalidArgumentException('Не удалось загрузить реестр arpg_element из Knowledge Base. Сохранение недоступно.');
     $canonical = af_elementtheme_resolve_key($key);
     if ($canonical !== '') $key = $canonical;
     elseif (!isset(af_elementtheme_get_rows()[$key])) throw new InvalidArgumentException('Создайте элемент в KB.');
-    $palette = af_elementtheme_validate_palette($palette);
+    $palette = af_elementtheme_normalize_metadata($palette);
+    try { $json = json_encode($palette, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR); }
+    catch (JsonException $e) { throw new InvalidArgumentException('Стиль содержит недопустимый UTF-8.'); }
+    if (strlen($json) > 65535) throw new InvalidArgumentException('Стиль превышает максимальный размер metadata (65 KB).');
     $table = $surface === '' ? 'af_element_theme_styles' : 'af_element_theme_surfaces';
     $where = "element_key='" . $db->escape_string($key) . "'";
     if ($surface !== '') $where .= " AND surface='" . $db->escape_string($surface) . "'";
     $db->delete_query($table, $where);
-    if ($palette) {
-        $row = ['element_key' => $db->escape_string($key), 'palette_json' => $db->escape_string(json_encode($palette))];
+    if ($palette['variables'] || $palette['custom_css'] !== '') {
+        $row = ['element_key' => $db->escape_string($key), 'palette_json' => $db->escape_string($json)];
         if ($surface !== '') $row['surface'] = $surface;
         $db->insert_query($table, $row);
     }

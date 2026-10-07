@@ -2892,6 +2892,13 @@ function af_kb_fill_arpg_mechanics_documentation(): void
     }
 }
 
+/** Public registry readiness, distinct from a successfully loaded empty type. */
+function af_kb_public_type_options_available(): bool
+{
+    global $db;
+    return is_object($db) && $db->table_exists('af_kb_entries');
+}
+
 function af_kb_get_public_type_options(string $typeKey, int $limit = 500): array
 {
     global $db;
