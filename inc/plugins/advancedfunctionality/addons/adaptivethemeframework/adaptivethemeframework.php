@@ -972,8 +972,9 @@ function af_adaptivethemeframework_compose_profile(): void
     foreach ($names as $name) $values[$name] = (string)($GLOBALS[$name] ?? '');
     $values['sections'] = [
         'info' => (string)($GLOBALS['af_apui_forum_info_grid'] ?? ''),
+        'quick_links' => (string)($GLOBALS['af_apui_profile_quick_links'] ?? ''),
         'sheet' => (string)($GLOBALS['af_apui_character_sheet_tab'] ?? ''),
-        'inventory' => (string)($GLOBALS['af_apui_inventory_tab'] ?? ''),
+        'rewards' => '<div class="af-apui-lazy-placeholder" data-af-apui-lazy-tab="rewards">Загрузка…</div>',
         'timeline' => (string)($GLOBALS['af_apui_timeline_tab'] ?? ''),
         'activity' => (string)($GLOBALS['af_apui_activity_tab'] ?? ''),
     ];
@@ -982,7 +983,7 @@ function af_adaptivethemeframework_compose_profile(): void
         'post_counter' => (string)($memprofile['advancedpostcounter'] ?? ''),
     ];
     $context = af_adaptivethemeframework_profile_context($memprofile, $values);
-    foreach (['hero', 'navigation', 'forum_info', 'character_sheet', 'inventory', 'timeline',
+    foreach (['hero', 'navigation', 'forum_info', 'quick_links', 'character_sheet', 'rewards', 'timeline',
         'activity', 'stats', 'balance', 'post_counter', 'before_content', 'main', 'after_content'] as $name) {
         $GLOBALS['atf_profile_' . $name] = af_adaptivethemeframework_render_slot('profile.' . $name, $context);
     }
@@ -2236,8 +2237,8 @@ function af_adaptivethemeframework_render_ucp_navigation(string $level, array $c
 function af_adaptivethemeframework_slots(): array
 {
     return [
-        'profile.hero', 'profile.navigation', 'profile.forum_info', 'profile.stats',
-        'profile.character_sheet', 'profile.application', 'profile.timeline',
+        'profile.hero', 'profile.navigation', 'profile.forum_info', 'profile.quick_links', 'profile.stats',
+        'profile.character_sheet', 'profile.rewards', 'profile.application', 'profile.timeline',
         'profile.activity', 'profile.balance', 'profile.post_counter',
         'profile.before_content', 'profile.main', 'profile.after_content',
         'post.author.identity', 'post.author.meta', 'post.author.profile_actions', 'post.author.profile_fields',

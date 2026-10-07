@@ -305,8 +305,9 @@ function af_apui_register_atf_profile_providers(): bool
 {
     if (!function_exists('af_adaptivethemeframework_register_component')) return false;
     $mapping = [
-        'forum_info' => 'forum_info', 'character_sheet' => 'sheet',
-        'inventory' => 'inventory', 'timeline' => 'timeline', 'activity' => 'activity',
+        'forum_info' => 'forum_info', 'quick_links' => 'quick_links',
+        'character_sheet' => 'sheet', 'rewards' => 'rewards',
+        'timeline' => 'timeline', 'activity' => 'activity',
     ];
     $registered = false;
     foreach ($mapping as $key => $section) {
@@ -510,8 +511,8 @@ function af_apui_get_profile_avatars(int $uid, bool $fallbackSecondaryToPrimary 
 
 function af_apui_render_atf_profile_navigation(array $context): string
 {
-    $labels = ['info' => 'Основная информация', 'sheet' => 'Лист персонажа', 'inventory' => 'Инвентарь',
-        'timeline' => 'Хронология', 'activity' => 'Активность'];
+    $labels = ['info' => 'Основная информация', 'sheet' => 'Лист персонажа',
+        'rewards' => 'Ачивки и Подарки', 'timeline' => 'Хронология', 'activity' => 'Активность'];
     $items = [];
     $sections = (array)($context['sections'] ?? []);
     $sections['info'] = (string)($sections['info'] ?? '')
