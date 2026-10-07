@@ -8,3 +8,10 @@
 .af-cs-modal__frame.is-loaded{opacity:1}
 @keyframes af-cs-loading{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.af-cs-modal__loader::before{animation:none}.af-cs-modal__loader,.af-cs-modal__frame{transition:none}}
+
+/* Keep the lazy sheet iframe bound to the full modal viewport even when
+   AdvancedProfileUI's shared .af-cs-modal rules are loaded later. */
+.af-cs-modal[data-af-modal-kind="sheet"].is-open{display:flex;align-items:stretch;justify-content:center}
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-modal__dialog{display:flex;flex-direction:column;min-height:0}
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-modal__body{display:flex;flex:1 1 0;width:100%;height:auto;min-height:0;overflow:hidden}
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-modal__frame{display:block;flex:1 1 auto;align-self:stretch;width:100%;height:auto;min-height:0}
