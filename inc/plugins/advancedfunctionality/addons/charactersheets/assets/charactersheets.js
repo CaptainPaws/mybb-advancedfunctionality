@@ -49,6 +49,31 @@
     return raw;
   }
 
+  function pinSheetFrameLayout(modalRoot, frame) {
+    if (!modalRoot || !frame) return;
+    var dialog = modalRoot.querySelector('.af-cs-modal__dialog');
+    var body = modalRoot.querySelector('.af-cs-modal__body');
+    if (!dialog || !body) return;
+
+    modalRoot.classList.add('af-cs-modal--sheet-frame');
+    dialog.style.position = 'relative';
+    body.style.position = 'absolute';
+    body.style.inset = '0';
+    body.style.width = 'auto';
+    body.style.height = 'auto';
+    body.style.minHeight = '0';
+    body.style.overflow = 'hidden';
+
+    frame.style.position = 'absolute';
+    frame.style.inset = '0';
+    frame.style.display = 'block';
+    frame.style.width = '100%';
+    frame.style.height = '100%';
+    frame.style.minHeight = '100%';
+    frame.style.maxHeight = 'none';
+    frame.style.border = '0';
+  }
+
   function getModalParts(modal, frame, loader) {
     if (!frame.__afcsLoaderBound) {
       frame.addEventListener('load', function () {
@@ -79,7 +104,10 @@
         body.appendChild(loader);
       }
 
-      if (frame && loader) return getModalParts(modal, frame, loader);
+      if (frame && loader) {
+        pinSheetFrameLayout(modal, frame);
+        return getModalParts(modal, frame, loader);
+      }
     }
 
     var wrap = document.createElement('div');
@@ -105,6 +133,7 @@
 
     var frame = wrap.querySelector('[data-afcs-frame]');
     var loader = wrap.querySelector('[data-afcs-loader]');
+    pinSheetFrameLayout(wrap, frame);
     return getModalParts(wrap, frame, loader);
   }
 
