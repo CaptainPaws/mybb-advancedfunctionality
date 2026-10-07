@@ -494,12 +494,23 @@ function af_apui_user_stat_routes(int $uid): array
 function af_apui_render_profile_character_workspace(array $context): string
 {
     $uid = (int)($context['uid'] ?? 0);
-    if (!function_exists('af_characterworkflow_resolve_active_application')
-        || af_characterworkflow_resolve_active_application($uid) === null) {
+    $activeApplication = function_exists('af_characterworkflow_resolve_active_application')
+        ? af_characterworkflow_resolve_active_application($uid)
+        : null;
+    $sheetPayload = (array)($context['sheet_payload'] ?? []);
+    $approvedCharacterPayload = (array)($context['approved_character_payload'] ?? []);
+    if (empty($approvedCharacterPayload['fields'])) {
+        $approvedCharacterPayload = (array)($GLOBALS['af_apui_approved_character_payload'] ?? []);
+    }
+    if (empty($approvedCharacterPayload['fields']) && function_exists('af_apui_get_approved_profile_character_payload')) {
+        $approvedCharacterPayload = af_apui_get_approved_profile_character_payload($uid);
+    }
+    if ($activeApplication === null && empty($approvedCharacterPayload['fields'])) {
         return '';
     }
-    $sheetPayload = (array)($context['sheet_payload'] ?? []);
-    $payload = af_apui_get_profile_character_payload($uid, $sheetPayload);
+    $payload = $activeApplication !== null
+        ? af_apui_get_profile_character_payload($uid, $sheetPayload)
+        : $approvedCharacterPayload;
     $fields = (array)($payload['fields'] ?? []);
     $labels = [
         'character_name_ru' => 'Имя', 'character_origin' => 'Происхождение',
@@ -514,9 +525,6 @@ function af_apui_render_profile_character_workspace(array $context): string
         if ($value === '') continue;
         $rows .= '<div class="af-apui-character-row"><dt>' . htmlspecialchars_uni($label) . '</dt><dd>' . $value . '</dd></div>';
     }
-    $approvedCharacterPayload = (array)($context['approved_character_payload']
-        ?? $GLOBALS['af_apui_approved_character_payload']
-        ?? []);
     $approvedFields = (array)($approvedCharacterPayload['fields'] ?? []);
     $elementField = (array)($approvedFields['character_element'] ?? []);
     $elementValue = af_apui_profile_character_field_value($elementField);
