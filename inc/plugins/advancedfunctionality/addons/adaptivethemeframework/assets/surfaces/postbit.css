@@ -599,7 +599,7 @@ body.atf-active .atf-post__content {
   padding-inline: var(--atf-space-5);
   overflow: visible;
 }
-body.atf-active .post_body.scaleimages.atf-post__message {
+body.atf-active .post_body.scaleimages.atf-post__message:not(:has(form, textarea)) {
   width: calc(100% + (2 * var(--atf-space-5)));
   max-width: none;
   min-width: 0;
@@ -612,11 +612,13 @@ body.atf-active .post_body.scaleimages.atf-post__message {
    padded message-body wrapper. Restore the normal text inset while editing;
    otherwise the editor inherits the full-bleed message width and intrudes
    into the author sidebar. */
-body.atf-active .post_body.scaleimages.atf-post__message:has(.atf-quick-edit, textarea[id^="quickedit_"]) {
+body.atf-active .post_body.scaleimages.atf-post__message:has(form, textarea) {
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   margin-inline: 0;
   padding-inline: var(--atf-space-5) !important;
+  box-sizing: border-box;
 }
 body.atf-active .atf-post__message-body {
   padding-inline: var(--atf-space-5);
@@ -654,7 +656,7 @@ body.atf-active .atf-post__reputation-corner {
   body.atf-active .atf-post__topbar,
 body.atf-active .atf-post__sidebar-inner { position: static; transform: none !important; will-change: auto !important; }
   body.atf-active .atf-post__reputation-corner { position: absolute; right: 0; bottom: 0; }
-  body.atf-active .post_body.scaleimages.atf-post__message:has(.atf-quick-edit, textarea[id^="quickedit_"]) { padding-inline: var(--atf-space-4) !important; }
+  body.atf-active .post_body.scaleimages.atf-post__message:has(form, textarea) { padding-inline: var(--atf-space-4) !important; }
 }
 body.atf-active .atf-post__meta-line {
   position: relative;
