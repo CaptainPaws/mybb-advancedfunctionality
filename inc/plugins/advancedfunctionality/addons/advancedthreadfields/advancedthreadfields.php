@@ -5107,13 +5107,28 @@ function af_atf_render_character_kb_moderation_button(int $tid, int $uid, array 
         'action' => $action,
         'tid' => $tid,
     ], '', '&', PHP_QUERY_RFC3986);
+    $jsUrl = json_encode($formUrl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $jsPayload = json_encode([
+        'action' => $action,
+        'tid' => (string)$tid,
+        'my_post_key' => $postKey,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($jsUrl) || !is_string($jsPayload) || $jsUrl === '' || $jsPayload === '') {
+        return '';
+    }
 
-    return '<form class="af-cs-kb-action-form" method="post" action="' . htmlspecialchars_uni($formUrl) . '" target="_blank" rel="noopener" style="display:inline">'
-        . '<input type="hidden" name="action" value="' . htmlspecialchars_uni($action) . '">'
-        . '<input type="hidden" name="tid" value="' . (int)$tid . '">'
-        . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($postKey) . '">'
-        . '<button type="submit" class="button af-cs-accept-button af-cs-accept-button--kb"><span>' . htmlspecialchars_uni($label) . '</span></button>'
-        . '</form>';
+    // Create the form as a body child so it cannot be parsed as a nested
+    // submit form inside MyBB's post/reply markup. Keep it alive briefly after
+    // submit so the browser can finish serializing and dispatching the POST.
+    $onClick = "(function(){"
+        . "var d=document,f=d.createElement('form'),p=" . $jsPayload . ";"
+        . "f.method='post';f.action=" . $jsUrl . ";f.target='_blank';f.style.display='none';"
+        . "for(var n in p){if(Object.prototype.hasOwnProperty.call(p,n)){var i=d.createElement('input');i.type='hidden';i.name=n;i.value=p[n];f.appendChild(i);}}"
+        . "d.body.appendChild(f);f.submit();"
+        . "window.setTimeout(function(){if(f.parentNode){f.parentNode.removeChild(f);}},30000);"
+        . "})();return false;";
+
+    return '<button type="button" class="button af-cs-accept-button af-cs-accept-button--kb" onclick="' . htmlspecialchars_uni($onClick) . '"><span>' . htmlspecialchars_uni($label) . '</span></button>';
 }
 
 function af_atf_character_bridge_store_thread_kb_link(int $tid, int $fid, int $uid): void
