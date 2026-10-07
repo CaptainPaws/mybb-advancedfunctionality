@@ -276,6 +276,7 @@
         panel.setAttribute('data-lazy-state', 'loaded');
         if (typeof window.AFAdvancedInventoryInit === 'function') window.AFAdvancedInventoryInit(panel);
         document.dispatchEvent(new CustomEvent('af:profile-tab-loaded', { detail: { panel: panel, tab: panel.getAttribute('data-panel') } }));
+        activateRequestedSheetSection(panel);
       } catch (error) {
         panel.setAttribute('data-lazy-state', 'error');
         panel.innerHTML = '<div class="af-apui-empty">Не удалось загрузить содержимое вкладки.</div>';
@@ -283,6 +284,25 @@
       } finally {
         panel.removeAttribute('aria-busy');
       }
+    }
+
+    function activateRequestedSheetSection(panel) {
+      if (!panel || panel.getAttribute('data-panel') !== 'sheet') return;
+      var section = '';
+      try {
+        section = (new URLSearchParams(window.location.search)).get('af_profile_section') || '';
+      } catch (error) {}
+      if (!section) return;
+
+      var wanted = section === 'arsenal' ? ['arsenal', 'arpg-arsenal']
+        : (section === 'talents' ? ['talents', 'arpg-talents'] : []);
+      if (!wanted.length) return;
+
+      var buttons = toArray(panel.querySelectorAll('[data-afcs-tab]'));
+      var button = buttons.find(function (candidate) {
+        return wanted.indexOf(candidate.getAttribute('data-afcs-tab')) !== -1;
+      });
+      if (button) button.click();
     }
 
     root.addEventListener('click', function (event) {

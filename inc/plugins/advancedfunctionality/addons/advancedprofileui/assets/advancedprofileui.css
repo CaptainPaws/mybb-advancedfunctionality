@@ -2984,20 +2984,50 @@ body.af-apui-member-profile-page .af-apui-profile-stats {
   max-width: 100%;
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(8, minmax(100px,1fr));
-  gap: 5px;
+  grid-template-columns: repeat(8, minmax(76px,1fr));
+  grid-auto-flow: column;
+  gap: 4px;
   overflow-x: auto;
   overflow-y: hidden;
   padding: 1px 1px 4px;
   scrollbar-width: thin;
 }
 body.af-apui-member-profile-page .af-apui-profile-stat {
-  min-width: 100px;
-  min-height: 36px;
-  padding: 4px 7px;
+  min-width: 0;
+  min-height: 34px;
+  grid-template-columns: 13px minmax(0,1fr);
+  grid-template-rows: auto auto;
+  gap: 0 4px;
+  align-content: center;
+  padding: 3px 5px;
   border: 1px solid rgba(205,215,237,.14);
   border-radius: 3px;
   background: linear-gradient(135deg, rgba(37,45,62,.68), rgba(22,28,41,.75));
+}
+body.af-apui-member-profile-page .af-apui-profile-stat > i {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  font-size: 11px;
+}
+body.af-apui-member-profile-page .af-apui-profile-stat__value {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.af-apui-member-profile-page .af-apui-profile-stat__label {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  font-size: 9px;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 body.af-apui-member-profile-page .af-apui-character-layout { gap: 9px; }
 body.af-apui-member-profile-page .af-apui-character-portrait { padding: 5px; }
@@ -3027,15 +3057,58 @@ body.af-apui-member-profile-page .af-apui-profile-quick-link {
 }
 body.af-apui-member-profile-page .af-apui-profile-quick-link i { font-size: 16px; }
 body.af-apui-member-profile-page .af-apui-profile-quick-link span { font-size: 11px; }
+body.af-apui-member-profile-page .af-apui-profile-quick-link.is-disabled {
+  opacity: .48;
+  cursor: default;
+}
+body.af-apui-member-profile-page .af-apui-profile-quick-link.is-disabled:hover {
+  border-color: rgba(205,215,237,.13);
+  background: rgba(25,32,46,.56);
+}
 body.af-apui-member-profile-page .af-apui-rewards-grid { gap: 9px; }
 body.af-apui-member-profile-page .af-apui-reward-card { padding: 9px; }
 body.af-apui-member-profile-page .af-apui-reward-card__scroll {
   height: 400px;
+  max-height: 400px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 6px;
   border: 1px solid rgba(205,215,237,.12);
   border-radius: 3px;
   background: rgba(8,12,20,.16);
+  scrollbar-width: thin;
 }
+body.af-apui-member-profile-page .af-apui-signature {
+  max-height: 250px;
+  overflow: auto;
+  border: 1px solid rgba(205,215,237,.11);
+  border-radius: 3px;
+  background: linear-gradient(145deg, rgba(12,17,27,.36), rgba(25,31,45,.3));
+}
+body.af-apui-member-profile-page .af-apui-signature h3 {
+  margin: 0 0 6px;
+  padding: 0 0 5px;
+  border-bottom: 1px solid rgba(205,215,237,.11);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+body.af-apui-member-profile-page .af-apui-signature .signature {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+body.af-apui-member-profile-page .af-apui-signature hr {
+  height: 0;
+  border: 0;
+  border-top: 1px solid rgba(205,215,237,.12);
+}
+body.af-apui-member-profile-page .af-apui-signature :is(p, ul, ol) { margin-block: 5px; }
 body.af-apui-member-profile-page .af-apui-tab-stack { gap: 9px; }
 body.af-apui-member-profile-page .af-apui-tab-card { gap: 10px; }
 body.af-apui-member-profile-page .af-apui-tab-card__head { gap: 4px; }
