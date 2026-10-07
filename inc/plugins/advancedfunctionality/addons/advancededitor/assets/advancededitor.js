@@ -2261,6 +2261,20 @@
         var rec = records[i];
         if (!rec) continue;
 
+        // MyBB's jEditable Quick Edit can insert its textarea before assigning
+        // quickedit_PID. The lightweight shell watches this id transition too;
+        // mirror that contract here so the full editor runtime doesn't miss
+        // the field when its id is assigned after the child-list notification.
+        if (rec.type === 'attributes') {
+          var changed = rec.target;
+          if (changed && changed.tagName === 'TEXTAREA'
+            && /^quickedit_\d+$/.test(String(changed.id || ''))
+            && changed.name === 'value') {
+            scanAndInit(changed);
+          }
+          continue;
+        }
+
         if (rec.addedNodes && rec.addedNodes.length) {
           for (var j = 0; j < rec.addedNodes.length; j++) {
             var added = rec.addedNodes[j];
@@ -2287,7 +2301,9 @@
 
     observer.observe(document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['id']
     });
   }
 
