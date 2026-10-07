@@ -2577,6 +2577,39 @@ af-apf-postbit-field {
   height: auto;
 }
 
+/* Keep the sheet modal's height chain independent of grid percentage sizing. */
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-modal__dialog,
+.af-cs-modal[data-af-apui-modal-kind="sheet"] .af-cs-modal__dialog {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-modal__header,
+.af-cs-modal[data-af-apui-modal-kind="sheet"] .af-cs-modal__header {
+  flex: 0 0 auto;
+}
+
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-modal__body,
+.af-cs-modal[data-af-apui-modal-kind="sheet"] .af-cs-modal__body {
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
+/* Older Global CSS gave .af-cs-page a fixed desktop width and large padding.
+   Keep that legacy rule from widening or constraining the embedded sheet. */
+body.af-cs-modal-page > .af-apui-surface-page > .af-cs-page {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  max-height: none;
+  margin: 0;
+  padding: 0 16px 32px;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
 
 .af-cs-modal[data-af-modal-kind="achievements"] .af-cs-modal__body,
 .af-cs-modal[data-af-apui-modal-kind="achievements"] .af-cs-modal__body {
