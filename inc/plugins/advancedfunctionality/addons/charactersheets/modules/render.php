@@ -1449,7 +1449,7 @@ function af_charactersheets_arpg_collect_artifacts_data(array $build, int $uid =
     return $result;
 }
 
-function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_view, array $atf_index, array $build = [], array $character_source = [], int $uid = 0, bool $includeAbilities = true): array
+function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_view, array $atf_index, array $build = [], array $character_source = [], int $uid = 0, bool $includeAbilities = true, bool $includeInventoryCards = true): array
 {
     global $mybb;
 
@@ -1462,7 +1462,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $mechanics = (array)($sheet_view['mechanics'] ?? []);
     $resources = (array)($sheet_view['character_computed_state']['resources'] ?? []);
     $resistances = (array)($sheet_view['character_computed_state']['resistances'] ?? []);
-    $equipment_items = $includeAbilities ? af_charactersheets_arpg_collect_equipment_items($build, $uid) : [];
+    $equipment_items = $includeAbilities && $includeInventoryCards ? af_charactersheets_arpg_collect_equipment_items($build, $uid) : [];
     $abilities_items = [];
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
     $has_kb_character = !empty(($character_source['entry'] ?? [])['id']);
@@ -1470,9 +1470,9 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         ? (array)(($character_source['payload'] ?? [])['stats'] ?? [])
         : [];
     $character_abilities = (array)(($character_source['payload'] ?? [])['abilities'] ?? []);
-    if ($includeAbilities && $has_kb_character) {
+    if ($includeAbilities && $includeInventoryCards && $has_kb_character) {
         $abilities_items = af_charactersheets_arpg_collect_character_contract_abilities($character_abilities);
-    } elseif ($includeAbilities) {
+    } elseif ($includeAbilities && $includeInventoryCards) {
         $abilities_items = af_charactersheets_arpg_collect_abilities($build, $sheet_view);
     }
 
@@ -1546,8 +1546,8 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $wallet_display = function_exists('af_balance_format_credits') ? af_balance_format_credits($wallet_raw) : number_format($wallet_raw / 100, 2, '.', ' ');
     $ability_tokens_display = function_exists('af_balance_format_ability_tokens') ? af_balance_format_ability_tokens($ability_tokens_raw) : number_format($ability_tokens_raw / 100, 2, '.', ' ');
     $ability_symbol = (string)($mybb->settings['af_balance_ability_tokens_symbol'] ?? '♦');
-    $weapon = $includeAbilities ? af_charactersheets_arpg_collect_weapon_data($build, $uid) : [];
-    $artifacts = $includeAbilities ? af_charactersheets_arpg_collect_artifacts_data($build, $uid) : [];
+    $weapon = $includeAbilities && $includeInventoryCards ? af_charactersheets_arpg_collect_weapon_data($build, $uid) : [];
+    $artifacts = $includeAbilities && $includeInventoryCards ? af_charactersheets_arpg_collect_artifacts_data($build, $uid) : [];
     $activeAbilities = [];
     if ($includeAbilities && $has_kb_character) {
         foreach ($character_abilities as $ability) {
@@ -2333,7 +2333,10 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
                 . af_charactersheets_arpg_render_description_html($vm);
         }
         if ($tab === 'abilities' && $sheet_render_profile === 'arpg') {
-            $vm = af_charactersheets_build_arpg_view_model($sheet, $sheet_view, $atf_index, $build, $character_source, $sheet_owner_uid_for_loadout, true);
+            // The abilities panel only renders the ability groups. Skip the
+            // separate inventory card collections while retaining the same
+            // sheet/equipment-derived stats used to resolve ability effects.
+            $vm = af_charactersheets_build_arpg_view_model($sheet, $sheet_view, $atf_index, $build, $character_source, $sheet_owner_uid_for_loadout, true, false);
             return '<section class="af-cs-arpg-panel"><h2>Активные способности</h2><div class="af-cs-arpg-ability-grid">'
                 . af_charactersheets_arpg_render_abilities_group_html((array)($vm['abilities_groups']['active'] ?? []), 'Активные способности не назначены')
                 . '</div></section><section class="af-cs-arpg-panel"><h2>Пассивные способности</h2><div class="af-cs-arpg-ability-grid">'
