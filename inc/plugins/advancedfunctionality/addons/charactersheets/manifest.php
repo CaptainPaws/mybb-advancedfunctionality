@@ -21,6 +21,18 @@ return [
         'response_rules' => [
             ['has_charactersheet_component' => true],
         ],
+        // Inline profile sheets need the full tab runtime only when the
+        // component is actually present; modal triggers stay lightweight.
+        'resources' => [
+            'embedded_runtime' => [
+                'mode' => 'contextual',
+                'routes' => [],
+                'response_rules' => [
+                    ['has_embedded_charactersheet' => true],
+                ],
+                'directory_fallback' => false,
+            ],
+        ],
         'directory_fallback' => false,
     ],
 

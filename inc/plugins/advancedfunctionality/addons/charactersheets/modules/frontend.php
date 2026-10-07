@@ -338,6 +338,41 @@ function af_charactersheets_is_trigger_context(): bool
     return in_array($script, ['showthread.php', 'member.php'], true);
 }
 
+/** Mark an inline member-profile sheet so its parent response loads tab runtime. */
+function af_charactersheets_mark_embedded_profile_component(): bool
+{
+    if (!defined('THIS_SCRIPT') || THIS_SCRIPT !== 'member.php' || !af_charactersheets_is_enabled()) {
+        return false;
+    }
+
+    $facts = ['has_embedded_charactersheet' => true];
+    if (function_exists('af_frontend_asset_allowed')
+        && !af_frontend_asset_allowed(AF_CS_ID, 'embedded_runtime', null, $facts)) {
+        return false;
+    }
+
+    $GLOBALS['af_charactersheets_has_embedded_component'] = true;
+    $GLOBALS['af_charactersheets_has_frontend_component'] = true;
+    $GLOBALS['af_charactersheets_needs_assets'] = true;
+    return true;
+}
+
+/** The full runtime is allowed only when an inline sheet component is present. */
+function af_charactersheets_embedded_runtime_allowed(): bool
+{
+    if (empty($GLOBALS['af_charactersheets_has_embedded_component'])) {
+        return false;
+    }
+
+    return !function_exists('af_frontend_asset_allowed')
+        || af_frontend_asset_allowed(
+            AF_CS_ID,
+            'embedded_runtime',
+            null,
+            ['has_embedded_charactersheet' => true]
+        );
+}
+
 function af_charactersheets_get_asset_version(bool $lightweight = false): string
 {
     $files = $lightweight
@@ -376,12 +411,13 @@ function af_charactersheets_enqueue_assets(): void
     }
 
     $hasComponent = !empty($GLOBALS['af_charactersheets_has_frontend_component']);
-    if (function_exists('af_frontend_asset_allowed')
+    $embeddedRuntime = af_charactersheets_embedded_runtime_allowed();
+    if (!$embeddedRuntime && function_exists('af_frontend_asset_allowed')
         && !af_frontend_asset_allowed(AF_CS_ID, 'runtime', null, ['has_charactersheet_component' => $hasComponent])) {
         return;
     }
 
-    $lightweight = af_charactersheets_is_trigger_context();
+    $lightweight = af_charactersheets_is_trigger_context() && !$embeddedRuntime;
     $assets = af_charactersheets_get_asset_urls($lightweight);
     $version = af_charactersheets_get_asset_version($lightweight);
     if (function_exists('af_add_css_once')) {
@@ -412,10 +448,9 @@ function af_charactersheets_canonicalize_assets_html(string $html): string
         );
     }
 
-    // Enforce one ownership mode per response: trigger pages must never retain
-    // the full UI runtime, while real CharacterSheets pages must not retain the
-    // lightweight trigger if another integration injected it earlier.
-    if (af_charactersheets_is_trigger_context()) {
+    // Keep one ownership mode per response: trigger-only pages use the light
+    // opener runtime; an actual inline profile sheet owns the full tab runtime.
+    if (af_charactersheets_is_trigger_context() && !af_charactersheets_embedded_runtime_allowed()) {
         $html = preg_replace('~<link\b[^>]*href=("|\')[^"\']*/charactersheets\.css(?:\?[^"\']*)?\1[^>]*>\s*~i', '', $html);
         $html = preg_replace('~<script\b[^>]*src=("|\')[^"\']*/charactersheets\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i', '', $html);
     } else {

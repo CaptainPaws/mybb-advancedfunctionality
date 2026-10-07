@@ -1747,6 +1747,12 @@ function af_apui_member_profile_prepare_layout_vars(): void
 
     $uid = (int)($memprofile['uid'] ?? 0);
     $sheetPayload = af_apui_get_charactersheet_postbit_payload($uid);
+    if (!empty($sheetPayload['enabled'])
+        && trim((string)($sheetPayload['sheet_slug'] ?? '')) !== ''
+        && trim((string)($sheetPayload['sheet_url'] ?? '')) !== ''
+        && function_exists('af_charactersheets_mark_embedded_profile_component')) {
+        af_charactersheets_mark_embedded_profile_component();
+    }
     $legacyContext = ['uid' => $uid, 'username' => (string)($memprofile['username'] ?? ''), 'member' => $memprofile, 'avatars' => $avatars, 'sheet_payload' => $sheetPayload];
     $GLOBALS['af_apui_profile_stats'] = af_apui_render_profile_stats($legacyContext);
     $GLOBALS['af_apui_character_workspace'] = af_apui_render_profile_character_workspace($legacyContext);
