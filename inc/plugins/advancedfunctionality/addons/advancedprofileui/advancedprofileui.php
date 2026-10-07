@@ -494,6 +494,9 @@ function af_apui_user_stat_routes(int $uid): array
 function af_apui_render_profile_character_workspace(array $context): string
 {
     $uid = (int)($context['uid'] ?? 0);
+    $activeApplication = function_exists('af_characterworkflow_resolve_active_application')
+        ? af_characterworkflow_resolve_active_application($uid)
+        : null;
     $sheetPayload = (array)($context['sheet_payload'] ?? []);
     $approvedCharacterPayload = (array)($context['approved_character_payload'] ?? []);
     if (empty($approvedCharacterPayload['fields'])) {
@@ -502,10 +505,12 @@ function af_apui_render_profile_character_workspace(array $context): string
     if (empty($approvedCharacterPayload['fields']) && function_exists('af_apui_get_approved_profile_character_payload')) {
         $approvedCharacterPayload = af_apui_get_approved_profile_character_payload($uid);
     }
-    if (empty($approvedCharacterPayload['fields'])) {
+    if ($activeApplication === null && empty($approvedCharacterPayload['fields'])) {
         return '';
     }
-    $payload = $approvedCharacterPayload;
+    $payload = $activeApplication !== null
+        ? af_apui_get_profile_character_payload($uid, $sheetPayload)
+        : $approvedCharacterPayload;
     $fields = (array)($payload['fields'] ?? []);
     $labels = [
         'character_name_ru' => 'Имя', 'character_origin' => 'Происхождение',
@@ -517,6 +522,9 @@ function af_apui_render_profile_character_workspace(array $context): string
     $rows = '';
     foreach ($labels as $key => $label) {
         $field = (array)($fields[$key] ?? []);
+        if ($key === 'character_element' && empty($field)) {
+            $field = (array)(($approvedCharacterPayload['fields'] ?? [])['character_element'] ?? []);
+        }
         $value = trim((string)($field['html'] ?? ''));
         if ($key === 'character_element') {
             $elementValue = af_apui_profile_character_field_value($field);
@@ -530,7 +538,8 @@ function af_apui_render_profile_character_workspace(array $context): string
             }
         }
         if ($value === '') continue;
-        $rows .= '<div class="af-apui-character-row"><dt>' . htmlspecialchars_uni($label) . '</dt><dd>' . $value . '</dd></div>';
+        $rowClass = $key === 'character_element' ? ' af-apui-character-row--element' : '';
+        $rows .= '<div class="af-apui-character-row' . $rowClass . '"><dt>' . htmlspecialchars_uni($label) . '</dt><dd>' . $value . '</dd></div>';
     }
     $applicationUrl = af_apui_resolve_application_url(['uid' => $uid], $sheetPayload);
     if ($applicationUrl !== '') {
