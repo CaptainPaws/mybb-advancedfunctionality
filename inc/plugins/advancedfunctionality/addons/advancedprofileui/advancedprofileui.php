@@ -494,9 +494,6 @@ function af_apui_user_stat_routes(int $uid): array
 function af_apui_render_profile_character_workspace(array $context): string
 {
     $uid = (int)($context['uid'] ?? 0);
-    $activeApplication = function_exists('af_characterworkflow_resolve_active_application')
-        ? af_characterworkflow_resolve_active_application($uid)
-        : null;
     $sheetPayload = (array)($context['sheet_payload'] ?? []);
     $approvedCharacterPayload = (array)($context['approved_character_payload'] ?? []);
     if (empty($approvedCharacterPayload['fields'])) {
@@ -505,40 +502,35 @@ function af_apui_render_profile_character_workspace(array $context): string
     if (empty($approvedCharacterPayload['fields']) && function_exists('af_apui_get_approved_profile_character_payload')) {
         $approvedCharacterPayload = af_apui_get_approved_profile_character_payload($uid);
     }
-    if ($activeApplication === null && empty($approvedCharacterPayload['fields'])) {
+    if (empty($approvedCharacterPayload['fields'])) {
         return '';
     }
-    $payload = $activeApplication !== null
-        ? af_apui_get_profile_character_payload($uid, $sheetPayload)
-        : $approvedCharacterPayload;
+    $payload = $approvedCharacterPayload;
     $fields = (array)($payload['fields'] ?? []);
     $labels = [
         'character_name_ru' => 'Имя', 'character_origin' => 'Происхождение',
         'character_origin_variant' => 'Разновидность', 'character_class' => 'Архетип',
-        'character_faction' => 'Фракция', 'character_weapon' => 'Оружие',
+        'character_faction' => 'Фракция', 'character_element' => 'Стихия', 'character_weapon' => 'Оружие',
         'character_activity' => 'Деятельность', 'character_age' => 'Возраст',
         'character_height' => 'Рост', 'character_weight' => 'Вес', 'character_gen' => 'Пол',
     ];
     $rows = '';
     foreach ($labels as $key => $label) {
-        $value = trim((string)($fields[$key]['html'] ?? ''));
+        $field = (array)($fields[$key] ?? []);
+        $value = trim((string)($field['html'] ?? ''));
+        if ($key === 'character_element') {
+            $elementValue = af_apui_profile_character_field_value($field);
+            $elementLabel = $elementValue !== '' && function_exists('af_kb_character_profile_resolved_value')
+                ? trim((string)af_kb_character_profile_resolved_value('character_element', $elementValue, true))
+                : '';
+            if ($elementLabel !== '') {
+                $value = htmlspecialchars_uni($elementLabel);
+            } elseif ($value === '' && $elementValue !== '') {
+                $value = htmlspecialchars_uni($elementValue);
+            }
+        }
         if ($value === '') continue;
         $rows .= '<div class="af-apui-character-row"><dt>' . htmlspecialchars_uni($label) . '</dt><dd>' . $value . '</dd></div>';
-    }
-    $approvedFields = (array)($approvedCharacterPayload['fields'] ?? []);
-    $elementField = (array)($approvedFields['character_element'] ?? []);
-    $elementValue = af_apui_profile_character_field_value($elementField);
-    $elementHtml = trim((string)($elementField['html'] ?? ''));
-    $elementLabel = $elementValue !== '' && function_exists('af_kb_character_profile_resolved_value')
-        ? trim((string)af_kb_character_profile_resolved_value('character_element', $elementValue, true))
-        : '';
-    if ($elementLabel !== '') {
-        $elementHtml = htmlspecialchars_uni($elementLabel);
-    } elseif ($elementHtml === '' && $elementValue !== '') {
-        $elementHtml = htmlspecialchars_uni($elementValue);
-    }
-    if ($elementHtml !== '') {
-        $rows .= '<div class="af-apui-character-row af-apui-character-row--element"><dt>Стихия</dt><dd>' . $elementHtml . '</dd></div>';
     }
     $applicationUrl = af_apui_resolve_application_url(['uid' => $uid], $sheetPayload);
     if ($applicationUrl !== '') {
