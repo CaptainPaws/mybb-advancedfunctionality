@@ -2574,7 +2574,8 @@ af-apf-postbit-field {
 .af-cs-modal[data-af-modal-kind="sheet"] .af-cs-modal__frame,
 .af-cs-modal[data-af-apui-modal-kind="sheet"] .af-cs-modal__frame {
   flex: 1 1 0%;
-  height: auto;
+  height: 100%;
+  min-height: 0;
 }
 
 /* Keep the sheet modal's height chain independent of grid percentage sizing. */
