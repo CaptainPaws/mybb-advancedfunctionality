@@ -618,6 +618,7 @@ function af_adaptivethemeframework_pm_context(array $state, array $values): arra
         'permissions' => [
             'send' => !empty($state['can_send']),
             'track' => !empty($state['can_track']),
+            'usercp' => !empty($state['can_usercp']),
         ],
         'native' => $native,
     ];
@@ -682,6 +683,9 @@ function af_adaptivethemeframework_render_pm_navigation(array $context): string
     if (!empty($context['permissions']['track'])) {
         $management .= $link('tracking', 'private.php?action=tracking', $label('atf_pm_tracking'));
     }
+    if (!empty($context['permissions']['usercp'])) {
+        $management .= $link('usercp', 'usercp.php', $label('atf_pm_usercp'));
+    }
     $management .= $link('search', 'private.php?action=advanced_search', $label('atf_pm_advanced_search'));
     $management .= $link('folders', 'private.php?action=folders', $label('atf_pm_edit_folders'));
     $management .= $link('empty', 'private.php?action=empty', $label('atf_pm_clear_folders'));
@@ -737,12 +741,8 @@ function af_adaptivethemeframework_compose_pm_workspace(): void
         'folders' => is_array($foldernames ?? null) ? $foldernames : [],
         'can_send' => !empty($mybb->usergroup['cansendpms']),
         'can_track' => !empty($mybb->usergroup['cantrackpms']),
+        'can_usercp' => !empty($mybb->usergroup['canusercp']),
     ], $values);
-    $ucpContext = af_adaptivethemeframework_ucp_context([
-        'route' => 'private.php', 'action' => $action, 'fid' => $resolvedFid,
-        'uid' => $uid, 'title' => '',
-    ], []);
-    $GLOBALS['atf_ucp_global_navigation'] = $ucpContext['global_navigation'];
     foreach (['navigation', 'quota', 'notice', 'pagination', 'actions',
               'content', 'before_content', 'after_content'] as $name) {
         $GLOBALS['atf_pm_' . $name] = af_adaptivethemeframework_render_slot('pm.' . $name, $context);

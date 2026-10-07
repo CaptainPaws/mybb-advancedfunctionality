@@ -9,7 +9,6 @@ body.atf-active .pun.atf-page-shell :is(
 }
 body.atf-active .atf-pm { display: grid; gap: var(--atf-page-gap); min-width: 0; }
 body.atf-active .atf-pm__navigation { min-width: 0; }
-body.atf-active .atf-pm__global-navigation { min-width: 0; }
 body.atf-active .atf-pm-navigation { display: grid; gap: var(--atf-space-2); min-width: 0; }
 body.atf-active .atf-pm-navigation__group { min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
 body.atf-active .atf-pm-navigation__group ul { display: flex; gap: var(--atf-space-2); width: max-content; min-width: 100%; padding: 0 0 var(--atf-space-1); margin: 0; list-style: none; }
