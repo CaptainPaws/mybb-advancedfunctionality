@@ -2829,3 +2829,73 @@ body.af-apui-surface-body[data-af-apui-surface="achievements"] > :first-child,
   object-fit: cover;
   object-position: center center;
 }
+
+/* Compact member profile surfaces inspired by the supplied profile references. */
+body.af-apui-member-profile-page .af-apui-profile-page { gap: 10px; margin-block: 10px; }
+body.af-apui-member-profile-page .af-apui-profile-hero { min-height: 320px; border-radius: 8px; }
+body.af-apui-member-profile-page .af-apui-profile-tabs { border-radius: 8px; }
+body.af-apui-member-profile-page .af-apui-profile-tabs__nav { gap: 5px; padding: 7px; }
+body.af-apui-member-profile-page .af-apui-tab { border-radius: 5px; padding: 6px 10px; }
+body.af-apui-member-profile-page .af-apui-profile-tabs__content { padding: 9px; }
+body.af-apui-member-profile-page .af-apui-panel.is-active { gap: 9px; }
+body.af-apui-member-profile-page .af-apui-card { border-radius: 6px; padding: 10px; }
+body.af-apui-member-profile-page .af-apui-card > h2 { margin-bottom: 8px; }
+.af-apui-profile-stats {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 5px;
+  overflow: visible;
+}
+.af-apui-profile-stat {
+  min-height: 34px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  box-shadow: none;
+}
+.af-apui-profile-quick-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(94px, 1fr));
+  gap: 5px;
+  margin: 8px 0 12px;
+}
+.af-apui-profile-quick-link {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 5px;
+  background: rgba(12,16,24,.58);
+  text-align: center;
+  text-decoration: none;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.af-apui-profile-quick-link:hover {
+  border-color: var(--af-apui-accent, currentColor);
+  background: rgba(12,16,24,.82);
+}
+.af-apui-profile-quick-link i { color: var(--af-apui-accent, currentColor); font-size: 17px; }
+.af-apui-profile-quick-link span { font-size: 11px; line-height: 1.2; }
+.af-apui-character-abilities { padding: 10px; }
+.af-apui-character-abilities__body { padding: 0; }
+.af-apui-rewards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.af-apui-reward-card { min-width: 0; padding: 10px; }
+.af-apui-reward-card h2 { margin: 0 0 8px; font-size: 16px; }
+.af-apui-reward-card__scroll {
+  height: 400px;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 5px;
+  padding: 6px;
+  scrollbar-width: thin;
+}
+@media (max-width: 640px) {
+  .af-apui-rewards-grid { grid-template-columns: 1fr; }
+}

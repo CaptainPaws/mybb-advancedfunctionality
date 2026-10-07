@@ -445,9 +445,9 @@ function af_apui_render_profile_character_workspace(array $context): string
     $about = trim((string)($payload['about_html'] ?? ''));
     if ($about === '') $about = '<p class="af-apui-empty">Описание персонажа пока не заполнено.</p>';
     if ($rows === '') $rows = '<p class="af-apui-empty">Данные анкеты пока не заполнены.</p>';
-    $abilities = trim((string)($fields['character_abilities']['html'] ?? ''));
+    $abilities = trim((string)($fields['character_abil_disc']['html'] ?? ''));
     $abilitiesHtml = $abilities !== ''
-        ? '<details class="af-apui-character-abilities"><summary>Способности</summary><div class="af-apui-character-abilities__body">' . $abilities . '</div></details>'
+        ? '<section class="af-apui-character-card af-apui-character-abilities"><h2>Способности</h2><div class="af-apui-character-abilities__body">' . $abilities . '</div></section>'
         : '';
     return '<div class="af-apui-character-layout">'
         . '<section class="af-apui-character-card af-apui-character-about"><h2>О персонаже</h2><div class="af-apui-character-about__body">' . $about . '</div></section>'
@@ -1681,6 +1681,7 @@ function af_apui_member_profile_init_vars(): void
         'af_apui_profilefields_grid',
         'af_apui_profile_stats',
         'af_apui_character_workspace',
+        'af_apui_profile_quick_links',
     ] as $varName) {
         if (!isset($GLOBALS[$varName]) || !is_string($GLOBALS[$varName])) {
             $GLOBALS[$varName] = '';
@@ -1747,6 +1748,7 @@ function af_apui_member_profile_prepare_layout_vars(): void
     $legacyContext = ['uid' => $uid, 'username' => (string)($memprofile['username'] ?? ''), 'member' => $memprofile, 'avatars' => $avatars, 'sheet_payload' => $sheetPayload];
     $GLOBALS['af_apui_profile_stats'] = af_apui_render_profile_stats($legacyContext);
     $GLOBALS['af_apui_character_workspace'] = af_apui_render_profile_character_workspace($legacyContext);
+    $GLOBALS['af_apui_profile_quick_links'] = af_apui_render_profile_quick_links($legacyContext);
 
     // Non-info tabs are intentionally represented by cheap shells. Their renderers
     // (and their queries) run only in af_apui_maybe_serve_lazy_profile_tab().
@@ -1762,7 +1764,7 @@ function af_apui_maybe_serve_lazy_profile_tab(): void
     $tab = trim((string)$mybb->get_input('af_profile_tab'));
     if ($tab === '') return;
 
-    $allowed = ['sheet', 'inventory', 'timeline', 'activity'];
+    $allowed = ['sheet', 'inventory', 'timeline', 'activity', 'rewards'];
     if (!in_array($tab, $allowed, true)) {
         http_response_code(400);
         echo 'Неизвестная вкладка.';
@@ -1777,6 +1779,9 @@ function af_apui_maybe_serve_lazy_profile_tab(): void
 
     try {
         if ($tab === 'sheet') {
+            if (function_exists('af_charactersheets_require_modules')) {
+                af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render']);
+            }
             $active = function_exists('af_characterworkflow_resolve_active_application')
                 ? af_characterworkflow_resolve_active_application($uid) : null;
             $html = $active === null
@@ -1799,6 +1804,8 @@ function af_apui_maybe_serve_lazy_profile_tab(): void
                 }
             }
             $html = af_apui_build_member_profile_tab_shell('Инвентарь', '', $content);
+        } elseif ($tab === 'rewards') {
+            $html = af_apui_build_member_profile_rewards_tab($uid);
         } elseif ($tab === 'timeline') {
             $html = af_apui_build_member_profile_placeholder_tab('Хронология', 'Хронология пока пуста.');
         } else {
@@ -1813,6 +1820,62 @@ function af_apui_maybe_serve_lazy_profile_tab(): void
     header('Cache-Control: private, no-store');
     echo $html;
     exit;
+}
+
+function af_apui_render_profile_quick_links(array $context): string
+{
+    $uid = (int)($context['uid'] ?? 0);
+    if ($uid <= 0) return '';
+
+    $links = [];
+    $sheetPayload = (array)($context['sheet_payload'] ?? []);
+    $applicationUrl = af_apui_resolve_application_url(['uid' => $uid], $sheetPayload);
+    if ($applicationUrl !== '') $links[] = ['Анкета', $applicationUrl, 'fa-solid fa-file-lines'];
+    $sheetUrl = af_apui_decode_action_url((string)($sheetPayload['sheet_url'] ?? ''));
+    if ($sheetUrl !== '') $links[] = ['Лист персонажа', $sheetUrl, 'fa-solid fa-address-card'];
+
+    $links[] = ['Сообщения', 'search.php?action=finduser&uid=' . $uid, 'fa-solid fa-comments'];
+    $links[] = ['Темы', 'search.php?action=finduserthreads&uid=' . $uid, 'fa-solid fa-list'];
+    $links[] = ['Написать ЛС', 'private.php?action=send&uid=' . $uid, 'fa-solid fa-envelope'];
+
+    if (function_exists('af_advancedinventory_url')) {
+        $links[] = ['Инвентарь', af_advancedinventory_url('inventory', ['uid' => $uid]), 'fa-solid fa-box-open'];
+        if (function_exists('af_advinv_get_entities') && isset(af_advinv_get_entities(true)['pets'])) {
+            $links[] = ['Питомцы', af_advancedinventory_url('inventory', ['uid' => $uid, 'entity' => 'pets']), 'fa-solid fa-paw'];
+        }
+    }
+    $links[] = ['Друзья', 'buddy.php', 'fa-solid fa-user-group'];
+    $links[] = ['На главную', 'index.php', 'fa-solid fa-house'];
+
+    $html = '<nav class="af-apui-profile-quick-links" aria-label="Быстрые ссылки профиля">';
+    foreach ($links as [$label, $url, $icon]) {
+        $html .= '<a class="af-apui-profile-quick-link" href="' . htmlspecialchars_uni((string)$url) . '">'
+            . '<i class="' . htmlspecialchars_uni((string)$icon) . '" aria-hidden="true"></i><span>' . htmlspecialchars_uni((string)$label) . '</span></a>';
+    }
+    return $html . '</nav>';
+}
+
+function af_apui_build_member_profile_rewards_tab(int $uid): string
+{
+    global $mybb;
+    $blocks = [
+        'achievements' => ['Ачивки', 'Ачивки пока не добавлены.'],
+        'gifts' => ['Подарки', 'Подарков пока нет.'],
+    ];
+    $entities = function_exists('af_advinv_get_entities') ? af_advinv_get_entities(true) : [];
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    $canView = function_exists('af_inv_user_can_view') && af_inv_user_can_view($viewerUid, $uid);
+    $html = '<div class="af-apui-rewards-grid">';
+    foreach ($blocks as $entity => [$title, $empty]) {
+        $content = '<div class="af-apui-empty">' . htmlspecialchars_uni($empty) . '</div>';
+        if ($canView && isset($entities[$entity]) && function_exists('af_advinv_render_entity_tab')) {
+            $content = af_advinv_render_entity_tab($entity, $uid, 'all', 1, true);
+            if (trim($content) === '') $content = '<div class="af-apui-empty">' . htmlspecialchars_uni($empty) . '</div>';
+        }
+        $html .= '<section class="af-apui-card af-apui-reward-card"><h2>' . htmlspecialchars_uni($title) . '</h2>'
+            . '<div class="af-apui-reward-card__scroll">' . $content . '</div></section>';
+    }
+    return $html . '</div>';
 }
 
 function af_apui_build_member_profile_placeholder_tab(string $title, string $lead, string $note = ''): string

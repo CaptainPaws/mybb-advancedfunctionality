@@ -5213,7 +5213,7 @@ function af_atf_get_profile_character_payload(int $tid): array
         'character_name_ru', 'character_origin', 'character_origin_variant',
         'character_class', 'character_faction', 'character_element', 'character_weapon',
         'character_activity', 'character_age', 'character_height',
-        'character_weight', 'character_gen', 'character_app', 'character_abilities', 'character_abil',
+        'character_weight', 'character_gen', 'character_app', 'character_abilities', 'character_abil', 'character_abil_disc',
     ];
     $payload = [];
     foreach (af_atf_get_fields_cached() as $field) {
