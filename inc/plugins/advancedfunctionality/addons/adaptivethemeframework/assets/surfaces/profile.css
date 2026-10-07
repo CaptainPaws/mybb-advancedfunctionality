@@ -1,4 +1,12 @@
 /* ATF profile surface. Ownership and routes: manifest.php. */
+@import url("../../../advancedthreadfields/assets/element-theme.css");
+
+body.atf-active.atf-profile-page .atf-profile {
+  --af-profile-accent: var(--af-element-accent, var(--atf-color-accent));
+  --af-profile-accent-soft: var(--af-element-soft, rgba(130, 201, 255, .14));
+  --af-profile-accent-strong: var(--af-element-main, var(--atf-color-accent));
+  --af-profile-accent-gradient: linear-gradient(112deg, var(--af-profile-accent-soft), color-mix(in srgb, var(--atf-color-surface-raised) 80%, transparent) 72%);
+}
 
 body.atf-active.atf-profile-page .af-apui-profile-portrait { width: min(200px, 100%); aspect-ratio: 4 / 5; overflow: hidden; }
 body.atf-active.atf-profile-page .af-apui-profile-portrait__image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center center; }
@@ -382,18 +390,51 @@ body.atf-active.atf-profile-page .atf-profile-signature {
   gap: 7px;
   margin-top: 10px;
   padding: 10px;
-  border: 1px solid var(--atf-color-border);
+  border: 1px solid var(--af-profile-accent-soft);
   border-radius: 4px;
-  background: color-mix(in srgb, var(--atf-color-surface-raised) 62%, transparent);
+  background: var(--af-profile-accent-gradient);
 }
 body.atf-active.atf-profile-page .atf-profile-signature__title {
   padding-bottom: 6px;
-  border-bottom: 1px solid var(--atf-color-border);
+  border-bottom: 1px solid var(--af-profile-accent-soft);
+  color: var(--af-profile-accent);
   font-size: 12px;
   letter-spacing: .05em;
   text-transform: uppercase;
 }
-body.atf-active.atf-profile-page .atf-profile-signature__body { max-width: 100%; overflow-x: auto; }
+body.atf-active.atf-profile-page .atf-profile-signature__body {
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+body.atf-active.atf-profile-page .atf-profile-signature__body > table.tborder {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  border: 0 !important;
+  border-spacing: 0;
+  border-collapse: separate;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+body.atf-active.atf-profile-page .atf-profile-signature__body > table.tborder > tbody,
+body.atf-active.atf-profile-page .atf-profile-signature__body > table.tborder > tr,
+body.atf-active.atf-profile-page .atf-profile-signature__body > table.tborder > tbody > tr {
+  display: block;
+  width: 100%;
+}
+body.atf-active.atf-profile-page .atf-profile-signature__body > table.tborder .thead { display: none !important; }
+body.atf-active.atf-profile-page .atf-profile-signature__body > table.tborder td {
+  display: block;
+  width: auto;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: inherit;
+}
 body.atf-active.atf-profile-page .atf-profile-signature__body img { max-width: 100%; height: auto; }
 body.atf-active.atf-profile-page .af-apui-rewards-grid {
   display: grid;

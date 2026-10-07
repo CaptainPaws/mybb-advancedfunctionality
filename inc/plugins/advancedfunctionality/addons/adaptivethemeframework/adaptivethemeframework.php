@@ -943,6 +943,7 @@ function af_adaptivethemeframework_profile_context(array $member, array $values)
         'avatars' => $avatars,
         'appearance' => [
             'uid_class' => $uid > 0 ? 'af-aa-profile-user-' . $uid : '',
+            'element_theme_key' => trim((string)($values['element_theme_key'] ?? '')),
             'payload' => $uid > 0 && function_exists('af_aa_build_user_css_payload')
                 ? (array)af_aa_build_user_css_payload($uid)
                 : [],
@@ -982,6 +983,7 @@ function af_adaptivethemeframework_compose_profile(): void
         'balance' => (string)($memprofile['balance'] ?? ''),
         'post_counter' => (string)($memprofile['advancedpostcounter'] ?? ''),
     ];
+    $values['element_theme_key'] = htmlspecialchars_uni((string)($GLOBALS['af_apui_profile_element'] ?? ''));
     $context = af_adaptivethemeframework_profile_context($memprofile, $values);
     foreach (['hero', 'navigation', 'forum_info', 'quick_links', 'character_sheet', 'rewards', 'timeline',
         'activity', 'stats', 'balance', 'post_counter', 'before_content', 'main', 'after_content'] as $name) {
