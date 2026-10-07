@@ -2557,6 +2557,9 @@ af-apf-postbit-field {
 
 .af-cs-modal[data-af-modal-kind="sheet"] .af-cs-modal__body,
 .af-cs-modal[data-af-apui-modal-kind="sheet"] .af-cs-modal__body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   background-image:
     var(--af-apui-modal-sheet-bg-overlay),
     var(--af-apui-modal-sheet-bg-image);
@@ -2567,6 +2570,13 @@ af-apf-postbit-field {
     cover,
     var(--af-apui-modal-sheet-bg-size);
 }
+
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-modal__frame,
+.af-cs-modal[data-af-apui-modal-kind="sheet"] .af-cs-modal__frame {
+  flex: 1 1 0%;
+  height: auto;
+}
+
 
 .af-cs-modal[data-af-modal-kind="achievements"] .af-cs-modal__body,
 .af-cs-modal[data-af-apui-modal-kind="achievements"] .af-cs-modal__body {
