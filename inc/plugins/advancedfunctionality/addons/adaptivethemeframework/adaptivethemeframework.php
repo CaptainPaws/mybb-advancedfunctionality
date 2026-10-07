@@ -660,6 +660,9 @@ function af_adaptivethemeframework_render_pm_navigation(array $context): string
     };
 
     $primary = '';
+    if (!empty($context['permissions']['usercp'])) {
+        $primary .= $link('usercp', 'usercp.php', $label('atf_pm_usercp'));
+    }
     if (!empty($context['permissions']['send'])) {
         $primary .= $link('compose', 'private.php?action=send', $label('atf_pm_compose'));
     }
@@ -682,9 +685,6 @@ function af_adaptivethemeframework_render_pm_navigation(array $context): string
     $management = '';
     if (!empty($context['permissions']['track'])) {
         $management .= $link('tracking', 'private.php?action=tracking', $label('atf_pm_tracking'));
-    }
-    if (!empty($context['permissions']['usercp'])) {
-        $management .= $link('usercp', 'usercp.php', $label('atf_pm_usercp'));
     }
     $management .= $link('search', 'private.php?action=advanced_search', $label('atf_pm_advanced_search'));
     $management .= $link('folders', 'private.php?action=folders', $label('atf_pm_edit_folders'));
