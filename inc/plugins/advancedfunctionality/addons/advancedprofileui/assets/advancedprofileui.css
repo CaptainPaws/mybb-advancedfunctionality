@@ -3082,20 +3082,51 @@ body.af-apui-member-profile-page .af-apui-reward-card__scroll {
   scrollbar-width: thin;
 }
 body.af-apui-member-profile-page .af-apui-signature {
-  max-height: 250px;
-  overflow: auto;
-  border: 1px solid rgba(205,215,237,.11);
+  max-height: none;
+  overflow: visible;
+  padding: 10px 12px;
+  border: 1px solid var(--af-profile-accent-soft, rgba(205,215,237,.14));
   border-radius: 3px;
-  background: linear-gradient(145deg, rgba(12,17,27,.36), rgba(25,31,45,.3));
+  background: var(--af-profile-accent-gradient, linear-gradient(145deg, rgba(12,17,27,.48), rgba(25,31,45,.34)));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.025);
 }
 body.af-apui-member-profile-page .af-apui-signature h3 {
-  margin: 0 0 6px;
-  padding: 0 0 5px;
-  border-bottom: 1px solid rgba(205,215,237,.11);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .06em;
+  margin: 0 0 8px;
+  padding: 0 0 6px;
+  border-bottom: 1px solid var(--af-profile-accent-soft, rgba(205,215,237,.14));
+  color: var(--af-profile-accent, inherit);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: .07em;
   text-transform: uppercase;
+}
+body.af-apui-member-profile-page .af-apui-signature > table.tborder {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  border: 0 !important;
+  border-spacing: 0;
+  border-collapse: separate;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+body.af-apui-member-profile-page .af-apui-signature > table.tborder > tbody,
+body.af-apui-member-profile-page .af-apui-signature > table.tborder > tr,
+body.af-apui-member-profile-page .af-apui-signature > table.tborder > tbody > tr {
+  display: block;
+  width: 100%;
+}
+body.af-apui-member-profile-page .af-apui-signature > table.tborder .thead {
+  display: none !important;
+}
+body.af-apui-member-profile-page .af-apui-signature > table.tborder td {
+  display: block;
+  width: auto;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: inherit;
 }
 body.af-apui-member-profile-page .af-apui-signature .signature {
   margin: 0;

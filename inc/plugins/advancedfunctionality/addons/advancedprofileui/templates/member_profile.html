@@ -83,18 +83,18 @@
                     </div>
                 </div>
 
-                <div class="af-apui-card">
+                <section class="af-apui-card">
                     <h2>Дополнительная информация</h2>
 
                     <div class="af-apui-legacy-stack">
                         <div class="af-apui-info-grid">{$af_apui_profilefields_grid}</div>
                     </div>
+                </section>
 
-                    <div class="af-apui-signature">
-                        <h3>Подпись</h3>
-                        {$signature}
-                    </div>
-                </div>
+                <section class="af-apui-signature" aria-label="Подпись">
+                    <h3>Подпись</h3>
+                    {$signature}
+                </section>
             </article>
 
             <article class="af-apui-panel" id="af-apui-tab-sheet" role="tabpanel" data-panel="sheet" data-lazy-url="member.php?action=profile&amp;uid={$memprofile['uid']}&amp;af_profile_tab=sheet" hidden>
