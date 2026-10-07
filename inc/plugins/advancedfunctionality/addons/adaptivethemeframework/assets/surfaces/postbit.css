@@ -202,12 +202,17 @@ body.atf-active .atf-post__sidebar-inner::after {
   display: none;
 }
 body.atf-active .atf-post__content .atf-quick-edit {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   gap: var(--atf-space-3);
   box-sizing: border-box;
+}
+body.atf-active .atf-post__content .atf-quick-edit > :is(.af-ae-shell, .sceditor-container, .af-ccp-wrap, textarea) {
+  flex: 0 0 100%;
 }
 body.atf-active .atf-post__content .atf-quick-edit :is(.af-ae-shell, .sceditor-container, .af-ccp-wrap) {
   width: 100% !important;
@@ -227,7 +232,11 @@ body.atf-active .atf-post__content .atf-quick-edit :is( .sceditor-container, .af
   min-width: 0;
   box-sizing: border-box;
 }
-body.atf-active .atf-post__content .atf-quick-edit :is(input[type="submit"], input[type="button"], button) { justify-self: start; }
+body.atf-active .atf-post__content .atf-quick-edit :is(input[type="submit"], input[type="button"], button) {
+  flex: 0 1 auto;
+  width: auto !important;
+  max-width: 100%;
+}
 @media (max-width: 48rem) {
   body.atf-active .atf-post__topbar { grid-template-columns: auto minmax(0, 1fr) 4.5rem; gap: var(--atf-space-3); padding: var(--atf-space-3); }
   body.atf-active .atf-post__primary-avatar { width: 4.5rem; }
