@@ -12,6 +12,10 @@ function af_charactersheets_user_is_admin_or_moderator(array $user, int $fid = 0
         return false;
     }
 
+    if (function_exists('is_super_admin') && is_super_admin($uid)) {
+        return true;
+    }
+
     if (!empty($user['cancp']) || !empty($mybb->usergroup['cancp'])) {
         return true;
     }

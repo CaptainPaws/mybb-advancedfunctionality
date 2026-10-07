@@ -4950,6 +4950,19 @@ function af_atf_handle_character_kb_bridge_action(bool $syncOnly): void
 {
     global $mybb, $db, $lang;
 
+    // The route is owned by ATF, but its workflow/sheet APIs are provided by
+    // CharacterSheets. Route-aware loading must not make this handler depend
+    // on another addon's misc_start hook order.
+    if (!function_exists('af_charactersheets_require_modules')) {
+        $characterSheetsBootstrap = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/charactersheets/charactersheets.php';
+        if (is_file($characterSheetsBootstrap)) {
+            require_once $characterSheetsBootstrap;
+        }
+    }
+    if (function_exists('af_charactersheets_require_modules')) {
+        af_charactersheets_require_modules(['permissions', 'experience', 'bootstrap', 'sheets_crud', 'calculator', 'render']);
+    }
+
     verify_post_check($mybb->get_input('my_post_key'));
     $tid = (int)$mybb->get_input('tid');
     if ($tid <= 0) {
@@ -5090,35 +5103,17 @@ function af_atf_render_character_kb_moderation_button(int $tid, int $uid, array 
         return '';
     }
 
-    $kbUrl = 'misc.php?' . http_build_query([
+    $formUrl = 'misc.php?' . http_build_query([
         'action' => $action,
         'tid' => $tid,
     ], '', '&', PHP_QUERY_RFC3986);
 
-    $jsUrl = json_encode($kbUrl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    $jsPostKey = json_encode($postKey, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($jsUrl) || !is_string($jsPostKey) || $jsUrl === '' || $jsPostKey === '') {
-        return '';
-    }
-
-    $onClick = "(function(btn){"
-        . "var d=document,f=d.createElement('form');"
-        . "f.method='post';"
-        . "f.action=" . $jsUrl . ";"
-        . "f.target='_blank';"
-        . "f.rel='noopener';"
-        . "f.style.display='none';"
-        . "var k=d.createElement('input');"
-        . "k.type='hidden';"
-        . "k.name='my_post_key';"
-        . "k.value=" . $jsPostKey . ";"
-        . "f.appendChild(k);"
-        . "d.body.appendChild(f);"
-        . "f.submit();"
-        . "d.body.removeChild(f);"
-        . "})(this); return false;";
-
-    return '<button type="button" class="button af-cs-accept-button af-cs-accept-button--kb" onclick="' . htmlspecialchars_uni($onClick) . '"><span>' . htmlspecialchars_uni($label) . '</span></button>';
+    return '<form class="af-cs-kb-action-form" method="post" action="' . htmlspecialchars_uni($formUrl) . '" target="_blank" rel="noopener" style="display:inline">'
+        . '<input type="hidden" name="action" value="' . htmlspecialchars_uni($action) . '">'
+        . '<input type="hidden" name="tid" value="' . (int)$tid . '">'
+        . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($postKey) . '">'
+        . '<button type="submit" class="button af-cs-accept-button af-cs-accept-button--kb"><span>' . htmlspecialchars_uni($label) . '</span></button>'
+        . '</form>';
 }
 
 function af_atf_character_bridge_store_thread_kb_link(int $tid, int $fid, int $uid): void
