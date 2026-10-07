@@ -2830,72 +2830,259 @@ body.af-apui-surface-body[data-af-apui-surface="achievements"] > :first-child,
   object-position: center center;
 }
 
-/* Compact member profile surfaces inspired by the supplied profile references. */
-body.af-apui-member-profile-page .af-apui-profile-page { gap: 10px; margin-block: 10px; }
-body.af-apui-member-profile-page .af-apui-profile-hero { min-height: 320px; border-radius: 8px; }
-body.af-apui-member-profile-page .af-apui-profile-tabs { border-radius: 8px; }
-body.af-apui-member-profile-page .af-apui-profile-tabs__nav { gap: 5px; padding: 7px; }
-body.af-apui-member-profile-page .af-apui-tab { border-radius: 5px; padding: 6px 10px; }
-body.af-apui-member-profile-page .af-apui-profile-tabs__content { padding: 9px; }
-body.af-apui-member-profile-page .af-apui-panel.is-active { gap: 9px; }
-body.af-apui-member-profile-page .af-apui-card { border-radius: 6px; padding: 10px; }
-body.af-apui-member-profile-page .af-apui-card > h2 { margin-bottom: 8px; }
-.af-apui-profile-stats {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 5px;
-  overflow: visible;
-}
-.af-apui-profile-stat {
-  min-height: 34px;
-  padding: 4px 7px;
-  border-radius: 5px;
-  box-shadow: none;
-}
-.af-apui-profile-quick-links {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(94px, 1fr));
-  gap: 5px;
-  margin: 8px 0 12px;
-}
-.af-apui-profile-quick-link {
-  display: flex;
-  min-height: 52px;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 8px;
-  border: 1px solid rgba(255,255,255,.11);
-  border-radius: 5px;
-  background: rgba(12,16,24,.58);
-  text-align: center;
-  text-decoration: none;
-  transition: border-color .15s ease, background-color .15s ease;
-}
-.af-apui-profile-quick-link:hover {
-  border-color: var(--af-apui-accent, currentColor);
-  background: rgba(12,16,24,.82);
-}
-.af-apui-profile-quick-link i { color: var(--af-apui-accent, currentColor); font-size: 17px; }
-.af-apui-profile-quick-link span { font-size: 11px; line-height: 1.2; }
-.af-apui-character-abilities { padding: 10px; }
-.af-apui-character-abilities__body { padding: 0; }
-.af-apui-rewards-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+/* Member profile: compact framed panels and dense information rows. */
+body.af-apui-member-profile-page .af-apui-profile-page {
+  width: min(1200px, calc(100% - 24px));
+  margin: 12px auto;
   gap: 10px;
 }
-.af-apui-reward-card { min-width: 0; padding: 10px; }
-.af-apui-reward-card h2 { margin: 0 0 8px; font-size: 16px; }
-.af-apui-reward-card__scroll {
-  height: 400px;
-  min-height: 0;
-  overflow: auto;
-  border: 1px solid rgba(255,255,255,.1);
+body.af-apui-member-profile-page .af-apui-profile-hero {
+  min-height: 320px;
+  border: 1px solid rgba(183, 194, 221, .2);
   border-radius: 5px;
+  background: linear-gradient(145deg, rgba(30, 37, 53, .96), rgba(18, 23, 35, .98));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.035), 0 5px 16px rgba(0,0,0,.16);
+}
+body.af-apui-member-profile-page .af-apui-profile-hero__inner {
+  padding: 226px 14px 14px 248px;
+}
+body.af-apui-member-profile-page .af-apui-profile-avatar-shell {
+  left: 12px;
+  bottom: 12px;
+  width: 218px;
+  gap: 5px;
+}
+body.af-apui-member-profile-page .af-apui-profile-avatar-frame {
+  padding: 5px;
+  border: 1px solid rgba(220,228,247,.24);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.035);
+}
+body.af-apui-member-profile-page .af-apui-profile-name-wrap {
+  margin-bottom: 3px;
+  font-size: 26px;
+}
+body.af-apui-member-profile-page .af-apui-profile-rank-wrap,
+body.af-apui-member-profile-page .af-apui-profile-grouping { margin-bottom: 7px; }
+body.af-apui-member-profile-page .af-apui-profile-grouping { gap: 7px 10px; }
+body.af-apui-member-profile-page .af-apui-profile-meta {
+  gap: 0 8px;
+  margin: 7px 0;
+  border-top: 1px solid rgba(220,228,247,.12);
+  border-bottom: 1px solid rgba(220,228,247,.12);
+}
+body.af-apui-member-profile-page .af-apui-profile-meta-item {
+  min-width: 0;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 0;
+  border-right: 1px solid rgba(220,228,247,.1);
+  border-radius: 0;
+  background: transparent;
+}
+body.af-apui-member-profile-page .af-apui-profile-meta-item:last-child { border-right: 0; }
+body.af-apui-member-profile-page .af-apui-profile-meta-value { line-height: 1.25; overflow-wrap: anywhere; }
+body.af-apui-member-profile-page .af-apui-profile-presence { gap: 6px 10px; margin-bottom: 6px; }
+body.af-apui-member-profile-page .af-apui-profile-statebits { gap: 6px; }
+
+body.af-apui-member-profile-page .af-apui-profile-tabs {
+  border: 1px solid rgba(183,194,221,.2);
+  border-radius: 5px;
+  background: rgba(17,22,33,.94);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.035), 0 5px 16px rgba(0,0,0,.12);
+}
+body.af-apui-member-profile-page .af-apui-profile-tabs__nav {
+  gap: 5px;
   padding: 6px;
+  background: linear-gradient(180deg, rgba(36,43,61,.94), rgba(27,33,48,.96));
+  border-bottom: 1px solid rgba(220,228,247,.14);
+}
+body.af-apui-member-profile-page .af-apui-tab {
+  width: auto;
+  flex: 0 1 auto;
+  padding: 6px 10px;
+  border: 1px solid rgba(220,228,247,.14);
+  border-radius: 3px;
+  background: rgba(13,18,28,.48);
+  line-height: 1.25;
+}
+body.af-apui-member-profile-page .af-apui-tab.is-active {
+  border-color: rgba(140,165,220,.48);
+  background: linear-gradient(180deg, rgba(61,75,105,.58), rgba(39,49,71,.72));
+}
+body.af-apui-member-profile-page .af-apui-profile-tabs__content { padding: 10px; background: rgba(15,20,30,.7); }
+body.af-apui-member-profile-page .af-apui-panel.is-active { gap: 9px; }
+body.af-apui-member-profile-page .af-apui-card,
+body.af-apui-member-profile-page .af-apui-character-card,
+body.af-apui-member-profile-page .af-apui-character-portrait {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(205,215,237,.16);
+  border-radius: 3px;
+  background: linear-gradient(145deg, rgba(29,35,49,.72), rgba(20,25,37,.78));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.025);
+}
+body.af-apui-member-profile-page .af-apui-card > h2,
+body.af-apui-member-profile-page .af-apui-character-card h2,
+body.af-apui-member-profile-page .af-apui-reward-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 7px;
+  padding: 0 0 6px;
+  border-bottom: 1px solid rgba(205,215,237,.13);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: .045em;
+  line-height: 1.3;
+}
+body.af-apui-member-profile-page .af-apui-card > h2::after,
+body.af-apui-member-profile-page .af-apui-character-card h2::after,
+body.af-apui-member-profile-page .af-apui-reward-card h2::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, rgba(205,215,237,.17), transparent);
+}
+body.af-apui-member-profile-page .af-apui-info-grid {
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 0 14px;
+}
+body.af-apui-member-profile-page .af-apui-info-item {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 0;
+  border-bottom: 1px solid rgba(205,215,237,.12);
+  border-radius: 0;
+  background: transparent;
+}
+body.af-apui-member-profile-page .af-apui-info-label {
+  margin: 0 0 2px;
+  font-size: 10px;
+  letter-spacing: .04em;
+}
+body.af-apui-member-profile-page .af-apui-info-value { line-height: 1.35; }
+body.af-apui-member-profile-page .af-apui-links { gap: 6px 12px; margin-top: 8px; }
+body.af-apui-member-profile-page .af-apui-link-item a { text-decoration-thickness: 1px; text-underline-offset: 2px; }
+body.af-apui-member-profile-page .af-apui-signature {
+  min-width: 0;
+  margin-top: 9px;
+  padding: 8px 9px 2px;
+  border-top: 1px solid rgba(205,215,237,.16);
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+body.af-apui-member-profile-page .af-apui-signature img { max-width: 100%; height: auto; }
+body.af-apui-member-profile-page .af-apui-signature :is(blockquote, .mycode_quote) {
+  margin: 7px 0;
+  padding: 7px 9px;
+  border-left: 2px solid rgba(140,165,220,.55);
+  background: rgba(8,12,20,.22);
+}
+body.af-apui-member-profile-page .af-apui-profile-stats {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(100px,1fr));
+  gap: 5px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1px 1px 4px;
   scrollbar-width: thin;
 }
-@media (max-width: 640px) {
-  .af-apui-rewards-grid { grid-template-columns: 1fr; }
+body.af-apui-member-profile-page .af-apui-profile-stat {
+  min-width: 100px;
+  min-height: 36px;
+  padding: 4px 7px;
+  border: 1px solid rgba(205,215,237,.14);
+  border-radius: 3px;
+  background: linear-gradient(135deg, rgba(37,45,62,.68), rgba(22,28,41,.75));
+}
+body.af-apui-member-profile-page .af-apui-character-layout { gap: 9px; }
+body.af-apui-member-profile-page .af-apui-character-portrait { padding: 5px; }
+body.af-apui-member-profile-page .af-apui-character-about__body { max-height: 260px; }
+body.af-apui-member-profile-page .af-apui-character-row {
+  grid-template-columns: minmax(82px,.72fr) minmax(0,1.28fr);
+  gap: 5px;
+  padding: 4px 2px;
+  border-bottom-color: rgba(205,215,237,.12);
+}
+body.af-apui-member-profile-page .af-apui-character-row dd { overflow-wrap: anywhere; }
+body.af-apui-member-profile-page .af-apui-character-abilities { margin-top: 9px; padding: 10px; }
+body.af-apui-member-profile-page .af-apui-character-abilities__body { padding: 0; }
+body.af-apui-member-profile-page .af-apui-profile-quick-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px,1fr));
+  gap: 5px;
+  margin: 7px 0 9px;
+}
+body.af-apui-member-profile-page .af-apui-profile-quick-link {
+  min-height: 48px;
+  gap: 4px;
+  padding: 5px 7px;
+  border: 1px solid rgba(205,215,237,.13);
+  border-radius: 3px;
+  background: rgba(25,32,46,.56);
+}
+body.af-apui-member-profile-page .af-apui-profile-quick-link i { font-size: 16px; }
+body.af-apui-member-profile-page .af-apui-profile-quick-link span { font-size: 11px; }
+body.af-apui-member-profile-page .af-apui-rewards-grid { gap: 9px; }
+body.af-apui-member-profile-page .af-apui-reward-card { padding: 9px; }
+body.af-apui-member-profile-page .af-apui-reward-card__scroll {
+  height: 400px;
+  padding: 6px;
+  border: 1px solid rgba(205,215,237,.12);
+  border-radius: 3px;
+  background: rgba(8,12,20,.16);
+}
+body.af-apui-member-profile-page .af-apui-tab-stack { gap: 9px; }
+body.af-apui-member-profile-page .af-apui-tab-card { gap: 10px; }
+body.af-apui-member-profile-page .af-apui-tab-card__head { gap: 4px; }
+
+@media (max-width: 1100px) {
+  body.af-apui-member-profile-page .af-apui-profile-hero { min-height: 310px; }
+  body.af-apui-member-profile-page .af-apui-profile-hero__inner { min-height: 310px; padding: 216px 12px 12px 228px; }
+  body.af-apui-member-profile-page .af-apui-profile-avatar-shell { left: 10px; bottom: 10px; width: 204px; }
+}
+@media (max-width: 900px) {
+  body.af-apui-member-profile-page .af-apui-profile-hero { min-height: 0; }
+  body.af-apui-member-profile-page .af-apui-profile-avatar-shell {
+    position: relative;
+    inset: auto;
+    width: 176px;
+    max-width: calc(100% - 24px);
+    margin: 146px 0 0 12px;
+    justify-items: start;
+  }
+  body.af-apui-member-profile-page .af-apui-profile-hero__inner { min-height: 0; padding: 10px 12px 12px; }
+  body.af-apui-member-profile-page .af-apui-character-layout { grid-template-columns: minmax(0,.8fr) minmax(0,1.2fr); }
+  body.af-apui-member-profile-page .af-apui-character-about { grid-column: 1 / -1; grid-row: 2; }
+}
+@media (max-width: 767px) {
+  body.af-apui-member-profile-page .af-apui-profile-page { width: calc(100% - 16px); margin: 8px auto; gap: 8px; }
+  body.af-apui-member-profile-page .af-apui-profile-hero__banner { height: 136px; }
+  body.af-apui-member-profile-page .af-apui-profile-avatar-shell {
+    width: 132px;
+    margin: 102px auto 0;
+    justify-items: center;
+  }
+  body.af-apui-member-profile-page .af-apui-profile-hero__inner { padding: 8px 10px 10px; text-align: center; }
+  body.af-apui-member-profile-page .af-apui-profile-name-wrap { font-size: 22px; }
+  body.af-apui-member-profile-page .af-apui-profile-grouping,
+  body.af-apui-member-profile-page .af-apui-profile-presence,
+  body.af-apui-member-profile-page .af-apui-profile-statebits { justify-content: center; }
+  body.af-apui-member-profile-page .af-apui-profile-meta { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0; }
+  body.af-apui-member-profile-page .af-apui-profile-meta-item { padding: 6px 4px; }
+  body.af-apui-member-profile-page .af-apui-profile-tabs__nav { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  body.af-apui-member-profile-page .af-apui-tab { width: auto; flex: 1 1 auto; }
+  body.af-apui-member-profile-page .af-apui-profile-tabs__content { padding: 8px; }
+  body.af-apui-member-profile-page .af-apui-panel.is-active { gap: 8px; }
+  body.af-apui-member-profile-page .af-apui-card,
+  body.af-apui-member-profile-page .af-apui-character-card { padding: 9px; }
+  body.af-apui-member-profile-page .af-apui-info-grid { grid-template-columns: 1fr; gap: 0; }
+  body.af-apui-member-profile-page .af-apui-rewards-grid { grid-template-columns: 1fr; }
+  body.af-apui-member-profile-page .af-apui-character-layout { grid-template-columns: 1fr; }
+  body.af-apui-member-profile-page .af-apui-character-about { grid-column: auto; grid-row: auto; }
+  body.af-apui-member-profile-page .af-apui-character-portrait { order: -1; width: min(100%,280px); justify-self: center; }
 }
