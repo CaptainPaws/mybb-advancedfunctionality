@@ -7,7 +7,7 @@
 <body class="atf-active atf-profile-page af-apui-member-profile-page" data-atf-owned="1">
 {$header}
 
-<main class="pun atf-page-shell atf-page atf-profile {$atf_profile_context['appearance']['uid_class']}" data-profile-uid="{$memprofile['uid']}" data-element="{$atf_profile_context['appearance']['element_theme_key']}">
+<main class="pun atf-page-shell atf-page atf-profile {$atf_profile_context['appearance']['uid_class']}" data-profile-uid="{$memprofile['uid']}" data-element="{$af_apui_profile_element}">
   <header class="atf-profile__hero">{$atf_profile_hero}</header>
 
   <section class="atf-profile__workspace" data-af-apui-tabs>
@@ -15,7 +15,6 @@
 
     <div class="atf-profile__content">
       <section class="atf-profile__panel is-active" id="af-apui-tab-info" data-panel="info">
-        <div class="atf-profile__stats">{$atf_profile_stats}</div>
         <div class="atf-profile__quick-links">{$atf_profile_quick_links}</div>
         <div class="atf-profile__before">{$atf_profile_before_content}</div>
         <div class="atf-profile__forum-info">{$atf_profile_forum_info}</div>

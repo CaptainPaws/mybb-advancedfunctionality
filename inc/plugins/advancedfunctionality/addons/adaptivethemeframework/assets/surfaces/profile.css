@@ -5,7 +5,9 @@ body.atf-active.atf-profile-page .atf-profile {
   --af-profile-accent: var(--af-element-accent, var(--atf-color-accent));
   --af-profile-accent-soft: var(--af-element-soft, rgba(130, 201, 255, .14));
   --af-profile-accent-strong: var(--af-element-main, var(--atf-color-accent));
+  --af-profile-accent-border: var(--af-element-border, var(--atf-color-border));
   --af-profile-accent-gradient: linear-gradient(112deg, var(--af-profile-accent-soft), color-mix(in srgb, var(--atf-color-surface-raised) 80%, transparent) 72%);
+  --af-profile-accent-glow: 0 0 16px var(--af-profile-accent-soft);
 }
 
 body.atf-active.atf-profile-page .af-apui-profile-portrait { width: min(200px, 100%); aspect-ratio: 4 / 5; overflow: hidden; }
@@ -15,8 +17,8 @@ body.atf-active.atf-profile-page .atf-profile__hero { min-width: 0; }
 body.atf-active.atf-profile-page .atf-profile-hero {
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--atf-space-5);
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--atf-space-3);
   align-items: end;
   min-height: clamp(13rem, 25vw, 20rem);
   min-width: 0;
@@ -59,26 +61,32 @@ body.atf-active.atf-profile-page .atf-profile__provider-stats {
 }
 
 body.atf-active.atf-profile-page .af-apui-profile-stats {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(7.5rem, 1fr));
-  gap: var(--atf-space-1);
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
+  box-sizing: border-box;
   overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 1px 4px;
   scrollbar-width: thin;
 }
 body.atf-active.atf-profile-page .af-apui-profile-stat {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0 var(--atf-space-1);
+  display: flex;
+  flex: 0 0 auto;
+  gap: 5px;
   align-items: center;
-  min-height: 2.625rem;
-  padding: var(--atf-space-1) var(--atf-space-2);
+  min-height: 30px;
+  padding: 4px 7px;
   background: color-mix(in srgb, var(--atf-color-surface) 84%, transparent);
   border: 1px solid var(--atf-color-border);
   border-radius: var(--atf-radius-md);
   line-height: 1.15;
 }
-body.atf-active.atf-profile-page .af-apui-profile-stat > i { grid-row: 1 / 3; color: var(--atf-color-accent); }
+body.atf-active.atf-profile-page .af-apui-profile-stat > i { flex: 0 0 auto; color: var(--af-profile-accent, var(--atf-color-accent)); }
 body.atf-active.atf-profile-page .af-apui-profile-stat__label { color: var(--atf-color-text-muted); font-size: var(--atf-font-size-xs); }
 body.atf-active.atf-profile-page .af-apui-profile-stat__value { overflow-wrap: anywhere; }
 body.atf-active.atf-profile-page .af-apui-character-layout {
@@ -287,11 +295,13 @@ body.atf-active.atf-profile-page .atf-profile-hero {
   background-image: linear-gradient(180deg, rgb(8 12 24 / 10%), rgb(8 12 24 / 76%)),
     var(--af-apui-profile-banner-overlay, none), var(--af-apui-profile-banner-image, none);
 }
+body.atf-active.atf-profile-page .atf-profile-hero { border-color: var(--af-element-border, var(--atf-color-border)); }
 body.atf-active.atf-profile-page .atf-profile-hero__avatar { margin-bottom: -20px; }
 body.atf-active.atf-profile-page .atf-profile-hero__avatar img { border-width: 2px; }
-body.atf-active.atf-profile-page .atf-profile-hero__name { font-size: clamp(1.5rem, 3.4vw, 2.25rem); }
+body.atf-active.atf-profile-page .atf-profile-hero__name { color: var(--af-profile-accent, var(--atf-color-text)); font-size: clamp(1.5rem, 3.4vw, 2.25rem); }
 body.atf-active.atf-profile-page .atf-profile-hero__identity { gap: 5px; }
 body.atf-active.atf-profile-page .atf-profile-hero__meta { gap: 4px 10px; font-size: 12px; }
+body.atf-active.atf-profile-page .atf-profile-hero__stats { width: 100%; max-width: 100%; min-width: 0; }
 body.atf-active.atf-profile-page .atf-profile__workspace,
 body.atf-active.atf-profile-page .atf-profile__content { gap: 10px; }
 body.atf-active.atf-profile-page .atf-profile__panel {
@@ -303,28 +313,38 @@ body.atf-active.atf-profile-page .atf-profile__panel {
 body.atf-active.atf-profile-page .atf-profile__panel > :not(:empty) + :not(:empty) { margin-block-start: 10px; }
 body.atf-active.atf-profile-page .atf-profile-nav { gap: 3px; }
 body.atf-active.atf-profile-page .atf-profile-nav__item { padding: 8px 11px; border-bottom-width: 1px; }
-body.atf-active.atf-profile-page .atf-profile__stats { min-width: 0; overflow-x: auto; scrollbar-width: thin; }
 body.atf-active.atf-profile-page .af-apui-profile-stats {
-  grid-template-columns: repeat(8, minmax(7rem, 1fr));
   gap: 5px;
-  width: max-content;
-  min-width: 100%;
-  overflow: visible;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding-bottom: 2px;
 }
 body.atf-active.atf-profile-page .af-apui-profile-stat {
-  display: flex;
   min-width: 0;
-  min-height: 34px;
-  padding: 5px 7px;
+  min-height: 30px;
+  padding: 4px 6px;
   gap: 5px;
   border-radius: 4px;
   white-space: nowrap;
+  border-color: var(--af-element-border, var(--atf-color-border));
+  color: var(--atf-color-text);
 }
-body.atf-active.atf-profile-page .af-apui-profile-stat > i { flex: 0 0 auto; }
+body.atf-active.atf-profile-page .af-apui-profile-stat > i { flex: 0 0 auto; color: var(--af-profile-accent, var(--atf-color-accent)); }
 body.atf-active.atf-profile-page .af-apui-profile-stat__label { font-size: 11px; }
 body.atf-active.atf-profile-page .af-apui-profile-stat__value { margin-inline-start: auto; font-size: 12px; }
+body.atf-active.atf-profile-page .atf-profile-nav__item.is-active { color: var(--af-profile-accent, var(--atf-color-text)); border-color: var(--af-element-accent, var(--atf-color-accent)); }
 body.atf-active.atf-profile-page .atf-profile__quick-links:empty { display: none; }
+body.atf-active.atf-profile-page .atf-profile__quick-links .af-apui-profile-quick-link {
+  border-color: var(--af-profile-accent-border, var(--atf-color-border));
+  background: var(--af-profile-accent-gradient, var(--atf-color-surface));
+}
+body.atf-active.atf-profile-page .atf-profile__quick-links .af-apui-profile-quick-link i { color: var(--af-profile-accent, var(--atf-color-accent)); }
+body.atf-active.atf-profile-page .af-apui-character-row { border-bottom-color: var(--af-profile-accent-soft, var(--atf-color-border)); }
+body.atf-active.atf-profile-page .af-apui-character-row dt,
+body.atf-active.atf-profile-page .af-apui-character-card h2 { color: var(--af-profile-accent, var(--atf-color-accent)); }
 body.atf-active.atf-profile-page .af-apui-profile-quick-links {
   display: flex;
   flex-wrap: wrap;

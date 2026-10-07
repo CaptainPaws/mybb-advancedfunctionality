@@ -986,7 +986,7 @@ function af_adaptivethemeframework_compose_profile(): void
     $values['element_theme_key'] = htmlspecialchars_uni((string)($GLOBALS['af_apui_profile_element'] ?? ''));
     $context = af_adaptivethemeframework_profile_context($memprofile, $values);
     foreach (['hero', 'navigation', 'forum_info', 'quick_links', 'character_sheet', 'rewards', 'timeline',
-        'activity', 'stats', 'balance', 'post_counter', 'before_content', 'main', 'after_content'] as $name) {
+        'activity', 'balance', 'post_counter', 'before_content', 'main', 'after_content'] as $name) {
         $GLOBALS['atf_profile_' . $name] = af_adaptivethemeframework_render_slot('profile.' . $name, $context);
     }
     $GLOBALS['atf_profile_context'] = $context;

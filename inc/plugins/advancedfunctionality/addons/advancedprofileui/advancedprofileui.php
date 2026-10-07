@@ -339,9 +339,13 @@ function af_apui_render_atf_profile_hero(array $context): string
 {
     $i = (array)($context['identity'] ?? []);
     $uidClass = htmlspecialchars_uni((string)($context['appearance']['uid_class'] ?? ''));
+    $stats = function_exists('af_adaptivethemeframework_render_slot')
+        ? af_adaptivethemeframework_render_slot('profile.stats', $context)
+        : '';
     return '<section class="atf-profile-hero ' . $uidClass . '" data-atf-profile-hero="1">'
         . '<div class="atf-profile-hero__avatar">' . af_apui_render_avatar_image((string)($context['avatars']['primary_avatar'] ?? ''), (string)($context['username'] ?? ''), 'atf-profile-hero__avatar-image') . '</div>'
-        . '<div class="atf-profile-hero__identity"><div class="atf-profile-hero__name">' . (string)($i['formattedname'] ?? '') . '</div>'
+        . '<div class="atf-profile-hero__identity"><div class="atf-profile-hero__stats">' . $stats . '</div>'
+        . '<div class="atf-profile-hero__name">' . (string)($i['formattedname'] ?? '') . '</div>'
         . '<div class="atf-profile-hero__title">' . (string)($i['usertitle'] ?? '') . '</div>'
         . '<div class="atf-profile-hero__rank">' . (string)($i['groupimage'] ?? '') . (string)($i['userstars'] ?? '') . '</div>'
         . '<div class="atf-profile-hero__meta"><span><b>Регистрация:</b> ' . (string)($i['memregdate'] ?? '')
@@ -432,6 +436,18 @@ function af_apui_get_approved_profile_character_payload(int $uid): array
     return ['tid' => 0, 'about_html' => '', 'fields' => []];
 }
 
+/** Match the shared profile/postbit element contract: canonical value, then stored raw value. */
+function af_apui_profile_character_field_value(array $field): string
+{
+    foreach (['value', 'raw'] as $key) {
+        if (isset($field[$key]) && is_scalar($field[$key])) {
+            $value = trim((string)$field[$key]);
+            if ($value !== '') return $value;
+        }
+    }
+    return '';
+}
+
 function af_apui_render_profile_stats(array $context): string
 {
     $member = (array)($context['member'] ?? []);
@@ -498,8 +514,21 @@ function af_apui_render_profile_character_workspace(array $context): string
         if ($value === '') continue;
         $rows .= '<div class="af-apui-character-row"><dt>' . htmlspecialchars_uni($label) . '</dt><dd>' . $value . '</dd></div>';
     }
-    $approvedFields = (array)(($context['approved_character_payload'] ?? [])['fields'] ?? []);
-    $elementHtml = trim((string)($approvedFields['character_element']['html'] ?? ''));
+    $approvedCharacterPayload = (array)($context['approved_character_payload']
+        ?? $GLOBALS['af_apui_approved_character_payload']
+        ?? []);
+    $approvedFields = (array)($approvedCharacterPayload['fields'] ?? []);
+    $elementField = (array)($approvedFields['character_element'] ?? []);
+    $elementValue = af_apui_profile_character_field_value($elementField);
+    $elementHtml = trim((string)($elementField['html'] ?? ''));
+    $elementLabel = $elementValue !== '' && function_exists('af_kb_character_profile_resolved_value')
+        ? trim((string)af_kb_character_profile_resolved_value('character_element', $elementValue, true))
+        : '';
+    if ($elementLabel !== '') {
+        $elementHtml = htmlspecialchars_uni($elementLabel);
+    } elseif ($elementHtml === '' && $elementValue !== '') {
+        $elementHtml = htmlspecialchars_uni($elementValue);
+    }
     if ($elementHtml !== '') {
         $rows .= '<div class="af-apui-character-row af-apui-character-row--element"><dt>Стихия</dt><dd>' . $elementHtml . '</dd></div>';
     }
@@ -1818,8 +1847,9 @@ function af_apui_member_profile_prepare_layout_vars(): void
     $uid = (int)($memprofile['uid'] ?? 0);
     $sheetPayload = af_apui_get_charactersheet_postbit_payload($uid);
     $approvedCharacterPayload = af_apui_get_approved_profile_character_payload($uid);
+    $GLOBALS['af_apui_approved_character_payload'] = $approvedCharacterPayload;
     $approvedElementField = (array)(($approvedCharacterPayload['fields'] ?? [])['character_element'] ?? []);
-    $elementValue = trim((string)($approvedElementField['raw'] ?? ''));
+    $elementValue = af_apui_profile_character_field_value($approvedElementField);
     $elementThemeKey = $elementValue !== '' && function_exists('af_atf_resolve_element_theme_key')
         ? af_atf_resolve_element_theme_key($elementValue)
         : '';
