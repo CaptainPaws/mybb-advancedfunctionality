@@ -135,10 +135,13 @@
   function insertAvatarIntoHeader(headerEl, src) {
     if (!headerEl || !src) return;
 
+    // Server-rendered quotes may already contain the avatar. Apply the same
+    // layout class before the duplicate check so those avatars get aligned
+    // and styled just like client-inserted ones.
+    headerEl.classList.add('af-qa-cite');
+
     // анти-дубль
     if (headerEl.querySelector('img.af-qa-avatar')) return;
-
-    headerEl.classList.add('af-qa-cite');
 
     var img = document.createElement('img');
     img.className = 'af-qa-avatar';
@@ -169,8 +172,16 @@
       var header = findQuoteHeader(bq);
       if (!header) return;
 
-      // анти-дубль
-      if (header.getAttribute('data-af-qa') === '1') return;
+      // Keep server-rendered avatars and already-enhanced quotes consistent.
+      // A quick-edit response can replace quote contents while retaining the
+      // cite node, so the marker must not hide a missing avatar on re-render.
+      var existingAvatar = header.querySelector('img.af-qa-avatar');
+      if (existingAvatar) {
+        header.classList.add('af-qa-cite');
+        header.setAttribute('data-af-qa', '1');
+        return;
+      }
+      if (header.getAttribute('data-af-qa') === '1') header.removeAttribute('data-af-qa');
 
       var link = findProfileLinkIn(header);
       var postLink = header.querySelector('a[href*="pid="]');
@@ -213,27 +224,67 @@
     });
   }
 
-  function observeQuotes(index) {
+  function observeQuotes() {
+    var posts = document.getElementById('posts') || document.querySelector('.atf-posts, .posts');
+    if (!posts) return;
+
+    var pendingRoots = new Set();
+    var refreshTimer = 0;
+
+    function addAffectedRoot(node) {
+      var el = node && (node.nodeType === 1 ? node : node.parentElement);
+      if (!el || !posts.contains(el)) return;
+      var quote = el.closest('blockquote.mycode_quote, blockquote.quote, blockquote[class*="quote"]');
+      var message = el.closest('.atf-post__message, .post_body');
+      var root = quote || message;
+      if (!root && el !== posts && el.querySelector) {
+        root = el.matches && el.matches('.atf-post__message, .post_body')
+          ? el
+          : el.querySelector('.atf-post__message, .post_body');
+      }
+      if (!root && el === posts) root = posts;
+      if (!root) return;
+      // If a containing message is already queued, a nested quote adds no
+      // work. Conversely, replace queued descendants with their new parent.
+      var covered = false;
+      pendingRoots.forEach(function (queued) {
+        if (queued === root || queued.contains(root)) covered = true;
+        else if (root.contains(queued)) pendingRoots.delete(queued);
+      });
+      if (!covered) pendingRoots.add(root);
+    }
+
+    function scheduleRefresh() {
+      if (refreshTimer) return;
+      refreshTimer = window.setTimeout(function () {
+        refreshTimer = 0;
+        var index = buildAvatarIndex();
+        pendingRoots.forEach(function (root) {
+          if (root.isConnected) enhanceQuotes(root, index);
+        });
+        pendingRoots.clear();
+      }, 0);
+    }
+
     var mo = new MutationObserver(function (mutations) {
       for (var i = 0; i < mutations.length; i++) {
         var m = mutations[i];
-        if (!m.addedNodes || !m.addedNodes.length) continue;
-        for (var j = 0; j < m.addedNodes.length; j++) {
-          var n = m.addedNodes[j];
-          if (n.nodeType !== 1) continue;
-          enhanceQuotes(n, index);
-        }
+        if (m.type === 'characterData') addAffectedRoot(m.target);
+        if (m.addedNodes && m.addedNodes.length) Array.prototype.forEach.call(m.addedNodes, addAffectedRoot);
+        if (m.removedNodes && m.removedNodes.length) addAffectedRoot(m.target);
       }
+      if (pendingRoots.size) scheduleRefresh();
     });
-    var posts = document.getElementById('posts') || document.querySelector('.atf-posts, .posts');
-    if (posts) mo.observe(posts, { childList: true, subtree: true });
+    mo.observe(posts, { childList: true, characterData: true, subtree: true });
   }
 
   onReady(function () {
     var index = buildAvatarIndex();
     enhanceQuotes(document, index);
-    observeQuotes(index);
-    document.addEventListener('af:preview-updated', function(e) { enhanceQuotes(e.detail && e.detail.root || document, buildAvatarIndex()); });
+    observeQuotes();
+    document.addEventListener('af:preview-updated', function(e) {
+      enhanceQuotes(e.detail && e.detail.root || document, buildAvatarIndex());
+    });
   });
 
 })();

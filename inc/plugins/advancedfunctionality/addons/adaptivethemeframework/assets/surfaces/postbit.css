@@ -209,6 +209,12 @@ body.atf-active .atf-post__content .atf-quick-edit {
   gap: var(--atf-space-3);
   box-sizing: border-box;
 }
+body.atf-active .atf-post__content .atf-quick-edit :is(.af-ae-shell, .sceditor-container, .af-ccp-wrap) {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
 body.atf-active .atf-post__content .atf-editor--quick-edit .sceditor-container :is(iframe),
 body.atf-active .atf-post__content .atf-editor--quick-edit .sceditor-container :is( textarea.sceditor-source) {
   min-height: 8rem;
@@ -602,6 +608,16 @@ body.atf-active .post_body.scaleimages.atf-post__message {
   padding-block-start: 0 !important;
   box-sizing: border-box;
 }
+/* MyBB inserts the quick-edit form directly into #pid_PID, replacing the
+   padded message-body wrapper. Restore the normal text inset while editing;
+   otherwise the editor inherits the full-bleed message width and intrudes
+   into the author sidebar. */
+body.atf-active .post_body.scaleimages.atf-post__message:has(.atf-quick-edit, textarea[id^="quickedit_"]) {
+  width: 100%;
+  max-width: 100%;
+  margin-inline: 0;
+  padding-inline: var(--atf-space-5) !important;
+}
 body.atf-active .atf-post__message-body {
   padding-inline: var(--atf-space-5);
 }
@@ -638,6 +654,7 @@ body.atf-active .atf-post__reputation-corner {
   body.atf-active .atf-post__topbar,
 body.atf-active .atf-post__sidebar-inner { position: static; transform: none !important; will-change: auto !important; }
   body.atf-active .atf-post__reputation-corner { position: absolute; right: 0; bottom: 0; }
+  body.atf-active .post_body.scaleimages.atf-post__message:has(.atf-quick-edit, textarea[id^="quickedit_"]) { padding-inline: var(--atf-space-4) !important; }
 }
 body.atf-active .atf-post__meta-line {
   position: relative;

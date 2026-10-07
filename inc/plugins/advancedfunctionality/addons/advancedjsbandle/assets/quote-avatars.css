@@ -3,8 +3,8 @@ cite.af-qa-cite,
 .quote_header.af-qa-cite,
 .af-qa-cite {
   /* важно: заголовок должен быть блочным, чтобы “полоска” была на всю ширину */
-  display: flex;
-  align-items: center;
+  display: flex !important;
+  align-items: center !important;
   gap: 8px;
 
   width: 100%;
@@ -18,10 +18,27 @@ cite.af-qa-cite,
 .af-qa-avatar {
   width: 18px;
   height: 18px;
+  min-width: 18px;
+  min-height: 18px;
   border-radius: 50%;
   object-fit: cover;
   display: block;
   flex: 0 0 18px;
+  align-self: center;
+  vertical-align: middle;
+  margin: 0 !important;
+  position: static !important;
+  transform: none !important;
+}
+
+.af-qa-cite > img.af-qa-avatar {
+  display: block !important;
+  width: 18px !important;
+  height: 18px !important;
+  max-width: none !important;
+  max-height: none !important;
+  align-self: center !important;
+  vertical-align: middle !important;
 }
 
 /* контейнер текста (всё, что кроме аватара) */
@@ -36,7 +53,10 @@ cite.af-qa-cite > :not(.af-qa-avatar),
 cite.af-qa-cite a,
 .quote_header.af-qa-cite a,
 .af-qa-cite a {
+  display: inline-flex;
+  align-items: center;
   min-width: 0;
+  line-height: inherit;
 }
 
 /* иногда темы добавляют псевдо-иконки/элементы: не даём им ломать выравнивание */
