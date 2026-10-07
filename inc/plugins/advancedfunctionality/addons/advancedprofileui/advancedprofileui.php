@@ -367,6 +367,71 @@ function af_apui_get_profile_character_payload(int $uid, array $sheetPayload = [
         : ['tid' => $tid, 'about_html' => '', 'fields' => []];
 }
 
+/** Return profile fields only from a CharacterSheets application in an approved state. */
+function af_apui_get_approved_profile_character_payload(int $uid): array
+{
+    global $db;
+
+    if ($uid <= 0 || !function_exists('af_atf_get_profile_character_payload')) {
+        return ['tid' => 0, 'about_html' => '', 'fields' => []];
+    }
+
+    $isApproved = static function (int $tid, array $relation) use ($uid): bool {
+        if ($tid <= 0 || ((int)($relation['uid'] ?? 0) > 0 && (int)$relation['uid'] !== $uid)) {
+            return false;
+        }
+
+        if (function_exists('af_cwf_get_row')) {
+            $workflow = af_cwf_get_row($tid);
+            $state = strtolower(trim((string)($workflow['state'] ?? '')));
+            if (in_array($state, ['draft', 'under_review', 'needs_revision', 'archived'], true)) {
+                return false;
+            }
+            if (in_array($state, ['approved', 'transferred', 'accepted'], true)) {
+                return true;
+            }
+        }
+
+        return !empty($relation['accepted'])
+            || (function_exists('af_charactersheets_is_accepted') && af_charactersheets_is_accepted($tid));
+    };
+
+    $active = function_exists('af_characterworkflow_resolve_active_application')
+        ? af_characterworkflow_resolve_active_application($uid)
+        : null;
+    $activeTid = (int)($active['tid'] ?? 0);
+    $activeRelation = (array)($active['relation'] ?? []);
+    if ($isApproved($activeTid, $activeRelation)) {
+        return (array)af_atf_get_profile_character_payload($activeTid);
+    }
+
+    if (!defined('AF_CS_TABLE') || !is_object($db) || !$db->table_exists(AF_CS_TABLE)) {
+        return ['tid' => 0, 'about_html' => '', 'fields' => []];
+    }
+
+    $query = $db->simple_select(
+        AF_CS_TABLE,
+        'tid,uid,accepted,accepted_at',
+        'uid=' . $uid . ' AND accepted=1',
+        ['order_by' => 'accepted_at,tid', 'order_dir' => 'DESC']
+    );
+    while ($relation = $db->fetch_array($query)) {
+        $tid = (int)($relation['tid'] ?? 0);
+        if ($tid <= 0 || $tid === $activeTid || !$isApproved($tid, (array)$relation)) {
+            continue;
+        }
+
+        $thread = $db->fetch_array($db->simple_select('threads', 'tid,uid', 'tid=' . $tid, ['limit' => 1]));
+        if (!is_array($thread) || (int)($thread['uid'] ?? 0) !== $uid) {
+            continue;
+        }
+
+        return (array)af_atf_get_profile_character_payload($tid);
+    }
+
+    return ['tid' => 0, 'about_html' => '', 'fields' => []];
+}
+
 function af_apui_render_profile_stats(array $context): string
 {
     $member = (array)($context['member'] ?? []);
@@ -383,7 +448,6 @@ function af_apui_render_profile_stats(array $context): string
         $stats[] = ['Кред.', (string)($balance['credits_display'] ?? '0.00') . ' ' . (string)($balance['currency_symbol'] ?? '¢'), 'fa-solid fa-coins', ''];
         $stats[] = ['Ток.', (string)($balance['ability_tokens_display'] ?? '0.00'), 'fa-solid fa-gem', ''];
         $stats[] = ['Уровень', (string)(int)($balance['level'] ?? 1), 'fa-solid fa-star', ''];
-        $stats[] = ['Опыт', (string)($balance['exp_display'] ?? '0') . ' / ' . (string)($balance['exp_need_display'] ?? '0'), 'fa-solid fa-chart-line', ''];
     }
     $html = '<div class="af-apui-profile-stats" aria-label="Статистика профиля">';
     foreach ($stats as $stat) {
@@ -433,6 +497,11 @@ function af_apui_render_profile_character_workspace(array $context): string
         $value = trim((string)($fields[$key]['html'] ?? ''));
         if ($value === '') continue;
         $rows .= '<div class="af-apui-character-row"><dt>' . htmlspecialchars_uni($label) . '</dt><dd>' . $value . '</dd></div>';
+    }
+    $approvedFields = (array)(($context['approved_character_payload'] ?? [])['fields'] ?? []);
+    $elementHtml = trim((string)($approvedFields['character_element']['html'] ?? ''));
+    if ($elementHtml !== '') {
+        $rows .= '<div class="af-apui-character-row af-apui-character-row--element"><dt>Стихия</dt><dd>' . $elementHtml . '</dd></div>';
     }
     $applicationUrl = af_apui_resolve_application_url(['uid' => $uid], $sheetPayload);
     if ($applicationUrl !== '') {
@@ -1682,6 +1751,7 @@ function af_apui_member_profile_init_vars(): void
         'af_apui_forum_info_grid',
         'af_apui_profilefields_grid',
         'af_apui_profile_stats',
+        'af_apui_profile_element',
         'af_apui_character_workspace',
         'af_apui_profile_quick_links',
     ] as $varName) {
@@ -1747,13 +1817,27 @@ function af_apui_member_profile_prepare_layout_vars(): void
 
     $uid = (int)($memprofile['uid'] ?? 0);
     $sheetPayload = af_apui_get_charactersheet_postbit_payload($uid);
+    $approvedCharacterPayload = af_apui_get_approved_profile_character_payload($uid);
+    $approvedElementField = (array)(($approvedCharacterPayload['fields'] ?? [])['character_element'] ?? []);
+    $elementValue = trim((string)($approvedElementField['raw'] ?? ''));
+    $elementThemeKey = $elementValue !== '' && function_exists('af_atf_resolve_element_theme_key')
+        ? af_atf_resolve_element_theme_key($elementValue)
+        : '';
+    $GLOBALS['af_apui_profile_element'] = htmlspecialchars_uni($elementThemeKey);
     if (!empty($sheetPayload['enabled'])
         && trim((string)($sheetPayload['sheet_slug'] ?? '')) !== ''
         && trim((string)($sheetPayload['sheet_url'] ?? '')) !== ''
         && function_exists('af_charactersheets_mark_embedded_profile_component')) {
         af_charactersheets_mark_embedded_profile_component();
     }
-    $legacyContext = ['uid' => $uid, 'username' => (string)($memprofile['username'] ?? ''), 'member' => $memprofile, 'avatars' => $avatars, 'sheet_payload' => $sheetPayload];
+    $legacyContext = [
+        'uid' => $uid,
+        'username' => (string)($memprofile['username'] ?? ''),
+        'member' => $memprofile,
+        'avatars' => $avatars,
+        'sheet_payload' => $sheetPayload,
+        'approved_character_payload' => $approvedCharacterPayload,
+    ];
     $GLOBALS['af_apui_profile_stats'] = af_apui_render_profile_stats($legacyContext);
     $GLOBALS['af_apui_character_workspace'] = af_apui_render_profile_character_workspace($legacyContext);
     $GLOBALS['af_apui_profile_quick_links'] = af_apui_render_profile_quick_links($legacyContext);

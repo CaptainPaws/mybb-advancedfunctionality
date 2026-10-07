@@ -9,10 +9,11 @@
 <body class="af-apui-member-profile-page af-aa-user-{$memprofile['uid']}">
 {$header}
 
-<div class="af-apui-profile-page">
+<div class="af-apui-profile-page" data-element="{$af_apui_profile_element}">
     <section class="af-apui-profile-hero">
         <div class="af-apui-profile-hero__background"></div>
         <div class="af-apui-profile-hero__banner"></div>
+        {$af_apui_profile_stats}
 
         <div class="af-apui-profile-avatar-shell">
             <div class="af-apui-profile-avatar-frame">
@@ -68,7 +69,6 @@
 
         <div class="af-apui-profile-tabs__content">
             <article class="af-apui-panel is-active" id="af-apui-tab-info" role="tabpanel" data-panel="info">
-                {$af_apui_profile_stats}
                 {$af_apui_profile_quick_links}
                 {$af_apui_character_workspace}
                 <div class="af-apui-card">

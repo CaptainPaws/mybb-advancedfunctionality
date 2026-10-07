@@ -1,3 +1,5 @@
+@import url("../../advancedthreadfields/assets/element-theme.css");
+
 body.af-apui-member-profile-page {
   position: relative;
   isolation: isolate;
@@ -3112,6 +3114,185 @@ body.af-apui-member-profile-page .af-apui-signature :is(p, ul, ol) { margin-bloc
 body.af-apui-member-profile-page .af-apui-tab-stack { gap: 9px; }
 body.af-apui-member-profile-page .af-apui-tab-card { gap: 10px; }
 body.af-apui-member-profile-page .af-apui-tab-card__head { gap: 4px; }
+
+/* Element accent for the member profile, inherited from ATF's shared palette. */
+body.af-apui-member-profile-page .af-apui-profile-page {
+  --af-profile-accent: var(--af-element-accent, #82c9ff);
+  --af-profile-accent-soft: var(--af-element-soft, rgba(94, 165, 225, .16));
+  --af-profile-accent-strong: var(--af-element-main, #468fc4);
+  --af-profile-accent-border: var(--af-element-border, rgba(130, 201, 255, .38));
+  --af-profile-accent-gradient: linear-gradient(112deg, var(--af-profile-accent-soft), rgba(19, 25, 38, .16) 72%);
+  --af-profile-accent-glow: 0 0 16px var(--af-profile-accent-soft);
+}
+body.af-apui-member-profile-page .af-apui-profile-hero {
+  border-color: var(--af-profile-accent-border);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.035), 0 5px 16px rgba(0,0,0,.16), var(--af-profile-accent-glow);
+}
+body.af-apui-member-profile-page .af-apui-profile-hero__background {
+  background: linear-gradient(145deg, var(--af-profile-accent-soft), rgba(30,37,53,.88) 36%, rgba(18,23,35,.98));
+}
+body.af-apui-member-profile-page .af-apui-profile-hero__banner {
+  border-bottom-color: var(--af-profile-accent-border);
+}
+body.af-apui-member-profile-page .af-apui-profile-hero__banner::after {
+  background: linear-gradient(180deg, rgba(8,12,24,.04), var(--af-profile-accent-soft) 32%, rgba(8,12,24,.82) 100%);
+}
+body.af-apui-member-profile-page .af-apui-profile-name-wrap {
+  color: var(--af-profile-accent);
+  text-shadow: 0 1px 10px var(--af-profile-accent-soft);
+}
+body.af-apui-member-profile-page .af-apui-profile-avatar-frame {
+  border-color: var(--af-profile-accent-border);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.035), 0 0 12px var(--af-profile-accent-soft);
+}
+body.af-apui-member-profile-page .af-apui-profile-groupimage,
+body.af-apui-member-profile-page .af-apui-profile-stars,
+body.af-apui-member-profile-page .af-apui-profile-statebits > *,
+body.af-apui-member-profile-page .af-apui-profile-presence > * {
+  border-color: var(--af-profile-accent-border);
+}
+body.af-apui-member-profile-page .af-apui-profile-meta {
+  border-color: var(--af-profile-accent-soft);
+}
+body.af-apui-member-profile-page .af-apui-profile-meta-item {
+  border-right-color: var(--af-profile-accent-soft);
+}
+body.af-apui-member-profile-page .af-apui-profile-stats {
+  position: absolute;
+  z-index: 4;
+  top: 10px;
+  right: 10px;
+  left: 248px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  padding: 2px 2px 5px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--af-profile-accent-border) transparent;
+}
+body.af-apui-member-profile-page .af-apui-profile-stat {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 1px solid var(--af-profile-accent-border);
+  border-radius: 3px;
+  background: linear-gradient(115deg, var(--af-profile-accent-soft), rgba(13,18,28,.72) 72%);
+  color: inherit;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.025);
+}
+body.af-apui-member-profile-page .af-apui-profile-stat:hover {
+  border-color: var(--af-element-accent, #82c9ff);
+  background: linear-gradient(115deg, var(--af-profile-accent-soft), rgba(22,29,43,.86) 72%);
+}
+body.af-apui-member-profile-page .af-apui-profile-stat > i {
+  flex: 0 0 auto;
+  color: var(--af-profile-accent);
+  font-size: 11px;
+}
+body.af-apui-member-profile-page .af-apui-profile-stat__label {
+  order: 3;
+  color: inherit;
+  opacity: .72;
+  font-size: 9px;
+  line-height: 1;
+}
+body.af-apui-member-profile-page .af-apui-profile-stat__value {
+  order: 2;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+body.af-apui-member-profile-page .af-apui-profile-tabs {
+  border-color: var(--af-profile-accent-border);
+}
+body.af-apui-member-profile-page .af-apui-profile-tabs__nav {
+  border-bottom-color: var(--af-profile-accent-border);
+}
+body.af-apui-member-profile-page .af-apui-tab {
+  transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+body.af-apui-member-profile-page .af-apui-tab:hover,
+body.af-apui-member-profile-page .af-apui-tab.is-active {
+  border-color: var(--af-profile-accent-border);
+  color: var(--af-profile-accent);
+  background: var(--af-profile-accent-gradient);
+}
+body.af-apui-member-profile-page .af-apui-tab.is-active {
+  box-shadow: inset 0 -2px 0 var(--af-profile-accent-strong);
+}
+body.af-apui-member-profile-page .af-apui-tab:focus-visible {
+  outline-color: var(--af-profile-accent-border);
+}
+body.af-apui-member-profile-page :is(.af-apui-card, .af-apui-character-card, .af-apui-character-portrait, .af-apui-reward-card) {
+  border-color: var(--af-profile-accent-soft);
+}
+body.af-apui-member-profile-page :is(.af-apui-card > h2, .af-apui-character-card h2, .af-apui-reward-card h2) {
+  color: var(--af-profile-accent);
+  border-bottom-color: var(--af-profile-accent-soft);
+}
+body.af-apui-member-profile-page :is(.af-apui-card > h2, .af-apui-character-card h2, .af-apui-reward-card h2)::after {
+  background: linear-gradient(90deg, var(--af-profile-accent-border), transparent);
+}
+body.af-apui-member-profile-page .af-apui-character-row {
+  border-bottom-color: var(--af-profile-accent-soft);
+}
+body.af-apui-member-profile-page .af-apui-character-row dt {
+  color: var(--af-profile-accent);
+}
+body.af-apui-member-profile-page .af-apui-character-row--element dt {
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+body.af-apui-member-profile-page .af-apui-application-link,
+body.af-apui-member-profile-page .af-apui-profile-quick-link {
+  border-color: var(--af-profile-accent-border);
+  background: linear-gradient(120deg, var(--af-profile-accent-soft), rgba(25,32,46,.56) 75%);
+}
+body.af-apui-member-profile-page .af-apui-application-link,
+body.af-apui-member-profile-page .af-apui-profile-quick-link i {
+  color: var(--af-profile-accent);
+}
+body.af-apui-member-profile-page .af-apui-profile-quick-link:hover {
+  border-color: var(--af-profile-accent);
+  box-shadow: var(--af-profile-accent-glow);
+}
+
+@media (max-width: 1100px) {
+  body.af-apui-member-profile-page .af-apui-profile-stats { left: 228px; }
+}
+@media (max-width: 900px) {
+  body.af-apui-member-profile-page .af-apui-profile-stats {
+    right: 8px;
+    left: 8px;
+  }
+}
+@media (max-width: 767px) {
+  body.af-apui-member-profile-page .af-apui-profile-stats {
+    top: 7px;
+    gap: 4px;
+  }
+  body.af-apui-member-profile-page .af-apui-profile-stat {
+    min-height: 25px;
+    gap: 4px;
+    padding: 3px 6px;
+  }
+  body.af-apui-member-profile-page .af-apui-profile-stat__label { font-size: 8px; }
+  body.af-apui-member-profile-page .af-apui-profile-stat__value { font-size: 10px; }
+}
 
 @media (max-width: 1100px) {
   body.af-apui-member-profile-page .af-apui-profile-hero { min-height: 310px; }
