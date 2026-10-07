@@ -641,7 +641,7 @@ body.atf-active .atf-post__sidebar-inner { position: static; transform: none !im
 }
 body.atf-active .atf-post__meta-line {
   position: relative;
-  z-index: 15;
+  z-index: 25;
   box-sizing: border-box;
   left: 16px;
   width: 97%;
@@ -659,7 +659,9 @@ body.atf-active .atf-post__meta-line > .atf-post__management::before {
   content: none;
 }
 body.atf-active .atf-post__management {
-  position: static;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
   align-self: center;
   display: flex;
   flex-flow: row nowrap;
@@ -691,6 +693,7 @@ body.atf-active .atf-post__profile-actions .atf-post__profile-action {
   text-indent: 0;
   text-decoration: none;
 }
+body.atf-active .atf-post__management .atf-post__management-action { pointer-events: auto; }
 body.atf-active .atf-post__management .atf-post__management-action > i,
 body.atf-active .atf-post__profile-actions .atf-post__profile-action > i {
   display: block;
