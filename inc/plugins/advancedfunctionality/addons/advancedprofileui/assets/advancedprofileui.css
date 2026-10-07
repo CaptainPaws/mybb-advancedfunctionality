@@ -1,6 +1,3 @@
-/* Shared palette URL remains valid when this stylesheet is minified at root. */
-@import url("/inc/plugins/advancedfunctionality/addons/advancedthreadfields/assets/element-theme.css?v=1");
-
 body.af-apui-member-profile-page {
   position: relative;
   isolation: isolate;

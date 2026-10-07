@@ -1,6 +1,4 @@
 /* ATF profile surface. Ownership and routes: manifest.php. */
-/* Shared palette URL remains valid when this stylesheet is minified at root. */
-@import url("/inc/plugins/advancedfunctionality/addons/advancedthreadfields/assets/element-theme.css?v=1");
 
 body.atf-active.atf-profile-page .atf-profile {
   --af-profile-accent: var(--af-element-accent, var(--atf-color-accent));
@@ -31,6 +29,11 @@ body.atf-active.atf-profile-page .atf-profile-hero {
   border: 1px solid var(--atf-color-border);
   border-radius: var(--atf-radius-lg);
 }
+body.atf-active.atf-profile-page .atf-profile-hero {
+  border-color: var(--af-profile-accent-border, var(--atf-color-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--af-profile-accent-border, var(--atf-color-border)) 42%, transparent),
+    0 0 18px var(--af-profile-accent-soft, transparent);
+}
 body.atf-active.atf-profile-page .atf-profile-hero__avatar { width: clamp(5rem, 12vw, 8rem); min-width: 0; margin-bottom: calc(var(--atf-space-6) * -1); z-index: 1; }
 body.atf-active.atf-profile-page .atf-profile-hero__avatar img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border: 3px solid var(--atf-color-surface); border-radius: 50%; box-shadow: var(--atf-shadow-md); }
 body.atf-active.atf-profile-page .atf-profile-hero__identity { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--atf-space-2); width: 100%; min-width: 0; }
@@ -45,7 +48,16 @@ body.atf-active.atf-profile-page .atf-profile__navigation { min-width: 0; overfl
 body.atf-active.atf-profile-page .atf-profile-nav { display: flex; gap: var(--atf-space-2); overflow-x: auto; border-bottom: 1px solid var(--atf-color-border); }
 body.atf-active.atf-profile-page .atf-profile-nav__item { flex: 0 0 auto; padding: var(--atf-space-3) var(--atf-space-4); color: var(--atf-color-text-muted); text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent; }
 body.atf-active.atf-profile-page .atf-profile-nav__item.is-active { color: var(--atf-color-text); border-color: var(--atf-color-accent); }
+body.atf-active.atf-profile-page .atf-profile-nav__item.is-active {
+  color: var(--af-profile-accent, var(--atf-color-text));
+  border-color: var(--af-profile-accent, var(--atf-color-accent));
+  background: linear-gradient(180deg, var(--af-profile-accent-soft, transparent), transparent);
+  box-shadow: inset 0 -2px 0 var(--af-profile-accent-strong, var(--atf-color-accent));
+}
 body.atf-active.atf-profile-page .atf-profile__panel { min-width: 0; padding: var(--atf-space-5); background: var(--atf-color-surface); border: 1px solid var(--atf-color-border); border-radius: var(--atf-radius-lg); }
+body.atf-active.atf-profile-page .atf-profile__panel {
+  border-color: color-mix(in srgb, var(--af-profile-accent-border, var(--atf-color-border)) 58%, var(--atf-color-border));
+}
 body.atf-active.atf-profile-page .atf-profile__panel[hidden] { display: none; }
 body.atf-active.atf-profile-page .atf-profile__panel > :not(:empty) + :not(:empty) { margin-block-start: var(--atf-component-gap); }
 body.atf-active.atf-profile-page .atf-profile__before:empty,
