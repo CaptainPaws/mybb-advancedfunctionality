@@ -76,6 +76,35 @@
   }
   window.AFCharacterSheetsTrigger = { beginLoading: beginLoading };
 
+  function pinSheetFrameLayout(modalRoot, frame) {
+    if (!modalRoot || !frame) return;
+    var dialog = modalRoot.querySelector('.af-cs-modal__dialog');
+    var body = modalRoot.querySelector('.af-cs-modal__body');
+    if (!dialog || !body) return;
+
+    modalRoot.classList.add('af-cs-modal--sheet-frame');
+
+    // The sheet modal has no header row: bind the iframe directly to the
+    // already-sized dialog instead of relying on percentage/flex sizing of a
+    // replaced element (whose fallback height is 150px).
+    dialog.style.position = 'relative';
+    body.style.position = 'absolute';
+    body.style.inset = '0';
+    body.style.width = 'auto';
+    body.style.height = 'auto';
+    body.style.minHeight = '0';
+    body.style.overflow = 'hidden';
+
+    frame.style.position = 'absolute';
+    frame.style.inset = '0';
+    frame.style.display = 'block';
+    frame.style.width = '100%';
+    frame.style.height = '100%';
+    frame.style.minHeight = '100%';
+    frame.style.maxHeight = 'none';
+    frame.style.border = '0';
+  }
+
   function cleanup() {
     if (!modal) return;
     if (loadingState) loadingState.dispose();
@@ -108,6 +137,7 @@
       '</div>';
 
     var frame = modal.querySelector('[data-afcs-frame]');
+    pinSheetFrameLayout(modal, frame);
     loadingState = beginLoading(modal.querySelector('.af-cs-modal__body'), url);
     var currentLoading = loadingState;
     frame.addEventListener('load', function () {
