@@ -580,19 +580,21 @@ function af_advancedinventory_render_equipment_fragment(): void
 {
     global $mybb;
     $ownerUid = (int)$mybb->get_input('uid');
-    echo af_advancedinventory_build_equipment_fragment($ownerUid);
+    $sheetMode = (string)$mybb->get_input('mode');
+    echo af_advancedinventory_build_equipment_fragment($ownerUid, $sheetMode);
     exit;
 }
 
-function af_advancedinventory_build_equipment_fragment(int $ownerUid): string
+function af_advancedinventory_build_equipment_fragment(int $ownerUid, string $sheetMode = ''): string
 {
     global $mybb;
     $viewerUid = (int)($mybb->user['uid'] ?? 0);
     if ($ownerUid <= 0) $ownerUid = $viewerUid;
     if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 1) !== 1 || !af_inv_user_can_view($viewerUid, $ownerUid)) return '';
-    $entityUrl = af_advancedinventory_url('entity', ['uid' => $ownerUid], false);
-    $firstUrl = af_advancedinventory_url('entity', ['uid' => $ownerUid, 'entity' => 'equipment', 'sub' => 'all', 'ajax' => 1], false);
-    $content = af_advinv_render_entity_tab('equipment', $ownerUid, 'all', 1, true);
+    $sheetMode = af_advinv_resolve_owner_sheet_mode($ownerUid, $sheetMode);
+    $entityUrl = af_advancedinventory_url('entity', ['uid' => $ownerUid, 'mode' => $sheetMode], false);
+    $firstUrl = af_advancedinventory_url('entity', ['uid' => $ownerUid, 'entity' => 'equipment', 'sub' => 'all', 'ajax' => 1, 'mode' => $sheetMode], false);
+    $content = af_advinv_render_entity_tab('equipment', $ownerUid, 'all', 1, true, '', $sheetMode);
     return '<div class="af-inv-page af-aa-context af-aa-context--inventory af-cs-arsenal" data-owner="' . $ownerUid . '" data-default-tab="equipment" data-entity-base="' . htmlspecialchars_uni($entityUrl) . '" data-first-url="' . htmlspecialchars_uni($firstUrl) . '">'
         . '<div class="af-inv-tab-content"><div id="af-inv-panel">' . $content . '</div></div></div>';
 }
@@ -1023,10 +1025,113 @@ function af_advinv_virtual_all_filter_definition(): array
     ];
 }
 
-function af_advinv_get_ui_subfilters(string $entity): array
+function af_advinv_normalize_sheet_mode(string $mode): string
+{
+    $mode = strtolower(trim($mode));
+    if (in_array($mode, ['arpg', 'action_rpg', 'action-rpg'], true)) {
+        return 'arpg';
+    }
+    return $mode === 'dnd' ? 'dnd' : '';
+}
+
+function af_advinv_resolve_owner_sheet_mode(int $ownerUid, string $sheetMode = ''): string
+{
+    global $db;
+
+    $sheetMode = af_advinv_normalize_sheet_mode($sheetMode);
+    if ($sheetMode !== '') {
+        return $sheetMode;
+    }
+    if ($ownerUid <= 0 || !defined('AF_CS_SHEETS_TABLE') || !is_object($db) || !$db->table_exists(AF_CS_SHEETS_TABLE)) {
+        return 'dnd';
+    }
+
+    $sheet = [];
+    if (function_exists('af_characterworkflow_resolve_active_application')) {
+        $application = af_characterworkflow_resolve_active_application($ownerUid);
+        $tid = (int)($application['tid'] ?? 0);
+        if ($tid > 0) {
+            if (function_exists('af_charactersheets_get_sheet_by_tid')) {
+                $sheet = af_charactersheets_get_sheet_by_tid($tid);
+            } else {
+                $sheet = (array)$db->fetch_array($db->simple_select(AF_CS_SHEETS_TABLE, '*', 'tid=' . $tid, ['limit' => 1]));
+            }
+        }
+    }
+
+    if (!$sheet) {
+        $sheet = (array)$db->fetch_array($db->simple_select(
+            AF_CS_SHEETS_TABLE,
+            '*',
+            'uid=' . $ownerUid,
+            ['order_by' => 'updated_at', 'order_dir' => 'DESC', 'limit' => 1]
+        ));
+    }
+
+    if (!$sheet) {
+        return 'dnd';
+    }
+    if (function_exists('af_charactersheets_resolve_sheet_mode')) {
+        return af_charactersheets_resolve_sheet_mode($sheet);
+    }
+
+    $decode = static function (string $json): array {
+        $value = json_decode($json, true);
+        return is_array($value) ? $value : [];
+    };
+    $base = $decode((string)($sheet['base_json'] ?? ''));
+    $build = $decode((string)($sheet['build_json'] ?? ''));
+    foreach ([
+        $base['sheet_mode'] ?? '',
+        $base['mechanic'] ?? '',
+        $base['mechanic_key'] ?? '',
+        $build['sheet_mode'] ?? '',
+        $build['mechanic'] ?? '',
+    ] as $candidate) {
+        $candidate = strtolower(trim((string)$candidate));
+        if (in_array($candidate, ['arpg', 'action_rpg', 'action-rpg'], true)) {
+            return 'arpg';
+        }
+        if ($candidate === 'dnd') {
+            return 'dnd';
+        }
+    }
+
+    return 'dnd';
+}
+
+function af_advinv_arpg_hidden_inventory_subtypes(string $entity): array
+{
+    if ($entity === 'equipment') {
+        return ['ammo', 'ammunition', 'augmentations', 'augmentation', 'cyberware', 'talent', 'talents', 'arpg_talent'];
+    }
+    if ($entity === 'abilities') {
+        return ['talent', 'talents', 'arpg_talent'];
+    }
+    return [];
+}
+
+function af_advinv_get_ui_subfilters(string $entity, int $ownerUid = 0, string $sheetMode = ''): array
 {
     $entity = af_advancedinventory_normalize_entity($entity);
     $filters = [af_advinv_virtual_all_filter_definition()];
+    if (in_array($entity, ['equipment', 'abilities'], true)) {
+        $sheetMode = af_advinv_normalize_sheet_mode($sheetMode);
+        if ($sheetMode === '') {
+            $sheetMode = af_advinv_resolve_owner_sheet_mode($ownerUid);
+        }
+        if ($sheetMode === 'arpg') {
+            $hiddenCodes = af_advinv_arpg_hidden_inventory_subtypes($entity);
+            $filtersForMode = array_values(array_filter(
+                af_advinv_get_entity_filters($entity),
+                static fn(array $row): bool => !in_array(strtolower(trim((string)($row['code'] ?? ''))), $hiddenCodes, true)
+            ));
+            foreach ($filtersForMode as $row) {
+                $filters[] = $row;
+            }
+            return $filters;
+        }
+    }
 
     foreach (af_advinv_get_entity_filters($entity) as $row) {
         $filters[] = $row;
@@ -1035,7 +1140,7 @@ function af_advinv_get_ui_subfilters(string $entity): array
     return $filters;
 }
 
-function af_advinv_resolve_active_subfilter(string $entity, string $subtype): string
+function af_advinv_resolve_active_subfilter(string $entity, string $subtype, int $ownerUid = 0, string $sheetMode = ''): string
 {
     $entity = af_advancedinventory_normalize_entity($entity);
     $normalized = af_advinv_normalize_subtype_for_entity($entity, $subtype);
@@ -1043,7 +1148,7 @@ function af_advinv_resolve_active_subfilter(string $entity, string $subtype): st
         return 'all';
     }
 
-    foreach (af_advinv_get_ui_subfilters($entity) as $filter) {
+    foreach (af_advinv_get_ui_subfilters($entity, $ownerUid, $sheetMode) as $filter) {
         if ((string)($filter['code'] ?? '') === $normalized) {
             return $normalized;
         }
@@ -1482,12 +1587,16 @@ function af_advancedinventory_render_tab(): void
         error_no_permission();
     }
 
-    $sub = af_advinv_resolve_active_subfilter($tab, (string)$mybb->get_input('sub'));
+    $requestedMode = af_advinv_normalize_sheet_mode((string)$mybb->get_input('mode'));
+    $sheetMode = in_array($tab, ['equipment', 'abilities'], true)
+        ? af_advinv_resolve_owner_sheet_mode($ownerUid, $requestedMode)
+        : '';
+    $sub = af_advinv_resolve_active_subfilter($tab, (string)$mybb->get_input('sub'), $ownerUid, $sheetMode);
     $pageNum = max(1, (int)$mybb->get_input('page'));
     $search = trim((string)$mybb->get_input('search'));
     $fragment = (int)$mybb->get_input('ajax') === 1 || (int)$mybb->get_input('fragment') === 1;
 
-    $af_inv_frame_content = af_advinv_render_entity_tab($tab, $ownerUid, $sub, $pageNum, true, $search);
+    $af_inv_frame_content = af_advinv_render_entity_tab($tab, $ownerUid, $sub, $pageNum, true, $search, $sheetMode);
     if ($fragment) {
         echo $af_inv_frame_content;
         exit;
@@ -2203,7 +2312,18 @@ function af_advancedinventory_api_list(): void
     if ($entity === '') {
         $entity = (string)$mybb->get_input('slot');
     }
-    af_advancedinventory_json(['ok' => true, 'data' => af_inv_get_items($ownerUid, ['entity' => $entity, 'subtype' => (string)$mybb->get_input('subtype'), 'search' => (string)$mybb->get_input('search'), 'page' => (int)$mybb->get_input('page')])]);
+    $normalizedEntity = af_advancedinventory_normalize_entity($entity);
+    $sheetMode = in_array($normalizedEntity, ['equipment', 'abilities'], true)
+        ? af_advinv_resolve_owner_sheet_mode($ownerUid)
+        : '';
+    af_advancedinventory_json(['ok' => true, 'data' => af_inv_get_items($ownerUid, [
+        'entity' => $entity,
+        'subtype' => (string)$mybb->get_input('subtype'),
+        'search' => (string)$mybb->get_input('search'),
+        'page' => (int)$mybb->get_input('page'),
+        'sheet_mode' => $sheetMode,
+        'arpg_ui_only' => $sheetMode === 'arpg' && (bool)af_advinv_arpg_hidden_inventory_subtypes($normalizedEntity),
+    ])]);
 }
 
 function af_advinv_debug_enabled(): bool
@@ -3106,11 +3226,22 @@ function af_inv_get_items(int $uid, array $filters = []): array
     $where = ['uid=' . (int)$uid];
     $entityFilter = (string)($filters['entity'] ?? '');
     if ($entityFilter !== '') {
-        $where[] = "entity='" . $db->escape_string(af_advancedinventory_normalize_entity($entityFilter)) . "'";
+        $entityFilter = af_advancedinventory_normalize_entity($entityFilter);
+        $where[] = "entity='" . $db->escape_string($entityFilter) . "'";
     }
-    $activeSubtype = af_advinv_resolve_active_subfilter($entityFilter, (string)($filters['subtype'] ?? 'all'));
+    $sheetMode = strtolower(trim((string)($filters['sheet_mode'] ?? '')));
+    if ($sheetMode === '' && !empty($filters['arpg_ui_only'])) {
+        $sheetMode = af_advinv_resolve_owner_sheet_mode($uid);
+    }
+    $activeSubtype = af_advinv_resolve_active_subfilter($entityFilter, (string)($filters['subtype'] ?? 'all'), $uid, $sheetMode);
     if ($activeSubtype !== 'all') {
         $where[] = "subtype='" . $db->escape_string($activeSubtype) . "'";
+    } elseif ($entityFilter !== '' && !empty($filters['arpg_ui_only']) && $sheetMode === 'arpg') {
+        $hiddenSubtypes = af_advinv_arpg_hidden_inventory_subtypes($entityFilter);
+        $excludedSubtypes = array_map([$db, 'escape_string'], $hiddenSubtypes);
+        if ($excludedSubtypes) {
+            $where[] = "subtype NOT IN ('" . implode("','", $excludedSubtypes) . "')";
+        }
     }
     if (($filters['search'] ?? '') !== '') {
         $like = $db->escape_string_like((string)$filters['search']);
@@ -3852,21 +3983,29 @@ function af_advinv_get_entity_filters(string $entity): array
     return $filters;
 }
 
-function af_advinv_render_entity_tab(string $entity, int $ownerUid, string $sub, int $page, bool $ajax, string $search = ''): string
+function af_advinv_render_entity_tab(string $entity, int $ownerUid, string $sub, int $page, bool $ajax, string $search = '', string $sheetMode = ''): string
 {
-    return af_advinv_render_entity_generic($entity, $ownerUid, $sub, $page, $ajax, $search);
+    return af_advinv_render_entity_generic($entity, $ownerUid, $sub, $page, $ajax, $search, $sheetMode);
 }
 
-function af_advinv_render_entity_generic(string $entity, int $ownerUid, string $sub, int $page, bool $ajax, string $search = ''): string
+function af_advinv_render_entity_generic(string $entity, int $ownerUid, string $sub, int $page, bool $ajax, string $search = '', string $sheetMode = ''): string
 {
-    $sub = af_advinv_resolve_active_subfilter($entity, $sub);
     global $mybb;
+    $entity = af_advancedinventory_normalize_entity($entity);
+    if ($sheetMode === '' && in_array($entity, ['equipment', 'abilities'], true)) {
+        $sheetMode = af_advinv_resolve_owner_sheet_mode($ownerUid);
+    }
+    $sub = af_advinv_resolve_active_subfilter($entity, $sub, $ownerUid, $sheetMode);
+    $arpgRestrictedUi = strtolower(trim($sheetMode)) === 'arpg'
+        && (bool)af_advinv_arpg_hidden_inventory_subtypes($entity);
 
     $filters = [
         'entity' => $entity,
         'subtype' => $sub,
         'page' => max(1, $page),
         'search' => $search,
+        'sheet_mode' => $sheetMode,
+        'arpg_ui_only' => $arpgRestrictedUi,
     ];
 
     $data = af_inv_get_items($ownerUid, array_merge($filters, ['enrich' => true]));
@@ -3880,7 +4019,8 @@ function af_advinv_render_entity_generic(string $entity, int $ownerUid, string $
         $entity,
         $ownerUid,
         $sub,
-        af_advancedinventory_subfilters($entity)
+        af_advancedinventory_subfilters($entity, $ownerUid, $sheetMode),
+        $sheetMode
     );
 
     $selectedItemId = !empty($items) ? (int)($items[0]['id'] ?? 0) : 0;
@@ -4304,10 +4444,10 @@ function af_advancedinventory_tabs(bool $enabledOnly = true): array
     return $tabs;
 }
 
-function af_advancedinventory_subfilters(string $tab): array
+function af_advancedinventory_subfilters(string $tab, int $ownerUid = 0, string $sheetMode = ''): array
 {
     $filters = [];
-    foreach (af_advinv_get_ui_subfilters($tab) as $row) {
+    foreach (af_advinv_get_ui_subfilters($tab, $ownerUid, $sheetMode) as $row) {
         $filters[(string)$row['code']] = (string)$row['title'];
     }
     return $filters;
@@ -4446,13 +4586,18 @@ function af_advinv_render_tab_cards(array $items, bool $canManage, bool $allowEq
     return $rows;
 }
 
-function af_advinv_render_subfilter_links(string $tab, int $ownerUid, string $sub, array $subfilters): string
+function af_advinv_render_subfilter_links(string $tab, int $ownerUid, string $sub, array $subfilters, string $sheetMode = ''): string
 {
     $current = $sub === '' ? 'all' : $sub;
+    $sheetMode = af_advinv_normalize_sheet_mode($sheetMode);
     $filterButtons = '';
     foreach ($subfilters as $code => $title) {
         $isActive = ($code === $current) ? 'is-active' : '';
-        $url = af_advancedinventory_url('entity', ['uid' => $ownerUid, 'entity' => $tab, 'sub' => $code, 'ajax' => 1], true);
+        $params = ['uid' => $ownerUid, 'entity' => $tab, 'sub' => $code, 'ajax' => 1];
+        if ($sheetMode !== '') {
+            $params['mode'] = $sheetMode;
+        }
+        $url = af_advancedinventory_url('entity', $params, true);
         $filterButtons .= '<a class="af-inv-subfilter ' . $isActive . '" href="' . $url . '">' . htmlspecialchars_uni($title) . '</a>';
     }
     return $filterButtons;

@@ -2222,7 +2222,10 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     $normalizedOnlyTab = preg_replace('/^arpg-/', '', trim($only_tab));
     if ($normalizedOnlyTab === 'arsenal') {
         return function_exists('af_advancedinventory_build_equipment_fragment')
-            ? (string)af_advancedinventory_build_equipment_fragment((int)($sheet['uid'] ?? 0))
+            ? (string)af_advancedinventory_build_equipment_fragment(
+                (int)($sheet['uid'] ?? 0),
+                af_charactersheets_resolve_sheet_mode($sheet)
+            )
             : '<div class="af-cs-muted">Арсенал недоступен.</div>';
     }
 
@@ -2409,7 +2412,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     $bonus_items_json = htmlspecialchars_uni(af_charactersheets_json_encode((array)($sheet_view['bonus_items'] ?? [])));
     $sheet_tab_url = htmlspecialchars_uni(af_charactersheets_url(['action' => 'tab', 'slug' => $slug, 'ajax' => 1]));
     $sheet_arsenal_url = function_exists('af_advancedinventory_url')
-        ? htmlspecialchars_uni(af_advancedinventory_url('equipment_fragment', ['uid' => $sheet_owner_uid], false))
+        ? htmlspecialchars_uni(af_advancedinventory_url('equipment_fragment', ['uid' => $sheet_owner_uid, 'mode' => $sheet_mode], false))
         : '';
 
     $sheet_mode_attr = htmlspecialchars_uni($sheet_mode);
