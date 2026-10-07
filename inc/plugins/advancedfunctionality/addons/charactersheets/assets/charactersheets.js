@@ -274,9 +274,10 @@
       if (!base) return;
       panel.dataset.afcsLoading = '1';
       panel.innerHTML = '<div class="af-cs-muted" role="status">Загрузка…</div>';
+      var normalizedName = String(name || '').replace(/^arpg-/, '');
       var arsenalUrl = sheet && sheet.getAttribute('data-afcs-arsenal-url');
-      var url = new URL(name === 'arsenal' && arsenalUrl ? arsenalUrl : base, document.baseURI);
-      if (name !== 'arsenal' || !arsenalUrl) {
+      var url = new URL(normalizedName === 'arsenal' && arsenalUrl ? arsenalUrl : base, document.baseURI);
+      if (normalizedName !== 'arsenal' || !arsenalUrl) {
         url.searchParams.set('tab', name);
         url.searchParams.set('ajax', '1');
       }

@@ -2219,7 +2219,8 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
 
     // Arsenal is an AdvancedInventory fragment. Resolve its approved sheet owner
     // and return before loading thread fields, KB character data, or sheet math.
-    if ($only_tab === 'arsenal') {
+    $normalizedOnlyTab = preg_replace('/^arpg-/', '', trim($only_tab));
+    if ($normalizedOnlyTab === 'arsenal') {
         return function_exists('af_advancedinventory_build_equipment_fragment')
             ? (string)af_advancedinventory_build_equipment_fragment((int)($sheet['uid'] ?? 0))
             : '<div class="af-cs-muted">Арсенал недоступен.</div>';
@@ -2267,6 +2268,8 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     $character_source = af_charactersheets_resolve_character_kb_entry($tid, $uid, $accept_row);
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
     $character_stats = (array)(($character_source['payload'] ?? [])['stats'] ?? []);
+    // Character source and ATF index are approved profile data, and the key
+    // goes through the same canonical allow-list used by postbit.
     $element_value = trim((string)($character_profile['character_element'] ?? ''));
     if ($element_value === '') {
         $element_value = af_charactersheets_pick_field_value($atf_index, ['character_element', 'element']);
