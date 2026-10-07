@@ -680,6 +680,9 @@ body.atf-active .atf-post__meta-line {
   background: color-mix(in srgb, var(--atf-color-surface, var(--atf-color-page-subtle)) 86%, #fff 14%) !important;
 }
 body.atf-active .atf-post__meta-line > .atf-post__management {
+  position: static;
+  inset: auto;
+  align-self: center;
   margin-inline-start: auto;
 }
 body.atf-active .atf-post__meta-line > .atf-post__management::before {
