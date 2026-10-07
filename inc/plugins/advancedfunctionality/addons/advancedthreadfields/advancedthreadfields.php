@@ -6809,6 +6809,10 @@ function af_atf_parse_message(string $message, array $opts): string
 function af_atf_resolve_element_theme_key(string $value): string
 {
     $value = strtolower(trim($value));
+    // The canonical KB element key is `shadow`, while the shared theme token
+    // for this palette is `dark`. Normalize the KB key here so every surface
+    // (including postbits and CharacterSheets) consumes the same CSS token.
+    if ($value === 'shadow') $value = 'dark';
     $supported = [
         'fire', 'water', 'air', 'wind', 'earth', 'ice', 'lightning', 'electric',
         'nature', 'light', 'dark', 'space', 'void', 'mind', 'quantum', 'imaginary',
