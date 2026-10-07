@@ -1,6 +1,5 @@
 /* The CSS pipeline publishes theme styles at the board root, so this shared
    palette must use a board-root URL instead of a source-relative import. */
-@import url("/inc/plugins/advancedfunctionality/addons/advancedthreadfields/assets/element-theme.css?v=1");
 
 .af-atf-block {
   margin: 12px 0;
@@ -50,21 +49,24 @@
 }
 
 .af-atf-display {
-  --af-element-main: #4ea6ff;
-  --af-element-accent: #8bd3ff;
-  --af-element-soft: rgba(78, 166, 255, .18);
-  --af-element-border: rgba(78, 166, 255, .55);
+  --af-atf-neutral-main: #4ea6ff;
+  --af-atf-neutral-accent: #8bd3ff;
+  --af-atf-neutral-soft: rgba(78, 166, 255, .18);
+  --af-atf-neutral-border: rgba(78, 166, 255, .55);
+}
+
+.af-atf-display {
   margin: 10px 0;
   padding: 10px;
   border: 0px solid rgba(255,255,255,0.08);
   border-radius: 10px;
 }
 
-.af-atf-display .af-atf-profile-field { display:flex; align-items:baseline; gap:8px; padding:8px 10px; border:1px solid var(--af-element-border); border-radius:8px; background:linear-gradient(135deg,var(--af-element-soft),transparent 72%); }
-.af-atf-display .af-atf-profile-field > .af-atf-label { color:var(--af-element-accent); }
-.af-atf-display .af-atf-element-chip,.af-atf-display .af-atf-ability-display-chip { border-color:var(--af-element-border); background:var(--af-element-soft); }
-.af-atf-display .af-atf-character-stats-display-wrap,.af-atf-display .af-atf-character-stats-display-item,.af-atf-display .af-atf-ability-display-card,.af-atf-display .af-atf-ability-display-icon-wrap { border-color:var(--af-element-border); }
-.af-atf-display .af-atf-character-stats-display-title,.af-atf-display .af-atf-abilities-display-title,.af-atf-display .af-atf-ability-display-name { color:var(--af-element-accent); }
+.af-atf-display .af-atf-profile-field { display:flex; align-items:baseline; gap:8px; padding:8px 10px; border:1px solid var(--af-element-border, var(--af-atf-neutral-border)); border-radius:8px; background:linear-gradient(135deg,var(--af-element-soft, var(--af-atf-neutral-soft)),transparent 72%); }
+.af-atf-display .af-atf-profile-field > .af-atf-label { color:var(--af-element-accent, var(--af-atf-neutral-accent)); }
+.af-atf-display .af-atf-element-chip,.af-atf-display .af-atf-ability-display-chip { border-color:var(--af-element-border, var(--af-atf-neutral-border)); background:var(--af-element-soft, var(--af-atf-neutral-soft)); }
+.af-atf-display .af-atf-character-stats-display-wrap,.af-atf-display .af-atf-character-stats-display-item,.af-atf-display .af-atf-ability-display-card,.af-atf-display .af-atf-ability-display-icon-wrap { border-color:var(--af-element-border, var(--af-atf-neutral-border)); }
+.af-atf-display .af-atf-character-stats-display-title,.af-atf-display .af-atf-abilities-display-title,.af-atf-display .af-atf-ability-display-name { color:var(--af-element-accent, var(--af-atf-neutral-accent)); }
 
 /* Character sheet display: quiet, element-aware encyclopaedia layout. */
 .af-atf-display {
@@ -85,7 +87,7 @@
 .af-atf-wiki__header {
   margin-bottom: clamp(18px, 3vw, 32px);
   padding-bottom: 12px;
-  border-bottom: 2px solid var(--af-element-main);
+  border-bottom: 2px solid var(--af-element-main, var(--af-atf-neutral-main));
 }
 
 .af-atf-wiki__heading {
@@ -117,14 +119,14 @@
   align-items: center;
   justify-content: center;
   padding: 5px;
-  border: 1px solid var(--af-element-border);
+  border: 1px solid var(--af-element-border, var(--af-atf-neutral-border));
   border-radius: 50%;
-  background: var(--af-element-soft);
-  color: var(--af-element-accent);
+  background: var(--af-element-soft, var(--af-atf-neutral-soft));
+  color: var(--af-element-accent, var(--af-atf-neutral-accent));
 }
 
 .af-atf-wiki__element:focus-visible {
-  outline: 2px solid var(--af-element-accent);
+  outline: 2px solid var(--af-element-accent, var(--af-atf-neutral-accent));
   outline-offset: 3px;
   border-radius: 50%;
 }
@@ -149,7 +151,7 @@
   min-width: 0;
   margin: 0 0 24px 36px;
   border: 1px solid rgba(255, 255, 255, .12);
-  border-top: 3px solid var(--af-element-main);
+  border-top: 3px solid var(--af-element-main, var(--af-atf-neutral-main));
   background: rgba(7, 10, 14, .24);
 }
 
@@ -180,7 +182,7 @@
 }
 
 .af-atf-wiki-info__label {
-  color: var(--af-element-accent);
+  color: var(--af-element-accent, var(--af-atf-neutral-accent));
   font-size: .82rem;
   font-weight: 650;
 }
@@ -193,7 +195,7 @@
   display: block;
   padding: 13px 14px;
   text-align: center;
-  background: var(--af-element-soft);
+  background: var(--af-element-soft, var(--af-atf-neutral-soft));
 }
 
 .af-atf-wiki-info--name .af-atf-wiki-info__label {
@@ -241,7 +243,7 @@
   display: block;
   margin: 0;
   padding: 0 0 7px;
-  border-bottom: 1px solid var(--af-element-border);
+  border-bottom: 1px solid var(--af-element-border, var(--af-atf-neutral-border));
   color: inherit;
   font-size: clamp(1.15rem, 2vw, 1.4rem);
   font-weight: 650;
@@ -305,7 +307,7 @@
 }
 
 .af-atf-wiki a:hover {
-  color: var(--af-element-accent);
+  color: var(--af-element-accent, var(--af-atf-neutral-accent));
 }
 
 @media (max-width: 820px) {
@@ -876,7 +878,7 @@ body.af-atf-kb-catalog-modal-open {
 
 .af-atf-ability-display-card .af-ability-meta > summary {
   cursor: pointer;
-  color: var(--af-element-accent);
+  color: var(--af-element-accent, var(--af-atf-neutral-accent));
   font-weight: 600;
 }
 

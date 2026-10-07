@@ -1,5 +1,4 @@
 /* Shared palette URL remains valid when this stylesheet is minified at root. */
-@import url("/inc/plugins/advancedfunctionality/addons/advancedthreadfields/assets/element-theme.css?v=1");
 
 .af-cs-page {
   position: relative;

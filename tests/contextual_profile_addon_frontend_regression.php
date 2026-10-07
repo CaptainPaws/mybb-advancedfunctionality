@@ -48,7 +48,7 @@ foreach (['af_normalize_script_name', 'af_resolve_frontend_manifest', 'af_fronte
 }
 
 $manifests = [];
-foreach (['advancedrules', 'advancedcharacters', 'advancedposteravatar', 'advancedprofilefields', 'advancedprofileui'] as $id) {
+foreach (['advancedrules', 'advancedcharacters', 'advancedposteravatar', 'advancedprofilefields', 'advancedprofileui', 'advancedelementtheme'] as $id) {
     $manifests[$id] = require $addons . '/' . $id . '/manifest.php';
     $frontend = af_resolve_frontend_manifest($manifests[$id]);
     if ($frontend['mode'] !== 'contextual' || $frontend['directory_fallback']) {
@@ -79,7 +79,7 @@ foreach ($contexts as $name => $context) {
     }
 }
 
-foreach (['advancedprofilefields' => 'has_apf_output', 'advancedprofileui' => 'has_apui_output'] as $id => $fact) {
+foreach (['advancedprofilefields' => 'has_apf_output', 'advancedprofileui' => 'has_apui_output', 'advancedelementtheme' => 'has_element_surface'] as $id => $fact) {
     foreach ([$contexts['showthread'], $contexts['member'], $contexts['index'], $contexts['forumdisplay']] as $context) {
         if (af_frontend_asset_allowed($manifests[$id], null, $context)
             || !af_frontend_asset_allowed($manifests[$id], null, $context, [$fact => true])

@@ -10,7 +10,7 @@ function af_apui_get_profile_character_payload(int $uid): array
     return ['fields' => ['character_element' => ['value' => $values[$uid] ?? '']]];
 }
 
-function af_atf_resolve_element_theme_key(string $value): string
+function af_elementtheme_resolve_key(string $value): string
 {
     $value = strtolower(trim($value));
     return in_array($value, ['fire', 'water'], true) ? $value : '';
@@ -83,7 +83,7 @@ atf_classic_assert(str_contains($css, '.atf-post.af-atf-display[data-element]:no
 atf_classic_assert(str_contains($css, '.atf-post__name a { color: var(--atf-post-accent); }'), 'Nickname does not consume the post element accent.');
 atf_classic_assert(substr_count($css, 'margin-inline-start: clamp(1.5rem, 2.5vw, 2.5rem);') >= 2, 'Nickname and title are not both offset away from the decorative wave.');
 atf_classic_assert(str_contains($css, '--atf-sheet-icon-color: color-mix(in srgb, var(--atf-post-accent) 58%, #111 42%);'), 'Character Sheet icon default accent is not derived from the post element color.');
-atf_classic_assert(str_contains($css, '--atf-sheet-icon-color: color-mix(in srgb, var(--atf-post-accent) 48%, #fff 52%);'), 'Dark element waves do not derive a readable light accent from the post element color.');
+atf_classic_assert(str_contains($css, '--atf-sheet-icon-color: var(--af-element-contrast,'), 'Postbit icon does not consume the shared contrast token.');
 atf_classic_assert(str_contains($css, 'a.af-apui-postbit-action.af-apui-postbit-action--sheet.af-cs-plaque__btn:visited'), 'Character Sheet link states can still fall back to the global link color.');
 atf_classic_assert(str_contains($css, '.af-apui-postbit-action--sheet.af-cs-plaque__btn :is(.af-apui-postbit-action__icon, i, i::before)'), 'Character Sheet icon descendants do not inherit the element-aware accent.');
 atf_classic_assert(str_contains($css, 'color: var(--atf-sheet-icon-color) !important;'), 'Character Sheet action does not consume the element-aware accent color.');
@@ -211,8 +211,8 @@ atf_classic_assert(af_adaptivethemeframework_post_element(103) === 'water', 'Wat
 atf_classic_assert(af_adaptivethemeframework_post_element(104) === '', 'Unknown element must not generate an accent.');
 
 $atfSource = (string)file_get_contents(AF_ADDONS . 'advancedthreadfields/advancedthreadfields.php');
-atf_classic_assert(str_contains($atfSource, 'function af_atf_resolve_element_theme_key'), 'AdvancedThreadFields has no canonical element resolver.');
-atf_classic_assert(str_contains($atfSource, '$elementThemeKey = af_atf_resolve_element_theme_key($val);'), 'Questionnaire rendering bypasses the canonical element resolver.');
+atf_classic_assert(str_contains($atfSource, "function_exists('af_elementtheme_resolve_key')"), 'AdvancedThreadFields does not consume the shared element resolver.');
+atf_classic_assert(str_contains($atfSource, 'af_elementtheme_resolve_key($val)'), 'Questionnaire rendering bypasses the canonical element resolver.');
 
 atf_classic_assert(af_adaptivethemeframework_post_text_count('Привет [b]мир[/b]') === 10, 'UTF-8/MyCode character count is incorrect.');
 atf_classic_assert(af_adaptivethemeframework_post_text_count('[img]https://example.test/a.jpg[/img]Текст') === 5, 'Non-text MyCode payload is counted.');

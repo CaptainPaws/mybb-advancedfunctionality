@@ -23,7 +23,7 @@ $pids='1,2';$post=['pid'=>1,'uid'=>42,'tid'=>77,'username'=>'Author','message'=>
 $authorCalls=[];
 function af_apf_get_secondary_avatar(int $uid): string {global $authorCalls;$authorCalls[$uid]=($authorCalls[$uid]??0)+1;return '/secondary-'.$uid.'.png';}
 function af_apui_get_profile_character_payload(int $uid): array {return ['fields'=>['character_element'=>['value'=>'fire']]];}
-function af_atf_resolve_element_theme_key(string $key): string {return $key==='fire'?'fire':'';}
+function af_elementtheme_resolve_key(string $key): string {return $key==='fire'?'fire':'';}
 af_adaptivethemeframework_preload_postbit_data($post);
 $reads=$db->reads;
 for($i=0;$i<20;$i++){ $row=$post;af_adaptivethemeframework_compose_postbit($row);check($row['af_atf_element']==='fire','Element lost');check(str_contains($row['af_atf_secondary_avatar'],'secondary-42'),'Secondary lost');check(str_contains($row['af_atf_post_reputation_html'],'+1'),'Reputation lost');}

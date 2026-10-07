@@ -1286,7 +1286,7 @@ function af_adaptivethemeframework_resolve_post_secondary_avatar(array $post): s
         . '" class="af-apf-secondary-avatar-image atf-post__secondary-avatar-image" loading="lazy" decoding="async">';
 }
 
-/** Resolve the canonical ATF/KB character element key; colour remains owned by ATF's existing element CSS map. */
+/** Resolve approved character identity through AdvancedElementTheme. */
 function af_adaptivethemeframework_post_element(int $uid): string
 {
     static $cache = [];
@@ -1298,11 +1298,10 @@ function af_adaptivethemeframework_post_element(int $uid): string
     $field = (array)($fields['character_element'] ?? []);
     $value = trim((string)($field['value'] ?? $field['raw'] ?? $field['key'] ?? ''));
 
-    // AdvancedThreadFields owns the canonical element allow-list and its CSS
-    // tokens. Unknown/missing values must remain neutral; never manufacture an
+    // Knowledge Base owns identity; AdvancedElementTheme owns presentation. Unknown/missing values must remain neutral; never manufacture an
     // accent from uid, group, appearance, or any other author attribute.
-    return $cache[$uid] = function_exists('af_atf_resolve_element_theme_key')
-        ? af_atf_resolve_element_theme_key($value)
+    return $cache[$uid] = function_exists('af_elementtheme_resolve_key')
+        ? af_elementtheme_resolve_key($value)
         : '';
 }
 

@@ -29,7 +29,7 @@ $workflowBatches=0;
 function af_characterworkflow_preload_active_applications(array $uids):void{global $workflowBatches;++$workflowBatches;}
 function af_characterworkflow_resolve_active_application(int $uid):?array{return $uid===44?null:['tid'=>100+$uid];}
 function af_atf_get_fields_cached():array{return [['name'=>'character_element','fieldid'=>8]];}
-function af_atf_resolve_element_theme_key(string $key):string{return $key==='fire'?'fire':'';}
+function af_elementtheme_resolve_key(string $key):string{return $key==='fire'?'fire':'';}
 extract_batch_function(AF_ADDONS.'advancedprofilefields/advancedprofilefields.php','af_apf_preload_system_values');
 extract_batch_function(AF_ADDONS.'advancedprofilefields/advancedprofilefields.php','af_apf_get_system_value');
 extract_batch_function(AF_ADDONS.'advancedprofilefields/advancedprofilefields.php','af_apf_get_secondary_avatar');

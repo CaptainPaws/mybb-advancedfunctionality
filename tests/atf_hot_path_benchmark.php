@@ -10,7 +10,7 @@ require $bootstrap;
 function htmlspecialchars_uni($s): string { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function af_apf_get_secondary_avatar(int $uid): string { return ''; }
 function af_apui_get_profile_character_payload(int $uid): array { return []; }
-function af_atf_resolve_element_theme_key(string $v): string { return ''; }
+function af_elementtheme_resolve_key(string $v): string { return ''; }
 $mybb = (object)['settings'=>[], 'user'=>['uid'=>42], 'usergroup'=>[]];
 $db = new class {
     public $table_prefix = 'mybb_'; public $ddl = 0; public $queries = 0; public $checks = 0;

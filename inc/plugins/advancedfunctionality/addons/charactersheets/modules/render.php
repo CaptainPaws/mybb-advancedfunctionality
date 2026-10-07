@@ -2272,13 +2272,13 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
     $character_stats = (array)(($character_source['payload'] ?? [])['stats'] ?? []);
     // Character source and ATF index are approved profile data, and the key
-    // goes through the same canonical allow-list used by postbit.
+    // goes through the same KB registry used by postbit.
     $element_value = trim((string)($character_profile['character_element'] ?? ''));
     if ($element_value === '') {
         $element_value = af_charactersheets_pick_field_value($atf_index, ['character_element', 'element']);
     }
-    $sheet_element_theme_key = function_exists('af_atf_resolve_element_theme_key')
-        ? htmlspecialchars_uni(af_atf_resolve_element_theme_key($element_value))
+    $sheet_element_theme_key = function_exists('af_elementtheme_resolve_key')
+        ? htmlspecialchars_uni(af_elementtheme_resolve_key($element_value))
         : '';
 
     $character_name_en = trim((string)($character_profile['character_name'] ?? ''));
@@ -2482,6 +2482,9 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     $tplInner = $templates->get($tpl_name);
     eval("\$sheet_inner = \"" . $tplInner . "\";");
 
+    if (!str_contains($sheet_inner, 'data-element-surface=')) {
+        $sheet_inner = preg_replace('/(<div\\b[^>]*\\bclass="[^"]*\\baf-cs-page\\b[^"]*")/', '$1 data-element-surface="sheet"', $sheet_inner, 1) ?? $sheet_inner;
+    }
     return af_charactersheets_canonicalize_assets_html($sheet_inner);
 }
 

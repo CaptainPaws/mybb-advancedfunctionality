@@ -3349,13 +3349,11 @@ function af_kb_render_character_element_value(string $elementKey, bool $isRu): s
     $summary = af_kb_get_entry_summary('arpg_element', $elementKey);
     $iconUrl = af_kb_sanitize_url((string)($summary['icon_url'] ?? ''));
 
-    if ($iconUrl === '') {
-        return htmlspecialchars_uni($resolvedTitle);
-    }
-
-    return '<span class="af-kb-char-element" title="' . htmlspecialchars_uni($resolvedTitle) . '">'
-        . '<img src="' . htmlspecialchars_uni($iconUrl) . '" alt="' . htmlspecialchars_uni($resolvedTitle) . '" loading="lazy" />'
-        . '</span>';
+    $themeKey = function_exists('af_elementtheme_resolve_key') ? af_elementtheme_resolve_key($elementKey) : '';
+    $content = $iconUrl === '' ? htmlspecialchars_uni($resolvedTitle)
+        : '<img src="' . htmlspecialchars_uni($iconUrl) . '" alt="' . htmlspecialchars_uni($resolvedTitle) . '" loading="lazy" />';
+    $chipClass = $iconUrl === '' ? 'af-kb-char-element af-kb-char-element--text' : 'af-kb-char-element';
+    return '<span class="' . $chipClass . '" data-element="' . htmlspecialchars_uni($themeKey) . '" title="' . htmlspecialchars_uni($resolvedTitle) . '">' . $content . '</span>';
 }
 
 function af_kb_character_stats_labels_dictionary(): array

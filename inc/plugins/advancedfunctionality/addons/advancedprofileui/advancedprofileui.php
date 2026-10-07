@@ -1862,8 +1862,8 @@ function af_apui_member_profile_prepare_layout_vars(): void
     $GLOBALS['af_apui_approved_character_payload'] = $approvedCharacterPayload;
     $approvedElementField = (array)(($approvedCharacterPayload['fields'] ?? [])['character_element'] ?? []);
     $elementValue = af_apui_profile_character_field_value($approvedElementField);
-    $elementThemeKey = $elementValue !== '' && function_exists('af_atf_resolve_element_theme_key')
-        ? af_atf_resolve_element_theme_key($elementValue)
+    $elementThemeKey = $elementValue !== '' && function_exists('af_elementtheme_resolve_key')
+        ? af_elementtheme_resolve_key($elementValue)
         : '';
     $GLOBALS['af_apui_profile_element'] = htmlspecialchars_uni($elementThemeKey);
     if (!empty($sheetPayload['enabled'])
@@ -2322,21 +2322,6 @@ function af_apui_pre_output_page(string &$page): void
         $injection .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($cssUrl) . '">' . "\n";
     } else {
         $injection .= af_apui_css_include_tag($base);
-    }
-    if ($script === 'member.php' && $action === 'profile') {
-        // Load the canonical shared element palette as a page stylesheet.
-        // Theme CSS is published/minified at the board root, where nested
-        // source-relative @imports lose their original directory context.
-        $elementThemePath = dirname(__DIR__) . '/advancedthreadfields/assets/element-theme.css';
-        if (is_file($elementThemePath) && is_readable($elementThemePath)) {
-            $elementThemeUrl = af_apui_add_ver(
-                $bburl . '/inc/plugins/advancedfunctionality/addons/advancedthreadfields/assets/element-theme.css',
-                $elementThemePath
-            );
-            if (strpos($page, 'advancedthreadfields/assets/element-theme.css') === false) {
-                $injection .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($elementThemeUrl) . '" data-af-element-theme>' . "\n";
-            }
-        }
     }
     $injection .= af_apui_build_runtime_style_tag();
     $injection .= '<script src="' . htmlspecialchars_uni($jsUrl) . '" defer></script>' . "\n";

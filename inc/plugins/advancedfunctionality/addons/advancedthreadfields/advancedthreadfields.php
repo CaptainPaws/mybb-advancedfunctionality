@@ -5193,7 +5193,7 @@ function af_atf_preload_author_elements(array $uids): array
     $query = $db->simple_select(AF_ATF_TABLE_VALUES, 'tid,value',
         'tid IN (' . implode(',', array_keys($authors)) . ') AND fieldid=' . $fieldId);
     while ($row = $db->fetch_array($query)) {
-        foreach (($authors[(int)$row['tid']] ?? []) as $uid) $result[$uid] = af_atf_resolve_element_theme_key((string)$row['value']);
+        foreach (($authors[(int)$row['tid']] ?? []) as $uid) $result[$uid] = function_exists('af_elementtheme_resolve_key') ? af_elementtheme_resolve_key((string)$row['value']) : '';
     }
     return $result;
 }
@@ -6824,24 +6824,10 @@ function af_atf_parse_message(string $message, array $opts): string
     return $parser->parse_message($message, $options);
 }
 
-/**
- * Resolve a stored character element to the key used by the shared element
- * theme.  All element-aware surfaces must go through this allow-list rather
- * than deriving a colour from unrelated profile data.
- */
+/** @deprecated Compatibility only; presentation is owned by AdvancedElementTheme. */
 function af_atf_resolve_element_theme_key(string $value): string
 {
-    $value = strtolower(trim($value));
-    // The canonical KB element key is `shadow`, while the shared theme token
-    // for this palette is `dark`. Normalize the KB key here so every surface
-    // (including postbits and CharacterSheets) consumes the same CSS token.
-    if ($value === 'shadow') $value = 'dark';
-    $supported = [
-        'fire', 'water', 'air', 'wind', 'earth', 'ice', 'lightning', 'electric',
-        'nature', 'light', 'dark', 'space', 'void', 'mind', 'quantum', 'imaginary',
-        'aether', 'ether', 'anomaly', 'fusion', 'glacio', 'aero', 'havoc', 'spectro',
-    ];
-    return in_array($value, $supported, true) ? $value : '';
+    return function_exists('af_elementtheme_resolve_key') ? af_elementtheme_resolve_key($value) : '';
 }
 
 function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
@@ -6930,7 +6916,7 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
             continue;
         }
         if ($fieldName === 'character_element') {
-            $elementThemeKey = af_atf_resolve_element_theme_key($val);
+            $elementThemeKey = function_exists('af_elementtheme_resolve_key') ? af_elementtheme_resolve_key($val) : '';
         }
 
         $area = af_atf_get_wiki_area($f);
@@ -6996,7 +6982,7 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
     $block = '';
     eval("\$block = \"".$templates->get('af_atf_display_block')."\";");
     if ($elementThemeKey !== '') {
-        $elementAttribute = ' data-element="'.htmlspecialchars_uni($elementThemeKey).'"';
+        $elementAttribute = ' data-element-surface="application" data-element="'.htmlspecialchars_uni($elementThemeKey).'"';
         $block = preg_replace('~(<div\\b[^>]*\\bclass="[^"]*\\baf-atf-display\\b[^"]*")~i', '$1'.$elementAttribute, $block, 1) ?? $block;
     }
 

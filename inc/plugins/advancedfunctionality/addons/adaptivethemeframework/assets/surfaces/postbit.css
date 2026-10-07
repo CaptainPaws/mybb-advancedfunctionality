@@ -274,13 +274,8 @@ body.atf-active .atf-post.af-atf-display[data-element]:not([data-element=""]) {
   --atf-post-accent-soft: var(--af-element-soft, color-mix(in srgb, var(--atf-neutral-accent) 18%, transparent));
   --atf-post-accent-gradient: linear-gradient(135deg, var(--af-element-main, var(--atf-neutral-accent)), var(--af-element-accent, var(--atf-neutral-accent)));
 }
-body.atf-active .atf-post.af-atf-display:is(
-  [data-element="lightning"], [data-element="electric"],
-  [data-element="dark"], [data-element="havoc"],
-  [data-element="space"], [data-element="void"],
-  [data-element="quantum"], [data-element="anomaly"]
-) {
-  --atf-sheet-icon-color: color-mix(in srgb, var(--atf-post-accent) 48%, #fff 52%);
+body.atf-active .atf-post.af-atf-display[data-element]:not([data-element=""]) {
+  --atf-sheet-icon-color: var(--af-element-contrast, color-mix(in srgb, var(--atf-post-accent) 58%, #111 42%));
 }
 body.atf-active .atf-post__topbar {
   position: relative;
