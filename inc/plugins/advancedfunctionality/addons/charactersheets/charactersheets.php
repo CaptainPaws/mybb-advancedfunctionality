@@ -70,6 +70,11 @@ if ($afCsTriggerContext) {
     af_charactersheets_require_modules(['permissions', 'metadata', 'postbit', 'frontend']);
 } elseif ($afCsScript === 'charactersheets.php') {
     af_charactersheets_require_route_modules();
+} elseif ($afCsScript === 'misc.php' && isset($mybb) && is_object($mybb)
+    && in_array((string)$mybb->get_input('action'), ['af_atf_character_kb_create', 'af_atf_character_kb_sync'], true)) {
+    // Load before misc_start dispatch: ATF owns the route handler, while its
+    // accepted-workflow path calls back into CharacterSheets backend APIs.
+    af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render']);
 } elseif (defined('IN_ADMINCP')) {
     af_charactersheets_require_modules(['permissions', 'experience', 'postbit', 'bootstrap', 'sheets_crud', 'calculator', 'render', 'ajax', 'acp_skills']);
 } elseif (in_array($afCsScript, ['newthread.php', 'editpost.php'], true)) {
