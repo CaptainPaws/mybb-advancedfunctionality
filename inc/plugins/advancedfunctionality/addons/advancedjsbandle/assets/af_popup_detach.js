@@ -81,6 +81,10 @@
 
     // MyBB иногда оставляет position absolute/top/left огромные по документу — убьём это
     menu.style.position = 'fixed';
+    // Preserve the visible toggle state after reparenting the popup.
+    menu.style.display = 'block';
+    // Keep detached menus above ATF's sticky post and meta layers.
+    menu.style.zIndex = '10000';
     menu.style.margin = '0';
     menu.style.right = 'auto';
     menu.style.bottom = 'auto';
