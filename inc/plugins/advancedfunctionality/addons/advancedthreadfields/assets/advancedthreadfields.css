@@ -1,4 +1,6 @@
-@import url("element-theme.css");
+/* The CSS pipeline publishes theme styles at the board root, so this shared
+   palette must use a board-root URL instead of a source-relative import. */
+@import url("/inc/plugins/advancedfunctionality/addons/advancedthreadfields/assets/element-theme.css?v=1");
 
 .af-atf-block {
   margin: 12px 0;

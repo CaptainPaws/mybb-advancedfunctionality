@@ -1,5 +1,6 @@
 /* ATF profile surface. Ownership and routes: manifest.php. */
-@import url("../../../advancedthreadfields/assets/element-theme.css");
+/* Shared palette URL remains valid when this stylesheet is minified at root. */
+@import url("/inc/plugins/advancedfunctionality/addons/advancedthreadfields/assets/element-theme.css?v=1");
 
 body.atf-active.atf-profile-page .atf-profile {
   --af-profile-accent: var(--af-element-accent, var(--atf-color-accent));
