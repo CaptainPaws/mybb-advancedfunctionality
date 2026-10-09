@@ -27,8 +27,8 @@ if (af_advancedmenu_render_guest_account_bar() !== '') {
 }
 
 $source = file_get_contents(AF_ADDONS.'advancedmenu/advancedmenu.php');
-if (!preg_match('~af-am-secondary[^\n]+</nav>\'\s*\.af_advancedmenu_render_guest_account_bar\(\)~', $source)) {
-    throw new RuntimeException('Guest account bar is not rendered directly below secondary navigation.');
+if (!str_contains($source, '.af_advancedmenu_render_user_avatar().af_advancedmenu_render_guest_account_bar()')) {
+    throw new RuntimeException('Guest representation is not placed at the start of the shared rail.');
 }
 
 $css = file_get_contents(AF_ADDONS.'advancedmenu/assets/advancedmenu.css');

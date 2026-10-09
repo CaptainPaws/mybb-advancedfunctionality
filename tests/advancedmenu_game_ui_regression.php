@@ -32,9 +32,14 @@ $plugins = new class { public array $hooks=[]; function add_hook(...$args) { $th
 af_advancedelementtheme_init(); af_advancedelementtheme_init();
 if (count($plugins->hooks)!==1 || $plugins->hooks[0][0]!=='misc_start') throw new RuntimeException('Preference endpoint hook missing/duplicated');
 af_menu_collect_registry();
-af_menu_register_item(['key'=>'fixture_main','label'=>'Main registry','default_container'=>'main','action'=>['url'=>'index.php']]);
-af_menu_register_item(['key'=>'fixture_secondary','label'=>'Secondary registry','default_container'=>'secondary','action'=>['url'=>'help.php']]);
+af_menu_register_item(['key'=>'fixture_main','label'=>'Main registry','icon'=>'fa-solid fa-house','default_sortorder'=>1,'default_container'=>'main','action'=>['url'=>'index.php']]);
+af_menu_register_item(['key'=>'fixture_secondary','label'=>'Secondary registry','icon'=>'fa-solid fa-book','default_container'=>'secondary','action'=>['url'=>'help.php']]);
+af_menu_register_item(['key'=>'fixture_hidden','label'=>'Hidden registry','default_container'=>'main','visibility'=>false]);
+af_menu_register_item(['key'=>'fixture_modal','label'=>'Modal registry','icon'=>'fa-solid fa-users','type'=>'modal','default_container'=>'secondary','action'=>['trigger_selector'=>'#fixture-modal-trigger','modal_selector'=>'#fixture-modal']]);
+$_SERVER['REQUEST_URI']='/index.php';
 $member = af_advancedmenu_render_frontend_nav();
+if (str_contains($member,'Hidden registry') || substr_count($member,'class="af-am-rail"')!==1) throw new RuntimeException('Rail/visibility contract');
+if (!(strpos($member,'af-am-avatar-control') < strpos($member,'af-am-main') && strpos($member,'af-am-main') < strpos($member,'af-am-secondary') && strpos($member,'af-am-secondary') < strpos($member,'af-am-user-controls'))) throw new RuntimeException('Rail group order');
 foreach (['profile','links','settings','theme'] as $section) if (substr_count($member, 'data-af-am-category="'.$section.'"') !== 1) throw new RuntimeException('Missing category '.$section);
 foreach (['Main registry','Secondary registry','ACP custom action','logoutkey=csrf-token','<span title="MyBB date">recently</span>','aria-describedby="af-am-account-tooltip"','Стихийные анимации','name="effects_enabled"'] as $needle) if (!str_contains($member,$needle)) throw new RuntimeException('Missing '.$needle);
 if (substr_count($member,'id="af-am-user-drawer"') !== 1 || str_contains($member,'af-am-drawer-identity') || str_contains($member,'af-am-burger')) throw new RuntimeException('Duplicate member identity/drawer or legacy burger');

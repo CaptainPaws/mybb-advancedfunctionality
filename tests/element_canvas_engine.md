@@ -163,3 +163,27 @@ widget renderer, startup exclusion, live toggles, AJAX hosts, failed-save
 rollback and motion/static-style contracts. The browser persistence test uses a
 mock HTTP response and a second server-seeded browser context; it is not a live
 cross-device login or a production frontend check.
+
+AdvancedMenu's navigation presentation now places avatar, main, secondary and
+user categories in one `.af-am-rail`. The existing `.af-am-navigation` flow
+wrapper has zero height, so the unmodified ATF sticky runtime measures zero top
+occlusion instead of treating the full-height rail as a header. Desktop body
+padding is scoped to `.af-advancedmenu-layout` and uses `--af-am-rail-width`
+(default 64px) plus the safe-area inset. Mobile uses the same DOM as an internally
+scrolling bottom bar with one bottom offset, without reducing content width.
+Content-only documents still opt out of navigation/layout compensation.
+
+Drawer width and max height use `--af-am-drawer-width` (340px) and
+`--af-am-drawer-max-height`; height follows content and only the drawer body
+scrolls. Rail and drawer colors inherit ATF surface/text/border/accent tokens
+through `--af-am-*` variables. A stable desktop scrollbar gutter avoids width
+shifts during modal open/close. Tooltips reuse `data-af-am-tip`, with one shared
+portal outside the rail scroll container; the rich avatar card uses the same
+positioning. No tooltip library or new observer is introduced.
+
+The menu browser check now includes nine named route/layout fixtures, actual
+ATF breadcrumb CSS and the unmodified ATF postbit sticky JS on controlled post
+geometry. It checks viewport/short-height/mobile layouts, compact drawer height,
+inner overflow, accessible/focus tooltips, a high-layer modal, repeated init,
+light theme token changes and reduced motion. These are local integration
+fixtures, not production pages or a full MyBB route rendering test.

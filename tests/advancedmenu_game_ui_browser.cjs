@@ -18,7 +18,8 @@ const root = path.resolve(__dirname, '..'), assets = path.join(root, 'inc/plugin
   });
   const fixture=JSON.parse(execFileSync(process.env.PHP_BINARY || 'php',[path.join(__dirname,'advancedmenu_game_ui_regression.php'),'--browser-fixture'],{encoding:'utf8'}));
   async function load(markup, member) {
-   await page.setContent(`<link rel="stylesheet" href="https://forum.test/font-awesome-6/css/all.min.css"><style>${fs.readFileSync(path.join(assets,'advancedmenu.css'),'utf8')}body{margin:0;background:#0e1520;color:white}#forum{height:1600px;max-width:100%;box-sizing:border-box;padding:20px}</style><body class="af-advancedmenu-layout ${member?'af-am-member':'af-am-guest'}">${markup}<main id="forum">Forum content <button id="outside">Outside</button></main></body>`);
+   await page.goto('about:blank');
+   await page.setContent(`<link rel="stylesheet" href="https://forum.test/font-awesome-6/css/all.min.css"><style>${fs.readFileSync(path.join(assets,'advancedmenu.css'),'utf8')}body{margin:0;background:#0e1520;color:white}#forum{height:1600px;max-width:100%;box-sizing:border-box;padding:20px}</style><body class="af-advancedmenu-layout ${member?'af-am-member':'af-am-guest'}">${markup}<main id="forum"><nav class="navigation atf-breadcrumbs">Breadcrumbs</nav>Forum content <button id="outside">Outside</button></main></body>`);
    await page.addScriptTag({content:fs.readFileSync(path.join(assets,'advancedmenu.js'),'utf8')});
   }
   await load(fixture.member,true);
@@ -30,6 +31,7 @@ const root = path.resolve(__dirname, '..'), assets = path.join(root, 'inc/plugin
    assert.equal(await drawer.locator(`[data-af-am-panel="${section}"]`).isVisible(),true);
    assert.ok(await page.evaluate(()=>document.getElementById('af-am-user-drawer').contains(document.activeElement)));
   }
+  assert.ok((await drawer.boundingBox()).height<740,'Drawer fills viewport');
   if(process.env.AF_MENU_SCREENSHOT) await page.screenshot({path:process.env.AF_MENU_SCREENSHOT});
   await page.locator('[data-af-am-category="theme"]').click(); assert.equal(await shell.isVisible(),false);
   await page.locator('[data-af-am-category="settings"]').click();
@@ -48,8 +50,40 @@ const root = path.resolve(__dirname, '..'), assets = path.join(root, 'inc/plugin
   await avatar.hover(); assert.equal(await page.locator('#af-am-account-tooltip').isVisible(),true);
   await page.mouse.move(900,700); await avatar.focus(); assert.equal(await page.locator('#af-am-account-tooltip').isVisible(),true);
   assert.match(await page.locator('#af-am-account-tooltip').innerText(),/Player.*recently/s);
-  const geometry=await page.evaluate(()=>({rail:document.querySelector('.af-am-user-controls').getBoundingClientRect().right,content:document.getElementById('forum').getBoundingClientRect().left,width:document.documentElement.scrollWidth,viewport:innerWidth}));
-  assert.ok(geometry.rail<=geometry.content && geometry.width<=geometry.viewport,'Rail overlays forum');
+  const geometry=await page.evaluate(()=>({rail:document.querySelector('.af-am-rail').getBoundingClientRect().right,content:document.getElementById('forum').getBoundingClientRect().left,width:document.documentElement.scrollWidth,viewport:innerWidth,height:document.querySelector('.af-am-rail').getBoundingClientRect().height,offset:document.querySelector('.af-am-navigation').getBoundingClientRect().height}));
+  assert.ok(geometry.rail===geometry.content && geometry.width<=geometry.viewport,'Rail overlays forum');
+  assert.equal(geometry.height,800); assert.equal(geometry.offset,0,'ATF would use full rail as top offset');
+  const main=page.locator('.af-am-main .af-am-link').first();
+  const url=await main.getAttribute('href'); assert.match(url,/index.php/);
+  await main.hover(); assert.match(await page.locator('#af-am-rail-tooltip').innerText(),/Main registry/);
+  assert.ok((await page.locator('#af-am-rail-tooltip').boundingBox()).x>=64,'Tooltip clipped inside rail');
+  await page.mouse.move(900,700); await main.focus(); assert.equal(await page.locator('#af-am-rail-tooltip').isVisible(),true);
+  await page.keyboard.press('Escape'); assert.equal(await page.locator('#af-am-rail-tooltip').isVisible(),false);
+  const contentWidth=(await page.locator('#forum').boundingBox()).width;
+  await page.locator('[data-af-am-category="profile"]').click(); assert.equal(await page.locator('#af-am-rail-tooltip').isVisible(),false);
+  assert.equal((await page.locator('#forum').boundingBox()).width,contentWidth,'Drawer caused layout shift');
+  assert.ok((await drawer.boundingBox()).height<300,'Short drawer is not content-sized'); await page.keyboard.press('Escape');
+  await page.evaluate(()=>{document.body.style.setProperty('--atf-color-surface','#eef2f7');document.body.style.setProperty('--atf-color-text','#172233');document.body.style.setProperty('--atf-color-page-subtle','#e2e8f0');});
+  assert.equal(await page.locator('.af-am-rail').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(226, 232, 240)');
+  assert.equal(await drawer.evaluate(e=>getComputedStyle(e).color),'rgb(23, 34, 51)');
+  await page.evaluate(()=>document.body.removeAttribute('style'));
+  await page.addScriptTag({content:fs.readFileSync(path.join(assets,'advancedmenu.js'),'utf8')});
+  await page.locator('[data-af-am-category="profile"]').click(); assert.equal(await shell.isVisible(),true,'Duplicate handler toggled drawer closed'); await page.keyboard.press('Escape');
+  await page.evaluate(()=>{
+   document.body.insertAdjacentHTML('beforeend','<div id="fixture-modal" hidden style="position:fixed;inset:0;z-index:10000;background:#192535"><button id="modal-close">Close modal</button></div>');
+   document.getElementById('fixture-modal-trigger').addEventListener('click',e=>{e.preventDefault();document.getElementById('fixture-modal').hidden=false;});
+  });
+  await page.locator('#fixture-modal-trigger').click();
+  assert.equal(await page.evaluate(()=>document.elementFromPoint(20,20).closest('#fixture-modal')!==null),true,'Modal is below navigation');
+  await page.evaluate(()=>document.getElementById('fixture-modal').remove());
+  await page.setViewportSize({width:1100,height:300});
+  await page.locator('[data-af-am-category="theme"]').click();
+  assert.ok((await drawer.boundingBox()).height<=268);
+  assert.ok(await page.locator('.af-am-drawer-body').evaluate(e=>e.scrollHeight>e.clientHeight),'Long category does not scroll internally');
+  await page.keyboard.press('Escape');
+  assert.ok(await page.locator('.af-am-rail-scroll').evaluate(e=>e.scrollHeight>e.clientHeight),'Short-height rail has no inner scrolling');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollTop),0);
+  await page.setViewportSize({width:1100,height:800});
   await page.setViewportSize({width:375,height:740});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile horizontal overflow');
   for(const section of ['profile','links','settings','theme']) {await page.locator(`[data-af-am-category="${section}"]`).click(); await page.keyboard.press('Escape');}
@@ -58,8 +92,32 @@ const root = path.resolve(__dirname, '..'), assets = path.join(root, 'inc/plugin
   await page.locator('[data-af-am-category="links"]').click(); assert.equal(await shell.isVisible(),false);
   await page.locator('.af-am-account-info').click(); assert.equal(await page.locator('.af-am-account-info').getAttribute('aria-expanded'),'true');
   await page.locator('.af-am-account-info').click(); assert.equal(await page.locator('.af-am-account-info').getAttribute('aria-expanded'),'false');
+  assert.equal(await page.locator('.af-am-rail').evaluate(e=>e.getBoundingClientRect().width),375);
+  assert.equal(await page.locator('#forum').evaluate(e=>e.getBoundingClientRect().left),0);
   await load(fixture.guest,false); assert.equal(await page.locator('[data-af-am-category]').count(),0); await page.locator('.af-am-burger').click(); assert.equal(await page.locator('#af-am-user-drawer').isVisible(),true);
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({width:1100,height:800});
+  // Shared route/layout fixtures, not production MyBB pages.
+  for(const route of ['index.php','forumdisplay.php','showthread.php','member.php','usercp.php','kb.php','charactersheets.php','shop.php','inventory.php']) {
+   await load(fixture.member,true);
+   await page.locator('#forum').evaluate((e,r)=>e.dataset.route=r,route);
+   await page.addStyleTag({content:fs.readFileSync(path.join(root,'inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/surfaces/navigation.css'),'utf8')});
+   await page.addStyleTag({content:'body{--atf-page-max-width:1200px;--atf-page-gap:16px;--atf-space-3:12px}'});
+   await page.evaluate(()=>document.body.classList.add('atf-active'));
+   assert.equal(await page.locator('#forum').evaluate(e=>e.getBoundingClientRect().left),64,route);
+   assert.ok(await page.locator('.atf-breadcrumbs').evaluate(e=>e.getBoundingClientRect().left>=64),route+' breadcrumbs');
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),route+' overflow');
+  }
+  // Actual unmodified ATF sticky runtime, using a controlled post geometry.
+  await page.locator('#forum').evaluate(e=>e.innerHTML='<div id="posts"><article class="atf-post" style="height:1800px"><div class="atf-post__topbar" style="height:60px">Topbar</div><div class="atf-post__sidebar-inner" style="height:260px">Author</div><div class="atf-post__meta-line" style="height:80px">Meta</div></article></div>');
+  await page.addScriptTag({content:fs.readFileSync(path.join(root,'inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/adaptivethemeframework.postbit-sticky.js'),'utf8')});
+  await page.evaluate(()=>scrollTo(0,400)); await page.waitForTimeout(120);
+  assert.ok(Math.abs((await page.locator('.atf-post__topbar').boundingBox()).y)<2,'Rail height broke ATF sticky topbar');
+  assert.ok(Math.abs((await page.locator('.atf-post__sidebar-inner').boundingBox()).y-60)<2,'Rail height broke sticky sidebar');
+  assert.equal((await page.locator('.af-am-rail').boundingBox()).y,0);
+  await page.emulateMedia({reducedMotion:'reduce'}); await page.locator('[data-af-am-category="profile"]').click();
+  assert.equal(await drawer.evaluate(e=>getComputedStyle(e).animationName),'none');
   assert.deepEqual(errors,[]);
-  console.log(`AdvancedMenu ${ff?'Firefox':'Chromium'}: categories, toggle/switch, Escape/overlay, focus trap/return, tabs, tooltip/avatar, registry custom action, desktop/mobile geometry and guest passed.`);
+  console.log(`AdvancedMenu ${ff?'Firefox':'Chromium'}: categories, toggle/switch, Escape/overlay, focus trap/return, tabs, tooltip/avatar, registry custom action, single rail, compact/scrolling drawer, shared tooltips, desktop/mobile, nine layout fixtures, modal stacking, real ATF sticky runtime, reduced motion and guest passed.`);
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1);});

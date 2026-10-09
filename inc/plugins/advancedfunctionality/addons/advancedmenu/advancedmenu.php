@@ -1367,7 +1367,7 @@ function af_advancedmenu_render_drawer_account(): string
 }
 
 /** Avatar ownership and last-visit formatting stay with existing providers. */
-function af_advancedmenu_render_user_controls(): string
+function af_advancedmenu_render_user_avatar(): string
 {
     global $mybb, $lang;
     $uid = (int)($mybb->user['uid'] ?? 0);
@@ -1386,11 +1386,16 @@ function af_advancedmenu_render_user_controls(): string
     $avatar = preg_replace_callback('/<a\b/i', static fn() => '<a aria-describedby="af-am-account-tooltip" aria-label="Профиль: '.$name.'"', $avatar, 1);
     $visit = (int)($mybb->user['lastvisit'] ?? 0);
     $date = $visit > 0 && function_exists('my_date') ? (string)my_date('relative', $visit) : '—';
-    $html = '<nav class="af-am-user-controls" aria-label="Управление аккаунтом">'
-        .'<div class="af-am-avatar-control">'.$avatar
+    return '<div class="af-am-avatar-control">'.$avatar
         .'<button type="button" class="af-am-account-info" aria-label="Информация об аккаунте" aria-controls="af-am-account-tooltip" aria-expanded="false">i</button>'
-        .'<div id="af-am-account-tooltip" class="af-am-account-tooltip" role="tooltip"><strong>Добро пожаловать!</strong><span>'.$name.'</span><small>'
+        .'<div id="af-am-account-tooltip" class="af-am-account-tooltip" role="tooltip" hidden><strong>Добро пожаловать!</strong><span>'.$name.'</span><small>'
         .htmlspecialchars_uni((string)($lang->welcome_lastvisit ?? 'Последний визит: ')).$date.'</small></div></div>';
+}
+
+function af_advancedmenu_render_user_controls(): string
+{
+    if (empty($GLOBALS['mybb']->user['uid'])) return '';
+    $html = '<nav class="af-am-user-controls" aria-label="Управление аккаунтом">';
     $icons = ['profile'=>'fa-user', 'links'=>'fa-link', 'settings'=>'fa-gear', 'theme'=>'fa-palette'];
     foreach (af_menu_sections() as $section => $label) {
         $html .= '<button type="button" class="af-am-category-control" data-af-am-category="'.$section.'" aria-label="'.htmlspecialchars_uni($label).'" aria-controls="af-am-user-drawer" aria-expanded="false"><i class="fa-solid '.$icons[$section].'" aria-hidden="true"></i></button>';
@@ -1399,9 +1404,7 @@ function af_advancedmenu_render_user_controls(): string
 }
 
 /**
- * Render the single, page-independent guest account surface below the
- * secondary navigation. The drawer keeps its compact copy for mobile access,
- * while this is the canonical visible welcome block in the page header.
+ * Guest navigation retains real login/register actions instead of a fake avatar.
  */
 function af_advancedmenu_render_guest_account_bar(): string
 {
@@ -1414,8 +1417,8 @@ function af_advancedmenu_render_guest_account_bar(): string
     return '<section class="af-am-guest-account" aria-label="Гостевой аккаунт">'
         .'<span class="af-am-guest-greeting">Привет, гость</span>'
         .'<div class="af-am-guest-actions">'
-        .'<a class="af-am-guest-action af-am-guest-action--login" href="member.php?action=login">Войти</a>'
-        .'<a class="af-am-guest-action af-am-guest-action--register" href="member.php?action=register">Регистрация</a>'
+        .'<a class="af-am-guest-action af-am-guest-action--login" href="member.php?action=login" aria-label="Войти" data-af-am-tip="Войти"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i><span class="af-am-title">Войти</span></a>'
+        .'<a class="af-am-guest-action af-am-guest-action--register" href="member.php?action=register" aria-label="Регистрация" data-af-am-tip="Регистрация"><i class="fa-solid fa-user-plus" aria-hidden="true"></i><span class="af-am-title">Регистрация</span></a>'
         .'</div></section>';
 }
 
@@ -1424,17 +1427,20 @@ function af_advancedmenu_render_frontend_nav(): string
     $main = af_advancedmenu_build_container_html('main');
     $secondary = af_advancedmenu_build_container_html('secondary');
     $drawer = af_advancedmenu_build_drawer_html();
+    // The flow wrapper measures zero top occlusion for the existing ATF sticky
+    // contract. Its fixed child owns the whole rail, including every category.
     return '<div class="af-am-shell af-am-navigation" data-af-am-navigation="1">'
-        .'<nav class="af-am-bar af-am-main" aria-label="Основное меню">'
-        .'<ul class="af-am-list">'.(empty($GLOBALS['mybb']->user['uid']) ? '<li><button class="af-am-burger" type="button" aria-label="Открыть меню" aria-expanded="false" aria-controls="af-am-user-drawer"><i class="fa-solid fa-bars" aria-hidden="true"></i></button></li>' : '')
-        .$main.'</ul></nav>'
+        .'<div class="af-am-rail"><div class="af-am-rail-scroll">'
+        .af_advancedmenu_render_user_avatar().af_advancedmenu_render_guest_account_bar()
+        .'<nav class="af-am-bar af-am-main" aria-label="Основное меню"><ul class="af-am-list">'.$main.'</ul></nav>'
         .'<nav class="af-am-bar af-am-secondary" aria-label="Дополнительное меню"><ul class="af-am-list">'.$secondary.'</ul></nav>'
-        .af_advancedmenu_render_guest_account_bar()
-        .'</div>'.af_advancedmenu_render_user_controls().'<div class="af-am-drawer-shell" data-af-am-drawer-shell hidden>'
+        .af_advancedmenu_render_user_controls()
+        .(empty($GLOBALS['mybb']->user['uid']) ? '<button class="af-am-burger" type="button" aria-label="Открыть меню" data-af-am-tip="Меню" aria-expanded="false" aria-controls="af-am-user-drawer"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>' : '')
+        .'</div></div></div><div class="af-am-drawer-shell" data-af-am-drawer-shell hidden>'
         .'<button class="af-am-drawer-overlay" type="button" tabindex="-1" aria-label="Закрыть пользовательское меню"></button>'
         .'<aside id="af-am-user-drawer" class="af-am-drawer" role="dialog" aria-modal="true" aria-label="Пользовательское меню" tabindex="-1">'
         .'<div class="af-am-drawer-header"><strong data-af-am-drawer-title>Меню пользователя</strong><button class="af-am-drawer-close" type="button" aria-label="Закрыть пользовательское меню">&times;</button></div>'
-        .af_advancedmenu_render_drawer_account().$drawer.'</aside></div>';
+        .'<div class="af-am-drawer-body">'.af_advancedmenu_render_drawer_account().$drawer.'</div></aside></div>';
 }
 
 /** Remove duplicate legacy controls while retaining provider-owned runtime. */

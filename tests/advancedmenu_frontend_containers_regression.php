@@ -60,10 +60,10 @@ $characters = file_get_contents(AF_ADDONS.'advancedcharacters/advancedcharacters
 foreach (['af-am-shell', 'af-am-main', 'af-am-secondary', 'af-am-user-drawer', 'af-am-burger', "af_menu_configured_registry()", "empty(\$item['enabled'])"] as $needle) {
     if (strpos($source, $needle) === false) throw new RuntimeException('Missing frontend container contract: '.$needle);
 }
-foreach (['position: sticky', 'max-width: 100vw', '#header .top_links', '#header .panel_links', '#footer .upper', '.af-am-member #panel'] as $needle) {
+foreach (['position: fixed', 'max-width: 100vw', '#header .top_links', '#header .panel_links', '#footer .upper', '.af-am-member #panel'] as $needle) {
     if (strpos($css, $needle) === false) throw new RuntimeException('Missing layout rule: '.$needle);
 }
-foreach (['#header .user_links', '.af-am-drawer-overlay', 'body.af-am-drawer-open', 'inset: auto auto 14px 14px', '.af-am-drawer-tablist', '.af-am-drawer-tab.is-active', '.af-am-drawer-panel[hidden]'] as $needle) {
+foreach (['#header .user_links', '.af-am-drawer-overlay', 'body.af-am-drawer-open', '.af-am-rail-scroll', '.af-am-drawer-tablist', '.af-am-drawer-tab.is-active', '.af-am-drawer-panel[hidden]'] as $needle) {
     if (strpos($css, $needle) === false) throw new RuntimeException('Missing user drawer layout rule: '.$needle);
 }
 $js = file_get_contents(AF_ADDONS.'advancedmenu/assets/advancedmenu.js');
