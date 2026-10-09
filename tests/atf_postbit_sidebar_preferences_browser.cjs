@@ -9,13 +9,15 @@ function post(id){return `<article class="atf-post" id="post-${id}" data-element
 (async()=>{
  const ff=process.env.AF_TEST_BROWSER==='firefox';const browser=await(ff?firefox:chromium).launch({headless:true,...(!ff?{executablePath:'/usr/bin/chromium',args:['--no-sandbox']}:{})});
  try{
-  const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];let saves=0,fail=false,serverHidden=true;
+  const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];let saves=0,fail=false,serverHidden=true,serverLayout='grid',held=null,release;
   page.on('pageerror',e=>errors.push(String(e)));
-  await page.route('https://forum.test/**',route=>{
+  await page.route('https://forum.test/**',async route=>{
    const url=new URL(route.request().url());
    if(url.pathname==='/misc.php'){
-    const body=new URLSearchParams(route.request().postData());assert.equal(body.get('my_post_key'),'csrf-token');assert.equal(body.get('preference_key'),'postbit_sidebar_hidden');assert.equal(body.has('uid'),false);assert.equal(body.has('forum_layout'),false);saves++;
+    const body=new URLSearchParams(route.request().postData());assert.equal(body.get('my_post_key'),'csrf-token');const key=body.get('preference_key');assert.ok(['forum_layout','postbit_sidebar_hidden'].includes(key));assert.equal(body.has('uid'),false);assert.equal(body.has(key==='forum_layout'?'postbit_sidebar_hidden':'forum_layout'),false);saves++;
+    if(held) await held;
     if(fail){fail=false;return route.fulfill({status:500,json:{error:'Storage failed'}});}
+    if(key==='forum_layout'){serverLayout=body.get('forum_layout');return route.fulfill({json:{forum_layout:serverLayout}});}
     serverHidden=body.get('postbit_sidebar_hidden')==='1';return route.fulfill({json:{postbit_sidebar_hidden:serverHidden}});
    }
    if(url.pathname==='/fixture')return route.fulfill({body:'<html><body></body></html>',contentType:'text/html'});
@@ -26,15 +28,15 @@ function post(id){return `<article class="atf-post" id="post-${id}" data-element
   async function load(member){
    await page.goto('https://forum.test/fixture');
    let {widget,bootstrap}=fixture[member?'member':'guest'];
-   if(member){widget=widget.replace('value="1" checked','value="1"'+(serverHidden?' checked':''));bootstrap=bootstrap.replace('data-atf-preferences-sidebar="hidden"','data-atf-preferences-sidebar="'+(serverHidden?'hidden':'visible')+'"');}
+   if(member){widget=widget.replace(/name="postbit_sidebar_visible" value="1"(?: checked)?/, 'name="postbit_sidebar_visible" value="1"'+(serverHidden?'':' checked'));bootstrap=bootstrap.replace('data-atf-preferences-layout="grid"','data-atf-preferences-layout="'+serverLayout+'"');bootstrap=bootstrap.replace('data-atf-preferences-sidebar="hidden"','data-atf-preferences-sidebar="'+(serverHidden?'hidden':'visible')+'"');}
    const html=`<html><head><style>${css}${fs.readFileSync(path.join(addons,'advancedmenu/assets/advancedmenu.css'),'utf8')}${fs.readFileSync(path.join(addons,'advancedelementtheme/assets/element-effects.css'),'utf8')}body{margin:0;padding:12px;--af-element-main:#ee7799;--af-element-accent:#88ccff;--af-element-soft:rgba(200,100,160,.3);--af-element-border:#aaccee}.atf-post__content{min-height:300px}.atf-post__topbar{min-height:60px}.atf-theme-preferences{max-width:340px}.af-am-drawer{position:relative;inset:auto;width:min(340px,100%);max-height:none}</style>${bootstrap}<script>window.earlySidebar=document.documentElement.dataset.atfPostbitSidebar;window.createdSidebarCanvases=0;new MutationObserver(rs=>rs.forEach(r=>r.addedNodes.forEach(n=>{if(n.nodeType===1&&n.matches('.af-element-canvas')&&n.closest('.atf-post__sidebar'))createdSidebarCanvases++;}))).observe(document,{childList:true,subtree:true});</script><script type="application/json" data-af-element-preferences>${JSON.stringify({uid:member?42:0,preferences:{}})}</script><script type="application/json" data-af-element-effects-config>${JSON.stringify({fire:{enabled:true,preset:'stardust',density:70,speed:80,intensity:80,opacity:70,surfaces:['postbit']}})}</script><script src="${asset('advancedelementtheme/assets/element-canvas-engine.js')}" defer></script><script src="${asset('advancedelementtheme/assets/element-effects.js')}" defer></script></head><body class="atf-active"><div class="af-am-drawer">${widget}</div><main>${post(1)}${post(2)}${post(3)}</main><script src="${asset('adaptivethemeframework/assets/adaptivethemeframework.postbit-sticky.js')}" defer></script></body></html>`;
    await page.route('https://forum.test/render',route=>route.fulfill({body:html,contentType:'text/html; charset=utf-8'}));
    await page.goto('https://forum.test/render');await page.waitForFunction(()=>window.afElementEffects&&document.body.dataset.atfPostbitSidebar);
   }
-  const input=page.locator('input[name="postbit_sidebar_hidden"]');
-  async function toggle(){await input.click();await page.waitForFunction(()=>!document.querySelector('[name="postbit_sidebar_hidden"]').disabled);}
+  const input=page.locator('input[name="postbit_sidebar_visible"]');
+  async function toggle(){await input.click();await page.waitForFunction(()=>!document.querySelector('[name="postbit_sidebar_visible"]').disabled);}
   async function hidden(expected,count=3){
-   assert.equal(await page.locator('.atf-post__sidebar').first().isVisible(),!expected,JSON.stringify(await page.evaluate(()=>({root:document.documentElement.dataset.atfPostbitSidebar,body:document.body.dataset.atfPostbitSidebar,checked:document.querySelector('[name="postbit_sidebar_hidden"]').checked,stored:localStorage.getItem('af-presentation-preferences:v1:postbit_sidebar_hidden'),status:document.querySelector('[role="status"]').textContent,uid:document.querySelector('[data-atf-preferences-uid]').dataset.atfPreferencesUid,aside:document.querySelector('.atf-post__sidebar').getBoundingClientRect().toJSON(),display:getComputedStyle(document.querySelector('.atf-post__sidebar')).display,columns:getComputedStyle(document.querySelector('.atf-post__layout')).gridTemplateColumns,areas:getComputedStyle(document.querySelector('.atf-post__layout')).gridTemplateAreas}))));
+   assert.equal(await page.locator('.atf-post__sidebar').first().isVisible(),!expected,JSON.stringify(await page.evaluate(()=>({root:document.documentElement.dataset.atfPostbitSidebar,body:document.body.dataset.atfPostbitSidebar,checked:document.querySelector('[name="postbit_sidebar_visible"]').checked,stored:localStorage.getItem('af-presentation-preferences:v1:postbit_sidebar_hidden'),status:document.querySelector('[role="status"]').textContent,uid:document.querySelector('[data-atf-preferences-uid]').dataset.atfPreferencesUid,aside:document.querySelector('.atf-post__sidebar').getBoundingClientRect().toJSON(),display:getComputedStyle(document.querySelector('.atf-post__sidebar')).display,columns:getComputedStyle(document.querySelector('.atf-post__layout')).gridTemplateColumns,areas:getComputedStyle(document.querySelector('.atf-post__layout')).gridTemplateAreas}))));
    assert.equal(await page.locator('.atf-post__topbar:visible').count(),count);
    assert.equal(await page.locator('.atf-post__sidebar canvas').count(),expected?0:count);
    assert.equal(await page.locator('.atf-post__topbar canvas').count(),count);
@@ -44,6 +46,20 @@ function post(id){return `<article class="atf-post" id="post-${id}" data-element
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Horizontal overflow');
   }
   await load(true);assert.equal(await page.evaluate(()=>earlySidebar),'hidden');assert.equal(await page.evaluate(()=>createdSidebarCanvases),0);await hidden(true);
+  assert.equal(await page.locator('.atf-theme-preferences button[type="submit"]').count(),0);
+  const beforeLayoutSave=saves;held=new Promise(resolve=>release=resolve);
+  await page.locator('input[value="full"]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-atf-layout-preferences]').getAttribute('aria-busy')==='true');
+  assert.equal(await page.evaluate(()=>document.body.classList.contains('atf-forum-layout--full')),true,'Account layout did not apply immediately');
+  assert.ok(await page.locator('.atf-theme-preferences input[type="radio"],.atf-theme-preferences input[type="checkbox"]').evaluateAll(inputs=>inputs.every(i=>i.disabled)));
+  await page.evaluate(()=>{const i=document.querySelector('input[value="grid"]');i.checked=true;i.dispatchEvent(new Event('change',{bubbles:true}));});
+  await page.waitForTimeout(30);assert.equal(saves,beforeLayoutSave+1,'Concurrent or duplicated autosave');
+  held=null;release();await page.waitForFunction(()=>document.querySelector('[data-atf-layout-preferences]').getAttribute('aria-busy')==='false');
+  assert.equal(serverLayout,'full');assert.equal(serverHidden,true,'Forum save overwrote sidebar');
+  fail=true;await page.locator('input[value="grid"]').click();await page.waitForFunction(()=>document.querySelector('[data-atf-layout-preferences]').getAttribute('aria-busy')==='false');
+  assert.equal(await page.evaluate(()=>document.body.classList.contains('atf-forum-layout--full')),true,'Failed account layout save did not roll back');
+  assert.match(await page.locator('.atf-theme-preferences [role="status"]').textContent(),/отменено/);
+  await load(true);assert.equal(await page.evaluate(()=>document.body.classList.contains('atf-forum-layout--full')),true,'Saved account layout did not survive reload');
   await page.evaluate(()=>window.scrollTo(0,document.getElementById('post-1').getBoundingClientRect().top+scrollY+30));
   await page.waitForFunction(()=>getComputedStyle(document.querySelector('#post-1 .atf-post__topbar')).transform!=='none');
   assert.ok(Math.abs((await page.locator('#post-1 .atf-post__topbar').boundingBox()).y)<2,'Hidden sidebar broke sticky topbar');
@@ -60,7 +76,7 @@ function post(id){return `<article class="atf-post" id="post-${id}" data-element
   assert.equal(await page.evaluate(()=>afElementCanvasEngine.diagnostics().schedulerLoops),1);
   await page.goto('https://forum.test/fixture');await page.evaluate(k=>localStorage.setItem(k,'1'),storageKey);await load(false);await hidden(true);assert.equal(await page.evaluate(()=>earlySidebar),'hidden');assert.equal(await page.evaluate(()=>createdSidebarCanvases),0);
   const guestSaves=saves;await toggle();await hidden(false);assert.equal(saves,guestSaves);assert.equal(await page.evaluate(k=>localStorage.getItem(k),storageKey),'0');await load(false);await hidden(false);
-  await page.evaluate(()=>{Storage.prototype.setItem=function(){throw new Error('blocked');};});await toggle();await hidden(true);assert.match(await page.locator('.atf-theme-preferences [role="status"]').textContent(),/до перезагрузки/);
+  await page.evaluate(()=>{Storage.prototype.setItem=function(){throw new Error('blocked');};});await toggle();await hidden(false);assert.match(await page.locator('.atf-theme-preferences [role="status"]').textContent(),/отменено/);
   serverHidden=false;await page.goto('https://forum.test/fixture');await page.evaluate(k=>localStorage.setItem(k,'1'),storageKey);await load(true);await hidden(false);assert.equal(await page.evaluate(()=>earlySidebar),'visible','Guest storage overrode account state');
   await page.emulateMedia({reducedMotion:'reduce'});await page.waitForFunction(()=>afElementCanvasEngine.diagnostics().schedulerLoops===0);await toggle();await hidden(true);assert.equal(await page.evaluate(()=>afElementCanvasEngine.diagnostics().schedulerLoops),0);
   assert.deepEqual(errors,[]);

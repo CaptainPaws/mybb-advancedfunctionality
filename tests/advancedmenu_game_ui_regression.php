@@ -26,7 +26,7 @@ $cache = new class($custom) { function __construct(public array $custom) {} func
 $db = new MenuFixtureDB;
 $mybb = (object)['settings'=>['bburl'=>'https://forum.test'],'user'=>['uid'=>42,'username'=>'Player','lastvisit'=>123],'usergroup'=>[],'post_code'=>'csrf-token'];
 $lang = new class { function load($file) {} };
-$theme_select = '<form id="theme_select"><select name="theme"><option>Тёмная</option></select></form>';
+$theme_select = '<form id="theme_select"><select name="theme" onchange="MyBB.changeTheme();"><option value="1">Тёмная</option><option value="2">Светлая</option></select><input type="submit" value="Сохранить"></form>';
 require AF_ADDONS.'advancedmenu/advancedmenu.php';
 require AF_ADDONS.'adaptivethemeframework/adaptivethemeframework.php';
 $GLOBALS['af_theme_switcher_preference_providers']['adaptivethemeframework'] = 'af_adaptivethemeframework_render_theme_preferences';
@@ -44,12 +44,21 @@ $member = af_advancedmenu_render_frontend_nav();
 if (str_contains($member,'Hidden registry') || substr_count($member,'class="af-am-rail"')!==1) throw new RuntimeException('Rail/visibility contract');
 if (!(strpos($member,'af-am-avatar-control') < strpos($member,'af-am-main') && strpos($member,'af-am-main') < strpos($member,'af-am-secondary') && strpos($member,'af-am-secondary') < strpos($member,'af-am-user-controls'))) throw new RuntimeException('Rail group order');
 foreach (['profile','links','settings','theme'] as $section) if (substr_count($member, 'data-af-am-category="'.$section.'"') !== 1) throw new RuntimeException('Missing category '.$section);
-foreach (['Main registry','Secondary registry','ACP custom action','logoutkey=csrf-token','<span title="MyBB date">recently</span>','aria-describedby="af-am-account-tooltip"','Стихийные анимации','name="effects_enabled"','name="postbit_sidebar_hidden"'] as $needle) if (!str_contains($member,$needle)) throw new RuntimeException('Missing '.$needle);
+foreach (['Main registry','Secondary registry','ACP custom action','logoutkey=csrf-token','<span title="MyBB date">recently</span>','aria-describedby="af-am-account-tooltip"','Стихийные анимации','name="effects_enabled"','name="postbit_sidebar_visible"'] as $needle) if (!str_contains($member,$needle)) throw new RuntimeException('Missing '.$needle);
 if (substr_count($member,'id="af-am-user-drawer"') !== 1 || str_contains($member,'af-am-drawer-identity') || str_contains($member,'af-am-burger')) throw new RuntimeException('Duplicate member identity/drawer or legacy burger');
 if (substr_count($member,'>ACP custom action<') !== 1) throw new RuntimeException('Custom action duplicated');
 $mybb->user=['uid'=>0];
 $guest=af_advancedmenu_render_frontend_nav();
 if (substr_count($guest,'data-af-am-category=') !== 1 || !str_contains($guest,'data-af-am-category="theme"') || !str_contains($guest,'af-am-guest-avatar') || str_contains($guest,'af-am-burger') || str_contains($guest,'data-af-am-panel="profile"')) throw new RuntimeException('Guest appearance/privacy contract');
-foreach (['Добро пожаловать, гость!', 'images/default_avatar.png', 'atf-forum-layout-option', 'effects_postbit','name="postbit_sidebar_hidden"'] as $needle) if (!str_contains($guest,$needle)) throw new RuntimeException('Guest control missing '.$needle);
-if (in_array('--browser-fixture',$argv,true)) { echo json_encode(compact('member','guest')); exit; }
+foreach (['Добро пожаловать, гость!', 'images/default_avatar.png', 'atf-forum-layout-option', 'effects_postbit','name="postbit_sidebar_visible"'] as $needle) if (!str_contains($guest,$needle)) throw new RuntimeException('Guest control missing '.$needle);
+if (str_contains($member, 'type="submit"') || !str_contains($guest,'name="postbit_sidebar_visible" value="1" checked')) throw new RuntimeException('Autosave/visible-toggle default contract');
+foreach ($GLOBALS['af_advancedmenu_system_registry'] as &$item) if (($item['default_container'] ?? '') === 'secondary') $item['visibility'] = false;
+unset($item);
+$emptySecondary = af_advancedmenu_render_frontend_nav();
+if (str_contains($emptySecondary,'class="af-am-bar af-am-secondary"')) throw new RuntimeException('Empty secondary group rendered');
+foreach ($GLOBALS['af_advancedmenu_system_registry'] as &$item) if (($item['default_container'] ?? '') === 'main') $item['visibility'] = false;
+unset($item);
+$emptyMenus = af_advancedmenu_render_frontend_nav();
+if (str_contains($emptyMenus,'class="af-am-bar af-am-main"')) throw new RuntimeException('Empty main group rendered');
+if (in_array('--browser-fixture',$argv,true)) { echo json_encode(compact('member','guest','emptySecondary','emptyMenus')); exit; }
 echo "AdvancedMenu Game UI: registry containers/custom items, four sections, avatar/date, single drawer and guest controls passed.\n";

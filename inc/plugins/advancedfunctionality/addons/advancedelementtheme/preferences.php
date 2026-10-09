@@ -70,7 +70,7 @@ function af_elementtheme_render_preferences_widget(array $item = []): string
         $html .= '<label class="af-element-preference-row"><span>'.$label.'</span><input type="hidden" name="'.$key.'" value="0"><input type="checkbox" name="'.$key.'" value="1"'.($preferences[$key] ? ' checked' : '').'><span class="af-element-preference-switch" aria-hidden="true"></span></label>';
     }
     return $html.'</fieldset><p class="af-element-preferences-status" role="status" aria-live="polite"></p>'
-        .'<button type="submit">Сохранить</button><small>'.($uid > 0 ? 'Настройки сохраняются для вашего аккаунта.' : 'Гостевые настройки сохраняются только в этом браузере.').'</small></form>';
+        .'<small>'.($uid > 0 ? 'Настройки сохраняются для вашего аккаунта.' : 'Гостевые настройки сохраняются только в этом браузере.').'</small></form>';
 }
 
 /** Testable request boundary: never accepts a target UID from client input. */

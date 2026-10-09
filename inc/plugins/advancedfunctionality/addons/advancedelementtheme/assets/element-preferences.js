@@ -21,7 +21,6 @@
   function render(value, message = '') {
     forms().forEach(form => {
       keys.forEach(key => { const input = form.querySelector(`input[type="checkbox"][name="${key}"]`); input.checked = value[key]; input.disabled = busy; });
-      form.querySelector('button[type="submit"]').disabled = busy;
       form.setAttribute('aria-busy', String(busy));
       form.querySelector('[role="status"]').textContent = message;
     });
@@ -39,10 +38,7 @@
         if (!response.ok || !result.preferences || !keys.every(key => typeof result.preferences[key] === 'boolean')) throw new Error(result.error || 'Не удалось сохранить настройки.');
         saved = normalize(result.preferences);
       } else {
-        saved = next;
-        try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch (_) {
-          busy = false; apply(saved); render(saved, 'Применено до перезагрузки: хранилище браузера недоступно.'); return;
-        }
+        localStorage.setItem(storageKey, JSON.stringify(next)); saved = next;
       }
       busy = false; apply(saved); render(saved, 'Сохранено');
     } catch (error) {
@@ -56,6 +52,6 @@
   });
   document.addEventListener('submit', event => {
     const form = event.target.closest('[data-af-element-preferences-form]');
-    if (form) { event.preventDefault(); save(form); }
+    if (form) event.preventDefault();
   });
 }());

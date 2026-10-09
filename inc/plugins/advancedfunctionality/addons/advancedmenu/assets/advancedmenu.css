@@ -1,6 +1,7 @@
 /* AdvancedMenu: one fixed rail; one scoped layout offset. */
 body.af-advancedmenu-layout {
   --af-am-rail-width: 64px;
+  --af-am-control-size: 38px;
   --af-am-drawer-width: 340px;
   --af-am-drawer-max-height: calc(100dvh - 32px);
   --af-am-surface: var(--atf-color-surface, #172233);
@@ -31,7 +32,7 @@ body.af-advancedmenu-layout {
 .af-am-user-controls { flex: 0 0 auto; }
 .af-am-rail .af-am-link, .af-am-category-control, .af-am-burger, .af-am-guest-action, .af-am-avatar-control > a, .af-am-guest-avatar {
   display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
-  width: 38px; height: 38px; box-sizing: border-box; padding: 0;
+  width: var(--af-am-control-size, 38px); height: var(--af-am-control-size, 38px); box-sizing: border-box; padding: 0;
   border: 1px solid var(--af-am-border); border-radius: 7px;
   background: var(--af-am-surface); color: var(--af-am-text); text-decoration: none; cursor: pointer;
 }
@@ -231,3 +232,25 @@ body.af-am-drawer-open .af-am-rail { z-index: 1200; }
 .atf-sidebar-preference input:checked + .atf-preference-switch::before { transform: translateX(14px); }
 .atf-sidebar-preference input:focus-visible + .atf-preference-switch { outline: 2px solid var(--af-am-highlight); outline-offset: 3px; }
 .atf-sidebar-preference input:disabled + .atf-preference-switch { opacity: .5; }
+
+/* Desktop groups share one axis and never own a scroll container. */
+@media (min-width: 769px) {
+  .af-advancedmenu-layout .af-am-rail :is(.af-am-bar, .af-am-list, .af-am-user-controls, .af-am-guest-account, .af-am-guest-actions) {
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
+    margin-inline: 0; padding-inline: 0; overflow: visible; float: none;
+  }
+  .af-advancedmenu-layout .af-am-rail :is(.af-am-list, .af-am-guest-actions) { padding-block: 0; margin-block: 0; gap: 4px; }
+  .af-advancedmenu-layout .af-am-rail .af-am-list > li { display: flex; justify-content: center; align-items: center; width: 100%; min-width: 0; padding: 0; margin: 0; float: none; box-sizing: border-box; }
+  .af-advancedmenu-layout .af-am-rail :is(.af-am-link, .af-am-category-control, .af-am-guest-action) { width: var(--af-am-control-size); height: var(--af-am-control-size); min-width: var(--af-am-control-size); max-width: var(--af-am-control-size); margin: 0; padding: 0; border-radius: 7px; gap: 0; }
+}
+.af-am-rail :is(.af-am-link, .af-am-category-control, .af-am-guest-action) :is(i, .af-am-ico, svg) { width: 16px; height: 16px; font-size: 16px; line-height: 16px; text-align: center; flex: 0 0 16px; }
+.af-am-drawer :is(.atf-theme-preferences, .af-element-preferences) { font: inherit; color: inherit; }
+.af-am-drawer :is(.atf-sidebar-preference, .af-element-preference-row) { font-size: 13px; padding: 9px 0; }
+.af-am-drawer :is(.atf-theme-preferences, .af-element-preferences) fieldset { border: 0; background: transparent; box-shadow: none; min-width: 0; }
+.af-am-drawer :is(input, select):focus-visible { outline: 2px solid var(--af-am-highlight); outline-offset: 2px; }
+/* Reset inherited list/nav geometry on both orientations; only the rail scrolls. */
+.af-advancedmenu-layout .af-am-rail .af-am-list { display: flex; align-items: center; list-style: none; margin: 0; padding: 0; gap: 4px; }
+.af-advancedmenu-layout .af-am-rail .af-am-list > li { display: flex; align-items: center; justify-content: center; float: none; margin: 0; padding: 0; }
+.af-advancedmenu-layout .af-am-rail .af-am-bar { overflow: visible; }
+.af-advancedmenu-layout .af-am-rail .af-am-guest-actions { align-items: center; gap: 4px; }

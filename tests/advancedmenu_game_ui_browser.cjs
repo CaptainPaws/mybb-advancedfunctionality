@@ -20,10 +20,19 @@ const root = path.resolve(__dirname, '..'), assets = path.join(root, 'inc/plugin
   const fixture=JSON.parse(execFileSync(process.env.PHP_BINARY || 'php',[path.join(__dirname,'advancedmenu_game_ui_regression.php'),'--browser-fixture'],{encoding:'utf8'}));
   async function load(markup, member) {
    await page.goto('https://forum.test/menu-fixture');
-   await page.setContent(`<link rel="stylesheet" href="https://forum.test/font-awesome-6/css/all.min.css"><style>${fs.readFileSync(path.join(assets,'advancedmenu.css'),'utf8')}${fs.readFileSync(path.join(root,'inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/surfaces/forum.css'),'utf8')}body{margin:0;background:#0e1520;color:white}#forum{height:1600px;max-width:100%;box-sizing:border-box;padding:20px}</style><body class="af-advancedmenu-layout ${member?'af-am-member':'af-am-guest'} atf-active atf-forum-layout--full">${markup}<main id="forum"><nav class="navigation atf-breadcrumbs">Breadcrumbs</nav><div class="atf-forumdisplay__subforum-cards"><div class="atf-forum-card">Subforum A</div><div class="atf-forum-card">Subforum B</div></div><div class="atf-forum-category__forums"><div class="atf-forum-card">Forum A</div><div class="atf-forum-card">Forum B</div></div>Forum content <button id="outside">Outside</button></main></body>`);
+   await page.setContent(`<link rel="stylesheet" href="https://forum.test/font-awesome-6/css/all.min.css"><style>nav.af-am-bar{overflow-x:auto}ul.af-am-list{padding:10px 18px;display:block}ul.af-am-list>li{float:left;padding-left:5px;margin-left:9px}.af-am-guest-actions{align-items:flex-start}</style><style>${fs.readFileSync(path.join(assets,'advancedmenu.css'),'utf8')}${fs.readFileSync(path.join(root,'inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/surfaces/forum.css'),'utf8')}body{margin:0;background:#0e1520;color:white}#forum{height:1600px;max-width:100%;box-sizing:border-box;padding:20px}</style><body class="af-advancedmenu-layout ${member?'af-am-member':'af-am-guest'} atf-active atf-forum-layout--full">${markup}<main id="forum"><nav class="navigation atf-breadcrumbs">Breadcrumbs</nav><div class="atf-forumdisplay__subforum-cards"><div class="atf-forum-card">Subforum A</div><div class="atf-forum-card">Subforum B</div></div><div class="atf-forum-category__forums"><div class="atf-forum-card">Forum A</div><div class="atf-forum-card">Forum B</div></div>Forum content <button id="outside">Outside</button></main></body>`);
    await page.addScriptTag({content:fs.readFileSync(path.join(assets,'advancedmenu.js'),'utf8')});
   }
-  await load(fixture.member,true);
+  async function aligned(){
+   const boxes=await page.locator('.af-am-rail .af-am-link, .af-am-category-control, .af-am-guest-action, .af-am-avatar-control > a, .af-am-guest-avatar').evaluateAll(nodes=>nodes.map(e=>{const r=e.getBoundingClientRect();return {center:r.x+r.width/2,width:r.width,height:r.height};}));
+   assert.ok(boxes.every(b=>Math.abs(b.center-boxes[0].center)<.1 && b.width===38 && b.height===38),'Rail controls do not share an axis/size');
+   assert.ok(await page.locator('.af-am-bar, .af-am-list').evaluateAll(nodes=>nodes.every(e=>getComputedStyle(e).overflowX==='visible' && e.scrollWidth<=e.clientWidth)),'Group owns horizontal overflow');
+  }
+  await load(fixture.member,true);await aligned();
+  assert.equal(await page.locator('.af-am-drawer button[type="submit"],.af-am-drawer input[type="submit"]').count(),0);
+  await page.evaluate(()=>{window.themeSaves=0;window.MyBB={changeTheme(){themeSaves++;}};});
+  await page.locator('#theme_select select').evaluate(e=>{e.value='2';e.dispatchEvent(new Event('change',{bubbles:true}));});
+  assert.equal(await page.evaluate(()=>themeSaves),1,'Theme owner was invoked twice');
   const drawer=page.locator('#af-am-user-drawer'), shell=page.locator('[data-af-am-drawer-shell]');
   for(const section of ['profile','links','settings','theme']) {
    const control=page.locator(`[data-af-am-category="${section}"]`);
@@ -98,7 +107,7 @@ const root = path.resolve(__dirname, '..'), assets = path.join(root, 'inc/plugin
   assert.equal(await page.locator('.af-am-rail').evaluate(e=>e.getBoundingClientRect().width),375);
   assert.equal(await page.locator('#forum').evaluate(e=>e.getBoundingClientRect().left),0);
   await page.setViewportSize({width:1100,height:800});
-  await load(fixture.guest,false); assert.equal(await page.locator('[data-af-am-category]').count(),1); await page.locator('[data-af-am-category="theme"]').click(); assert.equal(await page.locator('#af-am-user-drawer').isVisible(),true);
+  await load(fixture.guest,false); await aligned(); assert.equal(await page.locator('[data-af-am-category]').count(),1); await page.locator('[data-af-am-category="theme"]').click(); assert.equal(await page.locator('#af-am-user-drawer').isVisible(),true);
   await page.locator('.atf-forum-layout-option').filter({has:page.locator('input[value="grid"]')}).click();
   assert.equal(await page.evaluate(()=>document.body.classList.contains('atf-forum-layout--grid')),true);
   assert.equal(await page.evaluate(()=>localStorage.getItem('af-presentation-preferences:v1:forum_layout')),'grid');
@@ -115,10 +124,12 @@ const root = path.resolve(__dirname, '..'), assets = path.join(root, 'inc/plugin
   await page.evaluate(()=>{Storage.prototype.setItem=function(){throw new Error('blocked storage');};});
   await page.locator('[data-af-am-category="theme"]').click();
   await page.locator('.atf-forum-layout-option').filter({has:page.locator('input[value="full"]')}).click();
-  assert.equal(await page.evaluate(()=>document.body.classList.contains('atf-forum-layout--full')),true);
-  assert.match(await page.locator('.atf-theme-preferences [role="status"]').textContent(),/до перезагрузки/);
+  assert.equal(await page.evaluate(()=>document.body.classList.contains('atf-forum-layout--grid')),true);
+  assert.match(await page.locator('.atf-theme-preferences [role="status"]').textContent(),/отменено/);
   await load(fixture.member,true);
   assert.equal(await page.evaluate(()=>document.body.classList.contains('atf-forum-layout--grid')),false);
+  await load(fixture.emptySecondary,false);await aligned();assert.equal(await page.locator('.af-am-secondary').count(),0);
+  await load(fixture.emptyMenus,false);await aligned();assert.equal(await page.locator('.af-am-main,.af-am-secondary').count(),0);
   // Shared route/layout fixtures, not production MyBB pages.
   for(const route of ['index.php','forumdisplay.php','showthread.php','member.php','usercp.php','kb.php','charactersheets.php','shop.php','inventory.php']) {
    await load(fixture.member,true);

@@ -343,37 +343,42 @@ function af_adaptivethemeframework_render_theme_preferences(array $item = []): s
     $label = htmlspecialchars_uni((string)($lang->atf_forum_layout ?? 'Отображение форумов'));
     $full = htmlspecialchars_uni((string)($lang->atf_forum_layout_full ?? 'По ширине'));
     $grid = htmlspecialchars_uni((string)($lang->atf_forum_layout_grid ?? 'Сетка'));
-    $save = htmlspecialchars_uni((string)($lang->atf_presentation_save ?? 'Сохранить'));
     $hidden = af_adaptivethemeframework_presentation_preferences()['postbit_sidebar_hidden'];
     return '<form class="atf-theme-preferences" data-atf-layout-preferences method="post" action="misc.php?action=atf_presentation_preference">'
         .'<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni((string)$mybb->post_code).'">'
         .'<fieldset class="atf-forum-layout"><legend>'.$label.'</legend><div class="atf-forum-layout-options">'
         .'<label class="atf-forum-layout-option"><input type="radio" name="forum_layout" value="full"'.($layout === 'full' ? ' checked' : '').'><span><i class="fa-solid fa-bars" aria-hidden="true"></i>'.$full.'</span></label>'
         .'<label class="atf-forum-layout-option"><input type="radio" name="forum_layout" value="grid"'.($layout === 'grid' ? ' checked' : '').'><span><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>'.$grid.'</span></label></div></fieldset>'
-        .'<label class="atf-sidebar-preference"><span>Скрыть боковую панель postbit</span><input type="checkbox" name="postbit_sidebar_hidden" value="1"'.($hidden ? ' checked' : '').'><span class="atf-preference-switch" aria-hidden="true"></span></label>'
-        .'<button type="submit">'.$save.'</button><p role="status" aria-live="polite"></p></form>'.af_adaptivethemeframework_preferences_asset();
+        .'<label class="atf-sidebar-preference"><span>Показать боковой постбит</span><input type="checkbox" name="postbit_sidebar_visible" value="1"'.(!$hidden ? ' checked' : '').'><span class="atf-preference-switch" aria-hidden="true"></span></label>'
+        .'<p role="status" aria-live="polite"></p></form>'.af_adaptivethemeframework_preferences_asset();
 }
 
-/** Sidebar-only AJAX boundary; does not overwrite the independent forum layout. */
-function af_adaptivethemeframework_sidebar_save_request(): array
+/** AJAX boundary saves one allow-listed presentation preference at a time. */
+function af_adaptivethemeframework_presentation_save_request(string $key): array
 {
     global $db, $mybb;
     if ($mybb->request_method !== 'post') return [405, ['error'=>'Требуется POST.']];
     $uid = (int)($mybb->user['uid'] ?? 0);
     if ($uid <= 0) return [403, ['error'=>'Войдите в аккаунт.']];
     if (!verify_post_check($mybb->get_input('my_post_key'), true)) return [403, ['error'=>'Сессия устарела. Обновите страницу.']];
-    $value = $mybb->get_input('postbit_sidebar_hidden');
-    if (!in_array($value, ['0','1'], true)) return [422, ['error'=>'Недопустимое значение настройки.']];
+    if (!in_array($key, ['postbit_sidebar_hidden','forum_layout'], true)) return [422, ['error'=>'Недопустимая настройка.']];
+    $value = $mybb->get_input($key);
+    if (!in_array($value, $key === 'forum_layout' ? ['full','grid'] : ['0','1'], true)) return [422, ['error'=>'Недопустимое значение настройки.']];
     if (!af_adaptivethemeframework_preferences_available()) return [503, ['error'=>'Хранилище настроек недоступно. Выполните upgrade ATF.']];
     try {
-        $result = $db->replace_query(AF_PRESENTATION_PREFERENCES_TABLE_NAME, ['uid'=>$uid, 'preference_key'=>'postbit_sidebar_hidden', 'preference_value'=>$value, 'updated_at'=>TIME_NOW]);
+        $result = $db->replace_query(AF_PRESENTATION_PREFERENCES_TABLE_NAME, ['uid'=>$uid, 'preference_key'=>$key, 'preference_value'=>$value, 'updated_at'=>TIME_NOW]);
         if ($result === false) throw new RuntimeException('Preference write failed');
     } catch (Throwable $error) {
-        error_log('[ATF] sidebar preference save failed');
+        error_log('[ATF] presentation preference save failed');
         return [500, ['error'=>'Не удалось сохранить настройку. Повторите попытку.']];
     }
     unset($GLOBALS['atf_presentation_preferences'][$uid]);
-    return [200, ['postbit_sidebar_hidden'=>$value === '1']];
+    return [200, [$key=>$key === 'forum_layout' ? $value : $value === '1']];
+}
+
+function af_adaptivethemeframework_sidebar_save_request(): array
+{
+    return af_adaptivethemeframework_presentation_save_request('postbit_sidebar_hidden');
 }
 
 /** Persist only the submitted, allow-listed preference for registered users. */
@@ -381,8 +386,8 @@ function af_adaptivethemeframework_save_presentation_preference(): void
 {
     global $db, $mybb;
     if (($mybb->get_input('action') ?? '') !== 'atf_presentation_preference') return;
-    if ($mybb->get_input('preference_key') === 'postbit_sidebar_hidden') {
-        [$status, $body] = af_adaptivethemeframework_sidebar_save_request();
+    if ($mybb->get_input('preference_key') !== '') {
+        [$status, $body] = af_adaptivethemeframework_presentation_save_request((string)$mybb->get_input('preference_key'));
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');

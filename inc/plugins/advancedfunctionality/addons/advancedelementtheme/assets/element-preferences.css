@@ -1,14 +1,14 @@
-.af-element-preferences { margin-top: 18px; border-top: 1px solid #40516a; padding-top: 16px; color: inherit; }
+.af-element-preferences { margin-top: 18px; border-top: 1px solid var(--af-am-border, #40516a); padding-top: 16px; color: inherit; }
 .af-element-preferences fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .af-element-preferences legend { font-weight: 700; padding: 0; }
-.af-element-preferences p, .af-element-preferences small { font-size: .8em; color: #b5c6df; }
+.af-element-preferences p, .af-element-preferences small { font-size: .8em; color: var(--af-am-muted, #b5c6df); }
 .af-element-preference-row { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; cursor: pointer; font-size: .88em; }
 .af-element-preference-row input[type="checkbox"] { position: absolute; width: 32px; height: 18px; right: 0; margin: 0; opacity: 0; cursor: pointer; }
-.af-element-preference-switch { flex: 0 0 32px; height: 18px; box-sizing: border-box; border-radius: 20px; background: #4a576a; padding: 3px; pointer-events: none; }
-.af-element-preference-switch::before { content: ''; display: block; width: 12px; height: 12px; background: #edf3ff; border-radius: 50%; }
-.af-element-preference-row input:checked + .af-element-preference-switch { background: #577ebd; }
+.af-element-preference-switch { flex: 0 0 32px; height: 18px; box-sizing: border-box; border-radius: 20px; background: var(--af-am-border, #4a576a); padding: 3px; pointer-events: none; }
+.af-element-preference-switch::before { content: ''; display: block; width: 12px; height: 12px; background: var(--af-am-text, #edf3ff); border-radius: 50%; }
+.af-element-preference-row input:checked + .af-element-preference-switch { background: var(--af-am-highlight, #577ebd); }
 .af-element-preference-row input:checked + .af-element-preference-switch::before { transform: translateX(14px); }
-.af-element-preference-row input:focus-visible + .af-element-preference-switch { outline: 2px solid #9bc4ff; outline-offset: 3px; }
+.af-element-preference-row input:focus-visible + .af-element-preference-switch { outline: 2px solid var(--af-am-highlight, #9bc4ff); outline-offset: 3px; }
 .af-element-preference-row input:disabled + .af-element-preference-switch { opacity: .5; }
 .af-element-preferences-status { min-height: 1.3em; margin: 6px 0; }
 .af-element-preferences button { border: 1px solid #57749c; border-radius: 5px; padding: 6px 10px; background: #293e5c; color: #edf3ff; cursor: pointer; }

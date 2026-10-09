@@ -36,11 +36,17 @@ check_sidebar($status === 200 && $result['postbit_sidebar_hidden'] && !isset($db
 unset($GLOBALS['atf_presentation_preferences']);
 check_sidebar(af_adaptivethemeframework_presentation_preferences()['postbit_sidebar_hidden'], 'Server choice did not survive fresh request cache');
 $widget = af_adaptivethemeframework_render_theme_preferences();
+check_sidebar(str_contains($widget,'Показать боковой постбит') && !str_contains($widget,'name="postbit_sidebar_visible" value="1" checked') && !str_contains($widget,'type="submit"'), 'Stored hidden preference lost meaning or redundant submit');
 $page = '<html><head></head><body class="atf-active" data-atf-owned="1"><article class="atf-post">Post</article></body></html>';
 af_adaptivethemeframework_mark_page($page);
 check_sidebar(str_contains($page, '<body data-atf-postbit-sidebar="hidden"') && strpos($page,'data-atf-preferences-bootstrap') < strpos($page,'<body') && !str_contains(substr($page,0,strpos($page,'</head>')), ' defer'), 'Early bootstrap/body seed missing');
 $once = $page; af_adaptivethemeframework_mark_page($page); check_sidebar($page === $once, 'Bootstrap was duplicated');
 $member = ['widget'=>$widget, 'bootstrap'=>af_adaptivethemeframework_preferences_asset(true), 'page'=>$page];
+$mybb->input['forum_layout']='full';
+[$status,$layoutResult] = af_adaptivethemeframework_presentation_save_request('forum_layout');
+check_sidebar($status===200 && $layoutResult['forum_layout']==='full' && $db->rows[42]['postbit_sidebar_hidden']==='1', 'Forum autosave changed sidebar preference');
+$mybb->input['forum_layout']='invalid';
+check_sidebar(af_adaptivethemeframework_presentation_save_request('forum_layout')[0]===422 && af_adaptivethemeframework_presentation_save_request('unknown')[0]===422, 'Invalid autosave key/value accepted');
 $mybb->input['my_post_key']='invalid'; check_sidebar(af_adaptivethemeframework_sidebar_save_request()[0]===403, 'CSRF not checked');
 $mybb->input['my_post_key']='csrf-token'; $mybb->input['postbit_sidebar_hidden']='true'; check_sidebar(af_adaptivethemeframework_sidebar_save_request()[0]===422, 'Invalid boolean accepted');
 $mybb->input['postbit_sidebar_hidden']='0'; $mybb->request_method='get'; check_sidebar(af_adaptivethemeframework_sidebar_save_request()[0]===405, 'GET changed preferences');

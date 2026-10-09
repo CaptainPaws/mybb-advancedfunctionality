@@ -1262,6 +1262,10 @@ function af_advancedmenu_render_theme_widget(array $item = []): string
     global $theme_select;
     $content = trim((string)($theme_select ?? ''));
     if ($content === '') $content = '<p class="af-am-preference-notice">Выбор темы недоступен: он ограничен настройками форума.</p>';
+    // MyBB's theme selector already saves on change; its submit button is redundant.
+    if (preg_match('~<select\b~i', $content)) {
+        $content = preg_replace('~<input\b(?=[^>]*\btype=["\']submit["\'])[^>]*>|<button\b(?=[^>]*\btype=["\']submit["\'])[^>]*>.*?</button>~is', '', $content);
+    }
     // AdvancedMenu is only the widget host. Presentation owners may append
     // independent controls without teaching navigation how they are stored.
     foreach (($GLOBALS['af_theme_switcher_preference_providers'] ?? []) as $provider) {
@@ -1440,8 +1444,8 @@ function af_advancedmenu_render_frontend_nav(): string
     return '<div class="af-am-shell af-am-navigation" data-af-am-navigation="1">'
         .'<div class="af-am-rail"><div class="af-am-rail-scroll">'
         .af_advancedmenu_render_user_avatar().af_advancedmenu_render_guest_account_bar()
-        .'<nav class="af-am-bar af-am-main" aria-label="Основное меню"><ul class="af-am-list">'.$main.'</ul></nav>'
-        .'<nav class="af-am-bar af-am-secondary" aria-label="Дополнительное меню"><ul class="af-am-list">'.$secondary.'</ul></nav>'
+        .(trim($main) !== '' ? '<nav class="af-am-bar af-am-main" aria-label="Основное меню"><ul class="af-am-list">'.$main.'</ul></nav>' : '')
+        .(trim($secondary) !== '' ? '<nav class="af-am-bar af-am-secondary" aria-label="Дополнительное меню"><ul class="af-am-list">'.$secondary.'</ul></nav>' : '')
         .af_advancedmenu_render_user_controls()
         .'</div></div></div><div class="af-am-drawer-shell" data-af-am-drawer-shell hidden>'
         .'<button class="af-am-drawer-overlay" type="button" tabindex="-1" aria-label="Закрыть пользовательское меню"></button>'

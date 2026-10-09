@@ -177,5 +177,10 @@
   }
   var guestAvatar = rail.querySelector('.af-am-guest-avatar');
   if (guestAvatar) guestAvatar.addEventListener('click', function () { showTip(guestAvatar); });
+  var themeForm = document.getElementById('theme_select');
+  var themeSelect = themeForm && themeForm.querySelector('select');
+  if (themeSelect && !themeSelect.hasAttribute('onchange')) {
+    themeSelect.addEventListener('change', function () { themeForm.requestSubmit(); });
+  }
   document.documentElement.classList.add('af-advancedmenu-ready');
 })();

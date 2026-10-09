@@ -193,13 +193,14 @@ with a default UID-zero avatar and direct MyBB login/register actions. Rail over
 remains scrollable with its scrollbar visually hidden. The ATF provider uses the
 existing full/grid radios and renderer classes in a segmented control. Guest forum
 layout is stored in `af-presentation-preferences:v1:forum_layout`; account saves
-retain the existing CSRF-protected endpoint. Blocked localStorage preserves both
-preferences in the current page and reports that reload persistence is unavailable.
+retain the existing CSRF-protected endpoint. Failed writes, including blocked
+localStorage, restore the last saved choice and show an error.
 Browser checks use generated fixtures, not production pages.
 
 ATF visitor postbit-sidebar preference
 --------------------------------------
-The Appearance provider exposes `postbit_sidebar_hidden` (default false). Accounts
+The Appearance provider displays “Показать боковой постбит” (default ON), the inverse
+of the unchanged `postbit_sidebar_hidden` preference (default false). Accounts
 use the existing `af_presentation_preferences` table and CSRF-protected ATF endpoint
 with a sidebar-only AJAX request; guest storage uses
 `af-presentation-preferences:v1:postbit_sidebar_hidden` (`0`/`1`). Account seeds ignore
@@ -211,12 +212,24 @@ grid to a single `content` area, including mobile. Showing it restores the mobil
 `sidebar`/`content` rows despite the earlier desktop override. ElementTheme's existing public
 refresh event unregisters hidden sidebar instances and preserves topbar instances.
 New AJAX posts inherit the page state before their Canvas hosts are mounted.
-Failed account saves roll back the UI/layout; blocked guest storage retains the
-current-page choice and reports the persistence limit. The existing forum-layout
-save contract remains independent.
+Failed account or guest saves roll back the UI/layout and show an error. Forum
+layout and sidebar autosave use the same endpoint but update only the submitted
+key. ATF controls are disabled while a request is pending to prevent conflicts.
+The legacy forum-layout submit endpoint remains compatible, while the Appearance
+widget has no Save buttons. Existing hidden values retain their meaning.
 
 Targeted checks: `php tests/atf_postbit_sidebar_preferences_regression.php` and
 `node tests/atf_postbit_sidebar_preferences_browser.cjs` (also
 `AF_TEST_BROWSER=firefox`). The browser fixture uses real ATF CSS, preference JS,
 sticky runtime and Canvas engine, with simulated edit/reply insertion and HTTP
 responses. It does not exercise production MyBB Quick Edit/Quick Reply endpoints.
+
+Rail geometry checks cover inherited nav/list padding, floated list items and
+independent group overflow, plus guest/member controls on the same center axis.
+Main/secondary groups are emitted only when their filtered registry output is
+nonempty. The MyBB theme selector keeps its existing change handler (one invocation)
+and redundant submit controls are removed; controls without a handler use the
+provider form's normal submit flow on change. Element animation controls autosave
+through their existing endpoint without submit buttons or duplicate submit saves.
+Browser tests include account forum-layout autosave, reload/rollback and a held
+response to verify that rapid changes cannot create conflicting requests.
