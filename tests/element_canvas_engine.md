@@ -103,3 +103,63 @@ computed CSS colors and a one-pixel Canvas fallback. Every standard picker stays
 enabled; selecting RGB preserves literal alpha exactly, and a separate alpha
 input permits intentional transparency edits. CSS expressions stay untouched
 until a user chooses RGB/alpha, with that replacement behavior explained in UI.
+
+## Personal animation permissions / AdvancedMenu
+
+AdvancedElementTheme registers `af_elementtheme_render_preferences_widget` in
+`af_theme_switcher_preference_providers`; AdvancedMenu places it through the
+existing `theme_switcher` renderer. No menu records, layouts owned by ATF/APUI,
+or element eligibility providers are replaced.
+
+The existing `af_presentation_preferences` table stores one `element_effects`
+JSON row per UID. Five booleans default to true: `effects_enabled`,
+`effects_profile`, `effects_sheet`, `effects_application`, `effects_postbit`.
+Install/activate/upgrade creates this shared schema if absent; uninstall leaves
+preferences intact. Existing ATF installations reuse their table unchanged.
+The request cache reads the viewer's row once. Server writes go to
+`misc.php?action=af_element_preferences` with POST, MyBB `my_post_key`, and all
+five `0`/`1` values. The session UID is authoritative; a submitted UID is ignored.
+JSON success contains `preferences`; failures use HTTP 4xx/5xx and `error`.
+JS applies changes immediately, disables inputs during save and rolls back on
+failure. No-JS submits use MyBB's redirect after successful persistence.
+
+The public frontend contract is:
+
+```js
+window.afElementEffects.getPreferences(); // copy of the five current booleans
+window.afElementEffects.setPreferences({
+  effects_enabled: true, effects_profile: false, effects_sheet: true,
+  effects_application: true, effects_postbit: true
+}); // replaces permissions; omitted flags default to true; does not persist
+window.afElementEffects.refresh(); // rescan existing and lazy hosts
+// Existing document event is also supported:
+document.dispatchEvent(new CustomEvent('af-element-effects-refresh'));
+```
+
+The controller ANDs these permissions with canonical element/ACP restrictions
+before registering a host. Disabling unregisters Canvas and hides its layer,
+without modifying palette/custom CSS/APUI backgrounds. The shared engine still
+owns reduced-motion, visibility and cleanup. Server preferences are embedded as
+`data-af-element-preferences` JSON before deferred frontend initialization, even
+on content-only effect documents. Guests use `af-element-effects-guest` in
+localStorage; authenticated pages ignore guest storage. The ACP preview is not
+subject to frontend viewer permissions.
+
+Targeted checks:
+
+```sh
+php tests/advancedmenu_game_ui_regression.php
+php tests/element_preferences_regression.php
+node tests/advancedmenu_game_ui_browser.cjs
+node tests/element_preferences_browser.cjs
+AF_TEST_BROWSER=firefox node tests/advancedmenu_game_ui_browser.cjs
+AF_TEST_BROWSER=firefox node tests/element_preferences_browser.cjs
+```
+
+The PHP checks cover registry/custom placement, endpoint hook registration,
+POST/CSRF/UID isolation, one-load caching and fresh-request persistence. Browser
+fixtures cover desktop/mobile geometry, drawer keyboard behavior, the real
+widget renderer, startup exclusion, live toggles, AJAX hosts, failed-save
+rollback and motion/static-style contracts. The browser persistence test uses a
+mock HTTP response and a second server-seeded browser context; it is not a live
+cross-device login or a production frontend check.

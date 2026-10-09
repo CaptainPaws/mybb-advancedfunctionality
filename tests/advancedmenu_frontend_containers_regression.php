@@ -74,12 +74,11 @@ foreach (['af_advancedcharacters_menu_provider', 'af_characters_add_moderator_li
     if (strpos($characters, $needle) !== false) throw new RuntimeException('Characters menu injection remains: '.$needle);
 }
 
-if (!preg_match('~<nav class="af-am-bar af-am-main"[^>]*>\'\s*\.\s*\'<ul class="af-am-list"><button class="af-am-burger"~', $source)) {
-    throw new RuntimeException('Burger is not the first element inside the main menu list.');
+if (!str_contains($source, 'af_advancedmenu_render_user_controls()') || !str_contains($source, 'data-af-am-category=')) {
+    throw new RuntimeException('Member controls do not open registry drawer categories.');
 }
-
 if (substr_count($source, '<button class="af-am-burger"') !== 1) {
-    throw new RuntimeException('Frontend renderer must define exactly one burger.');
+    throw new RuntimeException('Guest renderer must define exactly one burger.');
 }
 foreach (['data-af-am-tabs="1"', 'role="tablist"', 'role="tabpanel"', 'data-af-am-tab="', 'data-af-am-panel="'] as $needle) {
     if (strpos($source, $needle) === false) throw new RuntimeException('Missing drawer tab markup: '.$needle);

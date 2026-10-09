@@ -97,10 +97,19 @@ async function metrics(page, name, seconds = 2) {
     });
     await sidebar.scrollIntoViewIfNeeded();
     await page.evaluate(() => afElementCanvasEngine.refresh()); await page.waitForTimeout(150);
-    const probeOn = await page.locator('#sidebar-probe').screenshot();
+    async function foregroundSnapshot() {
+      const probe = page.locator('#sidebar-probe');
+      await probe.scrollIntoViewIfNeeded();
+      const box = await probe.boundingBox();
+      // Fractional coordinates can add a transparent background row to the
+      // locator screenshot. Compare the opaque content, excluding its border.
+      return page.screenshot({ clip: { x: Math.ceil(box.x) + 2, y: Math.ceil(box.y) + 2,
+        width: Math.floor(box.width) - 4, height: Math.floor(box.height) - 4 } });
+    }
+    const probeOn = await foregroundSnapshot();
     const railOn = await sidebar.screenshot();
     await sidebar.locator('.atf-post__sidebar-inner > [data-af-element-effect]').evaluate(e => e.style.display = 'none');
-    assert.ok((await page.locator('#sidebar-probe').screenshot()).equals(probeOn), 'Canvas painted over foreground');
+    assert.ok((await foregroundSnapshot()).equals(probeOn), 'Canvas painted over foreground');
     assert.notDeepEqual(await sidebar.screenshot(), railOn, 'APUI image/overlay hid the sidebar canvas');
     await sidebar.locator('.atf-post__sidebar-inner > [data-af-element-effect]').evaluate(e => e.style.removeProperty('display'));
     await page.locator('#profile').scrollIntoViewIfNeeded();

@@ -1304,9 +1304,6 @@ function af_advancedmenu_build_drawer_html(): string
     foreach ($sections as $section => $title) {
         $rows = [];
         foreach ($items as $item) {
-            // Profile and logout are primary identity actions and are rendered
-            // in the drawer account card rather than repeated in the tabs.
-            if (in_array((string)($item['key'] ?? ''), ['profile', 'logout'], true)) continue;
             if (($item['container'] ?? '') !== 'user_drawer' || ($item['section'] ?? 'links') !== $section
                 || empty($item['enabled']) || !af_menu_item_is_visible($item)) continue;
             $identity = (string)($item['canonical_identity'] ?? af_menu_provider_identity($item));
@@ -1321,7 +1318,8 @@ function af_advancedmenu_build_drawer_html(): string
                 || (int)$item['enabled'] !== 1 || !af_advancedmenu_item_is_visible($item)) continue;
             $rows[] = ['sort'=>(int)$item['sort_order'], 'key'=>'custom_'.(int)$item['id'], 'html'=>af_advancedmenu_render_item($item)];
         }
-        if (!$rows) continue;
+        // Keep the four registered sections addressable even when ACP hides every item.
+        if (!$rows) $rows[] = ['sort'=>0, 'key'=>'empty', 'html'=>'<li class="af-am-empty">Нет доступных пунктов</li>'];
         usort($rows, static fn(array $a, array $b): int => [$a['sort'], $a['key']] <=> [$b['sort'], $b['key']]);
         $panels[$section] = [
             'title'=>$title,
@@ -1357,45 +1355,47 @@ function af_advancedmenu_build_drawer_html(): string
 
 
 
-/** Render the drawer identity surface; avatar ownership stays with AdvancedAvatar. */
+/** Guest account actions; members use the rail avatar and registry sections. */
 function af_advancedmenu_render_drawer_account(): string
 {
+    global $mybb;
+    if (!empty($mybb->user['uid'])) return '';
+    return '<section class="af-am-drawer-account af-am-drawer-account--guest" aria-label="Гостевой аккаунт">'
+        .'<p class="af-am-drawer-welcome">Добро пожаловать</p><div class="af-am-drawer-account-actions">'
+        .'<a class="af-am-account-action" href="member.php?action=login">Войти</a>'
+        .'<a class="af-am-account-action" href="member.php?action=register">Регистрация</a></div></section>';
+}
+
+/** Avatar ownership and last-visit formatting stay with existing providers. */
+function af_advancedmenu_render_user_controls(): string
+{
     global $mybb, $lang;
-
-    $uid = max(0, (int)($mybb->user['uid'] ?? 0));
-    if ($uid === 0) {
-        return '<section class="af-am-drawer-account af-am-drawer-account--guest" aria-label="Гостевой аккаунт">'
-            .'<p class="af-am-drawer-welcome">Добро пожаловать</p><div class="af-am-drawer-account-actions">'
-            .'<a class="af-am-account-action" href="member.php?action=login"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i> Войти</a>'
-            .'<a class="af-am-account-action" href="member.php?action=register"><i class="fa-solid fa-user-plus" aria-hidden="true"></i> Регистрация</a>'
-            .'</div></section>';
-    }
-
-    $username = trim((string)($mybb->user['username'] ?? ''));
-    $username = $username !== '' ? $username : (string)($lang->guest ?? 'User');
-    $profileUrl = 'member.php?action=profile&amp;uid='.$uid;
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    if ($uid <= 0) return '';
+    $name = htmlspecialchars_uni((string)($mybb->user['username'] ?? 'User'));
     $avatar = function_exists('af_avatar_render')
-        ? af_avatar_render((array)$mybb->user, 'drawer', ['img_class'=>'af-am-drawer-avatar-image'])
-        : '';
-    $lastVisit = '';
-    $lastVisitTs = (int)($mybb->user['lastvisit'] ?? 0);
-    if ($lastVisitTs > 0 && function_exists('my_date')) {
-        // my_date('relative') is MyBB-owned presentation HTML (not user data):
-        // recent dates include a safe <span title="..."> fragment.  Escaping it
-        // here displayed that markup literally in the drawer.
-        $lastVisit = '<p class="af-am-drawer-lastvisit">'.htmlspecialchars_uni((string)($lang->welcome_lastvisit ?? 'Последний визит: '))
-            .(string)my_date('relative', $lastVisitTs).'</p>';
+        ? af_avatar_render((array)$mybb->user, 'drawer', ['img_class'=>'af-am-control-avatar-image']) : '';
+    if ($avatar === '') {
+        // Core MyBB fallback when the shared AF provider is inactive.
+        $image = function_exists('format_avatar') ? format_avatar((string)($mybb->user['avatar'] ?? ''), '36x36') : [];
+        $src = (string)(($image['image'] ?? '') ?: ($mybb->settings['useravatar'] ?? 'images/default_avatar.png'));
+        $src = str_replace('{theme}', (string)($GLOBALS['theme']['imgdir'] ?? 'images'), $src);
+        $avatar = '<a href="member.php?action=profile&amp;uid='.$uid.'"><img class="af-am-control-avatar-image" src="'.htmlspecialchars_uni($src).'" alt="'.$name.'"></a>';
     }
-    $logoutUrl = 'member.php?action=logout&amp;logoutkey='.rawurlencode((string)($mybb->post_code ?? ''));
-
-    return '<section class="af-am-drawer-account" aria-label="Аккаунт пользователя">'
-        .'<div class="af-am-drawer-identity">'.$avatar.'<div class="af-am-drawer-usertext">'
-        .'<p class="af-am-drawer-welcome">Добро пожаловать</p>'
-        .'<a class="af-am-drawer-username" href="'.$profileUrl.'">'.htmlspecialchars_uni($username).'</a>'
-        .$lastVisit.'</div></div><div class="af-am-drawer-account-actions">'
-        .'<a class="af-am-account-action" href="'.$profileUrl.'"><i class="fa-solid fa-user" aria-hidden="true"></i> Профиль</a>'
-        .'<a class="af-am-account-action af-am-account-action--logout" href="'.$logoutUrl.'"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Выйти</a>'
-        .'</div></section>';
+    // The provider already returns a profile anchor: never nest another link.
+    $avatar = preg_replace_callback('/<a\b/i', static fn() => '<a aria-describedby="af-am-account-tooltip" aria-label="Профиль: '.$name.'"', $avatar, 1);
+    $visit = (int)($mybb->user['lastvisit'] ?? 0);
+    $date = $visit > 0 && function_exists('my_date') ? (string)my_date('relative', $visit) : '—';
+    $html = '<nav class="af-am-user-controls" aria-label="Управление аккаунтом">'
+        .'<div class="af-am-avatar-control">'.$avatar
+        .'<button type="button" class="af-am-account-info" aria-label="Информация об аккаунте" aria-controls="af-am-account-tooltip" aria-expanded="false">i</button>'
+        .'<div id="af-am-account-tooltip" class="af-am-account-tooltip" role="tooltip"><strong>Добро пожаловать!</strong><span>'.$name.'</span><small>'
+        .htmlspecialchars_uni((string)($lang->welcome_lastvisit ?? 'Последний визит: ')).$date.'</small></div></div>';
+    $icons = ['profile'=>'fa-user', 'links'=>'fa-link', 'settings'=>'fa-gear', 'theme'=>'fa-palette'];
+    foreach (af_menu_sections() as $section => $label) {
+        $html .= '<button type="button" class="af-am-category-control" data-af-am-category="'.$section.'" aria-label="'.htmlspecialchars_uni($label).'" aria-controls="af-am-user-drawer" aria-expanded="false"><i class="fa-solid '.$icons[$section].'" aria-hidden="true"></i></button>';
+    }
+    return $html.'</nav>';
 }
 
 /**
@@ -1426,14 +1426,14 @@ function af_advancedmenu_render_frontend_nav(): string
     $drawer = af_advancedmenu_build_drawer_html();
     return '<div class="af-am-shell af-am-navigation" data-af-am-navigation="1">'
         .'<nav class="af-am-bar af-am-main" aria-label="Основное меню">'
-        .'<ul class="af-am-list"><button class="af-am-burger" type="button" aria-label="Открыть пользовательское меню" aria-expanded="false" aria-controls="af-am-user-drawer"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>'
+        .'<ul class="af-am-list">'.(empty($GLOBALS['mybb']->user['uid']) ? '<li><button class="af-am-burger" type="button" aria-label="Открыть меню" aria-expanded="false" aria-controls="af-am-user-drawer"><i class="fa-solid fa-bars" aria-hidden="true"></i></button></li>' : '')
         .$main.'</ul></nav>'
         .'<nav class="af-am-bar af-am-secondary" aria-label="Дополнительное меню"><ul class="af-am-list">'.$secondary.'</ul></nav>'
         .af_advancedmenu_render_guest_account_bar()
-        .'</div><div class="af-am-drawer-shell" data-af-am-drawer-shell hidden>'
+        .'</div>'.af_advancedmenu_render_user_controls().'<div class="af-am-drawer-shell" data-af-am-drawer-shell hidden>'
         .'<button class="af-am-drawer-overlay" type="button" tabindex="-1" aria-label="Закрыть пользовательское меню"></button>'
         .'<aside id="af-am-user-drawer" class="af-am-drawer" role="dialog" aria-modal="true" aria-label="Пользовательское меню" tabindex="-1">'
-        .'<div class="af-am-drawer-header"><strong>Меню пользователя</strong><button class="af-am-drawer-close" type="button" aria-label="Закрыть пользовательское меню">&times;</button></div>'
+        .'<div class="af-am-drawer-header"><strong data-af-am-drawer-title>Меню пользователя</strong><button class="af-am-drawer-close" type="button" aria-label="Закрыть пользовательское меню">&times;</button></div>'
         .af_advancedmenu_render_drawer_account().$drawer.'</aside></div>';
 }
 

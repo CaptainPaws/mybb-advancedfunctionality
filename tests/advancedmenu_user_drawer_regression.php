@@ -30,8 +30,9 @@ if (strpos($items['logout']['action']['url'], 'logoutkey=logout-token') === fals
     throw new RuntimeException('Logout system action does not carry the session token.');
 }
 
-$account = af_advancedmenu_render_drawer_account();
-foreach (['shared-avatar', 'uid=42', 'Drawer User', 'Профиль', 'action=logout&amp;logoutkey=logout-token', '<span title="formatted date">recently</span>'] as $needle) {
+if (af_advancedmenu_render_drawer_account() !== '') throw new RuntimeException('Member identity duplicated in drawer');
+$account = af_advancedmenu_render_user_controls();
+foreach (['shared-avatar', 'uid=42', 'Drawer User', 'aria-describedby="af-am-account-tooltip"', '<span title="formatted date">recently</span>'] as $needle) {
     if (strpos($account, $needle) === false) throw new RuntimeException('Member account header missing: '.$needle);
 }
 if (strpos($account, '&lt;span') !== false) {

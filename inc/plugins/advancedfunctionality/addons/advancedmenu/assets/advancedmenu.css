@@ -131,7 +131,7 @@
   .af-am-guest-action { padding-inline: 8px; }
 }
 
-.af-advancedmenu-layout .af-am-main .af-am-list > .af-am-burger {
+.af-advancedmenu-layout .af-am-main .af-am-list .af-am-burger {
   flex: 0 0 48px;
   width: 48px;
   min-height: var(--af-am-main-height);
@@ -142,10 +142,10 @@
   cursor: pointer;
   box-shadow: none;
 }
-.af-advancedmenu-layout .af-am-main .af-am-list > .af-am-burger:hover,
-.af-advancedmenu-layout .af-am-main .af-am-list > .af-am-burger:focus-visible { background: #39424c; }
+.af-advancedmenu-layout .af-am-main .af-am-list .af-am-burger:hover,
+.af-advancedmenu-layout .af-am-main .af-am-list .af-am-burger:focus-visible { background: #39424c; }
 @media (min-width: 769px) {
-  .af-advancedmenu-layout .af-am-main .af-am-list > .af-am-burger {
+  .af-advancedmenu-layout .af-am-main .af-am-list .af-am-burger {
     position: static !important;
     inset: auto !important;
     transform: none !important;
@@ -226,7 +226,7 @@ body.af-am-drawer-open { overflow: hidden; }
 
 @media (max-width: 768px) {
   .af-am-drawer-tablist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .af-advancedmenu-layout .af-am-main .af-am-list > .af-am-burger {
+  .af-advancedmenu-layout .af-am-main .af-am-list .af-am-burger {
     position: fixed !important;
     z-index: 1200;
     inset: auto auto 14px 14px !important;
@@ -327,4 +327,48 @@ body.af-am-drawer-open { overflow: hidden; }
 
 .af-am-link{
   position: relative;
+}
+
+/* Compact account rail; its reserved strip belongs to navigation, not ATF. */
+.af-am-user-controls { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 6px; box-sizing: border-box; background: #101720; border: 1px solid #334258; border-radius: 8px; color: #b8c9e2; }
+.af-am-category-control, .af-am-avatar-control > a { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; box-sizing: border-box; border: 1px solid #394c68; border-radius: 6px; background: #1b2637; color: #b8c9e2; cursor: pointer; text-decoration: none; }
+.af-am-category-control { font-size: 15px; }
+.af-am-category-control:hover, .af-am-category-control:focus-visible, .af-am-avatar-control > a:focus-visible { background: #2b3e59; outline: 2px solid #85a9de; outline-offset: 2px; }
+.af-am-category-control.is-active { background: #293d5b; border-color: #85a9de; box-shadow: inset 3px 0 #9bc4ff; color: #fff; }
+.af-am-avatar-control { position: relative; margin-bottom: 4px; }
+.af-am-avatar-control > a { border-radius: 50%; overflow: hidden; }
+.af-am-avatar-control img, .af-am-avatar-control .apa_bg { width: 34px !important; height: 34px !important; object-fit: cover; border-radius: 50%; }
+.af-am-account-info { position: absolute; bottom: -3px; right: -3px; width: 16px; height: 16px; padding: 0; border: 1px solid #6984a8; border-radius: 50%; background: #263a56; color: #fff; font: 11px/1 sans-serif; cursor: pointer; }
+.af-am-account-tooltip { display: none; position: absolute; top: 0; left: calc(100% + 12px); width: 230px; max-width: calc(100vw - 80px); padding: 12px; box-sizing: border-box; border: 1px solid #425773; border-radius: 6px; background: #192535; color: #eef3fc; box-shadow: 0 8px 24px #0008; overflow-wrap: anywhere; }
+.af-am-account-tooltip > * { display: block; margin: 0 0 6px; }
+.af-am-account-tooltip small { color: #b5c6df; margin-bottom: 0; }
+.af-am-avatar-control > a:focus ~ .af-am-account-tooltip, .af-am-avatar-control.is-info-open .af-am-account-tooltip { display: block; }
+@media (hover: hover) { .af-am-avatar-control:hover .af-am-account-tooltip { display: block; } }
+.af-am-drawer { width: min(340px, calc(100vw - 72px)); background: rgba(24,35,51,.97); border: 1px solid #3a4d68; padding: 16px; animation: af-am-drawer-enter .16s ease-out; }
+.af-am-drawer-header { font-size: 1em; margin-bottom: 14px; }
+.af-am-drawer-close { font-size: 1.5em; }
+.af-am-drawer-list .af-am-link { font-size: .9em; padding: 9px 8px; }
+.af-am-widget-label { font-size: .8em; }
+.af-am-widget-content select { background: #233248; color: #eef3fc; border: 1px solid #415572; border-radius: 5px; }
+.af-am-empty { padding: 10px; color: #aabbcf; font-size: .85em; }
+@keyframes af-am-drawer-enter { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
+@media (min-width: 769px) {
+  body.af-advancedmenu-layout.af-am-member { box-sizing: border-box; padding-inline-start: 64px; }
+  .af-advancedmenu-layout.af-am-member .af-am-navigation { width: calc(100% + 64px); margin-inline-start: -64px; }
+  .af-am-user-controls { position: fixed; top: calc(var(--af-am-main-height, 48px) + var(--af-am-secondary-height, 42px) + 10px); left: 6px; width: 52px; z-index: 1400; }
+  .af-am-member .af-am-drawer { left: 64px; }
+  /* Visually compact, still focusable: keyboard users reveal the tablist. */
+  .af-am-member .af-am-drawer-tablist:not(:focus-within) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; margin: 0; }
+}
+@media (max-width: 768px) {
+  .af-am-user-controls { flex-direction: row; justify-content: center; gap: 12px; border-radius: 0; padding: 8px; }
+  .af-am-avatar-control { margin: 0; }
+  .af-am-account-tooltip { top: calc(100% + 10px); left: 0; }
+  .af-am-drawer { width: min(340px, 94vw); }
+}
+@media (prefers-reduced-motion: reduce) { .af-am-drawer { animation: none; } }
+.af-am-user-controls, .af-am-drawer { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; line-height: 1.45; }
+@media (max-width: 768px) {
+  body.af-am-drawer-open .af-am-user-controls { position: fixed; top: 0; left: 0; right: 0; z-index: 1400; }
+  .af-am-member .af-am-drawer { top: 56px; }
 }

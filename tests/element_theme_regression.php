@@ -25,7 +25,7 @@ $db = new class {
     public array $created = [];
     function build_create_table_collation() { return 'DEFAULT CHARSET=utf8mb4'; }
     function table_exists($table) { return isset($this->rows[$table]); }
-    function write_query($sql) { $this->created[] = $sql; preg_match('/CREATE TABLE mybb_(\w+)/', $sql, $name); $this->rows[$name[1]] = []; }
+    function write_query($sql) { $this->created[] = $sql; preg_match('/CREATE TABLE (?:IF NOT EXISTS )?mybb_(\w+)/', $sql, $name); $this->rows[$name[1]] = []; }
     function escape_string($value) { return addslashes($value); }
     function simple_select($table, $fields = '*') { ++$this->queries; return (object)['rows' => $this->rows[$table], 'i' => 0]; }
     function fetch_array($query) { return $query->rows[$query->i++] ?? false; }
@@ -149,6 +149,6 @@ $kbUnavailable = false; $kbKeys = []; unset($GLOBALS['af_elementtheme_elements']
 element_check(af_elementtheme_resolve_key('shadow') === '' && af_elementtheme_get_rows()['shadow']['state'] === 'Legacy / unbound', 'Deleted identity deleted style or stayed valid');
 $db->rows = []; af_elementtheme_invalidate(); element_check(af_elementtheme_get_style('new_element') === [], 'Absent schema failure');
 af_advancedelementtheme_activate(); af_advancedelementtheme_activate();
-element_check(count($db->created) === 2 && isset($db->rows['af_element_theme_styles'], $db->rows['af_element_theme_surfaces']), 'Activation/reactivation is not idempotent');
+element_check(count($db->created) === 3 && isset($db->rows['af_element_theme_styles'], $db->rows['af_element_theme_surfaces'], $db->rows['af_presentation_preferences']), 'Activation/reactivation is not idempotent');
 element_check(!str_contains(file_get_contents(AF_ADDONS . 'advancedelementtheme/advancedelementtheme.php'), 'update_query(\'templates\''), 'Addon owns templates');
 echo "element theme regression: OK (registry, aliases, dynamic binding, ACP, palettes, surfaces, assets, gating, cache)\n";

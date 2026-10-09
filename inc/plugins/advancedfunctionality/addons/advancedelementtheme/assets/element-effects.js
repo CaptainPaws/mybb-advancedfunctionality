@@ -4,6 +4,17 @@
   const blocks = document.querySelectorAll('[data-af-element-effects-config]');
   const settings = {};
   blocks.forEach(block => { try { Object.assign(settings, JSON.parse(block.textContent)); } catch (_) { /* malformed metadata stays inert */ } });
+  const preferenceKeys = ['effects_enabled', 'effects_profile', 'effects_sheet', 'effects_application', 'effects_postbit'];
+  function normalizePreferences(value = {}) { return Object.fromEntries(preferenceKeys.map(key => [key, value[key] === undefined ? true : value[key] === true || value[key] === 1 || value[key] === '1'])); }
+  let payload;
+  try { payload = JSON.parse(document.querySelector('[data-af-element-preferences]')?.textContent || '{}'); } catch (_) { payload = {}; }
+  let preferences = normalizePreferences(window.afElementEffectsPreferences || payload.preferences);
+  // Authenticated pages always use the server seed, never guest localStorage.
+  if (!Number(payload.uid) && !window.afElementEffectsPreferences) {
+    try { preferences = normalizePreferences(JSON.parse(localStorage.getItem('af-element-effects-guest')) || preferences); } catch (_) { /* storage is optional */ }
+  }
+  window.afElementEffectsPreferences = { ...preferences };
+  function permitted(surface) { return preferences.effects_enabled && preferences['effects_' + surface] === true; }
   const roots = '[data-element][data-element-surface]';
   const bindings = new WeakMap();
   const engine = window.afElementCanvasEngine;
@@ -28,7 +39,7 @@
     });
     if (!host || host.closest(roots) !== root) return;
     let layer = Array.from(host.children).find(child => child.hasAttribute('data-af-element-effect'));
-    if (!config || !config.enabled || !config.surfaces.includes(surface)) {
+    if (!config || !config.enabled || !config.surfaces.includes(surface) || !permitted(surface)) {
       engine.unregister(host); if (layer) { layer.hidden = true; layer.removeAttribute('data-af-effect-ready'); }
       host.removeAttribute('data-af-element-effect-active'); return;
     }
@@ -88,7 +99,7 @@
           if (surface === 'profile') host.setAttribute('data-af-element-effect-only', '');
         }
       }
-      if (!config || !config.enabled || !config.surfaces.includes(surface)) { stop(host); return; }
+      if (!config || !config.enabled || !config.surfaces.includes(surface) || !permitted(surface)) { stop(host); return; }
       let layer = Array.from(host.children).find(child => child.hasAttribute('data-af-element-effect'));
       if (!layer) { layer = document.createElement('span'); layer.hidden = true; layer.setAttribute('data-af-element-effect', ''); layer.setAttribute('aria-hidden', 'true'); host.prepend(layer); }
       const role = surface === 'profile' ? 'profile-page' : (surface === 'sheet' ? 'sheet' : (host.matches('.atf-post__sidebar-inner') ? 'postbit-sidebar' : 'postbit-topbar'));
@@ -115,5 +126,16 @@
   });
   changes.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-element', 'data-element-surface'] });
   function refresh() { scan(document.documentElement); engine.refresh(); }
-  window.afElementEffects = { refresh };
+  function setPreferences(value) {
+    preferences = normalizePreferences(value);
+    window.afElementEffectsPreferences = { ...preferences };
+    refresh();
+  }
+  // Stable public contract: settings affect decoration only, never canonical
+  // identity, ACP restrictions, CSS palettes or engine internals.
+  window.afElementEffects = { refresh, setPreferences, getPreferences: () => ({ ...preferences }) };
+  document.addEventListener('af-element-effects-refresh', event => {
+    if (event.detail?.preferences) setPreferences(event.detail.preferences);
+    else refresh();
+  });
 }());

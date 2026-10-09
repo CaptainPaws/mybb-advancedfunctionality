@@ -3,7 +3,7 @@ return [
     'id' => 'advancedelementtheme',
     'name' => 'AdvancedElementTheme',
     'description' => 'Единая визуальная палитра KB arpg_element.',
-    'version' => '1.4.0',
+    'version' => '1.5.0',
     'author' => 'CaptainPaws',
     'bootstrap' => 'advancedelementtheme.php',
     'admin' => ['slug' => 'advancedelementtheme', 'controller' => 'admin.php'],
@@ -11,6 +11,7 @@ return [
     // Runtime owns these sources; managed theme copies are detached by AF sync.
     'theme_stylesheets' => [
         ['file' => 'assets/element-theme.css', 'disable_theme_integration' => true, 'conditional' => true],
+        ['file' => 'assets/element-preferences.css', 'disable_theme_integration' => true, 'conditional' => true],
         ['file' => 'assets/element-effects.css', 'disable_theme_integration' => true, 'conditional' => true],
         ['file' => 'assets/advancedelementtheme-admin.css', 'admin_only' => true, 'disable_theme_integration' => true],
     ],

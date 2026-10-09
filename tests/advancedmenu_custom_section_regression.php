@@ -6,7 +6,7 @@ require AF_ADDONS.'advancedmenu/advancedmenu.php';
 
 // The values posted by the ACP are structural keys, never translated labels.
 $sections = af_menu_sections();
-if ($sections !== ['profile'=>'Профиль', 'links'=>'Ссылки', 'settings'=>'Настройки']) {
+if ($sections !== ['profile'=>'Профиль', 'links'=>'Ссылки', 'settings'=>'Настройки', 'theme'=>'Тема']) {
     throw new RuntimeException('Canonical section keys changed.');
 }
 if (af_menu_normalize_section('settings') !== 'settings'

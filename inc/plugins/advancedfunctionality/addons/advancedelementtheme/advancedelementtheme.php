@@ -2,10 +2,21 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__ . '/css.php';
 require_once __DIR__ . '/effects.php';
+require_once __DIR__ . '/preferences.php';
+
+function af_advancedelementtheme_init(): void
+{
+    static $registered = false;
+    if ($registered) return;
+    $registered = true;
+    $GLOBALS['af_theme_switcher_preference_providers']['advancedelementtheme'] = 'af_elementtheme_render_preferences_widget';
+    $GLOBALS['plugins']->add_hook('misc_start', 'af_elementtheme_preferences_misc', 10);
+}
 
 function af_advancedelementtheme_install(): bool
 {
     af_elementtheme_ensure_schema();
+    af_elementtheme_preferences_schema();
     af_elementtheme_invalidate();
     return true;
 }
@@ -379,6 +390,7 @@ function af_advancedelementtheme_pre_output(string &$page): void
     if ($effects['settings'] && af_elementtheme_effects_needed($page, $effects['settings']) && !str_contains($page, 'data-af-element-effects-config')) {
         $assetRoot = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedelementtheme/assets/';
         $effectVersion = (string)max((int)filemtime(__DIR__ . '/assets/element-effects.css'), (int)filemtime(__DIR__ . '/assets/element-effects.js'), (int)filemtime(__DIR__ . '/assets/element-canvas-engine.js'));
+        if (!str_contains($page, 'data-af-element-preferences')) $html .= af_elementtheme_preferences_bootstrap();
         $html .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($assetRoot . 'element-effects.css?v=' . $effectVersion) . '" data-af-element-effects>'
             . '<style data-af-element-effects-overrides>' . $effects['css'] . '</style>'
             . '<script type="application/json" data-af-element-effects-config>' . json_encode($effects['settings'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '</script>'
