@@ -755,19 +755,36 @@ body.atf-active .atf-post__topbar > [data-af-element-effect] { position: absolut
   body.atf-active .atf-post__topbar[data-af-element-effect-active] { position: relative; }
 }
 
-/* Both author hosts share postbit metadata; sidebar remains softer and keeps its rail sticky. */
+/* The rail's background follows ATF's existing sticky content, while the
+   effect remains bounded by its sidebar host. No owner overflow/height changes. */
 body.atf-active .atf-post__sidebar[data-af-element-effect-active] {
-  position: relative;
-  top: auto; /* static previously ignored the legacy sticky top offset */
+  position: var(--af-effect-host-position, relative);
+  top: var(--af-effect-host-top, auto);
   isolation: isolate;
+  background-image: linear-gradient(180deg, var(--atf-post-accent-soft), transparent 42%);
+}
+body.atf-active .atf-post__sidebar[data-af-element-effect-active]::before {
+  content: "";
+  display: block;
+  position: absolute;
+  z-index: -1;
+  inset: auto;
+  left: var(--af-effect-rail-left, 0px);
+  top: var(--af-effect-rail-top, 0px);
+  width: var(--af-effect-rail-width, 100%);
+  height: var(--af-effect-rail-height, 100%);
+  transform: translateY(var(--af-effect-rail-shift, 0px));
+  pointer-events: none;
   background-image: var(--af-apui-postbit-author-overlay, linear-gradient(180deg, var(--atf-post-accent-soft), transparent 42%)), var(--af-apui-postbit-author-bg-image, none);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
 }
 body.atf-active .atf-post__sidebar[data-af-element-effect-active] > .atf-post__sidebar-inner {
+  isolation: isolate;
+  z-index: 1;
   background-image: none;
   background-color: transparent;
 }
-body.atf-active .atf-post__sidebar > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; margin: 0; padding: 0; border: 0; box-sizing: border-box; }
+body.atf-active .atf-post__sidebar > [data-af-element-effect] { position: absolute; inset: 0; z-index: 0; margin: 0; padding: 0; border: 0; box-sizing: border-box; }
 body.atf-active .atf-post__sidebar > [data-af-element-effect][data-af-effect-ready] { opacity: min(var(--af-effect-opacity, .35), .14); }

@@ -40,3 +40,24 @@
 @keyframes af-effect-aura { 0%,100% { opacity: calc(var(--af-effect-strength) * .35); transform: rotate(-5deg) scale(1.03); } 50% { opacity: var(--af-effect-strength); transform: rotate(8deg) scale(1.12); } }
 @keyframes af-effect-electric { 0%,42%,48%,100% { opacity: calc(var(--af-effect-strength) * .08); transform: translate3d(0,0,0); } 45%,60% { opacity: var(--af-effect-strength); transform: translate3d(1%,0,0); } 63% { opacity: calc(var(--af-effect-strength) * .2); transform: translate3d(-1%,0,0); } }
 @keyframes af-effect-frost { 0%,100% { opacity: calc(var(--af-effect-strength) * .35); transform: translate3d(0,-2%,0) rotate(-3deg); } 50% { opacity: var(--af-effect-strength); transform: translate3d(0,2%,0) rotate(3deg); } }
+
+/* Sidebar decoration has an explicit paint plane, not a negative descendant
+   dependent on inherited backgrounds. Clamp the layer, not its sticky owner. */
+.atf-post__sidebar > [data-af-element-effect][data-af-effect-ready] {
+  z-index: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  min-width: 0;
+  min-height: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  box-sizing: border-box;
+  overflow: hidden !important;
+  contain: paint;
+  clip-path: inset(0);
+  box-shadow: none !important;
+  background: transparent;
+}
