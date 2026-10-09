@@ -34,12 +34,49 @@ const componentCSS = ['adaptivethemeframework/assets/surfaces/profile.css', 'ada
     assert.equal(await page.locator('#postbit [data-af-element-effect]').evaluate(e => (getComputedStyle(e, '::before').backgroundImage.match(/radial-gradient/g) || []).length), 3);
     await page.locator('#profile-button').evaluate(e => e.addEventListener('click', () => e.dataset.clicked = 'yes'));
     await page.locator('#profile-button').click(); assert.equal(await page.locator('#profile-button').getAttribute('data-clicked'), 'yes');
+    assert.equal(await page.locator('#profile .atf-profile__panel h2').evaluate(e => getComputedStyle(e).color), 'rgb(55, 196, 255)');
+    assert.equal(await page.locator('#profile-button').evaluate(e => getComputedStyle(e).color), 'rgb(55, 196, 255)');
+    // Root-sized layers and invariant layout, including the real ATF topbar > * rule.
+    for (const id of ['profile', 'sheet', 'application', 'postbit']) {
+      const result = await page.locator('#' + id).evaluate(root => {
+        const layer = root.querySelector('[data-af-element-effect]');
+        const host = layer.parentElement;
+        const a = host.getBoundingClientRect(), b = layer.getBoundingClientRect();
+        const before = { root: root.getBoundingClientRect().toJSON(), host: a.toJSON(), position: root.dataset.elementSurface === 'postbit' ? getComputedStyle(host).position : null };
+        const palette = getComputedStyle(root).getPropertyValue('--af-element-accent');
+        layer.removeAttribute('data-af-effect-ready'); host.removeAttribute('data-af-element-effect-active');
+        const off = { root: root.getBoundingClientRect().toJSON(), host: host.getBoundingClientRect().toJSON(), position: root.dataset.elementSurface === 'postbit' ? getComputedStyle(host).position : null };
+        host.setAttribute('data-af-element-effect-active', ''); layer.setAttribute('data-af-effect-ready', '');
+        return { before, off, isolation: getComputedStyle(host).isolation, matchesRoot: host === root, bounds: [host.clientWidth, host.clientHeight, Math.round(b.width), Math.round(b.height)], palette, afterPalette: getComputedStyle(root).getPropertyValue('--af-element-accent') };
+      });
+      assert.equal(result.isolation, 'isolate', `${id} layer could escape behind the root background`);
+      assert.equal(result.matchesRoot, id !== 'postbit', `${id} used the wrong effect host`);
+      assert.ok(Math.abs(result.bounds[0] - result.bounds[2]) <= 1 && Math.abs(result.bounds[1] - result.bounds[3]) <= 1, `${id} layer did not fill its host`);
+      assert.deepEqual(result.before, result.off, `${id} effect changed dimensions or sticky position`);
+      assert.equal(result.palette, result.afterPalette);
+    }
+    // Verify paint order in the engine, not only computed z-index: decoration
+    // must remain visible above an opaque root background but below its content.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const rootStyle = await page.locator('#application').getAttribute('style');
+    const appLayer = page.locator('#application > [data-af-element-effect]');
+    await page.locator('#application').evaluate(e => { e.style.padding = '24px'; e.style.background = 'rgb(2,3,4)'; });
+    await appLayer.evaluate(e => { e.style.setProperty('--af-effect-field', 'linear-gradient(lime,lime)'); e.style.setProperty('--af-effect-opacity', '1'); e.style.setProperty('--af-effect-strength', '1'); e.removeAttribute('data-af-effect-ready'); });
+    const paintedOff = await page.locator('#application').screenshot();
+    await appLayer.evaluate(e => e.setAttribute('data-af-effect-ready', ''));
+    const paintedOn = await page.locator('#application').screenshot();
+    assert.notDeepEqual(paintedOn, paintedOff, 'Root background hid the decorative layer');
+    await appLayer.evaluate(e => e.removeAttribute('style'));
+    await page.locator('#application').evaluate((e, style) => style === null ? e.removeAttribute('style') : e.setAttribute('style', style), rootStyle);
+    await page.locator('#profile').scrollIntoViewIfNeeded();
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     const initialBox = await page.locator('#profile').boundingBox();
     await page.locator('#profile').evaluate(e => { e.style.display = 'none'; });
     await page.waitForFunction(() => !document.querySelector('#profile [data-af-element-effect]').hasAttribute('data-af-effect-running'));
     await page.locator('#profile').evaluate(e => { e.style.display = ''; });
     await page.waitForFunction(() => document.querySelector('#profile [data-af-element-effect]').hasAttribute('data-af-effect-running'));
-    assert.deepEqual(await page.locator('#profile').boundingBox(), initialBox, 'Animation lifecycle shifted layout');
+    const restoredBox = await page.locator('#profile').boundingBox();
+    assert.deepEqual([restoredBox.width, restoredBox.height], [initialBox.width, initialBox.height], 'Animation lifecycle shifted layout');
     // Off-screen components pause, and document inactivity pauses every tracked layer.
     await page.locator('#profile').evaluate(e => { e.style.marginTop = '2000px'; });
     await page.waitForFunction(() => !document.querySelector('#profile [data-af-element-effect]').hasAttribute('data-af-effect-running'));

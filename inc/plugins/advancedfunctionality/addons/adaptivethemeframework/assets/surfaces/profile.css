@@ -521,6 +521,18 @@ body.atf-active.atf-profile-page .af-apui-rewards-grid .af-apui-empty { padding:
   body.atf-active.atf-profile-page .af-apui-character-portrait { order: -1; }
 }
 
-/* Surface-owned decoration placement; inactive effects do not change layout. */
-.atf-profile-hero[data-af-element-effect-active] { position: relative; isolation: isolate; }
-.atf-profile-hero > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+/* Surface-owned full background: the layer sits above root paint, below content. */
+.atf-profile[data-af-element-effect-active] { position: relative; isolation: isolate; }
+.atf-profile > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+
+/* Component accents remain independent of whether the background effect is enabled. */
+body.atf-active.atf-profile-page .atf-profile[data-element]:not([data-element=""]) :is(.atf-profile__panel h2, .af-apui-character-infobox dt, .af-apui-character-card h2) {
+  color: var(--af-element-accent, var(--atf-color-accent));
+}
+body.atf-active.atf-profile-page .atf-profile[data-element]:not([data-element=""]) :is(.af-apui-character-card, .af-apui-character-infobox) {
+  border-color: var(--af-element-border, var(--atf-color-border));
+}
+body.atf-active.atf-profile-page .atf-profile[data-element]:not([data-element=""]) :is(button, .button) {
+  border-color: var(--af-element-border, var(--atf-color-border));
+  color: var(--af-element-accent, var(--atf-color-text));
+}

@@ -5,12 +5,6 @@
   const settings = {};
   blocks.forEach(block => { try { Object.assign(settings, JSON.parse(block.textContent)); } catch (_) { /* malformed metadata stays inert */ } });
   const roots = '[data-element][data-element-surface]';
-  const hosts = {
-    profile: '.atf-profile-hero, .af-apui-profile-hero',
-    sheet: '.af-cs-arpg-top, .af-cs-hero',
-    application: '.af-atf-wiki__header',
-    postbit: '.atf-post__topbar'
-  };
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const tracked = new Map();
   function play(layer, visible) {
@@ -23,7 +17,18 @@
   function mount(root) {
     const config = settings[root.dataset.element];
     const surface = root.dataset.elementSurface;
-    const host = root.querySelector(hosts[surface] || '[data-af-element-effect-host]');
+    // Full surfaces own the layer on their canonical root. Only postbit uses
+    // an inner host; explicit template metadata wins over the legacy class.
+    const host = surface === 'postbit'
+      ? Array.from(root.querySelectorAll('[data-af-element-effect-host]')).find(node => node.closest(roots) === root)
+        || root.querySelector('.atf-post__topbar')
+      : root;
+    // Retire old hero/header layers without touching nested element surfaces.
+    root.querySelectorAll('[data-af-element-effect-host]').forEach(old => {
+      if (old === host || old.closest(roots) !== root) return;
+      Array.from(old.children).filter(child => child.hasAttribute('data-af-element-effect')).forEach(layer => { visibility?.unobserve(layer); tracked.delete(layer); layer.remove(); });
+      old.removeAttribute('data-af-element-effect-active'); old.removeAttribute('data-af-element-effect-host');
+    });
     if (!host || host.closest(roots) !== root) return;
     let layer = Array.from(host.children).find(child => child.hasAttribute('data-af-element-effect'));
     if (!config || !config.enabled || !config.surfaces.includes(surface)) {

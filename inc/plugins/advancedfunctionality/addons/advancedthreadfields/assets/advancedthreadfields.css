@@ -1144,6 +1144,6 @@ body.af-atf-kb-catalog-modal-open {
   .af-atf-ability-item { padding: 16px; }
 }
 
-/* Surface-owned decoration placement; inactive effects do not change layout. */
-.af-atf-wiki__header[data-af-element-effect-active] { position: relative; isolation: isolate; }
-.af-atf-wiki__header > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+/* Surface-owned full background: the layer sits above root paint, below content. */
+.af-atf-display[data-af-element-effect-active] { position: relative; isolation: isolate; }
+.af-atf-display > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }

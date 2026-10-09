@@ -173,8 +173,8 @@ function af_elementtheme_overrides(): array
     global $db, $cache;
     if (isset($GLOBALS['af_elementtheme_overrides'])) return $GLOBALS['af_elementtheme_overrides'];
     $data = is_object($cache) ? $cache->read('af_elementtheme') : false;
-    if (!is_array($data) || ($data['format'] ?? 0) !== 4 || !isset($data['styles'], $data['surfaces'], $data['css'], $data['effects'])) {
-        $data = ['format' => 4, 'styles' => [], 'surfaces' => [], 'css' => ''];
+    if (!is_array($data) || ($data['format'] ?? 0) !== 5 || !isset($data['styles'], $data['surfaces'], $data['css'], $data['effects'])) {
+        $data = ['format' => 5, 'styles' => [], 'surfaces' => [], 'css' => ''];
         if (is_object($db)) {
             foreach (['styles', 'surfaces'] as $kind) {
                 $table = 'af_element_theme_' . $kind;
@@ -313,7 +313,16 @@ function af_advancedelementtheme_pre_output(string &$page): void
     // Old DB templates receive attributes at output time, without changing template ownership/backups.
     $page = preg_replace_callback('/<(?:div|article|main)\b[^>]*\bclass=["\'][^"\']*\b(?:af-atf-display|af-cs-page|atf-post|atf-profile|af-apui-profile-page)\b[^"\']*["\'][^>]*>/i', static function ($match) {
         $tag = $match[0];
-        $surface = str_contains($tag, 'af-cs-page') ? 'sheet' : (str_contains($tag, 'atf-post') ? 'postbit' : ((str_contains($tag, 'atf-profile') || str_contains($tag, 'af-apui-profile-page')) ? 'profile' : 'application'));
+        preg_match('/\bclass=(["\'])(.*?)\1/i', $tag, $class);
+        $classes = preg_split('/\s+/', trim($class[2] ?? ''));
+        if (!array_intersect($classes, ['af-cs-page', 'atf-post', 'atf-profile', 'af-apui-profile-page', 'af-atf-display'])) return $tag;
+        $surface = in_array('af-cs-page', $classes, true) ? 'sheet' : (in_array('atf-post', $classes, true) ? 'postbit' : (array_intersect($classes, ['atf-profile', 'af-apui-profile-page']) ? 'profile' : 'application'));
+        $profileKey = $surface === 'profile' ? ($GLOBALS['atf_profile_context']['appearance']['element_theme_key'] ?? $GLOBALS['af_apui_profile_element'] ?? null) : null;
+        $hasElement = preg_match('/\bdata-element=(["\'])(.*?)\1/', $tag, $currentElement);
+        if ($profileKey !== null && (isset($GLOBALS['atf_profile_context']['appearance']['element_theme_key']) || !$hasElement || $currentElement[2] === '')) {
+            $attribute = 'data-element="' . af_elementtheme_resolve_key((string)$profileKey) . '"';
+            $tag = preg_match('/\bdata-element=(["\'])(.*?)\1/', $tag) ? preg_replace('/\bdata-element=(["\'])(.*?)\1/', $attribute, $tag) : substr($tag, 0, -1) . ' ' . $attribute . '>';
+        }
         if (!str_contains($tag, 'data-element-surface=')) $tag = substr($tag, 0, -1) . ' data-element-surface="' . $surface . '">';
         return preg_replace_callback('/\bdata-element=(["\'])(.*?)\1/', static fn($m) => 'data-element="' . af_elementtheme_resolve_key($m[2]) . '"', $tag) ?? $tag;
     }, $page) ?? $page;

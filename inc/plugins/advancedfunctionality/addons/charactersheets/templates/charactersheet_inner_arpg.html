@@ -12,12 +12,12 @@
      data-afcs-render-profile="{$sheet_render_profile_attr}"
      data-afcs-render-override="{$sheet_render_override_mode}"
      data-afcs-post-key="{$sheet_post_key}"
-     data-afcs-bonus-items="{$bonus_items_json}">
+     data-afcs-bonus-items="{$bonus_items_json}" data-af-element-effect-host>
+  <span hidden data-af-element-effect aria-hidden="true"></span>
   <div class="af-cs-inline-error" data-afcs-error="1" hidden></div>
   <div class="af-cs-toast" data-afcs-toast="1" hidden></div>
 
-  <header class="af-cs-arpg-top" data-af-element-effect-host>
-    <span hidden data-af-element-effect aria-hidden="true"></span>
+  <header class="af-cs-arpg-top">
     <div class="af-cs-arpg-top__art">
       <div class="af-cs-portrait af-cs-arpg-hero__portrait">
         <img src="{$sheet_portrait_url}" alt="{$sheet_title}" loading="lazy" />

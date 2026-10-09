@@ -3228,6 +3228,6 @@
   .af-cs-page .af-cs-arsenal .af-inv-subfilters { gap: 6px; }
 }
 
-/* Surface-owned decoration placement; inactive effects do not change layout. */
-:is(.af-cs-arpg-top,.af-cs-hero)[data-af-element-effect-active] { position: relative; isolation: isolate; }
-:is(.af-cs-arpg-top,.af-cs-hero) > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+/* Surface-owned full background: the layer sits above root paint, below content. */
+.af-cs-page[data-af-element-effect-active] { position: relative; isolation: isolate; }
+.af-cs-page > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }

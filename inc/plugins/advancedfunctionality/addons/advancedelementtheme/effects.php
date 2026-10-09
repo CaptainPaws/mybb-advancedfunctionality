@@ -69,8 +69,8 @@ function af_elementtheme_compile_effects(array $styles): array
                 'frost' => 'conic-gradient(from 45deg at 32% 35%,transparent 0 24%,var(--af-effect-color) 25%,transparent 26% 74%,var(--af-effect-color) 75%,transparent 76%)',
             ];
             $css .= '@scope (' . $root . ') to (:scope [data-element]) {'
-                . '[data-af-element-effect-host]{--af-effect-enabled:1;}'
-                . '[data-af-element-effect-host]>[data-af-element-effect]{'
+                . ':scope[data-af-element-effect-host],[data-af-element-effect-host]{--af-effect-enabled:1;}'
+                . ':scope[data-af-element-effect-host]>[data-af-element-effect],[data-af-element-effect-host]>[data-af-element-effect]{'
                 . '--af-effect-color:' . $color . ';--af-effect-opacity:' . ($effect['opacity'] / 100) . ';'
                 . '--af-effect-strength:' . ($effect['intensity'] / 100) . ';--af-effect-duration:' . (32 - $effect['speed'] * .24) . 's;'
                 . '--af-effect-points:' . af_elementtheme_effect_texture($effect['density'], $surface === 'postbit') . ';'

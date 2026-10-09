@@ -342,8 +342,7 @@ function af_apui_render_atf_profile_hero(array $context): string
     $stats = function_exists('af_adaptivethemeframework_render_slot')
         ? af_adaptivethemeframework_render_slot('profile.stats', $context)
         : '';
-    return '<section class="atf-profile-hero ' . $uidClass . '" data-atf-profile-hero="1" data-af-element-effect-host>'
-        . '<span hidden data-af-element-effect aria-hidden="true"></span>'
+    return '<section class="atf-profile-hero ' . $uidClass . '" data-atf-profile-hero="1">'
         . '<div class="atf-profile-hero__avatar">' . af_apui_render_avatar_image((string)($context['avatars']['primary_avatar'] ?? ''), (string)($context['username'] ?? ''), 'atf-profile-hero__avatar-image') . '</div>'
         . '<div class="atf-profile-hero__identity"><div class="atf-profile-hero__stats">' . $stats . '</div>'
         . '<div class="atf-profile-hero__name">' . (string)($i['formattedname'] ?? '') . '</div>'
@@ -435,6 +434,16 @@ function af_apui_get_approved_profile_character_payload(int $uid): array
     }
 
     return ['tid' => 0, 'about_html' => '', 'fields' => []];
+}
+
+/** Canonical profile identity from the approved provider, shared with ATF composition. */
+function af_apui_profile_element_key(int $uid, ?array $payload = null): string
+{
+    if ($uid <= 0 || !function_exists('af_elementtheme_resolve_key')) return '';
+    if ($payload === null && isset($GLOBALS['af_apui_profile_element_keys'][$uid])) return $GLOBALS['af_apui_profile_element_keys'][$uid];
+    $payload ??= af_apui_get_approved_profile_character_payload($uid);
+    $field = (array)(($payload['fields'] ?? [])['character_element'] ?? []);
+    return $GLOBALS['af_apui_profile_element_keys'][$uid] = af_elementtheme_resolve_key(af_apui_profile_character_field_value($field));
 }
 
 /** Match the shared profile/postbit element contract: canonical value, raw value, then normalized key. */
@@ -1863,9 +1872,7 @@ function af_apui_member_profile_prepare_layout_vars(): void
     $GLOBALS['af_apui_approved_character_payload'] = $approvedCharacterPayload;
     $approvedElementField = (array)(($approvedCharacterPayload['fields'] ?? [])['character_element'] ?? []);
     $elementValue = af_apui_profile_character_field_value($approvedElementField);
-    $elementThemeKey = $elementValue !== '' && function_exists('af_elementtheme_resolve_key')
-        ? af_elementtheme_resolve_key($elementValue)
-        : '';
+    $elementThemeKey = af_apui_profile_element_key($uid, $approvedCharacterPayload);
     $GLOBALS['af_apui_profile_element'] = htmlspecialchars_uni($elementThemeKey);
     if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('profile', $elementThemeKey);
     if (!empty($sheetPayload['enabled'])

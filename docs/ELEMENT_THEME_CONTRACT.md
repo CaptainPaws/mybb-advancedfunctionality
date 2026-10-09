@@ -142,8 +142,8 @@ Surface palette overrides automatically feed particle colors. The ACP preview
 uses the same compiler textures and CSS keyframes and changes before saving.
 
 Surface owners provide a hidden, non-interactive
-`[data-af-element-effect]` inside `[data-af-element-effect-host]` in their hero
-or topbar, and own its absolute positioning/stacking. Effects assets are delivered
+`[data-af-element-effect]` inside `[data-af-element-effect-host]` on the full profile, sheet or application root
+(or inside the postbit topbar), and own its absolute positioning/stacking. Effects assets are delivered
 by ElementTheme after manifest permission checks only when an enabled setting
 matches a rendered canonical key/surface, including sheet modal caller facts.
 Old installed templates receive only a decorative node through DOM integration;
@@ -155,6 +155,10 @@ Drawing and motion use original CSS gradients, transforms and opacity, never
 external copied assets or canvas. Textures have at most 12 fixed, non-repeating
 points. Postbits/mobile use up to three points and static soft glow. There are no
 particle DOM nodes, requestAnimationFrame/timer loops or animation KB queries.
+Installed hero/header nodes are migrated to the full surface root by the DOM
+integration, leaving exactly one layer and preserving nested surface boundaries.
+The layer is absolute inside an isolated root, above its own background paint and below content; ATF excludes
+it from its topbar content rule, preserving dimensions and desktop sticky position.
 One IntersectionObserver pauses off-screen/hidden components; document inactivity
 and reduced-motion also pause motion. One MutationObserver handles inserted
 sheets/lazy profiles and unobserves detached components. Reduced-motion keeps

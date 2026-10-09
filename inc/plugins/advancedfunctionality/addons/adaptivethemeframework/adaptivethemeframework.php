@@ -983,8 +983,9 @@ function af_adaptivethemeframework_compose_profile(): void
         'balance' => (string)($memprofile['balance'] ?? ''),
         'post_counter' => (string)($memprofile['advancedpostcounter'] ?? ''),
     ];
-    $values['element_theme_key'] = htmlspecialchars_uni((string)($GLOBALS['af_apui_profile_element'] ?? ''));
-    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('profile', (string)($GLOBALS['af_apui_profile_element'] ?? ''));
+    $elementKey = function_exists('af_apui_profile_element_key') ? af_apui_profile_element_key((int)($memprofile['uid'] ?? 0)) : '';
+    $values['element_theme_key'] = htmlspecialchars_uni($elementKey);
+    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('profile', $elementKey);
     $context = af_adaptivethemeframework_profile_context($memprofile, $values);
     foreach (['hero', 'navigation', 'forum_info', 'quick_links', 'character_sheet', 'rewards', 'timeline',
         'activity', 'balance', 'post_counter', 'before_content', 'main', 'after_content'] as $name) {

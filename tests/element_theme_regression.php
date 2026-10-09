@@ -124,6 +124,7 @@ element_check(str_contains($sheetRoot, 'data-element="shadow"') && str_contains(
 function af_apui_get_approved_profile_character_payload(int $uid): array { return af_apui_get_profile_character_payload($uid); }
 $profileSource = file_get_contents(AF_ADDONS . 'advancedprofileui/advancedprofileui.php');
 preg_match('/function af_apui_profile_character_field_value\(.*?\n\}/s', $profileSource, $profileField); eval($profileField[0]);
+preg_match('/function af_apui_profile_element_key\(.*?\n\}/s', $profileSource, $profileKeyFunction); eval($profileKeyFunction[0]);
 $profileStart = strpos($profileSource, '$approvedElementField = (array)(($approvedCharacterPayload');
 $profileEnd = strpos($profileSource, "    if (!empty(\$sheetPayload['enabled'])", $profileStart);
 $profileResolver = substr($profileSource, $profileStart, $profileEnd - $profileStart);

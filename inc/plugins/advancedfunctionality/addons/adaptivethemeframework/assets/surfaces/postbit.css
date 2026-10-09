@@ -451,7 +451,7 @@ body.atf-active .atf-post__topbar::after {
   pointer-events: none;
   background: var(--atf-post-accent);
 }
-body.atf-active .atf-post__topbar > * {
+body.atf-active .atf-post__topbar > :not([data-af-element-effect]) {
   position: relative;
   z-index: 1;
 }
@@ -748,6 +748,9 @@ body.atf-active .atf-post__footer {
   }
 }
 
-/* Surface-owned decoration placement; inactive effects do not change layout. */
-.atf-post__topbar[data-af-element-effect-active] { position: relative; isolation: isolate; }
-.atf-post__topbar > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+/* Preserve desktop sticky positioning; exclude decoration from the content rule. */
+body.atf-active .atf-post__topbar[data-af-element-effect-active] { isolation: isolate; }
+body.atf-active .atf-post__topbar > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+@media (max-width: 48rem) {
+  body.atf-active .atf-post__topbar[data-af-element-effect-active] { position: relative; }
+}

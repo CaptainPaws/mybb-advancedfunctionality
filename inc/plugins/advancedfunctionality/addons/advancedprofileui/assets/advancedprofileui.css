@@ -3440,6 +3440,6 @@ body.af-apui-member-profile-page:not(.atf-active) .af-apui-profile-hero__inner {
   }
 }
 
-/* Surface-owned decoration placement; inactive effects do not change layout. */
-.af-apui-profile-hero[data-af-element-effect-active] { position: relative; isolation: isolate; }
-.af-apui-profile-hero > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+/* Surface-owned full background: the layer sits above root paint, below content. */
+.af-apui-profile-page[data-af-element-effect-active] { position: relative; isolation: isolate; }
+.af-apui-profile-page > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
