@@ -43,7 +43,7 @@
 
 /* Sidebar decoration has an explicit paint plane, not a negative descendant
    dependent on inherited backgrounds. Clamp the layer, not its sticky owner. */
-.atf-post__sidebar > [data-af-element-effect][data-af-effect-ready] {
+.atf-post__sidebar-inner > [data-af-element-effect][data-af-effect-ready] {
   z-index: 0 !important;
   margin: 0 !important;
   padding: 0 !important;

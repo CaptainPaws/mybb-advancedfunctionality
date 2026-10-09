@@ -50,32 +50,6 @@
       if (remove) layer.remove();
     });
     host.removeAttribute('data-af-element-effect-active');
-    host.removeAttribute('data-af-element-effect-static');
-    ['host-position', 'host-top', 'rail-width', 'rail-height', 'rail-left', 'rail-top', 'rail-shift'].forEach(name => host.style.removeProperty('--af-effect-' + name));
-  }
-  function syncRailShift(host) {
-    const inner = host.querySelector(':scope > .atf-post__sidebar-inner');
-    const shift = Number(inner?.dataset.atfStickyTranslate || 0);
-    host.style.setProperty('--af-effect-rail-shift', (Number.isFinite(shift) ? shift : 0) + 'px');
-  }
-  function positionSidebar(host) {
-    if (!host?.matches('.atf-post__sidebar')) return;
-    // Read the owner's neutral positioning, not an effect rule (or stale bundle).
-    host.removeAttribute('data-af-element-effect-active');
-    host.removeAttribute('data-af-element-effect-static');
-    const style = getComputedStyle(host), position = style.position, top = style.top;
-    host.style.setProperty('--af-effect-host-position', position === 'static' ? 'relative' : position);
-    host.style.setProperty('--af-effect-host-top', position === 'static' ? 'auto' : top);
-    host.toggleAttribute('data-af-element-effect-static', position === 'static');
-    host.setAttribute('data-af-element-effect-active', '');
-    const inner = host.querySelector(':scope > .atf-post__sidebar-inner');
-    if (inner) {
-      host.style.setProperty('--af-effect-rail-width', inner.offsetWidth + 'px');
-      host.style.setProperty('--af-effect-rail-height', inner.offsetHeight + 'px');
-      host.style.setProperty('--af-effect-rail-left', inner.offsetLeft + 'px');
-      host.style.setProperty('--af-effect-rail-top', inner.offsetTop + 'px');
-      syncRailShift(host);
-    }
   }
   function mount(root) {
     const surface = root.dataset.elementSurface;
@@ -94,8 +68,9 @@
         || root.closest('.af-aa-context--sheet.af-apui-surface-body');
       if (host) hosts = [host];
     } else if (surface === 'postbit') {
-      hosts = Array.from(root.querySelectorAll('[data-af-element-effect-host="postbit-topbar"], [data-af-element-effect-host="postbit-sidebar"], .atf-post__topbar, .atf-post__sidebar'))
-        .filter(host => host.closest(roots) === root);
+      hosts = Array.from(root.querySelectorAll('[data-af-element-effect-host="postbit-topbar"], [data-af-element-effect-host="postbit-sidebar"], .atf-post__topbar, .atf-post__sidebar-inner'))
+        .map(host => host.matches('.atf-post__sidebar') ? host.querySelector(':scope > .atf-post__sidebar-inner') : host)
+        .filter((host, index, all) => host && host.closest(roots) === root && all.indexOf(host) === index);
     } else return;
     // Remove only obsolete decoration belonging to this instance, not nested sheets.
     [root, ...root.querySelectorAll('[data-af-element-effect-host]')].forEach(old => {
@@ -115,9 +90,8 @@
       if (!config || !config.enabled || !config.surfaces.includes(surface)) { stop(host); return; }
       let layer = Array.from(host.children).find(child => child.hasAttribute('data-af-element-effect'));
       if (!layer) { layer = document.createElement('span'); layer.hidden = true; layer.setAttribute('data-af-element-effect', ''); layer.setAttribute('aria-hidden', 'true'); host.prepend(layer); }
-      const role = surface === 'profile' ? 'profile-page' : (surface === 'sheet' ? 'sheet' : (host.matches('.atf-post__sidebar') ? 'postbit-sidebar' : 'postbit-topbar'));
+      const role = surface === 'profile' ? 'profile-page' : (surface === 'sheet' ? 'sheet' : (host.matches('.atf-post__sidebar-inner') ? 'postbit-sidebar' : 'postbit-topbar'));
       if (host.getAttribute('data-af-element-effect-host') !== role) host.setAttribute('data-af-element-effect-host', role);
-      positionSidebar(host);
       host.setAttribute('data-af-element-effect-active', ''); layer.setAttribute('data-af-effect-ready', '');
       if (!tracked.has(layer)) { play(layer, !visibility); visibility?.observe(layer); }
     });
@@ -131,22 +105,11 @@
   scan(document.documentElement);
   // One observer for all surfaces, no continuous RAF/timers, fetches, KB lookups or per-post loops.
   const changes = new MutationObserver(records => {
-    records.forEach(record => {
-      if (record.type === 'attributes' && record.attributeName === 'data-atf-sticky-translate') {
-        const host = record.target.closest('.atf-post__sidebar[data-af-element-effect-active]');
-        if (host) syncRailShift(host);
-      } else if (record.type === 'attributes') mount(record.target);
-      else record.addedNodes.forEach(scan);
-    });
+    records.forEach(record => { if (record.type === 'attributes') mount(record.target); else record.addedNodes.forEach(scan); });
     for (const layer of tracked.keys()) if (!layer.isConnected) { visibility?.unobserve(layer); tracked.delete(layer); }
   });
-  changes.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-element', 'data-element-surface', 'data-atf-sticky-translate'] });
-  function refresh() { tracked.forEach((visible, layer) => { positionSidebar(layer.parentElement); play(layer, visible); }); }
-  let resizing = false;
-  window.addEventListener('resize', () => {
-    if (resizing) return;
-    resizing = true; requestAnimationFrame(() => { resizing = false; refresh(); });
-  }, { passive: true });
+  changes.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-element', 'data-element-surface'] });
+  function refresh() { tracked.forEach((visible, layer) => play(layer, visible)); }
   document.addEventListener('visibilitychange', refresh); motion.addEventListener('change', refresh);
   window.afElementEffects = { refresh };
 }());

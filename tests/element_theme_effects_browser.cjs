@@ -32,13 +32,30 @@ const componentCSS = ['adaptivethemeframework/assets/surfaces/profile.css', 'ada
     assert.equal(await layer.evaluate(e => getComputedStyle(e).getPropertyValue('--af-effect-color').trim()), '#37c4ff');
     assert.equal(await layer.evaluate(e => getComputedStyle(e, '::before').animationName), 'af-effect-embers');
     assert.equal(await page.locator('#postbit .atf-post__topbar > [data-af-element-effect]').evaluate(e => getComputedStyle(e, '::before').animationName), 'af-effect-stardust');
+    assert.equal(await page.locator('#postbit .atf-post__sidebar > [data-af-element-effect]').count(), 0);
+    const rail = page.locator('#postbit .atf-post__sidebar-inner');
+    const railStyle = await rail.evaluate(e => {
+      const style = getComputedStyle(e), background = style.backgroundImage;
+      e.removeAttribute('data-af-element-effect-active');
+      const disabledBackground = getComputedStyle(e).backgroundImage;
+      e.setAttribute('data-af-element-effect-active', '');
+      return { background, disabledBackground, maxHeight: style.maxHeight, overflow: style.overflowY,
+        layerZ: getComputedStyle(e.querySelector(':scope > [data-af-element-effect]')).zIndex,
+        firstMargin: getComputedStyle(e.querySelector(':scope > :not([data-af-element-effect])')).marginTop };
+    });
+    assert.equal(railStyle.background, railStyle.disabledBackground, 'Effect replaced the APUI background');
+    assert.ok(railStyle.background.includes('gradient'));
+    assert.equal(railStyle.maxHeight, 'none');
+    assert.equal(railStyle.overflow, 'visible');
+    assert.equal(railStyle.layerZ, '0');
+    assert.equal(railStyle.firstMargin, '0px', 'Decoration counted as the first content block');
     assert.equal(await page.locator('#postbit .atf-post__topbar > [data-af-element-effect]').evaluate(e => (getComputedStyle(e, '::before').backgroundImage.match(/radial-gradient/g) || []).length), 3);
     await page.locator('#profile-button').evaluate(e => e.addEventListener('click', () => e.dataset.clicked = 'yes'));
     await page.locator('#profile-button').click(); assert.equal(await page.locator('#profile-button').getAttribute('data-clicked'), 'yes');
     assert.equal(await page.locator('#profile .atf-profile__panel h2').evaluate(e => getComputedStyle(e).color), 'rgb(55, 196, 255)');
     assert.equal(await page.locator('#profile-button').evaluate(e => getComputedStyle(e).color), 'rgb(55, 196, 255)');
     // Root-sized layers and invariant layout, including the real ATF topbar > * rule.
-    for (const selector of ['body', '#sheet-host', '#application', '#postbit .atf-post__topbar', '#postbit .atf-post__sidebar']) {
+    for (const selector of ['body', '#sheet-host', '#application', '#postbit .atf-post__topbar', '#postbit .atf-post__sidebar-inner']) {
       const result = await page.locator(selector).evaluate(host => {
         const layer = Array.from(host.children).find(e => e.hasAttribute('data-af-element-effect'));
         const a = host.getBoundingClientRect(), b = layer.getBoundingClientRect();
@@ -58,7 +75,7 @@ const componentCSS = ['adaptivethemeframework/assets/surfaces/profile.css', 'ada
     assert.equal(await page.locator('#sheet > [data-af-element-effect], #profile > [data-af-element-effect]').count(), 0);
     // Real paint on the external host: decoration survives an opaque background,
     // while the profile body never acquires authored :scope layout properties.
-    for (const selector of ['body', '#sheet-host', '#postbit .atf-post__sidebar']) {
+    for (const selector of ['body', '#sheet-host', '#postbit .atf-post__sidebar-inner']) {
       const host = page.locator(selector);
       const decoration = host.locator(':scope > [data-af-element-effect]');
       await page.emulateMedia({ reducedMotion: 'reduce' });

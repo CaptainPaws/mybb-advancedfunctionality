@@ -112,11 +112,14 @@
     }
 
     var topbarY = clamp(scrollTop + stickyOffset - item.postTop, 0, item.maxTravel);
-    var sidebarY = clamp(
+    // A rail taller than the available viewport must scroll with the document:
+    // pinning its top would keep its lower controls permanently below the fold.
+    var sidebarFits = item.sidebarHeight <= window.innerHeight - stickyOffset - item.topbarHeight;
+    var sidebarY = sidebarFits ? clamp(
       scrollTop + stickyOffset + item.topbarHeight - item.sidebarTop,
       0,
       item.maxTravel
-    );
+    ) : 0;
     var metaY = clamp(
       scrollTop + stickyOffset + item.topbarHeight - item.metaTop,
       0,

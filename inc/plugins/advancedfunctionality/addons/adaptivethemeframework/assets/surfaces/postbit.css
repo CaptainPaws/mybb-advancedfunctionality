@@ -344,15 +344,15 @@ body.atf-active .atf-post__sidebar-inner {
   position: sticky;
   top: var(--atf-sticky-offset, 1rem);
   box-sizing: border-box;
-  max-height: calc(100vh - var(--atf-sticky-offset, 1rem) - 1rem);
+  max-height: none;
   margin-block-end: 15px;
-  overflow-y: auto;
+  overflow: visible;
   padding: var(--atf-space-4);
   border: 0;
   border-inline-end: 1px solid var(--atf-post-accent);
   border-block-end: 1px solid var(--atf-post-accent);
 }
-body.atf-active .atf-post__sidebar-inner > :not(:first-child) { margin-block-start: var(--atf-space-4); padding-block-start: var(--atf-space-3); border-block-start: 1px solid var(--atf-color-border); }
+body.atf-active .atf-post__sidebar-inner > :not([data-af-element-effect]) ~ :not([data-af-element-effect]) { margin-block-start: var(--atf-space-4); padding-block-start: var(--atf-space-3); border-block-start: 1px solid var(--atf-color-border); }
 body.atf-active .atf-post__secondary-avatar { border: 1px solid var(--atf-post-accent); box-shadow: 0 .75rem 2rem var(--atf-post-accent-soft); }
 body.atf-active .atf-post__statistics .author_statistics { gap: .35rem; }
 body.atf-active .atf-post__statistics .af-apui-stat-item { display: grid; grid-template-rows: 1.5rem auto; place-items: center; padding: .35rem; text-align: center; background: var(--atf-post-accent-soft); border-radius: var(--atf-radius-sm); }
@@ -478,8 +478,8 @@ body.atf-active .atf-post__name {
 body.atf-active .atf-post__sidebar-inner {
   position: sticky;
   top: calc(var(--atf-sticky-offset, 0px) + var(--atf-post-topbar-height, 9rem) + var(--atf-space-2));
-  max-height: calc(100vh - var(--atf-sticky-offset, 0px) - var(--atf-post-topbar-height, 9rem) - var(--atf-space-4));
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
   background-image: var(--af-apui-postbit-author-overlay, linear-gradient(180deg, var(--atf-post-accent-soft), transparent 42%)), var(--af-apui-postbit-author-bg-image, none);
   background-position: center;
   background-repeat: no-repeat;
@@ -755,36 +755,22 @@ body.atf-active .atf-post__topbar > [data-af-element-effect] { position: absolut
   body.atf-active .atf-post__topbar[data-af-element-effect-active] { position: relative; }
 }
 
-/* The rail's background follows ATF's existing sticky content, while the
-   effect remains bounded by its sidebar host. No owner overflow/height changes. */
-body.atf-active .atf-post__sidebar[data-af-element-effect-active] {
-  position: var(--af-effect-host-position, relative);
-  top: var(--af-effect-host-top, auto);
-  isolation: isolate;
-  background-image: linear-gradient(180deg, var(--atf-post-accent-soft), transparent 42%);
-}
-body.atf-active .atf-post__sidebar[data-af-element-effect-active]::before {
-  content: "";
-  display: block;
-  position: absolute;
-  z-index: -1;
-  inset: auto;
-  left: var(--af-effect-rail-left, 0px);
-  top: var(--af-effect-rail-top, 0px);
-  width: var(--af-effect-rail-width, 100%);
-  height: var(--af-effect-rail-height, 100%);
-  transform: translateY(var(--af-effect-rail-shift, 0px));
-  pointer-events: none;
-  background-image: var(--af-apui-postbit-author-overlay, linear-gradient(180deg, var(--atf-post-accent-soft), transparent 42%)), var(--af-apui-postbit-author-bg-image, none);
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: cover;
-}
-body.atf-active .atf-post__sidebar[data-af-element-effect-active] > .atf-post__sidebar-inner {
-  isolation: isolate;
+/* APUI owns the rail background; decoration shares ATF's moving rail. */
+body.atf-active .atf-post__sidebar-inner[data-af-element-effect-active] { isolation: isolate; }
+body.atf-active .atf-post__sidebar-inner[data-af-element-effect-active] > :not([data-af-element-effect]) {
+  position: relative;
   z-index: 1;
-  background-image: none;
-  background-color: transparent;
 }
-body.atf-active .atf-post__sidebar > [data-af-element-effect] { position: absolute; inset: 0; z-index: 0; margin: 0; padding: 0; border: 0; box-sizing: border-box; }
-body.atf-active .atf-post__sidebar > [data-af-element-effect][data-af-effect-ready] { opacity: min(var(--af-effect-opacity, .35), .14); }
+body.atf-active .atf-post__sidebar-inner > [data-af-element-effect] {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-sizing: border-box;
+}
+body.atf-active .atf-post__sidebar-inner > [data-af-element-effect][data-af-effect-ready] { opacity: min(var(--af-effect-opacity, .35), .14); }
+@media (max-width: 48rem) {
+  body.atf-active .atf-post__sidebar-inner[data-af-element-effect-active] { position: relative; }
+}
