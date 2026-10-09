@@ -15,7 +15,7 @@ const assets = path.join(root, 'inc/plugins/advancedfunctionality/addons/advance
     await page.setContent(fixture.editor.replace(/<link\b[^>]*>|<script\b[^>]*>[\s\S]*?<\/script>/gi, ''));
     await page.addStyleTag({ content: fs.readFileSync(path.join(assets, 'advancedelementtheme-admin.css'), 'utf8') });
     await page.addScriptTag({ content: fs.readFileSync(path.join(assets, 'advancedelementtheme-admin.js'), 'utf8') });
-    assert.equal(await page.locator('.af-et-tabs a').count(), 5);
+    assert.equal(await page.locator('.af-et-tabs a').count(), 6);
     assert.equal(await page.locator('.af-et-tab.is-active').innerText(), 'Profile');
     assert.match(await page.locator('form').getAttribute('action'), /action=edit.*element_key=fire.*surface=profile/);
     const rows = page.locator('[data-af-et-extra-rows] tr');

@@ -342,7 +342,8 @@ function af_apui_render_atf_profile_hero(array $context): string
     $stats = function_exists('af_adaptivethemeframework_render_slot')
         ? af_adaptivethemeframework_render_slot('profile.stats', $context)
         : '';
-    return '<section class="atf-profile-hero ' . $uidClass . '" data-atf-profile-hero="1">'
+    return '<section class="atf-profile-hero ' . $uidClass . '" data-atf-profile-hero="1" data-af-element-effect-host>'
+        . '<span hidden data-af-element-effect aria-hidden="true"></span>'
         . '<div class="atf-profile-hero__avatar">' . af_apui_render_avatar_image((string)($context['avatars']['primary_avatar'] ?? ''), (string)($context['username'] ?? ''), 'atf-profile-hero__avatar-image') . '</div>'
         . '<div class="atf-profile-hero__identity"><div class="atf-profile-hero__stats">' . $stats . '</div>'
         . '<div class="atf-profile-hero__name">' . (string)($i['formattedname'] ?? '') . '</div>'
@@ -1866,7 +1867,7 @@ function af_apui_member_profile_prepare_layout_vars(): void
         ? af_elementtheme_resolve_key($elementValue)
         : '';
     $GLOBALS['af_apui_profile_element'] = htmlspecialchars_uni($elementThemeKey);
-    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('profile');
+    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('profile', $elementThemeKey);
     if (!empty($sheetPayload['enabled'])
         && trim((string)($sheetPayload['sheet_slug'] ?? '')) !== ''
         && trim((string)($sheetPayload['sheet_url'] ?? '')) !== ''

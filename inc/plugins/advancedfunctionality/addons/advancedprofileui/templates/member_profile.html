@@ -10,7 +10,8 @@
 {$header}
 
 <div class="af-apui-profile-page" data-element-surface="profile" data-element="{$af_apui_profile_element}">
-    <section class="af-apui-profile-hero">
+    <section class="af-apui-profile-hero" data-af-element-effect-host>
+        <span hidden data-af-element-effect aria-hidden="true"></span>
         <div class="af-apui-profile-hero__background"></div>
         <div class="af-apui-profile-hero__banner"></div>
         {$af_apui_profile_stats}

@@ -6981,7 +6981,7 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
     $wikiContent = implode('', $wikiMainSections);
     $block = '';
     eval("\$block = \"".$templates->get('af_atf_display_block')."\";");
-    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('application');
+    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('application', $elementThemeKey);
     if ($elementThemeKey !== '') {
         $elementAttribute = ' data-element-surface="application" data-element="'.htmlspecialchars_uni($elementThemeKey).'"';
         $block = preg_replace('~(<div\\b[^>]*\\bclass="[^"]*\\baf-atf-display\\b[^"]*")~i', '$1'.$elementAttribute, $block, 1) ?? $block;

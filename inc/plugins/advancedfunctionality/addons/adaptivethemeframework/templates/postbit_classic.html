@@ -2,7 +2,8 @@
 <a id="pid{$post['pid']}" name="pid{$post['pid']}"></a>
 
 <article class="post classic atf-post af-atf-display {$unapproved_shade} {$post['af_aa_user_class']}" id="post_{$post['pid']}" data-author-uid="{$post['uid']}" data-element-surface="postbit" data-element="{$post['af_atf_element']}" style="{$post_visibility}">
-  <header class="post_head atf-post__topbar">
+  <header class="post_head atf-post__topbar" data-af-element-effect-host>
+    <span hidden data-af-element-effect aria-hidden="true"></span>
     <div class="atf-post__topbar-leading">
       <div class="atf-post__moderation">{$post['modbit']}</div>
       <div class="atf-post__sheet-action"><span class="atf-post__sheet-accent" aria-hidden="true"></span>{$post['af_atf_slots']['post.author.character']}</div>

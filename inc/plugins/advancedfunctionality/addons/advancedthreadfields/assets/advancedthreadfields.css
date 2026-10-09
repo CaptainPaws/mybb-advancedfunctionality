@@ -1143,3 +1143,7 @@ body.af-atf-kb-catalog-modal-open {
   .af-atf-character-top-grid, .af-atf-ability-grid { grid-template-columns: minmax(0, 1fr); }
   .af-atf-ability-item { padding: 16px; }
 }
+
+/* Surface-owned decoration placement; inactive effects do not change layout. */
+.af-atf-wiki__header[data-af-element-effect-active] { position: relative; isolation: isolate; }
+.af-atf-wiki__header > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }

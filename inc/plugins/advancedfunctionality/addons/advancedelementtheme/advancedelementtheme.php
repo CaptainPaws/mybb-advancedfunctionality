@@ -1,6 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__ . '/css.php';
+require_once __DIR__ . '/effects.php';
 
 function af_advancedelementtheme_install(): bool
 {
@@ -95,9 +96,11 @@ function af_elementtheme_is_known_key(string $key): bool
 function af_elementtheme_surfaces(): array { return ['application', 'sheet', 'postbit', 'profile']; }
 
 /** Renderer fact: call on the full-page/modal caller, without owning its templates. */
-function af_elementtheme_mark_surface(string $surface): void
+function af_elementtheme_mark_surface(string $surface, string $key = ''): void
 {
-    if (in_array($surface, af_elementtheme_surfaces(), true)) $GLOBALS['af_elementtheme_rendered_surfaces'][$surface] = true;
+    if (!in_array($surface, af_elementtheme_surfaces(), true)) return;
+    $GLOBALS['af_elementtheme_rendered_surfaces'][$surface] = true;
+    if ($key !== '') $GLOBALS['af_elementtheme_surface_keys'][$surface][$key] = true;
 }
 
 /** Compatibility for callers of the original four-token API. */
@@ -125,7 +128,7 @@ function af_elementtheme_variables_from_palette(array $palette): array
 /** JSON adapter: old palette maps remain readable without any table migration. */
 function af_elementtheme_normalize_metadata(array $data): array
 {
-    $variables = array_key_exists('variables', $data) ? $data['variables'] : af_elementtheme_variables_from_palette($data);
+    $variables = array_key_exists('variables', $data) ? $data['variables'] : af_elementtheme_variables_from_palette(array_diff_key($data, ['effects' => true, 'custom_css' => true]));
     if (!is_array($variables)) throw new InvalidArgumentException('Variables должны быть объектом.');
     $out = [];
     foreach ($variables as $name => $value) {
@@ -139,7 +142,12 @@ function af_elementtheme_normalize_metadata(array $data): array
     $customCss = $data['custom_css'] ?? '';
     if (!is_string($customCss)) throw new InvalidArgumentException('Custom CSS должен быть строкой.');
     af_elementtheme_validate_custom_css($customCss);
-    return ['variables' => $out, 'custom_css' => trim($customCss)];
+    $metadata = ['variables' => $out, 'custom_css' => trim($customCss)];
+    if (isset($data['effects'])) {
+        if (!is_array($data['effects'])) throw new InvalidArgumentException('Недопустимые настройки эффекта.');
+        $metadata['effects'] = af_elementtheme_normalize_effects($data['effects']);
+    }
+    return $metadata;
 }
 
 /** Source file is the default registry of styles, including unbound legacy keys. */
@@ -165,8 +173,8 @@ function af_elementtheme_overrides(): array
     global $db, $cache;
     if (isset($GLOBALS['af_elementtheme_overrides'])) return $GLOBALS['af_elementtheme_overrides'];
     $data = is_object($cache) ? $cache->read('af_elementtheme') : false;
-    if (!is_array($data) || ($data['format'] ?? 0) !== 3 || !isset($data['styles'], $data['surfaces'], $data['css'])) {
-        $data = ['format' => 3, 'styles' => [], 'surfaces' => [], 'css' => ''];
+    if (!is_array($data) || ($data['format'] ?? 0) !== 4 || !isset($data['styles'], $data['surfaces'], $data['css'], $data['effects'])) {
+        $data = ['format' => 4, 'styles' => [], 'surfaces' => [], 'css' => ''];
         if (is_object($db)) {
             foreach (['styles', 'surfaces'] as $kind) {
                 $table = 'af_element_theme_' . $kind;
@@ -183,6 +191,7 @@ function af_elementtheme_overrides(): array
             }
         }
         $data['css'] = af_elementtheme_compile_overrides($data);
+        $data['effects'] = af_elementtheme_compile_effects($data['styles']);
         if (is_object($cache)) $cache->update('af_elementtheme', $data);
     }
     return $GLOBALS['af_elementtheme_overrides'] = $data;
@@ -251,7 +260,7 @@ function af_elementtheme_get_rows(): array
         $bound = isset($elements[$key]);
         $style = af_elementtheme_get_style($key);
         $metadata = af_elementtheme_get_metadata($key);
-        $hasStyle = (bool)$style || $metadata['custom_css'] !== '' || !empty($stored['surfaces'][$key]);
+        $hasStyle = (bool)$style || isset($metadata['effects']) || $metadata['custom_css'] !== '' || !empty($stored['surfaces'][$key]);
         $alias = !$bound ? (af_elementtheme_aliases()[$key] ?? '') : '';
         $state = !$loaded ? 'KB unavailable' : ($alias !== '' ? 'Alias → ' . $alias : ($bound ? ($hasStyle ? 'Bound' : 'Missing style') : 'Legacy / unbound'));
         $rows[$key] = ['key' => $key, 'element' => $elements[$key] ?? [], 'in_kb' => $loaded ? $bound : null, 'has_style' => $hasStyle, 'alias' => $alias,
@@ -275,6 +284,10 @@ function af_elementtheme_save_style(string $key, array $palette, string $surface
     $canonical = af_elementtheme_resolve_key($key);
     if ($canonical !== '') $key = $canonical;
     elseif (!isset(af_elementtheme_get_rows()[$key])) throw new InvalidArgumentException('Создайте элемент в KB.');
+    if ($surface === '' && !array_key_exists('effects', $palette)) {
+        $existing = af_elementtheme_get_metadata($key);
+        if (isset($existing['effects'])) $palette['effects'] = $existing['effects'];
+    }
     $palette = af_elementtheme_normalize_metadata($palette);
     try { $json = json_encode($palette, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR); }
     catch (JsonException $e) { throw new InvalidArgumentException('Стиль содержит недопустимый UTF-8.'); }
@@ -283,7 +296,7 @@ function af_elementtheme_save_style(string $key, array $palette, string $surface
     $where = "element_key='" . $db->escape_string($key) . "'";
     if ($surface !== '') $where .= " AND surface='" . $db->escape_string($surface) . "'";
     $db->delete_query($table, $where);
-    if ($palette['variables'] || $palette['custom_css'] !== '') {
+    if ($palette['variables'] || $palette['custom_css'] !== '' || isset($palette['effects'])) {
         $row = ['element_key' => $db->escape_string($key), 'palette_json' => $db->escape_string($json)];
         if ($surface !== '') $row['surface'] = $surface;
         $db->insert_query($table, $row);
@@ -310,6 +323,15 @@ function af_advancedelementtheme_pre_output(string &$page): void
     $html = preg_match('/<link\b[^>]*\sdata-af-element-theme(?:\s|>|=)/i', $page) ? '' : '<link rel="stylesheet" href="' . htmlspecialchars_uni($base . '?v=' . $version) . '" data-af-element-theme>';
     $css = af_elementtheme_overrides()['css'];
     if ($css !== '' && !preg_match('/<style\b[^>]*\sdata-af-element-theme-overrides(?:\s|>|=)/i', $page)) $html .= '<style data-af-element-theme-overrides>' . $css . '</style>';
+    $effects = af_elementtheme_overrides()['effects'];
+    if ($effects['settings'] && af_elementtheme_effects_needed($page, $effects['settings']) && !str_contains($page, 'data-af-element-effects-config')) {
+        $assetRoot = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedelementtheme/assets/';
+        $effectVersion = (string)max((int)filemtime(__DIR__ . '/assets/element-effects.css'), (int)filemtime(__DIR__ . '/assets/element-effects.js'));
+        $html .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($assetRoot . 'element-effects.css?v=' . $effectVersion) . '" data-af-element-effects>'
+            . '<style data-af-element-effects-overrides>' . $effects['css'] . '</style>'
+            . '<script type="application/json" data-af-element-effects-config>' . json_encode($effects['settings'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '</script>'
+            . '<script src="' . htmlspecialchars_uni($assetRoot . 'element-effects.js?v=' . $effectVersion) . '" defer></script>';
+    }
     if ($html === '') return;
     $page = preg_replace_callback('~</head>~i', static fn() => $html . "\n</head>", $page, 1) ?? $page;
 }

@@ -2268,7 +2268,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     }
 
     $GLOBALS['af_charactersheets_has_frontend_component'] = true;
-    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('sheet');
+
     $character_source = af_charactersheets_resolve_character_kb_entry($tid, $uid, $accept_row);
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
     $character_stats = (array)(($character_source['payload'] ?? [])['stats'] ?? []);
@@ -2281,6 +2281,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     $sheet_element_theme_key = function_exists('af_elementtheme_resolve_key')
         ? htmlspecialchars_uni(af_elementtheme_resolve_key($element_value))
         : '';
+    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('sheet', $sheet_element_theme_key);
 
     $character_name_en = trim((string)($character_profile['character_name'] ?? ''));
     if ($character_name_en === '') {

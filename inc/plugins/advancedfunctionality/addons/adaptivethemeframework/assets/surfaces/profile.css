@@ -520,3 +520,7 @@ body.atf-active.atf-profile-page .af-apui-rewards-grid .af-apui-empty { padding:
   body.atf-active.atf-profile-page .af-apui-character-about { grid-column: auto; grid-row: auto; }
   body.atf-active.atf-profile-page .af-apui-character-portrait { order: -1; }
 }
+
+/* Surface-owned decoration placement; inactive effects do not change layout. */
+.atf-profile-hero[data-af-element-effect-active] { position: relative; isolation: isolate; }
+.atf-profile-hero > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }

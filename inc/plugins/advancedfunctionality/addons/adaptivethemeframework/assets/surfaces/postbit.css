@@ -747,3 +747,7 @@ body.atf-active .atf-post__footer {
     flex-wrap: wrap;
   }
 }
+
+/* Surface-owned decoration placement; inactive effects do not change layout. */
+.atf-post__topbar[data-af-element-effect-active] { position: relative; isolation: isolate; }
+.atf-post__topbar > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }

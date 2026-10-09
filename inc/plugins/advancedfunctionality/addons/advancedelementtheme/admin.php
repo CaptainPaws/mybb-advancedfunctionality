@@ -35,15 +35,23 @@ class AF_Admin_Advancedelementtheme
         $action = $action ?: $mybb->get_input('action');
         $key = af_elementtheme_normalize_key($mybb->get_input('element_key'));
         $surface = $mybb->get_input('surface');
-        if (!in_array($surface, af_elementtheme_surfaces(), true)) $surface = '';
+        if ($surface !== 'effects' && !in_array($surface, af_elementtheme_surfaces(), true)) $surface = '';
         $error = ''; $submitted = null;
         if ($mybb->request_method === 'post') {
             verify_post_check($mybb->get_input('my_post_key'));
             $action = 'edit';
             try {
-                $submitted = self::submittedMetadata();
+                if ($surface === 'effects') {
+                    $submitted = af_elementtheme_get_metadata(af_elementtheme_resolve_key($key) ?: $key);
+                    $submitted['effects'] = af_elementtheme_normalize_effects([
+                        'enabled' => $mybb->get_input('effect_enabled') === '1', 'preset' => $mybb->get_input('effect_preset'),
+                        'intensity' => $mybb->get_input('effect_intensity'), 'speed' => $mybb->get_input('effect_speed'),
+                        'density' => $mybb->get_input('effect_density'), 'opacity' => $mybb->get_input('effect_opacity'),
+                        'color' => $mybb->get_input('effect_color'), 'surfaces' => $mybb->input['effect_surfaces'] ?? [],
+                    ]);
+                } else $submitted = self::submittedMetadata();
                 $target = af_elementtheme_resolve_key($key) ?: $key;
-                af_elementtheme_save_style($key, $submitted, $surface);
+                af_elementtheme_save_style($key, $submitted, $surface === 'effects' ? '' : $surface);
                 flash_message('Стиль сохранён.', 'success');
                 admin_redirect(self::editorUrl($target, $surface));
             } catch (InvalidArgumentException $e) { $error = $e->getMessage(); }
@@ -57,8 +65,8 @@ class AF_Admin_Advancedelementtheme
         }
         if ($error !== '') $header .= '<div class="error" role="alert">' . self::escape($error) . '</div>';
         $assetRoot = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedelementtheme/assets/';
-        $css = '<link rel="stylesheet" href="' . self::escape($assetRoot . 'advancedelementtheme-admin.css?v=2') . '">';
-        $js = '<script src="' . self::escape($assetRoot . 'advancedelementtheme-admin.js?v=2') . '" defer></script>';
+        $css = '<link rel="stylesheet" href="' . self::escape($assetRoot . 'advancedelementtheme-admin.css?v=3') . '">';
+        $js = '<script src="' . self::escape($assetRoot . 'advancedelementtheme-admin.js?v=3') . '" defer></script>';
         // AF has already output the ACP header before controller dispatch.
         $header = $css . $js . $header;
         if ($action === 'edit') {
@@ -109,9 +117,10 @@ class AF_Admin_Advancedelementtheme
         elseif ($row['alias'] !== '') $html .= '<p>Legacy alias. Status: ' . self::escape($row['state']) . '.</p><a href="' . self::escape(self::editorUrl($row['alias'], $surface)) . '">Открыть canonical style</a>';
         else $html .= '<p>Запись с key <code>' . self::escape($key) . '</code> пока отсутствует. Status: Legacy / unbound.</p>';
         $html .= '</section><nav class="af-et-tabs" aria-label="Surface">';
-        foreach (['' => 'Global', 'application' => 'Application', 'sheet' => 'Sheet', 'postbit' => 'Postbit', 'profile' => 'Profile'] as $name => $label) {
+        foreach (['' => 'Global', 'application' => 'Application', 'sheet' => 'Sheet', 'postbit' => 'Postbit', 'profile' => 'Profile', 'effects' => 'Эффекты'] as $name => $label) {
             $html .= '<a class="af-et-tab' . ($surface === $name ? ' is-active' : '') . '" href="' . self::escape(self::editorUrl($key, $name)) . '"' . ($surface === $name ? ' aria-current="page"' : '') . '>' . $label . '</a>';
         }
+        if ($surface === 'effects') return $html . '</nav>' . self::effectsEditor($key, $row, $submitted);
         $html .= '</nav><form class="af-et-editor" method="post" action="' . self::escape(self::editorUrl($key, $surface)) . '"><input type="hidden" name="my_post_key" value="' . self::escape($mybb->post_code ?? '') . '"><input type="hidden" name="element_key" value="' . self::escape($key) . '"><input type="hidden" name="surface" value="' . self::escape($surface) . '"><h4>' . ($surface === '' ? 'Global palette' : self::escape(ucfirst($surface)) . ' variables') . '</h4><p>Пустое значение: ' . ($surface === '' ? 'inherit default CSS' : 'inherit global') . '.</p>';
         foreach (self::TOKENS as $token => $label) {
             $name = '--af-element-' . $token; $value = $metadata['variables'][$name] ?? ''; $fallback = $inherited[$name] ?? '';
@@ -125,6 +134,32 @@ class AF_Admin_Advancedelementtheme
             $html .= self::variableRow($name, $metadata['variables'][$name] ?? '', $inherited[$name] ?? '');
         }
         $html .= self::variableRow('', '', '') . '</tbody></table><button type="button" data-af-et-add-variable>+ Добавить переменную</button><template data-af-et-variable-template>' . self::variableRow('', '', '') . '</template><h4><label for="af-et-custom-css">Custom CSS</label></h4><p>CSS действует только в <code>[data-element="' . self::escape($key) . '"]' . ($surface === '' ? '' : '[data-element-surface="' . self::escape($surface) . '"]') . '</code>. Для root используйте <code>:scope</code>. Поддерживаются @media, @supports, @container; global definitions (@import, @font-face, @keyframes) запрещены.</p><textarea id="af-et-custom-css" name="custom_css" rows="18" spellcheck="false">' . self::escape($metadata['custom_css']) . '</textarea><button class="af-et-save" type="submit"' . ($row['in_kb'] === null ? ' disabled' : '') . '>Сохранить</button></form>';
+        return $html;
+    }
+    private static function effectsEditor(string $key, array $row, ?array $submitted): string
+    {
+        global $mybb;
+        $effect = $submitted['effects'] ?? af_elementtheme_get_effects($key);
+        $assetRoot = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedelementtheme/assets/';
+        $html = '<link rel="stylesheet" href="' . self::escape($assetRoot . 'element-effects.css?v=1') . '"><form class="af-et-editor af-et-effects-editor" data-af-et-effects-editor method="post" action="' . self::escape(self::editorUrl($key, 'effects')) . '"><input type="hidden" name="my_post_key" value="' . self::escape($mybb->post_code ?? '') . '"><h4>Эффекты</h4><label><input type="checkbox" name="effect_enabled" value="1"' . ($effect['enabled'] ? ' checked' : '') . '> Включить анимацию</label><p>Эффект украшает только шапку. Postbit и мобильные устройства используют мягкий свет и не более трёх спарклов. При reduced motion остаётся статичная декорация.</p><label>Пресет анимации <select name="effect_preset">';
+        foreach (af_elementtheme_effect_presets() as $name => $label) $html .= '<option value="' . $name . '"' . ($effect['preset'] === $name ? ' selected' : '') . '>' . self::escape($label) . '</option>';
+        $html .= '</select></label>';
+        foreach (['intensity' => 'Интенсивность', 'speed' => 'Скорость', 'density' => 'Плотность частиц', 'opacity' => 'Прозрачность (видимость)'] as $name => $label) {
+            $html .= '<label class="af-et-effect-range">' . $label . ' <input type="range" name="effect_' . $name . '" min="0" max="100" value="' . $effect[$name] . '"><output>' . $effect[$name] . '%</output></label>';
+        }
+        $html .= '<label>Цвет частиц <input type="text" name="effect_color" value="' . self::escape($effect['color']) . '" placeholder="Автоматически из surface palette" data-af-et-effect-color><input type="color" data-af-et-effect-picker value="' . (self::hexColor($effect['color']) ?: '#ffffff') . '" aria-label="Цвет частиц"></label><small>Пустое поле — актуальный accent поверхности; поддерживаются hex, RGB(A), HSL(A).</small><fieldset><legend>Область применения</legend>';
+        foreach (af_elementtheme_surfaces() as $surface) $html .= '<label><input type="checkbox" name="effect_surfaces[]" value="' . $surface . '"' . (in_array($surface, $effect['surfaces'], true) ? ' checked' : '') . '> ' . ucfirst($surface) . '</label> ';
+        $html .= '</fieldset><h4>Предпросмотр</h4><label>Поверхность <select data-af-et-effect-preview-surface>';
+        foreach (af_elementtheme_surfaces() as $surface) $html .= '<option value="' . $surface . '"' . ($surface === 'profile' ? ' selected' : '') . '>' . ucfirst($surface) . '</option>';
+        $html .= '</select></label><p>Предпросмотр использует сохранённую палитру выбранной поверхности. Настройки эффектов обновляются до сохранения.</p><div class="af-et-effect-preview" data-af-et-effect-preview data-element="' . self::escape($key) . '" data-element-surface="profile"><div data-af-element-effect-host><span hidden data-af-element-effect aria-hidden="true"></span><strong>Страница персонажа</strong><p>Текст, аватар и кнопки остаются над декоративным слоем.</p><button type="button">Пример кнопки</button></div></div>';
+        $palettes = [];
+        foreach (af_elementtheme_surfaces() as $surface) $palettes[$surface] = af_elementtheme_get_variables($key, $surface);
+        $textures = [];
+        foreach (array_keys(af_elementtheme_effect_presets()) as $preset) {
+            $sample = af_elementtheme_effect_defaults($key); $sample['enabled'] = true; $sample['preset'] = $preset; $sample['surfaces'] = ['profile'];
+            $textures[$preset] = af_elementtheme_compile_effects([$key => ['effects' => $sample]])['css'];
+        }
+        $html .= '<script type="application/json" data-af-et-effect-preview-data>' . json_encode(['palettes' => $palettes, 'textures' => $textures, 'points' => af_elementtheme_effect_points()], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '</script><style data-af-et-effect-preview-style></style><button class="af-et-save" type="submit"' . ($row['in_kb'] === null ? ' disabled' : '') . '>Сохранить эффекты</button></form>';
         return $html;
     }
     private static function hexColor(string $value): string

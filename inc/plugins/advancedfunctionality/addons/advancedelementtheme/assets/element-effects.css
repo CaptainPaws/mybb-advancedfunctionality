@@ -1,0 +1,42 @@
+/* Original procedural decoration. Motion is compositor transforms/opacity only.
+   Layout/placement belongs to each surface owner, not this stylesheet. */
+[data-af-element-effect] { display: none; pointer-events: none; user-select: none; border-radius: inherit; overflow: hidden; contain: paint; }
+[data-af-element-effect][data-af-effect-ready] { display: block; opacity: var(--af-effect-opacity, .35); }
+[data-af-element-effect]::before, [data-af-element-effect]::after {
+  content: ""; position: absolute; inset: -8%; pointer-events: none;
+  background-image: var(--af-effect-field, var(--af-effect-points, none));
+  background-repeat: no-repeat; opacity: var(--af-effect-strength, .5);
+  transform-origin: 50% 65%;
+  animation: var(--af-effect-animation, af-effect-stardust) var(--af-effect-duration, 20s) ease-in-out infinite;
+  animation-play-state: paused;
+}
+[data-af-element-effect]::after {
+  background-image: radial-gradient(ellipse at 72% 85%, var(--af-effect-color, transparent), transparent 66%);
+  animation-name: af-effect-aura; animation-duration: calc(var(--af-effect-duration, 20s) * 1.4);
+  opacity: calc(var(--af-effect-strength, .5) * .45);
+}
+[data-af-element-effect][data-af-effect-running]::before,
+[data-af-element-effect][data-af-effect-running]::after { animation-play-state: running; }
+/* Long topics get three fixed non-repeating sparkles and a slow soft glow.
+   No lightning/flame/mist field on postbits, irrespective of selected preset. */
+@scope ([data-element-surface="postbit"]) to (:scope [data-element]) {
+[data-af-element-effect] { opacity: min(var(--af-effect-opacity, .35), .22); }
+[data-af-element-effect]::before {
+  background-image: var(--af-effect-light-points, none); animation-name: af-effect-stardust;
+  animation-duration: calc(var(--af-effect-duration, 20s) * 1.8);
+}
+[data-af-element-effect]::after { animation: none; }
+}
+@media (max-width: 680px) {
+  [data-af-element-effect]::before { background-image: var(--af-effect-light-points, none); animation-name: af-effect-stardust; }
+  [data-af-element-effect]::after { animation: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-af-element-effect]::before, [data-af-element-effect]::after { animation: none !important; transform: none !important; }
+}
+@keyframes af-effect-stardust { 0%,100% { opacity: calc(var(--af-effect-strength) * .3); transform: translate3d(0,0,0); } 50% { opacity: var(--af-effect-strength); transform: translate3d(1%, -2%, 0); } }
+@keyframes af-effect-embers { 0% { opacity: 0; transform: translate3d(-1%, 12%, 0); } 30%,70% { opacity: var(--af-effect-strength); } 100% { opacity: 0; transform: translate3d(2%, -18%, 0); } }
+@keyframes af-effect-mist { 0%,100% { opacity: calc(var(--af-effect-strength) * .5); transform: translate3d(-4%, 1%, 0) scale(1.05); } 50% { opacity: var(--af-effect-strength); transform: translate3d(4%, -2%, 0) scale(1.1); } }
+@keyframes af-effect-aura { 0%,100% { opacity: calc(var(--af-effect-strength) * .35); transform: rotate(-5deg) scale(1.03); } 50% { opacity: var(--af-effect-strength); transform: rotate(8deg) scale(1.12); } }
+@keyframes af-effect-electric { 0%,42%,48%,100% { opacity: calc(var(--af-effect-strength) * .08); transform: translate3d(0,0,0); } 45%,60% { opacity: var(--af-effect-strength); transform: translate3d(1%,0,0); } 63% { opacity: calc(var(--af-effect-strength) * .2); transform: translate3d(-1%,0,0); } }
+@keyframes af-effect-frost { 0%,100% { opacity: calc(var(--af-effect-strength) * .35); transform: translate3d(0,-2%,0) rotate(-3deg); } 50% { opacity: var(--af-effect-strength); transform: translate3d(0,2%,0) rotate(3deg); } }

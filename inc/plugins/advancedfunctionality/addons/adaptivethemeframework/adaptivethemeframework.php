@@ -984,7 +984,7 @@ function af_adaptivethemeframework_compose_profile(): void
         'post_counter' => (string)($memprofile['advancedpostcounter'] ?? ''),
     ];
     $values['element_theme_key'] = htmlspecialchars_uni((string)($GLOBALS['af_apui_profile_element'] ?? ''));
-    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('profile');
+    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('profile', (string)($GLOBALS['af_apui_profile_element'] ?? ''));
     $context = af_adaptivethemeframework_profile_context($memprofile, $values);
     foreach (['hero', 'navigation', 'forum_info', 'quick_links', 'character_sheet', 'rewards', 'timeline',
         'activity', 'balance', 'post_counter', 'before_content', 'main', 'after_content'] as $name) {
@@ -1440,7 +1440,7 @@ function af_adaptivethemeframework_compose_postbit(array &$post): void
     $post['af_atf_primary_avatar'] = (string)($post['useravatar'] ?? '');
     $post['af_atf_secondary_avatar'] = af_adaptivethemeframework_resolve_post_secondary_avatar($post);
     $post['af_atf_element'] = (string)($GLOBALS['af_adaptivethemeframework_author_data'][(int)($post['uid'] ?? 0)]['element'] ?? '');
-    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('postbit');
+    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('postbit', $post['af_atf_element']);
     $post['af_atf_online_indicator'] = strpos((string)($post['af_apui_presence_html'] ?? ''), 'presence-dot--online') !== false ? '<span class="atf-post__online-indicator" title="На форуме" aria-label="На форуме"></span>' : '';
     $post['af_atf_post_reputation_html'] = af_adaptivethemeframework_post_reputation($post);
     if (!isset($post['af_post_char_count'])) {

@@ -123,3 +123,44 @@ an installed Playwright Firefox), `tests/element_theme_editor_regression.php`,
 `tests/element_theme_editor_browser.cjs`, `tests/element_theme_regression.php`, the existing ATF
 postbit/batch/hot-path, active-application gate, profile composition and
 CharacterSheets frontend regressions.
+
+
+## Animated effects
+
+The Effects tab saves optional `effects` alongside `variables` and `custom_css`
+in the existing global `palette_json`; no schema migration or identity mapping
+is introduced. Existing metadata without this member means disabled. Palette
+saves preserve effects; effects saves preserve global and surface styles.
+All presets are opt-in. Presentation suggestions: fire/embers, shadow/stardust,
+water/mist; any canonical KB element can use any of the six reusable presets
+(stardust, embers, mist, aura, electric, frost).
+
+Settings: enabled, preset, intensity/speed/density/opacity (0–100), color (empty
+means current surface accent; optional literal hex/RGB/HSL override), surfaces
+(profile, sheet, application, postbit). Opacity is visibility, so 0 is invisible.
+Surface palette overrides automatically feed particle colors. The ACP preview
+uses the same compiler textures and CSS keyframes and changes before saving.
+
+Surface owners provide a hidden, non-interactive
+`[data-af-element-effect]` inside `[data-af-element-effect-host]` in their hero
+or topbar, and own its absolute positioning/stacking. Effects assets are delivered
+by ElementTheme after manifest permission checks only when an enabled setting
+matches a rendered canonical key/surface, including sheet modal caller facts.
+Old installed templates receive only a decorative node through DOM integration;
+no templates are restored or replaced. Disabled effects leave existing layout,
+palette and custom CSS intact. With JS disabled, decoration remains hidden and
+existing content/palette remains usable.
+
+Drawing and motion use original CSS gradients, transforms and opacity, never
+external copied assets or canvas. Textures have at most 12 fixed, non-repeating
+points. Postbits/mobile use up to three points and static soft glow. There are no
+particle DOM nodes, requestAnimationFrame/timer loops or animation KB queries.
+One IntersectionObserver pauses off-screen/hidden components; document inactivity
+and reduced-motion also pause motion. One MutationObserver handles inserted
+sheets/lazy profiles and unobserves detached components. Reduced-motion keeps
+static decoration. Compiled effect styles/settings share the versioned MyBB
+presentation cache and are invalidated on save.
+
+Targeted coverage: `tests/element_theme_effects_regression.php` and
+`tests/element_theme_effects_browser.cjs` (Chromium and installed Playwright Firefox
+via `AF_TEST_BROWSER=firefox`), plus existing palette/delivery/editor regressions.

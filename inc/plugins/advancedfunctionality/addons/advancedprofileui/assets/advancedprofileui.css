@@ -3439,3 +3439,7 @@ body.af-apui-member-profile-page:not(.atf-active) .af-apui-profile-hero__inner {
     text-align: center;
   }
 }
+
+/* Surface-owned decoration placement; inactive effects do not change layout. */
+.af-apui-profile-hero[data-af-element-effect-active] { position: relative; isolation: isolate; }
+.af-apui-profile-hero > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }

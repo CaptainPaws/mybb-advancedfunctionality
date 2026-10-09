@@ -20,3 +20,12 @@
 .af-et-editor textarea { box-sizing: border-box; width: 100%; padding: 12px; font-family: monospace; font-size: 14px; }
 .af-et-save { margin: 16px 0; padding: 10px 24px; }
 .af-et-diagnostic { overflow-wrap: anywhere; }
+.af-et-effects-editor > label { display: block; margin: 16px 0; }
+.af-et-effects-editor fieldset { margin: 20px 0; padding: 16px; }
+.af-et-effect-range { display: flex !important; align-items: center; flex-wrap: wrap; gap: 12px; }
+.af-et-effect-range input { width: min(50%, 320px); }
+.af-et-effect-range output { min-width: 4em; }
+.af-et-effect-preview { margin-top: 16px; background: #101725; color: #eff5ff; border-radius: 12px; }
+.af-et-effect-preview > [data-af-element-effect-host] { padding: 36px; min-height: 180px; box-sizing: border-box; border-radius: inherit; }
+.af-et-effect-preview [data-af-element-effect-host][data-af-element-effect-active] { position: relative; isolation: isolate; }
+.af-et-effect-preview [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
