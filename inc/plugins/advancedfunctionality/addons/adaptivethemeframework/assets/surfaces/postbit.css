@@ -345,7 +345,7 @@ body.atf-active .atf-post__sidebar-inner {
   top: var(--atf-sticky-offset, 1rem);
   box-sizing: border-box;
   max-height: none;
-  margin-block-end: 15px;
+  margin-block-end: 0;
   overflow: visible;
   padding: var(--atf-space-4);
   border: 0;
