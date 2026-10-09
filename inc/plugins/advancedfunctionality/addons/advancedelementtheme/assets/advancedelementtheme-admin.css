@@ -29,3 +29,7 @@
 .af-et-effect-preview > [data-af-element-effect-host] { padding: 36px; min-height: 180px; box-sizing: border-box; border-radius: inherit; }
 .af-et-effect-preview [data-af-element-effect-host][data-af-element-effect-active] { position: relative; isolation: isolate; }
 .af-et-effect-preview [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+
+.af-et-color-row .af-et-color-alpha { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 0 12px; vertical-align: middle; }
+.af-et-color-alpha input { width: 5em; }
+.af-et-color-row [data-af-et-color-note] { color: #425c75; }

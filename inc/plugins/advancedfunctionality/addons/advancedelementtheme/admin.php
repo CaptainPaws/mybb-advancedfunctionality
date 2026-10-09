@@ -65,8 +65,8 @@ class AF_Admin_Advancedelementtheme
         }
         if ($error !== '') $header .= '<div class="error" role="alert">' . self::escape($error) . '</div>';
         $assetRoot = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedelementtheme/assets/';
-        $css = '<link rel="stylesheet" href="' . self::escape($assetRoot . 'advancedelementtheme-admin.css?v=3') . '">';
-        $js = '<script src="' . self::escape($assetRoot . 'element-canvas-engine.js?v=' . filemtime(__DIR__ . '/assets/element-canvas-engine.js')) . '" defer></script><script src="' . self::escape($assetRoot . 'advancedelementtheme-admin.js?v=4') . '" defer></script>';
+        $css = '<link rel="stylesheet" href="' . self::escape($assetRoot . 'advancedelementtheme-admin.css?v=4') . '">';
+        $js = '<script src="' . self::escape($assetRoot . 'element-canvas-engine.js?v=' . filemtime(__DIR__ . '/assets/element-canvas-engine.js')) . '" defer></script><script src="' . self::escape($assetRoot . 'advancedelementtheme-admin.js?v=5') . '" defer></script>';
         // AF has already output the ACP header before controller dispatch.
         $header = $css . $js . $header;
         if ($action === 'edit') {
@@ -125,8 +125,9 @@ class AF_Admin_Advancedelementtheme
         foreach (self::TOKENS as $token => $label) {
             $name = '--af-element-' . $token; $value = $metadata['variables'][$name] ?? ''; $fallback = $inherited[$name] ?? '';
             $picker = self::hexColor($value ?: $fallback);
-            $html .= '<div class="af-et-color-row"><label for="af-et-' . $token . '">' . $label . ' <code>' . $name . '</code></label><div><input id="af-et-' . $token . '" class="text_input" type="text" name="' . $token . '" value="' . self::escape($value) . '" placeholder="' . self::escape($fallback) . '" data-af-et-color-text><input type="color" value="' . ($picker ?: '#000000') . '" aria-label="' . $label . ' — color picker" data-af-et-color-picker' . ($picker === '' ? ' disabled title="Используйте text input для RGBA/HSL/functions"' : '') . '></div><small>Inherited: <code>' . self::escape($fallback ?: 'neutral / не задано') . '</code></small></div>';
+            $html .= '<div class="af-et-color-row" data-af-et-token="' . self::escape($name) . '"><label for="af-et-' . $token . '">' . $label . ' <code>' . $name . '</code></label><div><input id="af-et-' . $token . '" class="text_input" type="text" name="' . $token . '" value="' . self::escape($value) . '" placeholder="' . self::escape($fallback) . '" data-af-et-color-text><input type="color" value="' . ($picker ?: '#000000') . '" aria-label="' . $label . ' — color picker" data-af-et-color-picker><label class="af-et-color-alpha">Alpha <input type="number" min="0" max="1" step="any" value="1" data-af-et-color-alpha aria-label="' . $label . ' — alpha"></label></div><small data-af-et-color-note>Picker выбирает RGB; alpha сохраняется.</small><small>Inherited: <code>' . self::escape($fallback ?: 'neutral / не задано') . '</code></small></div>';
         }
+        $html .= '<script type="application/json" data-af-et-palette-data>' . json_encode(array_replace($inherited, $metadata['variables']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '</script>';
         $html .= '<h4>Дополнительные CSS variables</h4><p>Разрешены только имена <code>--af-element-*</code>.</p><table class="general af-et-extra"><thead><tr><th>Variable name</th><th>Value</th><th>Inherited</th><th></th></tr></thead><tbody data-af-et-extra-rows>';
         $extra = array_unique(array_merge(array_keys($metadata['variables']), array_keys($inherited)));
         foreach ($extra as $name) {
@@ -147,6 +148,7 @@ class AF_Admin_Advancedelementtheme
         foreach (['intensity' => 'Интенсивность', 'speed' => 'Скорость', 'density' => 'Плотность частиц', 'opacity' => 'Прозрачность (видимость)'] as $name => $label) {
             $html .= '<label class="af-et-effect-range">' . $label . ' <input type="range" name="effect_' . $name . '" min="0" max="100" value="' . $effect[$name] . '"><output>' . $effect[$name] . '%</output></label>';
         }
+        $html .= '<small>Скорость: 0% — минимальное движение, 100% — максимальная динамика. Интенсивность меняет яркость и свечение; плотность — число частиц; прозрачность — видимость всего слоя.</small>';
         $html .= '<label>Цвет частиц <input type="text" name="effect_color" value="' . self::escape($effect['color']) . '" placeholder="Автоматически из surface palette" data-af-et-effect-color><input type="color" data-af-et-effect-picker value="' . (self::hexColor($effect['color']) ?: '#ffffff') . '" aria-label="Цвет частиц"></label><small>Пустое поле — актуальный accent поверхности; поддерживаются hex, RGB(A), HSL(A).</small><fieldset><legend>Область применения</legend>';
         foreach (af_elementtheme_surfaces() as $surface) $html .= '<label><input type="checkbox" name="effect_surfaces[]" value="' . $surface . '"' . (in_array($surface, $effect['surfaces'], true) ? ' checked' : '') . '> ' . ucfirst($surface) . '</label> ';
         $html .= '</fieldset><h4>Предпросмотр</h4><label>Поверхность <select data-af-et-effect-preview-surface>';

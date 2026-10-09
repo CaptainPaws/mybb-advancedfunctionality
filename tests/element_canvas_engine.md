@@ -7,6 +7,8 @@ php tests/element_theme_effects_regression.php
 php tests/element_theme_profile_flow_regression.php
 php tests/element_theme_delivery_regression.php
 AF_EFFECT_BENCHMARK=/tmp/element-canvas-benchmark.json node tests/element_theme_effects_browser.cjs
+node tests/element_canvas_controls_browser.cjs
+node tests/element_theme_editor_browser.cjs
 ```
 
 `PHP_BINARY` and `CHROMIUM_PATH` override the executables. `AF_TEST_BROWSER=firefox`
@@ -48,8 +50,9 @@ each particle/frame; it never modifies sticky positioning. Palette resolution
 uses `--af-element-main/accent/soft/border`, including surface overrides. The
 existing optional effect color overrides the particle/accent channel.
 
-Full surfaces target 30 FPS, 40–70 particles, DPR ≤2. Postbits target 24 FPS,
-8–16 particles, DPR ≤1.5. Mist/aura allocate fewer particles to atmospheric light.
+Full surfaces target 30 FPS, up to 70 particles, DPR ≤2. Postbits target 24 FPS,
+up to 16 particles, DPR ≤1.5. Density smoothly changes the pool budget (50%:
+40 full-surface / 9 postbit particles before preset/adaptive reductions). Mist/aura allocate fewer particles to atmospheric light.
 At 4–8 active hosts density, DPR and FPS decrease; at ≥9 they decrease again.
 Sprite textures use a shared 96-entry LRU cache. Feathered turbulence, glow,
 stars, embers, crystals and local arcs are generated once per color/type/size;
@@ -67,3 +70,36 @@ PHP retains the existing effect metadata/settings. Only the compiled presentatio
 cache version changes to discard old CSS motion fields. The old CSS keyframes
 and gradient-field compiler are removed. ACP preview calls the same singleton
 with local unsaved form values and never changes published configuration.
+
+## Distribution and controls regression
+
+A periodic virtual field is anchored in host coordinates but sized to the
+scrollport capacity, never to the full height of a long host. Low-discrepancy
+initial positions fill both axes immediately. The camera's offset changes on
+scroll; particle identities, ages and phases stay intact. Adjacent sprite copies
+make the periodic seam continuous without extra DOM nodes or a height-dependent
+pool. Resize changes the field dimensions, not the entire scene.
+
+Rebirth occurs inside the virtual field with independent 6–14 second lifetimes
+and smooth fades. Presets retain their directions. Speed maps smoothly to
+0.15–6× preset CSS-pixel velocities; 0% explicitly means minimal movement.
+Sparkles have a bounded guaranteed quota and repeat with independent phases,
+including the lowest adaptive tier. Intensity changes gain/halo/size, density
+changes the pool's tail, and opacity remains the layer's final alpha. Only
+preset changes reset the pool; preview slider changes preserve existing slots.
+
+The controls test checks a 12,000px host at an 8,200px scroll offset, resize,
+modal-style hide/reopen, all presets, preview controls and reduced motion. It
+separates controlled-clock renderer calibration (speed and pixel alpha sums)
+from a real-time 16-second observation of recurring sparkle pulses and complete
+particle renewal. The existing effects benchmark still verifies one RAF loop,
+offscreen pause and 60-host performance. Run all three browser tests with
+`AF_TEST_BROWSER=firefox` as well as Chromium. Native desktop picker windows
+are not inspected by these headless tests; enabled inputs, click handling,
+source preservation and RGB/alpha synchronization are exercised in both engines.
+
+The palette editor resolves colors in a local inherited-variable context using
+computed CSS colors and a one-pixel Canvas fallback. Every standard picker stays
+enabled; selecting RGB preserves literal alpha exactly, and a separate alpha
+input permits intentional transparency edits. CSS expressions stay untouched
+until a user chooses RGB/alpha, with that replacement behavior explained in UI.
