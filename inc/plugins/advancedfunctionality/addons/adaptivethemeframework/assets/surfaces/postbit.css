@@ -774,3 +774,19 @@ body.atf-active .atf-post__sidebar-inner > [data-af-element-effect][data-af-effe
 @media (max-width: 48rem) {
   body.atf-active .atf-post__sidebar-inner[data-af-element-effect-active] { position: relative; }
 }
+
+/* Visitor preference: ATF owns layout, while author data and topbar remain intact. */
+html[data-atf-postbit-sidebar="hidden"] body.atf-active .atf-post__sidebar,
+body.atf-active[data-atf-postbit-sidebar="hidden"] .atf-post__sidebar { display: none; }
+html[data-atf-postbit-sidebar="hidden"] body.atf-active .atf-post__layout,
+body.atf-active[data-atf-postbit-sidebar="hidden"] .atf-post__layout {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "content";
+}
+@media (max-width: 48rem) {
+  html[data-atf-postbit-sidebar="visible"] body.atf-active .atf-post__layout,
+  body.atf-active[data-atf-postbit-sidebar="visible"] .atf-post__layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "sidebar" "content";
+  }
+}

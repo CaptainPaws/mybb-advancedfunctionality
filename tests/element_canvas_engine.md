@@ -196,3 +196,27 @@ layout is stored in `af-presentation-preferences:v1:forum_layout`; account saves
 retain the existing CSRF-protected endpoint. Blocked localStorage preserves both
 preferences in the current page and reports that reload persistence is unavailable.
 Browser checks use generated fixtures, not production pages.
+
+ATF visitor postbit-sidebar preference
+--------------------------------------
+The Appearance provider exposes `postbit_sidebar_hidden` (default false). Accounts
+use the existing `af_presentation_preferences` table and CSRF-protected ATF endpoint
+with a sidebar-only AJAX request; guest storage uses
+`af-presentation-preferences:v1:postbit_sidebar_hidden` (`0`/`1`). Account seeds ignore
+guest storage. Both ATF preferences load in one request-cached query, not per postbit.
+A parser-blocking head bootstrap sets `html[data-atf-postbit-sidebar]` before posts
+are parsed; server responses also include the body state. The controller mirrors
+state to body for live changes. ATF postbit CSS hides the sidebar and switches its
+grid to a single `content` area, including mobile. Showing it restores the mobile
+`sidebar`/`content` rows despite the earlier desktop override. ElementTheme's existing public
+refresh event unregisters hidden sidebar instances and preserves topbar instances.
+New AJAX posts inherit the page state before their Canvas hosts are mounted.
+Failed account saves roll back the UI/layout; blocked guest storage retains the
+current-page choice and reports the persistence limit. The existing forum-layout
+save contract remains independent.
+
+Targeted checks: `php tests/atf_postbit_sidebar_preferences_regression.php` and
+`node tests/atf_postbit_sidebar_preferences_browser.cjs` (also
+`AF_TEST_BROWSER=firefox`). The browser fixture uses real ATF CSS, preference JS,
+sticky runtime and Canvas engine, with simulated edit/reply insertion and HTTP
+responses. It does not exercise production MyBB Quick Edit/Quick Reply endpoints.

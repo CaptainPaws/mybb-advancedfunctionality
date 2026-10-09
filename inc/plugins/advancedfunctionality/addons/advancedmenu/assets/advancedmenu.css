@@ -221,3 +221,13 @@ body.af-am-drawer-open .af-am-rail { z-index: 1200; }
 .atf-forum-layout-option input:checked + span { background: var(--af-am-surface-alt); border-color: var(--af-am-highlight); box-shadow: inset 0 -2px var(--af-am-highlight); }
 .atf-forum-layout-option input:focus-visible + span { outline: 2px solid var(--af-am-highlight); outline-offset: 2px; }
 .af-am-preference-notice, .atf-theme-preferences [role="status"] { color: var(--af-am-muted); font-size: 12px; }
+
+/* Presentation provider control; layout itself belongs to ATF. */
+.af-am-drawer .atf-sidebar-preference { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; font-size: 13px; cursor: pointer; }
+.atf-sidebar-preference input { position: absolute; right: 0; width: 32px; height: 18px; margin: 0; opacity: 0; }
+.atf-preference-switch { flex: 0 0 32px; height: 18px; border-radius: 20px; padding: 3px; box-sizing: border-box; background: var(--af-am-border); pointer-events: none; }
+.atf-preference-switch::before { content: ''; display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--af-am-text); }
+.atf-sidebar-preference input:checked + .atf-preference-switch { background: var(--af-am-highlight); }
+.atf-sidebar-preference input:checked + .atf-preference-switch::before { transform: translateX(14px); }
+.atf-sidebar-preference input:focus-visible + .atf-preference-switch { outline: 2px solid var(--af-am-highlight); outline-offset: 3px; }
+.atf-sidebar-preference input:disabled + .atf-preference-switch { opacity: .5; }

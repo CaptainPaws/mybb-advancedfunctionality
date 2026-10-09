@@ -99,6 +99,7 @@
           if (surface === 'profile') host.setAttribute('data-af-element-effect-only', '');
         }
       }
+      if (surface === 'postbit' && host.closest('.atf-post__sidebar') && document.documentElement.dataset.atfPostbitSidebar === 'hidden') { stop(host); return; }
       if (!config || !config.enabled || !config.surfaces.includes(surface) || !permitted(surface)) { stop(host); return; }
       let layer = Array.from(host.children).find(child => child.hasAttribute('data-af-element-effect'));
       if (!layer) { layer = document.createElement('span'); layer.hidden = true; layer.setAttribute('data-af-element-effect', ''); layer.setAttribute('aria-hidden', 'true'); host.prepend(layer); }

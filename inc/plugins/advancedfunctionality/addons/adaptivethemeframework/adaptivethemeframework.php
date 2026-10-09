@@ -301,20 +301,24 @@ function af_adaptivethemeframework_preferences_available(): bool
     return $available;
 }
 
-function af_adaptivethemeframework_forum_layout(): string
+function af_adaptivethemeframework_presentation_preferences(): array
 {
     global $db, $mybb;
+    $defaults = ['forum_layout'=>'full', 'postbit_sidebar_hidden'=>false];
     $uid = (int)($mybb->user['uid'] ?? 0);
-    if ($uid <= 0 || !af_adaptivethemeframework_preferences_available()) return 'full';
-    static $layouts = [];
-    if (isset($layouts[$uid])) return $layouts[$uid];
-    $value = (string)$db->fetch_field($db->simple_select(
-        AF_PRESENTATION_PREFERENCES_TABLE_NAME,
-        'preference_value',
-        "uid='{$uid}' AND preference_key='forum_layout'",
-        ['limit' => 1]
-    ), 'preference_value');
-    return $layouts[$uid] = in_array($value, ['full', 'grid'], true) ? $value : 'full';
+    if ($uid <= 0 || !af_adaptivethemeframework_preferences_available()) return $defaults;
+    if (isset($GLOBALS['atf_presentation_preferences'][$uid])) return $GLOBALS['atf_presentation_preferences'][$uid];
+    $query = $db->simple_select(AF_PRESENTATION_PREFERENCES_TABLE_NAME, 'preference_key, preference_value',
+        "uid='{$uid}' AND preference_key IN ('forum_layout','postbit_sidebar_hidden')");
+    while ($row = $db->fetch_array($query)) {
+        if ($row['preference_key'] === 'forum_layout' && in_array($row['preference_value'], ['full','grid'], true)) $defaults['forum_layout'] = $row['preference_value'];
+        if ($row['preference_key'] === 'postbit_sidebar_hidden') $defaults['postbit_sidebar_hidden'] = $row['preference_value'] === '1';
+    }
+    return $GLOBALS['atf_presentation_preferences'][$uid] = $defaults;
+}
+function af_adaptivethemeframework_forum_layout(): string
+{
+    return af_adaptivethemeframework_presentation_preferences()['forum_layout'];
 }
 
 /** Resolve the validated state before the owned index template is rendered. */
@@ -324,11 +328,11 @@ function af_adaptivethemeframework_resolve_index_preferences(): void
 }
 
 /** Owner-delivered client preferences: guests never call the account endpoint. */
-function af_adaptivethemeframework_preferences_asset(): string
+function af_adaptivethemeframework_preferences_asset(bool $early = false): string
 {
     $base = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/');
     $src = $base.'/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/presentation-preferences.js?v='.(string)filemtime(__DIR__.'/assets/presentation-preferences.js');
-    return '<script src="'.htmlspecialchars_uni($src).'" data-atf-preferences-uid="'.(int)($GLOBALS['mybb']->user['uid'] ?? 0).'" data-atf-preferences-layout="'.af_adaptivethemeframework_forum_layout().'" defer></script>';
+    return '<script src="'.htmlspecialchars($src, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').'" data-atf-preferences-uid="'.(int)($GLOBALS['mybb']->user['uid'] ?? 0).'" data-atf-preferences-layout="'.af_adaptivethemeframework_forum_layout().'" data-atf-preferences-sidebar="'.(af_adaptivethemeframework_presentation_preferences()['postbit_sidebar_hidden'] ? 'hidden' : 'visible').'"'.($early ? ' data-atf-preferences-bootstrap' : ' defer').'></script>';
 }
 
 function af_adaptivethemeframework_render_theme_preferences(array $item = []): string
@@ -340,12 +344,36 @@ function af_adaptivethemeframework_render_theme_preferences(array $item = []): s
     $full = htmlspecialchars_uni((string)($lang->atf_forum_layout_full ?? 'По ширине'));
     $grid = htmlspecialchars_uni((string)($lang->atf_forum_layout_grid ?? 'Сетка'));
     $save = htmlspecialchars_uni((string)($lang->atf_presentation_save ?? 'Сохранить'));
+    $hidden = af_adaptivethemeframework_presentation_preferences()['postbit_sidebar_hidden'];
     return '<form class="atf-theme-preferences" data-atf-layout-preferences method="post" action="misc.php?action=atf_presentation_preference">'
         .'<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni((string)$mybb->post_code).'">'
         .'<fieldset class="atf-forum-layout"><legend>'.$label.'</legend><div class="atf-forum-layout-options">'
         .'<label class="atf-forum-layout-option"><input type="radio" name="forum_layout" value="full"'.($layout === 'full' ? ' checked' : '').'><span><i class="fa-solid fa-bars" aria-hidden="true"></i>'.$full.'</span></label>'
         .'<label class="atf-forum-layout-option"><input type="radio" name="forum_layout" value="grid"'.($layout === 'grid' ? ' checked' : '').'><span><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>'.$grid.'</span></label></div></fieldset>'
+        .'<label class="atf-sidebar-preference"><span>Скрыть боковую панель postbit</span><input type="checkbox" name="postbit_sidebar_hidden" value="1"'.($hidden ? ' checked' : '').'><span class="atf-preference-switch" aria-hidden="true"></span></label>'
         .'<button type="submit">'.$save.'</button><p role="status" aria-live="polite"></p></form>'.af_adaptivethemeframework_preferences_asset();
+}
+
+/** Sidebar-only AJAX boundary; does not overwrite the independent forum layout. */
+function af_adaptivethemeframework_sidebar_save_request(): array
+{
+    global $db, $mybb;
+    if ($mybb->request_method !== 'post') return [405, ['error'=>'Требуется POST.']];
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    if ($uid <= 0) return [403, ['error'=>'Войдите в аккаунт.']];
+    if (!verify_post_check($mybb->get_input('my_post_key'), true)) return [403, ['error'=>'Сессия устарела. Обновите страницу.']];
+    $value = $mybb->get_input('postbit_sidebar_hidden');
+    if (!in_array($value, ['0','1'], true)) return [422, ['error'=>'Недопустимое значение настройки.']];
+    if (!af_adaptivethemeframework_preferences_available()) return [503, ['error'=>'Хранилище настроек недоступно. Выполните upgrade ATF.']];
+    try {
+        $result = $db->replace_query(AF_PRESENTATION_PREFERENCES_TABLE_NAME, ['uid'=>$uid, 'preference_key'=>'postbit_sidebar_hidden', 'preference_value'=>$value, 'updated_at'=>TIME_NOW]);
+        if ($result === false) throw new RuntimeException('Preference write failed');
+    } catch (Throwable $error) {
+        error_log('[ATF] sidebar preference save failed');
+        return [500, ['error'=>'Не удалось сохранить настройку. Повторите попытку.']];
+    }
+    unset($GLOBALS['atf_presentation_preferences'][$uid]);
+    return [200, ['postbit_sidebar_hidden'=>$value === '1']];
 }
 
 /** Persist only the submitted, allow-listed preference for registered users. */
@@ -353,6 +381,14 @@ function af_adaptivethemeframework_save_presentation_preference(): void
 {
     global $db, $mybb;
     if (($mybb->get_input('action') ?? '') !== 'atf_presentation_preference') return;
+    if ($mybb->get_input('preference_key') === 'postbit_sidebar_hidden') {
+        [$status, $body] = af_adaptivethemeframework_sidebar_save_request();
+        http_response_code($status);
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+        echo json_encode($body, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
+        exit;
+    }
     if (empty($mybb->user['uid'])) error_no_permission();
     verify_post_check($mybb->get_input('my_post_key'));
     $value = (string)$mybb->get_input('forum_layout');
@@ -361,6 +397,7 @@ function af_adaptivethemeframework_save_presentation_preference(): void
     $row = ['uid' => (int)$mybb->user['uid'], 'preference_key' => 'forum_layout',
         'preference_value' => $db->escape_string($value), 'updated_at' => TIME_NOW];
     $db->replace_query(AF_PRESENTATION_PREFERENCES_TABLE_NAME, $row);
+    unset($GLOBALS['atf_presentation_preferences'][(int)$mybb->user['uid']]);
     redirect('index.php');
 }
 
@@ -1683,6 +1720,14 @@ function af_adaptivethemeframework_compose_thread_card(): void
 /** Add the activation marker and resolve server-rendered forum-card slots. */
 function af_adaptivethemeframework_mark_page(string &$page): void
 {
+    // Blocking head bootstrap resolves guest storage before any postbit is parsed.
+    // Server state is also carried directly by the body for JS-disabled accounts.
+    if (stripos($page, '</head>') !== false && strpos($page, 'data-atf-preferences-bootstrap') === false) {
+        $bootstrap = af_adaptivethemeframework_preferences_asset(true);
+        $page = preg_replace_callback('~</head>~i', static fn() => $bootstrap.'</head>', $page, 1);
+        $state = af_adaptivethemeframework_presentation_preferences()['postbit_sidebar_hidden'] ? 'hidden' : 'visible';
+        $page = preg_replace('~<body\b(?![^>]*data-atf-postbit-sidebar)~i', '<body data-atf-postbit-sidebar="'.$state.'"', $page, 1);
+    }
     $script = defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '';
     if (in_array($script, ['index.php', 'forumdisplay.php'], true) && strpos($page, '<atf-forum-avatar') !== false) {
         $page = (string)preg_replace_callback(
