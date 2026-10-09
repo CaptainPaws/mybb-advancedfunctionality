@@ -306,13 +306,15 @@ function af_adaptivethemeframework_forum_layout(): string
     global $db, $mybb;
     $uid = (int)($mybb->user['uid'] ?? 0);
     if ($uid <= 0 || !af_adaptivethemeframework_preferences_available()) return 'full';
+    static $layouts = [];
+    if (isset($layouts[$uid])) return $layouts[$uid];
     $value = (string)$db->fetch_field($db->simple_select(
         AF_PRESENTATION_PREFERENCES_TABLE_NAME,
         'preference_value',
         "uid='{$uid}' AND preference_key='forum_layout'",
         ['limit' => 1]
     ), 'preference_value');
-    return in_array($value, ['full', 'grid'], true) ? $value : 'full';
+    return $layouts[$uid] = in_array($value, ['full', 'grid'], true) ? $value : 'full';
 }
 
 /** Resolve the validated state before the owned index template is rendered. */
@@ -321,22 +323,29 @@ function af_adaptivethemeframework_resolve_index_preferences(): void
     $GLOBALS['atf_forum_layout'] = af_adaptivethemeframework_forum_layout();
 }
 
-/** Provider-owned controls embedded by the theme_switcher host. */
+/** Owner-delivered client preferences: guests never call the account endpoint. */
+function af_adaptivethemeframework_preferences_asset(): string
+{
+    $base = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/');
+    $src = $base.'/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/presentation-preferences.js?v='.(string)filemtime(__DIR__.'/assets/presentation-preferences.js');
+    return '<script src="'.htmlspecialchars_uni($src).'" data-atf-preferences-uid="'.(int)($GLOBALS['mybb']->user['uid'] ?? 0).'" data-atf-preferences-layout="'.af_adaptivethemeframework_forum_layout().'" defer></script>';
+}
+
 function af_adaptivethemeframework_render_theme_preferences(array $item = []): string
 {
     global $lang, $mybb;
-    if (empty($mybb->user['uid'])) return '';
     $lang->load('advancedfunctionality_adaptivethemeframework');
     $layout = af_adaptivethemeframework_forum_layout();
-    $label = htmlspecialchars_uni((string)($lang->atf_forum_layout ?? 'Forum layout'));
-    $full = htmlspecialchars_uni((string)($lang->atf_forum_layout_full ?? 'Full width'));
-    $grid = htmlspecialchars_uni((string)($lang->atf_forum_layout_grid ?? 'Grid'));
-    $save = htmlspecialchars_uni((string)($lang->atf_presentation_save ?? 'Save'));
-    return '<form class="atf-theme-preferences" method="post" action="misc.php?action=atf_presentation_preference">'
+    $label = htmlspecialchars_uni((string)($lang->atf_forum_layout ?? 'Отображение форумов'));
+    $full = htmlspecialchars_uni((string)($lang->atf_forum_layout_full ?? 'По ширине'));
+    $grid = htmlspecialchars_uni((string)($lang->atf_forum_layout_grid ?? 'Сетка'));
+    $save = htmlspecialchars_uni((string)($lang->atf_presentation_save ?? 'Сохранить'));
+    return '<form class="atf-theme-preferences" data-atf-layout-preferences method="post" action="misc.php?action=atf_presentation_preference">'
         .'<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni((string)$mybb->post_code).'">'
-        .'<fieldset><legend>'.$label.'</legend><label><input type="radio" name="forum_layout" value="full"'.($layout === 'full' ? ' checked' : '').'> '.$full.'</label>'
-        .'<label><input type="radio" name="forum_layout" value="grid"'.($layout === 'grid' ? ' checked' : '').'> '.$grid.'</label></fieldset>'
-        .'<button type="submit">'.$save.'</button></form>';
+        .'<fieldset class="atf-forum-layout"><legend>'.$label.'</legend><div class="atf-forum-layout-options">'
+        .'<label class="atf-forum-layout-option"><input type="radio" name="forum_layout" value="full"'.($layout === 'full' ? ' checked' : '').'><span><i class="fa-solid fa-bars" aria-hidden="true"></i>'.$full.'</span></label>'
+        .'<label class="atf-forum-layout-option"><input type="radio" name="forum_layout" value="grid"'.($layout === 'grid' ? ' checked' : '').'><span><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>'.$grid.'</span></label></div></fieldset>'
+        .'<button type="submit">'.$save.'</button><p role="status" aria-live="polite"></p></form>'.af_adaptivethemeframework_preferences_asset();
 }
 
 /** Persist only the submitted, allow-listed preference for registered users. */
@@ -1825,7 +1834,7 @@ function af_adaptivethemeframework_render_footer(bool $hasPosts = false, string 
     $assetBase = $bburl . '/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/';
     $version = '?v=' . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION);
     $escape = static fn(string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    $scripts = '';
+    $scripts = strpos($page, 'presentation-preferences.js') === false ? af_adaptivethemeframework_preferences_asset() : '';
     if ($hasModalRuntime) {
         static $manifest = null;
         if ($manifest === null) $manifest = require __DIR__ . '/manifest.php';

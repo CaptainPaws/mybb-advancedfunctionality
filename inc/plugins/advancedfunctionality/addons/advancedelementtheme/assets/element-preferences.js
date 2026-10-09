@@ -7,10 +7,10 @@
   const seed = document.querySelector('[data-af-element-preferences]');
   let payload;
   try { payload = JSON.parse(seed?.textContent || '{}'); } catch (_) { payload = {}; }
-  const uid = Number(payload.uid) || 0, storageKey = 'af-element-effects-guest';
+  const uid = Number(payload.uid) || 0, storageKey = 'af-element-effects-guest:v1';
   function normalize(value = {}) { return Object.fromEntries(keys.map(key => [key, value[key] === undefined ? true : value[key] === true || value[key] === 1 || value[key] === '1'])); }
   let saved = normalize(payload.preferences || defaults), busy = false;
-  if (!uid) { try { saved = normalize(JSON.parse(localStorage.getItem(storageKey)) || saved); } catch (_) { /* unavailable storage uses defaults */ } }
+  if (!uid) { try { saved = normalize(JSON.parse((localStorage.getItem(storageKey) || localStorage.getItem('af-element-effects-guest'))) || saved); } catch (_) { /* unavailable storage uses defaults */ } }
   if (window.afElementEffectsPreferences) saved = normalize(window.afElementEffectsPreferences);
   function apply(value) {
     window.afElementEffectsPreferences = { ...value };
@@ -38,7 +38,12 @@
         const result = await response.json();
         if (!response.ok || !result.preferences || !keys.every(key => typeof result.preferences[key] === 'boolean')) throw new Error(result.error || 'Не удалось сохранить настройки.');
         saved = normalize(result.preferences);
-      } else { localStorage.setItem(storageKey, JSON.stringify(next)); saved = next; }
+      } else {
+        saved = next;
+        try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch (_) {
+          busy = false; apply(saved); render(saved, 'Применено до перезагрузки: хранилище браузера недоступно.'); return;
+        }
+      }
       busy = false; apply(saved); render(saved, 'Сохранено');
     } catch (error) {
       busy = false; apply(saved); render(saved, (error.message || 'Не удалось сохранить настройки.') + ' Изменения отменены; повторите попытку.');

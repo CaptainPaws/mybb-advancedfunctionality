@@ -141,8 +141,8 @@ before registering a host. Disabling unregisters Canvas and hides its layer,
 without modifying palette/custom CSS/APUI backgrounds. The shared engine still
 owns reduced-motion, visibility and cleanup. Server preferences are embedded as
 `data-af-element-preferences` JSON before deferred frontend initialization, even
-on content-only effect documents. Guests use `af-element-effects-guest` in
-localStorage; authenticated pages ignore guest storage. The ACP preview is not
+on content-only effect documents. Guests use versioned `af-element-effects-guest:v1` in
+localStorage (with fallback reads of the earlier key); authenticated pages ignore guest storage. The ACP preview is not
 subject to frontend viewer permissions.
 
 Targeted checks:
@@ -187,3 +187,12 @@ geometry. It checks viewport/short-height/mobile layouts, compact drawer height,
 inner overflow, accessible/focus tooltips, a high-layer modal, repeated init,
 light theme token changes and reduced motion. These are local integration
 fixtures, not production pages or a full MyBB route rendering test.
+
+Guest AdvancedMenu uses the same Appearance panel and widget providers as accounts,
+with a default UID-zero avatar and direct MyBB login/register actions. Rail overflow
+remains scrollable with its scrollbar visually hidden. The ATF provider uses the
+existing full/grid radios and renderer classes in a segmented control. Guest forum
+layout is stored in `af-presentation-preferences:v1:forum_layout`; account saves
+retain the existing CSRF-protected endpoint. Blocked localStorage preserves both
+preferences in the current page and reports that reload persistence is unavailable.
+Browser checks use generated fixtures, not production pages.

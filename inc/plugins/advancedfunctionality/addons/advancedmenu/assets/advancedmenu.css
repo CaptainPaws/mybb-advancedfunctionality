@@ -24,12 +24,12 @@ body.af-advancedmenu-layout {
   padding: env(safe-area-inset-top, 0px) 0 var(--af-am-safe-bottom) var(--af-am-safe-left);
   background: var(--af-am-surface-alt); border-right: 1px solid var(--af-am-border);
 }
-.af-am-rail-scroll { display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; box-sizing: border-box; padding: 12px 6px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+.af-am-rail-scroll { display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; box-sizing: border-box; padding: 10px 6px; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
 .af-am-bar, .af-am-user-controls { width: 100%; padding-top: 8px; border-top: 1px solid var(--af-am-border); box-sizing: border-box; }
-.af-am-list, .af-am-user-controls { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 0; padding-inline: 0; list-style: none; }
+.af-am-list, .af-am-user-controls { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 0; padding-inline: 0; list-style: none; }
 .af-am-list > li { display: flex; flex: 0 0 auto; margin: 0; }
 .af-am-user-controls { flex: 0 0 auto; }
-.af-am-rail .af-am-link, .af-am-category-control, .af-am-burger, .af-am-guest-action, .af-am-avatar-control > a {
+.af-am-rail .af-am-link, .af-am-category-control, .af-am-burger, .af-am-guest-action, .af-am-avatar-control > a, .af-am-guest-avatar {
   display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
   width: 38px; height: 38px; box-sizing: border-box; padding: 0;
   border: 1px solid var(--af-am-border); border-radius: 7px;
@@ -45,7 +45,7 @@ body.af-advancedmenu-layout {
 .af-am-badge { min-width: 1.4em; padding: 1px 4px; border-radius: 999px; background: #b33145; color: #fff; font-size: .7em; line-height: 1.3; text-align: center; }
 .af-am-rail .af-am-badge { position: absolute; top: -4px; right: -4px; }
 .af-am-avatar-control { flex: 0 0 auto; position: relative; margin: 0 0 4px; }
-.af-am-avatar-control > a { border-radius: 50%; overflow: hidden; }
+.af-am-avatar-control > a, .af-am-guest-avatar { border-radius: 50%; overflow: hidden; }
 .af-am-avatar-control img, .af-am-avatar-control .apa_bg { display: block; width: 36px !important; height: 36px !important; object-fit: cover; border-radius: 50%; }
 .af-am-account-info { position: absolute; bottom: -2px; right: -2px; width: 16px; height: 16px; padding: 0; border: 1px solid var(--af-am-border); border-radius: 50%; background: var(--af-am-surface); color: var(--af-am-text); font: 11px/1 sans-serif; cursor: pointer; }
 .af-am-guest-account { width: 100%; flex: 0 0 auto; }
@@ -68,7 +68,7 @@ body.af-advancedmenu-layout {
 }
 .af-am-drawer-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .af-am-drawer-close { padding: 3px 7px; border: 0; background: transparent; color: inherit; font-size: 1.5em; line-height: 1; cursor: pointer; }
-.af-am-drawer-body { overflow-y: auto; min-height: 0; scrollbar-width: thin; }
+.af-am-drawer-body { overflow-y: auto; min-height: 0; scrollbar-width: none; }
 .af-am-drawer-account { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--af-am-border); }
 .af-am-drawer-welcome { margin: 0; }
 .af-am-drawer-account-actions { display: flex; gap: 8px; margin-top: 10px; }
@@ -93,7 +93,7 @@ body.af-am-drawer-open .af-am-rail { z-index: 1200; }
 @keyframes af-am-drawer-enter { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
 @media (min-width: 769px) {
   html.af-advancedmenu-ready { scrollbar-gutter: stable; }
-  .af-am-member .af-am-drawer-tablist:not(:focus-within) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; margin: 0; }
+  .af-am-drawer-tablist:not(:focus-within) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; margin: 0; }
 }
 @media (max-width: 768px) {
   body.af-advancedmenu-layout { padding-inline-start: 0; padding-bottom: calc(60px + var(--af-am-safe-bottom)); }
@@ -206,3 +206,18 @@ body.af-am-drawer-open .af-am-rail { z-index: 1200; }
 .af-am-link{
   position: relative;
 }
+
+/* One rail surface; groups have separators rather than their own cards. */
+.af-am-rail-scroll::-webkit-scrollbar { display: none; }
+.af-am-rail .af-am-bar, .af-am-rail .af-am-user-controls, .af-am-rail .af-am-list, .af-am-rail .af-am-guest-account { background: transparent; box-shadow: none; border-radius: 0; padding-bottom: 0; }
+.af-am-rail .af-am-bar { flex: 0 0 auto; margin: 0; padding-inline: 0; }
+.af-am-drawer .atf-theme-preferences { margin: 12px 0; }
+.af-am-drawer .atf-forum-layout { margin: 0 0 10px; padding: 0; border: 0; min-width: 0; }
+.af-am-drawer .atf-forum-layout legend { padding: 0; margin-bottom: 8px; color: var(--af-am-muted); }
+.atf-forum-layout-options { display: flex; gap: 6px; }
+.atf-forum-layout-option { flex: 1; position: relative; }
+.atf-forum-layout-option input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.atf-forum-layout-option span { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 6px; border: 1px solid var(--af-am-border); border-radius: 6px; background: var(--af-am-surface); cursor: pointer; }
+.atf-forum-layout-option input:checked + span { background: var(--af-am-surface-alt); border-color: var(--af-am-highlight); box-shadow: inset 0 -2px var(--af-am-highlight); }
+.atf-forum-layout-option input:focus-visible + span { outline: 2px solid var(--af-am-highlight); outline-offset: 2px; }
+.af-am-preference-notice, .atf-theme-preferences [role="status"] { color: var(--af-am-muted); font-size: 12px; }

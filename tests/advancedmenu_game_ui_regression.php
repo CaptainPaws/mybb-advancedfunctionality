@@ -4,7 +4,7 @@ define('TABLE_PREFIX', 'mybb_');
 define('TIME_NOW', 1700000000);
 define('AF_ADDONS', __DIR__.'/../inc/plugins/advancedfunctionality/addons/');
 function htmlspecialchars_uni($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-function af_avatar_render(array $user, string $context, array $options = []) { return '<a class="af-avatar" href="member.php?action=profile&amp;uid='.$user['uid'].'"><img class="'.$options['img_class'].'" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2236%22 height=%2236%22%3E%3Crect width=%2236%22 height=%2236%22 fill=%22%23579%22/%3E%3C/svg%3E" alt="Player"></a>'; }
+function af_avatar_render(array $user, string $context, array $options = []) { if (empty($user['uid'])) return '<span class="af-avatar af-avatar--guest"><img class="af-am-control-avatar-image" src="images/default_avatar.png" alt=""></span>'; return '<a class="af-avatar" href="member.php?action=profile&amp;uid='.$user['uid'].'"><img class="'.$options['img_class'].'" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2236%22 height=%2236%22%3E%3Crect width=%2236%22 height=%2236%22 fill=%22%23579%22/%3E%3C/svg%3E" alt="Player"></a>'; }
 function my_date($format, $stamp) { return '<span title="MyBB date">recently</span>'; }
 class MenuFixtureDB {
     public array $overrides = [];
@@ -25,8 +25,11 @@ $custom = ['id'=>1,'enabled'=>1,'container'=>'user_drawer','location'=>'panel','
 $cache = new class($custom) { function __construct(public array $custom) {} function read($key) { return ['items'=>[$this->custom]]; } };
 $db = new MenuFixtureDB;
 $mybb = (object)['settings'=>['bburl'=>'https://forum.test'],'user'=>['uid'=>42,'username'=>'Player','lastvisit'=>123],'usergroup'=>[],'post_code'=>'csrf-token'];
+$lang = new class { function load($file) {} };
 $theme_select = '<form id="theme_select"><select name="theme"><option>Тёмная</option></select></form>';
 require AF_ADDONS.'advancedmenu/advancedmenu.php';
+require AF_ADDONS.'adaptivethemeframework/adaptivethemeframework.php';
+$GLOBALS['af_theme_switcher_preference_providers']['adaptivethemeframework'] = 'af_adaptivethemeframework_render_theme_preferences';
 require AF_ADDONS.'advancedelementtheme/advancedelementtheme.php';
 $plugins = new class { public array $hooks=[]; function add_hook(...$args) { $this->hooks[]=$args; } };
 af_advancedelementtheme_init(); af_advancedelementtheme_init();
@@ -46,6 +49,7 @@ if (substr_count($member,'id="af-am-user-drawer"') !== 1 || str_contains($member
 if (substr_count($member,'>ACP custom action<') !== 1) throw new RuntimeException('Custom action duplicated');
 $mybb->user=['uid'=>0];
 $guest=af_advancedmenu_render_frontend_nav();
-if (str_contains($guest,'data-af-am-category') || str_contains($guest,'af-am-avatar-control') || !str_contains($guest,'af-am-burger')) throw new RuntimeException('Guest controls leaked');
+if (substr_count($guest,'data-af-am-category=') !== 1 || !str_contains($guest,'data-af-am-category="theme"') || !str_contains($guest,'af-am-guest-avatar') || str_contains($guest,'af-am-burger') || str_contains($guest,'data-af-am-panel="profile"')) throw new RuntimeException('Guest appearance/privacy contract');
+foreach (['Добро пожаловать, гость!', 'images/default_avatar.png', 'atf-forum-layout-option', 'effects_postbit'] as $needle) if (!str_contains($guest,$needle)) throw new RuntimeException('Guest control missing '.$needle);
 if (in_array('--browser-fixture',$argv,true)) { echo json_encode(compact('member','guest')); exit; }
 echo "AdvancedMenu Game UI: registry containers/custom items, four sections, avatar/date, single drawer and guest controls passed.\n";

@@ -1261,6 +1261,7 @@ function af_advancedmenu_render_theme_widget(array $item = []): string
 {
     global $theme_select;
     $content = trim((string)($theme_select ?? ''));
+    if ($content === '') $content = '<p class="af-am-preference-notice">Выбор темы недоступен: он ограничен настройками форума.</p>';
     // AdvancedMenu is only the widget host. Presentation owners may append
     // independent controls without teaching navigation how they are stored.
     foreach (($GLOBALS['af_theme_switcher_preference_providers'] ?? []) as $provider) {
@@ -1296,6 +1297,7 @@ function af_advancedmenu_build_container_html(string $container): string
 function af_advancedmenu_build_drawer_html(): string
 {
     $sections = af_menu_sections();
+    if (empty($GLOBALS['mybb']->user['uid'])) $sections = array_intersect_key($sections, ['theme'=>true]);
     $items = af_menu_configured_registry();
     $custom = af_advancedmenu_get_items();
     $seenProviders = [];
@@ -1358,12 +1360,8 @@ function af_advancedmenu_build_drawer_html(): string
 /** Guest account actions; members use the rail avatar and registry sections. */
 function af_advancedmenu_render_drawer_account(): string
 {
-    global $mybb;
-    if (!empty($mybb->user['uid'])) return '';
-    return '<section class="af-am-drawer-account af-am-drawer-account--guest" aria-label="Гостевой аккаунт">'
-        .'<p class="af-am-drawer-welcome">Добро пожаловать</p><div class="af-am-drawer-account-actions">'
-        .'<a class="af-am-account-action" href="member.php?action=login">Войти</a>'
-        .'<a class="af-am-account-action" href="member.php?action=register">Регистрация</a></div></section>';
+    // Identity and login actions live only on the rail.
+    return '';
 }
 
 /** Avatar ownership and last-visit formatting stay with existing providers. */
@@ -1371,7 +1369,16 @@ function af_advancedmenu_render_user_avatar(): string
 {
     global $mybb, $lang;
     $uid = (int)($mybb->user['uid'] ?? 0);
-    if ($uid <= 0) return '';
+    if ($uid <= 0) {
+        $guest = ['uid'=>0, 'username'=>'Гость', 'avatar'=>''];
+        $avatar = function_exists('af_avatar_render') ? af_avatar_render($guest, 'drawer', ['img_class'=>'af-am-control-avatar-image', 'decorative'=>true, 'allow_letter'=>false]) : '';
+        if ($avatar === '') {
+            $src = str_replace('{theme}', (string)($GLOBALS['theme']['imgdir'] ?? 'images'), (string)($mybb->settings['useravatar'] ?? 'images/default_avatar.png'));
+            $avatar = '<img class="af-am-control-avatar-image" src="'.htmlspecialchars_uni($src).'" alt="">';
+        }
+        return '<div class="af-am-avatar-control"><button type="button" class="af-am-guest-avatar" aria-label="Добро пожаловать, гость!" aria-describedby="af-am-account-tooltip">'.$avatar.'</button>'
+            .'<div id="af-am-account-tooltip" class="af-am-account-tooltip" role="tooltip" hidden>Добро пожаловать, гость!</div></div>';
+    }
     $name = htmlspecialchars_uni((string)($mybb->user['username'] ?? 'User'));
     $avatar = function_exists('af_avatar_render')
         ? af_avatar_render((array)$mybb->user, 'drawer', ['img_class'=>'af-am-control-avatar-image']) : '';
@@ -1394,17 +1401,18 @@ function af_advancedmenu_render_user_avatar(): string
 
 function af_advancedmenu_render_user_controls(): string
 {
-    if (empty($GLOBALS['mybb']->user['uid'])) return '';
+    $sections = af_menu_sections();
+    if (empty($GLOBALS['mybb']->user['uid'])) $sections = ['theme'=>'Оформление'];
     $html = '<nav class="af-am-user-controls" aria-label="Управление аккаунтом">';
     $icons = ['profile'=>'fa-user', 'links'=>'fa-link', 'settings'=>'fa-gear', 'theme'=>'fa-palette'];
-    foreach (af_menu_sections() as $section => $label) {
+    foreach ($sections as $section => $label) {
         $html .= '<button type="button" class="af-am-category-control" data-af-am-category="'.$section.'" aria-label="'.htmlspecialchars_uni($label).'" aria-controls="af-am-user-drawer" aria-expanded="false"><i class="fa-solid '.$icons[$section].'" aria-hidden="true"></i></button>';
     }
     return $html.'</nav>';
 }
 
 /**
- * Guest navigation retains real login/register actions instead of a fake avatar.
+ * Guest navigation retains the existing MyBB login/register actions.
  */
 function af_advancedmenu_render_guest_account_bar(): string
 {
@@ -1435,7 +1443,6 @@ function af_advancedmenu_render_frontend_nav(): string
         .'<nav class="af-am-bar af-am-main" aria-label="Основное меню"><ul class="af-am-list">'.$main.'</ul></nav>'
         .'<nav class="af-am-bar af-am-secondary" aria-label="Дополнительное меню"><ul class="af-am-list">'.$secondary.'</ul></nav>'
         .af_advancedmenu_render_user_controls()
-        .(empty($GLOBALS['mybb']->user['uid']) ? '<button class="af-am-burger" type="button" aria-label="Открыть меню" data-af-am-tip="Меню" aria-expanded="false" aria-controls="af-am-user-drawer"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>' : '')
         .'</div></div></div><div class="af-am-drawer-shell" data-af-am-drawer-shell hidden>'
         .'<button class="af-am-drawer-overlay" type="button" tabindex="-1" aria-label="Закрыть пользовательское меню"></button>'
         .'<aside id="af-am-user-drawer" class="af-am-drawer" role="dialog" aria-modal="true" aria-label="Пользовательское меню" tabindex="-1">'

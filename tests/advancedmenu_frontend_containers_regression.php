@@ -57,7 +57,7 @@ if (strpos($modal, 'af-am-badge') === false || strpos($modal, '>7</span>') === f
 $source = file_get_contents(AF_ADDONS.'advancedmenu/advancedmenu.php');
 $css = file_get_contents(AF_ADDONS.'advancedmenu/assets/advancedmenu.css');
 $characters = file_get_contents(AF_ADDONS.'advancedcharacters/advancedcharacters.php');
-foreach (['af-am-shell', 'af-am-main', 'af-am-secondary', 'af-am-user-drawer', 'af-am-burger', "af_menu_configured_registry()", "empty(\$item['enabled'])"] as $needle) {
+foreach (['af-am-shell', 'af-am-main', 'af-am-secondary', 'af-am-user-drawer', 'af-am-category-control', "af_menu_configured_registry()", "empty(\$item['enabled'])"] as $needle) {
     if (strpos($source, $needle) === false) throw new RuntimeException('Missing frontend container contract: '.$needle);
 }
 foreach (['position: fixed', 'max-width: 100vw', '#header .top_links', '#header .panel_links', '#footer .upper', '.af-am-member #panel'] as $needle) {
@@ -77,9 +77,7 @@ foreach (['af_advancedcharacters_menu_provider', 'af_characters_add_moderator_li
 if (!str_contains($source, 'af_advancedmenu_render_user_controls()') || !str_contains($source, 'data-af-am-category=')) {
     throw new RuntimeException('Member controls do not open registry drawer categories.');
 }
-if (substr_count($source, '<button class="af-am-burger"') !== 1) {
-    throw new RuntimeException('Guest renderer must define exactly one burger.');
-}
+if (str_contains($source, '<button class="af-am-burger"')) throw new RuntimeException('Legacy guest burger remains');
 foreach (['data-af-am-tabs="1"', 'role="tablist"', 'role="tabpanel"', 'data-af-am-tab="', 'data-af-am-panel="'] as $needle) {
     if (strpos($source, $needle) === false) throw new RuntimeException('Missing drawer tab markup: '.$needle);
 }

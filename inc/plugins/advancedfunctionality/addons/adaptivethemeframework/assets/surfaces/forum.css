@@ -73,6 +73,7 @@ body.atf-active .atf-topic-list__header--actions {
   justify-content: flex-end;
 }
 
+body.atf-active.atf-forum-layout--grid .atf-forumdisplay__subforum-cards,
 body.atf-active.atf-forum-layout--grid .atf-forum-category__forums {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -195,6 +196,7 @@ body.atf-active .atf-topic-card__lastposter,
 body.atf-active .atf-topic-card__lasttime { display: block; overflow-wrap: anywhere; }
 body.atf-active .atf-topic-card__lasttime { color: var(--atf-color-text-muted); font-size: var(--atf-font-size-sm); }
 @media (max-width: 48rem) {
+  body.atf-active.atf-forum-layout--grid .atf-forumdisplay__subforum-cards,
   body.atf-active.atf-forum-layout--grid .atf-forum-category__forums { grid-template-columns: 1fr; }
   body.atf-active .atf-forum-card { grid-template-columns: auto minmax(0, 1fr); }
   body.atf-active .atf-forum-card__stats,

@@ -44,9 +44,8 @@ if (substr_count($account, 'shared-avatar') !== 1) {
 
 $mybb->user = ['uid'=>0];
 $guest = af_advancedmenu_render_drawer_account();
-foreach (['action=login', 'Войти', 'action=register', 'Регистрация'] as $needle) {
-    if (strpos($guest, $needle) === false) throw new RuntimeException('Guest account header missing: '.$needle);
-}
+if ($guest !== '') throw new RuntimeException('Guest identity/actions must not be duplicated in drawer');
+
 if (strpos($guest, 'shared-avatar') !== false || strpos($guest, 'action=logout') !== false) {
     throw new RuntimeException('Guest drawer exposes member avatar/actions.');
 }

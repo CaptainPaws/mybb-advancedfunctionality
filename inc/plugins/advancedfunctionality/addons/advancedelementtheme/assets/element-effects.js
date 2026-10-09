@@ -11,7 +11,7 @@
   let preferences = normalizePreferences(window.afElementEffectsPreferences || payload.preferences);
   // Authenticated pages always use the server seed, never guest localStorage.
   if (!Number(payload.uid) && !window.afElementEffectsPreferences) {
-    try { preferences = normalizePreferences(JSON.parse(localStorage.getItem('af-element-effects-guest')) || preferences); } catch (_) { /* storage is optional */ }
+    try { preferences = normalizePreferences(JSON.parse((localStorage.getItem('af-element-effects-guest:v1') || localStorage.getItem('af-element-effects-guest'))) || preferences); } catch (_) { /* storage is optional */ }
   }
   window.afElementEffectsPreferences = { ...preferences };
   function permitted(surface) { return preferences.effects_enabled && preferences['effects_' + surface] === true; }

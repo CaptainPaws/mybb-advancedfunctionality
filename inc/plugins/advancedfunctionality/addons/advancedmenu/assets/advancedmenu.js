@@ -111,7 +111,7 @@
     link.dataset.afAmInitial = Array.from(name)[0] || '·';
     link.removeAttribute('title'); // The accessible portal replaces native-only hints.
   });
-  if (avatar) avatar.querySelector('a').removeAttribute('title');
+  if (avatar) avatar.querySelector('a, .af-am-guest-avatar').removeAttribute('title');
   function hideTips() {
     tooltip.hidden = true; if (accountTip) accountTip.hidden = true;
     if (tipTarget && activeTip === tooltip) {
@@ -148,7 +148,7 @@
     activeTip.hidden = false; positionTip();
   }
   function tipTrigger(target) {
-    return target instanceof Element ? target.closest('[data-af-am-tip], .af-am-avatar-control > a') : null;
+    return target instanceof Element ? target.closest('[data-af-am-tip], .af-am-avatar-control > a, .af-am-guest-avatar') : null;
   }
   rail.addEventListener('mouseover', function (event) {
     var target = tipTrigger(event.target);
@@ -162,7 +162,7 @@
   rail.addEventListener('focusout', function () { if (!(avatar && avatar.classList.contains('is-info-open'))) hideTips(); });
   railScroll.addEventListener('scroll', positionTip, { passive: true });
   window.addEventListener('resize', positionTip);
-  if (avatar) {
+  if (avatar && avatar.querySelector('.af-am-account-info')) {
     var info = avatar.querySelector('.af-am-account-info');
     info.addEventListener('click', function () {
       var visible = avatar.classList.toggle('is-info-open'); info.setAttribute('aria-expanded', String(visible));
@@ -175,5 +175,7 @@
       if (event.key === 'Escape') { avatar.classList.remove('is-info-open'); info.setAttribute('aria-expanded', 'false'); hideTips(); info.focus(); }
     });
   }
+  var guestAvatar = rail.querySelector('.af-am-guest-avatar');
+  if (guestAvatar) guestAvatar.addEventListener('click', function () { showTip(guestAvatar); });
   document.documentElement.classList.add('af-advancedmenu-ready');
 })();

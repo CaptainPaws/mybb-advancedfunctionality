@@ -13,13 +13,14 @@ const root = path.resolve(__dirname, '..'), assets = path.join(root, 'inc/plugin
   page.on('pageerror',e=>errors.push(String(e)));
   await page.route('https://forum.test/**',route=>{
    const url=new URL(route.request().url()), name=path.basename(url.pathname);
-   const dir=url.pathname.includes('/font-awesome-6/') ? path.join(root,'inc/plugins/advancedfunctionality/addons/advancedfontawesome/assets/font-awesome-6',name.endsWith('.woff2')?'webfonts':'css') : path.join(root,'inc/plugins/advancedfunctionality/addons/advancedelementtheme/assets');
+   if (url.pathname === '/menu-fixture') return route.fulfill({body:'<html><body></body></html>',contentType:'text/html'});
+   const dir=url.pathname.includes('/font-awesome-6/') ? path.join(root,'inc/plugins/advancedfunctionality/addons/advancedfontawesome/assets/font-awesome-6',name.endsWith('.woff2')?'webfonts':'css') : path.join(root,'inc/plugins/advancedfunctionality/addons',url.pathname.includes('adaptivethemeframework')?'adaptivethemeframework':'advancedelementtheme','assets');
    return fs.existsSync(path.join(dir,name)) ? route.fulfill({body:fs.readFileSync(path.join(dir,name)),contentType:name.endsWith('.js')?'application/javascript; charset=utf-8':name.endsWith('.woff2')?'font/woff2':'text/css; charset=utf-8'}) : route.abort();
   });
   const fixture=JSON.parse(execFileSync(process.env.PHP_BINARY || 'php',[path.join(__dirname,'advancedmenu_game_ui_regression.php'),'--browser-fixture'],{encoding:'utf8'}));
   async function load(markup, member) {
-   await page.goto('about:blank');
-   await page.setContent(`<link rel="stylesheet" href="https://forum.test/font-awesome-6/css/all.min.css"><style>${fs.readFileSync(path.join(assets,'advancedmenu.css'),'utf8')}body{margin:0;background:#0e1520;color:white}#forum{height:1600px;max-width:100%;box-sizing:border-box;padding:20px}</style><body class="af-advancedmenu-layout ${member?'af-am-member':'af-am-guest'}">${markup}<main id="forum"><nav class="navigation atf-breadcrumbs">Breadcrumbs</nav>Forum content <button id="outside">Outside</button></main></body>`);
+   await page.goto('https://forum.test/menu-fixture');
+   await page.setContent(`<link rel="stylesheet" href="https://forum.test/font-awesome-6/css/all.min.css"><style>${fs.readFileSync(path.join(assets,'advancedmenu.css'),'utf8')}${fs.readFileSync(path.join(root,'inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/surfaces/forum.css'),'utf8')}body{margin:0;background:#0e1520;color:white}#forum{height:1600px;max-width:100%;box-sizing:border-box;padding:20px}</style><body class="af-advancedmenu-layout ${member?'af-am-member':'af-am-guest'} atf-active atf-forum-layout--full">${markup}<main id="forum"><nav class="navigation atf-breadcrumbs">Breadcrumbs</nav><div class="atf-forumdisplay__subforum-cards"><div class="atf-forum-card">Subforum A</div><div class="atf-forum-card">Subforum B</div></div><div class="atf-forum-category__forums"><div class="atf-forum-card">Forum A</div><div class="atf-forum-card">Forum B</div></div>Forum content <button id="outside">Outside</button></main></body>`);
    await page.addScriptTag({content:fs.readFileSync(path.join(assets,'advancedmenu.js'),'utf8')});
   }
   await load(fixture.member,true);
@@ -83,6 +84,8 @@ const root = path.resolve(__dirname, '..'), assets = path.join(root, 'inc/plugin
   await page.keyboard.press('Escape');
   assert.ok(await page.locator('.af-am-rail-scroll').evaluate(e=>e.scrollHeight>e.clientHeight),'Short-height rail has no inner scrolling');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollTop),0);
+  await page.locator('[data-af-am-category="theme"]').focus();
+  assert.ok(await page.locator('.af-am-rail-scroll').evaluate(e=>e.scrollTop>0),'Keyboard focus did not reveal overflowing items');
   await page.setViewportSize({width:1100,height:800});
   await page.setViewportSize({width:375,height:740});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile horizontal overflow');
@@ -94,9 +97,28 @@ const root = path.resolve(__dirname, '..'), assets = path.join(root, 'inc/plugin
   await page.locator('.af-am-account-info').click(); assert.equal(await page.locator('.af-am-account-info').getAttribute('aria-expanded'),'false');
   assert.equal(await page.locator('.af-am-rail').evaluate(e=>e.getBoundingClientRect().width),375);
   assert.equal(await page.locator('#forum').evaluate(e=>e.getBoundingClientRect().left),0);
-  await load(fixture.guest,false); assert.equal(await page.locator('[data-af-am-category]').count(),0); await page.locator('.af-am-burger').click(); assert.equal(await page.locator('#af-am-user-drawer').isVisible(),true);
+  await page.setViewportSize({width:1100,height:800});
+  await load(fixture.guest,false); assert.equal(await page.locator('[data-af-am-category]').count(),1); await page.locator('[data-af-am-category="theme"]').click(); assert.equal(await page.locator('#af-am-user-drawer').isVisible(),true);
+  await page.locator('.atf-forum-layout-option').filter({has:page.locator('input[value="grid"]')}).click();
+  assert.equal(await page.evaluate(()=>document.body.classList.contains('atf-forum-layout--grid')),true);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('af-presentation-preferences:v1:forum_layout')),'grid');
+  assert.equal(await page.locator('.atf-forum-category__forums').evaluate(e=>getComputedStyle(e).gridTemplateColumns.split(' ').length),2,'ATF renderer did not change columns');
+  assert.equal(await page.locator('.atf-forumdisplay__subforum-cards').evaluate(e=>getComputedStyle(e).gridTemplateColumns.split(' ').length),2,'Forumdisplay subforum renderer did not change columns');
+  await load(fixture.guest,false);
+  assert.equal(await page.evaluate(()=>document.body.classList.contains('atf-forum-layout--grid')),true);
   await page.keyboard.press('Escape');
   await page.setViewportSize({width:1100,height:800});
+  await page.locator('.af-am-guest-avatar').focus();
+  assert.equal(await page.locator('#af-am-account-tooltip').textContent(),'Добро пожаловать, гость!');
+  assert.equal(await page.locator('#af-am-account-tooltip').isVisible(),true);
+  assert.equal(await page.locator('.af-am-rail-scroll').evaluate(e=>getComputedStyle(e).scrollbarWidth),'none');
+  await page.evaluate(()=>{Storage.prototype.setItem=function(){throw new Error('blocked storage');};});
+  await page.locator('[data-af-am-category="theme"]').click();
+  await page.locator('.atf-forum-layout-option').filter({has:page.locator('input[value="full"]')}).click();
+  assert.equal(await page.evaluate(()=>document.body.classList.contains('atf-forum-layout--full')),true);
+  assert.match(await page.locator('.atf-theme-preferences [role="status"]').textContent(),/до перезагрузки/);
+  await load(fixture.member,true);
+  assert.equal(await page.evaluate(()=>document.body.classList.contains('atf-forum-layout--grid')),false);
   // Shared route/layout fixtures, not production MyBB pages.
   for(const route of ['index.php','forumdisplay.php','showthread.php','member.php','usercp.php','kb.php','charactersheets.php','shop.php','inventory.php']) {
    await load(fixture.member,true);
