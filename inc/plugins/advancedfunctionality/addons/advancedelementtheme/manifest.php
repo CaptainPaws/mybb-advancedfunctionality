@@ -3,7 +3,7 @@ return [
     'id' => 'advancedelementtheme',
     'name' => 'AdvancedElementTheme',
     'description' => 'Единая визуальная палитра KB arpg_element.',
-    'version' => '1.3.1',
+    'version' => '1.3.2',
     'author' => 'CaptainPaws',
     'bootstrap' => 'advancedelementtheme.php',
     'admin' => ['slug' => 'advancedelementtheme', 'controller' => 'admin.php'],

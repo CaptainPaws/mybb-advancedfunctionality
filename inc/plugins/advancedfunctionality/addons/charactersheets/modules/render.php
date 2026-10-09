@@ -2154,7 +2154,7 @@ function af_charactersheets_detect_render_profile(array $sheet_view): string
     return 'dnd';
 }
 
-function af_charactersheets_build_sheet_inner_html(string $slug, string $only_tab = ''): string
+function af_charactersheets_build_sheet_inner_html(string $slug, string $only_tab = '', bool $wrap_surface = true, ?array &$surface_context = null): string
 {
     global $db, $templates, $headerinclude, $mybb;
 
@@ -2282,6 +2282,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
         ? htmlspecialchars_uni(af_elementtheme_resolve_key($element_value))
         : '';
     if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('sheet', $sheet_element_theme_key);
+    $surface_context = ['element_key' => $sheet_element_theme_key, 'surface' => 'sheet'];
 
     $character_name_en = trim((string)($character_profile['character_name'] ?? ''));
     if ($character_name_en === '') {
@@ -2487,7 +2488,12 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     if (!str_contains($sheet_inner, 'data-element-surface=')) {
         $sheet_inner = preg_replace('/(<div\\b[^>]*\\bclass="[^"]*\\baf-cs-page\\b[^"]*")/', '$1 data-element-surface="sheet"', $sheet_inner, 1) ?? $sheet_inner;
     }
-    return af_charactersheets_canonicalize_assets_html($sheet_inner);
+    $sheet_inner = af_charactersheets_canonicalize_assets_html($sheet_inner);
+    if ($wrap_surface) {
+        $attributes = ' data-element="' . $sheet_element_theme_key . '" data-element-surface="sheet" data-af-element-effect-host="sheet"';
+        $sheet_inner = '<div class="af-aa-context af-aa-context--sheet af-apui-surface-body atf-active"' . $attributes . '>' . $sheet_inner . '</div>';
+    }
+    return $sheet_inner;
 }
 
 function af_charactersheets_render_sheet_page(string $slug): void
@@ -2498,7 +2504,9 @@ function af_charactersheets_render_sheet_page(string $slug): void
         af_front_ensure_header_bits();
     }
 
-    $sheet_inner = af_charactersheets_build_sheet_inner_html($slug);
+    $surface_context = [];
+    $sheet_inner = af_charactersheets_build_sheet_inner_html($slug, '', false, $surface_context);
+    $sheet_surface_attributes = ' data-element="' . htmlspecialchars_uni((string)($surface_context['element_key'] ?? '')) . '" data-element-surface="sheet" data-af-element-effect-host="sheet"';
     if ($sheet_inner === '') {
         error_no_permission();
         exit;
@@ -2513,7 +2521,7 @@ function af_charactersheets_render_sheet_page(string $slug): void
     // iframe modal route from postbit must be content-only (no forum chrome),
     // but still keep {$headerinclude} so theme/plugin assets are available.
     if ($isAjax && !$isEmbed && !$isSheetSurfaceRequest) {
-        $page = $sheet_inner;
+        $page = '<div class="af-aa-context af-aa-context--sheet af-apui-surface-body atf-active"' . $sheet_surface_attributes . '>' . $sheet_inner . '</div>';
     } elseif ($isEmbed) {
         $tplModal = $templates->get('charactersheet_modal');
         eval("\$page = \"" . $tplModal . "\";");

@@ -443,7 +443,14 @@ function af_apui_profile_element_key(int $uid, ?array $payload = null): string
     if ($payload === null && isset($GLOBALS['af_apui_profile_element_keys'][$uid])) return $GLOBALS['af_apui_profile_element_keys'][$uid];
     $payload ??= af_apui_get_approved_profile_character_payload($uid);
     $field = (array)(($payload['fields'] ?? [])['character_element'] ?? []);
-    return $GLOBALS['af_apui_profile_element_keys'][$uid] = af_elementtheme_resolve_key(af_apui_profile_character_field_value($field));
+    $resolved = '';
+    // Display labels in value must not hide a canonical raw key from the provider.
+    foreach (['value', 'raw', 'key'] as $candidate) {
+        if (!isset($field[$candidate]) || !is_scalar($field[$candidate])) continue;
+        $resolved = af_elementtheme_resolve_key((string)$field[$candidate]);
+        if ($resolved !== '') break;
+    }
+    return $GLOBALS['af_apui_profile_element_keys'][$uid] = $resolved;
 }
 
 /** Match the shared profile/postbit element contract: canonical value, raw value, then normalized key. */

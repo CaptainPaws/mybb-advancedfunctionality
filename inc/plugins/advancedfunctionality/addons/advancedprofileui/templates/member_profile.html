@@ -6,11 +6,11 @@
 <title>{$lang->profile} - {$formattedname}</title>
 {$headerinclude}
 </head>
-<body class="af-apui-member-profile-page af-aa-user-{$memprofile['uid']}">
+<body class="af-apui-member-profile-page af-aa-user-{$memprofile['uid']}" data-element="{$af_apui_profile_element}" data-element-surface="profile" data-af-element-effect-host="profile-page" data-af-element-effect-only>
+<span hidden data-af-element-effect aria-hidden="true"></span>
 {$header}
 
-<div class="af-apui-profile-page" data-element-surface="profile" data-element="{$af_apui_profile_element}" data-af-element-effect-host>
-  <span hidden data-af-element-effect aria-hidden="true"></span>
+<div class="af-apui-profile-page" data-element-surface="profile" data-element="{$af_apui_profile_element}" data-af-element-source="profile" data-af-element-accent-root="profile">
     <section class="af-apui-profile-hero">
         <div class="af-apui-profile-hero__background"></div>
         <div class="af-apui-profile-hero__banner"></div>

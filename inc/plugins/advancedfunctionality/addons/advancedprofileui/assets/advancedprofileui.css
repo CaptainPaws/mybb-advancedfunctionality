@@ -3441,5 +3441,5 @@ body.af-apui-member-profile-page:not(.atf-active) .af-apui-profile-hero__inner {
 }
 
 /* Surface-owned full background: the layer sits above root paint, below content. */
-.af-apui-profile-page[data-af-element-effect-active] { position: relative; isolation: isolate; }
-.af-apui-profile-page > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+body.af-apui-member-profile-page[data-af-element-effect-active] { isolation: isolate; }
+body.af-apui-member-profile-page > [data-af-element-effect][data-af-effect-ready] { position: fixed !important; inset: 0; z-index: -1; }

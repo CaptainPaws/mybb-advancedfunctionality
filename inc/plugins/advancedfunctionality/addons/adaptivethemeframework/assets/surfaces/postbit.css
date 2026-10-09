@@ -136,7 +136,7 @@ body.atf-active .atf-post__sidebar {
   background: var(--atf-color-page-subtle);
   border-inline-end: 1px solid var(--atf-color-border);
 }
-body.atf-active .atf-post__sidebar > :not(:first-child) { margin-block-start: var(--atf-space-4); }
+body.atf-active .atf-post__sidebar > :not([data-af-element-effect]) ~ :not([data-af-element-effect]) { margin-block-start: var(--atf-space-4); }
 body.atf-active .atf-post__secondary-avatar { width: 100%; max-width: 17.5rem; margin-inline: auto; overflow: hidden; border-radius: var(--atf-radius-md); }
 body.atf-active .atf-post__secondary-avatar:empty { display: none; }
 body.atf-active .atf-post__secondary-avatar :is(img, svg),
@@ -754,3 +754,8 @@ body.atf-active .atf-post__topbar > [data-af-element-effect] { position: absolut
 @media (max-width: 48rem) {
   body.atf-active .atf-post__topbar[data-af-element-effect-active] { position: relative; }
 }
+
+/* Both author hosts share postbit metadata; sidebar remains softer and keeps its rail sticky. */
+body.atf-active .atf-post__sidebar[data-af-element-effect-active] { position: relative; isolation: isolate; }
+body.atf-active .atf-post__sidebar > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+body.atf-active .atf-post__sidebar > [data-af-element-effect][data-af-effect-ready] { opacity: min(var(--af-effect-opacity, .35), .14); }

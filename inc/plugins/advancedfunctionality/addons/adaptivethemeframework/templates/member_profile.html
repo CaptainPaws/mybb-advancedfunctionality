@@ -4,11 +4,11 @@
 <title>{$lang->profile} - {$formattedname}</title>
 {$headerinclude}
 </head>
-<body class="atf-active atf-profile-page af-apui-member-profile-page" data-atf-owned="1">
+<body class="atf-active atf-profile-page af-apui-member-profile-page" data-atf-owned="1" data-element="{$atf_profile_context['appearance']['element_theme_key']}" data-element-surface="profile" data-af-element-effect-host="profile-page" data-af-element-effect-only>
+<span hidden data-af-element-effect aria-hidden="true"></span>
 {$header}
 
-<main class="pun atf-page-shell atf-page atf-profile {$atf_profile_context['appearance']['uid_class']}" data-profile-uid="{$memprofile['uid']}" data-element-surface="profile" data-element="{$atf_profile_context['appearance']['element_theme_key']}" data-af-element-effect-host>
-  <span hidden data-af-element-effect aria-hidden="true"></span>
+<main class="pun atf-page-shell atf-page atf-profile {$atf_profile_context['appearance']['uid_class']}" data-profile-uid="{$memprofile['uid']}" data-element-surface="profile" data-element="{$atf_profile_context['appearance']['element_theme_key']}" data-af-element-source="profile" data-af-element-accent-root="profile">
   <header class="atf-profile__hero">{$atf_profile_hero}</header>
 
   <section class="atf-profile__workspace" data-af-apui-tabs>

@@ -142,8 +142,9 @@ Surface palette overrides automatically feed particle colors. The ACP preview
 uses the same compiler textures and CSS keyframes and changes before saving.
 
 Surface owners provide a hidden, non-interactive
-`[data-af-element-effect]` inside `[data-af-element-effect-host]` on the full profile, sheet or application root
-(or inside the postbit topbar), and own its absolute positioning/stacking. Effects assets are delivered
+`[data-af-element-effect]` inside `[data-af-element-effect-host]` on the profile page body (effect-only), the external
+`.af-aa-context--sheet.af-apui-surface-body` wrapper, or the application root.
+Postbits declare both `postbit-topbar` and `postbit-sidebar` hosts. Surface owners control positioning/stacking. Effects assets are delivered
 by ElementTheme after manifest permission checks only when an enabled setting
 matches a rendered canonical key/surface, including sheet modal caller facts.
 Old installed templates receive only a decorative node through DOM integration;
@@ -168,3 +169,12 @@ presentation cache and are invalidated on save.
 Targeted coverage: `tests/element_theme_effects_regression.php` and
 `tests/element_theme_effects_browser.cjs` (Chromium and installed Playwright Firefox
 via `AF_TEST_BROWSER=firefox`), plus existing palette/delivery/editor regressions.
+
+Element source, accent root and effect host are separate component roles. Profile
+body uses the same approved owner key as its inner accent root, with
+`data-af-element-effect-only` excluding body from authored Custom CSS scopes.
+The body layer is fixed to the viewport within the profile page stacking context.
+Sheet renderers pass canonical keys into per-instance wrappers (or standalone
+body attributes); instances are never matched by UID. Postbit hosts inherit one
+author key and one surface configuration. Ancestry lookup bridges installed
+templates without restoring them; application integration is unchanged.

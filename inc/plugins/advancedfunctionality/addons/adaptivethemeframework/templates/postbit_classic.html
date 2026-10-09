@@ -2,7 +2,7 @@
 <a id="pid{$post['pid']}" name="pid{$post['pid']}"></a>
 
 <article class="post classic atf-post af-atf-display {$unapproved_shade} {$post['af_aa_user_class']}" id="post_{$post['pid']}" data-author-uid="{$post['uid']}" data-element-surface="postbit" data-element="{$post['af_atf_element']}" style="{$post_visibility}">
-  <header class="post_head atf-post__topbar" data-af-element-effect-host>
+  <header class="post_head atf-post__topbar" data-af-element-effect-host="postbit-topbar">
     <span hidden data-af-element-effect aria-hidden="true"></span>
     <div class="atf-post__topbar-leading">
       <div class="atf-post__moderation">{$post['modbit']}</div>
@@ -20,7 +20,7 @@
   </header>
 
   <div class="atf-post__layout">
-    <aside class="atf-post__sidebar" aria-label="Информация об авторе"><div class="atf-post__sidebar-inner">
+    <aside class="atf-post__sidebar" aria-label="Информация об авторе" data-af-element-effect-host="postbit-sidebar"><span hidden data-af-element-effect aria-hidden="true"></span><div class="atf-post__sidebar-inner">
       <div class="atf-post__secondary-avatar">{$post['af_atf_secondary_avatar']}</div>
       {$post['af_atf_slots']['post.author.character_name']}
       <section class="atf-post__personal-title"><div class="atf-post__profile-fields">{$post['af_atf_slots']['post.author.profile_fields']}</div></section>

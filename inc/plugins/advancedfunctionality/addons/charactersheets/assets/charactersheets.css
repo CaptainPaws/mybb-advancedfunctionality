@@ -3229,5 +3229,5 @@
 }
 
 /* Surface-owned full background: the layer sits above root paint, below content. */
-.af-cs-page[data-af-element-effect-active] { position: relative; isolation: isolate; }
-.af-cs-page > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+.af-aa-context--sheet.af-apui-surface-body[data-af-element-effect-active] { position: relative; isolation: isolate; }
+.af-aa-context--sheet.af-apui-surface-body > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }

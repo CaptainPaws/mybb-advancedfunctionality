@@ -14,7 +14,7 @@
   const visibility = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
     entries.forEach(entry => play(entry.target, entry.isIntersecting));
   }, { threshold: 0 }) : null;
-  function mount(root) {
+  function mountApplication(root) {
     const config = settings[root.dataset.element];
     const surface = root.dataset.elementSurface;
     // Full surfaces own the layer on their canonical root. Only postbit uses
@@ -42,6 +42,58 @@
     host.setAttribute('data-af-element-effect-active', '');
     layer.setAttribute('data-af-effect-ready', '');
     if (!tracked.has(layer)) { play(layer, !visibility); visibility?.observe(layer); }
+  }
+  function stop(host, remove = false) {
+    Array.from(host.children).filter(child => child.hasAttribute('data-af-element-effect')).forEach(layer => {
+      visibility?.unobserve(layer); tracked.delete(layer);
+      layer.removeAttribute('data-af-effect-ready'); layer.removeAttribute('data-af-effect-running');
+      if (remove) layer.remove();
+    });
+    host.removeAttribute('data-af-element-effect-active');
+  }
+  function mount(root) {
+    const surface = root.dataset.elementSurface;
+    // Application integration is deliberately unchanged in this task.
+    if (surface === 'application') return mountApplication(root);
+    if (root.hasAttribute('data-af-element-effect-only')) return;
+    const key = root.dataset.element;
+    const config = settings[key];
+    let hosts = [];
+    if (surface === 'profile') {
+      const host = root.closest('[data-af-element-effect-host="profile-page"]')
+        || root.closest('body.af-apui-member-profile-page');
+      if (host) hosts = [host];
+    } else if (surface === 'sheet') {
+      const host = root.closest('[data-af-element-effect-host="sheet"]')
+        || root.closest('.af-aa-context--sheet.af-apui-surface-body');
+      if (host) hosts = [host];
+    } else if (surface === 'postbit') {
+      hosts = Array.from(root.querySelectorAll('[data-af-element-effect-host="postbit-topbar"], [data-af-element-effect-host="postbit-sidebar"], .atf-post__topbar, .atf-post__sidebar'))
+        .filter(host => host.closest(roots) === root);
+    } else return;
+    // Remove only obsolete decoration belonging to this instance, not nested sheets.
+    [root, ...root.querySelectorAll('[data-af-element-effect-host]')].forEach(old => {
+      if (hosts.includes(old) || old.closest(roots) !== root) return;
+      if (old.hasAttribute('data-af-element-effect-host')) { stop(old, true); old.removeAttribute('data-af-element-effect-host'); }
+    });
+    hosts.forEach(host => {
+      // PHP owns new context attributes. Old installed templates may be bridged
+      // only from the declared source within the same surface ancestry, never uid.
+      if (surface !== 'postbit') {
+        if (host.hasAttribute('data-element') && host.dataset.element !== key) return;
+        if (!host.hasAttribute('data-element')) {
+          host.dataset.element = key; host.dataset.elementSurface = surface;
+          if (surface === 'profile') host.setAttribute('data-af-element-effect-only', '');
+        }
+      }
+      if (!config || !config.enabled || !config.surfaces.includes(surface)) { stop(host); return; }
+      let layer = Array.from(host.children).find(child => child.hasAttribute('data-af-element-effect'));
+      if (!layer) { layer = document.createElement('span'); layer.hidden = true; layer.setAttribute('data-af-element-effect', ''); layer.setAttribute('aria-hidden', 'true'); host.prepend(layer); }
+      const role = surface === 'profile' ? 'profile-page' : (surface === 'sheet' ? 'sheet' : (host.matches('.atf-post__sidebar') ? 'postbit-sidebar' : 'postbit-topbar'));
+      if (host.getAttribute('data-af-element-effect-host') !== role) host.setAttribute('data-af-element-effect-host', role);
+      host.setAttribute('data-af-element-effect-active', ''); layer.setAttribute('data-af-effect-ready', '');
+      if (!tracked.has(layer)) { play(layer, !visibility); visibility?.observe(layer); }
+    });
   }
   function scan(node) {
     if (!(node instanceof Element)) return;

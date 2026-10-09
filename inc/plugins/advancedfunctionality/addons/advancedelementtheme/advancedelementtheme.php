@@ -173,8 +173,8 @@ function af_elementtheme_overrides(): array
     global $db, $cache;
     if (isset($GLOBALS['af_elementtheme_overrides'])) return $GLOBALS['af_elementtheme_overrides'];
     $data = is_object($cache) ? $cache->read('af_elementtheme') : false;
-    if (!is_array($data) || ($data['format'] ?? 0) !== 5 || !isset($data['styles'], $data['surfaces'], $data['css'], $data['effects'])) {
-        $data = ['format' => 5, 'styles' => [], 'surfaces' => [], 'css' => ''];
+    if (!is_array($data) || ($data['format'] ?? 0) !== 6 || !isset($data['styles'], $data['surfaces'], $data['css'], $data['effects'])) {
+        $data = ['format' => 6, 'styles' => [], 'surfaces' => [], 'css' => ''];
         if (is_object($db)) {
             foreach (['styles', 'surfaces'] as $kind) {
                 $table = 'af_element_theme_' . $kind;
@@ -223,7 +223,7 @@ function af_elementtheme_compile_style(string $key, array $metadata, string $sur
     // including late/unlayered ATF CSS. Surface precedes global in important order.
     if ($metadata['custom_css'] !== '') {
         $layer = $surface === '' ? 'af_elementtheme_global_custom' : 'af_elementtheme_surface_custom';
-        $css .= '@layer ' . $layer . '{@scope (' . $selector . ') to (:scope [data-element]) {' . af_elementtheme_prioritize_custom_css($metadata['custom_css']) . '}}';
+        $css .= '@layer ' . $layer . '{@scope (' . $selector . ':not([data-af-element-effect-only])) to (:scope [data-element]) {' . af_elementtheme_prioritize_custom_css($metadata['custom_css']) . '}}';
     }
     return $css;
 }
@@ -326,6 +326,18 @@ function af_advancedelementtheme_pre_output(string &$page): void
         if (!str_contains($tag, 'data-element-surface=')) $tag = substr($tag, 0, -1) . ' data-element-surface="' . $surface . '">';
         return preg_replace_callback('/\bdata-element=(["\'])(.*?)\1/', static fn($m) => 'data-element="' . af_elementtheme_resolve_key($m[2]) . '"', $tag) ?? $tag;
     }, $page) ?? $page;
+    // Approved ATF/APUI context is copied to the profile page host, never viewer data.
+    $profileKey = $GLOBALS['atf_profile_context']['appearance']['element_theme_key'] ?? $GLOBALS['af_apui_profile_element'] ?? null;
+    if ($profileKey !== null) {
+        $page = preg_replace_callback('/<body\b[^>]*>/i', static function ($match) use ($profileKey) {
+            $tag = $match[0];
+            if (!preg_match('/\bclass=(["\'])(.*?)\1/i', $tag, $class)) return $tag;
+            $classes = preg_split('/\s+/', trim($class[2]));
+            if (!in_array('af-apui-member-profile-page', $classes, true)) return $tag;
+            $tag = preg_replace('/\sdata-(?:element(?:-surface)?|af-element-effect-(?:host|only))(?:=(["\']).*?\1)?(?=\s|>)/i', '', $tag);
+            return substr($tag, 0, -1) . ' data-element="' . af_elementtheme_resolve_key((string)$profileKey) . '" data-element-surface="profile" data-af-element-effect-host="profile-page" data-af-element-effect-only>';
+        }, $page) ?? $page;
+    }
     if (stripos($page, '</head>') === false) return;
     $base = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedelementtheme/assets/element-theme.css';
     $version = (string)(@filemtime(__DIR__ . '/assets/element-theme.css') ?: '1');

@@ -21,39 +21,54 @@ const componentCSS = ['adaptivethemeframework/assets/surfaces/profile.css', 'ada
     const page = await context.newPage();
     await page.setContent(fixture.html);
     for (const file of componentCSS) await page.addStyleTag({ content: fs.readFileSync(path.join(addons, file), 'utf8') });
-    const layer = page.locator('#profile [data-af-element-effect]');
-    await page.waitForFunction(() => document.querySelector('#profile [data-af-element-effect]').hasAttribute('data-af-effect-running'));
-    assert.equal(await page.locator('[data-af-effect-ready]').count(), 4);
+    await page.addStyleTag({ content: 'body { --atf-space-4: 16px; }' });
+    const layer = page.locator('body > [data-af-element-effect]');
+    await page.waitForFunction(() => document.querySelector('body > [data-af-element-effect]').hasAttribute('data-af-effect-running'));
+    assert.equal(await page.locator('[data-af-effect-ready]').count(), 5);
     assert.equal(await page.locator('#disabled-host [data-af-element-effect]').count(), 0);
     assert.equal(await page.locator('#neutral-host [data-af-element-effect]').count(), 0);
     assert.equal(await layer.evaluate(e => getComputedStyle(e).pointerEvents), 'none');
     assert.equal(await layer.evaluate(e => getComputedStyle(e).zIndex), '-1');
     assert.equal(await layer.evaluate(e => getComputedStyle(e).getPropertyValue('--af-effect-color').trim()), '#37c4ff');
     assert.equal(await layer.evaluate(e => getComputedStyle(e, '::before').animationName), 'af-effect-embers');
-    assert.equal(await page.locator('#postbit [data-af-element-effect]').evaluate(e => getComputedStyle(e, '::before').animationName), 'af-effect-stardust');
-    assert.equal(await page.locator('#postbit [data-af-element-effect]').evaluate(e => (getComputedStyle(e, '::before').backgroundImage.match(/radial-gradient/g) || []).length), 3);
+    assert.equal(await page.locator('#postbit .atf-post__topbar > [data-af-element-effect]').evaluate(e => getComputedStyle(e, '::before').animationName), 'af-effect-stardust');
+    assert.equal(await page.locator('#postbit .atf-post__topbar > [data-af-element-effect]').evaluate(e => (getComputedStyle(e, '::before').backgroundImage.match(/radial-gradient/g) || []).length), 3);
     await page.locator('#profile-button').evaluate(e => e.addEventListener('click', () => e.dataset.clicked = 'yes'));
     await page.locator('#profile-button').click(); assert.equal(await page.locator('#profile-button').getAttribute('data-clicked'), 'yes');
     assert.equal(await page.locator('#profile .atf-profile__panel h2').evaluate(e => getComputedStyle(e).color), 'rgb(55, 196, 255)');
     assert.equal(await page.locator('#profile-button').evaluate(e => getComputedStyle(e).color), 'rgb(55, 196, 255)');
     // Root-sized layers and invariant layout, including the real ATF topbar > * rule.
-    for (const id of ['profile', 'sheet', 'application', 'postbit']) {
-      const result = await page.locator('#' + id).evaluate(root => {
-        const layer = root.querySelector('[data-af-element-effect]');
-        const host = layer.parentElement;
+    for (const selector of ['body', '#sheet-host', '#application', '#postbit .atf-post__topbar', '#postbit .atf-post__sidebar']) {
+      const result = await page.locator(selector).evaluate(host => {
+        const layer = Array.from(host.children).find(e => e.hasAttribute('data-af-element-effect'));
         const a = host.getBoundingClientRect(), b = layer.getBoundingClientRect();
-        const before = { root: root.getBoundingClientRect().toJSON(), host: a.toJSON(), position: root.dataset.elementSurface === 'postbit' ? getComputedStyle(host).position : null };
-        const palette = getComputedStyle(root).getPropertyValue('--af-element-accent');
-        layer.removeAttribute('data-af-effect-ready'); host.removeAttribute('data-af-element-effect-active');
-        const off = { root: root.getBoundingClientRect().toJSON(), host: host.getBoundingClientRect().toJSON(), position: root.dataset.elementSurface === 'postbit' ? getComputedStyle(host).position : null };
-        host.setAttribute('data-af-element-effect-active', ''); layer.setAttribute('data-af-effect-ready', '');
-        return { before, off, isolation: getComputedStyle(host).isolation, matchesRoot: host === root, bounds: [host.clientWidth, host.clientHeight, Math.round(b.width), Math.round(b.height)], palette, afterPalette: getComputedStyle(root).getPropertyValue('--af-element-accent') };
+        const before = [a.width, a.height, host.matches('.atf-post__topbar') ? getComputedStyle(host).position : host.querySelector('.atf-post__sidebar-inner') ? getComputedStyle(host.querySelector('.atf-post__sidebar-inner')).position : null];
+        const palette = getComputedStyle(host).getPropertyValue('--af-element-accent');
+        layer.removeAttribute('data-af-effect-ready'); host.removeAttribute('data-af-element-effect-active'); layer.remove();
+        const off = host.getBoundingClientRect();
+        const offBox = [off.width, off.height, host.matches('.atf-post__topbar') ? getComputedStyle(host).position : host.querySelector('.atf-post__sidebar-inner') ? getComputedStyle(host.querySelector('.atf-post__sidebar-inner')).position : null];
+        host.prepend(layer); host.setAttribute('data-af-element-effect-active', ''); layer.setAttribute('data-af-effect-ready', '');
+        return { before, offBox, isolation: getComputedStyle(host).isolation, bounds: [host === document.body ? innerWidth : host.clientWidth, host === document.body ? innerHeight : host.clientHeight, Math.round(b.width), Math.round(b.height)], palette, afterPalette: getComputedStyle(host).getPropertyValue('--af-element-accent') };
       });
-      assert.equal(result.isolation, 'isolate', `${id} layer could escape behind the root background`);
-      assert.equal(result.matchesRoot, id !== 'postbit', `${id} used the wrong effect host`);
-      assert.ok(Math.abs(result.bounds[0] - result.bounds[2]) <= 1 && Math.abs(result.bounds[1] - result.bounds[3]) <= 1, `${id} layer did not fill its host`);
-      assert.deepEqual(result.before, result.off, `${id} effect changed dimensions or sticky position`);
+      assert.equal(result.isolation, 'isolate', selector);
+      assert.ok(Math.abs(result.bounds[0] - result.bounds[2]) <= 1 && Math.abs(result.bounds[1] - result.bounds[3]) <= 1, selector + ' host coverage');
+      assert.deepEqual(result.before, result.offBox, selector + ' geometry/sticky changed');
       assert.equal(result.palette, result.afterPalette);
+    }
+    assert.equal(await page.locator('#sheet > [data-af-element-effect], #profile > [data-af-element-effect]').count(), 0);
+    // Real paint on the external host: decoration survives an opaque background,
+    // while the profile body never acquires authored :scope layout properties.
+    for (const selector of ['body', '#sheet-host']) {
+      const host = page.locator(selector);
+      const decoration = host.locator(':scope > [data-af-element-effect]');
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await host.evaluate(e => e.style.background = 'rgb(2,3,4)');
+      await decoration.evaluate(e => { e.style.setProperty('--af-effect-field', 'linear-gradient(lime,lime)'); e.style.setProperty('--af-effect-opacity', '1'); e.style.setProperty('--af-effect-strength', '1'); e.removeAttribute('data-af-effect-ready'); });
+      const off = await page.screenshot();
+      await decoration.evaluate(e => e.setAttribute('data-af-effect-ready', ''));
+      assert.notDeepEqual(await page.screenshot(), off, selector + ' background hid effect');
+      await decoration.evaluate(e => e.removeAttribute('style'));
+      await host.evaluate(e => e.style.removeProperty('background'));
     }
     // Verify paint order in the engine, not only computed z-index: decoration
     // must remain visible above an opaque root background but below its content.
@@ -70,17 +85,17 @@ const componentCSS = ['adaptivethemeframework/assets/surfaces/profile.css', 'ada
     await page.locator('#application').evaluate((e, style) => style === null ? e.removeAttribute('style') : e.setAttribute('style', style), rootStyle);
     await page.locator('#profile').scrollIntoViewIfNeeded();
     await page.emulateMedia({ reducedMotion: 'no-preference' });
-    const initialBox = await page.locator('#profile').boundingBox();
-    await page.locator('#profile').evaluate(e => { e.style.display = 'none'; });
-    await page.waitForFunction(() => !document.querySelector('#profile [data-af-element-effect]').hasAttribute('data-af-effect-running'));
-    await page.locator('#profile').evaluate(e => { e.style.display = ''; });
-    await page.waitForFunction(() => document.querySelector('#profile [data-af-element-effect]').hasAttribute('data-af-effect-running'));
-    const restoredBox = await page.locator('#profile').boundingBox();
+    const initialBox = await page.locator('#sheet-host').boundingBox();
+    await page.locator('#sheet-host').evaluate(e => { e.style.display = 'none'; });
+    await page.waitForFunction(() => !document.querySelector('#sheet-host > [data-af-element-effect]').hasAttribute('data-af-effect-running'));
+    await page.locator('#sheet-host').evaluate(e => { e.style.display = ''; });
+    await page.waitForFunction(() => document.querySelector('#sheet-host > [data-af-element-effect]').hasAttribute('data-af-effect-running'));
+    const restoredBox = await page.locator('#sheet-host').boundingBox();
     assert.deepEqual([restoredBox.width, restoredBox.height], [initialBox.width, initialBox.height], 'Animation lifecycle shifted layout');
     // Off-screen components pause, and document inactivity pauses every tracked layer.
-    await page.locator('#profile').evaluate(e => { e.style.marginTop = '2000px'; });
-    await page.waitForFunction(() => !document.querySelector('#profile [data-af-element-effect]').hasAttribute('data-af-effect-running'));
-    await page.locator('#profile').evaluate(e => { e.style.marginTop = ''; });
+    await page.locator('#sheet-host').evaluate(e => { e.style.marginTop = '2000px'; });
+    await page.waitForFunction(() => !document.querySelector('#sheet-host > [data-af-element-effect]').hasAttribute('data-af-effect-running'));
+    await page.locator('#sheet-host').evaluate(e => { e.style.marginTop = ''; });
     await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange')); });
     assert.equal(await page.locator('[data-af-effect-running]').count(), 0);
     await page.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
@@ -89,12 +104,12 @@ const componentCSS = ['adaptivethemeframework/assets/surfaces/profile.css', 'ada
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await layer.evaluate(e => (getComputedStyle(e, '::before').backgroundImage.match(/radial-gradient/g) || []).length), 3);
     await page.evaluate(html => document.body.insertAdjacentHTML('beforeend', html), fixture.sheet);
-    await page.waitForFunction(() => document.querySelector('#modal-sheet [data-af-element-effect]').hasAttribute('data-af-effect-ready'));
-    await page.locator('#modal-sheet').evaluate(e => e.remove());
+    await page.waitForFunction(() => document.querySelector('#modal-sheet-host > [data-af-element-effect]').hasAttribute('data-af-effect-ready'));
+    await page.locator('#modal-sheet-host').evaluate(e => e.remove());
     // Old installed templates receive just a decorative node, with no template restore.
-    await page.locator('#profile [data-af-element-effect]').evaluate(e => e.remove());
+    await page.locator('body > [data-af-element-effect]').evaluate(e => e.remove());
     await page.locator('#profile').evaluate(e => e.insertAdjacentHTML('beforeend', '<small>updated hero</small>'));
-    await page.waitForFunction(() => document.querySelectorAll('#profile [data-af-element-effect]').length === 1);
+    await page.waitForFunction(() => document.querySelectorAll('body > [data-af-element-effect]').length === 1);
     await page.setViewportSize({ width: 1100, height: 900 });
     // ACP live preview uses the same compiler textures/asset keyframes for all six presets.
     await page.setContent(fixture.editor);
@@ -117,7 +132,7 @@ const componentCSS = ['adaptivethemeframework/assets/surfaces/profile.css', 'ada
       return route.fulfill({ body: fs.readFileSync(path.join(assets, file)), contentType: file.endsWith('.js') ? 'application/javascript' : 'text/css' });
     });
     const fallback = await noJS.newPage(); await fallback.setContent(fixture.html);
-    assert.equal(await fallback.locator('#profile [data-af-element-effect]').evaluate(e => getComputedStyle(e).display), 'none');
+    assert.equal(await fallback.locator('body > [data-af-element-effect]').evaluate(e => getComputedStyle(e).display), 'none');
     assert.equal(await fallback.locator('#profile-button').isVisible(), true);
     await noJS.close();
     console.log(`ElementTheme effects ${isFirefox ? 'Firefox' : 'Chromium'}: six previews, four surfaces, palette inheritance, bounded postbit/mobile, visibility/inactivity, reduced motion, AJAX, no-JS fallback and click-through passed.`);

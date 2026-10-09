@@ -95,7 +95,7 @@ editor_check(af_elementtheme_get_metadata('fire')['custom_css'] === $globalCss &
 $stored = json_decode($db->rows['af_element_theme_styles'][0]['palette_json'], true);
 editor_check(isset($stored['variables']['--af-element-glow']) && !isset($stored['main']), 'New JSON metadata shape');
 $compiled = af_elementtheme_overrides()['css'];
-editor_check(str_contains($compiled, '@scope ([data-element="fire"]) to (:scope [data-element])') && str_contains($compiled, '@scope ([data-element="fire"][data-element-surface="profile"])'), 'Element/surface scoped compiler');
+editor_check(str_contains($compiled, '@scope ([data-element="fire"]:not([data-af-element-effect-only])) to (:scope [data-element])') && str_contains($compiled, '@scope ([data-element="fire"][data-element-surface="profile"]:not([data-af-element-effect-only]))'), 'Element/surface scoped compiler');
 editor_check(str_contains($compiled, '--af-element-glow:0 0 20px #000 !important;'), 'Extra variable did not compile');
 editor_check(af_elementtheme_get_surface_style('fire', 'sheet')['main'] === '#123456', 'Existing palette API global inheritance failed');
 editor_check(af_elementtheme_get_surface_style('fire', 'profile')['accent'] === 'hsl(120, 50%, 50%)', 'Surface variable override lost');

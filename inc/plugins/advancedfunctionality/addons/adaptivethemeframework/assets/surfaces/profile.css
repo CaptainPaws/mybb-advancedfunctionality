@@ -522,8 +522,8 @@ body.atf-active.atf-profile-page .af-apui-rewards-grid .af-apui-empty { padding:
 }
 
 /* Surface-owned full background: the layer sits above root paint, below content. */
-.atf-profile[data-af-element-effect-active] { position: relative; isolation: isolate; }
-.atf-profile > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+body.af-apui-member-profile-page[data-af-element-effect-active] { isolation: isolate; }
+body.af-apui-member-profile-page > [data-af-element-effect][data-af-effect-ready] { position: fixed !important; inset: 0; z-index: -1; }
 
 /* Component accents remain independent of whether the background effect is enabled. */
 body.atf-active.atf-profile-page .atf-profile[data-element]:not([data-element=""]) :is(.atf-profile__panel h2, .af-apui-character-infobox dt, .af-apui-character-card h2) {
