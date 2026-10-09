@@ -1291,7 +1291,8 @@ function af_adaptivethemeframework_resolve_post_secondary_avatar(array $post): s
 /** Resolve approved character identity through AdvancedElementTheme. */
 function af_adaptivethemeframework_post_element(int $uid): string
 {
-    static $cache = [];
+    $cache =& $GLOBALS['af_adaptivethemeframework_post_elements'];
+    if (!is_array($cache)) $cache = [];
     if ($uid <= 0) return '';
     if (array_key_exists($uid, $cache)) return $cache[$uid];
     $payload = function_exists('af_apui_get_profile_character_payload')
@@ -1302,8 +1303,8 @@ function af_adaptivethemeframework_post_element(int $uid): string
 
     // Knowledge Base owns identity; AdvancedElementTheme owns presentation. Unknown/missing values must remain neutral; never manufacture an
     // accent from uid, group, appearance, or any other author attribute.
-    return $cache[$uid] = function_exists('af_elementtheme_resolve_key')
-        ? af_elementtheme_resolve_key($value)
+    return $cache[$uid] = function_exists('af_elementtheme_resolve_surface_key')
+        ? af_elementtheme_resolve_surface_key($uid, 'postbit', $value)
         : '';
 }
 
@@ -1423,12 +1424,15 @@ function af_adaptivethemeframework_preload_postbit_data(array &$post): void
     if (function_exists('af_characterworkflow_preload_active_applications')) {
         af_characterworkflow_preload_active_applications($uids);
     }
+    if (function_exists('af_elementtheme_preload_surface_contexts')) af_elementtheme_preload_surface_contexts($uids);
     $elements = null;
     if (function_exists('af_atf_preload_author_elements')) $elements = af_atf_preload_author_elements($uids);
     foreach ($uids as $id) {
         $GLOBALS['af_adaptivethemeframework_author_data'][$id] = [
             'secondary' => function_exists('af_apf_get_secondary_avatar') ? af_apf_get_secondary_avatar($id) : '',
-            'element' => $elements !== null ? (string)($elements[$id] ?? '') : af_adaptivethemeframework_post_element($id),
+            'element' => $elements !== null
+                ? (function_exists('af_elementtheme_resolve_surface_key') ? af_elementtheme_resolve_surface_key($id, 'postbit', (string)($elements[$id] ?? '')) : '')
+                : af_adaptivethemeframework_post_element($id),
         ];
     }
 }

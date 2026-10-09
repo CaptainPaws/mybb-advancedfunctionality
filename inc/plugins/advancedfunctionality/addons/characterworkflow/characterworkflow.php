@@ -105,16 +105,24 @@ function af_cwf_ensure_schema(): void
     $db->write_query("\n        CREATE TABLE " . TABLE_PREFIX . AF_CWF_TABLE . " (\n          tid INT UNSIGNED NOT NULL,\n          state VARCHAR(32) NOT NULL DEFAULT 'draft',\n          source_fid INT UNSIGNED NOT NULL DEFAULT 0,\n          kb_entry_id INT UNSIGNED DEFAULT NULL,\n          sheet_id INT UNSIGNED DEFAULT NULL,\n          sheet_slug VARCHAR(190) DEFAULT NULL,\n          greeting_post_id INT UNSIGNED DEFAULT NULL,\n          wanted_id INT UNSIGNED DEFAULT NULL,\n          reviewed_by INT UNSIGNED DEFAULT NULL,\n          accepted_by_uid INT UNSIGNED DEFAULT NULL,\n          transferred_by_uid INT UNSIGNED DEFAULT NULL,\n          accepted_at INT UNSIGNED NOT NULL DEFAULT 0,\n          transferred_at INT UNSIGNED NOT NULL DEFAULT 0,\n          revision_requested_at INT UNSIGNED NOT NULL DEFAULT 0,\n          updated_at INT UNSIGNED NOT NULL DEFAULT 0,\n          PRIMARY KEY (tid),\n          KEY state (state),\n          KEY kb_entry_id (kb_entry_id),\n          KEY sheet_id (sheet_id),\n          KEY greeting_post_id (greeting_post_id),\n          KEY wanted_id (wanted_id)\n        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n    ");
 }
 
-function af_cwf_get_row(int $tid): array
+function af_cwf_preload_rows(array $tids): void
 {
     global $db;
-
-    if ($tid <= 0 || !is_object($db) || !$db->table_exists(AF_CWF_TABLE)) {
-        return [];
-    }
-
-    $row = $db->fetch_array($db->simple_select(AF_CWF_TABLE, '*', 'tid=' . $tid, ['limit' => 1]));
-    return is_array($row) ? $row : [];
+    if (!is_object($db) || !$db->table_exists(AF_CWF_TABLE)) return;
+    $rows =& $GLOBALS['af_cwf_rows'];
+    if (!is_array($rows)) $rows = [];
+    $missing = array_values(array_filter(array_unique(array_map('intval', $tids)), static fn(int $tid): bool => $tid > 0 && !array_key_exists($tid, $rows)));
+    if (!$missing) return;
+    foreach ($missing as $tid) $rows[$tid] = [];
+    $query = $db->simple_select(AF_CWF_TABLE, '*', 'tid IN (' . implode(',', $missing) . ')');
+    while ($row = $db->fetch_array($query)) $rows[(int)$row['tid']] = $row;
+}
+function af_cwf_get_row(int $tid): array
+{
+    if ($tid <= 0) return [];
+    if (array_key_exists($tid, (array)($GLOBALS['af_cwf_rows'] ?? []))) return $GLOBALS['af_cwf_rows'][$tid];
+    af_cwf_preload_rows([$tid]);
+    return (array)($GLOBALS['af_cwf_rows'][$tid] ?? []);
 }
 
 function af_cwf_upsert_row(int $tid, array $data): void
@@ -144,6 +152,10 @@ function af_cwf_upsert_row(int $tid, array $data): void
 
     $row = af_cwf_get_row($tid);
     $payload = array_merge($defaults, $row ?: [], $data, ['tid' => $tid, 'updated_at' => TIME_NOW]);
+    // A moderation write invalidates request contexts; styles and KB data are retained.
+    unset($GLOBALS['af_cwf_rows'][$tid], $GLOBALS['af_cwf_active_application_cache'],
+        $GLOBALS['af_apui_profile_element_keys'], $GLOBALS['af_adaptivethemeframework_author_data'],
+        $GLOBALS['af_adaptivethemeframework_post_elements']);
 
     if ($row) {
         $db->update_query(AF_CWF_TABLE, af_cwf_db_escape_array($payload), 'tid=' . $tid);

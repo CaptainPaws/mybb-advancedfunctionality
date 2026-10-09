@@ -89,6 +89,30 @@ function af_elementtheme_resolve_key(string $value): string
     $key = af_elementtheme_aliases()[$key] ?? '';
     return isset($elements[$key]) ? $key : '';
 }
+/** Presentation eligibility delegates approval to the existing character provider. */
+function af_elementtheme_resolve_surface_key(int $uid, string $surface, string $value, int $tid = 0): string
+{
+    if ($surface === 'application') return af_elementtheme_resolve_key($value);
+    if ($uid <= 0 || !in_array($surface, ['profile', 'postbit', 'sheet'], true)
+        || !function_exists('af_characterworkflow_resolve_active_application')
+        || !function_exists('af_apui_is_approved_character_application')) return '';
+    $active = af_characterworkflow_resolve_active_application($uid);
+    $activeTid = (int)($active['tid'] ?? 0);
+    if ($activeTid <= 0 || ($tid > 0 && $tid !== $activeTid)
+        || !af_apui_is_approved_character_application($uid, $activeTid, (array)($active['relation'] ?? []))) return '';
+    return af_elementtheme_resolve_key($value);
+}
+/** Batch existing workflow rows, never store permissions in the persistent theme cache. */
+function af_elementtheme_preload_surface_contexts(array $uids): void
+{
+    if (!function_exists('af_characterworkflow_resolve_active_application') || !function_exists('af_cwf_preload_rows')) return;
+    $tids = [];
+    foreach ($uids as $uid) {
+        $active = af_characterworkflow_resolve_active_application((int)$uid);
+        if ((int)($active['tid'] ?? 0) > 0) $tids[] = (int)$active['tid'];
+    }
+    af_cwf_preload_rows($tids);
+}
 function af_elementtheme_is_known_key(string $key): bool
 {
     return isset(af_elementtheme_get_elements()[$key]);
@@ -310,16 +334,24 @@ function af_advancedelementtheme_pre_output(string &$page): void
     $hasSurface = !empty($GLOBALS['af_elementtheme_rendered_surfaces']) || !empty($GLOBALS['af_charactersheets_has_frontend_component']) || (bool)preg_match('/\bclass=["\'][^"\']*\b(?:af-atf-display|af-cs-page|atf-post|atf-profile|af-apui-profile-page|af-kb-char-element)\b/', $page);
     if (!$hasSurface || !function_exists('af_frontend_asset_allowed')
         || !af_frontend_asset_allowed('advancedelementtheme', 'pre_output', null, ['has_element_surface' => true])) return;
+    // Resolve once from the viewed owner's approved provider, not competing globals.
+    $profileUid = (int)($GLOBALS['memprofile']['uid'] ?? 0);
+    $profileKey = $profileUid > 0 && function_exists('af_apui_profile_element_key')
+        ? af_apui_profile_element_key($profileUid)
+        : ($GLOBALS['atf_profile_context']['appearance']['element_theme_key'] ?? $GLOBALS['af_apui_profile_element'] ?? null);
+    if ($profileUid > 0 && $profileKey !== null) {
+        $GLOBALS['af_apui_profile_element'] = htmlspecialchars_uni($profileKey);
+        if (isset($GLOBALS['atf_profile_context'])) $GLOBALS['atf_profile_context']['appearance']['element_theme_key'] = $profileKey;
+    }
     // Old DB templates receive attributes at output time, without changing template ownership/backups.
-    $page = preg_replace_callback('/<(?:div|article|main)\b[^>]*\bclass=["\'][^"\']*\b(?:af-atf-display|af-cs-page|atf-post|atf-profile|af-apui-profile-page)\b[^"\']*["\'][^>]*>/i', static function ($match) {
+    $page = preg_replace_callback('/<(?:div|article|main)\b[^>]*\bclass=["\'][^"\']*\b(?:af-atf-display|af-cs-page|atf-post|atf-profile|af-apui-profile-page)\b[^"\']*["\'][^>]*>/i', static function ($match) use ($profileKey, $profileUid) {
         $tag = $match[0];
         preg_match('/\bclass=(["\'])(.*?)\1/i', $tag, $class);
         $classes = preg_split('/\s+/', trim($class[2] ?? ''));
         if (!array_intersect($classes, ['af-cs-page', 'atf-post', 'atf-profile', 'af-apui-profile-page', 'af-atf-display'])) return $tag;
         $surface = in_array('af-cs-page', $classes, true) ? 'sheet' : (in_array('atf-post', $classes, true) ? 'postbit' : (array_intersect($classes, ['atf-profile', 'af-apui-profile-page']) ? 'profile' : 'application'));
-        $profileKey = $surface === 'profile' ? ($GLOBALS['atf_profile_context']['appearance']['element_theme_key'] ?? $GLOBALS['af_apui_profile_element'] ?? null) : null;
         $hasElement = preg_match('/\bdata-element=(["\'])(.*?)\1/', $tag, $currentElement);
-        if ($profileKey !== null && (isset($GLOBALS['atf_profile_context']['appearance']['element_theme_key']) || !$hasElement || $currentElement[2] === '')) {
+        if ($surface === 'profile' && $profileKey !== null && ($profileUid > 0 || isset($GLOBALS['atf_profile_context']['appearance']['element_theme_key']) || !$hasElement || $currentElement[2] === '')) {
             $attribute = 'data-element="' . af_elementtheme_resolve_key((string)$profileKey) . '"';
             $tag = preg_match('/\bdata-element=(["\'])(.*?)\1/', $tag) ? preg_replace('/\bdata-element=(["\'])(.*?)\1/', $attribute, $tag) : substr($tag, 0, -1) . ' ' . $attribute . '>';
         }
@@ -327,7 +359,6 @@ function af_advancedelementtheme_pre_output(string &$page): void
         return preg_replace_callback('/\bdata-element=(["\'])(.*?)\1/', static fn($m) => 'data-element="' . af_elementtheme_resolve_key($m[2]) . '"', $tag) ?? $tag;
     }, $page) ?? $page;
     // Approved ATF/APUI context is copied to the profile page host, never viewer data.
-    $profileKey = $GLOBALS['atf_profile_context']['appearance']['element_theme_key'] ?? $GLOBALS['af_apui_profile_element'] ?? null;
     if ($profileKey !== null) {
         $page = preg_replace_callback('/<body\b[^>]*>/i', static function ($match) use ($profileKey) {
             $tag = $match[0];

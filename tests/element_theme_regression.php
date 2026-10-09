@@ -95,7 +95,9 @@ $permission = false; $denied = '<head></head><div class="af-cs-page"></div>'; $b
 $fragment = '<div class="af-cs-page" data-element="shadow"></div>'; af_advancedelementtheme_pre_output($fragment); element_check(!str_contains($fragment, '<link') && str_contains($fragment, 'data-element-surface="sheet"'), 'Fragment assets/surface contract');
 $trigger = '<head></head><a>Open sheet</a>'; $GLOBALS['af_charactersheets_has_frontend_component'] = true; af_advancedelementtheme_pre_output($trigger); element_check(str_contains($trigger, 'data-af-element-theme'), 'Modal caller palette missing'); unset($GLOBALS['af_charactersheets_has_frontend_component']);
 // Actual postbit consumer retains its approved-payload source and remains neutral without it.
-function af_apui_get_profile_character_payload(int $uid): array { return $uid === 42 ? ['fields' => ['character_element' => ['value' => 'shadow']]] : []; }
+function af_characterworkflow_resolve_active_application(int $uid): ?array { return $uid === 42 ? ['tid' => 142, 'relation' => ['uid' => 42, 'accepted' => 1]] : null; }
+function af_apui_is_approved_character_application(int $uid, int $tid, array $relation): bool { return $uid === 42 && $tid === 142; }
+function af_apui_get_profile_character_payload(int $uid): array { return $uid === 42 ? ['tid' => 142, 'fields' => ['character_element' => ['value' => 'shadow']]] : []; }
 require AF_ADDONS . 'adaptivethemeframework/adaptivethemeframework.php';
 element_check(af_adaptivethemeframework_post_element(42) === 'shadow' && af_adaptivethemeframework_post_element(43) === '', 'Postbit approved/neutral gating');
 // Actual application renderer, with only its direct dependencies mocked.
@@ -113,6 +115,7 @@ $app = af_atf_build_display_block_for_tid_fid(12, 34);
 element_check(str_contains($app, 'data-element="shadow"') && str_contains($app, 'data-element-surface="application"'), 'Application renderer contract');
 // Sheet resolver block and template root use the same canonical key.
 $sheetSource = file_get_contents(AF_ADDONS . 'charactersheets/modules/render.php');
+$uid = 42; $tid = 142;
 $sheetStart = strpos($sheetSource, '$sheet_element_theme_key = function_exists(');
 $sheetResolver = substr($sheetSource, $sheetStart, strpos($sheetSource, ';', $sheetStart) - $sheetStart + 1);
 $element_value = 'dark'; eval($sheetResolver);

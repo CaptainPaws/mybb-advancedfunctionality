@@ -2278,8 +2278,8 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     if ($element_value === '') {
         $element_value = af_charactersheets_pick_field_value($atf_index, ['character_element', 'element']);
     }
-    $sheet_element_theme_key = function_exists('af_elementtheme_resolve_key')
-        ? htmlspecialchars_uni(af_elementtheme_resolve_key($element_value))
+    $sheet_element_theme_key = function_exists('af_elementtheme_resolve_surface_key')
+        ? htmlspecialchars_uni(af_elementtheme_resolve_surface_key($uid, 'sheet', $element_value, $tid))
         : '';
     if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('sheet', $sheet_element_theme_key);
     $surface_context = ['element_key' => $sheet_element_theme_key, 'surface' => 'sheet'];

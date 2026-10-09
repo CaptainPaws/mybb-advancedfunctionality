@@ -371,6 +371,24 @@ function af_apui_get_profile_character_payload(int $uid, array $sheetPayload = [
         : ['tid' => $tid, 'about_html' => '', 'fields' => []];
 }
 
+/** Shared approval check; a workflow row is authoritative over stale accepted flags. */
+function af_apui_is_approved_character_application(int $uid, int $tid, array $relation): bool
+{
+    if ($uid <= 0) return false;
+    if ($tid <= 0 || ((int)($relation['uid'] ?? 0) > 0 && (int)$relation['uid'] !== $uid)) {
+        return false;
+    }
+
+    if (function_exists('af_cwf_get_row')) {
+        $workflow = af_cwf_get_row($tid);
+        $state = strtolower(trim((string)($workflow['state'] ?? '')));
+        if ($workflow) return in_array($state, ['approved', 'transferred', 'accepted'], true);
+    }
+
+    return !empty($relation['accepted'])
+        || (function_exists('af_charactersheets_is_accepted') && af_charactersheets_is_accepted($tid));
+}
+
 /** Return profile fields only from a CharacterSheets application in an approved state. */
 function af_apui_get_approved_profile_character_payload(int $uid): array
 {
@@ -380,25 +398,7 @@ function af_apui_get_approved_profile_character_payload(int $uid): array
         return ['tid' => 0, 'about_html' => '', 'fields' => []];
     }
 
-    $isApproved = static function (int $tid, array $relation) use ($uid): bool {
-        if ($tid <= 0 || ((int)($relation['uid'] ?? 0) > 0 && (int)$relation['uid'] !== $uid)) {
-            return false;
-        }
-
-        if (function_exists('af_cwf_get_row')) {
-            $workflow = af_cwf_get_row($tid);
-            $state = strtolower(trim((string)($workflow['state'] ?? '')));
-            if (in_array($state, ['draft', 'under_review', 'needs_revision', 'archived'], true)) {
-                return false;
-            }
-            if (in_array($state, ['approved', 'transferred', 'accepted'], true)) {
-                return true;
-            }
-        }
-
-        return !empty($relation['accepted'])
-            || (function_exists('af_charactersheets_is_accepted') && af_charactersheets_is_accepted($tid));
-    };
+    $isApproved = static fn(int $tid, array $relation): bool => af_apui_is_approved_character_application($uid, $tid, $relation);
 
     $active = function_exists('af_characterworkflow_resolve_active_application')
         ? af_characterworkflow_resolve_active_application($uid)
@@ -450,7 +450,9 @@ function af_apui_profile_element_key(int $uid, ?array $payload = null): string
         $resolved = af_elementtheme_resolve_key((string)$field[$candidate]);
         if ($resolved !== '') break;
     }
-    return $GLOBALS['af_apui_profile_element_keys'][$uid] = $resolved;
+    return $GLOBALS['af_apui_profile_element_keys'][$uid] = function_exists('af_elementtheme_resolve_surface_key')
+        ? af_elementtheme_resolve_surface_key($uid, 'profile', $resolved, (int)($payload['tid'] ?? 0))
+        : '';
 }
 
 /** Match the shared profile/postbit element contract: canonical value, raw value, then normalized key. */

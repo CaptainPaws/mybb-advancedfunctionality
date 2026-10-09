@@ -24,6 +24,12 @@ $authorCalls=[];
 function af_apf_get_secondary_avatar(int $uid): string {global $authorCalls;$authorCalls[$uid]=($authorCalls[$uid]??0)+1;return '/secondary-'.$uid.'.png';}
 function af_apui_get_profile_character_payload(int $uid): array {return ['fields'=>['character_element'=>['value'=>'fire']]];}
 function af_elementtheme_resolve_key(string $key): string {return $key==='fire'?'fire':'';}
+// Exercise the real presentation gate with the test's approved character provider.
+function af_apui_is_approved_character_application(int $uid, int $tid, array $relation): bool { return $uid === 42; }
+
+function af_characterworkflow_resolve_active_application(int $uid): ?array { return ['tid' => 100 + $uid, 'relation' => ['uid' => $uid]]; }
+$source = file_get_contents(AF_ADDONS.'advancedelementtheme/advancedelementtheme.php');
+preg_match('/function af_elementtheme_resolve_surface_key\(.*?\n\}/s', $source, $gate); eval($gate[0]);
 af_adaptivethemeframework_preload_postbit_data($post);
 $reads=$db->reads;
 for($i=0;$i<20;$i++){ $row=$post;af_adaptivethemeframework_compose_postbit($row);check($row['af_atf_element']==='fire','Element lost');check(str_contains($row['af_atf_secondary_avatar'],'secondary-42'),'Secondary lost');check(str_contains($row['af_atf_post_reputation_html'],'+1'),'Reputation lost');}

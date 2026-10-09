@@ -49,7 +49,7 @@ active_application_gate_assert(
 );
 active_application_gate_assert(
     strpos($theme, 'af_apui_get_profile_character_payload($uid)') !== false
-        && strpos($theme, "return \$cache[\$uid] = function_exists('af_elementtheme_resolve_key')") !== false,
+        && strpos($theme, "return \$cache[\$uid] = function_exists('af_elementtheme_resolve_surface_key')") !== false,
     'Postbit element is not derived from the gated profile payload'
 );
 active_application_gate_assert(

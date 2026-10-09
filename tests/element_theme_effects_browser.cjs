@@ -21,7 +21,7 @@ const componentCSS = ['adaptivethemeframework/assets/surfaces/profile.css', 'ada
     const page = await context.newPage();
     await page.setContent(fixture.html);
     for (const file of componentCSS) await page.addStyleTag({ content: fs.readFileSync(path.join(addons, file), 'utf8') });
-    await page.addStyleTag({ content: 'body { --atf-space-4: 16px; }' });
+    await page.addStyleTag({ content: 'body { --atf-space-4: 16px; --atf-color-page-subtle: #10151c; --af-apui-postbit-author-bg-image: linear-gradient(#202530,#11151a); }' });
     const layer = page.locator('body > [data-af-element-effect]');
     await page.waitForFunction(() => document.querySelector('body > [data-af-element-effect]').hasAttribute('data-af-effect-running'));
     assert.equal(await page.locator('[data-af-effect-ready]').count(), 5);
@@ -42,11 +42,11 @@ const componentCSS = ['adaptivethemeframework/assets/surfaces/profile.css', 'ada
       const result = await page.locator(selector).evaluate(host => {
         const layer = Array.from(host.children).find(e => e.hasAttribute('data-af-element-effect'));
         const a = host.getBoundingClientRect(), b = layer.getBoundingClientRect();
-        const before = [a.width, a.height, host.matches('.atf-post__topbar') ? getComputedStyle(host).position : host.querySelector('.atf-post__sidebar-inner') ? getComputedStyle(host.querySelector('.atf-post__sidebar-inner')).position : null];
+        const before = [a.x, a.y, a.width, a.height, host.matches('.atf-post__topbar') ? getComputedStyle(host).position : host.querySelector('.atf-post__sidebar-inner') ? getComputedStyle(host.querySelector('.atf-post__sidebar-inner')).position : null];
         const palette = getComputedStyle(host).getPropertyValue('--af-element-accent');
         layer.removeAttribute('data-af-effect-ready'); host.removeAttribute('data-af-element-effect-active'); layer.remove();
         const off = host.getBoundingClientRect();
-        const offBox = [off.width, off.height, host.matches('.atf-post__topbar') ? getComputedStyle(host).position : host.querySelector('.atf-post__sidebar-inner') ? getComputedStyle(host.querySelector('.atf-post__sidebar-inner')).position : null];
+        const offBox = [off.x, off.y, off.width, off.height, host.matches('.atf-post__topbar') ? getComputedStyle(host).position : host.querySelector('.atf-post__sidebar-inner') ? getComputedStyle(host.querySelector('.atf-post__sidebar-inner')).position : null];
         host.prepend(layer); host.setAttribute('data-af-element-effect-active', ''); layer.setAttribute('data-af-effect-ready', '');
         return { before, offBox, isolation: getComputedStyle(host).isolation, bounds: [host === document.body ? innerWidth : host.clientWidth, host === document.body ? innerHeight : host.clientHeight, Math.round(b.width), Math.round(b.height)], palette, afterPalette: getComputedStyle(host).getPropertyValue('--af-element-accent') };
       });
@@ -58,15 +58,15 @@ const componentCSS = ['adaptivethemeframework/assets/surfaces/profile.css', 'ada
     assert.equal(await page.locator('#sheet > [data-af-element-effect], #profile > [data-af-element-effect]').count(), 0);
     // Real paint on the external host: decoration survives an opaque background,
     // while the profile body never acquires authored :scope layout properties.
-    for (const selector of ['body', '#sheet-host']) {
+    for (const selector of ['body', '#sheet-host', '#postbit .atf-post__sidebar']) {
       const host = page.locator(selector);
       const decoration = host.locator(':scope > [data-af-element-effect]');
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await host.evaluate(e => e.style.background = 'rgb(2,3,4)');
-      await decoration.evaluate(e => { e.style.setProperty('--af-effect-field', 'linear-gradient(lime,lime)'); e.style.setProperty('--af-effect-opacity', '1'); e.style.setProperty('--af-effect-strength', '1'); e.removeAttribute('data-af-effect-ready'); });
-      const off = await page.screenshot();
+      await decoration.evaluate(e => { e.style.setProperty('--af-effect-field', 'linear-gradient(lime,lime)'); e.style.setProperty('--af-effect-light-points', 'linear-gradient(lime,lime)'); e.style.setProperty('--af-effect-opacity', '1'); e.style.setProperty('--af-effect-strength', '1'); e.removeAttribute('data-af-effect-ready'); });
+      const off = await host.screenshot();
       await decoration.evaluate(e => e.setAttribute('data-af-effect-ready', ''));
-      assert.notDeepEqual(await page.screenshot(), off, selector + ' background hid effect');
+      assert.notDeepEqual(await host.screenshot(), off, selector + ' background hid effect');
       await decoration.evaluate(e => e.removeAttribute('style'));
       await host.evaluate(e => e.style.removeProperty('background'));
     }
@@ -76,7 +76,7 @@ const componentCSS = ['adaptivethemeframework/assets/surfaces/profile.css', 'ada
     const rootStyle = await page.locator('#application').getAttribute('style');
     const appLayer = page.locator('#application > [data-af-element-effect]');
     await page.locator('#application').evaluate(e => { e.style.padding = '24px'; e.style.background = 'rgb(2,3,4)'; });
-    await appLayer.evaluate(e => { e.style.setProperty('--af-effect-field', 'linear-gradient(lime,lime)'); e.style.setProperty('--af-effect-opacity', '1'); e.style.setProperty('--af-effect-strength', '1'); e.removeAttribute('data-af-effect-ready'); });
+    await appLayer.evaluate(e => { e.style.setProperty('--af-effect-field', 'linear-gradient(lime,lime)'); e.style.setProperty('--af-effect-light-points', 'linear-gradient(lime,lime)'); e.style.setProperty('--af-effect-opacity', '1'); e.style.setProperty('--af-effect-strength', '1'); e.removeAttribute('data-af-effect-ready'); });
     const paintedOff = await page.locator('#application').screenshot();
     await appLayer.evaluate(e => e.setAttribute('data-af-effect-ready', ''));
     const paintedOn = await page.locator('#application').screenshot();
@@ -111,6 +111,26 @@ const componentCSS = ['adaptivethemeframework/assets/surfaces/profile.css', 'ada
     await page.locator('#profile').evaluate(e => e.insertAdjacentHTML('beforeend', '<small>updated hero</small>'));
     await page.waitForFunction(() => document.querySelectorAll('body > [data-af-element-effect]').length === 1);
     await page.setViewportSize({ width: 1100, height: 900 });
+    // Browser replay of actual approved-provider -> PHP pre_output DOM, including
+    // an empty ATF global and a conflicting fire global for an unapproved owner.
+    const profileDOM = JSON.parse(execFileSync(process.env.PHP_BINARY || 'php', [path.join(__dirname, 'element_theme_profile_flow_regression.php'), '--browser-fixture'], { encoding: 'utf8' }));
+    const deliveredHead = fixture.html.match(/<head>([\s\S]*?)<\/head>/)[1];
+    for (const uid of ['1', '2']) {
+      const rendered = profileDOM[uid].replace('</head>', deliveredHead + '</head>');
+      const checked = await context.newPage();
+      await checked.setContent(rendered);
+      await checked.addStyleTag({ content: fs.readFileSync(path.join(addons, 'adaptivethemeframework/assets/surfaces/profile.css'), 'utf8') });
+      const expected = uid === '1' ? 'fire' : '';
+      assert.equal(await checked.locator('body').getAttribute('data-element'), expected);
+      assert.equal(await checked.locator('main.atf-profile').getAttribute('data-element'), expected);
+      if (uid === '1') {
+        await checked.waitForFunction(() => document.querySelector('body > [data-af-element-effect]')?.hasAttribute('data-af-effect-ready'));
+        assert.equal(await checked.locator('main').evaluate(e => getComputedStyle(e).getPropertyValue('--af-element-accent').trim()), '#37c4ff');
+        for (const selector of ['.atf-profile-hero__name', '.atf-profile-nav__item', '.atf-profile__panel h2']) assert.equal(await checked.locator(selector).evaluate(e => getComputedStyle(e).color), 'rgb(55, 196, 255)');
+        assert.notEqual(await checked.locator('.atf-profile-hero').evaluate(e => getComputedStyle(e).borderTopColor), 'rgba(0, 0, 0, 0)');
+      } else assert.equal(await checked.locator('[data-af-effect-ready]').count(), 0);
+      await checked.close();
+    }
     // ACP live preview uses the same compiler textures/asset keyframes for all six presets.
     await page.setContent(fixture.editor);
     await page.waitForFunction(() => document.querySelector('[data-af-et-effect-preview] [data-af-effect-ready]'));

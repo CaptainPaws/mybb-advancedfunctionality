@@ -178,3 +178,23 @@ Sheet renderers pass canonical keys into per-instance wrappers (or standalone
 body attributes); instances are never matched by UID. Postbit hosts inherit one
 author key and one surface configuration. Ancestry lookup bridges installed
 templates without restoring them; application integration is unchanged.
+
+## Presentation eligibility
+
+Use `af_elementtheme_resolve_surface_key($ownerUid, $surface, $value, $applicationTid)`
+for profile, sheet and postbit. It delegates acceptance to APUI's existing
+approved-character check and the current CharacterWorkflow relation; sheet
+instances must match their application tid. A workflow row is authoritative,
+including rejection/revocation despite an older accepted flag. Missing approval,
+missing relation and unknown KB keys return an empty key, disabling palette,
+Custom CSS and effects together. The published application topic is the explicit
+exception and uses its selected canonical key before acceptance; its author's
+postbit does not share that exception.
+
+Showthread preloads workflow rows in one batch alongside existing author/value
+batches. No permission is stored in the persistent ElementTheme metadata cache.
+CharacterWorkflow writes invalidate request-level row, author and profile-element
+contexts; new requests independently resolve the current status. Presentation
+metadata and selected elements are retained across moderation transitions.
+Runtime palette/effect sources declare conditional file ownership through AF's
+manifest theme stylesheet contract, preventing automatic managed theme copies.
