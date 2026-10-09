@@ -1866,6 +1866,7 @@ function af_apui_member_profile_prepare_layout_vars(): void
         ? af_elementtheme_resolve_key($elementValue)
         : '';
     $GLOBALS['af_apui_profile_element'] = htmlspecialchars_uni($elementThemeKey);
+    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('profile');
     if (!empty($sheetPayload['enabled'])
         && trim((string)($sheetPayload['sheet_slug'] ?? '')) !== ''
         && trim((string)($sheetPayload['sheet_url'] ?? '')) !== ''

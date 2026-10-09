@@ -36,7 +36,10 @@ from a user ID, group, appearance or Wanted reservation.
 New frontend integrations must follow AF's manifest-based frontend permission
 architecture. AdvancedElementTheme's manifest declares a response-aware context
 with directory fallback disabled. Its owner delivery checks
-`af_frontend_asset_allowed()` with an actual `has_element_surface` fact. Modal
+`af_frontend_asset_allowed()` with an actual `has_element_surface` fact. Renderers call
+`af_elementtheme_mark_surface($surface)` when producing a component; full-page
+modal callers mark the surface before emitting the head. Legacy HTML detection
+is a compatibility fallback, not the primary integration. Modal
 caller pages use CharacterSheets' existing component fact. HTML fragments/JSON
 receive no asset tags; the caller already owns the stylesheet. KB element chips
 also consume the shared palette.
@@ -101,12 +104,22 @@ or `[data-element="KEY"][data-element-surface="SURFACE"]`; scoped regions stop
 at nested element roots. Use `:scope` for the root itself. Complex selectors
 cannot style siblings or another element/surface outside this region. This
 requires a browser with CSS @scope support; base palette variables remain ordinary
-CSS. @media/@supports/@container groups are supported. Global definitions such
+CSS. ACP token declarations use `!important` only for `--af-element-*`.
+Custom CSS declarations are compiled as important in dedicated layers:
+`af_elementtheme_surface_custom` before `af_elementtheme_global_custom` (important
+layer order is reversed). This gives surface Custom CSS precedence over global
+Custom CSS, and both over late/unlayered component CSS, regardless of ATF asset
+delivery order or selector specificity. Only authored properties are overridden;
+component layout and other forum theme tokens remain owned by their consumers.
+Postbit accent consumes the common accent token, while its gradient also uses main.
+@media/@supports/@container groups are supported. Global definitions such
 as @import/@font-face/@keyframes are rejected, as are unbalanced CSS and HTML
 style termination. Escapes outside quoted strings are rejected to avoid ambiguous
 scoping validation. Extra variable values cannot contain declaration delimiters.
 
-Regression coverage: `tests/element_theme_editor_regression.php`,
+Regression coverage: `tests/element_theme_delivery_regression.php`,
+`tests/element_theme_delivery_browser.cjs` (Chromium; `AF_TEST_BROWSER=firefox` for
+an installed Playwright Firefox), `tests/element_theme_editor_regression.php`,
 `tests/element_theme_editor_browser.cjs`, `tests/element_theme_regression.php`, the existing ATF
 postbit/batch/hot-path, active-application gate, profile composition and
 CharacterSheets frontend regressions.

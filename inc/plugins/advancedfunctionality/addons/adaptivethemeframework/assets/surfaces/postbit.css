@@ -270,7 +270,7 @@ body.atf-active .atf-post.af-atf-display {
   color: inherit;
 }
 body.atf-active .atf-post.af-atf-display[data-element]:not([data-element=""]) {
-  --atf-post-accent: var(--af-element-main, var(--atf-neutral-accent));
+  --atf-post-accent: var(--af-element-accent, var(--atf-neutral-accent));
   --atf-post-accent-soft: var(--af-element-soft, color-mix(in srgb, var(--atf-neutral-accent) 18%, transparent));
   --atf-post-accent-gradient: linear-gradient(135deg, var(--af-element-main, var(--atf-neutral-accent)), var(--af-element-accent, var(--atf-neutral-accent)));
 }

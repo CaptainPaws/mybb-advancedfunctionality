@@ -56,3 +56,36 @@ function af_elementtheme_validate_css_balance(string $css, bool $rules): void
     }
     if ($stack || $quote !== '' || $comment) throw new InvalidArgumentException('Незакрытый CSS блок, строка или комментарий.');
 }
+
+/** Prioritize declarations only; leave selectors, conditional groups and strings intact. */
+function af_elementtheme_prioritize_custom_css(string $css): string
+{
+    $out = ''; $start = 0; $depth = 0; $parens = 0; $brackets = 0;
+    $quote = ''; $comment = false; $length = strlen($css);
+    $declaration = static function (string $text, int $depth): string {
+        $plain = preg_replace('~/\*.*?\*/~s', '', $text);
+        if ($depth > 0 && preg_match('/^\s*(?:--[a-z0-9_-]+|[a-z-]+)\s*:/i', $plain)
+            && !preg_match('/!\s*important\s*$/i', $plain)) return rtrim($text) . ' !important';
+        return $text;
+    };
+    for ($i = 0; $i < $length; ++$i) {
+        $char = $css[$i]; $next = $css[$i + 1] ?? '';
+        if ($comment) { if ($char === '*' && $next === '/') { $comment = false; ++$i; } continue; }
+        if ($quote !== '') { if ($char === '\\') ++$i; elseif ($char === $quote) $quote = ''; continue; }
+        if ($char === '/' && $next === '*') { $comment = true; ++$i; continue; }
+        if ($char === '"' || $char === "'") { $quote = $char; continue; }
+        if ($char === '(') ++$parens;
+        elseif ($char === ')') --$parens;
+        elseif ($char === '[') ++$brackets;
+        elseif ($char === ']') --$brackets;
+        if ($parens || $brackets) continue;
+        if ($char === '{') {
+            $out .= substr($css, $start, $i - $start) . '{'; ++$depth; $start = $i + 1;
+        } elseif ($char === ';' || $char === '}') {
+            $out .= $declaration(substr($css, $start, $i - $start), $depth) . $char;
+            if ($char === '}') --$depth;
+            $start = $i + 1;
+        }
+    }
+    return $out . substr($css, $start);
+}

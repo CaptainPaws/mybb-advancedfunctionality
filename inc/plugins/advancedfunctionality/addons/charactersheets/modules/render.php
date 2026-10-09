@@ -2268,6 +2268,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     }
 
     $GLOBALS['af_charactersheets_has_frontend_component'] = true;
+    if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('sheet');
     $character_source = af_charactersheets_resolve_character_kb_entry($tid, $uid, $accept_row);
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
     $character_stats = (array)(($character_source['payload'] ?? [])['stats'] ?? []);

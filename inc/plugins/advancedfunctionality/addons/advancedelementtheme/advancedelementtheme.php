@@ -94,6 +94,12 @@ function af_elementtheme_is_known_key(string $key): bool
 }
 function af_elementtheme_surfaces(): array { return ['application', 'sheet', 'postbit', 'profile']; }
 
+/** Renderer fact: call on the full-page/modal caller, without owning its templates. */
+function af_elementtheme_mark_surface(string $surface): void
+{
+    if (in_array($surface, af_elementtheme_surfaces(), true)) $GLOBALS['af_elementtheme_rendered_surfaces'][$surface] = true;
+}
+
 /** Compatibility for callers of the original four-token API. */
 function af_elementtheme_validate_palette(array $palette): array
 {
@@ -159,8 +165,8 @@ function af_elementtheme_overrides(): array
     global $db, $cache;
     if (isset($GLOBALS['af_elementtheme_overrides'])) return $GLOBALS['af_elementtheme_overrides'];
     $data = is_object($cache) ? $cache->read('af_elementtheme') : false;
-    if (!is_array($data) || ($data['format'] ?? 0) !== 2 || !isset($data['styles'], $data['surfaces'], $data['css'])) {
-        $data = ['format' => 2, 'styles' => [], 'surfaces' => [], 'css' => ''];
+    if (!is_array($data) || ($data['format'] ?? 0) !== 3 || !isset($data['styles'], $data['surfaces'], $data['css'])) {
+        $data = ['format' => 3, 'styles' => [], 'surfaces' => [], 'css' => ''];
         if (is_object($db)) {
             foreach (['styles', 'surfaces'] as $kind) {
                 $table = 'af_element_theme_' . $kind;
@@ -184,6 +190,7 @@ function af_elementtheme_overrides(): array
 
 function af_elementtheme_compile_overrides(array $data): string
 {
+    $order = '@layer af_elementtheme_surface_custom, af_elementtheme_global_custom;';
     $css = '';
     foreach ($data['styles'] as $key => $metadata) {
         $css .= af_elementtheme_compile_style($key, $metadata);
@@ -191,7 +198,7 @@ function af_elementtheme_compile_overrides(array $data): string
     foreach ($data['surfaces'] as $key => $surfaces) {
         foreach ($surfaces as $surface => $metadata) $css .= af_elementtheme_compile_style($key, $metadata, $surface);
     }
-    return $css;
+    return $css === '' ? '' : $order . $css;
 }
 function af_elementtheme_compile_style(string $key, array $metadata, string $surface = ''): string
 {
@@ -199,11 +206,16 @@ function af_elementtheme_compile_style(string $key, array $metadata, string $sur
     $metadata = af_elementtheme_normalize_metadata($metadata);
     $selector = '[data-element="' . $key . '"]' . ($surface === '' ? '' : '[data-element-surface="' . $surface . '"]');
     $declarations = '';
-    foreach ($metadata['variables'] as $name => $value) $declarations .= $name . ':' . $value . ';';
+    foreach ($metadata['variables'] as $name => $value) $declarations .= $name . ':' . preg_replace('/\s*!\s*important\s*$/i', '', $value) . ' !important;';
     $css = $declarations === '' ? '' : $selector . '{' . $declarations . '}';
     // Native scope confines complex selectors and :scope to the root/subtree and
     // stops at nested element roots. Conditional @rules remain inside this scope.
-    if ($metadata['custom_css'] !== '') $css .= '@scope (' . $selector . ') to (:scope [data-element]) {' . $metadata['custom_css'] . '}';
+    // Important layers make explicitly authored ACP properties beat component rules,
+    // including late/unlayered ATF CSS. Surface precedes global in important order.
+    if ($metadata['custom_css'] !== '') {
+        $layer = $surface === '' ? 'af_elementtheme_global_custom' : 'af_elementtheme_surface_custom';
+        $css .= '@layer ' . $layer . '{@scope (' . $selector . ') to (:scope [data-element]) {' . af_elementtheme_prioritize_custom_css($metadata['custom_css']) . '}}';
+    }
     return $css;
 }
 function af_elementtheme_get_metadata(string $key, string $surface = ''): array
@@ -282,7 +294,7 @@ function af_elementtheme_save_style(string $key, array $palette, string $surface
 /** Response-aware owner delivery, also covers existing templates without surface attributes. */
 function af_advancedelementtheme_pre_output(string &$page): void
 {
-    $hasSurface = !empty($GLOBALS['af_charactersheets_has_frontend_component']) || (bool)preg_match('/\bclass=["\'][^"\']*\b(?:af-atf-display|af-cs-page|atf-post|atf-profile|af-apui-profile-page|af-kb-char-element)\b/', $page);
+    $hasSurface = !empty($GLOBALS['af_elementtheme_rendered_surfaces']) || !empty($GLOBALS['af_charactersheets_has_frontend_component']) || (bool)preg_match('/\bclass=["\'][^"\']*\b(?:af-atf-display|af-cs-page|atf-post|atf-profile|af-apui-profile-page|af-kb-char-element)\b/', $page);
     if (!$hasSurface || !function_exists('af_frontend_asset_allowed')
         || !af_frontend_asset_allowed('advancedelementtheme', 'pre_output', null, ['has_element_surface' => true])) return;
     // Old DB templates receive attributes at output time, without changing template ownership/backups.
@@ -292,11 +304,12 @@ function af_advancedelementtheme_pre_output(string &$page): void
         if (!str_contains($tag, 'data-element-surface=')) $tag = substr($tag, 0, -1) . ' data-element-surface="' . $surface . '">';
         return preg_replace_callback('/\bdata-element=(["\'])(.*?)\1/', static fn($m) => 'data-element="' . af_elementtheme_resolve_key($m[2]) . '"', $tag) ?? $tag;
     }, $page) ?? $page;
-    if (stripos($page, '</head>') === false || str_contains($page, 'data-af-element-theme')) return;
+    if (stripos($page, '</head>') === false) return;
     $base = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedelementtheme/assets/element-theme.css';
     $version = (string)(@filemtime(__DIR__ . '/assets/element-theme.css') ?: '1');
-    $html = '<link rel="stylesheet" href="' . htmlspecialchars_uni($base . '?v=' . $version) . '" data-af-element-theme>';
+    $html = preg_match('/<link\b[^>]*\sdata-af-element-theme(?:\s|>|=)/i', $page) ? '' : '<link rel="stylesheet" href="' . htmlspecialchars_uni($base . '?v=' . $version) . '" data-af-element-theme>';
     $css = af_elementtheme_overrides()['css'];
-    if ($css !== '') $html .= '<style data-af-element-theme-overrides>' . $css . '</style>';
-    $page = preg_replace('~</head>~i', $html . "\n</head>", $page, 1) ?? $page;
+    if ($css !== '' && !preg_match('/<style\b[^>]*\sdata-af-element-theme-overrides(?:\s|>|=)/i', $page)) $html .= '<style data-af-element-theme-overrides>' . $css . '</style>';
+    if ($html === '') return;
+    $page = preg_replace_callback('~</head>~i', static fn() => $html . "\n</head>", $page, 1) ?? $page;
 }
