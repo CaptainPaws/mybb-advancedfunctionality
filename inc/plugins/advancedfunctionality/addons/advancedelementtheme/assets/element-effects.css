@@ -1,63 +1,22 @@
-/* Original procedural decoration. Motion is compositor transforms/opacity only.
-   Layout/placement belongs to each surface owner, not this stylesheet. */
+/* Transparent decoration only. Surface owners retain layout, backgrounds and isolation. */
 [data-af-element-effect] { display: none; pointer-events: none; user-select: none; border-radius: inherit; overflow: hidden; contain: paint; }
 [data-af-element-effect][data-af-effect-ready] { position: absolute !important; inset: 0; z-index: -1 !important; display: block; opacity: var(--af-effect-opacity, .35); }
-[data-af-element-effect]::before, [data-af-element-effect]::after {
-  content: ""; position: absolute; inset: -8%; pointer-events: none;
-  background-image: var(--af-effect-field, var(--af-effect-points, none));
-  background-repeat: no-repeat; opacity: var(--af-effect-strength, .5);
-  transform-origin: 50% 65%;
-  animation: var(--af-effect-animation, af-effect-stardust) var(--af-effect-duration, 20s) ease-in-out infinite;
-  animation-play-state: paused;
+.af-element-canvas { position: absolute !important; display: block; pointer-events: none; max-width: none !important; max-height: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
+/* Preserve the current sticky-rail paint plane above APUI's background and
+   below foreground children. Clamp decoration, never the rail itself. */
+.atf-post__sidebar-inner > [data-af-element-effect][data-af-effect-ready] {
+  z-index: 0 !important; margin: 0 !important; padding: 0 !important;
+  border: 0 !important; min-width: 0; min-height: 0; width: auto; height: auto;
+  max-width: none; max-height: none; box-sizing: border-box;
+  overflow: hidden !important; contain: paint; clip-path: inset(0);
+  box-shadow: none !important; background: transparent;
 }
-[data-af-element-effect]::after {
-  background-image: radial-gradient(ellipse at 72% 85%, var(--af-effect-color, transparent), transparent 66%);
-  animation-name: af-effect-aura; animation-duration: calc(var(--af-effect-duration, 20s) * 1.4);
-  opacity: calc(var(--af-effect-strength, .5) * .45);
-}
-[data-af-element-effect][data-af-effect-running]::before,
-[data-af-element-effect][data-af-effect-running]::after { animation-play-state: running; }
-/* Long topics get three fixed non-repeating sparkles and a slow soft glow.
-   No lightning/flame/mist field on postbits, irrespective of selected preset. */
-@scope ([data-element-surface="postbit"]) to (:scope [data-element]) {
-[data-af-element-effect] { opacity: min(var(--af-effect-opacity, .35), .22); }
-[data-af-element-effect]::before {
-  background-image: var(--af-effect-light-points, none); animation-name: af-effect-stardust;
-  animation-duration: calc(var(--af-effect-duration, 20s) * 1.8);
-}
-[data-af-element-effect]::after { animation: none; }
-}
-@media (max-width: 680px) {
-  [data-af-element-effect]::before { background-image: var(--af-effect-light-points, none); animation-name: af-effect-stardust; }
-  [data-af-element-effect]::after { animation: none; }
+/* Used when motion is reduced or Canvas is unavailable. Never animates an image. */
+[data-af-element-effect]::before { content: none; }
+[data-af-element-effect][data-af-effect-ready]:not(:has(> .af-element-canvas))::before {
+  content: ""; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 30% 70%, var(--af-element-soft, transparent), transparent 65%);
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-af-element-effect]::before, [data-af-element-effect]::after { animation: none !important; transform: none !important; }
-}
-@keyframes af-effect-stardust { 0%,100% { opacity: calc(var(--af-effect-strength) * .3); transform: translate3d(0,0,0); } 50% { opacity: var(--af-effect-strength); transform: translate3d(1%, -2%, 0); } }
-@keyframes af-effect-embers { 0% { opacity: 0; transform: translate3d(-1%, 12%, 0); } 30%,70% { opacity: var(--af-effect-strength); } 100% { opacity: 0; transform: translate3d(2%, -18%, 0); } }
-@keyframes af-effect-mist { 0%,100% { opacity: calc(var(--af-effect-strength) * .5); transform: translate3d(-4%, 1%, 0) scale(1.05); } 50% { opacity: var(--af-effect-strength); transform: translate3d(4%, -2%, 0) scale(1.1); } }
-@keyframes af-effect-aura { 0%,100% { opacity: calc(var(--af-effect-strength) * .35); transform: rotate(-5deg) scale(1.03); } 50% { opacity: var(--af-effect-strength); transform: rotate(8deg) scale(1.12); } }
-@keyframes af-effect-electric { 0%,42%,48%,100% { opacity: calc(var(--af-effect-strength) * .08); transform: translate3d(0,0,0); } 45%,60% { opacity: var(--af-effect-strength); transform: translate3d(1%,0,0); } 63% { opacity: calc(var(--af-effect-strength) * .2); transform: translate3d(-1%,0,0); } }
-@keyframes af-effect-frost { 0%,100% { opacity: calc(var(--af-effect-strength) * .35); transform: translate3d(0,-2%,0) rotate(-3deg); } 50% { opacity: var(--af-effect-strength); transform: translate3d(0,2%,0) rotate(3deg); } }
-
-/* Sidebar decoration has an explicit paint plane, not a negative descendant
-   dependent on inherited backgrounds. Clamp the layer, not its sticky owner. */
-.atf-post__sidebar-inner > [data-af-element-effect][data-af-effect-ready] {
-  z-index: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  border: 0 !important;
-  min-width: 0;
-  min-height: 0;
-  width: auto;
-  height: auto;
-  max-width: none;
-  max-height: none;
-  box-sizing: border-box;
-  overflow: hidden !important;
-  contain: paint;
-  clip-path: inset(0);
-  box-shadow: none !important;
-  background: transparent;
+  [data-af-element-effect], .af-element-canvas { animation: none !important; transition: none !important; }
 }

@@ -5,34 +5,31 @@
   const settings = {};
   blocks.forEach(block => { try { Object.assign(settings, JSON.parse(block.textContent)); } catch (_) { /* malformed metadata stays inert */ } });
   const roots = '[data-element][data-element-surface]';
-  const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const tracked = new Map();
-  function play(layer, visible) {
-    tracked.set(layer, visible);
-    layer.toggleAttribute('data-af-effect-running', visible && !document.hidden && !motion.matches);
+  const bindings = new WeakMap();
+  const engine = window.afElementCanvasEngine;
+  if (!engine) return;
+  function start(host, layer, config, surface) { engine.register(host, layer, config, surface); }
+  function remember(root, hosts) {
+    for (const host of bindings.get(root) || []) if (!hosts.includes(host)) stop(host);
+    bindings.set(root, hosts);
   }
-  const visibility = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
-    entries.forEach(entry => play(entry.target, entry.isIntersecting));
-  }, { threshold: 0 }) : null;
   function mountApplication(root) {
     const config = settings[root.dataset.element];
     const surface = root.dataset.elementSurface;
     // Full surfaces own the layer on their canonical root. Only postbit uses
     // an inner host; explicit template metadata wins over the legacy class.
-    const host = surface === 'postbit'
-      ? Array.from(root.querySelectorAll('[data-af-element-effect-host]')).find(node => node.closest(roots) === root)
-        || root.querySelector('.atf-post__topbar')
-      : root;
+    const host = root;
+    remember(root, [host]);
     // Retire old hero/header layers without touching nested element surfaces.
     root.querySelectorAll('[data-af-element-effect-host]').forEach(old => {
       if (old === host || old.closest(roots) !== root) return;
-      Array.from(old.children).filter(child => child.hasAttribute('data-af-element-effect')).forEach(layer => { visibility?.unobserve(layer); tracked.delete(layer); layer.remove(); });
+      Array.from(old.children).filter(child => child.hasAttribute('data-af-element-effect')).forEach(layer => { engine.unregister(old); layer.remove(); });
       old.removeAttribute('data-af-element-effect-active'); old.removeAttribute('data-af-element-effect-host');
     });
     if (!host || host.closest(roots) !== root) return;
     let layer = Array.from(host.children).find(child => child.hasAttribute('data-af-element-effect'));
     if (!config || !config.enabled || !config.surfaces.includes(surface)) {
-      if (layer) { visibility?.unobserve(layer); tracked.delete(layer); layer.removeAttribute('data-af-effect-ready'); layer.removeAttribute('data-af-effect-running'); }
+      engine.unregister(host); if (layer) { layer.hidden = true; layer.removeAttribute('data-af-effect-ready'); }
       host.removeAttribute('data-af-element-effect-active'); return;
     }
     // Explicit owned template containers are preferred. Old installed templates
@@ -41,12 +38,12 @@
     host.setAttribute('data-af-element-effect-host', '');
     host.setAttribute('data-af-element-effect-active', '');
     layer.setAttribute('data-af-effect-ready', '');
-    if (!tracked.has(layer)) { play(layer, !visibility); visibility?.observe(layer); }
+    start(host, layer, config, surface);
   }
   function stop(host, remove = false) {
     Array.from(host.children).filter(child => child.hasAttribute('data-af-element-effect')).forEach(layer => {
-      visibility?.unobserve(layer); tracked.delete(layer);
-      layer.removeAttribute('data-af-effect-ready'); layer.removeAttribute('data-af-effect-running');
+      engine.unregister(host);
+      layer.hidden = true; layer.removeAttribute('data-af-effect-ready'); layer.removeAttribute('data-af-effect-running');
       if (remove) layer.remove();
     });
     host.removeAttribute('data-af-element-effect-active');
@@ -55,7 +52,8 @@
     const surface = root.dataset.elementSurface;
     // Application integration is deliberately unchanged in this task.
     if (surface === 'application') return mountApplication(root);
-    if (root.hasAttribute('data-af-element-effect-only')) return;
+    if (!root.matches(roots)) { remember(root, []); return; }
+    // Explicit body hosts also need to stop when their canonical key is cleared.
     const key = root.dataset.element;
     const config = settings[key];
     let hosts = [];
@@ -71,7 +69,10 @@
       hosts = Array.from(root.querySelectorAll('[data-af-element-effect-host="postbit-topbar"], [data-af-element-effect-host="postbit-sidebar"], .atf-post__topbar, .atf-post__sidebar-inner'))
         .map(host => host.matches('.atf-post__sidebar') ? host.querySelector(':scope > .atf-post__sidebar-inner') : host)
         .filter((host, index, all) => host && host.closest(roots) === root && all.indexOf(host) === index);
-    } else return;
+    } else { remember(root, []); return; }
+    // Only the canonical outer identity may own a full-surface effect.
+    hosts = hosts.filter(host => surface === 'postbit' || !host.hasAttribute('data-element') || host.dataset.element === key);
+    remember(root, hosts);
     // Remove only obsolete decoration belonging to this instance, not nested sheets.
     [root, ...root.querySelectorAll('[data-af-element-effect-host]')].forEach(old => {
       if (hosts.includes(old) || old.closest(roots) !== root) return;
@@ -93,7 +94,7 @@
       const role = surface === 'profile' ? 'profile-page' : (surface === 'sheet' ? 'sheet' : (host.matches('.atf-post__sidebar-inner') ? 'postbit-sidebar' : 'postbit-topbar'));
       if (host.getAttribute('data-af-element-effect-host') !== role) host.setAttribute('data-af-element-effect-host', role);
       host.setAttribute('data-af-element-effect-active', ''); layer.setAttribute('data-af-effect-ready', '');
-      if (!tracked.has(layer)) { play(layer, !visibility); visibility?.observe(layer); }
+      start(host, layer, config, surface);
     });
   }
   function scan(node) {
@@ -103,13 +104,16 @@
     const root = node.closest(roots); if (root) mount(root);
   }
   scan(document.documentElement);
-  // One observer for all surfaces, no continuous RAF/timers, fetches, KB lookups or per-post loops.
+  // Bind only identity attributes already delivered by PHP. No UID/KB inference.
   const changes = new MutationObserver(records => {
-    records.forEach(record => { if (record.type === 'attributes') mount(record.target); else record.addedNodes.forEach(scan); });
-    for (const layer of tracked.keys()) if (!layer.isConnected) { visibility?.unobserve(layer); tracked.delete(layer); }
+    records.forEach(record => {
+      if (record.type === 'attributes') { if (!record.target.matches(roots)) remember(record.target, []); scan(record.target); }
+      else record.addedNodes.forEach(node => {
+        if (node instanceof Element && !node.matches('[data-af-element-effect], .af-element-canvas')) scan(node);
+      });
+    });
   });
   changes.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-element', 'data-element-surface'] });
-  function refresh() { tracked.forEach((visible, layer) => play(layer, visible)); }
-  document.addEventListener('visibilitychange', refresh); motion.addEventListener('change', refresh);
+  function refresh() { scan(document.documentElement); engine.refresh(); }
   window.afElementEffects = { refresh };
 }());

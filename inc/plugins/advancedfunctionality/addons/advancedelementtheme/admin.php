@@ -66,7 +66,7 @@ class AF_Admin_Advancedelementtheme
         if ($error !== '') $header .= '<div class="error" role="alert">' . self::escape($error) . '</div>';
         $assetRoot = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedelementtheme/assets/';
         $css = '<link rel="stylesheet" href="' . self::escape($assetRoot . 'advancedelementtheme-admin.css?v=3') . '">';
-        $js = '<script src="' . self::escape($assetRoot . 'advancedelementtheme-admin.js?v=3') . '" defer></script>';
+        $js = '<script src="' . self::escape($assetRoot . 'element-canvas-engine.js?v=' . filemtime(__DIR__ . '/assets/element-canvas-engine.js')) . '" defer></script><script src="' . self::escape($assetRoot . 'advancedelementtheme-admin.js?v=4') . '" defer></script>';
         // AF has already output the ACP header before controller dispatch.
         $header = $css . $js . $header;
         if ($action === 'edit') {
@@ -141,7 +141,7 @@ class AF_Admin_Advancedelementtheme
         global $mybb;
         $effect = $submitted['effects'] ?? af_elementtheme_get_effects($key);
         $assetRoot = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedelementtheme/assets/';
-        $html = '<link rel="stylesheet" href="' . self::escape($assetRoot . 'element-effects.css?v=1') . '"><form class="af-et-editor af-et-effects-editor" data-af-et-effects-editor method="post" action="' . self::escape(self::editorUrl($key, 'effects')) . '"><input type="hidden" name="my_post_key" value="' . self::escape($mybb->post_code ?? '') . '"><h4>Эффекты</h4><label><input type="checkbox" name="effect_enabled" value="1"' . ($effect['enabled'] ? ' checked' : '') . '> Включить анимацию</label><p>Эффект заполняет фон профиля, листа и анкеты. Postbit и мобильные устройства используют мягкий свет и не более трёх спарклов. При reduced motion остаётся статичная декорация.</p><label>Пресет анимации <select name="effect_preset">';
+        $html = '<link rel="stylesheet" href="' . self::escape($assetRoot . 'element-effects.css?v=2') . '"><form class="af-et-editor af-et-effects-editor" data-af-et-effects-editor method="post" action="' . self::escape(self::editorUrl($key, 'effects')) . '"><input type="hidden" name="my_post_key" value="' . self::escape($mybb->post_code ?? '') . '"><h4>Эффекты</h4><label><input type="checkbox" name="effect_enabled" value="1"' . ($effect['enabled'] ? ' checked' : '') . '> Включить анимацию</label><p>Эффект заполняет фон профиля, листа и анкеты. Postbit использует облегчённый бюджет частиц; при большом числе видимых эффектов качество адаптируется автоматически. При reduced motion остаётся статичная декорация.</p><label>Пресет анимации <select name="effect_preset">';
         foreach (af_elementtheme_effect_presets() as $name => $label) $html .= '<option value="' . $name . '"' . ($effect['preset'] === $name ? ' selected' : '') . '>' . self::escape($label) . '</option>';
         $html .= '</select></label>';
         foreach (['intensity' => 'Интенсивность', 'speed' => 'Скорость', 'density' => 'Плотность частиц', 'opacity' => 'Прозрачность (видимость)'] as $name => $label) {
@@ -154,12 +154,7 @@ class AF_Admin_Advancedelementtheme
         $html .= '</select></label><p>Предпросмотр использует сохранённую палитру выбранной поверхности. Настройки эффектов обновляются до сохранения.</p><div class="af-et-effect-preview" data-af-et-effect-preview data-element="' . self::escape($key) . '" data-element-surface="profile"><div data-af-element-effect-host><span hidden data-af-element-effect aria-hidden="true"></span><strong>Страница персонажа</strong><p>Текст, аватар и кнопки остаются над декоративным слоем.</p><button type="button">Пример кнопки</button></div></div>';
         $palettes = [];
         foreach (af_elementtheme_surfaces() as $surface) $palettes[$surface] = af_elementtheme_get_variables($key, $surface);
-        $textures = [];
-        foreach (array_keys(af_elementtheme_effect_presets()) as $preset) {
-            $sample = af_elementtheme_effect_defaults($key); $sample['enabled'] = true; $sample['preset'] = $preset; $sample['surfaces'] = ['profile'];
-            $textures[$preset] = af_elementtheme_compile_effects([$key => ['effects' => $sample]])['css'];
-        }
-        $html .= '<script type="application/json" data-af-et-effect-preview-data>' . json_encode(['palettes' => $palettes, 'textures' => $textures, 'points' => af_elementtheme_effect_points()], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '</script><style data-af-et-effect-preview-style></style><button class="af-et-save" type="submit"' . ($row['in_kb'] === null ? ' disabled' : '') . '>Сохранить эффекты</button></form>';
+        $html .= '<script type="application/json" data-af-et-effect-preview-data>' . json_encode(['palettes' => $palettes], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '</script><button class="af-et-save" type="submit"' . ($row['in_kb'] === null ? ' disabled' : '') . '>Сохранить эффекты</button></form>';
         return $html;
     }
     private static function hexColor(string $value): string

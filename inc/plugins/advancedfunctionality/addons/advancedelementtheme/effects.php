@@ -34,22 +34,6 @@ function af_elementtheme_get_effects(string $key): array
     return af_elementtheme_get_metadata($key)['effects'] ?? af_elementtheme_effect_defaults($key);
 }
 
-function af_elementtheme_effect_points(): array
-{
-    return [[8,73],[19,28],[31,84],[43,13],[57,65],[69,37],[82,81],[94,19],[13,48],[38,51],[61,91],[88,55]];
-}
-
-/** Fixed non-repeating points: no particle DOM or JS animation loops. Max 12 (postbit/mobile 3). */
-function af_elementtheme_effect_texture(int $density, bool $light = false): string
-{
-    $points = af_elementtheme_effect_points();
-    $count = min($light ? 3 : 12, (int)ceil($density * ($light ? 3 : 12) / 100));
-    $layers = [];
-    foreach (array_slice($points, 0, $count) as $i => $point) {
-        $layers[] = 'radial-gradient(circle at ' . $point[0] . '% ' . $point[1] . '%,var(--af-effect-color) 0 ' . ($i % 3 === 0 ? '1.6px' : '1px') . ',transparent 3px)';
-    }
-    return $layers ? implode(',', $layers) : 'none';
-}
 function af_elementtheme_compile_effects(array $styles): array
 {
     $css = ''; $settings = [];
@@ -62,22 +46,10 @@ function af_elementtheme_compile_effects(array $styles): array
         foreach ($effect['surfaces'] as $surface) {
             $root = '[data-element="' . $key . '"][data-element-surface="' . $surface . '"]';
             $color = $effect['color'] ?: 'var(--af-element-accent,var(--af-element-main,transparent))';
-            $textures = [
-                'mist' => 'radial-gradient(ellipse at 25% 70%,var(--af-effect-color),transparent 62%),radial-gradient(ellipse at 85% 25%,var(--af-effect-color),transparent 65%)',
-                'aura' => 'conic-gradient(from 40deg at 70% 60%,transparent,var(--af-effect-color),transparent 55%,var(--af-effect-color),transparent)',
-                'electric' => 'linear-gradient(115deg,transparent 38%,var(--af-effect-color) 38.2%,transparent 38.6%),linear-gradient(65deg,transparent 68%,var(--af-effect-color) 68.2%,transparent 68.6%)',
-                'frost' => 'conic-gradient(from 45deg at 32% 35%,transparent 0 24%,var(--af-effect-color) 25%,transparent 26% 74%,var(--af-effect-color) 75%,transparent 76%)',
-            ];
+            // Static fallback/opacity only; particles and motion belong to the shared engine.
             $css .= '@scope (' . $root . ') to (:scope [data-element]) {'
-                . ':scope[data-af-element-effect-host],[data-af-element-effect-host]{--af-effect-enabled:1;}'
                 . ':scope[data-af-element-effect-host]>[data-af-element-effect],[data-af-element-effect-host]>[data-af-element-effect]{'
-                . '--af-effect-color:' . $color . ';--af-effect-opacity:' . ($effect['opacity'] / 100) . ';'
-                . '--af-effect-strength:' . ($effect['intensity'] / 100) . ';--af-effect-duration:' . (32 - $effect['speed'] * .24) . 's;'
-                . '--af-effect-points:' . af_elementtheme_effect_texture($effect['density'], $surface === 'postbit') . ';'
-                . '--af-effect-light-points:' . af_elementtheme_effect_texture($effect['density'], true) . ';'
-                . '--af-effect-field:' . (isset($textures[$effect['preset']]) ? $textures[$effect['preset']] . ($effect['preset'] === 'frost' ? ',var(--af-effect-points)' : '') : 'var(--af-effect-points)') . ';'
-                . '--af-effect-animation:af-effect-' . $effect['preset'] . ';}}
-';
+                . '--af-effect-color:' . $color . ';--af-effect-opacity:' . ($effect['opacity'] / 100) . ';}}' . "\n";
         }
     }
     return ['css' => $css, 'settings' => $settings];

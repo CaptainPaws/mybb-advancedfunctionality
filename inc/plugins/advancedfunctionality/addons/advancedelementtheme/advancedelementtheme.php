@@ -197,8 +197,8 @@ function af_elementtheme_overrides(): array
     global $db, $cache;
     if (isset($GLOBALS['af_elementtheme_overrides'])) return $GLOBALS['af_elementtheme_overrides'];
     $data = is_object($cache) ? $cache->read('af_elementtheme') : false;
-    if (!is_array($data) || ($data['format'] ?? 0) !== 6 || !isset($data['styles'], $data['surfaces'], $data['css'], $data['effects'])) {
-        $data = ['format' => 6, 'styles' => [], 'surfaces' => [], 'css' => ''];
+    if (!is_array($data) || ($data['format'] ?? 0) !== 7 || !isset($data['styles'], $data['surfaces'], $data['css'], $data['effects'])) {
+        $data = ['format' => 7, 'styles' => [], 'surfaces' => [], 'css' => ''];
         if (is_object($db)) {
             foreach (['styles', 'surfaces'] as $kind) {
                 $table = 'af_element_theme_' . $kind;
@@ -378,10 +378,11 @@ function af_advancedelementtheme_pre_output(string &$page): void
     $effects = af_elementtheme_overrides()['effects'];
     if ($effects['settings'] && af_elementtheme_effects_needed($page, $effects['settings']) && !str_contains($page, 'data-af-element-effects-config')) {
         $assetRoot = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedelementtheme/assets/';
-        $effectVersion = (string)max((int)filemtime(__DIR__ . '/assets/element-effects.css'), (int)filemtime(__DIR__ . '/assets/element-effects.js'));
+        $effectVersion = (string)max((int)filemtime(__DIR__ . '/assets/element-effects.css'), (int)filemtime(__DIR__ . '/assets/element-effects.js'), (int)filemtime(__DIR__ . '/assets/element-canvas-engine.js'));
         $html .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($assetRoot . 'element-effects.css?v=' . $effectVersion) . '" data-af-element-effects>'
             . '<style data-af-element-effects-overrides>' . $effects['css'] . '</style>'
             . '<script type="application/json" data-af-element-effects-config>' . json_encode($effects['settings'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '</script>'
+            . '<script src="' . htmlspecialchars_uni($assetRoot . 'element-canvas-engine.js?v=' . $effectVersion) . '" defer></script>'
             . '<script src="' . htmlspecialchars_uni($assetRoot . 'element-effects.js?v=' . $effectVersion) . '" defer></script>';
     }
     if ($html === '') return;

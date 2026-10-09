@@ -25,11 +25,10 @@ $queries = $db->kbQueries;
 for ($i = 0; $i < 100; ++$i) { af_elementtheme_get_effects('fire'); af_elementtheme_overrides(); }
 editor_check($queries === $db->kbQueries, 'Effects introduced repeated KB queries');
 $effects = af_elementtheme_overrides()['effects'];
-editor_check(substr_count(af_elementtheme_effect_texture(100), 'radial-gradient') === 12 && substr_count(af_elementtheme_effect_texture(100, true), 'radial-gradient') === 3 && af_elementtheme_effect_texture(0) === 'none', 'Particle limits/density');
-editor_check(str_contains($effects['css'], 'var(--af-element-accent') && str_contains($effects['css'], 'af-effect-embers'), 'Effects do not follow surface palette/preset');
+editor_check(str_contains($effects['css'], 'var(--af-element-accent') && !str_contains($effects['css'], '--af-effect-animation'), 'Fallback follows palette without legacy motion');
 foreach (array_keys(af_elementtheme_effect_presets()) as $preset) {
     $config = array_replace($saved['effects'], ['preset' => $preset]);
-    editor_check(str_contains(af_elementtheme_compile_effects(['fire' => ['effects' => $config]])['css'], 'af-effect-' . $preset), 'Preset did not compile');
+    editor_check(af_elementtheme_compile_effects(['fire' => ['effects' => $config]])['settings']['fire']['preset'] === $preset, 'Preset metadata did not compile');
 }
 foreach ([['preset' => 'unknown'], ['density' => 101], ['color' => '#fff;display:none'], ['color' => 'url(x)'], ['surfaces' => ['forum']], ['surfaces' => [[]]], ['enabled' => 'yes']] as $invalid) {
     try { af_elementtheme_normalize_effects(array_replace($saved['effects'], $invalid)); throw new RuntimeException('Invalid effect accepted'); }
@@ -66,6 +65,7 @@ $post = effect_root('adaptivethemeframework/templates/postbit_classic.html', 'po
 $app = '<div class="af-atf-display" id="application" data-element="fire" data-element-surface="application"><article class="af-atf-wiki"><header class="af-atf-wiki__header" data-af-element-effect-host>' . $node . '<h2>Анкета персонажа</h2></header><section><h2>Abilities and description</h2><p>Application content</p></section></article></div>';
 $html = '<html><head></head><body class="atf-active atf-profile-page af-apui-member-profile-page" data-element="fire" data-element-surface="profile" data-af-element-effect-host="profile-page" data-af-element-effect-only>' . $node . '' . $profile . $sheet . $app . $post . '<div class="atf-profile" data-element="shadow" data-element-surface="profile"><section class="atf-profile-hero" id="disabled-host">Shadow · disabled</section></div><div class="atf-profile" data-element="" data-element-surface="profile"><section class="atf-profile-hero" id="neutral-host">Neutral</section></div></body></html>';
 af_elementtheme_mark_surface('profile', 'fire'); af_advancedelementtheme_pre_output($html);
+editor_check(strpos($html, 'element-canvas-engine.js') < strpos($html, 'element-effects.js') && substr_count($html, 'element-canvas-engine.js') === 1, 'Shared engine delivery/order');
 $once = $html; af_advancedelementtheme_pre_output($html); editor_check($html === $once && substr_count($html, 'data-af-element-effects-config>') === 1, 'Effects owner delivery duplicated assets');
 $fragment = $sheet; af_advancedelementtheme_pre_output($fragment); editor_check(!str_contains($fragment, '<script'), 'AJAX fragment injected effect assets');
 $mybb->request_method = 'get'; $editor = editor_render(['action' => 'edit', 'element_key' => 'fire', 'surface' => 'effects']);
