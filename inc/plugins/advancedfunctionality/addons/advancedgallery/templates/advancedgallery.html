@@ -105,7 +105,7 @@
 
 
 <!-- TEMPLATE: advancedgallery_picker_modal -->
-<div class="ag-picker" id="af-gallery-picker" role="dialog" aria-modal="true" aria-hidden="true">
+<div class="ag-picker" id="af-gallery-picker" data-purpose="{$ag_picker_purpose}" data-initial-album="{$ag_picker_initial_album}" role="dialog" aria-modal="true" aria-hidden="true">
 
   <div class="ag-picker-overlay" data-ag-picker-close="1"></div>
 
@@ -130,6 +130,7 @@
       <div class="ag-upload-pane" data-pane="local">
         <form action="{$ag_picker_upload_do_url}" method="post" enctype="multipart/form-data" class="ag-upload-form ag-upload-form--modal" data-ag-ajax="1">
         <input type="hidden" name="my_post_key" value="{$ag_picker_my_post_key}" />
+        {$ag_picker_purpose_field}
         <input type="hidden" name="ajax" value="1" />
         {$ag_picker_album_field}
 
@@ -148,6 +149,7 @@
       <div class="ag-upload-pane" data-pane="remote" style="display:none;">
         <form action="{$ag_picker_remote_do_url}" method="post" class="ag-upload-form ag-upload-form--modal" data-ag-ajax="1">
           <input type="hidden" name="my_post_key" value="{$ag_picker_my_post_key}" />
+        {$ag_picker_purpose_field}
           <input type="hidden" name="ajax" value="1" />
           {$ag_picker_album_field}
 

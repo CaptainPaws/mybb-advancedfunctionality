@@ -136,7 +136,11 @@
     page: 1,
     pages: 1,
     q: '',
-    albumId: -1
+    albumId: -1,
+    purpose: '',
+    openToken: 0,
+    dataToken: 0,
+    keyBound: false
   };
 
   function getPickerConfig() {
@@ -171,6 +175,7 @@
   function buildCard(item, labels) {
     var card = document.createElement('div');
     card.className = 'ag-picker-card';
+    card.setAttribute('data-media-id', String(item.media_id || item.id));
 
     var img = document.createElement('img');
     img.src = item.thumb || '';
@@ -189,6 +194,15 @@
 
     var actions = document.createElement('div');
     actions.className = 'ag-picker-card-actions';
+
+    if (pickerState.purpose) {
+      var select = document.createElement('button');
+      select.type = 'button'; select.className = 'button'; select.textContent = 'Выбрать изображение';
+      select.addEventListener('click', function () { selectAppearanceMedia(item, select); });
+      actions.appendChild(select);
+      body.appendChild(actions); card.appendChild(body);
+      return card;
+    }
 
     if (isImageUrl(item.url_full) || item.type === 'local') {
       var btnImg = document.createElement('button');
@@ -300,11 +314,13 @@
     var cfg = getPickerConfig();
     var url = cfg.dataUrl;
     var params = [];
+    var token = ++pickerState.dataToken;
+    if (pickerState.purpose) params.push('purpose=' + encodeURIComponent(pickerState.purpose));
 
     if (pickerState.page > 1) params.push('page=' + pickerState.page);
     if (pickerState.q) params.push('q=' + encodeURIComponent(pickerState.q));
 
-    if (typeof pickerState.albumId === 'number' && pickerState.albumId !== -1) {
+    if (typeof pickerState.albumId === 'number') {
       params.push('album_id=' + encodeURIComponent(String(pickerState.albumId)));
     }
 
@@ -313,11 +329,11 @@
     if (pickerState.modal) setGridLoading(pickerState.modal, true);
 
     fetch(url, { credentials: 'same-origin' })
-      .then(function (res) { return res.json(); })
-      .then(function (data) { renderPickerItems(data); })
-      .catch(function () { renderPickerItems([]); })
+      .then(function (res) { if (!res.ok) throw new Error('Picker failed'); return res.json(); })
+      .then(function (data) { if (token === pickerState.dataToken) renderPickerItems(data); })
+      .catch(function () { if (token === pickerState.dataToken) renderPickerItems([]); })
       .finally(function () {
-        if (pickerState.modal) setGridLoading(pickerState.modal, false);
+        if (token === pickerState.dataToken && pickerState.modal) setGridLoading(pickerState.modal, false);
       });
   }
 
@@ -342,6 +358,7 @@
     if (!form) return;
 
     var fd = new FormData(form);
+    var token = pickerState.openToken;
 
     if (!fd.has('ajax')) fd.append('ajax', '1');
     if (!fd.has('ag_title')) fd.append('ag_title', '');
@@ -354,6 +371,7 @@
     })
         .then(function (res) { return res.json(); })
         .then(function (data) {
+        if (token !== pickerState.openToken) return;
         var ok = !!(data && (data.ok || data.success || data.status === 'ok' || data.status === true));
         if (!ok) {
             var msg = (data && (data.error || data.message)) || 'Ошибка загрузки';
@@ -361,6 +379,13 @@
             return;
         }
 
+        if (pickerState.purpose && data.album_id) {
+          pickerState.albumId = Number(data.album_id);
+          pickerState.modal.setAttribute('data-initial-album', String(data.album_id));
+          var button = $one('[data-album-id="-2"]', pickerState.modal);
+          if (button) button.setAttribute('data-album-id', String(data.album_id));
+          setActiveAlbum(pickerState.modal, pickerState.albumId);
+        }
         pickerState.page = 1;
         loadPickerData();
         })
@@ -377,13 +402,15 @@
 
   function bindPickerModal(modal) {
 
-    document.addEventListener('keydown', function (e) {
+    if (!pickerState.keyBound) document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' || e.keyCode === 27) {
         if (pickerState.modal && pickerState.modal.classList.contains('is-open')) {
           closePicker();
         }
       }
     });
+
+    pickerState.keyBound = true;
 
     modal.addEventListener('click', function (event) {
       var target = event.target;
@@ -419,7 +446,7 @@
       var albumNode = target.closest ? target.closest('[data-album-id]') : null;
       if (albumNode && albumNode.closest && albumNode.closest('.ag-picker-albums')) {
         var id = parseInt(albumNode.getAttribute('data-album-id') || '-1', 10);
-        if (!isNaN(id) && id >= -1) {
+        if (!isNaN(id) && id >= -2) {
           pickerState.albumId = id;
           pickerState.page = 1;
           setActiveAlbum(modal, id);
@@ -451,15 +478,26 @@
     setModalUploadTab(modal, 'local');
   }
 
-  function openPicker(insertFn) {
+  function openPicker(insertFn, options) {
+    options = options || {};
+    if (insertFn && typeof insertFn === 'object') { options = insertFn; insertFn = options.onSelect; }
+    var purpose = options.purpose || '';
+    if (purpose && ['appearance_avatars', 'appearance_postbit_bg', 'appearance_profile_bg', 'appearance_sheet_bg', 'appearance_theme_bg'].indexOf(purpose) === -1) throw new Error('Unknown Gallery purpose');
+    if (purpose && typeof insertFn !== 'function') throw new Error('Appearance picker requires onSelect');
+    if (purpose !== pickerState.purpose && pickerState.modal) { closePicker(); pickerState.modal.remove(); pickerState.modal = null; }
+    var token = ++pickerState.openToken;
+    ++pickerState.dataToken;
+    pickerState.purpose = purpose;
     pickerState.insertFn = (typeof insertFn === 'function') ? insertFn : defaultInsert;
     var cfg = getPickerConfig();
 
+    var pickerUrl = cfg.pickerUrl + (cfg.pickerUrl.indexOf('?') >= 0 ? '&' : '?') + 'purpose=' + encodeURIComponent(purpose);
     var ensureModal = pickerState.modal
       ? Promise.resolve(pickerState.modal)
-      : fetch(cfg.pickerUrl, { credentials: 'same-origin' })
-          .then(function (res) { return res.text(); })
+      : fetch(pickerUrl, { credentials: 'same-origin' })
+          .then(function (res) { if (!res.ok) throw new Error('Picker unavailable'); return res.text(); })
           .then(function (html) {
+            if (token !== pickerState.openToken) return null;
             var wrapper = document.createElement('div');
             wrapper.innerHTML = html;
 
@@ -473,13 +511,13 @@
           });
 
     ensureModal.then(function (modal) {
-      if (!modal) return;
+      if (!modal || token !== pickerState.openToken) return;
 
       modal.classList.add('is-open');
       modal.setAttribute('aria-hidden', 'false');
       lockBodyScroll(true);
 
-      pickerState.albumId = -1;
+      pickerState.albumId = purpose ? parseInt(modal.getAttribute('data-initial-album') || '-2', 10) : -1;
       pickerState.page = 1;
       pickerState.pages = 1;
       pickerState.q = '';
@@ -491,10 +529,32 @@
       focusDialog(modal);
 
       loadPickerData();
-    });
+    }).catch(function () { if (token === pickerState.openToken) alert('Не удалось открыть галерею'); });
+  }
+
+  function selectAppearanceMedia(item, button) {
+    var token = pickerState.openToken, callback = pickerState.insertFn;
+    var form = $one('form', pickerState.modal);
+    var key = form && $one('[name="my_post_key"]', form);
+    var fd = new FormData();
+    fd.append('purpose', pickerState.purpose); fd.append('media_id', item.media_id || item.id);
+    fd.append('my_post_key', key ? key.value : '');
+    var cfg = getPickerConfig();
+    var url = new URL(cfg.pickerUrl, location.href); url.searchParams.set('action', 'picker_select');
+    button.disabled = true;
+    fetch(url.href, { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function (res) { return res.json().then(function (data) { if (!res.ok || !data.ok) throw new Error(data.error || 'Image unavailable'); return data; }); })
+      .then(function (data) {
+        if (token !== pickerState.openToken) return;
+        closePicker();
+        callback({ media_id: Number(data.media_id), url_full: data.url_full, thumb: item.thumb, title: item.title });
+      }).catch(function (error) { if (token === pickerState.openToken) alert(error.message); })
+      .finally(function () { button.disabled = false; });
   }
 
   function closePicker() {
+    ++pickerState.openToken;
+    ++pickerState.dataToken;
     if (pickerState.modal) {
       pickerState.modal.classList.remove('is-open');
       pickerState.modal.setAttribute('aria-hidden', 'true');
@@ -503,7 +563,7 @@
   }
 
   window.AF_GalleryPicker = {
-    open: function (insertFn) { openPicker(insertFn); },
+    open: function (insertFn, options) { openPicker(insertFn, options); },
     reload: function () { loadPickerData(); }
   };
 
