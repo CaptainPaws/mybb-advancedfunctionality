@@ -1,23 +1,39 @@
-<div class="af-kb-entry-header">
-    {$kb_entry_heading}
+<div class="af-kb-entry-view">
+    <div class="af-kb-entry-toolbar">
+        <form class="af-kb-search af-kb-entry-search" method="get" action="misc.php">
+            <input type="hidden" name="action" value="kb" />
+            <input type="hidden" name="type" value="{$kb_type_value}" />
+            <label class="af-kb-entry-search__field">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <input type="text" name="q" value="{$kb_query}" placeholder="{$lang->af_kb_search_placeholder}" aria-label="{$lang->af_kb_search_placeholder}" />
+            </label>
+        </form>
+        <div class="af-kb-entry-actions">
+            {$kb_back_link}
+            {$kb_edit_link}
+            {$kb_delete_form}
+            {$kb_help_link}
+        </div>
+    </div>
+    <div class="af-kb-entry-header">
+        {$kb_entry_heading}
+    </div>
+    <section class="af-kb-reading-panel">
+        <header class="af-kb-entry-section-heading">
+            <i class="fa-solid fa-book-open" aria-hidden="true"></i>
+            <span>{$kb_entry_description_label}</span>
+            <span class="af-kb-entry-section-heading__line" aria-hidden="true"></span>
+        </header>
+        <div class="af-kb-body">
+            {$kb_entry_body}
+        </div>
+        <div class="af-kb-blocks">
+            {$kb_blocks}
+        </div>
+        <div class="af-kb-relations">
+            {$kb_relations}
+        </div>
+        {$kb_tech_details}
+        {$kb_meta_details}
+    </section>
 </div>
-<div class="af-kb-entry-actions">
-    {$kb_back_link}
-    {$kb_edit_link}
-    {$kb_delete_form}
-    {$kb_help_link}
-</div>
-<div class="af-kb-short">
-    {$kb_short}
-</div>
-<div class="af-kb-body">
-    {$kb_entry_body}
-</div>
-<div class="af-kb-blocks">
-    {$kb_blocks}
-</div>
-<div class="af-kb-relations">
-    {$kb_relations}
-</div>
-{$kb_tech_details}
-{$kb_meta_details}

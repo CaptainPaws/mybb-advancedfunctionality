@@ -8,7 +8,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
 define('AF_KB_ID', 'knowledgebase');
-define('AF_KB_VER', '1.0.3');
+define('AF_KB_VER', '1.0.4');
 define('AF_KB_BASE', AF_ADDONS . AF_KB_ID . '/');
 define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
 define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
@@ -12388,8 +12388,27 @@ function af_kb_handle_view(): void
     $kb_short = '';
     $kb_entry_body = $body;
     $bannerUrl = af_kb_sanitize_url((string)($entry['banner_url'] ?? ''));
+    $kb_type_title = htmlspecialchars_uni($typeTitle);
+    $kb_type_value = htmlspecialchars_uni($type);
+    $kb_query = htmlspecialchars_uni($query);
+    $kb_entry_description_label = htmlspecialchars_uni($isRu ? 'Описание' : 'Description');
     $kb_entry_heading = '<h1>' . $kb_entry_icon . $kb_title . '</h1>';
-    if ($bannerUrl !== '') {
+    if ($type !== 'character') {
+        $typeIconHtml = af_kb_build_icon_html($typeRow['icon_url'] ?? '', $typeRow['icon_class'] ?? '');
+        $kb_entry_category_icon = $typeIconHtml !== ''
+            ? '<span class="af-kb-entry-hero__category-icon" aria-hidden="true">' . $typeIconHtml . '</span>'
+            : '';
+        $kb_entry_hero_image = $bannerUrl !== ''
+            ? '<img class="af-kb-entry-hero__image" src="' . htmlspecialchars_uni($bannerUrl) . '" alt="" loading="eager" />'
+            : '';
+        $kb_entry_heading = '<div class="af-kb-entry-hero">'
+            . $kb_entry_hero_image
+            . '<div class="af-kb-entry-hero__content">'
+            . '<div class="af-kb-entry-hero__category">' . $kb_entry_category_icon . '<span>' . $kb_type_title . '</span></div>'
+            . '<h1>' . $kb_entry_icon . '<span class="af-kb-entry-hero__title">' . $kb_title . '</span></h1>'
+            . '<span class="af-kb-entry-hero__divider" aria-hidden="true"></span>'
+            . '</div></div>';
+    } elseif ($bannerUrl !== '') {
         $kb_entry_heading = '<div class="af-kb-entry-header-visual">'
             . '<img class="af-kb-banner" src="' . htmlspecialchars_uni($bannerUrl) . '" alt="" loading="lazy" />'
             . '<div class="af-kb-entry-header-title"><h1>' . $kb_entry_icon . $kb_title . '</h1></div>'
@@ -12397,10 +12416,18 @@ function af_kb_handle_view(): void
     }
     $kb_can_edit = af_kb_can_edit() ? '1' : '0';
     $kb_back_link = af_kb_back_link_html(af_kb_url(['type' => $type]), ['kb']);
-    $kb_edit_link = af_kb_can_edit() ? '<a class="af-kb-btn af-kb-btn--edit af-kb-btn-edit" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'&key='.htmlspecialchars_uni($key).'">'.htmlspecialchars_uni($lang->af_kb_edit ?? 'Edit').'</a>' : '';
+    $kb_edit_link = '';
+    if (af_kb_can_edit()) {
+        $editLabel = htmlspecialchars_uni($lang->af_kb_edit ?? 'Edit');
+        $editContent = $type !== 'character'
+            ? '<i class="fa-solid fa-pen" aria-hidden="true"></i><span>' . $editLabel . '</span>'
+            : $editLabel;
+        $kb_edit_link = '<a class="af-kb-btn af-kb-btn--edit af-kb-btn-edit" href="misc.php?action=kb_edit&type='
+            . htmlspecialchars_uni($type) . '&key=' . htmlspecialchars_uni($key) . '">' . $editContent . '</a>';
+    }
     if (af_kb_can_edit() && $type === AF_KB_TYPE_ORIGIN) {
         $kb_edit_link .= ' <a class="af-kb-btn af-kb-btn--create" href="misc.php?action=kb_edit&amp;type=' . htmlspecialchars_uni(AF_KB_TYPE_ORIGIN_VARIANT)
-            . '&amp;origin_parent_key=' . htmlspecialchars_uni($key) . '">Добавить разновидность</a>';
+            . '&amp;origin_parent_key=' . htmlspecialchars_uni($key) . '"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Добавить разновидность</span></a>';
     }
     $kb_delete_form = '';
     if (af_kb_can_edit()) {
@@ -12410,7 +12437,10 @@ function af_kb_handle_view(): void
             . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '" />'
             . '<button type="submit" name="kb_delete" value="1" class="af-kb-btn af-kb-btn--delete af-kb-btn-delete"'
             . ' onclick="return confirm(\'' . htmlspecialchars_uni($lang->af_kb_delete_confirm ?? 'Delete entry?') . '\');">'
-            . htmlspecialchars_uni($deleteLabel) . '</button></form>';
+            . ($type !== 'character'
+                ? '<i class="fa-regular fa-trash-can" aria-hidden="true"></i><span>' . htmlspecialchars_uni($deleteLabel) . '</span>'
+                : htmlspecialchars_uni($deleteLabel))
+            . '</button></form>';
     }
     $kb_help_link = af_kb_can_edit()
         ? '<a class="af-kb-help-link" href="misc.php?action=kb_help" title="'.htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help').'"><i class="fa-regular fa-circle-question"></i></a>'
