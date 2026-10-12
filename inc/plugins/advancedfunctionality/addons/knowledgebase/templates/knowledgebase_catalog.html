@@ -1,17 +1,26 @@
-<form class="af-kb-search" method="get" action="misc.php">
-    <input type="hidden" name="action" value="kb" />
-    <input type="text" name="q" value="{$kb_query}" placeholder="{$lang->af_kb_search_placeholder}" />
-</form>
-<div class="af-kb-header">
-    <h1>{$lang->af_kb_catalog_title}</h1>
-    <div class="af-kb-actions">
-        {$kb_back_link}
-        {$kb_create_link}
-        {$kb_mechanics_link}
-        {$kb_help_link}
+<div class="af-kb-catalog">
+    <header class="af-kb-catalog__hero">
+        <h1>{$lang->af_kb_catalog_title}</h1>
+        <span class="af-kb-catalog__divider" aria-hidden="true"></span>
+        <p>{$lang->af_kb_catalog_intro}</p>
+    </header>
+    <div class="af-kb-catalog__toolbar">
+        <form class="af-kb-search af-kb-catalog__search" method="get" action="misc.php">
+            <input type="hidden" name="action" value="kb" />
+            <label class="af-kb-catalog__search-field">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <input type="text" name="q" value="{$kb_query}" placeholder="{$lang->af_kb_search_placeholder}" aria-label="{$lang->af_kb_search_placeholder}" />
+            </label>
+        </form>
+        <div class="af-kb-actions af-kb-catalog__actions">
+            {$kb_back_link}
+            {$kb_create_link}
+            {$kb_mechanics_link}
+            {$kb_help_link}
+        </div>
     </div>
+    <div class="af-kb-tabs af-kb-category-grid">
+        {$kb_types_rows}
+    </div>
+    <div class="af-kb-pagination">{$kb_pagination}</div>
 </div>
-<div class="af-kb-tabs">
-    {$kb_types_rows}
-</div>
-<div class="af-kb-pagination">{$kb_pagination}</div>

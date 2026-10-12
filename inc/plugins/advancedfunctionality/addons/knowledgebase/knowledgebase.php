@@ -8,7 +8,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
 define('AF_KB_ID', 'knowledgebase');
-define('AF_KB_VER', '1.0.1');
+define('AF_KB_VER', '1.0.2');
 define('AF_KB_BASE', AF_ADDONS . AF_KB_ID . '/');
 define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
 define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
@@ -10706,7 +10706,7 @@ function af_kb_back_url_from_referer(string $fallbackUrl, array $allowActions = 
 function af_kb_back_link_html(string $fallbackUrl, array $allowActions = ['kb'], string $label = 'Назад'): string
 {
     $url = af_kb_back_url_from_referer($fallbackUrl, $allowActions);
-    return '<a class="af-kb-btn af-kb-btn--back" href="' . htmlspecialchars_uni($url) . '">' . htmlspecialchars_uni($label) . '</a>';
+    return '<a class="af-kb-btn af-kb-btn--back" href="' . htmlspecialchars_uni($url) . '"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>' . htmlspecialchars_uni($label) . '</span></a>';
 }
 
 function af_kb_arpg_to_float($value): float
@@ -11871,9 +11871,15 @@ function af_kb_handle_view(): void
             $bgStyle = af_kb_build_bg_style($row['bg_tab_url'] ?? '');
             $styleAttr = $bgStyle !== '' ? ' style="' . $bgStyle . '"' : '';
             $bgClass = $bgStyle !== '' ? ' af-kb-tab--with-bg' : '';
-            $rows .= '<a class="af-kb-tab'.$bgClass.'"'.$styleAttr.' href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'">'
-                . '<span class="af-kb-tab-title">'.$iconWrap.htmlspecialchars_uni($title).'</span>'
-                . '<span class="af-kb-tab-desc">'.af_kb_parse_message($desc).'</span>'
+            $descriptionHtml = trim($desc) !== ''
+                ? '<span class="af-kb-tab-desc">' . af_kb_parse_message($desc) . '</span>'
+                : '';
+            $rows .= '<a class="af-kb-tab af-kb-category-card'.$bgClass.'"'.$styleAttr.' href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'">'
+                . '<span class="af-kb-tab-content">'.$iconWrap
+                . '<span class="af-kb-tab-title">'.htmlspecialchars_uni($title).'</span>'
+                . $descriptionHtml
+                . '</span>'
+                . '<span class="af-kb-tab-footer"><span class="af-kb-tab-footer__label"><i class="fa-regular fa-file-lines" aria-hidden="true"></i>'.htmlspecialchars_uni($lang->af_kb_catalog_articles ?? 'Статьи').'</span><span class="af-kb-tab-footer__arrow" aria-hidden="true">&#8594;</span></span>'
                 . '</a>';
         }
 
@@ -11891,10 +11897,10 @@ function af_kb_handle_view(): void
         $kb_back_link = af_kb_back_link_html(af_kb_url(), ['kb']);
         $kb_can_edit = af_kb_can_edit() ? '1' : '0';
         $kb_create_link = af_kb_can_manage_types()
-            ? '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_type_edit">'.htmlspecialchars_uni($lang->af_kb_type_create ?? 'Create category').'</a>'
+            ? '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_type_edit"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>'.htmlspecialchars_uni($lang->af_kb_type_create ?? 'Create category').'</span></a>'
             : '';
         $kb_mechanics_link = af_kb_can_edit()
-            ? '<a class="af-kb-btn" href="kb.php?type=arpg_mechanics">ARPG Mechanics</a>'
+            ? '<a class="af-kb-btn" href="kb.php?type=arpg_mechanics"><i class="fa-solid fa-book-open" aria-hidden="true"></i><span>ARPG Mechanics</span></a>'
             : '';
         $kb_help_link = af_kb_can_edit()
             ? '<a class="af-kb-help-link" href="misc.php?action=kb_help" title="'.htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help').'"><i class="fa-regular fa-circle-question"></i></a>'
