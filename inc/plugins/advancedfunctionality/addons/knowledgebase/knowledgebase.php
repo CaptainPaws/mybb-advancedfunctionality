@@ -8,7 +8,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
 define('AF_KB_ID', 'knowledgebase');
-define('AF_KB_VER', '1.0.2');
+define('AF_KB_VER', '1.0.3');
 define('AF_KB_BASE', AF_ADDONS . AF_KB_ID . '/');
 define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
 define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
@@ -11064,6 +11064,8 @@ function af_kb_render_character_status_link(array $availability, bool $isRu, str
 
 function af_kb_catalog_entry_card(array $entry, array $typeRow): string
 {
+    global $lang;
+
     $entryType = (string)($entry['type'] ?? '');
     $isCharacter = $entryType === 'character';
 
@@ -11138,6 +11140,35 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
         $kb_character_status_badge = af_kb_render_character_status_badge($availability, true);
         $kb_character_status_link = af_kb_render_character_status_link($availability, true, 'catalog');
     }
+
+    if (!$isCharacter) {
+        $entryUi = af_kb_get_entry_ui($entry);
+        $cardImageUrl = af_kb_sanitize_url((string)($entry['banner_url'] ?? ''));
+        if ($cardImageUrl === '') {
+            $cardImageUrl = af_kb_sanitize_url((string)($entryUi['background_url'] ?? ''));
+        }
+        $kb_category_entry_image = $cardImageUrl !== ''
+            ? '<img class="af-kb-entry-card__image" src="' . htmlspecialchars_uni($cardImageUrl) . '" alt="" loading="lazy" />'
+            : '';
+        $entryIconHtml = af_kb_build_icon_html(
+            (string)($entryUi['icon_url'] ?? ''),
+            (string)($entryUi['icon_class'] ?? '')
+        );
+        $kb_category_entry_icon = $entryIconHtml !== ''
+            ? '<span class="af-kb-entry-card__icon" aria-hidden="true">' . $entryIconHtml . '</span>'
+            : '';
+        $kb_category_entry_title = htmlspecialchars_uni($title);
+        $kb_category_entry_type = $kb_character_meta;
+        $kb_category_entry_short = $kb_character_short;
+        $kb_category_entry_url = $kb_entry_url;
+        $kb_category_entry_label = htmlspecialchars_uni(
+            $lang->af_kb_catalog_article ?? (af_kb_is_ru() ? 'Статья' : 'Article')
+        );
+
+        eval("\$card = \"" . af_kb_get_template('knowledgebase_list_category_entry') . "\";");
+        return $card;
+    }
+
     $kb_card_style = $entryBgStyle !== '' ? ' style="' . $entryBgStyle . '"' : '';
     $kb_card_bg_class = $entryBgStyle !== '' ? ' af-kb-char-card--with-bg' : '';
 
@@ -12049,8 +12080,6 @@ function af_kb_handle_view(): void
             $typeDesc = af_kb_pick_text($typeRow, 'description');
         }
 
-        $typeBannerUrl = $typeRow ? af_kb_sanitize_url((string)($typeRow['banner_url'] ?? '')) : '';
-
         $rows = '';
         foreach ($entries as $row) {
             $rows .= af_kb_catalog_entry_card($row, (array)$typeRow);
@@ -12070,12 +12099,6 @@ function af_kb_handle_view(): void
         if (defined('AF_CHARACTERS_PAGE_ALIAS')) $kb_page_title = 'Персонажи';
         $kb_type_title = htmlspecialchars_uni($typeTitle);
         $kb_type_heading = '<h1>' . $kb_type_icon . $kb_type_title . '</h1>';
-        if ($typeBannerUrl !== '') {
-            $kb_type_heading = '<div class="af-kb-type-header-visual">'
-                . '<img class="af-kb-banner" src="' . htmlspecialchars_uni($typeBannerUrl) . '" alt="" loading="lazy" />'
-                . '<div class="af-kb-type-header-title"><h1>' . $kb_type_icon . $kb_type_title . '</h1></div>'
-                . '</div>';
-        }
         $kb_type_description = af_kb_parse_message($typeDesc);
         $kb_type_value = htmlspecialchars_uni($type);
         $kb_character_owner_class = defined('AF_CHARACTERS_PAGE_ALIAS') ? 'af-characters-catalog' : '';
@@ -12143,24 +12166,24 @@ function af_kb_handle_view(): void
         $actions = [];
         $actions[] = af_kb_back_link_html(af_kb_url(), ['kb']);
         if (af_kb_can_edit()) {
-            $actions[] = '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>';
+            $actions[] = '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</span></a>';
         }
         if ($type === AF_KB_TYPE_RACE) {
-            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_RACE_VARIANT) . '">Разновидности рас</a>';
+            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_RACE_VARIANT) . '"><i class="fa-solid fa-shapes" aria-hidden="true"></i><span>Разновидности рас</span></a>';
         } elseif ($type === AF_KB_TYPE_RACE_VARIANT) {
-            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_RACE) . '">К расам</a>';
+            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_RACE) . '"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>К расам</span></a>';
         } elseif ($type === AF_KB_TYPE_ORIGIN) {
-            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_ORIGIN_VARIANT) . '">Разновидности происхождений</a>';
+            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_ORIGIN_VARIANT) . '"><i class="fa-solid fa-shapes" aria-hidden="true"></i><span>Разновидности происхождений</span></a>';
         } elseif ($type === AF_KB_TYPE_ORIGIN_VARIANT) {
-            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_ORIGIN) . '">К происхождениям</a>';
+            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_ORIGIN) . '"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>К происхождениям</span></a>';
         }
         if (af_kb_cat_can_manage() && af_kb_categories_enabled()) {
-            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb_manage_categories&type=' . htmlspecialchars_uni($type) . '">Manage categories</a>';
+            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb_manage_categories&type=' . htmlspecialchars_uni($type) . '"><i class="fa-solid fa-folder-tree" aria-hidden="true"></i><span>Manage categories</span></a>';
         }
         if (af_kb_can_manage_types()) {
-            $actions[] = '<a class="af-kb-btn af-kb-btn--edit af-kb-btn-edit" href="misc.php?action=kb_type_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_type_edit ?? 'Edit category').'</a>';
+            $actions[] = '<a class="af-kb-btn af-kb-btn--edit af-kb-btn-edit" href="misc.php?action=kb_type_edit&type='.htmlspecialchars_uni($type).'"><i class="fa-solid fa-pen" aria-hidden="true"></i><span>'.htmlspecialchars_uni($lang->af_kb_type_edit ?? 'Edit category').'</span></a>';
             $confirm = htmlspecialchars_uni($lang->af_kb_type_delete_confirm ?? 'Delete category?');
-            $actions[] = '<a class="af-kb-btn af-kb-btn--delete af-kb-btn-delete" href="misc.php?action=kb_type_delete&type='.htmlspecialchars_uni($type).'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'" onclick="return confirm(\''.$confirm.'\');">'.htmlspecialchars_uni($lang->af_kb_type_delete ?? 'Delete category').'</a>';
+            $actions[] = '<a class="af-kb-btn af-kb-btn--delete af-kb-btn-delete" href="misc.php?action=kb_type_delete&type='.htmlspecialchars_uni($type).'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'" onclick="return confirm(\''.$confirm.'\');"><i class="fa-regular fa-trash-can" aria-hidden="true"></i><span>'.htmlspecialchars_uni($lang->af_kb_type_delete ?? 'Delete category').'</span></a>';
         }
         $kb_help_link = af_kb_can_edit()
             ? '<a class="af-kb-help-link" href="misc.php?action=kb_help" title="'.htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help').'"><i class="fa-regular fa-circle-question"></i></a>'
