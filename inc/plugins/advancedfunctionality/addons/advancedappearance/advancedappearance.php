@@ -44,6 +44,8 @@ function af_advancedappearance_menu_provider(): void
 }
 
 
+require_once __DIR__ . '/personal.php';
+
 define('AF_AA_TPL_APSTUDIO', 'advancedappearance_apstudio');
 define('AF_AA_TPL_FITTINGROOM', 'advancedappearance_fittingroom');
 
@@ -63,6 +65,8 @@ function af_advancedappearance_install(): void
 {
     af_aa_ensure_schema();
     af_aa_ensure_settings();
+    af_aa_personal_install_schema();
+    af_aa_personal_ensure_settings();
     af_aa_ensure_front_templates();
     af_aa_install_page_aliases();
 
@@ -75,12 +79,19 @@ function af_advancedappearance_activate(): void
 {
     af_aa_ensure_schema();
     af_aa_ensure_settings();
+    af_aa_personal_install_schema();
+    af_aa_personal_ensure_settings();
     af_aa_ensure_front_templates();
     af_aa_install_page_aliases();
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
     }
+}
+
+function af_advancedappearance_upgrade(): void
+{
+    af_advancedappearance_activate();
 }
 
 function af_advancedappearance_deactivate(): void
@@ -102,6 +113,8 @@ function af_advancedappearance_uninstall(): void
     if ($db->table_exists(AF_AA_ASSIGNMENTS_TABLE_NAME)) {
         $db->drop_table(AF_AA_ASSIGNMENTS_TABLE_NAME);
     }
+
+    if ($db->table_exists('af_aa_slot_grants')) $db->drop_table('af_aa_slot_grants');
 
     $db->delete_query('settings', "name LIKE 'af_" . AF_AA_ID . "_%'");
     $db->delete_query('settinggroups', "name='af_" . AF_AA_ID . "'");
@@ -129,6 +142,10 @@ function af_aa_ensure_settings(): void
         'AdvancedAppearance',
         'Каталог визуальных пресетов для APUI и их назначения пользователям.'
     );
+
+    global $db;
+    $existing = $db->simple_select('settings', 'sid', "name='af_advancedappearance_enabled'", ['limit' => 1]);
+    if ($db->fetch_field($existing, 'sid')) return;
 
     af_ensure_setting(
         'af_' . AF_AA_ID,
@@ -436,6 +453,8 @@ function af_aa_collect_uid_from_postbit(array &$post): void
     if (!isset($GLOBALS['af_aa_uids_on_page']) || !is_array($GLOBALS['af_aa_uids_on_page'])) {
         $GLOBALS['af_aa_uids_on_page'] = [];
     }
+
+    $post['af_aa_user_class'] = 'af-aa-postbit-user-' . $uid;
 
     $GLOBALS['af_aa_uids_on_page'][$uid] = $uid;
 }
@@ -1658,6 +1677,8 @@ function af_aa_get_user_preset_settings_for_target(int $uid, string $assignmentT
         return [];
     }
 
+    if (str_starts_with($assignmentTargetKey, AF_AA_TARGET_APUI_FRAGMENT_PACK . ':postbit_') && af_aa_personal_active_row($uid)) return [];
+
     $assignment = af_aa_get_active_assignment('user', $uid, $assignmentTargetKey);
     if (empty($assignment)) {
         return [];
@@ -1666,6 +1687,13 @@ function af_aa_get_user_preset_settings_for_target(int $uid, string $assignmentT
     $preset = af_aa_get_preset_by_id((int)($assignment['preset_id'] ?? 0));
     if (empty($preset)) {
         return [];
+    }
+
+    if ((int)($preset['owner_uid'] ?? 0) > 0) {
+        if ($assignmentTargetKey !== AF_AA_TARGET_APUI_POSTBIT_PACK || (int)$preset['owner_uid'] !== $uid
+            || (int)($preset['schema_version'] ?? 0) !== 2 || ($preset['publication_state'] ?? '') !== 'ready'
+            || ($preset['target_key'] ?? '') !== 'postbit') return [];
+        return ['preset' => $preset, 'settings' => af_aa_personal_legacy_settings($preset)];
     }
 
     $targetKey = (string)($preset['target_key'] ?? '');
@@ -2176,6 +2204,8 @@ function af_aa_render_page_css(array $uidsOnPage): string
             }
         }
     }
+
+    foreach ($uids as $uid) $css .= af_aa_personal_render_css((int)$uid);
 
     if ($css === '') {
         return '';
@@ -3425,7 +3455,7 @@ function af_aa_fetch_presets_for_do(string $do, bool $enabledOnly = false): arra
     global $db;
 
     $targetKey = af_aa_target_key_for_do($do);
-    $where = "target_key='" . $db->escape_string($targetKey) . "'";
+    $where = "target_key='" . $db->escape_string($targetKey) . "'" . af_aa_personal_catalog_scope();
 
     if ($enabledOnly) {
         $where .= " AND enabled='1'";
@@ -3490,7 +3520,7 @@ function af_aa_save_front_preset(string $do): int
     ];
 
     if ($id > 0) {
-        $db->update_query(AF_AA_PRESETS_TABLE_NAME, $payload, "id='" . $id . "'");
+        $db->update_query(AF_AA_PRESETS_TABLE_NAME, $payload, "id='" . $id . "'" . af_aa_personal_catalog_scope());
         return $id;
     }
 
@@ -3510,7 +3540,7 @@ function af_aa_delete_front_preset(int $presetId): void
         return;
     }
 
-    $db->delete_query(AF_AA_PRESETS_TABLE_NAME, "id='" . $presetId . "'");
+    $db->delete_query(AF_AA_PRESETS_TABLE_NAME, "id='" . $presetId . "'" . af_aa_personal_catalog_scope());
 }
 
 function af_aa_toggle_front_preset(int $presetId, int $enabled): void
@@ -3528,7 +3558,7 @@ function af_aa_toggle_front_preset(int $presetId, int $enabled): void
             'enabled' => $enabled ? 1 : 0,
             'updated_at' => TIME_NOW,
         ],
-        "id='" . $presetId . "'"
+        "id='" . $presetId . "'" . af_aa_personal_catalog_scope()
     );
 }
 
@@ -4603,6 +4633,8 @@ function af_aa_build_preview_markup(string $kind, array $ctx): string
 function af_aa_render_apstudio_page(): void
 {
     global $mybb, $headerinclude;
+
+    if ((string)$mybb->get_input('api') === 'personal') af_aa_personal_api();
 
     if (!af_aa_is_enabled() || !af_aa_is_admin_user()) {
         error_no_permission();

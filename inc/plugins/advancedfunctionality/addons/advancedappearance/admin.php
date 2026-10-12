@@ -48,6 +48,8 @@ if (!defined('AF_AA_ASSIGNMENTS_TABLE') && defined('TABLE_PREFIX')) {
     define('AF_AA_ASSIGNMENTS_TABLE', TABLE_PREFIX . AF_AA_ASSIGNMENTS_TABLE_NAME);
 }
 
+require_once __DIR__ . '/personal.php';
+
 class AF_Admin_Advancedappearance
 {
     public static function dispatch(): void
@@ -61,6 +63,8 @@ class AF_Admin_Advancedappearance
         if (function_exists('af_aa_ensure_settings')) {
             af_aa_ensure_settings();
         }
+
+        if (function_exists('af_aa_personal_ensure_settings')) af_aa_personal_ensure_settings();
 
         if (function_exists('rebuild_settings')) {
             rebuild_settings();
@@ -245,6 +249,7 @@ class AF_Admin_Advancedappearance
         echo '<div style="margin-bottom:14px;">';
         echo '<a class="button" style="margin-right:8px;" href="' . htmlspecialchars_uni(self::baseUrl('presets', self::resolvePresetDo($do))) . '">Каталог пресетов</a>';
         echo '<a class="button" href="' . htmlspecialchars_uni(self::baseUrl('assignments')) . '">Назначения пользователям</a>';
+        echo ' <a class="button" href="index.php?module=config-settings">Настройки ёмкости личных пресетов (AdvancedAppearance)</a>';
         echo '</div>';
 
         if ($section === 'presets') {
@@ -321,7 +326,7 @@ class AF_Admin_Advancedappearance
             if ($action === 'delete') {
                 $id = (int)$mybb->get_input('id');
                 if ($id > 0) {
-                    $db->delete_query(AF_AA_PRESETS_TABLE_NAME, "id='" . $id . "'");
+                    $db->delete_query(AF_AA_PRESETS_TABLE_NAME, "id='" . $id . "'" . af_aa_personal_catalog_scope());
                 }
 
                 self::redirectWithMessage($base, 'Пресет удалён.', 'success');
@@ -335,7 +340,7 @@ class AF_Admin_Advancedappearance
                     $db->update_query(AF_AA_PRESETS_TABLE_NAME, [
                         'enabled' => $enabled ? 1 : 0,
                         'updated_at' => TIME_NOW,
-                    ], "id='" . $id . "'");
+                    ], "id='" . $id . "'" . af_aa_personal_catalog_scope());
                 }
 
                 self::redirectWithMessage($base, 'Статус пресета обновлён.', 'success');
@@ -345,7 +350,7 @@ class AF_Admin_Advancedappearance
         $editId = (int)$mybb->get_input('edit');
         $editPreset = [];
         if ($editId > 0) {
-            $query = $db->simple_select(AF_AA_PRESETS_TABLE_NAME, '*', "id='" . $editId . "'", ['limit' => 1]);
+            $query = $db->simple_select(AF_AA_PRESETS_TABLE_NAME, '*', "id='" . $editId . "'" . af_aa_personal_catalog_scope(), ['limit' => 1]);
             $row = $db->fetch_array($query);
             if (is_array($row)) {
                 $editPreset = $row;
@@ -364,7 +369,7 @@ class AF_Admin_Advancedappearance
         self::renderNav('presets', $do);
         self::renderPresetForm($base, $editPreset, $settings, $do);
 
-        $where = "target_key='" . $db->escape_string($targetKey) . "'";
+        $where = "target_key='" . $db->escape_string($targetKey) . "'" . af_aa_personal_catalog_scope();
         $query = $db->simple_select(
             AF_AA_PRESETS_TABLE_NAME,
             '*',
@@ -1223,7 +1228,7 @@ border-color: rgba(255,255,255,.10);
         ];
 
         if ($id > 0) {
-            $db->update_query(AF_AA_PRESETS_TABLE_NAME, $payload, "id='" . $id . "'");
+            $db->update_query(AF_AA_PRESETS_TABLE_NAME, $payload, "id='" . $id . "'" . af_aa_personal_catalog_scope());
             return;
         }
 
@@ -1319,7 +1324,7 @@ border-color: rgba(255,255,255,.10);
         $query = $db->simple_select(
             AF_AA_PRESETS_TABLE_NAME,
             'id,title,target_key,settings_json',
-            "enabled='1'",
+            "enabled='1'" . af_aa_personal_catalog_scope(),
             ['order_by' => 'target_key, sortorder, id', 'order_dir' => 'ASC']
         );
 
@@ -1367,7 +1372,7 @@ border-color: rgba(255,255,255,.10);
             return;
         }
 
-        $presetQuery = $db->simple_select(AF_AA_PRESETS_TABLE_NAME, '*', "id='" . $presetId . "'", ['limit' => 1]);
+        $presetQuery = $db->simple_select(AF_AA_PRESETS_TABLE_NAME, '*', "id='" . $presetId . "'" . af_aa_personal_catalog_scope(), ['limit' => 1]);
         $preset = $db->fetch_array($presetQuery);
 
         if (!is_array($preset) || empty($preset)) {

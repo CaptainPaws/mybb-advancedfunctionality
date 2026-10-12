@@ -3,7 +3,7 @@
 return [
     'id'          => 'advancedappearance',
     'name'        => 'AdvancedAppearance',
-    'version'     => '1.0.0',
+    'version'     => '1.1.0',
     'author'      => 'CaptainPaws',
     'authorsite'  => 'https://github.com/CaptainPaws',
     'description' => 'Каталог визуальных пресетов и назначения пользователям для APUI.',
