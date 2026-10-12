@@ -268,11 +268,13 @@
       panel.setAttribute('aria-busy', 'true');
       panel.innerHTML = '<div class="af-apui-lazy-placeholder">Загрузка…</div>';
       try {
-        var response = await fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        var response = await fetch(url + (url.indexOf('?') === -1 ? '?' : '&') + 'af_profile_assets=1', { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         if (!response.ok) throw new Error('HTTP ' + response.status);
-        var html = await response.text();
+        var payload = (response.headers.get('Content-Type') || '').indexOf('application/json') !== -1 ? await response.json() : {html:await response.text(),assets:[]};
+        var html = payload.html || '';
         if (!html.trim() || /<!doctype|<html[\s>]/i.test(html)) throw new Error('Invalid profile tab fragment');
         panel.innerHTML = html;
+        for (var asset of payload.assets || []) await loadProfileAsset(asset);
         panel.setAttribute('data-lazy-state', 'loaded');
         if (typeof window.AFAdvancedInventoryInit === 'function') window.AFAdvancedInventoryInit(panel);
         document.dispatchEvent(new CustomEvent('af:profile-tab-loaded', { detail: { panel: panel, tab: panel.getAttribute('data-panel') } }));
@@ -373,7 +375,6 @@
         '</div>' +
         '<div class="af-cs-modal__body">' +
           '<div class="af-cs-modal__content" data-af-apui-modal-content="1" style="display:none;"></div>' +
-          '<iframe class="af-cs-modal__frame" data-af-apui-modal-frame="1" src="about:blank" loading="lazy"></iframe>' +
         '</div>' +
       '</div>';
 
@@ -829,6 +830,8 @@
     }
 
     clearUniversalModalState(modalParts);
+    document.dispatchEvent(new CustomEvent('af-element-effects-refresh'));
+    if (modalState.opener && modalState.opener.isConnected) modalState.opener.focus();
   }
 
   function defer(fn) {
@@ -838,6 +841,52 @@
     }
 
     window.setTimeout(fn, 0);
+  }
+
+  var lazyAssets = new Map();
+  function loadProfileAsset(asset) {
+    var url = new URL(asset.url, location.href);
+    if (url.origin !== location.origin || !/\.(?:css|js)$/.test(url.pathname)) return Promise.reject(new Error('Недопустимый ресурс раздела.'));
+    var key = url.origin + url.pathname;
+    if (lazyAssets.has(key)) return lazyAssets.get(key);
+    var existing = Array.from(document.querySelectorAll('script[src],link[rel="stylesheet"][href]')).some(function (node) {
+      var old = new URL(node.src || node.href, location.href); return old.origin + old.pathname === key;
+    });
+    if (existing) return Promise.resolve();
+    var promise = new Promise(function (resolve, reject) {
+      var node = document.createElement(asset.type === 'css' ? 'link' : 'script');
+      if (asset.type === 'css') { node.rel = 'stylesheet'; node.href = url.href; } else { node.src = url.href; node.async = false; }
+      node.onload = resolve; node.onerror = function () { node.remove();lazyAssets.delete(key);reject(new Error('Не удалось загрузить оформление раздела.')); };
+      document.head.appendChild(node);
+    });
+    lazyAssets.set(key, promise); return promise;
+  }
+  async function openProfileFragment(opener) {
+    var parts = ensureSharedModal(), token = ++modalState.token;
+    clearUniversalModalState(parts);
+    parts.modal.classList.add('is-open'); parts.modal.setAttribute('aria-hidden', 'false');
+    setUniversalModalKind(parts, opener.getAttribute('data-af-apui-quick-link') === 'application' ? 'application' : 'inventory');
+    parts.title.textContent = opener.getAttribute('data-af-apui-modal-title') || '';
+    parts.title.style.display = '';
+    var dialog = parts.modal.querySelector('[role="dialog"]');
+    if (dialog) dialog.setAttribute('aria-label', parts.title.textContent);
+    parts.content.style.display = 'block'; parts.content.innerHTML = '<p role="status">Загрузка…</p>';
+    parts.modal.querySelector('button[data-af-apui-modal-close]').focus();
+    modalState.controller = new AbortController();
+    try {
+      var response = await fetch(opener.getAttribute('data-af-apui-modal-url'), {credentials:'same-origin', signal:modalState.controller.signal});
+      var payload = await response.json().catch(function () { return {error:'Содержимое недоступно.'}; });
+      if (!response.ok || !payload.html) throw new Error(payload.error || 'Содержимое недоступно.');
+      if (token !== modalState.token) return;
+      parts.content.innerHTML = payload.html;
+      for (var asset of payload.assets || []) await loadProfileAsset(asset);
+      if (token !== modalState.token) return;
+      if (opener.getAttribute('data-af-apui-quick-link') === 'application') normalizeApplicationModalFragmentLayout(parts);
+      if (window.AFAdvancedInventoryInit) window.AFAdvancedInventoryInit(parts.content);
+      document.dispatchEvent(new CustomEvent('af-element-effects-refresh'));
+    } catch (error) {
+      if (token === modalState.token && error.name !== 'AbortError') { parts.content.innerHTML = '<p role="alert"></p>';parts.content.firstChild.textContent = error.message || 'Не удалось загрузить содержимое.'; }
+    }
   }
 
   function openUniversalModal(url, title, kind) {
@@ -861,13 +910,22 @@
 
     clearUniversalModalState(modalParts);
     setUniversalModalKind(modalParts, modalKind);
+    var dialog = modalParts.modal.querySelector('[role="dialog"]');
+    if (dialog) dialog.setAttribute('aria-label', title || 'Содержимое');
 
     if (!modalParts.frame) {
-      return;
+      modalParts.frame = document.createElement('iframe');
+      modalParts.frame.className = 'af-cs-modal__frame';
+      modalParts.frame.setAttribute('data-af-apui-modal-frame', '1');
+      modalParts.frame.setAttribute('title', title || 'Содержимое');
+      modalParts.frame.setAttribute('src', 'about:blank');
+      modalParts.modal.querySelector('.af-cs-modal__body').appendChild(modalParts.frame);
     }
 
+    modalParts.modal.querySelector('button[data-af-apui-modal-close]').focus();
     modalParts.frame.style.display = 'block';
     modalParts.frame.style.visibility = 'hidden';
+    if (modalParts.content) { modalParts.content.style.display = 'block'; modalParts.content.innerHTML = '<p role="status">Загрузка…</p>'; }
     startSharedLoading(modalParts, loadUrl);
     modalParts.frame.onerror = function () {
       if (token === modalState.token && sharedLoadingState) sharedLoadingState.fail();
@@ -881,8 +939,14 @@
         return;
       }
 
+      try { modalParts.frame.contentDocument.addEventListener('keydown', function(event) { if (event.key === 'Escape') { event.preventDefault(); closeUniversalModal(); }
+        else if (event.key === 'Tab') {
+          var nodes = Array.from(event.currentTarget.querySelectorAll('a[href],button,input,select,textarea')).filter(function(node) { return !node.disabled && node.getClientRects().length; });
+          if (nodes.length && ((event.shiftKey && event.target === nodes[0]) || (!event.shiftKey && event.target === nodes[nodes.length-1]))) { event.preventDefault(); modalParts.modal.querySelector('button[data-af-apui-modal-close]').focus(); }
+        } }); } catch (_) {}
       modalParts.frame.style.visibility = '';
       modalParts.frame.classList.add('is-loaded');
+      if (modalParts.content) { modalParts.content.innerHTML = ''; modalParts.content.style.display = 'none'; }
       finishSharedLoading();
     };
 
@@ -1090,9 +1154,11 @@
       }
 
       event.preventDefault();
+      modalState.opener = opener;
 
       var modalKind = String(opener.getAttribute('data-af-apui-modal-kind') || 'iframe').toLowerCase();
 
+      if (modalKind === 'fragment') { openProfileFragment(opener); return; }
       if (modalKind === 'application') {
         openApplicationModal(opener);
         return;
@@ -1106,7 +1172,15 @@
     });
 
     document.addEventListener('keydown', function (event) {
+      var openModal = document.querySelector('[data-af-apui-modal].is-open');
+      if (event.key === 'Tab' && openModal && openModal.contains(event.target)) {
+        var controls = Array.from(openModal.querySelectorAll('a[href],button,input,select,textarea,iframe')).filter(function (node) { return !node.disabled && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden'; });
+        var first = controls[0], last = controls[controls.length-1];
+        if (first && ((event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last))) { event.preventDefault(); (event.shiftKey ? last : first).focus(); }
+      }
       if (event.key === 'Escape') {
+        var foreignDialog = event.target.closest && event.target.closest('[role="dialog"]');
+        if (openModal && foreignDialog && !openModal.contains(foreignDialog)) return;
         var modal = document.querySelector('[data-af-apui-modal].is-open');
         if (modal) {
           closeUniversalModal();

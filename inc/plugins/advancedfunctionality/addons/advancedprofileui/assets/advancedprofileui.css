@@ -3443,3 +3443,14 @@ body.af-apui-member-profile-page:not(.atf-active) .af-apui-profile-hero__inner {
 /* Surface-owned full background: the layer sits above root paint, below content. */
 body.af-apui-member-profile-page[data-af-element-effect-active] { isolation: isolate; }
 body.af-apui-member-profile-page > [data-af-element-effect][data-af-effect-ready] { position: fixed !important; inset: 0; z-index: -1; }
+/* Shared profile actions keep MyBB controls/tokens, with card presentation. */
+.af-apui-extra-group { margin-block: 0 12px; padding: 16px; background: var(--atf-color-surface, #172233); border: 1px solid var(--af-element-border, var(--atf-color-border, #40516a)); border-radius: 8px; }
+.af-apui-extra-group h2 { margin: 0 0 12px; font-size: 15px; }
+.af-apui-extra-group .af-apui-extra-actions-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.af-apui-native-action-tr { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 0; }
+.af-apui-extra-group a { display: inline-flex; align-items: center; padding: 7px 10px; border: 1px solid var(--af-element-border, #40516a); border-radius: 6px; }
+.af-apui-extra-group :is(a,button,input):focus-visible { outline: 2px solid var(--af-element-accent, #88bbff); outline-offset: 2px; }
+
+.af-apui-extra-group .af-apui-native-action-group { display: flex; align-items: flex-start; gap: 8px; flex: 1 1 220px; min-width: 0; }
+.af-apui-native-action-group > i { flex: 0 0 16px; margin-top: 10px; color: var(--af-element-accent, inherit); }
+.af-apui-native-action-group > div { min-width: 0; }

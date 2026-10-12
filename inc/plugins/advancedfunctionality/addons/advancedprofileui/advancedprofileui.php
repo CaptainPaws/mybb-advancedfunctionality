@@ -640,14 +640,17 @@ function af_apui_get_profile_avatars(int $uid, bool $fallbackSecondaryToPrimary 
 
 function af_apui_render_atf_profile_navigation(array $context): string
 {
-    $labels = ['info' => 'Основная информация', 'sheet' => 'Лист персонажа',
-        'rewards' => 'Ачивки и Подарки', 'timeline' => 'Хронология', 'activity' => 'Активность'];
+    $labels = ['info' => 'Основная информация',
+        'rewards' => 'Ачивки и Подарки', 'timeline' => 'Хронология', 'activity' => 'Активность', 'extra'=>'Дополнительно'];
     $items = [];
     $sections = (array)($context['sections'] ?? []);
     $sections['info'] = (string)($sections['info'] ?? '')
         . implode('', (array)($context['native'] ?? []))
         . implode('', (array)($context['providers'] ?? []));
-    foreach ($sections as $key => $html) {
+    $sections['extra'] = (string)($GLOBALS['af_apui_profile_extra'] ?? '');
+    foreach ($labels as $key => $label) {
+        $html = $sections[$key] ?? '';
+        if ($key === 'extra' && trim($html) === '') $html = 'extra';
         if (trim((string)$html) === '' || !isset($labels[$key])) continue;
         $active = !$items;
         $items[] = '<a class="atf-profile-nav__item' . ($active ? ' is-active' : '') . '" href="#af-tab-'
@@ -1814,6 +1817,7 @@ function af_apui_member_profile_init_vars(): void
         'af_apui_profile_element',
         'af_apui_character_workspace',
         'af_apui_profile_quick_links',
+        'af_apui_profile_extra',
     ] as $varName) {
         if (!isset($GLOBALS[$varName]) || !is_string($GLOBALS[$varName])) {
             $GLOBALS[$varName] = '';
@@ -1861,8 +1865,7 @@ function af_apui_member_profile_prepare_layout_vars(): void
     );
 
     $extraPairs = array_merge(
-        af_apui_extract_pairs_from_html((string)$profilefields),
-        af_apui_extract_pairs_from_html((string)$contact_details)
+        af_apui_extract_pairs_from_html((string)$profilefields)
     );
 
     $GLOBALS['af_apui_forum_info_grid'] = af_apui_render_info_grid(
@@ -1884,12 +1887,6 @@ function af_apui_member_profile_prepare_layout_vars(): void
     $elementThemeKey = af_apui_profile_element_key($uid, $approvedCharacterPayload);
     $GLOBALS['af_apui_profile_element'] = htmlspecialchars_uni($elementThemeKey);
     if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('profile', $elementThemeKey);
-    if (!empty($sheetPayload['enabled'])
-        && trim((string)($sheetPayload['sheet_slug'] ?? '')) !== ''
-        && trim((string)($sheetPayload['sheet_url'] ?? '')) !== ''
-        && function_exists('af_charactersheets_mark_embedded_profile_component')) {
-        af_charactersheets_mark_embedded_profile_component();
-    }
     $legacyContext = [
         'uid' => $uid,
         'username' => (string)($memprofile['username'] ?? ''),
@@ -1902,12 +1899,7 @@ function af_apui_member_profile_prepare_layout_vars(): void
     $GLOBALS['af_apui_character_workspace'] = af_apui_render_profile_character_workspace($legacyContext);
     $GLOBALS['af_apui_profile_quick_links'] = af_apui_render_profile_quick_links($legacyContext);
 
-    if (function_exists('af_advinv_get_entities') && function_exists('af_advancedinventory_append_embedded_assets')) {
-        $rewardEntities = af_advinv_get_entities(true);
-        if (isset($rewardEntities['achievements']) || isset($rewardEntities['gifts'])) {
-            af_advancedinventory_append_embedded_assets($headerinclude, true);
-        }
-    }
+    $GLOBALS['af_apui_profile_extra'] = af_apui_render_profile_extra($GLOBALS);
 
     // Non-info tabs are intentionally represented by cheap shells. Their renderers
     // (and their queries) run only in af_apui_maybe_serve_lazy_profile_tab().
@@ -1922,8 +1914,9 @@ function af_apui_maybe_serve_lazy_profile_tab(): void
     global $mybb;
     $tab = trim((string)$mybb->get_input('af_profile_tab'));
     if ($tab === '') return;
+    if (empty($mybb->usergroup['canviewprofiles']) || (isset($mybb->usergroup['canview']) && empty($mybb->usergroup['canview']))) { http_response_code(403); echo 'Профиль недоступен.'; exit; }
 
-    $allowed = ['sheet', 'timeline', 'activity', 'rewards'];
+    $allowed = ['sheet', 'timeline', 'activity', 'rewards', 'quick'];
     if (!in_array($tab, $allowed, true)) {
         http_response_code(400);
         echo 'Неизвестная вкладка.';
@@ -1934,6 +1927,13 @@ function af_apui_maybe_serve_lazy_profile_tab(): void
         http_response_code(404);
         echo 'Профиль не найден.';
         exit;
+    }
+
+    if ($tab === 'quick') {
+        try { [$status, $payload] = af_apui_profile_quick_content($uid, (string)$mybb->get_input('af_profile_quick')); }
+        catch (Throwable $error) { error_log('[AdvancedProfileUI] quick content renderer failed'); $status = 500; $payload = ['error'=>'Не удалось загрузить содержимое.']; }
+        http_response_code($status); header('Content-Type: application/json; charset=utf-8'); header('Cache-Control: no-store');
+        echo json_encode($payload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); exit;
     }
 
     try {
@@ -1957,6 +1957,13 @@ function af_apui_maybe_serve_lazy_profile_tab(): void
         error_log('[AdvancedProfileUI] lazy profile tab ' . $tab . ' failed: ' . $error->getMessage());
         http_response_code(500);
         $html = '<div class="af-apui-empty">Не удалось загрузить содержимое вкладки.</div>';
+    }
+    if ((string)$mybb->get_input('af_profile_assets') === '1') {
+        $assets = '';
+        if ($tab === 'rewards' && function_exists('af_advancedinventory_append_embedded_assets')) af_advancedinventory_append_embedded_assets($assets, true);
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: private, no-store');
+        echo json_encode(['html'=>$html, 'assets'=>af_apui_profile_asset_manifest($assets)], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); exit;
     }
     header('Content-Type: text/html; charset=' . ($mybb->settings['charset'] ?? 'UTF-8'));
     header('Cache-Control: private, no-store');

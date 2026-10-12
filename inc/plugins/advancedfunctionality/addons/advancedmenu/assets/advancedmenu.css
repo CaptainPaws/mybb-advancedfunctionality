@@ -254,3 +254,7 @@ body.af-am-drawer-open .af-am-rail { z-index: 1200; }
 .af-advancedmenu-layout .af-am-rail .af-am-list > li { display: flex; align-items: center; justify-content: center; float: none; margin: 0; padding: 0; }
 .af-advancedmenu-layout .af-am-rail .af-am-bar { overflow: visible; }
 .af-advancedmenu-layout .af-am-rail .af-am-guest-actions { align-items: center; gap: 4px; }
+
+/* Account sections must not inherit card padding/borders from forum themes. */
+.af-advancedmenu-layout .af-am-rail .af-am-guest-account { padding: 0; margin: 0; border: 0; box-sizing: border-box; background: transparent; }
+.af-advancedmenu-layout .af-am-rail .af-am-guest-actions { padding: 0; margin: 0; border: 0; box-sizing: border-box; }

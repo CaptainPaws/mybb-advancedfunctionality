@@ -880,10 +880,7 @@ function af_adaptivethemeframework_render_profile_main(array $context): string
         (string)($context['native']['profilefields'] ?? ''),
         'info'
     );
-    $contacts = af_adaptivethemeframework_profile_semantic_rows(
-        (string)($context['native']['contact_details'] ?? ''),
-        'info'
-    );
+    $contacts = '';
     $signature = trim((string)($context['native']['signature'] ?? ''));
 
     $html = '';
@@ -909,6 +906,7 @@ function af_adaptivethemeframework_render_profile_main(array $context): string
 
 function af_adaptivethemeframework_render_profile_actions(array $context): string
 {
+    if (function_exists('af_apui_render_profile_extra')) return (string)($context['sections']['extra'] ?? af_apui_render_profile_extra($context['native']));
     $mod = af_adaptivethemeframework_profile_semantic_rows(
         (string)($context['native']['modoptions'] ?? ''),
         'actions'
@@ -967,7 +965,7 @@ function af_adaptivethemeframework_register_profile_providers(): bool
         'renderer' => 'af_adaptivethemeframework_render_profile_main',
     ]);
     $registered = af_adaptivethemeframework_register_component([
-        'owner' => 'mybb', 'key' => 'profile_actions', 'slot' => 'profile.after_content',
+        'owner' => 'mybb', 'key' => 'profile_actions', 'slot' => 'profile.extra',
         'renderer' => 'af_adaptivethemeframework_render_profile_actions',
     ]) || $registered;
     return $registered;
@@ -1029,6 +1027,7 @@ function af_adaptivethemeframework_compose_profile(): void
         'rewards' => '<div class="af-apui-lazy-placeholder" data-af-apui-lazy-tab="rewards">Загрузка…</div>',
         'timeline' => (string)($GLOBALS['af_apui_timeline_tab'] ?? ''),
         'activity' => (string)($GLOBALS['af_apui_activity_tab'] ?? ''),
+        'extra' => (string)($GLOBALS['af_apui_profile_extra'] ?? ''),
     ];
     $values['providers'] = [
         'balance' => (string)($memprofile['balance'] ?? ''),
@@ -1039,7 +1038,7 @@ function af_adaptivethemeframework_compose_profile(): void
     if (function_exists('af_elementtheme_mark_surface')) af_elementtheme_mark_surface('profile', $elementKey);
     $context = af_adaptivethemeframework_profile_context($memprofile, $values);
     foreach (['hero', 'navigation', 'forum_info', 'quick_links', 'character_sheet', 'rewards', 'timeline',
-        'activity', 'balance', 'post_counter', 'before_content', 'main', 'after_content'] as $name) {
+        'activity', 'extra', 'balance', 'post_counter', 'before_content', 'main', 'after_content'] as $name) {
         $GLOBALS['atf_profile_' . $name] = af_adaptivethemeframework_render_slot('profile.' . $name, $context);
     }
     $GLOBALS['atf_profile_context'] = $context;
@@ -2304,7 +2303,7 @@ function af_adaptivethemeframework_render_ucp_navigation(string $level, array $c
 function af_adaptivethemeframework_slots(): array
 {
     return [
-        'profile.hero', 'profile.navigation', 'profile.forum_info', 'profile.quick_links', 'profile.stats',
+        'profile.hero', 'profile.navigation', 'profile.forum_info', 'profile.quick_links', 'profile.extra', 'profile.stats',
         'profile.character_sheet', 'profile.rewards', 'profile.application', 'profile.timeline',
         'profile.activity', 'profile.balance', 'profile.post_counter',
         'profile.before_content', 'profile.main', 'profile.after_content',
