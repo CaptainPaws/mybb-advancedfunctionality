@@ -258,3 +258,57 @@ body.af-am-drawer-open .af-am-rail { z-index: 1200; }
 /* Account sections must not inherit card padding/borders from forum themes. */
 .af-advancedmenu-layout .af-am-rail .af-am-guest-account { padding: 0; margin: 0; border: 0; box-sizing: border-box; background: transparent; }
 .af-advancedmenu-layout .af-am-rail .af-am-guest-actions { padding: 0; margin: 0; border: 0; box-sizing: border-box; }
+
+/* Keep guest actions on the same centered rail axis as the other controls. */
+.af-advancedmenu-layout .af-am-rail .af-am-guest-account {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.af-advancedmenu-layout .af-am-rail .af-am-guest-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.af-advancedmenu-layout .af-am-rail :is(.af-am-link, .af-am-category-control, .af-am-guest-action) {
+  display: inline-flex;
+  flex: 0 0 var(--af-am-control-size);
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--af-am-control-size);
+  min-width: var(--af-am-control-size);
+  max-width: var(--af-am-control-size);
+  height: var(--af-am-control-size);
+  min-height: var(--af-am-control-size);
+  margin: 0;
+  padding: 0;
+  text-align: center;
+}
+.af-advancedmenu-layout .af-am-rail :is(.af-am-link, .af-am-category-control, .af-am-guest-action) :is(i, .af-am-ico, svg) {
+  display: inline-flex;
+  flex: 0 0 16px;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  line-height: 1;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .af-advancedmenu-layout .af-am-rail .af-am-guest-account { width: auto; }
+  .af-advancedmenu-layout .af-am-rail .af-am-guest-actions { width: auto; flex-direction: row; }
+}

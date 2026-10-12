@@ -82,10 +82,23 @@
         tip.style.display = 'block';
 
         var rect = chip.getBoundingClientRect();
-        var top = rect.top + window.scrollY - tip.offsetHeight - 8;
-        if (top < 8) top = rect.bottom + window.scrollY + 8;
-
-        var left = rect.left + window.scrollX;
+        var root = document.documentElement;
+        var scrollX = window.pageXOffset || root.scrollLeft || 0;
+        var scrollY = window.pageYOffset || root.scrollTop || 0;
+        var viewportWidth = root.clientWidth || window.innerWidth;
+        var viewportHeight = root.clientHeight || window.innerHeight;
+        var pad = 8;
+        var minLeft = scrollX + pad;
+        var maxLeft = Math.max(minLeft, scrollX + viewportWidth - tip.offsetWidth - pad);
+        var left = Math.max(minLeft, Math.min(rect.left + scrollX, maxLeft));
+        var minTop = scrollY + pad;
+        var maxTop = Math.max(minTop, scrollY + viewportHeight - tip.offsetHeight - pad);
+        var top = rect.top + scrollY - tip.offsetHeight - pad;
+        if (top < minTop) {
+            var below = rect.bottom + scrollY + pad;
+            top = below <= maxTop ? below : maxTop;
+        }
+        top = Math.max(minTop, Math.min(top, maxTop));
         tip.style.top = top + 'px';
         tip.style.left = left + 'px';
     }

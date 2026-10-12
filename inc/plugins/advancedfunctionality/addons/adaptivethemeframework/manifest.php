@@ -6,7 +6,7 @@ return [
     'id' => 'adaptivethemeframework',
     'name' => 'Adaptive Theme Framework',
     'description' => 'Presentation framework for adaptive AF component-slot layouts.',
-    'version' => '0.28.0',
+    'version' => '0.29.0',
     'author' => 'AdvancedFunctionality',
     'bootstrap' => 'adaptivethemeframework.php',
 
@@ -31,6 +31,31 @@ return [
             'id' => 'surface_navigation',
             'file' => 'assets/surfaces/navigation.css',
             'attach' => [['file' => 'global']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+        ],
+        [
+            'id' => 'surface_tooltips',
+            'file' => 'assets/surfaces/tooltips.css',
+            'attach' => [['file' => 'global']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+        ],
+        [
+            'id' => 'surface_knowledgebase',
+            'file' => 'assets/surfaces/knowledgebase.css',
+            'attach' => [
+                ['file' => 'kb.php'],
+                ['file' => 'misc.php', 'action' => 'kb'],
+                ['file' => 'misc.php', 'action' => 'kb_edit'],
+                ['file' => 'misc.php', 'action' => 'kb_type_edit'],
+                ['file' => 'misc.php', 'action' => 'kb_help'],
+                ['file' => 'misc.php', 'action' => 'kb_manage_categories'],
+            ],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+        ],
+        [
+            'id' => 'surface_gallery',
+            'file' => 'assets/surfaces/gallery.css',
+            'attach' => [['file' => 'gallery.php']],
             'enabled_setting' => 'af_adaptivethemeframework_enabled',
         ],
         [

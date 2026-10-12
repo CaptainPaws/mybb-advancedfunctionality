@@ -8,7 +8,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
 define('AF_KB_ID', 'knowledgebase');
-define('AF_KB_VER', '1.0.0');
+define('AF_KB_VER', '1.0.1');
 define('AF_KB_BASE', AF_ADDONS . AF_KB_ID . '/');
 define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
 define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');

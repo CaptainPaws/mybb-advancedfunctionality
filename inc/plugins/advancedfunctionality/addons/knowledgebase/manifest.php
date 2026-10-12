@@ -2,7 +2,7 @@
 return [
     'id'          => 'knowledgebase',
     'name'        => 'База знаний',
-    'version'     => '1.0.0',
+    'version'     => '1.0.1',
     'author'      => 'AdvancedFunctionality',
     'authorsite'  => '',
     'description' => 'Единая база знаний для сущностей (type/key).',

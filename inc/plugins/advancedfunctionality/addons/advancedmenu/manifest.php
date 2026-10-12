@@ -6,7 +6,7 @@
 return [
     'id'        => 'advancedmenu',
     'name'      => 'AdvancedMenu',
-    'version'   => '1.0.0',
+    'version'   => '1.0.1',
     'author'      => 'CaptainPaws',
     'authorsite'  => 'https://github.com/CaptainPaws',
     'bootstrap' => 'advancedmenu.php',

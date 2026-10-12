@@ -1,0 +1,68 @@
+/* ATF shared tooltip surface. Runtime ownership remains with each component. */
+
+body.atf-active .af-title-tip {
+  position: fixed;
+  z-index: 2147483647;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  pointer-events: none;
+  animation: af-atf-tooltip-enter 120ms ease-out both;
+}
+
+body.atf-active .af-title-tip__inner {
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid var(--atf-color-border-strong);
+  border-radius: var(--atf-radius-md);
+  background: color-mix(in srgb, var(--atf-color-surface-raised) 94%, #080b10);
+  color: var(--atf-color-text);
+  font: var(--atf-font-size-sm)/1.4 var(--atf-font-family);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  box-shadow: var(--atf-shadow-md, 0 8px 24px rgb(0 0 0 / 48%));
+}
+
+body.atf-active :is(.af-am-tooltip, .af-am-account-tooltip, .af-kb-tooltip) {
+  box-sizing: border-box;
+  max-width: min(280px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  border: 1px solid var(--atf-color-border-strong);
+  border-radius: var(--atf-radius-md);
+  background: color-mix(in srgb, var(--atf-color-surface-raised) 94%, #080b10);
+  color: var(--atf-color-text);
+  font-family: var(--atf-font-family);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  box-shadow: var(--atf-shadow-md, 0 8px 24px rgb(0 0 0 / 48%));
+}
+
+body.atf-active .af-am-tooltip,
+body.atf-active .af-am-account-tooltip,
+body.atf-active .af-kb-tooltip {
+  z-index: 2147483646;
+  animation: af-atf-tooltip-enter 120ms ease-out both;
+}
+
+body.atf-active .af-kb-tooltip {
+  z-index: 2147483645;
+  padding: var(--atf-space-2) var(--atf-space-3);
+  font-size: var(--atf-font-size-sm);
+}
+
+body.atf-active .af-kb-tooltip-body { min-width: 0; }
+body.atf-active .af-kb-tooltip-body :is(p, ul, ol) { margin-block: var(--atf-space-1); }
+body.atf-active .af-kb-tooltip :is(a, strong) { color: inherit; }
+body.atf-active .af-kb-tooltip img { max-width: 100%; height: auto; object-fit: contain; }
+
+@keyframes af-atf-tooltip-enter {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.atf-active :is(.af-title-tip, .af-am-tooltip, .af-am-account-tooltip, .af-kb-tooltip) { animation: none; }
+}
