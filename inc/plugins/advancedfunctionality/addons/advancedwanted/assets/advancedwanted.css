@@ -11,9 +11,10 @@
 .af-wanted .af-kb-header { min-width: 0; margin: 0; }
 .af-wanted .af-kb-header h1 { margin: 0; }
 .af-wanted-page-description { max-width: 45rem; margin: .28rem 0 0; }
-.af-wanted-create { flex: 0 0 auto; }
+.af-wanted-create { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: .5rem; }
 .af-wanted-toolbar { margin-bottom: .55rem; }
 .af-wanted-tabs { display: inline-flex; align-items: stretch; gap: 0; }
+.af-wanted-tab { display: inline-flex; min-width: 8rem; min-height: 2.35rem; align-items: center; justify-content: center; gap: .45rem; padding: 0 .8rem; text-decoration: none; }
 .af-wanted-actions,
 .af-wanted-actions__lifecycle,
 .af-wanted-actions__owner,
@@ -29,9 +30,14 @@
 .af-wanted-field,
 .af-wanted-guest-name,
 .af-wanted-reservation-admin label { display: grid; min-width: 0; gap: .25rem; }
-.af-wanted-filter-fields :is(input, select, .button) { width: 100%; min-width: 0; height: 2.35rem; }
+.af-wanted-filter-fields :is(input, select, .af-wanted-button) { width: 100%; min-width: 0; height: 2.35rem; }
 .af-wanted-filter-actions { justify-content: flex-end; align-self: end; }
-.af-wanted-filter-actions .button { width: auto; }
+.af-wanted-filter-actions .af-wanted-button { width: auto; }
+.af-wanted-search { position: relative; display: flex !important; min-width: 0; min-height: 2.35rem; grid-column: span 2; align-items: center; gap: .6rem; padding: 0 .7rem; border: 1px solid; border-radius: var(--atf-radius-sm, 6px); }
+.af-wanted-search > i { flex: 0 0 auto; }
+.af-wanted-search > input { flex: 1 1 auto; width: 100%; min-width: 0; height: 100%; min-height: 0 !important; padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; }
+.af-wanted-search:focus-within { outline: 0; }
+.af-wanted-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; clip-path: inset(50%); }
 
 /* Override KB's generic auto-fill grid deliberately: Wanted is a 3-up catalog. */
 .af-wanted-grid,
@@ -84,9 +90,7 @@
 .af-wanted-card__byline > * { min-width: 0; overflow-wrap: anywhere; }
 .af-wanted-card__accepted { font-size: .86em; }
 .af-wanted-card__footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .45rem; margin-top: auto; padding-top: .55rem; border-top: 1px solid; }
-.af-wanted-card .af-wanted-actions { min-width: 0; flex: 1 1 auto; justify-content: flex-end; gap: .3rem; }
-.af-wanted-card .af-wanted-actions__lifecycle,
-.af-wanted-card .af-wanted-actions__owner { gap: .3rem; }
+.af-wanted-card__views { display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; }
 
 .af-wanted-status,
 .af-wanted-chip,
@@ -204,6 +208,51 @@ body.atf-active .af-wanted-filters,
 body.atf-active .af-wanted-panel,
 body.atf-active .af-wanted-management,
 body.atf-active .af-wanted-reservation-admin { border-color: var(--aw-border); border-radius: var(--atf-radius-md, 8px); background: linear-gradient(145deg, color-mix(in srgb, var(--aw-surface) 96%, transparent), color-mix(in srgb, var(--aw-page) 96%, transparent)); color: var(--aw-text); }
+body.atf-active .af-wanted .af-wanted-create,
+body.atf-active .af-wanted-catalog .af-wanted-tab,
+body.atf-active .af-wanted-catalog .af-wanted-button {
+  min-height: 2.35rem;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+  padding: 0 .72rem;
+  border: 1px solid var(--aw-border-strong);
+  border-radius: var(--atf-radius-sm, 6px);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--aw-raised) 94%, transparent), color-mix(in srgb, var(--aw-page) 96%, transparent));
+  color: var(--aw-text);
+  font: inherit;
+  line-height: 1.15;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease, color 180ms ease;
+}
+body.atf-active .af-wanted-catalog .af-wanted-tabs { border-bottom: 1px solid var(--aw-border); }
+body.atf-active .af-wanted-catalog .af-wanted-tab { min-height: 2.15rem; border-radius: 6px 6px 0 0; }
+body.atf-active .af-wanted-catalog .af-wanted-tab + .af-wanted-tab { margin-left: -1px; }
+body.atf-active .af-wanted-catalog .af-wanted-tab:not(.is-active) { border-color: transparent; background: transparent; color: var(--aw-muted); }
+body.atf-active .af-wanted-catalog .af-wanted-tab.is-active,
+body.atf-active .af-wanted .af-wanted-create {
+  border-color: color-mix(in srgb, var(--aw-accent) 76%, var(--aw-warm));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--aw-accent) 38%, var(--aw-raised)), color-mix(in srgb, var(--aw-page) 78%, var(--aw-accent)));
+  color: var(--aw-text);
+}
+body.atf-active .af-wanted .af-wanted-create { box-shadow: 0 0 16px color-mix(in srgb, var(--aw-accent) 24%, transparent), inset 0 1px 0 rgb(255 255 255 / 6%); }
+body.atf-active .af-wanted .af-wanted-create > i,
+body.atf-active .af-wanted-catalog .af-wanted-tab > i,
+body.atf-active .af-wanted-catalog .af-wanted-button > i { color: color-mix(in srgb, var(--aw-accent) 76%, white); }
+body.atf-active .af-wanted-catalog .af-wanted-filters { border: 1px solid var(--aw-border); background: linear-gradient(150deg, color-mix(in srgb, var(--aw-surface) 96%, transparent), color-mix(in srgb, var(--aw-page) 98%, transparent)); }
+body.atf-active .af-wanted-catalog .af-wanted-search { border-color: var(--aw-border-strong); background: color-mix(in srgb, var(--aw-page) 90%, transparent); color: var(--aw-accent); }
+body.atf-active .af-wanted-catalog .af-wanted-search:focus-within { border-color: var(--aw-accent); box-shadow: var(--atf-focus-ring, 0 0 0 3px rgb(151 137 255 / 28%)); }
+body.atf-active .af-wanted-catalog .af-wanted-search > input { color: var(--aw-text); }
+body.atf-active .af-wanted-catalog .af-wanted-search > input::placeholder { color: var(--aw-muted); opacity: .82; }
+body.atf-active .af-wanted-catalog .af-wanted-filter-actions .af-wanted-button--quiet { color: var(--aw-muted); }
+body.atf-active .af-wanted-catalog .af-wanted-tab:hover,
+body.atf-active .af-wanted-catalog .af-wanted-button:hover,
+body.atf-active .af-wanted .af-wanted-create:hover { border-color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 17%, var(--aw-raised)); box-shadow: 0 0 13px color-mix(in srgb, var(--aw-accent) 18%, transparent); color: var(--aw-text); }
+body.atf-active .af-wanted-catalog .af-wanted-tab:focus-visible,
+body.atf-active .af-wanted-catalog .af-wanted-button:focus-visible,
+body.atf-active .af-wanted .af-wanted-create:focus-visible { outline: 0; border-color: var(--aw-accent); box-shadow: var(--atf-focus-ring, 0 0 0 3px rgb(151 137 255 / 30%)); }
+body.atf-active .af-wanted-catalog .af-wanted-button:disabled { opacity: .55; cursor: not-allowed; }
 body.atf-active .af-wanted :is(.button, button.button, input.button, input[type="submit"], input[type="button"]),
 body.atf-active .af-wanted-modal-close {
   display: inline-flex;
@@ -228,17 +277,12 @@ body.atf-active .af-wanted-modal-close:hover { border-color: var(--aw-accent); b
 body.atf-active .af-wanted :is(.button, button.button, input.button, input[type="submit"], input[type="button"]):focus-visible,
 body.atf-active .af-wanted-modal-close:focus-visible { border-color: var(--aw-accent); outline: 0; box-shadow: var(--atf-focus-ring, 0 0 0 3px rgb(151 137 255 / 30%)); }
 body.atf-active .af-wanted :is(button, input, select, textarea):disabled { opacity: .55; cursor: not-allowed; }
-body.atf-active .af-wanted .af-wanted-tabs .button { border-radius: 6px 6px 0 0; }
-body.atf-active .af-wanted .af-wanted-tabs .button + .button { margin-left: -1px; }
-body.atf-active .af-wanted .af-wanted-tabs .is-active,
-body.atf-active .af-wanted .af-wanted-create,
 body.atf-active .af-wanted .af-wanted-form-actions button[type="submit"],
 body.atf-active .af-wanted .af-wanted-actions--lifecycle form[action*="action=apply"] button {
   border-color: color-mix(in srgb, var(--aw-accent) 72%, var(--aw-warm));
   background: linear-gradient(145deg, color-mix(in srgb, var(--aw-accent) 35%, var(--aw-raised)), color-mix(in srgb, var(--aw-page) 84%, var(--aw-accent)));
   color: var(--aw-text);
 }
-body.atf-active .af-wanted .af-wanted-create::before { content: "+"; font-size: 1.2em; line-height: 1; }
 body.atf-active .af-wanted-filter-fields > label,
 body.atf-active .af-wanted-field,
 body.atf-active .af-wanted-reservation-admin label,
@@ -281,9 +325,9 @@ body.atf-active .af-wanted-detail .af-wanted-status--application { border-color:
 body.atf-active .af-wanted-detail .af-wanted-status--archived { border-color: var(--aw-border); color: var(--aw-muted); }
 body.atf-active .af-wanted-card__image-overlay .af-wanted-status { box-shadow: 0 2px 9px rgb(0 0 0 / 35%); }
 body.atf-active .af-wanted-card__more { min-height: 2rem; padding-inline: .6rem; font-size: .85rem; }
-body.atf-active .af-wanted-card .af-wanted-actions { font-size: .82rem; }
-body.atf-active .af-wanted-card .af-wanted-actions .button { min-height: 2rem; padding-inline: .5rem; font-size: .8rem; }
-body.atf-active .af-wanted .af-wanted-card form[action*="action=delete"] .button,
+body.atf-active .af-wanted-card__views { color: var(--aw-muted); }
+body.atf-active .af-wanted-card__views > i,
+body.atf-active .af-wanted-detail-meta__views > span > i { color: var(--aw-accent); }
 body.atf-active .af-wanted-management .af-wanted-actions__owner form[action*="action=delete"] .button,
 body.atf-active .af-wanted-management .af-wanted-reservation-admin form:last-child .button { border-color: color-mix(in srgb, #c16c78 60%, var(--aw-border)); color: #f0aab3; }
 body.atf-active .af-wanted-detail-header__rule { background: linear-gradient(90deg, var(--aw-warm), var(--aw-accent), transparent); }
@@ -338,17 +382,17 @@ body.atf-active .af-wanted-modal-close:focus-visible { border-color: var(--aw-ac
   .af-wanted-page-head { align-items: stretch; flex-direction: column; gap: .55rem; }
   .af-wanted-create { width: 100%; }
   .af-wanted-tabs { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .af-wanted-tabs .button { width: 100%; }
+  .af-wanted-tabs .af-wanted-tab { width: 100%; }
   .af-wanted-filter-fields,
   .af-wanted-grid,
   .af-wanted .af-kb-entries--cards,
   .af-wanted-form { grid-template-columns: minmax(0, 1fr); }
+  .af-wanted-search { grid-column: auto; }
   .af-wanted-filter-actions { justify-content: stretch; }
-  .af-wanted-filter-actions .button { flex: 1 1 8rem; }
+  .af-wanted-filter-actions .af-wanted-button { flex: 1 1 8rem; }
   .af-wanted-card .af-kb-char-card__pic { height: 195px; }
   .af-wanted-form-actions { grid-column: 1; }
   .af-wanted-card__footer { align-items: flex-start; flex-direction: column; }
-  .af-wanted-card .af-wanted-actions { justify-content: flex-start; }
   .af-wanted-actions { align-items: stretch; }
   .af-wanted-detail { padding: .55rem; }
   .af-wanted-detail-image { height: 220px; }

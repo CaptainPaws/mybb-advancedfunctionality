@@ -1,6 +1,6 @@
 <?php
 return [
- 'id'=>'advancedwanted','name'=>'AdvancedWanted','description'=>'Каталог заявок на нужных персонажей.','version'=>'1.0.0','author'=>'CaptainPaws','bootstrap'=>'advancedwanted.php',
+ 'id'=>'advancedwanted','name'=>'AdvancedWanted','description'=>'Каталог заявок на нужных персонажей.','version'=>'1.1.0','author'=>'CaptainPaws','bootstrap'=>'advancedwanted.php',
  'admin'=>['slug'=>'advancedwanted','controller'=>'admin.php','title'=>'AdvancedWanted','icon'=>'fas fa-user-plus','order'=>35],
  'frontend'=>[
    'mode'=>'contextual',
