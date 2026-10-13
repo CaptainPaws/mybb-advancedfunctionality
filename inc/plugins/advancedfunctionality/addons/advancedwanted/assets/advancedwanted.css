@@ -684,7 +684,6 @@ body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-actions__secondary .
 body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-content { margin-top: 18px; }
 body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-section { padding: 8px 0; }
 body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-section h3 { gap: 10px; font-weight: 500; }
-body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-section h3::before { width: 5px; height: 18px; border-block: 1px solid var(--aw-warm); border-inline: 1px solid var(--aw-warm); transform: rotate(10deg); content: ""; }
 body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-meta { margin-top: 14px; padding: 12px 0; gap: 0; border-color: var(--aw-border); }
 body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-meta__item { padding: 0 14px; border-left: 1px solid var(--aw-border); font-size: .8rem; }
 body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-meta__author { padding-left: 0; border-left: 0; }
