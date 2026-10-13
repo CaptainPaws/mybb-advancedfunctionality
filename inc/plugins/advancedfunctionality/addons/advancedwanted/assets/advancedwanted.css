@@ -587,3 +587,53 @@ body .af-wanted-detail .af-wanted-detail-menu__delete .af-wanted-detail-menu__it
 @media (prefers-reduced-motion: reduce) {
  body .af-wanted .af-wanted-button { transition: none; }
 }
+
+/* Detail composition aligned to the approved two-column dossier. */
+body .af-wanted-detail { position: relative; isolation: isolate; padding: .95rem; }
+body .af-wanted-detail .af-wanted-detail-overview {
+  grid-template-columns: minmax(0, 1.08fr) minmax(290px, .92fr);
+  align-items: start;
+  gap: .9rem;
+}
+body .af-wanted-detail .af-wanted-detail-image { height: auto; aspect-ratio: 1.12 / 1; }
+body .af-wanted-detail .af-wanted-detail-sidebar { gap: .65rem; }
+body .af-wanted-detail .af-wanted-actions--lifecycle { display: grid; width: 100%; gap: .45rem; margin: 0; }
+body .af-wanted-detail .af-wanted-actions__primary,
+body .af-wanted-detail .af-wanted-actions__secondary { display: grid; min-width: 0; gap: .45rem; }
+body .af-wanted-detail .af-wanted-actions__primary > :is(a, form),
+body .af-wanted-detail .af-wanted-actions__secondary > :is(a, form) { min-width: 0; margin: 0; }
+body .af-wanted-detail .af-wanted-actions__primary > :is(a, form),
+body .af-wanted-detail .af-wanted-actions__primary .af-wanted-button { width: 100%; }
+body .af-wanted-detail .af-wanted-actions__secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+body .af-wanted-detail .af-wanted-actions__secondary .af-wanted-button { width: 100%; min-width: 0; min-height: 37px; }
+body .af-wanted-detail .af-wanted-actions__secondary > :only-child { grid-column: 1 / -1; }
+body .af-wanted-detail .af-wanted-actions__secondary .af-wanted-reserve-form { display: grid; grid-template-columns: minmax(0, 1fr); align-items: end; gap: .4rem; }
+body .af-wanted-detail .af-wanted-actions__secondary .af-wanted-reserve-form .af-wanted-guest-name { min-width: 0; }
+body .af-wanted-detail .af-wanted-actions__secondary .af-wanted-reserve-form--guest + .af-wanted-discuss { align-self: end; }
+body.atf-active .af-wanted .af-wanted-detail { border-color: color-mix(in srgb, var(--aw-warm) 48%, var(--aw-border-strong)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aw-warm) 12%, transparent), inset 0 1px 0 rgb(255 255 255 / 4%), 0 12px 34px rgb(0 0 0 / 16%); }
+body.atf-active .af-wanted .af-wanted-detail::before,
+body.atf-active .af-wanted .af-wanted-detail::after { position: absolute; z-index: 3; inset: 4px; border-radius: calc(var(--atf-radius-md, 8px) - 2px); content: ""; pointer-events: none; }
+body.atf-active .af-wanted .af-wanted-detail::before { border: 1px solid color-mix(in srgb, var(--aw-warm) 19%, transparent); }
+body.atf-active .af-wanted .af-wanted-detail::after {
+  inset: 3px;
+  background:
+    linear-gradient(90deg, var(--aw-warm), transparent) left top / 22px 1px no-repeat,
+    linear-gradient(180deg, var(--aw-warm), transparent) left top / 1px 22px no-repeat,
+    linear-gradient(270deg, var(--aw-warm), transparent) right top / 22px 1px no-repeat,
+    linear-gradient(180deg, var(--aw-warm), transparent) right top / 1px 22px no-repeat,
+    linear-gradient(90deg, var(--aw-warm), transparent) left bottom / 22px 1px no-repeat,
+    linear-gradient(0deg, var(--aw-warm), transparent) left bottom / 1px 22px no-repeat,
+    linear-gradient(270deg, var(--aw-warm), transparent) right bottom / 22px 1px no-repeat,
+    linear-gradient(0deg, var(--aw-warm), transparent) right bottom / 1px 22px no-repeat;
+  opacity: .75;
+}
+body.atf-active .af-wanted-detail .af-wanted-actions__primary .af-wanted-button { border-color: color-mix(in srgb, var(--aw-accent) 72%, var(--aw-warm)); background: linear-gradient(145deg, color-mix(in srgb, var(--aw-accent) 35%, var(--aw-raised)), color-mix(in srgb, var(--aw-page) 84%, var(--aw-accent))); color: var(--aw-text); }
+body.atf-active .af-wanted-detail .af-wanted-actions__primary .af-wanted-button:hover { border-color: var(--aw-accent); box-shadow: 0 0 15px color-mix(in srgb, var(--aw-accent) 24%, transparent); }
+@media (max-width: 860px) {
+  body .af-wanted-detail .af-wanted-detail-overview { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  body .af-wanted-detail { padding: .55rem; }
+  body .af-wanted-detail .af-wanted-detail-image { aspect-ratio: 1.08 / 1; }
+  body .af-wanted-detail .af-wanted-actions__secondary { grid-template-columns: minmax(0, 1fr); }
+}
