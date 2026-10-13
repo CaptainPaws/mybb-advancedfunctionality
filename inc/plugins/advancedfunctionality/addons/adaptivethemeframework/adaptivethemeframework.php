@@ -1312,7 +1312,9 @@ function af_adaptivethemeframework_post_context(array $post): array
     foreach ($keys as $key) $data[$key] = (string)($post[$key] ?? '');
     return ['pid' => max(0, (int)($post['pid'] ?? 0)),
         'tid' => max(0, (int)($post['tid'] ?? 0)),
-        'uid' => max(0, (int)($post['uid'] ?? 0)), 'post' => $data];
+        'uid' => max(0, (int)($post['uid'] ?? 0)), 'post' => $data,
+        'appearance' => function_exists('af_aa_get_post_appearance_context')
+            ? af_aa_get_post_appearance_context(max(0,(int)($post['pid']??0)),max(0,(int)($post['uid']??0))) : null];
 }
 
 /** Materialize every post slot without imposing a DOM or changing templates. */

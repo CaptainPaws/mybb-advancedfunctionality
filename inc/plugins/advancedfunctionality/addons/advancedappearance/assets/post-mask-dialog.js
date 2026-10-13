@@ -1,0 +1,33 @@
+'use strict';
+(() => {
+ let modal=null,closeCurrent=null;
+ const node=(tag,text)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;return el;};
+ window.af_ae_post_mask_exec=async(editor,button,caller)=>{
+  caller=caller?.jquery?caller[0]:caller;const shell=caller?.closest('.af-ae-shell'),ta=shell?.__afAeTextarea||editor.textarea;
+  const provider=window.afAppearanceMasks,state=provider?.attach(ta);if(!state)throw new Error('Редактор маски недоступен');
+  const loaded=await provider.api('load',state.ctx);if(closeCurrent)closeCurrent();
+  let value={mode:'set',preset_id:loaded.mask?'keep':0,topbar_avatar_media_id:loaded.mask?.topbar_avatar_media_id??null,sidebar_avatar_media_id:loaded.mask?.sidebar_avatar_media_id??null};
+  try{const pending=JSON.parse(state.input.value||'null');if(pending?.mode==='set')value=pending;}catch(_){}
+  modal=node('div');modal.className='af-aa-mask-modal';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','Маска сообщения');
+  const panel=node('section');panel.className='af-aa-mask-panel';modal.append(panel);panel.append(node('h2','Маска сообщения'),node('p','Оформление и аватары изменятся только после сохранения этого сообщения. При автоматическом объединении ответов MyBB сохраняет прежнюю маску существующего поста.'));
+  const status=node('p');status.setAttribute('role','status');panel.append(status);
+  const label=node('label','Пресет постбита'),select=node('select');select.append(new Option('По умолчанию',0));if(loaded.mask)select.append(new Option('Сохранённый snapshot · прежний вид','keep'));for(const p of loaded.presets)select.append(new Option(p.title,p.id));select.value=String(value.preset_id);if(!select.value){select.value=loaded.mask?'keep':'0';value.preset_id=loaded.mask?'keep':0;}label.append(select);panel.append(label);
+  panel.append(node('p','Для масок доступны ваши опубликованные пользовательские postbit-пресеты. Системное оформление не занимает слот.'));
+  const controls=[];
+  function action(text,callback){const b=node('button',text);b.type='button';b.addEventListener('click',()=>Promise.resolve().then(callback).catch(e=>status.textContent=e.message));controls.push(b);return b;}
+  for(const role of ['topbar','sidebar']){const group=node('div'),title=node('strong',role==='topbar'?'Аватар Topbar':'Аватар Sidebar'),media=node('span');const update=()=>media.textContent=value[role+'_avatar_media_id']?'Media #'+value[role+'_avatar_media_id']:'Из пресета / стандартный';group.className='af-aa-mask-avatar';group.append(title,media,action('Выбрать или загрузить в Gallery',()=>{if(!window.AF_GalleryPicker)throw new Error('Gallery picker недоступен');window.AF_GalleryPicker.open(item=>{value[role+'_avatar_media_id']=Number(item.media_id);update();preview();},{purpose:'appearance_avatars'});}),action('Наследовать',()=>{value[role+'_avatar_media_id']=null;update();preview();}));update();panel.append(group);}
+  const style=node('style'),scene=node('div');scene.id='aa-studio-preview';scene.className='af-aa-mask-preview';const tpl=document.getElementById('af-aa-mask-preview-template');if(tpl)scene.append(tpl.content.cloneNode(true));panel.append(style,scene);
+  const root=scene.querySelector('.atf-post');root?.classList.remove('af-aa-postbit-user-'+provider.seed.uid);root?.classList.add('af-aa-postbit-mask-preview');
+  const slot=root?.querySelector('.atf-post__slot--before'),effect=node('script');effect.type='application/json';effect.setAttribute('data-af-appearance-post-effects-config','');effect.textContent='{}';slot?.append(effect);
+  const originalSide=scene.querySelector('.atf-post__secondary-avatar')?.innerHTML||'';let sequence=0;
+  async function preview(){const seq=++sequence;try{const data=await provider.api('preview',state.ctx,{mask_json:JSON.stringify(value)});if(seq!==sequence||!modal?.isConnected)return;style.textContent=data.css.replaceAll('.af-aa-postbit-user-'+provider.seed.uid,'.af-aa-postbit-mask-preview');effect.textContent=JSON.stringify(data.canvas);const side=scene.querySelector('.atf-post__secondary-avatar');if(side){if(data.sidebar_url){const img=node('img');img.src=data.sidebar_url;img.alt='Аватар Sidebar';side.replaceChildren(img);}else side.innerHTML=originalSide;}status.textContent='Примерка · сообщение ещё не изменено';window.afElementEffects?.refresh();}catch(e){if(seq===sequence)status.textContent=e.message;}}
+  select.addEventListener('change',()=>{value.preset_id=select.value==='keep'?'keep':Number(select.value);preview();});
+  const previousFocus=document.activeElement,overflow=document.documentElement.style.overflow;let closed=false;
+  function close(){if(closed)return;closed=true;sequence++;modal?.remove();modal=null;closeCurrent=null;document.body.classList.remove('af-aa-mask-open');document.documentElement.style.overflow=overflow;previousFocus?.focus();document.removeEventListener('keydown',key);document.removeEventListener('af:editor-destroyed',destroy);window.afElementEffects?.refresh();}
+  closeCurrent=close;
+  const footer=node('footer');footer.append(action('Применить к сообщению',async()=>{controls.forEach(b=>b.disabled=true);select.disabled=true;try{await provider.api('preview',state.ctx,{mask_json:JSON.stringify(value)});provider.choose(state,value);close();}finally{controls.forEach(b=>b.disabled=false);select.disabled=false;}}),action('Сбросить маску',()=>{provider.choose(state,{mode:'clear'});close();}),action('Отмена',close));panel.append(footer);
+  function key(event){if(document.querySelector('#af-gallery-picker.is-open'))return;if(event.key==='Escape'){event.preventDefault();close();}if(event.key==='Tab'){const focusable=Array.from(panel.querySelectorAll('button:not(:disabled),select'));const first=focusable[0],last=focusable.at(-1);if(event.shiftKey&&document.activeElement===first){last.focus();event.preventDefault();}else if(!event.shiftKey&&document.activeElement===last){first.focus();event.preventDefault();}}}
+  scene.addEventListener('click',event=>event.preventDefault());scene.addEventListener('submit',event=>event.preventDefault());modal.addEventListener('click',event=>{if(event.target===modal)close();});document.body.append(modal);document.body.classList.add('af-aa-mask-open');document.documentElement.style.overflow='hidden';document.addEventListener('keydown',key);select.focus();preview();
+  const destroy=event=>{if(event.detail?.textarea===ta){close();document.removeEventListener('af:editor-destroyed',destroy);}};document.addEventListener('af:editor-destroyed',destroy);
+ };
+})();

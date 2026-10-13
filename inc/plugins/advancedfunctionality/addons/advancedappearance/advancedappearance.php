@@ -48,6 +48,7 @@ function af_advancedappearance_menu_provider(): void
 
 require_once __DIR__ . '/personal.php';
 require_once __DIR__ . '/studio.php';
+require_once __DIR__ . '/post_masks.php';
 
 define('AF_AA_TPL_APSTUDIO', 'advancedappearance_apstudio');
 define('AF_AA_TPL_FITTINGROOM', 'advancedappearance_fittingroom');
@@ -70,6 +71,7 @@ function af_advancedappearance_install(): void
     af_aa_ensure_schema();
     af_aa_ensure_settings();
     af_aa_personal_install_schema();
+    af_aa_mask_install_schema();
     af_aa_personal_ensure_settings();
     af_aa_ensure_front_templates();
     af_aa_install_page_aliases();
@@ -84,6 +86,7 @@ function af_advancedappearance_activate(): void
     af_aa_ensure_schema();
     af_aa_ensure_settings();
     af_aa_personal_install_schema();
+    af_aa_mask_install_schema();
     af_aa_personal_ensure_settings();
     af_aa_ensure_front_templates();
     af_aa_install_page_aliases();
@@ -210,6 +213,7 @@ function af_aa_ensure_schema(): void
 function af_aa_register_hooks(): void
 {
     global $plugins;
+    af_aa_mask_register_hooks();
 
     // Сбор uid на страницах с постбитами
     $plugins->add_hook('postbit', 'af_aa_collect_uid_from_postbit', 50);
@@ -4643,6 +4647,7 @@ function af_aa_render_apstudio_page(): void
 {
     global $mybb, $headerinclude;
 
+    if ((string)$mybb->get_input('api') === 'mask') af_aa_mask_api();
     if ((string)$mybb->get_input('api') === 'personal') af_aa_personal_api();
 
     if ((string)$mybb->get_input('mode') !== 'catalog' && (string)$mybb->get_input('do') === '') af_aa_render_workshop();

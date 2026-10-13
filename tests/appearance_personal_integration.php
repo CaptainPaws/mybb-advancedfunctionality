@@ -1,11 +1,12 @@
 <?php
 /** Destructive isolated fixture: only database appearance_test, aa_test_ tables. Never use production. */
-define('IN_MYBB',1);define('TABLE_PREFIX','aa_test_');define('TIME_NOW',time());define('MYBB_ROOT','/tmp/appearance-fixture/');
+define('IN_MYBB',1);define('TABLE_PREFIX','aa_test_');define('TIME_NOW',time());define('MYBB_ROOT',defined('AA_MASK_FIXTURE')?dirname(__DIR__).'/work/mybb1840/':'/tmp/appearance-fixture/');
 define('AF_ADDONS',dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/');
 class AppearanceFixtureMyBB {
     const INPUT_INT=1, INPUT_ARRAY=2;
     public array $user=['uid'=>7,'usergroup'=>2,'additionalgroups'=>''];
     public array $usergroup=['canview'=>1,'isbannedgroup'=>0,'cancp'=>0];
+    public array $input=[];
     public string $request_method='get', $post_code='appearance-fixture-key';
     public array $settings=['af_advancedappearance_enabled'=>1,'af_advancedgallery_enabled'=>1,
         'af_advancedgallery_can_upload_groups'=>'2','af_advancedgallery_can_moderate_groups'=>'4',
@@ -16,8 +17,9 @@ class AppearanceFixtureMyBB {
 class_alias(AppearanceFixtureMyBB::class,'MyBB');
 class AppearanceFixtureDB {
     public mysqli $connection;
+    public array $querylog=[];
     public function __construct(){mysqli_report(MYSQLI_REPORT_ERROR|MYSQLI_REPORT_STRICT);$this->connection=new mysqli(getenv('AA_TEST_DB_HOST')?:'af-appearance-test-mysql','root','','appearance_test');$this->connection->set_charset('utf8mb4');}
-    public function write_query($sql){return $this->connection->query($sql);}
+    public function write_query($sql){if(defined('AA_MASK_FIXTURE'))$this->querylog[]=$sql;return $this->connection->query($sql);}
     public function query($sql){return $this->write_query($sql);}
     public function escape_string($v){return $this->connection->real_escape_string((string)$v);}
     public function simple_select($table,$fields='*',$where='',$o=[]){$sql='SELECT '.$fields.' FROM '.TABLE_PREFIX.$table.($where!==''?' WHERE '.$where:'');if(isset($o['order_by']))$sql.=' ORDER BY '.$o['order_by'].' '.($o['order_dir']??'ASC');if(isset($o['limit']))$sql.=' LIMIT '.(int)($o['limit_start']??0).','.(int)$o['limit'];return $this->write_query($sql);}
@@ -42,6 +44,7 @@ $plugins=new class {public function add_hook(...$args){}};
 $db=new AppearanceFixtureDB();$mybb=new AppearanceFixtureMyBB();$lang=new stdClass();
 require AF_ADDONS.'advancedgallery/advancedgallery.php';require AF_ADDONS.'advancedappearance/advancedappearance.php';
 if (defined('AA_STUDIO_FIXTURE')) require __DIR__.'/appearance_studio_fixture.php';
+if (defined('AA_MASK_FIXTURE')) require __DIR__.'/appearance_post_masks_fixture.php';
 function appearance_check($condition,$message){if(!$condition)throw new RuntimeException($message);}
 function appearance_count($table,$where=''){global $db;return (int)$db->fetch_field($db->simple_select($table,'COUNT(*) AS n',$where),'n');}
 function appearance_fails(callable $fn,int $code){try{$fn();}catch(AF_AA_PersonalException $e){appearance_check($e->getCode()===$code,'Unexpected refusal '.$e->getMessage());return;}throw new RuntimeException('Expected refusal '.$code);}
@@ -50,6 +53,7 @@ if(PHP_SAPI==='cli-server') {
     $mybb->request_method=strtolower($_SERVER['REQUEST_METHOD']);
     $mybb->user['uid']=(int)($_GET['fixture_uid']??7);
     if(isset($_GET['free_slots']))$mybb->settings['af_advancedappearance_free_slots_postbit']=(int)$_GET['free_slots'];
+    if (defined('AA_MASK_FIXTURE')) appearance_masks_http();
     if (defined('AA_STUDIO_FIXTURE') && ($_GET['fixture_action']??'')==='studio_render') appearance_studio_render();
     if(($_GET['fixture_action']??'')==='render') {
         $uid=(int)($_GET['owner']??7);$base=file_get_contents(AF_ADDONS.'adaptivethemeframework/assets/surfaces/postbit.css');$html='<!doctype html><html><head><style>'.$base.'</style>'.af_aa_render_page_css([$uid]).'</head><body class="atf-active">';

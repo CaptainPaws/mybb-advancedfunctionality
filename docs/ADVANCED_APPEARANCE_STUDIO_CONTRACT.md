@@ -2,6 +2,9 @@
 
 Уточнение этапа 2: приватность альбома ограничивает просмотр Gallery, но не прямой URL опубликованного изображения. Требование public-album membership из первоначального предложения ниже заменено контрактом [AdvancedGallery Media API](ADVANCED_GALLERY_MEDIA_API.md). Удаление используется по консервативной retention-политике Gallery; новые Appearance writers обязаны закреплять media ID перед сохранением ссылки.
 
+
+Уточнение этапа 5: требование неизменяемого **snapshot по PID** заменяет первоначальный план live reference в §3.3. Используется существующая `af_aa_assignments` с четырьмя nullable mask-полями; маска выбирает уже опубликованный личный `postbit`-пресет и не расходует отдельный слот. Удаление исходного пресета не удаляет опубликованный snapshot. Детали реализованного контракта: [маски сообщений](ADVANCED_APPEARANCE_POST_MASKS.md).
+
 ## 1. Статус, источник и границы
 
 Этап 1 для warprift.ru; целевые версии MyBB 1.8.40 и PHP 8.5.0. Это контракт последующих этапов, а не реализованная функциональность или выполненная миграция.
@@ -143,13 +146,13 @@ Slot — постоянное право хранить N личных прес�
 
 Повторно использовать `af_aa_assignments`, без новой таблицы масок или новых колонок posts. `user`/UID сохраняется для character account surfaces; `thread`/TID сохраняется для тем; `post`/PID + `target_key=apui_post_mask` — ровно одна активная маска PID благодаря существующему UNIQUE. На этом этапе отдельная несуществующая identity персонажа не вводится: текущие API разрешают персонажа по UID/active application. Поддержка нескольких identities под одним UID потребовала бы отдельного подтверждённого character contract.
 
-Post Mask — ссылка на личный mask preset; это live reference, поэтому редактирование preset обновляет все назначенные ему сообщения. В UI последующего этапа это должно быть явно видно; для неизменности старого сообщения пользователь создаёт копию, которая занимает отдельный slot. Не дублировать settings snapshot в каждом assignment.
+Post Mask в реализованном этапе 5 — проверенный неизменяемый snapshot опубликованного личного `postbit`-пресета в assignment по PID. `preset_id` сохраняет исходный ID для информации; renderer не читает живое определение. Дополнительные nullable поля: `mask_owner_uid`, `mask_snapshot_json`, `mask_topbar_media_id`, `mask_sidebar_media_id`. Новый тип личного preset storage и отдельный слот маски не вводятся. Первоначальное предложение live reference отменено прямым требованием этапа 5.
 
 Writer и renderer проверяют: настоящий post существует; preset enabled и корректного типа; preset.owner_uid равен post.uid; actor имеет право управлять этим owner и редактировать post в MyBB с forum/thread/time/lock permissions. Модерация текста сама по себе не даёт владение личными пресетами. Администраторская поддержка — отдельное разрешение и audit. Ни assignment helper, ни renderer не доверяют posted UID/PID. Принятие анкеты для элементных поверхностей проверяется существующим gate при каждом разрешении.
 
 Newthread/newreply/Quick Reply: выбор хранится как несохранённое состояние формы, валидируется до записи, assignment создаётся только после успешного получения настоящего PID. Ошибка/preview не создают assignment; при сбое после сохранения поста текст не теряется, маска остаётся unapplied с понятным результатом. Editpost/Quick Edit: отсутствие поля сохраняет прежнюю маску, явный clear удаляет assignment, set меняет ссылку; успешная запись маски привязана к успешному редактированию. Quick Edit должен передавать отдельное состояние, а не BBCode в `value`. Для drafts сохраняется выбор без назначения живому PID; при отправке повторная авторизация.
 
-При удалении preset удаляются только его assignments, после чего поверхности наследуют базовое оформление; для legacy catalog не менять нынешнюю политику удаления в рамках migration. Удаление post очищает post assignment; move/split сохраняют PID-связь, clone не наследует автоматически. Merge/смена автора требуют повторной owner validation и снятия несовместимой маски. PM/preview с совпавшими числовыми ID не получают mask другого post; post resolver вызывается только в подтверждённом публичном post context.
+При удалении preset удаляются его обычные assignments; опубликованные `post/apui_post_mask` snapshots остаются. Обычные поверхности наследуют базовое оформление; для legacy catalog не менять нынешнюю политику удаления в рамках migration. Удаление post очищает post assignment; move/split сохраняют PID-связь, clone не наследует автоматически. Merge/смена автора требуют повторной owner validation и снятия несовместимой маски. PM/preview с совпавшими числовыми ID не получают mask другого post; post resolver вызывается только в подтверждённом публичном post context.
 
 ### 3.4. Media references
 
@@ -226,7 +229,7 @@ Reuse `af_aa_prime_runtime_cache` для UID назначения; добави�
 
 ## 8. Summary: решения и потенциальные конфликты
 
-Решения: расширить существующий AdvancedAppearance; единая таблица presets с UID и versioned typed payload; постоянные slot grants с происхождением покупки; assignments повторно используются для user/thread/post; mask — live preset reference по PID без расходования; Gallery владеет media и проверяет reuse, Appearance хранит только media_id; ATF владеет структурой, ElementTheme — canonical palette/approval/Canvas и viewer permissions. Сохраняются legacy presets/items/orders/URLs/API; изменения схемы только additive и только на следующем этапе.
+Решения: расширить существующий AdvancedAppearance; единая таблица presets с UID и versioned typed payload; постоянные slot grants с происхождением покупки; assignments повторно используются для user/thread/post; mask — неизменяемый snapshot по PID без расходования слотов; Gallery владеет media и проверяет reuse, Appearance хранит только media_id; ATF владеет структурой, ElementTheme — canonical palette/approval/Canvas и viewer permissions. Сохраняются legacy presets/items/orders/URLs/API; изменения схемы только additive и только на следующем этапе.
 
 Конфликты, которые должны быть решены перед включением мастерской:
 

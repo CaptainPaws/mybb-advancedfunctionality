@@ -327,7 +327,7 @@ function af_aa_personal_delete(int $uid, int $id): void
     global $db;
     af_aa_personal_transaction($uid,static function () use ($db,$uid,$id): void {
         af_aa_personal_owned_row($uid,$id);
-        $db->delete_query(AF_AA_ASSIGNMENTS_TABLE_NAME,"preset_id='{$id}'");
+        $db->delete_query(AF_AA_ASSIGNMENTS_TABLE_NAME,"preset_id='{$id}' AND NOT (entity_type='post' AND target_key='apui_post_mask')");
         $db->delete_query(AF_AA_PRESETS_TABLE_NAME,"id='{$id}' AND owner_uid='{$uid}'");
     });
 }

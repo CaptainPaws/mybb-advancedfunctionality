@@ -101,12 +101,24 @@ function ag_get_owned_media(int $uid, int $mediaId): ?array
     return $row ?: null;
 }
 
+/** Request-local batch URL seed. Ownership writers still read/check owned rows directly. */
+function ag_preload_media_ids(array $mediaIds): void {
+    global $db;
+    $cache=&$GLOBALS['ag_media_url_rows'];if (!is_array($cache)) $cache=[];
+    $ids=array_values(array_unique(array_filter(array_map('intval',$mediaIds),static fn($id)=>$id>0 && !array_key_exists($id,$cache))));
+    if (!$ids || !$db->table_exists('af_gallery_media')) return;
+    foreach ($ids as $id) $cache[$id]=null;
+    $q=$db->simple_select('af_gallery_media','*','id IN ('.implode(',',$ids).')');
+    while ($row=$db->fetch_array($q)) $cache[(int)$row['id']]=$row;
+}
+
 /** Public URL lookup is not ownership proof. Published approved images need no album access. */
 function ag_resolve_media_url(int $mediaId, string $variant): string
 {
     global $db;
     if ($mediaId <= 0 || !in_array($variant, ['full', 'preview', 'thumb'], true)) return '';
-    $media = $db->fetch_array($db->simple_select('af_gallery_media', '*', "id='{$mediaId}'", ['limit' => 1]));
+    $media = array_key_exists($mediaId,$GLOBALS['ag_media_url_rows']??[]) ? $GLOBALS['ag_media_url_rows'][$mediaId]
+        : $db->fetch_array($db->simple_select('af_gallery_media', '*', "id='{$mediaId}'", ['limit' => 1]));
     if (!$media || !ag_media_is_direct_image($media)
         || (($media['status'] ?? '') !== 'approved' && !ag_media_owner_access((int)$media['uid_owner']))) return '';
     if (($media['type'] ?? '') === 'remote') {

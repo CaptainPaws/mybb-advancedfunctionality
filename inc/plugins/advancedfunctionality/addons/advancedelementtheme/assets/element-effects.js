@@ -8,7 +8,9 @@
   document.querySelectorAll('[data-af-appearance-effects-config]').forEach(block => { try { Object.assign(appearanceSettings, JSON.parse(block.textContent)); } catch (_) {} });
   function configFor(root) {
     const base = settings[root.dataset.element];
-    const custom = appearanceSettings[root.dataset.authorUid];
+    const postConfig = root.querySelector(':scope > .atf-post__layout > .atf-post__content > .atf-post__slot--before > [data-af-appearance-post-effects-config]');
+    let custom = appearanceSettings[root.dataset.authorUid];
+    if (postConfig) { try { custom = JSON.parse(postConfig.textContent); } catch (_) { custom = {}; } }
     // Appearance changes decoration only inside an existing, ACP-enabled canonical surface.
     if (root.dataset.elementSurface !== 'postbit' || !base?.enabled || !base.surfaces.includes('postbit') || !custom) return base;
     return { ...base, ...custom, enabled: base.enabled, surfaces: base.surfaces };
