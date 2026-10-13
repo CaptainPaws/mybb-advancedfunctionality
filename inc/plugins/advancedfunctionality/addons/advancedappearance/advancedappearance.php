@@ -34,7 +34,7 @@ define('AF_AA_ALIAS_FITTINGROOM_MARK', 'AF_AA_FITTINGROOM_PAGE_ALIAS');
 function af_advancedappearance_presets_visible(): bool
 {
     global $mybb;
-    return !empty($mybb->usergroup['cancp']);
+    return af_aa_is_enabled() && (int)($mybb->user['uid']??0)>0 && empty($mybb->usergroup['isbannedgroup']);
 }
 
 function af_advancedappearance_menu_provider(): void
@@ -45,6 +45,7 @@ function af_advancedappearance_menu_provider(): void
 
 
 require_once __DIR__ . '/personal.php';
+require_once __DIR__ . '/studio.php';
 
 define('AF_AA_TPL_APSTUDIO', 'advancedappearance_apstudio');
 define('AF_AA_TPL_FITTINGROOM', 'advancedappearance_fittingroom');
@@ -211,6 +212,7 @@ function af_aa_register_hooks(): void
     $plugins->add_hook('postbit', 'af_aa_collect_uid_from_postbit', 50);
     $plugins->add_hook('postbit_prev', 'af_aa_collect_uid_from_postbit', 50);
     $plugins->add_hook('postbit_pm', 'af_aa_collect_uid_from_postbit', 50);
+    foreach (['postbit','postbit_prev','postbit_pm'] as $hook) $plugins->add_hook($hook,'af_aa_studio_postbit_avatar',1100);
 
     // Сбор uid на странице профиля
     $plugins->add_hook('member_profile_end', 'af_aa_collect_uid_from_member_profile', 50);
@@ -1417,6 +1419,7 @@ function af_aa_pre_output_page(string &$page): void
         if ($allowed) {
             $page = af_aa_inject_runtime_css($page, $runtimeCss);
             $page = af_aa_inject_modal_scope_js($page);
+            $page = str_replace('</body>',af_aa_studio_effect_payload(array_values($uids)).'</body>',$page);
         }
     }
 
@@ -3176,6 +3179,7 @@ function af_aa_template_map(): array
 {
     return [
         AF_AA_TPL_APSTUDIO => 'advancedappearance_apstudio.html',
+        'advancedappearance_workshop'=>'advancedappearance_workshop.html',
         AF_AA_TPL_FITTINGROOM => 'advancedappearance_fittingroom.html',
     ];
 }
@@ -3204,7 +3208,7 @@ function af_aa_get_template_source(string $templateName): string
         return '<div class="error">Template file missing: ' . htmlspecialchars_uni($map[$templateName]) . '</div>';
     }
 
-    return (string)file_get_contents($file);
+    return addcslashes((string)file_get_contents($file), '\\"');
 }
 
 function af_aa_ensure_front_templates(): void
@@ -3625,7 +3629,7 @@ function af_aa_render_tabs_html(string $baseFile, string $currentDo): string
     foreach ($tabs as $do => $label) {
         $isActive = $do === $currentDo;
         $class = 'af-aa-tab' . ($isActive ? ' is-active' : '');
-        $url = $baseFile . '?do=' . rawurlencode($do);
+        $url = $baseFile . ($baseFile==='apstudio.php'?'?mode=catalog&do=':'?do=') . rawurlencode($do);
 
         $html .= '<a class="' . $class . '" href="' . htmlspecialchars_uni($url) . '">' . htmlspecialchars_uni($label) . '</a>';
     }
@@ -4126,7 +4130,7 @@ function af_aa_build_studio_form_html(string $do, array $preset, array $settings
         'fragmentpack' => 'Конструктор: дробный пак',
     ];
 
-    $html = '<form class="af-aa-panel af-aa-form" method="post" action="apstudio.php?do=' . rawurlencode($do) . '" data-aa-form>';
+    $html = '<form class="af-aa-panel af-aa-form" method="post" action="apstudio.php?mode=catalog&do=' . rawurlencode($do) . '" data-aa-form>';
     $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
     $html .= '<input type="hidden" name="action" value="save">';
     $html .= '<input type="hidden" name="id" value="' . $id . '">';
@@ -4196,7 +4200,7 @@ function af_aa_build_studio_form_html(string $do, array $preset, array $settings
     $html .= '<div class="af-aa-actions">';
     $html .= '<button class="button" type="submit">Сохранить пресет</button>';
     $html .= '<button class="button" type="button" data-aa-preview-from-form>Открыть превью</button>';
-    $html .= '<a class="button" href="apstudio.php?do=' . rawurlencode($do) . '">Создать новый</a>';
+    $html .= '<a class="button" href="apstudio.php?mode=catalog&do=' . rawurlencode($do) . '">Создать новый</a>';
     $html .= '</div>';
     $html .= '</form>';
 
@@ -4244,9 +4248,9 @@ function af_aa_build_preset_card_html(array $row, string $do, bool $studioMode =
     $html .= '<button class="button button_small" type="button" data-aa-preview-from-card>Показать в превью</button>';
 
     if ($studioMode) {
-        $html .= '<a class="button button_small" href="apstudio.php?do=' . rawurlencode($do) . '&edit=' . $id . '">Редактировать</a>';
+        $html .= '<a class="button button_small" href="apstudio.php?mode=catalog&do=' . rawurlencode($do) . '&edit=' . $id . '">Редактировать</a>';
 
-        $html .= '<form method="post" action="apstudio.php?do=' . rawurlencode($do) . '" class="af-aa-inline-form">';
+        $html .= '<form method="post" action="apstudio.php?mode=catalog&do=' . rawurlencode($do) . '" class="af-aa-inline-form">';
         $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
         $html .= '<input type="hidden" name="action" value="toggle">';
         $html .= '<input type="hidden" name="id" value="' . $id . '">';
@@ -4254,7 +4258,7 @@ function af_aa_build_preset_card_html(array $row, string $do, bool $studioMode =
         $html .= '<button class="button button_small" type="submit">' . ($enabled ? 'Выключить' : 'Включить') . '</button>';
         $html .= '</form>';
 
-        $html .= '<form method="post" action="apstudio.php?do=' . rawurlencode($do) . '" class="af-aa-inline-form" onsubmit="return confirm(\'Удалить пресет?\');">';
+        $html .= '<form method="post" action="apstudio.php?mode=catalog&do=' . rawurlencode($do) . '" class="af-aa-inline-form" onsubmit="return confirm(\'Удалить пресет?\');">';
         $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
         $html .= '<input type="hidden" name="action" value="delete">';
         $html .= '<input type="hidden" name="id" value="' . $id . '">';
@@ -4636,6 +4640,8 @@ function af_aa_render_apstudio_page(): void
 
     if ((string)$mybb->get_input('api') === 'personal') af_aa_personal_api();
 
+    if ((string)$mybb->get_input('mode') !== 'catalog' && (string)$mybb->get_input('do') === '') af_aa_render_workshop();
+
     if (!af_aa_is_enabled() || !af_aa_is_admin_user()) {
         error_no_permission();
     }
@@ -4644,10 +4650,10 @@ function af_aa_render_apstudio_page(): void
     af_aa_ensure_front_templates();
 
     $do = af_aa_resolve_preset_do((string)$mybb->get_input('do'));
-    $baseUrl = 'apstudio.php?do=' . rawurlencode($do);
+    $baseUrl = 'apstudio.php?mode=catalog&do=' . rawurlencode($do);
 
     if ($mybb->request_method === 'post') {
-        verify_post_check($mybb->get_input('my_post_key'), true);
+        if (!verify_post_check($mybb->get_input('my_post_key'), true)) error_no_permission();
 
         $action = trim((string)$mybb->get_input('action'));
 
@@ -4674,7 +4680,7 @@ function af_aa_render_apstudio_page(): void
         if (!empty($editPreset)) {
             $rowDo = af_aa_do_for_target((string)($editPreset['target_key'] ?? ''));
             if ($rowDo !== $do) {
-                redirect('apstudio.php?do=' . rawurlencode($rowDo) . '&edit=' . $editId, 'Открыт нужный раздел для редактирования пресета.');
+                redirect('apstudio.php?mode=catalog&do=' . rawurlencode($rowDo) . '&edit=' . $editId, 'Открыт нужный раздел для редактирования пресета.');
             }
         }
     }
@@ -4719,6 +4725,7 @@ function af_aa_render_apstudio_page(): void
 function af_aa_render_fittingroom_page(): void
 {
     global $mybb, $headerinclude;
+    if ((int)($mybb->user['uid']??0)>0 && (string)$mybb->get_input('do')==='' && (string)$mybb->get_input('mode')!=='catalog') af_aa_render_workshop();
 
     if (!af_aa_is_enabled()) {
         error_no_permission();

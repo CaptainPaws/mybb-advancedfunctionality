@@ -35,12 +35,13 @@ function af_ensure_settinggroup($name,$title,$description){return 1;}
 function af_ensure_setting($group,$name,$title,$desc,$type,$value,$order){global $db;$row=['name'=>$db->escape_string($name),'value'=>$db->escape_string($value)];$id=$db->fetch_field($db->simple_select('settings','sid',"name='{$name}'"),'sid');if($id)$db->update_query('settings',$row,"sid={$id}");else $db->insert_query('settings',$row);}
 function error_no_permission(){throw new AF_AA_PersonalException('forbidden',403);}
 function error($message){throw new AF_AA_PersonalException($message,422);}
-function verify_post_check($key,$silent=false){if($key!=='appearance-fixture-key')throw new AF_AA_PersonalException('csrf',403);return true;}
+function verify_post_check($key,$silent=false){if($key!=='appearance-fixture-key'){if($silent)return false;throw new AF_AA_PersonalException('csrf',403);}return true;}
 function get_user($uid){return ['uid'=>$uid,'username'=>'Fixture '.$uid];}
 function htmlspecialchars_uni($s){return htmlspecialchars((string)$s,ENT_QUOTES,'UTF-8');}
 $plugins=new class {public function add_hook(...$args){}};
 $db=new AppearanceFixtureDB();$mybb=new AppearanceFixtureMyBB();$lang=new stdClass();
 require AF_ADDONS.'advancedgallery/advancedgallery.php';require AF_ADDONS.'advancedappearance/advancedappearance.php';
+if (defined('AA_STUDIO_FIXTURE')) require __DIR__.'/appearance_studio_fixture.php';
 function appearance_check($condition,$message){if(!$condition)throw new RuntimeException($message);}
 function appearance_count($table,$where=''){global $db;return (int)$db->fetch_field($db->simple_select($table,'COUNT(*) AS n',$where),'n');}
 function appearance_fails(callable $fn,int $code){try{$fn();}catch(AF_AA_PersonalException $e){appearance_check($e->getCode()===$code,'Unexpected refusal '.$e->getMessage());return;}throw new RuntimeException('Expected refusal '.$code);}
@@ -49,6 +50,7 @@ if(PHP_SAPI==='cli-server') {
     $mybb->request_method=strtolower($_SERVER['REQUEST_METHOD']);
     $mybb->user['uid']=(int)($_GET['fixture_uid']??7);
     if(isset($_GET['free_slots']))$mybb->settings['af_advancedappearance_free_slots_postbit']=(int)$_GET['free_slots'];
+    if (defined('AA_STUDIO_FIXTURE') && ($_GET['fixture_action']??'')==='studio_render') appearance_studio_render();
     if(($_GET['fixture_action']??'')==='render') {
         $uid=(int)($_GET['owner']??7);$base=file_get_contents(AF_ADDONS.'adaptivethemeframework/assets/surfaces/postbit.css');$html='<!doctype html><html><head><style>'.$base.'</style>'.af_aa_render_page_css([$uid]).'</head><body class="atf-active">';
         foreach([101,102] as $pid)$html.='<article class="atf-post af-aa-postbit-user-'.$uid.'" id="post_'.$pid.'" data-element="fire"><div class="atf-post__layout"><aside class="atf-post__sidebar"><div class="atf-post__sidebar-inner">Author</div></aside><section class="atf-post__content"><div class="atf-post__message-body">Fixture text</div></section></div></article>';

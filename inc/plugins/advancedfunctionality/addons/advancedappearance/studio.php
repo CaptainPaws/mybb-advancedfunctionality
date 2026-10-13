@@ -1,0 +1,163 @@
+<?php
+/** Workshop schema/compiler. Trusted component selectors only, shared by preview and runtime. */
+if (!defined('IN_MYBB')) die('No direct access');
+
+function af_aa_studio_components(): array {
+    return ['topbar'=>'.atf-post__topbar','sidebar'=>'.atf-post__sidebar-inner',
+        'message'=>'.atf-post__message-body','signature'=>'.atf-post__signature'];
+}
+function af_aa_studio_fields(): array {
+    return [
+        'background_color'=>['color'], 'gradient_color'=>['color'], 'gradient_angle'=>['number',0,360,1],
+        'background_opacity'=>['number',0,1,.05], 'darkening'=>['number',0,1,.05],
+        'background_position'=>['enum',['center','top','bottom','left','right']], 'background_size'=>['enum',['cover','contain','auto']],
+        'background_media_id'=>['media'], 'text_color'=>['color'], 'link_color'=>['color'], 'heading_color'=>['color'],
+        'border_color'=>['color'], 'button_color'=>['color'], 'accent_color'=>['color'],
+        'font_family'=>['enum',array_keys(af_aa_personal_fonts())], 'font_size'=>['number',12,24,1],
+        'font_weight'=>['enum',['400','500','600','700']], 'line_height'=>['number',1.2,2.2,.1],
+        'letter_spacing'=>['number',-1,3,.1], 'radius'=>['number',0,24,1], 'border_width'=>['number',0,3,1],
+        'shadow'=>['enum',['none','soft','glow']], 'padding'=>['number',0,24,1], 'decorative_line'=>['enum',['none','solid','dashed']],
+    ];
+}
+function af_aa_studio_validate_components($value, array &$media): array {
+    if (!$value instanceof stdClass) throw new AF_AA_PersonalException('Components must be an object.',422);
+    $out=[];
+    foreach ((array)$value as $component=>$fields) {
+        if (!isset(af_aa_studio_components()[$component]) || !$fields instanceof stdClass) throw new AF_AA_PersonalException('Unknown component.',422);
+        $out[$component]=[];
+        foreach ((array)$fields as $key=>$v) {
+            $rule=af_aa_studio_fields()[$key]??null;
+            if (!$rule) throw new AF_AA_PersonalException('Unknown component setting.',422);
+            if ($v===null) {$out[$component][$key]=null;continue;}
+            $valid=match($rule[0]) {
+                'color'=>is_string($v) && preg_match('/^#[0-9a-fA-F]{6}$/D',$v),
+                'enum'=>is_string($v) && in_array($v,$rule[1],true),
+                'number'=>(is_int($v)||is_float($v)) && is_finite((float)$v) && $v>=$rule[1] && $v<=$rule[2],
+                'media'=>is_int($v) && $v>0 && $v<=4294967295,
+                default=>false,
+            };
+            if (!$valid) throw new AF_AA_PersonalException('Invalid component setting: '.$key,422);
+            if ($rule[0]==='media') $media[$v]=true;
+            $out[$component][$key]=$v;
+        }
+    }
+    return $out;
+}
+function af_aa_studio_validate_canvas($v): array {
+    if (!$v instanceof stdClass || !function_exists('af_elementtheme_normalize_effects')) throw new AF_AA_PersonalException('ElementTheme effects unavailable.',422);
+    $data=(array)$v;
+    if (array_diff(array_keys($data),['preset','intensity','speed','density','opacity','color'])) throw new AF_AA_PersonalException('Unknown effect parameter.',422);
+    foreach (['intensity','speed','density','opacity'] as $key) if (isset($data[$key]) && (!is_int($data[$key]) || $data[$key]<0 || $data[$key]>100)) throw new AF_AA_PersonalException('Invalid effect range.',422);
+    if (isset($data['color']) && (!is_string($data['color']) || ($data['color']!=='' && !preg_match('/^#[a-fA-F0-9]{6}$/D',$data['color'])))) throw new AF_AA_PersonalException('Invalid effect color.',422);
+    try {$out=af_elementtheme_normalize_effects($data);}catch(InvalidArgumentException $e){throw new AF_AA_PersonalException($e->getMessage(),422);}
+    return array_intersect_key($out,array_flip(['preset','intensity','speed','density','opacity','color']));
+}
+function af_aa_studio_compile(int $uid, array $s, bool $preview=false): string {
+    $prefix=$preview?'#aa-studio-preview ':'';
+    $root=$prefix.'.atf-post.af-aa-postbit-user-'.$uid;
+    $scope=static fn($suffix)=>'body.atf-active '.$root.$suffix.', '.$root.$suffix;
+    $css='';
+    foreach ($s['components']??[] as $component=>$v) {
+        $selector=af_aa_studio_components()[$component];$vars=[];$rules=[];
+        $properties=['text_color'=>'color','font_size'=>'font-size','font_weight'=>'font-weight','line_height'=>'line-height',
+            'letter_spacing'=>'letter-spacing','radius'=>'border-radius','padding'=>'padding','background_position'=>'background-position','background_size'=>'background-size'];
+        foreach ($properties as $key=>$property) if (isset($v[$key])) {
+            $unit=in_array($key,['font_size','letter_spacing','radius','padding'],true)?'px':'';
+            $vars[]='--aa-'.$key.':'.$v[$key].$unit.';';$rules[]=$property.':var(--aa-'.$key.');';
+        }
+        if (isset($v['font_family']) && $v['font_family']!=='inherit') {$vars[]='--aa-font-family:'.af_aa_personal_fonts()[$v['font_family']].';';$rules[]='font-family:var(--aa-font-family);';}
+        $accent=$v['accent_color']??'var(--atf-post-accent,var(--af-element-accent,#789abc))';
+        if (isset($v['accent_color'])) $vars[]='--atf-post-accent:'.$accent.';--af-element-accent:'.$accent.';';
+        $alpha=$v['background_opacity']??1;
+        if (isset($v['background_color'])) {$vars[]='--aa-background:color-mix(in srgb, '.$v['background_color'].' '.($alpha*100).'%, transparent);';$rules[]='background-color:var(--aa-background);';}
+        $layers=[];
+        if (isset($v['darkening'])) $layers[]='linear-gradient(rgb(0 0 0 / '.$v['darkening'].'),rgb(0 0 0 / '.$v['darkening'].'))';
+        if (isset($v['gradient_color'])) $layers[]='linear-gradient('.($v['gradient_angle']??135).'deg,color-mix(in srgb,'.($v['background_color']??'#000000').' '.($alpha*100).'%,transparent),color-mix(in srgb,'.$v['gradient_color'].' '.($alpha*100).'%,transparent))';
+        if (array_key_exists('background_media_id',$v)) {
+            $url=$v['background_media_id']!==null && function_exists('ag_resolve_media_url')?ag_resolve_media_url($v['background_media_id'],'full'):'';
+            $layers[]=af_aa_css_url_value($url);
+        }
+        if ($layers) {$vars[]='--aa-background-image:'.implode(',',$layers).';';$rules[]='background-image:var(--aa-background-image);background-repeat:no-repeat;';}
+        if (isset($v['border_width']) || isset($v['border_color'])) {$vars[]='--aa-border:'.($v['border_width']??1).'px solid '.($v['border_color']??$accent).';';$rules[]='border:var(--aa-border);';}
+        if (isset($v['shadow'])) {$shadow=['none'=>'none','soft'=>'0 4px 12px rgb(0 0 0 / .25)','glow'=>'0 0 12px '.$accent][$v['shadow']];$vars[]='--aa-shadow:'.$shadow.';';$rules[]='box-shadow:var(--aa-shadow);';}
+        if (isset($v['decorative_line'])) $rules[]='border-bottom:'.($v['decorative_line']==='none'?'0':'1px '.$v['decorative_line'].' '.$accent).';';
+        $css.=$scope(' '.$selector).'{'.implode('',$vars).implode('',$rules).'}';
+        foreach (['link_color'=>'a','heading_color'=>':is(h1,h2,h3,h4,h5,h6)','button_color'=>':is(button,.button)'] as $key=>$child) if (isset($v[$key])) $css.=$scope(' '.$selector.' '.$child).'{--aa-'.$key.':'.$v[$key].';color:var(--aa-'.$key.');}';
+    }
+    if (isset($s['avatar_media_id']) && function_exists('ag_resolve_media_url')) {
+        $url=ag_resolve_media_url($s['avatar_media_id'],'full');
+        if ($url!=='') $css.=$scope(' .atf-post__primary-avatar-media img').'{content:'.af_aa_css_url_value($url).';}';
+    }
+    return $css;
+}
+/** User choices cannot enable a surface disabled by ACP, or manufacture an approved identity. */
+function af_aa_studio_canvas(int $uid,array $s): array {
+    if (!isset($s['canvas']) || !function_exists('af_adaptivethemeframework_post_element') || !function_exists('af_elementtheme_get_effects')) return [];
+    $key=af_adaptivethemeframework_post_element($uid);
+    if ($key==='') return [];
+    $base=af_elementtheme_get_effects($key);
+    if (empty($base['enabled']) || !in_array('postbit',$base['surfaces'],true)) return [];
+    return array_replace($base,$s['canvas']);
+}
+function af_aa_studio_effect_payload(array $uids): string {
+    $out=[];
+    foreach($uids as $uid) {
+        $row=af_aa_personal_active_row((int)$uid);if (!$row) continue;
+        try {$s=af_aa_personal_decode($row['settings_json'],(int)$uid,true,false,true);}catch(AF_AA_PersonalException $e){continue;}
+        $config=af_aa_studio_canvas((int)$uid,$s);if ($config) $out[(int)$uid]=$config;
+    }
+    return $out?'<script type="application/json" data-af-appearance-effects-config>'.json_encode($out,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT).'</script>':'';
+}
+/** Substitute fixture data into ATF's actual owned source; never accept client template/HTML. */
+function af_aa_studio_preview_markup(int $uid): string {
+    $path=AF_ADDONS.'adaptivethemeframework/templates/postbit_classic.html';
+    if (!is_file($path) || !function_exists('af_adaptivethemeframework_post_element')) throw new AF_AA_PersonalException('Activate Adaptive Theme Framework first.',503);
+    $user=get_user($uid);$name=htmlspecialchars_uni($user['username']??'Автор');
+    $key=htmlspecialchars_uni(af_adaptivethemeframework_post_element($uid));
+    $avatarUrl=af_aa_preview_abs_url((string)($user['avatar']??''));
+    if ($avatarUrl==='') $avatarUrl=rtrim((string)($GLOBALS['mybb']->settings['bburl']??''),'/').'/images/default_avatar.png';
+    $avatar='<img src="'.htmlspecialchars_uni($avatarUrl).'" alt="Аватар" />';
+    $values=['pid'=>'appearance_preview','uid'=>(string)$uid,'af_aa_user_class'=>'af-aa-postbit-user-'.$uid,'af_atf_element'=>$key,
+        'usertitle'=>'Путешественник','groupimage'=>'Участник','userstars'=>'★ ★ ★',
+        'af_atf_primary_avatar'=>$avatar,'af_atf_secondary_avatar'=>$avatar,'af_atf_meta_line'=>'<div class="atf-post__meta-line">Сегодня · Пример сообщения</div>',
+        'message'=>'<h3>На границе миров</h3><p>Свет отражается в воде. Этот текст помогает выбрать шрифт и проверить читаемость оформления.</p><p><a href="#">Пример ссылки</a> и <strong>выделенный текст</strong>.</p>',
+        'signature'=>'Подпись персонажа · История продолжается'];
+    $slots=['post.author.identity'=>$name,'post.author.character'=>'Персонаж','post.author.character_name'=>$name,
+        'post.author.profile_fields'=>'Звание: Искатель','post.author.rail'=>'Сообщения: 128<br>Репутация: 24','post.author.plaque'=>'Варп','post.post_counter'=>'#1'];
+    $source=file_get_contents($path);
+    $source=preg_replace_callback('/\{\$post\[\'([^\']+)\'\](?:\[\'([^\']+)\'\])?\}/',static function($m)use($values,$slots){return isset($m[2])?($slots[$m[2]]??''):($values[$m[1]]??'');},$source);
+    return preg_replace('/\{\$[a-z_]+\}/','',$source);
+}
+function af_aa_studio_preview(int $uid,string $json): array {
+    af_aa_personal_actor($uid);af_aa_personal_target('postbit');
+    // Validate ownership/approved media, but do not pin or save during preview.
+    $s=af_aa_personal_decode($json,$uid,false);
+    return ['css'=>af_aa_personal_compile_css($uid,$s,true),'canvas'=>af_aa_studio_canvas($uid,$s)];
+}
+function af_aa_render_workshop(): void {
+    global $mybb,$headerinclude;
+    $uid=(int)($mybb->user['uid']??0);
+    try {af_aa_personal_actor($uid);$list=af_aa_personal_list($uid,'postbit');$preview=af_aa_studio_preview_markup($uid);}catch(AF_AA_PersonalException $e){error($e->getMessage());return;}
+    af_aa_ensure_header_bits();add_breadcrumb('Мастерская оформления','apstudio.php');
+    $base=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedappearance/assets/';
+    $version=(string)max(filemtime(__DIR__.'/assets/studio.js'),filemtime(__DIR__.'/assets/studio.css'));
+    $atfBase=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/adaptivethemeframework/assets/surfaces/postbit.css';
+    $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni($atfBase.'?v='.(string)filemtime(AF_ADDONS.'adaptivethemeframework/assets/surfaces/postbit.css')).'" />';
+    $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni($base.'studio.css?v='.$version).'" /><script src="'.htmlspecialchars_uni($base.'studio.js?v='.$version).'" defer></script>';
+    $seed=['list'=>$list,'uid'=>$uid,'csrf'=>$mybb->post_code,'fields'=>af_aa_studio_fields(),'components'=>array_keys(af_aa_studio_components()),
+        'canvas_presets'=>function_exists('af_elementtheme_effect_presets')?af_elementtheme_effect_presets():[],
+        'title_limit'=>af_aa_personal_setting('personal_title_limit',80,1,191),'media_limit'=>af_aa_personal_setting('personal_media_limit',3,0,8)];
+    $vars=['aa_seed'=>json_encode($seed,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT),'aa_preview'=>$preview,
+        'aa_catalog'=>af_aa_is_admin_user()?'<a href="apstudio.php?mode=catalog">Каталог магазина</a>':''];
+    output_page(af_aa_render_template_output('advancedappearance_workshop',$vars));exit;
+}
+
+/** Override only ATF's avatar payload after composition; native MyBB/avatar identity stays intact. */
+function af_aa_studio_postbit_avatar(array &$post): void {
+    $uid=(int)($post['uid']??0);if ($uid<=0 || !af_aa_is_enabled()) return;
+    $row=af_aa_personal_active_row($uid);if (!$row || !function_exists('ag_resolve_media_url')) return;
+    try {$s=af_aa_personal_decode($row['settings_json'],$uid,true,false,true);}catch(AF_AA_PersonalException $e){return;}
+    if (empty($s['avatar_media_id'])) return;
+    $url=ag_resolve_media_url($s['avatar_media_id'],'full');if ($url==='') return;
+    $post['af_atf_primary_avatar']='<img src="'.htmlspecialchars_uni($url).'" alt="'.htmlspecialchars_uni($post['username']??'').'" loading="lazy" decoding="async" />';
+}

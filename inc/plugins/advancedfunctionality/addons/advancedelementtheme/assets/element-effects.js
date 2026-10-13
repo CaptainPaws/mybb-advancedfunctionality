@@ -4,6 +4,15 @@
   const blocks = document.querySelectorAll('[data-af-element-effects-config]');
   const settings = {};
   blocks.forEach(block => { try { Object.assign(settings, JSON.parse(block.textContent)); } catch (_) { /* malformed metadata stays inert */ } });
+  const appearanceSettings = {};
+  document.querySelectorAll('[data-af-appearance-effects-config]').forEach(block => { try { Object.assign(appearanceSettings, JSON.parse(block.textContent)); } catch (_) {} });
+  function configFor(root) {
+    const base = settings[root.dataset.element];
+    const custom = appearanceSettings[root.dataset.authorUid];
+    // Appearance changes decoration only inside an existing, ACP-enabled canonical surface.
+    if (root.dataset.elementSurface !== 'postbit' || !base?.enabled || !base.surfaces.includes('postbit') || !custom) return base;
+    return { ...base, ...custom, enabled: base.enabled, surfaces: base.surfaces };
+  }
   const preferenceKeys = ['effects_enabled', 'effects_profile', 'effects_sheet', 'effects_application', 'effects_postbit'];
   function normalizePreferences(value = {}) { return Object.fromEntries(preferenceKeys.map(key => [key, value[key] === undefined ? true : value[key] === true || value[key] === 1 || value[key] === '1'])); }
   let payload;
@@ -66,7 +75,7 @@
     if (!root.matches(roots)) { remember(root, []); return; }
     // Explicit body hosts also need to stop when their canonical key is cleared.
     const key = root.dataset.element;
-    const config = settings[key];
+    const config = configFor(root);
     let hosts = [];
     if (surface === 'profile') {
       const host = root.closest('[data-af-element-effect-host="profile-page"]')
@@ -134,7 +143,10 @@
   }
   // Stable public contract: settings affect decoration only, never canonical
   // identity, ACP restrictions, CSS palettes or engine internals.
-  window.afElementEffects = { refresh, setPreferences, getPreferences: () => ({ ...preferences }) };
+  window.afElementEffects = { refresh, setPreferences, setAppearanceEffects: (uid, config) => {
+    if (config && config.preset) appearanceSettings[uid] = config; else delete appearanceSettings[uid];
+    refresh();
+  }, getPreferences: () => ({ ...preferences }) };
   document.addEventListener('af-element-effects-refresh', event => {
     if (event.detail?.preferences) setPreferences(event.detail.preferences);
     else refresh();

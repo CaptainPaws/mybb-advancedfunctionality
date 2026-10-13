@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html{$htmloption}>
+<head><title>Мастерская оформления</title>{$headerinclude}</head>
+<body class="af-aa-workshop-host atf-active">{$header}
+<main class="aa-studio" data-aa-gallery-picker>
+<header class="aa-studio-heading"><div><h1>Мастерская оформления</h1><p>Свой стиль для каждой истории</p></div>{$aa_catalog}</header>
+<nav class="aa-categories" aria-label="Категории оформления"><strong>Постбит</strong><span>Профиль · скоро</span><span>Лист персонажа · скоро</span><span>Тема форума · скоро</span></nav>
+<p id="aa-status" role="status" aria-live="polite"></p>
+<section id="aa-cards" class="aa-cards" aria-label="Пресеты и слоты"></section>
+<section id="aa-editor" hidden>
+<div class="aa-editor-heading"><button type="button" id="aa-back">← Все пресеты</button><h2>Конструктор постбита</h2><span id="aa-draft-status" role="status"></span></div>
+<div class="aa-mobile-tabs"><button type="button" data-aa-view="controls">Настройки</button><button type="button" data-aa-view="preview">Примерочная</button></div>
+<div class="aa-workbench" data-view="controls">
+<form id="aa-controls" class="aa-controls">
+<fieldset><legend>Общее</legend><label>Название<input id="aa-title" required autocomplete="off" /></label><label>Описание<textarea id="aa-description" maxlength="500" rows="2"></textarea></label><button type="button" id="aa-copy">Дублировать пресет</button></fieldset>
+<label class="aa-component-label">Редактируемая область<select id="aa-component"><option value="topbar">Topbar · верхняя панель</option><option value="sidebar">Sidebar · автор</option><option value="message">Message · сообщение</option><option value="signature">Signature · подпись</option></select></label>
+<div id="aa-field-groups"></div>
+<fieldset><legend>Аватар</legend><button type="button" id="aa-avatar">Выбрать в Gallery</button><button type="button" id="aa-avatar-clear">Стандартный аватар</button><span id="aa-avatar-id"></span></fieldset>
+<fieldset><legend>Эффекты ElementTheme</legend><label>Canvas-пресет<select id="aa-canvas"><option value="inherit">Наследовать</option></select></label><p>Доступность эффекта определяется стихией принятой анкеты и разрешениями форума. Настройки анимаций посетителя имеют приоритет.</p><div id="aa-canvas-fields"></div></fieldset>
+<div class="aa-save-actions"><button type="submit">Сохранить</button><button type="button" id="aa-save-draft">Сохранить черновик</button><button type="button" id="aa-reset">Сбросить изменения</button></div>
+</form>
+<section class="aa-preview-panel" aria-label="Живая примерочная"><h3>Живая примерочная</h3><p>Нажмите на область постбита, чтобы выбрать её настройки.</p><style id="aa-preview-style"></style><div id="aa-studio-preview" class="aa-preview">{$aa_preview}</div></section>
+</div></section>
+<noscript>Для визуального конструктора включите JavaScript.</noscript>
+</main><script type="application/json" id="aa-studio-seed">{$aa_seed}</script>{$footer}</body></html>

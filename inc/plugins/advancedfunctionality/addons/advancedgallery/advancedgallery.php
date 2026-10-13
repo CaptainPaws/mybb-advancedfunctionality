@@ -733,6 +733,7 @@ function af_advancedgallery_pre_output(string &$page = ''): void
         ? !empty(af_advancededitor_response_facts($page)['has_supported_editor'])
         : (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']message["\'])[^>]*>~i', $page);
 
+    $hasPicker = $hasPicker || str_contains($page, 'data-aa-gallery-picker');
     if ($script === 'gallery.php' && stripos($page, '<html') !== false) {
         $wantScripts = true;
     } elseif ($hasPicker) {

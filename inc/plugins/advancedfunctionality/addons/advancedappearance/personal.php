@@ -194,9 +194,19 @@ function af_aa_personal_decode(string $json, int $uid, bool $publish, bool $chec
     try {$object=json_decode($json,false,8,JSON_THROW_ON_ERROR);}catch (JsonException $e){throw new AF_AA_PersonalException('Invalid JSON.',422);}
     if (!$object instanceof stdClass) throw new AF_AA_PersonalException('Settings must be a JSON object.',422);
     $settings=(array)$object;$media=[];
-    $images=['author_bg_media_id','name_bg_media_id','plaque_bg_media_id'];
+    $images=['author_bg_media_id','name_bg_media_id','plaque_bg_media_id','avatar_media_id'];
     foreach ($settings as $key=>$value) {
-        if (in_array($key,$images,true)) {
+        if ($key==='components') {
+            $settings[$key]=af_aa_studio_validate_components($value,$media);
+        } elseif ($key==='canvas') {
+            $settings[$key]=af_aa_studio_validate_canvas($value);
+        } elseif ($key==='display_title') {
+            if (!is_string($value)) throw new AF_AA_PersonalException('Invalid title.',422);
+            $settings[$key]=$stored?$value:af_aa_personal_title($value);
+            if (strlen($value)>764 || preg_match('/[\x00-\x1f<>]/u',$value)) throw new AF_AA_PersonalException('Invalid title.',422);
+        } elseif ($key==='description') {
+            if (!is_string($value) || mb_strlen($value)>500 || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f<>]/u',$value)) throw new AF_AA_PersonalException('Invalid description.',422);
+        } elseif (in_array($key,$images,true)) {
             if ($value!==null && (!is_int($value) || $value<=0 || $value>4294967295)) throw new AF_AA_PersonalException('Invalid media ID.',422);
             if ($value!==null) $media[$value]=true;
         } elseif (in_array($key,['text_color','accent_color','author_tint'],true)) {
@@ -209,7 +219,7 @@ function af_aa_personal_decode(string $json, int $uid, bool $publish, bool $chec
             if (!is_string($value) || !in_array($value,af_aa_personal_effects(),true)) throw new AF_AA_PersonalException('Invalid effect preset.',422);
         } else throw new AF_AA_PersonalException('Unknown setting: '.$key,422);
     }
-    if (count($media)>($stored?3:af_aa_personal_setting('personal_media_limit',3,0,3))) throw new AF_AA_PersonalException('Media limit exceeded.',422);
+    if (count($media)>($stored?8:af_aa_personal_setting('personal_media_limit',3,0,8))) throw new AF_AA_PersonalException('Media limit exceeded.',422);
     if ($checkMedia && $media) {
         if (!function_exists('ag_get_owned_media') || !function_exists('ag_retain_owned_media')) throw new AF_AA_PersonalException('Gallery Media API unavailable.',503);
         foreach (array_keys($media) as $id) {
@@ -223,7 +233,13 @@ function af_aa_personal_decode(string $json, int $uid, bool $publish, bool $chec
     return $settings;
 }
 
-function af_aa_personal_encode(array $settings): string {return json_encode((object)$settings,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);}
+function af_aa_personal_encode(array $settings): string {
+    if (isset($settings['components'])) {
+        foreach ($settings['components'] as $key=>$fields) $settings['components'][$key]=(object)$fields;
+        $settings['components']=(object)$settings['components'];
+    }
+    return json_encode((object)$settings,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+}
 
 function af_aa_personal_owned_row(int $uid, int $id): array
 {
@@ -244,7 +260,7 @@ function af_aa_personal_create(int $uid, string $target, string $title, string $
         if (!af_aa_personal_slots($uid,$target)['available']) throw new AF_AA_PersonalException('No free preset slots.',409);
         $settings=af_aa_personal_decode($json,$uid,!$draft);
         $data=['slug'=>$db->escape_string('user-'.$uid.'-'.bin2hex(random_bytes(12))), 'title'=>$db->escape_string($title),
-            'description'=>'','preview_image'=>'','target_key'=>$db->escape_string($target),
+            'description'=>$db->escape_string($draft?'':($settings['description']??'')),'preview_image'=>'','target_key'=>$db->escape_string($target),
             'settings_json'=>$db->escape_string($draft?'{}':af_aa_personal_encode($settings)), 'owner_uid'=>$uid,'schema_version'=>2,
             'publication_state'=>$draft?'draft':'ready','enabled'=>1,'sortorder'=>0,'created_at'=>TIME_NOW,'updated_at'=>TIME_NOW];
         if ($draft) $data['draft_json']=$db->escape_string(af_aa_personal_encode($settings));
@@ -260,7 +276,10 @@ function af_aa_personal_save(int $uid, int $id, string $json, bool $draft=false)
         $settings=af_aa_personal_decode($json,$uid,!$draft);
         $data=['updated_at'=>TIME_NOW];
         if ($draft) $data['draft_json']=$db->escape_string(af_aa_personal_encode($settings));
-        else {$data['settings_json']=$db->escape_string(af_aa_personal_encode($settings));$data['publication_state']='ready';}
+        else {$data['settings_json']=$db->escape_string(af_aa_personal_encode($settings));$data['publication_state']='ready';
+            if (isset($settings['display_title'])) $data['title']=$db->escape_string($settings['display_title']);
+            if (isset($settings['description'])) $data['description']=$db->escape_string($settings['description']);
+        }
         $db->update_query(AF_AA_PRESETS_TABLE_NAME,$data,"id='{$id}' AND owner_uid='{$uid}'");
         if (!$draft) $db->write_query('UPDATE '.AF_AA_PRESETS_TABLE." SET draft_json=NULL WHERE id='{$id}' AND owner_uid='{$uid}'");
     });
@@ -271,7 +290,15 @@ function af_aa_personal_rename(int $uid, int $id, string $title): void
     global $db;$title=af_aa_personal_title($title);
     af_aa_personal_transaction($uid,static function () use ($db,$uid,$id,$title): void {
         $row=af_aa_personal_owned_row($uid,$id);af_aa_personal_target($row['target_key']);
-        $db->update_query(AF_AA_PRESETS_TABLE_NAME,['title'=>$db->escape_string($title),'updated_at'=>TIME_NOW],"id='{$id}' AND owner_uid='{$uid}'");
+        $data=['title'=>$db->escape_string($title),'updated_at'=>TIME_NOW];
+        foreach (['settings_json','draft_json'] as $field) {
+            if ($row[$field]===null) continue;
+            $settings=af_aa_personal_decode($row[$field],$uid,false,false,true);
+            if (isset($settings['display_title'])) {
+                $settings['display_title']=$title;$data[$field]=$db->escape_string(af_aa_personal_encode($settings));
+            }
+        }
+        $db->update_query(AF_AA_PRESETS_TABLE_NAME,$data,"id='{$id}' AND owner_uid='{$uid}'");
     });
 }
 
@@ -281,8 +308,12 @@ function af_aa_personal_clone(int $uid, int $id, string $title): int
     return af_aa_personal_transaction($uid,static function () use ($db,$uid,$id,$title): int {
         $row=af_aa_personal_owned_row($uid,$id);af_aa_personal_target($row['target_key']);
         if (!af_aa_personal_slots($uid,$row['target_key'])['available']) throw new AF_AA_PersonalException('No free preset slots.',409);
-        af_aa_personal_decode($row['settings_json'],$uid,$row['publication_state']==='ready');
-        if ($row['draft_json']!==null) af_aa_personal_decode($row['draft_json'],$uid,false);
+        $definition=af_aa_personal_decode($row['settings_json'],$uid,$row['publication_state']==='ready');
+        if (isset($definition['display_title'])) {$definition['display_title']=$title;$row['settings_json']=af_aa_personal_encode($definition);}
+        if ($row['draft_json']!==null) {
+            $unfinished=af_aa_personal_decode($row['draft_json'],$uid,false);
+            if (isset($unfinished['display_title'])) {$unfinished['display_title']=$title;$row['draft_json']=af_aa_personal_encode($unfinished);}
+        }
         unset($row['id']);$row['slug']=$db->escape_string('user-'.$uid.'-'.bin2hex(random_bytes(12)));$row['title']=$db->escape_string($title);
         foreach (['description','preview_image','target_key','settings_json','publication_state'] as $key) $row[$key]=$db->escape_string((string)$row[$key]);
         if ($row['draft_json']===null) unset($row['draft_json']);else $row['draft_json']=$db->escape_string($row['draft_json']);
@@ -362,8 +393,17 @@ function af_aa_personal_render_css(int $uid): string
 {
     $row=af_aa_personal_active_row($uid);if (!$row) return '';
     try {$s=af_aa_personal_decode($row['settings_json'],$uid,true,false,true);}catch(AF_AA_PersonalException $e){return '';}
+    return af_aa_personal_compile_css($uid,$s);
+}
+
+function af_aa_personal_compile_css(int $uid,array $s,bool $preview=false): string
+{
+    $row=['settings_json'=>af_aa_personal_encode($s),'owner_uid'=>$uid];
     $root='.af-aa-postbit-user-'.(int)$uid;
-    $scope=static fn(string $suffix='')=>'body.atf-active .atf-post'.$root.$suffix.', '.$root.$suffix;
+    $prefix=$preview?'#aa-studio-preview ':'';
+    // Match ATF's canonical-surface rule specificity while retaining legacy roots.
+    $scope=static fn(string $suffix='')=>'body.atf-active '.$prefix.'.atf-post.af-atf-display'.$root.'[data-element]'.$suffix
+        .', body.atf-active '.$prefix.'.atf-post'.$root.$suffix.', '.$prefix.$root.$suffix;
     $css='';$vars=[];
     foreach (af_aa_personal_legacy_settings($row) as $key=>$value) {
         $map=['postbit_author_bg_url'=>'--af-apui-postbit-author-bg-image','postbit_name_bg_url'=>'--af-apui-postbit-name-bg-image',
@@ -379,7 +419,7 @@ function af_aa_personal_render_css(int $uid): string
     if (!empty($s['author_tint'])) $css.=$scope(' .atf-post__sidebar-inner').', '.$scope(' .af-apui-postbit-author__inner').'{background-color:'.$s['author_tint'].';}';
     if (($s['effect_preset']??'inherit')==='flat') $css.=$scope().'{box-shadow:none;}';
     if (($s['effect_preset']??'inherit')==='soft_glow') $css.=$scope().'{box-shadow:0 0 16px '.($s['accent_color']??'var(--atf-post-accent, #789abc)').';}';
-    return $css;
+    return $css.af_aa_studio_compile($uid,$s,$preview);
 }
 
 function af_aa_personal_list(int $uid, string $target): array
@@ -428,11 +468,12 @@ function af_aa_personal_api(): void
         $operation=$input['operation']??'list';$target=$input['target']??'postbit';$id=(int)($input['id']??0);
         if (!in_array($operation,['list','get'],true)) {
             if (strtolower($mybb->request_method)!=='post') throw new AF_AA_PersonalException('POST required.',405);
-            verify_post_check($input['my_post_key']??'',true);
+            if (!verify_post_check($input['my_post_key']??'',true)) throw new AF_AA_PersonalException('Invalid CSRF token.',403);
         }
         if (in_array($operation,['save','draft'],true) && $id>0 && !array_key_exists('settings_json',$input)) throw new AF_AA_PersonalException('settings_json required.',422);
         $json=$input['settings_json']??'{}';$title=$input['title']??'';
         switch ($operation) {
+            case 'preview':$result=af_aa_studio_preview($uid,$json);break;
             case 'list':$result=af_aa_personal_list($uid,$target);break;
             case 'get':$result=$id===0?af_aa_personal_system_preset($target):af_aa_personal_owned_row($uid,$id);break;
             case 'create':$result=['id'=>af_aa_personal_create($uid,$target,$title,$json)];break;
