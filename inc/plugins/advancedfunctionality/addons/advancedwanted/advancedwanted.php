@@ -277,6 +277,17 @@ function af_wanted_display_value(array $field,string $value,array $all=[]): stri
  if(($field['type']??'')==='checkbox')return $value==='1'?'Да':'Нет';
  $options=af_wanted_options($field,$all);return $options[$value]??$value;
 }
+function af_wanted_parse_textarea(string $value): string {
+ if($value==='')return '';
+ if(!class_exists('postParser')&&defined('MYBB_ROOT')){$parserFile=MYBB_ROOT.'inc/class_parser.php';if(is_file($parserFile))require_once $parserFile;}
+ if(!class_exists('postParser'))return nl2br(af_wanted_h($value));
+ $parser=new postParser();
+ return $parser->parse_message($value,[
+  'allow_html'=>0,'allow_mycode'=>1,'allow_basicmycode'=>1,'allow_smilies'=>0,
+  'allow_imgcode'=>1,'allow_videocode'=>0,'allow_list'=>1,'allow_alignmycode'=>1,
+  'allow_font'=>1,'allow_color'=>1,'allow_size'=>1,'filter_badwords'=>0,'nl2br'=>1,
+ ]);
+}
 /**
  * Render a stored field for public display.  Unlike af_wanted_display_value(),
  * this is an HTML boundary: every scalar is escaped here and only known field
@@ -289,8 +300,8 @@ function af_wanted_render_field_value(array $field,string $value,array $all=[]):
      ? '<img class="af-wanted-field-image" src="'.af_wanted_h($value).'" alt="" loading="lazy">'
      : '';
  }
+ if($type==='textarea')return af_wanted_parse_textarea($value);
  $display=af_wanted_display_value($field,$value,$all);
- if($type==='textarea') return nl2br(af_wanted_h($display));
  if($type==='url'&&af_wanted_valid_http_url($display)) {
    return '<a href="'.af_wanted_h($display).'" rel="noopener noreferrer">'.af_wanted_h($display).'</a>';
  }
@@ -385,7 +396,7 @@ function af_wanted_store_atf_prefill(int $id,int $uid,int $fid): string {
 }
 function af_wanted_field_control(array $f,$value,array $all=[]): string {
  $k=af_wanted_h((string)$f['field_key']);$v=is_array($value)?$value:(string)$value;$req=!empty($f['required'])?' required':'';$type=(string)$f['type'];
- if($type==='textarea')return '<textarea name="fields['.$k.']"'.$req.'>'.af_wanted_h((string)$v).'</textarea>';
+ if($type==='textarea')return '<textarea class="af-atf-bbcode-editor af-wanted-richtext" name="fields['.$k.']" rows="9"'.$req.'>'.af_wanted_h((string)$v).'</textarea>';
  if(in_array($type,['select','radio','kb_dynamic'],true)){ $opts=af_wanted_options($f,$all); if($type==='radio'){ $h='';foreach($opts as $ok=>$ol)$h.='<label><input type="radio" name="fields['.$k.']" value="'.af_wanted_h($ok).'"'.((string)$v===$ok?' checked':'').$req.'> '.af_wanted_h($ol).'</label> ';return $h;} $h='<select name="fields['.$k.']"'.$req.'><option value=""></option>';foreach($opts as $ok=>$ol)$h.='<option value="'.af_wanted_h($ok).'"'.((string)$v===$ok?' selected':'').'>'.af_wanted_h($ol).'</option>';return $h.'</select>'; }
  if($type==='multi'){ $vals=is_array($v)?$v:(json_decode((string)$v,true)?:[]);$h='<select multiple name="fields['.$k.'][]"'.$req.'>';foreach(af_wanted_options($f,$all) as $ok=>$ol)$h.='<option value="'.af_wanted_h($ok).'"'.(in_array($ok,$vals,true)?' selected':'').'>'.af_wanted_h($ol).'</option>';return $h.'</select>'; }
  if($type==='checkbox')return '<input type="checkbox" name="fields['.$k.']" value="1"'.((string)$v==='1'?' checked':'').'>';
@@ -463,7 +474,7 @@ function af_wanted_render_page(): void {
  $createAction=$action===''&&af_wanted_can('create')?'<a class="af-wanted-create" href="wanted.php?action=create"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Создать нужного персонажа</span></a>':'';
  $pageHead=$action===''?'<header class="af-wanted-page-head"><div class="af-kb-header"><h1>'.$title.'</h1><p class="af-wanted-page-description">Ищите персонажей для своих историй, знакомьтесь с действующими заявками и выбирайте удобный способ отклика.</p></div>'.$createAction.'</header>':'';
  $body='<div class="pun"><main class="af-wanted">'.$pageHead;
- if($action==='create'||$action==='edit'){if(!af_wanted_can($action==='create'?'create':'edit',$entry))error_no_permission();$fields=af_wanted_fields();$vals=$entry?af_wanted_values([$id])[$id]??[]:[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$body.='<section class="af-wanted-panel"><h2>'.($id?'Изменить Wanted #'.$id:'Новая заявка Wanted').'</h2><form class="af-wanted-form" method="post" action="wanted.php?action=save'.($id?'&id='.$id:'').'"><input type="hidden" name="my_post_key" value="'.af_wanted_h((string)$mybb->post_code).'">';foreach($fields as $f){$settings=(array)($f['settings']??[]);$dependent=($f['type']==='kb_dynamic'&&($settings['source']??'')==='origin_variant');$available=$dependent?af_wanted_options($f,$byKey):[];$hidden=$dependent&&!$available;$body.='<div class="af-wanted-field af-wanted-field--'.af_wanted_h((string)$f['type']).($hidden?' is-hidden':'').'"'.($hidden?' hidden':'').'><label>'.af_wanted_h($f['title']).(!empty($f['required'])?' *':'').'</label>'.af_wanted_field_control($f,$vals[(int)$f['id']]??'',$byKey).'</div>';}$body.='<div class="af-wanted-form-actions"><button class="button" type="submit">Сохранить</button><a class="button" href="'.($id?'wanted.php?action=view&amp;id='.$id:'wanted.php').'">Отмена</a></div></form></section>'.af_wanted_dependency_script($fields);
+ if($action==='create'||$action==='edit'){if(!af_wanted_can($action==='create'?'create':'edit',$entry))error_no_permission();$fields=af_wanted_fields();$vals=$entry?af_wanted_values([$id])[$id]??[]:[];$byKey=[];foreach($fields as $f)$byKey[$f['field_key']]=$vals[(int)$f['id']]??'';$body.='<section class="af-wanted-panel"><h2>'.($id?'Изменить Wanted #'.$id:'Новая заявка Wanted').'</h2><form class="af-wanted-form" method="post" action="wanted.php?action=save'.($id?'&id='.$id:'').'"><input type="hidden" name="my_post_key" value="'.af_wanted_h((string)$mybb->post_code).'">';foreach($fields as $f){$settings=(array)($f['settings']??[]);$dependent=($f['type']==='kb_dynamic'&&($settings['source']??'')==='origin_variant');$available=$dependent?af_wanted_options($f,$byKey):[];$hidden=$dependent&&!$available;$body.='<div class="af-wanted-field af-wanted-field--'.af_wanted_h((string)$f['type']).($hidden?' is-hidden':'').'"'.($hidden?' hidden':'').'><label>'.af_wanted_h($f['title']).(!empty($f['required'])?' *':'').'</label>'.af_wanted_field_control($f,$vals[(int)$f['id']]??'',$byKey).'</div>';}$body.='<div class="af-wanted-form-actions"><button class="button" type="submit"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i><span>Сохранить</span></button><a class="button" href="'.($id?'wanted.php?action=view&amp;id='.$id:'wanted.php').'"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>Отмена</span></a></div></form></section>'.af_wanted_dependency_script($fields);
  } elseif($action==='view'){if(!$entry)error('Wanted не найден.');$body.=af_wanted_render_detail($entry,true);
  } else {$body.=af_wanted_catalog();if(af_wanted_frontend_asset_allowed('catalog'))$body.='<script defer src="inc/plugins/advancedfunctionality/addons/advancedwanted/assets/advancedwanted_catalog.js"></script>';}
  $body.='</main></div>';

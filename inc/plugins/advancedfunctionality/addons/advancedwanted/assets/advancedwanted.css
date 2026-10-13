@@ -119,6 +119,7 @@
 .af-wanted-form-actions { grid-column: 1 / -1; }
 .af-wanted-field :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { width: 100%; min-width: 0; }
 .af-wanted-field textarea { min-height: 8rem; resize: vertical; }
+.af-wanted-field textarea.af-wanted-richtext { min-height: 14rem; height: 14rem; }
 .af-wanted-field input[type="file"] { height: auto; min-height: 2.35rem; padding: .35rem; }
 .af-wanted-form-actions { justify-content: flex-start; }
 
@@ -318,6 +319,28 @@ body.atf-active .af-wanted textarea { line-height: 1.5; }
 body.atf-active .af-wanted :is(input, select, textarea)::placeholder { color: var(--aw-muted); opacity: .82; }
 body.atf-active .af-wanted :is(input, select, textarea):focus-visible { border-color: var(--aw-accent); outline: 0; box-shadow: var(--atf-focus-ring, 0 0 0 3px rgb(151 137 255 / 28%)); }
 body.atf-active .af-wanted :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--aw-accent); }
+body.atf-active .af-wanted .af-wanted-panel > h2 { color: var(--aw-text); font-family: Georgia, "Times New Roman", serif; font-size: 1.45rem; font-weight: 500; }
+body.atf-active .af-wanted .af-wanted-field > label { color: var(--aw-muted); font-size: .84rem; font-weight: 600; letter-spacing: .015em; }
+body.atf-active .af-wanted .af-wanted-field :is(input, select, textarea):invalid:not(:focus-visible) { border-color: color-mix(in srgb, #c16c78 75%, var(--aw-border)); }
+body.atf-active .af-wanted .af-wanted-field textarea.af-wanted-richtext { min-height: 14rem; height: 14rem; border-radius: 0 0 var(--atf-radius-sm, 6px) var(--atf-radius-sm, 6px); }
+body.atf-active .af-wanted .af-ae-shell {
+  --af-ae-surface-height: 14rem;
+  overflow: visible;
+  border: 1px solid var(--aw-border-strong);
+  border-radius: var(--atf-radius-md, 8px);
+  background: color-mix(in srgb, var(--aw-page) 94%, transparent);
+  color: var(--aw-text);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+}
+body.atf-active .af-wanted .af-ae-shell > .sceditor-toolbar { border-color: var(--aw-border); border-radius: calc(var(--atf-radius-md, 8px) - 1px) calc(var(--atf-radius-md, 8px) - 1px) 0 0; background: color-mix(in srgb, var(--aw-raised) 94%, transparent); color: var(--aw-text); }
+body.atf-active .af-wanted .af-ae-shell .sceditor-group { border-color: var(--aw-border); background: color-mix(in srgb, var(--aw-page) 90%, transparent); }
+body.atf-active .af-wanted .af-ae-shell .sceditor-button { border-color: transparent; color: var(--aw-text); }
+body.atf-active .af-wanted .af-ae-shell .sceditor-button:is(:hover, :focus-visible, .active) { border-color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 20%, var(--aw-raised)); color: var(--aw-text); outline: 0; }
+body.atf-active .af-wanted .af-ae-shell > textarea.af-wanted-richtext { min-height: 14rem; height: 14rem; border: 0; border-radius: 0 0 var(--atf-radius-sm, 6px) var(--atf-radius-sm, 6px); background: transparent; color: var(--aw-text); }
+body.atf-active .af-wanted .af-ae-shell[data-af-editor-shell="1"] > .sceditor-container { height: 14rem; background: color-mix(in srgb, var(--aw-page) 94%, transparent); }
+body.atf-active .af-wanted .af-ae-shell .sceditor-container :is(iframe, textarea) { color-scheme: dark; }
+body.atf-active .af-wanted .af-ae-shell-menu { border: 1px solid var(--aw-border-strong); background: var(--aw-raised); color: var(--aw-text); }
+body.atf-active .af-wanted .af-ae-shell-menu .sceditor-button:hover { background: color-mix(in srgb, var(--aw-accent) 18%, var(--aw-raised)); }
 body.atf-active .af-wanted .af-kb-header,
 body.atf-active .af-wanted-page-head { color: var(--aw-text); }
 body.atf-active .af-wanted .af-kb-header { padding: 0; border: 0; background: transparent; }
