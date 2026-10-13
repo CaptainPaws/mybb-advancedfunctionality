@@ -8,7 +8,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
 define('AF_KB_ID', 'knowledgebase');
-define('AF_KB_VER', '1.0.4');
+define('AF_KB_VER', '1.0.5');
 define('AF_KB_BASE', AF_ADDONS . AF_KB_ID . '/');
 define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
 define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
@@ -12342,6 +12342,12 @@ function af_kb_handle_view(): void
 
     $entryUi = af_kb_get_entry_ui($entry);
     $entryIconHtml = af_kb_build_icon_html($entryUi['icon_url'], $entryUi['icon_class']);
+    if ($entryIconHtml === '' && $type !== 'character') {
+        $entryIconHtml = af_kb_build_icon_html(
+            (string)($typeRow['icon_url'] ?? ''),
+            (string)($typeRow['icon_class'] ?? '')
+        );
+    }
     $kb_entry_icon = $entryIconHtml !== '' ? '<span class="af-kb-icon">' . $entryIconHtml . '</span>' : '';
     $kb_page_title = htmlspecialchars_uni($title);
     $kb_title = htmlspecialchars_uni($title);
@@ -12394,17 +12400,13 @@ function af_kb_handle_view(): void
     $kb_entry_description_label = htmlspecialchars_uni($isRu ? 'Описание' : 'Description');
     $kb_entry_heading = '<h1>' . $kb_entry_icon . $kb_title . '</h1>';
     if ($type !== 'character') {
-        $typeIconHtml = af_kb_build_icon_html($typeRow['icon_url'] ?? '', $typeRow['icon_class'] ?? '');
-        $kb_entry_category_icon = $typeIconHtml !== ''
-            ? '<span class="af-kb-entry-hero__category-icon" aria-hidden="true">' . $typeIconHtml . '</span>'
-            : '';
         $kb_entry_hero_image = $bannerUrl !== ''
             ? '<img class="af-kb-entry-hero__image" src="' . htmlspecialchars_uni($bannerUrl) . '" alt="" loading="eager" />'
             : '';
         $kb_entry_heading = '<div class="af-kb-entry-hero">'
             . $kb_entry_hero_image
             . '<div class="af-kb-entry-hero__content">'
-            . '<div class="af-kb-entry-hero__category">' . $kb_entry_category_icon . '<span>' . $kb_type_title . '</span></div>'
+            . '<div class="af-kb-entry-hero__category"><span>' . $kb_type_title . '</span></div>'
             . '<h1>' . $kb_entry_icon . '<span class="af-kb-entry-hero__title">' . $kb_title . '</span></h1>'
             . '<span class="af-kb-entry-hero__divider" aria-hidden="true"></span>'
             . '</div></div>';
