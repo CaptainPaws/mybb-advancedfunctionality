@@ -588,52 +588,120 @@ body .af-wanted-detail .af-wanted-detail-menu__delete .af-wanted-detail-menu__it
  body .af-wanted .af-wanted-button { transition: none; }
 }
 
-/* Detail composition aligned to the approved two-column dossier. */
-body .af-wanted-detail { position: relative; isolation: isolate; padding: .95rem; }
-body .af-wanted-detail .af-wanted-detail-overview {
-  grid-template-columns: minmax(0, 1.08fr) minmax(290px, .92fr);
-  align-items: start;
-  gap: .9rem;
+/* The dossier owns its layout; ATF wiki floats and widths do not apply here. */
+body .af-wanted.af-wanted--detail-page {
+  padding: 0; border: 0; background: transparent; box-shadow: none;
 }
-body .af-wanted-detail .af-wanted-detail-image { height: auto; aspect-ratio: 1.12 / 1; }
-body .af-wanted-detail .af-wanted-detail-sidebar { gap: .65rem; }
-body .af-wanted-detail .af-wanted-actions--lifecycle { display: grid; width: 100%; gap: .45rem; margin: 0; }
-body .af-wanted-detail .af-wanted-actions__primary,
-body .af-wanted-detail .af-wanted-actions__secondary { display: grid; min-width: 0; gap: .45rem; }
-body .af-wanted-detail .af-wanted-actions__primary > :is(a, form),
-body .af-wanted-detail .af-wanted-actions__secondary > :is(a, form) { min-width: 0; margin: 0; }
-body .af-wanted-detail .af-wanted-actions__primary > :is(a, form),
-body .af-wanted-detail .af-wanted-actions__primary .af-wanted-button { width: 100%; }
-body .af-wanted-detail .af-wanted-actions__secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
-body .af-wanted-detail .af-wanted-actions__secondary .af-wanted-button { width: 100%; min-width: 0; min-height: 37px; }
-body .af-wanted-detail .af-wanted-actions__secondary > :only-child { grid-column: 1 / -1; }
-body .af-wanted-detail .af-wanted-actions__secondary .af-wanted-reserve-form { display: grid; grid-template-columns: minmax(0, 1fr); align-items: end; gap: .4rem; }
-body .af-wanted-detail .af-wanted-actions__secondary .af-wanted-reserve-form .af-wanted-guest-name { min-width: 0; }
-body .af-wanted-detail .af-wanted-actions__secondary .af-wanted-reserve-form--guest + .af-wanted-discuss { align-self: end; }
-body.atf-active .af-wanted .af-wanted-detail { border-color: color-mix(in srgb, var(--aw-warm) 48%, var(--aw-border-strong)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aw-warm) 12%, transparent), inset 0 1px 0 rgb(255 255 255 / 4%), 0 12px 34px rgb(0 0 0 / 16%); }
-body.atf-active .af-wanted .af-wanted-detail::before,
-body.atf-active .af-wanted .af-wanted-detail::after { position: absolute; z-index: 3; inset: 4px; border-radius: calc(var(--atf-radius-md, 8px) - 2px); content: ""; pointer-events: none; }
-body.atf-active .af-wanted .af-wanted-detail::before { border: 1px solid color-mix(in srgb, var(--aw-warm) 19%, transparent); }
-body.atf-active .af-wanted .af-wanted-detail::after {
-  inset: 3px;
+body .af-wanted .af-wanted-detail.af-wanted-detail--dossier {
+  position: relative; isolation: isolate; display: block; width: 100%; max-width: 1100px;
+  margin: 0 auto; padding: 22px; overflow: visible;
+  border: 1px solid #88718f; border-radius: 9px;
+  background: linear-gradient(135deg, rgb(10 15 26 / 96%), rgb(8 12 21 / 97%));
+  box-shadow: inset 0 0 0 3px #0a101b, inset 0 0 0 4px rgb(201 156 119 / 45%), 0 0 18px rgb(117 77 153 / 15%);
+}
+body .af-wanted .af-wanted-detail.af-wanted-detail--dossier::before,
+body .af-wanted .af-wanted-detail.af-wanted-detail--dossier::after {
+  position: absolute; z-index: 1; content: ""; pointer-events: none;
+}
+body .af-wanted .af-wanted-detail.af-wanted-detail--dossier::before {
+  inset: 8px; border: 1px solid rgb(201 156 119 / 35%); border-radius: 12px;
+  clip-path: polygon(0 0, 38px 0, 38px 38px, calc(100% - 38px) 38px, calc(100% - 38px) 0, 100% 0, 100% 100%, calc(100% - 38px) 100%, calc(100% - 38px) calc(100% - 38px), 38px calc(100% - 38px), 38px 100%, 0 100%);
+}
+body .af-wanted .af-wanted-detail.af-wanted-detail--dossier::after {
+  inset: 3px; border-radius: 7px;
   background:
-    linear-gradient(90deg, var(--aw-warm), transparent) left top / 22px 1px no-repeat,
-    linear-gradient(180deg, var(--aw-warm), transparent) left top / 1px 22px no-repeat,
-    linear-gradient(270deg, var(--aw-warm), transparent) right top / 22px 1px no-repeat,
-    linear-gradient(180deg, var(--aw-warm), transparent) right top / 1px 22px no-repeat,
-    linear-gradient(90deg, var(--aw-warm), transparent) left bottom / 22px 1px no-repeat,
-    linear-gradient(0deg, var(--aw-warm), transparent) left bottom / 1px 22px no-repeat,
-    linear-gradient(270deg, var(--aw-warm), transparent) right bottom / 22px 1px no-repeat,
-    linear-gradient(0deg, var(--aw-warm), transparent) right bottom / 1px 22px no-repeat;
-  opacity: .75;
+    linear-gradient(135deg, transparent 46%, var(--aw-warm) 48%, var(--aw-warm) 51%, transparent 53%) left top / 18px 18px no-repeat,
+    linear-gradient(225deg, transparent 46%, var(--aw-warm) 48%, var(--aw-warm) 51%, transparent 53%) right top / 18px 18px no-repeat,
+    linear-gradient(45deg, transparent 46%, var(--aw-warm) 48%, var(--aw-warm) 51%, transparent 53%) left bottom / 18px 18px no-repeat,
+    linear-gradient(315deg, transparent 46%, var(--aw-warm) 48%, var(--aw-warm) 51%, transparent 53%) right bottom / 18px 18px no-repeat,
+    linear-gradient(90deg, var(--aw-warm), transparent) left top / 58px 1px no-repeat,
+    linear-gradient(180deg, var(--aw-warm), transparent) left top / 1px 58px no-repeat,
+    linear-gradient(270deg, var(--aw-warm), transparent) right top / 58px 1px no-repeat,
+    linear-gradient(180deg, var(--aw-warm), transparent) right top / 1px 58px no-repeat,
+    linear-gradient(90deg, var(--aw-warm), transparent) left bottom / 58px 1px no-repeat,
+    linear-gradient(0deg, var(--aw-warm), transparent) left bottom / 1px 58px no-repeat,
+    linear-gradient(270deg, var(--aw-warm), transparent) right bottom / 58px 1px no-repeat,
+    linear-gradient(0deg, var(--aw-warm), transparent) right bottom / 1px 58px no-repeat;
+  opacity: .8;
 }
-body.atf-active .af-wanted-detail .af-wanted-actions__primary .af-wanted-button { border-color: color-mix(in srgb, var(--aw-accent) 72%, var(--aw-warm)); background: linear-gradient(145deg, color-mix(in srgb, var(--aw-accent) 35%, var(--aw-raised)), color-mix(in srgb, var(--aw-page) 84%, var(--aw-accent))); color: var(--aw-text); }
-body.atf-active .af-wanted-detail .af-wanted-actions__primary .af-wanted-button:hover { border-color: var(--aw-accent); box-shadow: 0 0 15px color-mix(in srgb, var(--aw-accent) 24%, transparent); }
-@media (max-width: 860px) {
-  body .af-wanted-detail .af-wanted-detail-overview { grid-template-columns: minmax(0, 1fr); }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-header { margin: 0 0 18px; padding: 0; border: 0; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-header__top { align-items: center; gap: 14px; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-heading { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: 12px; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-title { font-weight: 500; line-height: 1.15; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-header__rule { width: 100%; margin-top: 12px; background: linear-gradient(90deg, var(--aw-warm), var(--aw-border), transparent); }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-overview {
+  display: grid; grid-template-columns: minmax(0, 52fr) minmax(0, 48fr);
+  align-items: start; gap: 16px; width: 100%; margin: 0;
 }
-@media (max-width: 560px) {
-  body .af-wanted-detail { padding: .55rem; }
-  body .af-wanted-detail .af-wanted-detail-image { aspect-ratio: 1.08 / 1; }
-  body .af-wanted-detail .af-wanted-actions__secondary { grid-template-columns: minmax(0, 1fr); }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-image {
+  position: relative; display: block; grid-column: 1; grid-row: 1;
+  width: 100%; max-width: 100%; min-width: 0; height: auto; max-height: 480px;
+  aspect-ratio: 1.16 / 1; margin: 0; padding: 0; overflow: hidden;
+  border: 1px solid var(--aw-warm); border-radius: 7px;
+  box-shadow: inset 0 0 0 2px rgb(201 156 119 / 12%);
+}
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-image > :is(img, .af-wanted-detail-image-placeholder) {
+  position: absolute; inset: 0; display: block; width: 100%; height: 100%; max-height: none;
+  margin: 0; object-fit: cover; object-position: center;
+}
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-sidebar {
+  display: flex; flex-direction: column; grid-column: 2; grid-row: 1;
+  width: 100%; min-width: 0; margin: 0; gap: 12px; align-self: start;
+}
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-infobox {
+  display: block; float: none; width: 100%; max-width: none; min-width: 0;
+  margin: 0; padding: 14px 16px; border: 1px solid #786d87; border-radius: 7px;
+  background: linear-gradient(140deg, #171a28, #0e1320);
+  box-shadow: inset 0 0 0 2px rgb(172 145 186 / 6%);
+}
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-infobox__title { margin: 0 0 6px; padding-bottom: 10px; font-size: 1rem; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-field {
+  grid-template-columns: 18px minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 10px; padding: 9px 0; align-items: center;
+}
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-field dt,
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-field dd { font-size: .82rem; line-height: 1.4; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-actions--lifecycle {
+  display: flex; flex-direction: column; width: 100%; min-width: 0;
+  margin: 0; gap: 10px; align-items: stretch; order: 0;
+}
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-actions__primary { display: block; width: 100%; order: 0; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-actions__primary > :is(a, form) { display: block; width: 100%; margin: 0; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-actions__primary .af-wanted-button,
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-actions__primary > a {
+  display: flex; width: 100%; min-height: 44px; border-color: #ad93ee;
+  background: linear-gradient(135deg, #6344b0, #342666 65%, #4e3a8e); color: #f8f4ff;
+  box-shadow: inset 0 0 9px rgb(187 154 255 / 28%), 0 0 12px rgb(128 81 239 / 20%);
+}
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-actions__secondary {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%; min-width: 0; align-items: end; gap: 10px; order: 1;
+}
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-actions__secondary > :is(a, form) { min-width: 0; margin: 0; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-actions__secondary > :only-child { grid-column: 1 / -1; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-actions__secondary .af-wanted-reserve-form { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-actions__secondary .af-wanted-button { width: 100%; min-width: 0; min-height: 40px; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-content { margin-top: 18px; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-section { padding: 8px 0; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-section h3 { gap: 10px; font-weight: 500; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-section h3::before { width: 5px; height: 18px; border-block: 1px solid var(--aw-warm); border-inline: 1px solid var(--aw-warm); transform: rotate(10deg); content: ""; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-meta { margin-top: 14px; padding: 12px 0; gap: 0; border-color: var(--aw-border); }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-meta__item { padding: 0 14px; border-left: 1px solid var(--aw-border); font-size: .8rem; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-meta__author { padding-left: 0; border-left: 0; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-meta__avatar { border-radius: 50%; }
+body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-reservation-admin { margin-top: 14px; border-color: #786d87; background: linear-gradient(140deg, #141a28, #0a101b); }
+@media (max-width: 760px) {
+  body .af-wanted .af-wanted-detail.af-wanted-detail--dossier { padding: 16px; }
+  body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-overview { grid-template-columns: minmax(0, 1fr); }
+  body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-sidebar { grid-column: 1; grid-row: 2; }
+  body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-image { width: min(100%, 540px); justify-self: center; }
+  body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-meta { gap: 12px; }
+  body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-meta__item { padding: 0; border-left: 0; }
+}
+@media (max-width: 480px) {
+  body .af-wanted .af-wanted-detail.af-wanted-detail--dossier { padding: 13px; }
+  body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-header__top { flex-wrap: wrap; }
+  body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-tools { margin-left: auto; }
+  body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-detail-image { aspect-ratio: 1.08 / 1; }
+  body .af-wanted-detail.af-wanted-detail--dossier .af-wanted-actions__secondary { grid-template-columns: minmax(0, 1fr); }
 }
