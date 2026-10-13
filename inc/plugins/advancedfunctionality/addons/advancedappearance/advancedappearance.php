@@ -27,8 +27,10 @@ define('AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK', 'apui_achievements_pack');
 define('AF_AA_TARGET_APUI_FRAGMENT_PACK', 'apui_fragment_pack');
 
 define('AF_AA_ALIAS_APSTUDIO', 'apstudio.php');
+define('AF_AA_ALIAS_STUDIO', 'studio.php');
 define('AF_AA_ALIAS_FITTINGROOM', 'fittingroom.php');
 define('AF_AA_ALIAS_APSTUDIO_MARK', 'AF_AA_APSTUDIO_PAGE_ALIAS');
+define('AF_AA_ALIAS_STUDIO_MARK', 'AF_AA_STUDIO_PAGE_ALIAS');
 define('AF_AA_ALIAS_FITTINGROOM_MARK', 'AF_AA_FITTINGROOM_PAGE_ALIAS');
 
 function af_advancedappearance_presets_visible(): bool
@@ -59,6 +61,7 @@ function af_aa_is_preview_script(?string $script = null): bool
     $script = trim(strtolower((string)$script));
 
     return $script === strtolower(AF_AA_ALIAS_APSTUDIO)
+        || $script === strtolower(AF_AA_ALIAS_STUDIO)
         || $script === strtolower(AF_AA_ALIAS_FITTINGROOM);
 }
 
@@ -3257,12 +3260,14 @@ function af_aa_remove_front_templates(): void
 function af_aa_install_page_aliases(): void
 {
     af_aa_sync_alias_file(AF_AA_ALIAS_APSTUDIO, AF_AA_ASSETS_DIR . 'apstudio.php', AF_AA_ALIAS_APSTUDIO_MARK);
+    af_aa_sync_alias_file(AF_AA_ALIAS_STUDIO, AF_AA_ASSETS_DIR . 'studio.php', AF_AA_ALIAS_STUDIO_MARK);
     af_aa_sync_alias_file(AF_AA_ALIAS_FITTINGROOM, AF_AA_ASSETS_DIR . 'fittingroom.php', AF_AA_ALIAS_FITTINGROOM_MARK);
 }
 
 function af_aa_remove_page_aliases(): void
 {
     af_aa_delete_owned_alias(AF_AA_ALIAS_APSTUDIO, AF_AA_ALIAS_APSTUDIO_MARK);
+    af_aa_delete_owned_alias(AF_AA_ALIAS_STUDIO, AF_AA_ALIAS_STUDIO_MARK);
     af_aa_delete_owned_alias(AF_AA_ALIAS_FITTINGROOM, AF_AA_ALIAS_FITTINGROOM_MARK);
 }
 
