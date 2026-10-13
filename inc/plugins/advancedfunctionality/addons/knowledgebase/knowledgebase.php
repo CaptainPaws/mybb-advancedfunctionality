@@ -11086,12 +11086,25 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
         : trim((string)af_kb_pick_text($entry, 'short'));
 
     $pic = $isCharacter ? af_kb_sanitize_url((string)($profile['character_pic'] ?? '')) : '';
-    if ($pic === '') {
+    $kb_card_data_attr = '';
+    if ($isCharacter) {
+        // A character portrait is distinct from the entry/category icon. Keep
+        // the portrait placeholder when no actual character image is set.
+        $entryBgStyle = '';
+        $elementKey = trim((string)($profile['character_element'] ?? ''));
+        $elementThemeKey = $elementKey !== '' && function_exists('af_elementtheme_resolve_key')
+            ? af_elementtheme_resolve_key($elementKey)
+            : '';
+        if ($elementThemeKey !== '') {
+            $kb_card_data_attr = ' data-element="' . htmlspecialchars_uni($elementThemeKey) . '"';
+        }
+    } elseif ($pic === '') {
         $entryUi = af_kb_get_entry_ui($entry);
         $fallbackTypeIcon = af_kb_sanitize_url((string)($typeRow['icon_url'] ?? ''));
         $pic = af_kb_sanitize_url((string)($entryUi['icon_url'] ?? '')) ?: $fallbackTypeIcon;
         $entryBgStyle = af_kb_build_bg_style((string)($entryUi['background_tab_url'] ?? ''));
     } else {
+        $entryUi = af_kb_get_entry_ui($entry);
         $entryBgStyle = '';
     }
 
@@ -11106,6 +11119,13 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
             $value = trim((string)($catalogProfile[$field] ?? ''));
             if ($value === '') {
                 continue;
+            }
+            if ($field === 'character_element') {
+                $elementChip = af_kb_render_character_element_value($value, true);
+                if ($elementChip !== '') {
+                    $meta[] = $elementChip;
+                    continue;
+                }
             }
             $value = af_kb_character_profile_resolved_value($field, $value, true);
             $meta[] = htmlspecialchars_uni($value);
@@ -11187,13 +11207,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     $profile = is_array($data['profile'] ?? null) ? $data['profile'] : [];
     $abilities = is_array($data['abilities'] ?? null) ? $data['abilities'] : [];
 
-    $title = trim((string)($isRu ? ($profile['character_name_ru'] ?? '') : ($profile['character_name'] ?? '')));
-    if ($title === '') {
-        $title = trim((string)($profile['character_name_ru'] ?? $profile['character_name'] ?? af_kb_pick_text($entry, 'title')));
-    }
-
     $pic = af_kb_sanitize_url((string)($profile['character_pic'] ?? ''));
-    $banner = af_kb_sanitize_url((string)($entry['banner_url'] ?? ''));
     $appearance = trim((string)($profile['character_app'] ?? af_kb_pick_text($entry, 'short')));
     $bio = af_kb_pick_text($entry, 'body');
 
@@ -11294,10 +11308,9 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     }
 
     return '<div class="af-kb-char-profile">'
-        . ($banner !== '' ? '<div class="af-kb-char-profile__banner"><img src="' . htmlspecialchars_uni($banner) . '" alt="" loading="lazy" /></div>' : '')
         . '<section class="af-kb-char-profile__head">'
         . ($pic !== '' ? '<div class="af-kb-char-profile__avatar"><img src="' . htmlspecialchars_uni($pic) . '" alt="" loading="lazy" /></div>' : '')
-        . '<div class="af-kb-char-profile__identity"><h2>' . htmlspecialchars_uni($title) . '</h2>' . $identityRows . '</div>'
+        . '<div class="af-kb-char-profile__identity">' . $identityRows . '</div>'
         . '</section>'
         . ($appearance !== '' ? '<section class="af-kb-char-profile__section"><h3>Описание</h3><div>' . af_kb_parse_message($appearance) . '</div></section>' : '')
         . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>Биография</h3><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
@@ -12410,11 +12423,30 @@ function af_kb_handle_view(): void
             . '<h1>' . $kb_entry_icon . '<span class="af-kb-entry-hero__title">' . $kb_title . '</span></h1>'
             . '<span class="af-kb-entry-hero__divider" aria-hidden="true"></span>'
             . '</div></div>';
-    } elseif ($bannerUrl !== '') {
-        $kb_entry_heading = '<div class="af-kb-entry-header-visual">'
-            . '<img class="af-kb-banner" src="' . htmlspecialchars_uni($bannerUrl) . '" alt="" loading="lazy" />'
-            . '<div class="af-kb-entry-header-title"><h1>' . $kb_entry_icon . $kb_title . '</h1></div>'
-            . '</div>';
+    } else {
+        $characterPic = af_kb_sanitize_url((string)($characterProfile['character_pic'] ?? ''));
+        $kb_character_detail_class = $characterPic === '' ? ' af-ac-character-detail--no-portrait' : '';
+        $characterElement = trim((string)($characterProfile['character_element'] ?? ''));
+        $characterElementKey = $characterElement !== '' && function_exists('af_elementtheme_resolve_key')
+            ? af_elementtheme_resolve_key($characterElement)
+            : '';
+        $kb_character_element_attr = $characterElementKey !== ''
+            ? ' data-element="' . htmlspecialchars_uni($characterElementKey) . '"'
+            : '';
+        $kb_character_hero_image = $bannerUrl !== ''
+            ? '<img class="af-ac-character-hero__image" src="' . htmlspecialchars_uni($bannerUrl) . '" alt="" loading="eager" />'
+            : '';
+        $kb_character_element_chip = $characterElement !== ''
+            ? '<span class="af-ac-character-hero__element">' . af_kb_render_character_element_value($characterElement, $isRu) . '</span>'
+            : '';
+        $kb_entry_heading = '<div class="af-ac-character-hero">'
+            . $kb_character_hero_image
+            . '<div class="af-ac-character-hero__content">'
+            . '<span class="af-ac-character-hero__type">' . $kb_type_title . '</span>'
+            . '<h1 class="af-ac-character-hero__title">' . $kb_entry_icon . '<span>' . $kb_title . '</span></h1>'
+            . '<span class="af-ac-character-hero__divider" aria-hidden="true"></span>'
+            . '<div class="af-ac-character-hero__badges">' . $kb_status_badge . $kb_status_link . $kb_character_element_chip . '</div>'
+            . '</div></div>';
     }
     $kb_can_edit = af_kb_can_edit() ? '1' : '0';
     $kb_back_link = af_kb_back_link_html(af_kb_url(['type' => $type]), ['kb']);
