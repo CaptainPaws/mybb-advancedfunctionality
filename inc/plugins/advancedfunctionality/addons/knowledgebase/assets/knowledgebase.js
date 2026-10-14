@@ -138,7 +138,7 @@
                 field.setAttribute('data-af-kb-editor-allowed', '1');
                 field.setAttribute('data-af-kb-editor-policy', 'allow');
                 field.classList.remove('af-kb-editor-deny');
-                field.classList.add('af-kb-editor-allow');
+                field.classList.add('af-kb-editor-allow', 'af-kb-editor');
             } else {
                 field.setAttribute('data-af-kb-editor-policy', 'deny');
                 field.classList.remove('af-kb-editor-allow');
@@ -2637,6 +2637,10 @@
             input.dataset.field = def.name;
             if (def.editorPolicy) {
                 input.setAttribute('data-af-kb-editor-policy', def.editorPolicy);
+                if (def.editorPolicy === 'allow' && def.type === 'textarea') {
+                    input.classList.remove('af-kb-plain-textarea');
+                    input.classList.add('af-kb-editor', 'af-kb-editor-allow');
+                }
             }
 
             function commitValue() {
@@ -5458,11 +5462,18 @@
                     { name: 'character_height', label: 'Рост', type: 'text' },
                     { name: 'character_weight', label: 'Вес', type: 'text' }
                 );
-                var profileTextareaDefs = [
-                    { name: 'character_app', label: 'О персонаже', type: 'textarea', editorPolicy: 'allow', fullWidth: true },
-                    { name: 'character_post', label: 'Пост', type: 'textarea', editorPolicy: 'allow', fullWidth: true },
-                    { name: 'character_userinfo', label: 'Дополнительная информация', type: 'textarea', editorPolicy: 'allow', fullWidth: true }
-                ];
+                // Legacy ATF texts stay in state.character_profile and its serialized JSON.
+                // Only the canonical KB descriptions are editable here.
+                [['short_ru', 'Используется в каталоге персонажей и кратких превью'],
+                 ['short_en', 'Используется в каталоге персонажей и кратких превью'],
+                 ['body_ru', 'Основное описание персонажа в базе знаний. Используется как источник первоначального описания при подаче анкеты на канонического персонажа'],
+                 ['body_en', 'Основное описание персонажа в базе знаний. Используется при отсутствии русского полного описания для первоначального заполнения анкеты']].forEach(function (row) {
+                    var textarea = document.querySelector('textarea[name="' + row[0] + '"]');
+                    if (!textarea || textarea.dataset.afCharacterHint) return;
+                    var hint = document.createElement('div');
+                    hint.className = 'af-kb-help'; hint.textContent = row[1];
+                    textarea.parentNode.appendChild(hint); textarea.dataset.afCharacterHint = '1';
+                });
 
                 var profileGrid = document.createElement('div');
                 profileGrid.className = 'af-kb-row';
@@ -5484,11 +5495,6 @@
                     }
                 });
                 fields.profileFields.appendChild(profileGrid);
-                var profileTextareaGrid = document.createElement('div');
-                profileTextareaGrid.className = 'af-kb-row';
-                profileTextareaDefs.forEach(function (d) { profileTextareaGrid.appendChild(createInput(d, state.character_profile, syncRawDebounced)); });
-                fields.profileFields.appendChild(profileTextareaGrid);
-
                 var abilitiesBox = document.createElement('div');
                 abilitiesBox.className = 'af-kb-rule-card';
                 fields.profileLists.appendChild(abilitiesBox);
