@@ -323,10 +323,15 @@
         var results = document.getElementById('kb-character-results');
         var filters = document.querySelector('.af-kb-character-filters');
         var form = filters ? filters.querySelector('.af-kb-character-filter-fields') : null;
-        if (!results || !filters || !form || !window.fetch || !window.history) {
+        if (!results || !filters || !form) {
             return;
         }
 
+        var searchForm = document.querySelector('.af-ac-search');
+        var searchInput = searchForm ? searchForm.querySelector('input[name="q"]') : null;
+        var searchTimer = null;
+        var variantMap = {};
+        try { variantMap = JSON.parse(filters.getAttribute('data-af-character-variants') || '{}'); } catch (ignore) {}
         var controller = null;
         var sequence = 0;
 
@@ -334,9 +339,7 @@
             var select = form.elements.variant;
             var field = select ? select.closest('[data-af-character-variant-field]') : null;
             if (!select || !field) return;
-            var map = {};
-            try { map = JSON.parse(filters.getAttribute('data-af-character-variants') || '{}'); } catch (ignore) {}
-            var choices = origin && map[origin] ? map[origin] : {};
+            var choices = origin && variantMap[origin] ? variantMap[origin] : {};
             select.innerHTML = '<option value="">Все</option>';
             Object.keys(choices).forEach(function (key) {
                 var option = document.createElement('option');
@@ -346,6 +349,7 @@
                 select.appendChild(option);
             });
             var available = Object.keys(choices).length > 0;
+            select.value = available && Object.prototype.hasOwnProperty.call(choices, selected) ? selected : '';
             select.disabled = !available;
             field.hidden = !available;
         }
@@ -358,10 +362,14 @@
                 url.pathname = window.location.pathname;
                 url.searchParams.delete('action');
             }
+            var origin = url.searchParams.get('origin') || '';
+            var variant = url.searchParams.get('variant') || '';
+            if (!origin || !variantMap[origin] || !Object.prototype.hasOwnProperty.call(variantMap[origin], variant)) url.searchParams.delete('variant');
             return url;
         }
 
         function syncControls(url) {
+            if (searchInput) searchInput.value = url.searchParams.get('q') || '';
             ['kind', 'gender', 'origin', 'variant', 'element', 'archetype', 'faction', 'age'].forEach(function (name) {
                 var control = form.elements[name];
                 if (control) control.value = url.searchParams.get(name) || '';
@@ -388,6 +396,8 @@
 
         function load(url, push) {
             var target = pageUrl(url);
+            window.clearTimeout(searchTimer);
+            if (!window.fetch || !window.history) { window.location.assign(target.href); return; }
             var requestUrl = new URL(target.href);
             requestUrl.searchParams.set('ajax', '1');
             if (controller) controller.abort();
@@ -423,12 +433,14 @@
             var url = pageUrl(window.location.href);
             ['kind', 'gender', 'origin', 'variant', 'element', 'archetype', 'faction', 'age'].forEach(function (name) {
                 var control = form.elements[name];
-                var value = control ? String(control.value || '') : '';
+                var value = control && !control.disabled ? String(control.value || '') : '';
                 if (value) url.searchParams.set(name, value);
                 else url.searchParams.delete(name);
             });
+            var query = searchInput ? String(searchInput.value || '').trim() : '';
+            if (query) url.searchParams.set('q', query); else url.searchParams.delete('q');
             url.searchParams.delete('page');
-            return url;
+            return pageUrl(url.href);
         }
 
         form.addEventListener('change', function (event) {
@@ -436,8 +448,7 @@
             if (event.target.name === 'origin' && form.elements.variant) {
                 // Variant choices are origin-bound on the server. Clear an old
                 // machine key immediately; the GET/AJAX response is authoritative.
-                form.elements.variant.value = '';
-                updateVariantControl(String(event.target.value || ''), '');
+                updateVariantControl(String(event.target.value || ''), String(form.elements.variant.value || ''));
             }
             event.preventDefault();
             event.stopPropagation();
@@ -448,6 +459,15 @@
             load(urlFromForm(), true);
         });
         filters.addEventListener('click', function (event) {
+            var reset = event.target.closest('[data-af-character-reset]');
+            if (reset) {
+                if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                var resetUrl = pageUrl(reset.href);
+                syncControls(resetUrl);
+                load(resetUrl, true);
+                return;
+            }
             var tab = event.target.closest('.af-kb-character-filter-tab');
             if (!tab) return;
             event.preventDefault();
@@ -461,6 +481,18 @@
             event.preventDefault();
             load(pageUrl(link.href), true);
         });
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                if (controller) controller.abort();
+                sequence += 1;
+                window.clearTimeout(searchTimer);
+                searchTimer = window.setTimeout(function () { load(urlFromForm(), true); }, 300);
+            });
+            searchForm.addEventListener('submit', function (event) { event.preventDefault(); load(urlFromForm(), true); });
+        }
+        var initialUrl = pageUrl(window.location.href);
+        syncControls(initialUrl);
+        if (window.history && initialUrl.href !== window.location.href) window.history.replaceState({ afKbCharacter: true }, '', initialUrl.href);
         window.addEventListener('popstate', function () {
             var url = pageUrl(window.location.href);
             syncControls(url);
