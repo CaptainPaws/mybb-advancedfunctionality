@@ -1,7 +1,10 @@
+body:not(.atf-active) .af-kb-page {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 20px 16px;
+}
 .af-kb-page {
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 20px 16px;
+
     position: relative;
     z-index: 1;
 }

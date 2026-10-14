@@ -2350,7 +2350,7 @@ function af_balance_render_manage_page(): void
         . $headerinclude
         . '</head><body>'
         . $header
-        . '<div class="af-balance-page">'
+        . '<div class="pun atf-page-shell af-balance-page">'
         . '<h1>Balance management</h1>'
         . '<div class="af-balance-tabs">'
         . '<a class="af-balance-tab ' . $kind_exp_active . '" href="' . $exp_tab_url . '">EXP</a>'

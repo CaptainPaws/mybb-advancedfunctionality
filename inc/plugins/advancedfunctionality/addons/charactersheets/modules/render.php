@@ -2517,6 +2517,8 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $isAjax = (string)$mybb->get_input('ajax') === '1';
     $surface = strtolower(trim((string)$mybb->get_input('af_apui_surface')));
     $isSheetSurfaceRequest = ($surface === 'sheet');
+    $sheet_page_shell_class = (!$isEmbed && !$isAjax && !$isSheetSurfaceRequest)
+        ? 'pun atf-page-shell ' : '';
 
     // ajax/fragments only for partial in-page rendering (profile tabs, inline loads).
     // iframe modal route from postbit must be content-only (no forum chrome),

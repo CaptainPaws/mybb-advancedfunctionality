@@ -6,9 +6,14 @@ return [
     'id' => 'adaptivethemeframework',
     'name' => 'Adaptive Theme Framework',
     'description' => 'Presentation framework for adaptive AF component-slot layouts.',
-    'version' => '0.29.7',
+    'version' => '0.30.0',
     'author' => 'AdvancedFunctionality',
     'bootstrap' => 'adaptivethemeframework.php',
+    'admin' => [
+        'slug' => 'adaptivethemeframework',
+        'title' => 'ATF: внешняя рамка',
+        'controller' => 'admin.php',
+    ],
 
     // ATF owns the site-wide presentation layer. Asset permission is therefore
     // global and declarative; no legacy page blacklist is needed.

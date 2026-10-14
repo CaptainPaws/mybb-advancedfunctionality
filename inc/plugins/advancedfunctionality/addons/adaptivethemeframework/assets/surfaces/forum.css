@@ -6,7 +6,6 @@ body.atf-active .pun.atf-page-shell :is(
   min-width: 0;
   max-width: 100%;
 }
-body.atf-active .atf-index { padding-block: var(--atf-space-6); }
 body.atf-active.atf-index-page .navigation { display: none; }
 body.atf-active .atf-forumdisplay__breadcrumbs .navigation.atf-breadcrumbs {
   width: 100%;

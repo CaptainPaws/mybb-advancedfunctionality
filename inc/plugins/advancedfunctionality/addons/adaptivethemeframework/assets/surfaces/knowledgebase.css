@@ -1,13 +1,9 @@
 /* ATF Knowledge Base surface. Routes and delivery are declared in manifest.php. */
 
 body.atf-active .af-kb-page {
-  --atf-kb-panel-padding: clamp(13px, 1.8vw, 22px);
+  --atf-kb-panel-
   box-sizing: border-box;
-  width: var(--atf-page-content-width);
-  max-width: 100%;
-  min-width: 0;
-  margin: 0 auto;
-  padding: var(--atf-kb-panel-padding);
+  min-
   position: relative;
   isolation: isolate;
   color: var(--atf-color-text);

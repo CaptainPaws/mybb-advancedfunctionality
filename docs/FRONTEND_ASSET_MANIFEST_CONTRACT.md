@@ -118,3 +118,7 @@ contextual addon следует осознанно задать `directory_fallb
 - [ ] проверен JS/CSS order
 - [ ] проверен directory fallback
 - [ ] activation/reactivation проходит
+
+## Standalone frontend page contract
+
+All new AF standalone pages must follow [ATF_PAGE_SHELL_CONTRACT.md](ATF_PAGE_SHELL_CONTRACT.md): one `.pun.atf-page-shell`, ATF-owned exterior geometry, preserved fallback, no embedded shells, and manifest-based frontend permissions.

@@ -35,11 +35,13 @@ body.atf-active {
   --atf-space-4: 1rem;
   --atf-space-5: 1.5rem;
   --atf-space-6: 2rem;
-  --atf-page-gap: var(--atf-space-5);
+  --atf-page-padding: 20px;
+  --atf-page-mobile-gutter: 12px;
+  --atf-page-gap: var(--atf-page-padding);
   --atf-component-gap: var(--atf-space-4);
   --atf-content-max-width: 75rem;
   --atf-page-max-width: var(--atf-content-max-width);
-  --atf-page-content-width: calc(min(100%, var(--atf-page-max-width)) - 2 * var(--atf-page-gap));
+  --atf-page-content-width: min(100%, var(--atf-page-max-width));
 
   /* Typography */
   --atf-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -63,32 +65,16 @@ body.atf-active {
   --atf-breakpoint-narrow: 30rem;
 }
 
-/* Geometry-only opt-in also serves addon shells with their own presentation. */
+/* One exterior geometry authority. Addon semantic wrappers remain content. */
 body.atf-active .pun.atf-page-shell,
-body.atf-active .pun.atf-layout-shell {
+body.atf-active #content.pun.atf-page-shell {
   box-sizing: border-box;
-  width: var(--atf-page-content-width);
-  max-width: 100%;
+  width: 100%;
+  max-width: var(--atf-page-max-width);
   margin-inline: auto;
   min-width: 0;
-  padding-inline: var(--atf-shell-padding-inline, 0);
-}
-
-body.atf-active .pun.atf-layout-shell {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-@media (max-width: 64rem) {
-  body.atf-active.af-rwd-enabled .pun.atf-page-shell,
-  body.atf-active.af-rwd-enabled .pun.atf-layout-shell {
-    width: var(--atf-page-content-width) !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-    margin-inline: auto !important;
-    padding-inline: var(--atf-shell-padding-inline, 0) !important;
-  }
+  margin-block: 0;
+  padding: var(--atf-page-padding);
 }
 
 body.atf-active .atf-page {
@@ -110,7 +96,7 @@ body.atf-active .pun.atf-page-shell :is(
    #content.atf-page-shell also outranks the installed MyBB theme #content reset.
    The root paints its own background and outer edge. Pseudo-elements draw only
    the inset lines/ornament, never an opaque panel over content. */
-body.atf-active *:is(#content.atf-page-shell, .atf-ornate-frame, .pun.atf-page-shell, .af-kb-page, .pun.atf-layout-shell > .af-wanted):not(:is(.atf-ornate-frame, .atf-page-shell, .af-kb-page, .af-wanted) *) {
+body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-page-shell *) {
   --atf-frame-fill: radial-gradient(ellipse at 50% 0%, rgb(84 70 140 / 19%), transparent 65%), linear-gradient(135deg, #0d1424, #090e1c 65%, #15152b);
   position: relative;
   isolation: isolate;
@@ -123,20 +109,11 @@ body.atf-active *:is(#content.atf-page-shell, .atf-ornate-frame, .pun.atf-page-s
   overflow-wrap: anywhere;
   box-shadow: none;
 }
-body.atf-active .pun.atf-layout-shell > .af-wanted:not(.af-wanted--detail-page) {
-  padding: max(16px, calc(var(--atf-frame-ornament-inset) + 6px));
-}
-body.atf-active .pun.atf-page-shell,
-body.atf-active #content.atf-page-shell {
-  padding-inline: var(--atf-shell-padding-inline);
-  --atf-shell-padding-inline: max(16px, calc(var(--atf-frame-ornament-inset) + 6px));
-  padding-block: var(--atf-shell-padding-inline);
-}
 /* Progressive enhancement: paint the cut silhouette with background tiles on
    the root itself. No clip, mask or transform is applied to the content root.
    Without this support the solid border + full background above remain visible. */
 @supports (clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%)) {
-  body.atf-active *:is(#content.atf-page-shell, .atf-ornate-frame, .pun.atf-page-shell, .af-kb-page, .pun.atf-layout-shell > .af-wanted):not(:is(.atf-ornate-frame, .atf-page-shell, .af-kb-page, .af-wanted) *) {
+  body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-page-shell *) {
     border: 0;
     background:
       linear-gradient(125deg, var(--atf-frame-edge), var(--atf-frame-edge-soft) 38%, #6973a8 70%, var(--atf-frame-edge)) center top / calc(100% - 2 * var(--atf-frame-cut)) 1px no-repeat,
@@ -153,8 +130,8 @@ body.atf-active #content.atf-page-shell {
       linear-gradient(var(--atf-frame-background), var(--atf-frame-background)) right center / var(--atf-frame-cut) calc(100% - 2 * var(--atf-frame-cut)) no-repeat;
   }
 }
-body.atf-active *:is(#content.atf-page-shell, .atf-ornate-frame, .pun.atf-page-shell, .af-kb-page, .pun.atf-layout-shell > .af-wanted):not(:is(.atf-ornate-frame, .atf-page-shell, .af-kb-page, .af-wanted) *)::before,
-body.atf-active *:is(#content.atf-page-shell, .atf-ornate-frame, .pun.atf-page-shell, .af-kb-page, .pun.atf-layout-shell > .af-wanted):not(:is(.atf-ornate-frame, .atf-page-shell, .af-kb-page, .af-wanted) *)::after {
+body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-page-shell *)::before,
+body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-page-shell *)::after {
   position: absolute;
   content: "";
   pointer-events: none;
@@ -162,12 +139,12 @@ body.atf-active *:is(#content.atf-page-shell, .atf-ornate-frame, .pun.atf-page-s
   box-sizing: border-box;
   border-radius: 0;
 }
-body.atf-active *:is(#content.atf-page-shell, .atf-ornate-frame, .pun.atf-page-shell, .af-kb-page, .pun.atf-layout-shell > .af-wanted):not(:is(.atf-ornate-frame, .atf-page-shell, .af-kb-page, .af-wanted) *)::before {
+body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-page-shell *)::before {
   inset: 4px;
   border: 1px solid var(--atf-frame-inner-line);
   box-shadow: inset 0 0 0 2px var(--atf-frame-background), inset 0 0 0 3px var(--atf-frame-inner-line);
 }
-body.atf-active *:is(#content.atf-page-shell, .atf-ornate-frame, .pun.atf-page-shell, .af-kb-page, .pun.atf-layout-shell > .af-wanted):not(:is(.atf-ornate-frame, .atf-page-shell, .af-kb-page, .af-wanted) *)::after {
+body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-page-shell *)::after {
   inset: var(--atf-frame-ornament-inset);
   background:
     linear-gradient(135deg, var(--atf-frame-edge), transparent 60%) left top / var(--atf-frame-ornament-size) 1px no-repeat,
@@ -246,10 +223,6 @@ body.atf-active .atf-grid {
   gap: var(--atf-component-gap);
 }
 
-@media (max-width: 48rem) {
-  body.atf-active .atf-grid { grid-template-columns: minmax(0, 1fr); }
-}
-
 body.atf-active .atf-stack { display: flex; flex-direction: column; gap: var(--atf-component-gap); }
 body.atf-active .atf-stack--compact { gap: var(--atf-space-2); }
 
@@ -298,24 +271,11 @@ body.atf-active .atf-chip {
   border: 1px solid var(--atf-color-border);
   border-radius: var(--atf-radius-pill);
 }
-@media (max-width: 64rem) {
-  body.atf-active { --atf-page-gap: var(--atf-space-4); --atf-component-gap: var(--atf-space-3); }
-}
-@media (max-width: 48rem) {
-  body.atf-active { --atf-page-gap: var(--atf-space-3); }
-  body.atf-active .atf-card { padding: var(--atf-space-4); }
-}
-@media (max-width: 30rem) {
-  body.atf-active { --atf-page-gap: var(--atf-space-2); --atf-component-gap: var(--atf-space-2); }
-  body.atf-active .atf-button { width: 100%; }
-}
 
 body.atf-active .atf-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 body.atf-active .atf-options-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 body.atf-active .atf-options-form fieldset > legend { padding-inline: var(--atf-space-2); }
-@media (max-width: 48rem) {
-  body.atf-active .atf-options-grid { grid-template-columns: minmax(0, 1fr); }
-}
+
 body.atf-active :is(.atf-social-list,.atf-group-list){list-style:none;margin:0;padding:0;display:grid;gap:var(--atf-space-3,12px)}
 body.atf-active .atf-social-list{grid-template-columns:repeat(auto-fit,minmax(12rem,1fr))}
 body.atf-active :is(.atf-social-person,.atf-social-request,.atf-group-card){display:flex;gap:var(--atf-space-3,12px);align-items:center;padding:var(--atf-space-3,12px);border:1px solid var(--atf-border-color,currentColor);border-radius:var(--atf-radius,8px)}

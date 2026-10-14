@@ -142,6 +142,8 @@ function af_aa_render_workshop(): void {
     global $mybb,$headerinclude;
     $uid=(int)($mybb->user['uid']??0);
     try {af_aa_personal_actor($uid);$target=(string)($mybb->get_input('target')?:'postbit');af_aa_personal_target($target,false);$list=af_aa_personal_list($uid,$target);$preview=af_aa_studio_surface_preview_markup($uid,$target);}catch(AF_AA_PersonalException $e){error($e->getMessage());return;}
+    $aa_workshop_atf_class = function_exists('af_adaptivethemeframework_presentation_is_active')
+        && af_adaptivethemeframework_presentation_is_active() ? ' atf-active atf-profile-page' : '';
     af_aa_ensure_header_bits();add_breadcrumb('Мастерская оформления','apstudio.php');
     $base=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedappearance/assets/';
     $version=(string)max(filemtime(__DIR__.'/assets/studio.js'),filemtime(__DIR__.'/assets/studio.css'));

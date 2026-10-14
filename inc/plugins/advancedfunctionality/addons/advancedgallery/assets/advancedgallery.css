@@ -1,8 +1,11 @@
-.af-advancedgallery{
+body:not(.atf-active) .af-advancedgallery {
   max-width: 1200px;
   margin: 20px auto;
   padding: 0 16px;
   width: 100%;
+}
+.af-advancedgallery {
+
 }
 
 .af-advancedgallery *{

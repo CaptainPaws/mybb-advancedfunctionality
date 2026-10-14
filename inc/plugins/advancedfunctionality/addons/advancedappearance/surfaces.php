@@ -105,6 +105,13 @@ function af_aa_studio_template_fragment(string $path,array $values): string
     $source=preg_replace('~<script\b[^>]*>.*?</script>~is','',$source);
     // Preview uses the actual main component without duplicating html/head/body/document IDs.
     if (preg_match('~<main\b.*?</main>~is',$source,$m)) $source=$m[0];
+    // This component is embedded in the workshop's own shell.
+    $source=preg_replace_callback('~\bclass=(["\'])([^"\']*)\1~i',static function($m){
+        $classes=preg_split('/\s+/',trim($m[2]))?:[];
+        if (!in_array('atf-page-shell',$classes,true)) return $m[0];
+        $classes=array_values(array_diff($classes,['pun','atf-page-shell']));
+        return 'class='.$m[1].implode(' ',$classes).$m[1];
+    },$source);
     return $source;
 }
 

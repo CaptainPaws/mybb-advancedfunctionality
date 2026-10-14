@@ -1,7 +1,10 @@
-.af-aa-page {
+body:not(.atf-active) .af-aa-page {
   max-width: 1440px;
   margin: 18px auto 32px;
   padding: 0 16px;
+}
+.af-aa-page {
+
   display: grid;
   gap: 16px;
 }

@@ -6,7 +6,7 @@
 .af-wanted-detail *,
 .af-wanted-modal * { box-sizing: border-box; }
 
-.af-wanted { margin-inline: auto; padding: clamp(.75rem, 1.35vw, 1.15rem); }
+body:not(.atf-active) .af-wanted { margin-inline: auto; padding: clamp(.75rem, 1.35vw, 1.15rem); }
 .af-wanted-page-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .8rem; }
 .af-wanted .af-kb-header { min-width: 0; margin: 0; }
 .af-wanted .af-kb-header h1 { margin: 0; }

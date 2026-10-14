@@ -1181,7 +1181,7 @@ body.af-apui-surface-body[data-af-apui-surface="inventory"] {
 }
 
 /* Статичный фон на viewport */
-.af-apui-surface-page[data-af-apui-surface="inventory"]::before {
+.af-apui-surface-page[data-af-apui-surface="inventory"]:not(body.atf-active .atf-page-shell)::before {
   content: "";
   position: fixed;
   inset: 0;
@@ -1214,11 +1214,7 @@ body.af-apui-surface-body[data-af-apui-surface="inventory"] {
   background: transparent;
 }
 
-.af-inv-shell {
-  display: grid;
-  gap: 16px;
-  min-height: 100%;
-  box-sizing: border-box;
+.af-inv-shell:not(body.atf-active .pun.atf-page-shell[data-af-apui-surface="inventory"] > .af-inv-page > *) {
   padding: 18px;
   border: 1px solid var(--af-apui-modal-inventory-panel-border, rgba(255,255,255,.12));
   border-radius: 24px;
@@ -1226,6 +1222,13 @@ body.af-apui-surface-body[data-af-apui-surface="inventory"] {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   overflow: hidden;
+}
+.af-inv-shell {
+  display: grid;
+  gap: 16px;
+  min-height: 100%;
+  box-sizing: border-box;
+
 }
 
 .af-inv-page[data-af-apui-surface="inventory"] .af-inv-tabs {
@@ -1256,7 +1259,7 @@ body.af-apui-surface-body[data-af-apui-surface="inventory"] {
 }
 
 @media (max-width: 640px) {
-  .af-inv-shell {
+  .af-inv-shell:not(body.atf-active .pun.atf-page-shell[data-af-apui-surface="inventory"] > .af-inv-page > *) {
     padding: 14px;
     border-radius: 18px;
   }

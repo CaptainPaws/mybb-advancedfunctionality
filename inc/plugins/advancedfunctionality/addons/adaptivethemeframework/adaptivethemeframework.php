@@ -14,12 +14,13 @@ if (!defined('AF_ADDONS')) {
 }
 
 require_once __DIR__ . '/ownership.php';
+require_once __DIR__ . '/page-shell.php';
 
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.29.7');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.30.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1726,6 +1727,7 @@ function af_adaptivethemeframework_compose_thread_card(): void
 /** Add the activation marker and resolve server-rendered forum-card slots. */
 function af_adaptivethemeframework_mark_page(string &$page): void
 {
+    af_adaptivethemeframework_inject_page_settings($page);
     // Blocking head bootstrap resolves guest storage before any postbit is parsed.
     // Server state is also carried directly by the body for JS-disabled accounts.
     if (stripos($page, '</head>') !== false && strpos($page, 'data-atf-preferences-bootstrap') === false) {
@@ -2598,6 +2600,7 @@ function af_adaptivethemeframework_thread_card_context(array $thread, int $fid):
 
 function af_adaptivethemeframework_install(): bool
 {
+    af_adaptivethemeframework_ensure_page_settings();
     return af_adaptivethemeframework_schema_readiness();
 }
 
@@ -2612,11 +2615,13 @@ function af_adaptivethemeframework_is_installed(): bool
 
 function af_adaptivethemeframework_activate(): bool
 {
+    af_adaptivethemeframework_ensure_page_settings();
     return af_adaptivethemeframework_acquire_templates();
 }
 
 function af_adaptivethemeframework_upgrade(): bool
 {
+    af_adaptivethemeframework_ensure_page_settings();
     return af_adaptivethemeframework_acquire_templates();
 }
 

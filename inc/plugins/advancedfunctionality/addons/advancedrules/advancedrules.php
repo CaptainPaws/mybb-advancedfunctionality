@@ -83,7 +83,7 @@ function af_advancedrules_install()
 
     // === templates (sid = -2) — точные копии из эталона ===
     $templates = [
-        'rules_index' => '<html><head><title>{$lang->rules_title}</title>{$headerinclude}</head><body>{$header}<div class="rules"><h1>{$lang->rules_title}</h1><div class="rules-categories">{$rules_categories}</div></div><script type="text/javascript">document.addEventListener("DOMContentLoaded",function(){var headers=document.querySelectorAll(".rules-cat-header");for(var i=0;i<headers.length;i++){headers[i].addEventListener("click",function(){var id=this.getAttribute("data-id");var el=document.getElementById("rules-paragraphs-"+id);var cat=document.getElementById("rules-cat-"+id);if(el){var open=el.style.display==="none";el.style.display=open?"":"none";if(cat){if(open){cat.classList.add("open");}else{cat.classList.remove("open");}}}});}});</script>{$footer}</body></html>',
+        'rules_index' => '<html><head><title>{$lang->rules_title}</title>{$headerinclude}</head><body>{$header}<div class="pun atf-page-shell rules"><h1>{$lang->rules_title}</h1><div class="rules-categories">{$rules_categories}</div></div><script type="text/javascript">document.addEventListener("DOMContentLoaded",function(){var headers=document.querySelectorAll(".rules-cat-header");for(var i=0;i<headers.length;i++){headers[i].addEventListener("click",function(){var id=this.getAttribute("data-id");var el=document.getElementById("rules-paragraphs-"+id);var cat=document.getElementById("rules-cat-"+id);if(el){var open=el.style.display==="none";el.style.display=open?"":"none";if(cat){if(open){cat.classList.add("open");}else{cat.classList.remove("open");}}}});}});</script>{$footer}</body></html>',
         'rules_category' => '<div class="rules-category" id="rules-cat-{$category[\'id\']}"><div class="rules-cat-header" data-id="{$category[\'id\']}"><div class="rules-cat-icon">✼</div><div class="rules-cat-title">{$category[\'name\']}</div><div class="rules-cat-arrow">&#9660;</div></div><p class="rules-cat-desc rules-muted">{$category[\'description\']}</p><div class="rules-paragraphs" id="rules-paragraphs-{$category[\'id\']}" style="display:none;">{$rules_paragraphs}</div></div>',
         'rules_paragraph' => '<div class="rules-paragraph"><h3>{$paragraph[\'display_title\']}</h3><div class="rules-body">{$paragraph[\'body\']}</div></div>',
     ];
@@ -236,6 +236,9 @@ function af_advancedrules_misc_route()
 
     // Полная страница из rules_index (внутри уже {$headerinclude}, {$header}, {$footer})
     eval("\$page = \"".$templates->get('rules_index')."\";");
+    if (function_exists('af_adaptivethemeframework_wrap_page_content')) {
+        $page = af_adaptivethemeframework_wrap_page_content($page, 'rules');
+    }
     output_page($page);
     exit;
 }

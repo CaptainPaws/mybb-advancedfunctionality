@@ -1,5 +1,7 @@
 # ATF page shell final audit
 
+> Historical audit. Current geometry, root inventory and settings are defined in [ATF_PAGE_SHELL_CONTRACT.md](ATF_PAGE_SHELL_CONTRACT.md). Earlier browser results below do not verify the current change.
+
 Task 52 audits the full-page frontend surfaces owned by Adaptive Theme
 Framework (ATF). It is a structural audit only: cards, forms, typography and
 surface-specific composition remain unchanged.

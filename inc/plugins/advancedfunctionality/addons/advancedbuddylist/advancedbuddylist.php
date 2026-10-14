@@ -349,7 +349,7 @@ function af_abdl_render_page(): void
         $tabs.='<a class="af-abdl-tab '.($tab===$key?'is-active':'').'" href="buddy.php?tab='.$key.'">'.$label.'</a>';
     }
     $page='<!doctype html><html><head><title>Друзья</title>'.$headerinclude.'</head><body>'.$header
-        .'<main class="af-abdl-page"><header class="af-abdl-heading"><h1>Друзья</h1><nav class="af-abdl-tabs">'.$tabs
+        .'<main class="pun atf-page-shell af-abdl-page"><header class="af-abdl-heading"><h1>Друзья</h1><nav class="af-abdl-tabs">'.$tabs
         .'</nav></header><div id="af-abdl-content">'.$content.'</div></main>'.$footer.'</body></html>';
     output_page($page);
 }

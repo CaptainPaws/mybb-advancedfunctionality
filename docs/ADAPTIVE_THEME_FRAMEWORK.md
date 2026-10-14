@@ -201,3 +201,7 @@ old `advresponsivelayout.js` DOM contract.
 
 Frontend asset lists remain intentionally empty because CSS delivery is owned
 by the AF theme stylesheet pipeline rather than a direct asset URL.
+
+## Standalone frontend page contract
+
+All new AF standalone pages must follow [ATF_PAGE_SHELL_CONTRACT.md](ATF_PAGE_SHELL_CONTRACT.md): one `.pun.atf-page-shell`, ATF-owned exterior geometry, preserved fallback, no embedded shells, and manifest-based frontend permissions.

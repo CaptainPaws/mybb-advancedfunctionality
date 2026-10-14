@@ -1,12 +1,16 @@
 /* Shared palette URL remains valid when this stylesheet is minified at root. */
 
-.af-cs-page {
-  position: relative;
-  z-index: 1;
+body:not(.atf-active) .af-cs-page,
+.af-cs-page:not(.atf-page-shell):not(body.atf-active .atf-page-shell .af-cs-page) {
   max-width: 1120px;
   margin: 20px auto;
   padding: 0 16px 32px;
   background: transparent;
+}
+.af-cs-page {
+  position: relative;
+  z-index: 1;
+
   box-sizing: border-box;
 }
 

@@ -14,7 +14,7 @@ body.atf-active .atf-thread__breadcrumbs .navigation.atf-breadcrumbs {
 body.atf-active .atf-thread__breadcrumbs--bottom {
   margin-block: var(--atf-space-4) var(--atf-space-2);
 }
-body.atf-active .atf-thread { min-width: 0; padding-block: var(--atf-space-5); }
+body.atf-active .atf-thread { min-width: 0; }
 body.atf-active .atf-thread > * { max-width: 100%; }
 body.atf-active .atf-thread__breadcrumbs { margin-block-end: var(--atf-space-4); }
 body.atf-active .atf-thread__breadcrumbs:empty,

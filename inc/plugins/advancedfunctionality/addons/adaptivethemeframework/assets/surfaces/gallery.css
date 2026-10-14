@@ -2,11 +2,7 @@
 
 body.atf-active .af-advancedgallery {
   box-sizing: border-box;
-  width: min(100%, var(--atf-page-max-width));
-  max-width: var(--atf-page-max-width);
-  min-width: 0;
-  margin: 0 auto;
-  padding: var(--atf-space-5) var(--atf-page-gap);
+  min-
   color: var(--atf-color-text);
   font-family: var(--atf-font-family);
   font-size: var(--atf-font-size-md);

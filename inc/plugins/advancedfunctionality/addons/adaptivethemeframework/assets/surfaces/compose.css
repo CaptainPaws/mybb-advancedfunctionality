@@ -175,9 +175,6 @@ body.atf-active .atf-page :is(.select2-choices, .select2-search-choice, .autocom
 @media (max-width: 48rem) {
   body.atf-active .atf-page :is(.atf-form-row__controls--date) { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
 }
-body.atf-active .atf-compose {
-  padding-block: var(--atf-space-5) var(--atf-space-6);
-}
 body.atf-active .atf-compose,
 body.atf-active .atf-compose * { box-sizing: border-box; }
 body.atf-active .atf-compose__form {
