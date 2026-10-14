@@ -2,9 +2,9 @@
 
 body.atf-active .navigation.atf-breadcrumbs {
   box-sizing: border-box;
-  width: min(100%, var(--atf-page-max-width));
+  width: var(--atf-page-content-width);
   margin: var(--atf-space-3) auto;
-  padding-inline: var(--atf-page-gap);
+  padding-inline: 0;
   color: var(--atf-color-text-muted);
   font-size: var(--atf-font-size-sm);
 }
@@ -136,7 +136,7 @@ body.atf-active .atf-tabs__item {
 body.atf-active .atf-tabs__item[aria-current="page"],
 body.atf-active .atf-tabs__item--active { color: var(--atf-color-text); border-color: var(--atf-color-accent); }
 @media(max-width:36rem){
-  body.atf-active .navigation.atf-breadcrumbs { padding-inline: var(--atf-page-gap); }
+  body.atf-active .navigation.atf-breadcrumbs { padding-inline: 0; }
   body.atf-active .atf-breadcrumbs__list { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
   body.atf-active .atf-breadcrumbs__item { flex: 0 0 auto; }
   body.atf-active .atf-breadcrumbs__link,

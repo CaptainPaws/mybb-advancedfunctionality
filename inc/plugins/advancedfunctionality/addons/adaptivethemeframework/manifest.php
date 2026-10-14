@@ -19,8 +19,14 @@ return [
 
     // Every source has its own Theme stylesheet. Surface attachments keep CSS
     // scoped to the routes that use that surface.
-    'assets' => ['front' => ['css' => ['assets/adaptivethemeframework.css'], 'js' => []]],
+    'assets' => ['front' => ['css' => ['assets/adaptivethemeframework.css'], 'js' => ['assets/presentation-ui.js']]],
     'theme_stylesheets' => [
+        [
+            'id' => 'presentation_ui',
+            'file' => 'assets/presentation-ui.css',
+            'attach' => [['file' => 'global']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+        ],
         [
             'id' => 'adaptivethemeframework_design_system',
             'file' => 'assets/adaptivethemeframework.css',
