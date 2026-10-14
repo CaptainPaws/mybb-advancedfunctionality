@@ -36,7 +36,7 @@ function af_characters_pre_output_page(string &$page): void
 
     $assetAllowed = $hasDetail
         ? af_frontend_asset_allowed(AF_CHARACTERS_ID, 'character_detail_stylesheet', null, ['has_character_detail' => true])
-        : af_frontend_asset_allowed(AF_CHARACTERS_ID);
+        : af_frontend_asset_allowed(AF_CHARACTERS_ID, 'character_catalog_stylesheet', null, ['has_character_catalog' => true]);
     if (!$assetAllowed || strpos($page, 'data-af-advancedcharacters-css') !== false) {
         return;
     }
