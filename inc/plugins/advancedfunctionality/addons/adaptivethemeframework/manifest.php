@@ -44,6 +44,7 @@ return [
             'file' => 'assets/surfaces/knowledgebase.css',
             'attach' => [
                 ['file' => 'kb.php'],
+                ['file' => 'characters.php'],
                 ['file' => 'misc.php', 'action' => 'kb'],
                 ['file' => 'misc.php', 'action' => 'kb_edit'],
                 ['file' => 'misc.php', 'action' => 'kb_type_edit'],
