@@ -21,7 +21,7 @@
     if(list.active_selection.kind==='catalog')host.append(node('p','Активен магазинный пресет: '+list.active_selection.title));
     for(const row of list.presets){let s={};try{s=JSON.parse(row.settings_json);}catch(_){}const card=node('article',undefined,'aa-card'+(list.active_selection.kind==='personal'&&list.active_selection.id===row.id?' is-active':''));card.append(mini(s),node('h3',row.title),node('small',(row.publication_state==='draft'?'Черновик':'Сохранён')+(row.draft_json?' · есть незавершённые изменения':'')+(list.active_selection.id===row.id?' · активен':'')));const actions=node('div',undefined,'aa-card-actions');const apply=button('Применить',async()=>{await api('activate',{id:row.id});await reload();status('Пресет применён.');});apply.disabled=row.publication_state!=='ready';const clone=button('Дублировать',async()=>{await api('clone',{id:row.id,title:copyTitle(row.title)});await reload();});clone.disabled=!list.slots.available;actions.append(button('Редактировать',()=>open(row)),apply,clone,button('Удалить',async()=>{if(!confirm('Удалить пресет «'+row.title+'»?'))return;await api('delete',{id:row.id});await reload();}));card.append(actions);host.append(card);}
     for(let i=0;i<list.slots.available;i++){const card=node('article',undefined,'aa-card aa-slot');card.append(button('+',()=>open(null)),node('span','Свободный слот'));host.append(card);}
-    const locked=node('article',undefined,'aa-card aa-slot'),link=node('a','Перейти в магазин');link.href='shop.php';locked.append(node('span','Дополнительный слот'),node('small','Покупка слотов появится позже'),link);host.append(locked);}
+    if(list.slot_shop&&list.slots.free+list.slots.purchased<list.slots.maximum){const locked=node('article',undefined,'aa-card aa-slot'),link=node('a','Купить слот');link.href=list.slot_shop;locked.append(node('span','Дополнительный слот'),link);host.append(locked);}else if(list.slots.capacity>=list.slots.maximum)host.append(node('p','Достигнут максимум слотов.')); }
   function copyTitle(title){return Array.from(title+' · копия').slice(0,seed.title_limit).join('');}
   function componentSettings(){settings.components||={};return settings.components[component]||={};}
   function updateTitle(){settings.display_title=$('aa-title').value;settings.description=$('aa-description').value;}
@@ -54,6 +54,8 @@
   $('aa-studio-preview').addEventListener('click',event=>{event.preventDefault();event.stopPropagation();for(const [key,selector]of Object.entries(selectors))if(event.target.closest(selector)){component=key;$('aa-component').value=key;renderControls();return;}});
   $('aa-studio-preview').addEventListener('submit',event=>event.preventDefault());
   window.addEventListener('beforeunload',event=>{if(dirty){updateTitle();remember();event.preventDefault();event.returnValue='';}});
+  window.addEventListener('pageshow',event=>{if(event.persisted)reload().catch(showError);});
+  window.addEventListener('focus',()=>{if(!dirty)reload().catch(showError);});
   cards();
   const edit=Number(new URLSearchParams(location.search).get('edit'));if(edit) {const row=list.presets.find(row=>row.id===edit);if(row)open(row);}
 })();

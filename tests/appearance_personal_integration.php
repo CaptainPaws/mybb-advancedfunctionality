@@ -49,6 +49,8 @@ function appearance_check($condition,$message){if(!$condition)throw new RuntimeE
 function appearance_count($table,$where=''){global $db;return (int)$db->fetch_field($db->simple_select($table,'COUNT(*) AS n',$where),'n');}
 function appearance_fails(callable $fn,int $code){try{$fn();}catch(AF_AA_PersonalException $e){appearance_check($e->getCode()===$code,'Unexpected refusal '.$e->getMessage());return;}throw new RuntimeException('Expected refusal '.$code);}
 
+if(defined('AA_SHOP_FIXTURE')) return;
+
 if(PHP_SAPI==='cli-server') {
     $mybb->request_method=strtolower($_SERVER['REQUEST_METHOD']);
     $mybb->user['uid']=(int)($_GET['fixture_uid']??7);

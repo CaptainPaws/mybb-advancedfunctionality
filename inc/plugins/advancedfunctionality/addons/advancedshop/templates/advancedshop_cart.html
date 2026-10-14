@@ -11,7 +11,7 @@
     <div>{$lang->af_advancedshop_balance}: {$balance}</div>
     <div>{$lang->af_advancedshop_total}: {$total}</div>
     {$msg}
-    <button class="af-shop-btn af-checkout" {$can_checkout}>{$lang->af_advancedshop_btn_checkout}</button>
+    <button class="af-shop-btn af-checkout" data-checkout-key="{$checkout_key}" {$can_checkout}>{$lang->af_advancedshop_btn_checkout}</button>
   </div>
   <div class="af-shop-toasts" aria-live="polite"></div>
 </div>

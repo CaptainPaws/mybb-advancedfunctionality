@@ -12,6 +12,7 @@ define('AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT', "index.php\nforumdisplay.php\npost
 define('AF_ADVSHOP_ASSETS_BLACKLIST_DESC', 'По одной строке. Форматы: `script.php` или `script.php?action=xxx`.');
 define('AF_KB_TABLE_ENTRIES', 'af_kb_entries');
 define('AF_KB_TABLE_ENTRIES_LEGACY', 'kb_entries');
+require_once __DIR__.'/appearance_slots.php';
 if (!defined('AF_ADVSHOP_DEBUG_LOG') && defined('AF_CACHE')) {
     define('AF_ADVSHOP_DEBUG_LOG', AF_CACHE . 'advancedshop_debug.log');
 }
@@ -297,6 +298,11 @@ function af_advancedshop_slot_payload_from_source(string $sourceType, array $inp
     global $db;
 
     $sourceType = af_advancedshop_normalize_source_type($sourceType);
+    if ($sourceType === 'appearance_slot') {
+        $product=af_advancedshop_slot_product((int)($input['source_ref_id']??0));
+        return ['source_type'=>'appearance_slot','source_ref_id'=>$product['ref_id'],'kb_id'=>0,
+            'kb_type'=>'appearance_slot','kb_key'=>$product['key'],'appearance_preset'=>[]];
+    }
     if ($sourceType === 'appearance') {
         $preset = af_advancedshop_appearance_resolve_preset(
             (int)($input['source_ref_id'] ?? 0),
@@ -545,7 +551,7 @@ function af_advancedshop_assert_source_matches_shop(array $shop, array $sourcePa
 function af_advancedshop_normalize_source_type(string $sourceType): string
 {
     $sourceType = mb_strtolower(trim($sourceType));
-    return $sourceType === 'appearance' ? 'appearance' : 'kb';
+    return in_array($sourceType,['appearance','appearance_slot'],true) ? $sourceType : 'kb';
 }
 
 function af_advancedshop_source_type_from_slot(array $slot): string
@@ -1055,6 +1061,7 @@ function af_advancedshop_install(): void
     af_advancedshop_templates_install_or_update();
     af_advancedshop_ensure_slots_schema();
     af_advancedshop_ensure_appearance_active_schema();
+    af_advancedshop_slot_install_schema();
     if (!af_advancedshop_alias_sync('shop')) {
         af_advancedshop_alias_sync_notice_on_failure('shop');
     }
@@ -1093,6 +1100,7 @@ function af_advancedshop_activate(): void
     af_advancedshop_ensure_shops_schema();
     af_advancedshop_ensure_slots_schema();
     af_advancedshop_ensure_appearance_active_schema();
+    af_advancedshop_slot_install_schema();
     af_advancedshop_write_inventory_schema_snapshot();
     af_advancedshop_templates_install_or_update();
     if (!af_advancedshop_alias_sync('shop')) {
@@ -1604,7 +1612,11 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
         $slot_short_raw = '';
         $slot_icon_raw = '';
 
-        if ($sourceType === 'appearance') {
+        if ($sourceType === 'appearance_slot') {
+            try {$product=af_advancedshop_slot_product($sourceRefId);}catch(Throwable $e){continue;}
+            $slot_title_raw=$product['title'];$slot_short_raw='Постоянный +1 слот. Активация не требуется.';
+            $slot_icon_raw='';$slot_kb_id=0;$slot_kb_key=$product['key'];$slot_kb_type='appearance_slot';
+        } elseif ($sourceType === 'appearance') {
             $preset = af_advancedshop_appearance_fetch_preset($sourceRefId);
             $slot_title_raw = trim((string)($preset['title'] ?? ''));
             $slot_short_raw = trim((string)($preset['description'] ?? ''));
@@ -1648,9 +1660,11 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
         $slot_rarity_label = htmlspecialchars_uni((string)$slot['rarity_label']);
         $slot['rarity_class'] = 'af-rarity-' . $slot_rarity_value;
         $slot_rarity_class = htmlspecialchars_uni((string)$slot['rarity_class']);
-        $slot_kb_url = $sourceType === 'appearance'
+        $slot_kb_url = $sourceType !== 'kb'
             ? '#'
             : htmlspecialchars_uni(af_advancedshop_kb_entry_url($slot_kb_id, $slot_kb_type, $slot_kb_key));
+        $slot_product_anchor='appearance-slot-'.$slot_id;
+        $slot_title_link_class=$sourceType==='appearance_slot'?'af-shop-product-label':'af-kb-chip';
         eval('$slotsHtml .= "' . af_advancedshop_tpl('advancedshop_product_card') . '";');
     }
 
@@ -1961,7 +1975,8 @@ function af_advancedshop_render_cart(): void
     $shop = af_advancedshop_current_shop();
     add_breadcrumb($lang->af_advancedshop_hub_title ?? 'Выбор магазина', af_advancedshop_url('shop'));
     add_breadcrumb($lang->af_advancedshop_cart_title ?? 'Cart', af_advancedshop_url('shop_cart', ['shop' => (string)$shop['code']]));
-    $cart = af_advancedshop_get_or_create_cart((int)$shop['shop_id'], (int)$mybb->user['uid']);
+    $cart=af_advancedshop_order_transaction((int)$mybb->user['uid'],function()use($shop,$mybb){$cart=af_advancedshop_get_or_create_cart((int)$shop['shop_id'],(int)$mybb->user['uid']);$cart['checkout_key']=af_advancedshop_cart_key((int)$cart['cart_id']);return $cart;});
+    $checkout_key=htmlspecialchars_uni($cart['checkout_key']);
     [$itemsHtml, $totalByCurrency] = af_advancedshop_build_cart_items($cart);
     $insufficientLines = [];
     $balancesSummary = [];
@@ -2060,7 +2075,10 @@ function af_advancedshop_build_cart_items(array $cart): array
         $sourceRefId = af_advancedshop_source_ref_id_from_slot($row);
         $item_title_raw = '';
         $item_icon_raw = '';
-        if ($sourceType === 'appearance') {
+        if ($sourceType === 'appearance_slot') {
+            try {$item_title_raw=af_advancedshop_slot_product($sourceRefId,false)['title'];}
+            catch(Throwable $e){$item_title_raw='Слот оформления (недоступен)';}
+        } elseif ($sourceType === 'appearance') {
             $preset = af_advancedshop_appearance_fetch_preset($sourceRefId);
             $item_title_raw = trim((string)($preset['title'] ?? ''));
             if ($item_title_raw === '') {
@@ -2091,6 +2109,11 @@ function af_advancedshop_add_to_cart(): void
     $shop = af_advancedshop_current_shop();
     $slotId = (int)$mybb->get_input('slot');
     $qty = max(1, (int)$mybb->get_input('qty'));
+    af_advancedshop_order_transaction($uid,function()use($db,$shop,$uid,$slotId,$qty){
+    $slot=$db->fetch_array($db->simple_select('af_shop_slots','*','slot_id='.$slotId.' AND shop_id='.(int)$shop['shop_id'].' AND enabled=1',['limit'=>1]));
+    if (!$slot) throw new RuntimeException('Product is unavailable.');
+    if (af_advancedshop_source_type_from_slot($slot)==='appearance_slot') af_advancedshop_slot_product((int)$slot['source_ref_id']);
+    if ($qty>1000) throw new RuntimeException('Invalid quantity.');
     $cart = af_advancedshop_get_or_create_cart((int)$shop['shop_id'], $uid);
     $existing = $db->fetch_array($db->simple_select('af_shop_cart_items', '*', 'cart_id=' . (int)$cart['cart_id'] . ' AND slot_id=' . $slotId, ['limit' => 1]));
     if ($existing) {
@@ -2098,7 +2121,8 @@ function af_advancedshop_add_to_cart(): void
     } else {
         $db->insert_query('af_shop_cart_items', ['cart_id' => (int)$cart['cart_id'], 'slot_id' => $slotId, 'qty' => $qty]);
     }
-    $db->update_query('af_shop_carts', ['updated_at' => TIME_NOW], 'cart_id=' . (int)$cart['cart_id']);
+    af_advancedshop_cart_changed((int)$cart['cart_id']);
+    });
     af_advancedshop_json_ok();
 }
 
@@ -2109,109 +2133,33 @@ function af_advancedshop_update_cart(): void
     if ($uid <= 0) { af_advancedshop_json_err('auth', 403); }
     $itemId = (int)$mybb->get_input('item_id');
     $qty = (int)$mybb->get_input('qty');
+    af_advancedshop_order_transaction($uid,function()use($db,$uid,$itemId,$qty){
+    if ($qty>1000) throw new RuntimeException('Invalid quantity.');
     $item = $db->fetch_array($db->query("SELECT ci.* FROM " . TABLE_PREFIX . "af_shop_cart_items ci
         INNER JOIN " . TABLE_PREFIX . "af_shop_carts c ON(c.cart_id=ci.cart_id)
         WHERE ci.id={$itemId} AND c.uid={$uid} LIMIT 1"));
-    if (!$item) { af_advancedshop_json_err('not_found', 404); }
+    if (!$item) throw new RuntimeException('not_found');
     if ($qty <= 0) {
         $db->delete_query('af_shop_cart_items', 'id=' . $itemId);
     } else {
         $db->update_query('af_shop_cart_items', ['qty' => $qty], 'id=' . $itemId);
     }
+    af_advancedshop_cart_changed((int)$item['cart_id']);
+    });
     af_advancedshop_json_ok();
 }
 
 function af_advancedshop_checkout(): void
 {
-    global $mybb, $db, $lang;
-    $uid = (int)($mybb->user['uid'] ?? 0);
-    af_advancedshop_inv_debug('checkout_started', ['uid' => $uid]);
-    if ($uid <= 0) { af_advancedshop_json_err('auth', 403); }
-    if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 0) !== 1) {
-        af_advancedshop_json_err('Покупка недоступна: Advanced Inventory отключён или не установлен.', 400);
-    }
-    af_advancedshop_write_inventory_schema_snapshot();
-    $shop = af_advancedshop_current_shop();
-    $cart = af_advancedshop_get_or_create_cart((int)$shop['shop_id'], $uid);
-    [$items, $totalsByCurrency] = af_advancedshop_checkout_collect_items((int)$cart['cart_id']);
-    if (!$items || !$totalsByCurrency) { af_advancedshop_json_err('empty', 400); }
-    af_advancedshop_inv_debug('items_collected', ['uid' => $uid, 'cart_id' => (int)$cart['cart_id'], 'items' => $items, 'totals' => $totalsByCurrency]);
-
-    $insufficient = [];
-    foreach ($totalsByCurrency as $currencySlug => $totalCurrency) {
-        $currencySlug = af_advancedshop_normalize_currency_slug((string)$currencySlug);
-        $balanceCurrency = af_shop_get_balance($uid, $currencySlug);
-        if ($balanceCurrency < (int)$totalCurrency) {
-            $insufficient[] = af_advancedshop_currency_label($currencySlug);
-        }
-    }
-    if ($insufficient) {
-        if (count($insufficient) === 1 && $insufficient[0] === af_advancedshop_currency_label('ability_tokens')) {
-            af_advancedshop_json_err('Недостаточно Ability Tokens.', 400);
-        }
-        af_advancedshop_json_err(($lang->af_advancedshop_error_not_enough_money ?? 'Not enough money') . ': ' . implode(', ', $insufficient), 400);
-    }
-    af_advancedshop_inv_debug('balance_ok', ['uid' => $uid, 'totals' => $totalsByCurrency]);
-
-    $db->write_query('START TRANSACTION');
-    try {
-        $orderPayload = [
-            'shop_id' => (int)$shop['shop_id'],
-            'uid' => $uid,
-            'total' => (int)array_sum($totalsByCurrency),
-            'currency' => $db->escape_string(count($totalsByCurrency) === 1 ? (string)array_key_first($totalsByCurrency) : 'mixed'),
-            'created_at' => TIME_NOW,
-            'status' => 'paid',
-            'items_json' => $db->escape_string(json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
-        ];
-        af_advancedshop_inv_debug('checkout_db_op', [
-            'stage' => 'af_advancedshop_checkout',
-            'op' => 'insert_query',
-            'table' => 'af_shop_orders',
-            'fields' => array_keys($orderPayload),
-            'uid' => $uid,
-            'payload' => $orderPayload,
-        ]);
-        $orderId = (int)$db->insert_query('af_shop_orders', $orderPayload);
-        if ($orderId <= 0) {
-            throw new RuntimeException('Не удалось создать заказ.');
-        }
-        af_advancedshop_inv_debug('order_created', ['uid' => $uid, 'order_id' => $orderId]);
-
-        foreach ($totalsByCurrency as $currencySlug => $totalCurrency) {
-            $currencySlug = af_advancedshop_normalize_currency_slug((string)$currencySlug);
-            af_shop_sub_balance($uid, $currencySlug, (int)$totalCurrency, 'shop_purchase', ['order_id' => $orderId, 'shop' => $shop['code']]);
-        }
-
-        foreach ($items as $item) {
-            af_advancedshop_inv_debug('checkout_grant_start', ['uid' => $uid, 'item' => $item]);
-            af_advancedshop_grant_inventory_item($uid, $item);
-        }
-
-        $db->delete_query('af_shop_cart_items', 'cart_id=' . (int)$cart['cart_id']);
-        $db->write_query('COMMIT');
-        af_advancedshop_inv_debug('checkout_committed', ['uid' => $uid, 'order_id' => $orderId]);
-    } catch (mysqli_sql_exception $e) {
-        $db->write_query('ROLLBACK');
-        af_advancedshop_inv_debug('checkout_failed', [
-            'stage' => 'af_advancedshop_checkout',
-            'uid' => $uid,
-            'error' => $e->getMessage(),
-            'exception' => get_class($e),
-            'items' => $items,
-        ]);
-        af_advancedshop_json_err('Покупка не завершена: ' . $e->getMessage(), 500);
-    } catch (Throwable $e) {
-        $db->write_query('ROLLBACK');
-        af_advancedshop_inv_debug('checkout_failed', [
-            'stage' => 'af_advancedshop_checkout',
-            'uid' => $uid,
-            'error' => $e->getMessage(),
-            'exception' => get_class($e),
-            'items' => $items,
-        ]);
-        af_advancedshop_json_err('Покупка не завершена: ' . $e->getMessage(), 500);
-    }
+    global $mybb,$db,$lang;
+    $uid=(int)($mybb->user['uid']??0);
+    if ($uid<=0) af_advancedshop_json_err('auth',403);
+    $shop=af_advancedshop_current_shop();
+    try {$order=af_advancedshop_checkout_order($uid,$shop,(string)$mybb->get_input('checkout_key'));}
+    catch(Throwable $e){af_advancedshop_json_err('Покупка не завершена: '.$e->getMessage(),409);return;}
+    $orderId=(int)$order['order_id'];$items=af_advancedshop_json_decode_assoc($order['items_json']);$totalsByCurrency=[];
+    foreach($items as $item){$currency=af_advancedshop_normalize_currency_slug($item['currency']);
+        $totalsByCurrency[$currency]=($totalsByCurrency[$currency]??0)+(int)$item['qty']*(int)$item['price_each'];}
 
     $primaryCurrency = count($totalsByCurrency) === 1 ? (string)array_key_first($totalsByCurrency) : 'credits';
     $primarySpent = (int)($totalsByCurrency[$primaryCurrency] ?? 0);
@@ -2227,6 +2175,8 @@ function af_advancedshop_checkout(): void
         }
     }
     $successTarget = ($hasAbilityItems && !$hasRegularItems) ? 'abilities' : 'inventory';
+    $hasSlots=(bool)array_filter($items,static fn($item)=>$item['source_type']==='appearance_slot');
+    if ($hasSlots && count(array_filter($items,static fn($item)=>$item['source_type']!=='appearance_slot'))===0) $successTarget='appearance';
 
     af_advancedshop_json_ok([
         'shop_code' => (string)$shop['code'],
@@ -2252,6 +2202,7 @@ function af_advancedshop_checkout(): void
             'shop' => af_advancedshop_url('shop_category', ['shop' => (string)$shop['code']]),
             'inventory' => af_advancedshop_inventory_url($uid),
             'abilities' => af_advancedshop_abilities_url($uid),
+            'appearance' => $hasSlots?'apstudio.php':'',
         ],
     ]);
 }
@@ -2455,7 +2406,7 @@ function af_advancedshop_resolve_inventory_target(array $slotRow, array $kbProfi
 
 function af_advancedshop_checkout_collect_items(int $cartId): array
 {
-    global $db;
+    global $db,$mybb;
     $items = [];
     $totalsByCurrency = [];
     $kbCols = af_advancedshop_kb_cols();
@@ -2471,14 +2422,20 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
         INNER JOIN " . TABLE_PREFIX . "af_shop_slots s ON(s.slot_id=ci.slot_id)
         INNER JOIN " . TABLE_PREFIX . af_advancedshop_shops_table() . " sh ON(sh.shop_id=s.shop_id)
         LEFT JOIN " . af_advancedshop_kb_table() . " e ON(e." . $kbIdCol . "=s.kb_id)
-        WHERE ci.cart_id={$cartId} AND s.enabled=1");
+        WHERE ci.cart_id={$cartId} AND s.enabled=1 AND EXISTS(SELECT 1 FROM " . TABLE_PREFIX . "af_shop_carts own WHERE own.cart_id=ci.cart_id AND own.uid=".(int)($mybb->user['uid']??0)." AND own.shop_id=s.shop_id)");
     while ($row = $db->fetch_array($q)) {
         $qty = max(1, (int)$row['qty']);
         $price = max(0, (int)$row['price']);
         $sourceType = af_advancedshop_source_type_from_slot($row);
         $sourceRefId = af_advancedshop_source_ref_id_from_slot($row);
         $title = '';
-        if ($sourceType === 'appearance') {
+        $product=[];
+        if ($sourceType === 'appearance_slot') {
+            $product=af_advancedshop_slot_product($sourceRefId);
+            if (!$db->fetch_array($db->simple_select('af_shop_categories','cat_id','cat_id='.(int)$row['cat_id'].' AND shop_id='.(int)$row['shop_id'].' AND enabled=1',['limit'=>1]))) throw new RuntimeException('Product category is unavailable.');
+            if ($qty>1000 || (int)$row['price']<0) throw new RuntimeException('Invalid slot quantity/price.');
+            $title=$product['title'];
+        } elseif ($sourceType === 'appearance') {
             $preset = af_advancedshop_appearance_fetch_preset($sourceRefId);
             $title = trim((string)($preset['title'] ?? ''));
             if ($title === '') {
@@ -2505,6 +2462,8 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
             'kb_key' => (string)($row['kb_key'] ?? ''),
             'slot_meta_json' => (string)($row['meta_json'] ?? ''),
             'qty' => $qty,
+            'slot_target'=>$product['target']??'',
+            'entitlement_key'=>$product['key']??'',
             'title' => $title,
             'price_each' => $price,
             'currency' => af_advancedshop_normalize_currency_slug((string)$row['currency']),
@@ -2563,6 +2522,7 @@ function af_advancedshop_checkout_item_is_ability(array $item): bool
 
 function af_advancedshop_checkout_item_destination(array $item): string
 {
+    if (($item['source_type']??'')==='appearance_slot') return 'appearance';
     return af_advancedshop_checkout_item_is_ability($item) ? 'abilities' : 'inventory';
 }
 
@@ -2635,9 +2595,12 @@ function af_advancedshop_customization_inventory_subtype(string $targetKey): str
     return strpos($targetKey, 'apui_fragment_pack:') === 0 ? 'other' : 'other';
 }
 
-function af_advancedshop_grant_inventory_item(int $uid, array $item): void
+function af_advancedshop_grant_inventory_item(int $uid, array $item, int $orderId=0, int $line=0): void
 {
     global $db;
+    if (($item['source_type']??'')==='appearance_slot') {
+        af_advancedshop_grant_slot_order_line($uid,$orderId,$line);return;
+    }
     af_advancedshop_ensure_inventory_grant_available($uid);
     if (af_advancedshop_normalize_kb_type((string)($item['kb_type'] ?? '')) === 'arpg_talent'
         && defined('AF_ADVINV_TABLE_ITEMS') && $db->table_exists(AF_ADVINV_TABLE_ITEMS)) {
@@ -3249,7 +3212,9 @@ function af_advancedshop_manage_slots(): void
             $sourceRefId = af_advancedshop_source_ref_id_from_slot($r);
             $appearancePreset = [];
 
-            if ($sourceType === 'appearance') {
+            if ($sourceType === 'appearance_slot') {
+                try {$title=af_advancedshop_slot_product($sourceRefId,false)['title'];}catch(Throwable $e){$title='Слот оформления';}
+            } elseif ($sourceType === 'appearance') {
                 $appearancePreset = af_advancedshop_appearance_fetch_preset($sourceRefId);
                 $title = trim((string)($appearancePreset['title'] ?? $title));
                 $meta['ui']['icon_url'] = (string)($appearancePreset['preview_image'] ?? ($meta['ui']['icon_url'] ?? ''));

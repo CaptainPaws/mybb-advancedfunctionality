@@ -5,7 +5,7 @@ return [
     'author'      => 'CaptainPaws',
     'authorsite'  => 'https://github.com/CaptainPaws',
     'description' => 'Game shop and inventory for AdvancedFunctionality.',
-    'version'     => '1.0.0',
+    'version'     => '1.1.0',
     'bootstrap'   => 'advancedshop.php',
     'frontend' => [
         'mode' => 'contextual',

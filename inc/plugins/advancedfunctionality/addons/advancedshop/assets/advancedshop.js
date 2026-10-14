@@ -465,11 +465,12 @@
     }
     if (isAbilitiesSuccess && links.abilities) {
       actions += '<button type="button" class="af-shop-btn af-shop-btn--secondary" data-af-shop-nav="' + escapeHtml(String(links.abilities)) + '">В способности</button>';
-    } else if (links.inventory) {
+    } else if (links.inventory && String(data.success_target)!=='appearance') {
       actions += '<button type="button" class="af-shop-btn af-shop-btn--secondary" data-af-shop-nav="' + escapeHtml(String(links.inventory)) + '">В инвентарь</button>';
     }
 
-    var successText = isAbilitiesSuccess
+    if(links.appearance)actions+='<button type="button" class="af-shop-btn af-shop-btn--secondary" data-af-shop-nav="'+escapeHtml(String(links.appearance))+'">В мастерскую</button>';
+    var successText = String(data.success_target)==='appearance' ? 'Новые слоты доступны в мастерской. Активация не требуется.' : isAbilitiesSuccess
       ? 'Способность добавлена в способности.'
       : 'Предмет добавлен в инвентарь.';
 
@@ -682,7 +683,7 @@
 
       var shop3 = (checkout.closest('[data-shop]') || document.body).getAttribute('data-shop') || 'game';
 
-      withLoading(checkout, post(buildActionUrl('shop_checkout', 'shop=' + encodeURIComponent(shop3)), {})).then(function(res) {
+      withLoading(checkout, post(buildActionUrl('shop_checkout', 'shop=' + encodeURIComponent(shop3)), {checkout_key:checkout.getAttribute('data-checkout-key')||''})).then(function(res) {
         if (res.ok) {
           persistCheckoutSuccess(res);
           window.location.reload();
@@ -1173,7 +1174,7 @@
   }
 
   function setSourceMode(prefix, sourceType) {
-    var normalized = sourceType === 'appearance' ? 'appearance' : 'kb';
+    var normalized = ['appearance','appearance_slot'].indexOf(sourceType)>=0 ? sourceType : 'kb';
     var sourceNode = byId(sourcePrefix(prefix + '-source-type'));
     if (sourceNode) {
       sourceNode.value = normalized;
@@ -1188,6 +1189,8 @@
     if (apWrap) {
       apWrap.hidden = normalized !== 'appearance';
     }
+    var slotWrap=byId(sourcePrefix(prefix+'-slot-fields'));
+    if(slotWrap)slotWrap.hidden=normalized!=='appearance_slot';
   }
 
   function renderSelectedSource(prefix, sourceType, html) {
@@ -1316,7 +1319,7 @@
 
     return {
       source_type: sourceType,
-      source_ref_id: sourceType === 'appearance'
+      source_ref_id: sourceType === 'appearance_slot' ? ((byId(sourcePrefix(prefix+'-slot-target'))||{}).value || (byId(sourcePrefix(prefix+'-source-ref-id'))||{}).value || '1') : sourceType === 'appearance'
         ? ((byId(sourcePrefix(prefix + '-preset-id')) || {}).value || (byId(sourcePrefix(prefix + '-source-ref-id')) || {}).value || '0')
         : ((byId(sourcePrefix(prefix + '-kb-id')) || {}).value || (byId(sourcePrefix(prefix + '-source-ref-id')) || {}).value || '0'),
       preset_id: (byId(sourcePrefix(prefix + '-preset-id')) || {}).value || '0',
@@ -1626,7 +1629,7 @@
 
           if (st === 'appearance') {
             runAppearanceSearch(prefix);
-          } else {
+          } else if(st==='kb') {
             runKbSearchNow();
           }
         });

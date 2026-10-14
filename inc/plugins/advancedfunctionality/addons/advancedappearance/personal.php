@@ -3,6 +3,7 @@
 if (!defined('IN_MYBB')) die('No direct access');
 
 class AF_AA_PersonalException extends RuntimeException {}
+require_once __DIR__.'/slot_entitlements.php';
 
 function af_aa_personal_targets(): array
 {
@@ -441,6 +442,7 @@ function af_aa_personal_list(int $uid, string $target): array
         $selection=['kind'=>'personal','id'=>(int)$selected['id'],'title'=>$selected['title']];
     }
     return ['active_selection'=>$selection,'system_preset'=>af_aa_personal_system_preset($target),'presets'=>$rows,'slots'=>af_aa_personal_slots($uid,$target),
+        'slot_shop'=>function_exists('af_advancedshop_slot_product_url')?af_advancedshop_slot_product_url($target):'',
         'assignment'=>$assignment,'target'=>$meta,'targets'=>af_aa_personal_targets(),'fonts'=>af_aa_personal_fonts(),'effects'=>af_aa_personal_effects()];
 }
 

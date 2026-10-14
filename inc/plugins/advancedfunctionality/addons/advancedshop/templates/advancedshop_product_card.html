@@ -1,8 +1,8 @@
-<article class="af-shop-card {$slot_rarity_class} rarity-{$slot_rarity}">
+<article id="{$slot_product_anchor}" class="af-shop-card {$slot_rarity_class} rarity-{$slot_rarity}">
   <div class="af-shop-card__media"><img src="{$slot_icon}" alt="" loading="lazy"></div>
   <div class="af-shop-card__content">
     <div class="af-shop-card__type">{$slot_kb_type} · {$slot_rarity_label}</div>
-    <h3 class="af-shop-card__title"><a href="{$slot_kb_url}" class="af-kb-chip" data-kb-type="{$slot_kb_type}" data-kb-key="{$slot_kb_key}" data-kb-title="{$slot_title}"><span class="af-kb-chip-label">{$slot_title}</span></a></h3>
+    <h3 class="af-shop-card__title"><a href="{$slot_kb_url}" class="{$slot_title_link_class}" data-kb-type="{$slot_kb_type}" data-kb-key="{$slot_kb_key}" data-kb-title="{$slot_title}"><span class="af-kb-chip-label">{$slot_title}</span></a></h3>
     <p class="af-shop-card__summary">{$slot_short}</p>
     <div class="af-shop-card__price">{$slot_price} <span>{$slot_currency_symbol}</span></div>
   </div>
