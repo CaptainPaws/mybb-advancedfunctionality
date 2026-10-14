@@ -1,74 +1,88 @@
-# ATF: общая внешняя рамка, 0.29.6
+# ATF Ornate Frame — bugfix 0.29.7
 
-Утверждённая гибридная рамка централизована в существующем `assets/adaptivethemeframework.css`: внешний срез 6px, градиентный сине-фиолетовый контур толщиной 1px, две приглушённые внутренние линии, восемь световых штрихов по внутренним углам, тёмный фиолетовый градиент. Семь публичных переменных `--atf-frame-*` имеют значения из спецификации. Стихия персонажа их не меняет.
+Предыдущая реализация 0.29.6 не прошла приёмку. Ниже — диагностика действующего warprift.ru и исправление конкретной регрессии. Сервер/ACP не изменялись: проверка исправленного CSS выполнена его локальной подстановкой в Chromium поверх фактических страниц сайта.
 
-## Изменённые файлы
+## 1. Почему рамка исчезла
 
-Пути ниже относительно `inc/plugins/advancedfunctionality/addons/`, кроме tests/docs:
+На действующей главной действительно загружен Theme stylesheet:
 
-- `adaptivethemeframework/assets/adaptivethemeframework.css`: компонент `.atf-ornate-frame`, aliases реальных page roots, безопасные отступы ATF, прозрачный geometry wrapper.
-- `adaptivethemeframework/assets/surfaces/knowledgebase.css`: удалена собственная внешняя рамка и её псевдоэлементы; размеры, padding и типографика сохранены.
-- `adaptivethemeframework/manifest.php`: версия 0.29.6; существующие asset permissions и stylesheet attachments сохранены.
-- `adaptivethemeframework/adaptivethemeframework.php`: версия 0.29.6 для обновления asset URL; композиция и runtime не менялись.
-- `advancedwanted/assets/advancedwanted.css`: внешняя рамка передана ATF; прежний dossier-контур оставлен только для выключенного ATF.
-- `advancedwanted/assets/advancedwanted_decoration.css`: прежний каталоговый контур оставлен только для выключенного ATF.
-- `tests/atf_ornate_frame_browser.cjs`: проверки геометрии, paint, переполнения, слоёв и fallback на production CSS и корнях существующих шаблонов.
-- `docs/ATF_ORNATE_FRAME.md`: Summary и результаты проверок.
+`https://warprift.ru/cache/themes/theme2/adaptivethemeframework.min.css?v=d97ce7ca6476c190`
 
-## Контейнеры
+В нём присутствуют правила компонента, но штатная `minify_stylesheet()` MyBB 1.8.40 (`admin/inc/functions_themes.php`) удаляет пробел перед `:`:
 
-| Контейнер | Страницы |
-| --- | --- |
-| `.pun.atf-page-shell` | index, forumdisplay, showthread; member/profile и другие собственные member-страницы ATF; usercp, private, modcp, moderation; memberlist, программно формируемый userlist; compose, polls, reputation и остальные шаблоны с этим root; UCP-интеграции account switcher и alerts |
-| `.af-kb-page` | каталог KB, категории, статьи, help/edit и другие представления KB; каталог и публичные представления AdvancedCharacters, использующие общий KB renderer |
-| `.pun.atf-layout-shell > .af-wanted` | каталог, публичное dossier, формы Wanted; внешний `.atf-layout-shell` остаётся прозрачным geometry wrapper |
-| `.atf-ornate-frame` | явное подключение компонента к будущему самостоятельному root |
+```css
+/* File/source */
+body.atf-active :is(.atf-ornate-frame, .pun.atf-page-shell, ...) { ... }
+/* Фактически полученный Theme/minified */
+body.atf-active:is(.atf-ornate-frame,.pun.atf-page-shell,...) { ... }
+```
 
-Aliases позволяют обновить существующие установленные шаблоны без миграции БД и копирования CSS в аддоны. Вложенные page roots исключены из декорирования. Отдельные постбиты, карточки, формы, таблицы и модальные окна не получают рамку.
+Второй selector требует совпадения с самим body, а не с дочерним main. В реальном браузере у `.atf-page-shell` и `.af-kb-page` получено `before.content = none`, `after.content = none`. Корень при этом обнулён прежним `background: transparent; border: 0; box-shadow: none`. Старая рамка KB уже удалена. Это подтверждённая причина, а не предположение о z-index.
 
-В текущем ownership/template registry ATF нет самостоятельных page shells для `search.php` и `portal.php`. Шаблоны этих страниц не создавались и не подменялись; если пользовательский шаблон уже использует ATF page root, компонент применяется автоматически.
+Дополнительно текущая тема содержит более специфичный ID reset:
 
-Clipping есть только у двух декоративных псевдоэлементов. Контентный root имеет `overflow: visible`; `isolation: isolate` удерживает отрицательные paint-слои за содержимым. Нет transform/filter/contain на root. Декорации имеют `pointer-events: none`. Двойной контур и орнамент принадлежат тому же компоненту. Новых bundles, JS, hooks или зависимостей аддонов нет.
+```css
+#content { background: transparent; overflow: hidden; }
+```
 
-## Проверки
+Он перекрывал прямой фон root при первой проверке исправления на настоящем DOM. В alias включён реальный `#content.atf-page-shell`, поэтому стандартный компонент перекрывает этот reset без глобальных `!important`.
 
-Chromium / Playwright:
+Фильтр вложенности проверен на фактических ancestors пяти доступных страниц: их верхние контейнеры не исключаются. `*:is(...)` сохраняет descendant boundary после минификации. Вложенные KB/page roots по-прежнему не получают вторую рамку.
 
-- `ATF_BASELINE_CSS=work/base.css node tests/atf_ornate_frame_browser.cjs`: PASS. 71 реальный ATF template root и 8 дополнительных контейнерных fixtures, 316 проверок на 1440/768/375/320px. Данные провайдеров заменены инертным HTML; это не установленный форум.
-- Проверены четыре фактически нарисованных среза, прозрачные углы, внешний контур и внутренний орнамент. Проверен desktop-скриншот.
-- Длинный неразрывный текст не создаёт горизонтальный scroll. Popover выходит за край; fixed overlay сохраняет viewport containing block; кнопка у края доступна; вложенная KB не получает вторую рамку; dossier не рисует второй контур.
-- Computed presentation постбита, topbar, sidebar и meta-line совпадает с исходным core CSS. Переменная стихии не меняет стандартный цвет; настройка cut через публичную переменную работает.
-- При снятии `atf-active` сохранены KB padding/fallback и прежний Wanted dossier-контур.
-- `PHP_BIN=work/php/php node tests/stage6_atf_browser.cjs`: PASS. Существующий showthread fixture: 6 ширин, 12 комбинаций ширины/scroll, sticky/sidebar resizing, добавление поста, lazy modal open/close и mutation handling. Это запуск без baseline equality mode: изменение внешней рамки и page padding ожидаемо.
+## 2. Где теперь рисуется рамка и fallback
 
-PHP 8.4.24 CLI (изолированно распакован в work/, системная установка не менялась):
+- Root напрямую рисует тёмный градиент, внешний контур и четыре среза 6px через background layers. Даже принудительное отключение обоих псевдоэлементов оставляет внешний контур и фон.
+- `::before` рисует только две внутренние линии; `::after` — восемь световых штрихов. У обоих `z-index: 0`, `pointer-events: none`; непрозрачной заливки поверх содержимого нет.
+- При отсутствии поддержки enhancement остаются обычная `border: 1px solid var(--atf-frame-edge)` и полный тёмный background. У page root удалён прежний отдельный unconditional reset в transparent/border:0.
+- `clip-path`, mask, transform и containment к контентному root не применяются. `overflow: visible` перекрывает `#content` темы. Внешние углы не округляются.
+- Семь публичных переменных и утверждённые цвета сохранены. Postbit, внутренние карточки, AdvancedAppearance, AdvancedElementTheme и ядро MyBB не менялись.
 
-10 PASS:
+## 3. Доставка Theme / File и установка
 
-- `adaptivethemeframework_index_shell_regression.php`
-- `adaptivethemeframework_showthread_contract_regression.php`
-- `adaptivethemeframework_compose_regression.php`
-- `adaptivethemeframework_ucp_profile_navigation_regression.php` (существующие warnings fixture)
-- `adaptivethemeframework_userlist_online_indicator_regression.php`
-- `atf_kb_modal_content_regression.php`
-- `advancedcharacters_catalog_regression.php`
-- `theme_stylesheet_real_repository_integration.php`
-- `advancedwanted_frontend_permission_regression.php`
-- `advancedwanted_catalog_regression.php`
+Источник остаётся в существующем глобальном design-system stylesheet ATF, с прежними manifest permissions/attachments. Новых bundles и runtime нет. Manifest и bootstrap согласованы на 0.29.7.
 
-8 FAIL, каждый воспроизведён с исходными файлами актуального `main` (194bb3b0), до изменений рамки:
+Проверено:
 
-- `adaptivethemeframework_design_system_regression.php`: проверка scope принимает keyframe `from` за selector.
-- `adaptivethemeframework_postbit_classic_regression.php`: устаревшее ожидание CSS sidebar accent frame.
-- `stage6_atf_css_delivery_regression.php`: существующий лимит 85 KB; исходная доставка showthread уже 87 286 байт. Компонент добавляет несколько KB статического CSS; новых runtime нет.
-- `stage6_atf_hot_path_regression.php`: `Missing schema not diagnosed`.
-- `global_addon_frontend_manifest_regression.php`: отсутствует `advresponsivelayout/manifest.php`.
-- `theme_stylesheet_bundle_regression.php`: ожидания прежнего source seeding/import.
-- `advancedwanted_chip_isolation_layout_regression.php`: ожидание прежнего detail grid sizing.
-- `advancedwanted_settings_detail_regression.php`: ожидание прежнего outer pun wrapper.
+1. Загружены реальный HTML, Theme `.min.css` и физический File `.css` с warprift.ru. Компонент есть в обоих; ошибка selector находится в минифицированной версии.
+2. Новый файл пропущен через настоящую `minify_stylesheet()` из официального тега MyBB `mybb_1840`, отдельно скачанную в work/. Ядро форума не редактировалось. Браузерный regression использует те же преобразования, включая удаление пробела перед `:`.
+3. На фактических страницах локально заменены ответы существующих core Theme CSS URLs новым minified CSS, сохранив остальные стили и порядок. Отдельно проверен File/source с заменой core href на физический URL `assets/adaptivethemeframework.css?v=0.29.7`.
+4. Производственный `af_register_theme_stylesheet()` проверен с настоящими старым/новым CSS и DB double существующего sync-теста: обычный sync заменяет неизменённый установленный seed; ручной CSS сохраняется. Переключение Theme → File снимает attachment, File → Theme восстанавливает его; пользовательские байты не меняются.
+5. Проверены существующие URL builders: Theme cache URL использует hash содержимого, при недоступном cache — `css.php?stylesheet=SID&v=HASH`; File URL использует `filemtime`. Версия аддона сама по себе не обновляет сохранённый Theme CSS.
 
-PHP lint двух изменённых PHP-файлов, `node --check`, `git diff --check`: PASS. Пороговые значения и существующие проверки не ослаблялись. Production warprift.ru, установленный MyBB с реальными данными и PHP 8.5.0 в этой среде не проверялись.
+**Необходимое действие администратора:** обновить файлы до этого коммита, выполнить штатное обновление ATF и обычный Sync Theme stylesheets в ACP для ATF / активной темы, затем обновить страницу без browser cache. Это регенерирует минифицированный cache и его URL. Не выполнять Force Resync для пользовательского stylesheet.
 
-## Обновление установки
+Если design-system stylesheet отмечен `Customized` / `customized_seed_changed`, обычный sync намеренно его не перезаписывает. Администратору нужно вручную перенести исправленный компонент из физического CSS в этот Theme stylesheet, сохранив свои изменения. Временная альтернатива — переключить только этот источник в File через ACP; сохранённый пользовательский CSS не удаляется. Удалённый ACP и его БД в этой сессии недоступны; синхронизация production не выполнялась.
 
-Обновить файлы ATF и Wanted, выполнить обычное обновление ATF / синхронизацию Theme stylesheets через существующий механизм AF. Версия ATF согласована в manifest и bootstrap. Если Theme stylesheet изменён администратором, действуют штатные правила сохранения custom CSS; принудительная перезапись пользовательских стилей автоматически не выполняется. После синхронизации проверить живые страницы с активной темой форума.
+## 4. Какие реальные страницы проверены
+
+Chromium, гостевой доступ, реальные HTML/DOM и остальные CSS действующего warprift.ru. Новое оформление — **локальная CSS-подстановка**, не опубликованное состояние production.
+
+| Страница | Фактический root | Результат локальной подстановки |
+| --- | --- | --- |
+| `/` (`/index.php` перенаправляет сюда) | `main.pun.atf-page-shell.atf-index` | Фон, контур и орнамент видны в Theme/minified и File/source |
+| `/forumdisplay.php?fid=3` | `main.pun.atf-page-shell.atf-forumdisplay` | То же |
+| `/showthread.php?tid=14` | `main.pun.atf-page-shell.atf-thread` | То же; отдельные postbit не получают рамку |
+| `/kb.php` | `div.af-kb-page` | То же |
+| `/characters.php` | `div.af-kb-page.af-kb-page--characters` | То же |
+| `/member.php?action=profile&uid=1` | Гостю показано «Упс! Нет доступа» | Профиль установленного форума визуально не подтверждён |
+| `/usercp.php` | Гостю показано «Упс! Нет доступа» | UCP установленного форума визуально не подтверждён |
+
+Для пяти доступных roots до подстановки: background image отсутствует, `before/after.content = none`. После подстановки: root background содержит градиенты/контур, `before/after.content = ""`, `z-index = 0`, `clip-path = none`, `overflow = visible`. На верхнем внешнем контуре прочитан цвет около `rgb(162,155,243)` вместо фоновых серых пикселей прежней страницы. Сохранены и осмотрены скриншоты главной и KB; computed styles проверены дополнительно, не вместо пикселей.
+
+Фактическая главная до исправления:
+
+![Production 0.29.6 — без рамки](atf-frame-diagnostics/index-deployed-0.29.6.png)
+
+Та же страница с локально подставленным исправленным Theme CSS:
+
+![Реальный DOM с локальным CSS 0.29.7 — рамка видна](atf-frame-diagnostics/index-local-css-0.29.7.png)
+
+На viewport 375px контур/фон также рисуются на пяти доступных страницах. **Приёмка общей мобильной раскладки не подтверждена:** действующая тема имеет ancestor `.wrapper` с `min-width:970px` и внешний wrapper с `min-width:990px`; документ шире viewport. Эти правила не относятся к компоненту рамки и в bugfix не изменялись. Правый край широкой страницы требует горизонтального scroll. В адаптивных контейнерах локального regression рамка не создаёт переполнения.
+
+## 5. Проверки и изменённые файлы
+
+- Существующий `tests/atf_ornate_frame_browser.cjs` расширен проверкой MyBB minification и настоящего `#content` reset. Выполнен в File и Theme режимах, с baseline-сравнением presentation postbit. Проверены четыре угла по пикселям, фон без псевдоэлементов, обычный fallback, вложенные roots, длинный текст, popover, fixed overlay и ATF off. Все проверки прошли.
+- Существующий `tests/stage6_atf_browser.cjs`: sticky/sidebar, добавление postbit, lazy modal open/close и mobile runtime.
+- PHP lint, `node --check`, `git diff --check` выполнены. PHP CLI проверок — 8.4.24; PHP 8.5 production не запускался из этой среды.
+
+Изменены: ATF `assets/adaptivethemeframework.css`, `manifest.php`, версия в `adaptivethemeframework.php`; существующий browser regression; этот Summary и два диагностических PNG. Бизнес-логика, шаблоны установленных страниц и пользовательские Theme stylesheets не переписывались.

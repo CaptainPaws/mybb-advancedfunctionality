@@ -9,7 +9,11 @@ const { PNG } = require('pngjs');
 const root = path.resolve(__dirname, '..');
 const addon = path.join(root, 'inc/plugins/advancedfunctionality/addons/adaptivethemeframework');
 const read = file => fs.readFileSync(file, 'utf8');
-const core = read(path.join(addon, 'assets/adaptivethemeframework.css'));
+// Match MyBB 1.8.40 admin/inc/functions_themes.php::minify_stylesheet.
+// In particular this removes the descendant space before a leading pseudo-class.
+const minify = css => css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s*([{}:;,])\s*/g, '$1').replace(/;}/g, '}').replace(/#([a-f0-9])\1([a-f0-9])\2([a-f0-9])\3/gi, '#$1$2$3').trim();
+const source = read(path.join(addon, 'assets/adaptivethemeframework.css'));
+const core = process.env.ATF_THEME_MINIFY ? minify(source) : source;
 const baseline = process.env.ATF_BASELINE_CSS ? read(process.env.ATF_BASELINE_CSS) : null;
 const surface = name => read(path.join(addon, 'assets/surfaces', name + '.css'));
 const kb = read(path.join(root, 'inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase.css'));
@@ -30,7 +34,7 @@ assert.ok(kbTemplate.includes('class="af-kb-page"'));
 for (const name of ['kb-catalog', 'kb-category', 'kb-article', 'characters-catalog', 'characters-public']) fixtures.push({ name, classes: 'atf-active', main: '<div class="af-kb-page">' + content + '</div>', css: kb + surface('knowledgebase') + (name.startsWith('characters') ? ac : '') });
 for (const name of ['wanted-catalog', 'wanted-detail']) fixtures.push({ name, classes: 'atf-active', main: '<div class="pun atf-layout-shell"><main class="af-wanted' + (name === 'wanted-detail' ? ' af-wanted--detail-page' : '') + '">' + (name === 'wanted-detail' ? '<article class="af-wanted-detail af-wanted-detail--dossier">' + content + '</article>' : '<div class="af-wanted-catalog">' + content + '</div>') + '</main></div>', css: read(path.join(root, 'inc/plugins/advancedfunctionality/addons/advancedwanted/assets/advancedwanted.css')) + read(path.join(root, 'inc/plugins/advancedfunctionality/addons/advancedwanted/assets/advancedwanted_decoration.css')) });
 fixtures.push({ name: 'explicit-component', classes: 'atf-active', main: '<main class="atf-ornate-frame" style="margin:24px;padding:20px">' + content + '</main>', css: '' });
-const setup = 'html,body{margin:0;background:#030609}body{padding:20px 0}.pun{background:#241d35;border:2px solid #765;border-radius:20px;box-shadow:0 0 10px #765}p{margin:8px 0}';
+const setup = 'html,body{margin:0;background:#030609}body{padding:20px 0}.pun{background:#241d35;border:2px solid #765;border-radius:20px;box-shadow:0 0 10px #765}p{margin:8px 0}#content{background:transparent;overflow:hidden}';
 const document = (f, css = core) => '<!doctype html><html><head><style>' + setup + css + f.css + '</style></head><body class="' + f.classes + ' af-rwd-enabled">' + f.main + '</body></html>';
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || '/usr/bin/chromium', args: ['--no-sandbox'] });
@@ -55,17 +59,18 @@ const document = (f, css = core) => '<!doctype html><html><head><style>' + setup
         assert.equal(state.radius, '0px', f.name);
         assert.equal(state.background, 'rgba(0, 0, 0, 0)', f.name);
         assert.equal(state.shadow, 'none', f.name);
+        assert.ok(await frame.evaluate(el => getComputedStyle(el).backgroundImage !== 'none'), 'Root must paint its own frame: ' + f.name);
         assert.equal(state.border, '0px', f.name);
         assert.equal(state.clip, 'none', f.name);
         assert.equal(state.overflow, 'visible', f.name);
         assert.equal(state.scroll, false, f.name + ': horizontal overflow at ' + width);
-        assert.ok(state.outerClip.startsWith('polygon(6px 0px, calc(100% - 6px) 0px, 100% 6px'), f.name);
-        assert.ok(state.innerClip.startsWith('polygon(5.414px 0px'), f.name);
-        assert.equal((state.innerBackground.match(/linear-gradient/g) || []).length, 9, f.name);
-        assert.equal((state.ornamentOrigin.match(/content-box/g) || []).length, 8, f.name);
-        assert.equal((state.innerShadow.match(/inset/g) || []).length, 5, f.name);
+        assert.equal(state.outerClip, 'none', f.name);
+        assert.equal(state.innerClip, 'none', f.name);
+        assert.equal((state.innerBackground.match(/linear-gradient/g) || []).length, 8, f.name);
+        assert.equal((state.ornamentOrigin.match(/padding-box/g) || []).length, 8, f.name);
+        assert.equal(await frame.evaluate(el => (getComputedStyle(el, '::before').boxShadow.match(/inset/g) || []).length), 2, f.name);
         assert.deepEqual(state.events, ['none', 'none'], f.name);
-        assert.deepEqual(state.z, ['-2', '-1'], f.name);
+        assert.deepEqual(state.z, ['0', '0'], f.name);
         assert.ok(f.name === 'wanted-detail' || parseFloat(state.padding) >= 11, f.name + ': decoration overlaps content');
         results.push({ name: f.name, width });
       }
@@ -86,9 +91,9 @@ const document = (f, css = core) => '<!doctype html><html><head><style>' + setup
     assert.equal(await page.locator('#fixed-modal').evaluate(el => el.getBoundingClientRect().top), 10, 'Fixed modal containing block changed');
     // Element presets cannot recolour the frame; public variables still work.
     await frame.evaluate(el => el.style.setProperty('--af-element-accent', '#ff2200'));
-    assert.ok((await frame.evaluate(el => getComputedStyle(el, '::before').backgroundImage)).includes('rgb(168, 160, 250)'));
+    assert.ok((await frame.evaluate(el => getComputedStyle(el).backgroundImage)).includes('rgb(168, 160, 250)'));
     await frame.evaluate(el => el.style.setProperty('--atf-frame-cut', '8px'));
-    assert.ok((await frame.evaluate(el => getComputedStyle(el, '::after').clipPath)).startsWith('polygon(7.414px 0px'));
+    assert.ok((await frame.evaluate(el => getComputedStyle(el).backgroundSize)).includes('8px 8px'));
     // Compare computed postbit/rail/meta-line styles with the pre-change core.
     if (baseline) {
       const post = template('postbit_classic');
@@ -106,6 +111,14 @@ const document = (f, css = core) => '<!doctype html><html><head><style>' + setup
     for (const [x, y] of [[1, 1], [278, 1], [1, 178], [278, 178]]) assert.deepEqual(pixel(x, y), [3, 6, 9], 'Paint behind a cut corner');
     for (const [x, y] of [[7, 0], [272, 0], [7, 179], [272, 179]]) assert.notDeepEqual(pixel(x, y), [3, 6, 9], 'Missing external edge');
     assert.notDeepEqual(pixel(10, 10), pixel(80, 10), 'Missing inner corner ornament');
+    // Disabling decoration cannot remove the root's background or outer edge.
+    await page.addStyleTag({ content: 'main::before,main::after{content:none!important}' });
+    const undecorated = PNG.sync.read(await page.locator('main').screenshot());
+    assert.notDeepEqual([...undecorated.data.subarray((20 * undecorated.width + 20) * 4, (20 * undecorated.width + 20) * 4 + 3)], [3, 6, 9]);
+    const fallback = source.replace('@supports (clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%))', '@supports (atf-frame-unsupported: yes)');
+    await page.setContent(document(paint, fallback));
+    assert.equal(await page.locator('main').evaluate(el => getComputedStyle(el).borderTopWidth), '1px');
+    assert.notEqual(await page.locator('main').evaluate(el => getComputedStyle(el).backgroundImage), 'none');
     // ATF off leaves the addon fallback intact, even if the stylesheet is cached.
     const off = fixtures.find(f => f.name === 'kb-article');
     await page.setContent(document({ ...off, classes: '' }));
@@ -119,6 +132,6 @@ const document = (f, css = core) => '<!doctype html><html><head><style>' + setup
       await page.setContent(document(fixtures.find(f => f.name === 'kb-catalog')));
       await page.locator('.af-kb-page').screenshot({ path: process.env.ATF_FRAME_SCREENSHOT });
     }
-    console.log(JSON.stringify({ passed: true, templateRoots: fixtures.length, viewportChecks: results.length, widths: [1440, 768, 375, 320], postbitBaselineCompared: !!baseline, overflowPopoverModalNestedFallback: true }));
+    console.log(JSON.stringify({ passed: true, templateRoots: fixtures.length, viewportChecks: results.length, widths: [1440, 768, 375, 320], postbitBaselineCompared: !!baseline, delivery: process.env.ATF_THEME_MINIFY ? 'Theme/minified' : 'File/source', overflowPopoverModalNestedFallback: true }));
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
