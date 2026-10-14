@@ -10,6 +10,7 @@ return [
     'frontend' => [
         'mode' => 'contextual',
         'routes' => [
+            ['script' => 'characters.php'],
             // kb.php is the canonical frontend entry point.  Keep actions
             // explicit so JSON/mutation endpoints are not frontend contexts.
             ['script' => 'kb.php', 'action' => ''],
