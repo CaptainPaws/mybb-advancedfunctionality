@@ -12,6 +12,9 @@ return [
  'theme_stylesheets'=>[[
    'id'=>'advancedwanted_main','file'=>'assets/advancedwanted.css','stylesheet_name'=>'af_advancedwanted.css',
    'attach'=>[['file'=>'global'],['file'=>'wanted.php']],
+ ],[
+   'id'=>'advancedwanted_decoration','file'=>'assets/advancedwanted_decoration.css','stylesheet_name'=>'af_advancedwanted_decoration.css',
+   'attach'=>[['file'=>'wanted.php']],
  ]],
  'lang'=>['russian'=>['front'=>['af_wanted_name'=>'Нужные персонажи'],'admin'=>['af_wanted_group'=>'AdvancedWanted']], 'english'=>['front'=>['af_wanted_name'=>'Wanted characters'],'admin'=>['af_wanted_group'=>'AdvancedWanted']]],
 ];

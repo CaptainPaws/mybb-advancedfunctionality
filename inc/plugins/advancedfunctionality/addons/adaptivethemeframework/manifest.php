@@ -21,6 +21,12 @@ return [
     // scoped to the routes that use that surface.
     'assets' => ['front' => ['css' => ['assets/adaptivethemeframework.css'], 'js' => []]],
     'theme_stylesheets' => [
+        [
+            'id' => 'section_separator',
+            'file' => 'assets/section-separator.css',
+            'attach' => [['file' => 'global']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+        ],
         // Retired a952e78d source: retain identity so normal Theme sync can clear
         // its uncustomized cached stylesheet. The file contains no CSS rules.
         [

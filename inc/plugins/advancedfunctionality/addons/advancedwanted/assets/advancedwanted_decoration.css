@@ -1,0 +1,34 @@
+/* Catalog-only decoration copied from the existing Wanted dossier.
+ * Main Wanted controls/cards/menus and their stylesheet remain unchanged. */
+body .af-wanted:has(> .af-wanted-catalog) {
+  position: relative; isolation: isolate; display: block; width: 100%; max-width: 100%;
+  margin: 0 auto; overflow: visible;
+  border: 1px solid #88718f; border-radius: 9px;
+  background: linear-gradient(135deg, rgb(10 15 26 / 96%), rgb(8 12 21 / 97%));
+  box-shadow: inset 0 0 0 3px #0a101b, inset 0 0 0 4px rgb(201 156 119 / 45%), 0 0 18px rgb(117 77 153 / 15%);
+}
+body .af-wanted:has(> .af-wanted-catalog)::before,
+body .af-wanted:has(> .af-wanted-catalog)::after {
+  position: absolute; z-index: 1; content: ""; pointer-events: none;
+}
+body .af-wanted:has(> .af-wanted-catalog)::before {
+  inset: 8px; border: 1px solid rgb(201 156 119 / 35%); border-radius: 12px;
+  clip-path: polygon(0 0, 38px 0, 38px 38px, calc(100% - 38px) 38px, calc(100% - 38px) 0, 100% 0, 100% 100%, calc(100% - 38px) 100%, calc(100% - 38px) calc(100% - 38px), 38px calc(100% - 38px), 38px 100%, 0 100%);
+}
+body .af-wanted:has(> .af-wanted-catalog)::after {
+  inset: 3px; border-radius: 7px;
+  background:
+    linear-gradient(135deg, transparent 46%, var(--aw-warm) 48%, var(--aw-warm) 51%, transparent 53%) left top / 18px 18px no-repeat,
+    linear-gradient(225deg, transparent 46%, var(--aw-warm) 48%, var(--aw-warm) 51%, transparent 53%) right top / 18px 18px no-repeat,
+    linear-gradient(45deg, transparent 46%, var(--aw-warm) 48%, var(--aw-warm) 51%, transparent 53%) left bottom / 18px 18px no-repeat,
+    linear-gradient(315deg, transparent 46%, var(--aw-warm) 48%, var(--aw-warm) 51%, transparent 53%) right bottom / 18px 18px no-repeat,
+    linear-gradient(90deg, var(--aw-warm), transparent) left top / 58px 1px no-repeat,
+    linear-gradient(180deg, var(--aw-warm), transparent) left top / 1px 58px no-repeat,
+    linear-gradient(270deg, var(--aw-warm), transparent) right top / 58px 1px no-repeat,
+    linear-gradient(180deg, var(--aw-warm), transparent) right top / 1px 58px no-repeat,
+    linear-gradient(90deg, var(--aw-warm), transparent) left bottom / 58px 1px no-repeat,
+    linear-gradient(0deg, var(--aw-warm), transparent) left bottom / 1px 58px no-repeat,
+    linear-gradient(270deg, var(--aw-warm), transparent) right bottom / 58px 1px no-repeat,
+    linear-gradient(0deg, var(--aw-warm), transparent) right bottom / 1px 58px no-repeat;
+  opacity: .8;
+}
