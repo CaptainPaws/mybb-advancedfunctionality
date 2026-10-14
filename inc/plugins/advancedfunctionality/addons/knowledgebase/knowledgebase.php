@@ -3303,7 +3303,7 @@ function af_kb_character_matches_filters(array $entry, array $filters): bool
 function af_kb_render_character_filters(array $filters, array $optionSets, string $query): string
 {
     $showcase = defined('AF_CHARACTERS_PAGE_ALIAS');
-    $base = $showcase ? 'characters.php' : 'misc.php?action=kb&amp;type=character';
+    $base = $showcase ? 'characters.php?' : 'misc.php?action=kb&amp;type=character';
     $queryPart = $query !== '' ? '&amp;q=' . rawurlencode($query) : '';
     $dimensionPart = '';
     foreach (['gender', 'origin', 'variant', 'element', 'archetype', 'faction', 'age'] as $name) {
@@ -3324,7 +3324,7 @@ function af_kb_render_character_filters(array $filters, array $optionSets, strin
         $variantMap[(string)$originKey] = af_kb_character_filter_options('variant', af_kb_is_ru(), (string)$originKey);
     }
     $variantMapJson = htmlspecialchars_uni((string)json_encode($variantMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-    $html = '<div class="af-kb-character-filters' . ($showcase ? ' af-characters-filters' : '') . '" data-af-character-variants="' . $variantMapJson . '"><nav class="af-kb-character-filter-tabs" aria-label="Тип персонажа">' . $tabs . '</nav>'
+    $html = '<div class="af-kb-character-filters' . ' af-characters-filters' . '" data-af-character-variants="' . $variantMapJson . '"><nav class="af-kb-character-filter-tabs" aria-label="Тип персонажа">' . $tabs . '</nav>'
         . '<form class="af-kb-character-filter-fields" method="get" action="' . ($showcase ? 'characters.php' : 'misc.php') . '">'
         . ($showcase ? '' : '<input type="hidden" name="action" value="kb" /><input type="hidden" name="type" value="character" />')
         . '<input type="hidden" name="kind" value="' . htmlspecialchars_uni($activeKind === 'canons' ? 'canon' : ($activeKind === 'originals' ? 'original' : '')) . '" />'
@@ -11056,7 +11056,7 @@ function af_kb_render_character_status_link(array $availability, bool $isRu, str
     $uid = $status === 'reserved' ? (int)($availability['reserved_by_uid'] ?? 0) : (int)($availability['owner_uid'] ?? 0);
     if ($uid > 0) {
         $title = $isRu ? 'Профиль' : 'Profile';
-        return '<a class="af-kb-status-link af-kb-status-link--' . htmlspecialchars_uni($context) . '" href="member.php?action=profile&amp;uid=' . $uid . '"><span class="af-kb-status-link__icon" aria-hidden="true">&#128100;</span><span>' . htmlspecialchars_uni($title) . '</span></a>';
+        return '<a class="af-kb-status-link af-kb-status-link--' . htmlspecialchars_uni($context) . '" href="member.php?action=profile&amp;uid=' . $uid . '"><i class="fa-solid fa-user af-kb-status-link__icon" aria-hidden="true"></i><span>' . htmlspecialchars_uni($title) . '</span></a>';
     }
     $name = $status === 'reserved' ? trim((string)($availability['reserved_by_name'] ?? '')) : '';
     return $name !== '' ? '<span class="af-kb-status-link af-kb-status-link--' . htmlspecialchars_uni($context) . '">' . htmlspecialchars_uni($isRu ? 'Придержал: ' : 'Reserved by: ') . htmlspecialchars_uni($name) . '</span>' : '';
@@ -11082,7 +11082,7 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
     }
 
     $short = $isCharacter
-        ? trim((string)($profile['character_app'] ?? af_kb_pick_text($entry, 'short')))
+        ? trim((string)af_kb_pick_text($entry, 'short'))
         : trim((string)af_kb_pick_text($entry, 'short'));
 
     $pic = $isCharacter ? af_kb_sanitize_url((string)($profile['character_pic'] ?? '')) : '';
@@ -11115,20 +11115,14 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
         if ($catalogProfile['character_origin'] === '') {
             $catalogProfile['character_origin'] = trim((string)($profile['character_race'] ?? ''));
         }
-        foreach (['character_gen', 'character_origin', 'character_origin_variant', 'character_class', 'character_element', 'category'] as $field) {
+        $catalogProfile['character_class'] = trim((string)($profile['character_archetype'] ?? '')) ?: (string)($profile['character_class'] ?? '');
+        foreach (['character_gen', 'character_origin', 'character_origin_variant', 'character_class', 'character_faction', 'category'] as $field) {
             $value = trim((string)($catalogProfile[$field] ?? ''));
             if ($value === '') {
                 continue;
             }
-            if ($field === 'character_element') {
-                $elementChip = af_kb_render_character_element_value($value, true);
-                if ($elementChip !== '') {
-                    $meta[] = $elementChip;
-                    continue;
-                }
-            }
             $value = af_kb_character_profile_resolved_value($field, $value, true);
-            $meta[] = htmlspecialchars_uni($value);
+            $meta[] = '<span class="af-kb-char-chip">' . htmlspecialchars_uni($value) . '</span>';
         }
     } else {
         $itemKind = trim((string)($entry['item_kind'] ?? ''));
@@ -11152,7 +11146,10 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
         : '';
     $kb_character_pic = $pic !== '' ? '<img src="' . htmlspecialchars_uni($pic) . '" alt="" loading="lazy" />' : '<div class="af-kb-char-card__pic-placeholder"></div>';
     $kb_character_short = $short !== '' ? af_kb_parse_message($short) : '';
-    $kb_character_meta = $meta ? implode(' • ', $meta) : '';
+    $kb_character_meta = $meta ? implode($isCharacter ? '' : ' • ', $meta) : '';
+    $kb_character_element = $isCharacter ? af_kb_render_character_element_value((string)($profile['character_element'] ?? ''), true) : '';
+    if (strpos($kb_character_element, '<img ') === false) $kb_character_element = '';
+    if ($kb_character_element !== '') $kb_character_element = '<span class="af-kb-char-card__element">' . $kb_character_element . '</span>';
     $kb_character_status_badge = '';
     $kb_character_status_link = '';
     if ($isCharacter) {
@@ -11208,8 +11205,9 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     $abilities = is_array($data['abilities'] ?? null) ? $data['abilities'] : [];
 
     $pic = af_kb_sanitize_url((string)($profile['character_pic'] ?? ''));
-    $appearance = trim((string)($profile['character_app'] ?? af_kb_pick_text($entry, 'short')));
+    $appearance = trim((string)af_kb_pick_text($entry, 'short'));
     $bio = af_kb_pick_text($entry, 'body');
+    if (trim($bio) === '') $bio = (string)($profile['character_app'] ?? '');
 
     $identityRows = '';
     $displayProfile = $profile;
@@ -11222,11 +11220,9 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         $displayProfile['character_archetype'] = trim((string)($profile['character_class'] ?? ''));
     }
     foreach ([
-        'Имя персонажа [EN]' => 'character_name',
         'Имя персонажа [RU]' => 'character_name_ru',
         'Прототип' => 'character_prototype',
         'Прозвище' => 'character_nicknames',
-        'Стихия' => 'character_element',
         'Пол' => 'character_gen',
         'Происхождение' => 'character_origin',
         'Разновидность' => 'character_origin_variant',
@@ -11243,17 +11239,9 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
             continue;
         }
 
-        if ($field === 'character_element') {
-            $rendered = af_kb_render_character_element_value($value, $isRu);
-            if ($rendered !== '') {
-                $identityRows .= '<div class="af-kb-char-profile__row"><span>' . htmlspecialchars_uni($label) . '</span><strong>' . $rendered . '</strong></div>';
-            }
-            continue;
-        }
-
         $value = af_kb_character_profile_resolved_value((string)$field, $value, $isRu);
         if ($value !== '') {
-            $identityRows .= '<div class="af-kb-char-profile__row"><span>' . htmlspecialchars_uni($label) . '</span><strong>' . htmlspecialchars_uni($value) . '</strong></div>';
+            $identityRows .= '<div class="af-kb-char-profile__row"><i class="fa-solid ' . af_kb_character_info_icon($field) . '" aria-hidden="true"></i><span>' . htmlspecialchars_uni($label) . '</span><strong>' . htmlspecialchars_uni($value) . '</strong></div>';
         }
     }
 
@@ -11273,7 +11261,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
             . '<input type="hidden" name="action" value="kb_character_extend" />'
             . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$GLOBALS['mybb']->post_code) . '" />'
             . '<input type="hidden" name="source_kb_id" value="' . (int)($entry['id'] ?? 0) . '" />'
-            . '<button type="submit" class="af-kb-btn af-kb-btn--extend">Продлить бронь</button></form>';
+            . '<button type="submit" class="af-kb-btn af-kb-btn--extend"><i class="fa-solid fa-hourglass-half" aria-hidden="true"></i><span>Продлить бронь</span></button></form>';
     }
     if ($isCanon && !empty($availability['can_apply'])) {
         if ((string)$availability['effective_status'] === 'free' && (int)($GLOBALS['mybb']->user['uid'] ?? 0) > 0) {
@@ -11281,41 +11269,28 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
                 . '<input type="hidden" name="action" value="kb_character_reserve" />'
                 . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$GLOBALS['mybb']->post_code) . '" />'
                 . '<input type="hidden" name="source_kb_id" value="' . (int)($entry['id'] ?? 0) . '" />'
-                . '<button type="submit" class="af-kb-btn af-kb-btn--create">Придержать</button></form> ';
+                . '<button type="submit" class="af-kb-btn af-kb-btn--create"><i class="fa-solid fa-hourglass-half" aria-hidden="true"></i><span>Придержать</span></button></form> ';
         }
         $targetForumId = af_kb_resolve_character_application_forum_id();
         if ($targetForumId > 0) {
             $applyUrl = 'misc.php?action=kb_character_apply&source_kb_id=' . (int)($entry['id'] ?? 0);
-            $applyCtaHtml .= '<a class="af-kb-btn af-kb-btn--create" href="' . htmlspecialchars_uni($applyUrl) . '">Подать анкету</a>';
+            $applyCtaHtml .= '<a class="af-kb-btn af-kb-btn--create" href="' . htmlspecialchars_uni($applyUrl) . '"><i class="fa-solid fa-feather-pointed" aria-hidden="true"></i><span>Подать анкету</span></a>';
         } else {
-            $applyCtaHtml .= '<button type="button" class="af-kb-btn" disabled title="Не настроен форум анкет (ATF group forums).">Подать анкету</button>';
-        }
-    } elseif ($isCanon && (string)($availability['effective_status'] ?? '') === 'occupied') {
-        $profileUrl = af_kb_sanitize_url((string)($availability['link_url'] ?? ''));
-        if ($profileUrl !== '') {
-            $applyCtaHtml = af_kb_render_character_status_link($availability, $isRu, 'service');
-        } else {
-            $applyCtaHtml = '<button type="button" class="af-kb-btn" disabled>Профиль</button>';
+            $applyCtaHtml .= '<button type="button" class="af-kb-btn" disabled title="Не настроен форум анкет (ATF group forums)."><i class="fa-solid fa-feather-pointed" aria-hidden="true"></i><span>Подать анкету</span></button>';
         }
     } elseif ($isCanon && (string)($availability['effective_status'] ?? '') === 'application') {
         $tid = (int)(($data['meta'] ?? [])['active_application_tid'] ?? 0);
-        $applyCtaHtml = $tid > 0 ? '<a class="af-kb-btn af-kb-btn--profile" href="showthread.php?tid=' . $tid . '">Открыть анкету</a>' : '';
-    }
-
-    // Owner identity belongs to Character, not only to canon occupancy.
-    if (!$isCanon && (int)($availability['owner_uid'] ?? 0) > 0) {
-        $applyCtaHtml .= af_kb_render_character_status_link($availability, $isRu, 'service');
+        $applyCtaHtml = $tid > 0 ? '<a class="af-kb-btn af-kb-btn--profile" href="showthread.php?tid=' . $tid . '"><i class="fa-solid fa-file-lines" aria-hidden="true"></i><span>Открыть анкету</span></a>' : '';
     }
 
     return '<div class="af-kb-char-profile">'
         . '<section class="af-kb-char-profile__head">'
         . ($pic !== '' ? '<div class="af-kb-char-profile__avatar"><img src="' . htmlspecialchars_uni($pic) . '" alt="" loading="lazy" /></div>' : '')
-        . '<div class="af-kb-char-profile__identity">' . $identityRows . '</div>'
+        . '<div class="af-kb-char-profile__sidebar"><div class="af-kb-char-profile__identity"><h3>Ключевая информация</h3>' . $identityRows . '</div>' . ($applyCtaHtml !== '' ? '<div class="af-kb-char-profile__service">' . $applyCtaHtml . '</div>' : '') . '</div>'
         . '</section>'
-        . ($appearance !== '' ? '<section class="af-kb-char-profile__section"><h3>Описание</h3><div>' . af_kb_parse_message($appearance) . '</div></section>' : '')
-        . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>Биография</h3><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
+        . ($appearance !== '' ? '<section class="af-kb-char-profile__section"><h3>Краткое описание</h3><div>' . af_kb_parse_message($appearance) . '</div></section>' : '')
+        . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>О персонаже</h3><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
         . '<section class="af-kb-char-profile__section"><h3>Способности</h3><div class="af-kb-char-abilities">' . ($abilitiesHtml !== '' ? $abilitiesHtml : '<div class="af-kb-char-empty">No abilities yet.</div>') . '</div></section>'
-        . '<section class="af-kb-char-profile__service">' . $applyCtaHtml . '</section>'
         . '</div>';
 }
 
@@ -11392,6 +11367,11 @@ function af_kb_build_character_application_prefill(array $entry): array
             break;
         }
     }
+
+    // Description contract: Russian KB body, English body, then legacy profile text.
+    $description = trim((string)($entry['body_ru'] ?? ''));
+    if ($description === '') $description = trim((string)($entry['body_en'] ?? ''));
+    if ($description !== '') $prefill['character_app'] = $description;
 
     $statMap = [
         'character_hp' => ['character_hp', 'hp', 'health'],
@@ -12114,7 +12094,7 @@ function af_kb_handle_view(): void
         $kb_type_heading = '<h1>' . $kb_type_icon . $kb_type_title . '</h1>';
         $kb_type_description = af_kb_parse_message($typeDesc);
         $kb_type_value = htmlspecialchars_uni($type);
-        $kb_character_owner_class = defined('AF_CHARACTERS_PAGE_ALIAS') ? 'af-characters-catalog' : '';
+        $kb_character_owner_class = $isCharacterList ? 'af-characters-catalog' : '';
         $kb_character_form_action = defined('AF_CHARACTERS_PAGE_ALIAS') ? 'characters.php' : 'misc.php';
         $kb_character_form_hidden = defined('AF_CHARACTERS_PAGE_ALIAS') ? '' : '<input type="hidden" name="action" value="kb" /><input type="hidden" name="type" value="' . $kb_type_value . '" />';
         $kb_query = htmlspecialchars_uni($query);
@@ -12142,7 +12122,7 @@ function af_kb_handle_view(): void
         $kb_character_filters = $isCharacterList
             ? af_kb_render_character_filters($characterFilters, $characterOptionSets, $query)
             : '';
-        $paginationUrl = defined('AF_CHARACTERS_PAGE_ALIAS') ? 'characters.php' : 'misc.php?action=kb&type=' . urlencode($type);
+        $paginationUrl = defined('AF_CHARACTERS_PAGE_ALIAS') ? 'characters.php?' : 'misc.php?action=kb&type=' . urlencode($type);
         if ($query !== '') {
             $paginationUrl .= '&q=' . urlencode($query);
         }
@@ -12380,7 +12360,7 @@ function af_kb_handle_view(): void
         if (af_kb_can_edit() && $isArpgCanon) {
             $storedStatus = (string)($availability['stored_status'] ?? 'free');
             $statusSaveUrl = 'misc.php';
-            $kb_character_status_button = '<button type="button" class="af-kb-btn af-kb-btn--edit" data-af-kb-status-open="1">Изменить статус</button>';
+            $kb_character_status_button = '<button type="button" class="af-kb-btn af-kb-btn--edit" data-af-kb-status-open="1"><i class="fa-solid fa-sliders" aria-hidden="true"></i><span>Изменить статус</span></button>';
             $kb_character_status_modal = '<div class="af-kb-modal-backdrop af-kb-status-modal" data-af-kb-status-modal="1" style="display:none;">'
                 . '<div class="af-kb-modal"><div class="af-kb-modal-header"><h3>Статус персонажа</h3><button type="button" class="af-kb-modal-close" data-af-kb-status-close="1">&times;</button></div>'
                 . '<div class="af-kb-modal-body"><form method="post" action="' . htmlspecialchars_uni($statusSaveUrl) . '" class="af-kb-status-form" data-af-kb-status-form="1">'
@@ -12433,19 +12413,18 @@ function af_kb_handle_view(): void
         $kb_character_element_attr = $characterElementKey !== ''
             ? ' data-element="' . htmlspecialchars_uni($characterElementKey) . '"'
             : '';
-        $kb_character_hero_image = $bannerUrl !== ''
-            ? '<img class="af-ac-character-hero__image" src="' . htmlspecialchars_uni($bannerUrl) . '" alt="" loading="eager" />'
-            : '';
+        $englishTitle = trim((string)($characterProfile['character_name'] ?? ''));
+        if ($englishTitle === '') $englishTitle = trim((string)($characterProfile['character_name_ru'] ?? '')) ?: $title;
+        $kb_title = htmlspecialchars_uni($englishTitle);
+        $kb_page_title = $kb_title;
         $kb_character_element_chip = $characterElement !== ''
             ? '<span class="af-ac-character-hero__element">' . af_kb_render_character_element_value($characterElement, $isRu) . '</span>'
             : '';
         $kb_entry_heading = '<div class="af-ac-character-hero">'
-            . $kb_character_hero_image
             . '<div class="af-ac-character-hero__content">'
-            . '<span class="af-ac-character-hero__type">' . $kb_type_title . '</span>'
-            . '<h1 class="af-ac-character-hero__title">' . $kb_entry_icon . '<span>' . $kb_title . '</span></h1>'
+            . '<h1 class="af-ac-character-hero__title"><span>' . $kb_title . '</span></h1>'
             . '<span class="af-ac-character-hero__divider" aria-hidden="true"></span>'
-            . '<div class="af-ac-character-hero__badges">' . $kb_status_badge . $kb_status_link . $kb_character_element_chip . '</div>'
+            . '<div class="af-ac-character-hero__badges">' . $kb_character_element_chip . $kb_status_badge . $kb_status_link . '</div>'
             . '</div></div>';
     }
     $kb_can_edit = af_kb_can_edit() ? '1' : '0';
@@ -12453,9 +12432,7 @@ function af_kb_handle_view(): void
     $kb_edit_link = '';
     if (af_kb_can_edit()) {
         $editLabel = htmlspecialchars_uni($lang->af_kb_edit ?? 'Edit');
-        $editContent = $type !== 'character'
-            ? '<i class="fa-solid fa-pen" aria-hidden="true"></i><span>' . $editLabel . '</span>'
-            : $editLabel;
+        $editContent = '<i class="fa-solid fa-pen" aria-hidden="true"></i><span>' . $editLabel . '</span>';
         $kb_edit_link = '<a class="af-kb-btn af-kb-btn--edit af-kb-btn-edit" href="misc.php?action=kb_edit&type='
             . htmlspecialchars_uni($type) . '&key=' . htmlspecialchars_uni($key) . '">' . $editContent . '</a>';
     }
@@ -12473,7 +12450,7 @@ function af_kb_handle_view(): void
             . ' onclick="return confirm(\'' . htmlspecialchars_uni($lang->af_kb_delete_confirm ?? 'Delete entry?') . '\');">'
             . ($type !== 'character'
                 ? '<i class="fa-regular fa-trash-can" aria-hidden="true"></i><span>' . htmlspecialchars_uni($deleteLabel) . '</span>'
-                : htmlspecialchars_uni($deleteLabel))
+                : '<i class="fa-solid fa-trash" aria-hidden="true"></i><span>' . htmlspecialchars_uni($deleteLabel) . '</span>')
             . '</button></form>';
     }
     $kb_help_link = af_kb_can_edit()
@@ -12512,6 +12489,10 @@ function af_kb_handle_view(): void
     $bodyBgUrl = $entryUi['background_url'] ?: ($typeRow ? ($typeRow['bg_url'] ?? '') : '');
     $kb_body_style = af_kb_build_body_bg_style($bodyBgUrl);
     $af_kb_content = '';
+    if ($type === 'character') {
+        $characterTools = '<div class="af-ac-character-detail__toolbar af-kb-entry-actions">' . $kb_back_link . $kb_character_status_button . $kb_edit_link . $kb_delete_form . $kb_help_link . '</div>';
+        $kb_entry_heading = str_replace('<span class="af-ac-character-hero__divider"', $characterTools . '<span class="af-ac-character-hero__divider"', $kb_entry_heading);
+    }
     $viewTemplate = $type === 'character' ? 'knowledgebase_view_character' : 'knowledgebase_view';
     eval("\$af_kb_content = \"" . af_kb_get_template($viewTemplate) . "\";");
 
@@ -14419,4 +14400,11 @@ function af_kb_list(string $type, array $opts = []): array
     }
 
     return $rows;
+}
+
+/** Presentation mapping only; profile data and resolver contracts stay dynamic. */
+function af_kb_character_info_icon(string $field): string
+{
+    $icons = ['character_name_ru'=>'fa-user','character_prototype'=>'fa-id-card','character_nicknames'=>'fa-user-tag','character_gen'=>'fa-venus-mars','character_origin'=>'fa-dna','character_origin_variant'=>'fa-layer-group','character_archetype'=>'fa-shield-halved','character_faction'=>'fa-users','character_weapon'=>'fa-khanda','character_age'=>'fa-calendar','character_height'=>'fa-ruler-vertical','character_weight'=>'fa-weight-scale','character_activity'=>'fa-briefcase'];
+    return $icons[$field] ?? 'fa-tag';
 }
