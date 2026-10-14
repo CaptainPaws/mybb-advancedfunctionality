@@ -3303,10 +3303,11 @@ function af_kb_character_matches_filters(array $entry, array $filters): bool
 function af_kb_render_character_filters(array $filters, array $optionSets, string $query): string
 {
     $showcase = defined('AF_CHARACTERS_PAGE_ALIAS');
-    $base = $showcase ? 'characters.php?' : 'misc.php?action=kb&amp;type=character';
+    $canonicalKb = defined('THIS_SCRIPT') && THIS_SCRIPT === 'kb.php';
+    $base = $showcase ? 'characters.php?' : ($canonicalKb ? 'kb.php?type=character' : 'misc.php?action=kb&amp;type=character');
     $queryPart = $query !== '' ? '&amp;q=' . rawurlencode($query) : '';
     $dimensionPart = '';
-    foreach (['gender', 'origin', 'variant', 'element', 'archetype', 'faction', 'age'] as $name) {
+    foreach (['gender', 'origin', 'variant', 'element'] as $name) {
         $value = (string)($filters[$name] ?? '');
         if ($value !== '') {
             $dimensionPart .= '&amp;' . $name . '=' . rawurlencode($value);
@@ -3325,12 +3326,12 @@ function af_kb_render_character_filters(array $filters, array $optionSets, strin
     }
     $variantMapJson = htmlspecialchars_uni((string)json_encode($variantMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     $html = '<div class="af-kb-character-filters' . ' af-characters-filters' . '" data-af-character-variants="' . $variantMapJson . '"><nav class="af-kb-character-filter-tabs" aria-label="Тип персонажа">' . $tabs . '</nav>'
-        . '<form class="af-kb-character-filter-fields" method="get" action="' . ($showcase ? 'characters.php' : 'misc.php') . '">'
-        . ($showcase ? '' : '<input type="hidden" name="action" value="kb" /><input type="hidden" name="type" value="character" />')
+        . '<form class="af-kb-character-filter-fields" method="get" action="' . ($showcase ? 'characters.php' : ($canonicalKb ? 'kb.php' : 'misc.php')) . '">'
+        . ($showcase ? '' : ($canonicalKb ? '' : '<input type="hidden" name="action" value="kb" />') . '<input type="hidden" name="type" value="character" />')
         . '<input type="hidden" name="kind" value="' . htmlspecialchars_uni($activeKind === 'canons' ? 'canon' : ($activeKind === 'originals' ? 'original' : '')) . '" />'
         . ($query !== '' ? '<input type="hidden" name="q" value="' . htmlspecialchars_uni($query) . '" />' : '');
-    foreach (['gender' => 'Пол', 'origin' => 'Происхождение', 'variant' => 'Подтип происхождения', 'element' => 'Стихия', 'archetype' => 'Архетип', 'faction' => 'Фракция', 'age' => 'Возраст'] as $name => $label) {
-        $disabled = $name === 'variant' && empty($optionSets['variant']);
+    foreach (['gender' => 'Пол', 'origin' => 'Происхождение', 'variant' => 'Подтип происхождения', 'element' => 'Стихия'] as $name => $label) {
+        $disabled = $name === 'variant' && (empty($filters['origin']) || empty($optionSets['variant']));
         $html .= '<label' . ($name === 'variant' ? ' data-af-character-variant-field' : '') . ($disabled ? ' hidden' : '') . '><span>' . $label . '</span><select name="' . $name . '"' . ($disabled ? ' disabled="disabled"' : '') . '><option value="">Все</option>';
         foreach ((array)($optionSets[$name] ?? []) as $value => $optionLabel) {
             $selected = ($filters[$name] ?? '') === $value ? ' selected="selected"' : '';
@@ -3338,7 +3339,7 @@ function af_kb_render_character_filters(array $filters, array $optionSets, strin
         }
         $html .= '</select></label>';
     }
-    return $html . '<button type="submit" class="af-kb-btn">Применить</button></form></div>';
+    return $html . '<a class="af-kb-btn af-character-filter-reset" data-af-character-reset href="' . ($showcase ? 'characters.php' : ($canonicalKb ? 'kb.php?type=character' : 'misc.php?action=kb&amp;type=character')) . '" title="Сбросить фильтры" aria-label="Сбросить фильтры"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></a></form></div>';
 }
 
 function af_kb_render_character_element_value(string $elementKey, bool $isRu): string
@@ -12180,6 +12181,14 @@ function af_kb_handle_view(): void
             ? '<a class="af-kb-help-link" href="misc.php?action=kb_help" title="'.htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help').'"><i class="fa-regular fa-circle-question"></i></a>'
             : '';
         $kb_type_actions = implode(' ', $actions);
+        if ($isCharacterList) {
+            $catalogBack = array_shift($actions);
+            $catalogHelp = str_replace('</a>', '<span>Помощь</span></a>', $kb_help_link);
+            $catalogMenu = af_kb_character_actions_menu(implode('', $actions) . $catalogHelp, 'af-ac-character-catalog-menu');
+            $kb_type_actions = $catalogBack . $catalogMenu;
+            $kb_help_link = '';
+            if ($catalogMenu !== '' && af_kb_frontend_asset_allowed('page_runtime')) $kb_type_actions .= af_kb_character_detail_menu_script();
+        }
         $kb_page_bg = '';
         $kb_body_style = af_kb_build_body_bg_style($typeRow ? ($typeRow['bg_url'] ?? '') : '');
         $af_kb_content = '';
@@ -12488,9 +12497,7 @@ function af_kb_handle_view(): void
     $kb_body_style = af_kb_build_body_bg_style($bodyBgUrl);
     $af_kb_content = '';
     if ($type === 'character') {
-        $characterOwnerActions = str_replace('class="af-kb-btn ', 'role="menuitem" class="af-ac-character-menu__item af-kb-btn ', $kb_edit_link . $kb_delete_form);
-        $characterMenuId = 'af-ac-character-menu-' . (int)$entry['id'];
-        $characterMenu = $characterOwnerActions !== '' ? '<div class="af-ac-character-menu"><button class="af-ac-character-menu__toggle" id="' . $characterMenuId . '-toggle" type="button" aria-label="Действия с персонажем" aria-haspopup="menu" aria-expanded="false" aria-controls="' . $characterMenuId . '"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button><div class="af-ac-character-menu__panel" id="' . $characterMenuId . '" role="menu" aria-labelledby="' . $characterMenuId . '-toggle" hidden>' . $characterOwnerActions . '</div></div>' : '';
+        $characterMenu = af_kb_character_actions_menu($kb_edit_link . $kb_delete_form, 'af-ac-character-menu-' . (int)$entry['id']);
         $characterTools = '<div class="af-ac-character-detail__toolbar af-kb-entry-actions">' . $kb_back_link . $kb_character_status_button . $characterMenu . '</div>';
         $kb_entry_heading = str_replace('<span class="af-ac-character-hero__divider"', $characterTools . '<span class="af-ac-character-hero__divider"', $kb_entry_heading);
         if ($characterMenu !== '' && af_kb_frontend_asset_allowed('page_runtime')) $kb_entry_heading .= af_kb_character_detail_menu_script();
@@ -14414,4 +14421,15 @@ function af_kb_character_info_icon(string $field): string
 /** Character-only menu behavior follows the existing dossier keyboard contract. */
 function af_kb_character_detail_menu_script(): string {
  return '<script>(function(){if(window.afCharacterDetailMenuBound)return;window.afCharacterDetailMenuBound=true;var selector=".af-ac-character-menu";function setOpen(root,open,focusFirst){if(!root)return;var button=root.querySelector(".af-ac-character-menu__toggle"),panel=root.querySelector(".af-ac-character-menu__panel");if(!button||!panel)return;button.setAttribute("aria-expanded",open?"true":"false");panel.hidden=!open;if(open&&focusFirst){var first=panel.querySelector("[role=menuitem]:not([disabled])");if(first)first.focus();}}function closeAll(except){document.querySelectorAll(selector).forEach(function(root){if(root!==except)setOpen(root,false,false);});}document.addEventListener("click",function(event){var button=event.target.closest&&event.target.closest(".af-ac-character-menu__toggle");if(button){var root=button.closest(selector),opening=button.getAttribute("aria-expanded")!=="true";closeAll(root);setOpen(root,opening,opening);return;}var item=event.target.closest&&event.target.closest(".af-ac-character-menu__item");if(item){var itemRoot=item.closest(selector);setOpen(itemRoot,false,false);if(event.defaultPrevented){var toggle=itemRoot.querySelector(".af-ac-character-menu__toggle");if(toggle)toggle.focus();}return;}if(!(event.target.closest&&event.target.closest(selector)))closeAll(null);});document.addEventListener("keydown",function(event){var root=event.target.closest&&event.target.closest(selector);if(!root)return;var button=root.querySelector(".af-ac-character-menu__toggle"),panel=root.querySelector(".af-ac-character-menu__panel"),items=panel?Array.prototype.slice.call(panel.querySelectorAll("[role=menuitem]:not([disabled])")):[],index=items.indexOf(event.target);if(event.key==="Escape"){event.preventDefault();setOpen(root,false,false);button.focus();return;}if((event.key==="ArrowDown"||event.key==="ArrowUp")&&event.target===button){event.preventDefault();setOpen(root,true,false);if(items.length)items[event.key==="ArrowDown"?0:items.length-1].focus();return;}if(index<0||!items.length)return;if(event.key==="ArrowDown"||event.key==="ArrowUp"){event.preventDefault();items[(index+(event.key==="ArrowDown"?1:items.length-1))%items.length].focus();}else if(event.key==="Home"){event.preventDefault();items[0].focus();}else if(event.key==="End"){event.preventDefault();items[items.length-1].focus();}});document.addEventListener("focusin",function(event){if(!(event.target.closest&&event.target.closest(selector)))closeAll(null);});})();</script>';
+}
+
+/** Shared Character view/menu markup; the caller supplies permission-checked actions. */
+function af_kb_character_actions_menu(string $actions, string $id): string
+{
+    if (trim($actions) === '') return '';
+    $actions = str_replace('class="af-kb-btn ', 'role="menuitem" class="af-ac-character-menu__item af-kb-btn ', $actions);
+    $actions = str_replace('class="af-kb-btn"', 'role="menuitem" class="af-ac-character-menu__item af-kb-btn"', $actions);
+    $actions = str_replace('class="af-kb-help-link"', 'role="menuitem" class="af-ac-character-menu__item af-kb-help-link"', $actions);
+    $id = htmlspecialchars_uni($id);
+    return '<div class="af-ac-character-menu"><button class="af-ac-character-menu__toggle" id="' . $id . '-toggle" type="button" aria-label="Действия управления" aria-haspopup="menu" aria-expanded="false" aria-controls="' . $id . '"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button><div class="af-ac-character-menu__panel" id="' . $id . '" role="menu" aria-labelledby="' . $id . '-toggle" hidden>' . $actions . '</div></div>';
 }
