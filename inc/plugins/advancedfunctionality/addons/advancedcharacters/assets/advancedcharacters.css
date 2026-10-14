@@ -939,3 +939,7 @@ body.atf-active .af-kb-page .af-characters-catalog .af-character-meta-row { marg
 body.atf-active .af-kb-page .af-characters-catalog .af-kb-char-card[data-element] .af-kb-char-card__body h3 { color: var(--ac-text); font-family: Georgia,serif; font-size: 1.16rem; font-weight: 500; }
 body.atf-active .af-kb-page .af-ac-character-detail.af-ac-character-detail--dossier .af-kb-char-profile__service .af-kb-btn { min-height: 37px; padding: 0 14px; border: 1px solid #626684; border-radius: 5px; background: linear-gradient(180deg,var(--ac-raised),var(--ac-page)); color: var(--ac-text); line-height: 1.2; }
 body.atf-active .af-kb-page .af-ac-character-detail.af-ac-character-detail--dossier .af-kb-char-profile__service a[href*="kb_character_apply"] { border-color: #aa92ef; background: linear-gradient(135deg,#6344b0,#342666 65%,#4e3a8e); color: #f8f4ff; }
+
+/* Keep the current header intact until the new identity markup is present. */
+body.atf-active .af-kb-page .af-ac-character-detail--dossier .af-ac-character-hero__content:not(:has(> .af-ac-character-hero__identity)) { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; }
+body.atf-active .af-kb-page .af-ac-character-detail--dossier .af-ac-character-hero__content:not(:has(> .af-ac-character-hero__identity)) .af-ac-character-detail__toolbar { margin-left: auto; }
