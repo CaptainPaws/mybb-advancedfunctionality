@@ -2489,6 +2489,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
         $sheet_inner = preg_replace('/(<div\\b[^>]*\\bclass="[^"]*\\baf-cs-page\\b[^"]*")/', '$1 data-element-surface="sheet"', $sheet_inner, 1) ?? $sheet_inner;
     }
     $sheet_inner = af_charactersheets_canonicalize_assets_html($sheet_inner);
+    if (function_exists('af_aa_surface_fragment')) $sheet_inner=af_aa_surface_fragment($sheet_inner,$sheet_owner_uid,'sheet');
     if ($wrap_surface) {
         $attributes = ' data-element="' . $sheet_element_theme_key . '" data-element-surface="sheet" data-af-element-effect-host="sheet"';
         $sheet_inner = '<div class="af-aa-context af-aa-context--sheet af-apui-surface-body atf-active"' . $attributes . '>' . $sheet_inner . '</div>';

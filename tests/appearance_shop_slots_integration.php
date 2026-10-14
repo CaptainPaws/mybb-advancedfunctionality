@@ -36,13 +36,13 @@ preg_match_all('/\$db->write_query\("CREATE TABLE " \. TABLE_PREFIX \. "(af_shop
 slot_check(count($matches)===5,'Shop install DDL changed; update fixture extraction.');
 foreach($matches as $match)$db->write_query('CREATE TABLE '.TABLE_PREFIX.$match[1].' ('.$match[2].') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
 af_advancedshop_ensure_shops_schema();af_advancedshop_slot_install_schema();af_advancedshop_slot_install_schema();
-slot_check(appearance_count('af_shop_slots',"source_type='appearance_slot'")===1,'Upgrade duplicated products.');
+slot_check(appearance_count('af_shop_slots',"source_type='appearance_slot'")===4,'Upgrade duplicated products.');
 slot_check(appearance_count('af_shop_slots','enabled=1')===0,'Upgrade invented a live/free price.');
 $db->write_query('CREATE TABLE '.TABLE_PREFIX.'af_balance (uid INT PRIMARY KEY,exp BIGINT DEFAULT 0,credits BIGINT DEFAULT 0,ability_tokens BIGINT DEFAULT 0,updated_at INT DEFAULT 0) ENGINE=InnoDB');
 $db->write_query('CREATE TABLE '.TABLE_PREFIX.'af_balance_tx (id INT AUTO_INCREMENT PRIMARY KEY,uid INT,kind VARCHAR(32),amount BIGINT,balance_after BIGINT,reason VARCHAR(64),source VARCHAR(64),ref_type VARCHAR(32),ref_id INT,meta_json TEXT,actor_uid INT,created_at INT) ENGINE=InnoDB');
 $db->write_query('CREATE TABLE '.TABLE_PREFIX.'af_kb_entries (id INT PRIMARY KEY,type VARCHAR(32),`key` VARCHAR(128),title_ru TEXT,title_en TEXT) ENGINE=InnoDB');
 $shop=$db->fetch_array($db->simple_select('af_shop_shops','*',"code='appearance_slots'"));
-$product=(int)$db->fetch_field($db->simple_select('af_shop_slots','slot_id',"source_type='appearance_slot'"),'slot_id');
+$product=(int)$db->fetch_field($db->simple_select('af_shop_slots','slot_id',"source_type='appearance_slot' AND source_ref_id=1"),'slot_id');
 $db->update_query('af_shop_slots',['price'=>2500,'enabled'=>1],'slot_id='.$product);
 foreach([7,8,20] as $uid) $db->insert_query('af_balance',['uid'=>$uid,'credits'=>100000]);
 $cart=slot_cart(7);

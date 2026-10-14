@@ -48,6 +48,7 @@ function af_advancedappearance_menu_provider(): void
 
 require_once __DIR__ . '/personal.php';
 require_once __DIR__ . '/studio.php';
+require_once __DIR__ . '/surfaces.php';
 require_once __DIR__ . '/post_masks.php';
 
 define('AF_AA_TPL_APSTUDIO', 'advancedappearance_apstudio');
@@ -1433,6 +1434,7 @@ function af_aa_pre_output_page(string &$page): void
     if (defined('THIS_SCRIPT') && ((string)THIS_SCRIPT === 'newthread.php' || (string)THIS_SCRIPT === 'editpost.php')) {
         $page = af_aa_inject_thread_preset_field($page);
     }
+    af_aa_surfaces_pre_output($page);
 }
 
 function af_aa_strip_asset_includes(string $page): string

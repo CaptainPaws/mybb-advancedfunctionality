@@ -54,11 +54,16 @@ function af_advancedshop_seed_slot_products(): void
     $shop=(int)$db->fetch_field($db->simple_select($table,'shop_id',"code='appearance_slots'"),'shop_id');
     $category=(int)$db->fetch_field($db->simple_select('af_shop_categories','cat_id',"shop_id={$shop}",['order_by'=>'cat_id','limit'=>1]),'cat_id');
     if (!$category) $category=(int)$db->insert_query('af_shop_categories',['shop_id'=>$shop,'parent_id'=>0,'title'=>'Слоты оформления','description'=>'Постоянная вместимость личных пресетов','enabled'=>1]);
-    // No price was supplied: administrator explicitly sets price and enables the product.
-    if (!$db->fetch_array($db->simple_select('af_shop_slots','slot_id',"shop_id={$shop} AND source_type='appearance_slot' AND source_ref_id=1",['limit'=>1])))
-        $db->insert_query('af_shop_slots',['shop_id'=>$shop,'cat_id'=>$category,'source_type'=>'appearance_slot','source_ref_id'=>1,
-            'kb_id'=>0,'kb_type'=>'appearance_slot','kb_key'=>'appearance_slot.postbit','price'=>0,'currency'=>'credits',
+    // New implemented surfaces get disabled products; existing prices/rights are untouched.
+    $registry=function_exists('af_aa_slot_product_registry')?af_aa_slot_product_registry():['postbit'=>['ref_id'=>1,'implemented'=>true,'key'=>'appearance_slot.postbit']];
+    foreach($registry as $target=>$product) {
+        if (empty($product['implemented'])) continue;
+        $ref=(int)$product['ref_id'];
+        if ($db->fetch_array($db->simple_select('af_shop_slots','slot_id',"shop_id={$shop} AND source_type='appearance_slot' AND source_ref_id={$ref}",['limit'=>1]))) continue;
+        $db->insert_query('af_shop_slots',['shop_id'=>$shop,'cat_id'=>$category,'source_type'=>'appearance_slot','source_ref_id'=>$ref,
+            'kb_id'=>0,'kb_type'=>'appearance_slot','kb_key'=>$db->escape_string($product['key']),'price'=>0,'currency'=>'credits',
             'stock'=>-1,'limit_per_user'=>0,'enabled'=>0,'meta_json'=>'{}']);
+    }
 }
 
 function af_advancedshop_slot_product_url(string $target): string

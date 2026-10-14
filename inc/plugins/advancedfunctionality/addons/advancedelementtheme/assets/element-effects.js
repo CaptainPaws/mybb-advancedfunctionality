@@ -11,8 +11,10 @@
     const postConfig = root.querySelector(':scope > .atf-post__layout > .atf-post__content > .atf-post__slot--before > [data-af-appearance-post-effects-config]');
     let custom = appearanceSettings[root.dataset.authorUid];
     if (postConfig) { try { custom = JSON.parse(postConfig.textContent); } catch (_) { custom = {}; } }
+    const surfaceConfig=root.querySelector(':scope > [data-af-appearance-surface-effects-config]');
+    if(surfaceConfig){try{custom=JSON.parse(surfaceConfig.textContent);}catch(_){custom={};}}
     // Appearance changes decoration only inside an existing, ACP-enabled canonical surface.
-    if (root.dataset.elementSurface !== 'postbit' || !base?.enabled || !base.surfaces.includes('postbit') || !custom) return base;
+    if (!['postbit','profile','sheet'].includes(root.dataset.elementSurface) || !base?.enabled || !base.surfaces.includes(root.dataset.elementSurface) || !custom || (custom.element_key && custom.element_key!==root.dataset.element)) return base;
     return { ...base, ...custom, enabled: base.enabled, surfaces: base.surfaces };
   }
   const preferenceKeys = ['effects_enabled', 'effects_profile', 'effects_sheet', 'effects_application', 'effects_postbit'];
@@ -148,6 +150,11 @@
   window.afElementEffects = { refresh, setPreferences, setAppearanceEffects: (uid, config) => {
     if (config && config.preset) appearanceSettings[uid] = config; else delete appearanceSettings[uid];
     refresh();
+  }, setSurfaceAppearanceEffects: (root, config) => {
+    if(!(root instanceof Element))return;
+    let block=root.querySelector(':scope > [data-af-appearance-surface-effects-config]');
+    if(!block){block=document.createElement('script');block.type='application/json';block.setAttribute('data-af-appearance-surface-effects-config','');root.prepend(block);}
+    block.textContent=JSON.stringify(config||{});refresh();
   }, getPreferences: () => ({ ...preferences }) };
   document.addEventListener('af-element-effects-refresh', event => {
     if (event.detail?.preferences) setPreferences(event.detail.preferences);
