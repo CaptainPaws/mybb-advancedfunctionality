@@ -5526,7 +5526,7 @@ function af_kb_render_tech_note_details(string $label, string $text, bool $colla
     $content = '<div class="af-kb-tech-note">' . $html . '</div>';
     return $collapsible
         ? '<details class="af-kb-tech"><summary>' . htmlspecialchars_uni($label) . '</summary>' . $content . '</details>'
-        : '<section class="atf-technical__section"><h4>' . htmlspecialchars_uni($label) . '</h4>' . $content . '</section>';
+        : '<section class="af-kb-technical-section"><h4>' . htmlspecialchars_uni($label) . '</h4>' . $content . '</section>';
 }
 
 function af_kb_parse_message(string $message): string
@@ -8112,7 +8112,7 @@ function af_kb_render_tech_details(string $label, string $json, string $copyLabe
     $content = $copyButton . $table;
     return $collapsible
         ? '<details class="af-kb-tech"><summary>' . htmlspecialchars_uni($label) . '</summary>' . $content . '</details>'
-        : '<section class="atf-technical__section"><h4>' . htmlspecialchars_uni($label) . '</h4>' . $content . '</section>';
+        : '<section class="af-kb-technical-section"><h4>' . htmlspecialchars_uni($label) . '</h4>' . $content . '</section>';
 }
 
 function af_kb_get_entry_ui(array $entry): array
@@ -9554,7 +9554,7 @@ function af_kb_render_entry_ui(array $entry, array $typeRow, bool $isRu): string
 
         if (trim(strip_tags($parts)) === '') continue;
 
-        $head = $title !== '' ? '<h3>'.htmlspecialchars_uni($title).'</h3><span class="atf-separator" aria-hidden="true"></span>' : '';
+        $head = $title !== '' ? '<h3>'.htmlspecialchars_uni($title).'</h3>' : '';
 
         if ($typeKey === 'lore' && $title === '') {
             $html .= $parts;
@@ -11294,8 +11294,8 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         . ($pic !== '' ? '<div class="af-kb-char-profile__avatar"><img src="' . htmlspecialchars_uni($pic) . '" alt="" loading="lazy" /></div>' : '')
         . '<div class="af-kb-char-profile__sidebar"><div class="af-kb-char-profile__identity"><h3>Ключевая информация</h3>' . $identityRows . '</div>' . ($applyCtaHtml !== '' ? '<div class="af-kb-char-profile__service">' . $applyCtaHtml . '</div>' : '') . '</div>'
         . '</section>'
-        . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>О персонаже</h3><span class="atf-separator" aria-hidden="true"></span><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
-        . '<section class="af-kb-char-profile__section"><h3>Способности</h3><span class="atf-separator" aria-hidden="true"></span><div class="af-kb-char-abilities">' . ($abilitiesHtml !== '' ? $abilitiesHtml : '<div class="af-kb-char-empty">No abilities yet.</div>') . '</div></section>'
+        . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>О персонаже</h3><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
+        . '<section class="af-kb-char-profile__section"><h3>Способности</h3><div class="af-kb-char-abilities">' . ($abilitiesHtml !== '' ? $abilitiesHtml : '<div class="af-kb-char-empty">No abilities yet.</div>') . '</div></section>'
         . '</div>';
 }
 
@@ -11934,8 +11934,6 @@ function af_kb_handle_view(): void
         $kb_help_link = af_kb_can_edit()
             ? '<a class="af-kb-help-link" href="misc.php?action=kb_help" title="'.htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help').'"><i class="fa-regular fa-circle-question"></i></a>'
             : '';
-        $kb_management_menu = af_kb_character_actions_menu($kb_create_link, 'af-kb-catalog-menu');
-        if ($kb_management_menu !== '' && af_kb_frontend_asset_allowed('page_runtime')) $kb_management_menu .= af_kb_character_detail_menu_script();
         $kb_page_bg = '';
         $kb_body_style = '';
         $af_kb_content = '';
@@ -12188,19 +12186,15 @@ function af_kb_handle_view(): void
         $kb_help_link = af_kb_can_edit()
             ? '<a class="af-kb-help-link" href="misc.php?action=kb_help" title="'.htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help').'"><i class="fa-regular fa-circle-question"></i></a>'
             : '';
-        $catalogBack = array_shift($actions);
-        $managementActions = [];
-        $navigationActions = [];
-        foreach ($actions as $actionHtml) {
-            if (strpos($actionHtml, 'action=kb_edit') !== false || strpos($actionHtml, 'action=kb_type_') !== false || strpos($actionHtml, 'action=kb_manage_categories') !== false) {
-                $managementActions[] = $actionHtml;
-            } else {
-                $navigationActions[] = $actionHtml;
-            }
+        $kb_type_actions = implode(' ', $actions);
+        if ($isCharacterList) {
+            $catalogBack = array_shift($actions);
+            $catalogHelp = str_replace('</a>', '<span>Помощь</span></a>', $kb_help_link);
+            $catalogMenu = af_kb_character_actions_menu(implode('', $actions) . $catalogHelp, 'af-ac-character-catalog-menu');
+            $kb_type_actions = $catalogBack . $catalogMenu;
+            $kb_help_link = '';
+            if ($catalogMenu !== '' && af_kb_frontend_asset_allowed('page_runtime')) $kb_type_actions .= af_kb_character_detail_menu_script();
         }
-        $catalogMenu = af_kb_character_actions_menu(implode('', $managementActions), 'af-kb-category-menu');
-        $kb_type_actions = $catalogBack . implode('', $navigationActions) . $catalogMenu;
-        if ($catalogMenu !== '' && af_kb_frontend_asset_allowed('page_runtime')) $kb_type_actions .= af_kb_character_detail_menu_script();
         $kb_page_bg = '';
         $kb_body_style = af_kb_build_body_bg_style($typeRow ? ($typeRow['bg_url'] ?? '') : '');
         $af_kb_content = '';
@@ -12349,7 +12343,7 @@ function af_kb_handle_view(): void
             eval("\$kb_rel_items .= \"" . af_kb_get_template('knowledgebase_rel_item') . "\";");
         }
         $relTypeLabel = af_kb_relation_type_label((string)$relType, $isRu);
-        $kb_relations .= '<div class="af-kb-rel-group' . ($relType === AF_KB_REL_ORIGIN_HAS_VARIANT ? ' atf-origin-variants' : '') . '"><h4>'.htmlspecialchars_uni($relTypeLabel).'</h4><span class="atf-separator" aria-hidden="true"></span><ul>'.$kb_rel_items.'</ul></div>';
+        $kb_relations .= '<div class="af-kb-rel-group"><h4>'.htmlspecialchars_uni($relTypeLabel).'</h4><ul>'.$kb_rel_items.'</ul></div>';
     }
 
     $entryUi = af_kb_get_entry_ui($entry);
@@ -12509,10 +12503,8 @@ function af_kb_handle_view(): void
     }
     $technicalContent = $kb_tech_details . $kb_meta_details;
     $kb_technical_information = $technicalContent !== ''
-        ? '<details class="af-kb-tech atf-technical"><summary><span>' . ($isRu ? 'Техническая информация' : 'Technical information') . '</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><div class="atf-technical__body">' . $technicalContent . '</div></details>'
+        ? '<details class="af-kb-tech af-kb-technical-information"><summary><span>' . ($isRu ? 'Техническая информация' : 'Technical information') . '</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><div class="af-kb-technical-body">' . $technicalContent . '</div></details>'
         : '';
-    $kb_management_menu = af_kb_character_actions_menu($kb_edit_link . $kb_delete_form, 'af-kb-entry-menu-' . (int)$entry['id']);
-    if ($type !== 'character' && $kb_management_menu !== '' && af_kb_frontend_asset_allowed('page_runtime')) $kb_management_menu .= af_kb_character_detail_menu_script();
     $kb_page_bg = '';
     $bodyBgUrl = $entryUi['background_url'] ?: ($typeRow ? ($typeRow['bg_url'] ?? '') : '');
     $kb_body_style = af_kb_build_body_bg_style($bodyBgUrl);
@@ -14441,7 +14433,6 @@ function af_kb_character_info_icon(string $field): string
 
 /** Character-only menu behavior follows the existing dossier keyboard contract. */
 function af_kb_character_detail_menu_script(): string {
- if (function_exists('af_adaptivethemeframework_presentation_is_active') && af_adaptivethemeframework_presentation_is_active()) return '';
  return '<script>(function(){if(window.afCharacterDetailMenuBound)return;window.afCharacterDetailMenuBound=true;var selector=".af-ac-character-menu";function setOpen(root,open,focusFirst){if(!root)return;var button=root.querySelector(".af-ac-character-menu__toggle"),panel=root.querySelector(".af-ac-character-menu__panel");if(!button||!panel)return;button.setAttribute("aria-expanded",open?"true":"false");panel.hidden=!open;if(open&&focusFirst){var first=panel.querySelector("[role=menuitem]:not([disabled])");if(first)first.focus();}}function closeAll(except){document.querySelectorAll(selector).forEach(function(root){if(root!==except)setOpen(root,false,false);});}document.addEventListener("click",function(event){var button=event.target.closest&&event.target.closest(".af-ac-character-menu__toggle");if(button){var root=button.closest(selector),opening=button.getAttribute("aria-expanded")!=="true";closeAll(root);setOpen(root,opening,opening);return;}var item=event.target.closest&&event.target.closest(".af-ac-character-menu__item");if(item){var itemRoot=item.closest(selector);setOpen(itemRoot,false,false);if(event.defaultPrevented){var toggle=itemRoot.querySelector(".af-ac-character-menu__toggle");if(toggle)toggle.focus();}return;}if(!(event.target.closest&&event.target.closest(selector)))closeAll(null);});document.addEventListener("keydown",function(event){var root=event.target.closest&&event.target.closest(selector);if(!root)return;var button=root.querySelector(".af-ac-character-menu__toggle"),panel=root.querySelector(".af-ac-character-menu__panel"),items=panel?Array.prototype.slice.call(panel.querySelectorAll("[role=menuitem]:not([disabled])")):[],index=items.indexOf(event.target);if(event.key==="Escape"){event.preventDefault();setOpen(root,false,false);button.focus();return;}if((event.key==="ArrowDown"||event.key==="ArrowUp")&&event.target===button){event.preventDefault();setOpen(root,true,false);if(items.length)items[event.key==="ArrowDown"?0:items.length-1].focus();return;}if(index<0||!items.length)return;if(event.key==="ArrowDown"||event.key==="ArrowUp"){event.preventDefault();items[(index+(event.key==="ArrowDown"?1:items.length-1))%items.length].focus();}else if(event.key==="Home"){event.preventDefault();items[0].focus();}else if(event.key==="End"){event.preventDefault();items[items.length-1].focus();}});document.addEventListener("focusin",function(event){if(!(event.target.closest&&event.target.closest(selector)))closeAll(null);});})();</script>';
 }
 
@@ -14453,5 +14444,5 @@ function af_kb_character_actions_menu(string $actions, string $id): string
     $actions = str_replace('class="af-kb-btn"', 'role="menuitem" class="af-ac-character-menu__item af-kb-btn"', $actions);
     $actions = str_replace('class="af-kb-help-link"', 'role="menuitem" class="af-ac-character-menu__item af-kb-help-link"', $actions);
     $id = htmlspecialchars_uni($id);
-    return '<div class="af-ac-character-menu atf-dropdown"><button class="af-ac-character-menu__toggle atf-icon-button atf-dropdown__toggle" id="' . $id . '-toggle" type="button" aria-label="Действия управления" aria-haspopup="menu" aria-expanded="false" aria-controls="' . $id . '"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button><div class="af-ac-character-menu__panel atf-dropdown__panel" id="' . $id . '" role="menu" aria-labelledby="' . $id . '-toggle" hidden>' . $actions . '</div></div>';
+    return '<div class="af-ac-character-menu"><button class="af-ac-character-menu__toggle" id="' . $id . '-toggle" type="button" aria-label="Действия управления" aria-haspopup="menu" aria-expanded="false" aria-controls="' . $id . '"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button><div class="af-ac-character-menu__panel" id="' . $id . '" role="menu" aria-labelledby="' . $id . '-toggle" hidden>' . $actions . '</div></div>';
 }

@@ -6,7 +6,7 @@ return [
     'id' => 'adaptivethemeframework',
     'name' => 'Adaptive Theme Framework',
     'description' => 'Presentation framework for adaptive AF component-slot layouts.',
-    'version' => '0.29.4',
+    'version' => '0.29.5',
     'author' => 'AdvancedFunctionality',
     'bootstrap' => 'adaptivethemeframework.php',
 
@@ -19,8 +19,10 @@ return [
 
     // Every source has its own Theme stylesheet. Surface attachments keep CSS
     // scoped to the routes that use that surface.
-    'assets' => ['front' => ['css' => ['assets/adaptivethemeframework.css'], 'js' => ['assets/presentation-ui.js']]],
+    'assets' => ['front' => ['css' => ['assets/adaptivethemeframework.css'], 'js' => []]],
     'theme_stylesheets' => [
+        // Retired a952e78d source: retain identity so normal Theme sync can clear
+        // its uncustomized cached stylesheet. The file contains no CSS rules.
         [
             'id' => 'presentation_ui',
             'file' => 'assets/presentation-ui.css',
