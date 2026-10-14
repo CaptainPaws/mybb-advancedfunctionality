@@ -11205,7 +11205,6 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     $abilities = is_array($data['abilities'] ?? null) ? $data['abilities'] : [];
 
     $pic = af_kb_sanitize_url((string)($profile['character_pic'] ?? ''));
-    $appearance = trim((string)af_kb_pick_text($entry, 'short'));
     $bio = af_kb_pick_text($entry, 'body');
     if (trim($bio) === '') $bio = (string)($profile['character_app'] ?? '');
 
@@ -11288,7 +11287,6 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         . ($pic !== '' ? '<div class="af-kb-char-profile__avatar"><img src="' . htmlspecialchars_uni($pic) . '" alt="" loading="lazy" /></div>' : '')
         . '<div class="af-kb-char-profile__sidebar"><div class="af-kb-char-profile__identity"><h3>Ключевая информация</h3>' . $identityRows . '</div>' . ($applyCtaHtml !== '' ? '<div class="af-kb-char-profile__service">' . $applyCtaHtml . '</div>' : '') . '</div>'
         . '</section>'
-        . ($appearance !== '' ? '<section class="af-kb-char-profile__section"><h3>Краткое описание</h3><div>' . af_kb_parse_message($appearance) . '</div></section>' : '')
         . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>О персонаже</h3><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
         . '<section class="af-kb-char-profile__section"><h3>Способности</h3><div class="af-kb-char-abilities">' . ($abilitiesHtml !== '' ? $abilitiesHtml : '<div class="af-kb-char-empty">No abilities yet.</div>') . '</div></section>'
         . '</div>';
@@ -12422,9 +12420,9 @@ function af_kb_handle_view(): void
             : '';
         $kb_entry_heading = '<div class="af-ac-character-hero">'
             . '<div class="af-ac-character-hero__content">'
-            . '<h1 class="af-ac-character-hero__title"><span>' . $kb_title . '</span></h1>'
+            . '<div class="af-ac-character-hero__identity"><div class="af-ac-character-hero__name">' . $kb_character_element_chip . '<h1 class="af-ac-character-hero__title"><span>' . $kb_title . '</span></h1></div>'
+            . '<div class="af-ac-character-hero__badges">' . $kb_status_badge . $kb_status_link . '</div></div>'
             . '<span class="af-ac-character-hero__divider" aria-hidden="true"></span>'
-            . '<div class="af-ac-character-hero__badges">' . $kb_character_element_chip . $kb_status_badge . $kb_status_link . '</div>'
             . '</div></div>';
     }
     $kb_can_edit = af_kb_can_edit() ? '1' : '0';
@@ -12490,8 +12488,12 @@ function af_kb_handle_view(): void
     $kb_body_style = af_kb_build_body_bg_style($bodyBgUrl);
     $af_kb_content = '';
     if ($type === 'character') {
-        $characterTools = '<div class="af-ac-character-detail__toolbar af-kb-entry-actions">' . $kb_back_link . $kb_character_status_button . $kb_edit_link . $kb_delete_form . $kb_help_link . '</div>';
+        $characterOwnerActions = str_replace('class="af-kb-btn ', 'role="menuitem" class="af-ac-character-menu__item af-kb-btn ', $kb_edit_link . $kb_delete_form);
+        $characterMenuId = 'af-ac-character-menu-' . (int)$entry['id'];
+        $characterMenu = $characterOwnerActions !== '' ? '<div class="af-ac-character-menu"><button class="af-ac-character-menu__toggle" id="' . $characterMenuId . '-toggle" type="button" aria-label="Действия с персонажем" aria-haspopup="menu" aria-expanded="false" aria-controls="' . $characterMenuId . '"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button><div class="af-ac-character-menu__panel" id="' . $characterMenuId . '" role="menu" aria-labelledby="' . $characterMenuId . '-toggle" hidden>' . $characterOwnerActions . '</div></div>' : '';
+        $characterTools = '<div class="af-ac-character-detail__toolbar af-kb-entry-actions">' . $kb_back_link . $kb_character_status_button . $characterMenu . '</div>';
         $kb_entry_heading = str_replace('<span class="af-ac-character-hero__divider"', $characterTools . '<span class="af-ac-character-hero__divider"', $kb_entry_heading);
+        if ($characterMenu !== '' && af_kb_frontend_asset_allowed('page_runtime')) $kb_entry_heading .= af_kb_character_detail_menu_script();
     }
     $viewTemplate = $type === 'character' ? 'knowledgebase_view_character' : 'knowledgebase_view';
     eval("\$af_kb_content = \"" . af_kb_get_template($viewTemplate) . "\";");
@@ -14407,4 +14409,9 @@ function af_kb_character_info_icon(string $field): string
 {
     $icons = ['character_name_ru'=>'fa-user','character_prototype'=>'fa-id-card','character_nicknames'=>'fa-user-tag','character_gen'=>'fa-venus-mars','character_origin'=>'fa-dna','character_origin_variant'=>'fa-layer-group','character_archetype'=>'fa-shield-halved','character_faction'=>'fa-users','character_weapon'=>'fa-khanda','character_age'=>'fa-calendar','character_height'=>'fa-ruler-vertical','character_weight'=>'fa-weight-scale','character_activity'=>'fa-briefcase'];
     return $icons[$field] ?? 'fa-tag';
+}
+
+/** Character-only menu behavior follows the existing dossier keyboard contract. */
+function af_kb_character_detail_menu_script(): string {
+ return '<script>(function(){if(window.afCharacterDetailMenuBound)return;window.afCharacterDetailMenuBound=true;var selector=".af-ac-character-menu";function setOpen(root,open,focusFirst){if(!root)return;var button=root.querySelector(".af-ac-character-menu__toggle"),panel=root.querySelector(".af-ac-character-menu__panel");if(!button||!panel)return;button.setAttribute("aria-expanded",open?"true":"false");panel.hidden=!open;if(open&&focusFirst){var first=panel.querySelector("[role=menuitem]:not([disabled])");if(first)first.focus();}}function closeAll(except){document.querySelectorAll(selector).forEach(function(root){if(root!==except)setOpen(root,false,false);});}document.addEventListener("click",function(event){var button=event.target.closest&&event.target.closest(".af-ac-character-menu__toggle");if(button){var root=button.closest(selector),opening=button.getAttribute("aria-expanded")!=="true";closeAll(root);setOpen(root,opening,opening);return;}var item=event.target.closest&&event.target.closest(".af-ac-character-menu__item");if(item){var itemRoot=item.closest(selector);setOpen(itemRoot,false,false);if(event.defaultPrevented){var toggle=itemRoot.querySelector(".af-ac-character-menu__toggle");if(toggle)toggle.focus();}return;}if(!(event.target.closest&&event.target.closest(selector)))closeAll(null);});document.addEventListener("keydown",function(event){var root=event.target.closest&&event.target.closest(selector);if(!root)return;var button=root.querySelector(".af-ac-character-menu__toggle"),panel=root.querySelector(".af-ac-character-menu__panel"),items=panel?Array.prototype.slice.call(panel.querySelectorAll("[role=menuitem]:not([disabled])")):[],index=items.indexOf(event.target);if(event.key==="Escape"){event.preventDefault();setOpen(root,false,false);button.focus();return;}if((event.key==="ArrowDown"||event.key==="ArrowUp")&&event.target===button){event.preventDefault();setOpen(root,true,false);if(items.length)items[event.key==="ArrowDown"?0:items.length-1].focus();return;}if(index<0||!items.length)return;if(event.key==="ArrowDown"||event.key==="ArrowUp"){event.preventDefault();items[(index+(event.key==="ArrowDown"?1:items.length-1))%items.length].focus();}else if(event.key==="Home"){event.preventDefault();items[0].focus();}else if(event.key==="End"){event.preventDefault();items[items.length-1].focus();}});document.addEventListener("focusin",function(event){if(!(event.target.closest&&event.target.closest(selector)))closeAll(null);});})();</script>';
 }
