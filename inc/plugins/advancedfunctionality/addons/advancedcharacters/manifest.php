@@ -12,6 +12,12 @@ return [
             ['script' => 'characters.php'],
         ],
         'resources' => [
+            'character_catalog_stylesheet' => [
+                'mode' => 'contextual',
+                'routes' => [],
+                'response_rules' => [['has_character_catalog' => true]],
+                'directory_fallback' => false,
+            ],
             // Character detail is rendered by Knowledge Base on its normal
             // route. The page provider grants this stylesheet only after it
             // sees the character-specific view wrapper.
