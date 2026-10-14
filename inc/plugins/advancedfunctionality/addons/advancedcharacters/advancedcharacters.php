@@ -37,7 +37,16 @@ function af_characters_pre_output_page(string &$page): void
     $assetAllowed = $hasDetail
         ? af_frontend_asset_allowed(AF_CHARACTERS_ID, 'character_detail_stylesheet', null, ['has_character_detail' => true])
         : af_frontend_asset_allowed(AF_CHARACTERS_ID, 'character_catalog_stylesheet', null, ['has_character_catalog' => true]);
-    if (!$assetAllowed || strpos($page, 'data-af-advancedcharacters-css') !== false) {
+    if (!$assetAllowed) return;
+
+    // Only Character surfaces opt out of ATF's outer KB panel.
+    $page = preg_replace_callback('~(<(?:div|main)\b[^>]*\bclass\s*=\s*)([\x22\x27])([^\x22\x27]*\baf-kb-page\b[^\x22\x27]*)\2~i', static function (array $m): string {
+        $classes = preg_split('/\s+/', trim($m[3]));
+        if (!in_array('af-kb-page', $classes, true) || in_array('af-kb-page--characters', $classes, true)) return $m[0];
+        return $m[1] . $m[2] . $m[3] . ' af-kb-page--characters' . $m[2];
+    }, $page, 1) ?? $page;
+
+    if (strpos($page, 'data-af-advancedcharacters-css') !== false) {
         return;
     }
 
