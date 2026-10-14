@@ -228,7 +228,7 @@ body.atf-active .af-wanted-modal {
   --aw-warm: #c99c77;
   color: var(--aw-text);
 }
-body.atf-active .af-wanted { border: 1px solid var(--aw-border); border-radius: var(--atf-radius-md, 9px); background: linear-gradient(150deg, color-mix(in srgb, var(--aw-surface) 96%, transparent), color-mix(in srgb, var(--aw-page) 98%, transparent)); }
+/* The standalone page frame is owned by ATF; inner Wanted surfaces stay here. */
 body.atf-active .af-wanted .af-kb-header h1 { color: var(--aw-text); font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.8rem, 3vw, 2.45rem); font-weight: 500; letter-spacing: .05em; }
 body.atf-active .af-wanted-page-description { color: var(--aw-muted); }
 body.atf-active .af-wanted-filters,
@@ -595,19 +595,22 @@ body .af-wanted.af-wanted--detail-page {
 body .af-wanted .af-wanted-detail.af-wanted-detail--dossier {
   position: relative; isolation: isolate; display: block; width: 100%; max-width: 100%;
   margin: 0 auto; padding: 22px; overflow: visible;
+}
+/* Retain the dossier frame only as the non-ATF fallback. */
+body:not(.atf-active) .af-wanted .af-wanted-detail.af-wanted-detail--dossier {
   border: 1px solid #88718f; border-radius: 9px;
   background: linear-gradient(135deg, rgb(10 15 26 / 96%), rgb(8 12 21 / 97%));
   box-shadow: inset 0 0 0 3px #0a101b, inset 0 0 0 4px rgb(201 156 119 / 45%), 0 0 18px rgb(117 77 153 / 15%);
 }
-body .af-wanted .af-wanted-detail.af-wanted-detail--dossier::before,
-body .af-wanted .af-wanted-detail.af-wanted-detail--dossier::after {
+body:not(.atf-active) .af-wanted .af-wanted-detail.af-wanted-detail--dossier::before,
+body:not(.atf-active) .af-wanted .af-wanted-detail.af-wanted-detail--dossier::after {
   position: absolute; z-index: 1; content: ""; pointer-events: none;
 }
-body .af-wanted .af-wanted-detail.af-wanted-detail--dossier::before {
+body:not(.atf-active) .af-wanted .af-wanted-detail.af-wanted-detail--dossier::before {
   inset: 8px; border: 1px solid rgb(201 156 119 / 35%); border-radius: 12px;
   clip-path: polygon(0 0, 38px 0, 38px 38px, calc(100% - 38px) 38px, calc(100% - 38px) 0, 100% 0, 100% 100%, calc(100% - 38px) 100%, calc(100% - 38px) calc(100% - 38px), 38px calc(100% - 38px), 38px 100%, 0 100%);
 }
-body .af-wanted .af-wanted-detail.af-wanted-detail--dossier::after {
+body:not(.atf-active) .af-wanted .af-wanted-detail.af-wanted-detail--dossier::after {
   inset: 3px; border-radius: 7px;
   background:
     linear-gradient(135deg, transparent 46%, var(--aw-warm) 48%, var(--aw-warm) 51%, transparent 53%) left top / 18px 18px no-repeat,

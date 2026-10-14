@@ -13,6 +13,15 @@ body.atf-active {
   --atf-color-border: #3a485b;
   --atf-color-border-strong: #607089;
 
+  /* Shared page frame; deliberately independent of character element tokens. */
+  --atf-frame-cut: 6px;
+  --atf-frame-edge: #a8a0fa;
+  --atf-frame-edge-soft: #5561a0;
+  --atf-frame-background: #0a101b;
+  --atf-frame-inner-line: rgb(119 133 205 / 43%);
+  --atf-frame-ornament-size: 37px;
+  --atf-frame-ornament-inset: 10px;
+
   /* Shape */
   --atf-radius-sm: 0.25rem;
   --atf-radius-md: 0.5rem;
@@ -62,10 +71,11 @@ body.atf-active .pun.atf-layout-shell {
   max-width: 100%;
   margin-inline: auto;
   min-width: 0;
-  padding-inline: 0;
+  padding-inline: var(--atf-shell-padding-inline, 0);
 }
 
-body.atf-active .pun.atf-page-shell {
+body.atf-active .pun.atf-page-shell,
+body.atf-active .pun.atf-layout-shell {
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -78,7 +88,7 @@ body.atf-active .pun.atf-page-shell {
     max-width: 100% !important;
     min-width: 0 !important;
     margin-inline: auto !important;
-    padding-inline: 0 !important;
+    padding-inline: var(--atf-shell-padding-inline, 0) !important;
   }
 }
 
@@ -94,6 +104,87 @@ body.atf-active .pun.atf-page-shell :is(
   box-sizing: border-box;
   min-width: 0;
   max-width: 100%;
+}
+
+/* Ornate frame component. Existing ATF, KB and Wanted page roots are semantic aliases:
+   no template/DB migration or addon runtime is needed. Only standalone roots
+   receive decoration, even when an addon puts its page inside an ATF shell.
+   Clip ONLY the two paint layers: menus, sticky controls and modal descendants
+   retain their normal containing blocks and can overflow the page. */
+body.atf-active :is(.atf-ornate-frame, .pun.atf-page-shell, .af-kb-page, .pun.atf-layout-shell > .af-wanted):not(
+  :is(.atf-ornate-frame, .atf-page-shell, .af-kb-page, .af-wanted) *
+) {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  box-sizing: border-box;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+body.atf-active .pun.atf-layout-shell > .af-wanted:not(.af-wanted--detail-page) {
+  padding: max(16px, calc(var(--atf-frame-ornament-inset) + 6px));
+}
+body.atf-active .pun.atf-page-shell {
+  --atf-shell-padding-inline: max(16px, calc(var(--atf-frame-ornament-inset) + 6px));
+  padding-block: var(--atf-shell-padding-inline);
+}
+body.atf-active :is(.atf-ornate-frame, .pun.atf-page-shell, .af-kb-page, .pun.atf-layout-shell > .af-wanted):not(
+  :is(.atf-ornate-frame, .atf-page-shell, .af-kb-page, .af-wanted) *
+)::before,
+body.atf-active :is(.atf-ornate-frame, .pun.atf-page-shell, .af-kb-page, .pun.atf-layout-shell > .af-wanted):not(
+  :is(.atf-ornate-frame, .atf-page-shell, .af-kb-page, .af-wanted) *
+)::after {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  content: "";
+  box-sizing: border-box;
+  border-radius: 0;
+  pointer-events: none;
+  clip-path: polygon(
+    var(--atf-frame-cut) 0, calc(100% - var(--atf-frame-cut)) 0,
+    100% var(--atf-frame-cut), 100% calc(100% - var(--atf-frame-cut)),
+    calc(100% - var(--atf-frame-cut)) 100%, var(--atf-frame-cut) 100%,
+    0 calc(100% - var(--atf-frame-cut)), 0 var(--atf-frame-cut)
+  );
+  background: linear-gradient(125deg, var(--atf-frame-edge), var(--atf-frame-edge-soft) 38%, #6973a8 70%, var(--atf-frame-edge));
+}
+body.atf-active :is(.atf-ornate-frame, .pun.atf-page-shell, .af-kb-page, .pun.atf-layout-shell > .af-wanted):not(
+  :is(.atf-ornate-frame, .atf-page-shell, .af-kb-page, .af-wanted) *
+)::after {
+  /* Parallel 1px diagonal inset: cut shrinks by 2 - sqrt(2). */
+  clip-path: polygon(
+    calc(var(--atf-frame-cut) - 0.586px) 0, calc(100% - var(--atf-frame-cut) + 0.586px) 0,
+    100% calc(var(--atf-frame-cut) - 0.586px), 100% calc(100% - var(--atf-frame-cut) + 0.586px),
+    calc(100% - var(--atf-frame-cut) + 0.586px) 100%, calc(var(--atf-frame-cut) - 0.586px) 100%,
+    0 calc(100% - var(--atf-frame-cut) + 0.586px), 0 calc(var(--atf-frame-cut) - 0.586px)
+  );
+  inset: 1px;
+  z-index: -1;
+  padding: calc(var(--atf-frame-ornament-inset) - 1px);
+  background:
+    linear-gradient(135deg, var(--atf-frame-edge), transparent 60%) left top / var(--atf-frame-ornament-size) 1px no-repeat,
+    linear-gradient(135deg, var(--atf-frame-edge), transparent 60%) left top / 1px var(--atf-frame-ornament-size) no-repeat,
+    linear-gradient(225deg, var(--atf-frame-edge), transparent 60%) right top / var(--atf-frame-ornament-size) 1px no-repeat,
+    linear-gradient(225deg, var(--atf-frame-edge), transparent 60%) right top / 1px var(--atf-frame-ornament-size) no-repeat,
+    linear-gradient(45deg, var(--atf-frame-edge), transparent 60%) left bottom / var(--atf-frame-ornament-size) 1px no-repeat,
+    linear-gradient(45deg, var(--atf-frame-edge), transparent 60%) left bottom / 1px var(--atf-frame-ornament-size) no-repeat,
+    linear-gradient(315deg, var(--atf-frame-edge), transparent 60%) right bottom / var(--atf-frame-ornament-size) 1px no-repeat,
+    linear-gradient(315deg, var(--atf-frame-edge), transparent 60%) right bottom / 1px var(--atf-frame-ornament-size) no-repeat,
+    radial-gradient(ellipse at 50% 0%, rgb(84 70 140 / 19%), transparent 65%),
+    linear-gradient(135deg, #0d1424, #090e1c 65%, #15152b);
+  background-color: var(--atf-frame-background);
+  background-origin: content-box, content-box, content-box, content-box,
+    content-box, content-box, content-box, content-box, border-box, border-box;
+  box-shadow: inset 0 0 0 3px var(--atf-frame-background),
+    inset 0 0 0 4px var(--atf-frame-inner-line),
+    inset 0 0 0 6px var(--atf-frame-background),
+    inset 0 0 0 7px var(--atf-frame-inner-line),
+    inset 0 0 18px rgb(84 70 140 / 12%);
 }
 
 body.atf-active .atf-section { margin-block: var(--atf-space-6); }
