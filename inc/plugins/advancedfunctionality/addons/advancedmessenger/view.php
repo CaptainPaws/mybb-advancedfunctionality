@@ -7,6 +7,7 @@ function af_advancedmessenger_t(string $key): string
 {
     global $mybb;
     $ru = [
+        'participants'=>'участников', 'group_rename'=>'Название группы', 'group_save'=>'Сохранить', 'group_unavailable'=>'Ответ всей группе невозможен: один из участников недоступен. Частичная отправка не выполнена.', 'group_limit'=>'Число участников превышает ваш лимит получателей ЛС. Сообщение не отправлено.',
         'draft_action'=>'Черновик', 'preview_action'=>'Просмотр', 'send_action'=>'Отправить', 'cancel'=>'Отмена', 'search_title'=>'Расширенный поиск ЛС', 'search_submit'=>'Найти сообщения', 'criteria'=>'Основные критерии', 'filters'=>'Фильтры', 'sorting'=>'Сортировка', 'sent_copy'=>'Сохранённая отправленная копия; подтверждение прочтения недоступно', 'receipt_confirmed'=>'Прочтение подтверждено MyBB', 'quoted_history'=>'Предыдущие цитаты', 'online'=>'В сети', 'profile'=>'Профиль собеседника', 'title'=>'Личные сообщения', 'compose'=>'Написать сообщение', 'dialogs'=>'Диалоги', 'all'=>'Все сообщения',
         'folders'=>'Папки', 'tools'=>'Инструменты', 'search'=>'Поиск собеседника',
         'content_search'=>'Поиск по сообщениям', 'advanced_search'=>'Расширенный поиск',
@@ -28,6 +29,7 @@ function af_advancedmessenger_t(string $key): string
         'response'=>'Сервер вернул страницу вместо ответа API. Откройте диалог обычным переходом, чтобы увидеть сообщение MyBB.',
     ];
     $en = [
+        'participants'=>'participants', 'group_rename'=>'Group name', 'group_save'=>'Save', 'group_unavailable'=>'Cannot reply to every participant: a member is unavailable. No partial delivery was made.', 'group_limit'=>'The group exceeds your PM recipient limit. No message was sent.',
         'draft_action'=>'Draft', 'preview_action'=>'Preview', 'send_action'=>'Send', 'cancel'=>'Cancel', 'search_title'=>'Advanced message search', 'search_submit'=>'Find messages', 'criteria'=>'Main criteria', 'filters'=>'Filters', 'sorting'=>'Sort', 'sent_copy'=>'Saved sent copy; read confirmation unavailable', 'receipt_confirmed'=>'Read receipt confirmed by MyBB', 'quoted_history'=>'Earlier quotes', 'online'=>'Online', 'profile'=>'Participant profile', 'title'=>'Messages', 'compose'=>'New message', 'dialogs'=>'Conversations', 'all'=>'All conversations',
         'folders'=>'Folders', 'tools'=>'Tools', 'search'=>'Find a participant',
         'content_search'=>'Search messages', 'advanced_search'=>'Advanced search',
@@ -112,12 +114,13 @@ function af_advancedmessenger_sidebar(array $context): string
         $row = $dialog['row'];
         $user = $dialog['user'];
         $direct = str_starts_with($dialog['key'], 'user:');
-        $name = $direct ? $user['username'] : $parser->parse_badwords((string)($row['subject'] ?? af_advancedmessenger_t('group')));
+        $group = str_starts_with($dialog['key'], 'group:');
+        $name = ($direct || $group) ? $user['username'] : $parser->parse_badwords((string)($row['subject'] ?? af_advancedmessenger_t('group')));
         $url = (int)$row['folder'] === 3 ? 'private.php?action=send&pmid='.(int)$row['pmid']
             : 'private.php?action=read&pmid='.(int)$row['pmid'].'&am_folder='.$folder;
         if ((int)$row['folder'] !== 3) $url .= '&am_name='.rawurlencode($context['name']).'&am_page='.(int)$context['dialogs']['page'];
         $active = $dialog['key'] === $context['active'];
-        $avatar = af_advancedmessenger_avatar($user);
+        $avatar = $group ? '<span class="am-group-avatar"><i class="fa-solid fa-users" aria-hidden="true"></i></span>' : af_advancedmessenger_avatar($user);
         $snippet = $parser->text_parse_message((string)($row['message'] ?? ''), ['filter_badwords'=>1]);
         $snippet = my_substr(trim(preg_replace('/\s+/u', ' ', strip_tags($snippet)) ?? ''), 0, 110);
         $html .= '<a class="am-dialog'.($active ? ' is-active' : '').'" href="'.af_advancedmessenger_e($url).'"'
@@ -150,7 +153,9 @@ function af_advancedmessenger_bubble(array $row): string
     $name = $row['author_username'] ?? null;
     if ($name === null) { $author = get_user((int)$row['fromid']); $name = $author['username'] ?? af_advancedmessenger_t('unknown'); }
     // Message content is parsed directly: never compose a forum postbit here.
-    $author = get_user((int)$row['fromid']) ?: ['uid'=>0, 'username'=>$name, 'avatar'=>''];
+    $author = array_key_exists('author_username', $row)
+        ? ['uid'=>(int)$row['fromid'], 'username'=>$name, 'avatar'=>$row['avatar'] ?? '', 'avatartype'=>$row['avatartype'] ?? '']
+        : (get_user((int)$row['fromid']) ?: ['uid'=>0, 'username'=>$name, 'avatar'=>'']);
     $profile = get_profile_link((int)$row['fromid']); // Already attribute-escaped by MyBB.
     $avatar = !empty($author['uid'])
         ? '<a class="am-bubble__avatar" href="'.$profile.'" aria-label="'.af_advancedmessenger_e((string)$name).'">'.af_advancedmessenger_avatar($author).'</a>'
@@ -158,17 +163,18 @@ function af_advancedmessenger_bubble(array $row): string
     $html = '<article class="am-bubble'.($outgoing ? ' am-bubble--out' : '').'" data-am-pmid="'.$id
         .'" data-am-unread="'.($unread && !$outgoing ? '1' : '0').'">'
         .(!$outgoing ? $avatar : '')
-        .'<div class="am-bubble__body">'.af_advancedmessenger_parse_message($row).'</div>'
+        .'<div class="am-bubble__body">'.(!empty($row['am_group']) ? '<a class="am-group-author" href="'.$profile.'">'.($outgoing ? af_advancedmessenger_avatar($author) : '').'<span>'.af_advancedmessenger_e((string)$name).'</span></a>' : '').af_advancedmessenger_parse_message($row).'</div>'
         .'<footer class="am-bubble__foot"><a href="private.php?action=read&amp;pmid='.$id.'"><time datetime="'.gmdate('c',(int)$row['dateline']).'">'.my_date((string)$mybb->settings['timeformat'],(int)$row['dateline']).'</time></a>'
         .($outgoing ? af_advancedmessenger_receipt_indicator($row) : '')
         .(!$outgoing ? '<span class="am-visually-hidden" data-am-state="1">'.af_advancedmessenger_e(af_advancedmessenger_t($state)).'</span>' : '')
         .'<details class="am-message-actions" data-am-menu="1"><summary aria-label="'.af_advancedmessenger_e(af_advancedmessenger_t('actions')).'" title="'.af_advancedmessenger_e(af_advancedmessenger_t('actions')).'">'.af_advancedmessenger_icon('actions').'</summary><div class="am-dropdown" popover="manual"><nav>';
     if (!empty($mybb->usergroup['cansendpms'])) {
+        $gid = (int)(af_am_group_links()[$id]['gid'] ?? 0);
         foreach (['reply'=>'reply', 'quote'=>'reply', 'forward'=>'forward'] as $label => $do) {
-            $html .= af_advancedmessenger_link('private.php?action=send&do='.$do.'&pmid='.$id.($label === 'reply' ? '&am_noquote=1' : ''), af_advancedmessenger_t($label), true, $label);
+            $html .= af_advancedmessenger_link('private.php?action=send&do='.$do.'&pmid='.$id.($label === 'reply' ? '&am_noquote=1' : '').($gid && $do === 'reply' ? '&am_gid='.$gid : ''), af_advancedmessenger_t($label), true, $label);
         }
         if (count(af_advancedmessenger_reply_all_ids($row, (int)$mybb->user['uid'])) > 1) {
-            $html .= af_advancedmessenger_link('private.php?action=send&do=replyall&pmid='.$id,af_advancedmessenger_t('replyall'),true,'replyall');
+            $html .= af_advancedmessenger_link('private.php?action=send&do=replyall&pmid='.$id.($gid ? '&am_gid='.$gid : ''),af_advancedmessenger_t('replyall'),true,'replyall');
         }
     }
     $html .= af_advancedmessenger_link('private.php?action=read&pmid='.$id, af_advancedmessenger_t('open'), false, 'open').'</nav>';
@@ -224,6 +230,7 @@ function af_advancedmessenger_render_history(array $history): string
 function af_advancedmessenger_dialog_header(string $key, string $title, int $pmid, int $folder): string
 {
     global $mybb;
+    if (str_starts_with($key, 'group:')) return af_am_group_header((int)substr($key, 6), $pmid, $folder);
     $peer = str_starts_with($key, 'user:') ? (int)substr($key, 5) : 0;
     $user = $peer ? get_user($peer) : false;
     $profile = $user ? get_profile_link($peer) : ''; // MyBB already escapes this attribute URL.

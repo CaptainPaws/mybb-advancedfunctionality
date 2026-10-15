@@ -50,7 +50,7 @@
                 if (pending) sessionStorage.removeItem(pending);
                 sessionStorage.removeItem('am:pending:' + result.dataset.uid);
             } catch (_) { /* Storage may be disabled. */ }
-            if (parent !== window) parent.postMessage({ type: 'advancedmessenger:complete', kind: result.dataset.kind }, location.origin);
+            if (parent !== window) parent.postMessage({ type: 'advancedmessenger:complete', kind: result.dataset.kind, pmid: Number(result.dataset.pmid) }, location.origin);
             else location.replace('private.php');
             return;
         }

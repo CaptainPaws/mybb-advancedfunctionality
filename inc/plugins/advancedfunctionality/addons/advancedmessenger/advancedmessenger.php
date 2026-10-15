@@ -3,9 +3,9 @@
 if (!defined('IN_MYBB') || !defined('AF_ADDONS')) { die('No direct access'); }
 require_once __DIR__.'/repository.php';
 require_once __DIR__.'/view.php';
+require_once __DIR__.'/groups.php';
 
-// No installation/deactivation writes: core AF owns only the enabled setting.
-// In particular, this addon never leases, updates or restores private_* rows.
+// Group metadata has an additive schema; native private_* tables/templates are never altered.
 function af_advancedmessenger_init(): void
 {
     global $plugins;
@@ -16,6 +16,11 @@ function af_advancedmessenger_init(): void
               'private_results_end','private_advanced_search'] as $hook) {
         $plugins->add_hook($hook, 'af_advancedmessenger_compose', 10000);
     }
+    $plugins->add_hook('datahandler_pm_validate', 'af_am_group_validate', 10000);
+    $plugins->add_hook('datahandler_pm_insert_commit', 'af_am_group_capture', 0);
+    $plugins->add_hook('datahandler_pm_insert_savedcopy_commit', 'af_am_group_capture', 0);
+    $plugins->add_hook('datahandler_pm_insert_updatedraft_commit', 'af_am_group_draft', 0);
+    $plugins->add_hook('datahandler_pm_insert_end', 'af_am_group_sent', 10000);
     $plugins->add_hook('redirect', 'af_advancedmessenger_embedded_redirect', 10000);
     $plugins->add_hook('private_do_send_end', 'af_advancedmessenger_sent', 10000);
     $plugins->add_hook('private_do_search_process', 'af_advancedmessenger_filter_recipient', 10000);
@@ -51,9 +56,27 @@ function af_advancedmessenger_start(): void
         error_no_permission();
     }
     if (function_exists('af_frontend_asset_allowed') && !af_frontend_asset_allowed('advancedmessenger','runtime')) return;
+    af_am_groups_schema();
     if ($mybb->get_input('am_panel')) $header = $footer = '';
     header('Cache-Control: private, no-store');
     $action = $mybb->get_input('action');
+    if ($action === 'am_group_rename') {
+        if ($mybb->request_method !== 'post' || !verify_post_check($mybb->get_input('my_post_key'), true)) error_no_permission();
+        $gid = $mybb->get_input('am_gid', MyBB::INPUT_INT);
+        $group = af_am_group($gid);
+        if (!$group || (int)$group['creator'] !== (int)$mybb->user['uid']) error_no_permission();
+        $title = my_substr(trim($mybb->get_input('am_group_title')), 0, 180);
+        if ($title === '') error(af_advancedmessenger_t('group_rename'));
+        $GLOBALS['db']->update_query('af_am_groups', ['title'=>$GLOBALS['db']->escape_string($title)], 'gid='.$gid);
+        $anchor = af_advancedmessenger_owned($mybb->get_input('pmid', MyBB::INPUT_INT));
+        redirect($anchor ? 'private.php?action=read&pmid='.(int)$anchor['pmid'].'&am_latest=1' : 'private.php');
+        exit;
+    }
+    if ($action === 'send' && !$mybb->get_input('am_gid') && $mybb->get_input('pmid')) {
+        $draft = af_advancedmessenger_owned($mybb->get_input('pmid', MyBB::INPUT_INT));
+        if ($draft && (int)$draft['folder'] === 3) $mybb->input['am_gid'] = (int)(af_am_group_links()[(int)$draft['pmid']]['gid'] ?? 0);
+    }
+    if (in_array($action, ['send','do_send'], true) && $mybb->get_input('am_gid')) af_am_group_prepare();
     if ($action === 'am_history') {
         af_advancedmessenger_require_api_token();
         $anchor = af_advancedmessenger_owned($mybb->get_input('pmid', MyBB::INPUT_INT));
@@ -142,7 +165,7 @@ function af_advancedmessenger_compose(): void
             : af_advancedmessenger_history($anchor,(int)$anchor['dateline'],(int)$anchor['pmid']+1);
         $GLOBALS['am_key'] = $history['key'];
         $GLOBALS['am_history'] = af_advancedmessenger_render_history($history);
-        if (!str_starts_with($history['key'], 'user:')) {
+        if (str_starts_with($history['key'], 'message:')) {
             // Preserve native participant display and reply-all for group mail.
             $GLOBALS['am_history'] = '<div class="am-group-info">'.(string)($pm['subject_extra'] ?? '').'</div>'
                 .af_advancedmessenger_render_history(['rows'=>[$anchor]]);
@@ -152,6 +175,10 @@ function af_advancedmessenger_compose(): void
             global $db;
             $q = $db->simple_select('users', 'username', 'uid='.(int)substr($history['key'],5));
             $GLOBALS['am_title'] = af_advancedmessenger_e((string)($db->fetch_field($q,'username') ?: af_advancedmessenger_t('unknown')));
+        }
+        if (str_starts_with($history['key'], 'group:')) {
+            $group = af_am_group((int)substr($history['key'], 6));
+            $GLOBALS['am_title'] = af_advancedmessenger_e($group['title']);
         }
         $GLOBALS['am_dialog_header'] = af_advancedmessenger_dialog_header($history['key'], $GLOBALS['am_title'], (int)$anchor['pmid'], $GLOBALS['am_folder']);
         if ($history['cursor']) {
@@ -166,6 +193,11 @@ function af_advancedmessenger_compose(): void
                 .'&am_reply='.(int)$anchor['pmid'].'&am_panel=1';
             $GLOBALS['am_composer'] = '<iframe class="am-composer" id="am-composer" title="'.af_advancedmessenger_e(af_advancedmessenger_t('reply'))
                 .'" src="'.af_advancedmessenger_e($url).'" data-am-key="'.af_advancedmessenger_e($history['key']).'"></iframe>';
+        }
+        if (!empty($mybb->usergroup['cansendpms']) && str_starts_with($history['key'], 'group:') && (int)$anchor['folder'] !== 4) {
+            $gid = (int)substr($history['key'], 6);
+            $url = 'private.php?action=send&am_gid='.$gid.'&am_panel=1&subject='.rawurlencode(my_substr('Re: '.html_entity_decode($GLOBALS['am_title'], ENT_QUOTES, 'UTF-8'), 0, 85));
+            $GLOBALS['am_composer'] = '<iframe class="am-composer" id="am-composer" title="'.af_advancedmessenger_e(af_advancedmessenger_t('reply')).'" src="'.af_advancedmessenger_e($url).'" data-am-key="group:'.$gid.'"></iframe>';
         }
         if ($mybb->get_input('am_fragment')) {
             af_advancedmessenger_json(['html'=>$GLOBALS['am_history'], 'older'=>$GLOBALS['am_older'],
@@ -216,6 +248,9 @@ function af_advancedmessenger_compose_editor(): void
     global $mybb, $templates, $db;
     $GLOBALS['am_draft_key'] = 'compose:'.$mybb->get_input('pmid', MyBB::INPUT_INT).':'.$mybb->get_input('do').':'.$mybb->get_input('uid', MyBB::INPUT_INT);
     $GLOBALS['am_is_quote'] = 0;
+    $GLOBALS['am_group_id'] = $mybb->get_input('am_gid', MyBB::INPUT_INT);
+    $GLOBALS['am_group_readonly'] = $GLOBALS['am_group_id'] ? 'readonly' : '';
+    $GLOBALS['am_group_hide_bcc'] = $GLOBALS['am_group_id'] ? 'hidden' : '';
     $reply = af_advancedmessenger_owned($mybb->get_input('am_reply', MyBB::INPUT_INT));
     if ($reply && str_starts_with(af_advancedmessenger_identity($reply, (int)$mybb->user['uid']), 'user:')) {
         $key = af_advancedmessenger_identity($reply, (int)$mybb->user['uid']);
@@ -267,6 +302,12 @@ function af_advancedmessenger_compose_editor(): void
             .af_advancedmessenger_parse_message(['message'=>$mybb->get_input('message'), 'fromid'=>(int)$mybb->user['uid'],
                 'author_username'=>$mybb->user['username'], 'smilieoff'=>!empty($mybb->input['options']['disablesmilies']) ? 1 : 0]).'</div></section>';
     }
+    if ($GLOBALS['am_group_id']) {
+        $GLOBALS['to'] = af_advancedmessenger_e($mybb->get_input('to'));
+        $GLOBALS['bcc'] = '';
+        $GLOBALS['am_draft_key'] = 'group:'.$GLOBALS['am_group_id'];
+        $GLOBALS['optionschecked']['savecopy'] = 'checked="checked"';
+    }
     $GLOBALS['am_address_open'] = trim((string)($GLOBALS['to'] ?? '')) === '' ? 'open' : '';
     $GLOBALS['am_draft_key'] = af_advancedmessenger_e($GLOBALS['am_draft_key']);
     if ($mybb->get_input('am_panel')) $templates->cache['private_send'] = file_get_contents(__DIR__.'/templates/panel_send.html');
@@ -278,6 +319,7 @@ function af_advancedmessenger_sent(): void
     global $mybb, $templates, $headerinclude, $lang, $header, $footer;
     $kind = $mybb->get_input('saveasdraft') ? 'draft' : 'sent';
     $am_kind = $kind;
+    $am_sent_pmid = (int)($GLOBALS['am_sent_pmid'] ?? 0);
     $am_uid = (int)$mybb->user['uid'];
     $am_body_class = !empty($mybb->settings['af_adaptivethemeframework_enabled']) ? 'atf-active am-body' : 'am-body';
     $am_layout_attr = $mybb->get_input('am_panel') ? 'data-af-layout="content-only"' : '';
@@ -374,7 +416,7 @@ function af_advancedmessenger_assets(string &$page): string
         $decision = af_theme_stylesheet_delivery_decision('advancedmessenger', 'assets/'.$file);
         $path = '/inc/plugins/advancedfunctionality/addons/advancedmessenger/assets/'.$file;
         $href = !empty($decision['include_file'])
-            ? rtrim((string)$mybb->settings['bburl'], '/').$path.'?v=1.3.2'
+            ? rtrim((string)$mybb->settings['bburl'], '/').$path.'?v=1.4.0'
             : (string)($decision['theme_href'] ?? '');
         if ($href === '' || (!empty($decision['include_file']) && strpos($page, $path) !== false)
             || strpos($page, $href) !== false || strpos($page, af_advancedmessenger_e($href)) !== false) continue;

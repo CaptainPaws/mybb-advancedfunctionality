@@ -345,6 +345,12 @@
             // Native send has committed. Refresh once to rebuild latest activity,
             // quotas and every header counter using MyBB's canonical state.
             const latest = new URL(location.href);
+            if (Number.isInteger(event.data.pmid) && event.data.pmid > 0) {
+                latest.searchParams.set('action', 'read');
+                latest.searchParams.set('pmid', String(event.data.pmid));
+                latest.searchParams.delete('am_folder');
+                latest.searchParams.delete('fid');
+            }
             latest.searchParams.set('am_latest', '1');
             location.assign(latest.href);
         });

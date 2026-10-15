@@ -14,15 +14,15 @@
 	</header>
 	<div class="am-pm__notice">{$am_pm_notice}</div>
 	<form action="private.php" method="post" name="input" data-am-editor="1" data-am-quote="{$am_is_quote}" data-am-draft="{$am_draft_key}" data-am-uid="{$am_uid}" data-am-restore="{$am_label_draft_restore}" data-am-sending="{$am_label_sending}" class="am-pm-compose__form am-stack">
-		<input type="hidden" name="am_draft_ref" value="{$am_draft_key}" /><input type="hidden" name="am_panel" value="{$am_panel}" /><input type="hidden" name="am_reply" value="{$am_reply_id}" /><input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+		<input type="hidden" name="am_origin" value="1" /><input type="hidden" name="am_gid" value="{$am_group_id}" /><input type="hidden" name="am_draft_ref" value="{$am_draft_key}" /><input type="hidden" name="am_panel" value="{$am_panel}" /><input type="hidden" name="am_reply" value="{$am_reply_id}" /><input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 		<div class="am-pm-compose__feedback">{$preview}{$send_errors}</div>
 		<details class="am-card am-compose-disclosure" {$am_address_open}><summary><i class="fa-solid fa-address-card" aria-hidden="true"></i><span>{$lang->compose_to} / {$lang->compose_subject}</span><span class="am-recipient-preview">{$to}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><section class="am-section am-stack" aria-label="{$lang->compose_pm}">
 			<div class="am-form-row">
-				<div class="am-pm-compose__label-line"><label class="am-form-row__label" for="to">{$lang->compose_to}</label><button type="button" class="am-pm-compose__bcc-toggle" onclick="showBcc();">{$lang->compose_bcc_show}</button></div>
-				<textarea name="to" id="to" rows="1" cols="38" tabindex="1">{$to}</textarea>
+				<div class="am-pm-compose__label-line"><label class="am-form-row__label" for="to">{$lang->compose_to}</label><button type="button" class="am-pm-compose__bcc-toggle" {$am_group_hide_bcc} onclick="showBcc();">{$lang->compose_bcc_show}</button></div>
+				<textarea {$am_group_readonly} name="to" id="to" rows="1" cols="38" tabindex="1">{$to}</textarea>
 				<div class="am-form-row__hint">{$lang->separate_names}{$buddy_select_to}{$max_recipients}</div>
 			</div>
-			<div class="am-form-row" id="bcc_area">
+			<div class="am-form-row" id="bcc_area" {$am_group_hide_bcc}>
 				<label class="am-form-row__label" for="bcc">{$lang->compose_bcc}</label>
 				<textarea name="bcc" id="bcc" rows="1" cols="38" tabindex="1">{$bcc}</textarea>
 				<div class="am-form-row__hint">{$buddy_select_bcc}</div>

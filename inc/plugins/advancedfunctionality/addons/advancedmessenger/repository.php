@@ -5,6 +5,8 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 function af_advancedmessenger_identity(array $row, int $owner): string
 {
     $id = (int)$row['pmid'];
+    $link = af_am_group_links()[$id] ?? null;
+    if ($link && (int)$row['folder'] !== 3) return 'group:'.(int)$link['gid'];
     if ((int)$row['folder'] === 3 || (int)$row['fromid'] < 1) return 'message:'.$id;
     $recipients = is_array($row['recipients'] ?? null)
         ? $row['recipients'] : my_unserialize((string)($row['recipients'] ?? ''));
@@ -77,6 +79,7 @@ function af_advancedmessenger_dialogs(int $folder, int $page, string $name = '')
         $peer = str_starts_with($key, 'user:') ? (int)substr($key, 5)
             : ((int)$row['fromid'] === $owner ? (int)$row['toid'] : (int)$row['fromid']);
         $dialog['user'] = $users[$peer] ?? ['uid' => 0, 'username' => af_advancedmessenger_t('unknown'), 'avatar' => ''];
+        if (str_starts_with($key, 'group:')) $dialog['user'] = ['uid'=>0, 'username'=>af_am_group_links()[(int)$row['pmid']]['title'], 'avatar'=>''];
         if ($name !== '' && my_strpos(my_strtolower($dialog['user']['username']), my_strtolower($name)) === false) {
             unset($dialogs[$key]);
         }
@@ -104,7 +107,12 @@ function af_advancedmessenger_history(array $anchor, int $beforeTime = 0, int $b
     $owner = (int)$mybb->user['uid'];
     $key = af_advancedmessenger_identity($anchor, $owner);
     $where = "uid={$owner}";
-    if (str_starts_with($key, 'user:')) {
+    if (str_starts_with($key, 'group:')) {
+        $gid = (int)substr($key, 6);
+        if (!af_am_group($gid)) error_no_permission();
+        $where .= ' AND pmid IN (SELECT pmid FROM '.TABLE_PREFIX.'af_am_links WHERE gid='.$gid.')';
+        $where .= (int)$anchor['folder'] === 4 ? ' AND folder=4' : ' AND folder NOT IN (3,4)';
+    } elseif (str_starts_with($key, 'user:')) {
         $peer = (int)substr($key, 5);
         $where .= " AND ((fromid={$owner} AND toid={$peer}) OR (fromid={$peer} AND toid={$owner}))";
         $where .= (int)$anchor['folder'] === 4 ? ' AND folder=4' : ' AND folder NOT IN (3,4)';
@@ -141,7 +149,7 @@ function af_advancedmessenger_history(array $anchor, int $beforeTime = 0, int $b
             .' LEFT JOIN '.TABLE_PREFIX.'users u ON u.uid=pm.fromid'
             .' LEFT JOIN '.TABLE_PREFIX.'userfields f ON f.ufid=pm.fromid'
             ." WHERE pm.uid={$owner} AND pm.pmid IN (".implode(',', $ids).') ORDER BY pm.dateline ASC, pm.pmid ASC');
-        while ($row = $db->fetch_array($query)) $rows[] = $row;
+        while ($row = $db->fetch_array($query)) { $row['author_username'] ??= af_advancedmessenger_t('unknown'); $row['am_group'] = str_starts_with($key, 'group:'); $rows[] = $row; }
     }
     // Self-PMs have an inbox copy and a saved sent copy. Pair exact copies only;
     // never collapse different pmids merely because their subject/time matches.

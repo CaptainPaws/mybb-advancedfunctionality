@@ -4,7 +4,7 @@ return [
     'id' => 'advancedmessenger',
     'name' => 'Advanced Messenger',
     'description' => 'Диалоги и встроенный редактор поверх штатных личных сообщений MyBB.',
-    'version' => '1.3.2',
+    'version' => '1.4.0',
     'author' => 'AdvancedFunctionality',
     'bootstrap' => 'advancedmessenger.php',
     'frontend' => [

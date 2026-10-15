@@ -278,3 +278,54 @@ introduced. Manual validation: send to two visible recipients plus BCC, check
 individual alerts, reply-all as sender and recipient, preview and submit, and
 verify native recipient limits/ignore rules. Functional verification requires
 a configured MyBB forum and remains with the site owner.
+
+### 1.4.0 — persistent group conversations
+
+Additive metadata migration (install/upgrade/activate, also ensured once per
+active private.php request for an existing deployment):
+
+- af_am_groups: generated gid primary key, title, creator, created, active.
+- af_am_members: primary key (gid, uid), joined timestamp, active flag.
+- af_am_links: unique pmid, primary key (gid, pmid) for paginated group queries.
+
+No MyBB table is altered. There is no message-body table or historical backfill.
+Deactivation and uninstall deliberately retain metadata; no destructive removal
+endpoint is provided. Normal AF database credentials need CREATE privileges for
+the initial migration. InnoDB/collation are used on MySQL; generated keys use the
+native PostgreSQL/SQLite syntax on those drivers.
+
+A new successfully validated AM send to two or more other visible recipients
+creates a fresh gid. BCC mail stays ordinary mass mail. Commit hooks collect exact
+recipient and saved-copy IDs on the PM handler instance; insert-end creates the
+group only after successful delivery. A sender's own selected UID is excluded
+for group delivery and savecopy is forced, so the author has one outgoing copy.
+There is no subject/time/participant matching between distinct sends.
+
+Group reply forms carry am_gid and am_origin; membership is checked before
+native send/preview, recipients are populated on the server, and native limits,
+permissions, ignore lists, quotas, CSRF and validation still apply. Deleted
+participants or an exceeded limit fail without silent partial delivery. The
+validation hook verifies that resolved recipients equal the full membership
+minus the sender. Group recipient fields are read-only, and BCC is unavailable
+in group replies. To send a separate private message use New message. Draft
+copies preserve gid but are excluded from group history. Existing mass-mail
+reply-all is retained; old copies are not migrated.
+
+Sidebar and history use group keys from links joined to the current user's
+existing PM copies and active membership. History retains the existing cursor
+and 30-message batches, with one joined author query rather than per-message
+user lookups. Deleted PM copies cannot reappear; trash remains a separate view.
+Groups have an icon, title, participant list with profiles, per-message author
+names/avatars, and a creator-only CSRF-protected rename form. Renaming changes
+only metadata. Reply subjects are capped at MyBB's 85-character limit.
+
+AAM is unchanged. Its exact recipient-copy PM links resolve to a group through
+metadata when AM is enabled, and to normal private.php reading when disabled.
+Successful group send returns the author's exact saved-copy ID to the existing
+iframe completion handler, opening the same conversation after sending.
+
+Deployment verification is intentionally limited to PHP/JS syntax and targeted
+integration/security inspection. The site owner should run A -> B,C; B -> A,C;
+C -> A,B, then check separate groups with identical members, BCC mass mail,
+failed recipients, drafts, rename permissions, deletion/trash, notification links
+and disabled-AM native reading. No new automated test suite is included.
