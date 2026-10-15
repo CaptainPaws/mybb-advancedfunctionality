@@ -1,0 +1,62 @@
+/* Physical, page-owned stylesheet. No modal selectors or global form resets. */
+body #af-aas-workspace.af-aas-workspace {
+  --aas-accent:var(--af-aas-accent,var(--atf-color-accent,#35c9ff));
+  --aas-bg:color-mix(in srgb,var(--atf-color-page-subtle,#101d2c) 45%,#020d19);
+  --aas-soft:color-mix(in srgb,var(--aas-accent) 8%,var(--aas-bg));
+  --aas-line:color-mix(in srgb,var(--aas-accent) 40%,var(--aas-bg));
+  --aas-pad:clamp(16px,2vw,22px);
+  display:grid; gap:16px; min-width:0; color:var(--aas-text,var(--atf-color-text,#edf2f7));
+}
+body #af-aas-workspace.af-aas-workspace .af-aas-workspace-head { display:grid; gap:8px; margin:0; }
+body #af-aas-workspace.af-aas-workspace .af-aas-workspace-head :is(h1,p) { display:flex; align-items:center; gap:12px; margin:0; }
+body #af-aas-workspace.af-aas-workspace .af-aas-workspace-head i { flex:0 0 auto; }
+body #af-aas-workspace.af-aas-workspace :is(.af-aas-section,.af-aas-form-card) {
+  box-sizing:border-box; min-width:0; margin:0; padding:var(--aas-pad);
+  border:1px solid var(--aas-accent); border-radius:9px;
+  background:linear-gradient(120deg,var(--aas-soft),var(--aas-bg) 60%);
+  box-shadow:0 0 8px color-mix(in srgb,var(--aas-accent) 18%,transparent);
+}
+body #af-aas-workspace.af-aas-workspace .af-aas-account-list { margin:0; padding:0; gap:8px; }
+body #af-aas-workspace.af-aas-workspace .af-aas-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-items:stretch; }
+body #af-aas-workspace.af-aas-workspace .af-aas-form-card { display:flex; flex-direction:column; align-items:stretch; gap:4px; height:100%; }
+body #af-aas-workspace.af-aas-workspace .af-aas-section-head { display:flex; align-items:center; gap:14px; padding:0 0 14px; margin:0 0 12px; border-bottom:1px solid color-mix(in srgb,var(--aas-accent) 28%,transparent); }
+body #af-aas-workspace.af-aas-workspace .af-aas-form-card .af-aas-section-head { min-block-size:78px; margin-bottom:8px; }
+body #af-aas-workspace.af-aas-workspace .af-aas-section-head h2 { font-size:1.15rem; line-height:1.3; margin:0 0 4px; }
+body #af-aas-workspace.af-aas-workspace .af-aas-section-head p { line-height:1.45; margin:0; font-size:.82rem; }
+body #af-aas-workspace.af-aas-workspace .af-aas-form-card > label { font-size:.85rem; line-height:1.4; margin:8px 0 2px; }
+body #af-aas-workspace.af-aas-workspace .af-aas-field { position:relative; display:flex; align-items:center; min-width:0; flex:0 0 auto; }
+body #af-aas-workspace.af-aas-workspace .af-aas-field > input:not([type="hidden"]) {
+  box-sizing:border-box; width:100%; max-width:100%; min-width:0; height:40px; min-height:40px;
+  padding:8px 40px; margin:0; border:1px solid var(--aas-line); border-radius:6px;
+  color:var(--aas-text); background:var(--aas-bg); color-scheme:dark; font:inherit;
+}
+body #af-aas-workspace.af-aas-workspace .af-aas-field > i { position:absolute; inset-inline-start:12px; top:50%; transform:translateY(-50%); color:var(--aas-muted); pointer-events:none; }
+body #af-aas-workspace.af-aas-workspace .af-aas-field > button { inset-inline-end:4px; top:50%; transform:translateY(-50%); width:32px; height:32px; padding:4px; }
+/* Browser autofill paints over ordinary background-color declarations. */
+body #af-aas-workspace.af-aas-workspace .af-aas-field > input:-webkit-autofill {
+  -webkit-text-fill-color:var(--aas-text); caret-color:var(--aas-text);
+  -webkit-box-shadow:0 0 0 1000px var(--aas-bg) inset; box-shadow:0 0 0 1000px var(--aas-bg) inset;
+}
+body #af-aas-workspace.af-aas-workspace .af-aas-field > input:autofill {
+  color:var(--aas-text); caret-color:var(--aas-text); box-shadow:0 0 0 1000px var(--aas-bg) inset;
+}
+body #af-aas-workspace.af-aas-workspace .af-aas-form-hint { margin:10px 0 12px; font-size:.78rem; line-height:1.5; }
+body #af-aas-workspace.af-aas-workspace .af-aas-form-card > .af-aas-ui-button { align-self:center; margin:auto 0 0; max-width:100%; min-height:44px; white-space:normal; text-align:center; }
+body #af-aas-workspace.af-aas-workspace .af-aas-ui-button { border:1px solid var(--aas-accent); background:linear-gradient(180deg,color-mix(in srgb,var(--aas-accent) 20%,var(--aas-bg)),var(--aas-bg) 65%); }
+body #af-aas-workspace.af-aas-workspace .af-aas-privacy {
+  display:grid; grid-template-columns:minmax(0,1fr) auto; column-gap:18px; row-gap:12px;
+  background-image:linear-gradient(90deg,color-mix(in srgb,var(--aas-bg) 94%,transparent),color-mix(in srgb,var(--aas-bg) 72%,transparent) 48%,color-mix(in srgb,var(--aas-bg) 12%,transparent)),url('https://warprift.ru/uploads/af_gallery/1/2026/10/2240bb976cd73c5cbb555246b3001753.png');
+  background-size:cover; background-position:center; background-repeat:no-repeat;
+}
+body #af-aas-workspace.af-aas-workspace .af-aas-privacy > .af-aas-section-head { grid-column:1 / -1; padding-bottom:12px; margin:0; }
+body #af-aas-workspace.af-aas-workspace .af-aas-privacy > label { grid-column:1 / -1; padding:4px 0; margin:0; gap:10px; align-items:center; }
+body #af-aas-workspace.af-aas-workspace .af-aas-privacy > .af-aas-form-hint { grid-column:1; align-self:end; margin:0; }
+body #af-aas-workspace.af-aas-workspace .af-aas-privacy > button { grid-column:2; align-self:end; justify-self:end; width:fit-content; max-width:100%; margin:0; min-width:140px; }
+@media(max-width:760px) {
+  body #af-aas-workspace.af-aas-workspace { --aas-pad:16px; }
+  body #af-aas-workspace.af-aas-workspace .af-aas-form-grid { grid-template-columns:minmax(0,1fr); }
+  body #af-aas-workspace.af-aas-workspace .af-aas-form-card .af-aas-section-head { min-block-size:0; }
+  body #af-aas-workspace.af-aas-workspace .af-aas-form-card > .af-aas-ui-button { margin-top:12px; }
+  body #af-aas-workspace.af-aas-workspace .af-aas-privacy { grid-template-columns:minmax(0,1fr); }
+  body #af-aas-workspace.af-aas-workspace .af-aas-privacy > :is(.af-aas-form-hint,button) { grid-column:1; }
+}

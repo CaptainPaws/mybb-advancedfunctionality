@@ -1,6 +1,7 @@
-<section class="af-aas-workspace af-aas-surface" data-aas-action-surface data-walk-url="{$walk}" data-post-key="{$token}">
+<link rel="stylesheet" href="inc/plugins/advancedfunctionality/addons/advancedaccountswitcher/assets/account-workspace.css?v=1.2.1">
+<section id="af-aas-workspace" class="af-aas-workspace af-aas-surface" data-aas-action-surface data-walk-url="{$walk}" data-post-key="{$token}">
 <header class="af-aas-workspace-head"><h1><i class="fa-solid fa-users" aria-hidden="true"></i>Дополнительные аккаунты</h1><p><i class="fa-solid fa-circle-info" aria-hidden="true"></i>Управление дополнительными аккаунтами доступно только из мастер-аккаунта.</p></header>
-<section class="af-aas-section"><header class="af-aas-section-head"><i class="fa-solid fa-users" aria-hidden="true"></i><div><h2>Привязанные аккаунты</h2></div></header><div class="af-aas-account-list" data-aas-cards>{$cards}</div><p class="af-aas-walk-result" role="status" aria-live="polite"></p></section>
+<section class="af-aas-section"><div class="af-aas-account-list" data-aas-cards>{$cards}</div><p class="af-aas-walk-result" role="status" aria-live="polite"></p></section>
 <div class="af-aas-form-grid">{$forms}</div>
 <form method="post" action="{$action}" class="af-aas-section af-aas-privacy"><input type="hidden" name="my_post_key" value="{$token}"><input type="hidden" name="do" value="save_privacy"><header class="af-aas-section-head"><i class="fa-solid fa-eye" aria-hidden="true"></i><div><h2>Приватность</h2><p>Настройки отображения ваших дополнительных аккаунтов.</p></div></header><label class="af-aas-personal-autopost"><input type="checkbox" name="hide_in_list" value="1" {$checked}>Не показывать связанные аккаунты в списке пользователей</label><p class="af-aas-form-hint">{$privacy_hint}</p><button type="submit" class="af-aas-ui-button"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>Сохранить</button></form>
 </section>
