@@ -32,7 +32,14 @@ function af_menu_containers(): array
 /** Drawer groups shared by providers and the ACP presentation controls. */
 function af_menu_sections(): array
 {
-    return ['profile'=>'Профиль', 'links'=>'Ссылки', 'settings'=>'Настройки', 'theme'=>'Тема'];
+    $sections = ['profile'=>'Профиль', 'links'=>'Ссылки', 'settings'=>'Настройки', 'theme'=>'Тема'];
+    $stored = json_decode((string)($GLOBALS['mybb']->settings['af_advancedmenu_sections'] ?? '{}'), true);
+    foreach (is_array($stored) ? $stored : [] as $key => $row) {
+        if (is_string($key) && preg_match('~^s_[a-z0-9_]{1,22}$~D', $key) && is_array($row)) {
+            $sections[$key] = (string)($row['label'] ?? $key);
+        }
+    }
+    return $sections;
 }
 
 /** Section placement is separate from child presentation overrides.
@@ -47,9 +54,11 @@ function af_menu_section_config(): array
         $row = is_array($stored[$key] ?? null) ? $stored[$key] : [];
         $out[$key] = [
             'label'=>trim((string)($row['label'] ?? '')) ?: $label,
-            'icon'=>preg_replace('~[^a-z0-9 _-]~i', '', (string)($row['icon'] ?? 'fa-solid '.$icons[$key])),
+            'icon'=>preg_replace('~[^a-z0-9 _-]~i', '', (string)($row['icon'] ?? 'fa-solid '.($icons[$key] ?? 'fa-folder'))),
             'container'=>isset($row['container']) && array_key_exists($row['container'], af_menu_containers()) ? $row['container'] : null,
             'sortorder'=>(int)($row['sortorder'] ?? (count($out) + 1) * 10),
+            'enabled'=>(int)($row['enabled'] ?? 1),
+            'visibility'=>(string)($row['visibility'] ?? ''),
         ];
     }
     return $out;
@@ -224,7 +233,7 @@ function af_menu_apply_override(array $item, ?array $override): array
     $section = (string)($override['section'] ?? $item['section']);
     $item['section'] = $section === 'none' || array_key_exists($section, af_menu_sections()) ? $section : $item['section'];
     if (($override['label_override'] ?? '') !== '') $item['label'] = $override['label_override'];
-    if (($override['icon_override'] ?? '') !== '') $item['icon'] = $override['icon_override'];
+    if (isset($override['icon_override'])) $item['icon'] = $override['icon_override'];
     $item['canonical_identity'] = af_menu_provider_identity($item);
     return $item;
 }
@@ -1331,6 +1340,7 @@ function af_advancedmenu_navigation_rows(): array
         $section = af_menu_normalize_section((string)($item['section'] ?? 'links'));
         $container = af_menu_normalize_container((string)($item['container'] ?? $item['location'] ?? 'main'));
         $placement = $config[$section]['container'] ?? null;
+        if (isset($config[$section]) && (empty($config[$section]['enabled']) || !af_advancedmenu_item_is_visible(['visibility'=>$config[$section]['visibility']]))) return;
         $container = $placement ?? $container;
         $html = $custom ? af_advancedmenu_render_item($item) : af_advancedmenu_render_registry_item($item);
         if (trim($html) === '') return;

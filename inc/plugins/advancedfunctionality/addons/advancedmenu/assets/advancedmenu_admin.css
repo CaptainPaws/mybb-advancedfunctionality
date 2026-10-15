@@ -252,3 +252,57 @@ input#af-am-icon-input{
   font-size:18px;
   line-height:1;
 }
+
+/* Scoped ACP tree: public navigation and ATF geometry are not affected. */
+.af-am-editor { --am-border:#bcc5d0; --am-surface:#fff; --am-muted:#526174; color:#243145; max-width:1200px; }
+.af-am-editor button, .af-am-edit-dialog button { cursor:pointer; padding:6px 10px; }
+.af-am-editor-toolbar, .af-am-editor-footer { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 0; }
+.af-am-editor-toolbar label { margin-left:auto; }
+.af-am-editor-toolbar input { max-width:100%; }
+.af-am-editor-footer { position:sticky; bottom:0; z-index:5; background:var(--am-surface); border-top:1px solid var(--am-border); }
+.af-am-container { border:1px solid var(--am-border); border-radius:6px; margin:12px 0; background:#f3f5f8; }
+.af-am-container-title { cursor:pointer; padding:14px; font-size:1.1em; font-weight:bold; }
+.af-am-editor .af-am-tree-list { list-style:none; min-height:42px; margin:0; padding:8px; border:2px solid transparent; border-radius:5px; }
+.af-am-tree-list:empty::after { content:'Перетащите сюда пункт'; display:block; padding:10px; color:var(--am-muted); border:1px dashed var(--am-border); }
+.af-am-editor .af-am-tree-node { margin:5px 0; padding:0; list-style:none; }
+.af-am-node-card { display:flex; align-items:center; gap:10px; padding:9px; border:1px solid var(--am-border); border-radius:5px; background:var(--am-surface); min-width:0; }
+.af-am-section > .af-am-node-card { cursor:pointer; background:#e8edf5; }
+.af-am-section > summary { list-style:none; }
+.af-am-section > summary::-webkit-details-marker { display:none; }
+.af-am-section[open] > summary > .af-am-section-arrow { transform:rotate(90deg); }
+.af-am-section > .af-am-tree-list { margin-left:30px; border-left:2px solid var(--am-border); }
+.af-am-node-label { flex:1; overflow-wrap:anywhere; min-width:0; }
+.af-am-node-icon { width:24px; flex:0 0 24px; text-align:center; }
+.af-am-drag-handle { cursor:grab!important; touch-action:pan-y; }
+.af-am-editor.is-dragging .af-am-drag-handle { cursor:grabbing!important; }
+.af-am-node-status, .af-am-source, .af-am-count { color:var(--am-muted); font-size:12px; }
+.af-am-count { border-radius:20px; background:#d2dced; padding:2px 7px; }
+.af-am-node-status.is-disabled { opacity:.65; }
+.af-am-node-menu { position:relative; }
+.af-am-node-menu > button { cursor:pointer; padding:5px 10px; list-style:none; font-weight:bold; }
+.af-am-node-actions { position:absolute; right:0; top:100%; z-index:10; background:var(--am-surface); border:1px solid var(--am-border); border-radius:5px; padding:5px; min-width:160px; box-shadow:0 5px 18px #0002; display:grid; gap:4px; }
+.af-am-node-actions button { text-align:left; white-space:nowrap; }
+.af-am-editor .af-am-tree-list.is-drop-allowed { border-color:#3d75c5; background:#e6effc; }
+.af-am-editor .af-am-drop-marker { height:4px; min-height:4px; list-style:none; border:0; border-radius:2px; background:#265fba; margin:6px 0; padding:0; pointer-events:none; }
+.af-am-editor [hidden] { display:none!important; }
+.af-am-editor.is-filtered .af-am-drag-handle { cursor:not-allowed!important; opacity:.4; }
+.af-am-editor.is-saving { pointer-events:none; opacity:.75; }
+.af-am-editor [data-am-status].is-error { color:#a12020; }
+.af-am-editor button:focus-visible, .af-am-editor summary:focus-visible, .af-am-edit-dialog :is(button,input,select,textarea):focus-visible { outline:2px solid #346bc0; outline-offset:2px; }
+.af-am-edit-dialog { width:min(480px,calc(100vw - 40px)); max-height:85vh; overflow-y:auto; padding:22px; border:1px solid #a9b7c9; border-radius:8px; color:#243145; background:#fff; }
+.af-am-edit-dialog::backdrop { background:#0006; }
+.af-am-edit-dialog h2 { margin-top:0; }
+.af-am-edit-field { display:grid; gap:5px; margin:12px 0; }
+.af-am-edit-field input:not([type=checkbox]), .af-am-edit-field textarea, .af-am-edit-dialog select { width:100%; box-sizing:border-box; padding:8px; }
+.af-am-edit-field textarea { min-height:90px; }
+.af-am-edit-field [readonly] { background:#edf0f4; color:#526174; }
+.af-am-dialog-actions { display:flex; gap:8px; margin-top:18px; }
+@media(max-width:720px) {
+  .af-am-node-card { flex-wrap:wrap; gap:7px; }
+  .af-am-node-label { flex-basis:50%; }
+  .af-am-source { display:none; }
+  .af-am-section > .af-am-tree-list { margin-left:12px; }
+  .af-am-editor-toolbar label { margin-left:0; }
+}
+
+.af-am-edit-dialog [hidden] { display:none!important; }
