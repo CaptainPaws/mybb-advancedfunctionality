@@ -42,7 +42,7 @@ function af_advancedmessenger_dialogs(int $folder, int $page, string $name = '')
     while ($row = $db->fetch_array($query)) {
         $key = af_advancedmessenger_identity($row, $owner);
         if (!isset($dialogs[$key])) $dialogs[$key] = ['key' => $key, 'row' => $row, 'unread' => 0];
-        if ((int)$row['status'] === 0 && (int)$row['folder'] !== 3 && (int)$row['folder'] !== 4) {
+        if ((int)$row['status'] === 0 && (int)$row['folder'] !== 2 && (int)$row['folder'] !== 3 && (int)$row['folder'] !== 4) {
             ++$dialogs[$key]['unread'];
         }
     }

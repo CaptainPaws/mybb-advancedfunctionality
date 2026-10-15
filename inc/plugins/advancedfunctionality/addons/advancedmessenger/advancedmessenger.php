@@ -87,6 +87,8 @@ function af_advancedmessenger_compose(): void
     $GLOBALS['am_body_class'] = !empty($mybb->settings['af_adaptivethemeframework_enabled']) ? 'atf-active am-body' : 'am-body';
     $GLOBALS['am_uid'] = (int)$mybb->user['uid'];
     $GLOBALS['am_panel'] = $mybb->get_input('am_panel') ? 1 : 0;
+    $GLOBALS['am_layout_attr'] = $GLOBALS['am_panel'] ? 'data-af-layout="content-only"' : '';
+    if ($GLOBALS['am_panel']) $GLOBALS['am_body_class'] .= ' am-panel-body';
     $GLOBALS['am_reply_id'] = max(0, $mybb->get_input('am_reply', MyBB::INPUT_INT));
     $GLOBALS['am_labels'] = '';
     foreach (['loading','error','response','read','open','back','close','older','select','sending','draft_local','draft_restore','empty_confirm'] as $key) {
@@ -95,6 +97,7 @@ function af_advancedmessenger_compose(): void
     }
     $GLOBALS['am_label_title'] = af_advancedmessenger_e(af_advancedmessenger_t('title'));
     $GLOBALS['am_label_latest'] = af_advancedmessenger_e(af_advancedmessenger_t('latest'));
+    $GLOBALS['am_search_peer'] = max(0, $mybb->get_input('am_peer', MyBB::INPUT_INT));
     $GLOBALS['am_label_recipient'] = af_advancedmessenger_e(af_advancedmessenger_t('recipient'));
     $GLOBALS['am_label_recipient_hint'] = af_advancedmessenger_e(af_advancedmessenger_t('recipient_hint'));
     $GLOBALS['am_label_folder_messages'] = af_advancedmessenger_e(af_advancedmessenger_t('folder_messages'));
@@ -130,11 +133,11 @@ function af_advancedmessenger_compose(): void
         $history = $mybb->get_input('am_latest') ? af_advancedmessenger_history($anchor)
             : af_advancedmessenger_history($anchor,(int)$anchor['dateline'],(int)$anchor['pmid']+1);
         $GLOBALS['am_key'] = $history['key'];
-        $GLOBALS['am_history'] = af_advancedmessenger_render_history($history,(int)$anchor['pmid'],(string)$GLOBALS['message']);
+        $GLOBALS['am_history'] = af_advancedmessenger_render_history($history);
         if (!str_starts_with($history['key'], 'user:')) {
             // Preserve native participant display and reply-all for group mail.
             $GLOBALS['am_history'] = '<div class="am-group-info">'.(string)($pm['subject_extra'] ?? '').'</div>'
-                .af_advancedmessenger_bubble($anchor, (string)$GLOBALS['message']);
+                .af_advancedmessenger_render_history(['rows'=>[$anchor]]);
         }
         $GLOBALS['am_title'] = (string)($pm['subject'] ?? ''); // Already escaped by core.
         if (str_starts_with($history['key'], 'user:')) {
@@ -142,6 +145,7 @@ function af_advancedmessenger_compose(): void
             $q = $db->simple_select('users', 'username', 'uid='.(int)substr($history['key'],5));
             $GLOBALS['am_title'] = af_advancedmessenger_e((string)($db->fetch_field($q,'username') ?: af_advancedmessenger_t('unknown')));
         }
+        $GLOBALS['am_dialog_header'] = af_advancedmessenger_dialog_header($history['key'], $GLOBALS['am_title'], (int)$anchor['pmid'], $GLOBALS['am_folder']);
         if ($history['cursor']) {
             [$time,$id] = $history['cursor'];
             $GLOBALS['am_older'] = '<button type="button" id="am-older" data-time="'.$time.'" data-id="'.$id.'">'.af_advancedmessenger_e(af_advancedmessenger_t('older')).'</button>';
@@ -157,7 +161,7 @@ function af_advancedmessenger_compose(): void
         }
         if ($mybb->get_input('am_fragment')) {
             af_advancedmessenger_json(['html'=>$GLOBALS['am_history'], 'older'=>$GLOBALS['am_older'],
-                'composer'=>$GLOBALS['am_composer'], 'title'=>html_entity_decode($GLOBALS['am_title'],ENT_QUOTES,'UTF-8'),
+                'composer'=>$GLOBALS['am_composer'], 'header'=>$GLOBALS['am_dialog_header'], 'title'=>html_entity_decode($GLOBALS['am_title'],ENT_QUOTES,'UTF-8'),
                 'pmid'=>$GLOBALS['am_current_pmid'], 'key'=>$GLOBALS['am_key'], 'unread'=>af_advancedmessenger_unread()]);
         }
     }
@@ -233,6 +237,11 @@ function af_advancedmessenger_compose_editor(): void
             $GLOBALS['am_draft_key'] = $ref;
         }
     }
+    if (!empty($GLOBALS['preview'])) {
+        $GLOBALS['preview'] = '<section class="am-compose-preview"><div class="am-bubble__body">'
+            .af_advancedmessenger_parse_message(['message'=>$mybb->get_input('message'), 'fromid'=>(int)$mybb->user['uid'],
+                'author_username'=>$mybb->user['username'], 'smilieoff'=>!empty($mybb->input['options']['disablesmilies']) ? 1 : 0]).'</div></section>';
+    }
     $GLOBALS['am_address_open'] = trim((string)($GLOBALS['to'] ?? '')) === '' ? 'open' : '';
     $GLOBALS['am_draft_key'] = af_advancedmessenger_e($GLOBALS['am_draft_key']);
     if ($mybb->get_input('am_panel')) $templates->cache['private_send'] = file_get_contents(__DIR__.'/templates/panel_send.html');
@@ -246,6 +255,7 @@ function af_advancedmessenger_sent(): void
     $am_kind = $kind;
     $am_uid = (int)$mybb->user['uid'];
     $am_body_class = !empty($mybb->settings['af_adaptivethemeframework_enabled']) ? 'atf-active am-body' : 'am-body';
+    $am_layout_attr = $mybb->get_input('am_panel') ? 'data-af-layout="content-only"' : '';
     $am_result_header = $mybb->get_input('am_panel') ? '' : (string)$header;
     $am_result_footer = $mybb->get_input('am_panel') ? '' : (string)$footer.'<atf-footer-placement></atf-footer-placement>';
     $am_result_classes = $mybb->get_input('am_panel') ? 'am-root am-panel' : 'pun atf-page-shell am-root';
@@ -277,6 +287,23 @@ function af_advancedmessenger_avatars(string &$page): string
 function af_advancedmessenger_filter_recipient(): void
 {
     global $mybb, $db, $lang, $searcharray;
+    // Scope the existing native search result set to the selected direct dialog.
+    // Core still owns keyword matching, permissions, search IDs and pagination.
+    $peer = max(0, $mybb->get_input('am_peer', MyBB::INPUT_INT));
+    if ($peer) {
+        verify_post_check($mybb->get_input('my_post_key'));
+        $ids = array_values(array_filter(array_map('intval', explode(',', (string)$searcharray['querycache']))));
+        $matched = [];
+        foreach (array_chunk($ids, 300) as $chunk) {
+            $q = $db->simple_select('privatemessages', 'pmid,fromid,toid,recipients,folder',
+                'uid='.(int)$mybb->user['uid'].' AND pmid IN ('.implode(',', $chunk).')');
+            while ($row = $db->fetch_array($q)) {
+                if (af_advancedmessenger_identity($row, (int)$mybb->user['uid']) === 'user:'.$peer) $matched[] = (int)$row['pmid'];
+            }
+        }
+        if (!$matched) error($lang->error_nosearchresults);
+        $searcharray['querycache'] = implode(',', $matched);
+    }
     $name = my_substr(trim($mybb->get_input('am_recipient')),0,120);
     if ($name === '') return;
     verify_post_check($mybb->get_input('my_post_key'));

@@ -1,9 +1,9 @@
 <html>
 <head><title>{$am_title} — {$lang->private_messaging}</title>{$headerinclude}</head>
-<body class="{$am_body_class}" data-atf-owned="1">
+<body class="{$am_body_class}" data-atf-owned="1" {$am_layout_attr}>
 {$am_header}
 {$am_outer_start}
-<header class="am-conversation-head"><h2 id="am-title">{$am_title}</h2><a id="am-latest" data-am-dialog="1" href="private.php?action=read&amp;pmid={$am_current_pmid}&amp;am_latest=1&amp;am_folder={$am_folder}">{$am_label_latest}</a></header>
+<header class="am-conversation-head" id="am-conversation-head">{$am_dialog_header}</header>
 <div class="am-history" id="am-history" tabindex="0" aria-label="{$am_label_title}">
     <div id="am-history-more">{$am_older}</div>
     <div id="posts_container"><div id="posts">{$am_history}</div></div>

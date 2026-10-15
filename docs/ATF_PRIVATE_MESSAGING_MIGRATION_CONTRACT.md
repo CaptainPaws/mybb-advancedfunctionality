@@ -8,7 +8,10 @@ messenger controller, AJAX and functional UI. ATF continues to own its existing
 AdvancedMessenger substitutes its own templates only in the request-local cache;
 it never leases or modifies those database rows. With AdvancedMessenger disabled,
 the Phase 1 ATF interface documented below remains unchanged. With ATF disabled,
-AdvancedMessenger uses its own templates/base styles and native theme postbits.
+AdvancedMessenger uses its own templates/base styles and compact PM bubbles.
+It parses message bodies directly with MyBB's parser; the postbit contracts below
+continue to describe the ATF interface with AdvancedMessenger disabled. Embedded
+AM tools and composer use AdvancedMenu's `content-only` layout contract.
 See [ADVANCEDMESSENGER.md](ADVANCEDMESSENGER.md) for the four-state matrix, read
 adapter cost, native handler boundary and AdvancedEditor lifecycle.
 

@@ -7,6 +7,26 @@
         const status = document.getElementById('am-status');
         const dialog = document.getElementById('am-panel-dialog');
         const tool = document.getElementById('am-tool-frame');
+        const layout = root.querySelector('.am-layout');
+        function fitLayout() {
+            if (!layout) return;
+            const viewport = window.visualViewport;
+            const bottom = (viewport?.height || window.innerHeight) + (viewport?.offsetTop || 0);
+            layout.style.height = Math.max(240, Math.floor(bottom - layout.getBoundingClientRect().top - 12)) + 'px';
+            fitComposer();
+        }
+        function fitComposer() {
+            const frame = document.getElementById('am-composer');
+            if (!frame?.dataset.amHeight || !layout) return;
+            // Expanded address/options remain reachable on short screens. In
+            // the normal collapsed state the frame fits its content exactly.
+            const cap = Math.max(120, Math.floor(layout.clientHeight * .6));
+            frame.style.height = Math.min(Number(frame.dataset.amHeight), cap) + 'px';
+        }
+        window.addEventListener('resize', fitLayout);
+        window.addEventListener('load', fitLayout);
+        window.visualViewport?.addEventListener('resize', fitLayout);
+        fitLayout();
         let generation = 0;
         let touching = false;
         let touchQueue = [];
@@ -84,6 +104,13 @@
             } catch (error) { notice(error.message || label('error')); }
             finally { touching = false; if (touchQueue.length) touchNext(); else refreshSidebar(); }
         }
+        function mergeDates() {
+            let previous = '';
+            document.querySelectorAll('#posts > .am-date').forEach(date => {
+                if (date.dataset.amDate === previous) date.remove();
+                else previous = date.dataset.amDate;
+            });
+        }
         function watchUnread() {
             observer?.disconnect();
             if (!('IntersectionObserver' in window)) return; // Core still marks the opened PM.
@@ -113,7 +140,7 @@
                 const posts = document.getElementById('posts');
                 posts.innerHTML = data.html;
                 document.getElementById('am-history-more').innerHTML = data.older;
-                document.getElementById('am-title').textContent = data.title;
+                document.getElementById('am-conversation-head').innerHTML = data.header;
                 document.getElementById('am-composer-host').innerHTML = data.composer;
                 root.dataset.amPmid = data.pmid;
                 root.dataset.amKey = data.key;
@@ -186,6 +213,7 @@
                     document.getElementById('posts').insertAdjacentHTML('afterbegin', data.html);
                     if (data.cursor) { older.dataset.time = data.cursor[0]; older.dataset.id = data.cursor[1]; }
                     else older.remove();
+                    mergeDates();
                     scroll.scrollTop = top + scroll.scrollHeight - height;
                     watchUnread();
                     notice('');
@@ -215,8 +243,15 @@
             else location.reload();
         });
         window.addEventListener('message', event => {
-            if (event.origin !== location.origin || !event.data || event.data.type !== 'advancedmessenger:complete') return;
+            if (event.origin !== location.origin || !event.data) return;
             const composer = document.getElementById('am-composer');
+            if (event.data.type === 'advancedmessenger:composer-size') {
+                if (event.source !== composer?.contentWindow || !Number.isFinite(event.data.height) || event.data.height < 1) return;
+                composer.dataset.amHeight = String(event.data.height);
+                fitComposer();
+                return;
+            }
+            if (event.data.type !== 'advancedmessenger:complete') return;
             if (event.source !== composer?.contentWindow && event.source !== tool.contentWindow) return;
             // Native send has committed. Refresh once to rebuild latest activity,
             // quotas and every header counter using MyBB's canonical state.

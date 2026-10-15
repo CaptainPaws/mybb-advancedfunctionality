@@ -24,6 +24,28 @@
         }
         const textarea = form.querySelector('textarea[name="message"]');
         if (!textarea) return;
+        // Measure the compact document, not its viewport: resizing must not loop.
+        if (parent !== window && window.frameElement?.id === 'am-composer') {
+            const panel = document.querySelector('[data-am-panel-page]');
+            let lastHeight = 0;
+            let scheduled = false;
+            function reportHeight() {
+                scheduled = false;
+                const height = Math.ceil(panel.getBoundingClientRect().height);
+                if (height !== lastHeight) {
+                    lastHeight = height;
+                    parent.postMessage({ type: 'advancedmessenger:composer-size', height }, location.origin);
+                }
+            }
+            function scheduleHeight() {
+                if (!scheduled) { scheduled = true; requestAnimationFrame(reportHeight); }
+            }
+            if (panel && 'ResizeObserver' in window) new ResizeObserver(scheduleHeight).observe(panel);
+            window.addEventListener('load', scheduleHeight);
+            document.addEventListener('af:editor-ready', scheduleHeight);
+            form.addEventListener('toggle', scheduleHeight, true);
+            scheduleHeight();
+        }
         const key = 'am:draft:' + form.dataset.amUid + ':' + form.dataset.amDraft;
         let instance = null;
         let submitting = false;

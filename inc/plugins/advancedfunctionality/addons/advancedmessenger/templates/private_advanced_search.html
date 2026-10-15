@@ -3,13 +3,13 @@
 <title>{$mybb->settings['bbname']} - {$lang->advanced_private_message_search}</title>
 {$headerinclude}
 </head>
-<body class="{$am_body_class}" data-atf-owned="1">
+<body class="{$am_body_class}" data-atf-owned="1" {$am_layout_attr}>
 {$am_header}
 {$am_outer_start}
 	<header class="am-pm__header am-card"><div class="am-pm__heading"><p class="am-pm__eyebrow">{$lang->private_messaging}</p><h1 class="am-pm__title">{$lang->advanced_private_message_search}</h1></div><div class="am-pm__links"><a href="private.php">{$lang->inbox}</a></div></header>
 	<form action="private.php" method="post" name="pmForm" class="am-pm-search__form">
 		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
-		<input type="hidden" name="action" value="do_search" />
+		<input type="hidden" name="action" value="do_search" /><input type="hidden" name="am_peer" value="{$am_search_peer}" />
 		<section class="am-section am-card">
 			<h2>{$lang->search_criteria}</h2>
 			<div class="am-form-row"><label class="am-form-row__label" for="keywords">{$lang->keywords}</label><input type="text" class="textbox" name="keywords" id="keywords" size="35" maxlength="250" /><div class="am-form-row__hint"><label><input type="checkbox" name="subject" checked="checked" value="1" /> {$lang->search_in_subject}</label><label><input type="checkbox" name="message" checked="checked" value="1" /> {$lang->search_in_message}</label></div></div>

@@ -3,18 +3,11 @@
 <title>{$mybb->settings['bbname']} - {$lang->private_messaging}</title>
 {$headerinclude}
 </head>
-<body class="{$am_body_class}" data-atf-owned="1">
+<body class="{$am_body_class}" data-atf-owned="1" {$am_layout_attr}>
 {$am_header}
 {$am_outer_start}
 	{$am_pm_before_content}
-	<header class="am-pm__header am-card">
-		<div class="am-pm__heading">
-			<p class="am-pm__eyebrow">{$lang->private_messaging}</p>
-			<h1 class="am-pm__title">{$foldername}</h1>
-		</div>
-		<div class="am-pm__links"><a href="private.php">{$lang->inbox}</a>{$am_pm_actions} | <a href="private.php?action=folders">{$lang->manage_folders}</a></div>
-		<div class="am-pm__quota">{$am_pm_quota}</div>
-	</header>
+	<header class="am-conversation-head"><h2>{$am_label_title}</h2></header>
 	<div class="am-pm__notice">{$am_pm_notice}</div>
 	<p class="am-welcome">{$am_label_select}</p><details class="am-native-list" {$am_list_open}><summary>{$am_label_folder_messages}</summary><form action="private.php" method="post" name="pmForm" class="am-pm__form">
 		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
