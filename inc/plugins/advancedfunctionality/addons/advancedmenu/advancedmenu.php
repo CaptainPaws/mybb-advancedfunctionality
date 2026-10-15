@@ -1363,6 +1363,37 @@ function af_menu_navigation_model(): array
             'section'=>af_menu_normalize_section((string)($item['section'] ?? 'links')),
             'sortorder'=>(int)$item['sort_order'], 'custom'=>true, 'data'=>$item];
     }
+    // Repair legacy section moves before exposing a tree that cannot be saved.
+    // A group's placement must satisfy every provider child, not its old row container.
+    $notices = [];
+    foreach ($sections as $key => &$section) {
+        $section['container'] = $section['container'] ?? 'user_drawer';
+        $allowed = array_keys(af_menu_containers());
+        $members = [];
+        foreach ($items as $id => $entry) {
+            if ($entry['section'] !== $key || ($config[$key]['container'] === null && $entry['container'] !== 'user_drawer')) continue;
+            $members[] = $id;
+            if (!$entry['custom']) $allowed = array_values(array_intersect($allowed, $entry['data']['allowed_containers']));
+        }
+        if ($members && $allowed && !in_array($section['container'], $allowed, true)) {
+            $section['container'] = $allowed[0];
+            foreach ($members as $id) if (in_array($items[$id]['container'], $allowed, true)) {
+                $section['container'] = $items[$id]['container']; break;
+            }
+            $notices[] = 'Секция «'.$section['label'].'» восстановлена в области «'.af_menu_containers()[$section['container']].'» согласно ограничениям провайдеров.';
+        }
+        // Incompatible legacy providers have no common area. Keep the section
+        // in place and retain only incompatible items as standalone permitted links.
+        foreach ($members as $id) {
+            $entry = $items[$id];
+            if (!$entry['custom'] && !in_array($section['container'], $entry['data']['allowed_containers'], true)) {
+                $items[$id]['section'] = 'none';
+                $items[$id]['data']['section'] = 'none';
+                $notices[] = 'Пункт «'.$entry['data']['label'].'» восстановлен вне несовместимой секции в области «'.af_menu_containers()[$entry['container']].'».';
+            }
+        }
+    }
+    unset($section);
     $tree = array_fill_keys(array_keys(af_menu_containers()), []);
     foreach ($sections as $key => &$section) {
         $section['container'] = $section['container'] ?? 'user_drawer';
@@ -1373,6 +1404,8 @@ function af_menu_navigation_model(): array
         $key = $item['section'];
         $parent = isset($sections[$key]) && ($config[$key]['container'] !== null || $item['container'] === 'user_drawer') ? $key : null;
         $container = $parent !== null ? $sections[$parent]['container'] : $item['container'];
+        $items[$id]['container'] = $container;
+        $items[$id]['data']['container'] = $container;
         if ($parent !== null) {
             foreach ($tree[$container] as &$node) if ($node['kind'] === 'section' && $node['id'] === $parent) $node['children'][] = $id;
             unset($node);
@@ -1389,7 +1422,7 @@ function af_menu_navigation_model(): array
         unset($node);
     }
     unset($nodes);
-    return ['items'=>$items, 'sections'=>$sections, 'tree'=>$tree, 'custom'=>$custom];
+    return ['items'=>$items, 'sections'=>$sections, 'tree'=>$tree, 'custom'=>$custom, 'notices'=>$notices];
 }
 
 /** Filter the shared saved tree without applying a second public sort. */

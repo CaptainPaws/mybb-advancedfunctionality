@@ -321,8 +321,18 @@
       var ids = kind === 'section' ? source.node.children : [id];
       return ids.every(function (child) { return state.items[child].allowed.indexOf(container) !== -1; });
     }
+    function placementError(kind,id,target) {
+      if(term)return 'Очистите поиск перед перемещением.';
+      if(kind==='section' && target.indexOf('root:')!==0)return 'Секции нельзя вкладывать друг в друга.';
+      var found=locate(kind,id), container=targetContainer(target);
+      if(!found || !container)return 'Недопустимая область переноса.';
+      var ids=kind==='section'?found.node.children:[id];
+      var blocked=ids.find(function(child){return state.items[child].allowed.indexOf(container)===-1;});
+      if(blocked){var item=state.items[blocked];return 'Пункт «'+item.label+'»: разрешены только области '+item.allowed.map(function(area){return config.containers[area];}).join(', ')+'.';}
+      return 'Перенос недоступен.';
+    }
     function move(kind, id, target, index) {
-      if (!allowed(kind, id, target)) { announce('Перенос запрещён: проверьте ограничения провайдера или очистите поиск.', true); return; }
+      if (!allowed(kind, id, target)) { announce(placementError(kind,id,target), true); return; }
       var from = locate(kind, id), to = listFor(target), value;
       if (from.list === to && from.index < index) index--;
       from.list.splice(from.index, 1);
@@ -494,13 +504,14 @@
       });
       root.classList.toggle('is-filtered',!!term);
     }
-    function clearDrop(){marker.remove();insertion=null;root.querySelectorAll('.is-drop-allowed').forEach(function(n){n.classList.remove('is-drop-allowed');});}
+    function clearDrop(){marker.remove();insertion=null;root.querySelectorAll('.is-drop-allowed, .is-drop-denied').forEach(function(n){n.classList.remove('is-drop-allowed','is-drop-denied');});}
     treeHost.addEventListener('dragstart',function(event){
       var handle=event.target.closest('[data-drag-handle]');
       if(!handle||term||saving){event.preventDefault();return;}
       drag={kind:handle.dataset.kind,id:handle.dataset.id};
       event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',drag.id);
       root.classList.add('is-dragging');
+      treeHost.querySelectorAll('[data-list]').forEach(function(list){if(!allowed(drag.kind,drag.id,list.dataset.list))list.classList.add('is-drop-denied');});
     });
     treeHost.addEventListener('dragover',function(event){
       if(!drag)return;
@@ -509,7 +520,7 @@
       var sectionHeading=event.target.closest('.af-am-section > summary');
       if(heading){heading.parentElement.open=true;list=heading.parentElement.querySelector(':scope > [data-list]');}
       if(sectionHeading && drag.kind==='item'){sectionHeading.parentElement.open=true;list=sectionHeading.parentElement.querySelector(':scope > [data-list]');}
-      if(!list||!allowed(drag.kind,drag.id,list.dataset.list)){clearDrop();event.dataTransfer.dropEffect='none';return;}
+      if(!list||!allowed(drag.kind,drag.id,list.dataset.list)){clearDrop();if(list){list.classList.add('is-drop-denied');announce(placementError(drag.kind,drag.id,list.dataset.list),true);}event.dataTransfer.dropEffect='none';return;}
       event.preventDefault();event.dataTransfer.dropEffect='move';
       var children=Array.from(list.children).filter(function(n){return n!==marker;});
       var before=children.find(function(n){var box=n.getBoundingClientRect();return event.clientY < box.top+box.height/2;});
@@ -559,6 +570,7 @@
     document.addEventListener('click',function(event){root.querySelectorAll('.af-am-node-menu').forEach(function(menu){if(!menu.contains(event.target)){menu.querySelector('.af-am-node-actions').hidden=true;menu.querySelector('button').setAttribute('aria-expanded','false');}});});
     window.addEventListener('beforeunload',function(event){if(dirty){event.preventDefault();event.returnValue='';}});
     render();
+    if(state.notices && state.notices.length){dirty=true;announce(state.notices.join(' ')+' Сохраните изменения, чтобы записать восстановленную структуру.');}
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootTree);else bootTree();
 })();

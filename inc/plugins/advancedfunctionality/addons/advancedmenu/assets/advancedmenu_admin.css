@@ -313,3 +313,7 @@ dialog.af-am-icp-modal::backdrop { background:rgba(0,0,0,.55); }
 dialog.af-am-icp-modal:not([open]) { display:none; }
 .af-am-edit-dialog .af-am-iconright { flex-wrap:wrap; }
 .af-am-edit-dialog .af-am-iconclear-btn.button { width:auto; }
+
+/* Provider restrictions are visible before a drag can be committed. */
+.af-am-editor .af-am-tree-list.is-drop-denied { border-color:#b34a4a; background:#fff0f0; cursor:not-allowed; }
+.af-am-container:has(> .is-drop-denied) > summary, .af-am-section:has(> .is-drop-denied) > summary { color:#9d2525; }

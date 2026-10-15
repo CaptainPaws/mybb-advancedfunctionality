@@ -22,7 +22,9 @@ function af_am_editor_catalog(?array $model = null): array
             'label','icon','default_container','section','default_sortorder'
         ]));
     }
-    foreach ($model['custom'] as $item) {
+    foreach ($model['items'] as $entry) {
+        if (!$entry['custom']) continue;
+        $item = $entry['data'];
         if (af_menu_is_logout($item)) continue;
         $id = 'c:'.(int)$item['id'];
         $items[$id] = ['id'=>$id, 'kind'=>'custom', 'key'=>$item['slug'], 'source'=>'AdvancedMenu', 'type'=>'link',
@@ -42,7 +44,7 @@ function af_am_editor_snapshot(): array
     $tree = $model['tree'];
     // Include all persisted rows, even unavailable providers, for stale-editor detection.
     $revision = hash('sha256', serialize([$items, af_menu_section_config(), af_menu_get_overrides(), $model['custom']]));
-    return ['items'=>$items, 'sections'=>$sections, 'tree'=>$tree, 'deleted'=>[], 'revision'=>$revision];
+    return ['items'=>$items, 'sections'=>$sections, 'tree'=>$tree, 'deleted'=>[], 'revision'=>$revision, 'notices'=>$model['notices']];
 }
 
 function af_am_editor_text(array $row, string $field, int $max, bool $required = false): string
@@ -83,7 +85,10 @@ function af_am_editor_validate(array $data, array $current): array
         if (!$old && !preg_match('~^n:[a-z0-9_-]{1,60}$~D', $id)) throw new InvalidArgumentException('Неизвестный идентификатор пункта.');
         $row = $data['items'][$id];
         $provider = $old && $old['kind'] === 'provider';
-        if ($provider && !in_array($container, $old['allowed'], true)) throw new InvalidArgumentException('Провайдер запрещает эту область для «'.$old['label'].'».');
+        if ($provider && !in_array($container, $old['allowed'], true)) {
+            $labels = array_intersect_key(af_menu_containers(), array_flip($old['allowed']));
+            throw new InvalidArgumentException('Пункт «'.$old['label'].'»: провайдер «'.$old['source'].'» разрешает только области: '.implode(', ', $labels).'. Переместите пункт или всю секцию в допустимую область.');
+        }
         $reset = $provider && !empty($row['reset']);
         $save = ['id'=>$id, 'kind'=>$provider ? 'provider' : 'custom', 'container'=>$container, 'section'=>$section, 'sortorder'=>$order,
             'label'=>$reset ? $old['defaults']['label'] : af_am_editor_text($row,'label',255,true),
