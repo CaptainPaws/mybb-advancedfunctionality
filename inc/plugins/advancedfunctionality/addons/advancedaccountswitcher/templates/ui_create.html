@@ -1,0 +1,8 @@
+<form method="post" action="{$action}" class="af-aas-form-card" data-aas-form-mode="create">
+<input type="hidden" name="my_post_key" value="{$token}"><input type="hidden" name="do" value="create">
+<header class="af-aas-section-head"><i class="fa-solid fa-user-plus" aria-hidden="true"></i><div><h2>Создать дополнительный аккаунт</h2><p>Новый аккаунт будет автоматически привязан к вашему мастер-аккаунту.</p></div></header>
+<label for="{$prefix}-new-name">Логин (username)</label><div class="af-aas-field"><i class="fa-solid fa-user" aria-hidden="true"></i><input id="{$prefix}-new-name" name="new_username" type="text" autocomplete="off" required></div>
+<label for="{$prefix}-new-password">Пароль</label><div class="af-aas-field"><i class="fa-solid fa-lock" aria-hidden="true"></i><input id="{$prefix}-new-password" name="new_password" type="password" autocomplete="new-password" required><button type="button" data-aas-password aria-label="Показать пароль" aria-pressed="false"><i class="fa-solid fa-eye" aria-hidden="true"></i></button></div>
+<label for="{$prefix}-new-password2">Пароль ещё раз</label><div class="af-aas-field"><i class="fa-solid fa-lock" aria-hidden="true"></i><input id="{$prefix}-new-password2" name="new_password2" type="password" autocomplete="new-password" required><button type="button" data-aas-password aria-label="Показать пароль" aria-pressed="false"><i class="fa-solid fa-eye" aria-hidden="true"></i></button></div>
+<p class="af-aas-form-hint"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>{$hint}</p><button type="submit" class="af-aas-ui-button"><i class="fa-solid fa-plus" aria-hidden="true"></i>Создать и привязать</button>
+</form>

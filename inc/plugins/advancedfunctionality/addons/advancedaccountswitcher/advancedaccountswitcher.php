@@ -1305,6 +1305,8 @@ function af_aas_json(array $payload, int $status = 200)
 ============================================================ */
 function af_aas_render_usercp_page()
 {
+    global $plugins;
+    af_aas_prepare_ajax();
     global $mybb, $db, $lang, $templates, $theme;
     global $headerinclude, $header, $footer, $usercpnav;
 
@@ -1383,156 +1385,14 @@ function af_aas_render_usercp_page()
         }
     }
 
-    // Warning (если не мастер)
-    $af_aas_warning = '';
-    if (!$isMaster && is_object($templates) && $templates->get('af_aas_ucp_warning_not_master') !== '') {
-        eval('$af_aas_warning = "'.$templates->get('af_aas_ucp_warning_not_master').'";');
+    if ($mybb->get_input('aas_view') && af_aas_is_ajax()) {
+        if ($mybb->request_method !== 'post') error_no_permission();
+        if (!$isMaster) error_no_permission();
+        af_aas_ui_json(['ok'=>true, 'forms'=>af_aas_add_forms('aas-modal')]);
     }
-
-    // ===== Список: мастер + attached =====
-    $items = [];
-
-    $masterUser = get_user($masterUid);
-    if ($masterUser && !empty($masterUser['uid'])) {
-        $items[] = [
-            'uid'       => (int)$masterUser['uid'],
-            'username'  => (string)$masterUser['username'],
-            'is_master' => 1,
-        ];
-    }
-
-    $linked = [];
-    if (function_exists('af_aas_get_linked_accounts')) {
-        $linked = af_aas_get_linked_accounts($masterUid, true);
-    }
-
-    foreach ($linked as $row) {
-        $aUid = (int)($row['uid'] ?? 0);
-        $aUn  = (string)($row['username'] ?? '');
-        if ($aUid <= 0 || $aUn === '') continue;
-
-        $items[] = [
-            'uid'       => $aUid,
-            'username'  => $aUn,
-            'is_master' => 0,
-        ];
-    }
-
-    $af_aas_list = '';
-    $i = 0;
-
-    foreach ($items as $it) {
-        // не показываем текущий аккаунт
-        if ((int)$it['uid'] === $uid) {
-            continue;
-        }
-
-        $i++;
-        $af_aas_row_class = ($i % 2 === 0) ? 'trow2' : 'trow1';
-
-        $af_aas_uid      = (int)$it['uid'];
-        $af_aas_username = htmlspecialchars_uni((string)$it['username']);
-
-        if ($af_aas_uid <= 0 || $af_aas_username === '') {
-            continue;
-        }
-
-        // мини-аватар 24x24
-        $avatarUrl = htmlspecialchars_uni(af_aas_get_avatar_url($af_aas_uid));
-        $af_aas_miniavatar = '<span class="af-aas-miniavatar"><img src="' . $avatarUrl . '" alt="" width="24" height="24" loading="lazy"></span>';
-
-        $returnUrl = $bburl . '/usercp.php?action=af_aas';
-        $af_aas_switch_url = htmlspecialchars_uni(
-            $bburl . '/misc.php?action=af_aas_switch'
-            . '&uid=' . $af_aas_uid
-            . '&my_post_key=' . urlencode($my_post_key)
-            . '&return=' . urlencode($returnUrl)
-        );
-
-        $af_aas_unlink_form = '';
-        if ($isMaster && empty($it['is_master']) && is_object($templates) && $templates->get('af_aas_ucp_unlink_form') !== '') {
-            $af_aas_unlink_uid = $af_aas_uid;
-            eval('$af_aas_unlink_form = "'.$templates->get('af_aas_ucp_unlink_form').'";');
-        }
-
-        $rowTemplate = $atfShell ? 'af_aas_ucp_row_atf' : 'af_aas_ucp_row';
-        if (is_object($templates) && $templates->get($rowTemplate) !== '') {
-            eval('$af_aas_list .= "'.$templates->get($rowTemplate).'";');
-        } else {
-            $af_aas_list .= $atfShell ? '<article class="atf-group-card"><div>'
-                    . $af_aas_miniavatar . '<strong>'.$af_aas_username.'</strong> <span class="smalltext">(#'.$af_aas_uid.')</span></div>'
-                    . '<div class="af-aas-row-actions"><a class="button button_small" href="'.$af_aas_switch_url.'">Переключиться</a>'.$af_aas_unlink_form.'</div></article>' : '<tr>
-                <td class="'.$af_aas_row_class.'">'
-                    . $af_aas_miniavatar .
-                    '<strong>'.$af_aas_username.'</strong> <span class="smalltext">(#'.$af_aas_uid.')</span>
-                </td>
-                <td class="'.$af_aas_row_class.'" style="text-align:right;">
-                    <a class="button button_small" href="'.$af_aas_switch_url.'">Переключиться</a>
-                    '.$af_aas_unlink_form.'
-                </td>
-            </tr>';
-        }
-    }
-
-    if (trim($af_aas_list) === '') {
-        $emptyTemplate = $atfShell ? 'af_aas_ucp_empty_atf' : 'af_aas_ucp_empty';
-        if (is_object($templates) && $templates->get($emptyTemplate) !== '') {
-            eval('$af_aas_list = "'.$templates->get($emptyTemplate).'";');
-        } else {
-            $af_aas_list = $atfShell ? '<p class="atf-empty">Пока нет других доступных аккаунтов.</p>' : '<tr><td class="trow1" colspan="2">Пока нет других доступных аккаунтов.</td></tr>';
-        }
-    }
-
-    // ===== Формы — только мастер
-    $af_aas_create_form = '';
-    $af_aas_link_form   = '';
-
-    if ($isMaster) {
-        if (!empty($mybb->settings['af_advancedaccountswitcher_allow_create'])
-            && is_object($templates) && $templates->get($atfShell ? 'af_aas_ucp_form_create_atf' : 'af_aas_ucp_form_create') !== ''
-        ) {
-            eval('$af_aas_create_form = "'.$templates->get($atfShell ? 'af_aas_ucp_form_create_atf' : 'af_aas_ucp_form_create').'";');
-        }
-
-        if (!empty($mybb->settings['af_advancedaccountswitcher_allow_link_existing'])
-            && is_object($templates) && $templates->get($atfShell ? 'af_aas_ucp_form_link_atf' : 'af_aas_ucp_form_link') !== ''
-        ) {
-            eval('$af_aas_link_form = "'.$templates->get($atfShell ? 'af_aas_ucp_form_link_atf' : 'af_aas_ucp_form_link').'";');
-        }
-    }
-
-    // ===== Приватность (показываем всем, но смысл — скрыть мастер/привязки в публичном списке)
-    $af_aas_privacy_form = '';
-    $checked = (!empty($mybb->user['af_aas_hide_in_list']) && (int)$mybb->user['af_aas_hide_in_list'] === 1) ? ' checked="checked"' : '';
-    $af_aas_privacy_checked = $checked;
-
-    $privacyTemplate = $atfShell ? 'af_aas_ucp_privacy_form_atf' : 'af_aas_ucp_privacy_form';
-    if (is_object($templates) && $templates->get($privacyTemplate) !== '') {
-        eval('$af_aas_privacy_form = "'.$templates->get($privacyTemplate).'";');
-    } else {
-        $af_aas_privacy_form = $atfShell ? '<form method="post" action="'.$af_aas_ucp_action.'" class="af-aas-form atf-card atf-stack"><input type="hidden" name="my_post_key" value="'.$my_post_key.'"><input type="hidden" name="do" value="save_privacy"><h2>Приватность</h2><label><input type="checkbox" name="hide_in_list" value="1"'.$af_aas_privacy_checked.'> Не показывать связанные аккаунты в списке пользователей</label><div class="atf-form-actions"><button type="submit" class="button atf-button">Сохранить</button></div></form>' : '
-        <form method="post" action="'.$af_aas_ucp_action.'" class="af-aas-form" style="margin-top:12px;">
-            <input type="hidden" name="my_post_key" value="'.$my_post_key.'">
-            <input type="hidden" name="do" value="save_privacy">
-            <table class="tborder" cellspacing="'.(int)($theme['borderwidth'] ?? 1).'" cellpadding="'.(int)($theme['tablespace'] ?? 6).'" border="0">
-                <tr><td class="thead"><strong>Приватность</strong></td></tr>
-                <tr><td class="trow1">
-                    <label><input type="checkbox" name="hide_in_list" value="1"'.$af_aas_privacy_checked.'> Не показывать связанные аккаунты в списке пользователей</label>
-                    <div class="smalltext" style="margin-top:6px;">Если включено — в публичном списке “Пользователи” не будет виден мастер-аккаунт и не будет показана привязка для связанных аккаунтов.</div>
-                    <div class="af-aas-form-actions" style="margin-top:8px;"><button type="submit" class="button">Сохранить</button></div>
-                </td></tr>
-            </table>
-        </form>';
-    }
-
+    $af_aas_workspace = af_aas_workspace();
+    $af_aas_usercpmain = $af_aas_workspace;
     // ===== Рендер по канону: полный шаблон -> output_page одним куском
-    $af_aas_usercpmain = '';
-    if (!is_object($templates) || $templates->get($atfShell ? 'af_aas_ucp_page_atf' : 'af_aas_ucp_page') === '') {
-        error('Не найден шаблон af_aas_ucp_page. Переустанови шаблоны аддона.');
-    }
-    $pageTemplate = $atfShell ? 'af_aas_ucp_page_atf' : 'af_aas_ucp_page';
-    eval('$af_aas_usercpmain = "'.$templates->get($pageTemplate).'";');
-
     if ($atfShell) {
         $context = af_adaptivethemeframework_ucp_context(['route'=>'usercp.php','action'=>'af_aas','uid'=>$uid,'title'=>(string)$af_aas_page_title], []);
         $atf_ucp_global_navigation=$context['global_navigation']; $atf_ucp_local_navigation=$context['local_navigation'];
@@ -1652,6 +1512,7 @@ function af_aas_ucp_do_create(int $masterUid)
     af_aas_audit_log('link',   (int)$masterUid, (int)$masterUid, (int)$newUid);
 
     $bburl = rtrim((string)$mybb->settings['bburl'], '/');
+    if (af_aas_is_ajax()) af_aas_ui_json(['ok'=>true, 'message'=>(string)$lang->af_aas_msg_created_linked, 'cards'=>af_aas_render_panel_widget(true)]);
     redirect($bburl . '/usercp.php?action=af_aas', (string)$lang->af_aas_msg_created_linked);
 }
 
@@ -1715,6 +1576,7 @@ function af_aas_ucp_do_link_existing(int $masterUid)
     af_aas_audit_log('link', (int)$masterUid, (int)$masterUid, (int)$linkUid);
 
     $bburl = rtrim((string)$mybb->settings['bburl'], '/');
+    if (af_aas_is_ajax()) af_aas_ui_json(['ok'=>true, 'message'=>(string)$lang->af_aas_msg_linked, 'cards'=>af_aas_render_panel_widget(true)]);
     redirect($bburl . '/usercp.php?action=af_aas', (string)$lang->af_aas_msg_linked);
 }
 
@@ -2379,21 +2241,21 @@ function af_aas_get_avatar_url(int $uid, ?array $user = null): string
     return $bburl . '/' . ltrim($avatar, '/');
 }
 
-function af_aas_render_panel_widget(): string
+function af_aas_render_panel_widget(bool $cardsOnly = false): string
 {
     global $mybb, $templates, $lang, $db, $cache;
     $uid = (int)($mybb->user['uid'] ?? 0);
     if (!$uid || !is_object($templates)) return '';
     af_aas_load_lang(false);
     $masterUid = af_aas_get_master_uid($uid);
-    $attached = af_aas_get_accounts_for_master($masterUid);
+    $attached = af_aas_get_linked_accounts($masterUid, true);
     $ids = array_values(array_unique(array_merge([$uid,$masterUid], array_column($attached,'uid'))));
     $query = $db->simple_select('users', 'uid,username,avatar,avatardimensions,usergroup,usertitle,regdate,lastactive,invisible', 'uid IN ('.implode(',',array_map('intval',$ids)).')');
     $users = [];
     while ($user = $db->fetch_array($query)) $users[(int)$user['uid']] = $user;
     if (empty($users[$masterUid])) return '';
     $canManage = !empty($mybb->settings['af_advancedaccountswitcher_allow_create']) || !empty($mybb->settings['af_advancedaccountswitcher_allow_link_existing']);
-    if (count($users) < 2 && !$canManage) return '';
+    if (!$cardsOnly && count($users) < 2 && !$canManage) return '';
     // Source-owned presentation, request-local: existing installations must not
     // continue serving the old DB table markup until a manual template sync.
     $source = file_get_contents(__DIR__.'/templates/advancedaccountswitcher.html');
@@ -2407,7 +2269,7 @@ function af_aas_render_panel_widget(): string
     $af_aas_walk_url = htmlspecialchars_uni($bburl.'/misc.php?action=af_aas_walk');
     $af_aas_walk_post_key = htmlspecialchars_uni((string)$mybb->post_code);
     $af_aas_add_button = $canManage && $uid === $masterUid
-        ? '<a class="af-aas-ui-button" href="'.$af_aas_ucp_url.'#'.(!empty($mybb->settings['af_advancedaccountswitcher_allow_link_existing']) ? 'afAasLinkForm' : 'afAasCreateUsername').'"><i class="fa-solid fa-plus" aria-hidden="true"></i>Добавить аккаунт</a>'
+        ? '<a class="af-aas-ui-button" data-aas-add href="'.$af_aas_ucp_url.'#'.(!empty($mybb->settings['af_advancedaccountswitcher_allow_link_existing']) ? 'afAasLinkForm' : 'afAasCreateUsername').'"><i class="fa-solid fa-plus" aria-hidden="true"></i>Добавить аккаунт</a>'
         : '<button type="button" class="af-aas-ui-button" disabled title="Добавление доступно основному аккаунту при включённых привязках"><i class="fa-solid fa-plus" aria-hidden="true"></i>Добавить аккаунт</button>';
     $af_aas_panel_rows = '';
     foreach ($ids as $accountUid) {
@@ -2429,13 +2291,14 @@ function af_aas_render_panel_widget(): string
         $af_aas_item_badge = $accountUid === $masterUid ? '<span class="af-aas-primary" role="img" title="Основной аккаунт" aria-label="Основной аккаунт"><i class="fa-solid fa-crown" aria-hidden="true"></i></span>' : '';
         $af_aas_item_switch = $accountUid === $uid ? '<span class="af-aas-current"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>Текущий аккаунт</span>'
             : '<a class="af-aas-ui-button af-aas-switch" href="'.htmlspecialchars_uni($bburl.'/misc.php?action=af_aas_switch&uid='.$accountUid.'&my_post_key='.rawurlencode((string)$mybb->post_code)).'"><span>Переключиться</span></a>';
-        $af_aas_item_menu = '<details class="af-aas-account-menu"><summary aria-label="Действия: '.$af_aas_item_username.'"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></summary><div class="af-aas-dropdown" popover="manual"><button type="button" data-aas-walk-uid="'.$accountUid.'"><i class="fa-solid fa-person-walking" aria-hidden="true"></i>Выгулить этот аккаунт</button>';
+        $af_aas_item_menu = '<details class="af-aas-account-menu"><summary aria-label="Действия: '.$af_aas_item_username.'"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></summary><div class="af-aas-dropdown" popover="manual"><button type="button" data-aas-walk-uid="'.$accountUid.'"><i class="fa-solid fa-person-walking" aria-hidden="true"></i>Выгулять</button><label class="af-aas-personal-autopost"><input type="checkbox" data-aas-personal-autopost>Автопостинг</label>';
         if ($uid === $masterUid && $accountUid !== $masterUid) {
             $af_aas_item_menu .= '<form method="post" action="'.$af_aas_ucp_url.'" data-aas-unlink><input type="hidden" name="my_post_key" value="'.$af_aas_walk_post_key.'"><input type="hidden" name="do" value="unlink"><input type="hidden" name="uid" value="'.$accountUid.'"><button type="submit" class="af-aas-danger"><i class="fa-solid fa-link-slash" aria-hidden="true"></i>Отвязать</button></form>';
         }
         $af_aas_item_menu .= '</div></details>';
         eval('$af_aas_panel_rows .= "'.$templates->get('af_aas_panel_row').'";');
     }
+    if ($cardsOnly) return $af_aas_panel_rows;
     $out = '';
     eval('$out = "'.$templates->get('af_aas_panel_widget').'";');
     return $out;
@@ -3207,3 +3070,5 @@ function af_aas_tpl_remove_header_button_placeholder(): void
 
 
 af_aas_admin_sync_settings_if_needed();
+
+require_once __DIR__.'/presentation.php';

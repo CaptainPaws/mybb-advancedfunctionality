@@ -117,109 +117,130 @@
       }
     });
 
-    function closeMenus(except) {
-      modal.querySelectorAll('.af-aas-account-menu[open]').forEach(function(menu) { if (menu !== except) menu.open = false; });
-    }
-    modal.addEventListener('toggle', function(event) {
-      var details = event.target;
-      if (!details.matches('.af-aas-account-menu')) return;
-      var menu = details.querySelector('.af-aas-dropdown');
-      if (!details.open) { if (menu.hidePopover && menu.matches(':popover-open')) menu.hidePopover(); return; }
-      closeMenus(details);
-      if (menu.showPopover && !menu.matches(':popover-open')) menu.showPopover();
-      var rect = details.querySelector('summary').getBoundingClientRect();
-      var width = menu.offsetWidth, height = menu.offsetHeight;
-      menu.style.left = Math.max(8,Math.min(rect.right-width,innerWidth-width-8))+'px';
-      menu.style.top = Math.max(8,Math.min(rect.bottom+4,innerHeight-height-8))+'px';
-    }, true);
-    document.addEventListener('click', function(event) { if (!event.target.closest('.af-aas-account-menu')) closeMenus(); });
-    modal.querySelector('.af-aas-account-list').addEventListener('scroll', function() { closeMenus(); }, {passive:true});
-    window.addEventListener('resize', function() { closeMenus(); });
-    modal.addEventListener('submit', function(event) {
-      if (event.target.matches('[data-aas-unlink]') && !window.confirm('Отвязать выбранный аккаунт? Сам аккаунт MyBB не будет удалён.')) event.preventDefault();
-    });
     modal.addEventListener('click', function(event) {
-      var link = event.target.closest('.af-aas-switch');
-      if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-      if (link.getAttribute('aria-disabled') === 'true') { event.preventDefault(); return; }
-      link.setAttribute('aria-disabled','true'); link.setAttribute('aria-busy','true');
-      link.querySelector('span').textContent = 'Переключение…';
+      if (event.target.closest('[data-aas-add-close]')) { closeModal(); return; }
+      var add = event.target.closest('[data-aas-add]');
+      if (add) { event.preventDefault(); showAdd(); return; }
+      if (event.target.closest('[data-aas-add-back]')) { showPicker(); modal.querySelector('[data-aas-add]')?.focus(); return; }
+      var tab = event.target.closest('[data-aas-mode]');
+      if (tab) selectMode(tab.dataset.aasMode);
     });
-    var walk = modal.querySelector('.af-aas-walk');
-    var walkButton = walk ? walk.querySelector('.af-aas-walk-button') : null;
-    var walkAutopost = walk ? walk.querySelector('.af-aas-walk-autopost') : null;
-    var walkResult = modal.querySelector('.af-aas-walk-result');
-    var walkPending = false;
-
-    function operationId() {
-      var bytes = new Uint8Array(16);
-      if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
-      else for (var i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
-      return Array.prototype.map.call(bytes, function (n) { return ('0' + n.toString(16)).slice(-2); }).join('');
+    var addView = modal.querySelector('[data-aas-add-view]');
+    var addContent = modal.querySelector('[data-aas-add-content]');
+    var addMessage = modal.querySelector('[data-aas-add-message]');
+    var addLoading = false, addSubmitting = false;
+    function showPicker() {
+      addView.hidden = true;
+      modal.querySelectorAll('[data-aas-picker]').forEach(function(node) { node.hidden = false; });
+      addView.querySelectorAll('input[name*="password"]').forEach(function(input) { input.value=''; input.type='password'; });
     }
-
-    function runWalk(targetUid, button) {
-      var initial = button.innerHTML;
-      if (walkPending) return;
-      walkPending = true;
-      walkButton.disabled = true;
-      button.disabled = true;
-      button.textContent = 'Выполняется…';
-      walkResult.textContent = '';
-
-      var body = new URLSearchParams();
-      body.set('my_post_key', walk.getAttribute('data-post-key') || '');
-      body.set('operation_id', operationId());
-      if (targetUid) body.set('uid', String(targetUid));
-      body.set('autopost', walkAutopost && walkAutopost.checked ? '1' : '0');
-      fetch(walk.getAttribute('data-url'), {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-        body: body.toString()
-      }).then(function (response) {
-        return response.text().then(function (text) {
-          var data;
-          try {
-            data = JSON.parse(text);
-          } catch (error) {
-            console.error('Advanced Account Switcher: non-JSON walk response', text);
-            throw new Error('Сервер вернул некорректный ответ');
-          }
-          if (!response.ok || data.ok === false) {
-            throw new Error(data.message || ('HTTP ' + response.status));
-          }
-          return data;
+    function selectMode(mode) {
+      addContent.querySelectorAll('[data-aas-form-mode]').forEach(function(form) { form.hidden = form.dataset.aasFormMode !== mode; });
+      addContent.querySelectorAll('[data-aas-mode]').forEach(function(tab) { tab.setAttribute('aria-pressed',String(tab.dataset.aasMode === mode)); });
+    }
+    function showAdd() {
+      modal.querySelectorAll('[data-aas-picker]').forEach(function(node) { node.hidden=true; });
+      addView.hidden = false;
+      if (addContent.querySelector('form')) { addContent.querySelector('form:not([hidden]) input:not([type="hidden"])')?.focus(); return; }
+      if (addLoading) return;
+      addLoading = true; addMessage.textContent='Загрузка…';
+      var config = modal.querySelector('.af-aas-walk');
+      var body = new URLSearchParams({aas_ajax:'1',aas_view:'1',my_post_key:config.dataset.postKey});
+      fetch(buildUrl('usercp.php?action=af_aas'),{method:'POST',credentials:'same-origin',body:body}).then(uiResponse).then(function(data) {
+        addContent.innerHTML=data.forms;
+        var tabs = document.createElement('nav'); tabs.className='af-aas-mode-tabs';
+        addContent.querySelectorAll('[data-aas-form-mode]').forEach(function(form) {
+          var tab=document.createElement('button'); tab.type='button'; tab.className='af-aas-ui-button'; tab.dataset.aasMode=form.dataset.aasFormMode;
+          tab.textContent=form.dataset.aasFormMode==='create' ? 'Создать новый' : 'Привязать существующий'; tabs.appendChild(tab);
         });
-      }).then(function (data) {
-        var lines = [data.message || 'Выгул завершён.'];
-        if (typeof data.processed !== 'undefined') lines.push('Обработано аккаунтов: ' + data.processed);
-        if (typeof data.posted !== 'undefined') lines.push('Опубликовано сообщений: ' + data.posted);
-        lines.push('Ошибок: ' + ((data.errors || []).length));
-        (data.errors || []).forEach(function (error) { lines.push('• ' + error); });
-        walkResult.textContent = lines.join('\n');
-      }).catch(function (error) {
-        walkResult.textContent = 'Не удалось выполнить выгул: ' + error.message;
-      }).then(function () {
-        walkPending = false;
-        walkButton.disabled = false;
-        button.disabled = false; button.innerHTML = initial;
-      });
+        addContent.prepend(tabs);
+        var first=addContent.querySelector('form[data-aas-form-mode="link_existing"]') || addContent.querySelector('form');
+        if (first) { selectMode(first.dataset.aasFormMode); initUcpSuggest(addContent); }
+        addMessage.textContent=first ? '' : 'Добавление аккаунтов недоступно.';
+        if (!addView.hidden && modal.classList.contains('af-aas-modal-open')) addContent.querySelector('form:not([hidden]) input:not([type="hidden"])')?.focus();
+      }).catch(function(error) { addMessage.textContent=error.message; }).finally(function(){addLoading=false;});
     }
-    if (walkButton) walkButton.addEventListener('click', function() { runWalk(0, walkButton); });
-    modal.addEventListener('click', function(event) {
-      var button = event.target.closest('[data-aas-walk-uid]');
-      if (!button) return;
-      closeMenus(); runWalk(Number(button.dataset.aasWalkUid), button);
+    modal.addEventListener('submit',function(event) {
+      var form=event.target.closest('[data-aas-form-mode]');
+      if (!form) return;
+      event.preventDefault();
+      if (form.dataset.pending || addSubmitting) return;
+      addSubmitting=true;
+      form.dataset.pending='1'; var button=form.querySelector('[type="submit"]'); button.disabled=true;
+      var body=new FormData(form); body.set('aas_ajax','1');
+      addMessage.textContent='Выполняется…';
+      fetch(form.action,{method:'POST',credentials:'same-origin',body:body}).then(uiResponse).then(function(data){
+        document.querySelectorAll('[data-aas-cards]').forEach(function(list){list.innerHTML=data.cards;});
+        form.reset(); showPicker(); modal.querySelector('.af-aas-walk-result').textContent=data.message || 'Аккаунт добавлен.';
+        modal.querySelector('[data-aas-add]')?.focus();
+      }).catch(function(error){addMessage.textContent=error.message;}).finally(function(){
+        form.querySelectorAll('input[name*="password"]').forEach(function(input){input.value='';input.type='password';});
+        form.querySelectorAll('[data-aas-password]').forEach(function(button){button.setAttribute('aria-pressed','false');button.setAttribute('aria-label','Показать пароль');});
+        delete form.dataset.pending; addSubmitting=false; button.disabled=false;
+      });
     });
+    var originalClose = closeModal;
+    closeModal = function() { showPicker(); originalClose(); };
   })();
 
-  // UCP suggest
-  (function initUcpSuggest() {
-    var input = qs('#afAasLinkUsername');
-    var hiddenUid = qs('#afAasLinkUid');
-    var suggestBox = qs('#afAasSuggest');
+  function uiResponse(response) {
+    if (!(response.headers.get('content-type')||'').includes('application/json')) throw new Error('Не удалось получить ответ. Обновите страницу и проверьте вход в аккаунт.');
+    return response.json().then(function(data){if (!response.ok || !data.ok) throw new Error(data.message || 'Операция не выполнена.'); return data;});
+  }
+  function closeMenus(except) {
+    document.querySelectorAll('.af-aas-surface .af-aas-account-menu[open]').forEach(function(menu){if(menu!==except)menu.open=false;});
+  }
+  // One delegated action owner for picker and User CP, including refreshed cards.
+  var walkPending=false;
+  document.addEventListener('toggle',function(event){
+    var details=event.target;
+    if (!details.matches('.af-aas-surface .af-aas-account-menu')) return;
+    var menu=details.querySelector('.af-aas-dropdown');
+    if (!details.open) {if(menu.hidePopover && menu.matches(':popover-open'))menu.hidePopover();return;}
+    closeMenus(details); if(menu.showPopover && !menu.matches(':popover-open'))menu.showPopover();
+    var rect=details.querySelector('summary').getBoundingClientRect();
+    menu.style.left=Math.max(8,Math.min(rect.right-menu.offsetWidth,innerWidth-menu.offsetWidth-8))+'px';
+    menu.style.top=Math.max(8,Math.min(rect.bottom+4,innerHeight-menu.offsetHeight-8))+'px';
+  },true);
+  document.addEventListener('click',function(event){
+    var surface=event.target.closest('.af-aas-surface');
+    if (!event.target.closest('.af-aas-account-menu'))closeMenus();
+    if (!surface) return;
+    var reveal=event.target.closest('[data-aas-password]');
+    if (reveal) {var input=reveal.parentElement.querySelector('input'); var visible=input.type==='password'; input.type=visible?'text':'password';reveal.setAttribute('aria-pressed',String(visible));reveal.setAttribute('aria-label',visible?'Скрыть пароль':'Показать пароль');return;}
+    var switchLink=event.target.closest('.af-aas-switch');
+    if (switchLink && event.button===0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      if(switchLink.getAttribute('aria-disabled')==='true'){event.preventDefault();return;}
+      switchLink.setAttribute('aria-disabled','true');switchLink.setAttribute('aria-busy','true');switchLink.querySelector('span').textContent='Переключение…';return;
+    }
+    var personal=event.target.closest('[data-aas-walk-uid]'), bulk=event.target.closest('.af-aas-walk-button');
+    if(!personal && !bulk)return;
+    var button=personal||bulk, uid=personal?Number(personal.dataset.aasWalkUid):0;
+    var autopost=personal ? personal.closest('.af-aas-dropdown').querySelector('[data-aas-personal-autopost]').checked : !!surface.querySelector('.af-aas-walk-autopost')?.checked;
+    closeMenus(); if(walkPending)return; walkPending=true;
+    var config=surface.querySelector('.af-aas-walk')||surface, result=surface.querySelector('.af-aas-walk-result');
+    var bytes=new Uint8Array(16);crypto.getRandomValues(bytes);
+    var token=Array.from(bytes,function(n){return n.toString(16).padStart(2,'0');}).join('');
+    var body=new URLSearchParams({my_post_key:config.dataset.postKey,operation_id:token,autopost:autopost?'1':'0'});
+    if(uid)body.set('uid',String(uid));
+    var initial=button.innerHTML;button.disabled=true;button.textContent='Выполняется…';result.textContent='';
+    fetch(config.dataset.url||config.dataset.walkUrl,{method:'POST',credentials:'same-origin',body:body}).then(uiResponse).then(function(data){
+      result.textContent=[data.message||'Выгул завершён.','Обработано: '+(data.processed||0), 'Опубликовано: '+(data.posted||0)].concat(data.errors||[]).join('\n');
+    }).catch(function(error){result.textContent=error.message;}).finally(function(){walkPending=false;button.disabled=false;button.innerHTML=initial;});
+  });
+  document.addEventListener('submit',function(event){if(event.target.matches('.af-aas-surface [data-aas-unlink]') && !confirm('Отвязать выбранный аккаунт? Сам аккаунт MyBB не будет удалён.'))event.preventDefault();});
+  document.addEventListener('keydown',function(event){if(event.key==='Escape'){var menu=document.querySelector('.af-aas-surface .af-aas-account-menu[open]');if(menu){closeMenus();menu.querySelector('summary').focus();event.preventDefault();}}});
+  document.addEventListener('scroll',function(event){if(event.target.matches?.('.af-aas-account-list'))closeMenus();},true);
+  window.addEventListener('resize',function(){closeMenus();});
 
-    if (!input || !hiddenUid || !suggestBox) return;
+  // UCP suggest
+  function initUcpSuggest(root) {
+    var input = qs('[data-aas-suggest-input], #afAasLinkUsername', root);
+    var hiddenUid = qs('[data-aas-suggest-uid], #afAasLinkUid', root);
+    var suggestBox = qs('[data-aas-suggest-box], #afAasSuggest', root);
+
+    if (!input || !hiddenUid || !suggestBox || input.dataset.aasSuggestBound) return;
+    input.dataset.aasSuggestBound="1";
 
     input.setAttribute('autocomplete', 'off');
     input.setAttribute('autocorrect', 'off');
@@ -321,7 +342,8 @@
       if (e.target === input || e.target.closest('#afAasSuggest')) return;
       clearSuggest();
     });
-  })();
+  }
+  initUcpSuggest(document);
 
   // userlist.php: online/offline indicator over avatar (JS-only, no inline CSS)
   (function initUserlistOnlineStatus() {

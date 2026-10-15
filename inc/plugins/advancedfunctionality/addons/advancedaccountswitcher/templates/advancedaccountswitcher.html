@@ -1,17 +1,18 @@
 <!-- TEMPLATE: af_aas_panel_widget -->
 <span class="af-aas-panel"><a href="usercp.php?action=af_aas" class="af-aas-trigger" id="af_aas_trigger" aria-expanded="false" title="Смена аккаунта"><i class="fa-solid fa-users" aria-hidden="true"></i> Аккаунты</a></span>
-<div id="af_aas_modal" class="af-aas-modal" role="dialog" aria-modal="true" aria-labelledby="af-aas-modal-title" aria-hidden="true" style="display:none;">
+<div id="af_aas_modal" class="af-aas-modal af-aas-surface" role="dialog" aria-modal="true" aria-labelledby="af-aas-modal-title" aria-hidden="true" style="display:none;">
 <div class="af-aas-modal-backdrop"></div>
 <section class="af-aas-dialog" tabindex="-1">
-<header class="af-aas-modal-head"><span class="af-aas-heading-icon"><i class="fa-solid fa-users" aria-hidden="true"></i></span><div><h2 id="af-aas-modal-title">Смена аккаунта</h2><p>Выберите персонажа или основной аккаунт</p></div><button type="button" class="af-aas-modal-close" aria-label="Закрыть"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
-<div id="af_aas_modal_body" class="af-aas-account-list">{$af_aas_panel_rows}</div>
-<footer class="af-aas-modal-footer"><nav class="af-aas-footer-links"><a href="{$af_aas_ucp_url}" class="af-aas-ui-button"><i class="fa-solid fa-gear" aria-hidden="true"></i>Управление аккаунтами</a>{$af_aas_add_button}</nav><div class="af-aas-walk" data-url="{$af_aas_walk_url}" data-post-key="{$af_aas_walk_post_key}"><button type="button" class="af-aas-ui-button af-aas-walk-button"><i class="fa-solid fa-person-walking" aria-hidden="true"></i><span>Выгул твинков</span></button><label class="af-aas-autopost"><input type="checkbox" class="af-aas-walk-autopost">Автопостинг</label></div></footer>
+<header class="af-aas-modal-head" data-aas-picker><span class="af-aas-heading-icon"><i class="fa-solid fa-users" aria-hidden="true"></i></span><div><h2 id="af-aas-modal-title">Смена аккаунта</h2><p>Выберите персонажа или основной аккаунт</p></div><button type="button" class="af-aas-modal-close" aria-label="Закрыть"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
+<div id="af_aas_modal_body" class="af-aas-account-list" data-aas-cards data-aas-picker>{$af_aas_panel_rows}</div>
+<footer class="af-aas-modal-footer" data-aas-picker><nav class="af-aas-footer-links"><a href="{$af_aas_ucp_url}" class="af-aas-ui-button"><i class="fa-solid fa-gear" aria-hidden="true"></i>Управление аккаунтами</a>{$af_aas_add_button}</nav><div class="af-aas-walk" data-url="{$af_aas_walk_url}" data-post-key="{$af_aas_walk_post_key}"><button type="button" class="af-aas-ui-button af-aas-walk-button"><i class="fa-solid fa-person-walking" aria-hidden="true"></i><span>Выгул твинков</span></button><label class="af-aas-autopost"><input type="checkbox" class="af-aas-walk-autopost">Автопостинг</label></div></footer>
+<section class="af-aas-add-view" data-aas-add-view hidden><header><button type="button" class="af-aas-ui-button" data-aas-add-back><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>К аккаунтам</button><h2>Добавить аккаунт</h2><p>Привяжите существующий аккаунт или создайте новый.</p><button type="button" class="af-aas-modal-close" data-aas-add-close aria-label="Закрыть"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header><div data-aas-add-content></div><p data-aas-add-message role="status" aria-live="polite"></p></section>
 <div class="af-aas-walk-result" role="status" aria-live="polite"></div>
 </section></div>
 <!-- /TEMPLATE -->
 
 <!-- TEMPLATE: af_aas_panel_row -->
-<article class="af-aas-account{$af_aas_item_active}" data-account-uid="{$af_aas_item_uid}"><span class="af-aas-account-avatar{$af_aas_online_class}">{$af_aas_item_avatar}</span><div class="af-aas-account-text"><strong title="{$af_aas_item_username}">{$af_aas_item_username}</strong><span class="af-aas-account-status">{$af_aas_item_status}</span><span class="af-aas-account-meta">{$af_aas_item_meta}</span></div><div class="af-aas-account-actions">{$af_aas_item_badge}{$af_aas_item_switch}{$af_aas_item_menu}</div></article>
+<article class="af-aas-account{$af_aas_item_active}" data-account-uid="{$af_aas_item_uid}"><span class="af-aas-account-avatar{$af_aas_online_class}">{$af_aas_item_avatar}</span><div class="af-aas-account-text"><strong title="{$af_aas_item_username}">{$af_aas_item_username} <small>#{$af_aas_item_uid}</small></strong><span class="af-aas-account-status">{$af_aas_item_status}</span><span class="af-aas-account-meta">{$af_aas_item_meta}</span></div><div class="af-aas-account-actions">{$af_aas_item_badge}{$af_aas_item_switch}{$af_aas_item_menu}</div></article>
 <!-- /TEMPLATE -->
 
 <!-- TEMPLATE: af_aas_panel_empty -->
