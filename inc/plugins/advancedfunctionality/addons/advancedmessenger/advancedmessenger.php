@@ -95,7 +95,7 @@ function af_advancedmessenger_compose(): void
     if ($GLOBALS['am_panel']) $GLOBALS['am_body_class'] .= ' am-panel-body';
     $GLOBALS['am_reply_id'] = max(0, $mybb->get_input('am_reply', MyBB::INPUT_INT));
     $GLOBALS['am_labels'] = '';
-    foreach (['loading','error','response','read','open','back','close','older','select','sending','draft_local','draft_restore','empty_confirm','quoted_history'] as $key) {
+    foreach (['loading','error','response','read','open','back','close','older','select','sending','draft_local','draft_restore','empty_confirm','quoted_history','draft_action','preview_action','send_action','cancel','search_title','search_submit','criteria','filters','sorting'] as $key) {
         $GLOBALS['am_label_'.$key] = af_advancedmessenger_e(af_advancedmessenger_t($key));
         $GLOBALS['am_labels'] .= ' data-am-'.str_replace('_','-',$key).'="'.af_advancedmessenger_e(af_advancedmessenger_t($key)).'"';
     }
@@ -126,6 +126,10 @@ function af_advancedmessenger_compose(): void
     foreach (['navigation','before_content','after_content'] as $slot) $GLOBALS['am_pm_'.$slot] = '';
     if (isset($GLOBALS['posticons'])) {
         $GLOBALS['posticons'] = preg_replace('~</?(?:table|thead|tbody|tfoot|tr|th|td)\b[^>]*>~i', '', (string)$GLOBALS['posticons']);
+    }
+    if ($action === 'advanced_search') {
+        if ($GLOBALS['am_panel']) $GLOBALS['am_body_class'] .= ' am-search-document';
+        $GLOBALS['am_search_folders'] = af_advancedmessenger_search_folders();
     }
     if ($action === 'send') {
         af_advancedmessenger_compose_editor();
@@ -201,8 +205,9 @@ function af_advancedmessenger_shell(): void
             .'<section class="am-pane" id="am-pane"><button type="button" class="am-back">'.af_advancedmessenger_icon('previous').af_advancedmessenger_e(af_advancedmessenger_t('back')).'</button>'
             .'<p class="am-status" id="am-status" role="status" aria-live="polite"></p>';
     $GLOBALS['am_outer_end'] = $panel ? '</main>' : '</section></div>'
-        .'<dialog id="am-panel-dialog" class="am-tool-dialog"><button type="button" class="am-panel-close">'
-        .af_advancedmessenger_icon('close').'<span>'.af_advancedmessenger_e(af_advancedmessenger_t('close')).'</span></button><iframe title="'.af_advancedmessenger_e(af_advancedmessenger_t('tools')).'" id="am-tool-frame"></iframe></dialog></main>';
+        .'<dialog id="am-panel-dialog" class="am-tool-dialog" aria-labelledby="am-panel-title"><header class="am-modal-head"><h2 id="am-panel-title">'.af_advancedmessenger_e(af_advancedmessenger_t('tools')).'</h2><button type="button" class="am-panel-close" aria-label="'.af_advancedmessenger_e(af_advancedmessenger_t('close')).'">'
+        .af_advancedmessenger_icon('close').'</button></header><iframe title="'.af_advancedmessenger_e(af_advancedmessenger_t('tools')).'" id="am-tool-frame"></iframe></dialog></main>';
+
 }
 
 /** Reuse core's send controller and one native #message/AdvancedEditor lifecycle. */
@@ -333,7 +338,7 @@ function af_advancedmessenger_filter_recipient(): void
 function af_advancedmessenger_embedded_document(string &$page): string
 {
     global $mybb;
-    if (!$mybb->get_input('am_panel') || (function_exists('af_frontend_asset_allowed') && !af_frontend_asset_allowed('advancedmessenger', 'runtime'))) return $page;
+    if (!af_advancedmessenger_is_embedded_request()) return $page;
     $page = preg_replace_callback('~<body\b[^>]*>~i', static function (array $m): string {
         if (strpos($m[0], 'data-af-layout=') !== false) return $m[0];
         return substr($m[0], 0, -1).' data-af-layout="content-only" data-atf-owned="1">';
@@ -344,22 +349,24 @@ function af_advancedmessenger_embedded_document(string &$page): string
 /** Late response assets respect manifest permissions and AF's file/theme delivery decision. */
 function af_advancedmessenger_assets(string &$page): string
 {
+    global $mybb;
     if (strpos($page, 'am-root') === false || (function_exists('af_frontend_asset_allowed') && !af_frontend_asset_allowed('advancedmessenger', 'runtime'))) return $page;
     if (function_exists('af_advancedfontawesome_pre_output')) af_advancedfontawesome_pre_output($page);
-    if (function_exists('af_add_css_once') && function_exists('af_theme_stylesheet_delivery_decision')) {
-        $tags = '';
-        foreach (['native-panels.css','messenger.css'] as $file) {
-            $decision = af_theme_stylesheet_delivery_decision('advancedmessenger', 'assets/'.$file);
-            if (!empty($decision['include_file'])) {
-                af_add_css_once('/inc/plugins/advancedfunctionality/addons/advancedmessenger/assets/'.$file, ['scope'=>'front','version'=>'1.2.0']);
-            } elseif (!empty($decision['theme_href']) && strpos($page, (string)$decision['theme_href']) === false
-                && strpos($page, af_advancedmessenger_e((string)$decision['theme_href'])) === false) {
-                $tags .= '<link rel="stylesheet" href="'.af_advancedmessenger_e((string)$decision['theme_href']).'">';
-            }
-        }
-        if (function_exists('af_assets_build_tags')) $tags .= af_assets_build_tags([], $page);
-        if ($tags !== '') $page = str_ireplace('</head>', $tags.'</head>', $page);
+    if (!function_exists('af_theme_stylesheet_delivery_decision')) return $page;
+    $tags = '';
+    foreach (['native-panels.css','messenger.css'] as $file) {
+        $decision = af_theme_stylesheet_delivery_decision('advancedmessenger', 'assets/'.$file);
+        $path = '/inc/plugins/advancedfunctionality/addons/advancedmessenger/assets/'.$file;
+        $href = !empty($decision['include_file'])
+            ? rtrim((string)$mybb->settings['bburl'], '/').$path.'?v=1.3.0'
+            : (string)($decision['theme_href'] ?? '');
+        if ($href === '' || (!empty($decision['include_file']) && strpos($page, $path) !== false)
+            || strpos($page, $href) !== false || strpos($page, af_advancedmessenger_e($href)) !== false) continue;
+        $tags .= '<link rel="stylesheet" href="'.af_advancedmessenger_e($href).'" data-am-stylesheet="1">';
     }
+    // Only AM CSS: rebuilding the global asset queue here would reintroduce
+    // scripts already consumed by AdvancedJSBundle and duplicate editor boot.
+    if ($tags !== '') $page = str_ireplace('</head>', $tags.'</head>', $page);
     return $page;
 }
 
@@ -367,9 +374,25 @@ function af_advancedmessenger_assets(string &$page): string
 function af_advancedmessenger_embedded_redirect(array &$args): void
 {
     global $mybb;
-    if (!$mybb->get_input('am_panel') || (function_exists('af_frontend_asset_allowed') && !af_frontend_asset_allowed('advancedmessenger', 'runtime'))) return;
+    if (!af_advancedmessenger_is_embedded_request()) return;
     $url = (string)($args['url'] ?? '');
     if (!preg_match('~^(?:\./)?private\.php(?:[?#]|$)~i', $url) || preg_match('~(?:[?&]|&amp;)am_panel=~', $url)) return;
     $parts = explode('#', $url, 2);
     $args['url'] = $parts[0].(strpos($parts[0], '?') === false ? '?' : '&').'am_panel=1'.(isset($parts[1]) ? '#'.$parts[1] : '');
+}
+
+/** AF's output-buffer path dispatches addon pre_output independently of MyBB hooks. */
+function af_advancedmessenger_pre_output(string &$page): string
+{
+    af_advancedmessenger_embedded_document($page);
+    return af_advancedmessenger_assets($page);
+}
+
+/** Shared request fact for output providers; independent of rendered body markup. */
+function af_advancedmessenger_is_embedded_request(): bool
+{
+    global $mybb;
+    return defined('THIS_SCRIPT') && THIS_SCRIPT === 'private.php'
+        && !empty($mybb->settings['af_advancedmessenger_enabled']) && (bool)$mybb->get_input('am_panel')
+        && (!function_exists('af_frontend_asset_allowed') || af_frontend_asset_allowed('advancedmessenger', 'runtime'));
 }

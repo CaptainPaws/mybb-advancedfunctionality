@@ -263,6 +263,7 @@
                 inline.dataset.amPausedSrc = inline.src;
                 inline.src = 'about:blank';
             }
+            document.getElementById('am-panel-title').textContent = label('loading');
             tool.src = url.href;
             if (typeof dialog.showModal === 'function') dialog.showModal();
             else location.assign(href);
@@ -304,6 +305,15 @@
             else if (link.matches('[data-am-dialog]')) { event.preventDefault(); select(link.href, true); }
         });
         dialog.addEventListener('cancel', saveEditor);
+        dialog.addEventListener('click', event => {
+            if (event.target !== dialog) return;
+            const box = dialog.getBoundingClientRect();
+            const outside = event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+            if (!outside) return;
+            try { if (tool.contentWindow?.AMPanelDirty) return; } catch (_) { return; }
+            saveEditor(); dialog.close();
+        });
+
         dialog.addEventListener('close', () => {
             saveEditor();
             tool.src = 'about:blank';
@@ -328,6 +338,7 @@
                 fitComposer();
                 return;
             }
+            if (event.data.type === 'advancedmessenger:close' && event.source === tool.contentWindow) { saveEditor(); dialog.close(); return; }
             if (event.data.type !== 'advancedmessenger:complete') return;
             if (event.source !== composer?.contentWindow && event.source !== tool.contentWindow) return;
             // Native send has committed. Refresh once to rebuild latest activity,
@@ -338,6 +349,8 @@
         });
         tool.addEventListener('load', () => {
             try {
+                const title = tool.contentDocument?.querySelector('h1, .am-pm__title')?.textContent?.trim();
+                if (title) { document.getElementById('am-panel-title').textContent = title; tool.title = title; }
                 // Folder edits/native mass actions redirect to the mailbox.
                 if (tool.contentDocument?.querySelector('[data-am-root]')) location.reload();
                 else if (tool.contentDocument?.querySelector('[data-am-panel-page]')) refreshSidebar();

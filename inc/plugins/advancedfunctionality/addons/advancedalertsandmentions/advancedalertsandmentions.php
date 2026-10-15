@@ -1133,7 +1133,7 @@ function af_aam_bootstrap(): void
     // the global header fragment here made the persisted header template (and
     // the pre-output fallback) leak a standalone alerts link onto both catalog
     // and slug views.  Do not produce any AAM surface fragments for that route.
-    if (af_aam_is_charactersheets_surface()) {
+    if (af_aam_is_charactersheets_surface() || af_aam_is_messenger_panel()) {
         $af_aam_js = $af_aam_css = $af_aam_header_icon = $af_aam_modal = '';
         $af_aam_mentions_js = $af_aam_main_js = '';
         return;
@@ -1213,6 +1213,17 @@ function af_aam_bootstrap(): void
     eval('$af_aam_js          = "'.$templates->get('af_aam_js_popup').'";');
     eval('$af_aam_header_icon = "'.$templates->get('af_aam_header_icon').'";');
     eval('$af_aam_modal       = "'.$templates->get('af_aam_modal').'";');
+}
+
+/** Request-level check: global_start precedes AM templates and pre_output_page. */
+function af_aam_is_messenger_panel(): bool
+{
+    if (function_exists('af_advancedmessenger_is_embedded_request')) return af_advancedmessenger_is_embedded_request();
+    // AAM bootstraps before AM; the same request fact must be available already here.
+    global $mybb;
+    return defined('THIS_SCRIPT') && THIS_SCRIPT === 'private.php'
+        && !empty($mybb->settings['af_advancedmessenger_enabled']) && (bool)$mybb->get_input('am_panel')
+        && (!function_exists('af_frontend_asset_allowed') || af_frontend_asset_allowed('advancedmessenger', 'runtime'));
 }
 
 function af_aam_is_charactersheets_surface(): bool
@@ -1393,6 +1404,7 @@ function af_aam_pre_output_page(string &$page): void
     }
 
     // Embedded functional documents deliberately have no global navigation or alerts UI.
+    if (af_aam_is_messenger_panel()) return;
     if (preg_match('~<body\b[^>]*\bdata-af-layout\s*=\s*(["\'])content-only\1~i', $page)) return;
 
     // Template edits can disappear when a theme is imported or reverted.  Do

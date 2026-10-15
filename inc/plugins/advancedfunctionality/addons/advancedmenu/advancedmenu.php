@@ -1568,6 +1568,7 @@ function af_advancedmenu_remove_legacy_modal_triggers(string $page): string
 function af_advancedmenu_install_frontend_nav(string &$page): void
 {
     global $theme_select;
+    if (function_exists('af_advancedmessenger_is_embedded_request') && af_advancedmessenger_is_embedded_request()) return;
     if (strpos($page, 'data-af-am-navigation="1"') !== false) return;
     // Content-only documents (for example a Character Sheet iframe) keep the
     // shared head/assets, but deliberately opt out of all site navigation.

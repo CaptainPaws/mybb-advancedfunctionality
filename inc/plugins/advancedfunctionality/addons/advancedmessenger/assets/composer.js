@@ -1,6 +1,26 @@
 (function () {
     'use strict';
     function boot() {
+        window.AMPanelDirty = false;
+        document.addEventListener('input', () => { window.AMPanelDirty = true; });
+        document.addEventListener('change', event => {
+            window.AMPanelDirty = true;
+            const input = event.target;
+            if (!input.matches('input[name="folder[]"]')) return;
+            const form = input.closest('form');
+            const all = form?.querySelector('[data-am-all-folders]');
+            if (!all) return;
+            const folders = Array.from(form.querySelectorAll('input[name="folder[]"]:not([data-am-all-folders])'));
+            if (input === all && all.checked) folders.forEach(folder => { folder.checked = false; });
+            else if (input !== all && input.checked) all.checked = false;
+            if (!folders.some(folder => folder.checked)) all.checked = true;
+        });
+        document.addEventListener('click', event => {
+            if (!event.target.closest('[data-am-cancel]')) return;
+            if (parent !== window) parent.postMessage({ type: 'advancedmessenger:close' }, location.origin);
+            else location.assign('private.php');
+        });
+
         // Native panel links keep their presentation; profile/forum links leave the iframe.
         if (parent !== window && document.querySelector('[data-am-panel-page]')) {
             document.addEventListener('click', event => {
@@ -95,7 +115,11 @@
                 else sessionStorage.removeItem(key);
             } catch (_) { /* A quota/storage error never blocks native sending. */ }
         }
-        function schedule() { clearTimeout(timer); timer = setTimeout(save, 200); }
+        function updateSend() {
+            const send = form.querySelector('[name="submit"]');
+            if (send) send.disabled = text().replace(/\[\/?(?:b|i|u|s|color|size|font|align|left|right|center|justify)(?:=[^\]]*)?\]/gi, '').trim() === '';
+        }
+        function schedule() { window.AMPanelDirty = true; updateSend(); clearTimeout(timer); timer = setTimeout(save, 200); }
         window.AMComposer = { save };
         let stored;
         try { stored = JSON.parse(sessionStorage.getItem(key) || 'null'); } catch (_) { stored = null; }
@@ -138,9 +162,12 @@
             instance = event.detail.instance;
             queueMicrotask(() => {
                 if (pendingText !== null && instance) { instance.val(pendingText); textarea.value = pendingText; pendingText = null; }
+                updateSend();
             });
+            updateSend();
             try { instance?.bind('valuechanged', schedule); } catch (_) { /* Native textarea. */ }
         });
+        updateSend();
         form.addEventListener('input', schedule);
         form.addEventListener('change', schedule);
         // SCEditor can already exist if its lifecycle completed before DOM ready.
@@ -162,7 +189,7 @@
             });
         });
         window.addEventListener('pagehide', save);
-        window.addEventListener('pageshow', () => { submitting = false; form.removeAttribute('aria-busy'); status.textContent = ''; });
+        window.addEventListener('pageshow', () => { submitting = false; form.removeAttribute('aria-busy'); status.textContent = ''; updateSend(); });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
     else boot();

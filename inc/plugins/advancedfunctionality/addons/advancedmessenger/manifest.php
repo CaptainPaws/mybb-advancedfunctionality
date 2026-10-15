@@ -4,7 +4,7 @@ return [
     'id' => 'advancedmessenger',
     'name' => 'Advanced Messenger',
     'description' => 'Диалоги и встроенный редактор поверх штатных личных сообщений MyBB.',
-    'version' => '1.2.0',
+    'version' => '1.3.0',
     'author' => 'AdvancedFunctionality',
     'bootstrap' => 'advancedmessenger.php',
     'frontend' => [
@@ -13,8 +13,8 @@ return [
         'directory_fallback' => false,
     ],
     'theme_stylesheets' => [
-        ['id'=>'assets__messenger','file'=>'assets/messenger.css','attach'=>[['file'=>'private.php']],'enabled_setting'=>'af_advancedmessenger_enabled'],
-        ['id'=>'assets__native-panels','file'=>'assets/native-panels.css','attach'=>[['file'=>'private.php']],'enabled_setting'=>'af_advancedmessenger_enabled'],
+        ['id'=>'assets__messenger','file'=>'assets/messenger.css','attach'=>[['file'=>'private.php']],'enabled_setting'=>'af_advancedmessenger_enabled','disable_theme_integration'=>true,'exclude_autodiscovery'=>true],
+        ['id'=>'assets__native-panels','file'=>'assets/native-panels.css','attach'=>[['file'=>'private.php']],'enabled_setting'=>'af_advancedmessenger_enabled','disable_theme_integration'=>true,'exclude_autodiscovery'=>true],
     ],
     'assets' => ['front' => [
         'css' => ['assets/native-panels.css', 'assets/messenger.css'],

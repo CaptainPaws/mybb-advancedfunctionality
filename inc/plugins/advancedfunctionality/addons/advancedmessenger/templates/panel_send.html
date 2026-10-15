@@ -47,9 +47,9 @@
 		<input type="hidden" name="pmid" value="{$pmid}" />
 		<input type="hidden" name="do" value="{$do}" />
 		<div class="am-pm-compose__actions">
-			<button type="submit" class="am-button" name="submit" value="{$lang->send_message}" tabindex="9" accesskey="s" ><i class="fa-solid fa-paper-plane" aria-hidden="true"></i><span>{$lang->send_message}</span></button>
-			<button type="submit" class="am-button am-button--secondary" name="saveasdraft" value="{$lang->save_draft}" tabindex="10" ><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i><span>{$lang->save_draft}</span></button>
-			<button type="submit" class="am-button am-button--secondary" name="preview" value="{$lang->preview}" tabindex="11" ><i class="fa-solid fa-eye" aria-hidden="true"></i><span>{$lang->preview}</span></button>
+			<button type="submit" class="am-button" name="submit" value="{$lang->send_message}" tabindex="9" accesskey="s" ><i class="fa-solid fa-paper-plane" aria-hidden="true"></i><span>{$am_label_send_action}</span></button>
+			<button type="submit" class="am-button am-button--secondary" name="saveasdraft" value="{$lang->save_draft}" tabindex="10" ><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i><span>{$am_label_draft_action}</span></button>
+			<button type="submit" class="am-button am-button--secondary" name="preview" value="{$lang->preview}" tabindex="11" ><i class="fa-solid fa-eye" aria-hidden="true"></i><span>{$am_label_preview_action}</span></button>
 		</div>
 	</div></form>
 	{$am_pm_after_content}

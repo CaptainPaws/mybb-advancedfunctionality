@@ -194,3 +194,43 @@ menus enhance modern browsers; without popover support the menu uses fixed
 positioning. On very short viewports, expanded address/options/preview content
 can still scroll within the capped editor document; the outer pane does not
 scroll. Unknown historical HTML is deliberately not decoded or trusted.
+
+## Repeated UI defect fixes (1.3.0)
+
+The required AM layout/form styles now use manifest-declared file delivery, as
+AdvancedEditor's structural styles do. They are not replaced by a saved Theme
+copy. Theme variables and user overrides still apply; the existing history image
+URL is preserved. The late adapter emits only missing AM CSS, never the global
+JS queue, so it cannot resurrect sources already consumed by AdvancedJSBundle.
+An addon pre_output entry point now covers AF's output-buffer dispatcher as well
+as the normal MyBB output_page hooks.
+
+AAM's actual source is its global_start bootstrap, before headerinclude and before
+private_start. A narrow request predicate suppresses creation of global UI
+fragments for permitted AM panel requests, plus guards the output fallback.
+AdvancedMenu also checks the shared request fact before injecting navigation,
+including buffer-only output without a body marker. Normal forum alerts and menu
+are unchanged. This is composition control, not CSS hiding.
+
+Bubbles use intrinsic max-content width, a desktop minimum of 260px when space
+allows, and the existing 80% cap. Mobile reduces the minimum. Sidebar paint is
+transparent. Folder/tool and action-menu markup have explicit vertical layout;
+normal/destructive actions are separated and move selection stays inside the
+menu. Compose button labels are shorter while native submit names/values stay
+unchanged. Sending is disabled for an empty source and updates with the existing
+editor's valuechanged lifecycle; preview and draft actions remain available.
+
+Advanced search now has a scrolling fields region with criteria, filters and
+sorting, checkbox folder choices, and a persistent Cancel/Find footer. The outer
+modal owns its compact title/close header. Outside clicks close only a clean
+form; Escape and explicit Cancel retain their normal meaning. folder[]=0 means
+all folders as in MyBB, and the client keeps it exclusive with explicit folder
+choices. Native search action, field names and semantics are unchanged.
+
+Receipt icons are deliberately conservative. A check means a saved sent copy,
+not delivery or unread status. A double check requires receipt=2, a nonzero
+readtime/status on the actual owned recipient row. MyBB 1.8.40 stores sent copies
+with receipt=0 and a different pmid, without a persistent relationship to the
+recipient's tracking row. Ordinary outgoing copies therefore cannot truthfully
+show double checks, even if native Tracking lists a read receipt elsewhere.
+There is no content/time matching, cross-mailbox query, polling or new table.

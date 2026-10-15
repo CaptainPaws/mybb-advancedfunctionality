@@ -7,7 +7,7 @@ function af_advancedmessenger_t(string $key): string
 {
     global $mybb;
     $ru = [
-        'quoted_history'=>'Предыдущие цитаты', 'online'=>'В сети', 'profile'=>'Профиль собеседника', 'title'=>'Личные сообщения', 'compose'=>'Написать сообщение', 'dialogs'=>'Диалоги', 'all'=>'Все сообщения',
+        'draft_action'=>'Черновик', 'preview_action'=>'Просмотр', 'send_action'=>'Отправить', 'cancel'=>'Отмена', 'search_title'=>'Расширенный поиск ЛС', 'search_submit'=>'Найти сообщения', 'criteria'=>'Основные критерии', 'filters'=>'Фильтры', 'sorting'=>'Сортировка', 'sent_copy'=>'Сохранённая отправленная копия; подтверждение прочтения недоступно', 'receipt_confirmed'=>'Прочтение подтверждено MyBB', 'quoted_history'=>'Предыдущие цитаты', 'online'=>'В сети', 'profile'=>'Профиль собеседника', 'title'=>'Личные сообщения', 'compose'=>'Написать сообщение', 'dialogs'=>'Диалоги', 'all'=>'Все сообщения',
         'folders'=>'Папки', 'tools'=>'Инструменты', 'search'=>'Поиск собеседника',
         'content_search'=>'Поиск по сообщениям', 'advanced_search'=>'Расширенный поиск',
         'tracking'=>'Отслеживание', 'export'=>'Экспорт', 'empty'=>'Очистка папок', 'manage'=>'Управление папками',
@@ -28,7 +28,7 @@ function af_advancedmessenger_t(string $key): string
         'response'=>'Сервер вернул страницу вместо ответа API. Откройте диалог обычным переходом, чтобы увидеть сообщение MyBB.',
     ];
     $en = [
-        'quoted_history'=>'Earlier quotes', 'online'=>'Online', 'profile'=>'Participant profile', 'title'=>'Messages', 'compose'=>'New message', 'dialogs'=>'Conversations', 'all'=>'All conversations',
+        'draft_action'=>'Draft', 'preview_action'=>'Preview', 'send_action'=>'Send', 'cancel'=>'Cancel', 'search_title'=>'Advanced message search', 'search_submit'=>'Find messages', 'criteria'=>'Main criteria', 'filters'=>'Filters', 'sorting'=>'Sort', 'sent_copy'=>'Saved sent copy; read confirmation unavailable', 'receipt_confirmed'=>'Read receipt confirmed by MyBB', 'quoted_history'=>'Earlier quotes', 'online'=>'Online', 'profile'=>'Participant profile', 'title'=>'Messages', 'compose'=>'New message', 'dialogs'=>'Conversations', 'all'=>'All conversations',
         'folders'=>'Folders', 'tools'=>'Tools', 'search'=>'Find a participant',
         'content_search'=>'Search messages', 'advanced_search'=>'Advanced search',
         'tracking'=>'Tracking', 'export'=>'Export', 'empty'=>'Empty folders', 'manage'=>'Manage folders',
@@ -104,8 +104,9 @@ function af_advancedmessenger_sidebar(array $context): string
     $html .= '</nav><form action="private.php" method="post" class="am-content-search">'
         .'<input type="hidden" name="my_post_key" value="'.af_advancedmessenger_e($mybb->post_code).'">'
         .'<input type="hidden" name="action" value="do_stuff"><input type="hidden" name="fid" value="'.$folder.'">'
-        .'<label for="am-keywords">'.af_advancedmessenger_e(af_advancedmessenger_t('content_search')).'</label><input id="am-keywords" name="keywords" type="search" required>'
-        .'<button name="quick_search" value="1">'.af_advancedmessenger_e($lang->search_pms).'</button></form></details></div><h2 class="am-dialogs-heading">'.af_advancedmessenger_e(af_advancedmessenger_t('dialogs')).'</h2>';
+        .'<label class="am-visually-hidden" for="am-keywords">'.af_advancedmessenger_e(af_advancedmessenger_t('content_search')).'</label>'
+        .'<div class="am-search-control"><input id="am-keywords" name="keywords" type="search" placeholder="'.af_advancedmessenger_e(af_advancedmessenger_t('content_search')).'" required>'
+        .'<button name="quick_search" value="1" aria-label="'.af_advancedmessenger_e(af_advancedmessenger_t('content_search')).'">'.af_advancedmessenger_icon('search').'</button></div></form></details></div><h2 class="am-dialogs-heading">'.af_advancedmessenger_e(af_advancedmessenger_t('dialogs')).'</h2>';
     $html .= '<nav id="am-dialogs" class="am-dialogs" aria-label="'.af_advancedmessenger_e(af_advancedmessenger_t('dialogs')).'">';
     foreach ($context['dialogs']['items'] as $dialog) {
         $row = $dialog['row'];
@@ -159,6 +160,7 @@ function af_advancedmessenger_bubble(array $row): string
         .(!$outgoing ? $avatar : '')
         .'<div class="am-bubble__body">'.af_advancedmessenger_parse_message($row).'</div>'
         .'<footer class="am-bubble__foot"><a href="private.php?action=read&amp;pmid='.$id.'"><time datetime="'.gmdate('c',(int)$row['dateline']).'">'.my_date((string)$mybb->settings['timeformat'],(int)$row['dateline']).'</time></a>'
+        .($outgoing ? af_advancedmessenger_receipt_indicator($row) : '')
         .(!$outgoing ? '<span class="am-visually-hidden" data-am-state="1">'.af_advancedmessenger_e(af_advancedmessenger_t($state)).'</span>' : '')
         .'<details class="am-message-actions" data-am-menu="1"><summary aria-label="'.af_advancedmessenger_e(af_advancedmessenger_t('actions')).'" title="'.af_advancedmessenger_e(af_advancedmessenger_t('actions')).'">'.af_advancedmessenger_icon('actions').'</summary><div class="am-dropdown" popover="manual"><nav>';
     if (!empty($mybb->usergroup['cansendpms'])) {
@@ -171,7 +173,7 @@ function af_advancedmessenger_bubble(array $row): string
         }
     }
     $html .= af_advancedmessenger_link('private.php?action=read&pmid='.$id, af_advancedmessenger_t('open'), false, 'open').'</nav>';
-    $fields = '<input type="hidden" name="my_post_key" value="'.af_advancedmessenger_e($mybb->post_code).'">'
+    $fields = '<input type="hidden" name="am_panel" value="'.($mybb->get_input('am_panel') ? '1' : '0').'"><input type="hidden" name="my_post_key" value="'.af_advancedmessenger_e($mybb->post_code).'">'
         .'<input type="hidden" name="action" value="do_stuff"><input type="hidden" name="check['.$id.']" value="1">';
     $html .= '<details class="am-move"><summary>'.af_advancedmessenger_icon('move').'<span>'.af_advancedmessenger_e(af_advancedmessenger_t('move')).'</span>'.af_advancedmessenger_icon('chevron').'</summary><form action="private.php" method="post" class="am-message-form">'.$fields
         .'<label for="am-move-'.$id.'">'.af_advancedmessenger_e(af_advancedmessenger_t('folders')).'</label><select id="am-move-'.$id.'" name="fid">';
@@ -180,7 +182,7 @@ function af_advancedmessenger_bubble(array $row): string
         $html .= '<option value="'.(int)$fid.'">'.af_advancedmessenger_e($name).'</option>';
     }
     $html .= '</select><button name="moveto" value="1">'.af_advancedmessenger_icon('move').af_advancedmessenger_e(af_advancedmessenger_t('move')).'</button></form></details>';
-    return $html.'<form action="private.php" method="post">'.$fields.'<button class="am-danger" name="delete" value="1" data-am-confirm="'.af_advancedmessenger_e(af_advancedmessenger_t('delete_confirm')).'">'
+    return $html.'<form action="private.php" method="post" class="am-dropdown-danger">'.$fields.'<button class="am-danger" name="delete" value="1" data-am-confirm="'.af_advancedmessenger_e(af_advancedmessenger_t('delete_confirm')).'">'
         .af_advancedmessenger_icon('trash').'<span>'.af_advancedmessenger_e(af_advancedmessenger_t('delete')).'</span></button></form></div></details></footer></article>';
 
 }
@@ -292,4 +294,32 @@ function af_advancedmessenger_trusted_system_message(string $message): bool
         }
     }
     return in_array(trim(str_replace("\r\n", "\n", $message)), $messages, true);
+}
+
+/** No cross-mailbox inference: a saved copy has no native link to the tracking row. */
+function af_advancedmessenger_receipt_indicator(array $row): string
+{
+    global $mybb;
+    $owner = (int)$mybb->user['uid'];
+    if ((int)$row['fromid'] !== $owner || (int)$row['folder'] === 3) return '';
+    // A native receipt is proof only on its actual recipient row, not when
+    // someone opens a sent copy. For an owned outgoing row this can be a self-PM.
+    $confirmed = af_advancedmessenger_identity($row, $owner) === 'user:'.$owner
+        && (int)($row['uid'] ?? 0) === (int)$row['toid'] && (int)$row['toid'] > 0
+        && (int)($row['receipt'] ?? 0) === 2 && (int)($row['status'] ?? 0) !== 0 && (int)($row['readtime'] ?? 0) > 0;
+    $saved = (int)$row['folder'] === 2 && (int)($row['status'] ?? 0) !== 0;
+    if (!$confirmed && !$saved) return '';
+    $label = af_advancedmessenger_e(af_advancedmessenger_t($confirmed ? 'receipt_confirmed' : 'sent_copy'));
+    return '<span class="am-receipt" title="'.$label.'" role="img" aria-label="'.$label.'"><i class="fa-solid fa-'.($confirmed ? 'check-double' : 'check').'" aria-hidden="true"></i></span>';
+}
+
+/** Same folder[] values as core's advanced-search select; 0 means all folders. */
+function af_advancedmessenger_search_folders(): string
+{
+    global $lang;
+    $html = '<div class="am-folder-choices"><label><input type="checkbox" name="folder[]" value="0" checked data-am-all-folders="1"><span>'.af_advancedmessenger_e($lang->all_folders).'</span></label>';
+    foreach (af_advancedmessenger_folders() as $id => $name) {
+        $html .= '<label><input type="checkbox" name="folder[]" value="'.(int)$id.'"><span>'.af_advancedmessenger_e($name).'</span></label>';
+    }
+    return $html.'</div>';
 }
