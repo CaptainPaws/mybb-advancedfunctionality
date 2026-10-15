@@ -85,7 +85,7 @@ function af_advancedmessenger_sidebar(array $context): string
     $html .= '</header><form method="get" action="private.php" class="am-name-search">'
         .'<input type="hidden" name="am_folder" value="'.$folder.'">'
         .'<label for="am-search">'.af_advancedmessenger_e(af_advancedmessenger_t('search')).'</label><input id="am-search" name="am_name" type="search" maxlength="120" value="'
-        .af_advancedmessenger_e($context['name']).'"><button type="submit">'.af_advancedmessenger_e($lang->search).'</button></form>';
+        .af_advancedmessenger_e($context['name']).'"><button type="submit">'.af_advancedmessenger_e($lang->search_button).'</button></form>';
     $html .= '<details class="am-folders"><summary>'.af_advancedmessenger_e(af_advancedmessenger_t('folders')).'</summary><nav>'
         .af_advancedmessenger_link('private.php', af_advancedmessenger_t('all'));
     foreach (af_advancedmessenger_folders() as $id => $name) {
@@ -102,7 +102,7 @@ function af_advancedmessenger_sidebar(array $context): string
         .'<input type="hidden" name="my_post_key" value="'.af_advancedmessenger_e($mybb->post_code).'">'
         .'<input type="hidden" name="action" value="do_stuff"><input type="hidden" name="fid" value="'.$folder.'">'
         .'<label for="am-keywords">'.af_advancedmessenger_e(af_advancedmessenger_t('content_search')).'</label><input id="am-keywords" name="keywords" type="search" required>'
-        .'<button name="quick_search" value="1">'.af_advancedmessenger_e($lang->search).'</button></form>';
+        .'<button name="quick_search" value="1">'.af_advancedmessenger_e($lang->search_pms).'</button></form>';
     $html .= '<nav id="am-dialogs" class="am-dialogs" aria-label="'.af_advancedmessenger_e(af_advancedmessenger_t('dialogs')).'">';
     foreach ($context['dialogs']['items'] as $dialog) {
         $row = $dialog['row'];
