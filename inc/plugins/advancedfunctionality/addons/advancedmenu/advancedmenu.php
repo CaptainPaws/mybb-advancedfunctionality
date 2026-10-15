@@ -96,6 +96,16 @@ function af_menu_normalize_container(string $container): string
         'user_links'=>'user_drawer'][$container] ?? (array_key_exists($container, af_menu_containers()) ? $container : 'main');
 }
 
+/** Ordinary destinations belong to ACP custom links, never addon auto-discovery.
+ * These MyBB links are retained account/access controls, not addon page shortcuts.
+ */
+function af_menu_registration_allowed(array $item): bool
+{
+    if (($item['type'] ?? 'link') !== 'link') return true;
+    return ($item['source_addon'] ?? 'mybb') === 'mybb'
+        && in_array((string)($item['key'] ?? ''), ['profile','usercp','private_messages','modcp','admincp'], true);
+}
+
 /* Runtime catalogue contains immutable provider defaults. Presentation choices
  * are deliberately stored separately in AF_AM_TABLE_OVERRIDES. */
 function af_menu_register_item(array $item): bool
@@ -115,6 +125,7 @@ function af_menu_register_item(array $item): bool
     $item['section'] = array_key_exists((string)$item['section'], af_menu_sections()) ? (string)$item['section'] : 'settings';
     $item['allowed_containers'] = array_values(array_intersect(array_keys(af_menu_containers()), (array)$item['allowed_containers']));
     if (!$item['allowed_containers']) $item['allowed_containers'] = [$item['default_container']];
+    if (!af_menu_registration_allowed($item)) return false;
     $GLOBALS['af_advancedmenu_system_registry'][$key] = $item;
     return true;
 }
@@ -129,9 +140,7 @@ function af_menu_register_core_items(): void
     $postKey = rawurlencode((string)($mybb->post_code ?? ''));
     af_menu_register_item(['key'=>'profile','label'=>'Профиль','icon'=>'fa-solid fa-user','type'=>'link','section'=>'profile','default_container'=>'user_drawer','default_sortorder'=>10,'visibility'=>$member,'action'=>['url'=>'member.php?action=profile&amp;uid='.$uid]]);
     af_menu_register_item(['key'=>'usercp','label'=>'User CP','icon'=>'fa-solid fa-user-gear','type'=>'link','section'=>'profile','default_container'=>'user_drawer','default_sortorder'=>20,'visibility'=>$member,'action'=>['url'=>'usercp.php']]);
-    af_menu_register_item(['key'=>'new_posts','label'=>'Новые сообщения','icon'=>'fa-solid fa-clock-rotate-left','type'=>'link','section'=>'links','default_container'=>'user_drawer','default_sortorder'=>40,'visibility'=>$member,'action'=>['url'=>'search.php?action=getnew']]);
     af_menu_register_item(['key'=>'private_messages','label'=>'Личные сообщения','icon'=>'fa-solid fa-envelope','type'=>'link','section'=>'links','default_container'=>'user_drawer','default_sortorder'=>50,'visibility'=>$member,'action'=>['url'=>'private.php']]);
-    af_menu_register_item(['key'=>'todays_posts','label'=>'Сообщения за сегодня','icon'=>'fa-solid fa-calendar-day','type'=>'link','section'=>'links','default_container'=>'user_drawer','default_sortorder'=>60,'visibility'=>$member,'action'=>['url'=>'search.php?action=getdaily']]);
     af_menu_register_item(['key'=>'logout','label'=>'Выйти','icon'=>'fa-solid fa-right-from-bracket','type'=>'action/system','section'=>'settings','default_container'=>'user_drawer','default_sortorder'=>100,'visibility'=>$member,'action'=>['url'=>'member.php?action=logout&amp;logoutkey='.$postKey]]);
     af_menu_register_item(['key'=>'theme_switcher','label'=>'Тема','icon'=>'fa-solid fa-circle-half-stroke','type'=>'widget',
         'section'=>'theme','default_container'=>'user_drawer','default_sortorder'=>80,'visibility'=>true,
@@ -195,7 +204,8 @@ function af_menu_collect_registry(bool $force = false): array
             $function();
         }
     }
-    $items = $GLOBALS['af_advancedmenu_system_registry'] ?? [];
+    // Also exclude stale in-request entries supplied by older addon bootstraps.
+    $items = array_filter($GLOBALS['af_advancedmenu_system_registry'] ?? [], 'af_menu_registration_allowed');
     uasort($items, static fn(array $a, array $b): int => [$a['default_sortorder'], $a['key']] <=> [$b['default_sortorder'], $b['key']]);
     return $items;
 }
@@ -314,53 +324,14 @@ function af_menu_get_overrides(): array
     return $out;
 }
 
-/** Safely adopt demonstrable manual copies of the three historical provider links. */
-function af_menu_migrate_known_provider_copies(array $registry): void
-{
-    static $done = false;
-    if ($done) return;
-    $done = true;
-    global $db;
-    $known = ['advancedappearance::presets'=>true, 'advancedappearance::fitting_room'=>true,
-        'advancedpostcounter::post_activity'=>true];
-    $normalizeUrl = static function (string $url): string {
-        $url = html_entity_decode(trim($url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        return strtolower(ltrim((string)preg_replace('~^https?://[^/]+/~i', '', $url), '/'));
-    };
-    foreach ($registry as $provider) {
-        if (!isset($known[af_menu_provider_identity($provider)])) continue;
-        $providerUrl = $normalizeUrl((string)($provider['action']['url'] ?? ''));
-        if ($providerUrl === '') continue;
-        $q = $db->simple_select(AF_AM_TABLE_ITEMS, '*');
-        while ($custom = $db->fetch_array($q)) {
-            $urlMatches = $normalizeUrl((string)$custom['url']) === $providerUrl;
-            $labelMatches = trim((string)$custom['title']) === trim((string)$provider['label']);
-            $keyMatches = strtolower(trim((string)$custom['slug'])) === (string)$provider['key'];
-            // A label alone can be legitimate custom content and is never deleted.
-            if (!$urlMatches || (!$labelMatches && !$keyMatches)) continue;
-            $source = $db->escape_string((string)$provider['source_addon']);
-            $key = $db->escape_string((string)$provider['key']);
-            $where = "source_addon='{$source}' AND item_key='{$key}'";
-            $db->update_query(AF_AM_TABLE_OVERRIDES, [
-                'enabled'=>(int)$custom['enabled'],
-                'container'=>af_menu_normalize_container((string)($custom['container'] ?? $custom['location'])),
-                'section'=>af_menu_normalize_section((string)($custom['section'] ?? 'links')),
-                'sortorder'=>(int)$custom['sort_order'],
-                'label_override'=>$labelMatches ? null : (string)$custom['title'],
-                'icon_override'=>trim((string)$custom['icon']) === trim((string)$provider['icon']) ? null : (string)$custom['icon'],
-                'updated_at'=>TIME_NOW,
-            ], $where);
-            $db->delete_query(AF_AM_TABLE_ITEMS, "id='".(int)$custom['id']."'");
-        }
-    }
-}
+// Historical custom-to-provider adoption was intentionally removed: URL, slug
+// and label resemblance never authorize deleting an administrator's custom link.
 
 function af_menu_configured_registry(bool $ensure = true): array
 {
     $registry = af_menu_collect_registry();
     if ($ensure) {
         af_menu_ensure_registry_overrides($registry);
-        af_menu_migrate_known_provider_copies($registry);
     }
     $overrides = af_menu_get_overrides();
     foreach ($registry as $key => &$item) {

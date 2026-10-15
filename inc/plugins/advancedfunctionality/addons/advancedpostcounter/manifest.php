@@ -10,13 +10,6 @@ return [
     'bootstrap'   => 'advancedpostcounter.php',
 
 
-    'menu_provider' => [
-        'callback' => 'af_advancedpostcounter_menu_provider',
-        'items' => [
-            ['key'=>'post_activity','label'=>'Постовая активность','icon'=>'fa-solid fa-chart-column','type'=>'link','section'=>'links','default_container'=>'user_drawer','allowed_containers'=>['user_drawer'],'default_sortorder'=>60,'visibility'=>true,'action'=>['url'=>'postsactivity.php']],
-        ],
-    ],
-
     'frontend' => [
         'mode' => 'contextual',
         'routes' => [

@@ -1,5 +1,7 @@
 # AdvancedMenu stage 1: navigation audit and system registry
 
+> Historical inventory. Current registration policy is defined in [AdvancedMenu: public routes are opt-in custom navigation](FRONTEND_ASSET_MANIFEST_CONTRACT.md#advancedmenu-public-routes-are-opt-in-custom-navigation). Ordinary addon page links and custom-link adoption described below are retired.
+
 This is a source audit of the repository snapshot. Theme HTML stored in a live MyBB database is not in Git, so theme-only labels and the exact `footer` upper-link markup must be verified against the production templates before stage 2.
 
 ## Existing menu surfaces

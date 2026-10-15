@@ -39,13 +39,7 @@ function af_advancedappearance_presets_visible(): bool
     return af_aa_is_enabled() && (int)($mybb->user['uid']??0)>0 && empty($mybb->usergroup['isbannedgroup']);
 }
 
-function af_advancedappearance_menu_provider(): void
-{
-    af_menu_register_item(['key'=>'presets','source_addon'=>AF_AA_ID,'label'=>'Пресеты','icon'=>'fa-solid fa-palette','type'=>'link','section'=>'links','default_container'=>'user_drawer','allowed_containers'=>['user_drawer'],'default_sortorder'=>50,'visibility'=>'af_advancedappearance_presets_visible','action'=>['url'=>AF_AA_ALIAS_APSTUDIO]]);
-    af_menu_register_item(['key'=>'fitting_room','source_addon'=>AF_AA_ID,'label'=>'Примерочная','icon'=>'fa-solid fa-shirt','type'=>'link','section'=>'links','default_container'=>'user_drawer','allowed_containers'=>['user_drawer'],'default_sortorder'=>55,'visibility'=>true,'action'=>['url'=>AF_AA_ALIAS_FITTINGROOM]]);
-}
-
-
+// Public page URLs are opt-in CUSTOM links in ACP AdvancedMenu.
 require_once __DIR__ . '/personal.php';
 require_once __DIR__ . '/studio.php';
 require_once __DIR__ . '/surfaces.php';

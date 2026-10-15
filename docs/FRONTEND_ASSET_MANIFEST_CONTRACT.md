@@ -122,3 +122,37 @@ contextual addon следует осознанно задать `directory_fallb
 ## Standalone frontend page contract
 
 All new AF standalone pages must follow [ATF_PAGE_SHELL_CONTRACT.md](ATF_PAGE_SHELL_CONTRACT.md): one `.pun.atf-page-shell`, ATF-owned exterior geometry, preserved fallback, no embedded shells, and manifest-based frontend permissions.
+
+
+## AdvancedMenu: public routes are opt-in custom navigation
+
+New AF addons must not automatically register ordinary page links in AdvancedMenu,
+whether through a manifest `menu_provider`, a callback or a direct registry call.
+Provide a working public route and let the administrator add its URL as a CUSTOM
+item in ACP, choose its section/container and order, and configure its visibility.
+Route permissions remain the responsibility of the route owner; adding a menu
+link does not grant access to the destination.
+
+Provider registration is reserved for specialized interactive integrations such
+as AdvancedAlertsMentions notifications and AdvancedAccountSwitcher account
+switching. Their modal triggers, badges, handlers and provider identity remain
+system-owned. AdvancedMenu rejects automatic `type=link` registrations except
+its fixed MyBB account/access controls (`profile`, `usercp`, `private_messages`,
+`modcp`, `admincp`). Logout, guest login/registration and the theme widget remain
+system controls. New-post and daily-post search links are optional CUSTOM links.
+
+AdvancedAppearance (`presets`, `fitting_room`) and AdvancedPostCounter
+(`post_activity`) no longer expose menu-provider contracts or callbacks. Routes
+`apstudio.php`, `studio.php` (compatibility alias), `fittingroom.php` and
+`postsactivity.php` remain owned and served by the original addons. To show them,
+add ordinary CUSTOM links; no old provider container restriction is inherited.
+
+Existing provider overrides for retired links are deliberately retained as
+inactive records. The active catalogue is built from permitted registrations,
+so these rows cannot enter ACP/frontend trees, constrain sections or reappear on
+addon reactivation. No row is removed from the custom-items table, including
+same-URL links, manually converted items and records of ambiguous provenance.
+The historical migration that adopted/deleted lookalike CUSTOM links is removed.
+Section metadata and administrator ordering are not reset. If an installed addon
+still ships an old callback/manifest, the registry gate also rejects its ordinary
+links; deploy the complete update to remove the old declarations themselves.
