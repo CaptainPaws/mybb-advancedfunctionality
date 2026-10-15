@@ -14,7 +14,7 @@
 
 
 <!-- TEMPLATE: af_aam_modal -->
-<link rel="stylesheet" href="{$af_aam_asset_base}notifications-modal.css?v=1.1.0">
+<link rel="stylesheet" href="{$af_aam_asset_base}notifications-modal.css?v=1.1.1">
 <div id="af_aam_modal" style="display:none" class="af-aam-modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="af-aam-modal-title">
  <div class="af-aam-modal-backdrop"></div>
  <section class="af-aam-dialog" tabindex="-1">
@@ -24,6 +24,7 @@
    <button type="button" role="tab" data-aam-filter="unread" aria-selected="false" aria-controls="alerts_content" tabindex="-1">Непрочитанные <span data-aam-category="unread">0</span></button>
    <button type="button" role="tab" data-aam-filter="pm" aria-selected="false" aria-controls="alerts_content" tabindex="-1"><i class="fa-solid fa-envelope" aria-hidden="true"></i> ЛС <span data-aam-category="pm">0</span></button>
    <button type="button" role="tab" data-aam-filter="mention" aria-selected="false" aria-controls="alerts_content" tabindex="-1"><i class="fa-solid fa-at" aria-hidden="true"></i> Упоминания <span data-aam-category="mention">0</span></button>
+   <button type="button" role="tab" data-aam-filter="news" aria-selected="false" aria-controls="alerts_content" tabindex="-1"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Новости <span data-aam-category="news">0</span></button>
   </nav><button type="button" class="markAllReadButton"><i class="fa-solid fa-check" aria-hidden="true"></i> Отметить всё прочитанным</button></div>
   <div class="af-aam-scroll"><div id="alerts_content" role="tabpanel" aria-label="Уведомления">{$af_aam_modal_list}</div><button type="button" data-aam-more hidden>Показать ещё</button></div>
   <div id="af_aam_prefs_inline" style="display:none;"></div>

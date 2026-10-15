@@ -287,7 +287,7 @@ function af_aam_render_rows(array $items): string
         $read=!empty($it['is_read']);
         $esc=static function($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); };
         $code=(string)($it['type_code'] ?? '');
-        $icon=$code==='pm' ? 'envelope' : ($code==='mention' ? 'at' : ($code==='rep' ? 'star' : 'comment'));
+        $icon=!empty($it['is_all']) ? 'bullhorn' : ($code==='pm' ? 'envelope' : ($code==='mention' ? 'at' : ($code==='rep' ? 'star' : 'comment')));
         $avatar=$esc($it['avatar']['url'] ?? af_aam_default_avatar_url());
         $name=(string)($it['from_username'] ?? '');
         $text=strip_tags((string)($it['text'] ?? 'Уведомление'));
@@ -359,7 +359,7 @@ function af_aam_xmlhttp_dispatch(): void
         $prefs = af_aam_get_user_prefs($uid);
         $disabled = is_array($prefs['disabled_types'] ?? null) ? $prefs['disabled_types'] : [];
         $filter = (string)($mybb->input['filter'] ?? ($unreadOnly ? 'unread' : 'all'));
-        if (!in_array($filter,['all','unread','pm','mention'],true)) $filter='all';
+        if (!in_array($filter,['all','unread','pm','mention','news'],true)) $filter='all';
         $page=$repo->modal_page($uid,$filter,$limit,(int)($mybb->input['before'] ?? 0),$disabled);
         $items=$page['items'];
 

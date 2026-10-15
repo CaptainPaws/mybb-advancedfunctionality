@@ -54,7 +54,7 @@ function af_aam_handle_all_mention(string $message, int $fromUid, int $objectId,
     global $db, $mybb;
 
     // Есть ли @all
-    if (!preg_match('/(^|[\s>])@all\b/i', $message)) {
+    if (!preg_match('~(?<![\p{L}\p{N}_@.])@all(?![\p{L}\p{N}_.])|\[mention\]all\[/mention\]~iu', $message)) {
         return;
     }
 

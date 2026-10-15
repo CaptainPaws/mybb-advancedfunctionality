@@ -58,12 +58,17 @@ class AF_AAM_Repo
             $codes = array_map(function($code) use ($db) { return "'".$db->escape_string((string)$code)."'"; }, $disabled);
             $where .= " AND (t.code IS NULL OR t.code NOT IN (".implode(',', $codes)."))";
         }
+        // Existing @all marker; no extra event type or database JSON dependency.
+        $allMarker = "(REPLACE(COALESCE(a.extra,''),' ','') LIKE '%\"all\":1,%' OR REPLACE(COALESCE(a.extra,''),' ','') LIKE '%\"all\":1}%')";
+        $news = "(t.code='mention' AND ".$allMarker.")";
+        $mention = "(t.code='mention' AND NOT ".$allMarker.")";
         $join = " FROM ".TABLE_PREFIX."aam_alerts a LEFT JOIN ".TABLE_PREFIX."aam_alert_types t ON (t.id=a.type_id)";
-        $q = $db->write_query("SELECT COUNT(*) AS total, SUM(CASE WHEN a.is_read=0 THEN 1 ELSE 0 END) AS unread, SUM(CASE WHEN t.code='pm' THEN 1 ELSE 0 END) AS pm, SUM(CASE WHEN t.code='mention' THEN 1 ELSE 0 END) AS mention".$join." WHERE ".$where);
+        $q = $db->write_query("SELECT COUNT(*) AS total, SUM(CASE WHEN a.is_read=0 THEN 1 ELSE 0 END) AS unread, SUM(CASE WHEN t.code='pm' THEN 1 ELSE 0 END) AS pm, SUM(CASE WHEN {$mention} THEN 1 ELSE 0 END) AS mention, SUM(CASE WHEN {$news} THEN 1 ELSE 0 END) AS news".$join." WHERE ".$where);
         $counts = array_map('intval', (array)$db->fetch_array($q));
         if ($filter === 'unread') $where .= " AND a.is_read=0";
         elseif ($filter === 'pm') $where .= " AND t.code='pm'";
-        elseif ($filter === 'mention') $where .= " AND t.code='mention'";
+        elseif ($filter === 'mention') $where .= " AND ".$mention;
+        elseif ($filter === 'news') $where .= " AND ".$news;
         if ($before > 0) $where .= " AND a.id<".(int)$before;
         $limit = max(1,min(100,$limit));
         $q = $db->write_query("SELECT a.*, t.code, t.title, u.username AS from_username".$join." LEFT JOIN ".TABLE_PREFIX."users u ON (u.uid=a.from_uid) WHERE ".$where." ORDER BY a.id DESC LIMIT ".($limit+1));
@@ -249,6 +254,7 @@ class AF_AAM_Repo
                 'from_username' => (string)($row['from_username'] ?? ''),
 
                 // контент
+                'is_all' => !empty($extra['all']),
                 'subject' => (string)($extra['subject'] ?? ''),
                 'preview' => (string)($extra['preview'] ?? ''),
                 'dateline' => (int)($row['dateline'] ?? 0),

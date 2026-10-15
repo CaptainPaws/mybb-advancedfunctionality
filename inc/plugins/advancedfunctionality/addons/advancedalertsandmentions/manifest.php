@@ -9,7 +9,7 @@ return [
     'type'        => 'addon',
     'name'        => 'Advanced Alerts and Mentions',
     'description' => 'Система уведомлений и @упоминаний пользователей, интегрированная в AdvancedFunctionality.',
-    'version'     => '1.1.0',
+    'version'     => '1.1.1',
     'compatibility' => '18*',
     'author'   => 'CaptainPaws',
     'website'     => 'https://github.com/CaptainPaws',
