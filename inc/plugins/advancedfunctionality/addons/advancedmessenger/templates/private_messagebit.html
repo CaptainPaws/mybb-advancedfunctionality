@@ -1,0 +1,10 @@
+<article id="pm_{$message['pmid']}" class="am-pm-card am-card {$bgcolor} {$msgstatus}" data-pm-id="{$message['pmid']}">
+	<div class="am-pm-card__avatar am-avatar"><am-pm-avatar data-uid="{$tofromuid}"></am-pm-avatar></div>
+	<div class="am-pm-card__content am-card__body">
+		<h2 class="am-pm-card__subject am-card__title"><a class="{$msgstatus}" href="private.php?action=read&amp;pmid={$message['pmid']}">{$message['subject']}</a></h2>
+		<div class="am-pm-card__correspondent">{$tofromusername}</div>
+		<div class="am-pm-card__meta am-card__metadata"><span class="am-pm-card__state"><img src="{$theme['imgdir']}/{$msgstatus}.png" alt="{$msgalt}" title="{$msgalt}" /></span><span class="am-pm-card__icon">{$icon}</span><time class="am-pm-card__date">{$senddate}</time></div>
+		<div class="am-pm-card__receipt">{$denyreceipt}</div>
+	</div>
+	<label class="am-pm-card__check"><span class="am-visually-hidden">{$lang->select_message}</span><input type="checkbox" class="checkbox" name="check[{$message['pmid']}]" value="1" /></label>
+</article>

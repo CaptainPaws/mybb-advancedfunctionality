@@ -1,0 +1,38 @@
+<html>
+<head>
+<title>{$mybb->settings['bbname']} - {$lang->pm_tracking}</title>
+{$headerinclude}
+</head>
+<body class="{$am_body_class}" data-atf-owned="1">
+{$am_header}
+{$am_outer_start}
+	{$am_pm_before_content}
+	<header class="am-pm__header am-card">
+		<div class="am-pm__heading"><p class="am-pm__eyebrow">{$lang->private_messaging}</p><h1 class="am-pm__title">{$lang->pm_tracking}</h1></div>
+	</header>
+	<section class="am-pm-tracking__section" aria-labelledby="am-tracking-read-title">
+		<div class="am-pm-tracking__section-head"><h2 id="am-tracking-read-title">{$lang->read_messages}</h2><div class="am-pm-tracking__pagination">{$read_multipage}</div></div>
+		<form action="private.php" method="post" class="am-pm-tracking__form">
+			<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+			<input type="hidden" name="action" value="do_tracking" />
+			<div class="am-pm-tracking__toolbar am-card"><span>{$lang->message_title}</span><span>{$lang->sentto}</span><span>{$lang->dateread}</span><label><span class="am-visually-hidden">{$lang->selected_messages}</span><input type="checkbox" class="checkbox checkall" name="allbox" /></label></div>
+			<div class="am-pm-tracking__messages">{$readmessages}</div>
+			{$stoptrackingread}
+		</form>
+	</section>
+	<section class="am-pm-tracking__section" aria-labelledby="am-tracking-unread-title">
+		<div class="am-pm-tracking__section-head"><h2 id="am-tracking-unread-title">{$lang->unread_messages}</h2><div class="am-pm-tracking__pagination">{$unread_multipage}</div></div>
+		<form action="private.php" method="post" class="am-pm-tracking__form">
+			<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+			<input type="hidden" name="action" value="do_tracking" />
+			<div class="am-pm-tracking__toolbar am-card"><span>{$lang->message_title}</span><span>{$lang->sentto}</span><span>{$lang->datesent}</span><label><span class="am-visually-hidden">{$lang->selected_messages}</span><input type="checkbox" class="checkbox checkall" name="allbox" /></label></div>
+			<div class="am-pm-tracking__messages">{$unreadmessages}</div>
+			{$stoptrackingunread}
+		</form>
+	</section>
+	{$am_pm_after_content}
+{$am_outer_end}
+{$am_footer}
+
+</body>
+</html>

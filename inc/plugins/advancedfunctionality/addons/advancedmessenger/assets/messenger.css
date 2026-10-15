@@ -1,0 +1,104 @@
+/* Content geometry only. ATF remains the sole owner of .pun exterior geometry. */
+.am-root {
+  --am-bg: var(--atf-color-surface, #202532);
+  --am-bg-soft: var(--atf-color-page-subtle, #191e29);
+  --am-text: var(--atf-color-text, #e5e9f2);
+  --am-muted: var(--atf-color-text-muted, #a5afc2);
+  --am-line: var(--atf-color-border, #3a4356);
+  --am-accent: var(--atf-color-accent, #82aaff);
+  --am-radius: var(--atf-radius-md, 10px);
+  color: var(--am-text);
+  font-size: var(--atf-font-size-md, 14px);
+  line-height: 1.5;
+  min-width: 0;
+}
+.am-root *, .am-root *::before, .am-root *::after { box-sizing: border-box; }
+.am-root a { color: var(--am-accent); }
+.am-root :is(button, input, select, textarea) { font: inherit; }
+.am-root :is(button, .am-button, input[type="submit"]) {
+  padding: .45rem .75rem; color: var(--am-text); background: var(--am-bg-soft);
+  border: 1px solid var(--am-line); border-radius: .45rem; cursor: pointer;
+}
+.am-root button:disabled { opacity: .55; cursor: wait; }
+.am-root :is(input[type="text"], input[type="search"], textarea, select) {
+  padding: .5rem; background: var(--am-bg-soft); color: var(--am-text);
+  border: 1px solid var(--am-line); border-radius: .4rem; min-width: 0; max-width: 100%;
+}
+.am-root :is(a, button, input, textarea, select, summary):focus-visible { outline: 2px solid var(--am-accent); outline-offset: 3px; }
+.am-layout { display: grid; grid-template-columns: minmax(15rem, 30%) minmax(0, 1fr); height: calc(100dvh - 12rem); min-height: 32rem; overflow: hidden; border: 1px solid var(--am-line); border-radius: var(--am-radius); background: var(--am-bg); }
+.am-sidebar { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow-y: auto; border-inline-end: 1px solid var(--am-line); }
+.am-sidebar__head { display: flex; align-items: center; justify-content: space-between; gap: .7rem; padding: 1rem; }
+.am-sidebar__head h1 { font-size: 1.2rem; margin: 0; }
+.am-sidebar :is(.am-name-search, .am-content-search) { display: grid; gap: .4rem; padding: .5rem 1rem; }
+.am-sidebar :is(.am-name-search, .am-content-search) label { font-size: .8rem; color: var(--am-muted); }
+.am-folders, .am-tools { padding: .4rem 1rem; }
+.am-root summary { cursor: pointer; padding-block: .35rem; }
+.am-folders nav, .am-tools nav { display: grid; gap: .35rem; padding-block: .4rem; }
+.am-folders [aria-current="page"] { font-weight: bold; }
+.am-dialogs { flex: 1 0 12rem; overflow-y: auto; overscroll-behavior: contain; }
+.am-dialog { display: grid; grid-template-columns: 2.7rem minmax(0, 1fr) auto; align-items: center; gap: .65rem; padding: .9rem; text-decoration: none; border-block-end: 1px solid var(--am-line); }
+.am-dialog:hover { background: var(--am-bg-soft); }
+.am-dialog.is-active { background: color-mix(in srgb, var(--am-accent) 17%, var(--am-bg)); border-inline-start: 3px solid var(--am-accent); }
+.am-dialog__avatar, .am-dialog__avatar :is(img, .af-avatar), .am-avatar { display: block; width: 2.7rem; height: 2.7rem; border-radius: 50%; object-fit: cover; }
+.am-avatar { background: var(--am-bg-soft); text-align: center; line-height: 2.7rem; }
+.am-dialog__text { display: grid; gap: .2rem; min-width: 0; }
+.am-dialog__text strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--am-text); }
+.am-dialog__text > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: .8rem; color: var(--am-muted); overflow-wrap: anywhere; }
+.am-dialog__meta { display: grid; justify-items: end; gap: .35rem; font-size: .7rem; max-width: 5.5rem; color: var(--am-muted); }
+.am-unread { display: inline-block; border-radius: 2rem; padding: .1rem .5rem; background: var(--am-accent); color: var(--am-bg-soft); }
+.am-pages { display: flex; gap: 1rem; justify-content: center; padding: .5rem; }
+.am-quota { padding: .6rem; }
+.am-empty, .am-welcome { padding: 1.5rem; text-align: center; color: var(--am-muted); }
+.am-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow-y: auto; }
+.am-conversation-head { padding: .6rem 1rem; border-block-end: 1px solid var(--am-line); }
+.am-conversation-head h2 { font-size: 1rem; margin: 0; overflow-wrap: anywhere; }
+.am-status { margin: 0; padding: .5rem 1rem; color: var(--am-muted); }
+.am-status:empty { display: none; }
+.am-history { flex: 1 1 auto; min-height: 6rem; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 1rem; background: var(--am-bg-soft); }
+.am-history #posts { display: flex; flex-direction: column; gap: .9rem; }
+.am-history #am-history-more { text-align: center; margin-block-end: .7rem; }
+.am-bubble { align-self: flex-start; max-width: 88%; width: min(42rem, 100%); min-width: 0; border: 1px solid var(--am-line); background: var(--am-bg); border-radius: .9rem .9rem .9rem .15rem; overflow-wrap: anywhere; }
+.am-bubble--out { align-self: flex-end; background: color-mix(in srgb, var(--am-accent) 12%, var(--am-bg)); border-radius: .9rem .9rem .15rem .9rem; }
+.am-bubble .post { border: 0; margin: 0; background: transparent; box-shadow: none; }
+.am-bubble :is(.post_author, .post_controls, .post_statistics, .post_avhcnt) { display: none; }
+.am-bubble__head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; padding: .5rem .8rem; font-size: .75rem; color: var(--am-muted); }
+.am-root .am-bubble .atf-post__layout { display: block; }
+.am-root .am-bubble :is(.atf-post__sidebar, .atf-post__topbar, .atf-post__management, .atf-post__footer, .post_head) { display: none; }
+.am-root .am-bubble .atf-post__content { width: 100%; border: 0; }
+.am-bubble :is(.post_content, .post_body, .atf-post__content, .atf-post__body) { min-width: 0; max-width: 100%; width: auto; margin: 0; }
+.am-bubble .post_content { padding: .8rem; }
+.am-bubble .post.classic .post_content { float: none; width: auto; }
+.am-bubble :is(img, iframe, video, table) { max-width: 100%; }
+.am-bubble__foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: .4rem; padding: .4rem .8rem; font-size: .75rem; color: var(--am-muted); border-block-start: 1px solid var(--am-line); }
+.am-message-actions { max-width: 100%; }
+.am-message-actions nav, .am-message-form { display: flex; flex-wrap: wrap; gap: .5rem; padding-block: .5rem; }
+.am-message-form label { display: grid; }
+.am-message-actions[open] { flex-basis: 100%; }
+#am-composer-host { flex: 0 0 auto; min-width: 0; }
+.am-composer { display: block; border: 0; border-block-start: 1px solid var(--am-line); width: 100%; height: clamp(14rem, 35dvh, 23rem); background: var(--am-bg); }
+.am-tool-dialog { width: min(58rem, 94vw); height: min(90dvh, 55rem); padding: .75rem; color: var(--am-text); background: var(--am-bg); border: 1px solid var(--am-line); border-radius: var(--am-radius); }
+.am-tool-dialog::backdrop { background: #0009; }
+.am-tool-dialog[open] { display: flex; flex-direction: column; gap: .5rem; }
+.am-tool-dialog .am-panel-close { align-self: end; }
+.am-tool-dialog iframe { border: 0; flex: 1; width: 100%; min-height: 0; }
+.am-root.am-panel { padding: .65rem; background: var(--am-bg); }
+.am-body:has(> .am-panel) { margin: 0; background: #202532; }
+.am-panel .am-pm-compose__form { gap: .6rem; }
+.am-panel .am-pm-compose__editor textarea { min-height: 5rem; }
+.am-panel .am-pm-compose__header { display: none; }
+.am-card { padding: 1rem; background: var(--am-bg); border: 1px solid var(--am-line); border-radius: var(--am-radius); }
+.am-stack, .am-section, .am-form-row { display: grid; gap: .75rem; min-width: 0; }
+.am-native-list { margin: 1rem; min-width: 0; }
+.am-native-list > summary { padding: .7rem; }
+.am-composer-status:empty { display: none; }
+.am-back { display: none; }
+.am-root .am-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 48rem) {
+  .am-layout { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 8rem); min-height: 26rem; }
+  .am-root:not(.am-show-conversation) .am-pane { display: none; }
+  .am-root.am-show-conversation .am-sidebar { display: none; }
+  .am-back { display: block; align-self: start; margin: .4rem; }
+  .am-history { padding: .6rem; }
+  .am-bubble { max-width: 96%; }
+  .am-tool-dialog { width: 98vw; max-width: 98vw; height: 94dvh; }
+}

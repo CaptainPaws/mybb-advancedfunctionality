@@ -1,5 +1,20 @@
 # ATF private messaging migration contract
 
+## AdvancedMessenger integration
+
+The optional AdvancedMessenger addon now owns conversation projection, the
+messenger controller, AJAX and functional UI. ATF continues to own its existing
+44 interactive `private_*` database templates and their reversible ledger.
+AdvancedMessenger substitutes its own templates only in the request-local cache;
+it never leases or modifies those database rows. With AdvancedMessenger disabled,
+the Phase 1 ATF interface documented below remains unchanged. With ATF disabled,
+AdvancedMessenger uses its own templates/base styles and native theme postbits.
+See [ADVANCEDMESSENGER.md](ADVANCEDMESSENGER.md) for the four-state matrix, read
+adapter cost, native handler boundary and AdvancedEditor lifecycle.
+
+This extends the presentation-only scope below for AdvancedMessenger requests;
+it does not transfer ATF's template ownership or archive download ownership.
+
 ## Scope and evidence
 
 This contract began as the preparation audit for PM ownership and now records

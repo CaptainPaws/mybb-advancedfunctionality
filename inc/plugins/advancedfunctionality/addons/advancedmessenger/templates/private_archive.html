@@ -1,0 +1,39 @@
+<html>
+<head>
+<title>{$mybb->settings['bbname']} - {$lang->archive_messages}</title>
+{$headerinclude}
+</head>
+<body class="{$am_body_class}" data-atf-owned="1">
+{$am_header}
+{$am_outer_start}
+	<header class="am-pm__header am-card"><div class="am-pm__heading"><p class="am-pm__eyebrow">{$lang->private_messaging}</p><h1 class="am-pm__title">{$lang->archive_messages}</h1><p class="am-form-row__hint">{$lang->archive_note}</p></div></header>
+	<form action="private.php" method="post" class="am-pm-archive__form am-stack">
+		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+		<section class="am-pm-archive__section am-card am-stack">
+			<h2>{$lang->folders}</h2>
+			<div class="am-form-row"><label class="am-form-row__label" for="am-archive-folders">{$lang->folders}</label>{$folderlist}</div>
+		</section>
+		<section class="am-pm-archive__section am-card am-stack">
+			<h2>{$lang->export_format}</h2>
+			<fieldset class="am-form-row"><legend class="am-form-row__label">{$lang->export_format}</legend><p class="am-form-row__hint">{$lang->export_format_note}</p><div class="am-form-row__choices"><label><input type="radio" class="radio" name="exporttype" value="html" checked="checked" /> {$lang->export_html}</label><label><input type="radio" class="radio" name="exporttype" value="txt" /> {$lang->export_txt}</label><label><input type="radio" class="radio" name="exporttype" value="csv" /> {$lang->export_csv}</label></div></fieldset>
+		</section>
+		<section class="am-pm-archive__section am-card am-stack">
+			<h2>{$lang->date_limit}</h2>
+			<div class="am-form-row"><label class="am-form-row__label" for="am-archive-dayway">{$lang->date_limit}</label><div class="am-pm-archive__date"><select name="dayway" id="am-archive-dayway"><option value="older">{$lang->date_limit_older}</option><option value="newer">{$lang->date_limit_newer}</option><option value="disregard">{$lang->date_limit_disregard}</option></select><input type="text" class="textbox" name="daycut" value="30" size="3" maxlength="4" aria-label="{$lang->date_limit_days}" /> <span>{$lang->date_limit_days}</span></div></div>
+		</section>
+		<section class="am-pm-archive__section am-card am-stack">
+			<h2>{$lang->export_unread}</h2>
+			<fieldset class="am-form-row"><legend class="am-form-row__label">{$lang->export_unread}</legend><div class="am-form-row__choices"><label><input type="radio" class="radio" name="exportunread" value="1" /> {$lang->yes}</label><label><input type="radio" class="radio" name="exportunread" value="0" checked="checked" /> {$lang->no}</label></div></fieldset>
+		</section>
+		<section class="am-pm-archive__section am-card am-stack">
+			<h2>{$lang->delete_archived}</h2>
+			<fieldset class="am-form-row"><legend class="am-form-row__label">{$lang->delete_archived}</legend><p class="am-form-row__hint">{$lang->delete_archived_note}</p><div class="am-form-row__choices"><label><input type="radio" class="radio" name="deletepms" value="1" /> {$lang->yes}</label><label><input type="radio" class="radio" name="deletepms" value="0" checked="checked" /> {$lang->no}</label></div></fieldset>
+		</section>
+		<input type="hidden" name="action" value="do_export" />
+		<div class="am-pm-archive__actions"><input type="submit" class="am-button" name="submit" value="{$lang->archive_messages}" /></div>
+	</form>
+{$am_outer_end}
+{$am_footer}
+
+</body>
+</html>

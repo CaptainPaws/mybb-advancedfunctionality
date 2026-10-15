@@ -1,0 +1,25 @@
+<html>
+<head>
+<title>{$mybb->settings['bbname']} - {$lang->empty_folders}</title>
+{$headerinclude}
+</head>
+<body class="{$am_body_class}" data-atf-owned="1">
+{$am_header}
+{$am_outer_start}
+	<header class="am-pm__header am-card"><div class="am-pm__heading"><p class="am-pm__eyebrow">{$lang->private_messaging}</p><h1 class="am-pm__title">{$lang->empty_folders}</h1></div></header>
+	<form action="private.php" method="post" class="am-pm-folders__form am-stack">
+		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+		<section class="am-pm-folders__section am-card am-stack">
+			<p class="am-form-row__hint">{$lang->empty_note}</p>
+			<div class="am-pm-empty__head"><span>{$lang->export_folder}</span><span>{$lang->num_messages}</span><span>{$lang->empty_q}</span></div>
+			<div class="am-pm-folders__list am-stack am-stack--compact">{$folderlist}</div>
+			<label class="am-form-row am-pm-empty__keep"><input type="checkbox" class="checkbox" name="keepunread" value="1" checked="checked" /><strong>{$lang->keep_unread}</strong></label>
+		</section>
+		<input type="hidden" name="action" value="do_empty" />
+		<div class="am-pm-folders__actions am-pm-empty__actions"><input type="submit" class="am-button am-button--danger" name="submit" value="{$lang->delete}" /></div>
+	</form>
+{$am_outer_end}
+{$am_footer}
+
+</body>
+</html>

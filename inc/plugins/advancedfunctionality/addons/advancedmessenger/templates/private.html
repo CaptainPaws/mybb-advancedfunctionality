@@ -1,0 +1,47 @@
+<html>
+<head>
+<title>{$mybb->settings['bbname']} - {$lang->private_messaging}</title>
+{$headerinclude}
+</head>
+<body class="{$am_body_class}" data-atf-owned="1">
+{$am_header}
+{$am_outer_start}
+	{$am_pm_before_content}
+	<header class="am-pm__header am-card">
+		<div class="am-pm__heading">
+			<p class="am-pm__eyebrow">{$lang->private_messaging}</p>
+			<h1 class="am-pm__title">{$foldername}</h1>
+		</div>
+		<div class="am-pm__links"><a href="private.php">{$lang->inbox}</a>{$am_pm_actions} | <a href="private.php?action=folders">{$lang->manage_folders}</a></div>
+		<div class="am-pm__quota">{$am_pm_quota}</div>
+	</header>
+	<div class="am-pm__notice">{$am_pm_notice}</div>
+	<p class="am-welcome">{$am_label_select}</p><details class="am-native-list" {$am_list_open}><summary>{$am_label_folder_messages}</summary><form action="private.php" method="post" name="pmForm" class="am-pm__form">
+		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+		<section class="am-pm__toolbar am-card" aria-label="{$lang->search_pms}">
+			<div class="am-pm__search">
+				<input type="text" name="keywords" value="{$lang->enter_keywords}" onfocus="if(this.value == '{$lang->enter_keywords}') { this.value = ''; }" onblur="if(this.value=='') { this.value='{$lang->enter_keywords}'; }" class="textbox" size="25" />
+				<input type="submit" class="button" name="quick_search" value="{$lang->search_pms}" />
+				<a href="private.php?action=advanced_search">{$lang->advanced_search}</a>
+			</div>
+			<div class="am-pm__sort">
+				<span><a href="private.php?fid={$fid}&amp;sortby=subject&amp;order=asc">{$lang->message_title}</a> {$orderarrow['subject']}</span>
+				<span><a href="private.php?fid={$fid}&amp;sortby=username&amp;order=asc">{$sender}</a> {$orderarrow['username']}</span>
+				<span><a href="private.php?fid={$fid}&amp;sortby=dateline&amp;order=desc">{$lang->date_sent}</a> {$orderarrow['dateline']}</span>
+			</div>
+			<label class="am-pm__select-all"><input name="allbox" title="{$lang->check_all}" type="checkbox" class="checkbox checkall" value="{$lang->check_all}" /> {$lang->check_all}</label>
+		</section>
+		<section class="am-pm__messages" aria-live="polite">{$messagelist}</section>
+		<footer class="am-pm__mass-actions am-card">
+			<div class="am-pm__selected-actions"><input type="submit" class="button" name="moveto" value="{$lang->move_to}" /> {$folderoplist} {$lang->or} <input type="submit" class="button" name="delete" value="{$lang->delete}" /> {$lang->selected_messages}</div>
+			<div class="am-pm__folder-jump"><strong>{$lang->jump_folder}</strong> {$folderjump} <input type="submit" class="button" name="hop" value="{$lang->go}" /></div>
+		</footer>
+		<input type="hidden" name="action" value="do_stuff" />
+	</form>
+	<div class="am-pm__pagination">{$am_pm_pagination}</div>
+	</details>{$am_pm_after_content}
+{$am_outer_end}
+{$am_footer}
+
+</body>
+</html>
