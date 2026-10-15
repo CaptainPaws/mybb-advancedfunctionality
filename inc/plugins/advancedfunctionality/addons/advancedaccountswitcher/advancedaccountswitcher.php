@@ -955,7 +955,7 @@ function af_aas_handle_walk(): void
     if (!is_dir($lockDir)) {
         @mkdir($lockDir, 0755, true);
     }
-    $resultFile = $lockDir . '/' . hash('sha256', $masterUid . '|' . $token) . '.json';
+    $resultFile = $lockDir . '/' . hash('sha256', $masterUid . '|' . (int)($mybb->input['uid'] ?? 0) . '|' . $token) . '.json';
     $lock = @fopen($lockDir . '/master_' . $masterUid . '.lock', 'c+');
     if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
         af_aas_walk_json(['ok' => false, 'message' => 'Выгул уже выполняется.']);
@@ -976,6 +976,12 @@ function af_aas_handle_walk(): void
         if ($user) {
             $accounts[(int)$user['uid']] = $user;
         }
+    }
+
+    if (array_key_exists('uid', $mybb->input)) {
+        $targetUid = $mybb->get_input('uid', MyBB::INPUT_INT);
+        if ($targetUid <= 0 || !isset($accounts[$targetUid])) af_aas_walk_json(['ok'=>false,'message'=>'Аккаунт не входит в вашу связку.']);
+        $accounts = [$targetUid => $accounts[$targetUid]];
     }
 
     $autopost = !empty($mybb->input['autopost']);
@@ -2332,13 +2338,13 @@ function af_aas_usercp_menu()
 }
 
 
-function af_aas_get_avatar_url(int $uid): string
+function af_aas_get_avatar_url(int $uid, ?array $user = null): string
 {
     global $mybb;
 
     $bburl = rtrim((string)$mybb->settings['bburl'], '/');
 
-    $u = get_user($uid);
+    $u = $user ?? get_user($uid);
     if (!$u) {
         return $bburl . '/images/default_avatar.png';
     }
@@ -2375,165 +2381,64 @@ function af_aas_get_avatar_url(int $uid): string
 
 function af_aas_render_panel_widget(): string
 {
-    global $mybb, $templates, $lang;
-
+    global $mybb, $templates, $lang, $db, $cache;
     $uid = (int)($mybb->user['uid'] ?? 0);
-    if ($uid <= 0) {
-        return '';
-    }
-
+    if (!$uid || !is_object($templates)) return '';
     af_aas_load_lang(false);
-
-    $masterUid  = af_aas_get_master_uid($uid);
-    $masterUser = get_user($masterUid);
-    if (!$masterUser) {
-        return '';
-    }
-
-    $bburl = rtrim((string)$mybb->settings['bburl'], '/');
-
-    $all = [];
-    $all[] = [
-        'uid'       => (int)$masterUser['uid'],
-        'username'  => (string)$masterUser['username'],
-        'is_master' => 1,
-    ];
-
+    $masterUid = af_aas_get_master_uid($uid);
     $attached = af_aas_get_accounts_for_master($masterUid);
-    foreach ($attached as $a) {
-        $all[] = [
-            'uid'       => (int)$a['uid'],
-            'username'  => (string)$a['username'],
-            'is_master' => 0,
-        ];
+    $ids = array_values(array_unique(array_merge([$uid,$masterUid], array_column($attached,'uid'))));
+    $query = $db->simple_select('users', 'uid,username,avatar,avatardimensions,usergroup,usertitle,regdate,lastactive,invisible', 'uid IN ('.implode(',',array_map('intval',$ids)).')');
+    $users = [];
+    while ($user = $db->fetch_array($query)) $users[(int)$user['uid']] = $user;
+    if (empty($users[$masterUid])) return '';
+    $canManage = !empty($mybb->settings['af_advancedaccountswitcher_allow_create']) || !empty($mybb->settings['af_advancedaccountswitcher_allow_link_existing']);
+    if (count($users) < 2 && !$canManage) return '';
+    // Source-owned presentation, request-local: existing installations must not
+    // continue serving the old DB table markup until a manual template sync.
+    $source = file_get_contents(__DIR__.'/templates/advancedaccountswitcher.html');
+    foreach (['af_aas_panel_widget','af_aas_panel_row'] as $name) {
+        if (!preg_match('~<!-- TEMPLATE: '.$name.' -->\s*([\s\S]*?)\s*<!-- /TEMPLATE -->~', $source, $match)) return '';
+        $templates->cache[$name] = $match[1];
     }
-
-    $canManage = (!empty($mybb->settings['af_advancedaccountswitcher_allow_create']) || !empty($mybb->settings['af_advancedaccountswitcher_allow_link_existing']));
-    if (count($all) < 2 && !$canManage) {
-        return '';
-    }
-
-    $af_aas_ucp_url          = htmlspecialchars_uni($bburl . '/usercp.php?action=af_aas');
-    $af_aas_account_list_url = htmlspecialchars_uni($bburl . '/userlist.php');
-
-    $myPostKey = (string)$mybb->post_code;
-    $af_aas_walk_url = htmlspecialchars_uni($bburl . '/misc.php?action=af_aas_walk');
-    $af_aas_walk_post_key = htmlspecialchars_uni($myPostKey);
-    $af_aas_walk_controls = '<div class="af-aas-walk" data-url="' . $af_aas_walk_url
-        . '" data-post-key="' . $af_aas_walk_post_key . '">'
-        . '<label><input type="checkbox" class="af-aas-walk-autopost"> '
-        . htmlspecialchars_uni((string)($lang->af_aas_walk_autopost ?? 'С автопостингом')) . '</label>'
-        . '<button type="button" class="button af-aas-walk-button">'
-        . htmlspecialchars_uni((string)($lang->af_aas_walk_button ?? 'Выгул твинков')) . '</button>'
-        . '<div class="af-aas-walk-result" role="status" aria-live="polite"></div></div>';
-
-    $useTemplates = (is_object($templates)
-        && $templates->get('af_aas_panel_widget') !== ''
-        && $templates->get('af_aas_panel_row') !== '');
-
-    $rows = '';
-    $i = 0;
-
-    foreach ($all as $it) {
-        if ((int)$it['uid'] === $uid) {
-            continue;
+    $groups = $cache->read('usergroups');
+    $bburl = rtrim((string)$mybb->settings['bburl'], '/');
+    $af_aas_ucp_url = htmlspecialchars_uni($bburl.'/usercp.php?action=af_aas');
+    $af_aas_walk_url = htmlspecialchars_uni($bburl.'/misc.php?action=af_aas_walk');
+    $af_aas_walk_post_key = htmlspecialchars_uni((string)$mybb->post_code);
+    $af_aas_add_button = $canManage && $uid === $masterUid
+        ? '<a class="af-aas-ui-button" href="'.$af_aas_ucp_url.'#'.(!empty($mybb->settings['af_advancedaccountswitcher_allow_link_existing']) ? 'afAasLinkForm' : 'afAasCreateUsername').'"><i class="fa-solid fa-plus" aria-hidden="true"></i>Добавить аккаунт</a>'
+        : '<button type="button" class="af-aas-ui-button" disabled title="Добавление доступно основному аккаунту при включённых привязках"><i class="fa-solid fa-plus" aria-hidden="true"></i>Добавить аккаунт</button>';
+    $af_aas_panel_rows = '';
+    foreach ($ids as $accountUid) {
+        if (empty($users[$accountUid])) continue;
+        $user = $users[$accountUid];
+        $af_aas_item_uid = (int)$accountUid;
+        $af_aas_item_username = htmlspecialchars_uni((string)$user['username']);
+        $af_aas_item_active = $accountUid === $uid ? ' is-current' : '';
+        $online = (int)$user['lastactive'] > TIME_NOW - (int)$mybb->settings['wolcutoff'] * 60
+            && (empty($user['invisible']) || !empty($mybb->usergroup['canviewwolinvis']) || $accountUid === $uid);
+        $af_aas_online_class = $online ? ' is-online' : '';
+        $af_aas_item_status = $online ? 'В сети' : ((!empty($user['invisible']) && empty($mybb->usergroup['canviewwolinvis']) && $accountUid !== $uid) ? 'Не в сети' : ((int)$user['lastactive'] > 0 ? 'Был в сети '.my_date((string)$mybb->settings['dateformat'], (int)$user['lastactive']) : 'Не в сети'));
+        $meta = [];
+        if (!empty($groups[(int)$user['usergroup']]['title'])) $meta[] = $groups[(int)$user['usergroup']]['title'];
+        if (!empty($user['usertitle'])) $meta[] = $user['usertitle'];
+        if ((int)$user['regdate'] > 0) $meta[] = 'Участник с '.my_date((string)$mybb->settings['dateformat'], (int)$user['regdate']);
+        $af_aas_item_meta = htmlspecialchars_uni(implode(' · ',array_unique($meta)));
+        $af_aas_item_avatar = '<img src="'.htmlspecialchars_uni(af_aas_get_avatar_url($accountUid,$user)).'" alt="" loading="lazy">';
+        $af_aas_item_badge = $accountUid === $masterUid ? '<span class="af-aas-primary"><i class="fa-solid fa-crown" aria-hidden="true"></i>Основной аккаунт</span>' : '';
+        $af_aas_item_switch = $accountUid === $uid ? '<span class="af-aas-current"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>Текущий аккаунт</span>'
+            : '<a class="af-aas-ui-button af-aas-switch" href="'.htmlspecialchars_uni($bburl.'/misc.php?action=af_aas_switch&uid='.$accountUid.'&my_post_key='.rawurlencode((string)$mybb->post_code)).'"><span>Переключиться</span></a>';
+        $af_aas_item_menu = '<details class="af-aas-account-menu"><summary aria-label="Действия: '.$af_aas_item_username.'"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></summary><div class="af-aas-dropdown" popover="manual"><button type="button" data-aas-walk-uid="'.$accountUid.'"><i class="fa-solid fa-person-walking" aria-hidden="true"></i>Выгулить этот аккаунт</button>';
+        if ($uid === $masterUid && $accountUid !== $masterUid) {
+            $af_aas_item_menu .= '<form method="post" action="'.$af_aas_ucp_url.'" data-aas-unlink><input type="hidden" name="my_post_key" value="'.$af_aas_walk_post_key.'"><input type="hidden" name="do" value="unlink"><input type="hidden" name="uid" value="'.$accountUid.'"><button type="submit" class="af-aas-danger"><i class="fa-solid fa-link-slash" aria-hidden="true"></i>Отвязать</button></form>';
         }
-
-        $i++;
-        $af_aas_row_class     = ($i % 2 === 0) ? 'trow2' : 'trow1';
-        $af_aas_item_uid      = (int)$it['uid'];
-        $af_aas_item_username = htmlspecialchars_uni((string)$it['username']);
-
-        $avatarUrl          = htmlspecialchars_uni(af_aas_get_avatar_url($af_aas_item_uid));
-        $af_aas_item_avatar = '<span class="af-aas-avatar"><img src="' . $avatarUrl . '" alt=""></span>';
-
-        $switchUrl              = $bburl . '/misc.php?action=af_aas_switch&uid=' . (int)$af_aas_item_uid . '&my_post_key=' . urlencode($myPostKey);
-        $af_aas_item_switch_url = htmlspecialchars_uni($switchUrl);
-
-        $badgeTxt = htmlspecialchars_uni((string)($lang->af_aas_badge_master ?? ''));
-        $af_aas_item_badge  = !empty($it['is_master']) ? '<span class="af-aas-badge">' . $badgeTxt . '</span>' : '';
-        $af_aas_item_active = '';
-
-        if ($useTemplates) {
-            $rowOut = '';
-            eval('$rowOut = "' . $templates->get('af_aas_panel_row') . '";');
-            $rows .= $rowOut;
-        } else {
-            $btnLogin = htmlspecialchars_uni((string)($lang->af_aas_btn_login ?? ''));
-            $rows .= '<tr class="' . $af_aas_row_class . ' af-aas-modal-row' . $af_aas_item_active . '">
-                <td class="af-aas-modal-avatar" width="40">' . $af_aas_item_avatar . '</td>
-                <td class="af-aas-modal-name">
-                    <strong>' . $af_aas_item_username . '</strong> ' . $af_aas_item_badge . '<br />
-                    <span class="smalltext">#' . (int)$af_aas_item_uid . '</span>
-                </td>
-                <td class="af-aas-modal-action" width="90">
-                    <a class="button button_small" href="' . $af_aas_item_switch_url . '">' . $btnLogin . '</a>
-                </td>
-            </tr>';
-        }
+        $af_aas_item_menu .= '</div></details>';
+        eval('$af_aas_panel_rows .= "'.$templates->get('af_aas_panel_row').'";');
     }
-
-    if ($rows === '') {
-        if (is_object($templates) && $templates->get('af_aas_panel_empty') !== '') {
-            eval('$rows = "' . $templates->get('af_aas_panel_empty') . '";');
-        } else {
-            $empty = htmlspecialchars_uni((string)($lang->af_aas_panel_empty ?? ''));
-            $rows = '<tr><td class="trow1" colspan="3">' . $empty . '</td></tr>';
-        }
-    }
-
-    if ($useTemplates) {
-        $af_aas_panel_rows = $rows;
-        $out = '';
-        eval('$out = "' . $templates->get('af_aas_panel_widget') . '";');
-        // Existing boards can still have the pre-upgrade DB template. Keep the
-        // runtime output complete until the next explicit template sync.
-        if (strpos($out, 'af-aas-walk') === false) {
-            $out = preg_replace('~(</td>\s*</tr>\s*</tfoot>)~i', $af_aas_walk_controls . '$1', $out, 1);
-        }
-        return $out;
-    }
-
-    $tSwitch  = htmlspecialchars_uni((string)($lang->af_aas_header_title_switch ?? ''));
-    $lblAcc   = htmlspecialchars_uni((string)($lang->af_aas_header_label_accounts ?? ''));
-    $mTitle   = htmlspecialchars_uni((string)($lang->af_aas_modal_title_accounts ?? ''));
-    $mClose   = htmlspecialchars_uni((string)($lang->af_aas_modal_close_title ?? ''));
-    $fManage  = htmlspecialchars_uni((string)($lang->af_aas_footer_manage_accounts ?? ''));
-    $fList    = htmlspecialchars_uni((string)($lang->af_aas_footer_account_list ?? ''));
-
-    return '
-    <span class="af-aas-panel">
-        <a href="#" class="af-aas-trigger" id="af_aas_trigger" aria-expanded="false" title="' . $tSwitch . '">👥 ' . $lblAcc . '</a>
-    </span>
-
-    <div id="af_aas_modal" class="modal af-aas-modal" role="dialog" aria-modal="true" aria-hidden="true" style="display:none;">
-        <div class="af-aas-modal-backdrop"></div>
-
-        <table class="tborder af-aas-modal-table" cellspacing="1" cellpadding="6" border="0">
-            <thead>
-            <tr>
-                <th class="thead" colspan="3">
-                    <strong>' . $mTitle . '</strong>
-                    <button type="button" class="af-aas-modal-close" title="' . $mClose . '">✕</button>
-                </th>
-            </tr>
-            </thead>
-
-            <tbody id="af_aas_modal_body">' . $rows . '</tbody>
-
-            <tfoot>
-            <tr>
-                <td class="tfoot" colspan="3">
-                    <div class="af-aas-modal-footer">
-                        <a href="' . $af_aas_ucp_url . '" class="af-aas-footer-link">' . $fManage . '</a>
-                        <a href="' . $af_aas_account_list_url . '" class="af-aas-footer-link">' . $fList . '</a>
-                    </div>
-                    ' . $af_aas_walk_controls . '
-                </td>
-            </tr>
-            </tfoot>
-        </table>
-    </div>';
+    $out = '';
+    eval('$out = "'.$templates->get('af_aas_panel_widget').'";');
+    return $out;
 }
 
 /**

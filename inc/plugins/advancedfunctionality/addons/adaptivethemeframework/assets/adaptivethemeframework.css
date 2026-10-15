@@ -96,7 +96,7 @@ body.atf-active .pun.atf-page-shell :is(
    #content.atf-page-shell also outranks the installed MyBB theme #content reset.
    The root paints its own background and outer edge. Pseudo-elements draw only
    the inset lines/ornament, never an opaque panel over content. */
-body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-page-shell *) {
+body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell, .af-aas-dialog):not(.atf-page-shell *) {
   --atf-frame-fill: radial-gradient(ellipse at 50% 0%, rgb(84 70 140 / 19%), transparent 65%), linear-gradient(135deg, #0d1424, #090e1c 65%, #15152b);
   position: relative;
   isolation: isolate;
@@ -113,7 +113,7 @@ body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-
    the root itself. No clip, mask or transform is applied to the content root.
    Without this support the solid border + full background above remain visible. */
 @supports (clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%)) {
-  body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-page-shell *) {
+  body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell, .af-aas-dialog):not(.atf-page-shell *) {
     border: 0;
     background:
       linear-gradient(125deg, var(--atf-frame-edge), var(--atf-frame-edge-soft) 38%, #6973a8 70%, var(--atf-frame-edge)) center top / calc(100% - 2 * var(--atf-frame-cut)) 1px no-repeat,
@@ -130,8 +130,8 @@ body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-
       linear-gradient(var(--atf-frame-background), var(--atf-frame-background)) right center / var(--atf-frame-cut) calc(100% - 2 * var(--atf-frame-cut)) no-repeat;
   }
 }
-body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-page-shell *)::before,
-body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-page-shell *)::after {
+body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell, .af-aas-dialog):not(.atf-page-shell *)::before,
+body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell, .af-aas-dialog):not(.atf-page-shell *)::after {
   position: absolute;
   content: "";
   pointer-events: none;
@@ -139,12 +139,12 @@ body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-
   box-sizing: border-box;
   border-radius: 0;
 }
-body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-page-shell *)::before {
+body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell, .af-aas-dialog):not(.atf-page-shell *)::before {
   inset: 4px;
   border: 1px solid var(--atf-frame-inner-line);
   box-shadow: inset 0 0 0 2px var(--atf-frame-background), inset 0 0 0 3px var(--atf-frame-inner-line);
 }
-body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell):not(.atf-page-shell *)::after {
+body.atf-active *:is(#content.pun.atf-page-shell, .pun.atf-page-shell, .af-aas-dialog):not(.atf-page-shell *)::after {
   inset: var(--atf-frame-ornament-inset);
   background:
     linear-gradient(135deg, var(--atf-frame-edge), transparent 60%) left top / var(--atf-frame-ornament-size) 1px no-repeat,

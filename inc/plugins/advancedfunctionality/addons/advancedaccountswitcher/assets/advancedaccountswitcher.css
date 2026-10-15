@@ -374,3 +374,81 @@ td:has(.af-ul-avatarwrap){
 #header ul.menu li #af_aas_modal .af-aas-modal-footer {
     background-image: none;
 }
+
+/* Account picker: the existing modal runtime and ATF page-frame paint contract. */
+body.af-aas-lock-scroll { overflow: hidden; }
+#af_aas_modal {
+  --aas-bg: var(--atf-color-surface, #081321); --aas-soft: var(--atf-color-page-subtle, #0d1d32);
+  --aas-text: var(--atf-color-text, #e8efff); --aas-muted: var(--atf-color-text-muted, #9db9db);
+  --aas-accent: var(--atf-color-accent, #57b6f7); --aas-line: var(--atf-color-border, #25455e);
+  --atf-frame-background: var(--atf-color-page-subtle, #081321);
+  position: fixed; inset: 0; width: 100%; height: 100%; padding: 18px; box-sizing: border-box;
+  align-items: center; justify-content: center; background: transparent; color: var(--aas-text); font: 14px/1.45 system-ui,sans-serif;
+}
+#af_aas_modal *, #af_aas_modal *::before, #af_aas_modal *::after { box-sizing: border-box; }
+#af_aas_modal .af-aas-modal-backdrop { background: rgb(0 5 12 / 72%); backdrop-filter: blur(4px); }
+#af_aas_modal .af-aas-dialog {
+  position: relative; isolation: isolate; z-index: 1; display: grid; grid-template-rows: auto minmax(0,1fr) auto auto;
+  width: 920px; max-width: 100%; max-height: calc(100dvh - 36px); min-height: 0; padding: 9px;
+  border: 1px solid var(--atf-frame-edge, var(--aas-accent)); border-radius: var(--atf-frame-cut, 6px);
+  background: var(--atf-frame-fill, linear-gradient(120deg,var(--aas-soft),var(--aas-bg) 65%)) var(--atf-frame-background);
+  box-shadow: 0 0 12px color-mix(in srgb,var(--aas-accent) 30%,transparent), inset 0 0 0 3px var(--atf-frame-background), inset 0 0 0 4px var(--atf-frame-inner-line,var(--aas-line));
+}
+#af_aas_modal .af-aas-dialog > * { position: relative; z-index: 1; min-width: 0; }
+#af_aas_modal .af-aas-modal-head {
+  display: flex; align-items: center; gap: 24px; padding: 18px 20px; min-height: 108px;
+  background-image: linear-gradient(90deg,var(--aas-bg) 8%,color-mix(in srgb,var(--aas-bg) 65%,transparent) 55%,color-mix(in srgb,var(--aas-bg) 20%,transparent)),url('https://warprift.ru/uploads/af_gallery/1/2026/10/2240bb976cd73c5cbb555246b3001753.png');
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+}
+#af_aas_modal .af-aas-heading-icon { display: grid; place-items: center; flex: 0 0 68px; width: 68px; height: 68px; border: 1px solid var(--aas-accent); border-radius: 50%; color: var(--aas-accent); font-size: 27px; background: color-mix(in srgb,var(--aas-accent) 9%,var(--aas-bg)); }
+#af_aas_modal .af-aas-modal-head h2 { margin: 0 0 4px; color: var(--aas-text); font-size: 26px; line-height: 1.25; }
+#af_aas_modal .af-aas-modal-head p { margin: 0; color: var(--aas-accent); font-size: 16px; }
+#af_aas_modal .af-aas-modal-close { float: none; align-self: flex-start; margin-inline-start: auto; flex: 0 0 44px; width: 44px; height: 44px; padding: 8px; border: 1px solid var(--aas-line); border-radius: 7px; background: var(--aas-soft); color: var(--aas-text); font-size: 20px; cursor: pointer; }
+#af_aas_modal .af-aas-account-list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 0 12px 20px; display: grid; gap: 7px; }
+#af_aas_modal .af-aas-account { display: grid; grid-template-columns: 80px minmax(0,1fr) auto; align-items: center; gap: 20px; padding: 10px 14px; min-height: 102px; background: color-mix(in srgb,var(--aas-bg) 85%,transparent); border: 1px solid var(--aas-line); border-radius: 12px; }
+#af_aas_modal .af-aas-account.is-current { background: linear-gradient(110deg,color-mix(in srgb,var(--aas-accent) 22%,var(--aas-bg)),var(--aas-soft)); border-color: var(--aas-accent); box-shadow: inset 0 0 15px color-mix(in srgb,var(--aas-accent) 19%,transparent); }
+#af_aas_modal .af-aas-account-avatar { position: relative; width: 80px; height: 80px; border: 1px solid var(--aas-muted); border-radius: 50%; }
+#af_aas_modal .af-aas-account-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+#af_aas_modal .af-aas-account-avatar.is-online::after { content: ''; position: absolute; right: 0; bottom: 3px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--aas-bg); background: var(--atf-color-success, #38cf6d); }
+#af_aas_modal .af-aas-account-text { display: grid; gap: 3px; min-width: 0; }
+#af_aas_modal .af-aas-account-text strong { color: var(--aas-text); font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#af_aas_modal .af-aas-account-status, #af_aas_modal .af-aas-account-meta { color: var(--aas-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#af_aas_modal .is-online + .af-aas-account-text .af-aas-account-status { color: var(--atf-color-success, #38cf6d); }
+#af_aas_modal .af-aas-account-actions { display: grid; grid-template-columns: auto auto; align-items: center; gap: 5px 12px; }
+#af_aas_modal .af-aas-primary, #af_aas_modal .af-aas-current { grid-column: 1; display: inline-flex; justify-content: center; align-items: center; gap: 8px; padding: 7px 10px; font-size: 12px; border: 1px solid var(--aas-line); border-radius: 8px; color: var(--aas-accent); background: color-mix(in srgb,var(--aas-accent) 12%,var(--aas-bg)); white-space: nowrap; }
+#af_aas_modal .af-aas-current { min-height: 42px; color: var(--aas-text); background: color-mix(in srgb,var(--aas-accent) 24%,var(--aas-bg)); }
+#af_aas_modal .af-aas-ui-button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 10px 14px; min-height: 42px; border: 1px solid var(--aas-line); border-radius: 8px; color: var(--aas-text); background: linear-gradient(var(--aas-soft),var(--aas-bg)); text-decoration: none; font: inherit; cursor: pointer; white-space: nowrap; }
+#af_aas_modal .af-aas-switch { grid-column: 1; min-width: 164px; border-color: var(--aas-accent); box-shadow: inset 0 0 10px color-mix(in srgb,var(--aas-accent) 19%,transparent); }
+#af_aas_modal .af-aas-account-menu { grid-column: 2; grid-row: 1 / span 2; }
+#af_aas_modal .af-aas-account-menu summary { display: grid; place-items: center; list-style: none; width: 42px; height: 42px; border: 1px solid var(--aas-line); border-radius: 8px; background: var(--aas-soft); cursor: pointer; }
+#af_aas_modal .af-aas-account-menu summary::-webkit-details-marker { display: none; }
+#af_aas_modal .af-aas-dropdown { position: fixed; inset: auto; margin: 0; width: max-content; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; z-index: 10010; padding: 6px; border: 1px solid var(--aas-line); border-radius: 8px; background: var(--aas-bg); color: var(--aas-text); box-shadow: 0 8px 24px #0008; }
+#af_aas_modal .af-aas-dropdown button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 0; border-radius: 5px; background: transparent; color: inherit; text-align: start; cursor: pointer; font: inherit; }
+#af_aas_modal .af-aas-dropdown form { margin: 3px 0 0; padding-top: 3px; border-top: 1px solid var(--aas-line); }
+#af_aas_modal .af-aas-dropdown .af-aas-danger { color: var(--atf-color-danger, #f49c9c); }
+#af_aas_modal .af-aas-modal-footer { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 10px 12px 4px; margin: 0; border-top: 1px solid var(--aas-line); }
+#af_aas_modal .af-aas-footer-links, #af_aas_modal .af-aas-walk { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+#af_aas_modal .af-aas-walk { padding: 0; margin: 0; border: 0; background: transparent; }
+#af_aas_modal .af-aas-modal-footer .af-aas-ui-button { font-size: 12px; padding: 9px 12px; }
+#af_aas_modal .af-aas-autopost { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; white-space: nowrap; }
+#af_aas_modal .af-aas-autopost input { width: 18px; height: 18px; margin: 0; accent-color: var(--aas-accent); }
+#af_aas_modal .af-aas-walk-result { white-space: pre-line; max-height: 90px; overflow-y: auto; font-size: 12px; color: var(--aas-muted); margin: 6px 12px; }
+#af_aas_modal .af-aas-walk-result:empty { display: none; }
+#af_aas_modal :is(a,button,summary,input):focus-visible { outline: 2px solid var(--aas-accent); outline-offset: 3px; }
+#af_aas_modal :is(button,summary,.af-aas-ui-button):hover { border-color: var(--aas-accent); background-color: color-mix(in srgb,var(--aas-accent) 16%,var(--aas-bg)); }
+#af_aas_modal button:disabled, #af_aas_modal [aria-disabled="true"] { opacity: .55; cursor: wait; }
+@media(max-width:700px) {
+  #af_aas_modal { padding: 8px; }
+  #af_aas_modal .af-aas-dialog { max-height: calc(100dvh - 16px); padding: 6px; }
+  #af_aas_modal .af-aas-modal-head { padding: 14px 10px; gap: 12px; min-height: 90px; }
+  #af_aas_modal .af-aas-heading-icon { width: 48px; height: 48px; flex-basis: 48px; font-size: 21px; }
+  #af_aas_modal .af-aas-modal-head h2 { font-size: 21px; }
+  #af_aas_modal .af-aas-modal-head p { font-size: 12px; }
+  #af_aas_modal .af-aas-account-list { padding: 0 5px 12px; }
+  #af_aas_modal .af-aas-account { grid-template-columns: 58px minmax(0,1fr); gap: 10px; padding: 10px; }
+  #af_aas_modal .af-aas-account-avatar { width: 58px; height: 58px; }
+  #af_aas_modal .af-aas-account-text strong { font-size: 16px; }
+  #af_aas_modal .af-aas-account-actions { grid-column: 2; justify-self: start; }
+  #af_aas_modal .af-aas-modal-footer { flex-wrap: wrap; gap: 9px; padding: 9px 5px 3px; }
+  #af_aas_modal .af-aas-footer-links, #af_aas_modal .af-aas-walk { gap: 8px; }
+}

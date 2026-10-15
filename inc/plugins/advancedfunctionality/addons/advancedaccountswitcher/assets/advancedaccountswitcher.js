@@ -39,18 +39,30 @@
       Array.prototype.forEach.call(triggers(), function (node) { node.setAttribute('aria-expanded', value); });
     }
 
+    var opener = null, inertNodes = [];
     function openModal() {
+      if (modal.classList.contains('af-aas-modal-open')) return;
+      opener = document.activeElement;
+      inertNodes = Array.from(document.body.children).filter(function(node) { return node !== modal && !node.inert; });
+      inertNodes.forEach(function(node) { node.inert = true; });
+      document.body.classList.add('af-aas-lock-scroll');
       modal.classList.add('af-aas-modal-open');
       modal.style.display = 'flex';
       modal.setAttribute('aria-hidden', 'false');
       setExpanded('true');
+      if (closeBtn) closeBtn.focus();
     }
 
     function closeModal() {
+      if (!modal.classList.contains('af-aas-modal-open')) return;
+      closeMenus();
+      inertNodes.forEach(function(node) { node.inert = false; }); inertNodes = [];
+      document.body.classList.remove('af-aas-lock-scroll');
       modal.classList.remove('af-aas-modal-open');
       modal.style.display = 'none';
       modal.setAttribute('aria-hidden', 'true');
       setExpanded('false');
+      if (opener && opener.isConnected) opener.focus();
     }
 
     document.addEventListener('click', function (e) {
@@ -75,13 +87,53 @@
     });
 
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closeModal();
+      if (!modal.classList.contains('af-aas-modal-open')) return;
+      if (e.key === 'Escape') {
+        var opened = modal.querySelector('.af-aas-account-menu[open]');
+        if (opened) { closeMenus(); opened.querySelector('summary').focus(); } else closeModal();
+        e.preventDefault(); return;
+      }
+      if (e.key === 'Tab') {
+        var nodes = Array.from(modal.querySelectorAll('a[href],button:not([disabled]),input:not([type="hidden"]),summary')).filter(function(node) { return node.getClientRects().length && !node.closest('[hidden]'); });
+        if (!nodes.length) return;
+        var first = nodes[0], last = nodes[nodes.length-1];
+        if (e.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+      }
     });
 
+    function closeMenus(except) {
+      modal.querySelectorAll('.af-aas-account-menu[open]').forEach(function(menu) { if (menu !== except) menu.open = false; });
+    }
+    modal.addEventListener('toggle', function(event) {
+      var details = event.target;
+      if (!details.matches('.af-aas-account-menu')) return;
+      var menu = details.querySelector('.af-aas-dropdown');
+      if (!details.open) { if (menu.hidePopover && menu.matches(':popover-open')) menu.hidePopover(); return; }
+      closeMenus(details);
+      if (menu.showPopover && !menu.matches(':popover-open')) menu.showPopover();
+      var rect = details.querySelector('summary').getBoundingClientRect();
+      var width = menu.offsetWidth, height = menu.offsetHeight;
+      menu.style.left = Math.max(8,Math.min(rect.right-width,innerWidth-width-8))+'px';
+      menu.style.top = Math.max(8,Math.min(rect.bottom+4,innerHeight-height-8))+'px';
+    }, true);
+    document.addEventListener('click', function(event) { if (!event.target.closest('.af-aas-account-menu')) closeMenus(); });
+    modal.querySelector('.af-aas-account-list').addEventListener('scroll', function() { closeMenus(); }, {passive:true});
+    window.addEventListener('resize', function() { closeMenus(); });
+    modal.addEventListener('submit', function(event) {
+      if (event.target.matches('[data-aas-unlink]') && !window.confirm('Отвязать выбранный аккаунт? Сам аккаунт MyBB не будет удалён.')) event.preventDefault();
+    });
+    modal.addEventListener('click', function(event) {
+      var link = event.target.closest('.af-aas-switch');
+      if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      if (link.getAttribute('aria-disabled') === 'true') { event.preventDefault(); return; }
+      link.setAttribute('aria-disabled','true'); link.setAttribute('aria-busy','true');
+      link.querySelector('span').textContent = 'Переключение…';
+    });
     var walk = modal.querySelector('.af-aas-walk');
     var walkButton = walk ? walk.querySelector('.af-aas-walk-button') : null;
     var walkAutopost = walk ? walk.querySelector('.af-aas-walk-autopost') : null;
-    var walkResult = walk ? walk.querySelector('.af-aas-walk-result') : null;
+    var walkResult = modal.querySelector('.af-aas-walk-result');
     var walkPending = false;
 
     function operationId() {
@@ -91,16 +143,19 @@
       return Array.prototype.map.call(bytes, function (n) { return ('0' + n.toString(16)).slice(-2); }).join('');
     }
 
-    if (walkButton) walkButton.addEventListener('click', function () {
+    function runWalk(targetUid, button) {
+      var initial = button.innerHTML;
       if (walkPending) return;
       walkPending = true;
       walkButton.disabled = true;
-      walkButton.textContent = 'Выполняется...';
+      button.disabled = true;
+      button.textContent = 'Выполняется…';
       walkResult.textContent = '';
 
       var body = new URLSearchParams();
       body.set('my_post_key', walk.getAttribute('data-post-key') || '');
       body.set('operation_id', operationId());
+      if (targetUid) body.set('uid', String(targetUid));
       body.set('autopost', walkAutopost && walkAutopost.checked ? '1' : '0');
       fetch(walk.getAttribute('data-url'), {
         method: 'POST', credentials: 'same-origin',
@@ -115,7 +170,7 @@
             console.error('Advanced Account Switcher: non-JSON walk response', text);
             throw new Error('Сервер вернул некорректный ответ');
           }
-          if (!response.ok) {
+          if (!response.ok || data.ok === false) {
             throw new Error(data.message || ('HTTP ' + response.status));
           }
           return data;
@@ -132,8 +187,14 @@
       }).then(function () {
         walkPending = false;
         walkButton.disabled = false;
-        walkButton.textContent = 'Выгул твинков';
+        button.disabled = false; button.innerHTML = initial;
       });
+    }
+    if (walkButton) walkButton.addEventListener('click', function() { runWalk(0, walkButton); });
+    modal.addEventListener('click', function(event) {
+      var button = event.target.closest('[data-aas-walk-uid]');
+      if (!button) return;
+      closeMenus(); runWalk(Number(button.dataset.aasWalkUid), button);
     });
   })();
 

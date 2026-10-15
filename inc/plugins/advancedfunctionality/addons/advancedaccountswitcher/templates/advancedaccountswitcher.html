@@ -1,53 +1,17 @@
 <!-- TEMPLATE: af_aas_panel_widget -->
-<span class="af-aas-panel">
-    <a href="#" class="af-aas-trigger" id="af_aas_trigger" aria-expanded="false" title="{$lang->af_aas_header_title_switch}">👥 {$lang->af_aas_header_label_accounts}</a>
-</span>
-
-<div id="af_aas_modal" class="modal af-aas-modal" role="dialog" aria-modal="true" aria-hidden="true" style="display:none;">
-    <div class="af-aas-modal-backdrop"></div>
-
-    <table class="tborder af-aas-modal-table" cellspacing="{$theme['borderwidth']}"
-           cellpadding="{$theme['tablespace']}" border="0">
-        <thead>
-        <tr>
-            <th class="thead" colspan="3">
-                <strong>{$lang->af_aas_modal_title_accounts}</strong>
-                <button type="button" class="af-aas-modal-close" title="{$lang->af_aas_modal_close_title}">✕</button>
-            </th>
-        </tr>
-        </thead>
-
-        <tbody id="af_aas_modal_body">
-            {$af_aas_panel_rows}
-        </tbody>
-
-        <tfoot>
-        <tr>
-            <td class="tfoot" colspan="3">
-                <div class="af-aas-modal-footer">
-                    <a href="{$af_aas_ucp_url}" class="af-aas-footer-link">{$lang->af_aas_footer_manage_accounts}</a>
-                    <a href="{$af_aas_account_list_url}" class="af-aas-footer-link">{$lang->af_aas_footer_account_list}</a>
-                </div>
-                {$af_aas_walk_controls}
-            </td>
-        </tr>
-        </tfoot>
-
-    </table>
-</div>
+<span class="af-aas-panel"><a href="usercp.php?action=af_aas" class="af-aas-trigger" id="af_aas_trigger" aria-expanded="false" title="Смена аккаунта"><i class="fa-solid fa-users" aria-hidden="true"></i> Аккаунты</a></span>
+<div id="af_aas_modal" class="af-aas-modal" role="dialog" aria-modal="true" aria-labelledby="af-aas-modal-title" aria-hidden="true" style="display:none;">
+<div class="af-aas-modal-backdrop"></div>
+<section class="af-aas-dialog" tabindex="-1">
+<header class="af-aas-modal-head"><span class="af-aas-heading-icon"><i class="fa-solid fa-users" aria-hidden="true"></i></span><div><h2 id="af-aas-modal-title">Смена аккаунта</h2><p>Выберите персонажа или основной аккаунт</p></div><button type="button" class="af-aas-modal-close" aria-label="Закрыть"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
+<div id="af_aas_modal_body" class="af-aas-account-list">{$af_aas_panel_rows}</div>
+<footer class="af-aas-modal-footer"><nav class="af-aas-footer-links"><a href="{$af_aas_ucp_url}" class="af-aas-ui-button"><i class="fa-solid fa-gear" aria-hidden="true"></i>Управление аккаунтами</a>{$af_aas_add_button}</nav><div class="af-aas-walk" data-url="{$af_aas_walk_url}" data-post-key="{$af_aas_walk_post_key}"><button type="button" class="af-aas-ui-button af-aas-walk-button"><i class="fa-solid fa-person-walking" aria-hidden="true"></i><span>Выгул твинков</span></button><label class="af-aas-autopost"><input type="checkbox" class="af-aas-walk-autopost">Автопостинг</label></div></footer>
+<div class="af-aas-walk-result" role="status" aria-live="polite"></div>
+</section></div>
 <!-- /TEMPLATE -->
 
 <!-- TEMPLATE: af_aas_panel_row -->
-<tr class="{$af_aas_row_class} af-aas-modal-row{$af_aas_item_active}">
-    <td class="af-aas-modal-avatar" width="40">{$af_aas_item_avatar}</td>
-    <td class="af-aas-modal-name">
-        <strong>{$af_aas_item_username}</strong> {$af_aas_item_badge}<br />
-        <span class="smalltext">#{$af_aas_item_uid}</span>
-    </td>
-    <td class="af-aas-modal-action" width="90">
-        <a class="button button_small" href="{$af_aas_item_switch_url}">{$lang->af_aas_btn_login}</a>
-    </td>
-</tr>
+<article class="af-aas-account{$af_aas_item_active}" data-account-uid="{$af_aas_item_uid}"><span class="af-aas-account-avatar{$af_aas_online_class}">{$af_aas_item_avatar}</span><div class="af-aas-account-text"><strong title="{$af_aas_item_username}">{$af_aas_item_username}</strong><span class="af-aas-account-status">{$af_aas_item_status}</span><span class="af-aas-account-meta">{$af_aas_item_meta}</span></div><div class="af-aas-account-actions">{$af_aas_item_badge}{$af_aas_item_switch}{$af_aas_item_menu}</div></article>
 <!-- /TEMPLATE -->
 
 <!-- TEMPLATE: af_aas_panel_empty -->
