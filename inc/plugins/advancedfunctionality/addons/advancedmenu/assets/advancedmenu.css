@@ -318,3 +318,20 @@ body.af-am-drawer-open .af-am-rail { z-index: 1200; }
 @media (max-width: 768px) {
   .af-am-rail .af-am-logout { margin-top: 0; margin-left: auto; padding-top: 0; }
 }
+
+/* Guest quick login: native MyBB form, scoped theme surfaces, no page shell. */
+.af-advancedmenu-layout .af-am-login-modal { box-sizing: border-box; width: min(25rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); max-height: calc(100dvh - 2rem); margin: auto; padding: 1.1rem; overflow-y: auto; color: var(--af-am-text); background: var(--af-am-surface); border: 1px solid var(--af-am-border); border-radius: var(--atf-radius-lg, .7rem); font: 14px/1.5 system-ui, sans-serif; }
+.af-am-login-modal::backdrop { background: color-mix(in srgb, var(--af-am-surface-alt, #101720) 75%, transparent); }
+.af-am-login-modal .af-am-login-header { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-bottom: .8rem; }
+.af-am-login-modal .af-am-login-header h2 { margin: 0; font-size: 1.2rem; color: inherit; }
+.af-am-login-modal .af-am-login-close { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; padding: .4rem; border: 1px solid var(--af-am-border); border-radius: .4rem; background: transparent; color: inherit; cursor: pointer; }
+.af-am-login-modal .af-am-login-form { display: grid; gap: .65rem; margin: 0; }
+.af-am-login-modal .af-am-login-row { display: grid; gap: .45rem; min-width: 0; background: transparent; }
+.af-am-login-modal .af-am-login-form :is(input[type="text"],input[type="password"],input[type="email"]) { box-sizing: border-box; width: 100%; min-width: 0; padding: .6rem .7rem; border: 1px solid var(--af-am-border); border-radius: .4rem; background: var(--af-am-surface-alt); color: var(--af-am-text); font: inherit; }
+.af-am-login-modal .af-am-login-form :is(button[type="submit"],input[type="submit"]) { padding: .6rem 1rem; border: 1px solid var(--af-am-highlight); border-radius: .4rem; color: var(--af-am-text); background: color-mix(in srgb, var(--af-am-highlight) 25%, var(--af-am-surface)); font: inherit; cursor: pointer; }
+.af-am-login-modal .af-am-login-remember { display: flex; align-items: center; gap: .5rem; }
+.af-am-login-modal input[type="checkbox"] { accent-color: var(--af-am-highlight); width: auto; }
+.af-am-login-modal .af-am-login-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; font-size: .9em; }
+.af-am-login-modal a { color: var(--af-am-highlight); }
+.af-am-login-modal :is(a,button,input):focus-visible { outline: 2px solid var(--af-am-highlight); outline-offset: 2px; }
+.af-am-login-modal :is(button,input[type="submit"]):hover { filter: brightness(1.1); }

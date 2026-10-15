@@ -4,6 +4,91 @@
   var navigation = document.querySelector('[data-af-am-navigation]');
   if (!navigation || navigation.dataset.afAmBound) return;
   navigation.dataset.afAmBound = '1';
+  // Reuse MyBB's quick-login form and its native submit/lockout behavior.
+  // A native dialog owns focus containment and never shares other addons' modals.
+  var loginTrigger = navigation.querySelector('.af-am-guest-action--login');
+  var loginDialog = null, loginOpener = null;
+  function prepareLogin() {
+    if (loginDialog) return loginDialog;
+    if (typeof HTMLDialogElement === 'undefined' || typeof HTMLDialogElement.prototype.showModal !== 'function') return null;
+    var source = document.getElementById('quick_login');
+    var form = source && source.querySelector('form');
+    if (!form) {
+      var fallback = document.getElementById('af-am-login-fallback');
+      form = fallback && fallback.content.querySelector('form').cloneNode(true);
+      if (!form) return null;
+    }
+    loginDialog = document.createElement('dialog');
+    loginDialog.id = 'af-am-login-modal'; loginDialog.className = 'af-am-login-modal';
+    loginDialog.setAttribute('aria-labelledby', 'af-am-login-title');
+    var header = document.createElement('header'); header.className = 'af-am-login-header';
+    var title = document.createElement('h2'); title.id = 'af-am-login-title'; title.textContent = 'Вход';
+    var close = document.createElement('button'); close.type = 'button'; close.className = 'af-am-login-close'; close.setAttribute('aria-label', 'Закрыть');
+    var icon = document.createElement('i'); icon.className = 'fa-solid fa-xmark'; icon.setAttribute('aria-hidden','true'); close.appendChild(icon);
+    header.append(title, close); loginDialog.appendChild(header);
+    // Keep every native field/plugin control (including lockout text); replace
+    // only table presentation, without cloning credentials or changing names.
+    var nativeHeading = form.querySelector('td.thead[colspan], th.thead[colspan]');
+    if (nativeHeading && nativeHeading.closest('tr')) nativeHeading.closest('tr').remove();
+    form.querySelectorAll('br').forEach(function(node) { node.remove(); });
+    Array.from(form.querySelectorAll('table, thead, tbody, tfoot, tr, td, th')).reverse().forEach(function(table) {
+      var block = document.createElement('div'); block.className = 'af-am-login-row' + (table.classList.contains('remember_me') ? ' af-am-login-remember' : '');
+      while (table.firstChild) block.appendChild(table.firstChild);
+      table.replaceWith(block);
+    });
+    form.classList.add('af-am-login-form');
+    form.querySelectorAll('input[name="quick_username"], input[name="username"]').forEach(function(input) { input.autocomplete = 'username'; input.setAttribute('aria-label', 'Имя пользователя'); });
+    form.querySelectorAll('input[name="quick_password"], input[name="password"]').forEach(function(input) { input.type = 'password'; input.autocomplete = 'current-password'; input.setAttribute('aria-label', 'Пароль'); });
+    if (source && source.contains(form)) {
+      source.removeAttribute('style'); source.classList.remove('modal'); source.classList.add('af-am-login-native');
+      loginDialog.appendChild(source);
+    } else loginDialog.appendChild(form);
+    if (!form.querySelector('a[href*="action=register"]')) {
+      var links = document.createElement('nav'); links.className='af-am-login-links';
+      [['lostpw','Забыли пароль?'],['register','Регистрация']].forEach(function(item) {
+        var existing = form.querySelector('a[href*="action=' + item[0] + '"]');
+        if (existing) { links.appendChild(existing); return; }
+        var link = document.createElement('a'), url = new URL(form.action, location.href);
+        url.searchParams.set('action',item[0]); link.href = url.href; link.textContent = item[1]; links.appendChild(link);
+      });
+      form.appendChild(links);
+    }
+    function setReturnURL() {
+      var field = form.querySelector('input[name="url"]');
+      if (!field) return;
+      var action = new URL(form.action, location.href), current = new URL(location.href), base = new URL('.', action);
+      // MyBB validates this again on submit. Exclude auth/action endpoints and
+      // accept only the current same-origin page within this forum's path.
+      field.value = current.origin === action.origin && current.pathname.startsWith(base.pathname)
+        && !/\/(?:member|xmlhttp)\.php$/i.test(current.pathname) && !/^do_/i.test(current.searchParams.get('action') || '')
+        ? current.href : new URL('index.php',base).href;
+    }
+    loginDialog.amSetReturnURL = setReturnURL;
+    form.addEventListener('submit', setReturnURL);
+    close.addEventListener('click', function() { loginDialog.close(); });
+    loginDialog.addEventListener('click', function(event) {
+      if (event.target !== loginDialog) return;
+      var box = loginDialog.getBoundingClientRect();
+      if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) loginDialog.close();
+    });
+    loginDialog.addEventListener('close', function() {
+      // Never retain the password when dismissing the form.
+      form.querySelectorAll('input[type="password"]').forEach(function(input) { input.value = ''; });
+      if (loginOpener && loginOpener.isConnected) loginOpener.focus();
+    });
+    document.body.appendChild(loginDialog);
+    return loginDialog;
+  }
+  if (loginTrigger) loginTrigger.addEventListener('click', function(event) {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    var modal = prepareLogin();
+    if (!modal) return; // Keep normal MyBB login URL as progressive fallback.
+    event.preventDefault(); loginOpener = loginTrigger;
+    modal.amSetReturnURL();
+    if (!modal.open) modal.showModal();
+    var username = modal.querySelector('input[name="quick_username"], input[name="username"]');
+    if (username) username.focus();
+  });
   var triggers = Array.from(document.querySelectorAll('[data-af-am-category], .af-am-burger'));
   var shell = document.querySelector('[data-af-am-drawer-shell]');
   var drawer = document.getElementById('af-am-user-drawer');

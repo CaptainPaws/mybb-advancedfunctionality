@@ -1529,9 +1529,26 @@ function af_advancedmenu_render_guest_account_bar(): string
     return '<section class="af-am-guest-account" aria-label="Гостевой аккаунт">'
         .'<span class="af-am-guest-greeting">Привет, гость</span>'
         .'<div class="af-am-guest-actions">'
-        .'<a class="af-am-guest-action af-am-guest-action--login" href="member.php?action=login" aria-label="Войти" data-af-am-tip="Войти"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i><span class="af-am-title">Войти</span></a>'
+        .'<a class="af-am-guest-action af-am-guest-action--login" aria-haspopup="dialog" href="member.php?action=login" aria-label="Войти" data-af-am-tip="Войти"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i><span class="af-am-title">Войти</span></a>'
         .'<a class="af-am-guest-action af-am-guest-action--register" href="member.php?action=register" aria-label="Регистрация" data-af-am-tip="Регистрация"><i class="fa-solid fa-user-plus" aria-hidden="true"></i><span class="af-am-title">Регистрация</span></a>'
         .'</div></section>';
+}
+
+/** Inert fallback for themes which removed MyBB's #quick_login entirely. */
+function af_advancedmenu_render_login_fallback(): string
+{
+    global $mybb;
+    if (!empty($mybb->user['uid'])) return '';
+    $action = htmlspecialchars_uni(af_advancedmenu_normalize_url('member.php'));
+    $username = htmlspecialchars_uni((string)($GLOBALS['login_username'] ?? 'Имя пользователя'));
+    return '<template id="af-am-login-fallback"><form method="post" action="'.$action.'" class="af-am-login-form">'
+        .'<input type="hidden" name="action" value="do_login"><input type="hidden" name="quick_login" value="1">'
+        .'<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni((string)$mybb->post_code).'"><input type="hidden" name="url" value="">'
+        .'<label for="af-am-login-username">'.$username.'</label><input id="af-am-login-username" name="quick_username" type="text" autocomplete="username" required>'
+        .'<label for="af-am-login-password">Пароль</label><input id="af-am-login-password" name="quick_password" type="password" autocomplete="current-password" required>'
+        .'<label class="af-am-login-remember"><input name="quick_remember" type="checkbox" value="yes" checked>Запомнить меня</label>'
+        .'<button type="submit" class="af-am-login-submit">Войти</button>'
+        .'<nav class="af-am-login-links"><a href="'.$action.'?action=lostpw">Забыли пароль?</a><a href="'.$action.'?action=register">Регистрация</a></nav></form></template>';
 }
 
 function af_advancedmenu_render_frontend_nav(): string
@@ -1552,7 +1569,7 @@ function af_advancedmenu_render_frontend_nav(): string
         .'<button class="af-am-drawer-overlay" type="button" tabindex="-1" aria-label="Закрыть пользовательское меню"></button>'
         .'<aside id="af-am-user-drawer" class="af-am-drawer" role="dialog" aria-modal="true" aria-label="Пользовательское меню" tabindex="-1">'
         .'<div class="af-am-drawer-header"><strong data-af-am-drawer-title>Меню пользователя</strong><button class="af-am-drawer-close" type="button" aria-label="Закрыть пользовательское меню">&times;</button></div>'
-        .'<div class="af-am-drawer-body">'.af_advancedmenu_render_drawer_account().$drawer.'</div></aside></div>';
+        .'<div class="af-am-drawer-body">'.af_advancedmenu_render_drawer_account().$drawer.'</div></aside></div>'.af_advancedmenu_render_login_fallback();
 }
 
 /** Remove duplicate legacy controls while retaining provider-owned runtime. */
