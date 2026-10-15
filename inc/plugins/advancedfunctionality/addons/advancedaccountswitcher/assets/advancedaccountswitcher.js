@@ -32,7 +32,14 @@
     // The legacy header template renders its trigger and shell together.  The
     // trigger may be relocated by AdvancedMenu, but the dialog must live in
     // the page modal layer rather than inherit a transformed/clipped header.
-    if (modal.parentNode !== document.body) document.body.appendChild(modal);
+    function mountModal() {
+      if (window.AFModalHost && typeof window.AFModalHost.mount === 'function') window.AFModalHost.mount(modal);
+      else {
+        var host = document.getElementById('atf-global-modal-host') || document.body;
+        if (modal.parentNode !== host) host.appendChild(modal);
+      }
+    }
+    mountModal();
 
     function triggers() { return document.querySelectorAll('#af_aas_trigger'); }
     function setExpanded(value) {
@@ -43,8 +50,16 @@
     function openModal() {
       if (modal.classList.contains('af-aas-modal-open')) return;
       opener = document.activeElement;
-      inertNodes = Array.from(document.body.children).filter(function(node) { return node !== modal && !node.inert; });
-      inertNodes.forEach(function(node) { node.inert = true; });
+      mountModal();
+      inertNodes = [];
+      // ATF owns the modal's portal. Never inert an ancestor (including the
+      // shared host), only sibling branches along the path to body.
+      for (var branch = modal; branch && branch !== document.body; branch = branch.parentElement) {
+        if (!branch.parentElement) break;
+        Array.from(branch.parentElement.children).forEach(function(node) {
+          if (node !== branch && !node.inert) { inertNodes.push(node); node.inert = true; }
+        });
+      }
       document.body.classList.add('af-aas-lock-scroll');
       modal.classList.add('af-aas-modal-open');
       modal.style.display = 'flex';

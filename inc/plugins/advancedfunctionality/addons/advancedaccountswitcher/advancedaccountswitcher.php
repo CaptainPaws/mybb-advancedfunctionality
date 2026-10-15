@@ -2426,7 +2426,7 @@ function af_aas_render_panel_widget(): string
         if ((int)$user['regdate'] > 0) $meta[] = 'Участник с '.my_date((string)$mybb->settings['dateformat'], (int)$user['regdate']);
         $af_aas_item_meta = htmlspecialchars_uni(implode(' · ',array_unique($meta)));
         $af_aas_item_avatar = '<img src="'.htmlspecialchars_uni(af_aas_get_avatar_url($accountUid,$user)).'" alt="" loading="lazy">';
-        $af_aas_item_badge = $accountUid === $masterUid ? '<span class="af-aas-primary"><i class="fa-solid fa-crown" aria-hidden="true"></i>Основной аккаунт</span>' : '';
+        $af_aas_item_badge = $accountUid === $masterUid ? '<span class="af-aas-primary" role="img" title="Основной аккаунт" aria-label="Основной аккаунт"><i class="fa-solid fa-crown" aria-hidden="true"></i></span>' : '';
         $af_aas_item_switch = $accountUid === $uid ? '<span class="af-aas-current"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>Текущий аккаунт</span>'
             : '<a class="af-aas-ui-button af-aas-switch" href="'.htmlspecialchars_uni($bburl.'/misc.php?action=af_aas_switch&uid='.$accountUid.'&my_post_key='.rawurlencode((string)$mybb->post_code)).'"><span>Переключиться</span></a>';
         $af_aas_item_menu = '<details class="af-aas-account-menu"><summary aria-label="Действия: '.$af_aas_item_username.'"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></summary><div class="af-aas-dropdown" popover="manual"><button type="button" data-aas-walk-uid="'.$accountUid.'"><i class="fa-solid fa-person-walking" aria-hidden="true"></i>Выгулить этот аккаунт</button>';

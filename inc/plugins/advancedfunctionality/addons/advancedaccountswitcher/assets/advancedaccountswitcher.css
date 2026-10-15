@@ -414,12 +414,12 @@ body.af-aas-lock-scroll { overflow: hidden; }
 #af_aas_modal .af-aas-account-text strong { color: var(--aas-text); font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #af_aas_modal .af-aas-account-status, #af_aas_modal .af-aas-account-meta { color: var(--aas-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #af_aas_modal .is-online + .af-aas-account-text .af-aas-account-status { color: var(--atf-color-success, #38cf6d); }
-#af_aas_modal .af-aas-account-actions { display: grid; grid-template-columns: auto auto; align-items: center; gap: 5px 12px; }
-#af_aas_modal .af-aas-primary, #af_aas_modal .af-aas-current { grid-column: 1; display: inline-flex; justify-content: center; align-items: center; gap: 8px; padding: 7px 10px; font-size: 12px; border: 1px solid var(--aas-line); border-radius: 8px; color: var(--aas-accent); background: color-mix(in srgb,var(--aas-accent) 12%,var(--aas-bg)); white-space: nowrap; }
+#af_aas_modal .af-aas-account-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+#af_aas_modal .af-aas-current { display: inline-flex; justify-content: center; align-items: center; gap: 8px; padding: 7px 10px; font-size: 12px; border: 1px solid var(--aas-line); border-radius: 8px; color: var(--aas-accent); background: color-mix(in srgb,var(--aas-accent) 12%,var(--aas-bg)); white-space: nowrap; }
 #af_aas_modal .af-aas-current { min-height: 42px; color: var(--aas-text); background: color-mix(in srgb,var(--aas-accent) 24%,var(--aas-bg)); }
 #af_aas_modal .af-aas-ui-button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 10px 14px; min-height: 42px; border: 1px solid var(--aas-line); border-radius: 8px; color: var(--aas-text); background: linear-gradient(var(--aas-soft),var(--aas-bg)); text-decoration: none; font: inherit; cursor: pointer; white-space: nowrap; }
 #af_aas_modal .af-aas-switch { grid-column: 1; min-width: 164px; border-color: var(--aas-accent); box-shadow: inset 0 0 10px color-mix(in srgb,var(--aas-accent) 19%,transparent); }
-#af_aas_modal .af-aas-account-menu { grid-column: 2; grid-row: 1 / span 2; }
+#af_aas_modal .af-aas-account-menu { flex: 0 0 auto; }
 #af_aas_modal .af-aas-account-menu summary { display: grid; place-items: center; list-style: none; width: 42px; height: 42px; border: 1px solid var(--aas-line); border-radius: 8px; background: var(--aas-soft); cursor: pointer; }
 #af_aas_modal .af-aas-account-menu summary::-webkit-details-marker { display: none; }
 #af_aas_modal .af-aas-dropdown { position: fixed; inset: auto; margin: 0; width: max-content; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; z-index: 10010; padding: 6px; border: 1px solid var(--aas-line); border-radius: 8px; background: var(--aas-bg); color: var(--aas-text); box-shadow: 0 8px 24px #0008; }
@@ -451,4 +451,24 @@ body.af-aas-lock-scroll { overflow: hidden; }
   #af_aas_modal .af-aas-account-actions { grid-column: 2; justify-self: start; }
   #af_aas_modal .af-aas-modal-footer { flex-wrap: wrap; gap: 9px; padding: 9px 5px 3px; }
   #af_aas_modal .af-aas-footer-links, #af_aas_modal .af-aas-walk { gap: 8px; }
+}
+
+/* Consistent one-line account actions and theme-accented controls. */
+#af_aas_modal .af-aas-primary { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 26px; width: 26px; padding: 0; border: 0; background: transparent; color: var(--aas-accent); font-size: 19px; }
+#af_aas_modal .af-aas-account { transition: border-color .15s, background-color .15s; }
+#af_aas_modal .af-aas-account:hover { border-color: color-mix(in srgb,var(--aas-accent) 60%,var(--aas-line)); }
+#af_aas_modal .af-aas-account.is-current { background: linear-gradient(110deg,color-mix(in srgb,var(--aas-accent) 32%,var(--aas-bg)),color-mix(in srgb,var(--aas-accent) 14%,var(--aas-bg))); box-shadow: inset 0 0 18px color-mix(in srgb,var(--aas-accent) 20%,transparent),0 0 5px color-mix(in srgb,var(--aas-accent) 16%,transparent); }
+#af_aas_modal .af-aas-ui-button, #af_aas_modal .af-aas-account-menu summary { min-height: 44px; border-color: color-mix(in srgb,var(--aas-accent) 80%,var(--aas-line)); background: linear-gradient(180deg,color-mix(in srgb,var(--aas-accent) 24%,var(--aas-bg)),var(--aas-bg) 65%,color-mix(in srgb,var(--aas-accent) 10%,var(--aas-bg))); box-shadow: inset 0 1px 5px color-mix(in srgb,var(--aas-accent) 25%,transparent),0 0 5px color-mix(in srgb,var(--aas-accent) 15%,transparent); transition: border-color .15s, box-shadow .15s; }
+#af_aas_modal .af-aas-switch { height: 44px; min-width: 164px; padding-inline: 20px; }
+#af_aas_modal .af-aas-account-menu summary { width: 44px; height: 44px; }
+#af_aas_modal .af-aas-ui-button:hover, #af_aas_modal .af-aas-account-menu summary:hover { border-color: var(--aas-accent); box-shadow: inset 0 0 10px color-mix(in srgb,var(--aas-accent) 25%,transparent),0 0 7px color-mix(in srgb,var(--aas-accent) 30%,transparent); }
+#af_aas_modal .af-aas-ui-button:active, #af_aas_modal .af-aas-account-menu summary:active { background: var(--aas-soft); box-shadow: inset 0 2px 5px #0005; }
+#af_aas_modal .af-aas-autopost input { appearance: none; flex: 0 0 18px; border: 1px solid var(--aas-muted); border-radius: 3px; background: var(--aas-bg); cursor: pointer; display: grid; place-content: center; }
+#af_aas_modal .af-aas-autopost input:checked { border-color: var(--aas-accent); background: color-mix(in srgb,var(--aas-accent) 25%,var(--aas-bg)); }
+#af_aas_modal .af-aas-autopost input:checked::after { content: ''; width: 9px; height: 5px; border: solid var(--aas-accent); border-width: 0 0 2px 2px; transform: rotate(-45deg); }
+@media(max-width:700px) {
+  #af_aas_modal .af-aas-account-actions { grid-column: 1 / -1; justify-self: end; gap: 8px; max-width: 100%; }
+  #af_aas_modal .af-aas-current { padding: 7px 8px; font-size: 11px; }
+  #af_aas_modal .af-aas-switch { min-width: 0; padding-inline: 14px; }
+  #af_aas_modal .af-aas-modal-footer { align-items: center; }
 }
