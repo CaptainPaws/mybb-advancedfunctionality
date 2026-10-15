@@ -525,11 +525,18 @@
     root.querySelector('[data-am-search]').addEventListener('input',function(event){term=event.target.value.trim().toLocaleLowerCase();clearDrop();render();announce(term?'Поиск активен. Перемещение отключено.':dirty?'Есть несохранённые изменения':'Нет несохранённых изменений');});
     async function save(){
       if(saving)return;saving=true;root.classList.add('is-saving');root.setAttribute('aria-busy','true');announce('Сохранение…');
-      var body=new URLSearchParams();body.set('my_post_key',config.postKey);body.set('structure',JSON.stringify({revision:state.revision,tree:state.tree,items:state.items,sections:state.sections,deleted:state.deleted}));
       try{
+        var tokenField=root.querySelector('[data-af-am-post-key]');
+        if(!tokenField || !tokenField.value)throw new Error('На странице отсутствует CSRF-токен ACP. Изменения остались в редакторе.');
+        var body=new URLSearchParams();body.set('my_post_key',tokenField.value);body.set('ajax','1');
+        body.set('structure',JSON.stringify({revision:state.revision,tree:state.tree,items:state.items,sections:state.sections,deleted:state.deleted}));
         var response=await fetch(config.saveUrl,{method:'POST',credentials:'same-origin',body:body});
-        var doc=new DOMParser().parseFromString(await response.text(),'text/html'), resultNode=doc.getElementById('af-am-save-result');
-        if(!response.ok||!resultNode)throw new Error('Не удалось сохранить: проверьте соединение и сессию ACP. Изменения остались в редакторе.');
+        var text=await response.text(), nativeError=null;
+        try{nativeError=JSON.parse(text);}catch(_){}
+        if(nativeError && Array.isArray(nativeError.errors) && nativeError.errors.indexOf('login')!==-1)throw new Error('Сессия ACP истекла или вход не выполнен. Войдите в ACP в другой вкладке. Изменения остались в редакторе.');
+        if(!response.ok)throw new Error('Сервер отклонил сохранение (HTTP '+response.status+'). Изменения остались в редакторе.');
+        var doc=new DOMParser().parseFromString(text,'text/html'), resultNode=doc.getElementById('af-am-save-result');
+        if(!resultNode)throw new Error('Сервер не вернул результат сохранения AdvancedMenu. Изменения остались в редакторе.');
         var result=JSON.parse(resultNode.textContent);if(!result.ok)throw new Error(result.message);
         state=result.state;baseline=clone(state);dirty=false;render();announce('Изменения сохранены');
       }catch(error){announce(error.message||'Ошибка сохранения. Изменения остались в редакторе.',true);}

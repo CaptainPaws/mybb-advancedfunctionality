@@ -205,6 +205,7 @@ function af_admin_absdir(): string
 function af_rebuild_and_reload_settings(): void
 {
     global $mybb;
+    $runtimeInternal = $mybb->settings['internal'] ?? null;
 
     // 1) Пересобрать inc/settings.php из БД
     rebuild_settings();
@@ -222,6 +223,8 @@ function af_rebuild_and_reload_settings(): void
     /** @noinspection PhpIncludeInspection */
     require AF_SETTINGS_FILE;
     if (isset($settings) && is_array($settings)) {
+        // MyBB adds this in inc/init.php; it is absent from inc/settings.php.
+        if (is_array($runtimeInternal)) $settings['internal'] = $runtimeInternal;
         $mybb->settings = $settings;
     }
 }
@@ -2060,10 +2063,13 @@ function af_write_lang_file(string $fullpath, array $pairs, bool $force): void
 function af_reload_settings_runtime(): void
 {
     global $mybb;
+    $runtimeInternal = $mybb->settings['internal'] ?? null;
     if (is_file(MYBB_ROOT.'inc/settings.php')) {
         /** @noinspection PhpIncludeInspection */
         require MYBB_ROOT.'inc/settings.php';
         if (isset($settings) && is_array($settings)) {
+            // Preserve the encryption key used by generate_post_check()/verify_post_check().
+            if (is_array($runtimeInternal)) $settings['internal'] = $runtimeInternal;
             $mybb->settings = $settings;
         }
     }

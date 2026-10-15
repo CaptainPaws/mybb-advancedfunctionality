@@ -175,8 +175,8 @@ class AF_Admin_Advancedmenu
         $state = af_am_editor_snapshot();
         $state['containers'] = af_menu_containers();
         $state['saveUrl'] = self::url(['do'=>'save_tree']);
-        $state['postKey'] = $mybb->post_code;
         echo '<div id="af-am-editor" class="af-am-editor">'
+            .'<input type="hidden" name="my_post_key" data-af-am-post-key value="'.htmlspecialchars_uni((string)$mybb->post_code).'">'
             .'<div class="af-am-editor-toolbar"><button type="button" data-am-command="expand">Развернуть все</button> '
             .'<button type="button" data-am-command="collapse">Свернуть все</button> '
             .'<button type="button" data-am-command="add-item">Добавить пункт</button> '
@@ -191,13 +191,32 @@ class AF_Admin_Advancedmenu
         echo '<script type="application/json" id="af-am-editor-state">'.json_encode($state, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR).'</script>';
     }
 
+    /** Keep all menu mutations behind the native ACP session and POST checks. */
+    private static function post_error(): ?string
+    {
+        global $mybb, $page;
+        // Authentication, session expiry, 2FA and module permissions are checked
+        // by admin/index.php before this controller is dispatched.
+        if (!defined('IN_ADMINCP') || !IN_ADMINCP || empty($mybb->user['uid'])) {
+            return 'Требуется действующая авторизованная сессия ACP. Изменения не сохранены.';
+        }
+        // MyBB downgrades rejected POSTs to GET; do not mistake this for expiry.
+        $coreRejected = !empty($page->show_post_verify_error);
+        if ($mybb->request_method !== 'post' && !$coreRejected) return 'Сохранение разрешено только запросом POST.';
+        $token = (string)$mybb->get_input('my_post_key');
+        if ($token === '') return 'Отсутствует CSRF-токен ACP (my_post_key). Изменения не сохранены.';
+        if ($coreRejected || !verify_post_check($token, true)) {
+            return 'Проверка CSRF MyBB ACP отклонена: неверный токен или недопустимый источник запроса. Изменения не сохранены.';
+        }
+        return null;
+    }
+
     private static function save_tree(): void
     {
         global $mybb;
         try {
-            if ($mybb->request_method !== 'post' || !verify_post_check($mybb->get_input('my_post_key'), true)) {
-                throw new InvalidArgumentException('Сессия ACP истекла или неверный CSRF-токен. Изменения не сохранены.');
-            }
+            $postError = self::post_error();
+            if ($postError !== null) throw new InvalidArgumentException($postError);
             $raw = (string)$mybb->get_input('structure');
             if (strlen($raw) > 2000000) throw new InvalidArgumentException('Структура меню слишком велика.');
             $data = json_decode($raw, true, 32, JSON_THROW_ON_ERROR);
@@ -275,7 +294,8 @@ class AF_Admin_Advancedmenu
         }
 
         if ($mybb->request_method === 'post') {
-            verify_post_check($mybb->get_input('my_post_key'));
+            $postError = self::post_error();
+            if ($postError !== null) { self::simple_error($postError); return; }
 
             // Do not silently turn a stale/tampered edit submission into an
             // insert for another item.  The route id and form id must agree.
@@ -569,7 +589,8 @@ class AF_Admin_Advancedmenu
         $logicalContainer = af_menu_normalize_container($storedContainer !== '' ? $storedContainer : (string)$row['location']);
 
         if ($mybb->request_method === 'post') {
-            verify_post_check($mybb->get_input('my_post_key'));
+            $postError = self::post_error();
+            if ($postError !== null) { self::simple_error($postError); return; }
 
             $db->delete_query(AF_AM_TABLE_ITEMS, "id='".(int)$id."'");
 
@@ -604,11 +625,9 @@ class AF_Admin_Advancedmenu
     {
         global $mybb, $db;
 
-        if ($mybb->request_method !== 'post') {
-            self::simple_error('Изменение статуса разрешено только через форму ACP.');
-            return;
-        }
-        verify_post_check($mybb->get_input('my_post_key'));
+        $postError = self::post_error();
+        if ($postError !== null) { self::simple_error($postError); return; }
+
 
         $row = $db->fetch_array($db->simple_select(AF_AM_TABLE_ITEMS, '*', "id='".(int)$id."'", ['limit' => 1]));
         if (!$row) {
