@@ -6,7 +6,7 @@ return [
     'author'      => 'CaptainPaws',
     'authorsite'  => 'https://github.com/CaptainPaws',
     'description' => 'Дополнительные аккаунты (альты) с быстрым переключением без перелогина: создание, привязка существующих, отвязка, контроль по группам.',
-    'version'     => '1.2.1',
+    'version'     => '1.2.2',
     'bootstrap'   => 'advancedaccountswitcher.php',
 
 
@@ -22,6 +22,7 @@ return [
     ],
 
     'theme_stylesheets' => [
+        ['id'=>'assets__account-add','file'=>'assets/account-add.css','attach'=>[['file'=>'global']],'enabled_setting'=>'af_advancedaccountswitcher_enabled','disable_theme_integration'=>true,'exclude_autodiscovery'=>true],
         ['id'=>'assets__account-workspace','file'=>'assets/account-workspace.css','attach'=>[['file'=>'usercp.php']],'enabled_setting'=>'af_advancedaccountswitcher_enabled','disable_theme_integration'=>true,'exclude_autodiscovery'=>true],
     ],
 

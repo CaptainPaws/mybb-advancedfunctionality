@@ -1,0 +1,32 @@
+/* Only the internal Add account view; the account picker is unchanged. */
+body #af_aas_modal .af-aas-add-view {
+  --aas-form-bg:color-mix(in srgb,var(--aas-bg,#081321) 65%,#020c18);
+  padding:22px; color-scheme:dark;
+  background-image:linear-gradient(100deg,color-mix(in srgb,var(--aas-form-bg) 95%,transparent),color-mix(in srgb,var(--aas-form-bg) 78%,transparent) 55%,color-mix(in srgb,var(--aas-form-bg) 55%,transparent)),url('https://warprift.ru/uploads/af_gallery/1/2026/10/2240bb976cd73c5cbb555246b3001753.png');
+  background-position:center; background-size:cover; background-repeat:no-repeat;
+}
+body #af_aas_modal .af-aas-add-view[hidden],
+body #af_aas_modal .af-aas-add-view [data-aas-form-mode][hidden] { display:none; }
+body #af_aas_modal .af-aas-add-view .af-aas-mode-tabs { display:flex; flex-wrap:wrap; gap:8px; padding:0 0 12px; margin:16px 0; border-bottom:1px solid var(--aas-line); }
+body #af_aas_modal .af-aas-add-view [role="tab"] { min-height:40px; padding:9px 16px; border:1px solid var(--aas-line); border-radius:7px; color:var(--aas-muted); background:var(--aas-form-bg); box-shadow:none; }
+body #af_aas_modal .af-aas-add-view [role="tab"][aria-selected="true"] { color:var(--aas-text); border-color:var(--aas-accent); background:linear-gradient(color-mix(in srgb,var(--aas-accent) 20%,var(--aas-form-bg)),var(--aas-form-bg)); box-shadow:inset 0 0 8px color-mix(in srgb,var(--aas-accent) 15%,transparent); }
+body #af_aas_modal .af-aas-add-view .af-aas-form-card { display:grid; gap:7px; margin:0; padding:18px; border:1px solid var(--aas-line); border-radius:9px; background:color-mix(in srgb,var(--aas-form-bg) 88%,transparent); }
+body #af_aas_modal .af-aas-add-view .af-aas-section-head { margin:0 0 8px; padding-bottom:12px; border-bottom:1px solid var(--aas-line); }
+body #af_aas_modal .af-aas-add-view .af-aas-field { position:relative; min-width:0; }
+body #af_aas_modal .af-aas-add-view .af-aas-field > input:not([type="hidden"]) {
+  width:100%; max-width:100%; min-width:0; box-sizing:border-box; min-height:42px;
+  padding:9px 42px; border:1px solid var(--aas-line); border-radius:6px;
+  background:var(--aas-form-bg); color:var(--aas-text); font:inherit; color-scheme:dark;
+}
+body #af_aas_modal .af-aas-add-view .af-aas-field > i { top:50%; transform:translateY(-50%); inset-inline-start:13px; pointer-events:none; }
+body #af_aas_modal .af-aas-add-view .af-aas-field > button { top:50%; transform:translateY(-50%); inset-inline-end:4px; width:34px; height:34px; padding:4px; color:var(--aas-muted); }
+body #af_aas_modal .af-aas-add-view .af-aas-field > input:-webkit-autofill {
+  -webkit-text-fill-color:var(--aas-text); caret-color:var(--aas-text);
+  -webkit-box-shadow:0 0 0 1000px var(--aas-form-bg) inset; box-shadow:0 0 0 1000px var(--aas-form-bg) inset;
+}
+body #af_aas_modal .af-aas-add-view .af-aas-field > input:autofill { color:var(--aas-text); caret-color:var(--aas-text); box-shadow:0 0 0 1000px var(--aas-form-bg) inset; }
+body #af_aas_modal .af-aas-add-view .af-aas-form-card > label { font-size:.85rem; margin:6px 0 0; }
+body #af_aas_modal .af-aas-add-view .af-aas-form-hint { font-size:.8rem; line-height:1.5; margin:8px 0; }
+body #af_aas_modal .af-aas-add-view .af-aas-form-card > .af-aas-ui-button { justify-self:center; margin-top:10px; max-width:100%; white-space:normal; }
+body #af_aas_modal .af-aas-add-view :is(input,button):focus-visible { outline:2px solid var(--aas-accent); outline-offset:2px; }
+@media(max-width:600px) { body #af_aas_modal .af-aas-add-view { padding:14px; } body #af_aas_modal .af-aas-add-view .af-aas-form-card { padding:12px; } }

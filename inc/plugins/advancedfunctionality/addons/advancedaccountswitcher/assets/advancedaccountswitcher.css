@@ -476,6 +476,7 @@ body.af-aas-lock-scroll { overflow: hidden; }
 /* Shared in-page workspace and the picker's internal add-account view. */
 .af-aas-workspace { --aas-bg: var(--atf-color-surface,#081321); --aas-soft:var(--atf-color-page-subtle,#0d1d32); --aas-text:var(--atf-color-text,#e8efff); --aas-muted:var(--atf-color-text-muted,#9db9db); --aas-accent:var(--atf-color-accent,#57b6f7); --aas-line:var(--atf-color-border,#25455e); color:var(--aas-text); display:grid; gap:16px; min-width:0; }
 .af-aas-workspace *, .af-aas-add-view * { box-sizing:border-box; }
+:is(#af_aas_modal,.af-aas-workspace) [data-aas-form-mode][hidden] { display:none; }
 :is(#af_aas_modal,.af-aas-workspace) [hidden] { display:none; }
 .af-aas-workspace-head h1 { font-size:clamp(1.5rem,3vw,2.1rem); margin:0 0 6px; }
 .af-aas-workspace-head p { margin:0; color:var(--aas-accent); font-size:.9rem; }

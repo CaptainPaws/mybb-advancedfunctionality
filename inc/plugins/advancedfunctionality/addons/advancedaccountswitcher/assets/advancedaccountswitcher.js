@@ -109,7 +109,7 @@
         e.preventDefault(); return;
       }
       if (e.key === 'Tab') {
-        var nodes = Array.from(modal.querySelectorAll('a[href],button:not([disabled]),input:not([type="hidden"]),summary')).filter(function(node) { return node.getClientRects().length && !node.closest('[hidden]'); });
+        var nodes = Array.from(modal.querySelectorAll('a[href],button:not([disabled]),input:not([type="hidden"]),summary')).filter(function(node) { return node.tabIndex >= 0 && node.getClientRects().length && !node.closest('[hidden],[inert]'); });
         if (!nodes.length) return;
         var first = nodes[0], last = nodes[nodes.length-1];
         if (e.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
@@ -135,8 +135,16 @@
       addView.querySelectorAll('input[name*="password"]').forEach(function(input) { input.value=''; input.type='password'; });
     }
     function selectMode(mode) {
-      addContent.querySelectorAll('[data-aas-form-mode]').forEach(function(form) { form.hidden = form.dataset.aasFormMode !== mode; });
-      addContent.querySelectorAll('[data-aas-mode]').forEach(function(tab) { tab.setAttribute('aria-pressed',String(tab.dataset.aasMode === mode)); });
+      var forms = Array.from(addContent.querySelectorAll('[data-aas-form-mode]'));
+      if (!forms.some(function(form) { return form.dataset.aasFormMode === mode; })) return;
+      forms.forEach(function(form) {
+        var active = form.dataset.aasFormMode === mode;
+        form.hidden = !active; form.inert = !active;
+      });
+      addContent.querySelectorAll('[data-aas-mode]').forEach(function(tab) {
+        var active = tab.dataset.aasMode === mode;
+        tab.setAttribute('aria-selected',String(active)); tab.tabIndex = active ? 0 : -1;
+      });
     }
     function showAdd() {
       modal.querySelectorAll('[data-aas-picker]').forEach(function(node) { node.hidden=true; });
@@ -149,8 +157,23 @@
       fetch(buildUrl('usercp.php?action=af_aas'),{method:'POST',credentials:'same-origin',body:body}).then(uiResponse).then(function(data) {
         addContent.innerHTML=data.forms;
         var tabs = document.createElement('nav'); tabs.className='af-aas-mode-tabs';
+        tabs.setAttribute('role','tablist'); tabs.setAttribute('aria-label','Добавление аккаунта');
+        tabs.addEventListener('keydown',function(event) {
+          var items = Array.from(tabs.querySelectorAll('[role="tab"]'));
+          var index = items.indexOf(document.activeElement), next = index;
+          if (index < 0) return;
+          if (event.key === 'ArrowRight') next = (index+1)%items.length;
+          else if (event.key === 'ArrowLeft') next = (index+items.length-1)%items.length;
+          else if (event.key === 'Home') next = 0;
+          else if (event.key === 'End') next = items.length-1;
+          else return;
+          event.preventDefault(); selectMode(items[next].dataset.aasMode); items[next].focus();
+        });
         addContent.querySelectorAll('[data-aas-form-mode]').forEach(function(form) {
           var tab=document.createElement('button'); tab.type='button'; tab.className='af-aas-ui-button'; tab.dataset.aasMode=form.dataset.aasFormMode;
+          form.id='af-aas-add-'+form.dataset.aasFormMode;
+          tab.id=form.id+'-tab'; tab.setAttribute('role','tab'); tab.setAttribute('aria-controls',form.id);
+          form.setAttribute('role','tabpanel'); form.setAttribute('aria-labelledby',tab.id);
           tab.textContent=form.dataset.aasFormMode==='create' ? 'Создать новый' : 'Привязать существующий'; tabs.appendChild(tab);
         });
         addContent.prepend(tabs);
