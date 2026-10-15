@@ -314,23 +314,30 @@
       if (key.indexOf('root:') === 0) return key.slice(5);
       var found = locate('section', key.slice(8)); return found && found.container;
     }
-    function allowed(kind, id, target) {
-      if (term || saving || (kind === 'section' && target.indexOf('root:') !== 0)) return false;
-      var container = targetContainer(target), source = locate(kind, id);
-      if (!container || !source || !listFor(target)) return false;
-      var ids = kind === 'section' ? source.node.children : [id];
-      return ids.every(function (child) { return state.items[child].allowed.indexOf(container) !== -1; });
+    // Derive restrictions from current tree membership, never cached section/container fields.
+    function placementCheck(kind,id,target) {
+      function reject(message){return{allowed:false,blockers:[{type:'editor',message:message}]};}
+      if(term)return reject('Очистите поиск перед перемещением.');
+      if(saving)return reject('Дождитесь завершения сохранения.');
+      if(kind==='section' && target.indexOf('root:')!==0)return reject('Секции нельзя вкладывать друг в друга.');
+      var container=targetContainer(target), source=locate(kind,id);
+      if(!container || !Object.prototype.hasOwnProperty.call(config.containers,container) || !source || !listFor(target))return reject('Недопустимая область переноса.');
+      var ids=kind==='section'?Array.from(new Set(source.node.children)):[id], blockers=[];
+      ids.forEach(function(child){
+        var item=state.items[child];
+        if(!item){blockers.push({type:'structure',message:'В дереве есть ссылка на отсутствующий пункт: '+child+'.'});return;}
+        // Custom links have no provider restriction. Provider limits come from the server catalogue.
+        var areas=Array.isArray(item.allowed)?item.allowed:[];
+        if(item.kind==='custom' || areas.indexOf(container)!==-1)return;
+        var labels=areas.map(function(area){return config.containers[area]||area;});
+        var key=item.key||child, provider=item.source||'не указан';
+        blockers.push({type:'provider',id:child,label:item.label,key:key,provider:provider,areas:areas,
+          message:'Пункт «'+item.label+'»; key: '+key+'; провайдер: '+provider+'. Разрешённые области: '+(labels.length?labels.join(', '):'не объявлены')+'.'});
+      });
+      return{allowed:blockers.length===0,blockers:blockers};
     }
-    function placementError(kind,id,target) {
-      if(term)return 'Очистите поиск перед перемещением.';
-      if(kind==='section' && target.indexOf('root:')!==0)return 'Секции нельзя вкладывать друг в друга.';
-      var found=locate(kind,id), container=targetContainer(target);
-      if(!found || !container)return 'Недопустимая область переноса.';
-      var ids=kind==='section'?found.node.children:[id];
-      var blocked=ids.find(function(child){return state.items[child].allowed.indexOf(container)===-1;});
-      if(blocked){var item=state.items[blocked];return 'Пункт «'+item.label+'»: разрешены только области '+item.allowed.map(function(area){return config.containers[area];}).join(', ')+'.';}
-      return 'Перенос недоступен.';
-    }
+    function allowed(kind,id,target){return placementCheck(kind,id,target).allowed;}
+    function placementError(kind,id,target){return placementCheck(kind,id,target).blockers.map(function(blocker){return blocker.message;}).join(' ');}
     function move(kind, id, target, index) {
       if (!allowed(kind, id, target)) { announce(placementError(kind,id,target), true); return; }
       var from = locate(kind, id), to = listFor(target), value;
@@ -352,8 +359,8 @@
       var result = [];
       Object.keys(config.containers).forEach(function (container) {
         var rootKey = 'root:' + container;
-        var permitted=allowed(kind,id,rootKey);
-        result.push({key:rootKey,label:config.containers[container],disabled:!permitted,reason:permitted?'':placementError(kind,id,rootKey)});
+        var check=placementCheck(kind,id,rootKey);
+        result.push({key:rootKey,label:config.containers[container],disabled:!check.allowed,blockers:check.blockers,reason:check.blockers.map(function(blocker){return blocker.message;}).join(' ')});
         if (kind !== 'item') return;
         state.tree[container].forEach(function (node) {
           var key = 'section:' + node.id;
@@ -366,12 +373,22 @@
       var label=el('label','Область размещения','af-am-edit-field'), select=el('select');
       var choices=fresh?Object.keys(config.containers).map(function(container){return{key:'root:'+container,label:config.containers[container]};}):destinations(kind,id);
       choices.forEach(function(target){
-        var option=el('option',target.label+(target.disabled?' — недоступно':''));
+        var option=el('option',target.label+(target.disabled?' — недоступно: '+target.reason:''));
         option.value=target.key;option.disabled=!!target.disabled;option.title=target.reason||'';select.appendChild(option);
       });
       select.value=selected;label.appendChild(select);form.appendChild(label);
-      var reasons=choices.filter(function(target){return target.disabled;});
-      if(reasons.length)form.appendChild(el('p',reasons.map(function(target){return target.label+': '+target.reason;}).join(' ')));
+      var diagnostic=el('div',null,'af-am-placement-diagnostics');diagnostic.id='af-am-placement-'+(++menuSerial);
+      diagnostic.setAttribute('role','note');select.setAttribute('aria-describedby',diagnostic.id);
+      if(kind==='section')diagnostic.appendChild(el('p','У секции нет собственной привязки к контейнеру. Проверяются только текущие дочерние пункты.'));
+      choices.forEach(function(target){
+        if(!target.disabled)return;
+        var group=el('div',null,'af-am-placement-block');group.appendChild(el('strong',target.label+' — недоступно'));
+        var list=el('ul');
+        (target.blockers||[{message:target.reason}]).forEach(function(blocker){list.appendChild(el('li',blocker.message));});
+        group.appendChild(list);diagnostic.appendChild(group);
+      });
+      if(!choices.some(function(target){return target.disabled;}))diagnostic.appendChild(el('p','Все показанные области доступны.'));
+      form.appendChild(diagnostic);
       select.addEventListener('change',function(){select.setCustomValidity('');});
       return select;
     }

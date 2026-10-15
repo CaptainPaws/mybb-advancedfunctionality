@@ -317,3 +317,11 @@ dialog.af-am-icp-modal:not([open]) { display:none; }
 /* Provider restrictions are visible before a drag can be committed. */
 .af-am-editor .af-am-tree-list.is-drop-denied { border-color:#b34a4a; background:#fff0f0; cursor:not-allowed; }
 .af-am-container:has(> .is-drop-denied) > summary, .af-am-section:has(> .is-drop-denied) > summary { color:#9d2525; }
+
+/* Explain every blocked destination inside the dialog, independently of option tooltips. */
+.af-am-edit-dialog .af-am-placement-diagnostics { display:block; margin:12px 0; padding:10px; border:1px solid #a9b7c9; border-radius:5px; color:#243145; background:#f3f5f8; overflow-wrap:anywhere; }
+.af-am-edit-dialog .af-am-placement-diagnostics p { display:block; margin:0 0 8px; color:inherit; }
+.af-am-edit-dialog .af-am-placement-block { display:block; margin-top:10px; }
+.af-am-edit-dialog .af-am-placement-block strong { color:#9d2525; }
+.af-am-edit-dialog .af-am-placement-block ul { display:block; list-style:disc; margin:6px 0; padding-left:22px; }
+.af-am-edit-dialog .af-am-placement-block li { display:list-item; margin:5px 0; }
