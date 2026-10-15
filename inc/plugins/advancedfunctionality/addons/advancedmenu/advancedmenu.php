@@ -137,11 +137,11 @@ function af_menu_register_core_items(): void
     $mod = static function (): bool { global $mybb; return !empty($mybb->usergroup['canmodcp']) || !empty($mybb->usergroup['issupermod']) || (!empty($mybb->user['uid']) && function_exists('is_moderator') && is_moderator()); };
     $admin = static function (): bool { global $mybb; return !empty($mybb->usergroup['cancp']); };
     $uid = (int)($mybb->user['uid'] ?? 0);
-    $postKey = rawurlencode((string)($mybb->post_code ?? ''));
+    $logoutKey = rawurlencode((string)($mybb->user['logoutkey'] ?? ''));
     af_menu_register_item(['key'=>'profile','label'=>'Профиль','icon'=>'fa-solid fa-user','type'=>'link','section'=>'profile','default_container'=>'user_drawer','default_sortorder'=>10,'visibility'=>$member,'action'=>['url'=>'member.php?action=profile&amp;uid='.$uid]]);
     af_menu_register_item(['key'=>'usercp','label'=>'User CP','icon'=>'fa-solid fa-user-gear','type'=>'link','section'=>'profile','default_container'=>'user_drawer','default_sortorder'=>20,'visibility'=>$member,'action'=>['url'=>'usercp.php']]);
     af_menu_register_item(['key'=>'private_messages','label'=>'Личные сообщения','icon'=>'fa-solid fa-envelope','type'=>'link','section'=>'links','default_container'=>'user_drawer','default_sortorder'=>50,'visibility'=>$member,'action'=>['url'=>'private.php']]);
-    af_menu_register_item(['key'=>'logout','label'=>'Выйти','icon'=>'fa-solid fa-right-from-bracket','type'=>'action/system','section'=>'settings','default_container'=>'user_drawer','default_sortorder'=>100,'visibility'=>$member,'action'=>['url'=>'member.php?action=logout&amp;logoutkey='.$postKey]]);
+    af_menu_register_item(['key'=>'logout','label'=>'Выйти','icon'=>'fa-solid fa-right-from-bracket','type'=>'action/system','section'=>'settings','default_container'=>'user_drawer','default_sortorder'=>100,'visibility'=>$member,'action'=>['url'=>'member.php?action=logout&logoutkey='.$logoutKey]]);
     af_menu_register_item(['key'=>'theme_switcher','label'=>'Тема','icon'=>'fa-solid fa-circle-half-stroke','type'=>'widget',
         'section'=>'theme','default_container'=>'user_drawer','default_sortorder'=>80,'visibility'=>true,
         'allowed_containers'=>['user_drawer'],'renderer'=>'af_advancedmenu_render_theme_widget',
@@ -1511,7 +1511,7 @@ function af_advancedmenu_render_logout(): string
 {
     global $mybb;
     if (empty($mybb->user['uid'])) return '';
-    $url = af_advancedmenu_normalize_url('member.php?action=logout&logoutkey='.rawurlencode((string)$mybb->post_code));
+    $url = af_advancedmenu_normalize_url('member.php?action=logout&logoutkey='.rawurlencode((string)$mybb->user['logoutkey']));
     return '<nav class="af-am-logout" aria-label="Выход"><a class="af-am-link" href="'.htmlspecialchars_uni($url).'" aria-label="Выйти" data-af-am-tip="Выйти" title="Выйти"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i><span class="af-am-title">Выйти</span></a></nav>';
 }
 
