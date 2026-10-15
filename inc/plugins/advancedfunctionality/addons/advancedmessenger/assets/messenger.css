@@ -89,7 +89,7 @@ body.am-body .am-conversation-actions > a, body.am-body .am-dialog-actions > sum
 body.am-body .am-status { margin: 0; padding: .4rem 1rem; font-size: .8rem; color: var(--am-muted); }
 body.am-body .am-status:empty { display: none; }
 body.am-body .am-history {
-  --am-history-background-image: none; /* Replace none with url(...) for this surface only. */
+  --am-history-background-image: url("https://warprift.ru/uploads/af_gallery/1/2026/10/2240bb976cd73c5cbb555246b3001753.png");
   flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1rem;
   background-color: var(--am-bg-soft);
   background-image: linear-gradient(color-mix(in srgb, var(--am-bg-soft) 55%, transparent), color-mix(in srgb, var(--am-bg-soft) 70%, transparent)), var(--am-history-background-image);
