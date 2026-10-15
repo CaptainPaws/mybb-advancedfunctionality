@@ -177,29 +177,42 @@ class AF_Admin_Advancedmenu
         echo '<form method="post" action="'.htmlspecialchars_uni(self::url(['do'=>'save_order','loc'=>$active])).'">';
         echo '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">';
         require_once MYBB_ADMIN_DIR.'inc/class_table.php';
+        echo '<p>Перенос секции сохраняет все её дочерние пункты и их порядок. «Как у пунктов» сохраняет прежнее размещение. Для переноса отдельного пункта независимо от секции выберите «Без секции».</p>';
+        $sectionsTable = new Table;
+        foreach (['Секция', 'Название', 'Иконка', 'Область размещения', 'Порядок'] as $heading) $sectionsTable->construct_header($heading);
+        foreach (af_menu_section_config() as $key => $section) {
+            $options = '<option value="">Как у пунктов (совместимость)</option>';
+            foreach (af_menu_containers() as $value => $label) $options .= '<option value="'.$value.'"'.($section['container'] === $value ? ' selected' : '').'>'.htmlspecialchars_uni($label).'</option>';
+            $sectionsTable->construct_cell(htmlspecialchars_uni(af_menu_sections()[$key]));
+            $sectionsTable->construct_cell('<input name="sections['.$key.'][label]" value="'.htmlspecialchars_uni($section['label']).'">');
+            $sectionsTable->construct_cell('<input name="sections['.$key.'][icon]" value="'.htmlspecialchars_uni($section['icon']).'">');
+            $sectionsTable->construct_cell('<select name="sections['.$key.'][container]">'.$options.'</select>');
+            $sectionsTable->construct_cell('<input type="number" name="sections['.$key.'][sortorder]" value="'.$section['sortorder'].'" style="width:70px">');
+            $sectionsTable->construct_row();
+        }
+        $sectionsTable->output('Секции — перенос целиком');
+        echo '<p>Logout — системная кнопка в конце панели; её размещение не зависит от настроек пунктов.</p>';
         $table = new Table;
         foreach (['Название','Key','Source / тип','Type','Container','Section','Enabled','Sortorder','Действия'] as $heading) $table->construct_header($heading);
         $rows = [];
-        foreach (af_menu_configured_registry() as $key=>$item) if ($item['container'] === $active) $rows[] = ['source'=>'system','key'=>$key] + $item;
+        foreach (af_menu_configured_registry() as $key=>$item) if (!af_menu_is_logout($item) && af_menu_effective_container($item) === $active) $rows[] = ['source'=>'system','key'=>$key] + $item;
         $q = $db->simple_select(AF_AM_TABLE_ITEMS, '*', '', ['order_by'=>'sort_order, id']);
         while ($item=$db->fetch_array($q)) {
             $container = af_menu_normalize_container((string)($item['container'] ?? $item['location']));
-            if ($container === $active) $rows[] = ['source'=>'custom','key'=>'custom_'.(int)$item['id'],'container'=>$container,'sortorder'=>(int)$item['sort_order'],'label'=>$item['title'],'type'=>'link','allowed_containers'=>array_keys(af_menu_containers())] + $item;
+            if (af_menu_effective_container($item) === $active) $rows[] = ['source'=>'custom','key'=>'custom_'.(int)$item['id'],'container'=>$container,'sortorder'=>(int)$item['sort_order'],'label'=>$item['title'],'type'=>'link','allowed_containers'=>array_keys(af_menu_containers())] + $item;
         }
         usort($rows, static fn($a,$b)=>[$a['sortorder'],$a['key']] <=> [$b['sortorder'],$b['key']]);
         foreach ($rows as $item) {
             $key = (string)$item['key']; $field = htmlspecialchars_uni($key);
             $options = '';
             foreach (af_menu_containers() as $value=>$label) if (in_array($value,$item['allowed_containers'],true)) $options .= '<option value="'.$value.'"'.($value===$item['container']?' selected':'').'>'.htmlspecialchars_uni($label).'</option>';
-            $sectionOptions = '';
+            $sectionOptions = '<option value="none"'.(($item['section'] ?? '') === 'none' ? ' selected' : '').'>Без секции</option>';
             foreach (af_menu_sections() as $value=>$label) $sectionOptions .= '<option value="'.$value.'"'.($value===($item['section'] ?? 'links')?' selected':'').'>'.htmlspecialchars_uni($label).'</option>';
             if ($item['source'] === 'custom') {
                 $id = (int)$item['id'];
                 $actions = '<a href="'.htmlspecialchars_uni(self::url(['do'=>'edit','id'=>$id,'loc'=>$active])).'">Редактировать</a>';
                 $actions .= ' · <a href="'.htmlspecialchars_uni(self::url(['do'=>'delete','id'=>$id,'loc'=>$active])).'">Удалить</a>';
-                $actions .= ' · <form method="post" action="'.htmlspecialchars_uni(self::url(['do'=>'toggle','id'=>$id,'loc'=>$active])).'" style="display:inline">'
-                    .'<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">'
-                    .'<button class="button" type="submit">'.(!empty($item['enabled']) ? 'Выключить' : 'Включить').'</button></form>';
+                $actions .= ' · <button class="button" type="submit" formaction="'.htmlspecialchars_uni(self::url(['do'=>'toggle','id'=>$id,'loc'=>$active])).'">'.(!empty($item['enabled']) ? 'Выключить' : 'Включить').'</button>';
             } else {
                 $actions = '<label><input type="checkbox" name="items['.$field.'][reset]" value="1"> Вернуть defaults</label>';
             }
@@ -214,7 +227,9 @@ class AF_Admin_Advancedmenu
                 ? '<strong class="badge badge-success">SYSTEM / PROVIDER</strong><br>'.htmlspecialchars_uni((string)$item['source_addon'])
                 : '<strong>CUSTOM</strong><br>AdvancedMenu');
             $table->construct_cell(htmlspecialchars_uni((string)$item['type']));
-            $table->construct_cell('<select name="items['.$field.'][container]">'.$options.'</select>');
+            $placement = af_menu_section_config()[$item['section'] ?? 'links']['container'] ?? null;
+            $table->construct_cell('<select name="items['.$field.'][container]">'.$options.'</select>'
+                .($placement !== null ? '<br><small>Область секции: '.htmlspecialchars_uni(af_menu_containers()[$placement]).'</small>' : ''));
             $table->construct_cell('<select name="items['.$field.'][section]">'.$sectionOptions.'</select>');
             $table->construct_cell('<input type="checkbox" name="items['.$field.'][enabled]" value="1"'.(!empty($item['enabled'])?' checked':'').'>');
             $table->construct_cell('<input type="number" name="items['.$field.'][sortorder]" value="'.(int)$item['sortorder'].'" style="width:70px">');
@@ -234,7 +249,7 @@ class AF_Admin_Advancedmenu
         foreach ((array)$posted as $key=>$values) {
             $container = af_menu_normalize_container((string)($values['container'] ?? 'main'));
             $section = (string)($values['section'] ?? 'links');
-            if (!array_key_exists($section, af_menu_sections())) $section = 'links';
+            $section = af_menu_normalize_section($section);
             $enabled = empty($values['enabled']) ? 0 : 1; $sort = (int)($values['sortorder'] ?? 100);
             if (str_starts_with((string)$key, 'custom_')) {
                 $id=(int)substr((string)$key,7); $db->update_query(AF_AM_TABLE_ITEMS,['container'=>$container,'location'=>$container==='user_drawer'?'panel':'top','section'=>$section,'enabled'=>$enabled,'sort_order'=>$sort,'updated_at'=>TIME_NOW],"id='{$id}'");
@@ -261,6 +276,20 @@ class AF_Admin_Advancedmenu
                 }
             }
         }
+        $sections = af_menu_section_config();
+        foreach ((array)$mybb->get_input('sections', MyBB::INPUT_ARRAY) as $key => $values) {
+            if (!isset($sections[$key]) || !is_array($values)) continue;
+            $container = (string)($values['container'] ?? '');
+            $sections[$key] = [
+                'container'=>array_key_exists($container, af_menu_containers()) ? $container : null,
+                'sortorder'=>(int)($values['sortorder'] ?? 100),
+                'label'=>trim((string)($values['label'] ?? '')),
+                'icon'=>preg_replace('~[^a-z0-9 _-]~i', '', (string)($values['icon'] ?? '')),
+            ];
+        }
+        $encoded = json_encode($sections, JSON_UNESCAPED_UNICODE);
+        $db->update_query('settings', ['value'=>$db->escape_string($encoded)], "name='af_advancedmenu_sections'");
+        rebuild_settings();
         af_advancedmenu_rebuild_cache();
         self::go(['do'=>'list','loc'=>af_menu_normalize_container((string)$mybb->get_input('loc'))]);
     }
@@ -502,7 +531,7 @@ class AF_Admin_Advancedmenu
         $container->output_row(
             'Раздел',
             'Стабильный ключ хранится в базе; подпись используется только в интерфейсе.',
-            $form->generate_select_box('section', af_menu_sections(), af_menu_normalize_section((string)($data['section'] ?? 'links')), ['style' => 'width: 360px;']),
+            $form->generate_select_box('section', ['none'=>'Без секции'] + af_menu_sections(), af_menu_normalize_section((string)($data['section'] ?? 'links')), ['style' => 'width: 360px;']),
             'section'
         );
 

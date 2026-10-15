@@ -7,7 +7,7 @@
   var triggers = Array.from(document.querySelectorAll('[data-af-am-category], .af-am-burger'));
   var shell = document.querySelector('[data-af-am-drawer-shell]');
   var drawer = document.getElementById('af-am-user-drawer');
-  if (!triggers.length || !shell || !drawer) return;
+  if (!shell || !drawer) return;
   var closeButton = shell.querySelector('.af-am-drawer-close');
   var overlay = shell.querySelector('.af-am-drawer-overlay');
   var tabs = Array.from(drawer.querySelectorAll('[role="tab"][data-af-am-tab]'));

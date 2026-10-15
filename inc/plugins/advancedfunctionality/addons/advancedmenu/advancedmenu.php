@@ -35,10 +35,50 @@ function af_menu_sections(): array
     return ['profile'=>'Профиль', 'links'=>'Ссылки', 'settings'=>'Настройки', 'theme'=>'Тема'];
 }
 
+/** Section placement is separate from child presentation overrides.
+ * Missing placement preserves legacy per-item containers until ACP moves a section.
+ */
+function af_menu_section_config(): array
+{
+    $stored = json_decode((string)($GLOBALS['mybb']->settings['af_advancedmenu_sections'] ?? '{}'), true);
+    $icons = ['profile'=>'fa-user', 'links'=>'fa-link', 'settings'=>'fa-gear', 'theme'=>'fa-palette'];
+    $out = [];
+    foreach (af_menu_sections() as $key => $label) {
+        $row = is_array($stored[$key] ?? null) ? $stored[$key] : [];
+        $out[$key] = [
+            'label'=>trim((string)($row['label'] ?? '')) ?: $label,
+            'icon'=>preg_replace('~[^a-z0-9 _-]~i', '', (string)($row['icon'] ?? 'fa-solid '.$icons[$key])),
+            'container'=>isset($row['container']) && array_key_exists($row['container'], af_menu_containers()) ? $row['container'] : null,
+            'sortorder'=>(int)($row['sortorder'] ?? (count($out) + 1) * 10),
+        ];
+    }
+    return $out;
+}
+
+/** Child containers remain intact when their parent section is moved. */
+function af_menu_effective_container(array $item): string
+{
+    $section = af_menu_normalize_section((string)($item['section'] ?? 'links'));
+    return af_menu_section_config()[$section]['container']
+        ?? af_menu_normalize_container((string)($item['container'] ?? $item['location'] ?? 'main'));
+}
+
+/** Recognize only this forum's MyBB logout action, including legacy custom copies. */
+function af_menu_is_logout(array $item): bool
+{
+    if (($item['key'] ?? '') === 'logout' && ($item['source_addon'] ?? 'mybb') === 'mybb') return true;
+    $url = html_entity_decode((string)($item['action']['url'] ?? $item['url'] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $parts = parse_url(af_advancedmenu_normalize_url($url));
+    $board = parse_url(af_advancedmenu_normalize_url('member.php'));
+    if (!$parts || ($parts['host'] ?? '') !== ($board['host'] ?? '') || ($parts['path'] ?? '') !== ($board['path'] ?? '')) return false;
+    parse_str($parts['query'] ?? '', $query);
+    return ($query['action'] ?? '') === 'logout';
+}
+
 /** Return the stable storage key used by both custom and provider items. */
 function af_menu_normalize_section(string $section): string
 {
-    return array_key_exists($section, af_menu_sections()) ? $section : 'links';
+    return $section === 'none' || array_key_exists($section, af_menu_sections()) ? $section : 'links';
 }
 
 function af_menu_normalize_container(string $container): string
@@ -182,7 +222,7 @@ function af_menu_apply_override(array $item, ?array $override): array
     if (!in_array($item['container'], $item['allowed_containers'], true)) $item['container'] = $item['default_container'];
     $item['sortorder'] = (int)($override['sortorder'] ?? $item['default_sortorder']);
     $section = (string)($override['section'] ?? $item['section']);
-    $item['section'] = array_key_exists($section, af_menu_sections()) ? $section : $item['section'];
+    $item['section'] = $section === 'none' || array_key_exists($section, af_menu_sections()) ? $section : $item['section'];
     if (($override['label_override'] ?? '') !== '') $item['label'] = $override['label_override'];
     if (($override['icon_override'] ?? '') !== '') $item['icon'] = $override['icon_override'];
     $item['canonical_identity'] = af_menu_provider_identity($item);
@@ -516,6 +556,8 @@ function af_advancedmenu_install_settings(): void
             'gid'         => $gid,
         ]);
     };
+
+    $ensure('af_advancedmenu_sections', 'Секции AdvancedMenu', 'Настраиваются в списке меню AdvancedMenu.', 'text', '{}', 2);
 
     $ensure('af_advancedmenu_enabled', 'Включить AdvancedMenu', 'Общий рубильник аддона. Если выключено — меню не меняем вообще.', 'yesno', '1', 1);
 
@@ -1276,90 +1318,85 @@ function af_advancedmenu_render_theme_widget(array $item = []): string
     return $content;
 }
 
-/** Merge provider and custom items using the single ACP sort order. */
-function af_advancedmenu_build_container_html(string $container): string
+/** Build the same section tree for all three placement areas. */
+function af_advancedmenu_navigation_rows(): array
 {
-    $rows = [];
-    $seenProviders = [];
+    $config = af_menu_section_config();
+    $out = array_fill_keys(array_keys(af_menu_containers()), []);
+    $groups = [];
+    $seen = [];
+    $append = static function (array $item, bool $custom) use (&$out, &$groups, $config): void {
+        if (af_menu_is_logout($item)) return;
+        if (empty($item['enabled']) || !($custom ? af_advancedmenu_item_is_visible($item) : af_menu_item_is_visible($item))) return;
+        $section = af_menu_normalize_section((string)($item['section'] ?? 'links'));
+        $container = af_menu_normalize_container((string)($item['container'] ?? $item['location'] ?? 'main'));
+        $placement = $config[$section]['container'] ?? null;
+        $container = $placement ?? $container;
+        $html = $custom ? af_advancedmenu_render_item($item) : af_advancedmenu_render_registry_item($item);
+        if (trim($html) === '') return;
+        $row = ['sort'=>(int)($custom ? $item['sort_order'] : $item['sortorder']),
+            'key'=>$custom ? 'custom_'.(int)$item['id'] : (string)$item['key'], 'html'=>$html];
+        if ($section !== 'none' && ($container === 'user_drawer' || $placement !== null)) {
+            $groups[$container][$section][] = $row;
+        } else {
+            $out[$container][] = $row;
+        }
+    };
     foreach (af_menu_configured_registry() as $item) {
-        if (($item['container'] ?? '') !== $container || empty($item['enabled']) || !af_menu_item_is_visible($item)) continue;
         $identity = (string)($item['canonical_identity'] ?? af_menu_provider_identity($item));
-        if (isset($seenProviders[$identity])) continue;
-        $seenProviders[$identity] = true;
-        $rows[] = ['sort'=>(int)$item['sortorder'], 'key'=>(string)$item['key'], 'html'=>af_advancedmenu_render_registry_item($item)];
+        if (isset($seen[$identity])) continue;
+        $seen[$identity] = true;
+        $append($item, false);
     }
-    foreach (af_advancedmenu_get_items() as $item) {
-        $itemContainer = af_menu_normalize_container((string)($item['container'] ?? $item['location'] ?? 'main'));
-        if ($itemContainer !== $container || (int)$item['enabled'] !== 1 || !af_advancedmenu_item_is_visible($item)) continue;
-        $rows[] = ['sort'=>(int)$item['sort_order'], 'key'=>'custom_'.(int)$item['id'], 'html'=>af_advancedmenu_render_item($item)];
+    foreach (af_advancedmenu_get_items() as $item) $append($item, true);
+    foreach ($groups as $container => $sections) {
+        foreach ($sections as $section => $rows) {
+            usort($rows, static fn($a, $b) => [$a['sort'], $a['key']] <=> [$b['sort'], $b['key']]);
+            $meta = $config[$section];
+            $out[$container][] = ['sort'=>$meta['sortorder'], 'key'=>'section_'.$section,
+                'section'=>$section, 'label'=>$meta['label'], 'icon'=>$meta['icon'],
+                'html'=>implode("\n", array_column($rows, 'html'))];
+        }
     }
-    usort($rows, static fn(array $a, array $b): int => [$a['sort'], $a['key']] <=> [$b['sort'], $b['key']]);
-    return implode("\n", array_column($rows, 'html'));
+    foreach ($out as &$rows) usort($rows, static fn($a, $b) => [$a['sort'], $a['key']] <=> [$b['sort'], $b['key']]);
+    unset($rows);
+    return $out;
 }
 
-/** Drawer sections are presentation metadata; items retain the global ACP order. */
-function af_advancedmenu_build_drawer_html(): string
+function af_advancedmenu_section_trigger(array $row): string
 {
-    $sections = af_menu_sections();
-    if (empty($GLOBALS['mybb']->user['uid'])) $sections = array_intersect_key($sections, ['theme'=>true]);
-    $items = af_menu_configured_registry();
-    $custom = af_advancedmenu_get_items();
-    $seenProviders = [];
-    $panels = [];
+    return '<button type="button" class="af-am-category-control" data-af-am-category="'.$row['section'].'" aria-label="'.htmlspecialchars_uni($row['label']).'" aria-haspopup="dialog" aria-controls="af-am-user-drawer" aria-expanded="false"><i class="'.htmlspecialchars_uni($row['icon']).'" aria-hidden="true"></i></button>';
+}
 
-    foreach ($sections as $section => $title) {
-        $rows = [];
-        foreach ($items as $item) {
-            if (($item['container'] ?? '') !== 'user_drawer' || ($item['section'] ?? 'links') !== $section
-                || empty($item['enabled']) || !af_menu_item_is_visible($item)) continue;
-            $identity = (string)($item['canonical_identity'] ?? af_menu_provider_identity($item));
-            if (isset($seenProviders[$identity])) continue;
-            $seenProviders[$identity] = true;
-            $html = af_advancedmenu_render_registry_item($item);
-            if ($html !== '') $rows[] = ['sort'=>(int)$item['sortorder'], 'key'=>(string)$item['key'], 'html'=>$html];
-        }
-        foreach ($custom as $item) {
-            if (af_menu_normalize_container((string)($item['container'] ?? $item['location'] ?? 'main')) !== 'user_drawer'
-                || af_menu_normalize_section((string)($item['section'] ?? 'links')) !== $section
-                || (int)$item['enabled'] !== 1 || !af_advancedmenu_item_is_visible($item)) continue;
-            $rows[] = ['sort'=>(int)$item['sort_order'], 'key'=>'custom_'.(int)$item['id'], 'html'=>af_advancedmenu_render_item($item)];
-        }
-        // Keep the four registered sections addressable even when ACP hides every item.
-        if (!$rows) $rows[] = ['sort'=>0, 'key'=>'empty', 'html'=>'<li class="af-am-empty">Нет доступных пунктов</li>'];
-        usort($rows, static fn(array $a, array $b): int => [$a['sort'], $a['key']] <=> [$b['sort'], $b['key']]);
-        $panels[$section] = [
-            'title'=>$title,
-            'html'=>implode("\n", array_column($rows, 'html')),
-        ];
+function af_advancedmenu_build_container_html(string $container, ?array $navigation = null): string
+{
+    $navigation = $navigation ?? af_advancedmenu_navigation_rows();
+    $html = '';
+    foreach ($navigation[$container] ?? [] as $row) {
+        $html .= isset($row['section']) ? '<li class="af-am-section">'.af_advancedmenu_section_trigger($row).'</li>' : $row['html'];
     }
+    return $html;
+}
 
-    if (!$panels) return '';
-
-    $tabs = '';
-    $content = '';
+/** One shared side panel owns every section, irrespective of its rail area. */
+function af_advancedmenu_build_drawer_html(?array $navigation = null): string
+{
+    $navigation = $navigation ?? af_advancedmenu_navigation_rows();
+    $tabs = $content = '';
     $first = true;
-    foreach ($panels as $section => $panel) {
-        $sectionEsc = htmlspecialchars_uni($section);
-        $titleEsc = htmlspecialchars_uni((string)$panel['title']);
-        $tabId = 'af-am-tab-'.$sectionEsc;
-        $panelId = 'af-am-panel-'.$sectionEsc;
-        $activeClass = $first ? ' is-active' : '';
-
-        $tabs .= '<button type="button" class="af-am-drawer-tab'.$activeClass.'" id="'.$tabId.'" role="tab"'
-            .' aria-selected="'.($first ? 'true' : 'false').'" aria-controls="'.$panelId.'" tabindex="'.($first ? '0' : '-1').'"'
-            .' data-af-am-tab="'.$sectionEsc.'">'.$titleEsc.'</button>';
-        $content .= '<section class="af-am-drawer-panel'.$activeClass.'" id="'.$panelId.'" role="tabpanel"'
-            .' aria-labelledby="'.$tabId.'" data-af-am-panel="'.$sectionEsc.'"'.($first ? '' : ' hidden').'>'
-            .'<ul class="af-am-drawer-list">'.$panel['html'].'</ul></section>';
+    foreach ($navigation as $rows) foreach ($rows as $row) {
+        if (!isset($row['section'])) continue;
+        $section = $row['section'];
+        $tabId = 'af-am-tab-'.$section;
+        $panelId = 'af-am-panel-'.$section;
+        $active = $first ? ' is-active' : '';
+        $tabs .= '<button type="button" class="af-am-drawer-tab'.$active.'" id="'.$tabId.'" role="tab" aria-selected="'.($first ? 'true' : 'false').'" aria-controls="'.$panelId.'" tabindex="'.($first ? '0' : '-1').'" data-af-am-tab="'.$section.'">'.htmlspecialchars_uni($row['label']).'</button>';
+        $content .= '<section class="af-am-drawer-panel'.$active.'" id="'.$panelId.'" role="tabpanel" aria-labelledby="'.$tabId.'" data-af-am-panel="'.$section.'"'.($first ? '' : ' hidden').'><ul class="af-am-drawer-list">'.$row['html'].'</ul></section>';
         $first = false;
     }
-
-    return '<div class="af-am-drawer-tabs" data-af-am-tabs="1">'
-        .'<div class="af-am-drawer-tablist" role="tablist" aria-label="Разделы меню пользователя">'.$tabs.'</div>'
-        .'<div class="af-am-drawer-panels">'.$content.'</div></div>';
+    if ($content === '') return '';
+    return '<div class="af-am-drawer-tabs" data-af-am-tabs="1"><div class="af-am-drawer-tablist" role="tablist" aria-label="Разделы навигации">'.$tabs.'</div><div class="af-am-drawer-panels">'.$content.'</div></div>';
 }
-
-
 
 /** Guest account actions; members use the rail avatar and registry sections. */
 function af_advancedmenu_render_drawer_account(): string
@@ -1403,16 +1440,19 @@ function af_advancedmenu_render_user_avatar(): string
         .htmlspecialchars_uni((string)($lang->welcome_lastvisit ?? 'Последний визит: ')).$date.'</small></div></div>';
 }
 
-function af_advancedmenu_render_user_controls(): string
+function af_advancedmenu_render_user_controls(?array $navigation = null): string
 {
-    $sections = af_menu_sections();
-    if (empty($GLOBALS['mybb']->user['uid'])) $sections = ['theme'=>'Оформление'];
-    $html = '<nav class="af-am-user-controls" aria-label="Управление аккаунтом">';
-    $icons = ['profile'=>'fa-user', 'links'=>'fa-link', 'settings'=>'fa-gear', 'theme'=>'fa-palette'];
-    foreach ($sections as $section => $label) {
-        $html .= '<button type="button" class="af-am-category-control" data-af-am-category="'.$section.'" aria-label="'.htmlspecialchars_uni($label).'" aria-controls="af-am-user-drawer" aria-expanded="false"><i class="fa-solid '.$icons[$section].'" aria-hidden="true"></i></button>';
-    }
-    return $html.'</nav>';
+    $html = af_advancedmenu_build_container_html('user_drawer', $navigation);
+    return $html === '' ? '' : '<nav class="af-am-bar af-am-user-controls" aria-label="Пользовательское меню"><ul class="af-am-list">'.$html.'</ul></nav>';
+}
+
+/** Logout is a mandatory member control; configuration copies never render twice. */
+function af_advancedmenu_render_logout(): string
+{
+    global $mybb;
+    if (empty($mybb->user['uid'])) return '';
+    $url = af_advancedmenu_normalize_url('member.php?action=logout&logoutkey='.rawurlencode((string)$mybb->post_code));
+    return '<nav class="af-am-logout" aria-label="Выход"><a class="af-am-link" href="'.htmlspecialchars_uni($url).'" aria-label="Выйти" data-af-am-tip="Выйти" title="Выйти"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i><span class="af-am-title">Выйти</span></a></nav>';
 }
 
 /**
@@ -1436,9 +1476,10 @@ function af_advancedmenu_render_guest_account_bar(): string
 
 function af_advancedmenu_render_frontend_nav(): string
 {
-    $main = af_advancedmenu_build_container_html('main');
-    $secondary = af_advancedmenu_build_container_html('secondary');
-    $drawer = af_advancedmenu_build_drawer_html();
+    $navigation = af_advancedmenu_navigation_rows();
+    $main = af_advancedmenu_build_container_html('main', $navigation);
+    $secondary = af_advancedmenu_build_container_html('secondary', $navigation);
+    $drawer = af_advancedmenu_build_drawer_html($navigation);
     // The flow wrapper measures zero top occlusion for the existing ATF sticky
     // contract. Its fixed child owns the whole rail, including every category.
     return '<div class="af-am-shell af-am-navigation" data-af-am-navigation="1">'
@@ -1446,7 +1487,7 @@ function af_advancedmenu_render_frontend_nav(): string
         .af_advancedmenu_render_user_avatar().af_advancedmenu_render_guest_account_bar()
         .(trim($main) !== '' ? '<nav class="af-am-bar af-am-main" aria-label="Основное меню"><ul class="af-am-list">'.$main.'</ul></nav>' : '')
         .(trim($secondary) !== '' ? '<nav class="af-am-bar af-am-secondary" aria-label="Дополнительное меню"><ul class="af-am-list">'.$secondary.'</ul></nav>' : '')
-        .af_advancedmenu_render_user_controls()
+        .af_advancedmenu_render_user_controls($navigation).af_advancedmenu_render_logout()
         .'</div></div></div><div class="af-am-drawer-shell" data-af-am-drawer-shell hidden>'
         .'<button class="af-am-drawer-overlay" type="button" tabindex="-1" aria-label="Закрыть пользовательское меню"></button>'
         .'<aside id="af-am-user-drawer" class="af-am-drawer" role="dialog" aria-modal="true" aria-label="Пользовательское меню" tabindex="-1">'

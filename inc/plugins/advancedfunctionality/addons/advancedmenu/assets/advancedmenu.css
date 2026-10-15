@@ -312,3 +312,9 @@ body.af-am-drawer-open .af-am-rail { z-index: 1200; }
   .af-advancedmenu-layout .af-am-rail .af-am-guest-account { width: auto; }
   .af-advancedmenu-layout .af-am-rail .af-am-guest-actions { width: auto; flex-direction: row; }
 }
+
+/* System logout follows all placement areas and stays at the rail's end. */
+.af-am-rail .af-am-logout { flex: 0 0 auto; margin-top: auto; padding-top: 8px; }
+@media (max-width: 768px) {
+  .af-am-rail .af-am-logout { margin-top: 0; margin-left: auto; padding-top: 0; }
+}
