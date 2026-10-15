@@ -338,6 +338,11 @@
       from.list.splice(from.index, 1);
       value = target.indexOf('section:') === 0 ? id : from.node;
       to.splice(Math.max(0, Math.min(index, to.length)), 0, value);
+      var container=targetContainer(target);
+      if(kind==='section'){
+        state.sections[id].container=container;
+        from.node.children.forEach(function(child){state.items[child].container=container;state.items[child].section=id;});
+      }else{state.items[id].container=container;state.items[id].section=target.indexOf('section:')===0?target.slice(8):'none';}
       opened[target] = true;
       changed(); render();
       var handle = treeHost.querySelector('[data-node-id="' + CSS.escape(id) + '"] [data-drag-handle]');
@@ -347,7 +352,8 @@
       var result = [];
       Object.keys(config.containers).forEach(function (container) {
         var rootKey = 'root:' + container;
-        if (allowed(kind, id, rootKey)) result.push({key:rootKey, label:config.containers[container]});
+        var permitted=allowed(kind,id,rootKey);
+        result.push({key:rootKey,label:config.containers[container],disabled:!permitted,reason:permitted?'':placementError(kind,id,rootKey)});
         if (kind !== 'item') return;
         state.tree[container].forEach(function (node) {
           var key = 'section:' + node.id;
@@ -355,6 +361,19 @@
         });
       });
       return result;
+    }
+    function destinationSelect(form,kind,id,selected,fresh) {
+      var label=el('label','Область размещения','af-am-edit-field'), select=el('select');
+      var choices=fresh?Object.keys(config.containers).map(function(container){return{key:'root:'+container,label:config.containers[container]};}):destinations(kind,id);
+      choices.forEach(function(target){
+        var option=el('option',target.label+(target.disabled?' — недоступно':''));
+        option.value=target.key;option.disabled=!!target.disabled;option.title=target.reason||'';select.appendChild(option);
+      });
+      select.value=selected;label.appendChild(select);form.appendChild(label);
+      var reasons=choices.filter(function(target){return target.disabled;});
+      if(reasons.length)form.appendChild(el('p',reasons.map(function(target){return target.label+': '+target.reason;}).join(' ')));
+      select.addEventListener('change',function(){select.setCustomValidity('');});
+      return select;
     }
     function dialog(title, build) {
       var modal = el('dialog', null, 'af-am-edit-dialog'), form = el('form'); form.method = 'dialog';
@@ -389,7 +408,8 @@
         iconControls.append(pickIcon,clearIcon,preview); form.appendChild(iconControls);
         window.afAdvancedMenuIconPicker.bind(icon,pickIcon,clearIcon,preview);
         var enabled = field(form,'Включён',original.enabled,{checkbox:true});
-        var key, url, hint, access;
+        var key, url, hint, access, sectionTarget;
+        if(kind==='section')sectionTarget=destinationSelect(form,kind,id,'root:'+(fresh?'main':locate(kind,id).container),!!fresh);
         if (kind === 'section') field(form,'Key',id,{readonly:true});
         if (kind === 'item') {
           key = field(form,'Key',original.key,{required:true,readonly:provider,max:64});
@@ -405,13 +425,18 @@
         controls.appendChild(apply); controls.appendChild(button('Отмена',close)); form.appendChild(controls);
         form.addEventListener('submit',function(event) {
           event.preventDefault();
+          var target=sectionTarget?sectionTarget.value:null;
+          var relocate=kind==='section'&&!fresh&&target!=='root:'+locate(kind,id).container;
+          if(relocate&&!allowed(kind,id,target)){sectionTarget.setCustomValidity(placementError(kind,id,target));sectionTarget.reportValidity();return;}
           var copy = clone(original); copy.label = name.value.trim(); copy.icon = icon.value.trim(); copy.enabled = enabled.checked ? 1 : 0;
           if (kind === 'item' && !provider) { copy.key = key.value.trim(); copy.url = url.value.trim(); copy.hint = hint.value; copy.visibility = access.value.trim(); }
           if (kind === 'section') copy.visibility = access.value.trim();
           copy.reset = false;
+          if(fresh){copy.container=kind==='section'?target.slice(5):'main';if(kind==='item')copy.section='none';}
           if (kind === 'section') state.sections[id] = copy; else state.items[id] = copy;
-          if (fresh) state.tree.main.push(kind === 'section' ? {kind:'section',id:id,children:[]} : {kind:'item',id:id});
-          close(); changed(); render();
+          if (fresh) state.tree[kind==='section'?target.slice(5):'main'].push(kind === 'section' ? {kind:'section',id:id,children:[]} : {kind:'item',id:id});
+          close();
+          if(relocate)move(kind,id,target,listFor(target).length);else{changed();render();}
           var handle = treeHost.querySelector('[data-node-id="' + CSS.escape(id) + '"] [data-drag-handle]');
           if (handle) handle.focus();
         });
@@ -420,12 +445,10 @@
     function moveDialog(kind,id) {
       if (term) { announce('Очистите поиск перед перемещением.',true); return; }
       dialog('Переместить',function(form,close) {
-        var label = el('label','Куда'), select = el('select');
-        destinations(kind,id).forEach(function(target) { var option = el('option',target.label); option.value = target.key; select.appendChild(option); });
-        label.appendChild(select); form.appendChild(label);
+        var select=destinationSelect(form,kind,id,'root:'+locate(kind,id).container,false);
         form.appendChild(el('p','Элемент будет добавлен в конец выбранной группы. Порядок можно изменить кнопками «Выше» / «Ниже».'));
         var submit = el('button','Переместить'); submit.type='submit'; form.appendChild(submit); form.appendChild(button('Отмена',close));
-        form.addEventListener('submit',function(event) { event.preventDefault(); var key = select.value; close(); if (key) move(kind,id,key,listFor(key).length); });
+        form.addEventListener('submit',function(event) { event.preventDefault(); var key=select.value; if(!allowed(kind,id,key)){select.setCustomValidity(placementError(kind,id,key));select.reportValidity();return;} close();move(kind,id,key,listFor(key).length); });
       });
     }
     function resetProvider(id) {
