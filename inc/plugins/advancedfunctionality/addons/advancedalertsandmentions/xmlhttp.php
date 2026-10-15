@@ -281,56 +281,40 @@ function af_aam_set_user_prefs(int $uid, array $prefs): void
 function af_aam_render_rows(array $items): string
 {
     $html = '';
-    $defaultUrl = htmlspecialchars(af_aam_default_avatar_url(), ENT_QUOTES, 'UTF-8');
-
     foreach ($items as $it) {
-        $id = (int)($it['id'] ?? 0);
-        if ($id <= 0) continue;
-
-        $isRead = !empty($it['is_read']);
-        $cls = $isRead ? 'alert--read' : 'alert--unread';
-
-        $text = htmlspecialchars((string)($it['text'] ?? 'Уведомление'), ENT_QUOTES, 'UTF-8');
-        $url  = af_aam_normalize_url((string)($it['url'] ?? ''));
-        $href = $url !== '' ? htmlspecialchars($url, ENT_QUOTES, 'UTF-8') : '#';
-
-        $aUrl = $defaultUrl;
-        $aW = 32; $aH = 32; $aAlt = '';
-
-        if (!empty($it['avatar']) && is_array($it['avatar'])) {
-            $rawUrl = (string)($it['avatar']['url'] ?? '');
-            if ($rawUrl !== '') $aUrl = htmlspecialchars($rawUrl, ENT_QUOTES, 'UTF-8');
-
-            $aW   = (int)($it['avatar']['width'] ?? 32);
-            $aH   = (int)($it['avatar']['height'] ?? 32);
-            $aAlt = htmlspecialchars((string)($it['avatar']['username'] ?? ''), ENT_QUOTES, 'UTF-8');
-        }
-
-        if ($aW <= 0) $aW = 32;
-        if ($aH <= 0) $aH = 32;
-
-        $html .= '<tr class="af-aam-alert-row '.$cls.'" data-alert-id="'.$id.'">';
-
-        // аватар
-        $html .= '<td class="af-aam-alert-avatar">';
-        $html .= '<img src="'.$aUrl.'" width="'.$aW.'" height="'.$aH.'" alt="'.$aAlt.'" loading="lazy">';
-        $html .= '</td>';
-
-        // текст
-        $html .= '<td class="af-aam-alert-text"><a class="af-aam-alert-link" href="'.$href.'">'.$text.'</a></td>';
-
-        // действия
-        $html .= '<td class="af-aam-alert-actions">';
-        $html .= '<a href="#" class="markReadAlertButton'.($isRead ? ' hidden' : '').'" title="Прочитано">✔</a> ';
-        $html .= '<a href="#" class="markUnreadAlertButton'.($isRead ? '' : ' hidden').'" title="Непрочитано">↺</a> ';
-        $html .= '<a href="#" class="deleteAlertButton" title="Удалить">✕</a>';
-        $html .= '</td></tr>';
+        $id=(int)($it['id'] ?? 0);
+        if ($id<=0) continue;
+        $read=!empty($it['is_read']);
+        $esc=static function($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); };
+        $code=(string)($it['type_code'] ?? '');
+        $icon=$code==='pm' ? 'envelope' : ($code==='mention' ? 'at' : ($code==='rep' ? 'star' : 'comment'));
+        $avatar=$esc($it['avatar']['url'] ?? af_aam_default_avatar_url());
+        $name=(string)($it['from_username'] ?? '');
+        $text=strip_tags((string)($it['text'] ?? 'Уведомление'));
+        // Formatters supply text, never trusted HTML. Do not expose raw BBCode.
+        $text=preg_replace('~\[/?[a-z][^\]\r\n]*\]~i','',$text);
+        $lead='';
+        if ($name!=='' && strncmp($text,$name,strlen($name))===0) { $lead='<strong>'.$esc($name).'</strong>'; $text=substr($text,strlen($name)); }
+        $url=$esc(af_aam_normalize_url((string)($it['url'] ?? '')) ?: '#');
+        $stamp=(int)($it['dateline'] ?? 0);
+        $date=$stamp>0 ? $esc(strip_tags(my_date('relative',$stamp))) : '';
+        $subject=trim((string)($it['subject'] ?? ''));
+        $preview=trim((string)($it['preview'] ?? ''));
+        $clean=static function($value) use ($esc) { return $esc(preg_replace('~\[/?[a-z][^\]\r\n]*\]~i','',strip_tags($value))); };
+        $details=($subject!=='' ? '<span class="af-aam-card-object">'.$clean($subject).'</span>' : '')
+            .($preview!=='' ? '<span class="af-aam-card-preview">'.$clean($preview).'</span>' : '');
+        $html.='<article class="af-aam-alert-row '.($read?'alert--read':'alert--unread').'" data-alert-id="'.$id.'">'
+            .'<a class="af-aam-alert-link af-aam-card-link" href="'.$url.'">'
+            .'<span class="af-aam-card-avatar"><img src="'.$avatar.'" alt="" width="56" height="56" loading="lazy"></span>'
+            .'<span class="af-aam-card-kind"><i class="fa-solid fa-'.$icon.'" aria-hidden="true"></i></span>'
+            .'<span class="af-aam-card-text">'.$lead.$esc($text).$details.'</span>'
+            .'<span class="af-aam-card-meta"><span>'.$date.'</span><span class="af-aam-unread-dot" aria-label="Непрочитано"></span></span></a>'
+            .'<div class="af-aam-alert-actions"><button type="button" class="markReadAlertButton'.($read?' hidden':'').'" aria-label="Отметить прочитанным"><i class="fa-solid fa-check" aria-hidden="true"></i></button>'
+            .'<button type="button" class="markUnreadAlertButton'.($read?'':' hidden').'" aria-label="Отметить непрочитанным"><i class="fa-solid fa-envelope" aria-hidden="true"></i></button>'
+            .'<button type="button" class="deleteAlertButton" aria-label="Удалить"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></div></article>';
     }
-
     return $html;
 }
-
-
 
 function af_aam_xmlhttp_dispatch(): void
 {
@@ -372,21 +356,12 @@ function af_aam_xmlhttp_dispatch(): void
             $limit = 20;
         }
 
-        $items  = $repo->list_alerts($uid, (bool)$unreadOnly, $limit);
-
-        // prefs: отключённые типы
         $prefs = af_aam_get_user_prefs($uid);
-        $disabled = [];
-        if (!empty($prefs['disabled_types']) && is_array($prefs['disabled_types'])) {
-            $disabled = array_values(array_filter(array_map('strval', $prefs['disabled_types'])));
-        }
-
-        if ($disabled) {
-            $items = array_values(array_filter($items, function($it) use ($disabled) {
-                $code = (string)($it['type_code'] ?? $it['code'] ?? $it['type'] ?? '');
-                return $code === '' ? true : !in_array($code, $disabled, true);
-            }));
-        }
+        $disabled = is_array($prefs['disabled_types'] ?? null) ? $prefs['disabled_types'] : [];
+        $filter = (string)($mybb->input['filter'] ?? ($unreadOnly ? 'unread' : 'all'));
+        if (!in_array($filter,['all','unread','pm','mention'],true)) $filter='all';
+        $page=$repo->modal_page($uid,$filter,$limit,(int)($mybb->input['before'] ?? 0),$disabled);
+        $items=$page['items'];
 
         // аватары для модалки/тостов
         af_aam_attach_avatars($items, 32);
@@ -399,6 +374,10 @@ function af_aam_xmlhttp_dispatch(): void
             'unread_count' => $unread,
             'unread' => $unread,
             'server_newest_id' => $newest,
+            'filter' => $filter,
+            'counts' => $page['counts'],
+            'has_more' => $page['has_more'],
+            'next_before' => $page['next_before'],
             'items' => $items,
             'template' => af_aam_render_rows($items),
         ]);
@@ -578,6 +557,7 @@ function af_aam_xmlhttp_dispatch(): void
         . '      <input type="checkbox" id="af_aam_pref_toasts" '.($toasts ? 'checked="checked"' : '').'> ' . $toastLabel
         . '    </label>'
         . '  </div>'
+        . '  <label class="af-aam-pref-row af-aam-sound-setting"><span><strong>Звуковые уведомления</strong><small>Воспроизводить звук при получении новых уведомлений</small></span><input type="checkbox" role="switch" id="af_aam_sound_toggle" '.(!isset($prefs['sound']) || $prefs['sound'] ? 'checked' : '').'></label>'
         . '  <div class="af-aam-prefs-actions">'
         . '    <button type="submit" class="button">Сохранить</button>'
         . '  </div>'
@@ -618,6 +598,7 @@ function af_aam_xmlhttp_dispatch(): void
         $prefs = af_aam_get_user_prefs($uid);
         $prefs['disabled_types'] = $disabled;
         $prefs['toasts'] = $toasts;
+        if (isset($mybb->input['sound'])) $prefs['sound'] = (int)!empty($mybb->input['sound']);
         af_aam_set_user_prefs($uid, $prefs);
 
         af_aam_json(['ok' => 1, 'saved' => 1]);

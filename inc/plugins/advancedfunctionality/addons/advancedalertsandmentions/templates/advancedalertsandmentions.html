@@ -14,67 +14,22 @@
 
 
 <!-- TEMPLATE: af_aam_modal -->
-<div id="af_aam_modal" style="display: none;" class="modal af-aam-modal">
-
-    <!-- затемнённый фон, чтобы JS мог закрывать модалку по клику по фону -->
-    <div class="af-aam-modal-backdrop"></div>
-
-    <table class="tborder af-aam-modal-table" cellspacing="{$theme['borderwidth']}"
-           cellpadding="{$theme['tablespace']}" border="0">
-        <thead>
-        <tr>
-            <th class="thead" colspan="3">
-                <strong>{$lang->af_aam_link_alerts}</strong>
-                <button type="button" class="af-aam-modal-close" title="×">✕</button>
-            </th>
-        </tr>
-        </thead>
-
-        <!-- контейнер, к которому JS привязан по #alerts_content -->
-        <tbody id="alerts_content">
-            {$af_aam_modal_list}
-        </tbody>
-
-        <tfoot>
-        <tr>
-            <td class="tfoot smalltext" colspan="3">
-                <a href="{$mybb->settings['bburl']}/usercp.php?action=af_aam_list">
-                    {$lang->af_aam_modal_display_alerts}
-                </a>
-
-                <!-- markAllReadButton — ссылается на unified af_aam_api endpoint, JS подхватит -->
-                <span class="float_right">
-                    <a class="markAllReadButton"
-                       href="{$mybb->settings['bburl']}/xmlhttp.php?action=af_aam_api&amp;op=mark_all_read&amp;my_post_key={$mybb->post_code}">
-                        {$lang->af_aam_mark_all}
-                    </a>
-                </span>
-
-                <span class="float_right">
-                    <a href="#" id="af_aam_prefs_toggle">⚙ {$lang->af_aam_prefs_title}</a>
-                    &nbsp;|&nbsp;
-                </span>
-
-                <div id="af_aam_prefs_inline" style="display:none;"></div>
-                <br class="clear" />
-
-                <div class="af-aam-modal-footer">
-                    <div class="af-aam-sound-toggle">
-                        <label class="af-aam-sound-switch">
-                            <span class="af-aam-sound-label">🔊</span>
-                            <input type="checkbox" id="af_aam_sound_toggle" />
-                            <span class="af-aam-sound-slider"></span>
-                        </label>
-                    </div>
-                </div>
-
-                <audio id="af_aam_sound" preload="auto" style="display:none;" src="{$af_aam_asset_base}ping.mp3">
-                    <source src="{$af_aam_asset_base}ping.mp3" type="audio/mpeg" />
-                </audio>
-            </td>
-        </tr>
-        </tfoot>
-    </table>
+<link rel="stylesheet" href="{$af_aam_asset_base}notifications-modal.css?v=1.1.0">
+<div id="af_aam_modal" style="display:none" class="af-aam-modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="af-aam-modal-title">
+ <div class="af-aam-modal-backdrop"></div>
+ <section class="af-aam-dialog" tabindex="-1">
+  <header class="af-aam-modal-head"><span class="af-aam-heading-icon"><i class="fa-solid fa-bell" aria-hidden="true"></i></span><div><h2 id="af-aam-modal-title">Уведомления</h2><p>События форума и личных сообщений</p></div><button type="button" class="af-aam-modal-close" aria-label="Закрыть"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
+  <div class="af-aam-toolbar"><nav class="af-aam-tabs" role="tablist" aria-label="Фильтр уведомлений">
+   <button type="button" role="tab" data-aam-filter="all" aria-selected="true" aria-controls="alerts_content">Все <span data-aam-category="total">0</span></button>
+   <button type="button" role="tab" data-aam-filter="unread" aria-selected="false" aria-controls="alerts_content" tabindex="-1">Непрочитанные <span data-aam-category="unread">0</span></button>
+   <button type="button" role="tab" data-aam-filter="pm" aria-selected="false" aria-controls="alerts_content" tabindex="-1"><i class="fa-solid fa-envelope" aria-hidden="true"></i> ЛС <span data-aam-category="pm">0</span></button>
+   <button type="button" role="tab" data-aam-filter="mention" aria-selected="false" aria-controls="alerts_content" tabindex="-1"><i class="fa-solid fa-at" aria-hidden="true"></i> Упоминания <span data-aam-category="mention">0</span></button>
+  </nav><button type="button" class="markAllReadButton"><i class="fa-solid fa-check" aria-hidden="true"></i> Отметить всё прочитанным</button></div>
+  <div class="af-aam-scroll"><div id="alerts_content" role="tabpanel" aria-label="Уведомления">{$af_aam_modal_list}</div><button type="button" data-aam-more hidden>Показать ещё</button></div>
+  <div id="af_aam_prefs_inline" style="display:none;"></div>
+  <footer class="af-aam-modal-footer"><a href="{$mybb->settings['bburl']}/usercp.php?action=af_aam_list"><i class="fa-solid fa-list" aria-hidden="true"></i> Показать все уведомления <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a><button type="button" id="af_aam_prefs_toggle"><i class="fa-solid fa-gear" aria-hidden="true"></i> Настройки уведомлений</button></footer>
+  <audio id="af_aam_sound" preload="auto" hidden src="{$af_aam_asset_base}ping.mp3"></audio>
+ </section>
 </div>
 <!-- /TEMPLATE -->
 
@@ -211,6 +166,7 @@
     window.af_aam_asset_base    = "{$af_aam_asset_base}";
     window.af_aam_autorefresh   = {$af_aam_autorefresh};
     window.af_aam_sound_enabled = {$af_aam_sound_enabled};
+    window.af_aam_user_sound = {$af_aam_user_sound};
     window.af_aam_toast_limit   = {$af_aam_toast_limit};
     window.my_post_key          = "{$mybb->post_code}";
     window.af_aam_mention_suggest_url = "misc.php?action=af_mention_suggest";

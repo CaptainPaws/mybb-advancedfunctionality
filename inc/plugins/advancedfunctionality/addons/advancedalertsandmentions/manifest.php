@@ -9,7 +9,7 @@ return [
     'type'        => 'addon',
     'name'        => 'Advanced Alerts and Mentions',
     'description' => 'Система уведомлений и @упоминаний пользователей, интегрированная в AdvancedFunctionality.',
-    'version'     => '1.0.1',
+    'version'     => '1.1.0',
     'compatibility' => '18*',
     'author'   => 'CaptainPaws',
     'website'     => 'https://github.com/CaptainPaws',
@@ -21,6 +21,10 @@ return [
         'items' => [
             ['key'=>'advanced_alerts','label'=>'Уведомления','icon'=>'fa-solid fa-bell','type'=>'modal','default_container'=>'secondary','default_sortorder'=>20,'visibility'=>'af_advancedalertsandmentions_menu_visible','action'=>['url'=>'misc.php?action=af_aam_list','trigger_selector'=>'#af_aam_header_link','modal_selector'=>'#af_aam_modal','owner_template'=>'af_aam_header_icon'],'badge_provider'=>'af_advancedalertsandmentions_menu_badge'],
         ],
+    ],
+
+    'theme_stylesheets' => [
+        ['id'=>'assets__notifications-modal','file'=>'assets/notifications-modal.css','attach'=>[['file'=>'global']],'enabled_setting'=>'af_aam_enabled','disable_theme_integration'=>true,'exclude_autodiscovery'=>true],
     ],
 
     'frontend' => [

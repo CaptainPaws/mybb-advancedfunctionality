@@ -49,6 +49,31 @@ class AF_AAM_Repo
         return $this->map_items($rows);
     }
 
+    // The same storage and formatter serve every modal filter, before pagination.
+    public function modal_page(int $uid, string $filter, int $limit, int $before, array $disabled): array
+    {
+        global $db;
+        $where = "a.uid=".(int)$uid;
+        if ($disabled) {
+            $codes = array_map(function($code) use ($db) { return "'".$db->escape_string((string)$code)."'"; }, $disabled);
+            $where .= " AND (t.code IS NULL OR t.code NOT IN (".implode(',', $codes)."))";
+        }
+        $join = " FROM ".TABLE_PREFIX."aam_alerts a LEFT JOIN ".TABLE_PREFIX."aam_alert_types t ON (t.id=a.type_id)";
+        $q = $db->write_query("SELECT COUNT(*) AS total, SUM(CASE WHEN a.is_read=0 THEN 1 ELSE 0 END) AS unread, SUM(CASE WHEN t.code='pm' THEN 1 ELSE 0 END) AS pm, SUM(CASE WHEN t.code='mention' THEN 1 ELSE 0 END) AS mention".$join." WHERE ".$where);
+        $counts = array_map('intval', (array)$db->fetch_array($q));
+        if ($filter === 'unread') $where .= " AND a.is_read=0";
+        elseif ($filter === 'pm') $where .= " AND t.code='pm'";
+        elseif ($filter === 'mention') $where .= " AND t.code='mention'";
+        if ($before > 0) $where .= " AND a.id<".(int)$before;
+        $limit = max(1,min(100,$limit));
+        $q = $db->write_query("SELECT a.*, t.code, t.title, u.username AS from_username".$join." LEFT JOIN ".TABLE_PREFIX."users u ON (u.uid=a.from_uid) WHERE ".$where." ORDER BY a.id DESC LIMIT ".($limit+1));
+        $rows=[];
+        while ($row=$db->fetch_array($q)) $rows[]=$row;
+        $more=count($rows)>$limit;
+        if ($more) array_pop($rows);
+        return ['items'=>$this->map_items($rows),'counts'=>$counts,'has_more'=>$more,'next_before'=>$rows ? (int)$rows[count($rows)-1]['id'] : 0];
+    }
+
     /**
      * Long-poll: ждёт изменения newest_id или unread_count.
      */
@@ -204,6 +229,8 @@ class AF_AAM_Repo
             $typeCode  = (string)($row['code'] ?? '');
             $typeTitle = (string)($row['title'] ?? '');
 
+            $extra=json_decode((string)($row['extra'] ?? ''),true);
+            if (!is_array($extra)) $extra=[];
             $items[] = [
                 'id'      => (int)($row['id'] ?? 0),
                 'is_read' => (int)($row['is_read'] ?? 0),
@@ -222,6 +249,9 @@ class AF_AAM_Repo
                 'from_username' => (string)($row['from_username'] ?? ''),
 
                 // контент
+                'subject' => (string)($extra['subject'] ?? ''),
+                'preview' => (string)($extra['preview'] ?? ''),
+                'dateline' => (int)($row['dateline'] ?? 0),
                 'text' => $text,
                 'url'  => $url,
             ];

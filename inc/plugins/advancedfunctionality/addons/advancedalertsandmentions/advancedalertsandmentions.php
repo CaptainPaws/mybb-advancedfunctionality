@@ -1121,7 +1121,7 @@ function af_aam_bootstrap(): void
     global $af_aam_js, $af_aam_css, $af_aam_header_icon, $af_aam_modal, $af_aam_mentions_js, $af_aam_main_js;
     global $af_aam_unread, $af_aam_modal_list, $af_aam_new_indicator;
     global $af_aam_asset_base, $af_aam_autorefresh;
-    global $af_aam_sound_enabled, $af_aam_toast_limit;
+    global $af_aam_sound_enabled, $af_aam_toast_limit, $af_aam_user_sound;
 
     if (!af_aam_is_enabled()) {
         return;
@@ -1194,6 +1194,7 @@ function af_aam_bootstrap(): void
     }
 
     $prefs = af_aam_get_user_prefs($uid);
+    $af_aam_user_sound = isset($prefs['sound']) ? (int)(bool)$prefs['sound'] : -1;
     $disabled = [];
     if (!empty($prefs['disabled_types']) && is_array($prefs['disabled_types'])) {
         $disabled = array_values(array_filter(array_map('strval', $prefs['disabled_types'])));
@@ -1209,6 +1210,12 @@ function af_aam_bootstrap(): void
 
     af_aam_attach_avatars($items, 32);
     $af_aam_modal_list = af_aam_render_rows($items);
+
+    // Owned modal markup must update with deployed assets, without reinstalling.
+    $owned = af_aam_load_templates_from_file();
+    foreach (['af_aam_modal','af_aam_js_popup'] as $name) {
+        if (isset($owned[$name])) $templates->cache[$name] = $owned[$name];
+    }
 
     // собираем JS и header icon через шаблоны
     $af_aam_js = '';

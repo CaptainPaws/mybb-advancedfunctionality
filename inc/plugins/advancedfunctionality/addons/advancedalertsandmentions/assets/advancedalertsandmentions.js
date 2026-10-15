@@ -80,30 +80,25 @@
     } catch (e) {}
 
 
-    // если в localStorage стоит "заглушено" — переопределяем
-    try {
-        var lsVal = localStorage.getItem(afAamSoundStorageKey);
-        if (lsVal === '1') {
-            afAamUserSoundEnabled = false;
-        }
-    } catch (e) {
-        // если localStorage недоступен — просто игнорируем
+    if (typeof window.af_aam_user_sound !== 'undefined' && Number(window.af_aam_user_sound)>=0) {
+        afAamUserSoundEnabled = afAamGlobalSoundEnabled && !!Number(window.af_aam_user_sound);
+    } else {
+        try { if (localStorage.getItem(afAamSoundStorageKey)==='1') afAamUserSoundEnabled=false; } catch(e) {}
     }
-
 
     // ======== простая AJAX-обёртка =========
     var requestSerial = 0, lastApplied = 0;
     var stateEpoch = 0, mutationQueue = [], mutationBusy = false;
     function alertError(resp) {
         if (resp && resp._aamStale) return;
-        var host = document.querySelector('#af_aam_modal .thead') || document.querySelector('#af_aam_modal') || document.querySelector('.af-aam-alerts');
+        var host = document.querySelector('#af_aam_modal .af-aam-dialog') || document.querySelector('#af_aam_modal') || document.querySelector('.af-aam-alerts');
         if (!host) return;
         var error = host.querySelector('[data-aam-error]');
         if (!error) { error = document.createElement('p'); error.setAttribute('data-aam-error','1'); error.setAttribute('role','alert'); host.appendChild(error); }
         error.textContent = 'Не удалось обновить уведомления. Повторите попытку.';
     }
     function ajax(url, data, callback, timeoutMs) {
-        var mutation = data && data.action === 'af_aam_api' && /^(mark_read|mark_unread|delete|mark_all_read)$/.test(data.op);
+        var mutation = data && data.action === 'af_aam_api' && /^(mark_read|mark_unread|delete|mark_all_read|prefs_save)$/.test(data.op);
         if (mutation) {
             stateEpoch++; // Invalidate reads already in flight immediately.
             mutationQueue.push(function() { run(true); });
@@ -132,7 +127,7 @@
                         });
                     }
                 } else if (isMutation) alertError(resp);
-                if (isMutation) { stateEpoch++; mutationBusy = false; }
+                if (isMutation) { stateEpoch++; mutationBusy = false; if (resp && resp.ok && window.afAamRefreshModal) window.afAamRefreshModal(); }
                 try { if (callback) callback(resp); }
                 finally { if (isMutation) drainMutations(); }
             }, timeoutMs);
@@ -615,10 +610,7 @@
         if (!resp || !resp.ok || resp.error || resp._aamStale) { if (resp && !resp._aamStale) alertError(resp); return; }
         var cnt = extractUnreadCount(resp);
         if (cnt !== null) updateVisibleCounts(cnt);
-        if (resp.template) {
-            var tbody = qs('#alerts_content');
-            if (tbody) { tbody.innerHTML = resp.template; afAamRenderMentionsInContainer(tbody); }
-        }
+        if (resp.template && typeof resp.filter === 'undefined' && window.afAamRefreshModal) window.afAamRefreshModal();
     }
 
     // ======== ЛОГИКА MyAlerts (адаптация) =========
@@ -718,26 +710,6 @@
         var modalClose = modal ? modal.querySelector('.af-aam-modal-close') : null;
         var backdrop   = modal ? modal.querySelector('.af-aam-modal-backdrop') : null;
 
-        // Тумблер звука в модалке
-        var soundToggle = qs('#af_aam_sound_toggle');
-
-        // ---- ЗВУК ----
-        if (soundToggle) {
-            soundToggle.checked = afAamUserSoundEnabled;
-
-            soundToggle.addEventListener('change', function () {
-                afAamUserSoundEnabled = !!soundToggle.checked;
-                try {
-                    if (!afAamUserSoundEnabled) {
-                        localStorage.setItem(afAamSoundStorageKey, '1');
-                    } else {
-                        localStorage.removeItem(afAamSoundStorageKey);
-                        playAlertSound();
-                    }
-                } catch (e) {}
-            });
-        }
-
         // если обязательных узлов нет — выходим
         if (!link || !modal || !alertsTable) {
             if (afAamDebug) {
@@ -748,21 +720,66 @@
             return;
         }
 
-        function renderModal(unreadOnly) {
-            ajax('xmlhttp.php', {
-                action: 'af_aam_api',
-                op: 'list',
-                unreadOnly: unreadOnly ? 1 : 0
-            }, function (resp) {
-                syncFromResponse(resp || {});
+        var activeFilter='all', pageBefore=0, listSerial=0, opener=null;
+        function emptyState(message, retry) {
+            alertsTable.innerHTML='<div class="af-aam-empty" role="status"><i class="fa-solid fa-bell" aria-hidden="true"></i><p></p></div>';
+            alertsTable.querySelector('p').textContent=message;
+            if (retry) { var button=document.createElement('button'); button.type='button'; button.textContent='Повторить'; button.addEventListener('click',function(){renderModal();}); alertsTable.firstChild.appendChild(button); }
+        }
+        function renderModal(append) {
+            if (!modal.classList.contains('af-aam-modal-open')) return;
+            var serial=++listSerial, filter=activeFilter;
+            if (append !== true) { append=false; pageBefore=0; }
+            alertsTable.setAttribute('aria-busy','true');
+            if (!alertsTable.children.length) emptyState('Загрузка уведомлений…');
+            var more=modal.querySelector('[data-aam-more]'); more.disabled=true;
+            ajax('xmlhttp.php',{action:'af_aam_api',op:'list',filter:filter,before:append?pageBefore:0},function(resp) {
+                if (serial!==listSerial || filter!==activeFilter) return;
+                alertsTable.setAttribute('aria-busy','false'); more.disabled=false;
+                if (resp && resp._aamStale) { setTimeout(function(){ if(serial===listSerial) renderModal(); },100); return; }
+                if (!resp || !resp.ok || resp.error) { if (!append) emptyState('Не удалось загрузить уведомления.',true); else alertError(resp); return; }
+                syncFromResponse(resp);
+                modal.querySelectorAll('[data-aam-category]').forEach(function(node){node.textContent=String((resp.counts||{})[node.dataset.aamCategory]||0);});
+                var mark=modal.querySelector('.markAllReadButton'); mark.disabled=!Number(resp.unread_count);
+                if (append) alertsTable.insertAdjacentHTML('beforeend',resp.template||'');
+                else alertsTable.innerHTML=resp.template||'';
+                if (!alertsTable.children.length) emptyState(filter==='unread'?'Нет непрочитанных уведомлений.':filter==='all'?'Уведомлений пока нет.':'Нет уведомлений выбранного типа.');
+                pageBefore=Number(resp.next_before)||0; more.hidden=!resp.has_more;
             });
         }
+        function selectFilter(tab) {
+            activeFilter=tab.dataset.aamFilter;
+            modal.querySelectorAll('[data-aam-filter]').forEach(function(item){var selected=item===tab; item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;});
+            renderModal();
+        }
+        modal.querySelector('.af-aam-tabs').addEventListener('click',function(e){var tab=e.target.closest('[data-aam-filter]');if(tab) selectFilter(tab);});
+        modal.querySelector('.af-aam-tabs').addEventListener('keydown',function(e){
+            var tabs=Array.from(this.querySelectorAll('[role=tab]')), index=tabs.indexOf(document.activeElement);
+            if(index<0)return;
+            if(e.key==='ArrowRight')index=(index+1)%tabs.length;
+            else if(e.key==='ArrowLeft')index=(index+tabs.length-1)%tabs.length;
+            else if(e.key==='Home')index=0;else if(e.key==='End')index=tabs.length-1;else return;
+            e.preventDefault();selectFilter(tabs[index]);tabs[index].focus();
+        });
+        modal.querySelector('[data-aam-more]').addEventListener('click',function(){renderModal(true);});
+        document.addEventListener('keydown',function(e){
+            if(!modal.classList.contains('af-aam-modal-open'))return;
+            if(e.key==='Escape'){e.preventDefault();closeModal();return;}
+            if(e.key!=='Tab')return;
+            var nodes=Array.from(modal.querySelectorAll('a[href],button:not(:disabled),input:not(:disabled),[tabindex="0"]')).filter(function(n){return n.tabIndex>=0 && n.getClientRects().length && !n.closest('[hidden]');});
+            if(!nodes.length)return;
+            if(e.shiftKey && (document.activeElement===nodes[0] || !modal.contains(document.activeElement))){e.preventDefault();nodes[nodes.length-1].focus();}
+            else if(!e.shiftKey && (document.activeElement===nodes[nodes.length-1] || !modal.contains(document.activeElement))){e.preventDefault();nodes[0].focus();}
+        });
 
         function openModal() {
-            renderModal();
+            opener=document.activeElement;
+            if (window.AFModalHost && typeof window.AFModalHost.mount==='function') window.AFModalHost.mount(modal);
+            document.body.classList.add('af-aam-lock-scroll');
             modal.classList.add('af-aam-modal-open');
             modal.style.display = 'flex';
             modal.setAttribute('aria-hidden', 'false');
+            renderModal(); modalClose.focus();
 
             // "пробуждаем" звук от первого осознанного клика (по ссылке уведомлений)
             if (afAamSound && afAamUserSoundEnabled && !afAamSoundPrimed) {
@@ -777,9 +794,11 @@
         }
 
         function closeModal() {
+            document.body.classList.remove('af-aam-lock-scroll');
             modal.classList.remove('af-aam-modal-open');
             modal.style.display = 'none';
             modal.setAttribute('aria-hidden', 'true');
+            listSerial++; if(opener && opener.isConnected) opener.focus();
         }
 
         // Клик по ссылке — открыть модалку
@@ -810,90 +829,36 @@
         var prefsToggle = qs('#af_aam_prefs_toggle');
         var prefsBox    = qs('#af_aam_prefs_inline');
 
-        if (prefsToggle && prefsBox) {
-            prefsToggle.addEventListener('click', function (e) {
-                e.preventDefault();
-                if (prefsBox.getAttribute('data-loaded') === '1') {
-                    prefsBox.style.display = (prefsBox.style.display === 'none' || !prefsBox.style.display) ? 'block' : 'none';
-                    return;
-                }
-
-                ajax('xmlhttp.php', { action: 'af_aam_api', op: 'prefs_form' }, function (resp) {
-                    if (resp && resp.ok && resp.html) {
-                        prefsBox.innerHTML = resp.html;
-
-                        try {
-                            var toastCb0 = prefsBox.querySelector('#af_aam_pref_toasts');
-                            if (toastCb0) toastCb0.checked = afAamUserToastsEnabled;
-                        } catch (e) {}
-
-                        prefsBox.setAttribute('data-loaded', '1');
-                        prefsBox.style.display = 'block';
-
-                        var form = prefsBox.querySelector('#af_aam_prefs_form');
-                        if (form) {
-                            form.addEventListener('submit', function (ev) {
-                                ev.preventDefault();
-
-                                var checkboxes = prefsBox.querySelectorAll('.af-aam-pref-checkbox');
-                                var types = [];
-                                checkboxes.forEach(function (cb) {
-                                    if (cb.checked) types.push(cb.value);
-                                });
-
-                                var toastCb = prefsBox.querySelector('#af_aam_pref_toasts');
-                                var toastsEnabled = toastCb ? !!toastCb.checked : true;
-
-                                afAamUserToastsEnabled = toastsEnabled;
-                                try {
-                                    if (!toastsEnabled) localStorage.setItem(afAamToastsStorageKey, '1');
-                                    else localStorage.removeItem(afAamToastsStorageKey);
-                                } catch (e) {}
-
-                                ajax('xmlhttp.php', {
-                                    action: 'af_aam_api',
-                                    op: 'prefs_save',
-                                    types: types,
-                                    toasts: toastsEnabled ? 1 : 0,
-                                    my_post_key: window.my_post_key || ''
-                                }, function () {
-                                    ajax('xmlhttp.php', {
-                                        action: 'af_aam_api',
-                                        op: 'list',
-                                        unreadOnly: 1
-                                    }, function (resp2) {
-                                        if (!lastSeenAlertId && resp2 && Array.isArray(resp2.items) && resp2.items.length) {
-                                            var maxId = 0;
-                                            resp2.items.forEach(function (a) {
-                                                var id = parseInt(a.id, 10) || 0;
-                                                if (id > maxId) maxId = id;
-                                            });
-                                            lastSeenAlertId = maxId;
-                                            syncFromResponse(resp2 || {});
-                                            return;
-                                        }
-
-                                        var hasNewUnseen = (resp2 && Array.isArray(resp2.items))
-                                            ? afAamHasNewUnseenUnread(resp2.items)
-                                            : false;
-
-                                        syncFromResponse(resp2 || {});
-
-                                        if (resp2 && Array.isArray(resp2.items)) {
-                                            queueToasts(resp2.items);
-                                        }
-
-                                        if (hasNewUnseen) {
-                                            playAlertSound();
-                                        }
-                                    });
-                                });
-                            });
-                        }
-                    }
-                });
-            });
+        function showSettings(show) {
+            prefsBox.style.display=show?'block':'none';
+            modal.querySelector('.af-aam-scroll').hidden=show;
+            modal.querySelector('.af-aam-toolbar').hidden=show;
+            prefsToggle.innerHTML=show?'<i class="fa-solid fa-arrow-left" aria-hidden="true"></i> К уведомлениям':'<i class="fa-solid fa-gear" aria-hidden="true"></i> Настройки уведомлений';
         }
+        if (prefsToggle && prefsBox) prefsToggle.addEventListener('click',function(e){
+            e.preventDefault();
+            if(prefsBox.style.display==='block'){showSettings(false);renderModal();return;}
+            ajax('xmlhttp.php',{action:'af_aam_api',op:'prefs_form'},function(resp){
+                if(!resp || !resp.ok || !resp.html){alertError(resp);return;}
+                prefsBox.innerHTML=resp.html;showSettings(true);
+                var sound=prefsBox.querySelector('#af_aam_sound_toggle');
+                sound.checked=afAamUserSoundEnabled;sound.disabled=!afAamGlobalSoundEnabled;
+                prefsBox.querySelector('#af_aam_prefs_form').addEventListener('submit',function(ev){
+                    ev.preventDefault();var form=this, button=form.querySelector('[type=submit]');if(button.disabled)return;button.disabled=true;
+                    var types=Array.from(form.querySelectorAll('.af-aam-pref-checkbox:checked')).map(function(cb){return cb.value;});
+                    var toast=form.querySelector('#af_aam_pref_toasts');
+                    ajax('xmlhttp.php',{action:'af_aam_api',op:'prefs_save',types:types,toasts:toast&&toast.checked?1:0,sound:sound.checked?1:0,my_post_key:window.my_post_key||''},function(saved){
+                        button.disabled=false;
+                        if(!saved || !saved.ok || saved.error){alertError(saved);return;}
+                        afAamUserSoundEnabled=afAamGlobalSoundEnabled&&sound.checked;
+                        afAamUserToastsEnabled=!!(toast&&toast.checked);
+                        try{if(afAamUserToastsEnabled)localStorage.removeItem(afAamToastsStorageKey);else localStorage.setItem(afAamToastsStorageKey,'1');}catch(err){}
+                        showSettings(false);renderModal();
+                    });
+                });
+                sound.focus();
+            });
+        });
 
         // Делегирование кликов внутри модалки — оставляем как было у тебя
         modal.addEventListener('click', function (e) {
@@ -1192,13 +1157,17 @@
 
         function markAllHandler(e) {
             e.preventDefault();
+            var button=e.target.closest('.markAllReadButton');
+            if(button && button.dataset.pending)return;
+            if(button){button.dataset.pending='1';button.disabled=true;}
             ajax('xmlhttp.php', {
                 action:    'af_aam_api',
                 op:        'mark_all_read',
                 my_post_key: window.my_post_key || ''
             }, function (resp) {
                 syncFromResponse(resp || {});
-                if (resp && resp.ok && !resp.error && !resp._aamStale) renderLatest();
+                if(button){delete button.dataset.pending;button.disabled=currentUnread===0;}
+                if (resp && resp.ok && !resp.error && !resp._aamStale && latestContainer) renderLatest();
             });
         }
 
@@ -1210,9 +1179,7 @@
             });
         }
 
-        markAllButtons.forEach(function (btn) {
-            btn.addEventListener('click', markAllHandler);
-        });
+        // One delegated owner handles both existing and dynamic buttons.
 
         document.addEventListener('click', function (e) {
             var target = e.target.closest('.markAllReadButton');
@@ -1776,10 +1743,7 @@
         var newCount = extractUnreadCount(resp);
         if (newCount === null) newCount = oldCount;
 
-        if (resp.template) {
-            var tbody = qs('#alerts_content');
-            if (tbody) tbody.innerHTML = resp.template;
-        }
+        if (resp.changed && window.afAamRefreshModal) window.afAamRefreshModal();
 
         // вычислим items заранее
         var items = Array.isArray(resp.items) ? resp.items : [];
@@ -2362,8 +2326,8 @@
                 var low = href.toLowerCase();
                 if (low === '#' || low.indexOf('javascript:') === 0 || low.indexOf('void(0)') !== -1) return;
 
-                // теперь мы берём управление навигацией на себя
-                e.preventDefault();
+                // This capture handler owns row navigation and read marking.
+                e.preventDefault(); e.stopPropagation();
 
                 // помечаем прочитанным “по пути” (не блокируем переход)
                 var id = getAlertIdFromElement(row) || getAlertIdFromElement(a);
