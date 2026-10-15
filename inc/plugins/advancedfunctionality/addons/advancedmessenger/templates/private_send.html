@@ -8,7 +8,7 @@
 {$am_header}
 {$am_outer_start}
 	{$am_pm_before_content}
-	<header class="am-pm__header am-card">
+	<header class="am-pm__header am-card am-pm-compose__header">
 		<div class="am-pm__heading"><p class="am-pm__eyebrow">{$lang->private_messaging}</p><h1 class="am-pm__title">{$lang->compose_pm}</h1></div>
 		<div class="am-pm__quota">{$am_pm_quota}</div>
 	</header>
@@ -16,42 +16,42 @@
 	<form action="private.php" method="post" name="input" data-am-editor="1" data-am-quote="{$am_is_quote}" data-am-draft="{$am_draft_key}" data-am-uid="{$am_uid}" data-am-restore="{$am_label_draft_restore}" data-am-sending="{$am_label_sending}" class="am-pm-compose__form am-stack">
 		<input type="hidden" name="am_draft_ref" value="{$am_draft_key}" /><input type="hidden" name="am_panel" value="{$am_panel}" /><input type="hidden" name="am_reply" value="{$am_reply_id}" /><input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 		<div class="am-pm-compose__feedback">{$preview}{$send_errors}</div>
-		<section class="am-section am-card am-stack" aria-label="{$lang->compose_pm}">
+		<details class="am-card am-compose-disclosure" {$am_address_open}><summary><i class="fa-solid fa-address-card" aria-hidden="true"></i><span>{$lang->compose_to} / {$lang->compose_subject}</span><span class="am-recipient-preview">{$to}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><section class="am-section am-stack" aria-label="{$lang->compose_pm}">
 			<div class="am-form-row">
 				<div class="am-pm-compose__label-line"><label class="am-form-row__label" for="to">{$lang->compose_to}</label><button type="button" class="am-pm-compose__bcc-toggle" onclick="showBcc();">{$lang->compose_bcc_show}</button></div>
-				<textarea name="to" id="to" rows="2" cols="38" tabindex="1">{$to}</textarea>
+				<textarea name="to" id="to" rows="1" cols="38" tabindex="1">{$to}</textarea>
 				<div class="am-form-row__hint">{$lang->separate_names}{$buddy_select_to}{$max_recipients}</div>
 			</div>
 			<div class="am-form-row" id="bcc_area">
 				<label class="am-form-row__label" for="bcc">{$lang->compose_bcc}</label>
-				<textarea name="bcc" id="bcc" rows="2" cols="38" tabindex="1">{$bcc}</textarea>
+				<textarea name="bcc" id="bcc" rows="1" cols="38" tabindex="1">{$bcc}</textarea>
 				<div class="am-form-row__hint">{$buddy_select_bcc}</div>
 			</div>
 			<div class="am-form-row"><label class="am-form-row__label" for="subject">{$lang->compose_subject}</label><input type="text" class="textbox" name="subject" id="subject" size="40" maxlength="85" value="{$subject}" tabindex="3" /></div>
 			<div class="am-pm-compose__posticons">{$posticons}</div>
-		</section>
-		<section class="am-section am-card am-pm-compose__editor">
-			<div class="am-form-row"><label class="am-form-row__label" for="message">{$lang->compose_message}</label><textarea name="message" id="message" rows="20" cols="70" tabindex="4">{$message}</textarea></div>
+		</section></details>
+		<section class="am-section am-pm-compose__editor">
+			<div class="am-form-row"><label class="am-form-row__label" for="message">{$lang->compose_message}</label><textarea name="message" id="message" rows="5" cols="70" tabindex="4">{$message}</textarea></div>
 			<div class="am-pm-compose__editor-tools">{$smilieinserter}{$codebuttons}</div>
 		</section>
-		<section class="am-section am-card am-pm-compose__options">
-			<h2>{$lang->compose_options}</h2>
+		<div class="am-compose-footer"><details class="am-card am-compose-disclosure am-compose-options"><summary><i class="fa-solid fa-sliders" aria-hidden="true"></i><span>{$lang->compose_options}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><section class="am-section am-pm-compose__options">
+
 			<div class="am-stack am-stack--compact">
 				<label><input type="checkbox" class="checkbox" name="options[signature]" value="1" tabindex="5" {$optionschecked['signature']} /> {$lang->options_sig}</label>
 				<label><input type="checkbox" class="checkbox" name="options[disablesmilies]" value="1" tabindex="6" {$optionschecked['disablesmilies']} /> {$lang->options_disable_smilies}</label>
 				<label><input type="checkbox" class="checkbox" name="options[savecopy]" value="1" tabindex="7" {$optionschecked['savecopy']} /> {$lang->options_save_copy}</label>
 				{$private_send_tracking}
 			</div>
-		</section>
+		</section></details>
 		<input type="hidden" name="action" value="do_send" />
 		<input type="hidden" name="pmid" value="{$pmid}" />
 		<input type="hidden" name="do" value="{$do}" />
 		<div class="am-pm-compose__actions">
-			<input type="submit" class="am-button" name="submit" value="{$lang->send_message}" tabindex="9" accesskey="s" />
-			<input type="submit" class="am-button am-button--secondary" name="saveasdraft" value="{$lang->save_draft}" tabindex="10" />
-			<input type="submit" class="am-button am-button--secondary" name="preview" value="{$lang->preview}" tabindex="11" />
+			<button type="submit" class="am-button" name="submit" value="{$lang->send_message}" tabindex="9" accesskey="s" ><i class="fa-solid fa-paper-plane" aria-hidden="true"></i><span>{$lang->send_message}</span></button>
+			<button type="submit" class="am-button am-button--secondary" name="saveasdraft" value="{$lang->save_draft}" tabindex="10" ><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i><span>{$lang->save_draft}</span></button>
+			<button type="submit" class="am-button am-button--secondary" name="preview" value="{$lang->preview}" tabindex="11" ><i class="fa-solid fa-eye" aria-hidden="true"></i><span>{$lang->preview}</span></button>
 		</div>
-	</form>
+	</div></form>
 	{$am_pm_after_content}
 {$am_outer_end}
 {$am_footer}

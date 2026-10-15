@@ -9,12 +9,12 @@
 	{$am_pm_before_content}
 	<header class="am-conversation-head"><h2>{$am_label_title}</h2></header>
 	<div class="am-pm__notice">{$am_pm_notice}</div>
-	<p class="am-welcome">{$am_label_select}</p><details class="am-native-list" {$am_list_open}><summary>{$am_label_folder_messages}</summary><form action="private.php" method="post" name="pmForm" class="am-pm__form">
+	<p class="am-welcome">{$am_label_select}</p><details class="am-native-list" {$am_list_open}><summary>{$am_label_folder_messages}</summary><form action="private.php" method="post" name="pmForm" class="am-pm__form"><input type="hidden" name="am_panel" value="{$am_panel}" />
 		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 		<section class="am-pm__toolbar am-card" aria-label="{$lang->search_pms}">
 			<div class="am-pm__search">
 				<input type="text" name="keywords" value="{$lang->enter_keywords}" onfocus="if(this.value == '{$lang->enter_keywords}') { this.value = ''; }" onblur="if(this.value=='') { this.value='{$lang->enter_keywords}'; }" class="textbox" size="25" />
-				<input type="submit" class="button" name="quick_search" value="{$lang->search_pms}" />
+				<button type="submit" class="button" name="quick_search" value="{$lang->search_pms}" ><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>{$lang->search_pms}</span></button>
 				<a href="private.php?action=advanced_search">{$lang->advanced_search}</a>
 			</div>
 			<div class="am-pm__sort">
@@ -26,8 +26,8 @@
 		</section>
 		<section class="am-pm__messages" aria-live="polite">{$messagelist}</section>
 		<footer class="am-pm__mass-actions am-card">
-			<div class="am-pm__selected-actions"><input type="submit" class="button" name="moveto" value="{$lang->move_to}" /> {$folderoplist} {$lang->or} <input type="submit" class="button" name="delete" value="{$lang->delete}" /> {$lang->selected_messages}</div>
-			<div class="am-pm__folder-jump"><strong>{$lang->jump_folder}</strong> {$folderjump} <input type="submit" class="button" name="hop" value="{$lang->go}" /></div>
+			<div class="am-pm__selected-actions"><button type="submit" class="button" name="moveto" value="{$lang->move_to}" ><i class="fa-solid fa-folder-open" aria-hidden="true"></i><span>{$lang->move_to}</span></button> {$folderoplist} {$lang->or} <button type="submit" class="button" name="delete" value="{$lang->delete}" ><i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>{$lang->delete}</span></button> {$lang->selected_messages}</div>
+			<div class="am-pm__folder-jump"><strong>{$lang->jump_folder}</strong> {$folderjump} <button type="submit" class="button" name="hop" value="{$lang->go}" ><i class="fa-solid fa-check" aria-hidden="true"></i><span>{$lang->go}</span></button></div>
 		</footer>
 		<input type="hidden" name="action" value="do_stuff" />
 	</form>

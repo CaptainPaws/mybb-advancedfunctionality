@@ -36,6 +36,79 @@
         let refreshAgain = false;
         const label = key => root.getAttribute('data-am-' + key) || key;
         const notice = text => { status.textContent = text; };
+        function formatHistory() {
+            root.querySelectorAll('.am-bubble__body blockquote blockquote blockquote').forEach(quote => {
+                if (quote.closest('.am-quote-fold')) return;
+                const disclosure = document.createElement('details');
+                disclosure.className = 'am-quote-fold';
+                const summary = document.createElement('summary');
+                const icon = document.createElement('i');
+                icon.className = 'fa-solid fa-quote-right';
+                icon.setAttribute('aria-hidden', 'true');
+                summary.append(icon, document.createTextNode(label('quoted-history')));
+                disclosure.append(summary);
+                quote.replaceWith(disclosure);
+                disclosure.append(quote);
+            });
+        }
+        function closeMenus(except = null) {
+            root.querySelectorAll('[data-am-menu][open]').forEach(details => {
+                if (details !== except) details.open = false;
+            });
+        }
+        function positionMenu(details) {
+            const menu = details.querySelector('.am-dropdown');
+            if (!menu || !details.open) return;
+            const anchor = details.querySelector('summary').getBoundingClientRect();
+            const region = (details.closest('.am-history') || layout).getBoundingClientRect();
+            const bounds = { left: Math.max(0, region.left), right: Math.min(innerWidth, region.right),
+                top: Math.max(0, region.top), bottom: Math.min(innerHeight, region.bottom) };
+            menu.style.maxHeight = Math.max(80, bounds.bottom - bounds.top - 16) + 'px';
+            const box = menu.getBoundingClientRect();
+            menu.style.left = Math.max(bounds.left + 4, Math.min(anchor.right - box.width, bounds.right - box.width - 4)) + 'px';
+            const below = anchor.bottom + 4;
+            const above = anchor.top - box.height - 4;
+            menu.style.top = Math.max(bounds.top + 4, Math.min(below + box.height <= bounds.bottom ? below : above, bounds.bottom - box.height - 4)) + 'px';
+        }
+        root.addEventListener('toggle', event => {
+            const details = event.target;
+            if (details.matches('.am-folders, .am-tools')) {
+                try { sessionStorage.setItem('am:disclosure:' + root.dataset.amUid + ':' + details.className, details.open ? '1' : '0'); } catch (_) { /* Optional UI preference. */ }
+            }
+            if (!details.matches('[data-am-menu]')) return;
+            const menu = details.querySelector('.am-dropdown');
+            if (details.open) {
+                closeMenus(details);
+                if (typeof menu.showPopover === 'function') { if (!menu.matches(':popover-open')) menu.showPopover(); }
+                else menu.classList.add('am-dropdown-fallback');
+                positionMenu(details);
+                if (!menu.dataset.amObserved && 'ResizeObserver' in window) {
+                    menu.dataset.amObserved = '1';
+                    new ResizeObserver(() => positionMenu(details)).observe(menu);
+                }
+            } else {
+                if (typeof menu.hidePopover === 'function' && menu.matches(':popover-open')) menu.hidePopover();
+                menu.classList.remove('am-dropdown-fallback');
+            }
+        }, true);
+        document.addEventListener('click', event => {
+            if (!event.target.closest('[data-am-menu]')) closeMenus();
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key !== 'Escape') return;
+            const opened = root.querySelector('[data-am-menu][open]');
+            if (opened) { closeMenus(); opened.querySelector('summary').focus(); event.preventDefault(); }
+        });
+        document.getElementById('am-history')?.addEventListener('scroll', () => closeMenus(), { passive: true });
+        window.addEventListener('resize', () => closeMenus());
+        root.querySelectorAll('.am-folders, .am-tools').forEach(details => {
+            try {
+                const value = sessionStorage.getItem('am:disclosure:' + root.dataset.amUid + ':' + details.className);
+                if (value !== null) details.open = value === '1';
+            } catch (_) { /* Optional UI preference. */ }
+        });
+        formatHistory();
+
         function saveEditor() {
             for (const frame of [document.getElementById('am-composer'), tool]) {
                 try { frame?.contentWindow?.AMComposer?.save(); } catch (_) { /* Native error document. */ }
@@ -138,7 +211,9 @@
                 const data = await request(href, { am_fragment: '1' });
                 if (mine !== generation) return;
                 const posts = document.getElementById('posts');
+                closeMenus();
                 posts.innerHTML = data.html;
+                formatHistory();
                 document.getElementById('am-history-more').innerHTML = data.older;
                 document.getElementById('am-conversation-head').innerHTML = data.header;
                 document.getElementById('am-composer-host').innerHTML = data.composer;
@@ -213,6 +288,7 @@
                     document.getElementById('posts').insertAdjacentHTML('afterbegin', data.html);
                     if (data.cursor) { older.dataset.time = data.cursor[0]; older.dataset.id = data.cursor[1]; }
                     else older.remove();
+                    formatHistory();
                     mergeDates();
                     scroll.scrollTop = top + scroll.scrollHeight - height;
                     watchUnread();
@@ -222,6 +298,7 @@
                 return;
             }
             const link = event.target.closest('a[href]');
+            if (link?.closest('.am-dropdown')) closeMenus();
             if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             if (link.matches('[data-am-panel]')) { event.preventDefault(); openPanel(link.href); }
             else if (link.matches('[data-am-dialog]')) { event.preventDefault(); select(link.href, true); }
@@ -263,6 +340,7 @@
             try {
                 // Folder edits/native mass actions redirect to the mailbox.
                 if (tool.contentDocument?.querySelector('[data-am-root]')) location.reload();
+                else if (tool.contentDocument?.querySelector('[data-am-panel-page]')) refreshSidebar();
             } catch (_) { notice(label('error')); }
         });
         if (root.dataset.amPmid !== '0') {

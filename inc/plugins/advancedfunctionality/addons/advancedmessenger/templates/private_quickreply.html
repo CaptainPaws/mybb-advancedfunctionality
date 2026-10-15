@@ -1,4 +1,4 @@
-<form action="private.php" method="post" name="input" class="am-pm-quickreply am-card">
+<form action="private.php" method="post" name="input" class="am-pm-quickreply am-card"><input type="hidden" name="am_panel" value="{$am_panel}" />
 	<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 	<input type="hidden" name="to" value="{$to}" />
 	<input type="hidden" name="bcc" value="{$bcc_form_val}" />
@@ -21,6 +21,6 @@
 			{$private_send_tracking}
 		</div>
 		<div class="am-pm-quickreply__editor"><textarea rows="8" cols="80" name="message" id="message" tabindex="1">{$quoted_message}</textarea></div>
-		<div class="am-pm-quickreply__submit"><input type="submit" class="button" value="{$lang->send_message}" tabindex="2" accesskey="s" /> <input type="submit" class="button" name="preview" value="{$lang->preview}" tabindex="3" /></div>
+		<div class="am-pm-quickreply__submit"><button type="submit" class="button" value="{$lang->send_message}" tabindex="2" accesskey="s" ><i class="fa-solid fa-check" aria-hidden="true"></i><span>{$lang->send_message}</span></button> <button type="submit" class="button" name="preview" value="{$lang->preview}" tabindex="3" ><i class="fa-solid fa-check" aria-hidden="true"></i><span>{$lang->preview}</span></button></div>
 	</div>
 </form>

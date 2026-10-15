@@ -7,7 +7,7 @@
 {$am_header}
 {$am_outer_start}
 	<header class="am-pm__header am-card"><div class="am-pm__heading"><p class="am-pm__eyebrow">{$lang->private_messaging}</p><h1 class="am-pm__title">{$lang->archive_messages}</h1><p class="am-form-row__hint">{$lang->archive_note}</p></div></header>
-	<form action="private.php" method="post" class="am-pm-archive__form am-stack">
+	<form action="private.php" method="post" class="am-pm-archive__form am-stack"><input type="hidden" name="am_panel" value="{$am_panel}" />
 		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 		<section class="am-pm-archive__section am-card am-stack">
 			<h2>{$lang->folders}</h2>
@@ -30,7 +30,7 @@
 			<fieldset class="am-form-row"><legend class="am-form-row__label">{$lang->delete_archived}</legend><p class="am-form-row__hint">{$lang->delete_archived_note}</p><div class="am-form-row__choices"><label><input type="radio" class="radio" name="deletepms" value="1" /> {$lang->yes}</label><label><input type="radio" class="radio" name="deletepms" value="0" checked="checked" /> {$lang->no}</label></div></fieldset>
 		</section>
 		<input type="hidden" name="action" value="do_export" />
-		<div class="am-pm-archive__actions"><input type="submit" class="am-button" name="submit" value="{$lang->archive_messages}" /></div>
+		<div class="am-pm-archive__actions"><button type="submit" class="am-button" name="submit" value="{$lang->archive_messages}" ><i class="fa-solid fa-file-export" aria-hidden="true"></i><span>{$lang->archive_messages}</span></button></div>
 	</form>
 {$am_outer_end}
 {$am_footer}

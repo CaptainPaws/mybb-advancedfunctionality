@@ -1392,6 +1392,9 @@ function af_aam_pre_output_page(string &$page): void
         return;
     }
 
+    // Embedded functional documents deliberately have no global navigation or alerts UI.
+    if (preg_match('~<body\b[^>]*\bdata-af-layout\s*=\s*(["\'])content-only\1~i', $page)) return;
+
     // Template edits can disappear when a theme is imported or reverted.  Do
     // not make the complete frontend depend on those three persisted edits:
     // add every missing fragment to the final document as a safe fallback.

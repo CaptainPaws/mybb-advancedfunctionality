@@ -7,7 +7,7 @@
 {$am_header}
 {$am_outer_start}
 	<header class="am-pm__header am-card"><div class="am-pm__heading"><p class="am-pm__eyebrow">{$lang->private_messaging}</p><h1 class="am-pm__title">{$lang->empty_folders}</h1></div></header>
-	<form action="private.php" method="post" class="am-pm-folders__form am-stack">
+	<form action="private.php" method="post" class="am-pm-folders__form am-stack"><input type="hidden" name="am_panel" value="{$am_panel}" />
 		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 		<section class="am-pm-folders__section am-card am-stack">
 			<p class="am-form-row__hint">{$lang->empty_note}</p>
@@ -16,7 +16,7 @@
 			<label class="am-form-row am-pm-empty__keep"><input type="checkbox" class="checkbox" name="keepunread" value="1" checked="checked" /><strong>{$lang->keep_unread}</strong></label>
 		</section>
 		<input type="hidden" name="action" value="do_empty" />
-		<div class="am-pm-folders__actions am-pm-empty__actions"><input type="submit" class="am-button am-button--danger" name="submit" value="{$lang->delete}" /></div>
+		<div class="am-pm-folders__actions am-pm-empty__actions"><button type="submit" class="am-button am-button--danger" name="submit" value="{$lang->delete}" ><i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>{$lang->delete}</span></button></div>
 	</form>
 {$am_outer_end}
 {$am_footer}

@@ -12,7 +12,7 @@
 	</header>
 	<section class="am-pm-tracking__section" aria-labelledby="am-tracking-read-title">
 		<div class="am-pm-tracking__section-head"><h2 id="am-tracking-read-title">{$lang->read_messages}</h2><div class="am-pm-tracking__pagination">{$read_multipage}</div></div>
-		<form action="private.php" method="post" class="am-pm-tracking__form">
+		<form action="private.php" method="post" class="am-pm-tracking__form"><input type="hidden" name="am_panel" value="{$am_panel}" />
 			<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 			<input type="hidden" name="action" value="do_tracking" />
 			<div class="am-pm-tracking__toolbar am-card"><span>{$lang->message_title}</span><span>{$lang->sentto}</span><span>{$lang->dateread}</span><label><span class="am-visually-hidden">{$lang->selected_messages}</span><input type="checkbox" class="checkbox checkall" name="allbox" /></label></div>
@@ -22,7 +22,7 @@
 	</section>
 	<section class="am-pm-tracking__section" aria-labelledby="am-tracking-unread-title">
 		<div class="am-pm-tracking__section-head"><h2 id="am-tracking-unread-title">{$lang->unread_messages}</h2><div class="am-pm-tracking__pagination">{$unread_multipage}</div></div>
-		<form action="private.php" method="post" class="am-pm-tracking__form">
+		<form action="private.php" method="post" class="am-pm-tracking__form"><input type="hidden" name="am_panel" value="{$am_panel}" />
 			<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 			<input type="hidden" name="action" value="do_tracking" />
 			<div class="am-pm-tracking__toolbar am-card"><span>{$lang->message_title}</span><span>{$lang->sentto}</span><span>{$lang->datesent}</span><label><span class="am-visually-hidden">{$lang->selected_messages}</span><input type="checkbox" class="checkbox checkall" name="allbox" /></label></div>

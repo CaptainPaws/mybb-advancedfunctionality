@@ -1,6 +1,22 @@
 (function () {
     'use strict';
     function boot() {
+        // Native panel links keep their presentation; profile/forum links leave the iframe.
+        if (parent !== window && document.querySelector('[data-am-panel-page]')) {
+            document.addEventListener('click', event => {
+                const link = event.target.closest('a[href]');
+                if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                const url = new URL(link.href, location.href);
+                if (url.origin !== location.origin) return;
+                if (url.pathname.endsWith('/private.php')) {
+                    url.searchParams.set('am_panel', '1');
+                    link.href = url.href;
+                } else if (!link.hasAttribute('target') && !link.getAttribute('href').startsWith('#') && /^https?:$/.test(url.protocol)) {
+                    link.target = '_top';
+                }
+            });
+        }
+
         const result = document.getElementById('am-result');
         if (result) {
             try {

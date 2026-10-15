@@ -86,8 +86,9 @@ are excluded from ordinary history; trash has its own history domain.
   download templates/headers/formats are left untouched.
 
 History renders addon-owned bubbles with MyBB's `postParser::parse_message`,
-PM MyCode/smilie/image/video settings and the viewer's media preferences. Raw HTML
-is disabled. It never embeds `build_postbit` output or runs author/postbit hooks
+PM MyCode/smilie/image/video settings and the viewer's media preferences. User-supplied raw HTML remains disabled. Exact, parameter-free buddy notification
+texts from the server usercp language file may use native HTML parsing; sender UID
+alone never establishes trust, and unknown or changed historical HTML stays escaped. It never embeds `build_postbit` output or runs author/postbit hooks
 for each history item. Core's own read controller may still build its stock
 postbit; that presentation is discarded. `#posts_container`, `#posts`, quote
 markup and canonical message links remain. Context menus use native reply,
@@ -114,7 +115,7 @@ contains one `#message` and uses MyBB/AdvancedEditor's normal initialization.
 AM never initializes or destroys SCEditor. It subscribes to `af:editor-ready`
 and uses an existing instance only to read/restore source. Native recipient
 validation, subject, options, preview, draft/save-copy and tracking controls remain.
-The compact toolbar and source/WYSIWYG switch belong to AdvancedEditor. A
+The compact wrapping toolbar and source/WYSIWYG switch belong to AdvancedEditor. A
 ResizeObserver reports inline document height to its parent; the parent validates
 both origin and source. Expanded metadata/options can scroll within the frame on
 short screens, while the outer conversation pane does not scroll. Tools use the
@@ -145,3 +146,51 @@ Local PHP/JS syntax and template compilation, narrow grouping/access/CSRF code
 checks and ownership conflict review only. No schema migration, MyBB core edits,
 new automated test suite, live forum deployment or cloud UI testing. Visual and
 end-to-end checks of the four addon combinations remain an installation check.
+
+## UI integration corrections (1.2.0)
+
+The technical `.am-layout` has no background/frame/padding. Controls, Select2,
+inner panels and action buttons share scoped AM styles built on ATF variables.
+Both the panel root and editor containers use border-box sizing; width:100% no
+longer adds the root padding to the iframe width. The native submit names/values,
+BCC/autocomplete, options and one AdvancedEditor instance remain intact.
+
+All icons use the existing Advanced Font Awesome integration. Each document
+retains its canonical font stylesheet URL and the provider's duplicate check.
+Manifest stylesheet sources explicitly attach to private.php, preserving their
+previous logical IDs and AF's file/theme delivery policy. A late response adapter
+restores a missing permitted stylesheet link rather than overriding that policy.
+
+Folders/tools have icons and persist their disclosure state in this tab. Search
+has an integrated submit icon. Conversation rows have fixed column geometry and
+one-line ellipsis. Bubbles grow to 80% on desktop. Third-level quote chains are
+visually foldable; the stored message and original quote nodes are preserved.
+Message menus use the popover top layer and are positioned within history bounds,
+with a fixed-position fallback. Moving a message expands a small form inside the
+menu; deletion still uses MyBB's post key and do_stuff controller.
+
+MyBB get_profile_link() already returns an escaped attribute URL. AM now uses it
+as-is for avatar, username and profile control instead of encoding the ampersand
+again. The peer header gets its banner from af_aa_build_user_css_payload(peerUid),
+the same resolver used by ATF's profile context, with the APUI default fallback.
+No profile HTML is fetched and the viewer's UID is not substituted.
+
+History declares `--am-history-background-image: none` in
+`body.am-body .am-history`. Replace none with url(...) or override that selector
+to add a texture. There is no image asset or global ATF background change.
+
+Embedded mode is retained through native forms, private.php links and native
+redirect hooks. Header/footer stay empty. Native error pages receive the same
+content-only marker before output providers run. AdvancedAlertsMentions now
+honors that marker in its fallback injector, leaving global alerts unchanged.
+Profile/forum links from a panel leave the iframe rather than opening a global
+page shell inside it. Tool loads refresh the outer sidebar without replacing
+native search/export/tracking behavior.
+
+Validation is limited to PHP/JS syntax, template compilation and the critical
+integration paths described above. Live visual/function testing and the four
+AM/ATF combinations remain deployment checks. Deep quote folding and top-layer
+menus enhance modern browsers; without popover support the menu uses fixed
+positioning. On very short viewports, expanded address/options/preview content
+can still scroll within the capped editor document; the outer pane does not
+scroll. Unknown historical HTML is deliberately not decoded or trusted.

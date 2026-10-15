@@ -16,9 +16,12 @@ function af_advancedmessenger_init(): void
               'private_results_end','private_advanced_search'] as $hook) {
         $plugins->add_hook($hook, 'af_advancedmessenger_compose', 10000);
     }
+    $plugins->add_hook('redirect', 'af_advancedmessenger_embedded_redirect', 10000);
     $plugins->add_hook('private_do_send_end', 'af_advancedmessenger_sent', 10000);
     $plugins->add_hook('private_do_search_process', 'af_advancedmessenger_filter_recipient', 10000);
+    $plugins->add_hook('pre_output_page', 'af_advancedmessenger_embedded_document', 0);
     $plugins->add_hook('pre_output_page', 'af_advancedmessenger_avatars', 85);
+    $plugins->add_hook('pre_output_page', 'af_advancedmessenger_assets', 10001);
 }
 
 function af_advancedmessenger_json(array $data, int $status = 200): void
@@ -43,11 +46,12 @@ function af_advancedmessenger_require_api_token(): void
 /** Runs only after native private.php has enforced enablepms/login/canusepms. */
 function af_advancedmessenger_start(): void
 {
-    global $mybb, $templates;
+    global $mybb, $templates, $header, $footer;
     if (empty($mybb->user['uid']) || empty($mybb->usergroup['canusepms']) || empty($mybb->settings['enablepms'])) {
         error_no_permission();
     }
     if (function_exists('af_frontend_asset_allowed') && !af_frontend_asset_allowed('advancedmessenger','runtime')) return;
+    if ($mybb->get_input('am_panel')) $header = $footer = '';
     header('Cache-Control: private, no-store');
     $action = $mybb->get_input('action');
     if ($action === 'am_history') {
@@ -91,7 +95,7 @@ function af_advancedmessenger_compose(): void
     if ($GLOBALS['am_panel']) $GLOBALS['am_body_class'] .= ' am-panel-body';
     $GLOBALS['am_reply_id'] = max(0, $mybb->get_input('am_reply', MyBB::INPUT_INT));
     $GLOBALS['am_labels'] = '';
-    foreach (['loading','error','response','read','open','back','close','older','select','sending','draft_local','draft_restore','empty_confirm'] as $key) {
+    foreach (['loading','error','response','read','open','back','close','older','select','sending','draft_local','draft_restore','empty_confirm','quoted_history'] as $key) {
         $GLOBALS['am_label_'.$key] = af_advancedmessenger_e(af_advancedmessenger_t($key));
         $GLOBALS['am_labels'] .= ' data-am-'.str_replace('_','-',$key).'="'.af_advancedmessenger_e(af_advancedmessenger_t($key)).'"';
     }
@@ -194,11 +198,11 @@ function af_advancedmessenger_shell(): void
             .' data-am-name="'.af_advancedmessenger_e($GLOBALS['am_filter_name']).'" data-am-page="'.(int)$GLOBALS['am_dialog_page'].'"'
             .$GLOBALS['am_labels'].'><div class="am-layout"><aside class="am-sidebar" id="am-sidebar">'
             .($GLOBALS['am_sidebar'] ?? '').'<div class="am-quota">'.$GLOBALS['am_quota'].'</div></aside>'
-            .'<section class="am-pane" id="am-pane"><button type="button" class="am-back">'.af_advancedmessenger_e(af_advancedmessenger_t('back')).'</button>'
+            .'<section class="am-pane" id="am-pane"><button type="button" class="am-back">'.af_advancedmessenger_icon('previous').af_advancedmessenger_e(af_advancedmessenger_t('back')).'</button>'
             .'<p class="am-status" id="am-status" role="status" aria-live="polite"></p>';
     $GLOBALS['am_outer_end'] = $panel ? '</main>' : '</section></div>'
         .'<dialog id="am-panel-dialog" class="am-tool-dialog"><button type="button" class="am-panel-close">'
-        .af_advancedmessenger_e(af_advancedmessenger_t('close')).'</button><iframe title="'.af_advancedmessenger_e(af_advancedmessenger_t('tools')).'" id="am-tool-frame"></iframe></dialog></main>';
+        .af_advancedmessenger_icon('close').'<span>'.af_advancedmessenger_e(af_advancedmessenger_t('close')).'</span></button><iframe title="'.af_advancedmessenger_e(af_advancedmessenger_t('tools')).'" id="am-tool-frame"></iframe></dialog></main>';
 }
 
 /** Reuse core's send controller and one native #message/AdvancedEditor lifecycle. */
@@ -323,4 +327,49 @@ function af_advancedmessenger_filter_recipient(): void
     }
     if (!$matched) error($lang->error_nosearchresults);
     $searcharray['querycache'] = implode(',',$matched);
+}
+
+/** Apply the content-only contract before AF/ATF/AAM output providers, including native error pages. */
+function af_advancedmessenger_embedded_document(string &$page): string
+{
+    global $mybb;
+    if (!$mybb->get_input('am_panel') || (function_exists('af_frontend_asset_allowed') && !af_frontend_asset_allowed('advancedmessenger', 'runtime'))) return $page;
+    $page = preg_replace_callback('~<body\b[^>]*>~i', static function (array $m): string {
+        if (strpos($m[0], 'data-af-layout=') !== false) return $m[0];
+        return substr($m[0], 0, -1).' data-af-layout="content-only" data-atf-owned="1">';
+    }, $page, 1);
+    return $page;
+}
+
+/** Late response assets respect manifest permissions and AF's file/theme delivery decision. */
+function af_advancedmessenger_assets(string &$page): string
+{
+    if (strpos($page, 'am-root') === false || (function_exists('af_frontend_asset_allowed') && !af_frontend_asset_allowed('advancedmessenger', 'runtime'))) return $page;
+    if (function_exists('af_advancedfontawesome_pre_output')) af_advancedfontawesome_pre_output($page);
+    if (function_exists('af_add_css_once') && function_exists('af_theme_stylesheet_delivery_decision')) {
+        $tags = '';
+        foreach (['native-panels.css','messenger.css'] as $file) {
+            $decision = af_theme_stylesheet_delivery_decision('advancedmessenger', 'assets/'.$file);
+            if (!empty($decision['include_file'])) {
+                af_add_css_once('/inc/plugins/advancedfunctionality/addons/advancedmessenger/assets/'.$file, ['scope'=>'front','version'=>'1.2.0']);
+            } elseif (!empty($decision['theme_href']) && strpos($page, (string)$decision['theme_href']) === false
+                && strpos($page, af_advancedmessenger_e((string)$decision['theme_href'])) === false) {
+                $tags .= '<link rel="stylesheet" href="'.af_advancedmessenger_e((string)$decision['theme_href']).'">';
+            }
+        }
+        if (function_exists('af_assets_build_tags')) $tags .= af_assets_build_tags([], $page);
+        if ($tags !== '') $page = str_ireplace('</head>', $tags.'</head>', $page);
+    }
+    return $page;
+}
+
+/** Keep native PM redirects inside the same compact presentation, not a new page shell. */
+function af_advancedmessenger_embedded_redirect(array &$args): void
+{
+    global $mybb;
+    if (!$mybb->get_input('am_panel') || (function_exists('af_frontend_asset_allowed') && !af_frontend_asset_allowed('advancedmessenger', 'runtime'))) return;
+    $url = (string)($args['url'] ?? '');
+    if (!preg_match('~^(?:\./)?private\.php(?:[?#]|$)~i', $url) || preg_match('~(?:[?&]|&amp;)am_panel=~', $url)) return;
+    $parts = explode('#', $url, 2);
+    $args['url'] = $parts[0].(strpos($parts[0], '?') === false ? '?' : '&').'am_panel=1'.(isset($parts[1]) ? '#'.$parts[1] : '');
 }

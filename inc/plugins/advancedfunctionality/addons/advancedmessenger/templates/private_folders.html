@@ -7,7 +7,7 @@
 {$am_header}
 {$am_outer_start}
 	<header class="am-pm__header am-card"><div class="am-pm__heading"><p class="am-pm__eyebrow">{$lang->private_messaging}</p><h1 class="am-pm__title">{$lang->pm_folders}</h1></div></header>
-	<form action="private.php" method="post" class="am-pm-folders__form am-stack">
+	<form action="private.php" method="post" class="am-pm-folders__form am-stack"><input type="hidden" name="am_panel" value="{$am_panel}" />
 		<input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
 		<section class="am-pm-folders__section am-card am-stack">
 			<h2>{$lang->existing_folders}</h2>
@@ -20,7 +20,7 @@
 			<div class="am-pm-folders__list am-stack am-stack--compact">{$newfolders}</div>
 		</section>
 		<input type="hidden" name="action" value="do_folders" />
-		<div class="am-pm-folders__actions"><input type="submit" class="am-button" name="submit" value="{$lang->update_folders}" /></div>
+		<div class="am-pm-folders__actions"><button type="submit" class="am-button" name="submit" value="{$lang->update_folders}" ><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i><span>{$lang->update_folders}</span></button></div>
 	</form>
 {$am_outer_end}
 {$am_footer}
