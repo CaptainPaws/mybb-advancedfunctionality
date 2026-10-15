@@ -254,3 +254,27 @@ restored. Shared search input/button selectors now outrank the generic AM form
 rules, preserving the icon's reserved padding and compact hit area. Decorative
 search glyphs do not intercept pointer events. The existing history image is
 unchanged. No database, PM operation, editor instance or global menu change.
+
+
+### 1.3.2 — Stage A: reply-all and PM alerts
+
+Reply-all is offered when the author plus visible recipients yield more than
+one other participant. The composer resolves those UIDs against existing users,
+excludes the current user and duplicates, and clears BCC on initial reply-all.
+POST/preview validation and ordinary replies remain native MyBB operations.
+Limits are not bypassed or silently truncated; native send validation applies.
+
+AAM's PM insert-end hook now uses MyBB return_values.pmids from a successful
+messagesent result. Each alert points to that recipient's exact inserted copy;
+there is no dateline lookup or guess from the mutable saved-copy data. This
+covers single, multiple and BCC recipients, omits self-notifications, guards
+repeat processing of the same copy and retains existing alert preferences.
+Only subject is included in metadata, never recipient/BCC lists. Draft saves
+do not emit alerts.
+
+Stage B is deliberately pending confirmation of Stage A on the live forum.
+No persistent groups, schema changes or automatic merging of mass mail were
+introduced. Manual validation: send to two visible recipients plus BCC, check
+individual alerts, reply-all as sender and recipient, preview and submit, and
+verify native recipient limits/ignore rules. Functional verification requires
+a configured MyBB forum and remains with the site owner.

@@ -167,8 +167,7 @@ function af_advancedmessenger_bubble(array $row): string
         foreach (['reply'=>'reply', 'quote'=>'reply', 'forward'=>'forward'] as $label => $do) {
             $html .= af_advancedmessenger_link('private.php?action=send&do='.$do.'&pmid='.$id.($label === 'reply' ? '&am_noquote=1' : ''), af_advancedmessenger_t($label), true, $label);
         }
-        $recipients = is_array($row['recipients']) ? $row['recipients'] : my_unserialize($row['recipients']);
-        if (is_array($recipients['to'] ?? null) && count($recipients['to']) > 1) {
+        if (count(af_advancedmessenger_reply_all_ids($row, (int)$mybb->user['uid'])) > 1) {
             $html .= af_advancedmessenger_link('private.php?action=send&do=replyall&pmid='.$id,af_advancedmessenger_t('replyall'),true,'replyall');
         }
     }

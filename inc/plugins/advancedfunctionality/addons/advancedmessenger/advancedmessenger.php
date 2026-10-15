@@ -237,6 +237,22 @@ function af_advancedmessenger_compose_editor(): void
             }
         }
     }
+    if ($mybb->request_method !== 'post' && $mybb->get_input('do') === 'replyall') {
+        $original = af_advancedmessenger_owned($mybb->get_input('pmid', MyBB::INPUT_INT));
+        if ($original && (int)$original['folder'] !== 3) {
+            $ids = af_advancedmessenger_reply_all_ids($original, (int)$mybb->user['uid']);
+            $names = [];
+            if ($ids) {
+                $query = $db->simple_select('users', 'username', 'uid IN ('.implode(',', $ids).')');
+                while ($user = $db->fetch_array($query)) $names[] = af_advancedmessenger_e((string)$user['username']);
+            }
+            // Native PM validation still checks recipient limits, permissions,
+            // ignore lists and quotas on submit. Never truncate the reply list.
+            $GLOBALS['to'] = implode(', ', $names);
+            $GLOBALS['bcc'] = '';
+            $GLOBALS['am_is_quote'] = 1;
+        }
+    }
     if ($mybb->get_input('am_noquote') && $mybb->request_method !== 'post') $GLOBALS['message'] = '';
     if ($mybb->request_method === 'post') {
         $ref = $mybb->get_input('am_draft_ref');
@@ -358,7 +374,7 @@ function af_advancedmessenger_assets(string &$page): string
         $decision = af_theme_stylesheet_delivery_decision('advancedmessenger', 'assets/'.$file);
         $path = '/inc/plugins/advancedfunctionality/addons/advancedmessenger/assets/'.$file;
         $href = !empty($decision['include_file'])
-            ? rtrim((string)$mybb->settings['bburl'], '/').$path.'?v=1.3.1'
+            ? rtrim((string)$mybb->settings['bburl'], '/').$path.'?v=1.3.2'
             : (string)($decision['theme_href'] ?? '');
         if ($href === '' || (!empty($decision['include_file']) && strpos($page, $path) !== false)
             || strpos($page, $href) !== false || strpos($page, af_advancedmessenger_e($href)) !== false) continue;

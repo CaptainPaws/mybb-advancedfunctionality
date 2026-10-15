@@ -17,6 +17,17 @@ function af_advancedmessenger_identity(array $row, int $owner): string
     return 'message:'.$id;
 }
 
+/** Visible reply-all participants only; never read or merge the BCC list. */
+function af_advancedmessenger_reply_all_ids(array $row, int $owner): array
+{
+    $recipients = is_array($row['recipients'] ?? null)
+        ? $row['recipients'] : my_unserialize((string)($row['recipients'] ?? ''));
+    $visible = is_array($recipients['to'] ?? null) ? $recipients['to'] : [];
+    $visible[] = (int)($row['fromid'] ?? 0);
+    return array_values(array_unique(array_filter(array_map('intval', $visible),
+        static fn(int $uid): bool => $uid > 0 && $uid !== $owner)));
+}
+
 function af_advancedmessenger_owned(int $pmid): ?array
 {
     global $db, $mybb;

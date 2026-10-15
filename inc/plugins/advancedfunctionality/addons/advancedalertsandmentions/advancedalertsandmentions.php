@@ -2165,75 +2165,28 @@ function af_aam_rep_do_add_end(): void
 // ЛС
 function af_aam_pm_insert_end(&$pmhandler): void
 {
-    global $mybb, $db;
+    global $db;
+    if (!af_aam_is_enabled() || !is_object($pmhandler)) return;
 
-    if (!af_aam_is_enabled()) {
-        return;
-    }
-
-    if (!is_object($pmhandler)) {
-        return;
-    }
-
-    // Данные сообщения
-    $message = $pmhandler->pm_insert_data ?? [];
-    $fromUid = (int)($message['fromid'] ?? 0);
-    if ($fromUid <= 0) {
-        return;
-    }
-
-    // Дата/время ЛС – используем для поиска строки в БД
-    $dateline = (int)($message['dateline'] ?? TIME_NOW);
-
-    // Получатели: сначала toid, потом recipients
-    $recipients = [];
-    if (!empty($message['toid'])) {
-        $recipients = array_map('intval', explode(',', (string)$message['toid']));
-    } elseif (!empty($message['recipients'])) {
-        $recData = @unserialize($message['recipients']);
-        if (is_array($recData) && !empty($recData['to']) && is_array($recData['to'])) {
-            $recipients = array_map('intval', $recData['to']);
+    // MyBB's successful insert result contains only recipient-copy IDs, not
+    // the saved sender copy. pm_insert_data has already been mutated by then.
+    $result = $pmhandler->return_values ?? [];
+    if (empty($result['messagesent']) || !is_array($result['pmids'] ?? null)) return;
+    $ids = array_values(array_unique(array_filter(array_map('intval', $result['pmids']), static fn(int $id): bool => $id > 0)));
+    static $notified = [];
+    foreach (array_chunk($ids, 200) as $chunk) {
+        $query = $db->simple_select('privatemessages', 'pmid,uid,toid,fromid,subject,folder',
+            'pmid IN ('.implode(',', $chunk).')');
+        while ($row = $db->fetch_array($query)) {
+            $pmid = (int)$row['pmid'];
+            $uid = (int)$row['uid'];
+            $sender = (int)$row['fromid'];
+            if (isset($notified[$pmid]) || $uid <= 0 || $sender <= 0 || $uid === $sender
+                || $uid !== (int)$row['toid'] || in_array((int)$row['folder'], [2, 3], true)) continue;
+            $notified[$pmid] = true;
+            // No recipient list (especially BCC) is exposed in alert metadata.
+            af_aam_add_alert($uid, 'pm', $pmid, $sender, ['subject' => (string)$row['subject']]);
         }
-    }
-
-    if (empty($recipients)) {
-        return;
-    }
-
-    $subject = (string)($message['subject'] ?? '');
-
-    foreach ($recipients as $toUid) {
-        $toUid = (int)$toUid;
-        if ($toUid <= 0 || $toUid === $fromUid) {
-            continue;
-        }
-
-        // Пробуем найти pmid для КОНКРЕТНОГО получателя:
-        // в MyBB на каждого получателя создаётся отдельная строка в privatemessages
-        $pmid = 0;
-
-        $pmQuery = $db->simple_select(
-            'privatemessages',
-            'pmid',
-            "uid={$toUid} AND fromid={$fromUid} AND dateline={$dateline}",
-            [
-                'order_by'  => 'pmid',
-                'order_dir' => 'DESC',
-                'limit'     => 1,
-            ]
-        );
-        $pmid = (int)$db->fetch_field($pmQuery, 'pmid');
-
-        // Даже если вдруг не нашли pmid — всё равно создадим алерт, просто с object_id = 0
-        af_aam_add_alert(
-            $toUid,
-            'pm',
-            $pmid,          // теперь почти всегда > 0
-            $fromUid,
-            [
-                'subject' => $subject,
-            ]
-        );
     }
 }
 
