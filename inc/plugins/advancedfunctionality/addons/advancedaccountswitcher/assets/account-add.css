@@ -1,8 +1,12 @@
 /* Shared modal backdrop; form styling remains limited to Add account. */
 body #af_aas_modal .af-aas-dialog {
   --aas-form-bg:color-mix(in srgb,var(--aas-bg,#081321) 65%,#020c18);
+}
+/* Paint inside the ATF frame: its background shorthand must not replace the image. */
+body #af_aas_modal .af-aas-dialog > .af-aas-modal-art {
+  position:absolute; inset:9px; z-index:0; pointer-events:none; border-radius:inherit;
   background-color:var(--aas-bg,#081321);
-  background-image:linear-gradient(100deg,color-mix(in srgb,var(--aas-form-bg) 95%,transparent),color-mix(in srgb,var(--aas-form-bg) 78%,transparent) 55%,color-mix(in srgb,var(--aas-form-bg) 55%,transparent)),url('https://warprift.ru/uploads/af_gallery/1/2026/10/2240bb976cd73c5cbb555246b3001753.png');
+  background-image:linear-gradient(100deg,color-mix(in srgb,var(--aas-form-bg) 82%,transparent),color-mix(in srgb,var(--aas-form-bg) 65%,transparent) 55%,color-mix(in srgb,var(--aas-form-bg) 35%,transparent)),url('https://warprift.ru/uploads/af_gallery/1/2026/10/2240bb976cd73c5cbb555246b3001753.png');
   background-position:center; background-size:cover; background-repeat:no-repeat;
 }
 body #af_aas_modal .af-aas-modal-head {
