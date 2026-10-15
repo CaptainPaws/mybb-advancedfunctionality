@@ -6,7 +6,7 @@ return [
     'author'      => 'CaptainPaws',
     'authorsite'  => 'https://github.com/CaptainPaws',
     'description' => 'Дополнительные аккаунты (альты) с быстрым переключением без перелогина: создание, привязка существующих, отвязка, контроль по группам.',
-    'version'     => '1.2.2',
+    'version'     => '1.2.3',
     'bootstrap'   => 'advancedaccountswitcher.php',
 
 
