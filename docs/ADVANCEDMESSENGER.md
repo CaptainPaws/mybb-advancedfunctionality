@@ -234,3 +234,23 @@ with receipt=0 and a different pmid, without a persistent relationship to the
 recipient's tracking row. Ordinary outgoing copies therefore cannot truthfully
 show double checks, even if native Tracking lists a read receipt elsewhere.
 There is no content/time matching, cross-mailbox query, polling or new table.
+
+
+### 1.3.1 — navigation regression
+
+The shared translation attribute data-am-cancel on every AM root collided with
+the composer's delegated cancellation selector. Every click inside that root
+therefore navigated the top document to private.php, or posted a close message
+from an embedded document. Cancellation now uses an explicit button action
+(data-am-action="cancel"), separately from translation attributes. The existing
+AJAX/dialog lifecycle, native folder navigation and embedded notification guards
+remain in use. Both scripts also guard against repeated initialization. Fragment
+responses are validated before replacing a working conversation; failures keep
+that view and offer an AJAX retry as well as the native open link.
+
+Folders and Tools start collapsed on each page load. Sidebar refreshes preserve
+their live open state; previous-page sessionStorage preferences are no longer
+restored. Shared search input/button selectors now outrank the generic AM form
+rules, preserving the icon's reserved padding and compact hit area. Decorative
+search glyphs do not intercept pointer events. The existing history image is
+unchanged. No database, PM operation, editor instance or global menu change.

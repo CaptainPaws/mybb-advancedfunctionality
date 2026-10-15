@@ -95,7 +95,7 @@ function af_advancedmessenger_compose(): void
     if ($GLOBALS['am_panel']) $GLOBALS['am_body_class'] .= ' am-panel-body';
     $GLOBALS['am_reply_id'] = max(0, $mybb->get_input('am_reply', MyBB::INPUT_INT));
     $GLOBALS['am_labels'] = '';
-    foreach (['loading','error','response','read','open','back','close','older','select','sending','draft_local','draft_restore','empty_confirm','quoted_history','draft_action','preview_action','send_action','cancel','search_title','search_submit','criteria','filters','sorting'] as $key) {
+    foreach (['loading','error','retry','response','read','open','back','close','older','select','sending','draft_local','draft_restore','empty_confirm','quoted_history','draft_action','preview_action','send_action','cancel','search_title','search_submit','criteria','filters','sorting'] as $key) {
         $GLOBALS['am_label_'.$key] = af_advancedmessenger_e(af_advancedmessenger_t($key));
         $GLOBALS['am_labels'] .= ' data-am-'.str_replace('_','-',$key).'="'.af_advancedmessenger_e(af_advancedmessenger_t($key)).'"';
     }
@@ -358,7 +358,7 @@ function af_advancedmessenger_assets(string &$page): string
         $decision = af_theme_stylesheet_delivery_decision('advancedmessenger', 'assets/'.$file);
         $path = '/inc/plugins/advancedfunctionality/addons/advancedmessenger/assets/'.$file;
         $href = !empty($decision['include_file'])
-            ? rtrim((string)$mybb->settings['bburl'], '/').$path.'?v=1.3.0'
+            ? rtrim((string)$mybb->settings['bburl'], '/').$path.'?v=1.3.1'
             : (string)($decision['theme_href'] ?? '');
         if ($href === '' || (!empty($decision['include_file']) && strpos($page, $path) !== false)
             || strpos($page, $href) !== false || strpos($page, af_advancedmessenger_e($href)) !== false) continue;

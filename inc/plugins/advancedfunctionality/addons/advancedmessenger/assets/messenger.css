@@ -46,8 +46,8 @@ body.am-body .am-sidebar__head h1 > span { font-size: .75rem; color: var(--am-mu
 body.am-body .am-sidebar__head > a { display: flex; align-items: center; justify-content: center; gap: .65rem; min-height: 2.7rem; padding: .5rem; border: 1px solid var(--am-accent); border-radius: var(--am-radius); text-decoration: none; background: color-mix(in srgb, var(--am-accent) 12%, var(--am-bg)); }
 body.am-body .am-name-search { padding: .4rem 1rem .7rem; margin: 0; }
 body.am-body .am-search-control { position: relative; min-width: 0; }
-body.am-body .am-search-control input { min-height: 2.65rem; padding-inline-start: 2.65rem; border-radius: var(--am-radius); }
-body.am-body .am-search-control button { position: absolute; inset-inline-start: .2rem; top: .2rem; width: 2.25rem; min-height: 2.25rem; padding: .25rem; border: 0; background: transparent; color: var(--am-muted); }
+body.am-body .am-root .am-search-control > input[type="search"] { min-height: 2.65rem; padding-inline-start: 2.65rem; border-radius: var(--am-radius); }
+body.am-body .am-root .am-search-control > button { position: absolute; inset-inline-start: .2rem; top: .2rem; width: 2.25rem; min-height: 2.25rem; padding: .25rem; border: 0; background: transparent; color: var(--am-muted); }
 body.am-body :is(.am-folders, .am-tools) { padding: 0 .7rem .35rem; flex: 0 0 auto; }
 body.am-body :is(.am-folders, .am-tools) > summary { padding: .5rem .3rem; font-weight: 600; color: var(--am-text); }
 body.am-body :is(.am-folders, .am-tools) > nav { display: grid; gap: .1rem; }
@@ -253,6 +253,7 @@ body.am-body .am-root :is(.am-choice-row, .am-folder-choices) { display: flex; f
 body.am-body .am-root :is(.am-choice-row, .am-folder-choices) label { display: inline-flex; align-items: center; gap: .4rem; margin: 0; padding: .35rem .5rem; border: 1px solid var(--am-line); border-radius: .4rem; line-height: 1.3; cursor: pointer; }
 body.am-body .am-root :is(.am-choice-row, .am-folder-choices) label:has(:checked) { border-color: color-mix(in srgb, var(--am-accent) 65%, var(--am-line)); background: color-mix(in srgb, var(--am-accent) 12%, var(--am-bg)); }
 body.am-body .am-root :is(.am-choice-row, .am-folder-choices) input { width: 1rem; height: 1rem; margin: 0; }
+body.am-body .am-search-control .fa-magnifying-glass { pointer-events: none; }
 body.am-body .am-field-icon { position: absolute; inset-inline-start: .8rem; top: 50%; transform: translateY(-50%); color: var(--am-muted); pointer-events: none; }
 body.am-body .am-search-footer { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; padding: .7rem .85rem; border-top: 1px solid var(--am-line); background: var(--am-bg); }
 @media (max-width: 48rem) {

@@ -2,7 +2,8 @@
     'use strict';
     function boot() {
         const root = document.querySelector('[data-am-root]');
-        if (!root) return;
+        if (!root || root.dataset.amBooted) return;
+        root.dataset.amBooted = '1';
         const pane = document.getElementById('am-pane');
         const status = document.getElementById('am-status');
         const dialog = document.getElementById('am-panel-dialog');
@@ -72,9 +73,6 @@
         }
         root.addEventListener('toggle', event => {
             const details = event.target;
-            if (details.matches('.am-folders, .am-tools')) {
-                try { sessionStorage.setItem('am:disclosure:' + root.dataset.amUid + ':' + details.className, details.open ? '1' : '0'); } catch (_) { /* Optional UI preference. */ }
-            }
             if (!details.matches('[data-am-menu]')) return;
             const menu = details.querySelector('.am-dropdown');
             if (details.open) {
@@ -101,12 +99,8 @@
         });
         document.getElementById('am-history')?.addEventListener('scroll', () => closeMenus(), { passive: true });
         window.addEventListener('resize', () => closeMenus());
-        root.querySelectorAll('.am-folders, .am-tools').forEach(details => {
-            try {
-                const value = sessionStorage.getItem('am:disclosure:' + root.dataset.amUid + ':' + details.className);
-                if (value !== null) details.open = value === '1';
-            } catch (_) { /* Optional UI preference. */ }
-        });
+        // Each page starts collapsed. refreshSidebar preserves the current
+        // DOM disclosure state, without importing a previous page's preference.
         formatHistory();
 
         function saveEditor() {
@@ -210,6 +204,8 @@
             try {
                 const data = await request(href, { am_fragment: '1' });
                 if (mine !== generation) return;
+                // Reject incomplete responses before replacing a working view.
+                if (!['html', 'older', 'header', 'composer', 'title', 'key'].every(key => typeof data[key] === 'string') || !Number.isInteger(data.pmid)) throw new Error(label('response'));
                 const posts = document.getElementById('posts');
                 closeMenus();
                 posts.innerHTML = data.html;
@@ -240,6 +236,11 @@
             } catch (error) {
                 if (mine === generation) {
                     notice(error.message || label('error'));
+                    const retry = document.createElement('button');
+                    retry.type = 'button';
+                    retry.textContent = label('retry');
+                    retry.addEventListener('click', () => select(href, push), { once: true });
+                    status.append(' ', retry);
                     const fallback = document.createElement('a');
                     fallback.href = href;
                     fallback.textContent = label('open');

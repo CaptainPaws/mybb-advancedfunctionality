@@ -89,7 +89,7 @@ function af_advancedmessenger_sidebar(array $context): string
         .'<label class="am-visually-hidden" for="am-search">'.af_advancedmessenger_e(af_advancedmessenger_t('search')).'</label>'
         .'<div class="am-search-control"><input id="am-search" name="am_name" type="search" maxlength="120" placeholder="'.af_advancedmessenger_e(af_advancedmessenger_t('search')).'" value="'.af_advancedmessenger_e($context['name']).'">'
         .'<button type="submit" aria-label="'.af_advancedmessenger_e($lang->search_button).'">'.af_advancedmessenger_icon('search').'</button></div></form>';
-    $html .= '<div class="am-sidebar-sections"><details class="am-folders" open><summary>'.af_advancedmessenger_icon('folder').'<span>'.af_advancedmessenger_e(af_advancedmessenger_t('folders')).'</span>'.af_advancedmessenger_icon('chevron').'</summary><nav>'
+    $html .= '<div class="am-sidebar-sections"><details class="am-folders"><summary>'.af_advancedmessenger_icon('folder').'<span>'.af_advancedmessenger_e(af_advancedmessenger_t('folders')).'</span>'.af_advancedmessenger_icon('chevron').'</summary><nav>'
         .'<a href="private.php"'.($folder === 0 ? ' aria-current="page"' : '').'>'.af_advancedmessenger_icon('folder').'<span>'.af_advancedmessenger_e(af_advancedmessenger_t('all')).'</span>'.(array_sum($counts) ? '<b class="am-unread">'.array_sum($counts).'</b>' : '').'</a>';
     foreach (af_advancedmessenger_folders() as $id => $name) {
         $html .= '<a href="private.php?fid='.((int)$id === 1 ? 0 : (int)$id).'&amp;am_folder='.(int)$id.'"'

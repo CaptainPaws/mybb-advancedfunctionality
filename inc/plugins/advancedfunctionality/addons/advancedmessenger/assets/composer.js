@@ -1,6 +1,8 @@
 (function () {
     'use strict';
     function boot() {
+        if (!document.querySelector('.am-root') || window.AMPanelBooted) return;
+        window.AMPanelBooted = true;
         window.AMPanelDirty = false;
         document.addEventListener('input', () => { window.AMPanelDirty = true; });
         document.addEventListener('change', event => {
@@ -16,7 +18,11 @@
             if (!folders.some(folder => folder.checked)) all.checked = true;
         });
         document.addEventListener('click', event => {
-            if (!event.target.closest('[data-am-cancel]')) return;
+            // Translation labels live on the root as data-am-* too. Only an
+            // explicit control may cancel: a root label must never match here.
+            const cancel = event.target.closest('button[data-am-action="cancel"]');
+            if (!cancel || !cancel.closest('.am-root')) return;
+            event.preventDefault();
             if (parent !== window) parent.postMessage({ type: 'advancedmessenger:close' }, location.origin);
             else location.assign('private.php');
         });
