@@ -92,8 +92,61 @@
 
 
     // ======== простая AJAX-обёртка =========
+    var requestSerial = 0, lastApplied = 0;
+    var stateEpoch = 0, mutationQueue = [], mutationBusy = false;
+    function alertError(resp) {
+        if (resp && resp._aamStale) return;
+        var host = document.querySelector('#af_aam_modal .thead') || document.querySelector('#af_aam_modal') || document.querySelector('.af-aam-alerts');
+        if (!host) return;
+        var error = host.querySelector('[data-aam-error]');
+        if (!error) { error = document.createElement('p'); error.setAttribute('data-aam-error','1'); error.setAttribute('role','alert'); host.appendChild(error); }
+        error.textContent = 'Не удалось обновить уведомления. Повторите попытку.';
+    }
     function ajax(url, data, callback, timeoutMs) {
+        var mutation = data && data.action === 'af_aam_api' && /^(mark_read|mark_unread|delete|mark_all_read)$/.test(data.op);
+        if (mutation) {
+            stateEpoch++; // Invalidate reads already in flight immediately.
+            mutationQueue.push(function() { run(true); });
+            drainMutations();
+        } else run(false);
+        function run(isMutation) {
+            var epoch = stateEpoch, serial = ++requestSerial;
+            ajaxTransport(url, data, function(resp) {
+                if (!isMutation && (epoch !== stateEpoch || mutationBusy || serial < lastApplied)) resp = {ok:0, _aamStale:true};
+                if (resp && resp.ok && !resp.error && !resp._aamStale) {
+                    document.querySelectorAll('[data-aam-error]').forEach(function(error){error.remove();});
+                    lastApplied = serial;
+                    var count = extractUnreadCount(resp);
+                    if (count !== null) updateVisibleCounts(count);
+                    if (isMutation) {
+                        var selected = String(data.id || data.alert_id || data['alert_id[]'] || '').split(/[^0-9]+/).map(Number);
+                        document.querySelectorAll('[data-alert-id], .af-aam-list-row').forEach(function(row) {
+                            var id = getAlertIdFromElement(row);
+                            if (data.op !== 'mark_all_read' && selected.indexOf(id) === -1) return;
+                            if (data.op === 'delete') { row.remove(); return; }
+                            var read = data.op !== 'mark_unread';
+                            row.classList.toggle('alert--unread',!read); row.classList.toggle('alert--read',read);
+                            row.classList.toggle('af-aam-row-unread',!read); row.classList.toggle('af-aam-row-read',read);
+                            row.querySelectorAll('.markReadAlertButton').forEach(function(btn){btn.classList.toggle('hidden',read);});
+                            row.querySelectorAll('.markUnreadAlertButton').forEach(function(btn){btn.classList.toggle('hidden',!read);});
+                        });
+                    }
+                } else if (isMutation) alertError(resp);
+                if (isMutation) { stateEpoch++; mutationBusy = false; }
+                try { if (callback) callback(resp); }
+                finally { if (isMutation) drainMutations(); }
+            }, timeoutMs);
+        }
+    }
+    function drainMutations() {
+        if (mutationBusy || !mutationQueue.length) return;
+        mutationBusy = true; mutationQueue.shift()();
+    }
+    function ajaxTransport(url, data, callback, timeoutMs) {
+        var completed = false, originalCallback = callback;
+        callback = function(resp) { if (completed) return; completed = true; if (originalCallback) originalCallback(resp); };
         var xhr = new XMLHttpRequest();
+        xhr.timeout = 20000;
 
         data = data || {};
 
@@ -162,6 +215,7 @@
                 resp = { ok: 0, error: 'bad_json', raw: xhr.responseText };
             }
 
+            if (xhr.status < 200 || xhr.status >= 300) resp = {ok:0,error:'http_error'};
             if (typeof callback === 'function') callback(resp);
         };
 
@@ -557,58 +611,33 @@
 
 
 
-    function syncFromResponse(resp, deltaIfUnknown) {
-        if (afAamDebug) {
-            console.log('[AAM sync]', resp, 'deltaIfUnknown =', deltaIfUnknown);
-        }
-
-        if (!resp || typeof resp !== 'object') {
-            if (typeof deltaIfUnknown === 'number' && deltaIfUnknown !== 0) {
-                updateVisibleCounts(Math.max(0, currentUnread + deltaIfUnknown));
-            } else {
-                pollUnreadAlerts();
-            }
-            return;
-        }
-
-        if (afAamDebug && resp.debug) {
-            console.log('[AAM debug (server)]', resp.debug);
-        }
-
-        var hasDelta = (typeof deltaIfUnknown === 'number' && deltaIfUnknown !== 0);
+    function syncFromResponse(resp) {
+        if (!resp || !resp.ok || resp.error || resp._aamStale) { if (resp && !resp._aamStale) alertError(resp); return; }
         var cnt = extractUnreadCount(resp);
-
-        if (typeof cnt === 'number' && !isNaN(cnt)) {
-            updateVisibleCounts(cnt);
-        } else if (hasDelta) {
-            updateVisibleCounts(Math.max(0, currentUnread + deltaIfUnknown));
-        } else {
-            pollUnreadAlerts();
-        }
-
+        if (cnt !== null) updateVisibleCounts(cnt);
         if (resp.template) {
             var tbody = qs('#alerts_content');
-            if (tbody) {
-                tbody.innerHTML = resp.template;
-
-                // ФИКС №2: превращаем [mention] в жирную ссылку на профиль
-                afAamRenderMentionsInContainer(tbody);
-            }
+            if (tbody) { tbody.innerHTML = resp.template; afAamRenderMentionsInContainer(tbody); }
         }
     }
-
-
-
 
     // ======== ЛОГИКА MyAlerts (адаптация) =========
     function updateVisibleCounts(unreadCount) {
         currentUnread = Math.max(0, unreadCount || 0);
 
-        var badge = qs('#af_aam_badge');
-        if (badge) {
-            badge.textContent = currentUnread;
+        var heading = document.querySelector('#af_aam_modal .thead strong');
+        if (heading && !heading.querySelector('[data-aam-unread-count]')) {
+            var modalBadge = document.createElement('span'); modalBadge.className='af-aam-badge'; modalBadge.setAttribute('data-aam-unread-count','1'); heading.appendChild(modalBadge);
         }
-
+        document.querySelectorAll('#af_aam_badge, .af-aam-badge, [data-aam-unread-count]').forEach(function(badge) {
+            badge.textContent = String(currentUnread); badge.hidden = currentUnread === 0; badge.style.display = currentUnread === 0 ? 'none' : '';
+        });
+        document.querySelectorAll('.af-am-advanced_alerts > a').forEach(function(trigger) {
+            var badge = trigger.querySelector('.af-am-badge');
+            if (!badge) { badge = document.createElement('span'); badge.className='af-am-badge'; trigger.appendChild(badge); }
+            badge.textContent=String(currentUnread); badge.setAttribute('aria-label',String(currentUnread)); badge.hidden=currentUnread === 0; badge.style.display=currentUnread === 0 ? 'none' : '';
+        });
+        window.unreadAlerts = currentUnread;
         // Обновляем заголовок страницы (как у MyAlerts)
         if (currentUnread > 0) {
             document.title = '(' + currentUnread + ') ' + afAamBaseTitle;
@@ -868,7 +897,7 @@
 
         // Делегирование кликов внутри модалки — оставляем как было у тебя
         modal.addEventListener('click', function (e) {
-            var target = e.target;
+            var target = e.target.closest ? (e.target.closest('.markReadAlertButton, .markUnreadAlertButton, .deleteAlertButton') || e.target) : e.target;
 
             if (target.classList && target.classList.contains('markReadAlertButton')) {
                 e.preventDefault();
@@ -879,14 +908,10 @@
 
                 if (row) {
                     wasUnread = row.classList.contains('alert--unread');
-                    row.classList.remove('alert--unread');
-                    row.classList.add('alert--read');
 
                     var btnRead   = row.querySelector('.markReadAlertButton');
                     var btnUnread = row.querySelector('.markUnreadAlertButton');
 
-                    if (btnRead) btnRead.classList.add('hidden');
-                    if (btnUnread) btnUnread.classList.remove('hidden');
                 }
 
                 if (id) {
@@ -916,14 +941,10 @@
 
                 if (row2) {
                     wasRead = row2.classList.contains('alert--read');
-                    row2.classList.remove('alert--read');
-                    row2.classList.add('alert--unread');
 
                     var btnRead2   = row2.querySelector('.markReadAlertButton');
                     var btnUnread2 = row2.querySelector('.markUnreadAlertButton');
 
-                    if (btnRead2) btnRead2.classList.remove('hidden');
-                    if (btnUnread2) btnUnread2.classList.add('hidden');
                 }
 
                 if (id2) {
@@ -953,7 +974,7 @@
                 var wasUnread3 = false;
                 if (row3) {
                     wasUnread3 = row3.classList.contains('alert--unread');
-                    row3.parentNode.removeChild(row3);
+                    /* Removed only after confirmed delete. */
                 }
 
                 if (id3) {
@@ -992,8 +1013,6 @@
                         }
 
                         if (tr2) {
-                            tr2.classList.remove('alert--unread');
-                            tr2.classList.add('alert--read');
                         }
 
                         if (alertId) {
@@ -1045,8 +1064,6 @@
                     var wasUnreadBtn = rowBtn.classList.contains('af-aam-row-unread');
 
                     // UI локально
-                    rowBtn.classList.remove('af-aam-row-unread');
-                    rowBtn.classList.add('af-aam-row-read');
 
                     ajax('xmlhttp.php', {
                         action: 'af_aam_api',
@@ -1071,7 +1088,7 @@
                     var wasUnreadDel = rowDel.classList.contains('af-aam-row-unread');
 
                     // UI локально
-                    rowDel.parentNode.removeChild(rowDel);
+                    /* Removed only after confirmed delete. */
 
                     ajax('xmlhttp.php', {
                         action: 'af_aam_api',
@@ -1097,12 +1114,10 @@
                         var wasUnread = false;
                         if (row) {
                             wasUnread = row.classList.contains('af-aam-row-unread');
-                            row.classList.remove('af-aam-row-unread');
-                            row.classList.add('af-aam-row-read');
                         }
 
                         // бейдж сразу (оптимистично)
-                        if (wasUnread) updateVisibleCounts(Math.max(0, currentUnread - 1));
+                        /* Counts are synchronized only from confirmed server responses. */
 
                         // НЕ блочим навигацию: beacon → идеально, иначе ajax с быстрым fallback
                         var ok = false;
@@ -1182,9 +1197,8 @@
                 op:        'mark_all_read',
                 my_post_key: window.my_post_key || ''
             }, function (resp) {
-                // если сервер не прислал явный unread_count, просто зануляем счётчик
-                syncFromResponse(resp || {}, -currentUnread);
-                renderLatest();
+                syncFromResponse(resp || {});
+                if (resp && resp.ok && !resp.error && !resp._aamStale) renderLatest();
             });
         }
 
@@ -1430,8 +1444,8 @@
         var wasUnread = !(alert.is_read && parseInt(alert.is_read, 10) === 1);
 
         if (wasUnread) {
-            updateVisibleCounts(Math.max(0, currentUnread - 1));
-            alert.is_read = 1;
+            /* No optimistic badge decrement. */
+            /* Toast state is confirmed by the server response. */
         }
 
         if (!id) return;
@@ -1445,8 +1459,7 @@
             my_post_key: window.my_post_key || ''
         };
 
-        var ok = afAamSendBeacon(payload);
-        if (ok) return;
+        // Confirm the operation before synchronizing visible counters.
 
         ajax('xmlhttp.php', payload, function (resp) {
             syncFromResponse(resp || {}, wasUnread ? -1 : 0);

@@ -329,3 +329,41 @@ integration/security inspection. The site owner should run A -> B,C; B -> A,C;
 C -> A,B, then check separate groups with identical members, BCC mass mail,
 failed recipients, drafts, rename permissions, deletion/trash, notification links
 and disabled-AM native reading. No new automated test suite is included.
+
+### 1.4.1 — navigation, incremental updates and shared UI fixes
+
+Back to dialogs now navigates to private.php (All messages), clearing the active
+PM/folder/name filter with a normal browser history entry and draft save.
+
+The existing am_history API accepts after_id for an incremental batch (up to 30
+candidate IDs). Ownership, group membership and normal PM identity are retained;
+only current-user PM rows are read. Group-link lookup is bounded to the anchor
+and newer IDs for this request. No read side effects happen in the endpoint.
+A cheap own-mailbox COUNT/MAX(pmid)/SUM(status)/SUM(folder) stamp triggers sidebar refresh
+only on changes. Full dialog classification is not performed on every poll.
+
+One timer in the existing runtime runs every 5 seconds (POLL_INTERVAL), pauses
+on hidden/pagehide, resumes on visibility/pageshow, ignores old generations and
+backs off to 60 seconds on failures. Session/CSRF failures stop it. Bubble append
+uses existing parsing/rendering and PM-ID deduplication, preserves the editor,
+keeps scroll position unless already at the bottom, and offers New messages.
+Native visibility/read handling remains responsible for reading received PMs.
+
+AAM uses a shared confirmed-response badge updater, including AdvancedMenu and
+the modal. Mutations are serialized; response epochs/serials reject older read
+responses. No optimistic count arithmetic is used. Failed mutations leave row
+state/counters unchanged and report an error. Mark-all queries the server count
+instead of returning an assumed zero. Existing notification delivery, PM send,
+group identity and schema are unchanged.
+
+AAM suppresses only request-local global_pm_alert before header evaluation when
+PM alerts are enabled, available for the user, and frontend runtime is allowed.
+It does not change native PM counts/preferences/read state or quota warnings.
+Quote avatars no longer infer ownership from arbitrary images in a surrounding
+table/post. Only author-avatar profile links contribute UID/avatar pairs; name
+resolution must be unique in that local index. Each nested quote uses its own
+header. Unknown authors receive no guessed avatar.
+
+Validation: PHP/JS syntax, targeted hook/permission/cursor/lifecycle inspection,
+and git diff checks. Live UI, delivery/concurrency and scroll testing remain with
+the forum owner; no automated suite or cloud browser run was added.

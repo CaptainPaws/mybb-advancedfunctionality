@@ -281,3 +281,5 @@ body.am-body .am-group-rename label { display: grid; gap: .4rem; }
 body.am-body .am-group-rename button { margin-top: .5rem; }
 body.am-body .am-conversation-head:has(.am-group-members) { z-index: 3; }
 body.am-body .am-root [hidden] { display: none; }
+
+body.am-body .am-root .am-new-messages { align-self: center; width: fit-content; max-width: 100%; margin: .35rem; padding: .35rem .7rem; font-size: .8rem; color: var(--am-accent); }

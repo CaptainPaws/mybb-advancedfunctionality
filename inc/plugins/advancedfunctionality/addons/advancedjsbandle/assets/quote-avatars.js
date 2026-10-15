@@ -47,11 +47,11 @@
     if (!bq) return null;
 
     // классика MyBB: <blockquote class="mycode_quote"><cite>...</cite>...</blockquote>
-    var h = bq.querySelector('cite');
+    var h = Array.from(bq.querySelectorAll('cite')).find(function(node) { return node.closest('blockquote') === bq; });
     if (h) return h;
 
     // некоторые темы: .quote_header
-    h = bq.querySelector('.quote_header');
+    h = Array.from(bq.querySelectorAll('.quote_header')).find(function(node) { return node.closest('blockquote') === bq; });
     if (h) return h;
 
     // запасной: первый элемент внутри blockquote, если он похож на заголовок
@@ -101,35 +101,22 @@
   // Собираем карту аватаров с текущей страницы:
   // uid -> src, username(lower) -> src
   function buildAvatarIndex() {
-    var byUid = new Map();
-    var byName = new Map();
-
-    // Берём все ссылки на member.php?uid=... внутри постов/таблиц
-    var links = Array.prototype.slice.call(document.querySelectorAll('a[href*="member.php"][href*="uid="]'));
-
-    links.forEach(function (a) {
+    var byUid = new Map(), byName = new Map(), names = new Map();
+    document.querySelectorAll('a[href*="member.php"][href*="uid="]').forEach(function(a) {
+      if (a.closest('blockquote, .atf-post__message, .post_body')) return;
       var uid = uidFromHref(a.getAttribute('href'));
       if (!uid) return;
-
-      var username = normalizeName(a.textContent || '');
-      var unameKey = username.toLowerCase();
-
-      // Контекст для поиска аватара: сначала "пост", если есть, иначе строка таблицы
-      var ctx = a.closest('.post, .postbit, .postrow, .post_author, .post_author_info, tr, td, table') || a.parentElement;
-      if (!ctx) return;
-
-      var img = pickBestAvatarImg(ctx);
-      if (!img) return;
-
-      var src = String(img.getAttribute('src') || '');
-      if (!src) return;
-
-      // фикс на темы где avatar src с ?dateline=... — это нормально, оставляем как есть (это "реальный путь")
-      if (!byUid.has(uid)) byUid.set(uid, src);
-      if (username && !byName.has(unameKey)) byName.set(unameKey, src);
+      // An avatar belongs to the UID of its own profile link, never a table
+      // or message containing links to several different users.
+      var img = a.querySelector('img.am-avatar, img.avatar, img');
+      if (img && (a.closest('.am-bubble__avatar, .am-group-author, .post_author, .author_avatar, .atf-post__avatar, .atf-post__author') || a.classList.contains('avatar'))) {
+        byUid.set(uid, img.getAttribute('src'));
+      }
+      var name = normalizeName(a.textContent || a.getAttribute('aria-label') || '').toLowerCase();
+      if (name) { if (!names.has(name)) names.set(name, new Set()); names.get(name).add(uid); }
     });
-
-    return { byUid: byUid, byName: byName };
+    names.forEach(function(ids,name) { if (ids.size === 1) { var uid = Array.from(ids)[0]; if (byUid.has(uid)) byName.set(name,byUid.get(uid)); } });
+    return {byUid:byUid, byName:byName};
   }
 
   function insertAvatarIntoHeader(headerEl, src) {
@@ -206,7 +193,7 @@
 
       if (uid && index.byUid.has(uid)) {
         src = index.byUid.get(uid);
-      } else if (name) {
+      } else if (!uid && name) {
         var key = name.toLowerCase();
         if (index.byName.has(key)) src = index.byName.get(key);
       }
@@ -235,12 +222,12 @@
       var el = node && (node.nodeType === 1 ? node : node.parentElement);
       if (!el || !posts.contains(el)) return;
       var quote = el.closest('blockquote.mycode_quote, blockquote.quote, blockquote[class*="quote"]');
-      var message = el.closest('.atf-post__message, .post_body');
+      var message = el.closest('.atf-post__message, .post_body, .am-bubble__body');
       var root = quote || message;
       if (!root && el !== posts && el.querySelector) {
-        root = el.matches && el.matches('.atf-post__message, .post_body')
+        root = el.matches && el.matches('.atf-post__message, .post_body, .am-bubble__body')
           ? el
-          : el.querySelector('.atf-post__message, .post_body');
+          : el.querySelector('.atf-post__message, .post_body, .am-bubble__body');
       }
       if (!root && el === posts) root = posts;
       if (!root) return;

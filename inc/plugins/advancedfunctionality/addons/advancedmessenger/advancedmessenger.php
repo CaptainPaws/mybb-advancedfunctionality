@@ -79,6 +79,17 @@ function af_advancedmessenger_start(): void
     if (in_array($action, ['send','do_send'], true) && $mybb->get_input('am_gid')) af_am_group_prepare();
     if ($action === 'am_history') {
         af_advancedmessenger_require_api_token();
+        if (array_key_exists('after_id', $mybb->input)) {
+            global $db;
+            $anchor = af_advancedmessenger_owned($mybb->get_input('pmid', MyBB::INPUT_INT));
+            if ($mybb->get_input('pmid') && !$anchor) af_advancedmessenger_json(['error'=>'invalid_message'], 404);
+            $q = $db->simple_select('privatemessages', 'COUNT(*) AS n, MAX(pmid) AS lastid, SUM(status) AS states, SUM(folder) AS folders', 'uid='.(int)$mybb->user['uid']);
+            $state = $db->fetch_array($q);
+            $stamp = implode(':', array_values($state));
+            af_am_group_links(max(0,$mybb->get_input('after_id', MyBB::INPUT_INT)), (int)($anchor['pmid'] ?? 0));
+            $batch = $anchor ? af_advancedmessenger_new_messages($anchor, max(0,$mybb->get_input('after_id', MyBB::INPUT_INT))) : ['rows'=>[], 'after'=>0];
+            af_advancedmessenger_json(['html'=>$batch['rows'] ? af_advancedmessenger_render_history($batch) : '', 'after'=>$batch['after'], 'stamp'=>$stamp]);
+        }
         $anchor = af_advancedmessenger_owned($mybb->get_input('pmid', MyBB::INPUT_INT));
         if (!$anchor || (int)$anchor['folder'] === 3) af_advancedmessenger_json(['error'=>'invalid_message'], 404);
         $history = af_advancedmessenger_history($anchor, max(0,$mybb->get_input('before_time', MyBB::INPUT_INT)),
@@ -118,7 +129,7 @@ function af_advancedmessenger_compose(): void
     if ($GLOBALS['am_panel']) $GLOBALS['am_body_class'] .= ' am-panel-body';
     $GLOBALS['am_reply_id'] = max(0, $mybb->get_input('am_reply', MyBB::INPUT_INT));
     $GLOBALS['am_labels'] = '';
-    foreach (['loading','error','retry','response','read','open','back','close','older','select','sending','draft_local','draft_restore','empty_confirm','quoted_history','draft_action','preview_action','send_action','cancel','search_title','search_submit','criteria','filters','sorting'] as $key) {
+    foreach (['loading','error','new_messages','session','retry','response','read','open','back','close','older','select','sending','draft_local','draft_restore','empty_confirm','quoted_history','draft_action','preview_action','send_action','cancel','search_title','search_submit','criteria','filters','sorting'] as $key) {
         $GLOBALS['am_label_'.$key] = af_advancedmessenger_e(af_advancedmessenger_t($key));
         $GLOBALS['am_labels'] .= ' data-am-'.str_replace('_','-',$key).'="'.af_advancedmessenger_e(af_advancedmessenger_t($key)).'"';
     }
@@ -416,7 +427,7 @@ function af_advancedmessenger_assets(string &$page): string
         $decision = af_theme_stylesheet_delivery_decision('advancedmessenger', 'assets/'.$file);
         $path = '/inc/plugins/advancedfunctionality/addons/advancedmessenger/assets/'.$file;
         $href = !empty($decision['include_file'])
-            ? rtrim((string)$mybb->settings['bburl'], '/').$path.'?v=1.4.0'
+            ? rtrim((string)$mybb->settings['bburl'], '/').$path.'?v=1.4.1'
             : (string)($decision['theme_href'] ?? '');
         if ($href === '' || (!empty($decision['include_file']) && strpos($page, $path) !== false)
             || strpos($page, $href) !== false || strpos($page, af_advancedmessenger_e($href)) !== false) continue;

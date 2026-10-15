@@ -7,6 +7,7 @@ function af_advancedmessenger_t(string $key): string
 {
     global $mybb;
     $ru = [
+        'new_messages'=>'Новые сообщения', 'session'=>'Сессия завершена. Обновите страницу и войдите снова.',
         'participants'=>'участников', 'group_rename'=>'Название группы', 'group_save'=>'Сохранить', 'group_unavailable'=>'Ответ всей группе невозможен: один из участников недоступен. Частичная отправка не выполнена.', 'group_limit'=>'Число участников превышает ваш лимит получателей ЛС. Сообщение не отправлено.',
         'draft_action'=>'Черновик', 'preview_action'=>'Просмотр', 'send_action'=>'Отправить', 'cancel'=>'Отмена', 'search_title'=>'Расширенный поиск ЛС', 'search_submit'=>'Найти сообщения', 'criteria'=>'Основные критерии', 'filters'=>'Фильтры', 'sorting'=>'Сортировка', 'sent_copy'=>'Сохранённая отправленная копия; подтверждение прочтения недоступно', 'receipt_confirmed'=>'Прочтение подтверждено MyBB', 'quoted_history'=>'Предыдущие цитаты', 'online'=>'В сети', 'profile'=>'Профиль собеседника', 'title'=>'Личные сообщения', 'compose'=>'Написать сообщение', 'dialogs'=>'Диалоги', 'all'=>'Все сообщения',
         'folders'=>'Папки', 'tools'=>'Инструменты', 'search'=>'Поиск собеседника',
@@ -29,6 +30,7 @@ function af_advancedmessenger_t(string $key): string
         'response'=>'Сервер вернул страницу вместо ответа API. Откройте диалог обычным переходом, чтобы увидеть сообщение MyBB.',
     ];
     $en = [
+        'new_messages'=>'New messages',
         'participants'=>'participants', 'group_rename'=>'Group name', 'group_save'=>'Save', 'group_unavailable'=>'Cannot reply to every participant: a member is unavailable. No partial delivery was made.', 'group_limit'=>'The group exceeds your PM recipient limit. No message was sent.',
         'draft_action'=>'Draft', 'preview_action'=>'Preview', 'send_action'=>'Send', 'cancel'=>'Cancel', 'search_title'=>'Advanced message search', 'search_submit'=>'Find messages', 'criteria'=>'Main criteria', 'filters'=>'Filters', 'sorting'=>'Sort', 'sent_copy'=>'Saved sent copy; read confirmation unavailable', 'receipt_confirmed'=>'Read receipt confirmed by MyBB', 'quoted_history'=>'Earlier quotes', 'online'=>'Online', 'profile'=>'Participant profile', 'title'=>'Messages', 'compose'=>'New message', 'dialogs'=>'Conversations', 'all'=>'All conversations',
         'folders'=>'Folders', 'tools'=>'Tools', 'search'=>'Find a participant',

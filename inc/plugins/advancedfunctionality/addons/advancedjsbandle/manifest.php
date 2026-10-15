@@ -3,7 +3,7 @@
 return [
     'id'        => 'advancedjsbandle',
     'name'      => 'JS Bundle',
-    'version'   => '1.0.2',
+    'version'   => '1.0.3',
     'author'      => 'CaptainPaws',
     'website'     => 'https://github.com/CaptainPaws',
     'bootstrap' => 'advancedjsbandle.php',

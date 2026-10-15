@@ -476,10 +476,11 @@ function af_aam_xmlhttp_dispatch(): void
 
     if ($op === 'mark_all_read') {
         $repo->mark_all_read($uid);
+        $unread = $repo->get_unread_count($uid);
         af_aam_json([
             'ok' => 1,
-            'unread' => 0,
-            'unread_count' => 0,
+            'unread' => $unread,
+            'unread_count' => $unread,
             'server_newest_id' => $repo->get_newest_id($uid),
         ]);
     }

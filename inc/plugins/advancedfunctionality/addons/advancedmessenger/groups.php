@@ -54,7 +54,7 @@ function af_am_group_members(int $gid): array
 }
 
 /** One bounded metadata projection per request, never a lookup per bubble. */
-function af_am_group_links(): array
+function af_am_group_links(?int $after = null, int $anchor = 0): array
 {
     global $db, $mybb;
     static $links;
@@ -63,7 +63,8 @@ function af_am_group_links(): array
     $q = $db->query('SELECT l.pmid,g.gid,g.title FROM '.TABLE_PREFIX.'af_am_links l'
         .' JOIN '.TABLE_PREFIX.'af_am_groups g ON g.gid=l.gid AND g.active=1'
         .' JOIN '.TABLE_PREFIX.'af_am_members m ON m.gid=g.gid AND m.active=1 AND m.uid='.(int)$mybb->user['uid']
-        .' JOIN '.TABLE_PREFIX.'privatemessages p ON p.pmid=l.pmid AND p.uid=m.uid');
+        .' JOIN '.TABLE_PREFIX.'privatemessages p ON p.pmid=l.pmid AND p.uid=m.uid'
+        .($after !== null ? ' WHERE (l.pmid>'.max(0,$after).' OR l.pmid='.max(0,$anchor).')' : ''));
     while ($row = $db->fetch_array($q)) $links[(int)$row['pmid']] = $row;
     return $links;
 }

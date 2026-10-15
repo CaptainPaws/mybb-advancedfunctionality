@@ -167,3 +167,39 @@ function af_advancedmessenger_history(array $anchor, int $beforeTime = 0, int $b
     }
     return ['rows' => $result, 'cursor' => $more ? $cursor : null, 'key' => $key];
 }
+
+/** Incremental own-mailbox scan; never marks PM read or rebuilds dialog groups. */
+function af_advancedmessenger_new_messages(array $anchor, int $after): array
+{
+    global $db, $mybb;
+    $owner = (int)$mybb->user['uid'];
+    $key = af_advancedmessenger_identity($anchor, $owner);
+    $where = 'uid='.$owner.' AND pmid>'.$after;
+    $where .= (int)$anchor['folder'] === 4 ? ' AND folder=4' : ' AND folder NOT IN (3,4)';
+    if (str_starts_with($key, 'group:')) {
+        $gid = (int)substr($key,6);
+        if (!af_am_group($gid)) error_no_permission();
+        $where .= ' AND pmid IN (SELECT pmid FROM '.TABLE_PREFIX.'af_am_links WHERE gid='.$gid.')';
+    } elseif (str_starts_with($key, 'user:')) {
+        $peer = (int)substr($key,5);
+        $where .= ' AND ((fromid='.$owner.' AND toid='.$peer.') OR (fromid='.$peer.' AND toid='.$owner.'))';
+    } else return ['rows'=>[], 'after'=>$after];
+    $q = $db->simple_select('privatemessages', 'pmid,fromid,toid,folder,recipients', $where, ['order_by'=>'pmid','order_dir'=>'ASC','limit'=>30]);
+    $ids = [];
+    while ($row = $db->fetch_array($q)) {
+        $after = max($after,(int)$row['pmid']);
+        if (af_advancedmessenger_identity($row,$owner) === $key) $ids[] = (int)$row['pmid'];
+    }
+    $rows = [];
+    if ($ids) {
+        $q = $db->query('SELECT u.avatar,u.avatartype,u.username AS author_username,pm.* FROM '.TABLE_PREFIX.'privatemessages pm LEFT JOIN '.TABLE_PREFIX.'users u ON u.uid=pm.fromid WHERE pm.uid='.$owner.' AND pm.pmid IN ('.implode(',',$ids).') ORDER BY pm.dateline,pm.pmid');
+        while ($row = $db->fetch_array($q)) {
+            $row['author_username'] ??= af_advancedmessenger_t('unknown');
+            $row['am_group'] = str_starts_with($key,'group:');
+            // Self-PM recipient copy is canonical; skip its duplicate saved copy.
+            if ($key === 'user:'.$owner && (int)$row['folder'] === 2) continue;
+            $rows[] = $row;
+        }
+    }
+    return ['rows'=>$rows, 'after'=>$after];
+}

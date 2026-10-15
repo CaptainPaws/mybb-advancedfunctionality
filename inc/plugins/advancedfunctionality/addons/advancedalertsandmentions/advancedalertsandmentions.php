@@ -273,6 +273,8 @@ function af_advancedalertsandmentions_init(): void
     af_aam_register_atf_ucp_navigation();
 
 
+    $plugins->add_hook('global_intermediate', 'af_aam_native_pm_notice', 10000);
+
     // остальные хуки (после global_start)
     $plugins->add_hook('usercp_menu',                  'af_aam_usercp_menu');
     $plugins->add_hook('usercp_start',                 'af_aam_usercp_start');
@@ -2679,4 +2681,16 @@ function af_aam_postbit_mention_button(array &$post): void
     } else {
         $post['button_quote'] = $button;
     }
+}
+
+/** Suppress only the native PM banner, before global.php evaluates the header. */
+function af_aam_native_pm_notice(): void
+{
+    global $mybb, $templates, $db;
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    if (!$uid || !af_aam_is_enabled() || !$db->table_exists(AF_AAM_TABLE_ALERTS)
+        || (function_exists('af_frontend_asset_allowed') && !af_frontend_asset_allowed(AF_AAM_ID, 'runtime'))
+        || af_aam_get_type_id('pm') === null || !af_aam_user_allows_type($uid, 'pm')) return;
+    // Request-local presentation only: no changes to pmnotice, PM counters or read state.
+    $templates->cache['global_pm_alert'] = '';
 }

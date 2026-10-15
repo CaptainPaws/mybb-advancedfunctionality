@@ -122,9 +122,9 @@
             try {
                 const response = await fetch(url, { method: 'POST', body, credentials: 'same-origin',
                     headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }, signal: controller.signal });
-                if (!(response.headers.get('content-type') || '').includes('application/json')) throw new Error(label('response'));
+                if (!(response.headers.get('content-type') || '').includes('application/json')) { const error = new Error(label('session')); error.status = 401; throw error; }
                 const data = await response.json();
-                if (!response.ok || data.error) throw new Error(data.error || label('error'));
+                if (!response.ok || data.error) { const error = new Error(data.error || label('error')); error.status = response.status; throw error; }
                 return data;
             } finally { clearTimeout(timeout); }
         }
@@ -274,7 +274,7 @@
             if (confirm && !window.confirm(confirm.dataset.amConfirm)) { event.preventDefault(); return; }
             const close = event.target.closest('.am-panel-close');
             if (close) { saveEditor(); dialog.close(); return; }
-            if (event.target.closest('.am-back')) { root.classList.remove('am-show-conversation'); document.getElementById('am-search')?.focus(); return; }
+            if (event.target.closest('.am-back')) { event.preventDefault(); saveEditor(); location.assign('private.php'); return; }
             const older = event.target.closest('#am-older');
             if (older) {
                 event.preventDefault();
@@ -363,6 +363,60 @@
                 else if (tool.contentDocument?.querySelector('[data-am-panel-page]')) refreshSidebar();
             } catch (_) { notice(label('error')); }
         });
+        // One visibility-aware incremental poll loop, independent of the editor.
+        const POLL_INTERVAL = 5000;
+        let pollTimer = 0, pollBusy = false, pollStopped = false, pollDelay = POLL_INTERVAL;
+        let mailboxStamp = '', pollAfter = 0, pollKey = '', newCount = 0, pollHadError = false, pagePaused = false;
+        const newButton = document.createElement('button');
+        newButton.type = 'button'; newButton.className = 'am-new-messages'; newButton.hidden = true;
+        status.after(newButton);
+        newButton.addEventListener('click', () => {
+            const scroll = document.getElementById('am-history');
+            if (scroll) scroll.scrollTop = scroll.scrollHeight;
+            newCount = 0; newButton.hidden = true;
+        });
+        function schedulePoll() {
+            clearTimeout(pollTimer);
+            if (!document.hidden && !pollStopped && !pagePaused) pollTimer = setTimeout(pollMessages, pollDelay);
+        }
+        async function pollMessages() {
+            if (pollBusy || document.hidden || pollStopped || pagePaused) return;
+            pollBusy = true;
+            const mine = generation, key = root.dataset.amKey;
+            if (pollKey !== key) { pollAfter = 0; pollKey = key; newCount = 0; newButton.hidden = true; }
+            const posts = document.getElementById('posts');
+            posts?.querySelectorAll('[data-am-pmid]').forEach(row => { pollAfter = Math.max(pollAfter, Number(row.dataset.amPmid) || 0); });
+            try {
+                const data = await request('private.php?action=am_history', { pmid: root.dataset.amPmid || '0', after_id: pollAfter });
+                if (mine !== generation || key !== root.dataset.amKey || document.hidden) return;
+                pollDelay = POLL_INTERVAL;
+                if (pollHadError && !pane.hasAttribute('aria-busy')) notice('');
+                pollHadError = false;
+                pollAfter = Math.max(pollAfter, Number(data.after) || 0);
+                if (data.html && posts) {
+                    const scroll = document.getElementById('am-history');
+                    const atBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 80;
+                    const fragment = document.createElement('template'); fragment.innerHTML = data.html;
+                    const known = new Set(Array.from(posts.querySelectorAll('[data-am-pmid]'), row => row.dataset.amPmid));
+                    let added = 0;
+                    fragment.content.querySelectorAll('[data-am-pmid]').forEach(row => { if (known.has(row.dataset.amPmid)) row.remove(); else { known.add(row.dataset.amPmid); added++; } });
+                    if (added) {
+                        posts.append(fragment.content); mergeDates(); formatHistory(); watchUnread();
+                        if (atBottom) { scroll.scrollTop = scroll.scrollHeight; newCount = 0; newButton.hidden = true; }
+                        else { newCount += added; newButton.textContent = label('new-messages') + ' (' + newCount + ')'; newButton.hidden = false; }
+                    }
+                }
+                if (mailboxStamp !== data.stamp) { mailboxStamp = data.stamp; refreshSidebar(); }
+            } catch (error) {
+                if (mine !== generation) return;
+                if (error.status === 401 || error.status === 403) { pollStopped = true; notice(label('session')); }
+                else { pollHadError = true; pollDelay = Math.min(pollDelay * 2, 60000); notice(error.message || label('error')); }
+            } finally { pollBusy = false; schedulePoll(); }
+        }
+        document.addEventListener('visibilitychange', () => { clearTimeout(pollTimer); if (!document.hidden) pollMessages(); });
+        window.addEventListener('pagehide', () => { pagePaused = true; clearTimeout(pollTimer); });
+        window.addEventListener('pageshow', () => { pagePaused = false; schedulePoll(); });
+        schedulePoll();
         if (root.dataset.amPmid !== '0') {
             root.classList.add('am-show-conversation');
             const scroll = document.getElementById('am-history');
