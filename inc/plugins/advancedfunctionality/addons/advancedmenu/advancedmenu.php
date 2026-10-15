@@ -273,14 +273,17 @@ function af_menu_ensure_registry_overrides(?array $registry = null): void
             // rows; an administrator-edited row has a different updated_at.
             $row = $db->fetch_array($db->simple_select(AF_AM_TABLE_OVERRIDES, '*', $where, ['limit'=>1]));
             // Theme used to live in the generic settings section. This is a
-            // one-way presentation migration so existing installs get the new
-            // dedicated tab even when other placement fields were customized.
-            if ($row && $key === 'theme_switcher' && $source === 'mybb'
+            // one-way migration for untouched legacy rows only. Tree-editor
+            // placement must remain authoritative, including settings sections.
+            if ($row && (int)$row['created_at'] === (int)$row['updated_at']
+                && (af_menu_section_config()['theme']['container'] ?? null) === null
+                && $key === 'theme_switcher' && $source === 'mybb'
                 && (string)($row['section'] ?? '') === 'settings') {
                 $db->update_query(AF_AM_TABLE_OVERRIDES, ['section'=>'theme'], $where);
                 $row['section'] = 'theme';
             }
             if ($row && (int)$row['created_at'] === (int)$row['updated_at']
+                && in_array((string)$row['container'], ['top','top_links','panel','panel_links','user_links'], true)
                 && ((string)$row['container'] !== (string)$item['default_container']
                     || (string)($row['section'] ?? '') !== (string)$item['section'])) {
                 $db->update_query(AF_AM_TABLE_OVERRIDES, [
@@ -1327,49 +1330,92 @@ function af_advancedmenu_render_theme_widget(array $item = []): string
     return $content;
 }
 
-/** Build the same section tree for all three placement areas. */
+/** Read section placement from the same persisted setting used by ACP.
+ * inc/settings.php can still contain an earlier snapshot in a long-lived opcode cache.
+ */
+function af_menu_reload_section_settings(): void
+{
+    global $db, $mybb;
+    $row = $db->fetch_array($db->simple_select('settings', 'value', "name='af_advancedmenu_sections'", ['limit'=>1]));
+    if ($row && isset($row['value'])) $mybb->settings['af_advancedmenu_sections'] = (string)$row['value'];
+}
+
+/** Single saved hierarchy/order projection for ACP and the public renderer. */
+function af_menu_navigation_model(): array
+{
+    af_menu_reload_section_settings();
+    $config = af_menu_section_config();
+    $sections = $config;
+    $items = [];
+    foreach (af_menu_configured_registry() as $item) {
+        if (af_menu_is_logout($item)) continue;
+        $id = 'p:'.af_menu_provider_identity($item);
+        if (isset($items[$id])) continue;
+        $items[$id] = ['id'=>$id, 'container'=>$item['container'], 'section'=>$item['section'],
+            'sortorder'=>(int)$item['sortorder'], 'custom'=>false, 'data'=>$item];
+    }
+    // Do not let a different cache projection supply custom placement/order.
+    $custom = af_advancedmenu_get_items(true);
+    foreach ($custom as $item) {
+        if (af_menu_is_logout($item)) continue;
+        $id = 'c:'.(int)$item['id'];
+        $items[$id] = ['id'=>$id, 'container'=>af_menu_normalize_container((string)($item['container'] ?? $item['location'])),
+            'section'=>af_menu_normalize_section((string)($item['section'] ?? 'links')),
+            'sortorder'=>(int)$item['sort_order'], 'custom'=>true, 'data'=>$item];
+    }
+    $tree = array_fill_keys(array_keys(af_menu_containers()), []);
+    foreach ($sections as $key => &$section) {
+        $section['container'] = $section['container'] ?? 'user_drawer';
+        $tree[$section['container']][] = ['kind'=>'section', 'id'=>$key, 'children'=>[]];
+    }
+    unset($section);
+    foreach ($items as $id => $item) {
+        $key = $item['section'];
+        $parent = isset($sections[$key]) && ($config[$key]['container'] !== null || $item['container'] === 'user_drawer') ? $key : null;
+        $container = $parent !== null ? $sections[$parent]['container'] : $item['container'];
+        if ($parent !== null) {
+            foreach ($tree[$container] as &$node) if ($node['kind'] === 'section' && $node['id'] === $parent) $node['children'][] = $id;
+            unset($node);
+        } else $tree[$container][] = ['kind'=>'item', 'id'=>$id];
+    }
+    foreach ($tree as &$nodes) {
+        usort($nodes, static function ($a, $b) use ($items, $sections): int {
+            $sort = static fn($n) => $n['kind'] === 'section' ? $sections[$n['id']]['sortorder'] : $items[$n['id']]['sortorder'];
+            return [$sort($a), $a['id']] <=> [$sort($b), $b['id']];
+        });
+        foreach ($nodes as &$node) if ($node['kind'] === 'section') {
+            usort($node['children'], static fn($a,$b) => [$items[$a]['sortorder'],$a] <=> [$items[$b]['sortorder'],$b]);
+        }
+        unset($node);
+    }
+    unset($nodes);
+    return ['items'=>$items, 'sections'=>$sections, 'tree'=>$tree, 'custom'=>$custom];
+}
+
+/** Filter the shared saved tree without applying a second public sort. */
 function af_advancedmenu_navigation_rows(): array
 {
-    $config = af_menu_section_config();
+    $model = af_menu_navigation_model();
     $out = array_fill_keys(array_keys(af_menu_containers()), []);
-    $groups = [];
-    $seen = [];
-    $append = static function (array $item, bool $custom) use (&$out, &$groups, $config): void {
-        if (af_menu_is_logout($item)) return;
-        if (empty($item['enabled']) || !($custom ? af_advancedmenu_item_is_visible($item) : af_menu_item_is_visible($item))) return;
-        $section = af_menu_normalize_section((string)($item['section'] ?? 'links'));
-        $container = af_menu_normalize_container((string)($item['container'] ?? $item['location'] ?? 'main'));
-        $placement = $config[$section]['container'] ?? null;
-        if (isset($config[$section]) && (empty($config[$section]['enabled']) || !af_advancedmenu_item_is_visible(['visibility'=>$config[$section]['visibility']]))) return;
-        $container = $placement ?? $container;
-        $html = $custom ? af_advancedmenu_render_item($item) : af_advancedmenu_render_registry_item($item);
-        if (trim($html) === '') return;
-        $row = ['sort'=>(int)($custom ? $item['sort_order'] : $item['sortorder']),
-            'key'=>$custom ? 'custom_'.(int)$item['id'] : (string)$item['key'], 'html'=>$html];
-        if ($section !== 'none' && ($container === 'user_drawer' || $placement !== null)) {
-            $groups[$container][$section][] = $row;
-        } else {
-            $out[$container][] = $row;
-        }
+    $render = static function (string $id) use ($model): string {
+        $entry = $model['items'][$id]; $item = $entry['data'];
+        if (empty($item['enabled']) || !($entry['custom'] ? af_advancedmenu_item_is_visible($item) : af_menu_item_is_visible($item))) return '';
+        return $entry['custom'] ? af_advancedmenu_render_item($item) : af_advancedmenu_render_registry_item($item);
     };
-    foreach (af_menu_configured_registry() as $item) {
-        $identity = (string)($item['canonical_identity'] ?? af_menu_provider_identity($item));
-        if (isset($seen[$identity])) continue;
-        $seen[$identity] = true;
-        $append($item, false);
-    }
-    foreach (af_advancedmenu_get_items() as $item) $append($item, true);
-    foreach ($groups as $container => $sections) {
-        foreach ($sections as $section => $rows) {
-            usort($rows, static fn($a, $b) => [$a['sort'], $a['key']] <=> [$b['sort'], $b['key']]);
-            $meta = $config[$section];
-            $out[$container][] = ['sort'=>$meta['sortorder'], 'key'=>'section_'.$section,
-                'section'=>$section, 'label'=>$meta['label'], 'icon'=>$meta['icon'],
-                'html'=>implode("\n", array_column($rows, 'html'))];
+    foreach ($model['tree'] as $container => $nodes) foreach ($nodes as $node) {
+        if ($node['kind'] === 'item') {
+            $html = $render($node['id']);
+            if (trim($html) !== '') $out[$container][] = ['sort'=>$model['items'][$node['id']]['sortorder'], 'key'=>$node['id'], 'html'=>$html];
+            continue;
         }
+        $section = $node['id']; $meta = $model['sections'][$section];
+        if (empty($meta['enabled']) || !af_advancedmenu_item_is_visible(['visibility'=>$meta['visibility']])) continue;
+        $children = [];
+        foreach ($node['children'] as $id) { $html = $render($id); if (trim($html) !== '') $children[] = $html; }
+        if (!$children) continue;
+        $out[$container][] = ['sort'=>$meta['sortorder'], 'key'=>'section_'.$section, 'section'=>$section,
+            'label'=>$meta['label'], 'icon'=>$meta['icon'], 'html'=>implode("\n", $children)];
     }
-    foreach ($out as &$rows) usort($rows, static fn($a, $b) => [$a['sort'], $a['key']] <=> [$b['sort'], $b['key']]);
-    unset($rows);
     return $out;
 }
 

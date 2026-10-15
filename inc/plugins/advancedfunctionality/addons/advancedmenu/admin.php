@@ -136,7 +136,9 @@ class AF_Admin_Advancedmenu
         }
 
         // Font Awesome CSS (для превью и чтобы JS мог распарсить список иконок)
-        $faCss = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css';
+        $faRelative = 'inc/plugins/advancedfunctionality/addons/advancedfontawesome/assets/font-awesome-6/css/all.min.css';
+        $faCss = is_file(MYBB_ROOT.$faRelative) ? $bburl.'/'.$faRelative
+            : 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css';
 
         $base = $bburl . '/inc/plugins/advancedfunctionality/addons/advancedmenu/assets';
 
@@ -383,9 +385,7 @@ class AF_Admin_Advancedmenu
                 'location'   => $legacyLocation,
                 'container'  => $logicalContainer,
                 'section'    => $section,
-                // MyBB's insert_query/update_query escape values themselves.
-                // Pre-escaping here stored literal backslashes and broke the
-                // form -> DB -> form/frontend round trip.
+                // Keep raw form values here; escape once at the MyBB DB boundary.
                 'slug'       => $slug,
                 'title'      => $title,
                 'url'        => $url,
@@ -398,10 +398,10 @@ class AF_Admin_Advancedmenu
             ];
 
             if ($isEdit) {
-                $db->update_query(AF_AM_TABLE_ITEMS, $save, "id='".(int)$id."'");
+                $db->update_query(AF_AM_TABLE_ITEMS, af_am_editor_db_values($save), "id='".(int)$id."'");
             } else {
                 $save['created_at'] = TIME_NOW;
-                $db->insert_query(AF_AM_TABLE_ITEMS, $save);
+                $db->insert_query(AF_AM_TABLE_ITEMS, af_am_editor_db_values($save));
             }
 
             if (function_exists('af_advancedmenu_rebuild_cache')) {

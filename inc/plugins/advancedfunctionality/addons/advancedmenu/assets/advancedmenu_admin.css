@@ -306,3 +306,10 @@ input#af-am-icon-input{
 }
 
 .af-am-edit-dialog [hidden] { display:none!important; }
+
+/* Native dialog keeps the reused picker above the editor's modal top layer. */
+dialog.af-am-icp-modal { margin:0; padding:0; max-width:none; max-height:none; color:#243145; }
+dialog.af-am-icp-modal::backdrop { background:rgba(0,0,0,.55); }
+dialog.af-am-icp-modal:not([open]) { display:none; }
+.af-am-edit-dialog .af-am-iconright { flex-wrap:wrap; }
+.af-am-edit-dialog .af-am-iconclear-btn.button { width:auto; }

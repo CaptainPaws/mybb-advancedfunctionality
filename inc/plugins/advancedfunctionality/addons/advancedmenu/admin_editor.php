@@ -2,10 +2,13 @@
 /** ACP tree projection and validation over the existing menu tables. */
 if (!defined('IN_MYBB') || !defined('AF_ADDONS')) { die('No direct access'); }
 
-function af_am_editor_catalog(): array
+function af_am_editor_catalog(?array $model = null): array
 {
+    $model = $model ?? af_menu_navigation_model();
     $items = [];
-    foreach (af_menu_configured_registry() as $item) {
+    foreach ($model['items'] as $entry) {
+        if ($entry['custom']) continue;
+        $item = $entry['data'];
         if (af_menu_is_logout($item)) continue;
         $id = 'p:'.af_menu_provider_identity($item);
         $items[$id] = ['id'=>$id, 'kind'=>'provider', 'key'=>$item['key'], 'source'=>$item['source_addon'],
@@ -19,7 +22,7 @@ function af_am_editor_catalog(): array
             'label','icon','default_container','section','default_sortorder'
         ]));
     }
-    foreach (af_advancedmenu_get_items(true) as $item) {
+    foreach ($model['custom'] as $item) {
         if (af_menu_is_logout($item)) continue;
         $id = 'c:'.(int)$item['id'];
         $items[$id] = ['id'=>$id, 'kind'=>'custom', 'key'=>$item['slug'], 'source'=>'AdvancedMenu', 'type'=>'link',
@@ -33,37 +36,12 @@ function af_am_editor_catalog(): array
 
 function af_am_editor_snapshot(): array
 {
-    $items = af_am_editor_catalog();
-    $sections = af_menu_section_config();
-    $tree = array_fill_keys(array_keys(af_menu_containers()), []);
-    foreach ($sections as $key => &$section) {
-        $section['container'] = $section['container'] ?? 'user_drawer';
-        $tree[$section['container']][] = ['kind'=>'section', 'id'=>$key, 'children'=>[]];
-    }
-    unset($section);
-    foreach ($items as $id => $item) {
-        $key = $item['section'];
-        $explicit = af_menu_section_config()[$key]['container'] ?? null;
-        $parent = isset($sections[$key]) && ($explicit !== null || $item['container'] === 'user_drawer') ? $key : null;
-        $container = $parent !== null ? $sections[$parent]['container'] : $item['container'];
-        if ($parent !== null) {
-            foreach ($tree[$container] as &$node) if ($node['kind'] === 'section' && $node['id'] === $parent) $node['children'][] = $id;
-            unset($node);
-        } else $tree[$container][] = ['kind'=>'item', 'id'=>$id];
-    }
-    foreach ($tree as &$nodes) {
-        usort($nodes, static function ($a, $b) use ($items, $sections) {
-            $sort = static fn($n) => $n['kind'] === 'section' ? $sections[$n['id']]['sortorder'] : $items[$n['id']]['sortorder'];
-            return [$sort($a), $a['id']] <=> [$sort($b), $b['id']];
-        });
-        foreach ($nodes as &$node) if ($node['kind'] === 'section') {
-            usort($node['children'], static fn($a,$b) => [$items[$a]['sortorder'],$a] <=> [$items[$b]['sortorder'],$b]);
-        }
-        unset($node);
-    }
-    unset($nodes);
+    $model = af_menu_navigation_model();
+    $items = af_am_editor_catalog($model);
+    $sections = $model['sections'];
+    $tree = $model['tree'];
     // Include all persisted rows, even unavailable providers, for stale-editor detection.
-    $revision = hash('sha256', serialize([$items, af_menu_section_config(), af_menu_get_overrides(), af_advancedmenu_get_items(true)]));
+    $revision = hash('sha256', serialize([$items, af_menu_section_config(), af_menu_get_overrides(), $model['custom']]));
     return ['items'=>$items, 'sections'=>$sections, 'tree'=>$tree, 'deleted'=>[], 'revision'=>$revision];
 }
 
@@ -162,6 +140,13 @@ function af_am_editor_validate(array $data, array $current): array
     return ['items'=>$items, 'sections'=>$sections, 'deleted'=>array_keys($deleted)];
 }
 
+/** MyBB's DB helpers quote values; strings must be escaped by the caller. */
+function af_am_editor_db_values(array $values): array
+{
+    global $db;
+    return array_map(static fn($value) => is_string($value) ? $db->escape_string($value) : $value, $values);
+}
+
 function af_am_editor_apply(array $plan): void
 {
     global $db, $mybb;
@@ -178,8 +163,8 @@ function af_am_editor_apply(array $plan): void
                     'section'=>$row['section'], 'sort_order'=>$row['sortorder'], 'title'=>$row['label'], 'slug'=>$row['key'],
                     'icon'=>$row['icon'], 'url'=>$row['url'], 'hint'=>$row['hint'], 'visibility'=>$row['visibility'],
                     'enabled'=>$row['enabled'], 'updated_at'=>TIME_NOW];
-                if (str_starts_with($id,'c:')) $db->update_query(AF_AM_TABLE_ITEMS,$save,"id='".(int)substr($id,2)."'");
-                else $db->insert_query(AF_AM_TABLE_ITEMS,$save+['created_at'=>TIME_NOW]);
+                if (str_starts_with($id,'c:')) $db->update_query(AF_AM_TABLE_ITEMS,af_am_editor_db_values($save),"id='".(int)substr($id,2)."'");
+                else $db->insert_query(AF_AM_TABLE_ITEMS,af_am_editor_db_values($save+['created_at'=>TIME_NOW]));
             } else {
                 $source = $db->escape_string($row['source']); $key = $db->escape_string($row['key']);
                 $where = "source_addon='{$source}' AND item_key='{$key}'";
@@ -188,12 +173,13 @@ function af_am_editor_apply(array $plan): void
                     'enabled'=>$row['enabled'],'label_override'=>$row['reset'] ? null : $row['label'],
                     'icon_override'=>$row['reset'] ? null : $row['icon'],
                     'updated_at'=>max(TIME_NOW,(int)($existing['created_at'] ?? TIME_NOW)+1)];
-                if ($existing) $db->update_query(AF_AM_TABLE_OVERRIDES,$save,$where);
-                else $db->insert_query(AF_AM_TABLE_OVERRIDES,$save+['source_addon'=>$row['source'],'item_key'=>$row['key'],'created_at'=>TIME_NOW]);
+                if ($existing) $db->update_query(AF_AM_TABLE_OVERRIDES,af_am_editor_db_values($save),$where);
+                else $db->insert_query(AF_AM_TABLE_OVERRIDES,af_am_editor_db_values($save+['source_addon'=>$row['source'],'item_key'=>$row['key'],'created_at'=>TIME_NOW]));
+                if ($row['reset']) $db->write_query("UPDATE ".TABLE_PREFIX.AF_AM_TABLE_OVERRIDES." SET label_override=NULL, icon_override=NULL WHERE ".$where);
             }
         }
         $encoded = json_encode($plan['sections'],JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-        $db->update_query('settings',['value'=>$encoded],"name='af_advancedmenu_sections'");
+        $db->update_query('settings',af_am_editor_db_values(['value'=>$encoded]),"name='af_advancedmenu_sections'");
         $db->write_query('COMMIT');
     } catch (Throwable $error) {
         $db->write_query('ROLLBACK');
