@@ -6,7 +6,7 @@ function af_asb_templates(): array {
 }
 function af_asb_defaults(): array {
     $image=['enabled'=>true,'url'=>'','media_id'=>null];
-    return ['version'=>1,'template'=>'minimal','title'=>'','show_title'=>true,'subtitle'=>'','show_subtitle'=>true,'text'=>'','status'=>'','show_status'=>true,'background'=>$image,'images'=>[$image,$image,$image],'buttons'=>[]];
+    return ['version'=>1,'template'=>'minimal','title'=>'','show_title'=>true,'subtitle'=>'','show_subtitle'=>true,'show_divider'=>true,'text'=>'','status'=>'','show_status'=>true,'background'=>$image,'images'=>[$image,$image,$image],'buttons'=>[]];
 }
 function af_asb_limits(): array {
     $out=[];foreach(['title'=>100,'subtitle'=>100,'text'=>500,'status'=>100] as $key=>$default) $out[$key]=max(1,min(10000,(int)($GLOBALS['mybb']->settings['af_advancedsignaturebuilder_signature_'.$key.'_limit']??$default)));
@@ -30,7 +30,7 @@ function af_asb_validate(array $v,int $uid,bool $checkMedia=true,bool $publish=f
     $d=af_asb_defaults();if (array_diff(array_keys($v),array_keys($d))) throw new InvalidArgumentException('Неизвестное поле конструктора.');
     $v=array_replace($d,$v);
     if ($v['version']!==1 || !is_string($v['template']) || !isset(af_asb_templates()[$v['template']])) throw new InvalidArgumentException('Неизвестный шаблон подписи.');
-    foreach (['show_title','show_subtitle','show_status'] as $key) if (!is_bool($v[$key])) throw new InvalidArgumentException('Некорректный переключатель.');
+    foreach (['show_title','show_subtitle','show_status','show_divider'] as $key) if (!is_bool($v[$key])) throw new InvalidArgumentException('Некорректный переключатель.');
     foreach (af_asb_limits() as $key=>$max) {
         if (!is_string($v[$key]) || mb_strlen($v[$key])>$max || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/u',$v[$key]) || ($key!=='text' && preg_match('/[\r\n]/',$v[$key]))) throw new InvalidArgumentException('Превышен лимит или недопустимый текст: '.$key.' (до '.$max.').');
         $v[$key]=str_replace(["\r\n","\r"],"\n",$v[$key]);
@@ -81,7 +81,7 @@ function af_asb_compile(array $v): string {
 function af_asb_seed_model(array $raw): array {
     $out=af_asb_defaults();
     foreach (['title','subtitle','text','status'] as $key) if (is_string($raw[$key]??null)) $out[$key]=$raw[$key];
-    foreach (['show_title','show_subtitle','show_status'] as $key) if (is_bool($raw[$key]??null)) $out[$key]=$raw[$key];
+    foreach (['show_title','show_subtitle','show_status','show_divider'] as $key) if (is_bool($raw[$key]??null)) $out[$key]=$raw[$key];
     if (is_string($raw['template']??null) && isset(af_asb_templates()[$raw['template']])) $out['template']=$raw['template'];
     foreach (['background',0,1,2] as $slot) {
         $src=$slot==='background'?($raw['background']??[]):($raw['images'][$slot]??[]);

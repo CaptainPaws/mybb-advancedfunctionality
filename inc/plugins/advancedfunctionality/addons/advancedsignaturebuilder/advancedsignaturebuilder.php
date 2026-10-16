@@ -7,6 +7,7 @@ function af_advancedsignaturebuilder_install(): void { af_advancedsignaturebuild
 function af_advancedsignaturebuilder_activate(): void {
     af_asb_install_schema();af_asb_install_settings();
     if (function_exists('rebuild_settings')) rebuild_settings();
+    af_asb_migrate_builder_stylesheet_mode();
     if (function_exists('af_sync_theme_stylesheets')) af_sync_theme_stylesheets(false,AF_ASB_ID);
 }
 function af_advancedsignaturebuilder_upgrade(): void { af_advancedsignaturebuilder_activate(); }
@@ -29,10 +30,13 @@ function af_advancedsignaturebuilder_init(): void {
     $plugins->add_hook('usercp_do_editsig_end','af_asb_publish_end',1000);
     $plugins->add_hook('usercp_do_editsig_end','af_asb_saved_redirect',1100);
     foreach (['postbit','postbit_prev','postbit_pm'] as $hook) $plugins->add_hook($hook,'af_asb_postbit',110);
-    $plugins->add_hook('pre_output_page','af_asb_pre_output',1400);
     if (function_exists('af_adaptivethemeframework_register_component')) af_adaptivethemeframework_register_component([
         'owner'=>AF_ASB_ID,'key'=>'signature_builder','slot'=>'ucp.content','section_title'=>'Конструктор подписи',
         'context'=>static fn($ctx)=>($ctx['route']['action']??'')==='editsig',
         'renderer'=>static fn()=> (string)($GLOBALS['af_asb_builder_html']??''),
+        'assets'=>'af_asb_prepare_editor_assets',
     ]);
 }
+
+/** Canonical AF owner callback: runs before asset collection, bundling and CSS normalization. */
+function af_advancedsignaturebuilder_pre_output(string &$page): void { af_asb_pre_output($page); }

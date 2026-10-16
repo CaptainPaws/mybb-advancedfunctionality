@@ -2594,6 +2594,14 @@ function af_hard_normalize_stylesheet_link_tags(string $page): string
             }
 
             $exactKey = strtolower($cleanPath);
+            // MyBB's DB fallback serves distinct stylesheets from one path.
+            // Dropping the stylesheet ID collapses all css.php links into one.
+            if (strtolower(basename($cleanPath)) === 'css.php') {
+                parse_str((string)parse_url($href, PHP_URL_QUERY), $query);
+                if (isset($query['stylesheet']) && is_scalar($query['stylesheet']) && (int)$query['stylesheet'] > 0) {
+                    $exactKey .= '?stylesheet='.(int)$query['stylesheet'];
+                }
+            }
 
             // ЖЁСТКИЙ САНИТАЙЗЕР:
             // любой AF addon css-file режем, если theme-mode не разрешает file delivery.

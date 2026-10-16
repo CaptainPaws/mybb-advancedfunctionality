@@ -43,7 +43,7 @@ ob_start(); ?>
 <?php if($key==='text'): ?><textarea id="af-asb-text" rows="3" maxlength="<?= $limits[$key] ?>" data-asb-text="text"><?= $e($model[$key]) ?></textarea>
 <?php else: ?><input type="text" id="af-asb-<?= $key ?>" maxlength="<?= $limits[$key] ?>" data-asb-text="<?= $key ?>" value="<?= $e($model[$key]) ?>"><?php endif ?>
 <output data-asb-count="<?= $key ?>"><?= mb_strlen($model[$key]).'/'.$limits[$key] ?></output></div>
-<?php if($key!=='text'): ?><label class="af-asb__switch"><input type="checkbox" data-asb-show="<?= $key ?>" <?= $model['show_'.$key]?'checked':'' ?>><span>Показывать <?= $key==='title'?'заголовок':'подзаголовок' ?></span></label><?php endif ?>
+<?php if($key!=='text'): ?><label class="af-asb__switch"><input type="checkbox" data-asb-show="<?= $key ?>" <?= $model['show_'.$key]?'checked':'' ?>><span>Показывать <?= $key==='title'?'заголовок':'подзаголовок' ?></span></label><?php else: ?><label class="af-asb__switch"><input type="checkbox" data-asb-show="divider" <?= $model['show_divider']?'checked':'' ?>><span>Показывать разделитель</span></label><?php endif ?>
 </div><?php endforeach ?>
 </section>
 <section class="af-asb__panel"><header class="af-asb__heading"><span class="af-asb__step" aria-hidden="true">3</span><div><h2>Дополнительные поля</h2><p>Добавьте изображения, ссылки и дополнительную информацию. Все поля необязательны.</p></div></header>

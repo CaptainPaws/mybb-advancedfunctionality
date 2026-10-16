@@ -1,3 +1,5 @@
+> Исправление доставки UI для 1.0.2 и подтверждённая причина старого Theme CSS: [отчёт](signature-builder-css-delivery-fix.md).
+
 # AdvancedSignatureBuilder: самостоятельный конструктор подписи
 
 ## Причина поломки 8bd475a9

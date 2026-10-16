@@ -21,7 +21,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.32.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.32.1');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -2373,7 +2373,8 @@ function af_adaptivethemeframework_component_identity(string $owner, string $key
  * Register one server-rendered component.
  *
  * Required fields: owner, key, slot and a callable renderer (or static html).
- * Optional fields: sortorder, visibility, context, legacy and legacy_position.
+ * Optional fields: sortorder, visibility, context, legacy, legacy_position and
+ * assets (owner callback preparing permitted assets before the parent template).
  * `legacy` is an explicit value/callback, not a DOM marker lookup. This permits
  * a temporary dual render while an addon migrates its old template variable.
  */
@@ -2527,6 +2528,12 @@ function af_adaptivethemeframework_render_slot(string $slot, array $context = []
         $rendered = array_key_exists('html', $component)
             ? (string)$component['html']
             : af_adaptivethemeframework_render_value($component['renderer'], $context, $component);
+        // Let the content owner prepare its permitted Theme/File assets while
+        // the UserCP parent still has not evaluated {$headerinclude}. Empty or
+        // ineligible providers must not load their editor runtime.
+        if (trim($rendered) !== '' && is_callable($component['assets'] ?? null)) {
+            $component['assets']($context, $component);
+        }
         $legacy = af_adaptivethemeframework_render_value($component['legacy'], $context, $component);
         $output = $component['legacy_position'] === 'before'
             ? $legacy . $rendered

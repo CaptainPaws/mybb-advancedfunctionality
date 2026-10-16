@@ -31,6 +31,7 @@ function af_asb_prepare_page(): void {
     $GLOBALS['af_asb_builder_html']=af_asb_component();
     if ($GLOBALS['af_asb_builder_html']==='') return;
     if (function_exists('af_adaptivethemeframework_presentation_is_active') && af_adaptivethemeframework_presentation_is_active()) return;
+    af_asb_prepare_editor_assets();
     // Explicit stock-MyBB fallback. cache accepts RAW template text, never templates->get() output.
     $templates->cache['usercp_editsig']=file_get_contents(AF_ASB_BASE.'templates/usercp_fallback.html');
 }

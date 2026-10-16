@@ -39,8 +39,9 @@ af_advancedsignaturebuilder_init();$hooks=$plugins->hooks;af_advancedsignaturebu
 check_sig($plugins->hooks===$hooks&&count($hooks['usercp_start'][100])===1,'One hook registration, even on repeated bootstrap');
 $templates=new NativeContractTemplates;
 $source=file_get_contents(AF_ADDONS.'adaptivethemeframework/templates/usercp_editsig.html');$templates->cache['usercp_editsig']=$source;
-$header='<header id="preserved-menu">AdvancedMenu</header>';$footer='<footer>Footer</footer>';$error='';$sig='[b]Native[/b]';$smilieinserter='';$codebuttons='<script data-native-editor>native()</script>';
+$headerinclude='';$header='<header id="preserved-menu">AdvancedMenu</header>';$footer='<footer>Footer</footer>';$error='';$sig='[b]Native[/b]';$smilieinserter='';$codebuttons='<script data-native-editor>native()</script>';
 af_asb_prepare_page();af_adaptivethemeframework_compose_ucp_profile_surface();
+check_sig(str_contains($headerinclude,'af_asb_builder.css')&&str_contains($headerinclude,'signature-builder.js'),'ATF slot prepares owner assets before MyBB evaluates headerinclude');
 check_sig($templates->cache['usercp_editsig']===$source,'ASB must not rewrite ATF-owned page source or persist a lease');
 eval('$rendered = "'.$templates->get('usercp_editsig').'";');
 foreach(['class="pun atf-page-shell','id="preserved-menu"','atf-ucp-navigation--global','atf-ucp-navigation--local','aria-current="page"','class="af-asb__layout"','data-af-asb-builder','name="af_signature_builder"','name="updateposts"','value="do_editsig"','Конструктор подписи','data-asb-text="title"','data-asb-image="3"'] as $needle)check_sig(str_contains($rendered,$needle),'Rendered UserCP contract missing '.$needle);
@@ -49,7 +50,7 @@ check_sig(!str_contains($rendered,'\\"')&&!str_contains($rendered,'data-native-e
 $withAssets=$rendered;af_asb_pre_output($withAssets);$once=$withAssets;af_asb_pre_output($withAssets);
 check_sig($withAssets===$once&&str_contains($withAssets,'/advancedsignaturebuilder/assets/signature-builder.js'),'Owner-owned editor assets, only once');
 $public='<html><head></head><body><section class="af-asb-signature"></section></body></html>';af_asb_pre_output($public);
-check_sig(str_contains($public,'signature-view.css')&&!str_contains($public,'signature-builder.js')&&!str_contains($public,'signature-builder.css'),'Public signatures must not load the constructor runtime');
+check_sig(str_contains($public,'signature-view.css')&&!str_contains($public,'signature-builder.js')&&!str_contains($public,'af_asb_builder.css'),'Public signatures must not load the constructor runtime');
 // Reproduce the predecessor's error to ensure this test detects escaped-cache corruption.
 $templates->cache['probe']='<form><input value="enable"></form>';
 $templates->cache['probe']=$templates->get('probe',1,0);

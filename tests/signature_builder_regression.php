@@ -39,6 +39,8 @@ $validated=af_asb_validate($v,7);$portable=af_asb_compile($validated);
 check_sig(!str_starts_with($portable,'{')&&str_contains($portable,'[url=')&&str_contains($portable,'[img]'),'Portable MyBB signature, not JSON');
 check_sig(str_contains($portable,'&#91;b&#93;')&&!str_contains($portable,'<script>'),'Plain field text must not become HTML/BBCode');
 foreach(array_keys(af_asb_templates()) as $template){$state=$v;$state['template']=$template;$state=af_asb_validate($state,7);$html=af_asb_render($state);check_sig(str_contains($html,'--'.$template)&&!str_contains($html,'<script>')&&str_contains($html,'&lt;script&gt;'),'Shared safe renderer: '.$template);check_sig($state['images']===$validated['images'],'Template switching must retain unused data');}
+$off=$validated;$off['show_divider']=false;check_sig(str_contains(af_asb_render($validated),'af-asb-signature__divider')&&!str_contains(af_asb_render($off),'af-asb-signature__divider'),'Divider control affects shared renderer');
+$legacyModel=$validated;unset($legacyModel['show_divider']);check_sig(af_asb_validate($legacyModel,7)['show_divider']===true,'Old models inherit divider default without storage migration');
 $preview=af_asb_preview($validated,7);check_sig(str_contains($preview['html'],'<details open')&&str_contains($preview['html'],'atf-gothic-frame'),'Use existing open signature frame in preview');
 $state=$v;$state['background']['url']='javascript:alert(1)';reject_sig(fn()=>af_asb_validate($state,7));
 $state=$v;$state['buttons'][0]['url']='data:text/html,bad';reject_sig(fn()=>af_asb_validate($state,7));
