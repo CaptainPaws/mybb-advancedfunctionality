@@ -21,7 +21,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.31.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.31.1');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1494,9 +1494,7 @@ function af_adaptivethemeframework_preload_postbit_data(array &$post): void
 function af_adaptivethemeframework_compose_postbit(array &$post): void
 {
     // One static corner shape in CSS, reflected four times; no per-post SVG IDs/runtime.
-    $post['af_atf_gothic_frame'] = '<span class="atf-gothic-frame" aria-hidden="true">'
-        . '<i class="atf-gothic-corner atf-gothic-corner--tl"></i><i class="atf-gothic-corner atf-gothic-corner--tr"></i>'
-        . '<i class="atf-gothic-corner atf-gothic-corner--bl"></i><i class="atf-gothic-corner atf-gothic-corner--br"></i></span>';
+    $post['af_atf_gothic_frame'] = af_adaptivethemeframework_gothic_frame();
     $post['af_atf_signature_html']=af_adaptivethemeframework_signature_markup((string)($post['signature']??''),(string)($post['pid']??'preview'),$post['af_atf_gothic_frame']);
     // Primary MyBB avatar and APF secondary avatar are separate surfaces.
     // Never overwrite $post['useravatar'] here.

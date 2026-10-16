@@ -3,7 +3,7 @@
 return [
     'id'          => 'advancedprofileui',
     'name'        => 'AdvancedProfileUI',
-    'version'     => '1.1.0',
+    'version'     => '1.2.0',
     'author'      => 'CaptainPaws',
     'authorsite'  => 'https://github.com/CaptainPaws',
     'description' => 'Каркас кастомных шаблонов member_profile и postbit_classic с безопасным override/restore.',
@@ -21,7 +21,10 @@ return [
     'frontend' => [
         'mode' => 'contextual',
         'routes' => [['script'=>'apstudio.php'],['script'=>'usercp.php','action'=>'editsig'],['script'=>'usercp.php','action'=>'do_editsig']],
-        'resources'=>['signature_studio'=>['mode'=>'contextual','routes'=>[['script'=>'apstudio.php']],'directory_fallback'=>false]],
+        'resources'=>[
+            'signature_studio'=>['mode'=>'contextual','routes'=>[['script'=>'apstudio.php']],'directory_fallback'=>false],
+            'signature_builder'=>['mode'=>'contextual','routes'=>[['script'=>'usercp.php','action'=>'editsig'],['script'=>'usercp.php','action'=>'do_editsig']],'directory_fallback'=>false],
+        ],
         'response_rules' => [
             ['has_apui_output' => true],
         ],
@@ -40,6 +43,8 @@ return [
             'stylesheet_name' => 'af_advancedprofileui.css',
             'attach' => [
                 ['file' => 'member.php'],
+                ['file'=>'usercp.php','action'=>'editsig'],
+                ['file'=>'usercp.php','action'=>'do_editsig'],
                 ['file' => 'showthread.php'],
             ],
             'enabled_setting' => 'af_advancedprofileui_enabled',

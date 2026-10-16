@@ -116,6 +116,7 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false): string
             $layers[]='linear-gradient('.($v['overlay_angle']??180).'deg,color-mix(in srgb,'.$color.' '.(100*$intensity*($v['overlay_start']??1)).'%,transparent),color-mix(in srgb,'.$color.' '.(100*$intensity*($v['overlay_end']??1)).'%,transparent))';
         } elseif (!array_key_exists('overlay_mode',$v) && isset($v['darkening'])) $layers[]='linear-gradient(rgb(0 0 0 / '.$v['darkening'].'),rgb(0 0 0 / '.$v['darkening'].'))';
         if (isset($v['gradient_color'])) $layers[]='linear-gradient('.($v['gradient_angle']??135).'deg,color-mix(in srgb,'.($v['background_color']??'#000000').' '.(100*($v['background_opacity']??.18)).'%,transparent),color-mix(in srgb,'.$v['gradient_color'].' '.(100*($v['background_opacity']??.18)).'%,transparent))';
+        if ($key==='signature') $rule[]='--af-sig-overlay:'.($layers?implode(',',$layers):'none').';';
         $image=af_aa_postbit_image($v,'background');
         if ($image!=='') $layers[]=af_aa_css_url_value($image);
         elseif (array_key_exists('background_media_id',$v) || array_key_exists('background_url',$v)) $layers[]='none';

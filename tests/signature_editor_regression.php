@@ -39,10 +39,11 @@ foreach (['name="signature"','name="my_post_key"','value="do_editsig"','name="pr
 sig_check(substr_count($compact,'<textarea')===1 && !str_contains($compact,'atf_ucp_global_navigation'),'Compact form must retain exactly one native input');
 sig_check(af_apui_signature_embed_source('<form><textarea name="other"></textarea></form>')===null,'Unknown templates must stay untouched');
 $block=af_apui_signature_studio_block();
-sig_check(str_contains($block,'data-af-signature-src')&&!preg_match('~<iframe[^>]*\ssrc=~',$block),'APStudio must not fetch an editor until opened');
+sig_check(str_contains($block,'Открыть конструктор подписи')&&!str_contains($block,'<iframe'),'APStudio links to the content constructor without embedding a second editor');
 sig_check(!str_contains($headerinclude,'sceditor')&&!str_contains($headerinclude,'advancededitor.js'),'Studio bootstrap must stay lightweight');
 sig_check(af_advancededitor_is_signature_page()&&!af_advancededitor_assets_disabled_for_current_page(),'Native signature surface must override former blanket UserCP exclusion');
 $page='<html><head></head><body><form action="usercp.php" method="post"><input name="my_post_key" value="signature-key"><textarea name="signature" id="signature">[b]Draft &amp; GIF[/b]</textarea><button name="preview">Preview</button></form></body></html>';
+sig_check(!af_advancededitor_response_facts(str_replace('<form','<form data-af-signature-builder',$page))['has_supported_editor'],'No full editor in constructor');
 $facts=af_advancededitor_response_facts($page);sig_check($facts['has_signature_editor'] && $facts['has_supported_editor'],'Signature response facts');
 af_advancededitor_pre_output($page);
 sig_check(substr_count($page,'data-af-editor-shell="1"')===1 && substr_count($page,'<textarea')===1,'One native textarea and one toolbar');
@@ -61,4 +62,4 @@ $mybb->input['action']='do_editsig';
 try{af_apui_signature_saved();throw new LogicException('Expected native post-save redirect');}catch(RuntimeException $e){sig_check(str_contains($e->getMessage(),'af_signature_saved=1'),'Preserve embedded context after native save');}
 $mybb->user['suspendsignature']=1;$mybb->user['suspendsigtime']=0;
 sig_check(!af_apui_signature_can_edit()&&af_apui_signature_studio_block()==='','Suspended signatures must retain native access restrictions');
-echo "Signature checks passed: collapsed independent disclosures, unchanged parsed content/GIF, native form/CSRF/error fields, lazy studio, toolbar/fonts and idempotent shell.\n";
+echo "Signature checks passed: collapsed independent disclosures, unchanged parsed content/GIF, native form/CSRF/error fields, studio content link, toolbar/fonts and idempotent shell.\n";

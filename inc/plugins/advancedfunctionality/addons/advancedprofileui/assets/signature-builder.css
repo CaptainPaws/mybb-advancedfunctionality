@@ -1,0 +1,34 @@
+.af-sig-builder { min-width: 0; color: var(--atf-color-text,#d8e4f3); }
+.af-sig-builder__columns { display: grid; grid-template-columns: minmax(0,1.6fr) minmax(0,1fr); gap: 1rem; align-items: start; }
+.af-sig-builder__columns > *, .af-sig-builder__columns > * > * { min-width: 0; }
+.af-sig-builder__panel, .af-sig-builder__legacy { border: 1px solid var(--atf-color-border,#344b64); background: var(--atf-color-surface,#122235); border-radius: .75rem; padding: 1rem; margin-block-end: 1rem; }
+.af-sig-builder h2 { font-size: 1.1rem; margin: 0 0 .6rem; }
+.af-sig-builder p, .af-sig-builder small { line-height: 1.5; }
+.af-sig-builder__templates { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: .6rem; }
+.af-sig-builder__template { display: flex; flex-direction: column; gap: .4rem; border: 1px solid var(--atf-color-border,#344b64); border-radius: .5rem; padding: .65rem; cursor: pointer; }
+.af-sig-builder__template.is-active { border-color: var(--atf-color-accent,#6faeea); box-shadow: 0 0 0 1px var(--atf-color-accent,#6faeea); }
+.af-sig-builder__mini { display: grid; align-content: center; gap: .3rem; min-height: 3rem; padding: .4rem; background: var(--atf-color-page-subtle,#0a1726); }
+.af-sig-builder__mini span { display: block; height: .15rem; background: var(--atf-color-border,#344b64); margin-inline: .4rem; }
+.af-sig-builder__mini--gallery { grid-template-columns: repeat(3,minmax(0,1fr)); }.af-sig-builder__mini--gallery span { height: 2rem; margin: 0; }
+.af-sig-builder__mini--quote { border-inline-start: 3px solid var(--atf-color-accent,#6faeea); }
+.af-sig-builder__mini--card { grid-template-columns: 1fr 2fr; }.af-sig-builder__mini--card span:first-child { height: 2rem; grid-row: span 2; }
+.af-sig-builder__field { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: .7rem; margin-block: .8rem; }
+.af-sig-builder__field label:first-child { min-width: 0; display: grid; gap: .35rem; }.af-sig-builder__field output { text-align: end; font-size: .75rem; }
+.af-sig-builder :is(input[type=text],input[type=url],textarea) { box-sizing: border-box; width: 100%; max-width: 100%; padding: .6rem; border: 1px solid var(--atf-color-border,#344b64); border-radius: .4rem; background: var(--atf-color-page-subtle,#0a1726); color: inherit; font: inherit; }
+.af-sig-builder input[type=checkbox],.af-sig-builder input[type=radio] { width: auto; margin-inline-end: .4rem; }
+.af-sig-builder__images { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .6rem; }
+.af-sig-builder__image { min-width: 0; margin-block: .6rem; border: 1px solid var(--atf-color-border,#344b64); padding: .6rem; }
+.af-sig-builder__image img { display: block; width: 100%; max-height: 6rem; object-fit: contain; margin-block: .5rem; }.af-sig-builder__image img[hidden] { display: none; }
+.af-sig-builder button,.af-sig-builder .atf-button { cursor: pointer; font: inherit; padding: .6rem .8rem; border: 1px solid var(--atf-color-border,#344b64); border-radius: .4rem; color: inherit; background: var(--atf-color-page-subtle,#0a1726); }
+.af-sig-builder button:disabled { opacity: .5; cursor: default; }
+.af-sig-builder__image button { margin-block-start: .4rem; }
+.af-sig-builder__link { display: grid; grid-template-columns: minmax(5rem,1fr) minmax(5rem,1.5fr) auto auto auto; gap: .35rem; margin-block: .5rem; }
+.af-sig-builder__actions { display: flex; flex-wrap: wrap; justify-content: end; gap: .75rem; padding-block: 1rem; }
+.af-sig-builder fieldset > label { display: block; margin-block: .4rem; }
+.af-sig-builder pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.af-sig-builder [data-af-sig-preview] { min-width: 0; overflow-wrap: anywhere; }.af-sig-builder #aa-studio-preview > .atf-post { margin: 0; border: 0; background: transparent; box-shadow: none; }
+.af-sig-builder [data-af-sig-preview] .atf-post__signature-spoiler { margin-inline: 0; }
+@media(max-width:1000px){.af-sig-builder__columns{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:650px){.af-sig-builder__templates,.af-sig-builder__images{grid-template-columns:repeat(2,minmax(0,1fr))}.af-sig-builder__field{grid-template-columns:minmax(0,1fr)}.af-sig-builder__link{grid-template-columns:minmax(0,1fr) auto auto auto}.af-sig-builder__link input[type=url]{grid-column:1/-1;grid-row:2}}
+.af-sig-builder textarea[hidden] { display: none; }
+.af-sig-builder__legacy img { max-width: 100%; height: auto; }

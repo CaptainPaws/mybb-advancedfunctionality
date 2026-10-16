@@ -68,6 +68,7 @@
   window.addEventListener('pageshow',event=>{if(event.persisted)reload().catch(showError);});
   window.addEventListener('focus',()=>{if(!dirty)reload().catch(showError);});
   $('aa-avatar-fields').hidden=true;if($('aa-canvas-fieldset'))$('aa-canvas-fieldset').hidden=!surface.canvas;
+  const requestedComponent=new URLSearchParams(location.search).get('component');if(requestedComponent&&Object.hasOwn(selectors,requestedComponent))component=requestedComponent;
   $('aa-component').value=component;
   const previewHost=$('aa-studio-preview');if(target==='profile')previewHost.setAttribute('data-af-element-effect-host','profile-page');
   if(target==='sheet'){previewHost.classList.add('af-aa-context--sheet','af-apui-surface-body');previewHost.setAttribute('data-af-element-effect-host','sheet');}

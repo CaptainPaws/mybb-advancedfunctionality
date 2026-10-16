@@ -1,5 +1,5 @@
 <?php
-/** APStudio embeds the existing UserCP form; no second save path or signature table. */
+/** APStudio links to the content constructor; legacy embed helpers remain for old links. */
 if (!defined('IN_MYBB')) die('No direct access');
 
 function af_apui_signature_can_edit(): bool
@@ -22,15 +22,7 @@ function af_apui_signature_studio_block(): string
     global $mybb,$headerinclude;
     if (!af_apui_is_enabled() || !af_apui_signature_can_edit()) return '';
     if (function_exists('af_frontend_asset_allowed') && !af_frontend_asset_allowed(AF_APUI_ID,'signature_studio')) return '';
-    $base=rtrim((string)$mybb->settings['bburl'],'/');
-    $assets=$base.'/inc/plugins/advancedfunctionality/addons/advancedprofileui/assets/';
-    $version=max(filemtime(__DIR__.'/../assets/signature-editor.js'),filemtime(__DIR__.'/../assets/signature-editor.css'));
-    $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni($assets.'signature-editor.css?v='.$version).'">'
-        .'<script src="'.htmlspecialchars_uni($assets.'signature-editor.js?v='.$version).'" defer></script>';
-    return '<section class="af-apui-signature-editor"><h2>Подпись</h2>'
-        .'<details data-af-apui-signature-editor><summary>Редактировать подпись</summary>'
-        .'<iframe title="Редактор подписи" data-af-signature-src="'.htmlspecialchars_uni($base.'/usercp.php?action=editsig&af_apui_signature_embed=1').'" referrerpolicy="same-origin"></iframe>'
-        .'</details><noscript><a href="'.htmlspecialchars_uni($base.'/usercp.php?action=editsig').'">Редактировать подпись в UserCP</a></noscript></section>';
+    return '<section class="af-apui-signature-editor"><h2>Подпись</h2><p>Содержимое и композиция подписи редактируются в UserCP.</p><a href="usercp.php?action=editsig">Открыть конструктор подписи</a></section>';
 }
 
 /** Derive a compact document from this theme's native form, retaining its controls and placeholders. */
@@ -62,6 +54,7 @@ function af_apui_signature_embed_template(): void
 /** Called only by MyBB after verify_signature, CSRF and the native users.signature update. */
 function af_apui_signature_saved(): void
 {
+    if (!empty($GLOBALS['af_apui_sig_committed'])) { redirect('usercp.php?action=editsig&af_sig_saved=1',(string)($GLOBALS['lang']->redirect_sigupdated??'Подпись сохранена.'));return;}
     if (!af_apui_signature_embed_requested() || !af_apui_signature_can_edit()) return;
     redirect('usercp.php?action=editsig&af_apui_signature_embed=1&af_signature_saved=1',(string)($GLOBALS['lang']->redirect_sigupdated??'Подпись сохранена.'));
 }
