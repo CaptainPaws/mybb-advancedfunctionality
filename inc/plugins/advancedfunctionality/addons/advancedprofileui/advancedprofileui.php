@@ -22,15 +22,12 @@ define('AF_APUI_ASSET_MARK', '<!--af_apui_assets-->');
 define('AF_APUI_THEME_STYLESHEET_LOGICAL_ID', 'advancedprofileui_main');
 
 require_once AF_APUI_BASE . 'modules/profile_providers.php';
-require_once AF_APUI_BASE . 'modules/signature_editor.php';
-require_once AF_APUI_BASE . 'modules/signature_builder.php';
 
 function af_advancedprofileui_install(): void
 {
     global $db;
 
     af_apui_ensure_schema();
-    af_apui_sig_install();
     af_apui_ensure_settings();
     af_apui_apply_overrides();
     if (function_exists('af_sync_theme_stylesheets')) {
@@ -45,7 +42,6 @@ function af_advancedprofileui_install(): void
 function af_advancedprofileui_activate(): void
 {
     af_apui_ensure_schema();
-    af_apui_sig_install();
     af_apui_ensure_settings();
     af_apui_apply_overrides();
     if (function_exists('af_sync_theme_stylesheets')) {
@@ -92,10 +88,6 @@ function af_apui_ensure_settings(): void
     af_apui_ensure_setting_group();
 
     $definitions = [
-        ['signature_title_limit','Подпись: заголовок','Максимум символов заголовка; MyBB siglength остаётся окончательным ограничением.','numeric','100',100],
-        ['signature_subtitle_limit','Подпись: подзаголовок','Максимум символов подзаголовка.','numeric','100',101],
-        ['signature_text_limit','Подпись: текст','Максимум символов основного текста.','numeric','500',102],
-        ['signature_status_limit','Подпись: статус','Максимум символов заключительной фразы.','numeric','100',103],
         ['enabled', 'Включить AdvancedProfileUI', 'Включает подмену шаблонов member_profile и postbit_classic и подключение ассетов.', 'yesno', '1', 1],
         ['css_delivery_mode', 'Режим доставки CSS (file/theme/auto)', "file — CSS из файла аддона; theme — CSS из theme stylesheet; auto — theme stylesheet с fallback на file.", "select\nfile=File (legacy)\ntheme=Theme stylesheet\nauto=Auto (theme -> file fallback)", 'auto', 9],
         ['member_profile_body_cover_url', 'member_profile: фон body (большое изображение)', 'URL большого фонового изображения для body на странице профиля.', 'text', '', 2],
@@ -270,12 +262,6 @@ function af_apui_register_hooks(): void
         return;
     }
 
-    $plugins->add_hook('usercp_start','af_apui_sig_start',100);
-    $plugins->add_hook('usercp_do_editsig_start','af_apui_sig_publish_start',1000);
-    $plugins->add_hook('usercp_do_editsig_end','af_apui_sig_publish_end',1000);
-    foreach (['postbit','postbit_prev','postbit_pm'] as $signatureHook) $plugins->add_hook($signatureHook,'af_apui_sig_postbit',110);
-    $plugins->add_hook('usercp_editsig_end','af_apui_sig_page',1100);
-    $plugins->add_hook('usercp_do_editsig_end','af_apui_signature_saved',1100);
     $plugins->add_hook('member_profile_end', 'af_apui_member_profile_end', 5);
 
     // ВАЖНО: ставим поздний приоритет, чтобы другие плагины успели
@@ -2358,8 +2344,6 @@ function af_apui_pre_output_page(string &$page): void
             AF_APUI_MARKER_THREAD_START,
             'af-apui-profile-page',
             'af-apui-postbit',
-            'af-apui-signature-composition',
-            'data-af-signature-builder',
             'af-apui-tab',
 
             'af-apui-surface-body',

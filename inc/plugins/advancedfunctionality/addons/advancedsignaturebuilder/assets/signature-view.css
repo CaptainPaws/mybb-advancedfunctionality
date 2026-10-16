@@ -1,0 +1,21 @@
+/* Signature composition only. Colours, typography, links and masks inherit Appearance. */
+.af-asb-signature { position: relative; isolation: isolate; min-width: 0; overflow-wrap: anywhere; }
+.af-asb-signature__backdrop { position: absolute; z-index: -1; inset: 0; pointer-events: none; overflow: hidden; }
+.af-asb-signature__backdrop img { width: 100%; height: 100%; max-width: 100%; object-fit: cover; }
+.af-asb-signature__backdrop::after { content: ""; position: absolute; inset: 0; background-image: var(--af-sig-overlay,none); }
+.af-asb-signature__layout { position: relative; min-width: 0; padding: 1rem; }
+.af-asb-signature__copy { min-width: 0; }
+.af-asb-signature__copy :is(h3,p,blockquote) { color: inherit; font-family: inherit; font-size: inherit; font-weight: inherit; line-height: inherit; margin: .5em 0; }
+.af-asb-signature__copy .af-asb-signature__title { text-wrap: balance; font-size: 1.2em; }
+.af-asb-signature__links { display: flex; flex-wrap: wrap; justify-content: inherit; gap: .5rem; margin-block: .8rem; }
+.af-asb-signature__button { display: inline-block; max-width: 100%; box-sizing: border-box; border: 1px solid currentColor; padding: .4em .7em; color: inherit; font: inherit; text-decoration: none; overflow-wrap: anywhere; }
+.af-asb-signature__button:hover { text-decoration: underline; }
+.af-asb-signature__images { display: flex; gap: .5rem; min-width: 0; }
+.af-asb-signature__images img { display: block; width: 100%; max-width: 100%; min-width: 0; height: auto; object-fit: contain; align-self: start; }
+.af-asb-signature--minimal .af-asb-signature__layout,.af-asb-signature--quote .af-asb-signature__layout { text-align: center; }
+.af-asb-signature--minimal .af-asb-signature__links,.af-asb-signature--quote .af-asb-signature__links { justify-content: center; }
+.af-asb-signature--card .af-asb-signature__layout:has(.af-asb-signature__images) { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr); gap: 1rem; }
+.af-asb-signature--gallery .af-asb-signature__images { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,6rem),1fr)); }
+@media(max-width:600px){.af-asb-signature--card .af-asb-signature__layout:has(.af-asb-signature__images){grid-template-columns:minmax(0,1fr)}.af-asb-signature__layout{padding:.65rem}}
+
+body.atf-active .atf-post .atf-post__signature .af-asb-signature__backdrop > img { width: 100%; height: 100%; object-fit: cover; }

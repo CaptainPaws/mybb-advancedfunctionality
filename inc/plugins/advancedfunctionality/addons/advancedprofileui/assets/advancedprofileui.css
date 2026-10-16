@@ -3454,25 +3454,3 @@ body.af-apui-member-profile-page > [data-af-element-effect][data-af-effect-ready
 .af-apui-extra-group .af-apui-native-action-group { display: flex; align-items: flex-start; gap: 8px; flex: 1 1 220px; min-width: 0; }
 .af-apui-native-action-group > i { flex: 0 0 16px; margin-top: 10px; color: var(--af-element-accent, inherit); }
 .af-apui-native-action-group > div { min-width: 0; }
-
-/* Signature composition only. Colours, typography, links and masks inherit Appearance. */
-.af-apui-signature-composition { position: relative; isolation: isolate; min-width: 0; overflow-wrap: anywhere; }
-.af-apui-signature-composition__backdrop { position: absolute; z-index: -1; inset: 0; pointer-events: none; overflow: hidden; }
-.af-apui-signature-composition__backdrop img { width: 100%; height: 100%; max-width: 100%; object-fit: cover; }
-.af-apui-signature-composition__backdrop::after { content: ""; position: absolute; inset: 0; background-image: var(--af-sig-overlay,none); }
-.af-apui-signature-composition__layout { position: relative; min-width: 0; padding: 1rem; }
-.af-apui-signature-composition__copy { min-width: 0; }
-.af-apui-signature-composition__copy :is(h3,p,blockquote) { color: inherit; font-family: inherit; font-size: inherit; font-weight: inherit; line-height: inherit; margin: .5em 0; }
-.af-apui-signature-composition__copy .af-apui-signature-composition__title { text-wrap: balance; font-size: 1.2em; }
-.af-apui-signature-composition__links { display: flex; flex-wrap: wrap; justify-content: inherit; gap: .5rem; margin-block: .8rem; }
-.af-apui-signature-composition__button { display: inline-block; max-width: 100%; box-sizing: border-box; border: 1px solid currentColor; padding: .4em .7em; color: inherit; font: inherit; text-decoration: none; overflow-wrap: anywhere; }
-.af-apui-signature-composition__button:hover { text-decoration: underline; }
-.af-apui-signature-composition__images { display: flex; gap: .5rem; min-width: 0; }
-.af-apui-signature-composition__images img { display: block; width: 100%; max-width: 100%; min-width: 0; height: auto; object-fit: contain; align-self: start; }
-.af-apui-signature-composition--minimal .af-apui-signature-composition__layout,.af-apui-signature-composition--quote .af-apui-signature-composition__layout { text-align: center; }
-.af-apui-signature-composition--minimal .af-apui-signature-composition__links,.af-apui-signature-composition--quote .af-apui-signature-composition__links { justify-content: center; }
-.af-apui-signature-composition--card .af-apui-signature-composition__layout:has(.af-apui-signature-composition__images) { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr); gap: 1rem; }
-.af-apui-signature-composition--gallery .af-apui-signature-composition__images { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,6rem),1fr)); }
-@media(max-width:600px){.af-apui-signature-composition--card .af-apui-signature-composition__layout:has(.af-apui-signature-composition__images){grid-template-columns:minmax(0,1fr)}.af-apui-signature-composition__layout{padding:.65rem}}
-
-body.atf-active .atf-post .atf-post__signature .af-apui-signature-composition__backdrop > img { width: 100%; height: 100%; object-fit: cover; }

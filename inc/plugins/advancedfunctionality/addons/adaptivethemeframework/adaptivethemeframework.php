@@ -21,7 +21,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.31.1');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.32.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -475,6 +475,30 @@ function af_adaptivethemeframework_compose_ucp_profile_surface(): void
     $GLOBALS['atf_ucp_global_navigation'] = $context['global_navigation'];
     $GLOBALS['atf_ucp_local_navigation'] = $context['local_navigation'];
     $GLOBALS['atf_ucp_context'] = $context;
+    if ($action === 'editsig') {
+        $GLOBALS['atf_ucp_section_title'] = htmlspecialchars_uni($context['title']);
+        $content = af_adaptivethemeframework_render_slot('ucp.content', $context);
+        if ($content !== '') {
+            foreach (af_adaptivethemeframework_components_for_slot('ucp.content', $context) as $component) {
+                if (isset($component['section_title'])) {
+                    $GLOBALS['atf_ucp_section_title'] = htmlspecialchars_uni((string)$component['section_title']);
+                    break;
+                }
+            }
+        } else {
+            $content = af_adaptivethemeframework_ucp_signature_native();
+        }
+        $GLOBALS['atf_ucp_section_content'] = $content;
+    }
+}
+
+/** Native content fallback for the section slot; ATF alone owns the outer UserCP template. */
+function af_adaptivethemeframework_ucp_signature_native(): string
+{
+    global $mybb, $lang, $signature, $sig, $smilieinserter, $codebuttons;
+    ob_start();
+    require AF_ADAPTIVETHEMEFRAMEWORK_BASE . 'templates/components/usercp_editsig_native.php';
+    return ob_get_clean();
 }
 
 /**

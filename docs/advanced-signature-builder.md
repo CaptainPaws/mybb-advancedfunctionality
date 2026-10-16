@@ -1,0 +1,87 @@
+# AdvancedSignatureBuilder: самостоятельный конструктор подписи
+
+## Причина поломки 8bd475a9
+
+`af_apui_sig_page()` получала `templates->get('usercp_editsig', 1, 0)` и возвращала эту строку в `templates->cache`. В MyBB 1.8.40 параметр `eslashes=1` уже выполняет `addslashes()` для последующего PHP `eval`, а кеш обязан содержать сырой текст шаблона. Регулярное выражение не находило экранированный атрибут `name="signature"`, форма оставалась прежней, а следующий `get()` повторно экранировал весь шаблон. Браузер получал буквальные обратные слеши в атрибутах, из-за чего ломались классы, формы и навигация.
+
+Новая регрессионная проверка воспроизводит этот дефект и проверяет исправленный вывод через тот же контракт raw cache → `get(eslashes)` → `eval`, а не через упрощённое чтение HTML-файла.
+
+## Архитектура и UserCP
+
+Аддон `advancedsignaturebuilder` версии **1.0.0** имеет собственный manifest, lifecycle, настройки, схему, серверный компонент, модель, валидацию, публикацию и ассеты. Он не вызывает функций AdvancedProfileUI и работает без него.
+
+ATF уже предоставлял реестр компонентов и слот `ucp.content`; новая система слотов или template ownership не создавалась. Управляемый ATF-шаблон `usercp_editsig` сохраняет `pun`, header/footer, AdvancedMenu, глобальную и локальную навигацию. Вместо встроенного тела формы он выводит `atf_ucp_section_content`. Общий composer заполняет его компонентами существующего слота и принимает необязательный `section_title`. Если видимых компонентов нет, ATF выводит свою нативную форму из небольшого PHP-фрагмента.
+
+ASB готовит компонент на `usercp_editsig_end` с приоритетом 900; ATF размещает его с приоритетом 1000. ASB не меняет кеш или сохранённые шаблоны ATF. Проверено обновление известного предыдущего seed и повторное получение lease через существующий механизм ATF с сохранением исходного backup. При отсутствии ATF используется явный stock-MyBB fallback с `usercpnav`: в request-local кеш записывается только сырой текст собственного fallback-шаблона.
+
+Карточки и поля отрисовывает сервер. JavaScript связывает готовые элементы с моделью и общим предпросмотром. Четыре композиции — «Минимализм», «Цитата», «Карточка», «Галерея» — используют одну модель. Миниатюры представлены отдельными небольшими SVG с иллюстрациями композиций. Доступны фон, три изображения, шесть упорядочиваемых ссылок, текстовые поля, переключатели и счётчики. Цветов и шрифтов в редакторе содержимого нет.
+
+## Перенесённые компоненты и удалённые обработчики
+
+Из AdvancedProfileUI перенесены модель, её проверки, переносимый BBCode, общий HTML-рендерер, хранение черновика, публикация, предпросмотр и AJAX. UI и интеграция с шаблонами переработаны.
+
+В AdvancedProfileUI удалены:
+
+- `af_apui_sig_start` на `usercp_start`;
+- `af_apui_sig_publish_start`, `af_apui_sig_publish_end`, `af_apui_signature_saved` на хуках нативного сохранения;
+- `af_apui_sig_postbit` на `postbit`, `postbit_prev`, `postbit_pm`;
+- `af_apui_sig_page` на `usercp_editsig_end`;
+- создание таблицы конструктора и регистрация четырёх лимитов полей;
+- модули конструктора и старого iframe-редактора, их CSS/JS и frontend-ресурсы;
+- стили публичных композиций из основного CSS APUI.
+
+Функций `af_apui_sig_*` в рабочем коде больше нет. APUI не сохраняет и не обрабатывает модель подписи.
+
+## Данные и миграция
+
+ASB владеет таблицей `af_asb_signatures`: `uid`, `draft_json`, `published_json`, `published_hash`, `legacy_backup`, `updated_at`. При install/activate/upgrade создаётся таблица и выполняется копирование всех этих колонок из существующей `af_apui_signature_builder` через `INSERT IGNORE ... SELECT` по первичному ключу `uid`.
+
+Это сохраняет исходные строки JSON, хеши, черновики и backup без перекодирования. Повторная миграция не заменяет более новые записи ASB. Старая таблица не изменяется и не удаляется. В обычной работе читается и записывается только новая таблица. Лимиты полей при первом создании настроек наследуются из старых настроек APUI; последующие активации сохраняют значения ASB.
+
+«Сохранить шаблон» обновляет один текущий черновик, без публикации. «Обновить подпись» формирует совместимый BBCode для `users.signature`; нативный `UserDataHandler::verify_signature()`, ограничения MyBB, CSRF и переключатели `updateposts` остаются в цепочке. Опубликованная модель включается только после совпадения фактически записанного BBCode с ожидаемым. SHA-256 отсоединяет устаревшую модель после внешнего изменения стандартной подписи. Публичный вывод не читает черновик и не восстанавливает скрытую MyBB подпись.
+
+Обычная существующая подпись не мигрирует при посещении страницы. Замена требует подтверждения, а первый исходник сохраняется в `legacy_backup`. Отключение/удаление аддона не удаляет таблицы и стандартный BBCode подписи.
+
+## Интеграционные API и ассеты
+
+- `af_asb_published_html($uid, $native, $images)` возвращает только актуальную опубликованную композицию. Публичный postbit и APStudio используют этот же рендерер.
+- `af_asb_preview($model, $uid, $appearance)` оборачивает содержимое в существующую раскрытую рамку ATF. Необязательный третий аргумент — уже проверенный пресет, принадлежащий AdvancedAppearance; без него используется активный пресет. Проверку модели для внешних вызывающих предоставляет `af_asb_validate()`.
+- `af_asb_studio_link()` предоставляет APStudio ссылку на конструктор. Обратная ссылка выбирает компонент `signature` активного пресета.
+- Без AdvancedAppearance используются стили темы. Без ATF работает stock-MyBB оболочка и обычный предпросмотр. Без ASB нативные подписи и форма продолжают работать.
+- Manifest разделяет `editor`, `preview`, `view`, `studio_link`. `directory_fallback=false` исключает автоматическую загрузку каталога. Owner-owned подключения проходят через `af_frontend_asset_allowed`; CSS использует существующее решение Theme/File. На публичных страницах подключается только `signature-view.css`, без JS конструктора и SCEditor.
+- AdvancedEditor больше не проверяет маркер конкретного конструктора. Он пропускает скрытые и явно помеченные `data-af-ae-skip` поля подписи; видимые нативные поля продолжают получать редактор. В компоненте ASB нет скрытого WYSIWYG-поля: BBCode создаёт сервер перед нативной проверкой.
+- Gallery остаётся владельцем загрузок, прав и лимитов. Сохраняются оригинальные GIF; разрешены собственные одобренные JPG/PNG/WebP/GIF и прямые URL с разрешённых доменов. Пользовательские SVG, активный HTML и опасные протоколы ссылок не принимаются.
+
+## Изменённые файлы
+
+Пути аддонов относительно `inc/plugins/advancedfunctionality/addons/`:
+
+| Область | Файлы |
+| --- | --- |
+| Новый ASB | `advancedsignaturebuilder/manifest.php`, `advancedsignaturebuilder.php` |
+| Сервер ASB | `modules/schema.php`, `model.php`, `storage.php`, `renderer.php`, `preview.php`, `ajax.php`, `publishing.php`, `integrations.php`, `usercp.php`, `assets.php` |
+| Шаблоны ASB | `templates/signature_builder.php`, `templates/usercp_fallback.html` |
+| Ассеты ASB | `assets/signature-builder.js`, `signature-builder.css`, `signature-view.css`, `template-minimal.svg`, `template-quote.svg`, `template-card.svg`, `template-gallery.svg` |
+| ATF | `adaptivethemeframework.php`, `manifest.php`, `templates/usercp_editsig.html`, новый `templates/components/usercp_editsig_native.php` |
+| AdvancedAppearance | `studio.php`, `manifest.php` |
+| AdvancedEditor | `advancededitor.php`, `manifest.php` |
+| AdvancedProfileUI | `advancedprofileui.php`, `manifest.php`, `assets/advancedprofileui.css` |
+| Удалено из APUI | `modules/signature_builder.php`, `signature_builder_model.php`, `signature_editor.php`; `assets/signature-builder.js`, `signature-builder.css`, `signature-editor.js`, `signature-editor.css` |
+| Проверки | `tests/signature_builder_regression.php`, `signature_builder_integration_regression.php`, `signature_editor_regression.php`, `signature_runtime_regression.cjs` |
+
+Ядро MyBB, AF Core и AdvancedMenu не изменялись.
+
+## Установка и проверки
+
+1. Загрузить изменённые файлы и удалить устаревшие файлы APUI из списка выше.
+2. Обновить/реактивировать **ATF 0.32.0**, чтобы существующий managed-template `usercp_editsig` получил слот содержимого. Ручные изменения шаблона при конфликте ownership нельзя принудительно затирать: использовать штатную диагностику ATF.
+3. Установить и активировать **AdvancedSignatureBuilder 1.0.0** через ACP AdvancedFunctionality: это создаст схему, перенесёт записи и зарегистрирует настройки/CSS. ASB не включается скрытно вместе с APUI.
+4. Обновить остальные затронутые аддоны и синхронизировать стили штатным AF-механизмом. Версии: APUI 1.3.0, AdvancedAppearance 1.6.3, AdvancedEditor 1.1.2.
+
+Пройдены синтаксис PHP 8.5.11, `node --check`, проверки модели/прав/CSRF/публикации, идемпотентной миграции, отсутствия повторной регистрации, реального контракта кеша MyBB, вывода ATF-навигации и серверных полей, fallback без ASB/ATF/APUI, повторного получения ATF lease, состава ассетов, disclosure и совместимости оформления.
+
+Два дополнительных существующих теста ATF падают одинаково и на исходном `8bd475a9`: `adaptivethemeframework_component_slots_regression.php` ожидает устаревший каталог слотов; `adaptivethemeframework_ownership_upgrade_regression.php` не предоставляет `af_ensure_settinggroup()` для page-shell. Эти независимые тестовые проблемы не исправлялись.
+
+## Известные ограничения
+
+Проверки БД используют существующие фикстуры и модель хранения в памяти; доступа к рабочей MySQL warprift.ru и фактическим строкам старой таблицы в этой сессии не было. Автоматическая миграция выполняется на сайте при активации. Полная браузерная и визуальная проверка на сайте не проводилась. SVG-миниатюры иллюстрируют композиции и не копируют художественные баннеры из макета. Сохраняется один черновик, а не каталог именованных пользовательских шаблонов. Фон при отключённом ASB отображается как обычное изображение переносимого BBCode и учитывается в лимите изображений MyBB.
