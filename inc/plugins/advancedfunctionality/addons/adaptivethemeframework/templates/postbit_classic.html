@@ -2,11 +2,13 @@
 <a id="pid{$post['pid']}" name="pid{$post['pid']}"></a>
 
 <article class="post classic atf-post af-atf-display {$unapproved_shade} {$post['af_aa_user_class']}" id="post_{$post['pid']}" data-author-uid="{$post['uid']}" data-element-surface="postbit" data-element="{$post['af_atf_element']}" style="{$post_visibility}">
+  {$post['af_atf_gothic_frame']}
   <header class="post_head atf-post__topbar" data-af-element-effect-host="postbit-topbar">
     <span hidden data-af-element-effect aria-hidden="true"></span>
     <div class="atf-post__topbar-leading">
       <div class="atf-post__moderation">{$post['modbit']}</div>
-      <div class="atf-post__sheet-action"><span class="atf-post__sheet-accent" aria-hidden="true"></span>{$post['af_atf_slots']['post.author.character']}</div>
+      <!-- Legacy wave surface retained as an inactive decorative option. -->
+      <span class="atf-post__sheet-accent" hidden aria-hidden="true"></span>
     </div>
     <div class="atf-post__identity-main">
       <div class="atf-post__name largetext">{$post['af_atf_slots']['post.author.identity']}</div>
@@ -15,17 +17,19 @@
       <div class="atf-post__rank">{$post['groupimage']}{$post['userstars']}</div>
     </div>
     <div class="atf-post__author-tools atf-post__primary-column">
-      <div class="atf-post__primary-avatar atf-post__avatar atf-post__avatar--primary"><div class="atf-post__primary-avatar-media">{$post['af_atf_primary_avatar']}</div>{$post['af_atf_online_indicator']}</div>
+      <div class="atf-post__primary-avatar atf-post__avatar atf-post__avatar--primary"><div class="atf-post__primary-avatar-media">{$post['af_atf_primary_avatar']}</div><span class="atf-post__avatar-inlays" aria-hidden="true"></span>{$post['af_atf_online_indicator']}</div>
     </div>
   </header>
 
   <div class="atf-post__layout">
     <aside class="atf-post__sidebar" aria-label="Информация об авторе" data-af-element-effect-host="postbit-sidebar"><span hidden data-af-element-effect aria-hidden="true"></span><div class="atf-post__sidebar-inner">
-      <div class="atf-post__secondary-avatar">{$post['af_atf_secondary_avatar']}</div>
+      <div class="atf-post__secondary-avatar">{$post['af_atf_secondary_avatar']}{$post['af_atf_gothic_frame']}</div>
       {$post['af_atf_slots']['post.author.character_name']}
+      <div class="atf-post__divider atf-post__divider--name" aria-hidden="true"></div>
       <section class="atf-post__personal-title"><div class="atf-post__profile-fields">{$post['af_atf_slots']['post.author.profile_fields']}</div></section>
+      <div class="atf-post__divider atf-post__divider--statistics" aria-hidden="true"></div>
       <div class="atf-post__statistics">{$post['af_atf_slots']['post.author.rail']}</div>
-      <div class="atf-post__sidebar-actions">{$post['af_atf_slots']['post.author.plaque']}{$post['af_atf_slots']['post.post_counter']}</div>
+      <div class="atf-post__sidebar-actions">{$post['af_atf_slots']['post.post_counter']}<div class="atf-post__divider" aria-hidden="true"></div><div class="atf-post__plaque-end"><div class="atf-post__sheet-action">{$post['af_atf_slots']['post.author.character']}</div>{$post['af_atf_slots']['post.author.plaque']}{$post['af_atf_gothic_frame']}</div></div>
     </div></aside>
     <section class="post_content atf-post__content">
       <div class="atf-post__slot atf-post__slot--before">{$post['af_atf_slots']['post.before_body']}</div>
@@ -38,7 +42,7 @@
       <div class="post_meta atf-post__meta" id="post_meta_{$post['pid']}">{$post['iplogged']}<span class="post_edit atf-post__edited" id="edited_by_{$post['pid']}">{$post['editedmsg']}</span><span class="atf-post__status">{$post['poststatus']}</span></div>
       <footer class="atf-post__footer">
         <div class="atf-post__footer-spacer" aria-hidden="true"></div>
-        <div class="atf-post__reputation-corner">{$post['af_atf_post_reputation_html']}</div>
+        <div class="atf-post__reputation-corner">{$post['af_atf_post_reputation_html']}{$post['af_atf_gothic_frame']}</div>
       </footer>
       {$post['input_editreason']}
     </section>

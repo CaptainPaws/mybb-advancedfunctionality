@@ -1759,12 +1759,41 @@ function af_apui_postbit_compose_userdetails(array &$post): void
     $characterFields = (array)($characterPayload['fields'] ?? []);
     $characterNameField = $characterFields['character_name_ru'] ?? '';
     $characterName = trim((string)(is_array($characterNameField)
-        ? ($characterNameField['value'] ?? '')
+        ? ($characterNameField['value'] ?? $characterNameField['raw'] ?? '')
         : $characterNameField));
+    $activeApplication = function_exists('af_characterworkflow_resolve_active_application')
+        ? af_characterworkflow_resolve_active_application($uid) : null;
+    $applicationApproved = af_apui_is_approved_character_application(
+        $uid, (int)($activeApplication['tid'] ?? 0), (array)($activeApplication['relation'] ?? [])
+    );
+    if (!$applicationApproved) $characterName = '';
+    $applicationAccessible = false;
+    $applicationFid = (int)($activeApplication['fid'] ?? 0);
+    if ($applicationApproved && $applicationFid > 0 && function_exists('forum_permissions')) {
+        $permissions = forum_permissions($applicationFid);
+        $viewerUid = (int)($GLOBALS['mybb']->user['uid'] ?? 0);
+        $moderator = function_exists('is_moderator') && is_moderator($applicationFid);
+        $applicationAccessible = !empty($permissions['canview']) && !empty($permissions['canviewthreads'])
+            && (empty($permissions['canonlyviewownthreads']) || $uid === $viewerUid || $moderator);
+    }
+    // Reuse the accepted application's payload and APUI's existing fragment modal.
+    // Missing/unavailable applications keep a plain heading, never a guessed URL.
+    $characterNameHtml = htmlspecialchars_uni($characterName);
+    $applicationUrl = af_apui_resolve_application_url($post, $sheetPayload);
+    $applicationFetchUrl = af_apui_resolve_application_fetch_url($sheetPayload);
+    if ($applicationAccessible && $characterName !== '' && $applicationUrl !== '' && $applicationFetchUrl !== '') {
+        $applicationFetchUrl = af_apui_build_surface_url($applicationFetchUrl, $uid, 'application');
+        $characterNameHtml = '<a href="' . htmlspecialchars_uni($applicationUrl) . '"'
+            . ' data-af-apui-modal-url="' . htmlspecialchars_uni($applicationFetchUrl) . '"'
+            . ' data-af-apui-modal-owner="1" data-af-apui-modal-kind="application" data-af-apui-modal-title="' . htmlspecialchars_uni($characterName) . '"'
+            . ' data-af-apui-owner-uid="' . $uid . '" data-af-apui-surface="application"'
+            . ' data-af-apui-application-pid="' . af_apui_resolve_application_pid($sheetPayload) . '">'
+            . $characterNameHtml . '</a>';
+    }
     $post['af_apui_character_name_html'] = $characterName === ''
         ? ''
         : '<div class="atf-post__character-name" data-character-field="character_name_ru">'
-            . htmlspecialchars_uni($characterName) . '</div>';
+            . $characterNameHtml . '</div>';
 
     $post['af_apui_presence_html'] = af_apui_build_postbit_presence_html($post);
     $post['af_apui_profile_fields_html'] = $profileFields;
@@ -1775,7 +1804,7 @@ function af_apui_postbit_compose_userdetails(array &$post): void
         . $linkedStat('af-apui-stat-item--messages', $routes['messages'], $tooltipMessages, 'fa-solid fa-comments', $postsValue)
         . $linkedStat('af-apui-stat-item--threads', $routes['threads'], $tooltipThreads, 'fa-solid fa-copy', $threadsValue)
         . $linkedStat('af-apui-stat-item--reputation', $routes['reputation'], $tooltipReputation, 'fa-solid fa-heart', $reputationValue)
-        . '<span class="af-apui-stat-item af-apui-stat-item--posts" title="' . $tooltipPosts . '" data-af-title="' . $tooltipPosts . '" data-af-balance-posts="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-pen" aria-hidden="true"></i></span><span class="af-apui-stat-item__value"><span class="af-apc-slot" data-af-apc-slot="1" data-uid="' . $uid . '">' . $afApcPostbitHtml . '</span></span></span>'
+        . '<span class="af-apui-stat-item af-apui-stat-item--posts" title="' . $tooltipPosts . '" data-af-title="' . $tooltipPosts . '" data-af-balance-posts="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-feather-pointed" aria-hidden="true"></i></span><span class="af-apui-stat-item__value"><span class="af-apc-slot" data-af-apc-slot="1" data-uid="' . $uid . '">' . $afApcPostbitHtml . '</span></span></span>'
         . '</div>';
 
     $actionsHtml = af_apui_build_postbit_actionbar_html($post, $sheetPayload);

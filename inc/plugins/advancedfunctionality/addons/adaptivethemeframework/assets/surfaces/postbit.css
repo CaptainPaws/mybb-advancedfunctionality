@@ -288,6 +288,8 @@ body.atf-active .atf-post__topbar {
 }
 body.atf-active .atf-post__moderation { align-self: start; z-index: 2; }
 body.atf-active .atf-post__sheet-action { position: static; display: grid; place-items: center; width: 5rem; min-height: 4rem; }
+/* Legacy wave option: intentionally disabled for the grimdark postbit.
+   Keep its geometry/gradient intact for restoration; no JS owns this layer.
 body.atf-active .atf-post__sheet-accent {
   position: absolute;
   z-index: 1;
@@ -301,6 +303,9 @@ body.atf-active .atf-post__sheet-accent {
   clip-path: path("M 14 0 H 120 C 136 8 138 42 122 60 C 111 73 96 72 88 91 C 80 111 68 120 52 128 C 34 137 24 155 0 168 V 14 C 0 6 6 0 14 0 Z");
   filter: drop-shadow(0 .4rem .8rem var(--atf-post-accent-soft));
 }
+*/
+body.atf-active .atf-post__sheet-accent { display: none; }
+
 body.atf-active .atf-post__sheet-action :is(a,button) { border: 0; background: transparent; }
 body.atf-active .atf-post__sheet-action a.af-apui-postbit-action.af-apui-postbit-action--sheet.af-cs-plaque__btn,
 body.atf-active .atf-post__sheet-action a.af-apui-postbit-action.af-apui-postbit-action--sheet.af-cs-plaque__btn:link,
@@ -790,3 +795,289 @@ body.atf-active[data-atf-postbit-sidebar="hidden"] .atf-post__layout {
     grid-template-areas: "sidebar" "content";
   }
 }
+
+/* Grimdark postbit. Presentation only: accent declarations/resolution above,
+   APUI appearance backgrounds, AET hosts and the sticky runtime stay intact. */
+body.atf-active .atf-post.af-atf-display {
+  --atf-post-metal: #535b60;
+  --atf-post-metal-light: #929995;
+  --atf-post-metal-dark: #171e24;
+  /* One neutral SVG corner shared by every frame, mirrored below. Gems are
+     separate CSS facets so the SVG never embeds a user's accent. */
+  --atf-post-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='m' x2='1' y2='1'%3E%3Cstop stop-color='%23bac0b9'/%3E%3Cstop offset='.24' stop-color='%23313b40'/%3E%3Cstop offset='.48' stop-color='%23848e8b'/%3E%3Cstop offset='.65' stop-color='%23131d24'/%3E%3Cstop offset='1' stop-color='%23636d70'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M2 60V2h58L45 8l-20 2-8 7-7 8-2 20z' fill='%230b1118' stroke='%23535d61'/%3E%3Cpath d='M4 57l8-32 13-13 32-8-14 10-16 3-10 10-3 16zM5 5l17 4-8 5-5 8z' fill='url(%23m)' stroke='%23929a94' stroke-width='.8'/%3E%3Cpath d='M18 18l19-2-12 7-2 12-7 2zM7 34l7 8-7 9M34 7l8 7 9-7' fill='url(%23m)' stroke='%235b6668'/%3E%3Cpath d='M4 4l9 9M9 29l2-9 9-9 9-2' fill='none' stroke='%23c1c4b7' stroke-width='.8'/%3E%3C/svg%3E");
+  position: relative;
+  max-width: 100%;
+  color: var(--atf-color-text);
+  border: 1px solid var(--atf-post-metal);
+  border-radius: 3px;
+  /* Inset contours never enlarge the post or introduce horizontal overflow. */
+  box-shadow: inset 0 0 0 2px #10171e, inset 0 0 0 3px #343e46;
+}
+body.atf-active .atf-post .atf-gothic-frame {
+  position: absolute;
+  z-index: 4;
+  inset: 2px;
+  display: block;
+  box-sizing: border-box;
+  border: 1px solid var(--atf-post-metal);
+  box-shadow: inset 0 0 0 1px #090e14, 0 0 0 1px #111820;
+  color: var(--atf-post-accent);
+  pointer-events: none;
+}
+body.atf-active .atf-post > .atf-gothic-frame { z-index: 30; }
+body.atf-active .atf-post .atf-gothic-frame * { pointer-events: none; }
+body.atf-active .atf-post .atf-gothic-corner {
+  position: absolute;
+  display: block;
+  width: var(--atf-corner-size, 38px);
+  height: var(--atf-corner-size, 38px);
+  max-width: 50%;
+  max-height: 50%;
+  background: var(--atf-post-corner) center / contain no-repeat;
+}
+body.atf-active .atf-post .atf-gothic-corner--tl { top: 0; left: 0; }
+body.atf-active .atf-post .atf-gothic-corner--tr { top: 0; right: 0; transform: scaleX(-1); }
+body.atf-active .atf-post .atf-gothic-corner--bl { bottom: 0; left: 0; transform: scaleY(-1); }
+body.atf-active .atf-post .atf-gothic-corner--br { bottom: 0; right: 0; transform: scale(-1); }
+/* The same faceted stone is used on corners, round avatar and dividers. */
+body.atf-active .atf-post .atf-gothic-corner::after,
+body.atf-active .atf-post .atf-post__divider::after,
+body.atf-active .atf-post .atf-post__avatar-inlays::before,
+body.atf-active .atf-post .atf-post__avatar-inlays::after {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 13px;
+  background: linear-gradient(135deg, #e2e5da 0 9%, currentColor 24% 49%, #101720 51% 58%, currentColor 61% 78%, #080d15 93%);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  filter: drop-shadow(0 0 3px var(--atf-post-accent-soft));
+  pointer-events: none;
+}
+body.atf-active .atf-post .atf-gothic-corner::after { top: 12%; left: 12%; width: 23%; height: 32%; }
+body.atf-active .atf-post__topbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--atf-space-3);
+  border-radius: 2px 2px 0 0;
+  border-block-end-color: var(--atf-post-metal);
+}
+body.atf-active .atf-post__topbar-leading:not(:has(.atf-post__moderation:not(:empty))) { display: none; }
+body.atf-active .atf-post__topbar:has(.atf-post__moderation:not(:empty)) { grid-template-columns: auto minmax(0, 1fr) auto; }
+body.atf-active .atf-post__identity-main { align-self: center; }
+body.atf-active .atf-post__name { font-family: Georgia, "Times New Roman", serif; letter-spacing: .025em; }
+body.atf-active .atf-post__author-tools { grid-column: auto; width: auto; justify-self: end; }
+body.atf-active .atf-post__primary-avatar {
+  border-color: var(--atf-post-metal);
+  box-shadow: 0 0 0 1px #0b1218, 0 0 0 3px var(--atf-post-metal-dark), 0 0 0 4px var(--atf-post-metal-light);
+}
+body.atf-active .atf-post__avatar-inlays {
+  position: absolute;
+  z-index: 4;
+  inset: -4px;
+  border: 1px solid var(--atf-post-metal);
+  border-radius: 50%;
+  color: var(--atf-post-accent);
+  pointer-events: none;
+}
+body.atf-active .atf-post .atf-post__avatar-inlays::before { top: -5px; left: calc(50% - 4.5px); }
+body.atf-active .atf-post .atf-post__avatar-inlays::after { bottom: -5px; left: calc(50% - 4.5px); }
+body.atf-active .atf-post__layout {
+  margin-top: 0;
+  overflow: visible;
+  border-radius: 0 0 2px 2px;
+}
+body.atf-active .atf-post__sidebar { align-self: start; border-radius: 0; }
+body.atf-active .atf-post__sidebar-inner { padding: var(--atf-space-4) var(--atf-space-4) 0; border-color: var(--atf-post-metal); }
+body.atf-active .atf-post .atf-post__sidebar-inner > :not([data-af-element-effect]) ~ :not([data-af-element-effect]) {
+  margin-block-start: .65rem;
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+/* Intrinsic width prevents upscaling small portraits. The frame follows the
+   actual image box, including landscape/square images; no fixed height/crop. */
+body.atf-active .atf-post__secondary-avatar {
+  --atf-corner-size: 30px;
+  position: relative;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: min(250px, 100%);
+  padding: 5px;
+  overflow: visible;
+  border: 1px solid var(--atf-post-metal);
+  border-radius: 2px;
+  background: var(--atf-post-metal-dark);
+  box-shadow: inset 0 0 0 1px #0a1016, 0 3px 10px rgb(0 0 0 / 28%);
+}
+body.atf-active .atf-post__secondary-avatar:not(:has(img, svg)) { display: none; }
+body.atf-active .atf-post__secondary-avatar :is(img, svg),
+body.atf-active .atf-post__secondary-avatar-image {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: none;
+  object-fit: contain;
+  border-radius: 0;
+}
+body.atf-active .atf-post__character-name {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.15rem, 2vw, 1.55rem);
+  font-weight: 600;
+  line-height: 1.2;
+}
+body.atf-active .atf-post__character-name a { color: inherit; text-decoration: none; }
+body.atf-active .atf-post__character-name a:is(:hover, :focus-visible) { text-decoration: underline; text-underline-offset: .18em; }
+body.atf-active .atf-post .atf-post__divider {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 13px;
+  margin-block: .45rem;
+  padding: 0;
+  border: 0;
+  color: var(--atf-post-accent);
+  background: linear-gradient(90deg, transparent, var(--atf-post-metal) 12% 43%, var(--atf-post-metal-light) 48%, transparent 49% 51%, var(--atf-post-metal-light) 52%, var(--atf-post-metal) 57% 88%, transparent) center / 100% 1px no-repeat;
+  pointer-events: none;
+}
+body.atf-active .atf-post .atf-post__divider::after { top: 0; left: calc(50% - 4.5px); }
+body.atf-active .atf-post__divider--name:not(.atf-post__character-name + *) { display: none; }
+body.atf-active .atf-post__divider--statistics:has(+ .atf-post__statistics:empty) { display: none; }
+body.atf-active .atf-post__profile-fields .af-apf-postbit-field--fid4 { margin-block: 0; padding-block: 0; font-size: .8125rem; line-height: 1.5; overflow-wrap: anywhere; }
+body.atf-active .atf-post__profile-fields .af-apf-postbit-field--fid4 p { margin-block: .35em; }
+/* Override APUI's legacy rail tiles/popovers locally. Keep all existing links,
+   APC slots, balance handlers and values in their original DOM nodes. */
+body.atf-active .atf-post__statistics .af-apui-postbit-rail { width: 100%; margin: 0; }
+body.atf-active .atf-post__statistics .author_statistics.af-apui-postbit-userdetails {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  width: 100%;
+  padding: .5rem .2rem !important;
+  border: 1px solid var(--atf-post-metal) !important;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #19252e, #080f18) !important;
+  box-shadow: inset 0 0 0 1px #080e15;
+  overflow: visible;
+}
+body.atf-active .atf-post__statistics .af-apui-stat-item {
+  display: flex;
+  flex-direction: column;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  gap: .3rem;
+  padding: .1rem .25rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--atf-color-text);
+}
+body.atf-active .atf-post__statistics .af-apui-stat-item + .af-apui-stat-item { border-inline-start: 1px solid var(--atf-post-metal); }
+body.atf-active .atf-post__statistics .af-apui-stat-item .af-apui-stat-item__icon { width: auto; height: auto; min-height: 1.15rem; }
+body.atf-active .atf-post__statistics .af-apui-stat-item__icon i { font-size: 1rem; }
+body.atf-active .atf-post__statistics .af-apui-stat-item .af-apui-stat-item__value {
+  position: static;
+  inset: auto;
+  transform: none;
+  opacity: 1;
+  visibility: visible;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 1.2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font-size: .875rem;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+}
+body.atf-active .atf-post .atf-post__sidebar-actions { width: auto; margin-inline: calc(-1 * var(--atf-space-4)); }
+body.atf-active .atf-post__sidebar-actions > .atf-post__divider { width: calc(100% - 2 * var(--atf-space-4)); margin-inline: auto; }
+body.atf-active .atf-post__plaque-end {
+  --atf-corner-size: 24px;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  min-width: 0;
+  border-block-start: 1px solid var(--atf-post-metal);
+  background: linear-gradient(135deg, #1b252d, #080d14);
+}
+body.atf-active .atf-post__plaque-end:not(:has(.af-apui-postbit-plaque, .af-apui-postbit-action)) { display: none; }
+body.atf-active .atf-post__sidebar-actions:not(:has(.af-apui-postbit-plaque, .af-apui-postbit-action)) > .atf-post__divider { display: none; }
+body.atf-active .atf-post__sidebar-actions .af-apui-postbit-plaque { min-width: 0; border: 0; border-radius: 0; padding: .75rem; }
+body.atf-active .atf-post__plaque-end .atf-post__sheet-action { position: relative; display: grid; width: auto; min-height: 0; padding: .5rem 0 .5rem .6rem; }
+body.atf-active .atf-post__plaque-end .atf-post__sheet-action:empty { display: none; }
+body.atf-active .atf-post__plaque-end .af-apui-postbit-plaque { grid-column: 2; }
+body.atf-active .atf-post__plaque-end:not(:has(.af-apui-postbit-action)) .af-apui-postbit-plaque { grid-column: 1 / -1; }
+body.atf-active .atf-post__plaque-end .af-apui-postbit-action.af-cs-plaque__btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  min-width: 0;
+  min-height: 0;
+  transform: none;
+  border: 1px solid var(--atf-post-metal) !important;
+  border-radius: 50%;
+  color: var(--atf-post-accent) !important;
+  background: #111d28 !important;
+}
+body.atf-active .atf-post__plaque-end .af-apui-postbit-action i { margin: 0; font-size: 1.15rem; }
+/* A single, non-repeating image fades to the base before its 1000px layer ends.
+   Long posts extend the neutral colour, without seams or vertical stretching. */
+body.atf-active .atf-post__content {
+  background-color: #091521;
+  background-image: linear-gradient(180deg, rgb(4 10 17 / 42%), rgb(9 21 33 / 60%) 65%, #091521 100%), url("https://warprift.ru/uploads/af_gallery/1/2026/10/3721b07ce4df8a6619ae827a42c1aa31.png");
+  background-size: 100% 1000px, auto 1000px;
+  background-position: center top;
+  background-repeat: no-repeat;
+}
+body.atf-active .atf-post__meta-line {
+  /* Retain the corrected desktop inset and JS transform-based sticky geometry. */
+  padding-block: .4rem;
+  border-block: 1px solid var(--atf-post-metal);
+  background: #132331 !important;
+}
+body.atf-active .atf-post__date { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+body.atf-active .atf-post__management { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+body.atf-active .atf-post__footer { grid-template-columns: minmax(0, 1fr) auto; min-height: 3.5rem; margin: var(--atf-space-4) 0 .75rem; }
+body.atf-active .atf-post__reputation-corner {
+  --atf-corner-size: 17px;
+  position: relative;
+  inset: auto;
+  grid-column: 2;
+  align-self: end;
+  width: auto;
+  height: auto;
+  min-width: 4.5rem;
+  padding: .65rem .8rem;
+  border: 1px solid var(--atf-post-metal);
+  border-radius: 2px;
+  background: linear-gradient(#172633, #0b141e);
+  color: var(--atf-post-accent);
+  box-shadow: 0 0 8px var(--atf-post-accent-soft);
+}
+@media (max-width: 48rem) {
+  body.atf-active .atf-post.af-atf-display { --atf-corner-size: 26px; }
+  body.atf-active .atf-post__layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "sidebar" "content"; }
+  body.atf-active .atf-post__topbar { grid-template-columns: minmax(0, 1fr) auto; padding: var(--atf-space-4); }
+  body.atf-active .atf-post__author-tools { grid-column: auto; width: auto; justify-self: end; align-self: center; }
+  body.atf-active .atf-post__name,
+  body.atf-active .atf-post__title,
+  body.atf-active .atf-post__profile-actions { margin-inline-start: 0; }
+  body.atf-active .atf-post__name { font-size: clamp(1.2rem, 5vw, 1.7rem); }
+  body.atf-active .atf-post__meta-line { left: 0; width: 100%; justify-content: flex-start; text-align: start; gap: .4rem .6rem; }
+  body.atf-active .atf-post__meta-line > :not(:empty):not(:first-child)::before { display: none; }
+  body.atf-active .atf-post__meta-line > .atf-post__management { flex-basis: 100%; }
+  body.atf-active .atf-post__content { padding-inline: var(--atf-space-4); }
+  body.atf-active .post_body.scaleimages.atf-post__message:not(:has(form, textarea)) { width: calc(100% + 2 * var(--atf-space-4)); margin-inline: calc(-1 * var(--atf-space-4)); }
+  body.atf-active .atf-post__message-body { padding-inline: var(--atf-space-4); }
+  body.atf-active .atf-post__footer { margin-inline: 0; }
+}
+
+body.atf-active .atf-post__statistics .af-apui-postbit-rail .af-apui-postbit-actions { display: none !important; }

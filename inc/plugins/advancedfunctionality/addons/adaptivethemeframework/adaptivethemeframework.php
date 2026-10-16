@@ -1492,6 +1492,10 @@ function af_adaptivethemeframework_preload_postbit_data(array &$post): void
 
 function af_adaptivethemeframework_compose_postbit(array &$post): void
 {
+    // One static corner shape in CSS, reflected four times; no per-post SVG IDs/runtime.
+    $post['af_atf_gothic_frame'] = '<span class="atf-gothic-frame" aria-hidden="true">'
+        . '<i class="atf-gothic-corner atf-gothic-corner--tl"></i><i class="atf-gothic-corner atf-gothic-corner--tr"></i>'
+        . '<i class="atf-gothic-corner atf-gothic-corner--bl"></i><i class="atf-gothic-corner atf-gothic-corner--br"></i></span>';
     // Primary MyBB avatar and APF secondary avatar are separate surfaces.
     // Never overwrite $post['useravatar'] here.
     $post['posturl'] = af_adaptivethemeframework_posturl_checkbox_first((string)($post['posturl'] ?? ''));
@@ -1519,8 +1523,8 @@ function af_adaptivethemeframework_compose_postbit(array &$post): void
     if (empty($post['af_atf_is_preview'])) {
         $post['af_atf_meta_line'] = '<div class="atf-post__meta-line">'
             . '<span class="atf-post__permalink">' . (string)($post['posturl'] ?? '') . '</span>'
-            . '<time class="post_date atf-post__date">' . (string)($post['postdate'] ?? '') . '</time>'
-            . '<span class="atf-post__char-count" title="символов в посте" data-af-title="символов в посте"><i class="fa-solid fa-font" aria-hidden="true"></i><span class="atf-post__char-count-value">'
+            . '<time class="post_date atf-post__date"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> ' . (string)($post['postdate'] ?? '') . '</time>'
+            . '<span class="atf-post__char-count" title="символов в посте" data-af-title="символов в посте"><i class="fa-solid fa-file-lines" aria-hidden="true"></i><span class="atf-post__char-count-value">'
             . $post['af_post_char_count_formatted'] . '</span></span>'
             . '<div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">'
             . (string)($post['af_atf_slots']['post.actions'] ?? '') . '</div></div>';
