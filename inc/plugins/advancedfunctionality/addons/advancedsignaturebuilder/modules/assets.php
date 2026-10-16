@@ -28,6 +28,13 @@ function af_asb_prepare_editor_assets(): void {
     $tags=af_asb_asset_tags(true,true);
     if ($tags!=='') $headerinclude.='<!--af-asb-assets-->'.$tags;
 }
+/** Prepare public profile CSS before its outer MyBB/ATF template consumes headerinclude. */
+function af_asb_prepare_view_assets(): void {
+    global $headerinclude;
+    if (!af_asb_enabled() || str_contains((string)$headerinclude,'<!--af-asb-assets-->')) return;
+    $tags=af_asb_asset_tags(false,true);
+    if ($tags!=='') $headerinclude.='<!--af-asb-assets-->'.$tags;
+}
 /** Public signatures and non-ATF pages use the normal AF owner pipeline. */
 function af_asb_pre_output(string &$page): void {
     if (!af_asb_enabled() || !empty($GLOBALS['af_disable_pre_output']) || stripos($page,'</head>')===false || str_contains($page,'<!--af-asb-assets-->')) return;

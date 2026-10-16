@@ -38,7 +38,7 @@ function af_aa_personal_effects(): array { return ['inherit', 'flat', 'soft_glow
 function af_aa_personal_system_preset(string $target): array
 {
     if (!isset(af_aa_personal_targets()[$target])) throw new AF_AA_PersonalException('Unknown target.', 422);
-    return ['id'=>0, 'target_key'=>$target, 'title'=>'По умолчанию', 'virtual'=>true, 'immutable'=>true, 'settings'=>new stdClass()];
+    return ['id'=>0, 'target_key'=>$target, 'title'=>'По умолчанию', 'virtual'=>true, 'immutable'=>true, 'settings'=>$target==='postbit'?['components'=>['signature'=>af_aa_signature_defaults()]]:new stdClass()];
 }
 
 function af_aa_personal_field_exists(string $field): bool
@@ -420,7 +420,7 @@ function af_aa_personal_legacy_settings(array $row): array
 /** Approved personal presentation is scoped to existing postbit nodes; no grid/layout/identity mutation. */
 function af_aa_personal_render_css(int $uid): string
 {
-    $row=af_aa_personal_active_row($uid);if (!$row) return '';
+    $row=af_aa_personal_active_row($uid);if (!$row) return af_aa_personal_compile_css($uid,[]);
     try {$s=af_aa_personal_decode($row['settings_json'],$uid,true,false,true);}catch(AF_AA_PersonalException $e){return '';}
     return af_aa_personal_compile_css($uid,$s);
 }

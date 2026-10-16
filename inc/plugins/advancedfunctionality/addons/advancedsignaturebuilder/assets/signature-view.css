@@ -1,8 +1,5 @@
 /* Signature composition only. Colours, typography, links and masks inherit Appearance. */
 .af-asb-signature { position: relative; isolation: isolate; min-width: 0; overflow-wrap: anywhere; }
-.af-asb-signature__backdrop { position: absolute; z-index: -1; inset: 0; pointer-events: none; overflow: hidden; }
-.af-asb-signature__backdrop img { width: 100%; height: 100%; max-width: 100%; object-fit: cover; }
-.af-asb-signature__backdrop::after { content: ""; position: absolute; inset: 0; background-image: var(--af-sig-overlay,none); }
 .af-asb-signature__layout { position: relative; min-width: 0; padding: 1rem; }
 .af-asb-signature__copy { min-width: 0; }
 .af-asb-signature__copy :is(h3,p,blockquote) { color: inherit; font-family: inherit; font-size: inherit; font-weight: inherit; line-height: inherit; margin: .5em 0; }
@@ -18,7 +15,6 @@
 .af-asb-signature--gallery .af-asb-signature__images { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,6rem),1fr)); }
 @media(max-width:600px){.af-asb-signature--card .af-asb-signature__layout:has(.af-asb-signature__images){grid-template-columns:minmax(0,1fr)}.af-asb-signature__layout{padding:.65rem}}
 
-body.atf-active .atf-post .atf-post__signature .af-asb-signature__backdrop > img { width: 100%; height: 100%; object-fit: cover; }
 
 .af-asb-signature__copy .af-asb-signature__divider { width: 86%; height: 1px; margin: 1.1em auto; border: 0; background: linear-gradient(90deg,transparent,var(--atf-post-accent,currentColor),transparent); opacity: .75; }
 
@@ -26,4 +22,3 @@ body.atf-active .atf-post .atf-post__signature .af-asb-signature__backdrop > img
 .af-asb-signature__placeholder { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.5rem; min-width:0; min-height:110px; padding:.65rem; border:1px dashed currentColor; border-radius:4px; color:inherit; opacity:.65; font:inherit; font-size:.8em; text-align:center; }
 .af-asb-signature__placeholder svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:1.4; }
 .af-asb-signature--quote .af-asb-signature__text { border-inline-start:2px solid var(--atf-post-accent,currentColor); padding-inline:1rem; font-style:italic; }
-body.atf-active .atf-signature-surface .atf-post__signature .af-asb-signature__backdrop > img { width:100%; height:100%; object-fit:cover; }

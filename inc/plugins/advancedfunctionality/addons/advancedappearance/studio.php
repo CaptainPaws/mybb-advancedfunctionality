@@ -60,6 +60,7 @@ function af_aa_studio_compile(int $uid, array $s, bool $preview=false, string $t
     return af_aa_studio_compile_base($uid,$s,$preview,$target).($target==='postbit'?af_aa_postbit_compile($uid,$s,$preview):'');
 }
 function af_aa_studio_compile_base(int $uid, array $s, bool $preview=false, string $target='postbit',?string $signatureRoot=null): string {
+    if ($target==='postbit') $s=af_aa_postbit_effective_settings($s);
     $prefix=$preview?'#aa-studio-preview ':'';
     $root=$signatureRoot??af_aa_studio_root($uid,$target,$preview);
     $scope=static fn($suffix)=>'body.atf-active '.$root.$suffix.', '.$root.$suffix;

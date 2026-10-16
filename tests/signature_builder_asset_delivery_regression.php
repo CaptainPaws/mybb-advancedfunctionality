@@ -100,3 +100,17 @@ assertSameValue(false,af_frontend_asset_decision($gallery_manifest,'pre_output',
 $plain='<html><head></head><body><section class="af-asb-signature"></section></body></html>';af_advancedgallery_pre_output($plain);
 assertSameValue(false,str_contains($plain,'advancedgallery.js'),'Gallery runtime leaked without picker host');
 echo "Gallery/UserCP delivery passed: real owner CSS/JS/config, signature purposes, one callback and public-profile isolation.\n";
+// Actual Theme/File resolution for the viewed profile, not just manifest registration.
+$request_context=$profile;
+foreach(['theme','file','auto'] as $mode) {
+    foreach($db->registry as &$state)if($state['source_file']==='assets/signature-view.css')$state['delivery_mode']=$mode;unset($state);
+    $headerinclude='';af_asb_prepare_view_assets();
+    $profileHtml='<html><head>'.$headerinclude.'</head><body><section class="af-asb-signature"></section></body></html>';
+    af_advancedsignaturebuilder_pre_output($profileHtml);$profileHtml=af_hard_normalize_stylesheet_link_tags($profileHtml);
+    assertSameValue(true,str_contains($profileHtml,'rel="stylesheet"'),'Profile lost its actual view CSS link');
+    assertSameValue(false,str_contains($profileHtml,'signature-builder.js'),'Profile loads editing runtime');
+    assertSameValue(false,str_contains($profileHtml,'af_asb_builder.css'),'Profile loads builder CSS');
+    if($mode==='file') assertSameValue(true,str_contains($profileHtml,'assets/signature-view.css'),'Profile File mode loses view stylesheet');
+    else assertSameValue(true,str_contains($profileHtml,'css.php?stylesheet='),'Profile Theme mode loses registered stylesheet');
+}
+echo "Profile delivery passed: final head retains real Theme/File view CSS without builder assets.\n";

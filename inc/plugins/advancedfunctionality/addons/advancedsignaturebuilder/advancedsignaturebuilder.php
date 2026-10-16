@@ -2,10 +2,10 @@
 if (!defined('IN_MYBB') || !defined('AF_ADDONS')) die('AdvancedFunctionality required');
 define('AF_ASB_ID','advancedsignaturebuilder');
 define('AF_ASB_BASE',__DIR__.'/');
-foreach (['schema','model','storage','renderer','preview','ajax','publishing','integrations','usercp','assets'] as $module) require_once AF_ASB_BASE.'modules/'.$module.'.php';
+foreach (['schema','model','storage','legacy_background','renderer','preview','ajax','publishing','integrations','usercp','assets'] as $module) require_once AF_ASB_BASE.'modules/'.$module.'.php';
 function af_advancedsignaturebuilder_install(): void { af_advancedsignaturebuilder_activate(); }
 function af_advancedsignaturebuilder_activate(): void {
-    af_asb_install_schema();af_asb_install_settings();
+    af_asb_install_schema();af_asb_install_settings();af_asb_migrate_backgrounds();
     if (function_exists('rebuild_settings')) rebuild_settings();
     af_asb_migrate_builder_stylesheet_mode();
     if (function_exists('af_sync_theme_stylesheets')) af_sync_theme_stylesheets(false,AF_ASB_ID);

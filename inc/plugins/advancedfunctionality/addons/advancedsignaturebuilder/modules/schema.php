@@ -4,8 +4,9 @@ function af_asb_install_schema(): void {
     global $db;
     $db->write_query('CREATE TABLE IF NOT EXISTS '.TABLE_PREFIX."af_asb_signatures (
         uid INT UNSIGNED NOT NULL PRIMARY KEY, draft_json MEDIUMTEXT NULL, published_json MEDIUMTEXT NULL,
-        published_hash VARCHAR(64) NOT NULL DEFAULT '', legacy_backup MEDIUMTEXT NULL, updated_at INT UNSIGNED NOT NULL DEFAULT 0
+        published_hash VARCHAR(64) NOT NULL DEFAULT '', legacy_backup MEDIUMTEXT NULL, background_backup MEDIUMTEXT NULL, updated_at INT UNSIGNED NOT NULL DEFAULT 0
     )".$db->build_create_table_collation());
+    if (!$db->field_exists('background_backup','af_asb_signatures')) $db->write_query('ALTER TABLE '.TABLE_PREFIX.'af_asb_signatures ADD background_backup MEDIUMTEXT NULL');
     if ($db->table_exists('af_apui_signature_builder')) {
         // Copy byte-for-byte, once per uid. Newer ASB data always wins; never drop the backup table.
         $fields='uid,draft_json,published_json,published_hash,legacy_backup,updated_at';

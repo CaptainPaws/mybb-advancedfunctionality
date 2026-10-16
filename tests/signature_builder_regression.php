@@ -19,6 +19,7 @@ class SigBuilderMyBB {
 class SigBuilderDB {
     public $rows=[],$users=[7=>'[b]Original signature[/b]'], $writes=0;
     function table_exists($table){return true;}
+    function field_exists($field,$table){return true;}
     function escape_string($s){return addslashes($s);}
     function simple_select($table,$fields='*',$where='',$options=[]){preg_match('/uid=(\d+)/',$where,$m);return ['table'=>$table,'uid'=>(int)($m[1]??0)];}
     function query($sql){preg_match('/b.uid=(\d+)/',$sql,$m);return ['table'=>'join','uid'=>(int)$m[1]];}
@@ -34,7 +35,7 @@ class SigBuilderTemplates {public $cache=[];function get($name,...$args){return 
 $templates=new SigBuilderTemplates;
 function check_sig($value,$message){if(!$value)throw new RuntimeException($message);}
 function reject_sig(callable $fn){try{$fn();}catch(InvalidArgumentException|RuntimeException $e){return;}throw new LogicException('Expected validation failure');}
-$v=af_asb_defaults();$v['title']='<script> [b]Text[/b]';$v['text']="First\nSecond";$v['background']['media_id']=10;$v['images'][0]['url']='https://images.example.org/portrait.gif';$v['buttons']=[['label'=>'World','url'=>'https://example.org/world']];
+$v=af_asb_defaults();$v['title']='<script> [b]Text[/b]';$v['text']="First\nSecond";$v['template']='card';$v['images'][0]['media_id']=10;$v['buttons']=[['label'=>'World','url'=>'https://example.org/world']];
 $validated=af_asb_validate($v,7);$portable=af_asb_compile($validated);
 check_sig(!str_starts_with($portable,'{')&&str_contains($portable,'[url=')&&str_contains($portable,'[img]'),'Portable MyBB signature, not JSON');
 check_sig(str_contains($portable,'&#91;b&#93;')&&!str_contains($portable,'<script>'),'Plain field text must not become HTML/BBCode');
@@ -42,12 +43,12 @@ foreach(array_keys(af_asb_templates()) as $template){$state=$v;$state['template'
 $off=$validated;$off['show_divider']=false;check_sig(str_contains(af_asb_render($validated),'af-asb-signature__divider')&&!str_contains(af_asb_render($off),'af-asb-signature__divider'),'Divider control affects shared renderer');
 $legacyModel=$validated;unset($legacyModel['show_divider']);check_sig(af_asb_validate($legacyModel,7)['show_divider']===true,'Old models inherit divider default without storage migration');
 $preview=af_asb_preview($validated,7);check_sig(str_contains($preview['html'],'<details open')&&str_contains($preview['html'],'atf-gothic-frame'),'Use existing open signature frame in preview');
-$state=$v;$state['background']['url']='javascript:alert(1)';reject_sig(fn()=>af_asb_validate($state,7));
+$state=$v;$state['images'][0]['url']='javascript:alert(1)';reject_sig(fn()=>af_asb_validate($state,7));
 $state=$v;$state['buttons'][0]['url']='data:text/html,bad';reject_sig(fn()=>af_asb_validate($state,7));
-$state=$v;$state['background']['media_id']=11;reject_sig(fn()=>af_asb_validate($state,7));
+$state=$v;$state['images'][0]['media_id']=11;reject_sig(fn()=>af_asb_validate($state,7));
 $state=$v;$state['images'][]=$state['images'][0];reject_sig(fn()=>af_asb_validate($state,7));
 $state=$v;$state['buttons']=array_fill(0,7,$state['buttons'][0]);reject_sig(fn()=>af_asb_validate($state,7));
-$state=$v;$state['background']['media_id']=null;$state['background']['url']='https://example.org/active.svg';reject_sig(fn()=>af_asb_validate($state,7));
+$state=$v;$state['images'][0]['media_id']=null;$state['images'][0]['url']='https://example.org/active.svg';reject_sig(fn()=>af_asb_validate($state,7));
 $mybb->settings['sigimgcode']=0;reject_sig(fn()=>af_asb_validate($v,7,true,true));$mybb->settings['sigimgcode']=1;
 $filter=$validated;$filter['text']='filtered_word';check_sig(str_contains(af_asb_render($filter),'***'),'Shared renderer retains native word filtering');
 // Merely opening the constructor leaves legacy text and AF storage untouched.
@@ -71,7 +72,7 @@ af_asb_api('draft',7);check_sig($db->users[7]===$portable&&$db->rows[7]['publish
 reject_sig(fn()=>af_asb_api('draft',8));$mybb->input['my_post_key']='bad';reject_sig(fn()=>af_asb_api('draft',7));$mybb->input['my_post_key']='csrf';
 $db->users[7]='Edited outside constructor';unset($GLOBALS['af_asb_rows']);$post=['uid'=>7,'signature'=>'Externally edited parsed content'];af_asb_postbit($post);check_sig($post['signature']==='Externally edited parsed content','External native edits detach stale structured output');
 // Invalid submitted media must not leak unowned URLs through the error redisplay/seed.
-$attack=$v;$attack['background']['media_id']=11;$GLOBALS['af_asb_submitted']=$attack;$mybb->request_method='get';$af_asb_builder_html=af_asb_component();check_sig(!str_contains($af_asb_builder_html,'private.gif'),'Unowned media URL must not leak in a seed or preview');
+$attack=$v;$attack['images'][0]['media_id']=11;$GLOBALS['af_asb_submitted']=$attack;$mybb->request_method='get';$af_asb_builder_html=af_asb_component();check_sig(!str_contains($af_asb_builder_html,'private.gif'),'Unowned media URL must not leak in a seed or preview');
 $roundtrip=af_asb_validate(af_asb_decode(json_encode($validated)),7);check_sig($roundtrip===$validated,'Model round-trip');
 echo "Signature builder passed: four safe compositions, portable BBCode, no GET migration, explicit backup, native-save boundaries, drafts, hash detachment, CSRF/UID/media checks and shared preview.\n";
 
@@ -92,12 +93,13 @@ check_sig(json_decode($db->rows[7]['draft_json'],true)['template']==='gallery','
 check_sig(substr_count(af_asb_api('preview',7)['html'],'class="af-asb-signature__placeholder"')===3,'API preview incorrectly requires publication fields');
 // Restore one published owner model and inspect the public profile boundary with a different visitor.
 $db->rows[7]['published_json']=json_encode($validated);$db->rows[7]['published_hash']=hash('sha256',$portable);$db->users[7]=$portable;unset($GLOBALS['af_asb_rows']);
-$memprofile=['uid'=>7,'signature'=>$portable];$signature='Native visible signature';$mybb->user['uid']=8;$headerinclude='';
+$memprofile=['uid'=>7,'signature'=>'<b>Already parsed by MyBB</b>'];$signature='Native visible signature';$mybb->user['uid']=8;$headerinclude='';
 af_asb_profile();check_sig(str_contains($signature,'af-aa-signature-user-7') && str_contains($signature,'af-asb-signature') && !str_contains($signature,'af-aa-signature-user-8'),'Profile must render its owner, never visitor');
 $signature='';af_asb_profile();check_sig($signature==='','Profile native visibility gate bypassed');
-$signature='Legacy parsed signature';$memprofile['signature']='Legacy signature';af_asb_profile();check_sig($signature==='Legacy parsed signature','Legacy profile signature was replaced');
-check_sig(strpos($af_asb_builder_html,'<h2>Фон подписи</h2>')<strpos($af_asb_builder_html,'class="af-asb__actions"'),'Background remains below actions');
-check_sig(strpos($af_asb_builder_html,'<h2>Публикация подписи</h2>')<strpos($af_asb_builder_html,'class="af-asb__actions"'),'Publication options remain below actions');
+$signature='Legacy parsed signature';$memprofile['signature']='Legacy signature';$db->users[7]='Legacy signature';unset($GLOBALS['af_asb_rows']);af_asb_profile();check_sig($signature==='Legacy parsed signature','Legacy profile signature was replaced');
+check_sig(!str_contains($af_asb_builder_html,'Фон подписи') && substr_count($af_asb_builder_html,'class="af-asb__step" aria-hidden="true">')===4,'Only three numbered steps and preview icon, no background controls');
+check_sig(strpos($af_asb_builder_html,'<summary>Параметры публикации</summary>')<strpos($af_asb_builder_html,'class="af-asb__actions"'),'Publication disclosure remains below actions');
+check_sig(substr_count($af_asb_builder_html,'class="af-asb__image-remove"')===3,'Three visible-slot removal controls are required');
 echo "Signature additions passed: draft/preview/publish validation, exact placeholder slots, media IDs, owner profile and settings order.\n";
 
 foreach(array_keys(af_asb_templates()) as $template) {
@@ -105,8 +107,41 @@ foreach(array_keys(af_asb_templates()) as $template) {
     foreach($composition['images'] as &$image)$image=['enabled'=>true,'media_id'=>10,'url'=>''];unset($image);
     $native=af_asb_compile($composition);$db->users[7]=$native;$db->rows[7]['published_json']=json_encode($composition);$db->rows[7]['published_hash']=hash('sha256',$native);unset($GLOBALS['af_asb_rows']);
     $post=['uid'=>7,'signature'=>'Visible native signature'];af_asb_postbit($post);
-    $memprofile=['uid'=>7,'signature'=>$native];$signature='Visible native signature';af_asb_profile();
+    $memprofile=['uid'=>7,'signature'=>'<p>Parsed HTML, never raw BBCode</p>'];$signature='Visible native signature';af_asb_profile();
     $preview=af_asb_preview($composition,7);$content=af_asb_render($composition);
     check_sig($post['signature']===$content && str_contains($signature,$content) && str_contains($preview['html'],$content),'Composition differs between UserCP, Showthread and Member: '.$template);
 }
 echo "Four composition contexts passed: same shared content in UserCP preview, postbit and owner profile.\n";
+// Retired background: never part of new content, rendered HTML or portable BBCode.
+$oldModel=$validated;$oldModel['background']=['enabled'=>true,'url'=>'https://example.org/retired.gif','media_id'=>null];
+$clean=af_asb_validate($oldModel,7);
+check_sig(!array_key_exists('background',$clean) && !array_key_exists('background',af_asb_seed_model($oldModel)),'Legacy background leaked into editable state');
+check_sig(!str_contains(af_asb_render($oldModel),'retired.gif') && !str_contains(af_asb_compile($oldModel),'retired.gif'),'Legacy background leaked into HTML or BBCode');
+$oldText='[img]https://example.org/retired.gif[/img]' . "\n" . af_asb_compile($clean);
+$legacy=['uid'=>7,'draft_json'=>json_encode($oldModel),'published_json'=>json_encode($oldModel),'published_hash'=>hash('sha256',$oldText),
+    'native_signature'=>$oldText,'legacy_backup'=>'Prior ordinary signature','background_backup'=>null];
+$plan=af_asb_background_migration_plan($legacy);
+check_sig($plan['native']===af_asb_compile($clean) && $plan['fields']['published_hash']===hash('sha256',$plan['native']),'Verified portable background was not repaired with its hash');
+check_sig(!array_key_exists('background',json_decode($plan['fields']['published_json'],true)) && !array_key_exists('background',json_decode($plan['fields']['draft_json'],true)),'Migration retains obsolete fields');
+check_sig(json_decode($plan['fields']['background_backup'],true)['native_signature']===$oldText && !isset($plan['fields']['legacy_backup']),'Original content/backup was overwritten');
+$after=array_replace($legacy,$plan['fields'],['native_signature'=>$plan['native']]);
+check_sig(af_asb_background_migration_plan($after)['fields']===[] && af_asb_owned($after,$after['native_signature']),'Migration is not idempotent or detached the signature');
+$unowned=$legacy;$unowned['native_signature']='[img]https://example.org/ordinary.gif[/img]';
+check_sig(af_asb_background_migration_plan($unowned)['native']===null,'Ordinary IMG signature was modified');
+$unprovable=$legacy;$unprovable['native_signature']=$oldText."\nExternally modified";$unprovable['published_hash']=hash('sha256',$unprovable['native_signature']);
+$unsafe=af_asb_background_migration_plan($unprovable);
+check_sig($unsafe['native']===null && !isset($unsafe['fields']['published_json']) && isset($unsafe['fields']['background_backup']),'Unprovable publication must retain its source for controlled republish');
+echo "Retired background passed: clean model/HTML/BBCode, exact old-output proof, original backup, idempotence and safe manual fallback.\n";
+$fixtureDb=$db;
+$db=new class($legacy) extends SigBuilderDB {
+    public array $sql=[];private array $migrationRows;
+    function __construct($row){$this->migrationRows=[$row];}
+    function query($sql){return new ArrayIterator($this->migrationRows);}
+    function fetch_array($q){if(!$q->valid())return false;$row=$q->current();$q->next();return $row;}
+    function write_query($sql){$this->sql[]=$sql;}
+};
+af_asb_migrate_backgrounds();
+check_sig(count($db->sql)===1 && str_contains($db->sql[0],'INNER JOIN test_users u') && str_contains($db->sql[0],'u.signature=') && str_contains($db->sql[0],'b.published_hash='),'Native text/hash are not updated atomically');
+foreach(['BINARY u.signature=','BINARY b.published_json <=>','BINARY b.draft_json <=>','BINARY b.published_hash <=>'] as $guard)check_sig(str_contains($db->sql[0],$guard),'Migration can overwrite concurrent data: '.$guard);
+$db=$fixtureDb;
+echo "Migration SQL passed: native text and hash share one guarded update, with old-content compare-and-swap.\n";

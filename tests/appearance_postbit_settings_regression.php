@@ -67,3 +67,16 @@ check(str_contains($profileCss,'.af-aa-signature-user-7 .atf-post__signature'),'
 check(!str_contains($profileCss,'user-8') && !str_contains($profileCss,'.atf-post__topbar'),'Signature adapter leaks other owners/components');
 check(str_contains($profileCss,'--af-sig-overlay:') && str_contains($profileCss,'font-family:'),'Profile loses signature masks/fonts');
 echo "Signature profile compiler passed: owner scope, shared masks/fonts and no postbit layout selectors.\n";
+$mybb->settings['bburl']='https://warprift.ru';
+$default=af_aa_signature_defaults();$defaultUrl=$default['background_url'];
+foreach([af_aa_personal_compile_css(7,[]),af_aa_studio_compile(7,[],true),af_aa_signature_compile_css(7,[])] as $output) {
+    check(str_contains($output,$defaultUrl) && str_contains($output,'background-size:cover') && str_contains($output,'background-position:center'),'Default background differs between composition contexts');
+}
+foreach([['background_url'=>''],['background_media_id'=>null],['background_url'=>'https://images.example.org/custom.gif']] as $values) {
+    $preset=['components'=>['signature'=>$values]];$copy=$preset;
+    $output=af_aa_personal_compile_css(7,$preset);
+    check(!str_contains($output,$defaultUrl),'Default replaced an explicit background/removal');
+    check($preset===$copy,'Compiler mutated the stored preset');
+}
+check(af_aa_postbit_effective_settings(['components'=>['signature'=>['overlay_mode'=>'none','text_color'=>'#123456']]])['components']['signature']['overlay_mode']==='none','Default overwrote a custom mask');
+echo "Appearance background passed: default across roots, explicit removal/custom image preserved, no stored-preset mutation.\n";

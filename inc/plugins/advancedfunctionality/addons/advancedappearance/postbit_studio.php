@@ -73,8 +73,26 @@ function af_aa_studio_fonts_link(): string
     return $url!==''?'<link data-aa-local-fonts rel="stylesheet" href="'.htmlspecialchars_uni($url).'">':'';
 }
 
+/** Base preset decoration. Explicit image/null/empty values always win, including deliberate removal. */
+function af_aa_signature_defaults(): array
+{
+    return ['background_url'=>'https://warprift.ru/uploads/af_gallery/1/2026/10/2240bb976cd73c5cbb555246b3001753.png',
+        'background_size'=>'cover','background_position'=>'center','background_repeat'=>'no-repeat',
+        'overlay_mode'=>'darken','overlay_color'=>'#000000','overlay_intensity'=>.4,'overlay_start'=>1,'overlay_end'=>1,'overlay_angle'=>180,
+        'text_color'=>'#e7edff'];
+}
+function af_aa_postbit_effective_settings(array $settings): array
+{
+    $signature=$settings['components']['signature']??[];
+    if (!array_key_exists('background_url',$signature) && !array_key_exists('background_media_id',$signature)) {
+        $settings['components']['signature']=$signature+af_aa_signature_defaults();
+    }
+    return $settings;
+}
+
 function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $signatureRoot=null): string
 {
+    $s=af_aa_postbit_effective_settings($s);
     $root=$signatureRoot??af_aa_studio_root($uid,'postbit',$preview);
     // Match the canonical ATF rules without blanket !important declarations.
     $scope=$signatureRoot!==null

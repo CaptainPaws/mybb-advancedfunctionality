@@ -41,7 +41,7 @@ function af_aa_studio_root(int $uid,string $target,bool $preview=false): string
 function af_aa_surface_settings(int $uid,string $target): ?array
 {
     if (!af_aa_is_enabled()) return null;
-    $row=af_aa_personal_active_row($uid,$target);if (!$row) return null;
+    $row=af_aa_personal_active_row($uid,$target);if (!$row) return $target==='postbit'?[]:null;
     try{return af_aa_personal_decode($row['settings_json'],$uid,true,false,true,$target);}
     catch(AF_AA_PersonalException $e){return null;}
 }

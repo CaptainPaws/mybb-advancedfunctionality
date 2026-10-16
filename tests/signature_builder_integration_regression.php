@@ -69,6 +69,15 @@ check_sig($manifest['id']==='advancedsignaturebuilder'&&$manifest['frontend']['d
 foreach(['editor','preview','view','studio_link'] as $resource)check_sig(isset($manifest['frontend']['resources'][$resource]),'Declared frontend resource '.$resource);
 foreach(['install','activate','deactivate','upgrade','uninstall'] as $operation)check_sig(function_exists('af_advancedsignaturebuilder_'.$operation),'Lifecycle '.$operation);
 $apui=file_get_contents(AF_ADDONS.'advancedprofileui/advancedprofileui.php');check_sig(!str_contains($apui,'af_apui_sig_')&&!is_file(AF_ADDONS.'advancedprofileui/modules/signature_builder.php'),'No duplicate APUI ownership or hooks');
+// MyBB 1.8.40 supplies parsed memprofile.signature at member_profile_end.
+$mybb->settings['af_adaptivethemeframework_enabled']='1';$headerinclude='';
+$owner=7;$row=af_asb_row($owner);$memprofile=['uid'=>$owner,'signature'=>'<p>Already parsed native BBCode</p>'];
+$signature='<table><tr><td>Native parsed signature</td></tr></table>';af_asb_profile();
+$context=af_adaptivethemeframework_profile_context($memprofile,['signature'=>$signature]);
+$profileBody=af_adaptivethemeframework_render_profile_main($context);
+check_sig(str_contains($profileBody,'af-asb-signature') && substr_count($profileBody,'data-atf-signature')===1,'Profile lost shared composition or nested its disclosure');
+check_sig(str_contains($profileBody,'af-aa-signature-user-7') && !str_contains($profileBody,'<details open'),'Profile must be owner-scoped and collapsed');
+check_sig(str_contains($headerinclude,'signature-view.css') && !str_contains($headerinclude,'signature-builder.js'),'Profile did not prepare public CSS before template evaluation');
 // The changed section source upgrades through ATF's existing ledger, retaining its original backup.
 require __DIR__.'/fixtures/atf_ownership_database.php';
 $db=new AtfDatabase();$path=AF_ADAPTIVETHEMEFRAMEWORK_BASE.'templates/usercp_editsig.html';

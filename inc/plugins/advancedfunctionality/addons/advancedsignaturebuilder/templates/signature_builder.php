@@ -50,27 +50,19 @@ ob_start(); ?>
 <div class="af-asb__extras"><section class="af-asb__image-group" data-asb-images-group tabindex="-1" aria-describedby="af-asb-images-error"><h3>Дополнительные изображения</h3><p id="af-asb-images-error" data-asb-images-error role="alert" hidden></p><div class="af-asb__images">
 <?php foreach($model['images'] as $slot=>$image): $index=$slot+1;$name='Изображение '.$index; ?>
 <fieldset class="af-asb__image" data-asb-image="<?= $index ?>"><legend><?= $name ?></legend>
-<div class="af-asb__upload"><span class="af-asb__image-placeholder"><?= $icon('image') ?></span><img data-asb-image-thumb alt="Предпросмотр: <?= $name ?>" hidden><button type="button" data-asb-image-pick <?= $seed['image_allowed']?'':'disabled' ?>>Выбрать файл</button></div>
+<div class="af-asb__upload"><span class="af-asb__image-placeholder"><?= $icon('image') ?></span><img data-asb-image-thumb alt="Предпросмотр: <?= $name ?>" hidden><button type="button" data-asb-image-clear class="af-asb__image-remove" aria-label="Удалить изображение <?= $index ?>" disabled><?= $icon('trash') ?></button><button type="button" data-asb-image-pick <?= $seed['image_allowed']?'':'disabled' ?>>Выбрать файл</button></div>
 <small>JPG, PNG, WebP, GIF</small>
 <details class="af-asb__image-settings"><summary title="URL и параметры изображения">URL / параметры</summary>
 <label><input type="checkbox" data-asb-image-enabled <?= $image['enabled']?'checked':'' ?> <?= $seed['image_allowed']?'':'disabled' ?>> Показывать</label>
 <label><span class="af-asb__sr-only">URL: <?= $name ?></span><input type="url" maxlength="2048" placeholder="https://…/image.gif" value="<?= $e($image['url']) ?>" data-asb-image-url <?= $seed['image_allowed']?'':'disabled' ?>></label>
-<button type="button" data-asb-image-clear><?= $icon('trash') ?> Удалить</button></details></fieldset>
+</details></fieldset>
 <?php endforeach ?></div></section>
 <section class="af-asb__links"><h3>Кнопки-ссылки</h3><div data-asb-links></div><div class="af-asb__add-link"><button type="button" data-asb-add-link><?= $icon('plus') ?> Добавить кнопку</button><small>До 6 кнопок</small></div></section></div>
 <div class="af-asb__field af-asb__field--status"><label for="af-asb-status"><strong>Подпись автора / статус</strong> <span>(необязательно)</span></label><div class="af-asb__input-wrap"><input type="text" id="af-asb-status" data-asb-text="status" maxlength="<?= $limits['status'] ?>" value="<?= $e($model['status']) ?>"><output data-asb-count="status"><?= mb_strlen($model['status']).'/'.$limits['status'] ?></output></div></div>
 
 <label class="af-asb__switch"><input type="checkbox" data-asb-show="status" <?= $model['show_status']?'checked':'' ?>><span>Показывать подпись автора / статус</span></label>
 </section>
-<section class="af-asb__panel"><header class="af-asb__heading"><span class="af-asb__step" aria-hidden="true">4</span><div><h2>Фон подписи</h2><p>Выберите изображение из галереи. Цвета и затемнение настраиваются в APStudio.</p></div></header>
-<fieldset class="af-asb__image af-asb__image--background" data-asb-image="0"><legend class="af-asb__sr-only">Фоновое изображение</legend>
-<label class="af-asb__switch"><input type="checkbox" data-asb-image-enabled <?= $model['background']['enabled']?'checked':'' ?> <?= $seed['image_allowed']?'':'disabled' ?>><span>Показывать фон</span></label>
-<div class="af-asb__upload"><span class="af-asb__image-placeholder"><?= $icon('image') ?> Фон не выбран</span><img data-asb-image-thumb alt="Предпросмотр фона" hidden><button type="button" data-asb-image-pick <?= $seed['image_allowed']?'':'disabled' ?>>Выбрать файл</button><button type="button" data-asb-image-clear><?= $icon('trash') ?> Удалить</button></div>
-<details class="af-asb__background-url"><summary>Указать URL изображения</summary><label>URL изображения<input type="url" maxlength="2048" placeholder="https://…/image.gif" value="<?= $e($model['background']['url']) ?>" data-asb-image-url <?= $seed['image_allowed']?'':'disabled' ?>></label></details>
-</fieldset></section>
-<section class="af-asb__panel"><h2>Публикация подписи</h2><fieldset class="af-asb__post-options"><legend>Подпись в существующих сообщениях</legend>
-<?php foreach(['0'=>'Оставить текущие настройки','enable'=>'Включить подпись во всех моих сообщениях','disable'=>'Отключить подпись во всех моих сообщениях'] as $value=>$label): ?><label><input type="radio" name="updateposts" value="<?= $value ?>" <?= (string)($mybb->input['updateposts']??'0')===(string)$value?'checked':'' ?>> <?= $label ?></label><?php endforeach ?>
-</fieldset></section></div>
+</div>
 <aside class="af-asb__sidebar"><section class="af-asb__panel"><header class="af-asb__heading"><span class="af-asb__step" aria-hidden="true"><?= $icon('eye') ?></span><div><h2>Предпросмотр подписи</h2><p>Так подпись будет выглядеть в сообщениях форума.</p></div></header>
 <style data-af-sig-preview-style><?= $preview['css'] ?></style><div class="af-asb__preview" data-af-sig-preview><?= $preview['html'] ?></div></section>
 <?php if(function_exists('af_aa_surface_settings')): ?>
@@ -81,6 +73,9 @@ ob_start(); ?>
 <?php foreach(['trash','up','down'] as $name): ?><template data-asb-icon="<?= $name ?>"><?= $icon($name) ?></template><?php endforeach ?>
 <script type="application/json" data-af-sig-seed><?= json_encode($seed,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_INVALID_UTF8_SUBSTITUTE) ?></script>
 <noscript>Для интерактивного конструктора нужен JavaScript. Существующая подпись не меняется.</noscript>
+<details class="af-asb__publication"><summary>Параметры публикации</summary><fieldset class="af-asb__post-options"><legend>Подпись в существующих сообщениях</legend>
+<?php foreach(['0'=>'Оставить текущие настройки','enable'=>'Включить подпись во всех моих сообщениях','disable'=>'Отключить подпись во всех моих сообщениях'] as $value=>$label): ?><label><input type="radio" name="updateposts" value="<?= $value ?>" <?= (string)($mybb->input['updateposts']??'0')===(string)$value?'checked':'' ?>> <?= $label ?></label><?php endforeach ?>
+</fieldset></details>
 <div class="af-asb__actions"><button type="button" data-af-sig-draft><?= $icon('bookmark') ?> Сохранить шаблон</button><button type="button" data-af-sig-preview-button><?= $icon('eye') ?> Предпросмотр</button><button type="submit" class="af-asb__publish" disabled><?= $icon('save') ?> Обновить подпись</button></div>
 </form>
 <?php return ob_get_clean();

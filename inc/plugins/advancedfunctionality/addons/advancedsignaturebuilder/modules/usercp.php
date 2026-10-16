@@ -14,13 +14,15 @@ function af_asb_component(): string {
     $model=af_asb_seed_model($model);
     $preview=af_asb_preview(af_asb_defaults(),$uid);
     try {$preview=af_asb_preview(af_asb_validate($model,$uid,true),$uid);}catch(Throwable $e){}
-    $mediaUrls=[];foreach(array_merge([$model['background']],$model['images']) as $image) {
-        $url='';try {$checked=af_asb_validate(['background'=>$image],$uid,true);$url=af_asb_image_url(array_replace($checked['background'],['enabled'=>true]));}catch(Throwable $e){}
+    $mediaUrls=[];foreach($model['images'] as $image) {
+        $url='';try {$checked=af_asb_validate(['images'=>[$image]],$uid,true);$url=af_asb_image_url(array_replace($checked['images'][0],['enabled'=>true]));}catch(Throwable $e){}
         $mediaUrls[]=$url;
     }
     $seed=['media_urls'=>$mediaUrls,'model'=>$model,'defaults'=>af_asb_defaults(),'templates'=>af_asb_templates(),'limits'=>af_asb_limits(),'csrf'=>$mybb->post_code,'uid'=>$uid,'studio'=>af_asb_studio_url($uid),'field_error'=>$GLOBALS['af_asb_field_error']??null,'image_allowed'=>!empty($mybb->settings['sigmycode']) && !empty($mybb->settings['sigimgcode'])];
     $legacy=$native!=='' && !$owned?'<section class="af-asb__legacy"><h2>Существующая подпись сохранена</h2><p>Произвольный BBCode/HTML нельзя автоматически разложить на поля конструктора. Открытие страницы и сохранение черновика не меняют эту подпись.</p>'.$signature.'<label><input type="checkbox" name="af_sig_confirm_replace" value="1"> Заменить подпись композицией конструктора; исходник сохранить в резервной копии.</label></section>':'';
     $backup=!empty($row['legacy_backup'])?'<details><summary>Исходная подпись до перехода</summary><pre>'.htmlspecialchars_uni($row['legacy_backup']).'</pre></details>':'';
+    $republish=af_asb_needs_background_republish($row,$native)?'<p class="af-asb__migration-note">В старой переносимой подписи сохранён фон. Нажмите «Обновить подпись», чтобы убрать его; исходник будет сохранён перед публикацией.</p>':'';
+    $legacy.=$republish;
     $status=(string)$mybb->get_input('af_sig_saved')==='1'?'Подпись обновлена.':'';
     return require AF_ASB_BASE.'templates/signature_builder.php';
 }

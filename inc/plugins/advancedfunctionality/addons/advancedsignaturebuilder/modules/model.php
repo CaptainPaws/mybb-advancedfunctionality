@@ -9,7 +9,7 @@ function af_asb_templates(): array {
 }
 function af_asb_defaults(): array {
     $image=['enabled'=>true,'url'=>'','media_id'=>null];
-    return ['version'=>1,'template'=>'minimal','title'=>'','show_title'=>true,'subtitle'=>'','show_subtitle'=>true,'show_divider'=>true,'text'=>'','status'=>'','show_status'=>true,'background'=>$image,'images'=>[$image,$image,$image],'buttons'=>[]];
+    return ['version'=>1,'template'=>'minimal','title'=>'','show_title'=>true,'subtitle'=>'','show_subtitle'=>true,'show_divider'=>true,'text'=>'','status'=>'','show_status'=>true,'images'=>[$image,$image,$image],'buttons'=>[]];
 }
 function af_asb_limits(): array {
     $out=[];foreach(['title'=>100,'subtitle'=>100,'text'=>500,'status'=>100] as $key=>$default) $out[$key]=max(1,min(10000,(int)($GLOBALS['mybb']->settings['af_advancedsignaturebuilder_signature_'.$key.'_limit']??$default)));
@@ -30,6 +30,7 @@ function af_asb_decode(string $json): array {
     if (!is_array($v) || array_is_list($v)) throw new InvalidArgumentException('Нужен объект конфигурации подписи.');return $v;
 }
 function af_asb_validate(array $v,int $uid,bool $checkMedia=true,bool $publish=false): array {
+    unset($v['background']); // v1 legacy decoration is never editable content.
     $d=af_asb_defaults();if (array_diff(array_keys($v),array_keys($d))) throw new InvalidArgumentException('Неизвестное поле конструктора.');
     $v=array_replace($d,$v);
     if ($v['version']!==1 || !is_string($v['template']) || !isset(af_asb_templates()[$v['template']])) throw new InvalidArgumentException('Неизвестный шаблон подписи.');
@@ -39,11 +40,11 @@ function af_asb_validate(array $v,int $uid,bool $checkMedia=true,bool $publish=f
         $v[$key]=str_replace(["\r\n","\r"],"\n",$v[$key]);
     }
     if (!is_array($v['images']) || !array_is_list($v['images']) || count($v['images'])>3 || !is_array($v['buttons']) || !array_is_list($v['buttons']) || count($v['buttons'])>6) throw new InvalidArgumentException('Допустимы до трёх изображений и шести ссылок.');
-    $v['images']=array_pad($v['images'],3,$d['background']);
-    $images=array_merge([$v['background']],$v['images']);
+    $v['images']=array_pad($v['images'],3,$d['images'][0]);
+    $images=$v['images'];
     foreach ($images as &$image) {
         if (!is_array($image) || array_diff(array_keys($image),['enabled','url','media_id'])) throw new InvalidArgumentException('Некорректное изображение.');
-        $image=array_replace($d['background'],$image);
+        $image=array_replace($d['images'][0],$image);
         if (!is_bool($image['enabled']) || !is_string($image['url']) || ($image['url']!=='' && !af_asb_url($image['url'],true))) throw new InvalidArgumentException('Изображения: прямой PNG/JPG/WebP/GIF на разрешённом домене или загрузка Gallery.');
         $id=$image['media_id'];if ($id!==null && (!is_int($id) || $id<1 || $id>4294967295)) throw new InvalidArgumentException('Некорректный ID изображения.');
         if ($id && $checkMedia) {
@@ -52,10 +53,10 @@ function af_asb_validate(array $v,int $uid,bool $checkMedia=true,bool $publish=f
         }
         if ($id) $image['url']='';
     }unset($image);
-    $v['background']=array_shift($images);$v['images']=$images;
+    $v['images']=$images;
     foreach ($v['buttons'] as $button) if (!is_array($button) || array_diff(array_keys($button),['label','url']) || !is_string($button['label']??null) || trim($button['label'])==='' || mb_strlen($button['label'])>60 || preg_match('/[\x00-\x1f\x7f]/u',$button['label']) || !is_string($button['url']??null) || !af_asb_url($button['url'])) throw new InvalidArgumentException('У ссылки нужны название (до 60 символов) и HTTP(S)-адрес.');
     if (!empty($v['buttons']) && empty($GLOBALS['mybb']->settings['sigmycode'])) throw new InvalidArgumentException('Ссылки в подписи запрещены настройками MyBB.');
-    if ($publish && (empty($GLOBALS['mybb']->settings['sigmycode']) || empty($GLOBALS['mybb']->settings['sigimgcode'])) && array_filter(array_merge([$v['background']],af_asb_used_images($v)),static fn($i)=>$i['enabled'] && ($i['media_id'] || $i['url']!==''))) throw new InvalidArgumentException('Изображения в подписи запрещены настройками MyBB.');
+    if ($publish && (empty($GLOBALS['mybb']->settings['sigmycode']) || empty($GLOBALS['mybb']->settings['sigimgcode'])) && array_filter(af_asb_used_images($v),static fn($i)=>$i['enabled'] && ($i['media_id'] || $i['url']!==''))) throw new InvalidArgumentException('Изображения в подписи запрещены настройками MyBB.');
     if ($publish && $v['template']==='gallery' && !array_filter($v['images'],static fn($i)=>$i['enabled'] && ($i['media_id'] || $i['url']!==''))) throw new AF_ASB_FieldException('Добавьте хотя бы одно изображение в галерею.','images');
     return $v;
 }
@@ -72,8 +73,7 @@ function af_asb_plain(string $text): string {
 }
 function af_asb_compile(array $v): string {
     $parts=[];$mycode=!empty($GLOBALS['mybb']->settings['sigmycode']);
-    // The background remains a normal image in the portable BBCode fallback.
-    foreach (array_merge([$v['background']],af_asb_used_images($v)) as $image) if (($url=af_asb_image_url($image))!=='') $parts[]='[img]'.$url.'[/img]';
+    foreach (af_asb_used_images($v) as $image) if (($url=af_asb_image_url($image))!=='') $parts[]='[img]'.$url.'[/img]';
     foreach (['title'=>'b','subtitle'=>'i'] as $key=>$tag) if ($v['show_'.$key] && $v[$key]!=='') $parts[]=$mycode?'['.$tag.']'.af_asb_plain($v[$key]).'[/'.$tag.']':af_asb_plain($v[$key]);
     if ($v['text']!=='') $parts[]=af_asb_plain($v['text']);
     foreach ($v['buttons'] as $button) $parts[]='[url='.$button['url'].']'.af_asb_plain($button['label']).'[/url]';
@@ -86,15 +86,15 @@ function af_asb_seed_model(array $raw): array {
     foreach (['title','subtitle','text','status'] as $key) if (is_string($raw[$key]??null)) $out[$key]=$raw[$key];
     foreach (['show_title','show_subtitle','show_status','show_divider'] as $key) if (is_bool($raw[$key]??null)) $out[$key]=$raw[$key];
     if (is_string($raw['template']??null) && isset(af_asb_templates()[$raw['template']])) $out['template']=$raw['template'];
-    foreach (['background',0,1,2] as $slot) {
-        $src=$slot==='background'?($raw['background']??[]):($raw['images'][$slot]??[]);
-        $image=af_asb_defaults()['background'];
+    foreach ([0,1,2] as $slot) {
+        $src=$raw['images'][$slot]??[];
+        $image=af_asb_defaults()['images'][0];
         if (is_array($src)) {
             if (is_bool($src['enabled']??null)) $image['enabled']=$src['enabled'];
             if (is_string($src['url']??null)) $image['url']=$src['url'];
             if (is_int($src['media_id']??null)) $image['media_id']=$src['media_id'];
         }
-        if ($slot==='background') $out['background']=$image;else $out['images'][$slot]=$image;
+        $out['images'][$slot]=$image;
     }
     foreach (array_slice(is_array($raw['buttons']??null)?$raw['buttons']:[],0,6) as $button) $out['buttons'][]=['label'=>is_string($button['label']??null)?$button['label']:'','url'=>is_string($button['url']??null)?$button['url']:''];
     return $out;

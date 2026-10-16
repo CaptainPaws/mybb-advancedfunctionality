@@ -53,10 +53,10 @@
     changed();
   }));
   form.querySelectorAll('[data-asb-image]').forEach(box => {
-    const index = Number(box.dataset.asbImage), image = index === 0 ? model.background : model.images[index - 1];
+    const index = Number(box.dataset.asbImage), image = model.images[index - 1];
     const url = box.querySelector('[data-asb-image-url]'), thumb = box.querySelector('[data-asb-image-thumb]');
     function refreshThumb() {
-      const source = image.media_id ? thumbs[index] : image.url;
+      const source = image.media_id ? thumbs[index - 1] : image.url;
       let safe = '';
       try { const parsed = new URL(source); if (['http:', 'https:'].includes(parsed.protocol) && /\.(png|jpe?g|webp|gif)$/i.test(parsed.pathname)) safe = source; } catch (_) {}
       box.classList.toggle('has-image', Boolean(safe));
@@ -76,10 +76,10 @@
       try {
         await window.AF_GalleryPicker.open(media => {
           if (!Number.isInteger(Number(media.media_id)) || Number(media.media_id) < 1) { showError(new Error('Галерея не вернула ID изображения.')); return; }
-          image.media_id = Number(media.media_id); image.url = ''; image.enabled = true; thumbs[index] = media.url_full;
+          image.media_id = Number(media.media_id); image.url = ''; image.enabled = true; thumbs[index - 1] = media.url_full;
           box.querySelector('[data-asb-image-enabled]').checked = true;
           url.value = ''; refreshThumb(); changed();
-        }, {purpose: index === 0 ? 'signature_background' : 'signature_images', onError: showError});
+        }, {purpose: 'signature_images', onError: showError});
       } catch (error) { showError(error); }
       finally { button.disabled = !seed.image_allowed; }
     });

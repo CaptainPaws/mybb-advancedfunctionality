@@ -26,12 +26,16 @@ function af_asb_start(): void {
 }
 /** MyBB has accepted length/images/group rules and CSRF. Keep a recoverable draft before its update. */
 function af_asb_publish_start(): void {
-    global $mybb;
+    global $mybb,$db;
     if (!isset($GLOBALS['af_asb_pending'])) return;
     $p=$GLOBALS['af_asb_pending'];$uid=(int)$mybb->user['uid'];$row=af_asb_row($uid);
     $fields=['draft_json'=>json_encode($p['model'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)];
+    if ($row && af_asb_needs_background_republish($row,$p['legacy']) && ($row['background_backup']??null)===null) {
+        if (!$db->field_exists('background_backup','af_asb_signatures')) error('Обновите AdvancedSignatureBuilder через ACP для безопасного сохранения исходника.');
+        $fields['background_backup']=af_asb_background_backup($row,$p['legacy']);
+    }
     if (!$row || $row['legacy_backup']===null) $fields['legacy_backup']=$p['legacy'];
-    foreach (array_merge([$p['model']['background']],$p['model']['images']) as $image) if ($image['media_id'] && (!function_exists('ag_retain_owned_media') || !ag_retain_owned_media($uid,$image['media_id']))) error('Gallery: не удалось закрепить изображение.');
+    foreach ($p['model']['images'] as $image) if ($image['media_id'] && (!function_exists('ag_retain_owned_media') || !ag_retain_owned_media($uid,$image['media_id']))) error('Gallery: не удалось закрепить изображение.');
     af_asb_write($uid,$fields);
 }
 function af_asb_publish_end(): void {

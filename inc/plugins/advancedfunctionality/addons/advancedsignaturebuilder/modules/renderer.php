@@ -10,7 +10,6 @@ function af_asb_render(array $v,bool $viewerImages=true,bool $editorPreview=fals
         if ($v['text']==='') $v['text']=$v['template']==='quote'?'Текст цитаты':'Текст подписи';
     }
     $html='<section class="af-asb-signature af-asb-signature--'.$v['template'].'">';
-    if ($images && ($url=af_asb_image_url($v['background']))!=='') $html.='<span class="af-asb-signature__backdrop" aria-hidden="true"><img src="'.$esc($url).'" alt="" loading="lazy"></span>';
     $html.='<div class="af-asb-signature__layout">';$pictures='';
     foreach (af_asb_used_images($v) as $slot=>$image) {
         $url=$images?af_asb_image_url($image):'';
