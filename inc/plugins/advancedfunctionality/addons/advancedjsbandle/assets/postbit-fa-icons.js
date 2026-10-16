@@ -35,7 +35,8 @@
   function addClockToPostDate(root) {
     var nodes = (root || document).querySelectorAll('.post_date');
     nodes.forEach(function (pd) {
-      if (pd.querySelector('.af-pbfa-clock')) return;
+      // ATF owns its calendar icon; do not add a second date glyph.
+      if (pd.closest('.atf-post__meta-line') || pd.querySelector('.af-pbfa-clock')) return;
 
       var ico = document.createElement('i');
       ico.className = 'fa-regular fa-clock af-pbfa-ico af-pbfa-clock';
@@ -48,6 +49,7 @@
   function addLinkToPostNumber(root) {
     var links = (root || document).querySelectorAll('.float_right a[href*="showthread.php"][href*="pid="][href*="#pid"]');
     links.forEach(function (a) {
+      if (a.closest('.atf-post__meta-line')) return;
       var txt = (a.textContent || '').trim();
       if (!/^#\d+$/i.test(txt)) return;
 
