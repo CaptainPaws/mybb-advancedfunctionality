@@ -1047,7 +1047,20 @@ body.atf-active .atf-post.af-atf-display .atf-post__plaque-end .af-apui-postbit-
   text-decoration: none;
 }
 body.atf-active .atf-post__plaque-end a.af-apui-postbit-plaque { cursor: pointer; }
-body.atf-active .atf-post__plaque-end a.af-apui-postbit-plaque:is(:hover, :focus-visible) { outline: 1px solid var(--atf-post-accent); outline-offset: -4px; }
+/* A pointer hover must not add an accent rim/glow to the decorative plaque.
+   Keep a quiet metal focus outline for keyboard navigation only. */
+body.atf-active .atf-post.af-atf-display .atf-post__plaque-end a.af-apui-postbit-plaque:hover {
+  outline: none;
+  box-shadow: none;
+  filter: none;
+  text-shadow: none;
+  text-decoration: none;
+}
+body.atf-active .atf-post.af-atf-display .atf-post__plaque-end a.af-apui-postbit-plaque:focus-visible {
+  outline: 1px solid var(--atf-post-metal);
+  outline-offset: -4px;
+  box-shadow: none;
+}
 /* One filtered surface fills both the message and the space below the moving
    author rail. Each repeat fades to the same neutral colour at BOTH ends;
    the supplied image is not assumed seamless. No height limit or blank tail.
@@ -1316,3 +1329,8 @@ body.atf-active .atf-post.af-atf-display .atf-post__date::after { content: none 
     padding-block-end: var(--atf-post-sticky-bottom-gap);
   }
 }
+
+/* The stationary wrapper must let the shared post texture show through the
+   bottom clearance, even when short content never moves the inner profile.
+   APUI author backgrounds and AET effects remain on sidebar-inner. */
+body.atf-active .atf-post.af-atf-display .atf-post__sidebar { background: transparent; }
