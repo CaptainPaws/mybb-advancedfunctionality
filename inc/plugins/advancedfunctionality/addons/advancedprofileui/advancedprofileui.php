@@ -1663,6 +1663,10 @@ function af_apui_build_postbit_plaque_html(array $post, array $sheetPayload = []
     }
 
     $plaqueSettings = af_apui_get_postbit_plaque_icon_settings($uid);
+    if (function_exists('af_aa_postbit_plaque_settings')) {
+        $appearance=af_aa_postbit_settings($post);
+        if (is_array($appearance)) $plaqueSettings=array_replace($plaqueSettings,af_aa_postbit_plaque_settings($uid,$appearance));
+    }
     $mediaImageUrl = trim((string)($plaqueSettings['postbit_plaque_media_image_url'] ?? ''));
     if ($mediaImageUrl === '') {
         $mediaImageUrl = trim((string)($plaqueSettings['postbit_plaque_icon_url'] ?? ''));

@@ -17,8 +17,19 @@ function af_aa_personal_targets(): array
 
 function af_aa_personal_fonts(): array
 {
-    return ['inherit'=>'inherit', 'system'=>'system-ui, sans-serif', 'sans'=>'Arial, sans-serif',
+    static $fonts=null;
+    if ($fonts!==null) return $fonts;
+    $fonts=['inherit'=>'inherit', 'system'=>'system-ui, sans-serif', 'sans'=>'Arial, sans-serif',
         'serif'=>'Georgia, serif', 'mono'=>'monospace'];
+    if (function_exists('af_advancededitor_collect_font_families_for_payload')) {
+        foreach (af_advancededitor_collect_font_families_for_payload() as $family) {
+            $name=(string)($family['name']??'');
+            $name=function_exists('af_advancededitor_fonts_css_safe_family')?af_advancededitor_fonts_css_safe_family($name):str_replace([chr(34),chr(39),chr(92)],'',$name);
+            if ($name==='' || preg_match('/[\x00-\x1f\x7f<>]/u',$name)) continue;
+            $fonts['ae_'.substr(hash('sha256',$name),0,24)]='"'.$name.'", sans-serif';
+        }
+    }
+    return $fonts;
 }
 
 /** Static decorations only. Canvas, canonical element keys and motion permissions stay owned by ElementTheme. */
@@ -92,13 +103,13 @@ function af_aa_personal_setting(string $key, int $fallback, int $min, int $max):
 
 function af_aa_personal_ensure_settings(): void
 {
-    global $db;
+    global $db,$mybb;
     if (!function_exists('af_ensure_setting')) return;
     $settings=[
         'personal_types'=>['Разрешённые личные пресеты','CSV target keys; postbit, profile, sheet, theme. Существующее ограничение администратора сохраняется.','text','postbit,profile,sheet,theme'],
-        'personal_json_limit'=>['Максимальный JSON (байт)','Структурированные параметры; raw CSS запрещён.','numeric','4096'],
+        'personal_json_limit'=>['Максимальный JSON (байт)','Структурированные параметры; raw CSS запрещён.','numeric','32768'],
         'personal_title_limit'=>['Длина названия','Количество Unicode символов, до 191.','numeric','80'],
-        'personal_media_limit'=>['Медиа на один пресет','Количество уникальных Gallery media IDs.','numeric','3'],
+        'personal_media_limit'=>['Медиа на один пресет','Количество уникальных Gallery media IDs.','numeric','8'],
     ];
     foreach (af_aa_personal_targets() as $key=>$meta) {
         $settings['free_slots_'.$key]=['Бесплатные слоты: '.$meta['label'],'Виртуальный системный пресет не расходует ёмкость.','numeric',$key==='postbit'?'1':'0'];
@@ -109,6 +120,15 @@ function af_aa_personal_ensure_settings(): void
         $name='af_advancedappearance_'.$key;
         $q=$db->simple_select('settings','sid',"name='".$db->escape_string($name)."'",['limit'=>1]);
         if (!$db->fetch_field($q,'sid')) af_ensure_setting('af_advancedappearance',$name,$entry[0],$entry[1],$entry[2],$entry[3],$order);
+        // Upgrade only the former shipped defaults; deliberate ACP limits remain authoritative.
+        $oldDefaults=['personal_json_limit'=>'4096','personal_media_limit'=>'3'];
+        if (isset($oldDefaults[$key])) {
+            $previous=$db->fetch_field($db->simple_select('settings','value',"name='".$db->escape_string($name)."'",['limit'=>1]),'value');
+            if ((string)$previous===$oldDefaults[$key]) {
+                $db->update_query('settings',['value'=>$entry[3]],"name='".$db->escape_string($name)."'");
+                if (isset($mybb)) $mybb->settings[$name]=$entry[3];
+            }
+        }
         $order++;
     }
 }
@@ -193,7 +213,7 @@ function af_aa_personal_title(string $title): string
 function af_aa_personal_decode(string $json, int $uid, bool $publish, bool $checkMedia=true, bool $stored=false, string $target='postbit'): array
 {
     af_aa_personal_target($target,false);
-    $limit=$stored?32768:af_aa_personal_setting('personal_json_limit',4096,2,32768);
+    $limit=$stored?32768:af_aa_personal_setting('personal_json_limit',32768,2,32768);
     if (strlen($json)>$limit) throw new AF_AA_PersonalException('JSON limit exceeded.',422);
     try {$object=json_decode($json,false,8,JSON_THROW_ON_ERROR);}catch (JsonException $e){throw new AF_AA_PersonalException('Invalid JSON.',422);}
     if (!$object instanceof stdClass) throw new AF_AA_PersonalException('Settings must be a JSON object.',422);
@@ -205,7 +225,8 @@ function af_aa_personal_decode(string $json, int $uid, bool $publish, bool $chec
         if ($key==='components') {
             $settings[$key]=af_aa_studio_validate_components($value,$media,$target);
         } elseif ($key==='canvas') {
-            $settings[$key]=af_aa_studio_validate_canvas($value);
+            if ($target==='postbit') unset($settings[$key]);
+            else $settings[$key]=af_aa_studio_validate_canvas($value);
         } elseif ($key==='display_title') {
             if (!is_string($value)) throw new AF_AA_PersonalException('Invalid title.',422);
             $settings[$key]=$stored?$value:af_aa_personal_title($value);
@@ -220,12 +241,13 @@ function af_aa_personal_decode(string $json, int $uid, bool $publish, bool $chec
         } elseif ($key==='overlay_opacity') {
             if ((!is_int($value) && !is_float($value)) || $value<0 || $value>1 || !is_finite((float)$value)) throw new AF_AA_PersonalException('Invalid opacity.',422);
         } elseif ($key==='font_family') {
+            if (is_string($value) && preg_match('/^ae_[a-f0-9]{24}$/D',$value) && !isset(af_aa_personal_fonts()[$value])) $settings[$key]=$value='inherit';
             if (!is_string($value) || !array_key_exists($value,af_aa_personal_fonts())) throw new AF_AA_PersonalException('Invalid font family.',422);
         } elseif ($key==='effect_preset') {
             if (!is_string($value) || !in_array($value,af_aa_personal_effects(),true)) throw new AF_AA_PersonalException('Invalid effect preset.',422);
         } else throw new AF_AA_PersonalException('Unknown setting: '.$key,422);
     }
-    if (count($media)>($stored?8:af_aa_personal_setting('personal_media_limit',3,0,8))) throw new AF_AA_PersonalException('Media limit exceeded.',422);
+    if (count($media)>($stored?8:af_aa_personal_setting('personal_media_limit',8,0,8))) throw new AF_AA_PersonalException('Media limit exceeded.',422);
     if ($checkMedia && $media) {
         if (!function_exists('ag_get_owned_media') || !function_exists('ag_retain_owned_media')) throw new AF_AA_PersonalException('Gallery Media API unavailable.',503);
         foreach (array_keys($media) as $id) {

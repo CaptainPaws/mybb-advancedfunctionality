@@ -26,7 +26,7 @@ function af_elementtheme_normalize_effects(array $data): array
     // Restrict overrides to literal CSS colors; auto follows the actual surface palette.
     if (strlen($out['color']) > 128 || ($out['color'] !== '' && !preg_match('/^(?:#[a-f0-9]{3,4}|#[a-f0-9]{6}|#[a-f0-9]{8}|(?:rgb|rgba|hsl|hsla)\([\d\s.,%+\/-]+\))$/iD', $out['color']))) throw new InvalidArgumentException('Цвет частиц: hex, RGB(A), HSL(A) или пустое значение для палитры.');
     if (!is_array($out['surfaces']) || array_filter($out['surfaces'], static fn($surface) => !is_string($surface) || !in_array($surface, af_elementtheme_surfaces(), true))) throw new InvalidArgumentException('Недопустимые поверхности эффекта.');
-    $out['surfaces'] = array_values(array_unique($out['surfaces']));
+    $out['surfaces'] = array_values(array_diff(array_unique($out['surfaces']),['postbit']));
     return array_intersect_key($out, af_elementtheme_effect_defaults());
 }
 function af_elementtheme_get_effects(string $key): array
@@ -44,6 +44,7 @@ function af_elementtheme_compile_effects(array $styles): array
         if (!$effect || !$effect['enabled'] || !$effect['surfaces']) continue;
         $settings[$key] = $effect;
         foreach ($effect['surfaces'] as $surface) {
+            if ($surface==='postbit') continue;
             $root = '[data-element="' . $key . '"][data-element-surface="' . $surface . '"]';
             $color = $effect['color'] ?: 'var(--af-element-accent,var(--af-element-main,transparent))';
             // Static fallback/opacity only; particles and motion belong to the shared engine.
@@ -62,6 +63,7 @@ function af_elementtheme_effects_needed(string $page, array $settings): bool
         // Unbound metadata never creates a frontend identity.
         if (af_elementtheme_resolve_key($key) !== $key) continue;
         foreach ($effect['surfaces'] as $surface) {
+            if ($surface==='postbit') continue;
             if (!empty($GLOBALS['af_elementtheme_surface_keys'][$surface][$key])) return true;
             if ($surface === 'sheet' && !empty($GLOBALS['af_charactersheets_has_frontend_component'])) {
                 foreach ($GLOBALS['af_elementtheme_surface_keys'] ?? [] as $keys) if (!empty($keys[$key])) return true;

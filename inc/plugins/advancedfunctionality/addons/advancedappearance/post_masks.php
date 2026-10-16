@@ -21,7 +21,7 @@ function af_aa_mask_available(): bool {
 function af_aa_mask_ids(array $ids): array {return array_values(array_unique(array_filter(array_map('intval',$ids),static fn($id)=>$id>0)));}
 function af_aa_mask_media_ids(array $s): array {
     $ids=[];foreach(['author_bg_media_id','name_bg_media_id','plaque_bg_media_id','avatar_media_id'] as $key) if(!empty($s[$key])) $ids[]=$s[$key];
-    foreach($s['components']??[] as $fields) if(!empty($fields['background_media_id'])) $ids[]=$fields['background_media_id'];
+    foreach($s['components']??[] as $fields) foreach(['background_media_id','image_media_id'] as $key) if(!empty($fields[$key])) $ids[]=$fields[$key];
     return af_aa_mask_ids($ids);
 }
 /** One assignment/post query and one Gallery provider query for the whole page. */
@@ -179,8 +179,9 @@ function af_aa_mask_postbit(array &$post): void {
     // Same ATF template/classes/slots. Only the scope token changes so a live UID preset cannot leak into a snapshot.
     $post['af_aa_user_class']='af-aa-postbit-mask-'.$pid;
     $post['af_aa_post_appearance']=['pid'=>$pid,'owner_uid'=>$uid,'source_preset_id'=>(int)$row['preset_id'],'settings'=>$row['snapshot']];
-    $top=(int)($row['mask_topbar_media_id']??$row['snapshot']['avatar_media_id']??0);$side=(int)($row['mask_sidebar_media_id']??0);
+    $top=(int)($row['mask_topbar_media_id']??0);$side=(int)($row['mask_sidebar_media_id']??0);
     $post['af_atf_primary_avatar']=(string)($post['useravatar']??'');
+    af_aa_postbit_apply_images($post,$row['snapshot']);
     foreach(['topbar'=>$top,'sidebar'=>$side] as $role=>$id) if($id && function_exists('ag_resolve_media_url') && ($url=ag_resolve_media_url($id,'full'))!=='') {
         $post[$role==='topbar'?'af_atf_primary_avatar':'af_atf_secondary_avatar']='<img src="'.htmlspecialchars_uni($url).'" alt="'.htmlspecialchars_uni($post['username']??'').'" loading="lazy" decoding="async" />';
     }
@@ -222,11 +223,15 @@ function af_aa_mask_runtime_payload(int $pid,int $uid): array {
     if($native==='') $native=rtrim((string)($GLOBALS['mybb']->settings['bburl']??''),'/').'/images/default_avatar.png';
     $active=af_aa_personal_active_row($uid);$s=[];
     if($row)$s=$row['snapshot'];elseif($active) $s=af_aa_personal_decode($active['settings_json'],$uid,true,false,true);
-    $top=(int)($row['mask_topbar_media_id']??$s['avatar_media_id']??0);$side=(int)($row['mask_sidebar_media_id']??0);
+    $top=(int)($row['mask_topbar_media_id']??0);$side=(int)($row['mask_sidebar_media_id']??0);
     $topUrl=$top?ag_resolve_media_url($top,'full'):'';
     $topHtml='<img src="'.htmlspecialchars_uni($topUrl?:$native).'" alt="'.htmlspecialchars_uni($user['username']??'').'" loading="lazy" decoding="async" />';
     $sideHtml=function_exists('af_adaptivethemeframework_resolve_post_secondary_avatar')?af_adaptivethemeframework_resolve_post_secondary_avatar(['uid'=>$uid,'username'=>$user['username']??'']):'';
     if($side && ($url=ag_resolve_media_url($side,'full'))!=='') $sideHtml='<img src="'.htmlspecialchars_uni($url).'" alt="'.htmlspecialchars_uni($user['username']??'').'" loading="lazy" decoding="async" />';
+    $avatarPost=['username'=>$user['username']??'','af_atf_primary_avatar'=>$topHtml,'af_atf_secondary_avatar'=>$sideHtml];
+    af_aa_postbit_apply_images($avatarPost,$s);
+    if (!$top) $topHtml=$avatarPost['af_atf_primary_avatar'];
+    if (!$side) $sideHtml=$avatarPost['af_atf_secondary_avatar'];
     $css=$row?af_aa_mask_css($pid,$uid,$s):str_replace('.af-aa-postbit-user-'.$uid,'#post_'.$pid.'.af-aa-postbit-user-'.$uid,af_aa_personal_compile_css($uid,$s));
     return ['pid'=>$pid,'masked'=>(bool)$row,'css'=>$css,'canvas'=>af_aa_studio_canvas($uid,$s),'topbar_html'=>$topHtml,'sidebar_html'=>$sideHtml];
 }

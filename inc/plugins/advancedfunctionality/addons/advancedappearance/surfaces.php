@@ -5,12 +5,10 @@ if (!defined('IN_MYBB')) die('No direct access');
 function af_aa_studio_surface_registry(): array
 {
     $background=['background_color','gradient_color','gradient_angle','background_opacity','darkening','background_position','background_size','background_media_id'];
-    $all=array_keys(af_aa_studio_fields());
+    $all=array_values(array_diff(array_keys(af_aa_studio_fields()),array_keys(af_aa_postbit_fields())));
     $entry=static fn($label,$selector,$fields=null)=>['label'=>$label,'selector'=>$selector,'fields'=>$fields??$all];
     return [
-        'postbit'=>['purpose'=>'appearance_postbit_bg','css'=>['adaptivethemeframework/assets/surfaces/postbit.css'],'canvas'=>true,'components'=>[
-            'topbar'=>$entry('Topbar','.atf-post__topbar'),'sidebar'=>$entry('Sidebar','.atf-post__sidebar-inner'),
-            'message'=>$entry('Сообщение','.atf-post__message-body'),'signature'=>$entry('Подпись','.atf-post__signature')]],
+        'postbit'=>af_aa_postbit_surface(),
         'profile'=>['purpose'=>'appearance_profile_bg','css'=>['adaptivethemeframework/assets/surfaces/profile.css'],'canvas'=>true,'components'=>[
             'page'=>$entry('Фон страницы','',$background),'hero'=>$entry('Hero','.atf-profile__hero'),
             'banner'=>$entry('Баннер','.atf-profile-hero'),'cards'=>$entry('Карточки',':is(.atf-profile__panel:not([data-panel="sheet"]),.atf-profile-native,.atf-profile-signature)'),

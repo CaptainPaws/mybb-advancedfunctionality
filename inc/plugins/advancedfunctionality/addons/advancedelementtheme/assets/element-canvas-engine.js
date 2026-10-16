@@ -335,6 +335,7 @@
       document.addEventListener('af-element-effects-refresh', this.onRefresh);
     }
     register(host, layer, config, surface) {
+      if (surface === 'postbit' || host.closest('[data-element-surface]')?.dataset.elementSurface === 'postbit') { this.unregister(host); return null; }
       let instance = this.instances.get(host);
       if (instance && (instance.layer !== layer || !instance.canvas.isConnected)) { this.unregister(host); instance = null; }
       if (!instance) {

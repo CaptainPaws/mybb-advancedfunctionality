@@ -17,6 +17,7 @@ try {
     throw new RuntimeException('Effects save did not redirect');
 } catch (ElementEditorRedirect $e) { editor_check(str_contains($e->getMessage(), 'surface=effects'), 'Effects save returned to wrong tab'); }
 $saved = af_elementtheme_get_metadata('fire');
+editor_check(!in_array('postbit',$saved['effects']['surfaces'],true), 'Postbit motion must remain disabled even for old ACP submissions');
 editor_check($saved['variables'] === $old['variables'] && $saved['custom_css'] === $old['custom_css'] && $saved['effects']['enabled'], 'Effects save lost existing palette/custom CSS');
 af_elementtheme_save_style('fire', ['variables' => $saved['variables'], 'custom_css' => $saved['custom_css']]);
 editor_check(af_elementtheme_get_metadata('fire')['effects'] === $saved['effects'], 'Palette save lost animation metadata');
@@ -37,6 +38,7 @@ foreach ([['preset' => 'unknown'], ['density' => 101], ['color' => '#fff;display
 $GLOBALS['af_elementtheme_surface_keys'] = [];
 editor_check(!af_elementtheme_effects_needed('<div data-element="shadow" data-element-surface="profile"></div>', $effects['settings']), 'Unrelated element requested effects');
 editor_check(af_elementtheme_effects_needed('<div data-element="fire" data-element-surface="sheet"></div><div data-element="fire" data-element-surface="profile"></div>', ['fire' => array_replace($saved['effects'], ['surfaces' => ['profile']])]), 'Repeated key/second surface missed');
+editor_check(!af_elementtheme_effects_needed('<article data-element="fire" data-element-surface="postbit"></article>', ['fire'=>array_replace($saved['effects'],['surfaces'=>['postbit']])]), 'Old postbit metadata must not request animation assets');
 // A showthread sheet caller preloads effects even when postbit animation is disabled.
 af_elementtheme_mark_surface('postbit', 'fire'); $GLOBALS['af_charactersheets_has_frontend_component'] = true;
 editor_check(af_elementtheme_effects_needed('<head></head>', ['fire' => array_replace($saved['effects'], ['surfaces' => ['sheet']])]), 'Postbit sheet-modal caller missed effects');

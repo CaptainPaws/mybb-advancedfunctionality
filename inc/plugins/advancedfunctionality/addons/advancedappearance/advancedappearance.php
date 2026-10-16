@@ -1420,6 +1420,7 @@ function af_aa_pre_output_page(string &$page): void
             || af_frontend_asset_allowed(AF_AA_ID, 'runtime_css', null, ['has_appearance_runtime' => true]);
         if ($allowed) {
             $page = af_aa_inject_runtime_css($page, $runtimeCss);
+            if (!str_contains($page,'data-aa-local-fonts')) $page=str_replace('</head>',af_aa_studio_fonts_link().'</head>',$page);
             $page = af_aa_inject_modal_scope_js($page);
             $page = str_replace('</body>',af_aa_studio_effect_payload(array_values($uids)).'</body>',$page);
         }

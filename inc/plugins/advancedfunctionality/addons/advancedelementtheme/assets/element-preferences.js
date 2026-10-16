@@ -2,7 +2,7 @@
 (function () {
   if (window.afElementPreferenceControlsReady) return;
   window.afElementPreferenceControlsReady = true;
-  const keys = ['effects_enabled', 'effects_profile', 'effects_sheet', 'effects_application', 'effects_postbit'];
+  const keys = ['effects_enabled', 'effects_profile', 'effects_sheet', 'effects_application'];
   const defaults = Object.fromEntries(keys.map(key => [key, true]));
   const seed = document.querySelector('[data-af-element-preferences]');
   let payload;

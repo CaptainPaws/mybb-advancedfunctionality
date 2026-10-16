@@ -44,6 +44,7 @@ $GLOBALS['af_elementtheme_preferences_available']=false; pref_check(af_elementth
 unset($GLOBALS['af_elementtheme_preferences_available']);
 $db->available=false; af_elementtheme_preferences_schema(); af_elementtheme_preferences_schema(); pref_check($db->creates===1,'Schema not idempotent');
 $widget=af_elementtheme_render_preferences_widget();
+pref_check(!str_contains($widget,'effects_postbit')&&!isset($defaults['effects_postbit']),'Postbit animation switch must be absent');
 foreach(array_keys($defaults) as $key) pref_check(str_contains($widget,'type="checkbox" name="'.$key.'"'),'Missing switch '.$key);
 pref_check(str_contains($widget,'my_post_key')&&str_contains($widget,'data-uid="42"'),'Widget authentication contract');
 if(in_array('--browser-fixture',$argv,true)) { echo json_encode(['widget'=>$widget,'defaults'=>$defaults]); exit; }

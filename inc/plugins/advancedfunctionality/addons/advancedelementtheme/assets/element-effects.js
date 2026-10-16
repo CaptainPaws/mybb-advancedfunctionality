@@ -17,7 +17,7 @@
     if (!['postbit','profile','sheet'].includes(root.dataset.elementSurface) || !base?.enabled || !base.surfaces.includes(root.dataset.elementSurface) || !custom || (custom.element_key && custom.element_key!==root.dataset.element)) return base;
     return { ...base, ...custom, enabled: base.enabled, surfaces: base.surfaces };
   }
-  const preferenceKeys = ['effects_enabled', 'effects_profile', 'effects_sheet', 'effects_application', 'effects_postbit'];
+  const preferenceKeys = ['effects_enabled', 'effects_profile', 'effects_sheet', 'effects_application'];
   function normalizePreferences(value = {}) { return Object.fromEntries(preferenceKeys.map(key => [key, value[key] === undefined ? true : value[key] === true || value[key] === 1 || value[key] === '1'])); }
   let payload;
   try { payload = JSON.parse(document.querySelector('[data-af-element-preferences]')?.textContent || '{}'); } catch (_) { payload = {}; }
@@ -74,6 +74,13 @@
   }
   function mount(root) {
     const surface = root.dataset.elementSurface;
+    if (surface === 'postbit') {
+      remember(root, []);
+      [root, ...root.querySelectorAll('[data-af-element-effect-host]')].forEach(host => {
+        if (host.closest(roots) === root) stop(host, true);
+      });
+      return;
+    }
     // Application integration is deliberately unchanged in this task.
     if (surface === 'application') return mountApplication(root);
     if (!root.matches(roots)) { remember(root, []); return; }

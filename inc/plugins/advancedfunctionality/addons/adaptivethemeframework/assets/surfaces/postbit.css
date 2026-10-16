@@ -118,8 +118,8 @@ body.atf-active .atf-post__primary-avatar :is(img, svg) {
   height: 100% !important;
   max-width: none !important;
   margin: 0 !important;
-  object-fit: cover !important;
-  object-position: center center !important;
+  object-fit: var(--aa-avatar-fit, cover) !important;
+  object-position: var(--aa-avatar-position, center center) !important;
 }
 body.atf-active .atf-post__layout {
   display: grid;
@@ -323,7 +323,7 @@ body.atf-active .atf-post__name,
 body.atf-active .atf-post__name a { color: var(--atf-post-accent); }
 body.atf-active .atf-post__author-tools { display: flex; align-items: flex-end; justify-content: flex-end; gap: var(--atf-space-2); min-width: 0; }
 body.atf-active .atf-post__primary-avatar { order: 2; position: relative; overflow: visible; border-color: var(--atf-post-accent-soft); box-shadow: 0 0 0 1px var(--atf-post-accent); }
-body.atf-active .atf-post__primary-avatar :is(img,svg) { overflow: hidden; border-radius: 50%; object-position: center center !important; }
+body.atf-active .atf-post__primary-avatar :is(img,svg) { overflow: hidden; border-radius: 50%; object-position: var(--aa-avatar-position, center center) !important; }
 body.atf-active .atf-post__primary-avatar > .atf-post__online-indicator {
   position: absolute;
   z-index: 5;
@@ -595,8 +595,8 @@ body.atf-active .atf-post__primary-avatar-media .author_avatar > a > :is(img, sv
   max-width: none !important;
   max-height: none !important;
   margin: 0 !important;
-  object-fit: cover !important;
-  object-position: center center !important;
+  object-fit: var(--aa-avatar-fit, cover) !important;
+  object-position: var(--aa-avatar-position, center center) !important;
   transform: translate(-50%, -50%) !important;
   border-radius: 50% !important;
 }
@@ -857,7 +857,8 @@ body.atf-active .atf-post .atf-post__avatar-inlays::after {
   background: var(--atf-post-gem-facets) center / 100% 100% no-repeat, currentColor;
   mask: var(--atf-post-gem-mask) center / 100% 100% no-repeat;
   clip-path: none;
-  filter: drop-shadow(0 0 3px var(--atf-post-accent-soft));
+  color: var(--aa-gem-color, var(--atf-post-accent));
+  filter: drop-shadow(0 0 var(--aa-gem-glow, 3px) var(--aa-gem-color, var(--atf-post-accent-soft)));
   pointer-events: none;
 }
 body.atf-active .atf-post .atf-gothic-corner::after { top: 7%; left: 7%; width: 32%; height: 43%; }
@@ -960,7 +961,7 @@ body.atf-active .atf-post.af-atf-display .atf-post__statistics .author_statistic
   padding: .5rem .2rem !important;
   border: 1px solid var(--atf-post-metal) !important;
   border-radius: 3px;
-  background: linear-gradient(180deg, #19252e, #080f18) !important;
+  background: var(--aa-statistics-background, linear-gradient(180deg, #19252e, #080f18)) !important;
   box-shadow: inset 0 0 0 1px #080e15;
   overflow: visible;
 }
@@ -1118,7 +1119,7 @@ body.atf-active .atf-post.af-atf-display .atf-post__meta-line {
   border: 0;
   border-block-end: 1px solid #304953;
   border-radius: 0;
-  background: linear-gradient(90deg, #152e42, #101f2c) !important;
+  background: var(--aa-metadata-background, linear-gradient(90deg, #152e42, #101f2c)) !important;
   color: #a8bbdb;
   font-size: .875rem;
   text-align: start;

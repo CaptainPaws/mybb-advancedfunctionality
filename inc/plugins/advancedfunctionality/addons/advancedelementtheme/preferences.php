@@ -5,7 +5,7 @@ if (!defined('IN_MYBB')) die('No direct access');
 function af_elementtheme_preferences_table(): string { return 'af_presentation_preferences'; }
 function af_elementtheme_preferences_defaults(): array
 {
-    return array_fill_keys(['effects_enabled', 'effects_profile', 'effects_sheet', 'effects_application', 'effects_postbit'], true);
+    return array_fill_keys(['effects_enabled', 'effects_profile', 'effects_sheet', 'effects_application'], true);
 }
 function af_elementtheme_preferences_normalize(array $values): array
 {
@@ -66,7 +66,7 @@ function af_elementtheme_render_preferences_widget(array $item = []): string
         .'<form class="af-element-preferences" data-af-element-preferences-form data-uid="'.$uid.'" method="post" action="'.htmlspecialchars_uni($root.'/misc.php?action=af_element_preferences').'">'
         .'<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni((string)($mybb->post_code ?? '')).'">'
         .'<fieldset><legend>Стихийные анимации</legend><p>Настройте эффекты для разных частей форума. Цвета и фоны сохраняются.</p>';
-    foreach (['effects_enabled'=>'Все анимации', 'effects_profile'=>'Профили', 'effects_sheet'=>'Листы персонажей', 'effects_application'=>'Анкеты персонажей', 'effects_postbit'=>'Postbit'] as $key => $label) {
+    foreach (['effects_enabled'=>'Все анимации', 'effects_profile'=>'Профили', 'effects_sheet'=>'Листы персонажей', 'effects_application'=>'Анкеты персонажей'] as $key => $label) {
         $html .= '<label class="af-element-preference-row"><span>'.$label.'</span><input type="hidden" name="'.$key.'" value="0"><input type="checkbox" name="'.$key.'" value="1"'.($preferences[$key] ? ' checked' : '').'><span class="af-element-preference-switch" aria-hidden="true"></span></label>';
     }
     return $html.'</fieldset><p class="af-element-preferences-status" role="status" aria-live="polite"></p>'
