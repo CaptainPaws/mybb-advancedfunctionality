@@ -2241,6 +2241,30 @@ function af_aas_get_avatar_url(int $uid, ?array $user = null): string
     return $bburl . '/' . ltrim($avatar, '/');
 }
 
+/** Read native MyBB presence for a batch of accounts, without per-user queries. */
+function af_aas_online_uids(array $uids): array
+{
+    global $mybb, $db;
+
+    $uids = array_values(array_unique(array_filter(array_map('intval', $uids),
+        static fn(int $uid): bool => $uid > 0)));
+    if (!$uids) return [];
+
+    // inc/init.php already converts wolcutoffmins to wolcutoff SECONDS.
+    // Convert minutes only when the derived runtime setting is unavailable.
+    $windowSeconds = (int)($mybb->settings['wolcutoff'] ?? 0);
+    if ($windowSeconds <= 0) {
+        $windowSeconds = max(1, (int)($mybb->settings['wolcutoffmins'] ?? 15)) * 60;
+    }
+    $cutoff = TIME_NOW - $windowSeconds;
+    $online = [];
+    $query = $db->simple_select('sessions', 'uid',
+        'uid IN ('.implode(',', $uids).') AND time>'.(int)$cutoff,
+        ['group_by'=>'uid']);
+    while ($session = $db->fetch_array($query)) $online[(int)$session['uid']] = true;
+    return $online;
+}
+
 function af_aas_render_panel_widget(bool $cardsOnly = false): string
 {
     global $mybb, $templates, $lang, $db, $cache;
@@ -2256,6 +2280,7 @@ function af_aas_render_panel_widget(bool $cardsOnly = false): string
     if (empty($users[$masterUid])) return '';
     $canManage = !empty($mybb->settings['af_advancedaccountswitcher_allow_create']) || !empty($mybb->settings['af_advancedaccountswitcher_allow_link_existing']);
     if (!$cardsOnly && count($users) < 2 && !$canManage) return '';
+    $onlineUids = af_aas_online_uids(array_keys($users));
     // Source-owned presentation, request-local: existing installations must not
     // continue serving the old DB table markup until a manual template sync.
     $source = file_get_contents(__DIR__.'/templates/advancedaccountswitcher.html');
@@ -2278,7 +2303,7 @@ function af_aas_render_panel_widget(bool $cardsOnly = false): string
         $af_aas_item_uid = (int)$accountUid;
         $af_aas_item_username = htmlspecialchars_uni((string)$user['username']);
         $af_aas_item_active = $accountUid === $uid ? ' is-current' : '';
-        $online = (int)$user['lastactive'] > TIME_NOW - (int)$mybb->settings['wolcutoff'] * 60
+        $online = isset($onlineUids[$accountUid])
             && (empty($user['invisible']) || !empty($mybb->usergroup['canviewwolinvis']) || $accountUid === $uid);
         $af_aas_online_class = $online ? ' is-online' : '';
         $af_aas_item_status = $online ? 'В сети' : ((!empty($user['invisible']) && empty($mybb->usergroup['canviewwolinvis']) && $accountUid !== $uid) ? 'Не в сети' : ((int)$user['lastactive'] > 0 ? 'Был в сети '.my_date((string)$mybb->settings['dateformat'], (int)$user['lastactive']) : 'Не в сети'));
@@ -2765,10 +2790,7 @@ function af_aas_render_account_list_page()
             $dtoUids[] = $uid;
         }
         if ($dtoUids) {
-            $cutoff = TIME_NOW - max(1, (int)($mybb->settings['wolcutoff'] ?? 15)) * 60;
-            $online = [];
-            $presenceQuery = $db->simple_select('sessions', 'uid', 'uid IN ('.implode(',', array_map('intval', $dtoUids)).') AND time>'.(int)$cutoff, ['group_by'=>'uid']);
-            while ($session = $db->fetch_array($presenceQuery)) $online[(int)$session['uid']] = true;
+            $online = af_aas_online_uids($dtoUids);
             foreach ($dtoUsers as $uid => &$dtoUser) {
                 if ($dtoUser['_invisible'] && (int)($mybb->usergroup['canviewwolinvis'] ?? 0) !== 1) {
                     $dtoUser['presence'] = ['state'=>'hidden', 'can_disclose'=>false, 'label'=>''];
