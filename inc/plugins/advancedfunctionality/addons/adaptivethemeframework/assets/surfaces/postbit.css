@@ -799,6 +799,7 @@ body.atf-active[data-atf-postbit-sidebar="hidden"] .atf-post__layout {
 /* Grimdark postbit. Presentation only: accent declarations/resolution above,
    APUI appearance backgrounds, AET hosts and the sticky runtime stay intact. */
 body.atf-active .atf-post.af-atf-display {
+  --atf-post-content-inset: var(--atf-space-5);
   --atf-post-metal: #535b60;
   --atf-post-metal-light: #929995;
   --atf-post-metal-dark: #171e24;
@@ -808,6 +809,7 @@ body.atf-active .atf-post.af-atf-display {
   position: relative;
   max-width: 100%;
   color: var(--atf-color-text);
+  background-color: #091521;
   border: 1px solid var(--atf-post-metal);
   border-radius: 3px;
   /* Inset contours never enlarge the post or introduce horizontal overflow. */
@@ -894,12 +896,12 @@ body.atf-active .atf-post .atf-post__sidebar-inner > :not([data-af-element-effec
 }
 /* Intrinsic width prevents upscaling small portraits. The frame follows the
    actual image box, including landscape/square images; no fixed height/crop. */
-body.atf-active .atf-post__secondary-avatar {
+body.atf-active .atf-post.af-atf-display .atf-post__sidebar-inner .atf-post__secondary-avatar {
   --atf-corner-size: 30px;
   position: relative;
   box-sizing: border-box;
-  width: fit-content;
-  max-width: min(250px, 100%);
+  width: fit-content !important;
+  max-width: min(250px, 100%) !important;
   padding: 5px;
   overflow: visible;
   border: 1px solid var(--atf-post-metal);
@@ -907,13 +909,13 @@ body.atf-active .atf-post__secondary-avatar {
   background: var(--atf-post-metal-dark);
   box-shadow: inset 0 0 0 1px #0a1016, 0 3px 10px rgb(0 0 0 / 28%);
 }
-body.atf-active .atf-post__secondary-avatar:not(:has(img, svg)) { display: none; }
-body.atf-active .atf-post__secondary-avatar :is(img, svg),
-body.atf-active .atf-post__secondary-avatar-image {
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: none;
+body.atf-active .atf-post.af-atf-display .atf-post__sidebar-inner .atf-post__secondary-avatar:not(:has(img, svg)) { display: none; }
+body.atf-active .atf-post.af-atf-display .atf-post__sidebar-inner .atf-post__secondary-avatar :is(img, svg),
+body.atf-active .atf-post.af-atf-display .atf-post__sidebar-inner .atf-post__secondary-avatar-image {
+  width: auto !important;
+  height: auto !important;
+  max-width: min(250px, 100%) !important;
+  max-height: none !important;
   object-fit: contain;
   border-radius: 0;
 }
@@ -944,8 +946,8 @@ body.atf-active .atf-post__profile-fields .af-apf-postbit-field--fid4 { margin-b
 body.atf-active .atf-post__profile-fields .af-apf-postbit-field--fid4 p { margin-block: .35em; }
 /* Override APUI's legacy rail tiles/popovers locally. Keep all existing links,
    APC slots, balance handlers and values in their original DOM nodes. */
-body.atf-active .atf-post__statistics .af-apui-postbit-rail { width: 100%; margin: 0; }
-body.atf-active .atf-post__statistics .author_statistics.af-apui-postbit-userdetails {
+body.atf-active .atf-post.af-atf-display .atf-post__statistics .af-apui-postbit-rail { width: 100%; margin: 0; }
+body.atf-active .atf-post.af-atf-display .atf-post__statistics .author_statistics.af-apui-postbit-userdetails {
   display: grid !important;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
@@ -957,25 +959,28 @@ body.atf-active .atf-post__statistics .author_statistics.af-apui-postbit-userdet
   box-shadow: inset 0 0 0 1px #080e15;
   overflow: visible;
 }
-body.atf-active .atf-post__statistics .af-apui-stat-item {
-  display: flex;
-  flex-direction: column;
+body.atf-active .atf-post.af-atf-display .atf-post__statistics .af-apui-stat-item {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
   width: auto;
   min-width: 0;
   height: auto;
   min-height: 0;
   gap: .3rem;
   padding: .1rem .25rem;
-  border: 0;
+  border: 0 !important;
   border-radius: 0;
-  background: none;
+  background: none !important;
   box-shadow: none;
   color: var(--atf-color-text);
 }
-body.atf-active .atf-post__statistics .af-apui-stat-item + .af-apui-stat-item { border-inline-start: 1px solid var(--atf-post-metal); }
-body.atf-active .atf-post__statistics .af-apui-stat-item .af-apui-stat-item__icon { width: auto; height: auto; min-height: 1.15rem; }
-body.atf-active .atf-post__statistics .af-apui-stat-item__icon i { font-size: 1rem; }
-body.atf-active .atf-post__statistics .af-apui-stat-item .af-apui-stat-item__value {
+body.atf-active .atf-post.af-atf-display .atf-post__statistics .af-apui-stat-item + .af-apui-stat-item { border-inline-start: 1px solid var(--atf-post-metal) !important; }
+body.atf-active .atf-post.af-atf-display .atf-post__statistics .af-apui-stat-item .af-apui-stat-item__icon { width: auto; height: auto; min-height: 1.15rem; }
+body.atf-active .atf-post.af-atf-display .atf-post__statistics .af-apui-stat-item__icon i { margin: 0; font-size: 1rem; line-height: 1; }
+body.atf-active .atf-post.af-atf-display .atf-post__statistics .af-apui-stat-item .af-apui-stat-item__value {
   position: static;
   inset: auto;
   transform: none;
@@ -1003,67 +1008,101 @@ body.atf-active .atf-post__plaque-end {
   --atf-corner-size: 24px;
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   border-block-start: 1px solid var(--atf-post-metal);
   background: linear-gradient(135deg, #1b252d, #080d14);
 }
-body.atf-active .atf-post__plaque-end:not(:has(.af-apui-postbit-plaque, .af-apui-postbit-action)) { display: none; }
-body.atf-active .atf-post__sidebar-actions:not(:has(.af-apui-postbit-plaque, .af-apui-postbit-action)) > .atf-post__divider { display: none; }
-body.atf-active .atf-post__sidebar-actions .af-apui-postbit-plaque { min-width: 0; border: 0; border-radius: 0; padding: .75rem; }
-body.atf-active .atf-post__plaque-end .atf-post__sheet-action { position: relative; display: grid; width: auto; min-height: 0; padding: .5rem 0 .5rem .6rem; }
-body.atf-active .atf-post__plaque-end .atf-post__sheet-action:empty { display: none; }
-body.atf-active .atf-post__plaque-end .af-apui-postbit-plaque { grid-column: 2; }
-body.atf-active .atf-post__plaque-end:not(:has(.af-apui-postbit-action)) .af-apui-postbit-plaque { grid-column: 1 / -1; }
-body.atf-active .atf-post__plaque-end .af-apui-postbit-action.af-cs-plaque__btn {
-  width: 2.25rem;
-  height: 2.25rem;
+body.atf-active .atf-post__plaque-end:not(:has(.af-apui-postbit-plaque)) { display: none; }
+body.atf-active .atf-post__sidebar-actions:not(:has(.af-apui-postbit-plaque)) > .atf-post__divider { display: none; }
+body.atf-active .atf-post.af-atf-display .atf-post__plaque-end .af-apui-postbit-plaque {
+  display: flex;
+  grid-column: 1;
+  width: 100%;
   min-width: 0;
-  min-height: 0;
-  transform: none;
-  border: 1px solid var(--atf-post-metal) !important;
-  border-radius: 50%;
-  color: var(--atf-post-accent) !important;
-  background: #111d28 !important;
+  margin: 0;
+  padding: .75rem;
+  border: 0;
+  border-radius: 0;
+  text-decoration: none;
 }
-body.atf-active .atf-post__plaque-end .af-apui-postbit-action i { margin: 0; font-size: 1.15rem; }
-/* A single, non-repeating image fades to the base before its 1000px layer ends.
-   Long posts extend the neutral colour, without seams or vertical stretching. */
-body.atf-active .atf-post__content {
+body.atf-active .atf-post__plaque-end a.af-apui-postbit-plaque { cursor: pointer; }
+body.atf-active .atf-post__plaque-end a.af-apui-postbit-plaque:is(:hover, :focus-visible) { outline: 1px solid var(--atf-post-accent); outline-offset: -4px; }
+/* One filtered surface fills both the message and the space below the moving
+   author rail. Each repeat fades to the same neutral colour at BOTH ends;
+   the supplied image is not assumed seamless. No height limit or blank tail.
+   Filtering is confined to this decorative layer, never text/avatars/AET. */
+body.atf-active .atf-post.af-atf-display .atf-post__layout {
+  position: relative;
+  isolation: isolate;
+  background: #091521;
+}
+body.atf-active .atf-post.af-atf-display .atf-post__layout::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background-color: #091521;
-  background-image: linear-gradient(180deg, rgb(4 10 17 / 42%), rgb(9 21 33 / 60%) 65%, #091521 100%), url("https://warprift.ru/uploads/af_gallery/1/2026/10/3721b07ce4df8a6619ae827a42c1aa31.png");
-  background-size: 100% 1000px, auto 1000px;
+  background-image: linear-gradient(180deg, #091521, rgb(9 21 33 / 35%) 12%, rgb(9 21 33 / 35%) 88%, #091521), url("https://warprift.ru/uploads/af_gallery/1/2026/10/3721b07ce4df8a6619ae827a42c1aa31.png");
   background-position: center top;
-  background-repeat: no-repeat;
+  background-size: 100% 768px;
+  background-repeat: repeat-y;
+  filter: grayscale(.6) saturate(.4) brightness(.55) contrast(.9);
 }
-body.atf-active .atf-post__meta-line {
-  /* Retain the corrected desktop inset and JS transform-based sticky geometry. */
-  padding-block: .4rem;
-  border-block: 1px solid var(--atf-post-metal);
-  background: #132331 !important;
+body.atf-active .atf-post.af-atf-display .atf-post__content,
+body.atf-active .atf-post.af-atf-display .post_body.scaleimages.atf-post__message { background: transparent !important; }
+body.atf-active .atf-post.af-atf-display .atf-post__meta-line {
+  box-sizing: border-box;
+  left: 0 !important;
+  width: calc(100% + 2 * var(--atf-post-content-inset)) !important;
+  max-width: none !important;
+  margin: 0 calc(-1 * var(--atf-post-content-inset)) var(--atf-space-3) !important;
+  padding: .4rem var(--atf-space-4);
+  justify-content: flex-start;
+  gap: .6rem 1.2rem;
+  overflow: visible;
+  border: 0;
+  border-block-end: 1px solid #304953;
+  border-radius: 0;
+  background: linear-gradient(90deg, #152e42, #101f2c) !important;
+  color: #a8bbdb;
+  font-size: .875rem;
+  text-align: start;
 }
+body.atf-active .atf-post.af-atf-display .atf-post__meta-line > :not(:empty):not(:first-child)::before { content: none; display: none; }
+body.atf-active .atf-post.af-atf-display .atf-post__management .atf-post__management-action {
+  width: 2.1rem;
+  height: 2.1rem;
+  min-height: 2.1rem;
+  border: 1px solid #2a4b60;
+  border-radius: 4px;
+  background: linear-gradient(#163348, #0c1b27);
+}
+/* MyBB emits the restore control for moderators even on ordinary posts.
+   Its native class/state and handler remain available on deleted posts. */
+body.atf-active .atf-post:not(.deleted_post) .atf-post__management :is(.postbit_qrestore, .postbit_restore, [id^="quick_restore_"]) { display: none !important; }
 body.atf-active .atf-post__date { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
 body.atf-active .atf-post__management { flex-wrap: wrap; min-width: 0; max-width: 100%; }
 body.atf-active .atf-post__footer { grid-template-columns: minmax(0, 1fr) auto; min-height: 3.5rem; margin: var(--atf-space-4) 0 .75rem; }
-body.atf-active .atf-post__reputation-corner {
+body.atf-active .atf-post.af-atf-display .atf-post__reputation-corner {
   --atf-corner-size: 17px;
   position: relative;
   inset: auto;
   grid-column: 2;
   align-self: end;
-  width: auto;
-  height: auto;
+  width: auto !important;
+  height: auto !important;
   min-width: 4.5rem;
   padding: .65rem .8rem;
   border: 1px solid var(--atf-post-metal);
-  border-radius: 2px;
-  background: linear-gradient(#172633, #0b141e);
+  border-radius: 2px !important;
+  background: linear-gradient(#172633, #0b141e) !important;
   color: var(--atf-post-accent);
   box-shadow: 0 0 8px var(--atf-post-accent-soft);
 }
 @media (max-width: 48rem) {
-  body.atf-active .atf-post.af-atf-display { --atf-corner-size: 26px; }
+  body.atf-active .atf-post.af-atf-display { --atf-corner-size: 26px; --atf-post-content-inset: var(--atf-space-4); }
   body.atf-active .atf-post__layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "sidebar" "content"; }
   body.atf-active .atf-post__topbar { grid-template-columns: minmax(0, 1fr) auto; padding: var(--atf-space-4); }
   body.atf-active .atf-post__author-tools { grid-column: auto; width: auto; justify-self: end; align-self: center; }
@@ -1071,7 +1110,7 @@ body.atf-active .atf-post__reputation-corner {
   body.atf-active .atf-post__title,
   body.atf-active .atf-post__profile-actions { margin-inline-start: 0; }
   body.atf-active .atf-post__name { font-size: clamp(1.2rem, 5vw, 1.7rem); }
-  body.atf-active .atf-post__meta-line { left: 0; width: 100%; justify-content: flex-start; text-align: start; gap: .4rem .6rem; }
+  body.atf-active .atf-post.af-atf-display .atf-post__meta-line { gap: .4rem .6rem; }
   body.atf-active .atf-post__meta-line > :not(:empty):not(:first-child)::before { display: none; }
   body.atf-active .atf-post__meta-line > .atf-post__management { flex-basis: 100%; }
   body.atf-active .atf-post__content { padding-inline: var(--atf-space-4); }
@@ -1080,4 +1119,112 @@ body.atf-active .atf-post__reputation-corner {
   body.atf-active .atf-post__footer { margin-inline: 0; }
 }
 
-body.atf-active .atf-post__statistics .af-apui-postbit-rail .af-apui-postbit-actions { display: none !important; }
+body.atf-active .atf-post.af-atf-display .atf-post__statistics .af-apui-postbit-rail .af-apui-postbit-actions { display: none !important; }
+
+body.atf-active .atf-post.af-atf-display .atf-post__reputation-corner::before,
+body.atf-active .atf-post.af-atf-display .atf-post__reputation-corner::after { content: none !important; display: none !important; }
+body.atf-active .atf-post.af-atf-display .atf-post__statistics :is(.af-apui-stat-item__icon, .af-apui-stat-item__value, .af-apc-slot, .af-apc, .af-apc-count) {
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  align-self: center;
+  margin-inline: 0;
+}
+/* The edit popup can be reparented to body by AdvancedJSBandle. Select its
+   native ID, not its former post ancestor, so both placements look identical. */
+body.atf-active .popup_menu[id^="edit_post_"][id$="_popup"] {
+  box-sizing: border-box;
+  min-width: 12rem;
+  max-width: calc(100vw - 16px);
+  padding: .35rem;
+  border: 1px solid #56616a;
+  border-radius: 3px;
+  color: #c3d1e3;
+  background: linear-gradient(135deg, #172634, #0a121d) !important;
+  box-shadow: inset 0 0 0 2px #0b1119, 0 8px 24px rgb(0 0 0 / 55%);
+}
+body.atf-active .popup_menu[id^="edit_post_"][id$="_popup"] .popup_item_container { padding: 0; border: 0; background: transparent !important; }
+body.atf-active .popup_menu[id^="edit_post_"][id$="_popup"] a.popup_item {
+  display: block;
+  box-sizing: border-box;
+  width: auto;
+  height: auto;
+  min-height: 2.25rem;
+  padding: .6rem .75rem;
+  border: 0;
+  border-radius: 2px;
+  color: #c3d1e3;
+  background: transparent;
+  font-size: .875rem;
+  line-height: 1.3;
+  text-align: start;
+  text-decoration: none;
+}
+body.atf-active .popup_menu[id^="edit_post_"][id$="_popup"] a.popup_item:is(:hover, :focus-visible) { color: #fff; background: #213e51; outline: 1px solid #42667a; }
+/* Native MyBB.reputation / submitReputation modal: keep its form, tokens and
+   controls. No replacement dialog or JavaScript runtime is introduced. */
+body.atf-active .modal:has(form[action*="reputation.php"]) {
+  color-scheme: dark;
+  box-sizing: border-box;
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  padding: 6px;
+  border: 1px solid #687277;
+  border-radius: 4px;
+  color: #c1cee1;
+  background: linear-gradient(140deg, #1c2b38, #09121c) !important;
+  box-shadow: inset 0 0 0 2px #0a1119, inset 0 0 0 3px #384751, 0 15px 60px rgb(0 0 0 / 70%);
+  font-size: .9375rem;
+  text-align: start;
+}
+body.atf-active .modal:has(form[action*="reputation.php"]) :is(.tborder, .trow1, .trow2, .thead) {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent !important;
+}
+body.atf-active .modal:has(form[action*="reputation.php"]) .tborder { border-collapse: collapse; box-shadow: none; }
+body.atf-active .modal:has(form[action*="reputation.php"]) td > strong { display: inline-block; margin-block-end: .5rem; color: #dce6ee; font: 600 1.35rem Georgia, "Times New Roman", serif; }
+body.atf-active .modal:has(form[action*="reputation.php"]) .smalltext { color: #a5b5cb; }
+body.atf-active .modal form[action*="reputation.php"] :is(select, input[type="text"], textarea) {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: .6rem .7rem;
+  border: 1px solid #455c6d;
+  border-radius: 3px;
+  color: #d1dced;
+  background: #0a1723;
+  font: inherit;
+}
+body.atf-active .modal form[action*="reputation.php"] :is(select, input[name="comments"], textarea) { width: 100% !important; }
+body.atf-active .modal form[action*="reputation.php"] :is(input[type="submit"], input[type="button"], button) {
+  min-height: 2.4rem;
+  margin: .2rem;
+  padding: .5rem 1rem;
+  border: 1px solid #426276;
+  border-radius: 3px;
+  color: #d5e3ef;
+  background: linear-gradient(#213e51, #102333);
+  font: inherit;
+  cursor: pointer;
+}
+body.atf-active .modal form[action*="reputation.php"] :is(input, select, textarea, button):focus-visible { outline: 2px solid var(--atf-color-accent, #7398ad); outline-offset: 2px; }
+body.atf-active .modal:has(form[action*="reputation.php"]) a.close-modal {
+  top: .5rem;
+  right: .5rem;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid #526572;
+  border-radius: 3px;
+  color: #cbd9e8;
+  background: #122535;
+  text-indent: 0;
+  font-size: 0;
+  text-decoration: none;
+}
+body.atf-active .modal:has(form[action*="reputation.php"]) a.close-modal::before { content: "×"; font-size: 1.4rem; line-height: 1; }
+body.atf-active .jquery-modal.blocker:has(form[action*="reputation.php"]) { background: rgb(0 6 13 / 78%); }

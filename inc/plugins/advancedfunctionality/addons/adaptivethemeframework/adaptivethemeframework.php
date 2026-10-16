@@ -1304,7 +1304,7 @@ function af_adaptivethemeframework_post_context(array $post): array
         'postdate', 'posturl', 'subject', 'subject_extra', 'icon', 'editedmsg',
         'attachments', 'signature', 'iplogged', 'poststatus', 'input_editreason',
         'af_aa_user_class', 'af_apui_presence_html', 'af_apui_profile_fields_html',
-        'af_apui_author_statistics_html', 'af_apui_actionbar_html', 'af_apui_rail_html',
+        'af_apui_author_statistics_html', 'af_apui_actionbar_html', 'af_apui_rail_html', 'af_apui_character_name_html',
         'af_apui_plaque_html', 'advancedpostcounter', 'af_apc_atf_html',
         'af_apui_secondary_avatar', 'af_apui_display_avatar', 'af_apf_secondary_avatar_url', 'af_atf_primary_avatar', 'af_atf_secondary_avatar',
         'af_post_char_count', 'af_post_char_count_formatted',
@@ -1525,7 +1525,7 @@ function af_adaptivethemeframework_compose_postbit(array &$post): void
             . '<span class="atf-post__permalink">' . (string)($post['posturl'] ?? '') . '</span>'
             . '<time class="post_date atf-post__date"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> ' . (string)($post['postdate'] ?? '') . '</time>'
             . '<span class="atf-post__char-count" title="символов в посте" data-af-title="символов в посте"><i class="fa-solid fa-file-lines" aria-hidden="true"></i><span class="atf-post__char-count-value">'
-            . $post['af_post_char_count_formatted'] . '</span></span>'
+            . $post['af_post_char_count_formatted'] . '</span><span class="atf-post__char-count-label">символов</span></span>'
             . '<div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">'
             . (string)($post['af_atf_slots']['post.actions'] ?? '') . '</div></div>';
     }

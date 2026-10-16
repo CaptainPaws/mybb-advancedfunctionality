@@ -1655,7 +1655,7 @@ function af_apui_get_postbit_plaque_icon_settings(int $uid): array
     return $cache[$uid];
 }
 
-function af_apui_build_postbit_plaque_html(array $post): string
+function af_apui_build_postbit_plaque_html(array $post, array $sheetPayload = []): string
 {
     $uid = (int)($post['uid'] ?? 0);
     if ($uid <= 0) {
@@ -1701,13 +1701,28 @@ function af_apui_build_postbit_plaque_html(array $post): string
         $mediaHtml = '<span class="af-apui-postbit-plaque__media-glyph" aria-hidden="true">' . htmlspecialchars_uni($legacyGlyph) . '</span>';
     }
 
-    return '<div class="af-apui-postbit-plaque" data-af-apui-plaque="1">'
+    // The existing lazy CharacterSheets trigger belongs to the plaque itself.
+    // Its media/content remain decorative; no second sheet icon or nested link.
+    $sheetUrl = !empty($sheetPayload['enabled'])
+        ? trim((string)($sheetPayload['sheet_url'] ?? '')) : '';
+    $tag = $sheetUrl !== '' ? 'a' : 'div';
+    $sheetAttrs = '';
+    if ($sheetUrl !== '') {
+        $sheetUrl = af_apui_build_surface_url($sheetUrl, $uid, 'sheet');
+        $sheetAttrs = ' href="' . htmlspecialchars_uni($sheetUrl) . '" data-afcs-open="1"'
+            . ' data-afcs-sheet="' . htmlspecialchars_uni($sheetUrl) . '"'
+            . ' data-slug="' . htmlspecialchars_uni((string)($sheetPayload['sheet_slug'] ?? '')) . '"'
+            . ' data-af-apui-owner-uid="' . $uid . '" data-af-apui-surface="sheet"'
+            . ' aria-label="' . htmlspecialchars_uni((string)($sheetPayload['button_label'] ?? 'Лист персонажа')) . '"';
+    }
+
+    return '<' . $tag . ' class="af-apui-postbit-plaque" data-af-apui-plaque="1"' . $sheetAttrs . '>'
         . '<span class="af-apui-postbit-plaque__media" data-af-apui-plaque-media="1"' . $mediaAttr . '>' . $mediaHtml . '</span>'
         . '<span class="af-apui-postbit-plaque__content">'
         . '<span class="af-apui-postbit-plaque__title">' . htmlspecialchars_uni($title) . '</span>'
         . '<span class="af-apui-postbit-plaque__subtitle">' . htmlspecialchars_uni($subtitle) . '</span>'
         . '</span>'
-        . '</div>';
+        . '</' . $tag . '>';
 }
 
 function af_apui_postbit_compose_userdetails(array &$post): void
@@ -1797,7 +1812,7 @@ function af_apui_postbit_compose_userdetails(array &$post): void
 
     $post['af_apui_presence_html'] = af_apui_build_postbit_presence_html($post);
     $post['af_apui_profile_fields_html'] = $profileFields;
-    $post['af_apui_plaque_html'] = af_apui_build_postbit_plaque_html($post);
+    $post['af_apui_plaque_html'] = af_apui_build_postbit_plaque_html($post, $sheetPayload);
 
     $statsHtml =
         '<div class="author_statistics af-apui-postbit-userdetails">'
