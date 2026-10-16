@@ -54,9 +54,16 @@
     var topbarBottom = item.postTop + item.topbarHeight;
     var sidebarBottom = item.sidebarTop + item.sidebarHeight;
     var metaBottom = item.metaTop + item.metaHeight;
+    // The stationary rail reserves the frame clearance in CSS. Resolve its
+    // actual pixel padding only during geometry measurement, not on scrolling.
+    var sidebarBottomGap = item.sidebarHeight > 0
+      ? Math.max(0, parseFloat(window.getComputedStyle(item.sidebar.parentElement).paddingBottom) || 0)
+      : 0;
+    // Keep the three sticky surfaces on the same stop so the banner/meta never
+    // drift over the rail when it reaches the decorative bottom frame.
     item.maxTravel = Math.max(0, Math.min(
       postBottom - topbarBottom,
-      postBottom - sidebarBottom,
+      postBottom - sidebarBottom - sidebarBottomGap,
       postBottom - metaBottom
     ));
   }

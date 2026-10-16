@@ -800,6 +800,8 @@ body.atf-active[data-atf-postbit-sidebar="hidden"] .atf-post__layout {
    APUI appearance backgrounds, AET hosts and the sticky runtime stay intact. */
 body.atf-active .atf-post.af-atf-display {
   --atf-post-content-inset: var(--atf-space-5);
+  /* Clear the 48px outer corner plus its inner contour at the rail stop. */
+  --atf-post-sticky-bottom-gap: 52px;
   --atf-post-metal: #535b60;
   --atf-post-metal-light: #929995;
   --atf-post-metal-dark: #171e24;
@@ -1305,3 +1307,12 @@ body.atf-active .atf-post.af-atf-display .atf-post__permalink a::before,
 body.atf-active .atf-post.af-atf-display .atf-post__permalink a::after,
 body.atf-active .atf-post.af-atf-display .atf-post__date::before,
 body.atf-active .atf-post.af-atf-display .atf-post__date::after { content: none !important; display: none !important; }
+
+/* Reserve clearance outside the moving profile, keeping its plaque flush
+   with sidebar-inner. Mobile stacks the message below the rail, so it needs
+   no spacer between these surfaces. */
+@media (min-width: 48.0625rem) {
+  body.atf-active .atf-post.af-atf-display .atf-post__sidebar {
+    padding-block-end: var(--atf-post-sticky-bottom-gap);
+  }
+}
