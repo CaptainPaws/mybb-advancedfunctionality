@@ -5,13 +5,15 @@
 return [
     'id'       => 'advancededitor',
     'name'     => 'Advanced Editor',
-    'version'  => '1.0.0',
+    'version'  => '1.1.0',
     'author'   => 'CaptainPaws',
     'bootstrap'=> 'advancededitor.php',
 
     'frontend' => [
         'mode' => 'contextual',
         'routes' => [
+            ['script'=>'usercp.php','action'=>'editsig'],
+            ['script'=>'usercp.php','action'=>'do_editsig'],
             // KB owns the HTML and publishes the canonical editor marker late,
             // in the rendered response.  Declare both its canonical entry
             // point and retained misc.php aliases so bootstrap-time permission

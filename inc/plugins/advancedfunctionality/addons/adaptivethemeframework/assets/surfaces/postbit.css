@@ -1335,3 +1335,46 @@ body.atf-active .atf-post.af-atf-display .atf-post__date::after { content: none 
    bottom clearance, even when short content never moves the inner profile.
    APUI author backgrounds and AET effects remain on sidebar-inner. */
 body.atf-active .atf-post.af-atf-display .atf-post__sidebar { background: transparent; }
+
+/* Signature disclosure: native details, shared neutral metal and accent-only gems. */
+body.atf-active .atf-post.af-atf-display .atf-post__content > .atf-post__signature-spoiler {
+  min-width: 0;
+  margin: .75rem var(--atf-post-content-inset) 0;
+}
+body.atf-active .atf-post .atf-post__signature-toggle {
+  display: grid;
+  justify-items: center;
+  grid-template-rows: 22px 14px 7px;
+  min-height: 43px;
+  padding: 0;
+  color: #aeb4b2;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+body.atf-active .atf-post .atf-post__signature-toggle::-webkit-details-marker { display: none; }
+body.atf-active .atf-post .atf-post__signature-toggle::marker { content: ""; }
+body.atf-active .atf-post .atf-post__signature-toggle:focus-visible { outline: 1px solid var(--atf-post-metal-light); outline-offset: 3px; }
+body.atf-active .atf-post .atf-post__signature-toggle > .atf-post__signature-separator {
+  align-self: center;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  background-image: linear-gradient(90deg,transparent,var(--atf-post-metal-light) 2% 43%,transparent 48% 52%,var(--atf-post-metal-light) 57% 98%,transparent),linear-gradient(90deg,transparent,var(--atf-post-metal) 4% 42%,transparent 47% 53%,var(--atf-post-metal) 58% 96%,transparent);
+  background-size: 100% 1px,100% 1px;
+  background-position: center 9px,center 12px;
+  background-repeat: no-repeat;
+}
+body.atf-active .atf-post .atf-post__signature-label { font: 11px/14px Georgia,"Times New Roman",serif; letter-spacing: .18em; }
+body.atf-active .atf-post .atf-post__signature-arrow { width: 6px; height: 6px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); }
+body.atf-active .atf-post .atf-post__signature-spoiler[open] > summary .atf-post__signature-arrow { transform: translateY(3px) rotate(225deg); }
+body.atf-active .atf-post .atf-post__signature-frame { --atf-corner-size: 22px; position: relative; min-width: 0; border: 1px solid var(--atf-post-metal); margin-top: .4rem; box-shadow: inset 0 0 0 1px #0a1016; }
+body.atf-active .atf-post .atf-post__signature-frame > .atf-post__signature { margin: 0; padding: .65rem .85rem; overflow-wrap: anywhere; }
+body.atf-active .atf-post .atf-post__signature-frame > .atf-gothic-frame { inset: 2px; }
+body.atf-active .atf-post .atf-post__signature img { max-width: 100%; height: auto; }
+/* Suppress only the legacy wrapper's divider, not an author's BBCode rule. */
+body.atf-active .atf-post .atf-post__signature > .signature { border-block-start: 0; margin: 0; padding: 0; }
+
+body.atf-active .atf-post .atf-post__signature-terminal { position: absolute; top: 8px; width: 5px; height: 5px; border: 1px solid var(--atf-post-metal-light); background: var(--atf-post-metal-dark); transform: rotate(45deg); }
+body.atf-active .atf-post .atf-post__signature-terminal--start { left: 2px; }
+body.atf-active .atf-post .atf-post__signature-terminal--end { right: 2px; }

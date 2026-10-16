@@ -832,8 +832,16 @@ function af_advancededitor_build_sceditor_content_css(string $baseCssUrl): strin
     return $baseCssUrl;
 }
 
+function af_advancededitor_is_signature_page(): bool
+{
+    return defined('THIS_SCRIPT') && THIS_SCRIPT==='usercp.php'
+        && in_array((string)($GLOBALS['mybb']->input['action']??''),['editsig','do_editsig'],true);
+}
+
 function af_advancededitor_assets_disabled_for_current_page(): bool
 {
+    // Signature is an explicit supported surface; the old UserCP blanket exclusion stays elsewhere.
+    if (af_advancededitor_is_signature_page()) return false;
     if (function_exists('af_is_blacklisted')) {
         return af_is_blacklisted(AF_AE_ID);
     }
@@ -884,6 +892,7 @@ function af_advancededitor_build_css_tag_for_asset(string $assetUrl, string $bbu
 
 function af_advancededitor_response_facts(string $page): array
 {
+    $hasSignature=af_advancededitor_is_signature_page() && !empty($GLOBALS['mybb']->settings['sigmycode']) && (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']signature["\'])[^>]*>~i',$page);
     $hasMessage = (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']message["\'])[^>]*>~i', $page);
     $hasKbEditor = (bool)preg_match('~<textarea\b(?=[^>]*\bclass=["\'][^"\']*\baf-kb-editor\b)[^>]*>~i', $page);
     $hasAtfEditor = (bool)preg_match('~<textarea\b(?=[^>]*\bclass=["\'][^"\']*\baf-atf-bbcode-editor\b)[^>]*>~i', $page);
@@ -892,7 +901,8 @@ function af_advancededitor_response_facts(string $page): array
         || (bool)preg_match('~class=["\'][^"\']*\bpost_body\b~i', $page)
         || (bool)preg_match('~id=["\']posts["\']~i', $page);
     return [
-        'has_supported_editor' => $hasMessage || $hasKbEditor || $hasAtfEditor,
+        'has_supported_editor' => $hasMessage || $hasKbEditor || $hasAtfEditor || $hasSignature,
+        'has_signature_editor'=>$hasSignature,
         'has_kb_editor' => $hasKbEditor,
         'has_atf_editor' => $hasAtfEditor,
         'has_post_content' => $hasPostContent,
@@ -918,6 +928,12 @@ function af_advancededitor_pre_output(string &$page = ''): void
     }
 
     $facts = af_advancededitor_response_facts($page);
+    if (!empty($facts['has_signature_editor'])) {
+        $page=preg_replace_callback('~<textarea\b(?=[^>]*\bname=["\']signature["\'])[^>]*>~i',static function($m){
+            if (str_contains($m[0],'af-ae-signature-editor')) return $m[0];
+            return preg_match('~\bclass=(["\'])~i',$m[0])?preg_replace('~\bclass=(["\'])~i','class=$1af-ae-signature-editor ',$m[0],1):substr($m[0],0,-1).' class="af-ae-signature-editor">';
+        },$page);
+    }
     if (function_exists('af_frontend_asset_allowed')
         && !af_frontend_asset_allowed(AF_AE_ID, 'pre_output', null, $facts)) return;
 
@@ -1174,6 +1190,7 @@ table #post_options, table #postoptions{display:none!important;}
         if (!empty($facts['has_kb_editor'])) {
             $editorSelectors[] = 'textarea.af-kb-editor';
         }
+        if (!empty($facts['has_signature_editor'])) $editorSelectors[]='textarea.af-ae-signature-editor';
         $editorSelector = implode(', ', array_unique($editorSelectors));
 
         if ($helpFeatureEnabled) {
@@ -1192,6 +1209,10 @@ table #post_options, table #postoptions{display:none!important;}
 
         $shellRegistry = af_advancededitor_shell_registry($available, $customDefs, $packs);
         $available = $shellRegistry['buttons'];
+        if (!empty($facts['has_signature_editor'])) {
+            $available=af_advancededitor_signature_buttons($available);
+            $customDefs=af_advancededitor_signature_buttons($customDefs);
+        }
         $compiledButtons = array_column($available, null, 'cmd');
         $customDefs = array_map(static fn($b) => array_replace($b, $compiledButtons[$b['cmd']] ?? []), $customDefs);
         $payload = [
@@ -1247,7 +1268,7 @@ table #post_options, table #postoptions{display:none!important;}
         ];
         $payload['shellToolbar'] = af_advancededitor_shell_toolbar($available, $layout, $payload['formatHelp']);
         $counterForums = array_filter(array_map('intval', explode(',', $formfeatureCsv)));
-        $payload['shellCounter'] = !$counterForums || in_array($payload['cfg']['forumId'], $counterForums, true);
+        $payload['shellCounter'] = empty($facts['has_signature_editor']) && (!$counterForums || in_array($payload['cfg']['forumId'], $counterForums, true));
         $payload['counterHtml'] = $payload['shellCounter'] ? af_advancededitor_shell_counter_html() : '';
         $page = af_advancededitor_render_shells($page, $payload['shellToolbar'], $payload['shellCounter']);
         if ($editorSelector !== '') {
@@ -2924,4 +2945,15 @@ function af_advancededitor_get_available_buttons(string $bburl, array $customDef
     }
 
     return array_merge($std, $builtins, $custom);
+}
+
+/** Only this response's registry is filtered; ACP layout and other editor surfaces stay intact. */
+function af_advancededitor_signature_buttons(array $buttons): array
+{
+    $settings=$GLOBALS['mybb']->settings;
+    $blocked=['youtube','video','af_embedvideos']; // Native signature parsing does not enable video BBCode.
+    if (empty($settings['sigimgcode'])) $blocked=array_merge($blocked,['image','af_resizeimg','af_gallery','af_stikers']);
+    if (empty($settings['sigsmilies'])) $blocked[]='emoticon';
+    if (empty($settings['sightml'])) $blocked[]='af_htmlbb';
+    return array_values(array_filter($buttons,static fn($button)=>!in_array((string)($button['cmd']??''),$blocked,true)));
 }

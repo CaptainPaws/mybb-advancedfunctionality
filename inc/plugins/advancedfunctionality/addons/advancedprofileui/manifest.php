@@ -3,7 +3,7 @@
 return [
     'id'          => 'advancedprofileui',
     'name'        => 'AdvancedProfileUI',
-    'version'     => '1.0.0',
+    'version'     => '1.1.0',
     'author'      => 'CaptainPaws',
     'authorsite'  => 'https://github.com/CaptainPaws',
     'description' => 'Каркас кастомных шаблонов member_profile и postbit_classic с безопасным override/restore.',
@@ -20,7 +20,8 @@ return [
     ],
     'frontend' => [
         'mode' => 'contextual',
-        'routes' => [],
+        'routes' => [['script'=>'apstudio.php'],['script'=>'usercp.php','action'=>'editsig'],['script'=>'usercp.php','action'=>'do_editsig']],
+        'resources'=>['signature_studio'=>['mode'=>'contextual','routes'=>[['script'=>'apstudio.php']],'directory_fallback'=>false]],
         'response_rules' => [
             ['has_apui_output' => true],
         ],

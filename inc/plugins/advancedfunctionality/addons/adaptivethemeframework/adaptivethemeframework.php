@@ -15,12 +15,13 @@ if (!defined('AF_ADDONS')) {
 
 require_once __DIR__ . '/ownership.php';
 require_once __DIR__ . '/page-shell.php';
+require_once __DIR__ . '/postbit-signature.php';
 
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.30.0');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.31.0');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1496,6 +1497,7 @@ function af_adaptivethemeframework_compose_postbit(array &$post): void
     $post['af_atf_gothic_frame'] = '<span class="atf-gothic-frame" aria-hidden="true">'
         . '<i class="atf-gothic-corner atf-gothic-corner--tl"></i><i class="atf-gothic-corner atf-gothic-corner--tr"></i>'
         . '<i class="atf-gothic-corner atf-gothic-corner--bl"></i><i class="atf-gothic-corner atf-gothic-corner--br"></i></span>';
+    $post['af_atf_signature_html']=af_adaptivethemeframework_signature_markup((string)($post['signature']??''),(string)($post['pid']??'preview'),$post['af_atf_gothic_frame']);
     // Primary MyBB avatar and APF secondary avatar are separate surfaces.
     // Never overwrite $post['useravatar'] here.
     $post['posturl'] = af_adaptivethemeframework_posturl_checkbox_first((string)($post['posturl'] ?? ''));
@@ -1910,6 +1912,9 @@ function af_adaptivethemeframework_render_footer(bool $hasPosts = false, string 
             }
         }
         $scripts .= '<script src="' . $escape($assetBase . 'assets/adaptivethemeframework.modals.js?v=' . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION)) . '" defer></script>' . "\n";
+    }
+    if (strpos($page,'data-atf-signature')!==false) {
+        $scripts .= '<script src="'.$escape($assetBase.'assets/adaptivethemeframework.signature.js'.$version).'" defer></script>'."\n";
     }
     if ($hasPosts) {
         $scripts .= '<script src="' . $escape($assetBase . 'assets/adaptivethemeframework.postbit-sticky.js?v=' . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION)) . '" defer></script>' . "\n";

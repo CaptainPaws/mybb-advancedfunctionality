@@ -138,7 +138,8 @@ function af_aa_studio_preview_markup(int $uid, array $settings=[]): string {
         $signature=$parser->parse_message($user['signature'],['allow_html'=>0,'allow_mycode'=>1,'allow_smilies'=>1,'allow_imgcode'=>1,'allow_videocode'=>0,'filter_badwords'=>1,'nl2br'=>1]);
     }
     if ($signature==='') $signature='<p>Подпись персонажа · <a href="#">История продолжается</a></p>';
-    $values=['af_atf_gothic_frame'=>$fixture['af_atf_gothic_frame'],'af_atf_post_reputation_html'=>$fixture['af_atf_post_reputation_html'],'pid'=>'appearance_preview','uid'=>(string)$uid,'af_aa_user_class'=>'af-aa-postbit-user-'.$uid,'af_atf_element'=>$key,
+    $signatureMarkup=af_adaptivethemeframework_signature_markup($signature,'appearance-preview',$fixture['af_atf_gothic_frame']);
+    $values=['af_atf_signature_html'=>$signatureMarkup,'af_atf_gothic_frame'=>$fixture['af_atf_gothic_frame'],'af_atf_post_reputation_html'=>$fixture['af_atf_post_reputation_html'],'pid'=>'appearance_preview','uid'=>(string)$uid,'af_aa_user_class'=>'af-aa-postbit-user-'.$uid,'af_atf_element'=>$key,
         'usertitle'=>'Путешественник','groupimage'=>'Участник','userstars'=>'★ ★ ★',
         'af_atf_primary_avatar'=>$fixture['af_atf_primary_avatar'],'af_atf_secondary_avatar'=>$fixture['af_atf_secondary_avatar']?:$avatar,'af_atf_meta_line'=>'<div class="atf-post__meta-line"><time class="atf-post__date">Сегодня</time><a href="#">#1</a><div class="atf-post__management postbit_buttons"><a class="atf-post__management-action" href="#" aria-label="Ответить"><i class="fa-solid fa-reply" aria-hidden="true"></i></a></div></div>',
         'message'=>'<h3>На границе миров</h3><p>Свет отражается в воде. Этот текст помогает выбрать шрифт и проверить читаемость оформления.</p><p><a href="#">Пример ссылки</a> и <strong>выделенный текст</strong>.</p>',
@@ -172,6 +173,7 @@ function af_aa_render_workshop(): void {
     $categories='';foreach(af_aa_personal_targets() as $key=>$meta)$categories.='<a href="apstudio.php?target='.$key.'"'.($key===$target?' aria-current="page"':'').'>'.htmlspecialchars_uni($meta['label']).'</a>';
     $componentOptions='';foreach(af_aa_studio_surface_registry()[$target]['components'] as $key=>$meta)$componentOptions.='<option value="'.$key.'">'.htmlspecialchars_uni($meta['label']).'</option>';
     $vars=['aa_workshop_atf_class'=>$aa_workshop_atf_class,'aa_categories'=>$categories,'aa_component_options'=>$componentOptions,'aa_target_label'=>htmlspecialchars_uni(af_aa_personal_targets()[$target]['label']),'aa_target'=>$target,'aa_seed'=>json_encode($seed,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT),'aa_preview'=>$preview,
+        'aa_signature_editor'=>defined('THIS_SCRIPT') && THIS_SCRIPT==='apstudio.php' && basename((string)($_SERVER['SCRIPT_NAME']??THIS_SCRIPT))!=='studio.php' && function_exists('af_apui_signature_studio_block')?af_apui_signature_studio_block():'',
         'aa_catalog'=>af_aa_is_admin_user()?'<a href="apstudio.php?mode=catalog">Каталог магазина</a>':''];
     $html=af_aa_render_template_output('advancedappearance_workshop',$vars);
     if ($target==='postbit') $html=preg_replace('~<fieldset id="aa-canvas-fieldset">.*?</fieldset>~s','',$html);

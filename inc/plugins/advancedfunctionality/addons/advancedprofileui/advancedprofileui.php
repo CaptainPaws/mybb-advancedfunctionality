@@ -22,6 +22,7 @@ define('AF_APUI_ASSET_MARK', '<!--af_apui_assets-->');
 define('AF_APUI_THEME_STYLESHEET_LOGICAL_ID', 'advancedprofileui_main');
 
 require_once AF_APUI_BASE . 'modules/profile_providers.php';
+require_once AF_APUI_BASE . 'modules/signature_editor.php';
 
 function af_advancedprofileui_install(): void
 {
@@ -262,6 +263,8 @@ function af_apui_register_hooks(): void
         return;
     }
 
+    $plugins->add_hook('usercp_editsig_end','af_apui_signature_embed_template',1100);
+    $plugins->add_hook('usercp_do_editsig_end','af_apui_signature_saved',1100);
     $plugins->add_hook('member_profile_end', 'af_apui_member_profile_end', 5);
 
     // ВАЖНО: ставим поздний приоритет, чтобы другие плагины успели
