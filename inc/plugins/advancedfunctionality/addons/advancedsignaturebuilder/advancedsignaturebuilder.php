@@ -29,6 +29,7 @@ function af_advancedsignaturebuilder_init(): void {
     $plugins->add_hook('usercp_do_editsig_start','af_asb_publish_start',1000);
     $plugins->add_hook('usercp_do_editsig_end','af_asb_publish_end',1000);
     $plugins->add_hook('usercp_do_editsig_end','af_asb_saved_redirect',1100);
+    $plugins->add_hook('member_profile_end','af_asb_profile',110);
     foreach (['postbit','postbit_prev','postbit_pm'] as $hook) $plugins->add_hook($hook,'af_asb_postbit',110);
     if (function_exists('af_adaptivethemeframework_register_component')) af_adaptivethemeframework_register_component([
         'owner'=>AF_ASB_ID,'key'=>'signature_builder','slot'=>'ucp.content','section_title'=>'Конструктор подписи',

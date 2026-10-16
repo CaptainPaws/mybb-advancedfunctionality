@@ -1,6 +1,9 @@
 <?php
 /** Typed content model and portable MyBB BBCode. No presentation settings live here. */
 if (!defined('IN_MYBB')) die('No direct access');
+class AF_ASB_FieldException extends InvalidArgumentException {
+    public function __construct(string $message,public string $field) { parent::__construct($message); }
+}
 function af_asb_templates(): array {
     return ['minimal'=>['Минимализм','Заголовок, текст и ссылки.'],'quote'=>['Цитата','Главное — ваше высказывание.'],'card'=>['Карточка','Изображение и текст рядом.'],'gallery'=>['Галерея','От одного до трёх изображений.']];
 }
@@ -53,7 +56,7 @@ function af_asb_validate(array $v,int $uid,bool $checkMedia=true,bool $publish=f
     foreach ($v['buttons'] as $button) if (!is_array($button) || array_diff(array_keys($button),['label','url']) || !is_string($button['label']??null) || trim($button['label'])==='' || mb_strlen($button['label'])>60 || preg_match('/[\x00-\x1f\x7f]/u',$button['label']) || !is_string($button['url']??null) || !af_asb_url($button['url'])) throw new InvalidArgumentException('У ссылки нужны название (до 60 символов) и HTTP(S)-адрес.');
     if (!empty($v['buttons']) && empty($GLOBALS['mybb']->settings['sigmycode'])) throw new InvalidArgumentException('Ссылки в подписи запрещены настройками MyBB.');
     if ($publish && (empty($GLOBALS['mybb']->settings['sigmycode']) || empty($GLOBALS['mybb']->settings['sigimgcode'])) && array_filter(array_merge([$v['background']],af_asb_used_images($v)),static fn($i)=>$i['enabled'] && ($i['media_id'] || $i['url']!==''))) throw new InvalidArgumentException('Изображения в подписи запрещены настройками MyBB.');
-    if ($publish && $v['template']==='gallery' && !array_filter($v['images'],static fn($i)=>$i['enabled'] && ($i['media_id'] || $i['url']!==''))) throw new InvalidArgumentException('Для галереи выберите хотя бы одно изображение.');
+    if ($publish && $v['template']==='gallery' && !array_filter($v['images'],static fn($i)=>$i['enabled'] && ($i['media_id'] || $i['url']!==''))) throw new AF_ASB_FieldException('Добавьте хотя бы одно изображение в галерею.','images');
     return $v;
 }
 function af_asb_image_url(array $image): string {

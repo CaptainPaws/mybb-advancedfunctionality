@@ -21,3 +21,9 @@
 body.atf-active .atf-post .atf-post__signature .af-asb-signature__backdrop > img { width: 100%; height: 100%; object-fit: cover; }
 
 .af-asb-signature__copy .af-asb-signature__divider { width: 86%; height: 1px; margin: 1.1em auto; border: 0; background: linear-gradient(90deg,transparent,var(--atf-post-accent,currentColor),transparent); opacity: .75; }
+
+/* Preview-only empty slots; the common renderer never emits these in public contexts. */
+.af-asb-signature__placeholder { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.5rem; min-width:0; min-height:110px; padding:.65rem; border:1px dashed currentColor; border-radius:4px; color:inherit; opacity:.65; font:inherit; font-size:.8em; text-align:center; }
+.af-asb-signature__placeholder svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:1.4; }
+.af-asb-signature--quote .af-asb-signature__text { border-inline-start:2px solid var(--atf-post-accent,currentColor); padding-inline:1rem; font-style:italic; }
+body.atf-active .atf-signature-surface .atf-post__signature .af-asb-signature__backdrop > img { width:100%; height:100%; object-fit:cover; }

@@ -331,7 +331,7 @@
     fetch(url, { credentials: 'same-origin' })
       .then(function (res) { if (!res.ok) throw new Error('Picker failed'); return res.json(); })
       .then(function (data) { if (token === pickerState.dataToken) renderPickerItems(data); })
-      .catch(function () { if (token === pickerState.dataToken) renderPickerItems([]); })
+      .catch(function (error) { if (token === pickerState.dataToken) { renderPickerItems([]); if (pickerState.onError) pickerState.onError(new Error('Не удалось загрузить изображения галереи. ' + error.message)); } })
       .finally(function () {
         if (token === pickerState.dataToken && pickerState.modal) setGridLoading(pickerState.modal, false);
       });
@@ -482,11 +482,12 @@
     options = options || {};
     if (insertFn && typeof insertFn === 'object') { options = insertFn; insertFn = options.onSelect; }
     var purpose = options.purpose || '';
-    if (purpose && ['appearance_avatars', 'appearance_postbit_bg', 'appearance_profile_bg', 'appearance_sheet_bg', 'appearance_theme_bg'].indexOf(purpose) === -1) throw new Error('Unknown Gallery purpose');
+    if (purpose && ['signature_background', 'signature_images', 'appearance_avatars', 'appearance_postbit_bg', 'appearance_profile_bg', 'appearance_sheet_bg', 'appearance_theme_bg'].indexOf(purpose) === -1) throw new Error('Unknown Gallery purpose');
     if (purpose && typeof insertFn !== 'function') throw new Error('Appearance picker requires onSelect');
     if (purpose !== pickerState.purpose && pickerState.modal) { closePicker(); pickerState.modal.remove(); pickerState.modal = null; }
     var token = ++pickerState.openToken;
     ++pickerState.dataToken;
+    pickerState.onError = typeof options.onError === 'function' ? options.onError : function (error) { alert(error.message); };
     pickerState.purpose = purpose;
     pickerState.insertFn = (typeof insertFn === 'function') ? insertFn : defaultInsert;
     var cfg = getPickerConfig();
@@ -495,7 +496,7 @@
     var ensureModal = pickerState.modal
       ? Promise.resolve(pickerState.modal)
       : fetch(pickerUrl, { credentials: 'same-origin' })
-          .then(function (res) { if (!res.ok) throw new Error('Picker unavailable'); return res.text(); })
+          .then(function (res) { if (!res.ok) throw new Error('Сервер ответил HTTP ' + res.status + '. Проверьте доступ к Gallery.'); return res.text(); })
           .then(function (html) {
             if (token !== pickerState.openToken) return null;
             var wrapper = document.createElement('div');
@@ -510,8 +511,9 @@
             return modal;
           });
 
-    ensureModal.then(function (modal) {
-      if (!modal || token !== pickerState.openToken) return;
+    return ensureModal.then(function (modal) {
+      if (token !== pickerState.openToken) return;
+      if (!modal) throw new Error('Галерея не вернула окно выбора. Проверьте доступ и активность Advanced Gallery.');
 
       modal.classList.add('is-open');
       modal.setAttribute('aria-hidden', 'false');
@@ -529,7 +531,7 @@
       focusDialog(modal);
 
       loadPickerData();
-    }).catch(function () { if (token === pickerState.openToken) alert('Не удалось открыть галерею'); });
+    }).catch(function (error) { if (token === pickerState.openToken) pickerState.onError(new Error('Не удалось открыть галерею. ' + error.message)); });
   }
 
   function selectAppearanceMedia(item, button) {
@@ -548,7 +550,7 @@
         if (token !== pickerState.openToken) return;
         closePicker();
         callback({ media_id: Number(data.media_id), url_full: data.url_full, thumb: item.thumb, title: item.title });
-      }).catch(function (error) { if (token === pickerState.openToken) alert(error.message); })
+      }).catch(function (error) { if (token === pickerState.openToken) pickerState.onError(error); })
       .finally(function () { button.disabled = false; });
   }
 
@@ -563,7 +565,7 @@
   }
 
   window.AF_GalleryPicker = {
-    open: function (insertFn, options) { openPicker(insertFn, options); },
+    open: function (insertFn, options) { return openPicker(insertFn, options); },
     reload: function () { loadPickerData(); }
   };
 

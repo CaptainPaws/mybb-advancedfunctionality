@@ -5,6 +5,8 @@ if (!defined('IN_MYBB')) die('No direct access');
 function ag_system_album_purposes(): array
 {
     return [
+        'signature_background' => 'Фоны подписей',
+        'signature_images' => 'Изображения подписей',
         'appearance_avatars' => 'Аватары оформления',
         'appearance_postbit_bg' => 'Фоны постбитов',
         'appearance_profile_bg' => 'Фоны профилей',

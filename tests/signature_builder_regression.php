@@ -74,3 +74,39 @@ $db->users[7]='Edited outside constructor';unset($GLOBALS['af_asb_rows']);$post=
 $attack=$v;$attack['background']['media_id']=11;$GLOBALS['af_asb_submitted']=$attack;$mybb->request_method='get';$af_asb_builder_html=af_asb_component();check_sig(!str_contains($af_asb_builder_html,'private.gif'),'Unowned media URL must not leak in a seed or preview');
 $roundtrip=af_asb_validate(af_asb_decode(json_encode($validated)),7);check_sig($roundtrip===$validated,'Model round-trip');
 echo "Signature builder passed: four safe compositions, portable BBCode, no GET migration, explicit backup, native-save boundaries, drafts, hash detachment, CSRF/UID/media checks and shared preview.\n";
+
+$empty=af_asb_defaults();$empty['template']='gallery';
+check_sig(af_asb_validate($empty,7)===$empty,'Empty gallery must validate as a draft');
+try { af_asb_validate($empty,7,true,true);throw new LogicException('Empty gallery published'); }
+catch(AF_ASB_FieldException $e){check_sig($e->field==='images','Publish error must identify image group');}
+check_sig(substr_count(af_asb_preview($empty,7)['html'],'class="af-asb-signature__placeholder"')===3,'Preview needs exactly three empty gallery slots');
+check_sig(!str_contains(af_asb_render($empty),'af-asb-signature__placeholder'),'Public renderer leaked placeholders');
+$one=$empty;$one['images'][1]['media_id']=10;$one=af_asb_validate($one,7,true,true);
+check_sig($one['images'][1]['media_id']===10 && $one['images'][0]['media_id']===null,'Media ID must remain in its original slot');
+check_sig(substr_count(af_asb_preview($one,7)['html'],'class="af-asb-signature__placeholder"')===2,'One image must replace only its own preview slot');
+$one['images'][1]['enabled']=false;reject_sig(fn()=>af_asb_validate($one,7,true,true));
+$empty['template']='card';check_sig(substr_count(af_asb_preview($empty,7)['html'],'class="af-asb-signature__placeholder"')===1,'Empty card needs an editor placeholder');
+$mybb->request_method='post';$mybb->input=['action'=>'editsig','my_post_key'=>'csrf','af_signature_model'=>json_encode($empty)];
+$empty['template']='gallery';$mybb->input['af_signature_model']=json_encode($empty);af_asb_api('draft',7);
+check_sig(json_decode($db->rows[7]['draft_json'],true)['template']==='gallery','Empty gallery draft did not persist');
+check_sig(substr_count(af_asb_api('preview',7)['html'],'class="af-asb-signature__placeholder"')===3,'API preview incorrectly requires publication fields');
+// Restore one published owner model and inspect the public profile boundary with a different visitor.
+$db->rows[7]['published_json']=json_encode($validated);$db->rows[7]['published_hash']=hash('sha256',$portable);$db->users[7]=$portable;unset($GLOBALS['af_asb_rows']);
+$memprofile=['uid'=>7,'signature'=>$portable];$signature='Native visible signature';$mybb->user['uid']=8;$headerinclude='';
+af_asb_profile();check_sig(str_contains($signature,'af-aa-signature-user-7') && str_contains($signature,'af-asb-signature') && !str_contains($signature,'af-aa-signature-user-8'),'Profile must render its owner, never visitor');
+$signature='';af_asb_profile();check_sig($signature==='','Profile native visibility gate bypassed');
+$signature='Legacy parsed signature';$memprofile['signature']='Legacy signature';af_asb_profile();check_sig($signature==='Legacy parsed signature','Legacy profile signature was replaced');
+check_sig(strpos($af_asb_builder_html,'<h2>Фон подписи</h2>')<strpos($af_asb_builder_html,'class="af-asb__actions"'),'Background remains below actions');
+check_sig(strpos($af_asb_builder_html,'<h2>Публикация подписи</h2>')<strpos($af_asb_builder_html,'class="af-asb__actions"'),'Publication options remain below actions');
+echo "Signature additions passed: draft/preview/publish validation, exact placeholder slots, media IDs, owner profile and settings order.\n";
+
+foreach(array_keys(af_asb_templates()) as $template) {
+    $composition=$validated;$composition['template']=$template;$composition['subtitle']='Подзаголовок';
+    foreach($composition['images'] as &$image)$image=['enabled'=>true,'media_id'=>10,'url'=>''];unset($image);
+    $native=af_asb_compile($composition);$db->users[7]=$native;$db->rows[7]['published_json']=json_encode($composition);$db->rows[7]['published_hash']=hash('sha256',$native);unset($GLOBALS['af_asb_rows']);
+    $post=['uid'=>7,'signature'=>'Visible native signature'];af_asb_postbit($post);
+    $memprofile=['uid'=>7,'signature'=>$native];$signature='Visible native signature';af_asb_profile();
+    $preview=af_asb_preview($composition,7);$content=af_asb_render($composition);
+    check_sig($post['signature']===$content && str_contains($signature,$content) && str_contains($preview['html'],$content),'Composition differs between UserCP, Showthread and Member: '.$template);
+}
+echo "Four composition contexts passed: same shared content in UserCP preview, postbit and owner profile.\n";

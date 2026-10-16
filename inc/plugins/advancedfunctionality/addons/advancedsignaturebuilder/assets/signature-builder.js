@@ -8,6 +8,12 @@
   const preview = form.querySelector('[data-af-sig-preview]');
   let timer, sequence = 0, dirty = false;
   const serialize = () => { form.querySelector('[data-af-sig-model]').value = JSON.stringify(model); };
+  const imageGroup = form.querySelector('[data-asb-images-group]'), imageError = form.querySelector('[data-asb-images-error]');
+  const galleryEmpty = () => model.template === 'gallery' && !model.images.some(image => image.enabled && (Number(image.media_id) > 0 || image.url.trim() !== ''));
+  function focusImages(message) {
+    imageError.textContent = message; imageError.hidden = false; imageGroup.classList.add('has-error');
+    imageGroup.setAttribute('aria-invalid', 'true'); imageGroup.scrollIntoView({behavior:'smooth', block:'center'}); imageGroup.focus({preventScroll:true});
+  }
   const showError = error => { status.dataset.error = '1'; status.textContent = error.message || 'Не удалось выполнить действие.'; };
   async function request(operation, announce = false) {
     const seq = ++sequence, submitted = JSON.stringify(model), data = new FormData();
@@ -28,6 +34,7 @@
     else if (status.dataset.error) { status.textContent = ''; delete status.dataset.error; }
   }
   function changed() {
+    if (!galleryEmpty()) { imageError.hidden = true; imageError.textContent = ''; imageGroup.classList.remove('has-error'); imageGroup.removeAttribute('aria-invalid'); }
     dirty = true; serialize(); clearTimeout(timer);
     timer = setTimeout(() => request('preview').catch(showError), 300);
   }
@@ -53,16 +60,28 @@
       let safe = '';
       try { const parsed = new URL(source); if (['http:', 'https:'].includes(parsed.protocol) && /\.(png|jpe?g|webp|gif)$/i.test(parsed.pathname)) safe = source; } catch (_) {}
       box.classList.toggle('has-image', Boolean(safe));
+      box.querySelector('[data-asb-image-pick]').textContent = safe ? 'Заменить' : 'Выбрать файл';
+      box.querySelector('[data-asb-image-clear]').disabled = !image.media_id && !image.url;
       thumb.hidden = !safe; if (safe) thumb.src = safe; else thumb.removeAttribute('src');
     }
     box.querySelector('[data-asb-image-enabled]').addEventListener('change', event => { image.enabled = event.target.checked; changed(); });
     url.addEventListener('input', () => { image.url = url.value; image.media_id = null; refreshThumb(); changed(); });
-    box.querySelector('[data-asb-image-pick]').addEventListener('click', () => {
-      if (!window.AF_GalleryPicker) { showError(new Error('Gallery недоступна. Укажите URL на разрешённом домене.')); return; }
-      window.AF_GalleryPicker.open(media => {
-        image.media_id = Number(media.media_id); image.url = ''; thumbs[index] = media.url_full;
-        url.value = ''; refreshThumb(); changed();
-      }, {purpose: 'appearance_postbit_bg'});
+    box.querySelector('[data-asb-image-pick]').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      // Gallery is delivered by its owner manifest; opening waits for the real modal request.
+      if (!window.AF_GalleryPicker || typeof window.AF_GalleryPicker.open !== 'function') {
+        showError(new Error('Модуль выбора Advanced Gallery не загрузился. Обновите страницу; если ошибка повторяется, проверьте активность Gallery и доставку его ассетов в UserCP.')); return;
+      }
+      button.disabled = true;
+      try {
+        await window.AF_GalleryPicker.open(media => {
+          if (!Number.isInteger(Number(media.media_id)) || Number(media.media_id) < 1) { showError(new Error('Галерея не вернула ID изображения.')); return; }
+          image.media_id = Number(media.media_id); image.url = ''; image.enabled = true; thumbs[index] = media.url_full;
+          box.querySelector('[data-asb-image-enabled]').checked = true;
+          url.value = ''; refreshThumb(); changed();
+        }, {purpose: index === 0 ? 'signature_background' : 'signature_images', onError: showError});
+      } catch (error) { showError(error); }
+      finally { button.disabled = !seed.image_allowed; }
     });
     box.querySelector('[data-asb-image-clear]').addEventListener('click', () => {
       image.url = ''; image.media_id = null; url.value = ''; refreshThumb(); changed();
@@ -95,8 +114,13 @@
   form.querySelector('[data-af-sig-preview-button]').addEventListener('click', () => { clearTimeout(timer); request('preview', true).catch(showError); });
   preview.addEventListener('click', event => { if (event.target.closest('a,summary')) event.preventDefault(); });
   form.addEventListener('change', event => { if (event.target.name === 'updateposts' || event.target.name === 'af_sig_confirm_replace') dirty = true; });
-  form.addEventListener('submit', () => { serialize(); dirty = false; });
+  form.addEventListener('submit', event => {
+    serialize();
+    if (galleryEmpty()) { event.preventDefault(); focusImages('Добавьте хотя бы одно изображение в галерею.'); return; }
+    dirty = false;
+  });
   window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
   window.addEventListener('focus', () => request('preview').catch(showError));
+  if (seed.field_error && seed.field_error.field === 'images') focusImages(seed.field_error.message);
   renderLinks(); serialize(); form.dataset.initialized = '1'; form.querySelector('button[type="submit"]').disabled = false;
 })();

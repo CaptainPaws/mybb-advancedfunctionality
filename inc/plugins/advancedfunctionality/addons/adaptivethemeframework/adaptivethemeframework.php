@@ -21,7 +21,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.32.1');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.32.2');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -921,10 +921,10 @@ function af_adaptivethemeframework_render_profile_main(array $context): string
         $html .= '</section>';
     }
     if ($signature !== '') {
-        $html .= '<section class="atf-profile-signature">'
-            . '<div class="atf-profile-signature__title">Подпись</div>'
-            . '<div class="atf-profile-signature__body">' . $signature . '</div>'
-            . '</section>';
+        // A provider may already supply the shared disclosure; never nest a second frame.
+        if (!str_contains($signature,'data-atf-signature')) $signature=af_adaptivethemeframework_signature_surface($signature,'profile',(int)($context['owner_uid']??$GLOBALS['memprofile']['uid']??0));
+        $html .= '<section class="atf-profile-signature atf-profile-signature--disclosure">'
+            . '<div class="atf-profile-signature__body">' . $signature . '</div></section>';
     }
 
     return $html;

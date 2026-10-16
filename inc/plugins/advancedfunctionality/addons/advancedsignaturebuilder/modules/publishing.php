@@ -22,7 +22,7 @@ function af_asb_start(): void {
         if ($native!=='' && !af_asb_owned(af_asb_row($uid),$native) && (string)$mybb->get_input('af_sig_confirm_replace')!=='1') throw new InvalidArgumentException('Подтвердите переход: исходная подпись будет сохранена в резервной копии.');
         $compiled=af_asb_compile($v);
         $mybb->input['signature']=$compiled;$GLOBALS['af_asb_pending']=['model'=>$v,'compiled'=>$compiled,'legacy'=>$native];
-    }catch(Throwable $e){$error=inline_error([htmlspecialchars_uni($e->getMessage())]);$mybb->input['action']='editsig';}
+    }catch(Throwable $e){if ($e instanceof AF_ASB_FieldException) $GLOBALS['af_asb_field_error']=['field'=>$e->field,'message'=>$e->getMessage()];$error=inline_error([htmlspecialchars_uni($e->getMessage())]);$mybb->input['action']='editsig';}
 }
 /** MyBB has accepted length/images/group rules and CSRF. Keep a recoverable draft before its update. */
 function af_asb_publish_start(): void {

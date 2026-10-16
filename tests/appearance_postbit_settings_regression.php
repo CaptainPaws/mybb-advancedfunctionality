@@ -61,3 +61,9 @@ foreach (['{"components":{"plaque_title":{"label_text":"<script>"}}}','{"compone
 foreach (af_aa_postbit_surface()['components'] as $component=>$meta) foreach ($meta['editable_fields'] as $field) check(isset(af_aa_studio_fields()[$field]),'Missing field schema: '.$field);
 check(!in_array('image_url',af_aa_studio_surface_registry()['profile']['components']['hero']['fields'],true),'Postbit controls must not leak into other adapters');
 echo "Postbit settings passed: round-trip, legacy compatibility, original GIFs, registered fonts, safe text/URLs, scoped CSS, crop variables and disabled Canvas.\n";
+
+$profileCss=af_aa_signature_compile_css(7,$decoded);
+check(str_contains($profileCss,'.af-aa-signature-user-7 .atf-post__signature'),'Profile signature scope missing');
+check(!str_contains($profileCss,'user-8') && !str_contains($profileCss,'.atf-post__topbar'),'Signature adapter leaks other owners/components');
+check(str_contains($profileCss,'--af-sig-overlay:') && str_contains($profileCss,'font-family:'),'Profile loses signature masks/fonts');
+echo "Signature profile compiler passed: owner scope, shared masks/fonts and no postbit layout selectors.\n";

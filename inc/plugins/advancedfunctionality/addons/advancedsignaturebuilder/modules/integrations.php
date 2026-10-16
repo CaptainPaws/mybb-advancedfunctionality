@@ -23,3 +23,21 @@ function af_asb_studio_link(): string {
     if (!af_asb_enabled() || !af_asb_can_edit() || !af_asb_asset_allowed('studio_link')) return '';
     return '<section class="af-asb-studio-link"><h2>Подпись</h2><p>Содержимое и композиция редактируются в UserCP.</p><a href="usercp.php?action=editsig">Открыть конструктор подписи</a></section>';
 }
+
+/** Native MyBB profile parsing/visibility has already run; the owner is never the visitor. */
+function af_asb_profile(): void {
+    global $memprofile,$signature,$headerinclude,$mybb;
+    $uid=(int)($memprofile['uid']??0);
+    if ($uid<1 || trim((string)$signature)==='' || !af_asb_enabled()) return;
+    $html=af_asb_published_html($uid,(string)($memprofile['signature']??''),!isset($mybb->user['showimages']) || (int)$mybb->user['showimages']===1);
+    if ($html==='') return; // Keep legacy signatures and native suspension/visibility gates intact.
+    $atf=function_exists('af_adaptivethemeframework_signature_surface')
+        && (!function_exists('af_adaptivethemeframework_presentation_is_active') || af_adaptivethemeframework_presentation_is_active());
+    $signature=$atf?af_adaptivethemeframework_signature_surface($html,'profile-'.$uid,$uid)
+        :'<div class="af-aa-signature-user-'.$uid.'"><div class="atf-post__signature">'.$html.'</div></div>';
+    $settings=function_exists('af_aa_surface_settings')?af_aa_surface_settings($uid,'postbit'):null;
+    if ($settings!==null && function_exists('af_aa_signature_compile_css')) {
+        $headerinclude.='<style data-asb-profile-owner="'.$uid.'">'.af_aa_signature_compile_css($uid,$settings).'</style>';
+        if (function_exists('af_aa_studio_fonts_link')) $headerinclude.=af_aa_studio_fonts_link();
+    }
+}

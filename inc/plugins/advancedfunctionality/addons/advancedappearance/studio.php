@@ -59,12 +59,13 @@ function af_aa_studio_validate_canvas($v): array {
 function af_aa_studio_compile(int $uid, array $s, bool $preview=false, string $target='postbit'): string {
     return af_aa_studio_compile_base($uid,$s,$preview,$target).($target==='postbit'?af_aa_postbit_compile($uid,$s,$preview):'');
 }
-function af_aa_studio_compile_base(int $uid, array $s, bool $preview=false, string $target='postbit'): string {
+function af_aa_studio_compile_base(int $uid, array $s, bool $preview=false, string $target='postbit',?string $signatureRoot=null): string {
     $prefix=$preview?'#aa-studio-preview ':'';
-    $root=af_aa_studio_root($uid,$target,$preview);
+    $root=$signatureRoot??af_aa_studio_root($uid,$target,$preview);
     $scope=static fn($suffix)=>'body.atf-active '.$root.$suffix.', '.$root.$suffix;
     $css='';
     foreach ($s['components']??[] as $component=>$v) {
+        if ($signatureRoot!==null && !in_array($component,['signature','decoration'],true)) continue;
         $selector=af_aa_studio_components($target)[$component]??null;if($selector===null)continue;
         $suffix=$selector===''?'':' '.$selector;
         if($target==='theme' && $selector!=='')$suffix.=':not(:where([data-element-surface],[data-element-surface] *))';

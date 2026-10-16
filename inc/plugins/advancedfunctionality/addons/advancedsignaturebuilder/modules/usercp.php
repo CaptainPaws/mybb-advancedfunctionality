@@ -18,7 +18,7 @@ function af_asb_component(): string {
         $url='';try {$checked=af_asb_validate(['background'=>$image],$uid,true);$url=af_asb_image_url(array_replace($checked['background'],['enabled'=>true]));}catch(Throwable $e){}
         $mediaUrls[]=$url;
     }
-    $seed=['media_urls'=>$mediaUrls,'model'=>$model,'defaults'=>af_asb_defaults(),'templates'=>af_asb_templates(),'limits'=>af_asb_limits(),'csrf'=>$mybb->post_code,'uid'=>$uid,'studio'=>af_asb_studio_url($uid),'image_allowed'=>!empty($mybb->settings['sigmycode']) && !empty($mybb->settings['sigimgcode'])];
+    $seed=['media_urls'=>$mediaUrls,'model'=>$model,'defaults'=>af_asb_defaults(),'templates'=>af_asb_templates(),'limits'=>af_asb_limits(),'csrf'=>$mybb->post_code,'uid'=>$uid,'studio'=>af_asb_studio_url($uid),'field_error'=>$GLOBALS['af_asb_field_error']??null,'image_allowed'=>!empty($mybb->settings['sigmycode']) && !empty($mybb->settings['sigimgcode'])];
     $legacy=$native!=='' && !$owned?'<section class="af-asb__legacy"><h2>Существующая подпись сохранена</h2><p>Произвольный BBCode/HTML нельзя автоматически разложить на поля конструктора. Открытие страницы и сохранение черновика не меняют эту подпись.</p>'.$signature.'<label><input type="checkbox" name="af_sig_confirm_replace" value="1"> Заменить подпись композицией конструктора; исходник сохранить в резервной копии.</label></section>':'';
     $backup=!empty($row['legacy_backup'])?'<details><summary>Исходная подпись до перехода</summary><pre>'.htmlspecialchars_uni($row['legacy_backup']).'</pre></details>':'';
     $status=(string)$mybb->get_input('af_sig_saved')==='1'?'Подпись обновлена.':'';

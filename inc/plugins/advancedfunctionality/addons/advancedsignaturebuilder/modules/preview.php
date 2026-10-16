@@ -1,7 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) die('No direct access');
 function af_asb_preview(array $model,int $uid,?array $appearance=null): array {
-    $html=af_asb_render($model,!isset($GLOBALS['mybb']->user['showimages']) || (int)$GLOBALS['mybb']->user['showimages']===1);
+    $html=af_asb_render($model,!isset($GLOBALS['mybb']->user['showimages']) || (int)$GLOBALS['mybb']->user['showimages']===1,true);
     $key=function_exists('af_adaptivethemeframework_post_element')?af_adaptivethemeframework_post_element($uid):'';
     $atf=function_exists('af_adaptivethemeframework_signature_markup') && function_exists('af_adaptivethemeframework_gothic_frame')
         && (!function_exists('af_adaptivethemeframework_presentation_is_active') || af_adaptivethemeframework_presentation_is_active());

@@ -7,7 +7,7 @@ eval(str_replace(['<?php','declare(strict_types=1);','final class StylesheetDb']
 define('IN_MYBB',1);define('AF_ADDONS',$root.'/inc/plugins/advancedfunctionality/addons/');define('AF_PLUGIN_ID','advancedfunctionality');define('MYBB_ROOT','/nonexistent-forum/');define('THIS_SCRIPT','usercp.php');
 require AF_ADDONS.'advancedsignaturebuilder/advancedsignaturebuilder.php';
 function htmlspecialchars_uni($s){return htmlspecialchars((string)$s,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
-function af_discover_addons(){return [$GLOBALS['asb_manifest']];}
+function af_discover_addons(){return array_filter([$GLOBALS['asb_manifest'],$GLOBALS['gallery_manifest']??null]);}
 function af_frontend_request_context(){return $GLOBALS['request_context'];}
 function af_current_theme_tid(){return 1;}
 function af_get_theme_inheritance_tids($tid=null){return [1];}
@@ -81,3 +81,22 @@ assertSameValue(true,af_frontend_asset_decision($asb_manifest,'view',$public)['a
 $withoutMarker='<html><head></head><body>Other page</body></html>';af_advancedsignaturebuilder_pre_output($withoutMarker);
 assertSameValue(false,str_contains($withoutMarker,'signature-builder.js'),'Runtime loaded without constructor markup');
 echo "ASB asset delivery passed: legacy-owner collision reproduced, independent Theme source, preserved mode/old CSS, real resolver and final normalization, permissions, head timing and no duplicates.\n";
+
+// Exercise the Gallery owner callback on the actual UserCP context, not just a marker test.
+require AF_ADDONS.'advancedgallery/advancedgallery.php';
+$gallery_manifest=require AF_AG_BASE.'manifest.php';$mybb->settings['af_advancedgallery_enabled']=1;
+$picker='<html><head></head><body><form data-af-asb-builder data-aa-gallery-picker></form></body></html>';
+af_advancedgallery_pre_output($picker);
+assertSameValue(true,str_contains($picker,'/advancedgallery/assets/advancedgallery.js'),'UserCP picker runtime blocked');
+assertSameValue(true,str_contains($picker,'/advancedgallery/assets/advancedgallery.css'),'UserCP modal CSS blocked');
+assertSameValue(true,str_contains($picker,'AF_GalleryPickerConfig='),'UserCP picker endpoints missing');
+af_advancedgallery_pre_output($picker);
+assertSameValue(1,substr_count($picker,'src="https://example.org/inc/plugins/advancedfunctionality/addons/advancedgallery/assets/advancedgallery.js'),'Gallery callback duplicated runtime');
+foreach(['signature_background','signature_images'] as $purpose)assertSameValue(true,isset(ag_system_album_purposes()[$purpose]),'Gallery does not accept signature purpose');
+$profile=$public;$profile['script']='member.php';$profile['action']='profile';
+assertSameValue(true,af_frontend_asset_decision($asb_manifest,'view',$profile)['allowed'],'Profile view CSS denied');
+assertSameValue(false,af_frontend_asset_decision($asb_manifest,'editor',$profile)['allowed'],'Profile loaded constructor runtime');
+assertSameValue(false,af_frontend_asset_decision($gallery_manifest,'pre_output',$profile)['allowed'],'Profile loaded Gallery without a picker');
+$plain='<html><head></head><body><section class="af-asb-signature"></section></body></html>';af_advancedgallery_pre_output($plain);
+assertSameValue(false,str_contains($plain,'advancedgallery.js'),'Gallery runtime leaked without picker host');
+echo "Gallery/UserCP delivery passed: real owner CSS/JS/config, signature purposes, one callback and public-profile isolation.\n";

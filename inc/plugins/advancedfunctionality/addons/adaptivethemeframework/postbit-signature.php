@@ -22,3 +22,11 @@ function af_adaptivethemeframework_gothic_frame(): string {
         . '<i class="atf-gothic-corner atf-gothic-corner--tl"></i><i class="atf-gothic-corner atf-gothic-corner--tr"></i>'
         . '<i class="atf-gothic-corner atf-gothic-corner--bl"></i><i class="atf-gothic-corner atf-gothic-corner--br"></i></span>';
 }
+
+function af_adaptivethemeframework_signature_surface(string $html,string $id,int $uid,bool $open=false): string
+{
+    $markup=af_adaptivethemeframework_signature_markup($html,$id,af_adaptivethemeframework_gothic_frame(),$open);
+    if ($markup==='') return '';
+    $element=function_exists('af_adaptivethemeframework_post_element')?af_adaptivethemeframework_post_element($uid):'';
+    return '<div class="atf-signature-surface af-aa-signature-user-'.(int)$uid.'" data-element="'.htmlspecialchars_uni($element).'">'.$markup.'</div>';
+}

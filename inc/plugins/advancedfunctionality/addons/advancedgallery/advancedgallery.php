@@ -8,7 +8,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
 define('AF_AG_ID', 'advancedgallery');
-define('AF_AG_VER', '1.1.0');
+define('AF_AG_VER', '1.1.1');
 define('AF_AG_BASE', AF_ADDONS . AF_AG_ID . '/');
 define('AF_AG_ASSETS', AF_AG_BASE . 'assets/');
 define('AF_AG_TPL_FILE', AF_AG_BASE . 'templates/advancedgallery.html');
@@ -677,15 +677,14 @@ function af_advancedgallery_init(): void
 {
     global $plugins;
 
-    // Выполняемся максимально поздно, чтобы никто после нас не дописывал ?v=...
-    $plugins->add_hook('pre_output_page', 'af_advancedgallery_pre_output', 9999);
+    // AF invokes the canonical owner callback before collection/bundling. No second late rewrite.
 }
 
 function af_advancedgallery_pre_output(string &$page = ''): void
 {
     global $mybb;
 
-    if (!ag_is_frontend()) {
+    if (!empty($GLOBALS['af_disable_pre_output']) || !ag_is_frontend()) {
         return;
     }
 
@@ -705,20 +704,6 @@ function af_advancedgallery_pre_output(string &$page = ''): void
         '',
         $page
     );
-
-    if (af_gallery_assets_disabled_for_current_page()) {
-        $page = preg_replace(
-            '~<link\b[^>]*href=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/advancedgallery/assets/[^"\']+\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
-            '',
-            $page
-        );
-        $page = preg_replace(
-            '~<script\b[^>]*src=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/advancedgallery/assets/[^"\']+\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i',
-            '',
-            $page
-        );
-        return;
-    }
 
     // Нормализация/дедуп должны работать даже если маркер уже есть,
     // потому что "вторая волна" может прилетать отдельно.

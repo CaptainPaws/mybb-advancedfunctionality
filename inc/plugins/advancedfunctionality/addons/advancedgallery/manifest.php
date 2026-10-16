@@ -4,7 +4,7 @@ return [
     'id'          => 'advancedgallery',
     'name'        => 'Галерея',
     'description' => 'Пользовательская галерея изображений с загрузкой и модерацией.',
-    'version'     => '1.1.0',
+    'version'     => '1.1.1',
     'author'      => 'CaptainPaws',
     'website'     => 'https://github.com/CaptainPaws',
 
@@ -14,6 +14,8 @@ return [
         'mode' => 'contextual',
         'routes' => [
             ['script' => 'gallery.php'],
+            ['script' => 'usercp.php', 'action' => 'editsig'],
+            ['script' => 'usercp.php', 'action' => 'do_editsig'],
         ],
         'response_rules' => [
             ['has_gallery_picker' => true],

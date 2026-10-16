@@ -26,7 +26,7 @@ function af_aa_postbit_surface(): array
     // Keep validating old sparse presets; obsolete geometry fields are never offered by this adapter.
     $legacy=array_diff(array_keys(af_aa_studio_fields()),array_keys(af_aa_postbit_fields()));
     $entry=static fn($label,$selector,$fields,$old=false)=>['label'=>$label,'selector'=>$selector,'editable_fields'=>array_values(array_diff($fields,['darkening'])),'fields'=>$old?array_values(array_unique(array_merge($fields,$legacy))):$fields];
-    return ['purpose'=>'appearance_postbit_bg','css'=>['adaptivethemeframework/assets/surfaces/postbit.css','advancedprofileui/assets/advancedprofileui.css'],'canvas'=>false,'components'=>[
+    return ['purpose'=>'appearance_postbit_bg','css'=>['adaptivethemeframework/assets/surfaces/postbit.css','adaptivethemeframework/assets/surfaces/signature.css','advancedprofileui/assets/advancedprofileui.css'],'canvas'=>false,'components'=>[
         'decoration'=>$entry('Декоративные акценты','',['gem_color','gem_glow']),
         'topbar'=>$entry('Верхняя панель','.atf-post__topbar',array_merge($background,['haze_color','haze_intensity','haze_opacity','haze_angle']),true),
         'sidebar'=>$entry('Боковая панель','.atf-post__sidebar-inner',$background,true),
@@ -73,13 +73,16 @@ function af_aa_studio_fonts_link(): string
     return $url!==''?'<link data-aa-local-fonts rel="stylesheet" href="'.htmlspecialchars_uni($url).'">':'';
 }
 
-function af_aa_postbit_compile(int $uid,array $s,bool $preview=false): string
+function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $signatureRoot=null): string
 {
-    $root=af_aa_studio_root($uid,'postbit',$preview);
+    $root=$signatureRoot??af_aa_studio_root($uid,'postbit',$preview);
     // Match the canonical ATF rules without blanket !important declarations.
-    $scope=static fn($suffix='')=>'body.atf-active '.$root.'.af-atf-display[data-element]'.$suffix.', '.$root.$suffix;
+    $scope=$signatureRoot!==null
+        ? static fn($suffix='')=>'body.atf-active .atf-signature-surface'.$root.$suffix.', '.$root.$suffix
+        : static fn($suffix='')=>'body.atf-active '.$root.'.af-atf-display[data-element]'.$suffix.', '.$root.$suffix;
     $css='';
     foreach ($s['components']??[] as $key=>$v) {
+        if ($signatureRoot!==null && !in_array($key,['signature','decoration'],true)) continue;
         $selector=af_aa_studio_components('postbit')[$key]??null;
         if ($selector===null) continue;
         $suffix=$selector===''?'':' '.$selector;
@@ -185,4 +188,13 @@ function af_aa_postbit_settings(array $post): array
     $uid=(int)($post['uid']??0);$pid=(int)($post['pid']??0);
     if ($pid>0 && function_exists('af_aa_mask_runtime') && ($mask=af_aa_mask_runtime($pid,$uid))) return $mask['snapshot'];
     return af_aa_surface_settings($uid,'postbit')??[];
+}
+
+/** Signature-only adapter for non-postbit hosts. Shares the postbit compiler and owner preset. */
+function af_aa_signature_compile_css(int $uid,array $settings): string
+{
+    $root='.af-aa-signature-user-'.(int)$uid;
+    $css='';
+    if (!empty($settings['accent_color'])) $css='body.atf-active .atf-signature-surface'.$root.', '.$root.'{--atf-post-accent:'.$settings['accent_color'].';--atf-post-accent-soft:color-mix(in srgb,'.$settings['accent_color'].' 18%,transparent);}';
+    return $css.af_aa_studio_compile_base($uid,$settings,false,'postbit',$root).af_aa_postbit_compile($uid,$settings,false,$root);
 }
