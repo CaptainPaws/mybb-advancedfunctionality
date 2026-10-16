@@ -446,7 +446,7 @@ body.atf-active .atf-post__topbar {
   z-index: 20;
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
-body.atf-active .atf-post__topbar::after {
+body.atf-active .atf-post.af-atf-display .atf-post__topbar::after {
   content: "";
   position: absolute;
   z-index: 0;
@@ -454,7 +454,7 @@ body.atf-active .atf-post__topbar::after {
   bottom: 0;
   height: 1px;
   pointer-events: none;
-  background: var(--atf-post-accent);
+  background: var(--atf-post-metal, var(--atf-color-border));
 }
 body.atf-active .atf-post__topbar > :not([data-af-element-effect]) {
   position: relative;
@@ -1002,25 +1002,40 @@ body.atf-active .atf-post.af-atf-display .atf-post__statistics .af-apui-stat-ite
   overflow-wrap: anywhere;
   pointer-events: auto;
 }
-body.atf-active .atf-post .atf-post__sidebar-actions { width: auto; margin-inline: calc(-1 * var(--atf-space-4)); }
-body.atf-active .atf-post__sidebar-actions > .atf-post__divider { width: calc(100% - 2 * var(--atf-space-4)); margin-inline: auto; }
-body.atf-active .atf-post__plaque-end {
+/* Match the rail's explicit padding rather than relying on auto width inside
+   a theme's flex/grid container. The plaque remains the single sheet trigger. */
+body.atf-active .atf-post.af-atf-display .atf-post__sidebar-inner { padding-inline: var(--atf-space-4) !important; }
+body.atf-active .atf-post.af-atf-display .atf-post__sidebar-actions {
+  box-sizing: border-box;
+  width: calc(100% + 2 * var(--atf-space-4)) !important;
+  max-width: none;
+  margin-inline: calc(-1 * var(--atf-space-4)) !important;
+  padding: 0;
+}
+body.atf-active .atf-post.af-atf-display .atf-post__plaque-end {
   --atf-corner-size: 24px;
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0;
   min-width: 0;
   border-block-start: 1px solid var(--atf-post-metal);
   background: linear-gradient(135deg, #1b252d, #080d14);
 }
-body.atf-active .atf-post__plaque-end:not(:has(.af-apui-postbit-plaque)) { display: none; }
-body.atf-active .atf-post__sidebar-actions:not(:has(.af-apui-postbit-plaque)) > .atf-post__divider { display: none; }
+body.atf-active .atf-post.af-atf-display .atf-post__plaque-end:not(:has(.af-apui-postbit-plaque)) { display: none; }
 body.atf-active .atf-post.af-atf-display .atf-post__plaque-end .af-apui-postbit-plaque {
-  display: flex;
-  grid-column: 1;
-  width: 100%;
+  display: flex !important;
+  box-sizing: border-box;
+  grid-area: auto !important;
+  float: none;
+  width: 100% !important;
+  max-width: none !important;
+  height: auto;
+  align-self: stretch;
+  justify-self: stretch;
   min-width: 0;
-  margin: 0;
+  margin: 0 !important;
   padding: .75rem;
   border: 0;
   border-radius: 0;
@@ -1052,12 +1067,32 @@ body.atf-active .atf-post.af-atf-display .atf-post__layout::before {
 }
 body.atf-active .atf-post.af-atf-display .atf-post__content,
 body.atf-active .atf-post.af-atf-display .post_body.scaleimages.atf-post__message { background: transparent !important; }
+/* Keep metadata inside the real content box, independently of theme padding.
+   Sticky transforms remain owned by the existing runtime. */
+body.atf-active .atf-post.af-atf-display .atf-post__content {
+  box-sizing: border-box;
+  width: auto;
+  max-width: 100%;
+  padding-inline: 0 !important;
+}
+body.atf-active .atf-post.af-atf-display .post_body.scaleimages.atf-post__message:not(:has(form, textarea)) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin-inline: 0;
+}
+body.atf-active .atf-post.af-atf-display .atf-post__message-body { padding-inline: var(--atf-post-content-inset); }
+body.atf-active .atf-post.af-atf-display .atf-post__content > :is(.atf-post__slot, .atf-post__attachments, .atf-post__signature, .atf-post__meta, .atf-post__footer) {
+  margin-inline: var(--atf-post-content-inset);
+}
 body.atf-active .atf-post.af-atf-display .atf-post__meta-line {
   box-sizing: border-box;
   left: 0 !important;
-  width: calc(100% + 2 * var(--atf-post-content-inset)) !important;
-  max-width: none !important;
-  margin: 0 calc(-1 * var(--atf-post-content-inset)) var(--atf-space-3) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 0 var(--atf-space-3) !important;
+  min-width: 0;
+  align-self: stretch;
   padding: .4rem var(--atf-space-4);
   justify-content: flex-start;
   gap: .6rem 1.2rem;
