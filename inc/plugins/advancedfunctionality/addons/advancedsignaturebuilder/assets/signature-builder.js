@@ -8,8 +8,8 @@
   const preview = form.querySelector('[data-af-sig-preview]');
   let timer, sequence = 0, dirty = false;
   const serialize = () => { form.querySelector('[data-af-sig-model]').value = JSON.stringify(model); };
-  const showError = error => { status.textContent = error.message || 'Не удалось выполнить действие.'; };
-  async function request(operation) {
+  const showError = error => { status.dataset.error = '1'; status.textContent = error.message || 'Не удалось выполнить действие.'; };
+  async function request(operation, announce = false) {
     const seq = ++sequence, submitted = JSON.stringify(model), data = new FormData();
     data.set('my_post_key', seed.csrf); data.set('af_signature_model', submitted);
     const response = await fetch('usercp.php?action=editsig&af_asb_api=' + operation, {
@@ -24,7 +24,8 @@
       preview.innerHTML = result.data.html;
       if (operation === 'draft') dirty = false;
     }
-    status.textContent = result.data.message;
+    if (announce || operation === 'draft') { status.textContent = result.data.message; delete status.dataset.error; }
+    else if (status.dataset.error) { status.textContent = ''; delete status.dataset.error; }
   }
   function changed() {
     dirty = true; serialize(); clearTimeout(timer);
@@ -51,6 +52,7 @@
       const source = image.media_id ? thumbs[index] : image.url;
       let safe = '';
       try { const parsed = new URL(source); if (['http:', 'https:'].includes(parsed.protocol) && /\.(png|jpe?g|webp|gif)$/i.test(parsed.pathname)) safe = source; } catch (_) {}
+      box.classList.toggle('has-image', Boolean(safe));
       thumb.hidden = !safe; if (safe) thumb.src = safe; else thumb.removeAttribute('src');
     }
     box.querySelector('[data-asb-image-enabled]').addEventListener('change', event => { image.enabled = event.target.checked; changed(); });
@@ -69,7 +71,7 @@
   });
   const links = form.querySelector('[data-asb-links]'), add = form.querySelector('[data-asb-add-link]');
   function element(tag, text) { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node; }
-  function action(text, title, callback) { const node = element('button', text); node.type = 'button'; node.setAttribute('aria-label', title); node.addEventListener('click', callback); return node; }
+  function action(icon, title, callback) { const node = element('button'); node.append(form.querySelector('[data-asb-icon="' + icon + '"]').content.cloneNode(true)); node.type = 'button'; node.setAttribute('aria-label', title); node.addEventListener('click', callback); return node; }
   function renderLinks(focusIndex = -1) {
     links.replaceChildren();
     model.buttons.forEach((link, index) => {
@@ -78,17 +80,19 @@
       name.type = 'text'; name.maxLength = 60; name.placeholder = 'Название'; name.value = link.label; name.setAttribute('aria-label', 'Название ссылки ' + (index + 1));
       url.type = 'url'; url.maxLength = 2048; url.placeholder = 'https://'; url.value = link.url; url.setAttribute('aria-label', 'Адрес ссылки ' + (index + 1));
       name.addEventListener('input', () => { link.label = name.value; changed(); }); url.addEventListener('input', () => { link.url = url.value; changed(); });
-      const up = action('↑', 'Переместить вверх', () => { [model.buttons[index - 1], model.buttons[index]] = [link, model.buttons[index - 1]]; renderLinks(index - 1); changed(); });
-      const down = action('↓', 'Переместить вниз', () => { [model.buttons[index + 1], model.buttons[index]] = [link, model.buttons[index + 1]]; renderLinks(index + 1); changed(); });
+      const up = action('up', 'Переместить вверх', () => { [model.buttons[index - 1], model.buttons[index]] = [link, model.buttons[index - 1]]; renderLinks(index - 1); changed(); });
+      const down = action('down', 'Переместить вниз', () => { [model.buttons[index + 1], model.buttons[index]] = [link, model.buttons[index + 1]]; renderLinks(index + 1); changed(); });
       up.disabled = index === 0; down.disabled = index === model.buttons.length - 1;
-      row.append(name, url, up, down, action('×', 'Удалить ссылку', () => { model.buttons.splice(index, 1); renderLinks(Math.min(index, model.buttons.length - 1)); changed(); }));
+      const reorder = element('div'); reorder.className = 'af-asb__link-reorder'; reorder.append(up, down);
+      const remove = action('trash', 'Удалить ссылку', () => { model.buttons.splice(index, 1); renderLinks(Math.min(index, model.buttons.length - 1)); changed(); }); remove.className = 'af-asb__link-delete';
+      row.append(name, url, remove, reorder);
       links.append(row); if (focusIndex === index) name.focus();
     });
     add.disabled = model.buttons.length >= 6;
   }
   add.addEventListener('click', () => { if (model.buttons.length >= 6) return; model.buttons.push({label: '', url: ''}); renderLinks(model.buttons.length - 1); changed(); });
   form.querySelector('[data-af-sig-draft]').addEventListener('click', () => { clearTimeout(timer); request('draft').catch(showError); });
-  form.querySelector('[data-af-sig-preview-button]').addEventListener('click', () => { clearTimeout(timer); request('preview').catch(showError); });
+  form.querySelector('[data-af-sig-preview-button]').addEventListener('click', () => { clearTimeout(timer); request('preview', true).catch(showError); });
   preview.addEventListener('click', event => { if (event.target.closest('a,summary')) event.preventDefault(); });
   form.addEventListener('change', event => { if (event.target.name === 'updateposts' || event.target.name === 'af_sig_confirm_replace') dirty = true; });
   form.addEventListener('submit', () => { serialize(); dirty = false; });
