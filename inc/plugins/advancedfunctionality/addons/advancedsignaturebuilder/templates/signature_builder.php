@@ -39,10 +39,10 @@ ob_start(); ?>
 </div></section>
 <section class="af-asb__panel"><header class="af-asb__heading"><span class="af-asb__step" aria-hidden="true">2</span><div><h2>Основные поля</h2><p>Заполните основные текстовые поля. Вы можете отключить ненужные элементы.</p></div></header>
 <?php foreach(['title'=>'Заголовок','subtitle'=>'Подзаголовок','text'=>'Основной текст / цитата'] as $key=>$name): ?>
-<div class="af-asb__field"><label for="af-asb-<?= $key ?>"><?= $name ?></label><div class="af-asb__input-wrap">
-<?php if($key==='text'): ?><textarea id="af-asb-text" rows="3" maxlength="<?= $limits[$key] ?>" data-asb-text="text"><?= $e($model[$key]) ?></textarea>
-<?php else: ?><input type="text" id="af-asb-<?= $key ?>" maxlength="<?= $limits[$key] ?>" data-asb-text="<?= $key ?>" value="<?= $e($model[$key]) ?>"><?php endif ?>
-<output data-asb-count="<?= $key ?>"><?= mb_strlen($model[$key]).'/'.$limits[$key] ?></output></div>
+<div class="af-asb__field<?= $key==='text'?' af-asb__field--editor':'' ?>"><label for="af-asb-<?= $key ?>"><?= $name ?></label><div class="af-asb__input-wrap">
+<?php if($key==='text'): ?><textarea class="af-asb__control af-asb__text-editor" id="af-asb-text" name="signature" rows="7" <?= $richEditor?'':'data-af-ae-skip="1"' ?> data-asb-text="text"><?= htmlspecialchars($model[$key],ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8',true) ?></textarea>
+<?php else: ?><input class="af-asb__control" type="text" id="af-asb-<?= $key ?>" maxlength="<?= $limits[$key] ?>" data-asb-text="<?= $key ?>" value="<?= $e($model[$key]) ?>"><?php endif ?>
+<output data-asb-count="<?= $key ?>"><?= ($key==='text' && $model['text_format']==='bbcode'?mb_strlen(html_entity_decode($model[$key],ENT_QUOTES|ENT_HTML5,'UTF-8')):mb_strlen($model[$key])).'/'.$limits[$key] ?></output></div>
 <?php if($key!=='text'): ?><label class="af-asb__switch"><input type="checkbox" data-asb-show="<?= $key ?>" <?= $model['show_'.$key]?'checked':'' ?>><span>Показывать <?= $key==='title'?'заголовок':'подзаголовок' ?></span></label><?php else: ?><label class="af-asb__switch"><input type="checkbox" data-asb-show="divider" <?= $model['show_divider']?'checked':'' ?>><span>Показывать разделитель</span></label><?php endif ?>
 </div><?php endforeach ?>
 </section>
@@ -54,11 +54,11 @@ ob_start(); ?>
 <small>JPG, PNG, WebP, GIF</small>
 <details class="af-asb__image-settings"><summary title="URL и параметры изображения">URL / параметры</summary>
 <label><input type="checkbox" data-asb-image-enabled <?= $image['enabled']?'checked':'' ?> <?= $seed['image_allowed']?'':'disabled' ?>> Показывать</label>
-<label><span class="af-asb__sr-only">URL: <?= $name ?></span><input type="url" maxlength="2048" placeholder="https://…/image.gif" value="<?= $e($image['url']) ?>" data-asb-image-url <?= $seed['image_allowed']?'':'disabled' ?>></label>
+<label><span class="af-asb__sr-only">URL: <?= $name ?></span><input class="af-asb__control" type="url" maxlength="2048" placeholder="https://…/image.gif" value="<?= $e($image['url']) ?>" data-asb-image-url <?= $seed['image_allowed']?'':'disabled' ?>></label>
 </details></fieldset>
 <?php endforeach ?></div></section>
 <section class="af-asb__links"><h3>Кнопки-ссылки</h3><div data-asb-links></div><div class="af-asb__add-link"><button type="button" data-asb-add-link><?= $icon('plus') ?> Добавить кнопку</button><small>До 6 кнопок</small></div></section></div>
-<div class="af-asb__field af-asb__field--status"><label for="af-asb-status"><strong>Подпись автора / статус</strong> <span>(необязательно)</span></label><div class="af-asb__input-wrap"><input type="text" id="af-asb-status" data-asb-text="status" maxlength="<?= $limits['status'] ?>" value="<?= $e($model['status']) ?>"><output data-asb-count="status"><?= mb_strlen($model['status']).'/'.$limits['status'] ?></output></div></div>
+<div class="af-asb__field af-asb__field--status"><label for="af-asb-status"><strong>Подпись автора / статус</strong> <span>(необязательно)</span></label><div class="af-asb__input-wrap"><input class="af-asb__control" type="text" id="af-asb-status" data-asb-text="status" maxlength="<?= $limits['status'] ?>" value="<?= $e($model['status']) ?>"><output data-asb-count="status"><?= mb_strlen($model['status']).'/'.$limits['status'] ?></output></div></div>
 
 <label class="af-asb__switch"><input type="checkbox" data-asb-show="status" <?= $model['show_status']?'checked':'' ?>><span>Показывать подпись автора / статус</span></label>
 </section>

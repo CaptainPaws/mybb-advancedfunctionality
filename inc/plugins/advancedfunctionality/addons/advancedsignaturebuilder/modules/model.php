@@ -9,7 +9,7 @@ function af_asb_templates(): array {
 }
 function af_asb_defaults(): array {
     $image=['enabled'=>true,'url'=>'','media_id'=>null];
-    return ['version'=>1,'template'=>'minimal','title'=>'','show_title'=>true,'subtitle'=>'','show_subtitle'=>true,'show_divider'=>true,'text'=>'','status'=>'','show_status'=>true,'images'=>[$image,$image,$image],'buttons'=>[]];
+    return ['version'=>1,'template'=>'minimal','title'=>'','show_title'=>true,'subtitle'=>'','show_subtitle'=>true,'show_divider'=>true,'text'=>'','text_format'=>'plain','status'=>'','show_status'=>true,'images'=>[$image,$image,$image],'buttons'=>[]];
 }
 function af_asb_limits(): array {
     $out=[];foreach(['title'=>100,'subtitle'=>100,'text'=>500,'status'=>100] as $key=>$default) $out[$key]=max(1,min(10000,(int)($GLOBALS['mybb']->settings['af_advancedsignaturebuilder_signature_'.$key.'_limit']??$default)));
@@ -34,9 +34,10 @@ function af_asb_validate(array $v,int $uid,bool $checkMedia=true,bool $publish=f
     $d=af_asb_defaults();if (array_diff(array_keys($v),array_keys($d))) throw new InvalidArgumentException('Неизвестное поле конструктора.');
     $v=array_replace($d,$v);
     if ($v['version']!==1 || !is_string($v['template']) || !isset(af_asb_templates()[$v['template']])) throw new InvalidArgumentException('Неизвестный шаблон подписи.');
+    if (!in_array($v['text_format'],['plain','bbcode'],true)) throw new InvalidArgumentException('Некорректный формат текста.');
     foreach (['show_title','show_subtitle','show_status','show_divider'] as $key) if (!is_bool($v[$key])) throw new InvalidArgumentException('Некорректный переключатель.');
     foreach (af_asb_limits() as $key=>$max) {
-        if (!is_string($v[$key]) || mb_strlen($v[$key])>$max || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/u',$v[$key]) || ($key!=='text' && preg_match('/[\r\n]/',$v[$key]))) throw new InvalidArgumentException('Превышен лимит или недопустимый текст: '.$key.' (до '.$max.').');
+        if (!is_string($v[$key]) || ($key==='text' && $v['text_format']==='bbcode'?mb_strlen(html_entity_decode($v[$key],ENT_QUOTES|ENT_HTML5,'UTF-8')):mb_strlen($v[$key]))>$max || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/u',$v[$key]) || ($key!=='text' && preg_match('/[\r\n]/',$v[$key]))) throw new InvalidArgumentException('Превышен лимит или недопустимый текст: '.$key.' (до '.$max.').');
         $v[$key]=str_replace(["\r\n","\r"],"\n",$v[$key]);
     }
     if (!is_array($v['images']) || !array_is_list($v['images']) || count($v['images'])>3 || !is_array($v['buttons']) || !array_is_list($v['buttons']) || count($v['buttons'])>6) throw new InvalidArgumentException('Допустимы до трёх изображений и шести ссылок.');
@@ -71,11 +72,19 @@ function af_asb_used_images(array $v): array {
 function af_asb_plain(string $text): string {
     return str_replace(['[',']'],['&#91;','&#93;'],htmlspecialchars_uni($text));
 }
+/** Decimal references remain literal through MyBB's parse_html() and HTML-enabled native fallbacks. */
+function af_asb_editor_plain(string $text): string {
+    return str_replace(['&','<','>','[',']'],['&#38;','&#60;','&#62;','&#91;','&#93;'],$text);
+}
+function af_asb_bbcode_native(string $text): string {
+    $text=preg_replace('/&(?!#[0-9]+;)/','&#38;',$text);
+    return str_replace(['<','>'],['&#60;','&#62;'],$text);
+}
 function af_asb_compile(array $v): string {
     $parts=[];$mycode=!empty($GLOBALS['mybb']->settings['sigmycode']);
     foreach (af_asb_used_images($v) as $image) if (($url=af_asb_image_url($image))!=='') $parts[]='[img]'.$url.'[/img]';
     foreach (['title'=>'b','subtitle'=>'i'] as $key=>$tag) if ($v['show_'.$key] && $v[$key]!=='') $parts[]=$mycode?'['.$tag.']'.af_asb_plain($v[$key]).'[/'.$tag.']':af_asb_plain($v[$key]);
-    if ($v['text']!=='') $parts[]=af_asb_plain($v['text']);
+    if ($v['text']!=='') $parts[]=($v['text_format']??'plain')==='bbcode'?af_asb_bbcode_native($v['text']):af_asb_plain($v['text']);
     foreach ($v['buttons'] as $button) $parts[]='[url='.$button['url'].']'.af_asb_plain($button['label']).'[/url]';
     if ($v['show_status'] && $v['status']!=='') $parts[]=af_asb_plain($v['status']);
     return implode("\n",$parts);
@@ -83,6 +92,7 @@ function af_asb_compile(array $v): string {
 /** Retain editable known values after an error, without trusting arbitrary nested shapes in page generation. */
 function af_asb_seed_model(array $raw): array {
     $out=af_asb_defaults();
+    if (($raw['text_format']??'plain')==='bbcode') $out['text_format']='bbcode';
     foreach (['title','subtitle','text','status'] as $key) if (is_string($raw[$key]??null)) $out[$key]=$raw[$key];
     foreach (['show_title','show_subtitle','show_status','show_divider'] as $key) if (is_bool($raw[$key]??null)) $out[$key]=$raw[$key];
     if (is_string($raw['template']??null) && isset(af_asb_templates()[$raw['template']])) $out['template']=$raw['template'];

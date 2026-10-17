@@ -55,3 +55,13 @@ $mybb->input['action']='profile';sig_check(!af_advancededitor_is_signature_page(
 $mybb->user['suspendsignature']=1;$mybb->user['suspendsigtime']=0;
 sig_check(!af_asb_can_edit()&&af_asb_studio_link()==='','Suspended signatures must retain native access restrictions');
 echo "Signature checks passed: collapsed independent disclosures, unchanged parsed content/GIF, native form/CSRF/error fields, studio content link, toolbar/fonts and idempotent shell.\n";
+$mybb->input['action']='editsig';$mybb->user['suspendsignature']=0;$mybb->settings['sigmycode']=1;$mybb->settings['sigimgcode']=1;
+// The actual ASB component, not just a native signature fixture, must host the existing editor.
+$builder=af_asb_component();
+sig_check(str_contains($builder,'id="af-asb-text" name="signature"') && !str_contains($builder,'data-af-ae-skip="1"'),'Builder did not expose its visible editor body');
+sig_check(substr_count($builder,'<textarea')===1,'Builder duplicates editable textareas');
+$builderPage='<html><head></head><body>'.$builder.'</body></html>';
+af_advancededitor_pre_output($builderPage);
+sig_check(substr_count($builderPage,'data-af-editor-shell="1"')===1 && str_contains($builderPage,'data-af-command="af_togglemode"'),'Builder does not receive AdvancedEditor shell/mode toggle');
+foreach(['bold','italic','underline','link','quote','code','image'] as $cmd) sig_check(str_contains($builderPage,'data-af-command="'.$cmd.'"'),'Builder misses real editor command '.$cmd);
+echo "Builder editor integration passed: actual component, existing toolbar/mode switch and one textarea.\n";

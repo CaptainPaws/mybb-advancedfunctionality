@@ -1,3 +1,5 @@
+> Версия 1.0.5: [стили полей и полноценный AdvancedEditor](signature-editor-fields.md).
+
 > Изменения 1.0.4: [фон только в Appearance, миграция и исправление профиля](signature-appearance-only-background.md).
 
 > Исправление доставки UI для 1.0.2 и подтверждённая причина старого Theme CSS: [отчёт](signature-builder-css-delivery-fix.md).

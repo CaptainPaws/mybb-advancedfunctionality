@@ -6,8 +6,35 @@
   const model = structuredClone(seed.model), thumbs = seed.media_urls || [];
   const status = form.querySelector('[data-af-sig-status]');
   const preview = form.querySelector('[data-af-sig-preview]');
-  let timer, sequence = 0, dirty = false;
-  const serialize = () => { form.querySelector('[data-af-sig-model]').value = JSON.stringify(model); };
+  let timer, sequence = 0, dirty = false, signatureEditor = null;
+  const bodyField = form.querySelector('[data-asb-text="text"]'), boundEditors = new WeakSet();
+  const decodedText = document.createElement('textarea');
+  function textLength(value) {
+    if (model.text_format === 'bbcode') { decodedText.innerHTML = value.replace(/</g, '&lt;').replace(/>/g, '&gt;'); value = decodedText.value; }
+    return Array.from(value).length;
+  }
+  function currentEditor() {
+    try { if (window.jQuery?.fn?.sceditor) return window.jQuery(bodyField).sceditor('instance') || signatureEditor; } catch (_) {}
+    return signatureEditor;
+  }
+  function syncEditor() {
+    const editor = currentEditor();
+    const value = editor && typeof editor.val === 'function' ? editor.val() : bodyField.value;
+    model.text = String(value ?? ''); bodyField.value = model.text;
+    form.querySelector('[data-asb-count="text"]').textContent = textLength(model.text) + '/' + seed.limits.text;
+  }
+  function bindEditor(editor) {
+    if (!editor) return; signatureEditor = editor;
+    if (!editor.__afAeSourceAdapter && typeof editor.bind === 'function' && !boundEditors.has(editor)) {
+      boundEditors.add(editor);
+      editor.bind('valuechanged', () => { syncEditor(); changed(); });
+    }
+  }
+  document.addEventListener('af:editor-ready', event => {
+    if (event.detail?.textarea === bodyField) bindEditor(event.detail.instance);
+  });
+  bodyField.addEventListener('focus', () => bindEditor(currentEditor()));
+  const serialize = () => { syncEditor(); form.querySelector('[data-af-sig-model]').value = JSON.stringify(model); };
   const imageGroup = form.querySelector('[data-asb-images-group]'), imageError = form.querySelector('[data-asb-images-error]');
   const galleryEmpty = () => model.template === 'gallery' && !model.images.some(image => image.enabled && (Number(image.media_id) > 0 || image.url.trim() !== ''));
   function focusImages(message) {
@@ -16,6 +43,7 @@
   }
   const showError = error => { status.dataset.error = '1'; status.textContent = error.message || 'Не удалось выполнить действие.'; };
   async function request(operation, announce = false) {
+    syncEditor();
     const seq = ++sequence, submitted = JSON.stringify(model), data = new FormData();
     data.set('my_post_key', seed.csrf); data.set('af_signature_model', submitted);
     const response = await fetch('usercp.php?action=editsig&af_asb_api=' + operation, {
@@ -41,7 +69,7 @@
   form.querySelectorAll('[data-asb-text]').forEach(input => {
     const key = input.dataset.asbText, count = form.querySelector('[data-asb-count="' + key + '"]');
     input.addEventListener('input', () => {
-      model[key] = input.value; count.textContent = Array.from(input.value).length + '/' + seed.limits[key]; changed();
+      model[key] = input.value; count.textContent = (key === 'text' ? textLength(input.value) : Array.from(input.value).length) + '/' + seed.limits[key]; changed();
     });
   });
   form.querySelectorAll('[data-asb-show]').forEach(input => input.addEventListener('change', () => {
@@ -96,6 +124,7 @@
     model.buttons.forEach((link, index) => {
       const row = element('div'); row.className = 'af-asb__link';
       const name = element('input'), url = element('input');
+      name.className = 'af-asb__control'; url.className = 'af-asb__control';
       name.type = 'text'; name.maxLength = 60; name.placeholder = 'Название'; name.value = link.label; name.setAttribute('aria-label', 'Название ссылки ' + (index + 1));
       url.type = 'url'; url.maxLength = 2048; url.placeholder = 'https://'; url.value = link.url; url.setAttribute('aria-label', 'Адрес ссылки ' + (index + 1));
       name.addEventListener('input', () => { link.label = name.value; changed(); }); url.addEventListener('input', () => { link.url = url.value; changed(); });
@@ -122,5 +151,5 @@
   window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
   window.addEventListener('focus', () => request('preview').catch(showError));
   if (seed.field_error && seed.field_error.field === 'images') focusImages(seed.field_error.message);
-  renderLinks(); serialize(); form.dataset.initialized = '1'; form.querySelector('button[type="submit"]').disabled = false;
+  bindEditor(currentEditor()); renderLinks(); serialize(); form.dataset.initialized = '1'; form.querySelector('button[type="submit"]').disabled = false;
 })();

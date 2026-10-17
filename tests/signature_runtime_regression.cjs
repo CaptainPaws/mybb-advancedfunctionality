@@ -18,3 +18,20 @@ details.open = true; onToggle({target:details}); assert.equal(attributes['aria-e
 details.open = false; document.activeElement = 'inside'; onToggle({target:details}); assert.ok(focused);
 const appended = {...details,open:true}; onToggle({target:appended}); assert.equal(attributes['aria-expanded'],'true');
 console.log('Signature runtime passed: delegated disclosure, ARIA/focus and dynamic posts without duplicate listeners.');
+// Builder bridge consumes the real AE lifecycle API and serializes its current value, not a stale textarea.
+const builderSource=fs.readFileSync(base+'advancedsignaturebuilder/assets/signature-builder.js','utf8');
+const bridge=builderSource.slice(builderSource.indexOf('  let timer,'),builderSource.indexOf('  const imageGroup'));
+let editorValue='[b]Визуальный текст[/b]', valueChanged, ready, bindings=0, changes=0;
+const bodyField={value:'stale textarea',addEventListener:()=>{}}, hiddenModel={}, counter={};
+const bridgeForm={querySelector:selector=>selector.includes('data-asb-text')?bodyField:selector.includes('data-asb-count')?counter:hiddenModel};
+const decoder={value:'',set innerHTML(text){this.value=text.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#91;/g,'[').replace(/&#93;/g,']');}};
+const bridgeContext=vm.createContext({window:{},WeakSet,model:{text:'old',text_format:'bbcode'},seed:{limits:{text:500}},form:bridgeForm,document:{createElement:()=>decoder,addEventListener:(type,fn)=>{if(type==='af:editor-ready')ready=fn;}},changed:()=>{changes++;}});
+vm.runInContext(bridge,bridgeContext);
+const editor={val:()=>editorValue,bind:(type,fn)=>{assert.equal(type,'valuechanged');bindings++;valueChanged=fn;}};
+ready({detail:{textarea:bodyField,instance:editor}});ready({detail:{textarea:bodyField,instance:editor}});
+assert.equal(bindings,1,'Repeated editor-ready binds duplicate handlers');
+valueChanged();assert.equal(changes,1);assert.equal(bodyField.value,editorValue);
+editorValue='[i]После переключения режима[/i]';vm.runInContext('serialize()',bridgeContext);
+assert.equal(JSON.parse(hiddenModel.value).text,editorValue,'Submission/draft serialized stale visual content');
+assert.equal(JSON.parse(hiddenModel.value).text_format,'bbcode');
+console.log('Builder editor bridge passed: lifecycle, one listener, live value and save serialization.');

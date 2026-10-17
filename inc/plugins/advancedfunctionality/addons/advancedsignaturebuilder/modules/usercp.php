@@ -12,6 +12,12 @@ function af_asb_component(): string {
         elseif ($owned) $model=af_asb_decode($row['published_json']);
     }catch(Throwable $e){} // Never replace the existing native signature merely by visiting.
     $model=af_asb_seed_model($model);
+    $richEditor=!empty($mybb->settings['af_advancededitor_enabled']) && !empty($mybb->settings['sigmycode'])
+        && (!function_exists('af_is_addon_enabled') || af_is_addon_enabled('advancededitor'));
+    if ($richEditor && $model['text_format']==='plain') {
+        // Preserve literal BBCode/HTML from old plain-text models when entering the editor.
+        $model['text']=af_asb_editor_plain($model['text']);$model['text_format']='bbcode';
+    }
     $preview=af_asb_preview(af_asb_defaults(),$uid);
     try {$preview=af_asb_preview(af_asb_validate($model,$uid,true),$uid);}catch(Throwable $e){}
     $mediaUrls=[];foreach($model['images'] as $image) {

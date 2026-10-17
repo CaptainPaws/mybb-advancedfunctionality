@@ -2,7 +2,7 @@
 $editor=[['script'=>'usercp.php','action'=>'editsig'],['script'=>'usercp.php','action'=>'do_editsig']];
 $public=array_map(static fn($s)=>['script'=>$s],['showthread.php','newreply.php','newthread.php','editpost.php','private.php','announcements.php','misc.php','reputation.php','member.php']);
 return [
-    'id'=>'advancedsignaturebuilder','name'=>'AdvancedSignatureBuilder','version'=>'1.0.4',
+    'id'=>'advancedsignaturebuilder','name'=>'AdvancedSignatureBuilder','version'=>'1.0.5',
     'author'=>'CaptainPaws','description'=>'Конструктор содержимого подписей: композиции, черновики и совместимое сохранение MyBB.',
     'bootstrap'=>'advancedsignaturebuilder.php',
     'frontend'=>[

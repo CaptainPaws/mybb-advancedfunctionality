@@ -18,7 +18,14 @@ function af_asb_asset_tags(bool $editor,bool $view): string {
         $url=rtrim((string)$GLOBALS['mybb']->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/'.AF_ASB_ID.'/assets/signature-builder.js?v='.filemtime(AF_ASB_BASE.'assets/signature-builder.js');
         $tags.='<script src="'.htmlspecialchars_uni($url).'" defer></script>';
     }
-    if (($editor && af_asb_asset_allowed('preview')) || ($view && af_asb_asset_allowed('view',['has_asb_signature'=>true]))) $tags.=af_asb_css_tag('signature-view.css');
+    if (($editor && af_asb_asset_allowed('preview')) || ($view && af_asb_asset_allowed('view',['has_asb_signature'=>true]))) {
+        $tags.=af_asb_css_tag('signature-view.css');
+        // Font faces share AdvancedEditor's registry without loading its editor runtime publicly.
+        if (!empty($GLOBALS['mybb']->settings['af_advancededitor_enabled']) && function_exists('af_advancededitor_ensure_local_fonts_css_file')) {
+            $fonts=af_advancededitor_ensure_local_fonts_css_file();
+            if ($fonts!=='') $tags.='<link rel="stylesheet" href="'.htmlspecialchars_uni($fonts).'">';
+        }
+    }
     return $tags;
 }
 /** ATF's existing component slot calls this before evaluating its UserCP shell. */

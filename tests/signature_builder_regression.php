@@ -145,3 +145,10 @@ check_sig(count($db->sql)===1 && str_contains($db->sql[0],'INNER JOIN test_users
 foreach(['BINARY u.signature=','BINARY b.published_json <=>','BINARY b.draft_json <=>','BINARY b.published_hash <=>'] as $guard)check_sig(str_contains($db->sql[0],$guard),'Migration can overwrite concurrent data: '.$guard);
 $db=$fixtureDb;
 echo "Migration SQL passed: native text and hash share one guarded update, with old-content compare-and-swap.\n";
+$bbcode=$validated;$bbcode['text_format']='bbcode';$bbcode['text']='[b]Текст[/b] <img src=x onerror=alert(1)>';
+$checked=af_asb_validate($bbcode,7);$compiled=af_asb_compile($checked);
+check_sig(str_contains($compiled,'[b]Текст[/b]') && !str_contains($compiled,'<img src=x') && str_contains($compiled,'&#60;img'),'BBCode compilation loses formatting or permits raw HTML');
+check_sig(af_asb_validate(af_asb_decode(json_encode($checked)),7)===$checked,'BBCode format fails draft round trip');
+$oldPlain=$checked;unset($oldPlain['text_format']);check_sig(af_asb_validate($oldPlain,7)['text_format']==='plain','Legacy text must remain plain');
+$invalid=$checked;$invalid['text_format']='html';reject_sig(fn()=>af_asb_validate($invalid,7));
+echo "Editor model passed: typed BBCode format, safe portable HTML escaping and legacy plain-text compatibility.\n";
