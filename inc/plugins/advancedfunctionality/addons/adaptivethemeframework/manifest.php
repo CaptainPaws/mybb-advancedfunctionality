@@ -6,7 +6,7 @@ return [
     'id' => 'adaptivethemeframework',
     'name' => 'Adaptive Theme Framework',
     'description' => 'Presentation framework for adaptive AF component-slot layouts.',
-    'version' => '0.32.2',
+    'version' => '0.32.3',
     'author' => 'AdvancedFunctionality',
     'bootstrap' => 'adaptivethemeframework.php',
     'admin' => [
@@ -93,7 +93,7 @@ return [
         [
             'id' => 'surface_postbit',
             'file' => 'assets/surfaces/postbit.css',
-            'attach' => [['file'=>'studio.php'], ['file'=>'apstudio.php'], ['file'=>'usercp.php','action'=>'editsig'], ['file'=>'usercp.php','action'=>'do_editsig'], ['file' => 'showthread.php'], ['file' => 'newreply.php'], ['file' => 'newthread.php'], ['file' => 'editpost.php'], ['file' => 'private.php'], ['file' => 'announcements.php'], ['file' => 'misc.php'], ['file' => 'reputation.php']],
+            'attach' => [['file'=>'member.php'], ['file'=>'studio.php'], ['file'=>'apstudio.php'], ['file'=>'usercp.php','action'=>'editsig'], ['file'=>'usercp.php','action'=>'do_editsig'], ['file' => 'showthread.php'], ['file' => 'newreply.php'], ['file' => 'newthread.php'], ['file' => 'editpost.php'], ['file' => 'private.php'], ['file' => 'announcements.php'], ['file' => 'misc.php'], ['file' => 'reputation.php']],
             'enabled_setting' => 'af_adaptivethemeframework_enabled',
         ],
         [

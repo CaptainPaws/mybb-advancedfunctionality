@@ -1,90 +1,11 @@
-/* Shared ATF signature/metal component: postbit and standalone profile hosts. */
-body.atf-active :is(.atf-post.af-atf-display,.atf-signature-surface) {
-  --atf-post-metal: #535b60;
-  --atf-post-metal-light: #929995;
-  --atf-post-metal-dark: #171e24;
-  /* One neutral SVG corner shared by every frame, mirrored below. Gems are
-     separate CSS facets so the SVG never embeds a user's accent. */
-  --atf-post-corner: url("data:image/svg+xml,%3Csvg%20xmlns=%22http%3A//www.w3.org/2000/svg%22%20viewBox=%220%200%20128%20128%22%3E%3Cdefs%3E%3ClinearGradient%20id=%22steel%22%20x1=%220%22%20y1=%220%22%20x2=%220%22%20y2=%2232%22%20gradientUnits=%22userSpaceOnUse%22%3E%3Cstop%20stop-color=%22%23111c23%22/%3E%3Cstop%20offset=%22.12%22%20stop-color=%22%23c2c3b3%22/%3E%3Cstop%20offset=%22.23%22%20stop-color=%22%23566268%22/%3E%3Cstop%20offset=%22.4%22%20stop-color=%22%23a5ada6%22/%3E%3Cstop%20offset=%22.54%22%20stop-color=%22%2329363e%22/%3E%3Cstop%20offset=%22.77%22%20stop-color=%22%23687876%22/%3E%3Cstop%20offset=%221%22%20stop-color=%22%2316242d%22/%3E%3C/linearGradient%3E%3ClinearGradient%20id=%22bevel%22%20x1=%2214%22%20y1=%2214%22%20x2=%2255%22%20y2=%2258%22%20gradientUnits=%22userSpaceOnUse%22%3E%3Cstop%20stop-color=%22%23d6d8c5%22/%3E%3Cstop%20offset=%22.22%22%20stop-color=%22%237d8a86%22/%3E%3Cstop%20offset=%22.43%22%20stop-color=%22%23203039%22/%3E%3Cstop%20offset=%22.64%22%20stop-color=%22%239ba89d%22/%3E%3Cstop%20offset=%22.8%22%20stop-color=%22%233a4b51%22/%3E%3Cstop%20offset=%221%22%20stop-color=%22%23121e27%22/%3E%3C/linearGradient%3E%3ClinearGradient%20id=%22leaf%22%20x1=%2224%22%20y1=%228%22%20x2=%2274%22%20y2=%2236%22%20gradientUnits=%22userSpaceOnUse%22%3E%3Cstop%20stop-color=%22%23171f28%22/%3E%3Cstop%20offset=%22.28%22%20stop-color=%22%23abb5a8%22/%3E%3Cstop%20offset=%22.47%22%20stop-color=%22%234c605f%22/%3E%3Cstop%20offset=%22.68%22%20stop-color=%22%23bac0ad%22/%3E%3Cstop%20offset=%221%22%20stop-color=%22%23263b43%22/%3E%3C/linearGradient%3E%3Cg%20id=%22arm%22%20stroke-linejoin=%22round%22%20stroke-linecap=%22round%22%3E%3Cpath%20d=%22M4%204H125l-7%206-28%201c-17%200-24%203-36%207-18%206-33%203-50%200Z%22%20fill=%22%23080f16%22%20stroke=%22%23293940%22%20stroke-width=%222.2%22/%3E%3Cpath%20d=%22M6%205h116l-6%203-27%201c-17%200-27%204-39%207-15%204-30%203-44%200Z%22%20fill=%22url%28%23steel%29%22%20stroke=%22%23788780%22%20stroke-width=%22.9%22/%3E%3Cpath%20d=%22M9%206h102M8%2014c17%204%2029%204%2043%200%2012-4%2023-7%2038-6%22%20fill=%22none%22%20stroke=%22%23d5d6bd%22%20stroke-width=%22.8%22%20opacity=%22.76%22/%3E%3Cpath%20d=%22M15%2018c20%205%2035%200%2049-5%2014-4%2027-4%2044-4%22%20fill=%22none%22%20stroke=%22%230a141c%22%20stroke-width=%221.4%22/%3E%3Cpath%20d=%22M16%2013c9-6%2020-6%2028-2%208%204%2011%2010%2018%2010%205%200%2010-4%2012-11%202%2011-4%2020-14%2021-10%201-15-8-24-10-8-2-14%200-20%206%202-6%204-10%209-12-3-1-6-1-9-2Z%22%20fill=%22url%28%23leaf%29%22%20stroke=%22%231a2b33%22%20stroke-width=%221.6%22/%3E%3Cpath%20d=%22M18%2013c9-4%2017-3%2024%201%209%205%2012%2012%2021%2011%204-1%207-4%209-8%22%20fill=%22none%22%20stroke=%22%23d1d5bd%22%20stroke-width=%22.9%22/%3E%3Cpath%20d=%22M27%2016c7-1%2012%201%2017%206%205%205%209%209%2015%208M19%2024c7-5%2014-5%2022-1%22%20fill=%22none%22%20stroke=%22%2330484e%22%20stroke-width=%221.2%22/%3E%3Cpath%20d=%22M45%2016c3-7%2010-10%2018-9-6%203-8%207-8%2012%200%203%201%205%202%207-5-1-10-5-12-10Z%22%20fill=%22url%28%23bevel%29%22%20stroke=%22%2380928b%22%20stroke-width=%22.7%22/%3E%3Cpath%20d=%22M48%2016c3-4%207-6%2011-7-5%204-7%2010-3%2015%22%20fill=%22none%22%20stroke=%22%23c6ceba%22%20stroke-width=%22.6%22/%3E%3Cpath%20d=%22M72%2011c11%200%2022-3%2032-9-4%208-12%2014-22%2015-5%201-8%204-11%208%201-5%203-8%207-10Z%22%20fill=%22url%28%23steel%29%22%20stroke=%22%2371877f%22%20stroke-width=%22.8%22/%3E%3Cpath%20d=%22M75%2013c9-1%2017-4%2024-8M80%2016l7-4%22%20fill=%22none%22%20stroke=%22%23d0d6be%22%20stroke-width=%22.7%22/%3E%3Cpath%20d=%22M91%207l4-1m5%201%203-1M32%2010l3%201m3%200%203%201M61%2014l1-2%22%20fill=%22none%22%20stroke=%22%23e0e1cc%22%20stroke-width=%22.55%22%20opacity=%22.46%22/%3E%3Ccircle%20cx=%2212%22%20cy=%228.5%22%20r=%221.5%22%20fill=%22%23101a22%22%20stroke=%22%237c8e84%22%20stroke-width=%22.6%22/%3E%3Ccircle%20cx=%2211.7%22%20cy=%228.1%22%20r=%22.45%22%20fill=%22%23c8d0b8%22/%3E%3C/g%3E%3C/defs%3E%3Cuse%20href=%22%23arm%22/%3E%3Cuse%20href=%22%23arm%22%20transform=%22matrix%280%201%201%200%200%200%29%22/%3E%3Cpath%20d=%22M7%207c11%202%2019%205%2025%2012%205%206%207%2015%2015%2020-9%200-18-3-24-9C16%2023%2012%2015%207%207Z%22%20fill=%22%23111f28%22%20stroke=%22%237b8d85%22%20stroke-width=%221%22/%3E%3Cpath%20d=%22M9%209c10%203%2017%207%2022%2014%204%206%207%2010%2012%2014M13%2011c4%208%208%2015%2015%2020%22%20fill=%22none%22%20stroke=%22url%28%23bevel%29%22%20stroke-width=%221.3%22/%3E%3Cpath%20d=%22M30%205c5%209%2013%2014%2019%2022%204%205%204%2011%200%2017-6%209-14%2015-19%2025-5-10-13-16-19-25-4-6-4-12%200-17C17%2019%2025%2014%2030%205Z%20M30%2010c-5%208-12%2013-17%2020-3%204-3%208%200%2012%205%208%2012%2013%2017%2021%205-8%2012-13%2017-21%203-4%203-8%200-12-5-7-12-12-17-20Z%22%20fill=%22url%28%23bevel%29%22%20fill-rule=%22evenodd%22%20stroke=%22%2371877d%22%20stroke-width=%22.7%22/%3E%3Cpath%20d=%22M30%206c-4%209-12%2015-18%2023-3%205-3%2010%200%2015M30%2067c5-10%2013-15%2019-24%22%20fill=%22none%22%20stroke=%22%23d2d8c1%22%20stroke-width=%22.8%22%20opacity=%22.8%22/%3E%3Cpath%20d=%22M27%208q3-5%206%200l-3%207Z%20M8%2033q-3%203%200%206l6-3Z%20M27%2065q3%206%206%200l-3-5Z%20M51%2033q4%203%200%206l-6-3Z%22%20fill=%22url%28%23bevel%29%22%20stroke=%22%239caa99%22%20stroke-width=%22.65%22/%3E%3Cpath%20d=%22M11%2051c-1%208-5%2015-10%2020%208-2%2014-8%2017-15M51%2011c8-1%2015-5%2020-10-2%208-8%2014-15%2017%22%20fill=%22url%28%23leaf%29%22%20stroke=%22%238e9f91%22%20stroke-width=%22.8%22%20stroke-linejoin=%22round%22/%3E%3C/svg%3E");
-  --atf-post-gem-facets: url("data:image/svg+xml,%3Csvg%20xmlns=%22http%3A//www.w3.org/2000/svg%22%20viewBox=%220%200%2032%2044%22%3E%3Cdefs%3E%3ClinearGradient%20id=%22rim%22%20x2=%221%22%20y2=%221%22%3E%3Cstop%20stop-color=%22%23eeeece%22/%3E%3Cstop%20offset=%22.23%22%20stop-color=%22%237b8986%22/%3E%3Cstop%20offset=%22.5%22%20stop-color=%22%2325343b%22/%3E%3Cstop%20offset=%22.75%22%20stop-color=%22%23a9b6aa%22/%3E%3Cstop%20offset=%221%22%20stop-color=%22%231d303b%22/%3E%3C/linearGradient%3E%3ClinearGradient%20id=%22shine%22%20x2=%22.7%22%20y2=%221%22%3E%3Cstop%20stop-color=%22white%22%20stop-opacity=%22.9%22/%3E%3Cstop%20offset=%22.45%22%20stop-color=%22white%22%20stop-opacity=%22.2%22/%3E%3Cstop%20offset=%221%22%20stop-color=%22white%22%20stop-opacity=%220%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath%20d=%22M16%201%2031%2022%2016%2043%201%2022Z%20M16%205%205%2022%2016%2039%2027%2022Z%22%20fill=%22url%28%23rim%29%22%20fill-rule=%22evenodd%22/%3E%3Cpath%20d=%22M16%205%2027%2022%2022%2022%2016%2012Z%22%20fill=%22white%22%20opacity=%22.22%22/%3E%3Cpath%20d=%22M16%205%2016%2012%2010%2022%205%2022Z%22%20fill=%22url%28%23shine%29%22/%3E%3Cpath%20d=%22M5%2022%2010%2022%2016%2032%2016%2039Z%22%20fill=%22black%22%20opacity=%22.48%22/%3E%3Cpath%20d=%22M27%2022%2016%2039%2016%2032%2022%2022Z%22%20fill=%22black%22%20opacity=%22.68%22/%3E%3Cpath%20d=%22M16%2012%2022%2022%2016%2032%2010%2022Z%22%20fill=%22white%22%20opacity=%22.08%22/%3E%3Cpath%20d=%22M16%2012%2010%2022%2016%2020%2022%2022Z%22%20fill=%22url%28%23shine%29%22/%3E%3Cpath%20d=%22M16%2020%2016%2032%2022%2022Z%22%20fill=%22black%22%20opacity=%22.17%22/%3E%3Cpath%20d=%22M16%205%205%2022%2016%2039%2027%2022Z%22%20fill=%22none%22%20stroke=%22black%22%20stroke-opacity=%22.6%22%20stroke-width=%22.8%22/%3E%3Cpath%20d=%22M8%2018l4-6%203-1%22%20stroke=%22white%22%20stroke-opacity=%22.9%22%20stroke-width=%221.1%22%20stroke-linecap=%22round%22%20fill=%22none%22/%3E%3Cellipse%20cx=%2211.7%22%20cy=%2214.5%22%20rx=%221.5%22%20ry=%221%22%20fill=%22white%22%20opacity=%22.85%22/%3E%3C/svg%3E");
-  --atf-post-gem-mask: url("data:image/svg+xml,%3Csvg%20xmlns=%22http%3A//www.w3.org/2000/svg%22%20viewBox=%220%200%2032%2044%22%3E%3Cpath%20d=%22M16%201%2031%2022%2016%2043%201%2022Z%22%20fill=%22white%22/%3E%3C/svg%3E");
-
-}
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-gothic-frame {
-  position: absolute;
-  z-index: 4;
-  inset: 2px;
-  display: block;
-  box-sizing: border-box;
-  border: 1px solid var(--atf-post-metal);
-  box-shadow: inset 0 0 0 1px #090e14, 0 0 0 1px #111820;
-  color: var(--atf-post-accent);
-  pointer-events: none;
-}
-body.atf-active .atf-post > .atf-gothic-frame { z-index: 30; }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-gothic-frame * { pointer-events: none; }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-gothic-corner {
-  position: absolute;
-  display: block;
-  width: var(--atf-corner-size, 48px);
-  height: var(--atf-corner-size, 48px);
-  max-width: 50%;
-  max-height: 50%;
-  background: var(--atf-post-corner) center / contain no-repeat;
-}
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-gothic-corner--tl { top: 0; left: 0; }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-gothic-corner--tr { top: 0; right: 0; transform: scaleX(-1); }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-gothic-corner--bl { bottom: 0; left: 0; transform: scaleY(-1); }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-gothic-corner--br { bottom: 0; right: 0; transform: scale(-1); }
-/* The same faceted stone is used on corners, round avatar and dividers. */
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-gothic-corner::after,
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__divider::after,
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__avatar-inlays::before,
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__avatar-inlays::after {
-  content: "";
-  position: absolute;
-  width: 16px;
-  height: 22px;
-  background: var(--atf-post-gem-facets) center / 100% 100% no-repeat, currentColor;
-  mask: var(--atf-post-gem-mask) center / 100% 100% no-repeat;
-  clip-path: none;
-  color: var(--aa-gem-color, var(--atf-post-accent));
-  filter: drop-shadow(0 0 var(--aa-gem-glow, 3px) var(--aa-gem-color, var(--atf-post-accent-soft)));
-  pointer-events: none;
-}
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-gothic-corner::after { top: 7%; left: 7%; width: 32%; height: 43%; }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__divider {
-  position: relative;
-  box-sizing: border-box;
-  width: 100%;
-  height: 22px;
-  margin-block: .3rem;
-  padding: 0;
-  border: 0;
-  color: var(--atf-post-accent);
-  background: linear-gradient(90deg, transparent, var(--atf-post-metal) 12% 43%, var(--atf-post-metal-light) 48%, transparent 49% 51%, var(--atf-post-metal-light) 52%, var(--atf-post-metal) 57% 88%, transparent) center / 100% 1px no-repeat;
-  pointer-events: none;
-}
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__divider::after { top: 0; left: calc(50% - 8px); }
-/* Metal shoulders surround the shared faceted stone; all colour stays in the
-   existing currentColor stone layer, never in this neutral setting. */
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__divider::before {
-  content: "";
-  position: absolute;
-  top: 6px;
-  left: calc(50% - 30px);
-  width: 60px;
-  height: 10px;
-  background: linear-gradient(90deg, #263b48, #a1aca3 27%, #1b2c37 38% 62%, #a1aca3 73%, #263b48);
-  clip-path: polygon(0 45%, 25% 35%, 35% 0, 43% 35%, 57% 35%, 65% 0, 75% 35%, 100% 45%, 100% 55%, 75% 65%, 65% 100%, 57% 65%, 43% 65%, 35% 100%, 25% 65%, 0 55%);
-  pointer-events: none;
-}
+/* Signature disclosure and standalone-profile adaptations only. Common metal/gems: postbit.css. */
 /* Signature disclosure: native details, shared neutral metal and accent-only gems. */
 body.atf-active .atf-post.af-atf-display .atf-post__content > .atf-post__signature-spoiler {
   min-width: 0;
   margin: .75rem var(--atf-post-content-inset) 0;
 }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-toggle {
+body.atf-active .atf-post .atf-post__signature-toggle,
+body.atf-active .atf-signature-surface .atf-post__signature-toggle {
   display: grid;
   justify-items: center;
   grid-template-rows: 22px 14px 7px;
@@ -95,10 +16,14 @@ body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-toggl
   cursor: pointer;
   user-select: none;
 }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-toggle::-webkit-details-marker { display: none; }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-toggle::marker { content: ""; }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-toggle:focus-visible { outline: 1px solid var(--atf-post-metal-light); outline-offset: 3px; }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-toggle > .atf-post__signature-separator {
+body.atf-active .atf-post .atf-post__signature-toggle::-webkit-details-marker,
+body.atf-active .atf-signature-surface .atf-post__signature-toggle::-webkit-details-marker { display: none; }
+body.atf-active .atf-post .atf-post__signature-toggle::marker,
+body.atf-active .atf-signature-surface .atf-post__signature-toggle::marker { content: ""; }
+body.atf-active .atf-post .atf-post__signature-toggle:focus-visible,
+body.atf-active .atf-signature-surface .atf-post__signature-toggle:focus-visible { outline: 1px solid var(--atf-post-metal-light); outline-offset: 3px; }
+body.atf-active .atf-post .atf-post__signature-toggle > .atf-post__signature-separator,
+body.atf-active .atf-signature-surface .atf-post__signature-toggle > .atf-post__signature-separator {
   align-self: center;
   width: 100%;
   height: 22px;
@@ -108,19 +33,30 @@ body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-toggl
   background-position: center 9px,center 12px;
   background-repeat: no-repeat;
 }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-label { font: 11px/14px Georgia,"Times New Roman",serif; letter-spacing: .18em; }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-arrow { width: 6px; height: 6px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-spoiler[open] > summary .atf-post__signature-arrow { transform: translateY(3px) rotate(225deg); }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-frame { --atf-corner-size: 22px; position: relative; min-width: 0; border: 1px solid var(--atf-post-metal); margin-top: .4rem; box-shadow: inset 0 0 0 1px #0a1016; }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-frame > .atf-post__signature { margin: 0; padding: .65rem .85rem; overflow-wrap: anywhere; }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-frame > .atf-gothic-frame { inset: 2px; }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature img { max-width: 100%; height: auto; }
+body.atf-active .atf-post .atf-post__signature-label,
+body.atf-active .atf-signature-surface .atf-post__signature-label { font: 11px/14px Georgia,"Times New Roman",serif; letter-spacing: .18em; }
+body.atf-active .atf-post .atf-post__signature-arrow,
+body.atf-active .atf-signature-surface .atf-post__signature-arrow { width: 6px; height: 6px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); }
+body.atf-active .atf-post .atf-post__signature-spoiler[open] > summary .atf-post__signature-arrow,
+body.atf-active .atf-signature-surface .atf-post__signature-spoiler[open] > summary .atf-post__signature-arrow { transform: translateY(3px) rotate(225deg); }
+body.atf-active .atf-post .atf-post__signature-frame,
+body.atf-active .atf-signature-surface .atf-post__signature-frame { --atf-corner-size: 22px; position: relative; min-width: 0; border: 1px solid var(--atf-post-metal); margin-top: .4rem; box-shadow: inset 0 0 0 1px #0a1016; }
+body.atf-active .atf-post .atf-post__signature-frame > .atf-post__signature,
+body.atf-active .atf-signature-surface .atf-post__signature-frame > .atf-post__signature { margin: 0; padding: .65rem .85rem; overflow-wrap: anywhere; }
+body.atf-active .atf-post .atf-post__signature-frame > .atf-gothic-frame,
+body.atf-active .atf-signature-surface .atf-post__signature-frame > .atf-gothic-frame { inset: 2px; }
+body.atf-active .atf-post .atf-post__signature img,
+body.atf-active .atf-signature-surface .atf-post__signature img { max-width: 100%; height: auto; }
 /* Suppress only the legacy wrapper's divider, not an author's BBCode rule. */
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature > .signature { border-block-start: 0; margin: 0; padding: 0; }
+body.atf-active .atf-post .atf-post__signature > .signature,
+body.atf-active .atf-signature-surface .atf-post__signature > .signature { border-block-start: 0; margin: 0; padding: 0; }
 
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-terminal { position: absolute; top: 8px; width: 5px; height: 5px; border: 1px solid var(--atf-post-metal-light); background: var(--atf-post-metal-dark); transform: rotate(45deg); }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-terminal--start { left: 2px; }
-body.atf-active :is(.atf-post,.atf-signature-surface) .atf-post__signature-terminal--end { right: 2px; }
+body.atf-active .atf-post .atf-post__signature-terminal,
+body.atf-active .atf-signature-surface .atf-post__signature-terminal { position: absolute; top: 8px; width: 5px; height: 5px; border: 1px solid var(--atf-post-metal-light); background: var(--atf-post-metal-dark); transform: rotate(45deg); }
+body.atf-active .atf-post .atf-post__signature-terminal--start,
+body.atf-active .atf-signature-surface .atf-post__signature-terminal--start { left: 2px; }
+body.atf-active .atf-post .atf-post__signature-terminal--end,
+body.atf-active .atf-signature-surface .atf-post__signature-terminal--end { right: 2px; }
 
 body.atf-active .atf-signature-surface { --atf-post-accent: var(--atf-neutral-accent,var(--atf-color-accent,#789abc)); --atf-post-accent-soft: color-mix(in srgb,var(--atf-post-accent) 18%,transparent); min-width:0; }
 body.atf-active.atf-profile-page .atf-profile-signature--disclosure { padding:0; border:0; background:none; box-shadow:none; }

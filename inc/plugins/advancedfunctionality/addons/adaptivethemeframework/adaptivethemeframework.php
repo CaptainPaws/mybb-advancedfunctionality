@@ -21,7 +21,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.32.2');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.32.3');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1934,9 +1934,6 @@ function af_adaptivethemeframework_render_footer(bool $hasPosts = false, string 
             }
         }
         $scripts .= '<script src="' . $escape($assetBase . 'assets/adaptivethemeframework.modals.js?v=' . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION)) . '" defer></script>' . "\n";
-    }
-    if (strpos($page,'data-atf-signature')!==false) {
-        $scripts .= '<script src="'.$escape($assetBase.'assets/adaptivethemeframework.signature.js'.$version).'" defer></script>'."\n";
     }
     if ($hasPosts) {
         $scripts .= '<script src="' . $escape($assetBase . 'assets/adaptivethemeframework.postbit-sticky.js?v=' . rawurlencode(AF_ADAPTIVETHEMEFRAMEWORK_VERSION)) . '" defer></script>' . "\n";

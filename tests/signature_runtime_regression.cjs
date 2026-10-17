@@ -9,14 +9,23 @@ const attributes = {};
 const summary = { setAttribute: (k,v) => { attributes[k] = v; }, focus: () => { focused = true; } };
 const content = { contains: node => node === 'inside' };
 const details = { open: false, matches: () => true, querySelector: selector => selector.includes('toggle') ? summary : content };
-const document = { activeElement: null, querySelectorAll: () => [details], addEventListener: (type,fn) => { toggles++; onToggle = fn; } };
+const document = { querySelector: () => null, activeElement: null, querySelectorAll: () => [details], addEventListener: (type,fn) => { toggles++; onToggle = fn; } };
 const context = vm.createContext({window:{}, document});
-const source = fs.readFileSync(base+'adaptivethemeframework/assets/adaptivethemeframework.signature.js','utf8');
+const source = fs.readFileSync(base+'adaptivethemeframework/assets/presentation-preferences.js','utf8');
 vm.runInContext(source,context); vm.runInContext(source,context);
 assert.equal(toggles,1); assert.equal(attributes['aria-expanded'],'false');
 details.open = true; onToggle({target:details}); assert.equal(attributes['aria-expanded'],'true');
 details.open = false; document.activeElement = 'inside'; onToggle({target:details}); assert.ok(focused);
 const appended = {...details,open:true}; onToggle({target:appended}); assert.equal(attributes['aria-expanded'],'true');
+// The shared preference asset may run in head, before signature markup exists.
+let readySignature, earlyToggleCount=0;
+const earlyDocument={...document,readyState:'loading',addEventListener:(type,fn)=>{if(type==='DOMContentLoaded')readySignature=fn;else if(type==='toggle')earlyToggleCount++;}};
+const earlyContext=vm.createContext({window:{},document:earlyDocument});
+vm.runInContext(source,earlyContext); vm.runInContext(source,earlyContext);
+assert.equal(earlyToggleCount,1);assert.equal(typeof readySignature,'function');
+readySignature();assert.equal(attributes['aria-expanded'],'false');
+vm.runInContext(fs.readFileSync(base+'adaptivethemeframework/assets/adaptivethemeframework.signature.js','utf8'),earlyContext);
+assert.equal(earlyToggleCount,1,'Legacy shim registered another handler');
 console.log('Signature runtime passed: delegated disclosure, ARIA/focus and dynamic posts without duplicate listeners.');
 // Builder bridge consumes the real AE lifecycle API and serializes its current value, not a stale textarea.
 const builderSource=fs.readFileSync(base+'advancedsignaturebuilder/assets/signature-builder.js','utf8');
