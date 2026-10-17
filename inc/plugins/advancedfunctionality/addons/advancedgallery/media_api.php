@@ -7,6 +7,7 @@ function ag_system_album_purposes(): array
     return [
         'signature_background' => 'Фоны подписей',
         'signature_images' => 'Изображения подписей',
+        'account_avatar' => 'Аватары аккаунта',
         'appearance_avatars' => 'Аватары оформления',
         'appearance_postbit_bg' => 'Фоны постбитов',
         'appearance_profile_bg' => 'Фоны профилей',
@@ -164,11 +165,18 @@ function ag_media_is_retained(array $media): bool
 function ag_handle_picker_select(): void
 {
     global $mybb;
-    if ($mybb->request_method !== 'post' || !ag_can_upload()) error_no_permission();
+    if ($mybb->request_method !== 'post') error_no_permission();
     verify_post_check($mybb->get_input('my_post_key'));
     $purpose = ag_request_appearance_purpose();
     if ($purpose === '') ag_json_response(['ok' => false, 'error' => 'Appearance purpose required.'], 422);
     $id = $mybb->get_input('media_id', MyBB::INPUT_INT);
+    if ($purpose === 'account_avatar') {
+        try {$source=ag_avatar_source($id);} catch (RuntimeException $e) {ag_json_response(['ok'=>false,'error'=>$e->getMessage()],422);}
+        unset($source['path']);
+        ag_json_response(['ok'=>true]+$source);
+        return;
+    }
+    if (!ag_can_upload()) error_no_permission();
     if (!ag_retain_owned_media((int)$mybb->user['uid'], $id)) {
         ag_json_response(['ok' => false, 'error' => 'Image is not owned or not approved.'], 403);
     }
@@ -186,7 +194,7 @@ function ag_request_appearance_purpose(): string
 /** Never create a system/default album when merely opening an Appearance picker. */
 function ag_picker_initial_album(int $uid, string $purpose): int
 {
-    if ($purpose === '') return -1;
+    if ($purpose === '' || $purpose === 'account_avatar') return -1;
     $album = ag_get_system_album($uid, $purpose);
     return $album ? (int)$album['id'] : -2; // missing-purpose filter, not all media
 }

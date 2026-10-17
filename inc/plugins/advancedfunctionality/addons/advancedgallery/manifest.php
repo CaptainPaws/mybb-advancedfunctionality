@@ -14,6 +14,8 @@ return [
         'mode' => 'contextual',
         'routes' => [
             ['script' => 'gallery.php'],
+            ['script' => 'usercp.php', 'action' => 'avatar'],
+            ['script' => 'usercp.php', 'action' => 'do_avatar'],
             ['script' => 'usercp.php', 'action' => 'editsig'],
             ['script' => 'usercp.php', 'action' => 'do_editsig'],
         ],

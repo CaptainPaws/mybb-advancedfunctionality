@@ -17,6 +17,7 @@ define('AF_AG_MARK_DONE', '<!--af_advancedgallery_done-->');
 define('AF_AG_ASSETS_BLACKLIST_DEFAULT', "index.php\nusercp.php\nuserlist.php\nsearch.php\nmisc.php\nkb.php\nforumdisplay.php\ncharactersheets.php\nshop.php");
 
 require_once __DIR__ . '/media_api.php';
+require_once __DIR__ . '/avatar.php';
 
 /* -------------------- INFO -------------------- */
 
@@ -677,6 +678,8 @@ function af_advancedgallery_init(): void
 {
     global $plugins;
 
+    $plugins->add_hook('usercp_avatar_end','ag_avatar_usercp_block',1100);
+    $plugins->add_hook('usercp_do_avatar_start','ag_avatar_validate_submission');
     // AF invokes the canonical owner callback before collection/bundling. No second late rewrite.
 }
 
@@ -718,7 +721,7 @@ function af_advancedgallery_pre_output(string &$page = ''): void
         ? !empty(af_advancededitor_response_facts($page)['has_supported_editor'])
         : (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']message["\'])[^>]*>~i', $page);
 
-    $hasPicker = $hasPicker || str_contains($page, 'data-aa-gallery-picker');
+    $hasPicker = $hasPicker || str_contains($page, 'data-aa-gallery-picker') || str_contains($page, 'data-ag-avatar-picker');
     if ($script === 'gallery.php' && stripos($page, '<html') !== false) {
         $wantScripts = true;
     } elseif ($hasPicker) {
@@ -2194,7 +2197,7 @@ function ag_handle_upload(): void
         'embed_html'    => '',
     ];
 
-    if ($purpose !== '') $insert['appearance_retained'] = 1;
+    if ($purpose !== '' && $purpose !== 'account_avatar') $insert['appearance_retained'] = 1;
 
     $db->insert_query('af_gallery_media', $insert);
     $newId = (int)$db->insert_id();
@@ -2365,12 +2368,12 @@ function ag_render_picker_modal(): void
 {
     global $db, $mybb, $templates, $lang;
 
-    if ((int)$mybb->user['uid'] <= 0 || !ag_can_upload()) {
+    $purpose = ag_request_appearance_purpose();
+    if ((int)$mybb->user['uid'] <= 0 || ($purpose === 'account_avatar' ? !ag_avatar_available() : !ag_can_upload())) {
         error_no_permission();
     }
 
     $uid = (int)$mybb->user['uid'];
-    $purpose = ag_request_appearance_purpose();
     $defaultId = ag_get_default_album_id($uid, $purpose === '');
     $ag_picker_initial_album = ag_picker_initial_album($uid, $purpose);
     $ag_picker_purpose = htmlspecialchars_uni($purpose);
@@ -2378,7 +2381,7 @@ function ag_render_picker_modal(): void
 
     // ---- кнопки альбомов (фильтр) ----
     $albumsHtml = '<button type="button" class="ag-picker-album" data-album-id="-1">Все мои изображения</button>';
-    if ($purpose !== '') $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="'.$ag_picker_initial_album.'">'.htmlspecialchars_uni(ag_system_album_purposes()[$purpose]).'</button>';
+    if ($purpose !== '' && $purpose !== 'account_avatar') $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="'.$ag_picker_initial_album.'">'.htmlspecialchars_uni(ag_system_album_purposes()[$purpose]).'</button>';
 
     // Default как album_id=0 (виртуальный, но обработчик picker_data переведёт в реальный defaultId)
     $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="0">'
@@ -2409,6 +2412,7 @@ function ag_render_picker_modal(): void
     $ag_picker_my_post_key = $mybb->post_code;
     $preferredAlbumId = $mybb->get_input('album_id', MyBB::INPUT_INT);
     $ag_picker_album_field = $purpose === '' ? ag_build_upload_album_field($uid, (int)$preferredAlbumId) : '<p>Новое изображение сохранится в альбом оформления.</p>';
+    $ag_picker_upload_hidden = ag_can_upload() ? '' : 'hidden';
     $ag_picker_remote_enabled = $purpose === '' && ag_remote_enabled() ? '1' : '0';
 
     $ag_picker_albums = $albumsHtml;
@@ -2423,11 +2427,11 @@ function ag_handle_picker_data(): void
 {
     global $db, $mybb;
 
-    if ((int)$mybb->user['uid'] <= 0 || !ag_can_upload()) {
+    $purpose = ag_request_appearance_purpose();
+    if ((int)$mybb->user['uid'] <= 0 || ($purpose === 'account_avatar' ? !ag_avatar_available() : !ag_can_upload())) {
         error_no_permission();
     }
 
-    $purpose = ag_request_appearance_purpose();
     $page = max(1, $mybb->get_input('page', MyBB::INPUT_INT));
     $perPage = (int)($mybb->settings['af_advancedgallery_items_per_page'] ?? 24);
     if ($perPage < 1) { $perPage = 24; }
@@ -2437,6 +2441,11 @@ function ag_handle_picker_data(): void
     $where = "m.uid_owner='{$uid}'";
 
     if ($purpose !== '') $where .= " AND m.status='approved' AND m.type='local' AND m.mime IN ('image/jpeg','image/png','image/gif','image/webp')";
+
+    if ($purpose === 'account_avatar') {
+        $mimes=ag_avatar_allowed_mimes();
+        $where .= $mimes ? " AND m.mime IN ('".implode("','",array_map([$db,'escape_string'],$mimes))."')" : ' AND 1=0';
+    }
 
     $q = trim((string)$mybb->get_input('q'));
     if ($q !== '') {
