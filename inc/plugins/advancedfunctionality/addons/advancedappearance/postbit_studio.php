@@ -5,6 +5,7 @@ if (!defined('IN_MYBB')) die('No direct access');
 function af_aa_postbit_fields(): array
 {
     $fields=[
+        'text_align'=>['enum',['left','center','right','justify']], 'hover_background_color'=>['color'], 'hover_border_color'=>['color'], 'divider_color'=>['color'],
         'background_url'=>['url'], 'image_url'=>['url'], 'image_media_id'=>['media'],
         'background_repeat'=>['enum',['no-repeat','repeat','repeat-x','repeat-y']],
         'overlay_mode'=>['enum',['none','darken','lighten']], 'overlay_color'=>['color'],
@@ -21,15 +22,17 @@ function af_aa_postbit_fields(): array
 function af_aa_postbit_surface(): array
 {
     $background=['background_color','background_opacity','background_media_id','background_url','background_position','background_size','background_repeat','gradient_color','gradient_angle','darkening','overlay_mode','overlay_color','overlay_intensity','overlay_start','overlay_end','overlay_angle'];
-    $type=['text_color','font_family','font_size','font_weight','font_style','line_height','glow_color','glow_intensity'];
+    $haze=['haze_color','haze_intensity','haze_opacity','haze_angle'];
+    $type=['text_align','letter_spacing','text_color','font_family','font_size','font_weight','font_style','line_height','glow_color','glow_intensity'];
     $image=['image_media_id','image_url','image_fit','image_position','image_scale'];
     // Keep validating old sparse presets; obsolete geometry fields are never offered by this adapter.
     $legacy=array_diff(array_keys(af_aa_studio_fields()),array_keys(af_aa_postbit_fields()));
     $entry=static fn($label,$selector,$fields,$old=false)=>['label'=>$label,'selector'=>$selector,'editable_fields'=>array_values(array_diff($fields,['darkening'])),'fields'=>$old?array_values(array_unique(array_merge($fields,$legacy))):$fields];
     return ['purpose'=>'appearance_postbit_bg','css'=>['adaptivethemeframework/assets/surfaces/postbit.css','adaptivethemeframework/assets/surfaces/signature.css','advancedprofileui/assets/advancedprofileui.css'],'canvas'=>false,'components'=>[
         'decoration'=>$entry('Декоративные акценты','',['gem_color','gem_glow']),
-        'topbar'=>$entry('Верхняя панель','.atf-post__topbar',array_merge($background,['haze_color','haze_intensity','haze_opacity','haze_angle']),true),
-        'sidebar'=>$entry('Боковая панель','.atf-post__sidebar-inner',$background,true),
+        'topbar'=>$entry('Верхняя панель','.atf-post__topbar',array_merge($background,$haze),true),
+        'sidebar'=>$entry('Боковая панель','.atf-post__sidebar-inner',array_merge($background,$haze),true),
+        'message_background'=>$entry('Фон сообщения','.atf-post__layout',array_merge($background,$haze)),
         'primary_avatar'=>$entry('Аватары · основной','.atf-post__primary-avatar-media img',$image),
         'secondary_avatar'=>$entry('Аватары · дополнительный','.atf-post__secondary-avatar > img',$image),
         'buttons'=>$entry('Кнопки и текст · кнопки',':is(.atf-post__profile-action,.atf-post__management-action,.af-apui-postbit-action)',['text_color','icon_color','hover_color','glow_color','glow_intensity']),
@@ -41,6 +44,10 @@ function af_aa_postbit_surface(): array
         'plaque_icon'=>$entry('Плашка персонажа · изображение','.af-apui-postbit-plaque__media',$image),
         'plaque_title'=>$entry('Плашка персонажа · основная подпись','.af-apui-postbit-plaque__title',array_merge(['label_text'],$type)),
         'plaque_subtitle'=>$entry('Плашка персонажа · вторая подпись','.af-apui-postbit-plaque__subtitle',array_merge(['label_text'],$type)),
+        'signature_title'=>$entry('Подпись · заголовок','.af-asb-signature__copy .af-asb-signature__title',$type),
+        'signature_subtitle'=>$entry('Подпись · подзаголовок','.af-asb-signature__copy .af-asb-signature__subtitle',$type),
+        'signature_quote'=>$entry('Подпись · цитата','.af-asb-signature--quote .af-asb-signature__copy .af-asb-signature__text',array_merge($type,['background_color','background_opacity','divider_color','padding'])),
+        'signature_buttons'=>$entry('Подпись · кнопки-ссылки','.af-asb-signature .af-asb-signature__button',array_merge($type,['background_color','border_color','hover_color','hover_background_color','hover_border_color'])),
         'signature'=>$entry('Подпись','.atf-post__signature',array_merge($background,$type,['link_color','hover_color']),true),
     ]];
 }
@@ -98,9 +105,9 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $si
     $scope=$signatureRoot!==null
         ? static fn($suffix='')=>'body.atf-active .atf-signature-surface'.$root.$suffix.', '.$root.$suffix
         : static fn($suffix='')=>'body.atf-active '.$root.'.af-atf-display[data-element]'.$suffix.', '.$root.$suffix;
-    $css='';
+    $css=$scope(' .af-asb-signature .af-asb-signature__button').'{color:var(--atf-post-accent,currentColor);border-color:var(--atf-post-accent,currentColor);}';
     foreach ($s['components']??[] as $key=>$v) {
-        if ($signatureRoot!==null && !in_array($key,['signature','decoration'],true)) continue;
+        if ($signatureRoot!==null && !in_array($key,['signature','decoration','signature_title','signature_subtitle','signature_quote','signature_buttons'],true)) continue;
         $selector=af_aa_studio_components('postbit')[$key]??null;
         if ($selector===null) continue;
         $suffix=$selector===''?'':' '.$selector;
@@ -109,8 +116,8 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $si
             if (isset($v['gem_color'])) $rule[]='--aa-gem-color:'.$v['gem_color'].';';
             if (isset($v['gem_glow'])) $rule[]='--aa-gem-glow:'.$v['gem_glow'].'px;';
         }
-        foreach (['text_color'=>'color','font_size'=>'font-size','font_weight'=>'font-weight','font_style'=>'font-style','line_height'=>'line-height','letter_spacing'=>'letter-spacing'] as $field=>$property) {
-            if (isset($v[$field])) $rule[]=$property.':'.$v[$field].(in_array($field,['font_size','letter_spacing'],true)?'px':'').';';
+        foreach (['text_align'=>'text-align','padding'=>'padding','text_color'=>'color','font_size'=>'font-size','font_weight'=>'font-weight','font_style'=>'font-style','line_height'=>'line-height','letter_spacing'=>'letter-spacing'] as $field=>$property) {
+            if (isset($v[$field])) $rule[]=$property.':'.$v[$field].(in_array($field,['font_size','letter_spacing','padding'],true)?'px':'').';';
         }
         if (isset($v['font_family']) && $v['font_family']!=='inherit') $rule[]='font-family:'.(af_aa_personal_fonts()[$v['font_family']]??'inherit').';';
         if (isset($v['glow_intensity'])) {
@@ -123,11 +130,51 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $si
             if ($key!=='statistics') $rule[]='text-shadow:'.$glow.';';
             else $css.=$scope($suffix.' :is(.af-apui-stat-item__value,.af-apui-stat-item__icon)').'{text-shadow:'.$glow.';}';
         }
-        if (isset($v['background_color'])) {
+        if (isset($v['background_color']) && !in_array($key,['topbar','sidebar','message_background'],true)) {
             $color='color-mix(in srgb,'.$v['background_color'].' '.(($v['background_opacity']??1)*100).'%,transparent)';
             $rule[]='background-color:'.$color.';';
             if ($key==='statistics') $rule[]='--aa-statistics-background:'.$color.';';
             if ($key==='metadata') $rule[]='--aa-metadata-background:'.$color.';';
+        }
+        if (in_array($key,['topbar','sidebar','message_background'],true)) {
+            $prefix='--aa-'.$key.'-';
+            // Emit on the real host, including the layout that owns ::before.
+            $vars=[];
+            if (isset($v['background_color'])) $vars[]=$prefix.'color:color-mix(in srgb,'.$v['background_color'].' '.(100*($v['background_opacity']??1)).'%,transparent);';
+            $image=af_aa_postbit_image($v,'background');
+            if ($image!=='' || array_key_exists('background_media_id',$v) || array_key_exists('background_url',$v)) $vars[]=$prefix.'image:'.($image!==''?af_aa_css_url_value($image):'none').';';
+            foreach (['background_size'=>'size','background_position'=>'position','background_repeat'=>'repeat'] as $field=>$property) if (isset($v[$field])) $vars[]=$prefix.$property.':'.$v[$field].';';
+            if ($image!=='') {
+                if (!isset($v['background_size'])) $vars[]=$prefix.'size:cover;';
+                if (!isset($v['background_repeat'])) $vars[]=$prefix.'repeat:no-repeat;';
+            }
+            if (isset($v['haze_color'])) $vars[]=$prefix.'haze:linear-gradient('.($v['haze_angle']??115).'deg,color-mix(in srgb,'.$v['haze_color'].' '.(100*($v['haze_intensity']??.18)*($v['haze_opacity']??1)).'%,transparent),transparent 70%);';
+            $mode=$v['overlay_mode']??null;
+            if ($mode===null && !array_key_exists('overlay_mode',$v) && isset($v['darkening'])) {$mode='darken';$v['overlay_intensity']=$v['darkening'];}
+            if ($mode!==null) {
+                $mask='none';
+                if ($mode!=='none') {
+                    $color=$v['overlay_color']??($mode==='lighten'?'#ffffff':'#000000');
+                    $intensity=$v['overlay_intensity']??.5;
+                    $mask='linear-gradient('.($v['overlay_angle']??180).'deg,color-mix(in srgb,'.$color.' '.(100*$intensity*($v['overlay_start']??1)).'%,transparent),color-mix(in srgb,'.$color.' '.(100*$intensity*($v['overlay_end']??1)).'%,transparent))';
+                }
+                $vars[]=$prefix.'mask:'.$mask.';';
+            }
+            if (isset($v['gradient_color'])) $vars[]=$prefix.'gradient:linear-gradient('.($v['gradient_angle']??135).'deg,color-mix(in srgb,'.($v['background_color']??'#000000').' '.(100*($v['background_opacity']??.18)).'%,transparent),color-mix(in srgb,'.$v['gradient_color'].' '.(100*($v['background_opacity']??.18)).'%,transparent));';
+            // Preserve the original filtered theme texture until this area is customized.
+            if ($key==='message_background' && $vars) $vars[]=$prefix.'filter:none;';
+            if ($vars || $rule) $css.=$scope($suffix).'{'.implode('',$vars).implode('',$rule).'}';
+            continue;
+        }
+        if (isset($v['divider_color'])) {
+            $rule[]='border-inline-start-color:'.$v['divider_color'].';';
+            if ($key==='signature_quote') $css.=$scope(' .af-asb-signature--quote .af-asb-signature__divider').'{background:linear-gradient(90deg,transparent,'.$v['divider_color'].',transparent);}';
+        }
+        if ($key==='signature_buttons') {
+            if (isset($v['border_color'])) $rule[]='border-color:'.$v['border_color'].';';
+            $hover=[];
+            foreach (['hover_color'=>'color','hover_background_color'=>'background-color','hover_border_color'=>'border-color'] as $field=>$property) if (isset($v[$field])) $hover[]=$property.':'.$v[$field].';';
+            if ($hover) $css.=$scope($suffix.':is(:hover,:focus-visible)').'{'.implode('',$hover).'}';
         }
         $layers=[];
         if (isset($v['haze_color'])) $layers[]='linear-gradient('.($v['haze_angle']??115).'deg,color-mix(in srgb,'.$v['haze_color'].' '.(100*($v['haze_intensity']??.18)*($v['haze_opacity']??1)).'%,transparent),transparent 70%)';
@@ -142,8 +189,6 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $si
         if ($image!=='') $layers[]=af_aa_css_url_value($image);
         elseif (array_key_exists('background_media_id',$v) || array_key_exists('background_url',$v)) $layers[]='none';
         // Native textures remain beneath haze/masks unless an image is explicitly replaced/removed.
-        elseif ($layers && $key==='topbar') $layers[]='linear-gradient(115deg,var(--atf-post-accent-soft),transparent 38%),var(--af-apui-postbit-name-bg-image,none)';
-        elseif ($layers && $key==='sidebar') $layers[]='var(--af-apui-postbit-author-bg-image,none)';
         elseif ($layers && $key==='plaque') $layers[]='var(--af-apui-postbit-plaque-bg-image,none)';
         if ($layers) $rule[]='background-image:'.implode(',',$layers).';';
         foreach (['background_size'=>'background-size','background_position'=>'background-position','background_repeat'=>'background-repeat'] as $field=>$property) if (isset($v[$field])) $rule[]=$property.':'.$v[$field].';';

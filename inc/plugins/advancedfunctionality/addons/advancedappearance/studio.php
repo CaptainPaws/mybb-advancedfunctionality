@@ -66,7 +66,12 @@ function af_aa_studio_compile_base(int $uid, array $s, bool $preview=false, stri
     $scope=static fn($suffix)=>'body.atf-active '.$root.$suffix.', '.$root.$suffix;
     $css='';
     foreach ($s['components']??[] as $component=>$v) {
-        if ($signatureRoot!==null && !in_array($component,['signature','decoration'],true)) continue;
+        if ($signatureRoot!==null && !in_array($component,['signature','decoration','signature_title','signature_subtitle','signature_quote','signature_buttons'],true)) continue;
+        if ($target==='postbit' && in_array($component,['signature_title','signature_subtitle','signature_quote','signature_buttons'],true)) continue;
+        if ($target==='postbit' && in_array($component,['topbar','sidebar','message_background'],true)) {
+            // Background paint belongs to ATF. Keep unrelated legacy properties readable.
+            $v=array_diff_key($v,array_flip(['background_color','background_opacity','background_media_id','background_position','background_size','gradient_color','gradient_angle','darkening']));
+        }
         $selector=af_aa_studio_components($target)[$component]??null;if($selector===null)continue;
         $suffix=$selector===''?'':' '.$selector;
         if($target==='theme' && $selector!=='')$suffix.=':not(:where([data-element-surface],[data-element-surface] *))';

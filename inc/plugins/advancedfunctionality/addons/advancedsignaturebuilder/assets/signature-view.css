@@ -5,7 +5,7 @@
 .af-asb-signature__copy :is(h3,p,blockquote,div.af-asb-signature__text) { color: inherit; font-family: inherit; font-size: inherit; font-weight: inherit; line-height: inherit; margin: .5em 0; }
 .af-asb-signature__copy .af-asb-signature__title { text-wrap: balance; font-size: 1.2em; }
 .af-asb-signature__links { display: flex; flex-wrap: wrap; justify-content: inherit; gap: .5rem; margin-block: .8rem; }
-.af-asb-signature__button { display: inline-block; max-width: 100%; box-sizing: border-box; border: 1px solid currentColor; padding: .4em .7em; color: inherit; font: inherit; text-decoration: none; overflow-wrap: anywhere; }
+.af-asb-signature__button { display: inline-block; max-width: 100%; box-sizing: border-box; border: 1px solid currentColor; padding: .4em .7em; color: var(--atf-post-accent, inherit); font: inherit; text-decoration: none; overflow-wrap: anywhere; }
 .af-asb-signature__button:hover { text-decoration: underline; }
 .af-asb-signature__images { display: flex; gap: .5rem; min-width: 0; }
 .af-asb-signature__images img { display: block; width: 100%; max-width: 100%; min-width: 0; height: auto; object-fit: contain; align-self: start; }
