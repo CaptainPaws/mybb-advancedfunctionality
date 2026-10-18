@@ -34,6 +34,8 @@ function af_avatar_state(string $role): array
 
 function af_avatar_json(array $data,int $status=200): void
 {
+    // Core's shutdown buffer also runs after exit; JSON must bypass HTML providers.
+    $GLOBALS['af_disable_pre_output'] = true;
     http_response_code($status);header('Content-Type: application/json; charset=UTF-8');header('Cache-Control: no-store, private');
     echo json_encode($data,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);exit;
 }

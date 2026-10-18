@@ -122,7 +122,7 @@
     async function readState(){
       const url=new URL(endpoint.href);url.search='';url.searchParams.set('action','avatar');url.searchParams.set('af_avatar_state','1');
       url.searchParams.set('role',form.dataset.avatarCard);url.searchParams.set('my_post_key',one(form,'[name=my_post_key]').value);
-      const response=await fetch(url.href,{credentials:'same-origin',cache:'no-store'});
+      const response=await fetch(url.href,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
       let payload;try{payload=await response.json();}catch{throw new Error(`Проверка состояния недоступна: GET ${url.pathname} (HTTP ${response.status}), ответ не JSON. Обновите страницу и проверьте установку AF.`);}
       if(!response.ok || !payload.ok)throw new Error(payload.error||'Не удалось проверить текущее состояние аватара.');
       return checkedState(payload.avatar);
@@ -166,7 +166,8 @@
           }
         }
         data.set('atf_avatar_async','1');data.delete('ajax');
-        try{beforeVersion=(await readState()).version;}catch(error){throw new Error(`Сохранение не отправлено: ${error.message} Выбранное изображение осталось в карточке.`);}
+        // Server-rendered/last confirmed state is the baseline; GET must not block a valid POST.
+        beforeVersion=form.dataset.avatarVersion;
         report(removing?'Удаление…':'Сохранение…');
         const response=await fetch(endpoint.href,{method:'POST',body:data,credentials:'same-origin',cache:'no-store'});
         if(new URL(response.url).origin!==location.origin)throw new Error('Неверный адрес ответа сервера.');

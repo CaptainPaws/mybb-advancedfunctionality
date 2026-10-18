@@ -9,14 +9,14 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
     page.setDefaultTimeout(5000);
     const html=fs.readFileSync(process.env.ATF_AVATAR_HTML||'work/avatar-editor.html','utf8');
     const gif=Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7','base64');
-    const posts=[],purposes=[];let failNext=false;let legacyNext=false;let ambiguousNext=false;let stateFailure=false;let failRecovery=false;const invalidRequests=[];const versions={primary:0,secondary:0};
+    const posts=[],purposes=[];let failNext=false;let legacyNext=false;let ambiguousNext=false;let stateFailure=false;let failRecovery=false;const invalidRequests=[];let stateReads=0;const versions={primary:0,secondary:0};
     const state=role=>({uid:7,role,url:'https://forum.test/current.gif?v='+versions[role],version:role+'-'+versions[role],has_avatar:true});
     const field=(raw,name)=>raw.match(new RegExp('name="'+name+'"\\r\\n\\r\\n([^\\r]+)'))?.[1]||'';
     await page.route('**/*',async route=>{
       const request=route.request(),url=new URL(request.url());
       if(url.pathname.endsWith('.gif'))return route.fulfill({contentType:'image/gif',body:gif});
       if(!['/usercp.php','/gallery.php','/original.gif','/current.gif'].includes(url.pathname)){invalidRequests.push(request.url());return route.fulfill({status:404,body:'Not found'});}
-      if(url.searchParams.get('action')==='avatar' && url.searchParams.get('af_avatar_state')==='1'){assert.equal(request.method(),'GET');assert.equal(url.pathname,'/usercp.php');assert.ok(['primary','secondary'].includes(url.searchParams.get('role')));assert.equal(url.searchParams.get('my_post_key'),'valid');if(stateFailure)return route.fulfill({status:404,body:'Missing state handler'});return route.fulfill({json:{ok:true,avatar:state(url.searchParams.get('role'))}});}
+      if(url.searchParams.get('action')==='avatar' && url.searchParams.get('af_avatar_state')==='1'){stateReads++;assert.equal(request.headers().accept,'application/json');assert.equal(request.method(),'GET');assert.equal(url.pathname,'/usercp.php');assert.ok(['primary','secondary'].includes(url.searchParams.get('role')));assert.equal(url.searchParams.get('my_post_key'),'valid');if(stateFailure)return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,avatar:state(url.searchParams.get('role'))})+'<!--af_assets_begin--><link rel=stylesheet href=theme.css><!--af_core_preoutput_done-->'});return route.fulfill({json:{ok:true,avatar:state(url.searchParams.get('role'))}});}
       if(url.pathname.endsWith('gallery.php')){
         const action=url.searchParams.get('action'),purpose=url.searchParams.get('purpose');
         if(action==='picker'){
@@ -64,6 +64,7 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
       assert.ok(post.bytes.includes(gif),'Original GIF bytes lost');assert.equal(field(post.raw,'ag_avatar_confirm'),'1');
     }
     assert.deepEqual(purposes,['account_avatar','character_avatar']);
+    assert.equal(stateReads,0,'Verified save receipts must not require a preflight state GET');
     legacyNext=true;
     const primary=page.locator('[data-avatar-card=primary]');
     await primary.locator('[data-avatar-tab=upload]').click();
@@ -84,13 +85,14 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
     assert.equal(posts.length,beforeAmbiguous+1,'Ambiguous response retried POST');assert.equal(await primary.locator('[data-avatar-selection]').isVisible(),true);
     stateFailure=true;const beforeStateFailure=posts.length;
     await primary.locator('[data-avatar-save]').click();
-    await primary.locator('[data-avatar-status]').filter({hasText:'Сохранение не отправлено'}).waitFor();
-    assert.equal(posts.length,beforeStateFailure,'Unavailable preflight must not send a POST');
-    assert.equal(await primary.locator('[data-avatar-selection]').isVisible(),true);
+    await primary.locator('[data-avatar-status]').filter({hasText:'Аватар успешно обновлён.'}).waitFor();
+    assert.equal(posts.length,beforeStateFailure+1,'Unavailable state GET must not block a valid POST receipt');
+    assert.equal(await primary.locator('[data-avatar-selection]').isVisible(),false);
+    await primary.locator('[data-avatar-recent] button').click();await primary.locator('[data-avatar-selection]').waitFor({state:'visible'});
     stateFailure=false;legacyNext=true;failRecovery=true;
     await primary.locator('[data-avatar-save]').click();
     await primary.locator('[data-avatar-status]').filter({hasText:'Это не означает отказ сохранения'}).waitFor();
-    assert.equal(posts.length,beforeStateFailure+1,'Unavailable recovery must not repeat POST');
+    assert.equal(posts.length,beforeStateFailure+2,'Unavailable recovery must not repeat POST');
     assert.equal(await primary.locator('[data-avatar-selection]').isVisible(),true);
     stateFailure=false;
     assert.deepEqual(invalidRequests,[],'Requests must reach the actual UserCP path');

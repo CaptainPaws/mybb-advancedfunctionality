@@ -1334,6 +1334,8 @@ function af_avatar_state(string $role): array
 
 function af_avatar_json(array $data,int $status=200): void
 {
+    // Core's shutdown buffer also runs after exit; JSON must bypass HTML providers.
+    $GLOBALS['af_disable_pre_output'] = true;
     http_response_code($status);header('Content-Type: application/json; charset=UTF-8');header('Cache-Control: no-store, private');
     echo json_encode($data,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);exit;
 }
@@ -2965,6 +2967,14 @@ function af_should_skip_preoutput(): bool
 {
     if (!empty($GLOBALS['af_disable_pre_output'])) {
         return true;
+    }
+
+    // Shutdown runs after JSON handlers have set their response headers.
+    // Respect the actual response type even for fetch requests without ajax=1.
+    foreach (headers_list() as $header) {
+        if (preg_match('~^Content-Type:\s*application/(?:json|[a-z0-9!#$&^_.+-]+\+json)(?:\s*;|\s*$)~i', $header)) {
+            return true;
+        }
     }
 
     if (af_is_ajax_request()) {
