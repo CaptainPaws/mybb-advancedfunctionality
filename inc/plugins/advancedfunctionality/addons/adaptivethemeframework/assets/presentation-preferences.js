@@ -112,3 +112,39 @@ document.addEventListener('toggle', function (event) {
   if (!event.target.matches?.('details[data-atf-quick-settings]')) return;
   event.target.querySelector('summary').setAttribute('aria-expanded', String(event.target.open));
 }, true);
+
+/* Enhance only native, actually rendered moderator forms. Forum-jump-only
+   panels retain their existing markup and presentation. */
+(() => {
+  function initializeModeration() {
+    if (!document.body.classList.contains('atf-active')) return;
+    document.querySelectorAll('.atf-thread__moderation').forEach(panel => {
+      if (!panel.querySelector(':scope > form#inlinemoderation_options, :scope > form#moderator_options')) return;
+      panel.querySelectorAll(':scope > form').forEach(form => {
+        if (!form.matches('#inlinemoderation_options, #moderator_options') && !form.querySelector('select.forumjump')) return;
+        if (form.querySelector('.atf-thread-mod-actions')) return;
+        const actions = document.createElement('div');
+        actions.className = 'atf-thread-mod-actions';
+        form.querySelectorAll('input[type="submit"], button[type="submit"], input[type="button"][onclick*="inlineModeration.clearChecked"]').forEach(control => {
+          if (control.matches('input[type="button"]')) {
+            control.title = 'Снять выделение сообщений';
+            control.setAttribute('aria-label', control.title);
+            const reset = document.createElement('span');
+            reset.className = 'atf-thread-mod-clear';
+            reset.appendChild(control);
+            reset.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1 1 8"/></svg>');
+            actions.prepend(reset);
+          } else actions.appendChild(control);
+        });
+        if (actions.children.length) form.appendChild(actions);
+        // Native inline moderation separates its inputs with &nbsp;. Without
+        // controls these whitespace nodes would become anonymous grid items.
+        Array.from(form.childNodes).forEach(node => {
+          if (node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) node.remove();
+        });
+      });
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initializeModeration, {once:true});
+  else initializeModeration();
+})();
