@@ -40,6 +40,11 @@ function af_aa_postbit_overlay_mask(array $v): string
     return 'linear-gradient('.($v['overlay_angle']??180).'deg,transparent '.(100*min($start,$end)).'%,'.$paint.' '.(100*max($start,$end)).'%)';
 }
 
+function af_aa_postbit_profile_field_defaults(int $fid): array
+{
+    return $fid===4?['background_color'=>'#000000','background_opacity'=>.45,'radius'=>4,'padding'=>5]:[];
+}
+
 function af_aa_postbit_surface(): array
 {
     $background=['background_color','background_opacity','background_media_id','background_url','background_position','background_size','background_repeat','gradient_color','gradient_angle','darkening','overlay_mode','overlay_gradient','overlay_color','overlay_intensity','overlay_start','overlay_end','overlay_angle'];
@@ -78,7 +83,9 @@ function af_aa_postbit_surface(): array
     $surface['components']['profile_fields']=$entry('Дополнительные поля · все','.atf-post__profile-fields',$type);
     $surface['components']['user_status']=$entry('Статус пользователя','.atf-post__title',$type);
     if(function_exists('af_apf_postbit_field_definitions'))foreach(af_apf_postbit_field_definitions() as $fid=>$field) {
-        $surface['components']['profile_field_'.$fid]=$entry('Поле · '.$field['name'],'.atf-post__profile-fields .af-apf-postbit-field--fid'.$fid,$type);
+        $surface['components']['profile_field_'.$fid]=$entry('Поле · '.$field['name'],'.atf-post__profile-fields .af-apf-postbit-field--fid'.$fid,array_merge($type,['background_color','background_opacity','radius','padding']));
+        // ATF's established personal-title field keeps one default in preview and live posts.
+        $surface['components']['profile_field_'.$fid]['defaults']=af_aa_postbit_profile_field_defaults($fid);
     }
     return $surface;
 }
@@ -121,6 +128,7 @@ function af_aa_signature_defaults(): array
 }
 function af_aa_postbit_effective_settings(array $settings): array
 {
+    if(isset($settings['components']['profile_field_4']))$settings['components']['profile_field_4']=array_replace(af_aa_postbit_profile_field_defaults(4),$settings['components']['profile_field_4']);
     $signature=$settings['components']['signature']??[];
     if (!array_key_exists('background_url',$signature) && !array_key_exists('background_media_id',$signature)) {
         $settings['components']['signature']=$signature+af_aa_signature_defaults();
