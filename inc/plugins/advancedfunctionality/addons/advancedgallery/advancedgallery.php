@@ -8,7 +8,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
 define('AF_AG_ID', 'advancedgallery');
-define('AF_AG_VER', '1.2.0');
+define('AF_AG_VER', '1.2.1');
 define('AF_AG_BASE', AF_ADDONS . AF_AG_ID . '/');
 define('AF_AG_ASSETS', AF_AG_BASE . 'assets/');
 define('AF_AG_TPL_FILE', AF_AG_BASE . 'templates/advancedgallery.html');
@@ -1054,6 +1054,8 @@ function ag_render_index(bool $mine): string
         $where .= " AND (uid_owner='{$viewer}' OR id NOT IN (SELECT am.media_id FROM ".TABLE_PREFIX."af_gallery_album_media am INNER JOIN ".TABLE_PREFIX."af_gallery_albums a ON a.id=am.album_id WHERE a.system_key IS NOT NULL))";
     }
 
+    $where .= ag_source_filter_sql();
+    $ag_source_filter = ag_source_filter();
     $total = (int)$db->fetch_field($db->simple_select('af_gallery_media', 'COUNT(*) AS cnt', $where), 'cnt');
     $query = $db->simple_select('af_gallery_media', '*', $where, [
         'order_by' => 'created_at',
@@ -1072,6 +1074,8 @@ function ag_render_index(bool $mine): string
     }
 
     $baseUrl = 'gallery.php' . ($mine ? '?action=mine' : '');
+    $source = (string)$mybb->get_input('source');
+    if (isset(ag_source_labels()[$source])) $baseUrl .= (strpos($baseUrl,'?')===false?'?':'&').'source='.rawurlencode($source);
     $pagination = multipage($total, $perPage, $pageNum, $baseUrl);
 
     // toolbar links
@@ -1093,6 +1097,7 @@ function ag_render_index(bool $mine): string
 
 function ag_render_home_albums(): string
 {
+    $ag_source_filter = '';
     global $db, $mybb, $templates, $lang, $ag_page_title;
 
     $ag_page_title = $lang->af_advancedgallery_name ?? 'Галерея';
@@ -1255,6 +1260,8 @@ function ag_render_album_view(): string
         $mediaWhere .= " AND m.status='approved'";
     }
 
+    $mediaWhere .= ag_source_filter_sql('m');
+    $ag_source_filter = ag_source_filter();
     $orderBy = "m.created_at DESC";
     if ($sortMode === 'date_asc') {
         $orderBy = "m.created_at ASC";
@@ -1380,7 +1387,7 @@ function ag_render_album_sort_select(string $current): string
 
 function ag_render_album_sort_filter(int $albumId, string $current): string
 {
-    global $lang;
+    global $lang, $mybb;
 
     $options = ag_render_album_sort_select($current);
     $label = htmlspecialchars_uni($lang->af_advancedgallery_album_sort_mode ?? 'Sort mode');
@@ -1388,6 +1395,7 @@ function ag_render_album_sort_filter(int $albumId, string $current): string
     return '<form action="gallery.php" method="get" class="ag-album-sort-form">'
         .'<input type="hidden" name="action" value="album" />'
         .'<input type="hidden" name="id" value="'.(int)$albumId.'" />'
+        .'<input type="hidden" name="source" value="'.htmlspecialchars_uni((string)$mybb->get_input('source')).'" />'
         .'<label for="ag_album_sort">'.$label.'</label>'
         .'<select name="sort" id="ag_album_sort" onchange="this.form.submit()">'
         .$options
@@ -1747,6 +1755,7 @@ function ag_render_tile(array $media, int $contextAlbumId = 0, bool $bulkMode = 
 {
     global $mybb, $templates;
 
+    $ag_source_badge = ag_source_badge($media);
     $title = htmlspecialchars_uni((string)$media['title']);
     $thumbUrl = ag_media_thumb_url($media);
 
@@ -1841,7 +1850,11 @@ function ag_render_view(): string
     $ag_description = $parser->parse_message($descRaw, $parser_options);
 
     $ag_title = htmlspecialchars_uni((string)$media['title']);
-    $ag_bbcode = htmlspecialchars_uni(ag_media_bbcode($media, $imageUrl));
+    $originalUrl = $media['type']==='local' ? $bburl.'/'.ltrim((string)$media['storage_path'],'/') : (string)$media['remote_url'];
+    $ag_original_url = htmlspecialchars_uni($originalUrl);
+    $ag_source_notice = $media['type']==='local' ? '' : '<p class="ag-meta">Файл хранится на внешнем сайте. В Gallery сохранена запись и ссылка.</p>';
+    $ag_source_badge = ag_source_badge($media);
+    $ag_bbcode = htmlspecialchars_uni(ag_media_bbcode($media, $originalUrl));
 
     // ВАЖНО: не оборачиваем навигацией тут — это делает шаблон
     $ag_media_html = ag_render_media_view($media, $imageUrl);
@@ -1859,7 +1872,7 @@ function ag_render_view(): string
     if (ag_can_delete_media($media)) {
         $ag_delete_form = '<form action="gallery.php?action=delete&id='.(int)$media['id'].'" method="post" class="ag-inline-form">'
             .'<input type="hidden" name="my_post_key" value="'.$mybb->post_code.'" />'
-            .'<button type="submit" class="button">'.($media['type']==='remote'?'Удалить из моей галереи':'Delete').'</button>'
+            .'<button type="submit" class="button">Удалить из Gallery</button>'
             .'</form>';
     }
 
@@ -2343,6 +2356,8 @@ function ag_handle_remote_add_do(): void
             'id' => $newId,
             'status' => $status,
             'title' => (string)$title,
+            'provider' => (string)$resolved['provider'],
+            'source_label' => 'URL',
             'thumb' => (string)$thumbPath,
             'url_full' => (string)$url,
             'bbcode' => ag_media_is_direct_image(['type'=>'remote','provider'=>(string)$resolved['provider'],'remote_url'=>$url])
@@ -2402,6 +2417,7 @@ function ag_render_picker_modal(): void
 
     // ---- блок загрузки прямо в модалке ----
     $ag_picker_provider_controls = ag_provider_upload_controls();
+    $ag_picker_source_filter = ag_source_filter(true);
     $ag_picker_upload_do_url = 'gallery.php?action=upload_do';
     $ag_picker_remote_do_url = 'gallery.php?action=remote_add_do';
     $ag_picker_my_post_key = $mybb->post_code;
@@ -2434,7 +2450,7 @@ function ag_handle_picker_data(): void
     $offset = ($page - 1) * $perPage;
 
     $uid = (int)$mybb->user['uid'];
-    $where = "m.uid_owner='{$uid}'";
+    $where = "m.uid_owner='{$uid}'".ag_source_filter_sql('m');
 
     if ($purpose !== '') $where .= " AND m.status='approved' AND (m.type='local' OR (m.type='remote' AND m.provider IN (".ag_external_provider_sql(in_array($purpose,['account_avatar','character_avatar'],true))."))) AND m.mime IN ('image/jpeg','image/png','image/gif','image/webp')";
 
@@ -2488,7 +2504,7 @@ function ag_handle_picker_data(): void
         $thumb = ag_media_thumb_url($row);
         $fullUrl = $row['type'] === 'remote'
             ? (string)$row['remote_url']
-            : (rtrim((string)($mybb->settings['bburl'] ?? ''), '/').'/'.ltrim((string)($row['preview_path'] ?: $row['storage_path']), '/'));
+            : (rtrim((string)($mybb->settings['bburl'] ?? ''), '/').'/'.ltrim((string)$row['storage_path'], '/'));
         if ($purpose !== '') {
             $fullUrl = ag_resolve_media_url((int)$row['id'], 'full');
             $thumb = ag_resolve_media_url((int)$row['id'], 'thumb');
@@ -2503,6 +2519,7 @@ function ag_handle_picker_data(): void
             'provider' => (string)$row['provider'],
             'created_at' => (int)$row['created_at'],
             'media_id' => (int)$row['id'],
+            'source_label' => ag_source_labels()[ag_media_source($row)] ?? 'URL',
         ];
     }
 

@@ -20,6 +20,7 @@
     <a class="button" href="{$ag_mine_url}">Загружено мной</a>
     <a class="button" href="{$ag_albums_url}">{$ag_albums_label}</a>
 </div>
+{$ag_source_filter}
 <div class="ag-grid">
     {$ag_tiles}
 </div>
@@ -36,6 +37,7 @@
     <div class="ag-tile-body">
         <div class="ag-title">{$ag_title}</div>
         <div class="ag-meta">{$ag_author}</div>
+        {$ag_source_badge}
         {$ag_status_badge}
     </div>
 </div>
@@ -72,9 +74,15 @@
   <div class="ag-view-info">
     <h2>{$ag_title}</h2>
     <div class="ag-view-meta">{$ag_author} · {$ag_created}</div>
+    {$ag_source_badge}
+    {$ag_source_notice}
     <div class="ag-view-desc">{$ag_description}</div>
 
     <div class="ag-view-actions">
+      <a class="button" href="{$ag_original_url}" target="_blank" rel="noopener noreferrer">Открыть изображение</a>
+      <button type="button" class="button ag-copy-bbcode" data-bbcode="{$ag_original_url}">Скопировать прямой URL</button>
+      <button type="button" class="button" data-ag-select-editor data-bbcode="{$ag_bbcode}">Выбрать для вставки в редактор</button>
+      <span data-ag-editor-result role="status"></span>
       {$ag_approve_form}
       {$ag_delete_form}
 
@@ -82,9 +90,9 @@
         type="button"
         class="button ag-copy-bbcode"
         data-bbcode="{$ag_bbcode}"
-        data-label-default="Copy BBCode"
+        data-label-default="Скопировать BBCode"
         data-label-copied="Скопировано"
-      >Copy BBCode</button>
+      >Скопировать BBCode</button>
     </div>
 
     {$ag_add_to_album_form}
@@ -117,16 +125,12 @@
       </div>
     </div>
 
+    {$ag_picker_source_filter}
     <div class="ag-picker-search">
       <input type="search" placeholder="Поиск…" autocomplete="off" data-ag-picker-search="1" />
     </div>
 
     <div class="ag-picker-upload" {$ag_picker_upload_hidden} data-remote-enabled="{$ag_picker_remote_enabled}">
-      <div class="ag-upload-tabs">
-        <button type="button" class="ag-tab ag-tab-active" data-tab="local">С устройства</button>
-        <button type="button" class="ag-tab" data-tab="remote">По ссылке</button>
-      </div>
-
       <div class="ag-upload-pane" data-pane="local">
         <form action="{$ag_picker_upload_do_url}" method="post" enctype="multipart/form-data" class="ag-upload-form ag-upload-form--modal" data-ag-ajax="1">
         <input type="hidden" name="my_post_key" value="{$ag_picker_my_post_key}" />
@@ -144,21 +148,6 @@
         </div>
 
         <button type="submit" class="button">Загрузить</button>
-        </form>
-      </div>
-
-      <div class="ag-upload-pane" data-pane="remote" style="display:none;">
-        <form action="{$ag_picker_remote_do_url}" method="post" class="ag-upload-form ag-upload-form--modal" data-ag-ajax="1">
-          <input type="hidden" name="my_post_key" value="{$ag_picker_my_post_key}" />
-        {$ag_picker_purpose_field}
-          <input type="hidden" name="ajax" value="1" />
-          {$ag_picker_album_field}
-
-          <div class="ag-field">
-            <input type="url" name="ag_remote_url" placeholder="https://…" required />
-          </div>
-
-          <button type="submit" class="button">Добавить</button>
         </form>
       </div>
     </div>
@@ -183,16 +172,7 @@
 <!-- TEMPLATE: advancedgallery_upload -->
 <div class="ag-upload">
 
-  <div class="ag-upload-tabs" data-remote-enabled="{$ag_remote_enabled}">
-    <button type="button" class="ag-tab{$ag_upload_tab_local_active}" data-tab="local">
-      Загрузка с устройства
-    </button>
-    <button type="button" class="ag-tab{$ag_upload_tab_remote_active}" data-tab="remote">
-      По ссылке
-    </button>
-  </div>
-
-  <div class="ag-upload-pane" data-pane="local" style="display:none;">
+  <div class="ag-upload-pane" data-pane="local">
     <form action="{$ag_upload_do_url}" method="post" enctype="multipart/form-data" class="ag-upload-form">
       <input type="hidden" name="my_post_key" value="{$ag_my_post_key}" />
       {$ag_upload_album_field}
@@ -216,31 +196,6 @@
       <button type="submit" class="button">Загрузить</button>
     </form>
   </div>
-
-  <div class="ag-upload-pane" data-pane="remote" style="display:none;">
-    <form action="{$ag_remote_do_url}" method="post" class="ag-upload-form">
-      <input type="hidden" name="my_post_key" value="{$ag_my_post_key}" />
-      {$ag_upload_album_field}
-
-      <div class="ag-field">
-        <label>Ссылка</label>
-        <input type="url" name="ag_remote_url" value="" placeholder="https://…" required />
-      </div>
-
-      <div class="ag-field">
-        <label>Заголовок</label>
-        <input type="text" name="ag_title" value="" />
-      </div>
-
-      <div class="ag-field">
-        <label>Описание</label>
-        <textarea name="ag_description" rows="4"></textarea>
-      </div>
-
-      <button type="submit" class="button">Добавить</button>
-    </form>
-  </div>
-
 </div>
 
 
@@ -278,6 +233,7 @@
         </div>
     </div>
 </div>
+{$ag_source_filter}
 <div class="ag-grid">
     {$ag_album_tiles}
 </div>

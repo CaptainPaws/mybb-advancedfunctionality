@@ -120,6 +120,7 @@ function ag_handle_upload(): void
     if ($mybb->request_method!=='post') error_no_permission();
     verify_post_check($mybb->get_input('my_post_key'));
     $id=trim((string)$mybb->get_input('storage_provider')) ?: 'local';
+    if ($id==='url') { ag_handle_remote_add_do(); return; }
     $provider=ag_storage_providers()[$id] ?? null;
     if (!$provider || !$provider->canUpload()) error_no_permission();
     $provider->upload();
@@ -194,11 +195,12 @@ function ag_provider_upload_controls(): string
 {
     $providers=ag_storage_providers();$available=[];
     foreach ($providers as $id=>$provider) if ($provider->canUpload()) $available[$id]=$provider;
-    if (count($available)<2) return '';
+
     $default=isset($available['imgbb']) && (int)af_ag_get_setting('imgbb_default',0) ? 'imgbb':'local';
-    $html='<div class="ag-field"><label>Место хранения: <select name="storage_provider" data-ag-storage-provider>';
-    foreach ($available as $id=>$provider) $html.='<option value="'.htmlspecialchars_uni($id).'" data-url-enabled="'.($provider->supportsUrl()?'1':'0').'"'.($id===$default?' selected':'').'>'.htmlspecialchars_uni($provider->label()).'</option>';
-    return $html.'</select></label></div><div data-ag-external-options hidden><p>Изображение сохранится на внешнем хостинге и попадёт в ваш служебный альбом. Позже его можно переместить в свой альбом. Ссылка на изображение будет публичной.</p><label>Источник: <select name="external_source" data-ag-external-source><option value="file">С устройства</option><option value="url" data-ag-external-url-option>По URL</option></select></label><label data-ag-external-url hidden>Прямая ссылка <input type="url" name="external_url" placeholder="https://…"></label></div>';
+    $html='<div class="ag-field"><label>Источник: <select name="storage_provider" data-ag-storage-provider>';
+    foreach ($available as $id=>$provider) $html.='<option value="'.htmlspecialchars_uni($id).'" data-url-enabled="'.($provider->supportsUrl()?'1':'0').'"'.($id===$default?' selected':'').'>'.htmlspecialchars_uni($id==='local'?'Локальное хранилище':$provider->label()).'</option>';
+    if (ag_remote_enabled() && ag_request_appearance_purpose()==='') $html.='<option value="url">Добавить по URL</option>';
+    return $html.'</select></label></div><div class="ag-field" data-ag-url-source hidden><label>Прямая ссылка <input type="url" name="ag_remote_url" placeholder="https://…" disabled></label><p>В Gallery сохраняется ссылка. Файл остаётся на внешнем сайте.</p></div><div data-ag-external-options hidden><p>Изображение сохранится на внешнем хостинге и попадёт в ваш служебный альбом. Позже его можно переместить в свой альбом. Ссылка на изображение будет публичной.</p><label>Способ загрузки: <select name="external_source" data-ag-external-source><option value="file">С устройства</option><option value="url" data-ag-external-url-option>По URL</option></select></label><label data-ag-external-url hidden>Прямая ссылка <input type="url" name="external_url" placeholder="https://…"></label></div>';
 }
 
 function ag_external_avatar_providers(): array
@@ -218,4 +220,51 @@ function ag_provider_album_accepts(array $album, array $media): bool
     $key=(string)($album['system_key'] ?? '');
     return !str_starts_with($key,'provider_') || (ag_managed_external_image($media)
         && $key==='provider_'.$media['provider'] && (int)$album['uid_owner']===(int)$media['uid_owner']);
+}
+
+
+/** Classify by the saved provider, never by a URL hostname. */
+function ag_media_source(array $media): string
+{
+    if (($media['type'] ?? '') === 'local') return 'local';
+    $id=(string)($media['provider'] ?? '');
+    return isset(ag_storage_providers()[$id]) && $id!=='local' ? $id : 'url';
+}
+function ag_source_labels(): array
+{
+    $labels=['local'=>'Local'];
+    foreach (ag_storage_providers() as $id=>$provider) if ($id!=='local') $labels[$id]=$provider->label();
+    return $labels+['url'=>'URL'];
+}
+function ag_source_badge(array $media): string
+{
+    $source=ag_media_source($media);
+    return '<span class="ag-badge ag-source" title="'.($source==='local'?'Файл на сервере форума':'Файл на внешнем сайте').'">'.htmlspecialchars_uni(ag_source_labels()[$source] ?? $source).'</span>';
+}
+function ag_source_filter_sql(string $alias=''): string
+{
+    global $mybb, $db;
+    $source=(string)$mybb->get_input('source');
+    $column=$alias!==''?$alias.'.':'';
+    if ($source==='local') return " AND {$column}type='local'";
+    if ($source==='url') return " AND {$column}type='remote' AND ({$column}provider IS NULL OR {$column}provider NOT IN (".ag_external_provider_sql()."))";
+    if (isset(ag_source_labels()[$source])) return " AND {$column}type='remote' AND {$column}provider='".$db->escape_string($source)."'";
+    return '';
+}
+function ag_source_filter(bool $picker=false): string
+{
+    global $mybb;
+    $current=(string)$mybb->get_input('source');
+    $html='<label class="ag-source-filter">Источник <select '.($picker?'data-ag-source-filter':'name="source" onchange="this.form.submit()"').'>';
+    foreach ([''=>'Все изображения']+ag_source_labels() as $id=>$label) {
+        $html.='<option value="'.htmlspecialchars_uni($id).'"'.($id===$current?' selected':'').'>'.htmlspecialchars_uni($id==='local'?'Локальные':($id==='url'?'Добавленные по URL':$label)).'</option>';
+    }
+    $html.='</select></label>';
+    if ($picker) return $html;
+    $fields='';
+    foreach (['action','id','sort'] as $key) {
+        $value=(string)$mybb->get_input($key);
+        if ($value!=='') $fields.='<input type="hidden" name="'.$key.'" value="'.htmlspecialchars_uni($value).'">';
+    }
+    return '<form action="gallery.php" method="get" class="ag-toolbar">'.$fields.$html.'<noscript><button class="button">Применить</button></noscript></form>';
 }

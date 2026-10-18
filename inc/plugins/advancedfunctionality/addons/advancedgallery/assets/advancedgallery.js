@@ -44,16 +44,19 @@
   function syncProviderForm(form) {
     var selector = $one('[data-ag-storage-provider]', form);
     if (!selector) return;
-    var external = selector.value !== 'local', options = $one('[data-ag-external-options]', form);
+    var linkOnly = selector.value === 'url';
+    var external = selector.value !== 'local' && !linkOnly, options = $one('[data-ag-external-options]', form);
     var source = $one('[data-ag-external-source]', form), url = $one('[name="external_url"]', form);
     var allowed = selector.options[selector.selectedIndex].getAttribute('data-url-enabled') === '1';
     var urlOption = $one('[data-ag-external-url-option]', form);
     urlOption.disabled = !allowed;
     if (!allowed) source.value = 'file';
-    var useUrl = external && source.value === 'url', file = $one('[name="ag_file"]', form);
+    var useUrl = linkOnly || (external && source.value === 'url'), file = $one('[name="ag_file"]', form);
     options.hidden = !external;
-    $one('[data-ag-external-url]', form).hidden = !useUrl;
-    url.disabled = !useUrl; url.required = useUrl;
+    $one('[data-ag-external-url]', form).hidden = !external || !useUrl;
+    url.disabled = !external || !useUrl; url.required = external && useUrl;
+    var remote = $one('[name="ag_remote_url"]', form);
+    if (remote) {remote.disabled = !linkOnly; remote.required = linkOnly; $one('[data-ag-url-source]', form).hidden = !linkOnly;}
     source.disabled = !external;
     file.disabled = useUrl; file.required = !useUrl;
     if (file.closest('.ag-field')) file.closest('.ag-field').hidden = useUrl;
@@ -61,7 +64,10 @@
     if (album) album.disabled = external;
   }
   function initProviderForms(root) {
-    $all('[data-ag-storage-provider]', root).forEach(function (select) { syncProviderForm(select.form); });
+    $all('[data-ag-storage-provider]', root).forEach(function (select) {
+      if (select.closest('.ag-upload') && new URL(location.href).searchParams.get('tab') === 'remote' && $one('option[value="url"]',select)) select.value='url';
+      syncProviderForm(select.form);
+    });
   }
   document.addEventListener('change', function (event) {
     if (event.target.matches('[data-ag-storage-provider], [data-ag-external-source]')) syncProviderForm(event.target.form);
@@ -78,7 +84,8 @@
     var image=document.createElement('img');image.className='ag-thumb';image.src=data.thumb || data.url_full;image.alt=data.title || 'Загруженное изображение';link.appendChild(image);
     var title=document.createElement('p');title.textContent=data.title || 'Изображение загружено';
     var copy=document.createElement('button');copy.type='button';copy.className='button ag-copy-bbcode';copy.textContent='Copy BBCode';copy.setAttribute('data-bbcode',data.bbcode || '[img]'+data.url_full+'[/img]');
-    card.append(link,title,copy);result.prepend(card);
+    var badge=document.createElement('span');badge.className='ag-badge ag-source';badge.textContent=data.source_label || (data.provider==='imgbb'?'ImgBB':(data.provider && data.provider!=='local'?'URL':'Local'));
+    card.append(link,title,badge,copy);result.prepend(card);
   }
 
   function renderStorage(storage) {
@@ -158,7 +165,22 @@
         setTimeout(function () {
           target.textContent = labelDefault;
         }, 1500);
-      });
+      }).catch(function () { target.textContent='Не удалось скопировать'; });
+    }
+  });
+
+  document.addEventListener('click', function(event) {
+    var button=event.target.closest && event.target.closest('[data-ag-select-editor]');
+    if(!button) return;
+    var code=button.getAttribute('data-bbcode') || '', editor=null;
+    try { if(window.opener && !window.opener.closed && window.opener.location.origin===location.origin) editor=window.opener.MyBBEditor; } catch(e) {}
+    var result=$one('[data-ag-editor-result]',button.parentElement);
+    if(editor && (typeof editor.insertText==='function' || typeof editor.insert==='function')) {
+      if(typeof editor.insertText==='function') editor.insertText(code); else editor.insert(code);
+      window.opener.focus();if(result) result.textContent='Изображение вставлено в редактор.';
+    } else {
+      copyText(code).then(function(){if(result) result.textContent='BBCode выбран и скопирован. Вставьте его в редактор.';})
+        .catch(function(){if(result) result.textContent='Не удалось скопировать. Разрешите доступ к буферу обмена.';});
     }
   });
 
@@ -292,6 +314,7 @@
     title.className = 'ag-picker-card-title';
     title.textContent = item.title || ('#' + item.id);
     body.appendChild(title);
+    var badge=document.createElement('span');badge.className='ag-badge ag-source';badge.textContent=item.source_label || (item.type==='local'?'Local':(item.provider==='imgbb'?'ImgBB':'URL'));body.appendChild(badge);
 
     var actions = document.createElement('div');
     actions.className = 'ag-picker-card-actions';
@@ -418,6 +441,8 @@
     var token = ++pickerState.dataToken;
     if (pickerState.purpose) params.push('purpose=' + encodeURIComponent(pickerState.purpose));
 
+    var filter = pickerState.modal && $one('[data-ag-source-filter]',pickerState.modal);
+    if (filter && filter.value) params.push('source='+encodeURIComponent(filter.value));
     if (pickerState.page > 1) params.push('page=' + pickerState.page);
     if (pickerState.q) params.push('q=' + encodeURIComponent(pickerState.q));
 
@@ -564,6 +589,8 @@
       }
     });
 
+    var sourceFilter = $one('[data-ag-source-filter]',modal);
+    if(sourceFilter) sourceFilter.addEventListener('change',function(){pickerState.page=1;loadPickerData();});
     var search = $one('[data-ag-picker-search="1"]', modal);
     if (search) {
       search.addEventListener('input', debounce(function () {

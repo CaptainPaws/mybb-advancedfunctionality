@@ -60,3 +60,21 @@ code,pending=request('upload_do',file=PNG,extra=dict(pending=1));assert code==20
 code,rows=request('picker_data',extra=dict(purpose='account_avatar',album_id=-1));assert all(row['id']!=pending['id'] for row in rows),rows
 code,data=request('picker_select',fields=dict(purpose='account_avatar',media_id=pending['id']));assert code==422,(code,data)
 print('ImgBB HTTP passed: multipart upload, metadata, size/format/API failures, SSRF, ownership, private album, avatar original proxy, BBCode, move, deletion and pending moderation; local quota unchanged and no client secrets.')
+
+# The unified selector uses upload_do for URL records too; no provider API or local quota.
+code,linked=request('upload_do',fields=dict(storage_provider='url',ag_remote_url='https://i.postimg.cc/fixture/source.png',ag_title='URL source'))
+assert code==200 and linked['source_label']=='URL',(code,linked)
+code,details=request('inspect',extra=dict(id=linked['id']))
+assert details['media']['provider']=='direct' and details['storage']['used_bytes']==100,details
+for source in ['local','imgbb','url']:
+    code,rows=request('picker_data',extra=dict(album_id=-1,source=source))
+    assert code==200,(code,rows)
+    assert all((r['type']=='local' if source=='local' else (r['provider']=='imgbb' if source=='imgbb' else r['provider'] not in ['imgbb','local'])) for r in rows),rows
+    if source=='url':assert any(r['id']==linked['id'] for r in rows),rows
+    code,foreign=request('picker_data',uid=8,extra=dict(album_id=-1,source=source,uid=7))
+    assert code==200 and all(r['id']!=linked['id'] for r in foreign),foreign
+code,data=request('upload_do',fields=dict(storage_provider='url',my_post_key='invalid',ag_remote_url='https://i.postimg.cc/fixture/source.png'))
+assert code==403,(code,data)
+code,data=request('upload_do',fields=dict(storage_provider='url',purpose='account_avatar',ag_remote_url='https://i.postimg.cc/fixture/source.png'))
+assert code==422,(code,data)
+print('Unified sources HTTP passed: URL dispatch, persisted URL record, owner-only source filters, CSRF, avatar restriction and unchanged local quota.')

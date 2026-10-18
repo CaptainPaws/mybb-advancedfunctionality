@@ -10,6 +10,9 @@ function af_rebuild_and_reload_settings() {
 function af_apf_is_enabled() {return true;}
 function af_apf_validate_secondary_avatar_upload() {}
 function is_member($groups) {global $mybb;return ag_user_in_groups(array_map('intval',explode(',',(string)$groups)));}
+function build_profile_link($name,$uid) {return htmlspecialchars_uni($name);}
+function my_date($format,$time) {return date($format,$time);}
+class postParser {function parse_message($text,$options) {return htmlspecialchars_uni($text);}}
 class ImgBBTestCache {
     function read($key) {return $key==='attachtypes' ? [['mimetype'=>'image/png','avatarfile'=>1,'groups'=>'2,4','maxsize'=>100],['mimetype'=>'image/gif','avatarfile'=>1,'groups'=>'2,4','maxsize'=>100]] : [];}
 }
@@ -45,7 +48,7 @@ if (PHP_SAPI==='cli') {
         $db->write_query('CREATE TABLE test_settinggroups (gid INT AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191),title VARCHAR(191),description TEXT,disporder INT,isdefault INT) ENGINE=InnoDB');
         $db->write_query('CREATE TABLE test_settings (sid INT AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191),title VARCHAR(191),description TEXT,optionscode TEXT,value TEXT,disporder INT,gid INT) ENGINE=InnoDB');
         af_advancedgallery_install();
-        foreach (['enabled'=>'1','can_upload_groups'=>'2,4','autoapprove_groups'=>'2,4','max_storage_mb'=>'1','max_albums'=>'1','imgbb_enabled'=>'1','imgbb_max_mb'=>'1','imgbb_groups'=>'2,4','imgbb_allow_url'=>'1','imgbb_default'=>'1'] as $key=>$value) $db->update_query('settings',['value'=>$value],"name='af_advancedgallery_{$key}'");
+        foreach (['enabled'=>'1','can_upload_groups'=>'2,4','autoapprove_groups'=>'2,4','max_storage_mb'=>'1','max_albums'=>'1','imgbb_enabled'=>'1','imgbb_max_mb'=>'1','imgbb_groups'=>'2,4','imgbb_allow_url'=>'1','imgbb_default'=>'1','remote_enabled'=>'1'] as $key=>$value) $db->update_query('settings',['value'=>$value],"name='af_advancedgallery_{$key}'");
         $db->insert_query('af_gallery_provider_secrets',['provider'=>'imgbb','api_key'=>IMGBB_TEST_KEY]);
         $db->write_query("INSERT INTO test_af_gallery_media (uid_owner,type,status,filesize,created_at,updated_at,description,embed_html) VALUES (7,'local','approved',100,1,1,'unchanged','')");
         $original=$db->fetch_array($db->simple_select('af_gallery_media','*','id=1'));
@@ -87,6 +90,7 @@ if (isset($_GET['pending'])) $mybb->settings['af_advancedgallery_autoapprove_gro
 try {
     switch ($_GET['action']??'page') {
         case 'page': header('Content-Type: text/html; charset=utf-8');echo '<!doctype html><meta charset="utf-8">'.ag_storage_widget().ag_render_upload().'<script src="gallery.php?action=js"></script>';break;
+        case 'view':header('Content-Type: text/html; charset=utf-8');echo '<!doctype html><meta charset="utf-8">'.ag_storage_widget().ag_render_view().'<script src="gallery.php?action=js"></script>';break;
         case 'js':header('Content-Type: application/javascript');readfile(AF_ADDONS.'advancedgallery/assets/advancedgallery.js');break;
         case 'upload_do':ag_handle_upload();break;
         case 'picker':ag_render_picker_modal();break;

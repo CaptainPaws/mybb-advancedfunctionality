@@ -732,3 +732,9 @@ body:not(.atf-active) .af-advancedgallery {
 .ag-upload-form [hidden] { display: none; }
 .ag-upload-form [data-ag-external-options] { max-width: 100%; }
 .ag-upload-form [data-ag-external-options] input { max-width: 100%; box-sizing: border-box; }
+
+/* Source controls share the gallery component palette. */
+.ag-source { display:inline-block; margin-inline-end:.4em; font-size:.75em; white-space:nowrap; }
+.ag-source-filter { display:flex; align-items:center; gap:.5em; }
+.ag-source-filter select, [data-ag-storage-provider] { width:auto; max-width:100%; }
+[data-ag-url-source][hidden] { display:none !important; }
