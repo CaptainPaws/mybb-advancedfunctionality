@@ -41,6 +41,67 @@
     else document.documentElement.classList.remove(cls);
   }
 
+  function renderStorage(storage) {
+    if (!storage) return;
+    var mb = function (n) { return (Number(n) / 1048576).toFixed(2); };
+    $all('[data-ag-storage]').forEach(function (root) {
+      $one('[data-ag-storage-used]', root).textContent = 'Использовано: ' + mb(storage.used_bytes) + ' МБ' +
+        (storage.limit_bytes > 0 ? ' из ' + mb(storage.limit_bytes) + ' МБ' : ' · Без ограничений');
+      var progress = $one('[data-ag-storage-progress]', root), available = $one('[data-ag-storage-available]', root);
+      progress.hidden = available.hidden = !(storage.limit_bytes > 0);
+      progress.value = storage.percent || 0;
+      available.textContent = 'Доступно: ' + mb(storage.available_bytes) + ' МБ';
+      $one('[data-ag-storage-warning]', root).hidden = !storage.full;
+    });
+  }
+
+  function updateStorage(storage) {
+    if (!$one('[data-ag-storage]')) return;
+    if (storage) { renderStorage(storage); return; }
+    fetch('gallery.php?action=storage_usage', {credentials:'same-origin', cache:'no-store'})
+      .then(function (r) { return r.json(); }).then(function (data) { if (data.ok) renderStorage(data.storage); })
+      .catch(function () {});
+  }
+
+  // Page forms retain their regular POST fallback when JavaScript is unavailable.
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || !form.matches || !$one('[data-ag-storage]') || form.closest('.ag-picker')) return;
+    var url = new URL(form.getAttribute('action') || location.href, location.href);
+    var action = url.searchParams.get('action');
+    if (url.origin !== location.origin || !/\/gallery\.php$/.test(url.pathname) ||
+        ['upload_do','delete','bulk_do'].indexOf(action) === -1) return;
+    if (action === 'bulk_do' && new FormData(form).get('bulk_action') !== 'delete') return;
+    event.preventDefault();
+    if (form.getAttribute('data-ag-busy') === '1') return;
+    form.setAttribute('data-ag-busy', '1');
+    var fd = new FormData(form); fd.set('ajax', '1');
+    var status = $one('[data-ag-storage-result]');
+    status.textContent = 'Выполняется…';
+    fetch(url.href, {method:'POST', body:fd, credentials:'same-origin', headers:{'X-Requested-With':'XMLHttpRequest'}})
+      .then(function (r) { return r.text().then(function (body) {
+        var data;
+        try { data = JSON.parse(body); } catch (e) { throw new Error('Сервер не подтвердил операцию. Проверьте ограничения файла и обновите страницу перед повторной попыткой.'); }
+        if (data.storage) renderStorage(data.storage);
+        if (!r.ok || !data.ok) throw new Error(data.error || 'Операция не выполнена.');
+        return data;
+      }); })
+      .then(function (data) {
+        updateStorage(data.storage);
+        status.textContent = action === 'upload_do' ? 'Изображение загружено.' : 'Удаление завершено.';
+        if (action === 'upload_do') form.reset();
+        if (action === 'delete') {
+          var view = form.closest('.ag-view');
+          if (view) view.remove(); else form.remove();
+        }
+        if (action === 'bulk_do') {
+          // Retained files can be skipped by the server; do not guess which rows were removed.
+          status.textContent = 'Удалено файлов: ' + data.affected + '. Обновите список для просмотра оставшихся изображений.';
+        }
+      }).catch(function (error) { status.textContent = error.message; })
+      .finally(function () { form.removeAttribute('data-ag-busy'); });
+  });
+
   /* -------------------- 1) Copy BBCode button -------------------- */
 
   document.addEventListener('click', function (event) {
@@ -379,6 +440,7 @@
             return;
         }
 
+        updateStorage(data.storage);
         if (pickerState.purpose && data.album_id && ['account_avatar','character_avatar'].indexOf(pickerState.purpose)===-1) {
           pickerState.albumId = Number(data.album_id);
           pickerState.modal.setAttribute('data-initial-album', String(data.album_id));

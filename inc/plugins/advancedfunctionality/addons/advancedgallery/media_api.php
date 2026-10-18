@@ -217,12 +217,14 @@ function ag_picker_initial_album(int $uid, string $purpose): int
 /** Optional total owner storage quota; ordinary/system/retained files all count. */
 function ag_enforce_storage_limit(int $uid, int $additionalBytes): void
 {
-    global $db;
-    $limitMb = (int)af_ag_get_setting('max_storage_mb', 0);
-    if ($limitMb <= 0) return;
+    if (ag_storage_exempt($uid) || (float)af_ag_get_setting('max_storage_mb', 0) <= 0) return;
     ag_lock_owner_upload($uid);
-    $used = (int)$db->fetch_field($db->simple_select('af_gallery_media', 'SUM(filesize) AS used', "uid_owner='{$uid}'"), 'used');
-    if ($used + max(0, $additionalBytes) > $limitMb * 1024 * 1024) error('Gallery storage limit reached.');
+    $usage = ag_storage_usage($uid);
+    if ($usage['used_bytes'] + max(0, $additionalBytes) > $usage['limit_bytes']) {
+        $message = 'Недостаточно места в Gallery. Удалите ненужные локальные файлы или обратитесь к администратору.';
+        if (ag_is_ajax_request()) ag_json_response(['ok'=>false, 'error'=>$message, 'storage'=>$usage], 422);
+        error($message);
+    }
 }
 
 /** Preserve private system media browsing, without changing direct file delivery. */
@@ -238,12 +240,11 @@ function ag_can_browse_media(array $media): bool
 
 function ag_ensure_storage_setting(): void
 {
-    global $db;
-    $existing = $db->simple_select('settings', 'sid', "name='af_advancedgallery_max_storage_mb'", ['limit' => 1]);
-    if ($db->fetch_field($existing, 'sid')) return;
     $gid = af_ag_ensure_group('af_advancedgallery', 'AF: Галерея', 'Настройки галереи изображений.');
-    af_ag_ensure_setting($gid, 'af_advancedgallery_max_storage_mb', 'Общий объём Gallery (МБ)',
-        'Все собственные файлы, включая служебные альбомы и сохранённые изображения. 0 = без ограничения.', 'text', '0', 19);
+    af_ag_ensure_setting($gid, 'af_advancedgallery_max_storage_mb', 'Квота локального хранилища на пользователя (МБ)',
+        'Суммарный объём локальных оригиналов пользователя во всех альбомах и статусах. Внешние изображения не учитываются. 0 = без ограничения.', 'numeric', '0', 19);
+    af_ag_ensure_setting($gid, 'af_advancedgallery_storage_exempt_staff', 'Исключить администраторов и модераторов из пользовательских квот',
+        'Администраторы MyBB, модераторы MyBB и группы модерации Gallery освобождены от объёмной квоты. Максимальный размер одного файла действует для всех.', 'yesno', '1', 20);
 }
 
 /** Validate the destination before saving bytes; create a system album only after success. */

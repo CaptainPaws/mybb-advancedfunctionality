@@ -17,6 +17,7 @@ define('AF_AG_MARK_DONE', '<!--af_advancedgallery_done-->');
 define('AF_AG_ASSETS_BLACKLIST_DEFAULT', "index.php\nusercp.php\nuserlist.php\nsearch.php\nmisc.php\nkb.php\nforumdisplay.php\ncharactersheets.php\nshop.php");
 
 require_once __DIR__ . '/media_api.php';
+require_once __DIR__ . '/storage.php';
 require_once __DIR__ . '/avatar.php';
 
 /* -------------------- INFO -------------------- */
@@ -231,6 +232,7 @@ function af_ag_ensure_setting(int $gid, string $name, string $title, string $des
     ];
 
     if ($sid) {
+        unset($row['value']); // Refresh metadata without resetting the administrator's value.
         $db->update_query('settings', $row, "sid={$sid}");
     } else {
         $db->insert_query('settings', $row);
@@ -242,6 +244,9 @@ function af_advancedgallery_install(): bool
 {
     global $db, $lang, $mybb;
 
+    if (function_exists('af_sync_addon_languages')) {
+        af_sync_addon_languages(require __DIR__.'/manifest.php');
+    }
     af_advancedgallery_load_lang(true);
 
     if (!$db->table_exists('af_gallery_media')) {
@@ -373,8 +378,8 @@ SQL;
     af_ag_ensure_setting(
         $gid,
         'af_advancedgallery_upload_max_mb',
-        $lang->af_advancedgallery_upload_max_mb ?? 'Макс. размер файла (МБ)',
-        $lang->af_advancedgallery_upload_max_mb_desc ?? 'Ограничение на размер файла загрузки.',
+        $lang->af_advancedgallery_upload_max_mb ?? 'Максимальный размер одного локального файла (МБ)',
+        $lang->af_advancedgallery_upload_max_mb_desc ?? 'Максимальный размер одного локального файла. Действует также для администраторов и модераторов.',
         'numeric',
         '10',
         3
@@ -414,7 +419,7 @@ SQL;
         $gid,
         'af_advancedgallery_can_upload_groups',
         $lang->af_advancedgallery_can_upload_groups ?? 'Группы с правом загрузки',
-        $lang->af_advancedgallery_can_upload_groups_desc ?? 'ID групп через запятую.',
+        $lang->af_advancedgallery_can_upload_groups_desc ?? 'ID групп MyBB, разделённые запятыми. Укажите числовые ID, а не названия групп.',
         'text',
         '4',
         7
@@ -425,7 +430,7 @@ SQL;
         $gid,
         'af_advancedgallery_can_moderate_groups',
         $lang->af_advancedgallery_can_moderate_groups ?? 'Группы с правом модерации',
-        $lang->af_advancedgallery_can_moderate_groups_desc ?? 'ID групп через запятую.',
+        $lang->af_advancedgallery_can_moderate_groups_desc ?? 'ID групп MyBB, разделённые запятыми. Укажите числовые ID, а не названия групп.',
         'text',
         '4',
         8
@@ -435,7 +440,7 @@ SQL;
         $gid,
         'af_advancedgallery_autoapprove_groups',
         $lang->af_advancedgallery_autoapprove_groups ?? 'Группы автопринятия',
-        $lang->af_advancedgallery_autoapprove_groups_desc ?? 'ID групп через запятую.',
+        $lang->af_advancedgallery_autoapprove_groups_desc ?? 'ID групп MyBB, разделённые запятыми. Укажите числовые ID, а не названия групп.',
         'text',
         '4',
         9
@@ -531,13 +536,6 @@ SQL;
         18
     );
 
-    if (function_exists('rebuild_settings')) {
-        rebuild_settings();
-    }
-    if (function_exists('af_rebuild_and_reload_settings')) {
-        af_rebuild_and_reload_settings();
-    }
-
     $uploadRoot = af_ag_resolve_upload_path();
     $galleryDir = $uploadRoot . '/af_gallery';
     if (!is_dir($galleryDir)) {
@@ -554,6 +552,8 @@ SQL;
 
     af_ag_sync_alias(true);
     af_ag_templates_install_or_update();
+    if (function_exists('af_rebuild_and_reload_settings')) af_rebuild_and_reload_settings();
+    elseif (function_exists('rebuild_settings')) rebuild_settings();
 
     return true;
 }
@@ -579,6 +579,8 @@ function af_advancedgallery_uninstall(): bool
         'af_advancedgallery_enabled',
         'af_advancedgallery_items_per_page',
         'af_advancedgallery_upload_max_mb',
+        'af_advancedgallery_max_storage_mb',
+        'af_advancedgallery_storage_exempt_staff',
         'af_advancedgallery_allowed_ext',
         'af_advancedgallery_thumb_w',
         'af_advancedgallery_thumb_h',
@@ -625,42 +627,9 @@ function af_advancedgallery_uninstall(): bool
 
 function af_advancedgallery_activate(): bool
 {
-    global $lang;
-
-    // На существующих установках тоже добавим поле is_default
-    ag_ensure_default_album_schema();
-    ag_ensure_system_album_schema();
-    ag_ensure_storage_setting();
-
-    af_advancedgallery_load_lang(true);
-
-    $gid = af_ag_ensure_group(
-        'af_advancedgallery',
-        $lang->af_advancedgallery_group ?? 'AF: Галерея',
-        $lang->af_advancedgallery_group_desc ?? 'Настройки аддона AdvancedGallery.'
-    );
-
-    af_ag_ensure_setting(
-        $gid,
-        'af_gallery_assets_blacklist',
-        $lang->af_gallery_assets_blacklist ?? 'Assets blacklist (страницы без JS/CSS)',
-        $lang->af_gallery_assets_blacklist_desc ?? 'По одной строке: script.php или script.php?action=name. На совпавших страницах AdvancedGallery JS/CSS не подключаются.',
-        'textarea',
-        AF_AG_ASSETS_BLACKLIST_DEFAULT,
-        18
-    );
-
-    if (function_exists('rebuild_settings')) {
-        rebuild_settings();
-    }
-    if (function_exists('af_rebuild_and_reload_settings')) {
-        af_rebuild_and_reload_settings();
-    }
-
-    af_ag_templates_install_or_update();
-    return true;
+    // Install is additive and preserves values; also restores any missing settings.
+    return af_advancedgallery_install();
 }
-
 
 function af_advancedgallery_upgrade(): bool
 {
@@ -1011,6 +980,12 @@ function af_advancedgallery_render_gallery(): void
             ag_handle_picker_select();
             return;
 
+        case 'storage_usage':
+            header('Cache-Control: private, no-store');
+            if ((int)$mybb->user['uid'] <= 0) error_no_permission();
+            ag_json_response(['ok'=>true, 'storage'=>ag_storage_usage((int)$mybb->user['uid'])]);
+            return;
+
         case 'picker_data':
             ag_handle_picker_data();
             return;
@@ -1037,6 +1012,7 @@ function af_advancedgallery_render_gallery(): void
             break;
     }
 
+    $ag_content = ag_storage_widget().$ag_content;
     eval('$page = "' . $templates->get('advancedgallery_page') . '";');
     output_page($page);
 }
@@ -2093,22 +2069,22 @@ function ag_handle_upload(): void
     verify_post_check($mybb->get_input('my_post_key'));
 
     $purpose = ag_request_appearance_purpose();
-    if ($purpose !== '' && !ag_system_album_schema_available()) error('Activate/upgrade AdvancedGallery first.');
+    if ($purpose !== '' && !ag_system_album_schema_available()) ag_upload_error('Activate/upgrade AdvancedGallery first.');
 
     if (empty($_FILES['ag_file'])) {
-        error('No file uploaded.');
+        ag_upload_error('No file uploaded.');
     }
 
     $file = $_FILES['ag_file'];
     if (!empty($file['error'])) {
-        error('Upload failed.');
+        ag_upload_error('Upload failed.');
     }
 
     $maxMb = (int)($mybb->settings['af_advancedgallery_upload_max_mb'] ?? 10);
     if ($maxMb < 1) { $maxMb = 10; }
     $maxBytes = $maxMb * 1024 * 1024;
     if ((int)$file['size'] > $maxBytes) {
-        error('File is too large.');
+        ag_upload_error('Максимальный размер одного локального файла: '.$maxMb.' МБ.');
     }
 
     $allowedExts = array_filter(array_map('trim', explode(',', (string)($mybb->settings['af_advancedgallery_allowed_ext'] ?? ''))));
@@ -2117,7 +2093,7 @@ function ag_handle_upload(): void
     $originalName = (string)$file['name'];
     $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     if ($ext === '' || !in_array($ext, $allowedExts, true)) {
-        error('File extension not allowed.');
+        ag_upload_error('File extension not allowed.');
     }
 
     $finfo = new finfo(FILEINFO_MIME_TYPE);
@@ -2125,12 +2101,12 @@ function ag_handle_upload(): void
 
     $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if ($mime === '' || !in_array($mime, $allowedMimes, true)) {
-        error('Invalid file type.');
+        ag_upload_error('Invalid file type.');
     }
 
     $sizeInfo = @getimagesize($file['tmp_name']);
     if (!$sizeInfo) {
-        error('Invalid image file.');
+        ag_upload_error('Invalid image file.');
     }
 
     ag_lock_owner_upload((int)$mybb->user['uid']);
@@ -2151,7 +2127,7 @@ function ag_handle_upload(): void
     $destPath = $subdir . '/' . $filename;
 
     if (!move_uploaded_file($file['tmp_name'], $destPath)) {
-        error('Failed to save file.');
+        ag_upload_error('Failed to save file.');
     }
 
     $thumbW = (int)($mybb->settings['af_advancedgallery_thumb_w'] ?? 320);
@@ -2226,6 +2202,7 @@ function ag_handle_upload(): void
 
         ag_json_response([
             'ok' => true,
+            'storage' => ag_storage_usage($uid),
             'id' => $newId,
             'media_id' => $newId,
             'album_id' => $albumId,
@@ -2538,6 +2515,7 @@ function ag_handle_delete(): void
 
     if (!ag_delete_unretained_media($id)) error('Это изображение сохранено для оформления и не может быть удалено.');
 
+    if (ag_is_ajax_request()) ag_json_response(['ok'=>true, 'storage'=>ag_storage_usage((int)$mybb->user['uid'])]);
     redirect('gallery.php', 'Deleted.');
 }
 
@@ -2697,7 +2675,7 @@ function ag_handle_bulk_do(): void
     }
 
     if (ag_is_ajax_request()) {
-        ag_json_response(['ok' => true, 'affected' => $affected]);
+        ag_json_response(['ok' => true, 'affected' => $affected, 'storage'=>ag_storage_usage($uid)]);
     }
 
     // fallback — назад

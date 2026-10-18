@@ -54,6 +54,7 @@ class GalleryTestDB {
         return $this->write_query('UPDATE '.TABLE_PREFIX.$table.' SET '.implode(',',$values).' WHERE '.$where);
     }
     public function delete_query($table,$where) {return $this->write_query('DELETE FROM '.TABLE_PREFIX.$table.' WHERE '.$where);}
+    public function drop_table($table) {return $this->write_query('DROP TABLE IF EXISTS '.TABLE_PREFIX.$table);}
     public function insert_id() {return $this->connection->insert_id;}
     public function table_exists($table) {return (bool)$this->fetch_array($this->write_query("SHOW TABLES LIKE '".TABLE_PREFIX.$table."'"));}
     public function field_exists($field,$table) {return (bool)$this->fetch_array($this->write_query('SHOW COLUMNS FROM '.TABLE_PREFIX.$table." LIKE '{$field}'"));}
@@ -97,6 +98,7 @@ if(PHP_SAPI==='cli-server') {
             case 'fixture_js':header('Content-Type: application/javascript');readfile(AF_ADDONS.'advancedgallery/assets/advancedgallery.js');break;
             case 'picker': ag_render_picker_modal();break;
             case 'picker_data':ag_handle_picker_data();break;
+            case 'storage_usage':ag_json_response(['ok'=>true,'storage'=>ag_storage_usage((int)$mybb->user['uid'])]);break;
             case 'picker_select':ag_handle_picker_select();break;
             case 'upload_do':ag_handle_upload();break;
             case 'remote_add_do':ag_handle_remote_add_do();break;
@@ -111,6 +113,7 @@ if(PHP_SAPI==='cli-server') {
     catch(GalleryFixtureError $e){http_response_code($e->getCode()?:422);header('Content-Type: application/json');echo json_encode(['error'=>$e->getMessage()]);}
     exit;
 }
+if(($argv[1]??'')==='--storage') {require __DIR__.'/gallery_storage_integration.php';exit;}
 if(($argv[1]??'')==='--race') {echo ag_get_or_create_system_album(7,'appearance_avatars');exit;}
 if(($argv[1]??'')==='--retain-race') {echo ag_retain_owned_media(7,(int)$argv[2]) ? 'retained' : 'refused';exit;}
 if(($argv[1]??'')==='--delete-race') {echo ag_delete_unretained_media((int)$argv[2]) ? 'deleted' : 'kept';exit;}

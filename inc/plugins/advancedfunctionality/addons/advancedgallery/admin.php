@@ -3,6 +3,7 @@
  * AF Addon: AdvancedGallery — Admin controller
  */
 if (!defined('IN_MYBB')) { die('No direct access'); }
+require_once __DIR__.'/advancedgallery.php';
 if (!defined('IN_ADMINCP')) { define('IN_ADMINCP', 1); }
 
 class AF_Admin_Advancedgallery
@@ -121,6 +122,7 @@ class AF_Admin_Advancedgallery
         $html .= '<a class="button button-primary" href="'.htmlspecialchars($settingsUrl).'">Open settings</a>';
         $html .= '</div>';
 
+        $html .= ag_storage_admin_widget();
         $html .= '<h3 style="margin:24px 0 8px 0;">Pending list</h3>';
         $html .= '<form action="index.php?module=advancedfunctionality&af_view=advancedgallery&action=bulk_approve" method="post">';
         $html .= '<input type="hidden" name="my_post_key" value="'.$mybb->post_code.'" />';
