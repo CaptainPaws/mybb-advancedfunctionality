@@ -4,7 +4,7 @@ if (!defined('IN_MYBB')) die('No direct access');
 
 function ag_system_album_purposes(): array
 {
-    return [
+    $purposes = [
         'signature_background' => 'Фоны подписей',
         'signature_images' => 'Изображения подписей',
         'account_avatar' => 'Аватары аккаунта',
@@ -15,6 +15,8 @@ function ag_system_album_purposes(): array
         'appearance_sheet_bg' => 'Фоны листов персонажей',
         'appearance_theme_bg' => 'Фоны тем',
     ];
+    foreach (ag_storage_providers() as $id=>$provider) if ($provider instanceof AG_ExternalStorageProvider) $purposes['provider_'.$id]=$provider->label();
+    return $purposes;
 }
 
 /** Additive MySQL migration, only invoked by install/activate/upgrade. */
@@ -148,7 +150,7 @@ function ag_retain_owned_media(int $uid, int $mediaId): bool
     global $db, $mybb;
     if (!ag_can_view() || !ag_system_album_schema_available() || (int)($mybb->user['uid'] ?? 0) !== $uid) return false;
     $media = ag_get_owned_media($uid, $mediaId);
-    if (!$media || $media['status'] !== 'approved' || $media['type'] !== 'local'
+    if (!$media || $media['status'] !== 'approved' || ($media['type'] !== 'local' && !ag_managed_external_image($media))
         || !in_array($media['mime'], ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true)
         || ag_resolve_media_url($mediaId, 'full') === '') return false;
     // Conditional update avoids retaining a row concurrently rejected by moderation.
@@ -188,7 +190,7 @@ function ag_request_appearance_purpose(): string
 {
     global $mybb;
     $purpose = trim((string)$mybb->get_input('purpose'));
-    if ($purpose !== '' && !isset(ag_system_album_purposes()[$purpose])) error('Unknown Gallery purpose.');
+    if ($purpose !== '' && (str_starts_with($purpose,'provider_') || !isset(ag_system_album_purposes()[$purpose]))) error('Unknown Gallery purpose.');
     return $purpose;
 }
 
@@ -196,7 +198,7 @@ function ag_request_appearance_purpose(): string
 function ag_avatar_picker_album_ids(int $uid): array
 {
     $ids = [];
-    foreach (['appearance_avatars', 'account_avatar'] as $key) {
+    foreach (array_merge(['appearance_avatars', 'account_avatar'],array_map(static fn($id)=>'provider_'.$id,array_keys(ag_external_avatar_providers()))) as $key) {
         $album = ag_get_system_album($uid, $key);
         if ($album) $ids[] = (int)$album['id'];
     }
@@ -261,7 +263,8 @@ function ag_prepare_upload_album(int $uid, string $purpose): int
     }
     $id = $mybb->get_input('album_id', MyBB::INPUT_INT);
     $album = $id > 0 ? ag_get_album($id) : null;
-    return $album && (int)$album['uid_owner'] === $uid ? $id : ag_get_default_album_id($uid, true);
+    if ($album && (int)$album['uid_owner']===$uid && str_starts_with((string)($album['system_key'] ?? ''),'provider_')) ag_upload_error('Этот альбом предназначен только для файлов соответствующего внешнего хостинга.');
+    return $album && (int)$album['uid_owner'] === $uid && !str_starts_with((string)($album['system_key'] ?? ''),'provider_') ? $id : ag_get_default_album_id($uid, true);
 }
 
 /** Serialize deletion against retention's UPDATE; no successful selection can lose its file. */
@@ -282,6 +285,7 @@ function ag_delete_unretained_media(int $mediaId): bool
         $db->delete_query('af_gallery_album_media', "media_id='{$mediaId}'");
         $db->update_query('af_gallery_albums', ['cover_media_id' => 0, 'updated_at' => TIME_NOW], "cover_media_id='{$mediaId}'");
         if ($affected) $db->update_query('af_gallery_albums', ['updated_at' => TIME_NOW], 'id IN ('.implode(',', $affected).')');
+        if ($db->table_exists('af_gallery_external_media')) $db->delete_query('af_gallery_external_media', "media_id='{$mediaId}'");
         $db->delete_query('af_gallery_media', "id='{$mediaId}'");
         $db->write_query('COMMIT');
     } catch (Throwable $e) {

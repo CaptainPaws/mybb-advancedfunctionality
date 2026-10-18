@@ -8,7 +8,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
 define('AF_AG_ID', 'advancedgallery');
-define('AF_AG_VER', '1.1.1');
+define('AF_AG_VER', '1.2.0');
 define('AF_AG_BASE', AF_ADDONS . AF_AG_ID . '/');
 define('AF_AG_ASSETS', AF_AG_BASE . 'assets/');
 define('AF_AG_TPL_FILE', AF_AG_BASE . 'templates/advancedgallery.html');
@@ -16,6 +16,7 @@ define('AF_AG_ALIAS_SIGNATURE', 'AF_PAGE_ALIAS: advancedgallery');
 define('AF_AG_MARK_DONE', '<!--af_advancedgallery_done-->');
 define('AF_AG_ASSETS_BLACKLIST_DEFAULT', "index.php\nusercp.php\nuserlist.php\nsearch.php\nmisc.php\nkb.php\nforumdisplay.php\ncharactersheets.php\nshop.php");
 
+require_once __DIR__ . '/providers.php';
 require_once __DIR__ . '/media_api.php';
 require_once __DIR__ . '/storage.php';
 require_once __DIR__ . '/avatar.php';
@@ -549,6 +550,8 @@ SQL;
     ag_ensure_default_album_schema();
     ag_ensure_system_album_schema();
     ag_ensure_storage_setting();
+    ag_ensure_provider_schema();
+    ag_ensure_provider_settings();
 
     af_ag_sync_alias(true);
     af_ag_templates_install_or_update();
@@ -562,6 +565,10 @@ function af_advancedgallery_uninstall(): bool
 {
     global $db;
 
+    foreach (['af_gallery_external_media','af_gallery_provider_secrets'] as $table) {
+        if ($db->table_exists($table)) $db->drop_table($table);
+    }
+    $db->delete_query('settings', "name IN ('af_advancedgallery_imgbb_enabled','af_advancedgallery_imgbb_max_mb','af_advancedgallery_imgbb_groups','af_advancedgallery_imgbb_allow_url','af_advancedgallery_imgbb_default')");
     if ($db->table_exists('af_gallery_media')) {
         $db->drop_table('af_gallery_media');
     }
@@ -599,7 +606,7 @@ function af_advancedgallery_uninstall(): bool
         'af_advancedgallery_remote_max_url_len',
         'af_gallery_assets_blacklist'
     )");
-    $db->delete_query('settinggroups', "name='af_advancedgallery'");
+    $db->delete_query('settinggroups', "name IN ('af_advancedgallery','af_advancedgallery_external')");
 
     $db->delete_query('templates', "title IN (
         'advancedgallery_page',
@@ -760,7 +767,7 @@ function af_advancedgallery_pre_output(string &$page = ''): void
         $cfg = [
             'pickerUrl' => $bburl . '/gallery.php?action=picker',
             'dataUrl'   => $bburl . '/gallery.php?action=picker_data',
-            'purposes' => array_keys(ag_system_album_purposes()),
+            'purposes' => array_values(array_filter(array_keys(ag_system_album_purposes()),static fn($key)=>!str_starts_with($key,'provider_'))),
         ];
 
         $cfgTag = '<script>window.AF_GalleryPickerConfig='
@@ -976,6 +983,10 @@ function af_advancedgallery_render_gallery(): void
 
         case 'picker':
             ag_render_picker_modal();
+            return;
+
+        case 'avatar_original':
+            ag_handle_avatar_original();
             return;
 
         case 'picker_select':
@@ -1615,6 +1626,7 @@ function ag_handle_album_add_media(): void
         error_no_permission();
     }
 
+    if (!ag_provider_album_accepts($album,$media)) error('В этот служебный альбом можно помещать только свои изображения соответствующего хостинга.');
     ag_enforce_media_limits($albumId);
 
     // MOVE semantics: медиа может быть только в одном альбоме владельца
@@ -1847,7 +1859,7 @@ function ag_render_view(): string
     if (ag_can_delete_media($media)) {
         $ag_delete_form = '<form action="gallery.php?action=delete&id='.(int)$media['id'].'" method="post" class="ag-inline-form">'
             .'<input type="hidden" name="my_post_key" value="'.$mybb->post_code.'" />'
-            .'<button type="submit" class="button">Delete</button>'
+            .'<button type="submit" class="button">'.($media['type']==='remote'?'Удалить из моей галереи':'Delete').'</button>'
             .'</form>';
     }
 
@@ -2031,6 +2043,7 @@ function ag_render_upload(): string
     $uid = (int)$mybb->user['uid'];
     ag_get_default_album_id($uid, true); // гарантируем дефолтный альбом
 
+    $ag_provider_controls = ag_provider_upload_controls();
     $ag_upload_do_url = 'gallery.php?action=upload_do';
     $ag_remote_do_url = 'gallery.php?action=remote_add_do';
     $ag_my_post_key = $mybb->post_code;
@@ -2060,7 +2073,7 @@ function ag_render_remote_add(): string
     return ag_render_upload();
 }
 
-function ag_handle_upload(): void
+function ag_handle_local_upload(): void
 {
     global $db, $mybb;
 
@@ -2297,7 +2310,7 @@ function ag_handle_remote_add_do(): void
         $album = ag_get_album($albumIdInput);
 
         // разрешаем только свой альбом
-        if ($album && (int)$album['uid_owner'] === $uid) {
+        if ($album && (int)$album['uid_owner'] === $uid && !str_starts_with((string)($album['system_key'] ?? ''),'provider_')) {
             $albumId = $albumIdInput;
         }
 
@@ -2359,7 +2372,9 @@ function ag_render_picker_modal(): void
     // ---- кнопки альбомов (фильтр) ----
     $albumsHtml = '<button type="button" class="ag-picker-album" data-album-id="-1">Все мои изображения</button>';
     $initialAlbumPurpose = in_array($purpose,['account_avatar','character_avatar'],true) ? 'appearance_avatars' : $purpose;
-    if ($ag_picker_initial_album === -3) $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="-3">Аватары аккаунта и оформления</button>';
+    $avatarGroupLabel='Аватары аккаунта и оформления';
+    foreach (ag_external_avatar_providers() as $providerId=>$provider) if (ag_get_system_album($uid,'provider_'.$providerId)) $avatarGroupLabel.=' · '.$provider->label();
+    if ($ag_picker_initial_album === -3) $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="-3">'.htmlspecialchars_uni($avatarGroupLabel).'</button>';
     elseif ($initialAlbumPurpose !== '' && $ag_picker_initial_album !== -1) $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="'.$ag_picker_initial_album.'">'.htmlspecialchars_uni(ag_system_album_purposes()[$initialAlbumPurpose]).'</button>';
 
     // Default как album_id=0 (виртуальный, но обработчик picker_data переведёт в реальный defaultId)
@@ -2386,6 +2401,7 @@ function ag_render_picker_modal(): void
     }
 
     // ---- блок загрузки прямо в модалке ----
+    $ag_picker_provider_controls = ag_provider_upload_controls();
     $ag_picker_upload_do_url = 'gallery.php?action=upload_do';
     $ag_picker_remote_do_url = 'gallery.php?action=remote_add_do';
     $ag_picker_my_post_key = $mybb->post_code;
@@ -2420,7 +2436,7 @@ function ag_handle_picker_data(): void
     $uid = (int)$mybb->user['uid'];
     $where = "m.uid_owner='{$uid}'";
 
-    if ($purpose !== '') $where .= " AND m.status='approved' AND m.type='local' AND m.mime IN ('image/jpeg','image/png','image/gif','image/webp')";
+    if ($purpose !== '') $where .= " AND m.status='approved' AND (m.type='local' OR (m.type='remote' AND m.provider IN (".ag_external_provider_sql(in_array($purpose,['account_avatar','character_avatar'],true))."))) AND m.mime IN ('image/jpeg','image/png','image/gif','image/webp')";
 
     if (in_array($purpose,['account_avatar','character_avatar'],true)) {
         $mimes=ag_avatar_allowed_mimes($purpose);
@@ -2517,8 +2533,8 @@ function ag_handle_delete(): void
 
     if (!ag_delete_unretained_media($id)) error('Это изображение сохранено для оформления и не может быть удалено.');
 
-    if (ag_is_ajax_request()) ag_json_response(['ok'=>true, 'storage'=>ag_storage_usage((int)$mybb->user['uid'])]);
-    redirect('gallery.php', 'Deleted.');
+    if (ag_is_ajax_request()) ag_json_response(['ok'=>true, 'message'=>$media['type']==='remote'?'Запись удалена из Gallery. Удаление с внешнего хостинга не выполнялось.':'Файл удалён.', 'storage'=>ag_storage_usage((int)$mybb->user['uid'])]);
+    redirect('gallery.php', $media['type']==='remote'?'Запись удалена из Gallery; удаление на внешнем хостинге не выполнялось.':'Deleted.');
 }
 
 function ag_handle_approve(): void
@@ -2601,6 +2617,7 @@ function ag_handle_bulk_do(): void
         }
 
         ag_enforce_media_limits($targetAlbumId);
+        $targetAlbum = ag_get_album($targetAlbumId);
     }
 
     $affected = 0;
@@ -2635,6 +2652,7 @@ function ag_handle_bulk_do(): void
         }
 
         if ($bulkAction === 'move') {
+            if (!$targetAlbum || !ag_provider_album_accepts($targetAlbum,$media)) continue;
             // перемещать разрешаем только владельцу (или модеру, но это спорно — оставляю строго)
             if (!$isOwner) {
                 continue;
@@ -2945,8 +2963,10 @@ function ag_build_upload_album_field(int $uid, int $preferredAlbumId = 0): strin
     $selDefault = ($selectedId === 0) ? ' selected="selected"' : '';
     $options .= '<option value="0"'.$selDefault.'>'.$defaultLabel.'</option>';
 
+    // Provider albums cannot receive a local/legacy URL upload.
+    $ordinary = ag_system_album_schema_available() ? " AND (system_key IS NULL OR LEFT(system_key,9)<>'provider_')" : '';
     // Пользовательские альбомы (включая дефолтный как обычную опцию — но мы его не дублируем)
-    $q = $db->simple_select('af_gallery_albums', 'id,title', "uid_owner='{$uid}'", [
+    $q = $db->simple_select('af_gallery_albums', 'id,title', "uid_owner='{$uid}'".$ordinary, [
         'order_by'  => 'created_at',
         'order_dir' => 'DESC',
     ]);
@@ -3325,6 +3345,7 @@ function ag_media_is_direct_image(array $media): bool
         return true;
     }
     $provider = (string)($media['provider'] ?? '');
+    if (ag_managed_external_image($media)) return true;
     if (in_array($provider, ['direct', 'imgur', 'giphy', 'discord'], true)) {
         return ag_remote_is_image_url((string)($media['remote_url'] ?? ''));
     }

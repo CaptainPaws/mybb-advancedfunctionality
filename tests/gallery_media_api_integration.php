@@ -20,6 +20,7 @@ class MyBB {
         'af_advancedgallery_max_albums'=>2, 'af_advancedgallery_max_media_per_album'=>200,
         'af_advancedgallery_max_storage_mb'=>0, 'uploadspath'=>'uploads', 'bburl'=>'http://127.0.0.1:8099',
     ];
+    public array $usergroup=[];
     public string $post_code='fixture-key', $request_method='get';
     public function get_input($key, $type=0) {
         $v=$_POST[$key] ?? $_GET[$key] ?? ($type===self::INPUT_ARRAY ? [] : '');
@@ -78,6 +79,7 @@ function check($v,$message) {if(!$v)throw new RuntimeException($message);}
 function count_rows($table,$where='') {global $db;return (int)$db->fetch_field($db->simple_select($table,'COUNT(*) AS n',$where),'n');}
 $db=new GalleryTestDB();$mybb=new MyBB();$lang=new stdClass();$templates=new GalleryFixtureTemplates();
 require AF_ADDONS.'advancedgallery/advancedgallery.php';
+if (defined('AG_TEST_BOOTSTRAP_ONLY')) return;
 
 if(PHP_SAPI==='cli-server') {
     $mybb->request_method=strtolower($_SERVER['REQUEST_METHOD']);
@@ -149,7 +151,7 @@ if(($argv[1]??'')==='--after-http') {
     }
     echo "HTTP persistence/path/thumbnail/retention checks passed.\n";exit;
 }
-foreach(['af_gallery_album_media','af_gallery_albums','af_gallery_media','af_gallery_logs'] as $t)$db->write_query('DROP TABLE IF EXISTS '.TABLE_PREFIX.$t);
+foreach(['af_gallery_external_media','af_gallery_provider_secrets','af_gallery_album_media','af_gallery_albums','af_gallery_media','af_gallery_logs'] as $t)$db->write_query('DROP TABLE IF EXISTS '.TABLE_PREFIX.$t);
 $db->write_query('DROP TABLE IF EXISTS test_settings');$db->write_query('DROP TABLE IF EXISTS test_settinggroups');
 $db->write_query("CREATE TABLE test_settinggroups (gid INT AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191),title VARCHAR(191),description TEXT,disporder INT,isdefault INT) ENGINE=InnoDB");
 $db->write_query("CREATE TABLE test_settings (sid INT AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191),title VARCHAR(191),description TEXT,optionscode TEXT,value TEXT,disporder INT,gid INT) ENGINE=InnoDB");

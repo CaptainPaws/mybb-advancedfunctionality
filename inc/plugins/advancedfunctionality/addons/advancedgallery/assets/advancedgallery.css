@@ -729,3 +729,6 @@ body:not(.atf-active) .af-advancedgallery {
 .ag-storage progress { width: 100%; height: 1rem; accent-color: #5389c7; }
 .ag-storage [data-ag-storage-warning] { color: #b74d32; }
 .ag-storage [hidden] { display: none; }
+.ag-upload-form [hidden] { display: none; }
+.ag-upload-form [data-ag-external-options] { max-width: 100%; }
+.ag-upload-form [data-ag-external-options] input { max-width: 100%; box-sizing: border-box; }

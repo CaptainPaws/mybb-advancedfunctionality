@@ -16,7 +16,7 @@ class StorageTestCache {
     function read($key) {return [2=>[],4=>['cancp'=>1],6=>['issupermod'=>1]];}
 }
 $cache=new StorageTestCache();
-foreach(['af_gallery_album_media','af_gallery_albums','af_gallery_media','af_gallery_logs','templates','settings','settinggroups'] as $table) $db->write_query('DROP TABLE IF EXISTS '.TABLE_PREFIX.$table);
+foreach(['af_gallery_external_media','af_gallery_provider_secrets','af_gallery_album_media','af_gallery_albums','af_gallery_media','af_gallery_logs','templates','settings','settinggroups'] as $table) $db->write_query('DROP TABLE IF EXISTS '.TABLE_PREFIX.$table);
 $db->write_query('CREATE TABLE test_templates (tid INT AUTO_INCREMENT PRIMARY KEY,title VARCHAR(191),template MEDIUMTEXT,sid INT,version VARCHAR(20),dateline INT) ENGINE=InnoDB');
 $db->write_query('CREATE TABLE test_settinggroups (gid INT AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191),title VARCHAR(191),description TEXT,disporder INT,isdefault INT) ENGINE=InnoDB');
 $db->write_query('CREATE TABLE test_settings (sid INT AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191),title VARCHAR(191),description TEXT,optionscode TEXT,value TEXT,disporder INT,gid INT) ENGINE=InnoDB');
@@ -49,13 +49,14 @@ foreach($custom as $key=>$value) {
     $name=str_starts_with($key,'af_')?$key:'af_advancedgallery_'.$key;
     check((string)$mybb->settings[$name]===$value,'Setting reset or runtime stale: '.$name);
 }
+$mybb->request_method='post';
 $_POST=['my_post_key'=>'fixture-key'];
 $_FILES=['ag_file'=>['error'=>0,'size'=>3*1048576+1]];
 foreach([2,4] as $group) {
     $mybb->user['usergroup']=$group;
     try {ag_handle_upload();throw new RuntimeException('Single file limit bypassed');}catch(GalleryFixtureError $e) {check(str_contains($e->getMessage(),'3 МБ'),'Wrong single file limit');}
 }
-$_POST=[];$_FILES=[];$mybb->user['usergroup']=2;
+$_POST=[];$_FILES=[];$mybb->user['usergroup']=2;$mybb->request_method='get';
 check((int)$mybb->settings['af_advancedgallery_thumb_h']===320,'Missing setting not restored');
 check($before===$db->fetch_array($db->simple_select('af_gallery_media','COUNT(*) AS n,SUM(filesize) AS bytes')),'Reactivate changed media');
 check(count_rows('settings',"name='af_advancedgallery_max_storage_mb'")===1,'Duplicate quota setting');

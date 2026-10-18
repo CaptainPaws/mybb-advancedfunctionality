@@ -17,20 +17,26 @@ function ag_avatar_allowed_mimes(string $purpose='account_avatar'): array
     return af_avatar_capabilities($purpose==='character_avatar'?'secondary':'primary')['mimes'];
 }
 
-/** Only an approved, owned local original; never accept a browser-supplied URL/path. */
+/** Only an approved, owned original; URLs are resolved from server-owned records. */
 function ag_avatar_source(int $id,string $purpose='account_avatar'): array
 {
     global $mybb;
     if (!ag_avatar_available($purpose)) throw new RuntimeException('Выбор аватара из галереи недоступен.');
     $uid=(int)$mybb->user['uid'];
     $media=ag_get_owned_media($uid,$id);
-    if (!$media || (int)$media['uid_owner']!==$uid || $media['status']!=='approved' || $media['type']!=='local') {
+    if (!$media || (int)$media['uid_owner']!==$uid || $media['status']!=='approved' || ($media['type']!=='local' && !ag_managed_external_image($media))) {
         throw new RuntimeException('Изображение недоступно: выберите одобренный файл из своей галереи.');
     }
-    $root=realpath(af_ag_resolve_upload_path().'/af_gallery/'.$uid);
-    $path=realpath(af_ag_abs_path((string)$media['storage_path']));
-    if (!$root || !$path || !str_starts_with($path,$root.DIRECTORY_SEPARATOR) || !is_file($path) || !is_readable($path)) {
-        throw new RuntimeException('Исходный файл галереи недоступен.');
+    if ($media['type']==='remote') {
+        $provider=ag_storage_providers()[$media['provider']];
+        if (!$provider->supportsAvatar() || !ag_external_details($id)) throw new RuntimeException('Этот внешний источник не поддерживает выбор аватара.');
+        $path=$provider->downloadOriginal($media);
+    } else {
+        $root=realpath(af_ag_resolve_upload_path().'/af_gallery/'.$uid);
+        $path=realpath(af_ag_abs_path((string)$media['storage_path']));
+        if (!$root || !$path || !str_starts_with($path,$root.DIRECTORY_SEPARATOR) || !is_file($path) || !is_readable($path)) {
+            throw new RuntimeException('Исходный файл галереи недоступен.');
+        }
     }
     $image=@getimagesize($path);
     $mime=$image['mime']??'';
@@ -46,7 +52,7 @@ function ag_avatar_source(int $id,string $purpose='account_avatar'): array
     }
     $extension=['image/jpeg'=>'jpg','image/png'=>'png','image/gif'=>'gif','image/webp'=>'webp'][$mime];
     return ['path'=>$path,'mime'=>$mime,'filename'=>'gallery-avatar.'.$extension,'media_id'=>$id,
-        'url_full'=>ag_resolve_media_url($id,'full')];
+        'url_full'=>$media['type']==='remote' ? rtrim((string)$mybb->settings['bburl'],'/').'/gallery.php?action=avatar_original&id='.$id.'&purpose='.rawurlencode($purpose) : ag_resolve_media_url($id,'full')];
 }
 
 /** Runs after native CSRF verification and before upload_avatar(); performs no writes. */
@@ -89,4 +95,18 @@ function ag_character_avatar_validate_submission(): void
 {
     global $mybb;
     if ($mybb->get_input('action')==='do_apf_secondary_avatar') ag_avatar_validate_context('character_avatar');
+}
+
+/** Private same-origin delivery avoids CORS and keeps the existing native avatar contract. */
+function ag_handle_avatar_original(): void
+{
+    global $mybb;
+    $GLOBALS['af_disable_pre_output']=true; // Preserve binary bytes through AF shutdown buffers.
+    $purpose=(string)$mybb->get_input('purpose');
+    if (!in_array($purpose,['account_avatar','character_avatar'],true)) error_no_permission();
+    try {$source=ag_avatar_source((int)$mybb->get_input('id',MyBB::INPUT_INT),$purpose);}
+    catch (RuntimeException $e) {http_response_code(422);exit('Изображение недоступно.');}
+    header('Cache-Control: private, no-store');header('X-Content-Type-Options: nosniff');
+    header('Content-Type: '.$source['mime']);header('Content-Length: '.filesize($source['path']));
+    readfile($source['path']);exit;
 }

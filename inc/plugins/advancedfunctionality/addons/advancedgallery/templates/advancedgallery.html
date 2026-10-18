@@ -133,6 +133,7 @@
         {$ag_picker_purpose_field}
         <input type="hidden" name="ajax" value="1" />
         {$ag_picker_album_field}
+        {$ag_picker_provider_controls}
 
         <!-- FIX: дефолты, чтобы бэкенд не падал -->
         <input type="hidden" name="ag_title" value="" />
@@ -195,6 +196,7 @@
     <form action="{$ag_upload_do_url}" method="post" enctype="multipart/form-data" class="ag-upload-form">
       <input type="hidden" name="my_post_key" value="{$ag_my_post_key}" />
       {$ag_upload_album_field}
+      {$ag_provider_controls}
 
       <div class="ag-field">
         <label>Файл</label>

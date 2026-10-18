@@ -41,6 +41,46 @@
     else document.documentElement.classList.remove(cls);
   }
 
+  function syncProviderForm(form) {
+    var selector = $one('[data-ag-storage-provider]', form);
+    if (!selector) return;
+    var external = selector.value !== 'local', options = $one('[data-ag-external-options]', form);
+    var source = $one('[data-ag-external-source]', form), url = $one('[name="external_url"]', form);
+    var allowed = selector.options[selector.selectedIndex].getAttribute('data-url-enabled') === '1';
+    var urlOption = $one('[data-ag-external-url-option]', form);
+    urlOption.disabled = !allowed;
+    if (!allowed) source.value = 'file';
+    var useUrl = external && source.value === 'url', file = $one('[name="ag_file"]', form);
+    options.hidden = !external;
+    $one('[data-ag-external-url]', form).hidden = !useUrl;
+    url.disabled = !useUrl; url.required = useUrl;
+    source.disabled = !external;
+    file.disabled = useUrl; file.required = !useUrl;
+    if (file.closest('.ag-field')) file.closest('.ag-field').hidden = useUrl;
+    var album = $one('select[name="album_id"]', form);
+    if (album) album.disabled = external;
+  }
+  function initProviderForms(root) {
+    $all('[data-ag-storage-provider]', root).forEach(function (select) { syncProviderForm(select.form); });
+  }
+  document.addEventListener('change', function (event) {
+    if (event.target.matches('[data-ag-storage-provider], [data-ag-external-source]')) syncProviderForm(event.target.form);
+  });
+  document.addEventListener('DOMContentLoaded', function () {initProviderForms(document);});
+  if (document.readyState !== 'loading') initProviderForms(document);
+
+  function showUploadedCard(data, form) {
+    if (!data.id || !data.url_full) return;
+    var result = $one('[data-ag-upload-result]', form.parentElement);
+    if (!result) { result = document.createElement('div'); result.setAttribute('data-ag-upload-result',''); form.after(result); }
+    var card = document.createElement('article'); card.className='ag-tile';
+    var link=document.createElement('a');link.href='gallery.php?action=view&id='+Number(data.id);
+    var image=document.createElement('img');image.className='ag-thumb';image.src=data.thumb || data.url_full;image.alt=data.title || 'Загруженное изображение';link.appendChild(image);
+    var title=document.createElement('p');title.textContent=data.title || 'Изображение загружено';
+    var copy=document.createElement('button');copy.type='button';copy.className='button ag-copy-bbcode';copy.textContent='Copy BBCode';copy.setAttribute('data-bbcode',data.bbcode || '[img]'+data.url_full+'[/img]');
+    card.append(link,title,copy);result.prepend(card);
+  }
+
   function renderStorage(storage) {
     if (!storage) return;
     var mb = function (n) { return (Number(n) / 1048576).toFixed(2); };
@@ -88,8 +128,8 @@
       }); })
       .then(function (data) {
         updateStorage(data.storage);
-        status.textContent = action === 'upload_do' ? 'Изображение загружено.' : 'Удаление завершено.';
-        if (action === 'upload_do') form.reset();
+        status.textContent = data.message || (action === 'upload_do' ? 'Изображение загружено.' : 'Удаление завершено.');
+        if (action === 'upload_do') { showUploadedCard(data,form); form.reset(); syncProviderForm(form); }
         if (action === 'delete') {
           var view = form.closest('.ag-view');
           if (view) view.remove(); else form.remove();
@@ -441,11 +481,16 @@
         }
 
         updateStorage(data.storage);
-        if (pickerState.purpose && data.album_id && ['account_avatar','character_avatar'].indexOf(pickerState.purpose)===-1) {
+        if ((pickerState.purpose || data.provider) && data.album_id && ['account_avatar','character_avatar'].indexOf(pickerState.purpose)===-1) {
           pickerState.albumId = Number(data.album_id);
           pickerState.modal.setAttribute('data-initial-album', String(data.album_id));
           var button = $one('[data-album-id="-2"]', pickerState.modal);
           if (button) button.setAttribute('data-album-id', String(data.album_id));
+          var existingAlbum=$one('[data-album-id="'+data.album_id+'"]',pickerState.modal);
+          if (!existingAlbum && data.provider) {
+            var albums=$one('.ag-picker-albums',pickerState.modal);
+            if(albums){var added=document.createElement('button');added.type='button';added.className='ag-picker-album';added.setAttribute('data-album-id',data.album_id);added.textContent=data.provider;albums.appendChild(added);}
+          }
           setActiveAlbum(pickerState.modal, pickerState.albumId);
         }
         pickerState.page = 1;
@@ -463,6 +508,7 @@
   }
 
   function bindPickerModal(modal) {
+    initProviderForms(modal);
 
     if (!pickerState.keyBound) document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' || e.keyCode === 27) {

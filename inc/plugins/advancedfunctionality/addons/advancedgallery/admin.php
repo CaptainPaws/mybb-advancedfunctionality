@@ -4,6 +4,7 @@
  */
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/advancedgallery.php';
+require_once __DIR__.'/providers/admin.php';
 if (!defined('IN_ADMINCP')) { define('IN_ADMINCP', 1); }
 
 class AF_Admin_Advancedgallery
@@ -23,6 +24,8 @@ class AF_Admin_Advancedgallery
 
         if ($mybb->request_method === 'post') {
             verify_post_check($mybb->get_input('my_post_key'));
+
+            if ($action === 'external_save') $providerMessage=ag_provider_admin_save();
 
             if ($action === 'approve') {
                 $id = $mybb->get_input('id', MyBB::INPUT_INT);
@@ -123,6 +126,8 @@ class AF_Admin_Advancedgallery
         $html .= '</div>';
 
         $html .= ag_storage_admin_widget();
+        if (isset($providerMessage)) $html.='<p role="status">'.htmlspecialchars_uni($providerMessage).'</p>';
+        $html .= ag_provider_admin_widget();
         $html .= '<h3 style="margin:24px 0 8px 0;">Pending list</h3>';
         $html .= '<form action="index.php?module=advancedfunctionality&af_view=advancedgallery&action=bulk_approve" method="post">';
         $html .= '<input type="hidden" name="my_post_key" value="'.$mybb->post_code.'" />';
