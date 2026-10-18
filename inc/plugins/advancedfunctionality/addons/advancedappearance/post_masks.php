@@ -226,7 +226,11 @@ function af_aa_mask_runtime_payload(int $pid,int $uid): array {
     $top=(int)($row['mask_topbar_media_id']??0);$side=(int)($row['mask_sidebar_media_id']??0);
     $topUrl=$top?ag_resolve_media_url($top,'full'):'';
     $topHtml='<img src="'.htmlspecialchars_uni($topUrl?:$native).'" alt="'.htmlspecialchars_uni($user['username']??'').'" loading="lazy" decoding="async" />';
-    $sideHtml=function_exists('af_adaptivethemeframework_resolve_post_secondary_avatar')?af_adaptivethemeframework_resolve_post_secondary_avatar(['uid'=>$uid,'username'=>$user['username']??'']):'';
+    // A standalone runtime request has neither APF's postbit hook payload nor ATF's author cache.
+    // Supply the same APF-owned URL used by the initial postbit; the ATF renderer stays query-free.
+    $secondaryPost=['uid'=>$uid,'username'=>$user['username']??''];
+    if(function_exists('af_apf_get_secondary_avatar')) $secondaryPost['af_apf_secondary_avatar_url']=af_apf_get_secondary_avatar($uid);
+    $sideHtml=function_exists('af_adaptivethemeframework_resolve_post_secondary_avatar')?af_adaptivethemeframework_resolve_post_secondary_avatar($secondaryPost):'';
     if($side && ($url=ag_resolve_media_url($side,'full'))!=='') $sideHtml='<img src="'.htmlspecialchars_uni($url).'" alt="'.htmlspecialchars_uni($user['username']??'').'" loading="lazy" decoding="async" />';
     $avatarPost=['username'=>$user['username']??'','af_atf_primary_avatar'=>$topHtml,'af_atf_secondary_avatar'=>$sideHtml];
     af_aa_postbit_apply_images($avatarPost,$s);

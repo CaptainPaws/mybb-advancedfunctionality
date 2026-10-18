@@ -6,14 +6,19 @@ function get_forum($fid){global $db;return $db->fetch_array($db->simple_select('
 function forum_permissions($fid){return array_replace(['canview'=>1,'canviewthreads'=>1,'caneditposts'=>1,'canpostreplys'=>1,'canpostthreads'=>1],$GLOBALS['mask_fixture_permissions']??[]);}
 function check_forum_password(...$args){return !empty($GLOBALS['mask_fixture_password']);}
 function is_moderator($fid,$permission){return !empty($GLOBALS['mask_fixture_moderator']);}
+// Profile Fields is an external data boundary; exercise ATF's real query-free renderer.
+function af_apf_get_secondary_avatar(int $uid): string {
+    return rtrim((string)$GLOBALS['mybb']->settings['bburl'],'/').'/uploads/avatars/secondary_'.$uid.'_0123456789abcdef0123456789abcdef.png';
+}
 class MaskFixtureHandler {
     public string $method='insert';public array $data=[], $return_values=[], $errors=[];public int $pid=0;
     public function set_error($error){$this->errors[]=$error;}
 }
 function appearance_masks_markup(array $record): string {
     $pid=(int)$record['pid'];$post=$record+['username'=>'Fixture '.(int)$record['uid'],'useravatar'=>'<img src="/images/default_avatar.png" alt="Native" />',
+        'af_apf_secondary_avatar_url'=>af_apf_get_secondary_avatar((int)$record['uid']),
         'af_atf_primary_avatar'=>'<img src="/images/default_avatar.png" alt="Native" />','af_atf_secondary_avatar'=>'<img src="/images/default_avatar.png" alt="Secondary" />','af_atf_slots'=>['post.before_body'=>'']];
-    af_aa_collect_uid_from_postbit($post);af_aa_studio_postbit_avatar($post);af_aa_mask_postbit($post);
+    af_aa_collect_uid_from_postbit($post);$post['af_atf_secondary_avatar']=af_adaptivethemeframework_resolve_post_secondary_avatar($post);af_aa_studio_postbit_avatar($post);af_aa_mask_postbit($post);
     $source=str_replace('appearance_preview',(string)$pid,af_aa_studio_preview_markup((int)$record['uid']));
     $source=str_replace('af-aa-postbit-user-'.(int)$record['uid'],$post['af_aa_user_class'],$source);
     foreach(['primary','secondary'] as $role) $source=preg_replace('~(<div class="atf-post__'.($role==='primary'?'primary-avatar-media':'secondary-avatar').'">).*?(</div>)~s','$1'.$post['af_atf_'.$role.'_avatar'].'$2',$source);

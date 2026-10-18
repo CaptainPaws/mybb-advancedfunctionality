@@ -755,8 +755,8 @@ function af_advancedgallery_pre_output(string &$page = ''): void
     }
 
     // Проверяем: есть ли уже линк/скрипт (после дедупа они могут быть, даже без marker)
-    $hasCss = (bool)preg_match('~advancedgallery\.css~iu', $page);
-    $hasJs  = (bool)preg_match('~advancedgallery\.js~iu', $page);
+    $hasCss = (bool)preg_match('~<link\b[^>]*\bhref=(["\'])[^"\']*advancedgallery\.css(?:\?[^"\']*)?\1~iu', $page);
+    $hasJs  = (bool)preg_match('~<script\b[^>]*\bsrc=(["\'])[^"\']*advancedgallery\.js(?:\?[^"\']*)?\1~iu', $page);
 
     // ---------------------------------------------------------------------
     // 3) Единственный комплект с версией исходного файла для обновления кеша

@@ -24,7 +24,12 @@
    root.querySelectorAll('[data-af-aa-mask-css],[data-af-appearance-post-effects-config]').forEach(n=>n.remove());
    const style=document.createElement('style');style.dataset.afAaMaskCss=String(pid);style.textContent=data.css;slot.append(style);
    const config=document.createElement('script');config.type='application/json';config.setAttribute('data-af-appearance-post-effects-config','');config.textContent=JSON.stringify(data.canvas);slot.append(config);
-   const top=root.querySelector('.atf-post__primary-avatar-media'),side=root.querySelector('.atf-post__secondary-avatar');if(top)top.innerHTML=data.topbar_html;if(side)side.innerHTML=data.sidebar_html;
+   // Keep unchanged avatar nodes (and their listeners); never rebuild the rest of the sidebar.
+   for(const [selector,html] of [['.atf-post__primary-avatar-media',data.topbar_html],['.atf-post__secondary-avatar',data.sidebar_html]]){
+    const avatar=root.querySelector(selector);if(!avatar||typeof html!=='string')continue;
+    const template=document.createElement('template');template.innerHTML=html;
+    if(avatar.innerHTML!==template.innerHTML)avatar.replaceChildren(template.content);
+   }
    window.afElementEffects?.refresh();
   })().finally(()=>pendingRefresh.delete(pid));pendingRefresh.set(pid,task);return task;}
  function transport(){const jq=window.jQuery;if(!jq?.ajaxPrefilter||jq.__afAppearanceMasks)return;jq.__afAppearanceMasks=true;
