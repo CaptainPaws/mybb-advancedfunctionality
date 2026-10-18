@@ -575,7 +575,11 @@
     select: function (mediaId, options) { return selectGalleryMedia(mediaId, options || {}); },
     recent: function (options) {
       var url=new URL(getPickerConfig().dataUrl, location.href);
-      url.searchParams.set('purpose', options.purpose); url.searchParams.set('album_id','-1'); url.searchParams.set('page','1');
+      url.searchParams.set('purpose', options.purpose);
+      // Avatar cards use the same server-selected album as the modal.
+      if (['account_avatar','character_avatar'].indexOf(options.purpose)!==-1) url.searchParams.delete('album_id');
+      else url.searchParams.set('album_id','-1');
+      url.searchParams.set('page','1');
       return fetch(url.href,{credentials:'same-origin'}).then(function(res) { if(!res.ok) throw new Error('Не удалось получить изображения галереи'); return res.json(); })
         .then(function(items) { if(!Array.isArray(items)) throw new Error('Неверный ответ Gallery'); return items.slice(0,6); });
     }

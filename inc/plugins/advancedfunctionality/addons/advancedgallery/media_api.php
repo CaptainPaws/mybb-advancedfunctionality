@@ -195,7 +195,8 @@ function ag_request_appearance_purpose(): string
 /** Never create a system/default album when merely opening an Appearance picker. */
 function ag_picker_initial_album(int $uid, string $purpose): int
 {
-    if ($purpose === '' || in_array($purpose,['account_avatar','character_avatar'],true)) return -1;
+    if ($purpose === '') return -1;
+    if (in_array($purpose,['account_avatar','character_avatar'],true)) $purpose = 'appearance_avatars';
     $album = ag_get_system_album($uid, $purpose);
     return $album ? (int)$album['id'] : -2; // missing-purpose filter, not all media
 }

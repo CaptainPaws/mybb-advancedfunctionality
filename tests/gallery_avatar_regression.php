@@ -16,7 +16,7 @@ class MyBB {
     public function get_input($key,$type=0) { $v=$this->input[$key]??'';return $type===1?(int)$v:(string)$v; }
 }
 class AvatarDB {
-    public array $media=[],$queries=[],$values=[];
+    public array $media=[],$queries=[],$values=[],$albums=[];
     public array $user=['avatar'=>'','avatardimensions'=>'','avatartype'=>''];
     function update_query($table,$row,$where){if($table!=='users')throw new RuntimeException('Wrong table');$this->user=array_replace($this->user,$row);}
     function table_exists($table){return $table==='af_apf_values';}
@@ -26,6 +26,7 @@ class AvatarDB {
     function delete_query($table,$where){if($table!=='af_apf_values')throw new RuntimeException('Wrong delete');$this->values[7]='';}
     function simple_select($table,$fields,$where,$options=[]) {
         $this->queries[]=$where;
+        if ($table==='af_gallery_albums' && preg_match("/system_key='([^']+)'/",$where,$key))return $this->albums[$key[1]]??[];
         if ($table==='users')return $this->user;
         if ($table==='af_apf_values')return ['field_value'=>$this->values[7]??''];
         if (!preg_match("/id='(\d+)'/",$where,$id)) return [];
@@ -106,7 +107,12 @@ if (PHP_SAPI!=='cli') {
 }
 $source=ag_avatar_source(42);
 avatar_check($source['path']===$original && $source['mime']==='image/gif','Wrong original');
-avatar_check(ag_picker_initial_album(7,'account_avatar')===-1,'Picker must initially show all own media');
+avatar_check(ag_picker_initial_album(7,'account_avatar')===-2,'Missing appearance album should be empty, not all media');
+$GLOBALS['ag_system_album_schema_ready']=true;
+$db->albums['appearance_avatars']=['id'=>84,'uid_owner'=>7,'system_key'=>'appearance_avatars'];
+foreach (['account_avatar','character_avatar'] as $avatarPurpose) avatar_check(ag_picker_initial_album(7,$avatarPurpose)===84,'Both avatar pickers must default to appearance avatars');
+avatar_check(ag_picker_initial_album(7,'')===-1,'Ordinary picker default changed');
+$db->albums=[];$GLOBALS['ag_system_album_schema_ready']=false;
 foreach (['uid_owner'=>8,'status'=>'pending','type'=>'remote','mime'=>'image/webp','storage_path'=>'../outside.gif'] as $field=>$value) {
     $old=$db->media[42][$field];$db->media[42][$field]=$value;
     avatar_reject(fn()=>ag_avatar_source(42),'Unsafe image accepted: '.$field);$db->media[42][$field]=$old;
@@ -122,7 +128,7 @@ $mybb->input['my_post_key']='valid';$_FILES=['avatarupload'=>['tmp_name'=>$origi
 $mybb->input=['ag_avatar_media_id'=>999,'my_post_key'=>'invalid'];ag_avatar_validate_submission();
 avatar_check(!function_exists('ag_avatar_usercp_block'),'Retired Gallery form insertion remains');
 avatar_check(hash_file('sha256',$original)===hash('sha256',$gif),'Gallery original changed');
-echo "Gallery avatar passed: ownership, approved local original, MIME/group permissions, CSRF, native upload boundary, standard submit, disabled Gallery permission, all-own initial view.\n";
+echo "Gallery avatar passed: ownership, approved local original, MIME/group permissions, CSRF, native upload boundary, standard submit, disabled Gallery permission, appearance-avatar initial view.\n";
 // Stubs used only by the optional real MyBB HTTP upload fixture.
 function get_extension($name){return pathinfo($name,PATHINFO_EXTENSION);}
 function my_strtolower($s){return strtolower($s);}
