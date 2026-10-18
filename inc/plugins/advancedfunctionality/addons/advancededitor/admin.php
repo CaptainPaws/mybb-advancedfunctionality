@@ -1504,6 +1504,17 @@ class AF_Admin_AdvancedEditor
             $sub = (string)$mybb->get_input('sub');
             $message = '';
 
+            if ($sub === 'stikers_user_settings_save') {
+                $ok = af_advancededitor_stikers_save_settings([
+                    'upload_max_mb' => (int)$mybb->get_input('upload_max_mb', MyBB::INPUT_INT),
+                    'user_quota_mb' => (int)$mybb->get_input('user_quota_mb', MyBB::INPUT_INT),
+                    'staff_exempt' => (int)$mybb->get_input('staff_exempt', MyBB::INPUT_INT),
+                    'allow_external' => (int)$mybb->get_input('allow_external', MyBB::INPUT_INT),
+                ], $message);
+                flash_message($message, $ok ? 'success' : 'error');
+                admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
+            }
+
             if ($sub === 'stikers_settings_save') {
                 $ok = af_advancededitor_stikers_save_settings([
                     'thumb_size' => (int)$mybb->get_input('thumb_size', MyBB::INPUT_INT),
@@ -1615,6 +1626,19 @@ class AF_Admin_AdvancedEditor
         $formSettings->output_submit_wrapper([$formSettings->generate_submit_button('Сохранить размеры')]);
         $formSettings->end();
 
+        echo '<br />';
+
+        $formQuota = new Form(self::base_url_raw(AF_AE_DO_STIKERS), 'post');
+        echo $formQuota->generate_hidden_field('my_post_key', (string)$mybb->post_code);
+        echo $formQuota->generate_hidden_field('sub', 'stikers_user_settings_save');
+        $boxQuota = class_exists('FormContainer', false) ? new FormContainer('Пользовательские стикеры') : new AF_AE_FormContainerShim('Пользовательские стикеры');
+        $boxQuota->output_row('Максимальный размер загружаемого файла (МБ)', 'Для локального пользовательского стикера. Лимит файла действует и для сотрудников.', $formQuota->generate_numeric_field('upload_max_mb', (int)$stikerSettings['upload_max_mb'], ['min'=>1,'max'=>2048]));
+        $boxQuota->output_row('Общая квота пользовательских стикеров (МБ на пользователя)', 'Только локальные файлы пользователя. 0 — без ограничения. Уже загруженные файлы не удаляются.', $formQuota->generate_numeric_field('user_quota_mb', (int)$stikerSettings['user_quota_mb'], ['min'=>0,'max'=>1048576]));
+        $boxQuota->output_row('Исключить администраторов и модераторов из квот', 'Суммарная квота не применяется к администраторам и модераторам MyBB; права проверяются сервером.', $formQuota->generate_yes_no_radio('staff_exempt', (int)$stikerSettings['staff_exempt']));
+        $boxQuota->output_row('Разрешить внешние стикеры по URL', 'Сохраняется только ссылка; файл не скачивается на сервер и не расходует локальную квоту.', $formQuota->generate_yes_no_radio('allow_external', (int)$stikerSettings['allow_external']));
+        $boxQuota->end();
+        $formQuota->output_submit_wrapper([$formQuota->generate_submit_button('Сохранить ограничения')]);
+        $formQuota->end();
         echo '<br />';
 
         // ===== Создание категории =====

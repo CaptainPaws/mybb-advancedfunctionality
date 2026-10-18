@@ -17,6 +17,8 @@ if (!defined('AF_AE_STIKERS_RECENT_TABLE')) {
     define('AF_AE_STIKERS_RECENT_TABLE', 'af_ae_stikers_recent');
 }
 
+require_once __DIR__.'/storage.php';
+
 function af_advancededitor_stikers_assets_rel_base(): string
 {
     return 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
@@ -136,7 +138,7 @@ function af_advancededitor_stikers_allowed_exts(): array
 
 function af_advancededitor_stikers_max_size(): int
 {
-    return 5 * 1024 * 1024;
+    return (int)af_advancededitor_stikers_get_settings()['upload_max_mb'] * 1048576;
 }
 
 function af_advancededitor_stikers_max_per_user(): int
@@ -153,6 +155,10 @@ function af_advancededitor_stikers_settings_defaults(): array
     return [
         'thumb_size' => 50,
         'post_size' => 120,
+        'upload_max_mb' => 2,
+        'user_quota_mb' => 20,
+        'staff_exempt' => 1,
+        'allow_external' => 1,
     ];
 }
 
@@ -195,6 +201,10 @@ function af_advancededitor_stikers_get_settings(): array
     return [
         'thumb_size' => af_advancededitor_stikers_normalize_size((int)($data['thumb_size'] ?? $defaults['thumb_size']), $defaults['thumb_size']),
         'post_size' => af_advancededitor_stikers_normalize_size((int)($data['post_size'] ?? $defaults['post_size']), $defaults['post_size']),
+        'upload_max_mb' => max(1,min(2048,(int)($data['upload_max_mb'] ?? $defaults['upload_max_mb']))),
+        'user_quota_mb' => max(0,min(1048576,(int)($data['user_quota_mb'] ?? $defaults['user_quota_mb']))),
+        'staff_exempt' => (int)(bool)($data['staff_exempt'] ?? $defaults['staff_exempt']),
+        'allow_external' => (int)(bool)($data['allow_external'] ?? $defaults['allow_external']),
     ];
 }
 
@@ -212,10 +222,14 @@ function af_advancededitor_stikers_save_settings(array $input, string &$message 
         return false;
     }
 
-    $defaults = af_advancededitor_stikers_settings_defaults();
+    $defaults = af_advancededitor_stikers_get_settings();
     $data = [
         'thumb_size' => af_advancededitor_stikers_normalize_size((int)($input['thumb_size'] ?? $defaults['thumb_size']), $defaults['thumb_size']),
         'post_size' => af_advancededitor_stikers_normalize_size((int)($input['post_size'] ?? $defaults['post_size']), $defaults['post_size']),
+        'upload_max_mb' => max(1,min(2048,(int)($input['upload_max_mb'] ?? $defaults['upload_max_mb']))),
+        'user_quota_mb' => max(0,min(1048576,(int)($input['user_quota_mb'] ?? $defaults['user_quota_mb']))),
+        'staff_exempt' => (int)(bool)($input['staff_exempt'] ?? $defaults['staff_exempt']),
+        'allow_external' => (int)(bool)($input['allow_external'] ?? $defaults['allow_external']),
     ];
 
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
@@ -224,8 +238,10 @@ function af_advancededitor_stikers_save_settings(array $input, string &$message 
         return false;
     }
 
-    $ok = @file_put_contents($file, $json, LOCK_EX);
-    if ($ok === false) {
+    $temporary = @tempnam($dir, 'ae-stickers-');
+    $ok = $temporary !== false && @file_put_contents($temporary, $json, LOCK_EX) !== false && @rename($temporary, $file);
+    if ($temporary !== false && is_file($temporary)) @unlink($temporary);
+    if (!$ok) {
         $message = 'Не удалось сохранить настройки стикеров.';
         return false;
     }
@@ -352,20 +368,30 @@ function af_advancededitor_stikers_ensure_schema(): void
         );
     }
 
+    if (!$db->field_exists('uid', AF_AE_STIKERS_TABLE)) {
+        af_ae_sticker_locked(0, static function() use ($db) {
+            if (!$db->field_exists('uid', AF_AE_STIKERS_TABLE)) $db->write_query('ALTER TABLE '.TABLE_PREFIX.AF_AE_STIKERS_TABLE.' ADD uid INT UNSIGNED NOT NULL DEFAULT 0, ADD KEY uid (uid)');
+            return [];
+        });
+    }
     af_advancededitor_stikers_ensure_default_category();
 }
 
-function af_advancededitor_stikers_is_allowed_upload(array $file, &$error = ''): bool
+function af_advancededitor_stikers_is_allowed_upload(array $file, &$error = '', bool $userUpload = false): bool
 {
     $error = '';
 
-    if (empty($file['name']) || empty($file['tmp_name'])) {
+    if (!is_string($file['name'] ?? null) || !is_string($file['tmp_name'] ?? null) || empty($file['name']) || empty($file['tmp_name'])) {
         $error = 'Файл не выбран.';
         return false;
     }
 
-    $size = (int)($file['size'] ?? 0);
-    if ($size <= 0 || $size > af_advancededitor_stikers_max_size()) {
+    if ((int)($file['error'] ?? UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK || !is_uploaded_file((string)$file['tmp_name'])) {
+        $error='Файл не загружен или превышает серверный лимит.'; return false;
+    }
+    clearstatcache(true,(string)$file['tmp_name']);
+    $size = @filesize((string)$file['tmp_name']);
+    if ($size === false || $size <= 0 || $size > ($userUpload ? af_advancededitor_stikers_max_size() : 5*1048576)) {
         $error = 'Размер файла превышает лимит.';
         return false;
     }
@@ -376,13 +402,11 @@ function af_advancededitor_stikers_is_allowed_upload(array $file, &$error = ''):
         return false;
     }
 
-    $mime = function_exists('mime_content_type')
-        ? (string)@mime_content_type((string)$file['tmp_name'])
-        : '';
-
-    if ($mime !== '' && stripos($mime, 'image/') !== 0) {
-        $error = 'Загружаются только изображения.';
-        return false;
+    $types=['webp'=>'image/webp','gif'=>'image/gif','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg'];
+    $info=@getimagesize((string)$file['tmp_name']);
+    $mime=class_exists('finfo') ? (new finfo(FILEINFO_MIME_TYPE))->file((string)$file['tmp_name']) : '';
+    if (!$info || empty($info[0]) || empty($info[1]) || ($info['mime'] ?? '')!==$types[$ext] || $mime!==$types[$ext]) {
+        $error='Содержимое файла не соответствует допустимому изображению.'; return false;
     }
 
     return true;
@@ -733,6 +757,7 @@ function af_advancededitor_stikers_get_front_payload(int $uid): array
             'max_per_user' => af_advancededitor_stikers_max_per_user(),
             'ext' => af_advancededitor_stikers_allowed_exts(),
         ],
+        'storage' => af_ae_sticker_usage($uid),
         'sizes' => af_advancededitor_stikers_get_settings(),
     ];
 }
@@ -757,6 +782,8 @@ function af_advancededitor_stikers_handle_ajax(): bool
             'data' => af_advancededitor_stikers_get_front_payload($uid),
         ]);
     }
+
+    if (strtolower((string)($mybb->request_method ?? $_SERVER['REQUEST_METHOD'] ?? ''))!=='post') af_advancededitor_stikers_json(['success'=>false,'message'=>'Требуется POST-запрос.','data'=>null]);
 
     if (!function_exists('verify_post_check')) {
         require_once MYBB_ROOT . 'inc/functions.php';
@@ -837,127 +864,26 @@ function af_advancededitor_stikers_handle_ajax(): bool
             ]);
         }
 
-        $cnt = (int)$db->fetch_field(
-            $db->simple_select(AF_AE_STIKERS_TABLE, 'COUNT(id) AS c', "is_user_sticker=1 AND uid={$uid}"),
-            'c'
-        );
-
-        if ($cnt >= af_advancededitor_stikers_max_per_user()) {
-            af_advancededitor_stikers_json([
-                'success' => false,
-                'message' => 'Достигнут лимит пользовательских стикеров.',
-                'data' => null,
-            ]);
+        try {
+            $external=$mybb->input['sticker_url'] ?? '';
+            if (!is_string($external)) throw new RuntimeException('Некорректная ссылка на стикер.');
+            $data=af_ae_sticker_save($uid,isset($_FILES['sticker']) && is_array($_FILES['sticker']) ? $_FILES['sticker'] : null,trim($external));
+            $result=['success'=>true,'message'=>'Стикер добавлен.','data'=>$data];
+        } catch (Throwable $e) {
+            $result=['success'=>false,'message'=>get_class($e)===RuntimeException::class ? $e->getMessage() : 'Не удалось сохранить стикер.','data'=>null];
         }
-
-        $file = $_FILES['sticker'] ?? null;
-        $error = '';
-
-        if (!is_array($file) || !af_advancededitor_stikers_is_allowed_upload($file, $error)) {
-            af_advancededitor_stikers_json([
-                'success' => false,
-                'message' => $error ?: 'Файл не получен.',
-                'data' => null,
-            ]);
-        }
-
-        $dir = af_advancededitor_stikers_get_user_folder($uid);
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0775, true);
-        }
-
-        if (!is_dir($dir)) {
-            af_advancededitor_stikers_json([
-                'success' => false,
-                'message' => 'Не удалось создать папку пользователя.',
-                'data' => null,
-            ]);
-        }
-
-        [$finalName, $ext] = af_advancededitor_stikers_unique_path($dir, (string)$file['name']);
-        $target = rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . $finalName;
-
-        if (!@move_uploaded_file((string)$file['tmp_name'], $target)) {
-            af_advancededitor_stikers_json([
-                'success' => false,
-                'message' => 'Не удалось сохранить файл.',
-                'data' => null,
-            ]);
-        }
-
-        $url = af_advancededitor_stikers_url('stikers' . $uid . '/' . $finalName);
-
-        $id = (int)$db->insert_query(AF_AE_STIKERS_TABLE, [
-            'title' => $db->escape_string((string)pathinfo($finalName, PATHINFO_FILENAME)),
-            'slug' => $db->escape_string((string)pathinfo($finalName, PATHINFO_FILENAME)),
-            'path' => $db->escape_string($target),
-            'url' => $db->escape_string($url),
-            'ext' => $db->escape_string($ext),
-            'is_user_sticker' => 1,
-            'uid' => $uid,
-            'category_id' => 0,
-            'sortorder' => 0,
-            'created_at' => TIME_NOW,
-        ]);
-
-        af_advancededitor_stikers_json([
-            'success' => true,
-            'message' => 'Стикер загружен.',
-            'data' => [
-                'id' => $id,
-                'url' => $url,
-            ],
-        ]);
+        af_advancededitor_stikers_json($result);
     }
 
     if ($action === 'af_ae_stikers_delete') {
-        if ($uid <= 0) {
-            af_advancededitor_stikers_json([
-                'success' => false,
-                'message' => 'Требуется авторизация.',
-                'data' => null,
-            ]);
+        if ($uid<=0) af_advancededitor_stikers_json(['success'=>false,'message'=>'Требуется авторизация.','data'=>null]);
+        try {
+            $data=af_ae_sticker_delete($uid,(int)($mybb->input['id'] ?? 0));
+            $result=['success'=>true,'message'=>'Стикер удалён из каталога.','data'=>$data];
+        } catch (Throwable $e) {
+            $result=['success'=>false,'message'=>get_class($e)===RuntimeException::class ? $e->getMessage() : 'Не удалось удалить стикер.','data'=>null];
         }
-
-        $id = (int)($mybb->input['id'] ?? 0);
-        if ($id <= 0) {
-            af_advancededitor_stikers_json([
-                'success' => false,
-                'message' => 'Некорректный ID.',
-                'data' => null,
-            ]);
-        }
-
-        $row = $db->fetch_array(
-            $db->simple_select(
-                AF_AE_STIKERS_TABLE,
-                '*',
-                "id={$id} AND is_user_sticker=1 AND uid={$uid}",
-                ['limit' => 1]
-            )
-        );
-
-        if (empty($row['id'])) {
-            af_advancededitor_stikers_json([
-                'success' => false,
-                'message' => 'Стикер не найден.',
-                'data' => null,
-            ]);
-        }
-
-        $path = (string)$row['path'];
-        if ($path !== '' && af_advancededitor_stikers_is_path_inside($path, af_advancededitor_stikers_abs()) && is_file($path)) {
-            @unlink($path);
-        }
-
-        $db->delete_query(AF_AE_STIKERS_TABLE, "id={$id}");
-        $db->delete_query(AF_AE_STIKERS_RECENT_TABLE, "uid={$uid} AND sticker_id={$id}");
-
-        af_advancededitor_stikers_json([
-            'success' => true,
-            'message' => 'Стикер удалён.',
-            'data' => ['id' => $id],
-        ]);
+        af_advancededitor_stikers_json($result);
     }
 
     return true;

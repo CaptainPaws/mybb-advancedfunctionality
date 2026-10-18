@@ -180,3 +180,7 @@
   padding:18px;
   opacity:.8;
 }
+
+.af-ae-stikers-storage { margin-block:.5em; font-size:.9em; }
+.af-ae-stikers-url { display:flex; flex-wrap:wrap; align-items:center; gap:.5em; margin-block:.5em; }
+.af-ae-stikers-url input { max-width:100%; box-sizing:border-box; }

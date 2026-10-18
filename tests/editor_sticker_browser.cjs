@@ -1,0 +1,40 @@
+'use strict';
+const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=require('node:fs');
+(async()=>{
+ const browser=await chromium.launch({headless:true,executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
+ try{
+  const page=await browser.newPage();page.setDefaultTimeout(7000);
+  const errors=[],dialogs=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',async d=>{dialogs.push(d.message());await d.dismiss();});
+  const origin='http://127.0.0.1:8102';
+  await page.route('**/*',r=>r.request().resourceType()==='image'?r.fulfill({status:204}):r.continue());
+  await page.goto(origin+'/?action=page');
+  await page.addStyleTag({content:fs.readFileSync('inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/stikers/stikers.css','utf8')});
+  await page.getByRole('button',{name:'Стикеры',exact:true}).click();
+  await page.getByRole('button',{name:'Свои стикеры',exact:true}).click();
+  const usage=page.locator('.af-ae-stikers-storage');await usage.filter({hasText:'Стикеры: 0.00 МБ / 1.00 МБ'}).waitFor();
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6l8AAAAASUVORK5CYII=','base64');
+  const large=Buffer.concat([png,Buffer.alloc(600*1024-png.length)]);
+  await page.locator('#af-ae-stiker-upload').setInputFiles({name:'browser.png',mimeType:'image/png',buffer:large});
+  await usage.filter({hasText:'Стикеры: 0.59 МБ / 1.00 МБ'}).waitFor();
+  assert.match(await usage.innerText(),/Осталось: 0.41 МБ/);
+  assert.equal(await page.locator('[data-tab=mine]').getAttribute('class'),'af-ae-stikers-tab is-active');
+  const before=await page.locator('.af-ae-stiker').count();
+  await page.locator('[name=sticker_url]').fill('https://images.example.org/browser.png');
+  await page.getByRole('button',{name:'Добавить по URL',exact:true}).click();
+  await page.waitForFunction(n=>document.querySelectorAll('.af-ae-stiker').length===n+1,before);
+  assert.match(await usage.innerText(),/0.59 МБ/);
+  await page.locator('#af-ae-stiker-toggle').click();
+  const uploaded=page.locator('.af-ae-stiker').filter({has:page.locator('img[alt^=browser]')});
+  await uploaded.locator('[data-del]').click();
+  await usage.filter({hasText:'Стикеры: 0.00 МБ / 1.00 МБ'}).waitFor();
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.goto(origin+'/?action=page&uid=8&group=4');
+  await page.getByRole('button',{name:'Стикеры',exact:true}).click();
+  await page.getByRole('button',{name:'Свои стикеры',exact:true}).click();
+  await page.locator('.af-ae-stikers-storage').filter({hasText:'Без ограничений'}).waitFor();
+  assert.match(await page.locator('.af-ae-stikers-storage').innerText(),/1.05 МБ/);
+  assert.deepEqual(errors,[]);assert.deepEqual(dialogs,[]);
+  console.log('Sticker browser passed: actual modal, live upload/delete usage and remaining bytes, URL has no byte cost, active tab retained, staff actual consumption/unlimited and mobile layout.');
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

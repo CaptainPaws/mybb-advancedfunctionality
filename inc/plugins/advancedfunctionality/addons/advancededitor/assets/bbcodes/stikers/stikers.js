@@ -6,7 +6,8 @@
     loaded: false,
     loading: false,
     data: null,
-    removeMode: false
+    removeMode: false,
+    activeTab: 'recent'
   };
 
   function payload() {
@@ -445,17 +446,23 @@
 
       function renderTab(key) {
         var t = tabs.filter(function (x) { return x.key === key; })[0] || tabs[0];
+        state.activeTab=t.key;
+        tabsEl.querySelectorAll('.af-ae-stikers-tab').forEach(function(b){b.classList.toggle('is-active',b.getAttribute('data-tab')===t.key);});
         var extra = '';
 
         if (t.key === 'mine' && isAuth()) {
-          extra =
+          var storage=data.storage, mb=function(bytes){return (Number(bytes)/1048576).toFixed(2);};
+          var usage=storage ? 'Стикеры: '+mb(storage.used_bytes)+' МБ'+(storage.limit_bytes>0?' / '+mb(storage.limit_bytes)+' МБ · Осталось: '+mb(storage.available_bytes)+' МБ':' · Без ограничений') : 'Загрузка данных о стикерах…';
+          extra = '<div class="af-ae-stikers-storage" role="status">'+htmlEscape(usage)+'</div>'+
+            (storage && storage.full ? '<p>Квота стикеров исчерпана. Освободите место для новой локальной загрузки.</p>' : '')+
             '<div class="af-ae-stikers-tools">' +
               '<label class="af-ae-stikers-btn af-ae-stikers-upload-btn">' +
                 '<input type="file" id="af-ae-stiker-upload" accept=".webp,.gif,.png,.jpg,.jpeg">' +
                 '<span>Добавить стикер</span>' +
               '</label>' +
               '<button type="button" class="af-ae-stikers-btn af-ae-stikers-gear-btn" id="af-ae-stiker-toggle" title="Режим удаления">⚙</button>' +
-            '</div>';
+            '</div>'+
+            (data.sizes && Number(data.sizes.allow_external)===1 ? '<form class="af-ae-stikers-url"><label>Внешний стикер <input type="url" name="sticker_url" placeholder="https://…" required></label><button class="af-ae-stikers-btn" type="submit">Добавить по URL</button></form>' : '');
         }
 
         bodyEl.innerHTML = extra + renderGrid(
@@ -464,8 +471,15 @@
           state.loading && !state.loaded && !state.data
         );
 
+        var urlForm=bodyEl.querySelector('.af-ae-stikers-url');
+        if(urlForm) urlForm.addEventListener('submit',function(event){
+          event.preventDefault();
+          var fd=new FormData(urlForm), button=urlForm.querySelector('button');button.disabled=true;
+          req(p.uploadUrl,'POST',fd,function(err,res){button.disabled=false;if(err || !res || !res.success){alert((res && res.message) || 'Не удалось добавить ссылку.');return;}loadAndPaint();});
+        });
         var upload = bodyEl.querySelector('#af-ae-stiker-upload');
         if (upload) {
+          upload.disabled=!!(data.storage && data.storage.full);
           upload.addEventListener('change', function () {
             var f = upload.files && upload.files[0];
             if (!f) return;
@@ -546,11 +560,11 @@
         });
       });
 
-      renderTab('recent');
+      renderTab(state.activeTab || 'recent');
     }
 
     function loadAndPaint() {
-      if (state.loading) return;
+      if (state.loading) {state.reloadPending=true;return;}
 
       state.loading = true;
 
@@ -571,6 +585,7 @@
 
         ensureStickerRuntimeCss(state.data);
         paint(state.data);
+        if(state.reloadPending){state.reloadPending=false;loadAndPaint();}
       });
     }
 
