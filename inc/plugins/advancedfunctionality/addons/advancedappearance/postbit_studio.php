@@ -60,7 +60,7 @@ function af_aa_postbit_surface(): array
         'sidebar'=>$entry('Боковая панель','.atf-post__sidebar-inner',array_merge($background,$haze),true),
         'message_background'=>$entry('Фон сообщения','.atf-post__layout',array_merge($background,$haze)),
         'primary_avatar'=>$entry('Аватары · основной','.atf-post__primary-avatar-media img',$image),
-        'secondary_avatar'=>$entry('Аватары · дополнительный','.atf-post__secondary-avatar > img',$image),
+        'secondary_avatar'=>$entry('Аватары · дополнительный','.atf-post__secondary-avatar img',$image),
         'buttons'=>$entry('Кнопки и текст · кнопки',':is(.atf-post__profile-action,.atf-post__management-action,.af-apui-postbit-action)',['text_color','icon_color','hover_color','glow_color','glow_intensity']),
         'character_name'=>$entry('Кнопки и текст · имя персонажа','.atf-post__character-name',['text_color','glow_color','glow_intensity']),
         'message'=>$entry('Кнопки и текст · сообщение','.atf-post__message-body',['text_color','glow_color','glow_intensity'],true),
@@ -76,6 +76,7 @@ function af_aa_postbit_surface(): array
         'signature_buttons'=>$entry('Подпись · кнопки-ссылки','.af-asb-signature .af-asb-signature__button',array_merge($type,['background_color','border_color','hover_color','hover_background_color','hover_border_color'])),
         'signature'=>$entry('Подпись','.atf-post__signature',array_merge($background,$type,['link_color','hover_color']),true),
     ]];
+    foreach(['primary_avatar','secondary_avatar'] as $zone)$surface['components'][$zone]['defaults']=['image_scale'=>100,'image_fit'=>'cover','image_position'=>'center'];
     foreach(['topbar','sidebar','message_background'] as $zone) {
         $surface['components'][$zone]['fields'][]='background_saturation';
         $surface['components'][$zone]['editable_fields'][]='background_saturation';
@@ -236,12 +237,16 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $si
         // Replace primary avatar in the preview via real markup, never CSS content (GIF stays original).
         $imageSuffix=$key==='plaque_icon'?$suffix.' > img':$suffix;
         $imageRules=[];
-        if (isset($v['image_fit'])) $imageRules[]='--aa-avatar-fit:'.$v['image_fit'].';object-fit:'.$v['image_fit'].';';
+        $isAvatar=in_array($key,['primary_avatar','secondary_avatar'],true);
+        $fit=$v['image_fit']??'cover';
+        // Keep old stored 'fill' readable, but never stretch an avatar's proportions.
+        if($isAvatar && $fit==='fill')$fit='cover';
+        if (isset($v['image_fit'])) $imageRules[]='--aa-avatar-fit:'.$fit.';object-fit:'.$fit.';';
+        if($isAvatar)$imageRules[]='--aa-avatar-min-scale:'.(in_array($fit,['contain','none'],true)?0:1).';';
         if (isset($v['image_position'])) $imageRules[]='--aa-avatar-position:'.$v['image_position'].';object-position:'.$v['image_position'].';';
-        if (isset($v['image_scale'])) $imageRules[]='scale:'.($v['image_scale']/100).';';
+        if (isset($v['image_scale'])) $imageRules[]=$isAvatar?'--aa-avatar-scale:'.($v['image_scale']/100).';':'scale:'.($v['image_scale']/100).';';
         if ($imageRules) $css.=$scope($imageSuffix).'{'.implode('',$imageRules).'}';
         if ($key==='plaque_icon') $rule[]='overflow:hidden;';
-        if ($key==='secondary_avatar' && isset($v['image_scale'])) $css.=$scope(' .atf-post__secondary-avatar').'{overflow:hidden;}';
         if ($rule) $css.=$scope($suffix).'{'.implode('',$rule).'}';
         foreach (['link_color'=>' a','hover_color'=>' :is(a,button):is(:hover,:focus-visible)','icon_color'=>' :is(i,svg,.af-apui-stat-item__icon)','value_color'=>' .af-apui-stat-item__value'] as $field=>$child) {
             if (isset($v[$field])) $css.=$scope($suffix.$child).'{color:'.$v[$field].';}';

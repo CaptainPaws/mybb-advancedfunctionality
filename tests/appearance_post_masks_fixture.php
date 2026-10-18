@@ -21,7 +21,7 @@ function appearance_masks_markup(array $record): string {
     af_aa_collect_uid_from_postbit($post);$post['af_atf_secondary_avatar']=af_adaptivethemeframework_resolve_post_secondary_avatar($post);af_aa_studio_postbit_avatar($post);af_aa_mask_postbit($post);
     $source=str_replace('appearance_preview',(string)$pid,af_aa_studio_preview_markup((int)$record['uid']));
     $source=str_replace('af-aa-postbit-user-'.(int)$record['uid'],$post['af_aa_user_class'],$source);
-    foreach(['primary','secondary'] as $role) $source=preg_replace('~(<div class="atf-post__'.($role==='primary'?'primary-avatar-media':'secondary-avatar').'">).*?(</div>)~s','$1'.$post['af_atf_'.$role.'_avatar'].($role==='secondary'?af_adaptivethemeframework_gothic_frame():'').'$2',$source);
+    foreach(['primary','secondary'] as $role) $source=preg_replace('~(<div class="atf-post__'.($role==='primary'?'primary-avatar-media':'secondary-avatar').'">).*?(</div>)~s','$1'.($role==='secondary'?'<span class="atf-post__secondary-avatar-media">'.$post['af_atf_'.$role.'_avatar'].'</span>'.af_adaptivethemeframework_gothic_frame():$post['af_atf_'.$role.'_avatar']).'$2',$source);
     $source=str_replace('<div class="atf-post__slot atf-post__slot--before">','<div class="atf-post__slot atf-post__slot--before">'.$post['af_atf_slots']['post.before_body'],$source);
     $source=preg_replace('~(<div class="atf-post__message-body">).*?(</div>)~s','$1'.htmlspecialchars_uni($record['message']).'$2',$source);
     return str_replace('</article>','<a href="#" id="quick_edit_post_'.$pid.'" class="quick_edit_button">Быстрая правка</a></article>',$source);

@@ -24,11 +24,14 @@
   const incoming=document.createElement('template');incoming.innerHTML=html;
   // Preview restores can include the original container contents, including its frame.
   Array.from(incoming.content.children).filter(el=>el.matches('.atf-gothic-frame')).forEach(el=>el.remove());
-  const media=Array.from(avatar.childNodes).filter(el=>!el.matches?.('.atf-gothic-frame'));
+  const mediaRoot=avatar.querySelector(':scope > .atf-post__secondary-avatar-media')||avatar;
+  const wrapped=incoming.content.querySelector('.atf-post__secondary-avatar-media');
+  if(wrapped)incoming.content.replaceChildren(...wrapped.childNodes);
+  const media=Array.from(mediaRoot.childNodes).filter(el=>!el.matches?.('.atf-gothic-frame'));
   const current=document.createElement('template');media.forEach(el=>current.content.append(el.cloneNode(true)));
   if(current.innerHTML===incoming.innerHTML)return;
-  const frame=Array.from(avatar.children).find(el=>el.matches('.atf-gothic-frame'));
-  media.forEach(el=>el.remove());avatar.insertBefore(incoming.content,frame||null);
+  const frame=Array.from(mediaRoot.children).find(el=>el.matches('.atf-gothic-frame'));
+  media.forEach(el=>el.remove());mediaRoot.insertBefore(incoming.content,frame||null);
  }
  async function refresh(pid){if(pendingRefresh.has(pid))return pendingRefresh.get(pid);const task=(async()=>{const root=document.getElementById('post_'+pid);if(!root||number(root.dataset.authorUid)!==seed.uid)return;const data=await api('runtime',{pid,tid:0,fid:0});if(!root.isConnected)return;
    root.classList.remove('af-aa-postbit-user-'+seed.uid,'af-aa-postbit-mask-'+pid);root.classList.add(data.masked?'af-aa-postbit-mask-'+pid:'af-aa-postbit-user-'+seed.uid);

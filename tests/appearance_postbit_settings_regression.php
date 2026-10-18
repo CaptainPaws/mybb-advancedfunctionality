@@ -92,3 +92,20 @@ foreach(['topbar','sidebar'] as $zone) {
  check(str_contains($legacy,'#000000 20%'),'Legacy darkening precedence changed');
 }
 echo "Overlay settings passed: sparse edits, explicit none, legacy precedence and both zone scopes.\n";
+
+// Targeted avatar settings contract: compile scale once, preserve stored values and positions.
+foreach(['primary_avatar','secondary_avatar'] as $avatarKey) {
+ foreach([['image_fit'=>'cover','image_scale'=>50],['image_fit'=>'contain','image_scale'=>150],['image_fit'=>'fill','image_scale'=>100]] as $values) {
+  $values['image_position']='top';$preset=['components'=>[$avatarKey=>$values]];
+  $decodedAvatar=af_aa_personal_decode(json_encode($preset),7,false,false);
+  check($decodedAvatar['components'][$avatarKey]===$values,'Avatar settings changed during validation');
+  $out=af_aa_personal_compile_css(7,$decodedAvatar,true);
+  check(str_contains($out,'--aa-avatar-scale:'.($values['image_scale']/100).';'),'Avatar scale variable missing');
+  check(str_contains($out,'--aa-avatar-position:top;'),'Scale discarded image position');
+  check(!str_contains($out,'{overflow:hidden;}'),'Compiler clipped the outer avatar frame');
+  check(str_contains($out,'--aa-avatar-min-scale:'.($values['image_fit']==='contain'?0:1).';'),'Cover minimum/explicit contain policy changed');
+  if($values['image_fit']==='fill')check(!str_contains($out,'object-fit:fill'),'Legacy fill still distorts avatars');
+ }
+ check(af_aa_postbit_surface()['components'][$avatarKey]['defaults']['image_scale']===100,'Avatar slider default differs from render baseline');
+}
+echo "Avatar settings passed: stored scale/fit/position preserved, cover baseline, explicit contain, no frame clipping or fill stretching.\n";

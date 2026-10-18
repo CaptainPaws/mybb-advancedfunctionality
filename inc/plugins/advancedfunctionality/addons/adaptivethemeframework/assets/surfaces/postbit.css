@@ -587,8 +587,8 @@ body.atf-active .atf-post__primary-avatar-media :is(img, svg),
 body.atf-active .atf-post__primary-avatar-media .author_avatar :is(img, svg),
 body.atf-active .atf-post__primary-avatar-media .author_avatar > a > :is(img, svg) {
   position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
+  top: 0 !important;
+  left: 0 !important;
   display: block !important;
   width: 100% !important;
   height: 100% !important;
@@ -597,7 +597,9 @@ body.atf-active .atf-post__primary-avatar-media .author_avatar > a > :is(img, sv
   margin: 0 !important;
   object-fit: var(--aa-avatar-fit, cover) !important;
   object-position: var(--aa-avatar-position, center center) !important;
-  transform: translate(-50%, -50%) !important;
+  transform: none !important;
+  transform-origin: var(--aa-avatar-position, center center);
+  scale: max(var(--aa-avatar-min-scale, 1), var(--aa-avatar-scale, 1));
   border-radius: 50% !important;
 }
 body.atf-active .atf-post__content {
@@ -963,13 +965,27 @@ body.atf-active .atf-post.af-atf-display .atf-post__sidebar-inner .atf-post__sec
   box-shadow: inset 0 0 0 1px #0a1016, 0 3px 10px rgb(0 0 0 / 28%);
 }
 body.atf-active .atf-post.af-atf-display .atf-post__sidebar-inner .atf-post__secondary-avatar:not(:has(img, svg)) { display: none; }
+/* Only the media clips/scales; the outer Gothic frame retains its geometry. */
+body.atf-active .atf-post.af-atf-display .atf-post__secondary-avatar-media {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+}
 body.atf-active .atf-post.af-atf-display .atf-post__sidebar-inner .atf-post__secondary-avatar :is(img, svg),
 body.atf-active .atf-post.af-atf-display .atf-post__sidebar-inner .atf-post__secondary-avatar-image {
-  width: auto !important;
+  display: block !important;
+  position: static !important;
+  width: 100% !important;
   height: auto !important;
-  max-width: min(250px, 100%) !important;
+  max-width: 100% !important;
   max-height: none !important;
-  object-fit: contain;
+  margin: 0 !important;
+  object-fit: var(--aa-avatar-fit, cover) !important;
+  object-position: var(--aa-avatar-position, center center) !important;
+  transform: none !important;
+  transform-origin: var(--aa-avatar-position, center center);
+  scale: max(var(--aa-avatar-min-scale, 1), var(--aa-avatar-scale, 1));
   border-radius: 0;
 }
 body.atf-active .atf-post__character-name {
