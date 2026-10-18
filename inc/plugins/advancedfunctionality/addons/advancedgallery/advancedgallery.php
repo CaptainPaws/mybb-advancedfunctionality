@@ -581,6 +581,8 @@ function af_advancedgallery_uninstall(): bool
         'af_advancedgallery_upload_max_mb',
         'af_advancedgallery_max_storage_mb',
         'af_advancedgallery_storage_exempt_staff',
+        'af_advancedgallery_storage_mount_path',
+        'af_advancedgallery_storage_mount_device',
         'af_advancedgallery_allowed_ext',
         'af_advancedgallery_thumb_w',
         'af_advancedgallery_thumb_h',

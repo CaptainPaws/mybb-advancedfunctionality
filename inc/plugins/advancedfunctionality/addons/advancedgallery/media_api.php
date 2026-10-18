@@ -245,6 +245,10 @@ function ag_ensure_storage_setting(): void
         'Суммарный объём локальных оригиналов пользователя во всех альбомах и статусах. Внешние изображения не учитываются. 0 = без ограничения.', 'numeric', '0', 19);
     af_ag_ensure_setting($gid, 'af_advancedgallery_storage_exempt_staff', 'Исключить администраторов и модераторов из пользовательских квот',
         'Администраторы MyBB, модераторы MyBB и группы модерации Gallery освобождены от объёмной квоты. Максимальный размер одного файла действует для всех.', 'yesno', '1', 20);
+    af_ag_ensure_setting($gid, 'af_advancedgallery_storage_mount_path', 'Ожидаемая точка монтирования хранилища',
+        'Абсолютный путь точки монтирования тома Gallery. Пусто — каталог uploadspath должен быть отдельной точкой монтирования. Если том не подключён, его статистика скрывается. Для обычного каталога укажите фактическую точку тома явно.', 'text', '', 21);
+    af_ag_ensure_setting($gid, 'af_advancedgallery_storage_mount_device', 'Ожидаемое устройство хранилища',
+        'Необязательно: устройство из mountinfo, например /dev/sda1. При несовпадении статистика скрывается. Значение не меняет настройки файловой системы.', 'text', '', 22);
 }
 
 /** Validate the destination before saving bytes; create a system album only after success. */

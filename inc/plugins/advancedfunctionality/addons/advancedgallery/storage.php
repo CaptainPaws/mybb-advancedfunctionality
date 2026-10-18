@@ -1,6 +1,7 @@
 <?php
 /** Local media accounting. Originals are counted once, independent of album/status. */
 if (!defined('IN_MYBB')) die('No direct access');
+require_once __DIR__.'/storage_disk.php';
 
 function ag_upload_error(string $message): void
 {
@@ -61,17 +62,6 @@ function ag_storage_admin_stats(): array
     return $stats;
 }
 
-/** Never infer a disk from an existing parent if the configured Gallery path is absent. */
-function ag_storage_disk(): ?array
-{
-    $path = realpath(af_ag_resolve_upload_path().'/af_gallery');
-    if (!$path || !is_dir($path)) return null;
-    $total = @disk_total_space($path);
-    $free = @disk_free_space($path);
-    if ($total === false || $free === false || $total <= 0 || $free < 0 || $free > $total) return null;
-    return ['path'=>$path, 'total'=>$total, 'free'=>$free, 'percent'=>($total-$free)/$total*100];
-}
-
 function ag_storage_admin_widget(): string
 {
     $s = ag_storage_admin_stats();
@@ -85,14 +75,6 @@ function ag_storage_admin_widget(): string
         $html .= '<dt>Остальные локальные файлы</dt><dd>'.((int)$s['local_files']-(int)$s['system']['files']).' файлов · '.ag_storage_mb((float)$s['bytes']-(float)$s['system']['bytes']).' МБ</dd>';
     }
     $html .= '</dl><p>Оригиналы учитываются один раз, включая все статусы модерации. Миниатюры не входят в пользовательскую квоту.</p>';
-    $disk = ag_storage_disk();
-    if ($disk) {
-        $formatMb = static fn(float $bytes): string => number_format($bytes / 1048576, 2, ',', ' ').' МБ';
-        $html .= '<p>Том хранилища: '.htmlspecialchars_uni($disk['path']).'</p><dl>'
-            .'<dt>Общая ёмкость тома</dt><dd>'.$formatMb($disk['total']).'</dd>'
-            .'<dt>Занято на томе</dt><dd>'.$formatMb($disk['total']-$disk['free']).'</dd>'
-            .'<dt>Свободно на томе</dt><dd>'.$formatMb($disk['free']).'</dd>'
-            .'</dl><progress max="100" value="'.$disk['percent'].'" aria-label="Занято на томе хранилища"></progress><p>Заполнение тома включает другие данные и миниатюры; это не пользовательская квота Gallery.</p>';
-    } else $html .= '<p>Ёмкость тома хранилища недоступна; показан абсолютный объём Gallery.</p>';
+    $html .= ag_storage_disk_widget(ag_storage_disk());
     return $html.'</section>';
 }

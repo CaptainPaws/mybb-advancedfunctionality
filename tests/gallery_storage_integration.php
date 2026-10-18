@@ -88,10 +88,11 @@ $stats=ag_storage_admin_stats();
 check((int)$stats['local_files']===4 && (int)$stats['users']===2 && (int)$stats['remote_files']===1,'ACP counts');
 check((int)$stats['bytes']===4718592 && (int)$stats['system']['files']===1 && (int)$stats['system']['bytes']===2097152,'ACP duplicate/system bytes');
 $mybb->settings['uploadspath']='/tmp/ag-storage-network-fixture';
-check(ag_storage_disk()===null,'Missing storage path guessed parent capacity');
+check(!isset(ag_storage_disk()['total']),'Missing storage path guessed parent capacity');
 check(!str_contains(ag_storage_admin_widget(),'<progress'),'Unknown capacity displayed invented percentage');
 if (!is_dir('/tmp/ag-storage-network-fixture/af_gallery')) mkdir('/tmp/ag-storage-network-fixture/af_gallery',0755,true);
 check(ag_storage_disk()['path']==='/tmp/ag-storage-network-fixture/af_gallery','Configured absolute storage path ignored');
+check(!isset(ag_storage_disk()['total']),'Unmounted network directory fell back to root volume');
 $mybb->settings['uploadspath']='uploads';
 // Two real worker connections contend for one owner's final 1 MB.
 $workers=[];
