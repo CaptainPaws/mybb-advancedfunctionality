@@ -1130,7 +1130,7 @@ function af_apf_usercp_start(): void
         || (string)$mybb->get_input('action') !== 'do_apf_secondary_avatar') {
         return;
     }
-    if (empty($mybb->user['uid'])) {
+    if (empty($mybb->user['uid']) || empty($mybb->usergroup['canusercp']) || $mybb->request_method!=='post') {
         error_no_permission();
     }
     verify_post_check((string)$mybb->get_input('my_post_key'));
@@ -1236,6 +1236,10 @@ function af_apf_validate_secondary_avatar_upload(array $file): string
 function af_apf_usercp_avatar_end(): void
 {
     global $mybb;
+    if (!empty($mybb->settings['af_adaptivethemeframework_enabled']) && function_exists('af_atf_avatar_editor_prepare')) {
+        $GLOBALS['af_apf_secondary_avatar']='';
+        return;
+    }
     $uid = (int)($mybb->user['uid'] ?? 0);
     if ($uid <= 0) {
         $GLOBALS['af_apf_secondary_avatar'] = '';

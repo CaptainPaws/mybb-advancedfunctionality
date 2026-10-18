@@ -39,8 +39,8 @@ foreach ($requirements as $label => $needle) {
 if (str_contains($apf, "ALTER TABLE") && str_contains($apf, "users")) {
     throw new RuntimeException('Secondary avatar must not add a users column.');
 }
-if (!str_contains($template, '{$af_apf_secondary_avatar}')) {
-    throw new RuntimeException('ATF avatar page does not expose the APF component slot.');
+if (!str_contains($template, '{$atf_avatar_editor}')) {
+    throw new RuntimeException('ATF avatar page does not expose the shared avatar editor component.');
 }
 if (!str_contains($apf, 'function af_apf_normalize_atf_avatar_template')
     || !str_contains($apf, 'secondary_avatar_atf_seed_upgrade')) {

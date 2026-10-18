@@ -1,3 +1,5 @@
+> Эта первая версия UI заменена единым редактором двух аватаров. Актуальная архитектура и ограничения: [usercp-avatar-editor.md](usercp-avatar-editor.md).
+
 # Выбор основного аватара из Advanced Gallery
 
 Страница: `usercp.php?action=avatar`. MyBB 1.8.40, проверка на PHP 8.5.

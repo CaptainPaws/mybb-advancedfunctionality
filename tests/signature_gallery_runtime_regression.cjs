@@ -20,7 +20,7 @@ const window={AF_GalleryPickerConfig:{pickerUrl:'gallery.php?action=picker',data
 const context=vm.createContext({window,document,URL,location:{href:'https://example.org/usercp.php?action=editsig'},setInterval:()=>0,clearInterval:()=>{},setTimeout,clearTimeout,FormData,alert:()=>{throw Error('Picker ignored inline onError');},fetch:async url=>{urls.push(url);if(fail)throw Error('network failure');return {ok:true,text:async()=>'<div id="af-gallery-picker"></div>',json:async()=>[]};}});
 vm.runInContext(fs.readFileSync('inc/plugins/advancedfunctionality/addons/advancedgallery/assets/advancedgallery.js','utf8'),context);
 (async()=>{
-  for (const purpose of ['signature_images','signature_background','account_avatar']) {
+  for (const purpose of ['signature_images','signature_background','account_avatar','character_avatar']) {
     modal=new Node();modal.attrs['data-initial-album']='-2';
     await window.AF_GalleryPicker.open(()=>{}, {purpose,onError:e=>errors.push(e.message)});
     assert.ok(body.children.includes(modal),'Modal was not appended');
@@ -31,5 +31,5 @@ vm.runInContext(fs.readFileSync('inc/plugins/advancedfunctionality/addons/advanc
   }
   fail=true;await window.AF_GalleryPicker.open(()=>{}, {purpose:'signature_images',onError:e=>errors.push(e.message)});
   assert.ok(errors.some(message=>message.includes('network failure')),'Open failure did not reach constructor');
-  console.log('Gallery runtime passed: signature and account avatar purposes fetch and open the actual modal API, focus/ARIA and inline failure callback.');
+  console.log('Gallery runtime passed: signature and both avatar purposes fetch and open the actual modal API, focus/ARIA and inline failure callback.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

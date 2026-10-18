@@ -482,7 +482,7 @@
     options = options || {};
     if (insertFn && typeof insertFn === 'object') { options = insertFn; insertFn = options.onSelect; }
     var purpose = options.purpose || '';
-    if (purpose && ['account_avatar', 'signature_background', 'signature_images', 'appearance_avatars', 'appearance_postbit_bg', 'appearance_profile_bg', 'appearance_sheet_bg', 'appearance_theme_bg'].indexOf(purpose) === -1) throw new Error('Unknown Gallery purpose');
+    if (purpose && ['character_avatar', 'account_avatar', 'signature_background', 'signature_images', 'appearance_avatars', 'appearance_postbit_bg', 'appearance_profile_bg', 'appearance_sheet_bg', 'appearance_theme_bg'].indexOf(purpose) === -1) throw new Error('Unknown Gallery purpose');
     if (purpose && typeof insertFn !== 'function') throw new Error('Appearance picker requires onSelect');
     if (purpose !== pickerState.purpose && pickerState.modal) { closePicker(); pickerState.modal.remove(); pickerState.modal = null; }
     var token = ++pickerState.openToken;
@@ -538,14 +538,8 @@
     var token = pickerState.openToken, callback = pickerState.insertFn;
     var form = $one('form', pickerState.modal);
     var key = form && $one('[name="my_post_key"]', form);
-    var fd = new FormData();
-    fd.append('purpose', pickerState.purpose); fd.append('media_id', item.media_id || item.id);
-    fd.append('my_post_key', key ? key.value : '');
-    var cfg = getPickerConfig();
-    var url = new URL(cfg.pickerUrl, location.href); url.searchParams.set('action', 'picker_select');
     button.disabled = true;
-    fetch(url.href, { method: 'POST', body: fd, credentials: 'same-origin' })
-      .then(function (res) { return res.json().then(function (data) { if (!res.ok || !data.ok) throw new Error(data.error || 'Image unavailable'); return data; }); })
+    selectGalleryMedia(item.media_id || item.id, {purpose:pickerState.purpose, myPostKey:key ? key.value : ''})
       .then(function (data) {
         if (token !== pickerState.openToken) return;
         closePicker();
@@ -564,9 +558,25 @@
     lockBodyScroll(false);
   }
 
+  // Shared selection boundary for the modal and compact consumer thumbnail strips.
+  function selectGalleryMedia(mediaId, options) {
+    var fd = new FormData(), cfg = getPickerConfig();
+    fd.append('purpose', options.purpose); fd.append('media_id', mediaId); fd.append('my_post_key', options.myPostKey || '');
+    var url = new URL(cfg.pickerUrl, location.href); url.searchParams.set('action', 'picker_select');
+    return fetch(url.href, {method:'POST',body:fd,credentials:'same-origin'})
+      .then(function(res) { return res.json().then(function(data) { if(!res.ok || !data.ok) throw new Error(data.error || 'Изображение недоступно'); return data; }); });
+  }
+
   window.AF_GalleryPicker = {
     open: function (insertFn, options) { return openPicker(insertFn, options); },
-    reload: function () { loadPickerData(); }
+    reload: function () { loadPickerData(); },
+    select: function (mediaId, options) { return selectGalleryMedia(mediaId, options || {}); },
+    recent: function (options) {
+      var url=new URL(getPickerConfig().dataUrl, location.href);
+      url.searchParams.set('purpose', options.purpose); url.searchParams.set('album_id','-1'); url.searchParams.set('page','1');
+      return fetch(url.href,{credentials:'same-origin'}).then(function(res) { if(!res.ok) throw new Error('Не удалось получить изображения галереи'); return res.json(); })
+        .then(function(items) { if(!Array.isArray(items)) throw new Error('Неверный ответ Gallery'); return items.slice(0,6); });
+    }
   };
 
   /* -------------------- 5) SCEditor button integration -------------------- */
@@ -710,66 +720,5 @@
     });
     })();
 
-
-  /* Primary avatar: reuse the native multipart form and its MyBB handler. */
-  function bindAccountAvatarPicker() {
-    var host = $one('[data-ag-avatar-picker]');
-    if (!host || host.dataset.agBound) return;
-    host.dataset.agBound = '1';
-    var form = host.closest('form'), fileInput = form && $one('input[type="file"][name="avatarupload"]', form);
-    var open = $one('[data-ag-avatar-open]', host), cancel = $one('[data-ag-avatar-cancel]', host);
-    var confirm = $one('[name="ag_avatar_confirm"]', host), mediaId = $one('[name="ag_avatar_media_id"]', host);
-    var preview = $one('[data-ag-avatar-preview]', host), status = $one('[data-ag-avatar-status]', host);
-    var selected = null, revision = 0, ready = false;
-    if (!fileInput || typeof File !== 'function' || typeof DataTransfer !== 'function' || !form.requestSubmit) {
-      open.disabled = true;
-      status.textContent = 'Выбор из галереи недоступен в этом браузере. Используйте стандартную загрузку аватара.';
-      return;
-    }
-    function reset() {
-      revision++; ready = false; selected = null; mediaId.value = ''; preview.hidden = true; preview.removeAttribute('src');
-      confirm.disabled = true; cancel.disabled = true; status.textContent = '';
-    }
-    cancel.addEventListener('click', reset);
-    open.addEventListener('click', function () {
-      window.AF_GalleryPicker.open(function (item) {
-        revision++; ready = false; selected = item; mediaId.value = String(item.media_id);
-        // The full original is also used for GIF previews; no canvas/re-encoding.
-        preview.src = item.url_full; preview.hidden = false;
-        confirm.disabled = false; cancel.disabled = false;
-        status.textContent = 'Изображение выбрано. Подтвердите установку аватара.';
-      }, {purpose: 'account_avatar', onError: function (error) { status.textContent = error.message; }});
-    });
-    fileInput.addEventListener('change', reset);
-    form.addEventListener('submit', function (event) {
-      if (event.submitter !== confirm) { revision++; return; }
-      if (ready) return; // requestSubmit now enters native MyBB do_avatar once.
-      event.preventDefault();
-      if (!selected) return;
-      var item = selected, token = ++revision;
-      confirm.disabled = true; status.textContent = 'Подготовка аватара…';
-      Promise.resolve().then(function () {
-        var url = new URL(item.url_full, location.href);
-        if (url.origin !== location.origin) throw new Error('Исходное изображение должно находиться на этом форуме.');
-        return fetch(url.href, {credentials: 'same-origin', cache: 'no-store', redirect: 'error'});
-      }).then(function (response) {
-        if (!response.ok) throw new Error('Не удалось получить исходное изображение галереи.');
-        return response.blob();
-      }).then(function (blob) {
-        if (token !== revision) return;
-        var transfer = new DataTransfer();
-        transfer.items.add(new File([blob], item.filename, {type: item.mime}));
-        fileInput.files = transfer.files;
-        ready = true; confirm.disabled = false;
-        form.requestSubmit(confirm);
-        ready = false;
-      }).catch(function (error) {
-        if (token !== revision) return;
-        ready = false; confirm.disabled = false; status.textContent = error.message;
-      });
-    });
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindAccountAvatarPicker);
-  else bindAccountAvatarPicker();
 
 })();

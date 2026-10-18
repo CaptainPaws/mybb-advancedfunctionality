@@ -16,6 +16,7 @@ if (!defined('AF_ADDONS')) {
 require_once __DIR__ . '/ownership.php';
 require_once __DIR__ . '/page-shell.php';
 require_once __DIR__ . '/postbit-signature.php';
+require_once __DIR__ . '/avatar-editor.php';
 
 define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
@@ -244,6 +245,8 @@ function af_adaptivethemeframework_init(): void
             // Contextual subscription confirmations have no dedicated end
             // hook, so prepare their navigation before core evaluates them.
             $plugins->add_hook('usercp_start', 'af_adaptivethemeframework_compose_ucp_profile_surface', 1000);
+            $plugins->add_hook('usercp_avatar_end', 'af_atf_avatar_editor_prepare', 1200);
+            $plugins->add_hook('usercp_do_avatar_start', 'af_atf_avatar_native_guard', 15);
             // Each migrated form keeps native core values and processing while
             // adopting the shared navigation context at its final display hook.
             $plugins->add_hook('usercp_end', 'af_adaptivethemeframework_compose_ucp_overview', 1000);

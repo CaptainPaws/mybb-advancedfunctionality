@@ -678,7 +678,7 @@ function af_advancedgallery_init(): void
 {
     global $plugins;
 
-    $plugins->add_hook('usercp_avatar_end','ag_avatar_usercp_block',1100);
+    $plugins->add_hook('usercp_start','ag_character_avatar_validate_submission',4);
     $plugins->add_hook('usercp_do_avatar_start','ag_avatar_validate_submission');
     // AF invokes the canonical owner callback before collection/bundling. No second late rewrite.
 }
@@ -721,7 +721,7 @@ function af_advancedgallery_pre_output(string &$page = ''): void
         ? !empty(af_advancededitor_response_facts($page)['has_supported_editor'])
         : (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']message["\'])[^>]*>~i', $page);
 
-    $hasPicker = $hasPicker || str_contains($page, 'data-aa-gallery-picker') || str_contains($page, 'data-ag-avatar-picker');
+    $hasPicker = $hasPicker || str_contains($page, 'data-aa-gallery-picker') || str_contains($page, 'data-atf-avatar-editor');
     if ($script === 'gallery.php' && stripos($page, '<html') !== false) {
         $wantScripts = true;
     } elseif ($hasPicker) {
@@ -2204,7 +2204,7 @@ function ag_handle_upload(): void
         'embed_html'    => '',
     ];
 
-    if ($purpose !== '' && $purpose !== 'account_avatar') $insert['appearance_retained'] = 1;
+    if ($purpose !== '' && !in_array($purpose,['account_avatar','character_avatar'],true)) $insert['appearance_retained'] = 1;
 
     $db->insert_query('af_gallery_media', $insert);
     $newId = (int)$db->insert_id();
@@ -2376,7 +2376,7 @@ function ag_render_picker_modal(): void
     global $db, $mybb, $templates, $lang;
 
     $purpose = ag_request_appearance_purpose();
-    if ((int)$mybb->user['uid'] <= 0 || ($purpose === 'account_avatar' ? !ag_avatar_available() : !ag_can_upload())) {
+    if ((int)$mybb->user['uid'] <= 0 || (in_array($purpose,['account_avatar','character_avatar'],true) ? !ag_avatar_available($purpose) : !ag_can_upload())) {
         error_no_permission();
     }
 
@@ -2388,7 +2388,7 @@ function ag_render_picker_modal(): void
 
     // ---- кнопки альбомов (фильтр) ----
     $albumsHtml = '<button type="button" class="ag-picker-album" data-album-id="-1">Все мои изображения</button>';
-    if ($purpose !== '' && $purpose !== 'account_avatar') $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="'.$ag_picker_initial_album.'">'.htmlspecialchars_uni(ag_system_album_purposes()[$purpose]).'</button>';
+    if ($purpose !== '' && !in_array($purpose,['account_avatar','character_avatar'],true)) $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="'.$ag_picker_initial_album.'">'.htmlspecialchars_uni(ag_system_album_purposes()[$purpose]).'</button>';
 
     // Default как album_id=0 (виртуальный, но обработчик picker_data переведёт в реальный defaultId)
     $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="0">'
@@ -2435,7 +2435,7 @@ function ag_handle_picker_data(): void
     global $db, $mybb;
 
     $purpose = ag_request_appearance_purpose();
-    if ((int)$mybb->user['uid'] <= 0 || ($purpose === 'account_avatar' ? !ag_avatar_available() : !ag_can_upload())) {
+    if ((int)$mybb->user['uid'] <= 0 || (in_array($purpose,['account_avatar','character_avatar'],true) ? !ag_avatar_available($purpose) : !ag_can_upload())) {
         error_no_permission();
     }
 
@@ -2449,8 +2449,8 @@ function ag_handle_picker_data(): void
 
     if ($purpose !== '') $where .= " AND m.status='approved' AND m.type='local' AND m.mime IN ('image/jpeg','image/png','image/gif','image/webp')";
 
-    if ($purpose === 'account_avatar') {
-        $mimes=ag_avatar_allowed_mimes();
+    if (in_array($purpose,['account_avatar','character_avatar'],true)) {
+        $mimes=ag_avatar_allowed_mimes($purpose);
         $where .= $mimes ? " AND m.mime IN ('".implode("','",array_map([$db,'escape_string'],$mimes))."')" : ' AND 1=0';
     }
 

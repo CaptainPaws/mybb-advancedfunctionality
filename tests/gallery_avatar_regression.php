@@ -9,14 +9,21 @@ class MyBB {
     public array $usergroup=['canusercp'=>1,'canuploadavatars'=>1];
     public array $settings=['af_advancedgallery_enabled'=>1,'bburl'=>'http://localhost','uploadspath'=>'uploads','maxavatardims'=>'100x100',
         'avatarsize'=>100,'avatarresizing'=>'never','avataruploadpath'=>MYBB_ROOT.'avatars','usecdn'=>0,'cdnpath'=>''];
+    public string $post_code='valid';
     public string $request_method='post';
     public array $input=[];
     public function get_input($key,$type=0) { $v=$this->input[$key]??'';return $type===1?(int)$v:(string)$v; }
 }
 class AvatarDB {
-    public array $media=[],$queries=[];
+    public array $media=[],$queries=[],$values=[];
+    function table_exists($table){return $table==='af_apf_values';}
+    function escape_string($s){return addslashes((string)$s);}
+    function fetch_field($row,$key){return $row[$key]??'';}
+    function replace_query($table,$row){if($table!=='af_apf_values')throw new RuntimeException('Wrong storage');$this->values[$row['uid']]=$row['field_value'];}
+    function delete_query($table,$where){if($table!=='af_apf_values')throw new RuntimeException('Wrong delete');$this->values[7]='';}
     function simple_select($table,$fields,$where,$options=[]) {
         $this->queries[]=$where;
+        if ($table==='af_apf_values')return ['field_value'=>$this->values[7]??''];
         if (!preg_match("/id='(\d+)'/",$where,$id)) return [];
         $row=$this->media[(int)$id[1]]??[];
         if (str_contains($where,"uid_owner='7'") && ($row['uid_owner']??0)!==7) return [];
@@ -33,6 +40,8 @@ function htmlspecialchars_uni($s){return htmlspecialchars((string)$s,ENT_QUOTES,
 function verify_post_check($key){if ($key!=='valid')throw new RuntimeException('CSRF');}
 function error_no_permission(){throw new RuntimeException('Permission');}
 function error($message){throw new RuntimeException($message);}
+class AvatarRedirect extends RuntimeException {}
+function redirect($url,$message){throw new AvatarRedirect($message);}
 function avatar_check($condition,$message){if (!$condition)throw new RuntimeException($message);}
 function avatar_reject($callback,$message){try{$callback();}catch(RuntimeException $e){return;}throw new RuntimeException($message);}
 $mybb=new MyBB();$db=new AvatarDB();$cache=new AvatarCache();
@@ -50,6 +59,23 @@ if (PHP_SAPI!=='cli') {
         if (!empty($_POST['foreign'])) $db->media[42]['uid_owner']=8;
         if (!empty($_POST['mime_denied'])) $cache->types=[];
         if (!empty($_POST['too_small'])) $mybb->settings['avatarsize']=.001;
+        if (($mybb->input['action']??'')==='do_apf_secondary_avatar') {
+            if (!defined('THIS_SCRIPT'))define('THIS_SCRIPT','usercp.php');
+            $mybb->settings['af_advancedprofilefields_enabled']=1;
+            $mybb->user['avatar']='untouched-primary';
+            require AF_ADDONS.'advancedprofilefields/advancedprofilefields.php';
+            if (!empty($_POST['remove_secondary_avatar'])) {
+                @mkdir(MYBB_ROOT.'uploads/avatars',0755,true);
+                $db->values[7]='uploads/avatars/secondary_7_'.str_repeat('a',32).'.gif';
+                file_put_contents(MYBB_ROOT.$db->values[7],$gif);
+            }
+            ag_character_avatar_validate_submission();
+            try {af_apf_usercp_start();}catch(AvatarRedirect $success){}
+            $path=$db->values[7]??'';
+            echo json_encode(['secondary'=>$path,'primary'=>$mybb->user['avatar'],'original_hash'=>hash_file('sha256',$original),
+                'avatar_hash'=>$path!==''?hash_file('sha256',MYBB_ROOT.$path):null,'error'=>$GLOBALS['af_apf_secondary_avatar_error']??'']);
+            return;
+        }
         ag_avatar_validate_submission();
         // Optional exact upstream upload_avatar(): tests must supply MyBB 1.8.40 source.
         require getenv('MYBB_UPLOAD_SOURCE');
@@ -78,15 +104,9 @@ $mybb->input=['ag_avatar_confirm'=>'1','ag_avatar_media_id'=>42,'my_post_key'=>'
 $mybb->input['my_post_key']='valid';$_FILES=['avatarupload'=>['tmp_name'=>$original,'error'=>0]];avatar_reject('ag_avatar_validate_submission','Synthetic server file accepted as upload');
 // Standard avatar submit is untouched even when an unrelated stale media ID exists.
 $mybb->input=['ag_avatar_media_id'=>999,'my_post_key'=>'invalid'];ag_avatar_validate_submission();
-class AvatarTemplates {
-    public array $cache=['usercp_avatar'=>'<form><input name="avatarupload" type="file"></form>'];
-    function get($name,$escape=1,$comments=1){return $this->cache[$name];}
-}
-$templates=new AvatarTemplates();ag_avatar_usercp_block();$once=$templates->cache['usercp_avatar'];ag_avatar_usercp_block();
-avatar_check($once===$templates->cache['usercp_avatar'] && substr_count($once,'<form')===1 && str_contains($once,'data-ag-avatar-picker'),'Form injection/duplicate failure');
-$mybb->settings['af_advancedgallery_enabled']=0;$templates=new AvatarTemplates();ag_avatar_usercp_block();avatar_check(!str_contains($templates->cache['usercp_avatar'],'data-ag-avatar-picker'),'Disabled Gallery changes UserCP');
+avatar_check(!function_exists('ag_avatar_usercp_block'),'Retired Gallery form insertion remains');
 avatar_check(hash_file('sha256',$original)===hash('sha256',$gif),'Gallery original changed');
-echo "Gallery avatar passed: ownership, approved local original, MIME/group permissions, CSRF, native upload boundary, standard submit, single form, disabled fallback, all-own initial view.\n";
+echo "Gallery avatar passed: ownership, approved local original, MIME/group permissions, CSRF, native upload boundary, standard submit, disabled Gallery permission, all-own initial view.\n";
 // Stubs used only by the optional real MyBB HTTP upload fixture.
 function get_extension($name){return pathinfo($name,PATHINFO_EXTENSION);}
 function my_strtolower($s){return strtolower($s);}
