@@ -491,7 +491,7 @@
             (percent !== null && storage.limit_bytes > 0 ? '<span class="af-ae-stikers-percent">' + Math.round(percent) + '%</span><progress max="100" value="' + percent + '" aria-label="Заполнение квоты стикеров"></progress>' : '') + '</div>' +
             (storage && storage.full ? '<p class="af-ae-stikers-warning">Квота исчерпана. Удалите локальные стикеры или добавьте внешний URL, если он разрешён.</p>' : '') +
             (external ? '<div class="af-ae-stikers-source"><select data-sticker-source hidden aria-hidden="true" tabindex="-1"><option value="file">С устройства</option><option value="url">По внешнему URL</option></select><button type="button" data-source="file">С устройства</button><button type="button" data-source="url">По внешнему URL</button></div>' : '') +
-            '<div class="af-ae-stikers-tools">' +
+            '<div class="af-ae-stikers-entry"><div class="af-ae-stikers-tools">' +
               '<label class="af-ae-stikers-upload-btn" title="' + htmlEscape(formats.join(', ').toUpperCase() + (limits.max_size ? ' · до ' + mb(limits.max_size) + ' МБ' : '')) + '">' +
                 '<input type="file" id="af-ae-stiker-upload" accept="' + htmlEscape(accept) + '">' +
                 '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16v4h16v-4M12 16V3m-5 5 5-5 5 5"/></svg>' +
@@ -499,7 +499,7 @@
               '</label>' +
               '<button type="button" class="af-ae-stikers-btn af-ae-stikers-gear-btn" id="af-ae-stiker-toggle" title="' + (state.removeMode ? 'Режим удаления включён: нажмите крестик на стикере' : 'Включить режим удаления') + '" aria-label="Режим удаления" aria-pressed="' + state.removeMode + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-1 3-3 1-2 4 2 2v4l4 2 3-1 3 1 4-2v-4l2-2-2-4-3-1-1-3z"/><circle cx="12" cy="12" r="3"/></svg></button>' +
             '</div>' +
-            (external ? '<form class="af-ae-stikers-url" title="Сохраняется только ссылка. Локальная квота не расходуется."><label for="af-ae-sticker-url">URL изображения</label><input id="af-ae-sticker-url" type="url" name="sticker_url" placeholder="https://…" required><input aria-label="Название стикера" type="text" name="sticker_title" maxlength="60" placeholder="Название (необязательно)"><button class="af-ae-stikers-btn" type="submit">Добавить</button></form>' : '');
+            (external ? '<form class="af-ae-stikers-url" title="Сохраняется только ссылка. Локальная квота не расходуется."><label for="af-ae-sticker-url">URL изображения</label><input id="af-ae-sticker-url" type="url" name="sticker_url" placeholder="https://…" required><input aria-label="Название стикера" type="text" name="sticker_title" maxlength="60" placeholder="Название (необязательно)"><button class="af-ae-stikers-btn" type="submit">Добавить</button></form>' : '') + '</div>';
         }
 
         controlsEl.innerHTML = extra;

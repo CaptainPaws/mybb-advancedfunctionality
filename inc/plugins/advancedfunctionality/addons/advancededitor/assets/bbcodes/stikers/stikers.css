@@ -287,3 +287,8 @@ body.atf-active .af-ae-stiker-source { background:var(--atf-color-page); color:v
 
 #af-ae-stikers-modal .af-ae-stikers-gear-btn svg { width:16px; height:16px; }
 #af-ae-stikers-modal .af-ae-stikers-upload-btn:hover { filter:brightness(1.12); }
+
+/* Keep deletion mode beside the URL form without moving it into that form. */
+.af-ae-stikers-entry { display:flex; align-items:flex-start; gap:6px; min-width:0; }
+.af-ae-stikers-entry > .af-ae-stikers-tools { flex:0 0 auto; }
+.af-ae-stikers-entry > .af-ae-stikers-url { flex:1 1 0; min-width:0; }
