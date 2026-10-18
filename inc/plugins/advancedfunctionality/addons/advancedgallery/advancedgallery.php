@@ -1121,7 +1121,7 @@ function ag_render_home_albums(): string
     $isMod = ag_can_moderate();
 
     // Общие/системные (uid_owner=0) больше не используем
-    $base = "uid_owner<>0";
+    $base = "a.uid_owner<>0";
 
     if ($isMod) {
         $where = $base;
@@ -1130,24 +1130,25 @@ function ag_render_home_albums(): string
 
         // свои альбомы видны всегда
         if ($uidViewer > 0) {
-            $whereParts[] = "uid_owner='{$uidViewer}'";
+            $whereParts[] = "a.uid_owner='{$uidViewer}'";
         }
 
         // публичные
-        $whereParts[] = "visibility='public'";
+        $whereParts[] = "a.visibility='public'";
 
         // для зарегистрированных
         if ($uidViewer > 0) {
-            $whereParts[] = "visibility='registered'";
+            $whereParts[] = "a.visibility='registered'";
         }
 
         $where = $base . " AND (" . implode(' OR ', array_unique($whereParts)) . ")";
     }
 
-    $query = $db->simple_select('af_gallery_albums', '*', $where, [
-        'order_by'  => 'updated_at',
-        'order_dir' => 'DESC',
-    ]);
+    // Resolve owners in the list query, including deleted users via LEFT JOIN.
+    $query = $db->write_query('SELECT a.*, u.uid AS owner_uid, u.username AS owner_username'
+        .' FROM '.TABLE_PREFIX.'af_gallery_albums a'
+        .' LEFT JOIN '.TABLE_PREFIX.'users u ON u.uid=a.uid_owner'
+        .' WHERE '.$where.' ORDER BY a.updated_at DESC');
 
     $tiles = '';
     while ($album = $db->fetch_array($query)) {
@@ -1194,10 +1195,10 @@ function ag_render_albums(): string
     $ag_page_title = $lang->af_advancedgallery_my_albums ?? 'Мои альбомы';
 
     $uid = (int)$mybb->user['uid'];
-    $query = $db->simple_select('af_gallery_albums', '*', "uid_owner='{$uid}'", [
-        'order_by' => 'created_at',
-        'order_dir' => 'DESC',
-    ]);
+    $query = $db->write_query('SELECT a.*, u.uid AS owner_uid, u.username AS owner_username'
+        .' FROM '.TABLE_PREFIX.'af_gallery_albums a'
+        .' LEFT JOIN '.TABLE_PREFIX.'users u ON u.uid=a.uid_owner'
+        ." WHERE a.uid_owner='{$uid}' ORDER BY a.created_at DESC");
 
     $tiles = '';
     while ($album = $db->fetch_array($query)) {
@@ -1217,7 +1218,7 @@ function ag_render_albums(): string
 
 function ag_render_album_tile(array $album): string
 {
-    global $templates;
+    global $templates, $lang;
 
     $coverUrl = ag_album_cover_url($album);
     $title = htmlspecialchars_uni(ag_album_ui_title($album));
@@ -1227,6 +1228,12 @@ function ag_render_album_tile(array $album): string
     $ag_album_cover_url = $coverUrl;
     $ag_album_title = $title;
     $ag_album_count = (int)$mediaCount;
+    $ag_album_author_label = htmlspecialchars_uni($lang->af_advancedgallery_album_author ?? 'Автор');
+    $ownerName = htmlspecialchars_uni((string)($album['owner_username'] ?? ''));
+    $ownerUid = (int)($album['owner_uid'] ?? 0);
+    $ag_album_owner = $ownerUid > 0 && $ownerName !== ''
+        ? build_profile_link($ownerName, $ownerUid)
+        : htmlspecialchars_uni($lang->af_advancedgallery_album_deleted_owner ?? 'Удалённый пользователь');
 
     eval('$output = "' . $templates->get('advancedgallery_album_tile') . '";');
     return $output;

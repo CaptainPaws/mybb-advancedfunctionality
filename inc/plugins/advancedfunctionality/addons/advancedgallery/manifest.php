@@ -42,6 +42,8 @@ return [
                 'af_advancedgallery_edit_album' => 'Редактировать альбом',
                 'af_advancedgallery_delete_album' => 'Удалить альбом',
                 'af_advancedgallery_album_title' => 'Название альбома',
+                'af_advancedgallery_album_author' => 'Автор',
+                'af_advancedgallery_album_deleted_owner' => 'Удалённый пользователь',
                 'af_advancedgallery_album_desc' => 'Описание',
                 'af_advancedgallery_album_visibility' => 'Видимость',
                 'af_advancedgallery_album_visibility_public' => 'Публичный',
