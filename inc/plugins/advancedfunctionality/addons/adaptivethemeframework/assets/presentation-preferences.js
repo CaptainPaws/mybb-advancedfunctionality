@@ -119,9 +119,14 @@ document.addEventListener('toggle', function (event) {
   function initializeModeration() {
     if (!document.body.classList.contains('atf-active')) return;
     document.querySelectorAll('.atf-thread__moderation').forEach(panel => {
-      if (!panel.querySelector(':scope > form#inlinemoderation_options, :scope > form#moderator_options')) return;
-      panel.querySelectorAll(':scope > form').forEach(form => {
+      const forms = Array.from(panel.children).filter(node => node.tagName === 'FORM');
+      if (!forms.some(form => form.id === 'inlinemoderation_options' || form.id === 'moderator_options')) return;
+      panel.classList.add('atf-thread__moderation--managed');
+      forms.forEach(form => {
         if (!form.matches('#inlinemoderation_options, #moderator_options') && !form.querySelector('select.forumjump')) return;
+        form.querySelectorAll('input[type="submit"], button[type="submit"]').forEach(control => {
+          control.classList.add('atf-button', 'atf-thread-mod-submit');
+        });
         if (form.querySelector('.atf-thread-mod-actions')) return;
         const actions = document.createElement('div');
         actions.className = 'atf-thread-mod-actions';
