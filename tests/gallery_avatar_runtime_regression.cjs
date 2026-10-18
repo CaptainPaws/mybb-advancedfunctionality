@@ -9,7 +9,7 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
     page.setDefaultTimeout(5000);
     const html=fs.readFileSync(process.env.ATF_AVATAR_HTML||'work/avatar-editor.html','utf8');
     const gif=Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7','base64');
-    const posts=[],purposes=[];let failNext=false;let legacyNext=false;let ambiguousNext=false;let stateFailure=false;let failRecovery=false;const invalidRequests=[];let stateReads=0;const versions={primary:0,secondary:0};
+    const posts=[],purposes=[],dataRequests=[];let failNext=false;let legacyNext=false;let ambiguousNext=false;let stateFailure=false;let failRecovery=false;const invalidRequests=[];let stateReads=0;const versions={primary:0,secondary:0};
     const state=role=>({uid:7,role,url:'https://forum.test/current.gif?v='+versions[role],version:role+'-'+versions[role],has_avatar:true});
     const field=(raw,name)=>raw.match(new RegExp('name="'+name+'"\\r\\n\\r\\n([^\\r]+)'))?.[1]||'';
     await page.route('**/*',async route=>{
@@ -21,9 +21,9 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
         const action=url.searchParams.get('action'),purpose=url.searchParams.get('purpose');
         if(action==='picker'){
           purposes.push(purpose);
-          return route.fulfill({contentType:'text/html; charset=utf-8',body:'<div id="af-gallery-picker" class="ag-picker" tabindex="-1" aria-hidden="true" data-initial-album="-1"><div class="ag-picker-dialog" role="document" tabindex="-1"><form><input name="my_post_key" value="valid"></form><div class="ag-picker-grid" data-ag-picker-grid="1"></div><button data-ag-picker-close="1">Закрыть</button></div></div>'});
+          return route.fulfill({contentType:'text/html; charset=utf-8',body:'<div id="af-gallery-picker" class="ag-picker" tabindex="-1" aria-hidden="true" data-initial-album="84"><div class="ag-picker-dialog" role="document" tabindex="-1"><div class="ag-picker-albums"><button class="ag-picker-album" data-album-id="84">Аватары оформления</button><button class="ag-picker-album" data-album-id="12">Другой альбом</button><button class="ag-picker-album" data-album-id="-1">Все изображения</button></div><form><input name="my_post_key" value="valid"></form><div class="ag-picker-grid" data-ag-picker-grid="1"></div><button data-ag-picker-close="1">Закрыть</button></div></div>'});
         }
-        if(action==='picker_data')return route.fulfill({json:[{id:42,media_id:42,title:'Original GIF',type:'local',thumb:'https://forum.test/original.gif',url_full:'https://forum.test/original.gif'}]});
+        if(action==='picker_data'){dataRequests.push({purpose,album:url.searchParams.get('album_id')});return route.fulfill({json:[{id:42,media_id:42,title:'Original GIF',type:'local',thumb:'https://forum.test/original.gif',url_full:'https://forum.test/original.gif'}]});}
         if(action==='picker_select')return route.fulfill({json:{ok:true,media_id:42,mime:'image/gif',filename:'gallery-avatar.gif',url_full:'https://forum.test/original.gif'}});
       }
       if(request.method()==='POST'){
@@ -46,10 +46,21 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
     assert.equal(await page.locator('form[data-avatar-card]').first().evaluate(f=>String(f.action)),'[object HTMLInputElement]','Fixture must reproduce named action shadowing');
     await page.waitForFunction(()=>document.querySelectorAll('[data-avatar-recent] button').length===2);
     assert.equal(await page.locator('form[data-avatar-card]').count(),2);
+    assert.deepEqual(dataRequests.map(r=>r.album),[null,null],'Recent must defer album selection to server');
     await page.screenshot({path:'work/avatar-editor-desktop.png',fullPage:true});
     for(const role of ['primary','secondary']){
       const card=page.locator(`[data-avatar-card=${role}]`);
       await card.locator('.atf-avatar-editor__gallery-open').click();
+      await page.waitForFunction(()=>document.querySelector('#af-gallery-picker .ag-picker-card-actions button'));
+      assert.equal(dataRequests.at(-1).album,'84','Modal must start on appearance avatars');
+      for(const album of ['12','-1','84']){
+        const count=dataRequests.length;
+        const response=page.waitForResponse(r=>new URL(r.url()).searchParams.get('action')==='picker_data' && new URL(r.url()).searchParams.get('album_id')===album);
+        await page.locator('#af-gallery-picker [data-album-id=\"'+album+'\"]').click();
+        await response;
+        await page.waitForFunction(()=>document.querySelector('#af-gallery-picker .ag-picker-card-actions button'));
+        assert.equal(dataRequests.length,count+1);assert.equal(dataRequests.at(-1).album,album,'Switch must retain explicitly selected album');
+      }
       await page.locator('#af-gallery-picker .ag-picker-card-actions button').click();
       await card.locator('[data-avatar-selection]').waitFor({state:'visible'});
       assert.equal(posts.length,role==='primary'?0:1,'Selection saved automatically');

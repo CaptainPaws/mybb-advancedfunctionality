@@ -71,3 +71,13 @@ Runtime отправляет FormData в прежний usercp.php, с одни�
 Проверки: avatar_editor_regression.php, gallery_avatar_regression.php, gallery_avatar_http_regression.py, gallery_avatar_runtime_regression.cjs, signature_gallery_runtime_regression.cjs, advancedprofilefields_secondary_avatar_regression.php.
 
 При установке обновить совместно перечисленные исходники, управляемый шаблон usercp_avatar и существующий stylesheet surface_usercp штатной синхронизацией AF/ATF; очистить кэш статических ресурсов. Новых схем БД нет.
+
+### Начальный альбом Gallery в редакторе аватаров
+
+Для `account_avatar` и `character_avatar` начальный альбом и «Последние изображения»
+определяются по системному ключу `appearance_avatars` текущего пользователя.
+Переименование альбома не влияет на выборку. Если альбома или системной схемы нет,
+используется обычная выборка собственных изображений; открытие не создаёт альбомы.
+Остальные альбомы доступны, явный `album_id` при переключении имеет приоритет.
+Purpose, проверки форматов и владельца, маршруты и контракт сохранения обоих
+аватаров остаются прежними. Обычная страница Gallery не меняется.

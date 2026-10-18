@@ -107,9 +107,11 @@ if (PHP_SAPI!=='cli') {
 }
 $source=ag_avatar_source(42);
 avatar_check($source['path']===$original && $source['mime']==='image/gif','Wrong original');
-avatar_check(ag_picker_initial_album(7,'account_avatar')===-2,'Missing appearance album should be empty, not all media');
+foreach (['account_avatar','character_avatar'] as $avatarPurpose) avatar_check(ag_picker_initial_album(7,$avatarPurpose)===-1,'Missing schema must fall back to ordinary browsing');
 $GLOBALS['ag_system_album_schema_ready']=true;
-$db->albums['appearance_avatars']=['id'=>84,'uid_owner'=>7,'system_key'=>'appearance_avatars'];
+foreach (['account_avatar','character_avatar'] as $avatarPurpose) avatar_check(ag_picker_initial_album(7,$avatarPurpose)===-1,'Missing album must fall back to ordinary browsing');
+avatar_check(ag_picker_initial_album(7,'appearance_avatars')===-2,'Other appearance pickers must keep their empty initial filter');
+$db->albums['appearance_avatars']=['id'=>84,'uid_owner'=>7,'system_key'=>'appearance_avatars','title'=>'Переименованный альбом'];
 foreach (['account_avatar','character_avatar'] as $avatarPurpose) avatar_check(ag_picker_initial_album(7,$avatarPurpose)===84,'Both avatar pickers must default to appearance avatars');
 avatar_check(ag_picker_initial_album(7,'')===-1,'Ordinary picker default changed');
 $db->albums=[];$GLOBALS['ag_system_album_schema_ready']=false;

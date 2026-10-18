@@ -2380,7 +2380,7 @@ function ag_render_picker_modal(): void
     // ---- кнопки альбомов (фильтр) ----
     $albumsHtml = '<button type="button" class="ag-picker-album" data-album-id="-1">Все мои изображения</button>';
     $initialAlbumPurpose = in_array($purpose,['account_avatar','character_avatar'],true) ? 'appearance_avatars' : $purpose;
-    if ($initialAlbumPurpose !== '') $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="'.$ag_picker_initial_album.'">'.htmlspecialchars_uni(ag_system_album_purposes()[$initialAlbumPurpose]).'</button>';
+    if ($initialAlbumPurpose !== '' && $ag_picker_initial_album !== -1) $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="'.$ag_picker_initial_album.'">'.htmlspecialchars_uni(ag_system_album_purposes()[$initialAlbumPurpose]).'</button>';
 
     // Default как album_id=0 (виртуальный, но обработчик picker_data переведёт в реальный defaultId)
     $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="0">'
@@ -2393,7 +2393,7 @@ function ag_render_picker_modal(): void
     ]);
     while ($album = $db->fetch_array($albumsQuery)) {
         $aid = (int)$album['id'];
-        if ($aid <= 0) continue;
+        if ($aid <= 0 || ($initialAlbumPurpose !== '' && $aid === $ag_picker_initial_album)) continue;
 
         $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="'
             .$aid.'">'

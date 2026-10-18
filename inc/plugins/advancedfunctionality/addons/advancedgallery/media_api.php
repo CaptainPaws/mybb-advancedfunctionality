@@ -196,9 +196,10 @@ function ag_request_appearance_purpose(): string
 function ag_picker_initial_album(int $uid, string $purpose): int
 {
     if ($purpose === '') return -1;
-    if (in_array($purpose,['account_avatar','character_avatar'],true)) $purpose = 'appearance_avatars';
-    $album = ag_get_system_album($uid, $purpose);
-    return $album ? (int)$album['id'] : -2; // missing-purpose filter, not all media
+    $isAvatar = in_array($purpose, ['account_avatar', 'character_avatar'], true);
+    $album = ag_get_system_album($uid, $isAvatar ? 'appearance_avatars' : $purpose);
+    // Missing avatar albums fall back to ordinary browsing without writes or AJAX errors.
+    return $album ? (int)$album['id'] : ($isAvatar ? -1 : -2);
 }
 
 /** Optional total owner storage quota; ordinary/system/retained files all count. */
