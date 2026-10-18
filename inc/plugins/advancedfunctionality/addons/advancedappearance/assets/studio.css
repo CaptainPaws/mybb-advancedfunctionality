@@ -21,8 +21,3 @@ body:not(.atf-active) .aa-studio {
 .aa-control-row output{min-width:3rem;font-size:.8em}
 
 .aa-preview :is(.af-apf-postbit-field,.atf-post__title){cursor:pointer}
-
-/* Keep the preview's avatar column and clipping box the same size as the frame. */
-body.atf-active .aa-preview .atf-post__author-tools.atf-post__primary-column{display:flex;width:max-content;max-width:100%;min-width:0;align-items:center;justify-content:center}
-body.atf-active .aa-preview .atf-post__primary-avatar{width:clamp(5rem,9vw,6.875rem);height:clamp(5rem,9vw,6.875rem);min-width:0;flex:0 0 auto;aspect-ratio:1}
-body.atf-active .aa-preview .atf-post__primary-avatar-media{position:absolute;inset:0;width:100%;height:100%;overflow:hidden}

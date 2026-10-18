@@ -238,12 +238,19 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $si
         $imageSuffix=$key==='plaque_icon'?$suffix.' > img':$suffix;
         $imageRules=[];
         $isAvatar=in_array($key,['primary_avatar','secondary_avatar'],true);
+        $isPrimaryAvatar=$key==='primary_avatar';
         $fit=$v['image_fit']??'cover';
         // Keep old stored 'fill' readable, but never stretch an avatar's proportions.
         if($isAvatar && $fit==='fill')$fit='cover';
-        if (isset($v['image_fit'])) $imageRules[]='--aa-avatar-fit:'.$fit.';object-fit:'.$fit.';';
+        if (isset($v['image_fit'])) {
+            $imageRules[]='--aa-avatar-fit:'.$fit.';';
+            if(!$isPrimaryAvatar)$imageRules[]='object-fit:'.$fit.';';
+        }
         if($isAvatar)$imageRules[]='--aa-avatar-min-scale:'.(in_array($fit,['contain','none'],true)?0:1).';';
-        if (isset($v['image_position'])) $imageRules[]='--aa-avatar-position:'.$v['image_position'].';object-position:'.$v['image_position'].';';
+        if (isset($v['image_position'])) {
+            $imageRules[]='--aa-avatar-position:'.$v['image_position'].';';
+            if(!$isPrimaryAvatar)$imageRules[]='object-position:'.$v['image_position'].';';
+        }
         if (isset($v['image_scale'])) $imageRules[]=$isAvatar?'--aa-avatar-scale:'.($v['image_scale']/100).';':'scale:'.($v['image_scale']/100).';';
         if ($imageRules) $css.=$scope($imageSuffix).'{'.implode('',$imageRules).'}';
         if ($key==='plaque_icon') $rule[]='overflow:hidden;';
@@ -260,13 +267,34 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $si
     return $css;
 }
 
+/** Keep custom primary avatars inside MyBB's native postbit_avatar wrapper. */
+function af_aa_postbit_avatar_markup(array $post,array $useravatar): string
+{
+    global $templates;
+    if (empty($useravatar['image'])) return '';
+    $uid=(int)($post['uid']??0);
+    if (empty($post['profilelink_plain'])) {
+        $post['profilelink_plain']=$uid>0?(function_exists('get_profile_link')?get_profile_link($uid):'member.php?action=profile&uid='.$uid):'#';
+    }
+    if (is_object($templates??null) && method_exists($templates,'get')) {
+        $avatar='';
+        eval('$avatar = "'.$templates->get("postbit_avatar").'";');
+        if ($avatar!=='') return (string)$avatar;
+    }
+    $escape=static fn($value)=>function_exists('htmlspecialchars_uni')?htmlspecialchars_uni((string)$value):htmlspecialchars((string)$value,ENT_QUOTES,'UTF-8');
+    return '<div class="author_avatar"><a href="'.$escape($post['profilelink_plain']).'"><img src="'.$useravatar['image'].'" alt="" '.($useravatar['width_height']??'').' /></a></div>';
+}
+
 function af_aa_postbit_apply_images(array &$post,array $s): void
 {
     foreach (['primary_avatar'=>'af_atf_primary_avatar','secondary_avatar'=>'af_atf_secondary_avatar'] as $key=>$slot) {
         $v=$s['components'][$key]??[];
         if ($key==='primary_avatar' && !empty($s['avatar_media_id']) && !array_key_exists('image_media_id',$v) && !array_key_exists('image_url',$v)) $v['image_media_id']=$s['avatar_media_id'];
         $url=af_aa_postbit_image($v);
-        if ($url!=='') $post[$slot]='<img src="'.htmlspecialchars_uni($url).'" alt="'.htmlspecialchars_uni($post['username']??'').'" loading="lazy" decoding="async">';
+        if ($url!=='') {
+            $image=['image'=>htmlspecialchars_uni($url),'width_height'=>''];
+            $post[$slot]=$key==='primary_avatar'?af_aa_postbit_avatar_markup($post,$image):'<img src="'.$image['image'].'" alt="'.htmlspecialchars_uni($post['username']??'').'" loading="lazy" decoding="async">';
+        }
     }
 }
 

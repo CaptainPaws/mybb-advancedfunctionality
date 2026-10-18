@@ -129,12 +129,18 @@ function af_aa_studio_preview_markup(int $uid, array $settings=[]): string {
     if (!is_file($path) || !function_exists('af_adaptivethemeframework_post_element')) throw new AF_AA_PersonalException('Activate Adaptive Theme Framework first.',503);
     $user=get_user($uid);$name=htmlspecialchars_uni($user['username']??'Автор');
     $key=htmlspecialchars_uni(af_adaptivethemeframework_post_element($uid));
-    $avatarUrl=af_aa_preview_abs_url((string)($user['avatar']??''));
-    if ($avatarUrl==='') $avatarUrl=rtrim((string)($GLOBALS['mybb']->settings['bburl']??''),'/').'/images/default_avatar.png';
-    $avatar='<img src="'.htmlspecialchars_uni($avatarUrl).'" alt="Аватар" />';
+    $profileLink=function_exists('get_profile_link')?get_profile_link($uid):'member.php?action=profile&uid='.$uid;
+    $avatarPost=array_replace($user,['uid'=>$uid,'profilelink_plain'=>$profileLink]);
+    $avatarData=function_exists('format_avatar')?format_avatar((string)($user['avatar']??''),(string)($user['avatardimensions']??''),(string)($GLOBALS['mybb']->settings['postmaxavatarsize']??'')):[];
+    if (empty($avatarData['image'])) {
+        $avatarUrl=af_aa_preview_abs_url((string)($user['avatar']??''));
+        if ($avatarUrl==='') $avatarUrl=rtrim((string)($GLOBALS['mybb']->settings['bburl']??''),'/').'/images/default_avatar.png';
+        $avatarData=['image'=>htmlspecialchars_uni($avatarUrl),'width_height'=>''];
+    }
+    $avatar=af_aa_postbit_avatar_markup($avatarPost,$avatarData);
     $status=(string)($user['usertitle']??'');
     if(trim($status)===''&&function_exists('get_usertitle'))$status=(string)get_usertitle($uid);
-    $fixture=array_replace($user,['af_aa_preview_settings'=>$settings,'user_details'=>'','af_atf_is_preview'=>true,'pid'=>0,'tid'=>0,'message'=>'','uid'=>$uid,'username'=>$user['username']??'Автор','useravatar'=>$avatar,'af_atf_slots'=>[]]);
+    $fixture=array_replace($user,['af_aa_preview_settings'=>$settings,'user_details'=>'','af_atf_is_preview'=>true,'pid'=>0,'tid'=>0,'message'=>'','uid'=>$uid,'username'=>$user['username']??'Автор','profilelink_plain'=>$profileLink,'useravatar'=>$avatar,'af_atf_slots'=>[]]);
     // MyBB stores custom values separately from users; get_user() alone never includes fidN.
     if(function_exists('af_apf_render_postbit_fields')&&isset($GLOBALS['db'])) {
         $query=$GLOBALS['db']->simple_select('userfields','*','ufid='.(int)$uid);
