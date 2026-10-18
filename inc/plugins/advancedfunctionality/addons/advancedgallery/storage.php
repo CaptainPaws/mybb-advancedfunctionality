@@ -87,7 +87,12 @@ function ag_storage_admin_widget(): string
     $html .= '</dl><p>Оригиналы учитываются один раз, включая все статусы модерации. Миниатюры не входят в пользовательскую квоту.</p>';
     $disk = ag_storage_disk();
     if ($disk) {
-        $html .= '<p>Том хранилища: '.htmlspecialchars_uni($disk['path']).'</p><p>Занято на всём томе: '.ag_storage_mb($disk['total']-$disk['free']).' МБ из '.ag_storage_mb($disk['total']).' МБ · Свободно: '.ag_storage_mb($disk['free']).' МБ</p><progress max="100" value="'.$disk['percent'].'" aria-label="Занято на томе хранилища"></progress><p>Заполнение тома включает другие данные и миниатюры; это не пользовательская квота Gallery.</p>';
+        $formatMb = static fn(float $bytes): string => number_format($bytes / 1048576, 2, ',', ' ').' МБ';
+        $html .= '<p>Том хранилища: '.htmlspecialchars_uni($disk['path']).'</p><dl>'
+            .'<dt>Общая ёмкость тома</dt><dd>'.$formatMb($disk['total']).'</dd>'
+            .'<dt>Занято на томе</dt><dd>'.$formatMb($disk['total']-$disk['free']).'</dd>'
+            .'<dt>Свободно на томе</dt><dd>'.$formatMb($disk['free']).'</dd>'
+            .'</dl><progress max="100" value="'.$disk['percent'].'" aria-label="Занято на томе хранилища"></progress><p>Заполнение тома включает другие данные и миниатюры; это не пользовательская квота Gallery.</p>';
     } else $html .= '<p>Ёмкость тома хранилища недоступна; показан абсолютный объём Gallery.</p>';
     return $html.'</section>';
 }
