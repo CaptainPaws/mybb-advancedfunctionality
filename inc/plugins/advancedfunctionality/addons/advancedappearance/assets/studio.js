@@ -12,7 +12,7 @@
   groups['Фон'].push('background_url','background_repeat');groups['Цвета'].push('icon_color','value_color','hover_color');groups['Типографика'].push('font_style','text_align');groups['Цвета'].push('divider_color','hover_background_color','hover_border_color');
   const enumLabels={none:'Без затенения',darken:'Затемнить',lighten:'Осветлить',cover:'Заполнить',contain:'Вписать',auto:'Исходный размер',center:'По центру',top:'Сверху',bottom:'Снизу',left:'Слева',right:'Справа',normal:'Обычное',italic:'Курсив','no-repeat':'Не повторять',repeat:'Повторять','repeat-x':'По горизонтали','repeat-y':'По вертикали'};
   let list=seed.list,id=0,settings={},baseline={},component=Object.keys(selectors)[0],revision=0,dirty=false,timer,previewTimer,previewSequence=0;
-  let queue=Promise.resolve(),lastMarkup='';
+  let queue=Promise.resolve(),lastMarkup='',selectedPreview=null;
   function node(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;}
   function button(text,fn){const b=node('button',text);b.type='button';b.addEventListener('click',()=>Promise.resolve().then(fn).catch(showError));return b;}
   function status(text){$('aa-status').textContent=text;}
@@ -48,13 +48,18 @@
   function renderCanvas(){if(!surface.canvas)return;const select=$('aa-canvas');select.replaceChildren(new Option('Наследовать','inherit'));for(const [key,label]of Object.entries(seed.canvas_presets))select.append(new Option(label,key));select.value=settings.canvas?.preset||'inherit';const host=$('aa-canvas-fields');host.replaceChildren();host.hidden=!settings.canvas;for(const key of ['intensity','speed','density','opacity']){const label=node('label',({intensity:'Интенсивность',speed:'Скорость',density:'Плотность',opacity:'Непрозрачность'})[key]),input=node('input');input.type='range';input.min=0;input.max=100;input.value=settings.canvas?.[key]??50;input.addEventListener('input',()=>{if(settings.canvas){settings.canvas[key]=Number(input.value);changed();}});label.append(input);host.append(label);}}
   async function preview(){const seq=++previewSequence,json=JSON.stringify(settings),data=await api('preview',{settings_json:json});if(seq!==previewSequence)return;$('aa-preview-style').textContent=data.css;if(target==='postbit'&&typeof data.markup==='string'&&data.markup!==lastMarkup){lastMarkup=data.markup;$('aa-studio-preview').innerHTML=data.markup;inertPreview();}const root=previewRoot();if(root)window.afElementEffects?.setSurfaceAppearanceEffects?.(root,data.canvas);else if(target==='postbit')window.afElementEffects?.setAppearanceEffects?.(seed.uid,data.canvas);selectPreview();}
   function previewRoot(){return $('aa-studio-preview').querySelector(target==='postbit'?'.atf-post':target==='profile'?'.atf-profile':target==='sheet'?'.af-cs-page':'.aa-theme-preview');}
-  function selectPreview(){$('aa-studio-preview').querySelectorAll('[data-aa-selected]').forEach(el=>el.removeAttribute('data-aa-selected'));for(const [key,selector]of Object.entries(selectors)){const el=selector?$('aa-studio-preview').querySelector(selector):previewRoot();if(el){if(key===component){el.setAttribute('data-aa-selected','');el.setAttribute('aria-label',labels[key]);}}}}
+  function selectPreview(){
+    const host=$('aa-studio-preview'),selector=selectors[component];
+    host.querySelectorAll('[data-aa-selected]').forEach(el=>el.removeAttribute('data-aa-selected'));
+    const el=selector?(selectedPreview&&host.contains(selectedPreview)&&selectedPreview.matches(selector)?selectedPreview:host.querySelector(selector)):previewRoot();
+    if(el){el.setAttribute('data-aa-selected','');el.setAttribute('aria-label',labels[component]);}
+  }
   async function persist(draft){updateTitle();remember();const version=revision,wasId=id,title=$('aa-title').value,json=JSON.stringify(settings);const data=await api(draft?'draft':(id?'save':'create'),{id,title,settings_json:json});id=data.id;if(!wasId)forget(0);if(version===revision){dirty=false;forget(id);$('aa-draft-status').textContent=draft?'Черновик сохранён':'Пресет сохранён';if(!draft)baseline=structuredClone(settings);}return data;}
   function saveDraft(){return serial(async()=>{if(dirty)await persist(true);});}
   $('aa-controls').addEventListener('submit',event=>{event.preventDefault();clearTimeout(timer);serial(async()=>{await persist(false);await reload();status('Пресет сохранён. Примените его в списке для выбранной поверхности.');}).catch(showError);});
   $('aa-save-draft').addEventListener('click',()=>saveDraft().catch(showError));
   $('aa-title').addEventListener('input',changed);$('aa-description').addEventListener('input',changed);
-  $('aa-component').addEventListener('change',()=>{component=$('aa-component').value;renderControls();});
+  $('aa-component').addEventListener('change',()=>{component=$('aa-component').value;selectedPreview=null;renderControls();});
   $('aa-canvas')?.addEventListener('change',()=>{if($('aa-canvas').value==='inherit')delete settings.canvas;else settings.canvas={preset:$('aa-canvas').value,intensity:50,speed:50,density:50,opacity:35,color:''};renderCanvas();changed();});
   $('aa-avatar').addEventListener('click',()=>{try{pick('avatar_media_id','appearance_avatars');}catch(e){showError(e);}});
   $('aa-avatar-clear').addEventListener('click',()=>{delete settings.avatar_media_id;renderControls();changed();});
@@ -63,7 +68,19 @@
   $('aa-reset').addEventListener('click',()=>{settings=structuredClone(baseline);$('aa-title').value=settings.display_title||list.presets.find(row=>row.id===id)?.title||'Новый пресет';$('aa-description').value=settings.description||'';renderControls();renderCanvas();changed();});
   $('aa-back').addEventListener('click',()=>{clearTimeout(timer);serial(async()=>{if(dirty)await persist(true);await reload();$('aa-editor').hidden=true;$('aa-cards').hidden=false;}).catch(showError);});
   document.querySelectorAll('[data-aa-view]').forEach(b=>b.addEventListener('click',()=>document.querySelector('.aa-workbench').dataset.view=b.dataset.aaView));
-  $('aa-studio-preview').addEventListener('click',event=>{if(event.target.closest('.atf-post__signature-toggle')){event.stopPropagation();return;}event.preventDefault();event.stopPropagation();for(const [key,selector]of Object.entries(selectors).reverse())if(selector&&event.target.closest(selector)){component=key;$('aa-component').value=key;renderControls();return;}});
+  $('aa-studio-preview').addEventListener('click',event=>{
+    const host=$('aa-studio-preview'),hit=event.target instanceof Element?event.target:event.target.parentElement;
+    if(!hit||hit.closest('.atf-post__signature-toggle'))return;
+    // Walk from the actual hit towards the preview root: nested zones win over their containers.
+    // Match the full trusted selector, so compound selectors and dynamically refreshed markup work too.
+    for(let el=hit;el&&el!==host;el=el.parentElement){
+      const match=Object.entries(selectors).find(([,selector])=>selector&&el.matches(selector));
+      if(!match)continue;
+      event.preventDefault();event.stopPropagation();component=match[0];selectedPreview=el;$('aa-component').value=component;renderControls();return;
+    }
+    // Preview links must never navigate, including links outside a registered editable zone.
+    if(hit.closest('a'))event.preventDefault();
+  });
   $('aa-studio-preview').addEventListener('submit',event=>event.preventDefault());
   window.addEventListener('beforeunload',event=>{if(dirty){updateTitle();remember();event.preventDefault();event.returnValue='';}});
   window.addEventListener('pageshow',event=>{if(event.persisted)reload().catch(showError);});
