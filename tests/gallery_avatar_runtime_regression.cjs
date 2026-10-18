@@ -21,9 +21,10 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
         const action=url.searchParams.get('action'),purpose=url.searchParams.get('purpose');
         if(action==='picker'){
           purposes.push(purpose);
-          return route.fulfill({contentType:'text/html; charset=utf-8',body:'<div id="af-gallery-picker" class="ag-picker" tabindex="-1" aria-hidden="true" data-initial-album="84"><div class="ag-picker-dialog" role="document" tabindex="-1"><div class="ag-picker-albums"><button class="ag-picker-album" data-album-id="84">Аватары оформления</button><button class="ag-picker-album" data-album-id="12">Другой альбом</button><button class="ag-picker-album" data-album-id="-1">Все изображения</button></div><form><input name="my_post_key" value="valid"></form><div class="ag-picker-grid" data-ag-picker-grid="1"></div><button data-ag-picker-close="1">Закрыть</button></div></div>'});
+          return route.fulfill({contentType:'text/html; charset=utf-8',body:'<div id="af-gallery-picker" class="ag-picker" tabindex="-1" aria-hidden="true" data-initial-album="-3"><div class="ag-picker-dialog" role="document" tabindex="-1"><div class="ag-picker-albums"><button class="ag-picker-album" data-album-id="-3">Аватары аккаунта и оформления</button><button class="ag-picker-album" data-album-id="12">Другой альбом</button><button class="ag-picker-album" data-album-id="-1">Все изображения</button></div><form data-ag-ajax="1" action="https://forum.test/gallery.php?action=upload_do" method="post"><input name="my_post_key" value="valid"><button type="submit" data-test-upload>Загрузить</button></form><div class="ag-picker-grid" data-ag-picker-grid="1"></div><button data-ag-picker-close="1">Закрыть</button></div></div>'});
         }
         if(action==='picker_data'){dataRequests.push({purpose,album:url.searchParams.get('album_id')});return route.fulfill({json:[{id:42,media_id:42,title:'Original GIF',type:'local',thumb:'https://forum.test/original.gif',url_full:'https://forum.test/original.gif'}]});}
+        if(action==='upload_do')return route.fulfill({json:{ok:true,album_id:85}});
         if(action==='picker_select')return route.fulfill({json:{ok:true,media_id:42,mime:'image/gif',filename:'gallery-avatar.gif',url_full:'https://forum.test/original.gif'}});
       }
       if(request.method()==='POST'){
@@ -52,8 +53,8 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
       const card=page.locator(`[data-avatar-card=${role}]`);
       await card.locator('.atf-avatar-editor__gallery-open').click();
       await page.waitForFunction(()=>document.querySelector('#af-gallery-picker .ag-picker-card-actions button'));
-      assert.equal(dataRequests.at(-1).album,'84','Modal must start on appearance avatars');
-      for(const album of ['12','-1','84']){
+      assert.equal(dataRequests.at(-1).album,'-3','Modal must start on combined avatar albums');
+      for(const album of ['12','-1','-3']){
         const count=dataRequests.length;
         const response=page.waitForResponse(r=>new URL(r.url()).searchParams.get('action')==='picker_data' && new URL(r.url()).searchParams.get('album_id')===album);
         await page.locator('#af-gallery-picker [data-album-id=\"'+album+'\"]').click();
@@ -61,6 +62,11 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
         await page.waitForFunction(()=>document.querySelector('#af-gallery-picker .ag-picker-card-actions button'));
         assert.equal(dataRequests.length,count+1);assert.equal(dataRequests.at(-1).album,album,'Switch must retain explicitly selected album');
       }
+      const uploadResponse=page.waitForResponse(r=>new URL(r.url()).searchParams.get('action')==='picker_data');
+      await page.locator('[data-test-upload]').click();await uploadResponse;
+      await page.waitForFunction(()=>document.querySelector('#af-gallery-picker .ag-picker-card-actions button'));
+      assert.equal(dataRequests.at(-1).album,'-3','Upload must preserve combined album filter');
+      assert.equal(await page.locator('#af-gallery-picker').getAttribute('data-initial-album'),'-3','Upload must preserve initial group');
       await page.locator('#af-gallery-picker .ag-picker-card-actions button').click();
       await card.locator('[data-avatar-selection]').waitFor({state:'visible'});
       assert.equal(posts.length,role==='primary'?0:1,'Selection saved automatically');

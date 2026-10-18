@@ -2380,7 +2380,8 @@ function ag_render_picker_modal(): void
     // ---- кнопки альбомов (фильтр) ----
     $albumsHtml = '<button type="button" class="ag-picker-album" data-album-id="-1">Все мои изображения</button>';
     $initialAlbumPurpose = in_array($purpose,['account_avatar','character_avatar'],true) ? 'appearance_avatars' : $purpose;
-    if ($initialAlbumPurpose !== '' && $ag_picker_initial_album !== -1) $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="'.$ag_picker_initial_album.'">'.htmlspecialchars_uni(ag_system_album_purposes()[$initialAlbumPurpose]).'</button>';
+    if ($ag_picker_initial_album === -3) $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="-3">Аватары аккаунта и оформления</button>';
+    elseif ($initialAlbumPurpose !== '' && $ag_picker_initial_album !== -1) $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="'.$ag_picker_initial_album.'">'.htmlspecialchars_uni(ag_system_album_purposes()[$initialAlbumPurpose]).'</button>';
 
     // Default как album_id=0 (виртуальный, но обработчик picker_data переведёт в реальный defaultId)
     $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="0">'
@@ -2411,6 +2412,7 @@ function ag_render_picker_modal(): void
     $ag_picker_my_post_key = $mybb->post_code;
     $preferredAlbumId = $mybb->get_input('album_id', MyBB::INPUT_INT);
     $ag_picker_album_field = $purpose === '' ? ag_build_upload_album_field($uid, (int)$preferredAlbumId) : '<p>Новое изображение сохранится в альбом оформления.</p>';
+    if (in_array($purpose, ['account_avatar','character_avatar'], true)) $ag_picker_album_field = '<p>Новое изображение сохранится в альбом «'.htmlspecialchars_uni(ag_system_album_purposes()[$purpose]).'».</p>';
     $ag_picker_upload_hidden = ag_can_upload() ? '' : 'hidden';
     $ag_picker_remote_enabled = $purpose === '' && ag_remote_enabled() ? '1' : '0';
 
@@ -2460,6 +2462,12 @@ function ag_handle_picker_data(): void
     $albumId = ($purpose !== '' && !isset($_GET['album_id']) && !isset($_POST['album_id']))
         ? ag_picker_initial_album($uid, $purpose) : $mybb->get_input('album_id', MyBB::INPUT_INT);
     $join = '';
+
+    // Virtual avatar group: EXISTS avoids duplicate media belonging to both albums.
+    if ($albumId === -3) {
+        $ids = in_array($purpose, ['account_avatar','character_avatar'], true) ? ag_avatar_picker_album_ids($uid) : [];
+        $where .= $ids ? " AND EXISTS (SELECT 1 FROM ".TABLE_PREFIX."af_gallery_album_media avatar_am WHERE avatar_am.media_id=m.id AND avatar_am.album_id IN (".implode(',', $ids)."))" : ' AND 1=0';
+    }
 
     // album_id = 0 => default album
     if ($albumId === 0) {

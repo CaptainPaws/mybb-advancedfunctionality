@@ -192,14 +192,26 @@ function ag_request_appearance_purpose(): string
     return $purpose;
 }
 
+/** Resolve the avatar browsing group by system keys, never by album titles. */
+function ag_avatar_picker_album_ids(int $uid): array
+{
+    $ids = [];
+    foreach (['appearance_avatars', 'account_avatar'] as $key) {
+        $album = ag_get_system_album($uid, $key);
+        if ($album) $ids[] = (int)$album['id'];
+    }
+    return $ids;
+}
+
 /** Never create a system/default album when merely opening an Appearance picker. */
 function ag_picker_initial_album(int $uid, string $purpose): int
 {
     if ($purpose === '') return -1;
-    $isAvatar = in_array($purpose, ['account_avatar', 'character_avatar'], true);
-    $album = ag_get_system_album($uid, $isAvatar ? 'appearance_avatars' : $purpose);
-    // Missing avatar albums fall back to ordinary browsing without writes or AJAX errors.
-    return $album ? (int)$album['id'] : ($isAvatar ? -1 : -2);
+    if (in_array($purpose, ['account_avatar', 'character_avatar'], true)) {
+        return ag_avatar_picker_album_ids($uid) ? -3 : -1;
+    }
+    $album = ag_get_system_album($uid, $purpose);
+    return $album ? (int)$album['id'] : -2;
 }
 
 /** Optional total owner storage quota; ordinary/system/retained files all count. */

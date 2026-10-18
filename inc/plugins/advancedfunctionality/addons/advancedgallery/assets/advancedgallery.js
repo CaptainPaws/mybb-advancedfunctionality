@@ -379,7 +379,7 @@
             return;
         }
 
-        if (pickerState.purpose && data.album_id) {
+        if (pickerState.purpose && data.album_id && ['account_avatar','character_avatar'].indexOf(pickerState.purpose)===-1) {
           pickerState.albumId = Number(data.album_id);
           pickerState.modal.setAttribute('data-initial-album', String(data.album_id));
           var button = $one('[data-album-id="-2"]', pickerState.modal);
@@ -446,7 +446,7 @@
       var albumNode = target.closest ? target.closest('[data-album-id]') : null;
       if (albumNode && albumNode.closest && albumNode.closest('.ag-picker-albums')) {
         var id = parseInt(albumNode.getAttribute('data-album-id') || '-1', 10);
-        if (!isNaN(id) && id >= -2) {
+        if (!isNaN(id) && id >= -3) {
           pickerState.albumId = id;
           pickerState.page = 1;
           setActiveAlbum(modal, id);

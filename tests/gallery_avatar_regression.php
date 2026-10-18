@@ -112,7 +112,12 @@ $GLOBALS['ag_system_album_schema_ready']=true;
 foreach (['account_avatar','character_avatar'] as $avatarPurpose) avatar_check(ag_picker_initial_album(7,$avatarPurpose)===-1,'Missing album must fall back to ordinary browsing');
 avatar_check(ag_picker_initial_album(7,'appearance_avatars')===-2,'Other appearance pickers must keep their empty initial filter');
 $db->albums['appearance_avatars']=['id'=>84,'uid_owner'=>7,'system_key'=>'appearance_avatars','title'=>'Переименованный альбом'];
-foreach (['account_avatar','character_avatar'] as $avatarPurpose) avatar_check(ag_picker_initial_album(7,$avatarPurpose)===84,'Both avatar pickers must default to appearance avatars');
+foreach (['account_avatar','character_avatar'] as $avatarPurpose) avatar_check(ag_picker_initial_album(7,$avatarPurpose)===-3,'Both avatar pickers must default to combined avatar albums');
+avatar_check(ag_avatar_picker_album_ids(7)===[84],'Appearance-only group failed');
+$db->albums['account_avatar']=['id'=>85,'uid_owner'=>7,'system_key'=>'account_avatar','title'=>'Renamed account album'];
+avatar_check(ag_avatar_picker_album_ids(7)===[84,85],'Combined system albums failed');
+unset($db->albums['appearance_avatars']);
+avatar_check(ag_avatar_picker_album_ids(7)===[85] && ag_picker_initial_album(7,'account_avatar')===-3,'Account-only group failed');
 avatar_check(ag_picker_initial_album(7,'')===-1,'Ordinary picker default changed');
 $db->albums=[];$GLOBALS['ag_system_album_schema_ready']=false;
 foreach (['uid_owner'=>8,'status'=>'pending','type'=>'remote','mime'=>'image/webp','storage_path'=>'../outside.gif'] as $field=>$value) {
