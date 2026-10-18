@@ -249,7 +249,6 @@ function af_adaptivethemeframework_init(): void
             $plugins->add_hook('usercp_do_avatar_start', 'af_atf_avatar_native_guard', 15);
             $plugins->add_hook('usercp_do_avatar_start', 'af_avatar_primary_compat', 20);
             $plugins->add_hook('usercp_do_avatar_end', 'af_avatar_native_saved', 1000);
-            $plugins->add_hook('usercp_start', 'af_avatar_state_route', 1);
             // Each migrated form keeps native core values and processing while
             // adopting the shared navigation context at its final display hook.
             $plugins->add_hook('usercp_end', 'af_adaptivethemeframework_compose_ucp_overview', 1000);

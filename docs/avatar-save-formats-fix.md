@@ -60,3 +60,24 @@ GIF в допустимых размерах сохраняется побайт
 Проверки: tests/avatar_formats_http_regression.py, tests/avatar_editor_regression.php, tests/gallery_avatar_regression.php, tests/gallery_avatar_runtime_regression.cjs. Предыдущий отчёт docs/usercp-avatar-editor.md снабжён ссылкой на эти уточнения.
 
 Обновлять все исходники совместно. Для первых запросов после установки нужен новый PHP renderer и новый JS. Content revision обновляет браузерный кэш; внешние reverse proxy/CDN должны учитывать query string либо быть очищены штатным способом. MyBB core и БД-схема не изменялись.
+
+### Восстановление общего runtime и маршрут состояния
+
+Core при установке и реактивации вызывает `af_ensure_avatar_runtime()` до
+обнаружения аддонов. Встроенный в `advancedfunctionality.php` исходник должен
+побайтово совпадать с `advancedfunctionality/avatar.php` (проверяется
+`tests/avatar_runtime_install_regression.php`). Отсутствующий или отличающийся
+файл заменяется атомарно; актуальный файл не переписывается. Сетевой загрузки
+PHP нет, ошибки прав записи сообщаются явно, OPcache инвалидируется.
+
+Новый запрос состояния использует штатный адрес
+`usercp.php?action=avatar&af_avatar_state=1`, а Core заранее регистрирует
+обработчик `usercp_start`. Прежний `action=af_avatar_state` оставлен совместимым
+на сервере. Проверки текущего пользователя, доступа UserCP и CSRF сохранены.
+HTTP 404 до POST блокировал все источники изображений одинаково; без доступа
+к конфигурации production нельзя установить, какой именно серверный фильтр
+или версия установленного обработчика возвращала этот статус.
+
+Для обновления необходимо загрузить изменённые файлы Core и ATF и
+деактивировать/активировать **Advanced functionality**. При отсутствии
+общего `avatar.php` реактивация создаст его из встроенного исходника.

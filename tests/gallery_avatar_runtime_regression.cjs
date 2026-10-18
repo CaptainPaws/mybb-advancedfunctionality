@@ -15,7 +15,7 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
     await page.route('**/*',async route=>{
       const request=route.request(),url=new URL(request.url());
       if(url.pathname.endsWith('.gif'))return route.fulfill({contentType:'image/gif',body:gif});
-      if(url.searchParams.get('action')==='af_avatar_state')return route.fulfill({json:{ok:true,avatar:state(url.searchParams.get('role'))}});
+      if(url.searchParams.get('action')==='avatar' && url.searchParams.get('af_avatar_state')==='1')return route.fulfill({json:{ok:true,avatar:state(url.searchParams.get('role'))}});
       if(url.pathname.endsWith('gallery.php')){
         const action=url.searchParams.get('action'),purpose=url.searchParams.get('purpose');
         if(action==='picker'){

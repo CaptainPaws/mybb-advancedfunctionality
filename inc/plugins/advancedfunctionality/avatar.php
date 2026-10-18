@@ -63,7 +63,7 @@ function af_avatar_native_saved(): void
 function af_avatar_state_route(): void
 {
     global $mybb;
-    if ($mybb->get_input('action')!=='af_avatar_state') return;
+    if ($mybb->get_input('action')!=='af_avatar_state' && !($mybb->get_input('action')==='avatar' && $mybb->get_input('af_avatar_state')==='1')) return;
     verify_post_check($mybb->get_input('my_post_key'));
     try {af_avatar_json(['ok'=>true,'avatar'=>af_avatar_state($mybb->get_input('role'))]);}
     catch (RuntimeException $e) {af_avatar_json(['ok'=>false,'error'=>$e->getMessage()],422);}

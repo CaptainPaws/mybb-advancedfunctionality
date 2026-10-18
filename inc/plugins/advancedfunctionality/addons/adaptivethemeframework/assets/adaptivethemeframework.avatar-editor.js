@@ -117,7 +117,7 @@
       return state;
     }
     async function readState(){
-      const url=new URL(form.action,location.href);url.search='';url.searchParams.set('action','af_avatar_state');
+      const url=new URL(form.action,location.href);url.search='';url.searchParams.set('action','avatar');url.searchParams.set('af_avatar_state','1');
       url.searchParams.set('role',form.dataset.avatarCard);url.searchParams.set('my_post_key',one(form,'[name=my_post_key]').value);
       const response=await fetch(url.href,{credentials:'same-origin',cache:'no-store'});
       let payload;try{payload=await response.json();}catch{throw new Error(`Состояние аватара недоступно (HTTP ${response.status}). Проверьте авторизацию и установку обновлённых файлов AF.`);}
