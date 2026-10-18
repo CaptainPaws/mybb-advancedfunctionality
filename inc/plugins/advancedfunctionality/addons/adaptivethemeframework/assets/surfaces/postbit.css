@@ -98,6 +98,8 @@ body.atf-active .atf-post__top-actions::before { display: none; }
 body.atf-active .atf-post__top-actions .postbit_buttons { display: flex; flex-wrap: wrap; gap: var(--atf-space-2); }
 body.atf-active .atf-post__primary-avatar {
   width: clamp(5rem, 9vw, 6.875rem);
+  height: clamp(5rem, 9vw, 6.875rem);
+  flex: 0 0 auto;
   aspect-ratio: 1;
   overflow: hidden;
   border: 3px solid var(--atf-color-surface);
@@ -597,9 +599,8 @@ body.atf-active .atf-post__primary-avatar-media .author_avatar > a > :is(img, sv
   margin: 0 !important;
   object-fit: var(--aa-avatar-fit, cover) !important;
   object-position: var(--aa-avatar-position, center center) !important;
-  transform: none !important;
-  transform-origin: var(--aa-avatar-position, center center);
-  scale: max(var(--aa-avatar-min-scale, 1), var(--aa-avatar-scale, 1));
+  transform: scale(max(var(--aa-avatar-min-scale, 1), var(--aa-avatar-scale, 1))) !important;
+  transform-origin: var(--aa-avatar-position, center center) !important;
   border-radius: 50% !important;
 }
 body.atf-active .atf-post__content {
@@ -983,9 +984,8 @@ body.atf-active .atf-post.af-atf-display .atf-post__sidebar-inner .atf-post__sec
   margin: 0 !important;
   object-fit: var(--aa-avatar-fit, cover) !important;
   object-position: var(--aa-avatar-position, center center) !important;
-  transform: none !important;
-  transform-origin: var(--aa-avatar-position, center center);
-  scale: max(var(--aa-avatar-min-scale, 1), var(--aa-avatar-scale, 1));
+  transform: scale(max(var(--aa-avatar-min-scale, 1), var(--aa-avatar-scale, 1))) !important;
+  transform-origin: var(--aa-avatar-position, center center) !important;
   border-radius: 0;
 }
 body.atf-active .atf-post__character-name {
