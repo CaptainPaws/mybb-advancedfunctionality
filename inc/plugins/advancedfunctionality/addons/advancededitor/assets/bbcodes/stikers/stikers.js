@@ -7,7 +7,8 @@
     loading: false,
     data: null,
     removeMode: false,
-    activeTab: 'recent'
+    activeTab: 'recent',
+    uploadSource: 'url'
   };
 
   function payload() {
@@ -455,14 +456,15 @@
           var usage=storage ? 'Стикеры: '+mb(storage.used_bytes)+' МБ'+(storage.limit_bytes>0?' / '+mb(storage.limit_bytes)+' МБ · Осталось: '+mb(storage.available_bytes)+' МБ':' · Без ограничений') : 'Загрузка данных о стикерах…';
           extra = '<div class="af-ae-stikers-storage" role="status">'+htmlEscape(usage)+'</div>'+
             (storage && storage.full ? '<p>Квота стикеров исчерпана. Освободите место для новой локальной загрузки.</p>' : '')+
+            (data.sizes && Number(data.sizes.allow_external)===1 ? '<label class="af-ae-stikers-source">Добавить стикер: <select data-sticker-source><option value="url">По внешнему URL</option><option value="file">С устройства</option></select></label>' : '')+
             '<div class="af-ae-stikers-tools">' +
               '<label class="af-ae-stikers-btn af-ae-stikers-upload-btn">' +
                 '<input type="file" id="af-ae-stiker-upload" accept=".webp,.gif,.png,.jpg,.jpeg">' +
-                '<span>Добавить стикер</span>' +
+                '<span>Выбрать файл с устройства</span>' +
               '</label>' +
               '<button type="button" class="af-ae-stikers-btn af-ae-stikers-gear-btn" id="af-ae-stiker-toggle" title="Режим удаления">⚙</button>' +
             '</div>'+
-            (data.sizes && Number(data.sizes.allow_external)===1 ? '<form class="af-ae-stikers-url"><label>Внешний стикер <input type="url" name="sticker_url" placeholder="https://…" required></label><button class="af-ae-stikers-btn" type="submit">Добавить по URL</button></form>' : '');
+            (data.sizes && Number(data.sizes.allow_external)===1 ? '<form class="af-ae-stikers-url"><label>URL изображения <input type="url" name="sticker_url" placeholder="https://…" required></label><button class="af-ae-stikers-btn" type="submit">Добавить по URL</button><small>Сохраняется только ссылка. Квота не расходуется.</small></form>' : '');
         }
 
         bodyEl.innerHTML = extra + renderGrid(
@@ -477,6 +479,16 @@
           var fd=new FormData(urlForm), button=urlForm.querySelector('button');button.disabled=true;
           req(p.uploadUrl,'POST',fd,function(err,res){button.disabled=false;if(err || !res || !res.success){alert((res && res.message) || 'Не удалось добавить ссылку.');return;}loadAndPaint();});
         });
+        var sourceSelect=bodyEl.querySelector('[data-sticker-source]');
+        var fileLabel=bodyEl.querySelector('.af-ae-stikers-upload-btn');
+        function syncUploadSource() {
+          var byUrl=!!sourceSelect && sourceSelect.value==='url';
+          if(sourceSelect) state.uploadSource=sourceSelect.value;
+          if(fileLabel) fileLabel.style.display=byUrl?'none':'';
+          if(urlForm) urlForm.style.display=byUrl?'flex':'none';
+        }
+        if(sourceSelect) {sourceSelect.value=state.uploadSource;sourceSelect.addEventListener('change',syncUploadSource);}
+        syncUploadSource();
         var upload = bodyEl.querySelector('#af-ae-stiker-upload');
         if (upload) {
           upload.disabled=!!(data.storage && data.storage.full);

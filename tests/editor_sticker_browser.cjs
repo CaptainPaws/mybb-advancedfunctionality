@@ -13,12 +13,17 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=r
   await page.getByRole('button',{name:'Свои стикеры',exact:true}).click();
   const usage=page.locator('.af-ae-stikers-storage');await usage.filter({hasText:'Стикеры: 0.00 МБ / 1.00 МБ'}).waitFor();
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6l8AAAAASUVORK5CYII=','base64');
+  assert.equal(await page.locator('[data-sticker-source]').inputValue(),'url');
+  assert.equal(await page.locator('[name=sticker_url]').isVisible(),true);
+  assert.equal(await page.locator('.af-ae-stikers-upload-btn').isVisible(),false);
+  await page.locator('[data-sticker-source]').selectOption('file');
   const large=Buffer.concat([png,Buffer.alloc(600*1024-png.length)]);
   await page.locator('#af-ae-stiker-upload').setInputFiles({name:'browser.png',mimeType:'image/png',buffer:large});
   await usage.filter({hasText:'Стикеры: 0.59 МБ / 1.00 МБ'}).waitFor();
   assert.match(await usage.innerText(),/Осталось: 0.41 МБ/);
   assert.equal(await page.locator('[data-tab=mine]').getAttribute('class'),'af-ae-stikers-tab is-active');
   const before=await page.locator('.af-ae-stiker').count();
+  await page.locator('[data-sticker-source]').selectOption('url');
   await page.locator('[name=sticker_url]').fill('https://images.example.org/browser.png');
   await page.getByRole('button',{name:'Добавить по URL',exact:true}).click();
   await page.waitForFunction(n=>document.querySelectorAll('.af-ae-stiker').length===n+1,before);

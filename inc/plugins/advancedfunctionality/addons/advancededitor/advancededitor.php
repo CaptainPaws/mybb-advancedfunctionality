@@ -2719,7 +2719,12 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
                 if ($rel === '') continue;
                 $fileRel = af_advancededitor_pack_asset_rel($rel, $packDir, $addonBaseFs);
 
-                $packJs[] = af_advancededitor_addon_file_url($fileRel);
+                $assetUrl = af_advancededitor_addon_file_url($fileRel);
+                // Sticker upload UI must update even when deployment preserves file timestamps.
+                if ($fileRel === 'assets/bbcodes/stikers/stikers.js' && is_file($addonBaseFs . '/' . $fileRel)) {
+                    $assetUrl .= '?v=' . substr(hash_file('sha256', $addonBaseFs . '/' . $fileRel), 0, 16);
+                }
+                $packJs[] = $assetUrl;
             }
         }
 

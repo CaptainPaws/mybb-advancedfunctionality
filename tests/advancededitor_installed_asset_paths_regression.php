@@ -28,3 +28,11 @@ try {
         if (is_dir($base . '/' . $dir)) rmdir($base . '/' . $dir);
     }
 }
+
+$mybb=(object)['settings'=>['bburl'=>'https://forum.test']];
+$packs=af_advancededitor_discover_bbcode_packs('https://forum.test');
+$stickerJs=$packs['packs']['stikers']['assets']['js'][0] ?? '';
+if (!preg_match('/stikers\.js\?v=[a-f0-9]{16}$/',$stickerJs)) {
+    throw new RuntimeException('Sticker lazy runtime lacks content-based cache invalidation: '.$stickerJs);
+}
+echo "PASS: sticker lazy runtime URL includes a content hash\n";
