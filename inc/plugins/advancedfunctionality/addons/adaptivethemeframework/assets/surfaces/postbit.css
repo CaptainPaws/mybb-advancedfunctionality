@@ -1112,10 +1112,11 @@ body.atf-active .atf-post.af-atf-display .atf-post__layout::before {
   z-index: -1;
   pointer-events: none;
   background-color: var(--aa-message_background-color, #091521);
-  background-image: var(--aa-message_background-mask, none), var(--aa-message_background-haze, none), var(--aa-message_background-gradient, none), var(--aa-message_background-image, linear-gradient(180deg, #091521, rgb(9 21 33 / 35%) 12%, rgb(9 21 33 / 35%) 88%, #091521), url("https://warprift.ru/uploads/af_gallery/1/2026/10/3721b07ce4df8a6619ae827a42c1aa31.png"));
-  background-position: center, center, center, var(--aa-message_background-position, center top), var(--aa-message_background-position, center top);
-  background-size: auto, auto, auto, var(--aa-message_background-size, 100% 768px), var(--aa-message_background-size, 100% 768px);
-  background-repeat: no-repeat, no-repeat, no-repeat, var(--aa-message_background-repeat, repeat-y), var(--aa-message_background-repeat, repeat-y);
+  background-image: var(--aa-message_background-mask, none), var(--aa-message_background-haze, none), var(--aa-message_background-gradient, none), var(--aa-message_background-desaturate, none), var(--aa-message_background-image, linear-gradient(180deg, #091521, rgb(9 21 33 / 35%) 12%, rgb(9 21 33 / 35%) 88%, #091521), url("https://warprift.ru/uploads/af_gallery/1/2026/10/3721b07ce4df8a6619ae827a42c1aa31.png"));
+  background-blend-mode: normal, normal, normal, saturation, normal, normal;
+  background-position: center, center, center, center, var(--aa-message_background-position, center top), var(--aa-message_background-position, center top);
+  background-size: auto, auto, auto, auto, var(--aa-message_background-size, 100% 768px), var(--aa-message_background-size, 100% 768px);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, var(--aa-message_background-repeat, repeat-y), var(--aa-message_background-repeat, repeat-y);
   filter: var(--aa-message_background-filter, grayscale(.6) saturate(.4) brightness(.55) contrast(.9));
 }
 body.atf-active .atf-post.af-atf-display .atf-post__content,
@@ -1362,15 +1363,17 @@ body.atf-active .atf-post.af-atf-display .atf-post__sidebar { background: transp
    No parent opacity/filter/transform; author sticky rail and Gothic frame stay intact. */
 body.atf-active .atf-post.af-atf-display .atf-post__topbar {
   background-color: var(--aa-topbar-color, var(--atf-color-page-subtle));
-  background-image: var(--aa-topbar-mask, var(--af-apui-postbit-name-overlay, none)), var(--aa-topbar-haze, none), var(--aa-topbar-gradient, none), linear-gradient(115deg, var(--atf-post-accent-soft, transparent), transparent 38%), var(--aa-topbar-image, var(--af-apui-postbit-name-bg-image, none));
-  background-size: auto, auto, auto, auto, var(--aa-topbar-size, cover);
-  background-position: center, center, center, center, var(--aa-topbar-position, center);
-  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, var(--aa-topbar-repeat, no-repeat);
+  background-image: var(--aa-topbar-mask, var(--af-apui-postbit-name-overlay, none)), var(--aa-topbar-haze, none), var(--aa-topbar-gradient, none), linear-gradient(115deg, var(--atf-post-accent-soft, transparent), transparent 38%), var(--aa-topbar-desaturate, none), var(--aa-topbar-image, var(--af-apui-postbit-name-bg-image, none));
+  background-size: auto, auto, auto, auto, auto, var(--aa-topbar-size, cover);
+  background-blend-mode: normal, normal, normal, normal, saturation, normal;
+  background-position: center, center, center, center, center, var(--aa-topbar-position, center);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, var(--aa-topbar-repeat, no-repeat);
 }
 body.atf-active .atf-post.af-atf-display .atf-post__sidebar-inner {
   background-color: var(--aa-sidebar-color, var(--atf-color-page-subtle));
-  background-image: var(--aa-sidebar-mask, var(--af-apui-postbit-author-overlay, linear-gradient(180deg, var(--atf-post-accent-soft, transparent), transparent 42%))), var(--aa-sidebar-haze, none), var(--aa-sidebar-gradient, none), var(--aa-sidebar-image, var(--af-apui-postbit-author-bg-image, none));
-  background-size: auto, auto, auto, var(--aa-sidebar-size, cover);
-  background-position: center, center, center, var(--aa-sidebar-position, center);
-  background-repeat: no-repeat, no-repeat, no-repeat, var(--aa-sidebar-repeat, no-repeat);
+  background-image: var(--aa-sidebar-mask, var(--af-apui-postbit-author-overlay, linear-gradient(180deg, var(--atf-post-accent-soft, transparent), transparent 42%))), var(--aa-sidebar-haze, none), var(--aa-sidebar-gradient, none), var(--aa-sidebar-desaturate, none), var(--aa-sidebar-image, var(--af-apui-postbit-author-bg-image, none));
+  background-size: auto, auto, auto, auto, var(--aa-sidebar-size, cover);
+  background-blend-mode: normal, normal, normal, saturation, normal;
+  background-position: center, center, center, center, var(--aa-sidebar-position, center);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, var(--aa-sidebar-repeat, no-repeat);
 }

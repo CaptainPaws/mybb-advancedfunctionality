@@ -11,6 +11,7 @@ const assert=require('node:assert/strict'),{chromium}=require('playwright');
  const paint=zone=>area(zone).evaluate(el=>getComputedStyle(el).backgroundImage);
  async function select(zone){await page.selectOption('#aa-component',zone);await page.locator('#aa-field-groups details').filter({has:page.locator('summary',{hasText:'Затенение'})}).locator('summary').click();}
  async function range(key,value){await page.locator('[data-setting="'+key+'"]').evaluate((el,value)=>{el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));},String(value));}
+ await page.waitForFunction(()=>document.getElementById('aa-preview-style').textContent&&getComputedStyle(document.querySelector('#aa-studio-preview .atf-post__sidebar-inner')).backgroundImage);
  const initialSide=await paint('sidebar');
  await select('topbar');
  for(const [key,value] of Object.entries({overlay_intensity:'.5',overlay_start:'1',overlay_end:'1',overlay_angle:'180'}))assert.equal(Number(await page.locator('[data-setting="'+key+'"]').inputValue()),Number(value),'Wrong initial '+key);
@@ -21,13 +22,15 @@ const assert=require('node:assert/strict'),{chromium}=require('playwright');
  await select('sidebar');await page.locator('[data-setting="overlay_mode"]').selectOption('lighten');await range('overlay_intensity',.6);
  await range('overlay_start',0);await range('overlay_end',1);
  await page.waitForFunction(()=>getComputedStyle(document.querySelector('#aa-studio-preview .atf-post__sidebar-inner')).backgroundImage.includes('0.6'));
+ await range('background_saturation',0);
+ await page.waitForFunction(()=>getComputedStyle(document.querySelector('#aa-studio-preview .atf-post__sidebar-inner')).getPropertyValue('--aa-sidebar-desaturate').includes('128'));
  assert.equal(await paint('topbar'),topPaint,'Sidebar changed topbar');
  assert.match(await paint('sidebar'),/1 1 1/,'Lighten did not use white');
  await page.waitForFunction(()=>document.querySelector('#aa-draft-status').textContent==='Черновик сохранён');
  const response=await page.request.post(origin+'/apstudio.php?api=personal',{data:{operation:'list',target:'postbit',my_post_key:'appearance-fixture-key'}});
  const list=(await response.json()).data,row=list.presets[0],settings=JSON.parse(row.draft_json);
  assert.equal(settings.components.topbar.overlay_mode,'darken');assert.equal(settings.components.topbar.overlay_intensity,.8);
- assert.equal(settings.components.sidebar.overlay_mode,'lighten');assert.equal(settings.components.sidebar.overlay_start,0);
+ assert.equal(settings.components.sidebar.overlay_mode,'lighten');assert.equal(settings.components.sidebar.overlay_start,0);assert.equal(settings.components.sidebar.background_saturation,0);
  // Persist/activate through the existing API, then inspect the ordinary postbit CSS path.
  for(const [operation,values] of [['save',{id:row.id,title:row.title,settings_json:row.draft_json}],['activate',{id:row.id}]]){
   const r=await page.request.post(origin+'/apstudio.php?api=personal',{data:{operation,target:'postbit',my_post_key:'appearance-fixture-key',...values}});assert.ok((await r.json()).ok);

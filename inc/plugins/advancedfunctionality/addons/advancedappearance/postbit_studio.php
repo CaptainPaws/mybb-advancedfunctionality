@@ -7,6 +7,7 @@ function af_aa_postbit_fields(): array
     $fields=[
         'text_align'=>['enum',['left','center','right','justify']], 'hover_background_color'=>['color'], 'hover_border_color'=>['color'], 'divider_color'=>['color'],
         'background_url'=>['url'], 'image_url'=>['url'], 'image_media_id'=>['media'],
+        'background_saturation'=>['number',0,100,1],
         'background_repeat'=>['enum',['no-repeat','repeat','repeat-x','repeat-y']],
         'overlay_mode'=>['enum',['none','darken','lighten']], 'overlay_color'=>['color'],
         'overlay_intensity'=>['number',0,1,.01], 'overlay_start'=>['number',0,1,.01], 'overlay_end'=>['number',0,1,.01], 'overlay_angle'=>['number',0,360,1],
@@ -34,7 +35,7 @@ function af_aa_postbit_surface(): array
     // Keep validating old sparse presets; obsolete geometry fields are never offered by this adapter.
     $legacy=array_diff(array_keys(af_aa_studio_fields()),array_keys(af_aa_postbit_fields()));
     $entry=static fn($label,$selector,$fields,$old=false)=>['label'=>$label,'selector'=>$selector,'editable_fields'=>array_values(array_diff($fields,['darkening'])),'fields'=>$old?array_values(array_unique(array_merge($fields,$legacy))):$fields];
-    $surface=['overlay_defaults'=>af_aa_postbit_overlay_defaults(),'purpose'=>'appearance_postbit_bg','css'=>['adaptivethemeframework/assets/surfaces/postbit.css','adaptivethemeframework/assets/surfaces/signature.css','advancedprofileui/assets/advancedprofileui.css'],'canvas'=>false,'components'=>[
+    $surface=['field_defaults'=>['background_saturation'=>100],'overlay_defaults'=>af_aa_postbit_overlay_defaults(),'purpose'=>'appearance_postbit_bg','css'=>['adaptivethemeframework/assets/surfaces/postbit.css','adaptivethemeframework/assets/surfaces/signature.css','advancedprofileui/assets/advancedprofileui.css'],'canvas'=>false,'components'=>[
         'decoration'=>$entry('Декоративные акценты','',['gem_color','gem_glow']),
         'topbar'=>$entry('Верхняя панель','.atf-post__topbar',array_merge($background,$haze),true),
         'sidebar'=>$entry('Боковая панель','.atf-post__sidebar-inner',array_merge($background,$haze),true),
@@ -56,6 +57,10 @@ function af_aa_postbit_surface(): array
         'signature_buttons'=>$entry('Подпись · кнопки-ссылки','.af-asb-signature .af-asb-signature__button',array_merge($type,['background_color','border_color','hover_color','hover_background_color','hover_border_color'])),
         'signature'=>$entry('Подпись','.atf-post__signature',array_merge($background,$type,['link_color','hover_color']),true),
     ]];
+    foreach(['topbar','sidebar','message_background'] as $zone) {
+        $surface['components'][$zone]['fields'][]='background_saturation';
+        $surface['components'][$zone]['editable_fields'][]='background_saturation';
+    }
     $surface['components']['profile_fields']=$entry('Дополнительные поля · все','.atf-post__profile-fields',$type);
     $surface['components']['user_status']=$entry('Статус пользователя','.atf-post__title',$type);
     if(function_exists('af_apf_postbit_field_definitions'))foreach(af_apf_postbit_field_definitions() as $fid=>$field) {
@@ -160,6 +165,10 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $si
                 if (!isset($v['background_size'])) $vars[]=$prefix.'size:cover;';
                 if (!isset($v['background_repeat'])) $vars[]=$prefix.'repeat:no-repeat;';
             }
+            if(isset($v['background_saturation'])) {
+                $alpha=1-$v['background_saturation']/100;
+                $vars[]=$prefix.'desaturate:linear-gradient(rgb(128 128 128 / '.$alpha.'),rgb(128 128 128 / '.$alpha.'));';
+            }
             if (isset($v['haze_color'])) $vars[]=$prefix.'haze:linear-gradient('.($v['haze_angle']??115).'deg,color-mix(in srgb,'.$v['haze_color'].' '.(100*($v['haze_intensity']??.18)*($v['haze_opacity']??1)).'%,transparent),transparent 70%);';
             $defaults=af_aa_postbit_overlay_defaults();
             $mode=$v['overlay_mode']??null;
@@ -171,7 +180,9 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $si
                 if ($mode!=='none') {
                     $color=$v['overlay_color']??($mode==='lighten'?'#ffffff':'#000000');
                     $intensity=$v['overlay_intensity']??$defaults['overlay_intensity'];
-                    $mask='linear-gradient('.($v['overlay_angle']??$defaults['overlay_angle']).'deg,color-mix(in srgb,'.$color.' '.(100*$intensity*($v['overlay_start']??$defaults['overlay_start'])).'%,transparent),color-mix(in srgb,'.$color.' '.(100*$intensity*($v['overlay_end']??$defaults['overlay_end'])).'%,transparent))';
+                    // Intensity is global strength: 100% must be opaque even with soft gradient stops.
+                    $strength=static fn($stop)=>100*$intensity*($stop+(1-$stop)*$intensity);
+                    $mask='linear-gradient('.($v['overlay_angle']??$defaults['overlay_angle']).'deg,color-mix(in srgb,'.$color.' '.$strength($v['overlay_start']??$defaults['overlay_start']).'%,transparent),color-mix(in srgb,'.$color.' '.$strength($v['overlay_end']??$defaults['overlay_end']).'%,transparent))';
                 }
                 $vars[]=$prefix.'mask:'.$mask.';';
             }
