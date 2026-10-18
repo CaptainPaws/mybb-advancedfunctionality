@@ -11,6 +11,7 @@
   var HANDLER_ID = 'jscolorpiker';
   var DEFAULT_COLOR = '#000000';
   var popupEl = null;
+  var popupCache = null;
   var popupCaller = null;
   var popupEditor = null;
   var outsideBound = false;
@@ -356,6 +357,7 @@
     var options;
 
     if (!host || !input) return null;
+    if (input.jscolor) { input.jscolor.show(); return input.jscolor; }
 
     options = {
       value: input.value || DEFAULT_COLOR,
@@ -384,14 +386,7 @@
       }
     };
 
-    if (document.body.classList.contains('atf-active')) {
-      var theme = getComputedStyle(host.closest('.af-ae-jscolor-popup'));
-      options.backgroundColor = theme.backgroundColor;
-      options.borderColor = theme.borderColor;
-      options.controlBorderColor = theme.borderColor;
-      options.borderRadius = 3;
-      options.padding = 6;
-    }
+    options = window.afAeColorOptions(options, host);
     Ctor = getJscolorCtor();
     if (!Ctor) return null;
 
@@ -428,6 +423,7 @@
     }
 
     window.setTimeout(function () {
+      if (!host.isConnected) return;
       syncPreview(input, preview, input.value || DEFAULT_COLOR);
 
       if (input.jscolor && typeof input.jscolor.show === 'function') {
@@ -506,8 +502,11 @@
   }
 
   function closePopup() {
-    if (popupEl && popupEl.parentNode) {
-      popupEl.parentNode.removeChild(popupEl);
+    if (popupEl) {
+      var input = popupEl.querySelector('.af-ae-jscolor-input');
+      if (input && input.jscolor) input.jscolor.hide();
+      if (typeof popupEl.hidePopover === 'function' && popupEl.matches(':popover-open')) popupEl.hidePopover();
+      popupEl.remove();
     }
 
     if (popupCaller) {
@@ -520,32 +519,7 @@
   }
 
   function positionPopup() {
-    var rect;
-    var top;
-    var left;
-    var maxLeft;
-    var width;
-
-    if (!popupEl || !popupCaller) return;
-
-    rect = popupCaller.getBoundingClientRect();
-
-    popupEl.style.visibility = 'hidden';
-    popupEl.style.display = 'block';
-
-    width = popupEl.offsetWidth || 320;
-    var height = popupEl.offsetHeight;
-    var available = document.documentElement.clientHeight;
-    top = Math.max(8, Math.min(available - height - 8, rect.bottom + height + 6 > available ? rect.top - height - 6 : rect.bottom + 6)) + window.pageYOffset;
-    left = rect.left + window.pageXOffset;
-
-    maxLeft = window.pageXOffset + document.documentElement.clientWidth - width - 8;
-    if (left > maxLeft) left = maxLeft;
-    if (left < window.pageXOffset + 8) left = window.pageXOffset + 8;
-
-    popupEl.style.left = left + 'px';
-    popupEl.style.top = top + 'px';
-    popupEl.style.visibility = 'visible';
+    if (popupEl && popupCaller) window.afAePlacePopup(popupEl, popupCaller);
   }
 
   function bindOutsideCloser() {
@@ -581,14 +555,14 @@
   }
 
   function createPopup(editor, caller) {
-    var popup = document.createElement('div');
+    var popup = popupCache || (popupCache = document.createElement('div'));
     var input;
     var preview;
     var host;
     var applyBtn;
 
-    popup.className = 'af-ae-jscolor-popup';
-    popup.innerHTML = '' +
+    popup.className = 'af-ae-jscolor-popup af-ae-popup-surface';
+    if (!popup.querySelector('.af-ae-jscolor-input')) popup.innerHTML = '' +
       '<div class="af-ae-jscolor-wrap">' +
         '<div class="af-ae-jscolor-title"><strong>Цвет текста</strong><button type="button" class="af-ae-jscolor-close" aria-label="Закрыть">×</button></div>' +
         '<div class="af-ae-jscolor-top">' +
@@ -597,13 +571,14 @@
         '</div>' +
         '<div class="af-ae-jscolor-host"></div>' +
         '<div class="af-ae-jscolor-actions">' +
-          '<button type="button" class="button af-ae-jscolor-apply">Применить</button>' +
+          '<button type="button" class="button atf-button af-ae-jscolor-apply">Применить</button>' +
         '</div>' +
       '</div>';
 
     document.body.appendChild(popup);
     if (window.afAtfDecorateSurface) window.afAtfDecorateSurface(popup);
-    popup.querySelector('.af-ae-jscolor-close').addEventListener('click', closePopup);
+    popup.querySelector('.af-ae-jscolor-close').onclick = closePopup;
+    if (typeof popup.showPopover === 'function') { popup.setAttribute('popover', 'manual'); popup.showPopover(); }
 
     input = popup.querySelector('.af-ae-jscolor-input');
     preview = popup.querySelector('.af-ae-jscolor-preview');
@@ -612,7 +587,7 @@
 
     ensureJscolor(host, input, preview);
 
-    applyBtn.addEventListener('click', function (ev) {
+    applyBtn.onclick = function (ev) {
       var resolvedEditor;
       var norm;
 
@@ -628,7 +603,7 @@
       if (applyColor(resolvedEditor, norm)) {
         closePopup();
       }
-    });
+    };
 
     popupEl = popup;
     popupCaller = caller;

@@ -34,8 +34,9 @@
 
 .af-ae-tables-dropdown {
   box-sizing: border-box;
-  min-width: 430px;
-  max-width: 460px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   padding: 12px;
   background:
     radial-gradient(circle at top, rgba(88, 125, 215, 0.13), transparent 48%),
@@ -517,27 +518,40 @@
 #jscolor-palette {
   z-index: 100000 !important;
 }
-/* ATF uses the shared dropdown surface; keep all existing builder controls. */
-body.atf-active .af-ae-tables-dropdown {
-  min-width:0; width:100%; max-width:none; padding:9px;
-  background:transparent; color:var(--atf-color-text); border:0; border-radius:0;
-  box-shadow:none; backdrop-filter:none;
-}
-body.atf-active .af-ae-tables-dropdown__field {
-  padding:5px; gap:5px; border-radius:3px;
-  background:var(--atf-color-surface); border-color:var(--atf-color-border); box-shadow:none;
-}
-body.atf-active .af-ae-tables-dropdown__fieldhead { gap:5px; min-height:24px; }
-.af-ae-tables-dropdown__field-label { font-size:11px; line-height:1.35; }
+/* The outer shell owns the frame and width. Every grid child may shrink. */
+.af-ae-tables-dropdown { padding:0; background:transparent; border:0; border-radius:0; box-shadow:none; backdrop-filter:none; }
+.af-ae-tables-dropdown__grid > * { box-sizing:border-box; min-width:0; max-width:100%; }
+.af-ae-tables-dropdown__fieldhead { min-width:0; }
+.af-ae-tables-dropdown__field-label { font-size:11px; line-height:1.35; overflow-wrap:anywhere; }
+.af-ae-tables-dropdown__checkbox--compact { flex-direction:column; min-width:0; gap:4px; padding:5px; text-align:center; white-space:normal; font-size:11px; }
+.af-ae-tables-dropdown__checkbox--compact > span { max-width:100%; overflow-wrap:anywhere; }
+.af-ae-tables-dropdown__checkbox input { flex:0 0 auto; width:16px; height:16px; }
+.af-ae-tables-dropdown__colors { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); justify-content:normal; gap:4px; }
+.af-ae-tables-dropdown .af-ae-color-chip { position:relative; box-sizing:border-box; flex-direction:row; min-width:0; gap:4px; padding:5px; border-radius:3px; }
+.af-ae-tables-dropdown .af-ae-ui-label { width:14px; min-width:14px; height:16px; border:0; background:transparent; }
+.af-ae-tables-dropdown .af-ae-ui-label svg { width:14px; height:14px; }
+.af-ae-tables-dropdown .af-ae-color__pick { min-width:18px; width:18px; min-height:18px; height:18px; padding:0; border-radius:3px; }
+.af-ae-tables-dropdown .af-ae-color__clear--mini { position:absolute; top:0; right:0; min-width:12px; width:12px; min-height:12px; height:12px; padding:0; opacity:0; font-size:10px; line-height:1; }
+.af-ae-tables-dropdown .af-ae-color-chip:hover .af-ae-color__clear--mini,
+.af-ae-tables-dropdown .af-ae-color__clear--mini:focus-visible { opacity:1; }
+.af-ae-tables-dropdown__actions { position:sticky; bottom:0; padding-block:8px 0; }
+body.atf-active .af-ae-tables-dropdown { color:var(--atf-color-text); }
+body.atf-active .af-ae-tables-dropdown__field,
 body.atf-active .af-ae-tables-dropdown__checkbox,
-body.atf-active .af-ae-tables-dropdown__summary { background:var(--atf-color-surface); border-color:var(--atf-color-border); color:var(--atf-color-text-muted); border-radius:3px; }
-body.atf-active .af-ae-tables-dropdown__summary { font-size:11px; padding:8px; }
-body.atf-active .af-ae-tables-dropdown .af-ae-ui-label { background:transparent; border:0; color:var(--atf-color-accent); }
+body.atf-active .af-ae-tables-dropdown__summary,
+body.atf-active .af-ae-tables-dropdown .af-ae-color-chip { background:var(--atf-color-surface); border-color:var(--atf-color-border); color:var(--atf-color-text); border-radius:3px; box-shadow:none; }
+body.atf-active .af-ae-tables-dropdown__field { padding:5px; gap:5px; }
+body.atf-active .af-ae-tables-dropdown__fieldhead { min-height:24px; }
+body.atf-active .af-ae-tables-dropdown .af-ae-ui-label { color:var(--atf-color-accent); }
+body.atf-active .af-ae-tables-dropdown__actions { background:var(--atf-color-page-subtle); }
+body.atf-active .af-ae-popup-surface .af-ae-tables-dropdown .af-ae-color-chip .af-ae-color__clear--mini { min-height:12px; padding:0; font-size:10px; }
 @media (max-width:40rem) {
-  body.atf-active .af-ae-tables-dropdown__grid--compact { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  body.atf-active .af-ae-tables-dropdown__colors { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .af-ae-tables-dropdown__grid--compact { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .af-ae-tables-dropdown__colors { gap:2px; }
+  .af-ae-tables-dropdown .af-ae-color-chip { gap:2px; padding:3px; }
+  .af-ae-tables-dropdown .af-ae-ui-label { width:12px; min-width:12px; }
+  .af-ae-tables-dropdown .af-ae-color__pick { min-width:16px; width:16px; height:16px; min-height:16px; }
 }
 
-body.atf-active .af-ae-tables-dropdown__colors { grid-template-columns:repeat(3,minmax(0,1fr)); }
-body.atf-active .af-ae-tables-dropdown .af-ae-color-chip { flex-direction:column; align-items:flex-start; min-width:0; background:var(--atf-color-surface); border-color:var(--atf-color-border); border-radius:3px; color:var(--atf-color-text-muted); font-size:11px; }
-@media (max-width:40rem) { body.atf-active .af-ae-tables-dropdown__colors { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+body.atf-active .af-ae-popup-surface .af-ae-tables-dropdown .af-ae-color__pick { min-width:18px; width:18px; min-height:18px; height:18px; padding:0; }
+@media (max-width:40rem) { body.atf-active .af-ae-popup-surface .af-ae-tables-dropdown .af-ae-color__pick { min-width:16px; width:16px; min-height:16px; height:16px; } }

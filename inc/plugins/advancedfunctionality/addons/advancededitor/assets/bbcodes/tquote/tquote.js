@@ -966,6 +966,10 @@
     dropdownState.allowProgrammaticClose = false;
   }
 
+  document.addEventListener('af:popup-closed', function (event) {
+    if (dropdownState.dropdown === event.detail.popup) closeDropdownState();
+  });
+
   function closeDropdownState() {
     restoreDropdownCloseDropDown();
     dropdownState.isOpen = false;
@@ -1037,14 +1041,13 @@
     if (input.jscolor) return input.jscolor;
 
     try {
-      picker = new Ctor(input, {
+      picker = new Ctor(input, window.afAeColorOptions({
         value: initialValue,
         format: 'hexa',
         alphaChannel: true,
         hash: true,
         valueElement: input,
         previewElement: swatch,
-        container: document.body,
         showOnClick: false,
         hideOnLeave: false,
         closeButton: true,
@@ -1063,7 +1066,7 @@
         onChange: function () {
           syncFromPicker(this);
         }
-      });
+      }));
 
       input.jscolor = picker;
 
@@ -1109,7 +1112,7 @@
 
       picker = createJscolorInstance(root, input, swatch, onChange);
       if (picker && typeof picker.show === 'function') {
-        try { picker.show(); } catch (e0) {}
+        try { window.afAeShowColor(picker, swatch); } catch (e0) {}
         window.setTimeout(bindJscolorPopupGuards, 0);
         window.setTimeout(bindJscolorPopupGuards, 30);
         window.setTimeout(bindJscolorPopupGuards, 100);

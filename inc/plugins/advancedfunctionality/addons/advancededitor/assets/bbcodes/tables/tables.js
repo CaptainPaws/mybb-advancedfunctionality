@@ -1201,8 +1201,8 @@
 
   function createColorField(name, label, placeholder, iconKey) {
     return [
-      '<label class="af-ae-color-chip" title="' + escHtml(label) + '">',
-      '  <span class="af-ae-color-chip__label">' + escHtml(label) + '</span>',
+      '<label class="af-ae-color-chip" aria-label="' + escHtml(label) + '" title="' + escHtml(label) + '">',
+      '  <span class="af-ae-color-chip__label">' + createIconLabel(ICONS[iconKey], label) + '</span>',
       '  <div class="af-ae-color af-ae-color--chip">',
       '    <input class="af-ae-color__value" type="text" name="' + name + '" value="" placeholder="' + placeholder + '">',
       '    <button type="button" class="af-ae-color__pick" data-af-color-for="' + name + '" aria-label="' + escHtml(label) + '"></button>',
@@ -1359,26 +1359,9 @@
   }
 
   function ensureTableColorViewport(root) {
-    var dropdown = getTableColorDropdown(root);
-
-    if (dropdown) {
-      dropdown.style.overflow = 'visible';
-      dropdown.style.maxWidth = 'none';
-      if (dropdown.offsetWidth < 460) {
-        dropdown.style.width = '460px';
-      }
-    }
-
-    if (root && root.classList) {
-      if (root.classList.contains('af-ae-tables-dropdown')) {
-        root.style.minWidth = '430px';
-        root.style.maxWidth = '460px';
-      }
-
-      if (root.classList.contains('af-ae-table-toolbar')) {
-        root.style.width = '460px';
-        root.style.maxWidth = 'calc(100% - 12px)';
-      }
+    if (root && root.classList.contains('af-ae-tables-dropdown')) {
+      root.style.minWidth = '0';
+      root.style.maxWidth = '100%';
     }
   }
 
@@ -1397,14 +1380,13 @@
     ensureTableColorViewport(root);
 
     try {
-      picker = new Ctor(input, {
+      picker = new Ctor(input, window.afAeColorOptions({
         value: initialValue,
         format: 'hexa',
         alphaChannel: true,
         hash: true,
         valueElement: input,
         previewElement: pickerBtn,
-        container: document.body,
         showOnClick: false,
         hideOnLeave: false,
         closeButton: true,
@@ -1453,7 +1435,7 @@
 
           syncColorControls(root);
         }
-      });
+      }));
 
       input.jscolor = picker;
 
@@ -1505,7 +1487,7 @@
 
       picker = createTableJscolorInstance(root, input, pickerBtn);
       if (picker && typeof picker.show === 'function') {
-        try { picker.show(); } catch (e1) {}
+        try { window.afAeShowColor(picker, pickerBtn); } catch (e1) {}
         window.setTimeout(bindJscolorPopupGuards, 0);
       }
     });
@@ -1759,14 +1741,7 @@
       dropdown.style.maxWidth = 'calc(100vw - 16px)';
       dropdown.style.maxHeight = 'calc(100dvh - 16px)';
       if (window.afAtfDecorateSurface) window.afAtfDecorateSurface(dropdown);
-      // Native SCEditor and the source adapter both retain their own close handler.
-      var bounds = dropdown.getBoundingClientRect();
-      var fixed = getComputedStyle(dropdown).position === 'fixed';
-      var anchor = caller && caller.jquery ? caller[0] : caller;
-      var rect = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : bounds;
-      var top = rect.bottom + bounds.height + 6 > innerHeight ? rect.top - bounds.height - 6 : rect.bottom + 6;
-      dropdown.style.left = (Math.max(8, Math.min(rect.left, innerWidth - bounds.width - 8)) + (fixed ? 0 : window.scrollX)) + 'px';
-      dropdown.style.top = (Math.max(8, Math.min(top, innerHeight - bounds.height - 8)) + (fixed ? 0 : window.scrollY)) + 'px';
+      window.afAePlacePopup(dropdown, caller && caller.jquery ? caller[0] : caller);
     }
 
     openBuilderState(node, dropdown || null, target);
@@ -2582,6 +2557,10 @@
     if (toolbar && toolbar.classList.contains('is-visible')) {
       hideTableToolbar();
     }
+  });
+
+  document.addEventListener('af:popup-closed', function (event) {
+    if (builderState.dropdown === event.detail.popup) closeBuilderState();
   });
 
   document.addEventListener('af:editor-ready', function (event) {

@@ -1,5 +1,5 @@
 .af-ae-jscolor-popup {
-  position: absolute;
+  position: fixed;
   z-index: 99999;
   min-width: 300px;
   max-width: 340px;

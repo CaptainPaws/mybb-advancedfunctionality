@@ -320,28 +320,130 @@
     }, { signal: signal });
   }
 
+  // All popup positions use viewport coordinates, including manual popovers.
+  window.afAePlacePopup = function (surface, anchor) {
+    if (!surface || !anchor || !anchor.isConnected) return;
+    var rect = anchor.getBoundingClientRect();
+    var view = window.visualViewport;
+    var left = view ? view.offsetLeft : 0, top = view ? view.offsetTop : 0;
+    var width = view ? view.width : document.documentElement.clientWidth;
+    var height = view ? view.height : window.innerHeight;
+    surface.style.position = 'fixed';
+    var y = rect.bottom + surface.offsetHeight + 6 > top + height ? rect.top - surface.offsetHeight - 6 : rect.bottom + 6;
+    surface.style.left = Math.max(left + 8, Math.min(rect.left, left + width - surface.offsetWidth - 8)) + 'px';
+    surface.style.top = Math.max(top + 8, Math.min(y, top + height - surface.offsetHeight - 8)) + 'px';
+  };
+
+  // One reusable portal hosts the library's own shared picker. Custom jscolor
+  // containers use relative coordinates internally; only this host is fixed.
+  var colorLayer = null, colorOwner = null, colorAnchor = null;
+  function colorHost() {
+    if (colorLayer) return colorLayer;
+    colorLayer = document.createElement('div');
+    colorLayer.className = 'af-ae-color-layer';
+    colorLayer.setAttribute('data-af-color-layer', '1');
+    colorLayer.hidden = true;
+    document.body.appendChild(colorLayer);
+    if (window.ResizeObserver) new ResizeObserver(positionColor).observe(colorLayer);
+    return colorLayer;
+  }
+  function positionColor() {
+    if (!colorOwner) return;
+    if (!colorAnchor || !colorAnchor.isConnected) { colorOwner.hide(); return; }
+    window.afAePlacePopup(colorLayer, colorAnchor);
+  }
+  window.afAeColorOptions = function (options, inlineHost) {
+    options = Object.assign({}, options, {container: inlineHost || colorHost()});
+    if (document.body.classList.contains('atf-active')) {
+      var theme = getComputedStyle(document.body);
+      options.backgroundColor = theme.getPropertyValue('--atf-color-page-subtle').trim() || '#171d26';
+      options.borderColor = theme.getPropertyValue('--atf-color-border-strong').trim() || '#607089';
+      options.controlBorderColor = theme.getPropertyValue('--atf-color-border').trim() || '#3a485b';
+      options.buttonColor = theme.getPropertyValue('--atf-color-text').trim() || '#e6e9ef';
+      options.borderRadius = 3;
+      options.padding = 6;
+      options.shadow = false;
+    }
+    return options;
+  };
+  window.afAeShowColor = function (picker, anchor) {
+    if (colorOwner && colorOwner !== picker) colorOwner.hide();
+    var host = colorHost();
+    if (!picker.__afAeLayerHide) {
+      var hide = picker.hide;
+      picker.hide = function () {
+        var result = hide.apply(this, arguments);
+        if (colorOwner === this) {
+          colorOwner = colorAnchor = null;
+          if (typeof host.hidePopover === 'function' && host.matches(':popover-open')) host.hidePopover();
+          host.hidden = true;
+        }
+        return result;
+      };
+      picker.__afAeLayerHide = true;
+    }
+    colorOwner = picker; colorAnchor = anchor;
+    host.hidden = false;
+    if (typeof host.showPopover === 'function') {
+      host.setAttribute('popover', 'manual');
+      if (!host.matches(':popover-open')) host.showPopover();
+    }
+    try { picker.show(); positionColor(); }
+    catch (error) { picker.hide(); throw error; }
+  };
+  window.afAeColorOwnedBy = function (parent, target) {
+    return !!(colorOwner && colorAnchor && parent.contains(colorAnchor) && colorLayer.contains(target));
+  };
+  window.afAeHideColorFor = function (parent) {
+    if (colorOwner && colorAnchor && parent.contains(colorAnchor)) colorOwner.hide();
+  };
+  document.addEventListener('pointerdown', function (event) {
+    if (colorOwner && !colorLayer.contains(event.target) && !colorAnchor.contains(event.target)) colorOwner.hide();
+  }, true);
+  document.addEventListener('keydown', function (event) {
+    if (colorOwner && event.key === 'Escape') {
+      colorOwner.hide(); event.preventDefault(); event.stopImmediatePropagation();
+    }
+  }, true);
+  window.addEventListener('resize', positionColor);
+  window.addEventListener('scroll', positionColor, true);
+  if (window.visualViewport) {
+    visualViewport.addEventListener('resize', positionColor);
+    visualViewport.addEventListener('scroll', positionColor);
+  }
+
   // Existing pack dialogs use this source-mode API without requiring SCEditor.
   function adapter(ta, wrapper) {
-    var popup = null, restoreContent = null, trigger = null;
+    var popup = null, popupNode = null, restoreContent = null, trigger = null;
+    var popupResize = window.ResizeObserver ? new ResizeObserver(position) : null;
     function close() {
+      if (popupResize) popupResize.disconnect();
+      if (popup) {
+        window.afAeHideColorFor(popup);
+        document.dispatchEvent(new CustomEvent('af:popup-closed', {detail: {popup: popup}}));
+      }
       if (restoreContent) { restoreContent(); restoreContent = null; }
       if (trigger) trigger.setAttribute('aria-expanded', 'false');
-      if (popup) popup.remove();
+      if (popup) {
+        if (typeof popup.hidePopover === 'function' && popup.matches(':popover-open')) popup.hidePopover();
+        popup.remove(); popup.replaceChildren();
+      }
       popup = trigger = null;
     }
     function position() {
       if (!popup || !trigger || !trigger.isConnected) return;
-      var bounds = trigger.getBoundingClientRect();
-      popup.style.left = Math.max(8, Math.min(bounds.left, innerWidth - popup.offsetWidth - 8)) + 'px';
-      popup.style.top = Math.max(8, Math.min(innerHeight - popup.offsetHeight - 8,
-        bounds.bottom + popup.offsetHeight + 8 > innerHeight ? bounds.top - popup.offsetHeight - 4 : bounds.bottom + 4)) + 'px';
+      window.afAePlacePopup(popup, trigger);
     }
     var signal = ta.__afAeShellAbort.signal;
     window.addEventListener('resize', position, { signal: signal });
     window.addEventListener('scroll', position, { capture: true, signal: signal });
+    if (window.visualViewport) {
+      visualViewport.addEventListener('resize', position, {signal: signal});
+      visualViewport.addEventListener('scroll', position, {signal: signal});
+    }
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); }, { signal: signal });
     document.addEventListener('mousedown', function (e) {
-      if (popup && !popup.contains(e.target) && !(trigger && trigger.contains(e.target))) close();
+      if (popup && !popup.contains(e.target) && !window.afAeColorOwnedBy(popup, e.target) && !(trigger && trigger.contains(e.target))) close();
     }, { signal: signal });
     var api = {
       textarea: ta, sourceEditor: ta, __afAeSourceAdapter: true,
@@ -366,30 +468,38 @@
           node.before(marker);
           restoreContent = function () { marker.replaceWith(node); node.hidden = true; };
         }
-        popup = document.createElement('div');
+        popup = popupNode || (popupNode = document.createElement('div'));
+        popup.removeAttribute('style');
+        popup.replaceChildren();
         // The compiled extra menu is owned by AdvancedEditor. Giving it the
         // native SCEditor dropdown class lets lazy-loaded SCEditor CSS restyle
         // and mutate its visual contract after the first mode switch.
         popup.className = (name === 'af-ae-extra-menu' ? 'af-ae-popup ' : 'sceditor-dropdown af-ae-popup ') + name;
+        popup.classList.add('af-ae-popup-surface');
         popup.id = 'sceditor-' + name;
         popup.setAttribute('data-af-popup-owner', ta.id || ta.name);
         popup.appendChild(node);
+        popup.querySelectorAll('button.button, input[type="submit"]').forEach(function (button) { button.classList.add('atf-button'); });
         document.body.appendChild(popup);
-        if (window.afAtfDecorateSurface) window.afAtfDecorateSurface(popup);
+        if (window.afAtfDecorateSurface && !(node.classList && node.classList.contains('atf-ornate'))) window.afAtfDecorateSurface(popup);
         // Browser top layer also sits above a fullscreen shell. Neither UI
         // node is reparented on mode/fullscreen transitions.
         if (typeof popup.showPopover === 'function') {
           popup.setAttribute('popover', 'manual'); popup.showPopover();
         }
-        popup.addEventListener('mousedown', function (e) { if (e.target.closest('[data-af-command]')) e.preventDefault(); });
-        popup.addEventListener('click', function (e) {
-          var button = e.target.closest('[data-af-command]');
-          if (!button) return;
-          e.preventDefault();
-          var definition = buttons[button.getAttribute('data-af-command')];
-          if (definition) { var anchor = trigger; close(); activate(ta, definition, anchor); }
-        });
+        if (!popup.__afAeEventsBound) {
+          popup.__afAeEventsBound = true;
+          popup.addEventListener('mousedown', function (e) { if (e.target.closest('[data-af-command]')) e.preventDefault(); });
+          popup.addEventListener('click', function (e) {
+            var button = e.target.closest('[data-af-command]');
+            if (!button) return;
+            e.preventDefault();
+            var definition = buttons[button.getAttribute('data-af-command')];
+            if (definition) { var anchor = trigger; close(); activate(ta, definition, anchor); }
+          });
+        }
         trigger.setAttribute('aria-expanded', 'true');
+        if (popupResize) popupResize.observe(popup);
         position();
         return popup;
       },

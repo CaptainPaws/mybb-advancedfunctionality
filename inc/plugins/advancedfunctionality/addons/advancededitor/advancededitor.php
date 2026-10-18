@@ -2718,7 +2718,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
 
                 $assetUrl = af_advancededitor_addon_file_url($fileRel);
                 // Lazy image/sticker UI must update even when deployment preserves file timestamps.
-                if (in_array($fileRel, ['assets/bbcodes/stikers/stikers.js','assets/bbcodes/media/media.js','assets/bbcodes/tables/tables.js','assets/bbcodes/jscolorpiker/jscolorpiker.js'], true) && is_file($addonBaseFs . '/' . $fileRel)) {
+                if (in_array($fileRel, ['assets/bbcodes/stikers/stikers.js','assets/bbcodes/media/media.js','assets/bbcodes/tables/tables.js','assets/bbcodes/jscolorpiker/jscolorpiker.js','assets/bbcodes/tquote/tquote.js'], true) && is_file($addonBaseFs . '/' . $fileRel)) {
                     $assetUrl .= '?v=' . substr(hash_file('sha256', $addonBaseFs . '/' . $fileRel), 0, 16);
                 }
                 $packJs[] = $assetUrl;
