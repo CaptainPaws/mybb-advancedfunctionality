@@ -138,6 +138,7 @@ function af_advancededitor_is_path_inside(string $path, string $baseDir): bool
 }
 
 require_once __DIR__ . '/assets/bbcodes/stikers/stikers.php';
+require_once __DIR__ . '/media.php';
 require_once __DIR__ . '/shell.php';
 require_once __DIR__ . '/theme_capabilities.php';
 
@@ -1216,6 +1217,7 @@ table #post_options, table #postoptions{display:none!important;}
         $compiledButtons = array_column($available, null, 'cmd');
         $customDefs = array_map(static fn($b) => array_replace($b, $compiledButtons[$b['cmd']] ?? []), $customDefs);
         $payload = [
+            'mediaGallery' => af_advancededitor_media_config(),
             'v'                => 5,
             'capabilities' => $shellRegistry['capabilities'],
             'assetVer'          => $buildVer,
@@ -2701,7 +2703,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
 
                 $resolvedCss = af_advancededitor_feature_css_url($fileRel);
                 if ($resolvedCss !== '') {
-                    if ($fileRel === 'assets/bbcodes/stikers/stikers.css' && is_file($addonBaseFs . '/' . $fileRel)) {
+                    if (in_array($fileRel, ['assets/bbcodes/stikers/stikers.css','assets/bbcodes/media/media.css'], true) && is_file($addonBaseFs . '/' . $fileRel)) {
                         $resolvedCss .= (strpos($resolvedCss, '?') === false ? '?' : '&') . 'v=' . substr(hash_file('sha256', $addonBaseFs . '/' . $fileRel), 0, 16);
                     }
                     $packCss[] = $resolvedCss;
@@ -2715,8 +2717,8 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
                 $fileRel = af_advancededitor_pack_asset_rel($rel, $packDir, $addonBaseFs);
 
                 $assetUrl = af_advancededitor_addon_file_url($fileRel);
-                // Sticker upload UI must update even when deployment preserves file timestamps.
-                if ($fileRel === 'assets/bbcodes/stikers/stikers.js' && is_file($addonBaseFs . '/' . $fileRel)) {
+                // Lazy image/sticker UI must update even when deployment preserves file timestamps.
+                if (in_array($fileRel, ['assets/bbcodes/stikers/stikers.js','assets/bbcodes/media/media.js'], true) && is_file($addonBaseFs . '/' . $fileRel)) {
                     $assetUrl .= '?v=' . substr(hash_file('sha256', $addonBaseFs . '/' . $fileRel), 0, 16);
                 }
                 $packJs[] = $assetUrl;

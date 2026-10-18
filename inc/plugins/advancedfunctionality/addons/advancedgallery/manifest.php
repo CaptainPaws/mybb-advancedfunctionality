@@ -4,7 +4,7 @@ return [
     'id'          => 'advancedgallery',
     'name'        => 'Галерея',
     'description' => 'Пользовательская галерея изображений с загрузкой и модерацией.',
-    'version'     => '1.2.1',
+    'version'     => '1.2.2',
     'author'      => 'CaptainPaws',
     'website'     => 'https://github.com/CaptainPaws',
 

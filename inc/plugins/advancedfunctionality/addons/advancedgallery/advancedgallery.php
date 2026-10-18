@@ -8,7 +8,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
 define('AF_AG_ID', 'advancedgallery');
-define('AF_AG_VER', '1.2.1');
+define('AF_AG_VER', '1.2.2');
 define('AF_AG_BASE', AF_ADDONS . AF_AG_ID . '/');
 define('AF_AG_ASSETS', AF_AG_BASE . 'assets/');
 define('AF_AG_TPL_FILE', AF_AG_BASE . 'templates/advancedgallery.html');
@@ -698,6 +698,8 @@ function af_advancedgallery_pre_output(string &$page = ''): void
     $hasPicker = function_exists('af_advancededitor_response_facts')
         ? !empty(af_advancededitor_response_facts($page)['has_supported_editor'])
         : (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']message["\'])[^>]*>~i', $page);
+
+    if ($script !== 'gallery.php' && $hasPicker && !str_contains($page, 'data-aa-gallery-picker') && !str_contains($page, 'data-atf-avatar-editor')) return;
 
     $hasPicker = $hasPicker || str_contains($page, 'data-aa-gallery-picker') || str_contains($page, 'data-atf-avatar-editor');
     if ($script === 'gallery.php' && stripos($page, '<html') !== false) {
@@ -2495,12 +2497,17 @@ function ag_handle_picker_data(): void
         }
     }
 
+    if ($mybb->get_input('images_only')==='1') {
+        $where .= " AND (m.type='local' OR (m.type='remote' AND (m.provider IN (".ag_external_provider_sql().") OR (m.provider IN ('direct','imgur','giphy','discord') AND SUBSTRING_INDEX(SUBSTRING_INDEX(m.remote_url,'?',1),'#',1) REGEXP '[.](jpe?g|png|gif|webp)$'))))";
+    }
+
     $sql = "SELECT m.* FROM ".TABLE_PREFIX."af_gallery_media m{$join} WHERE {$where}"
         ." ORDER BY m.created_at DESC";
     $query = $db->write_query($sql . " LIMIT {$offset}, {$perPage}");
 
     $items = [];
     while ($row = $db->fetch_array($query)) {
+        if ($mybb->get_input('images_only')==='1' && !ag_media_is_direct_image($row)) continue;
         $thumb = ag_media_thumb_url($row);
         $fullUrl = $row['type'] === 'remote'
             ? (string)$row['remote_url']
@@ -2520,6 +2527,7 @@ function ag_handle_picker_data(): void
             'created_at' => (int)$row['created_at'],
             'media_id' => (int)$row['id'],
             'source_label' => ag_source_labels()[ag_media_source($row)] ?? 'URL',
+            'is_image' => ag_media_is_direct_image($row),
         ];
     }
 

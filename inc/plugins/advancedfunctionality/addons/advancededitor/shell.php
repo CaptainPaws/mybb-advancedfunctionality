@@ -75,6 +75,7 @@ function af_advancededitor_shell_command_key(string $cmd, array $button = []): s
         || in_array($cmd, ['kb','kb_insert','af_kb','af_kb_insert','knowledgebase','knowledgebase_insert'], true)) {
         return 'af_kb_insert';
     }
+    if (in_array($cmd,['af_gallery','af_gallery_picker'],true)) return 'af_gallery';
     return $cmd;
 }
 
@@ -136,6 +137,17 @@ function af_advancededitor_shell_registry(array $available, array $custom, array
     }
     $capabilities = array_merge($capabilities, (array)($GLOBALS['af_ae_external_capabilities'] ?? []));
     $buttons = array_merge($buttons, (array)($GLOBALS['af_ae_external_buttons'] ?? []));
+    if (isset($buttons['image']) && isset($capabilities['media'])) {
+        $buttons['image']['handler']='media';$buttons['image']['capability']='media';
+        $mediaConfig=af_advancededitor_media_config();
+        if ($mediaConfig['enabled']) {
+            $buttons['af_gallery']=array_replace($buttons['image'],['cmd'=>'af_gallery','title'=>'Галерея','label'=>'Галерея',
+                'iconSvg'=>'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="6" width="16" height="15" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v11M3 17l5-5 4 4 3-3 4 4"/><circle cx="8" cy="10" r="1"/></svg>']);
+        } else unset($buttons['af_gallery']);
+        if(!empty($buttons['image']['iconSvg']))$buttons['image']['icon']=$buttons['image']['iconSvg'];
+        if(isset($buttons['af_gallery']))$buttons['af_gallery']['icon']=$buttons['af_gallery']['iconSvg'];
+        unset($buttons['af_gallery_picker']);
+    }
     foreach ($buttons as $cmd => &$b) {
         if ((!empty($b['opentag']) || !empty($b['closetag'])) && empty($b['handler'])) unset($b['capability']);
         if (isset($b['runtime']) && is_array($b['runtime'])) {
@@ -222,6 +234,20 @@ function af_advancededitor_shell_toolbar(array $buttons, ?array $layout, array $
         $section['items'] = array_values($normalized);
     }
     unset($section);
+    if (isset($map['af_gallery'])) {
+        $found=false;
+        foreach ($layout['sections'] as &$section) {
+            $items=[];
+            foreach ((array)($section['items'] ?? []) as $cmd) {
+                if (af_advancededitor_shell_command_key((string)$cmd)==='af_gallery') continue;
+                $items[]=$cmd;
+                if ($cmd==='image' && !$found) {$items[]='af_gallery';$found=true;}
+            }
+            $section['items']=$items;
+        }
+        unset($section);
+        if (!$found) $layout['sections'][]=['type'=>'group','items'=>['af_gallery']];
+    }
     $escape = static fn($s) => htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $button = static function ($cmd, $b, bool $menuItem = false) use ($escape): string {
         if ($menuItem) {

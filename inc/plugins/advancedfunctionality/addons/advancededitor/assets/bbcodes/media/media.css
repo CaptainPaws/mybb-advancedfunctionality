@@ -1,0 +1,14 @@
+.ae-media-fallback { position:fixed; inset:0; background:rgba(0,0,0,.5); display:grid; place-items:center; z-index:100010; }
+.ae-media-dialog { width:min(480px,90vw); box-sizing:border-box; padding:1.2em; background:var(--background,#24262a); color:var(--color,#eee); border:1px solid #555; border-radius:8px; }
+.ae-media-dialog input { box-sizing:border-box; width:100%; margin-block:.7em; }
+.ae-media-dialog [data-close] { float:right; }
+.ag-media-tabs { display:flex; gap:.4em; flex-wrap:wrap; padding:.7em; }
+.ag-media-url { padding:1em; }
+.ag-media-url input { width:100%; box-sizing:border-box; }
+.ag-media-status { padding:.5em 1em; }
+.ag-media-tabs[hidden], .ag-media-url[hidden] { display:none !important; }
+.ag-picker-dialog.ag-media-dialog { margin:4vh auto; width:min(900px,calc(100vw - 24px)); max-height:92vh; box-sizing:border-box; overflow:auto; }
+.ag-media-dialog .ag-picker-grid { max-height:35vh; }
+
+.ag-media-tabs [hidden] { display:none !important; }
+.ag-media-tabs [aria-selected="true"] { outline:2px solid currentColor; outline-offset:-2px; }

@@ -328,7 +328,7 @@
       return card;
     }
 
-    if (isImageUrl(item.url_full) || item.type === 'local') {
+    if (item.is_image || isImageUrl(item.url_full) || item.type === 'local') {
       var btnImg = document.createElement('button');
       btnImg.type = 'button';
       btnImg.className = 'button';
@@ -348,7 +348,7 @@
       if (pickerState.insertFn) pickerState.insertFn('[url=' + item.url_full + ']' + item.url_full + '[/url]');
       closePicker();
     });
-    actions.appendChild(btnLink);
+    if(!pickerState.mediaTool)actions.appendChild(btnLink);
 
     body.appendChild(actions);
     card.appendChild(body);
@@ -418,6 +418,7 @@
       insertLink: modal.getAttribute('data-insert-link-label') || 'Insert link'
     };
 
+    if(pickerState.mediaTool)labels.insertImg='Вставить изображение';
     if (!items || !items.length) {
       var empty = document.createElement('div');
       empty.className = 'ag-empty';
@@ -439,6 +440,7 @@
     var url = cfg.dataUrl;
     var params = [];
     var token = ++pickerState.dataToken;
+    if (pickerState.mediaTool) params.push('images_only=1');
     if (pickerState.purpose) params.push('purpose=' + encodeURIComponent(pickerState.purpose));
 
     var filter = pickerState.modal && $one('[data-ag-source-filter]',pickerState.modal);
@@ -483,6 +485,8 @@
     function ajaxSubmitPickerUpload(form) {
     if (!form) return;
 
+    if(form.dataset.agBusy==='1')return;
+    form.dataset.agBusy='1';mediaStatus('Загрузка изображения…');
     var fd = new FormData(form);
     var token = pickerState.openToken;
 
@@ -501,11 +505,12 @@
         var ok = !!(data && (data.ok || data.success || data.status === 'ok' || data.status === true));
         if (!ok) {
             var msg = (data && (data.error || data.message)) || 'Ошибка загрузки';
-            alert(msg);
+            if(pickerState.mediaTool)mediaStatus(msg);else alert(msg);
             return;
         }
 
         updateStorage(data.storage);
+        mediaStatus('Изображение загружено.');
         if ((pickerState.purpose || data.provider) && data.album_id && ['account_avatar','character_avatar'].indexOf(pickerState.purpose)===-1) {
           pickerState.albumId = Number(data.album_id);
           pickerState.modal.setAttribute('data-initial-album', String(data.album_id));
@@ -518,12 +523,13 @@
           }
           setActiveAlbum(pickerState.modal, pickerState.albumId);
         }
+        if(pickerState.mediaTool && data.url_full){var insert=pickerState.insertFn;closePicker();if(insert)insert('[img]'+data.url_full+'[/img]');return;}
         pickerState.page = 1;
         loadPickerData();
         })
         .catch(function () {
-        alert('Ошибка сети при загрузке');
-        });
+        if(pickerState.mediaTool)mediaStatus('Ошибка сети при загрузке. Повторите попытку.');else alert('Ошибка сети при загрузке');
+        }).finally(function(){delete form.dataset.agBusy;});
     }
 
   function focusDialog(modal) {
@@ -613,6 +619,53 @@
     setModalUploadTab(modal, 'local');
   }
 
+  function mediaStatus(message) {
+    var node=pickerState.modal && $one('[data-ag-media-status]',pickerState.modal);
+    if(node) node.textContent=message || '';
+  }
+  function configureMediaTool(options) {
+    var modal=pickerState.modal, dialog=$one('.ag-picker-dialog',modal), originalUpload=$one('.ag-picker-upload',modal);
+    if(!Object.prototype.hasOwnProperty.call(modal,'_agUploadDisplay'))modal._agUploadDisplay=originalUpload?originalUpload.style.display:'';
+    pickerState.mediaTool=!!options.mediaTool && !pickerState.purpose;
+    dialog.classList.toggle('ag-media-dialog',pickerState.mediaTool);
+    var tabs=$one('[data-ag-media-tabs]',modal), urlPane=$one('[data-ag-media-url]',modal);
+    if(pickerState.mediaTool && !tabs) {
+      tabs=document.createElement('div');tabs.className='ag-media-tabs';tabs.setAttribute('data-ag-media-tabs','');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Источник изображения');
+      [['url','URL'],['mine','Мои изображения'],['local','Загрузить локально'],['external','Внешний хостинг']].forEach(function(item){var button=document.createElement('button');button.type='button';button.className='button';button.setAttribute('role','tab');button.dataset.agMediaTab=item[0];button.textContent=item[1];button.addEventListener('click',function(){activateMediaTab(item[0]);});tabs.appendChild(button);});
+      dialog.prepend(tabs);
+      urlPane=document.createElement('form');urlPane.className='ag-media-url';urlPane.setAttribute('data-ag-media-url','');urlPane.innerHTML='<label>URL изображения <input type="url" required placeholder="https://…"></label><button class="button" type="submit">Вставить изображение</button>';
+      urlPane.addEventListener('submit',function(event){event.preventDefault();var url=$one('input',urlPane).value.trim();if(!/^https?:\/\/[^\s\[\]<>]+$/i.test(url)){mediaStatus('Укажите прямую HTTP/HTTPS-ссылку.');return;}var callback=pickerState.insertFn;closePicker();if(callback)callback('[img]'+url+'[/img]');});
+      tabs.after(urlPane);var status=document.createElement('p');status.className='ag-media-status';status.setAttribute('data-ag-media-status','');status.setAttribute('role','status');urlPane.after(status);
+    }
+    if(tabs) {tabs.hidden=!pickerState.mediaTool;urlPane.hidden=true;}
+    if(pickerState.mediaTool) activateMediaTab(options.tab || 'url');
+    else {
+      ['.ag-picker-top','.ag-picker-search','.ag-picker-grid','.ag-picker-footer','.ag-source-filter'].forEach(function(sel){var node=$one(sel,modal);if(node)node.style.display='';});
+      var upload=$one('.ag-picker-upload',modal);if(upload)upload.style.display=modal._agUploadDisplay;
+      var select=$one('[data-ag-storage-provider]',modal);if(select){Array.from(select.options).forEach(function(option){option.hidden=false;option.disabled=false;});select.closest('.ag-field').style.display='';}
+      mediaStatus('');
+    }
+  }
+  function activateMediaTab(tab) {
+    var modal=pickerState.modal, upload=$one('.ag-picker-upload',modal), select=$one('[data-ag-storage-provider]',modal);
+    var external=select?Array.from(select.options).filter(function(option){return option.value!=='local' && option.value!=='url';}):[];
+    var externalButton=$one('[data-ag-media-tab="external"]',modal);externalButton.hidden=!external.length;
+    if(tab==='external' && !external.length) tab='local';
+    pickerState.mediaTab=tab;mediaStatus('');
+    $all('[data-ag-media-tab]',modal).forEach(function(button){button.setAttribute('aria-selected',String(button.dataset.agMediaTab===tab));});
+    $one('[data-ag-media-url]',modal).hidden=tab!=='url';
+    ['.ag-picker-top','.ag-picker-search','.ag-picker-grid','.ag-source-filter'].forEach(function(sel){var node=$one(sel,modal);if(node)node.style.display=tab==='mine'?'':'none';});
+    var pager=$one('[data-ag-picker-pager]',modal);if(pager)pager.style.display=tab==='mine' && pickerState.pages>1?'':'none';
+    if(upload) upload.style.display=(tab==='local' || tab==='external')?'':'none';
+    if(select && (tab==='local' || tab==='external')) {
+      Array.from(select.options).forEach(function(option){option.hidden=option.disabled=tab==='external'?(option.value==='local' || option.value==='url'):option.value!=='local';});
+      select.value=tab==='local'?'local':external[0].value;
+      select.closest('.ag-field').style.display=tab==='local'?'none':'';
+      syncProviderForm(select.form);
+    }
+    var input=tab==='url'?$one('[data-ag-media-url] input',modal):null;if(input)input.focus();
+  }
+
   function openPicker(insertFn, options) {
     options = options || {};
     if (insertFn && typeof insertFn === 'object') { options = insertFn; insertFn = options.onSelect; }
@@ -623,8 +676,9 @@
     if (purpose !== pickerState.purpose && pickerState.modal) { closePicker(); pickerState.modal.remove(); pickerState.modal = null; }
     var token = ++pickerState.openToken;
     ++pickerState.dataToken;
-    pickerState.onError = typeof options.onError === 'function' ? options.onError : function (error) { alert(error.message); };
+    pickerState.onError = options.mediaTool ? function(error){mediaStatus(error.message);if(options.onError)options.onError(error);} : (typeof options.onError === 'function' ? options.onError : function (error) { alert(error.message); });
     pickerState.purpose = purpose;
+    pickerState.onClose = typeof options.onClose==='function'?options.onClose:null;
     pickerState.insertFn = (typeof insertFn === 'function') ? insertFn : defaultInsert;
     var cfg = getPickerConfig();
 
@@ -664,7 +718,8 @@
       if (search) search.value = '';
 
       setActiveAlbum(modal, pickerState.albumId);
-      focusDialog(modal);
+      if(options.mediaTool || $one('[data-ag-media-tabs]',modal))configureMediaTool(options);else pickerState.mediaTool=false;
+      if(!pickerState.mediaTool || pickerState.mediaTab!=='url') focusDialog(modal);
 
       loadPickerData();
     }).catch(function (error) { if (token === pickerState.openToken) pickerState.onError(new Error('Не удалось открыть галерею. ' + error.message)); });
@@ -692,6 +747,7 @@
       pickerState.modal.setAttribute('aria-hidden', 'true');
     }
     lockBodyScroll(false);
+    var onClose=pickerState.onClose;pickerState.onClose=null;if(onClose)onClose();
   }
 
   // Shared selection boundary for the modal and compact consumer thumbnail strips.
@@ -707,6 +763,7 @@
     supportsPurpose: function(purpose) { return (getPickerConfig().purposes || ['account_avatar','character_avatar','signature_background','signature_images','appearance_avatars','appearance_postbit_bg','appearance_profile_bg','appearance_sheet_bg','appearance_theme_bg']).indexOf(purpose)!==-1; },
     open: function (insertFn, options) { return openPicker(insertFn, options); },
     reload: function () { loadPickerData(); },
+    close: function () { closePicker(); },
     select: function (mediaId, options) { return selectGalleryMedia(mediaId, options || {}); },
     recent: function (options) {
       var url=new URL(getPickerConfig().dataUrl, location.href);
@@ -777,7 +834,7 @@
     var wrapped = function (options) {
       ensureCommandRegistered();
       try {
-        if (options && typeof options === 'object' && typeof options.toolbar === 'string') {
+        if (!this.closest('.af-ae-shell').length && options && typeof options === 'object' && typeof options.toolbar === 'string') {
           options.toolbar = patchToolbarString(options.toolbar);
         }
       } catch (e) {}

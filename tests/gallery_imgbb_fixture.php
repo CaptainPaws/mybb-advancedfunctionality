@@ -89,6 +89,14 @@ $mybb->settings['bburl']='http://127.0.0.1:8101';
 if (isset($_GET['pending'])) $mybb->settings['af_advancedgallery_autoapprove_groups']='4';
 try {
     switch ($_GET['action']??'page') {
+        case 'editor_page':
+            define('THIS_SCRIPT',basename(parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH)));
+            require_once AF_ADDONS.'advancededitor/advancededitor.php';
+            $mybb->settings['af_advancededitor_enabled']='1';
+            if(isset($_GET['disabled']))$mybb->settings['af_advancedgallery_enabled']='0';
+            $page='<!doctype html><html><head><meta charset="utf-8"><script src="/jscripts/jquery.js"></script></head><body><form id="quick_reply_form"><input name="tid" value="14"><textarea name="message" id="message">А😀Б</textarea><button type="submit">Отправить</button></form></body></html>';
+            af_advancededitor_pre_output($page);af_advancedgallery_pre_output($page);
+            header('Content-Type: text/html; charset=utf-8');echo $page;break;
         case 'page': header('Content-Type: text/html; charset=utf-8');echo '<!doctype html><meta charset="utf-8">'.ag_storage_widget().ag_render_upload().'<script src="gallery.php?action=js"></script>';break;
         case 'view':header('Content-Type: text/html; charset=utf-8');echo '<!doctype html><meta charset="utf-8">'.ag_storage_widget().ag_render_view().'<script src="gallery.php?action=js"></script>';break;
         case 'js':header('Content-Type: application/javascript');readfile(AF_ADDONS.'advancedgallery/assets/advancedgallery.js');break;
