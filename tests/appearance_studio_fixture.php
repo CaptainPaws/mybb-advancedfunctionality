@@ -1,5 +1,19 @@
 <?php
 /** External workflow/palette fixtures; the ATF resolver and Canvas renderer remain real. */
+require_once AF_ADDONS.'advancedprofilefields/postbit-fields.php';
+$mybb->settings['allowlinkmycode']=1;
+function my_strlen($v){return mb_strlen($v,'UTF-8');}
+function my_substr($v,$start,$length=null){return mb_substr($v,$start,$length,'UTF-8');}
+function my_strtolower($v){return mb_strtolower($v,'UTF-8');}
+$cache=new class {public function read($name){return $name==='profilefields'?[
+ ['fid'=>1,'name'=>'ЛЗ','type'=>'text','postbit'=>1,'allowmycode'=>0],
+ ['fid'=>2,'name'=>'О персонаже','type'=>'textarea','postbit'=>1,'allowmycode'=>0],
+ ['fid'=>3,'name'=>'Скрытое поле','type'=>'text','postbit'=>0]
+]:[];}};
+$templates=new class {public function get($name){
+ $map=['postbit_profilefield'=>'<br /><span class="af-apf-postbit-field af-apf-postbit-field--fid{$field[\'fid\']}" data-field-id="{$field[\'fid\']}"><span class="af-apf-name">{$post[\'fieldname\']}</span>: <span class="af-apf-value">{$post[\'fieldvalue\']}</span></span>'];
+ return str_replace('"','\\"',$map[$name]??'');
+}};
 require AF_ADDONS.'adaptivethemeframework/adaptivethemeframework.php';
 require AF_ADDONS.'advancedelementtheme/advancedelementtheme.php';
 function af_apui_get_profile_character_payload($uid){return ['fields'=>['character_element'=>['value'=>'fire']]];}

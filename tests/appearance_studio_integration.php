@@ -27,3 +27,20 @@ af_aa_personal_rename(7,$id,'Новое имя');$renamed=af_aa_personal_owned_r
 $mybb->settings['af_advancedappearance_free_slots_postbit']=2;$clone=af_aa_personal_clone(7,$id,'Копия');$copy=af_aa_personal_owned_row(7,$clone);appearance_check(json_decode($copy['settings_json'],true)['display_title']==='Копия'&&json_decode($copy['draft_json'],true)['display_title']==='Копия','Clone retained source display title');af_aa_personal_delete(7,$clone);$mybb->settings['af_advancedappearance_free_slots_postbit']=1;
 $mybb->user['uid']=7;af_aa_personal_save(7,$id,'{}');
 echo "Studio integration passed: typed components, bounded compiler, Gallery ownership, atomic metadata, separate draft, real ATF seed, disabled postbit Canvas, empty-object roundtrip.\n";
+
+$shape=af_aa_studio_preview_markup(7);
+appearance_check(str_contains($shape,'Личное звание персонажа')&&str_contains($shape,'data-aa-empty-field="1"'),'Stored/empty profile fields absent');
+appearance_check(!str_contains($shape,'Private field')&&!str_contains($shape,'★')&&!str_contains($shape,'Участник'),'Hidden field or fake rank leaked');
+appearance_check(str_contains($shape,'fa-solid fa-user')&&str_contains($shape,'title="Профиль"'),'Shared profile icon/tooltip absent');
+$fields=af_apf_postbit_field_definitions();
+appearance_check(isset($fields[1],$fields[2])&&!isset($fields[3]),'Non-postbit field exposed');
+$s=af_aa_personal_decode('{"components":{"profile_field_1":{"text_color":"#123456","font_size":19},"user_status":{"text_color":"#654321"}}}',7,false,false);
+$css=af_aa_personal_compile_css(7,$s,true);
+appearance_check(str_contains($css,'.af-apf-postbit-field--fid1')&&str_contains($css,'#123456'),'Field style compiler diverged');
+appearance_check(!str_contains(af_apf_render_postbit_fields(['fid1'=>'Original'],false),'data-aa-empty-field'),'Public renderer shows empty preview labels');
+$value=$db->fetch_array($db->simple_select('userfields','*','ufid=7'));
+appearance_check($value['fid1']==='Личное звание персонажа'&&$value['fid2']==='','Preview modified real profile fields');
+echo "Studio fields passed: stored/empty/hidden fields, stable ID styling, real profile icon/tooltip, no fake rank or profile writes.\n";
+
+$escaped=af_apf_render_postbit_fields(['fid1'=>'<script>alert(1)</script>'],true);
+appearance_check(!str_contains($escaped,'<script>')&&str_contains($escaped,'&lt;script&gt;'),'Native field parser HTML policy bypassed');

@@ -19,3 +19,5 @@ body:not(.atf-active) .aa-studio {
 @media(max-width:600px){.aa-preview .atf-profile-hero,.aa-preview .af-cs-hero{grid-template-columns:minmax(0,1fr)}.aa-preview .af-cs-portrait{max-width:160px}.aa-preview .atf-profile-hero__avatar{max-width:80px}.aa-preview .atf-forum-category__header{flex-wrap:wrap}}
 
 .aa-control-row output{min-width:3rem;font-size:.8em}
+
+.aa-preview :is(.af-apf-postbit-field,.atf-post__title){cursor:pointer}

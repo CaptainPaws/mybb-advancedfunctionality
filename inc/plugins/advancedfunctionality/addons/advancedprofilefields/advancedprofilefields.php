@@ -17,6 +17,7 @@ define('AF_APF_VALUES_TABLE', 'af_apf_values');
 define('AF_APF_SECONDARY_AVATAR_KEY', 'profile_secondary_avatar');
 define('AF_APF_SECONDARY_AVATAR_DIR', 'uploads/avatars');
 require_once dirname(__DIR__,2).'/avatar.php';
+require_once __DIR__.'/postbit-fields.php';
 
 /* -------------------- LANG -------------------- */
 

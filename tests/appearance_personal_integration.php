@@ -1,6 +1,6 @@
 <?php
 /** Destructive isolated fixture: only database appearance_test, aa_test_ tables. Never use production. */
-define('IN_MYBB',1);define('TABLE_PREFIX','aa_test_');define('TIME_NOW',time());define('MYBB_ROOT',defined('AA_MASK_FIXTURE')?dirname(__DIR__).'/work/mybb1840/':'/tmp/appearance-fixture/');
+define('IN_MYBB',1);define('TABLE_PREFIX','aa_test_');define('TIME_NOW',time());define('MYBB_ROOT',defined('AA_STUDIO_FIXTURE')?dirname(__DIR__).'/work/mybb1840/':'/tmp/appearance-fixture/');
 define('AF_ADDONS',dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/');
 class AppearanceFixtureMyBB {
     const INPUT_INT=1, INPUT_ARRAY=2;
@@ -40,7 +40,7 @@ function error($message){throw new AF_AA_PersonalException($message,422);}
 function verify_post_check($key,$silent=false){if($key!=='appearance-fixture-key'){if($silent)return false;throw new AF_AA_PersonalException('csrf',403);}return true;}
 function get_user($uid){return ['uid'=>$uid,'username'=>'Fixture '.$uid];}
 function htmlspecialchars_uni($s){return htmlspecialchars((string)$s,ENT_QUOTES,'UTF-8');}
-$plugins=new class {public function add_hook(...$args){}};
+$plugins=new class {public function add_hook(...$args){} public function run_hooks($name,$value=null){return $value;}};
 $db=new AppearanceFixtureDB();$mybb=new AppearanceFixtureMyBB();$lang=new stdClass();
 require AF_ADDONS.'advancedgallery/advancedgallery.php';require AF_ADDONS.'advancedappearance/advancedappearance.php';
 if (defined('AA_STUDIO_FIXTURE')) require __DIR__.'/appearance_studio_fixture.php';
@@ -74,7 +74,9 @@ if(($argv[1]??'')==='--after-http') {
     $slot=af_aa_personal_slots(7,'postbit');appearance_check($slot['used']===1&&$slot['available']===0,'HTTP slot accounting');
     echo "Appearance HTTP persistence and quota checks passed.\n";exit;
 }
-foreach(['af_aa_slot_grants','af_aa_assignments','af_aa_presets','af_aa_active','af_gallery_media','settings'] as $table)$db->write_query('DROP TABLE IF EXISTS '.TABLE_PREFIX.$table);
+foreach(['af_aa_slot_grants','af_aa_assignments','af_aa_presets','af_aa_active','af_gallery_media','settings','userfields'] as $table)$db->write_query('DROP TABLE IF EXISTS '.TABLE_PREFIX.$table);
+$db->write_query('CREATE TABLE '.TABLE_PREFIX.'userfields (ufid INT PRIMARY KEY,fid1 TEXT,fid2 TEXT,fid3 TEXT) ENGINE=InnoDB');
+$db->write_query('INSERT INTO '.TABLE_PREFIX."userfields VALUES (7,'Личное звание персонажа','','Private field')");
 $db->write_query('CREATE TABLE '.TABLE_PREFIX."settings (sid INT AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191),value TEXT) ENGINE=InnoDB");
 af_aa_ensure_schema();
 // Seed actual legacy shop definitions/assignments before migrating. Include trusted legacy CSS.

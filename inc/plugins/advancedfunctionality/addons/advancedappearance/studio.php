@@ -132,11 +132,35 @@ function af_aa_studio_preview_markup(int $uid, array $settings=[]): string {
     $avatarUrl=af_aa_preview_abs_url((string)($user['avatar']??''));
     if ($avatarUrl==='') $avatarUrl=rtrim((string)($GLOBALS['mybb']->settings['bburl']??''),'/').'/images/default_avatar.png';
     $avatar='<img src="'.htmlspecialchars_uni($avatarUrl).'" alt="Аватар" />';
+    $status=(string)($user['usertitle']??'');
+    if(trim($status)===''&&function_exists('get_usertitle'))$status=(string)get_usertitle($uid);
     $fixture=array_replace($user,['af_aa_preview_settings'=>$settings,'user_details'=>'','af_atf_is_preview'=>true,'pid'=>0,'tid'=>0,'message'=>'','uid'=>$uid,'username'=>$user['username']??'Автор','useravatar'=>$avatar,'af_atf_slots'=>[]]);
+    // MyBB stores custom values separately from users; get_user() alone never includes fidN.
+    if(function_exists('af_apf_render_postbit_fields')&&isset($GLOBALS['db'])) {
+        $query=$GLOBALS['db']->simple_select('userfields','*','ufid='.(int)$uid);
+        $fixture=array_replace($fixture,(array)($GLOBALS['db']->fetch_array($query)?:[]));
+        $fixture['user_details']=af_apf_render_postbit_fields($fixture,true);
+    }
     if (function_exists('af_apui_postbit_compose_userdetails')) af_apui_postbit_compose_userdetails($fixture);
     $fixture['af_apf_secondary_avatar_url']=$fixture['af_apui_secondary_avatar']??(function_exists('af_apf_get_secondary_avatar')?af_apf_get_secondary_avatar($uid):'');
     af_adaptivethemeframework_compose_postbit($fixture);
     af_aa_postbit_apply_images($fixture,$settings);
+    // Native controls are formatted by ATF's shared icon adapter, not text/Unicode stand-ins.
+    $fixture['profilelink']='<a href="member.php?action=profile&amp;uid='.$uid.'">'.$name.'</a>';
+    if(isset($GLOBALS['templates'])) {
+        $post=$fixture;$templates=$GLOBALS['templates'];$lang=$GLOBALS['lang']??null;$mybb=$GLOBALS['mybb'];
+        $controls=[];
+        if(!empty($mybb->usergroup['cansearch']))$controls['button_find']='postbit_find';
+        if(empty($user['hideemail'])&&$uid!==(int)$mybb->user['uid']&&!empty($mybb->usergroup['cansendemail']))$controls['button_email']='postbit_email';
+        $groups=isset($GLOBALS['cache'])?(array)$GLOBALS['cache']->read('usergroups'):[];
+        $ownerGroup=$groups[(int)($user['usergroup']??0)]??[];
+        if(!empty($mybb->settings['enablepms'])&&$uid!==(int)$mybb->user['uid']&&
+            ((!empty($user['receivepms'])&&!empty($ownerGroup['canusepms'])&&!empty($mybb->usergroup['cansendpms'])&&!in_array((string)$mybb->user['uid'],explode(',',(string)($user['ignorelist']??'')),true))||!empty($mybb->usergroup['canoverridepm'])))$controls['button_pm']='postbit_pm';
+        if(!empty($user['website'])&&!empty($ownerGroup['canchangewebsite'])&&function_exists('is_member')&&!is_member($mybb->settings['hidewebsite']??'')) {
+            $post['website']=htmlspecialchars_uni($user['website']);$controls['button_www']='postbit_www';
+        }
+        foreach($controls as $controlKey=>$template) {eval('$post["'.$controlKey.'"] = "'.$templates->get($template).'";');$fixture[$controlKey]=$post[$controlKey];}
+    }
     $plaque=$fixture['af_apui_plaque_html']??(function_exists('af_apui_build_postbit_plaque_html')?af_apui_build_postbit_plaque_html(['uid'=>$uid,'af_aa_preview_settings'=>$settings]):'');
     $signature='';
     if (!class_exists('postParser') && is_file(MYBB_ROOT.'inc/class_parser.php')) require_once MYBB_ROOT.'inc/class_parser.php';
@@ -151,12 +175,12 @@ function af_aa_studio_preview_markup(int $uid, array $settings=[]): string {
     if ($signature==='') $signature='<p>Подпись персонажа · <a href="#">История продолжается</a></p>';
     $signatureMarkup=af_adaptivethemeframework_signature_markup($signature,'appearance-preview',$fixture['af_atf_gothic_frame']);
     $values=['af_atf_signature_html'=>$signatureMarkup,'af_atf_gothic_frame'=>$fixture['af_atf_gothic_frame'],'af_atf_post_reputation_html'=>$fixture['af_atf_post_reputation_html'],'pid'=>'appearance_preview','uid'=>(string)$uid,'af_aa_user_class'=>'af-aa-postbit-user-'.$uid,'af_atf_element'=>$key,
-        'usertitle'=>'Путешественник','groupimage'=>'Участник','userstars'=>'★ ★ ★',
-        'af_atf_primary_avatar'=>$fixture['af_atf_primary_avatar'],'af_atf_secondary_avatar'=>$fixture['af_atf_secondary_avatar']?:$avatar,'af_atf_meta_line'=>'<div class="atf-post__meta-line"><time class="atf-post__date">Сегодня</time><a href="#">#1</a><div class="atf-post__management postbit_buttons"><a class="atf-post__management-action" href="#" aria-label="Ответить"><i class="fa-solid fa-reply" aria-hidden="true"></i></a></div></div>',
+        'usertitle'=>htmlspecialchars_uni($status),'groupimage'=>'','userstars'=>'',
+        'af_atf_primary_avatar'=>$fixture['af_atf_primary_avatar'],'af_atf_secondary_avatar'=>$fixture['af_atf_secondary_avatar'],'af_atf_meta_line'=>'<div class="atf-post__meta-line"><time class="atf-post__date">Сегодня</time><a href="#">#1</a><div class="atf-post__management postbit_buttons"><a class="atf-post__management-action" href="#" aria-label="Ответить"><i class="fa-solid fa-reply" aria-hidden="true"></i></a></div></div>',
         'message'=>'<h3>На границе миров</h3><p>Свет отражается в воде. Этот текст помогает выбрать шрифт и проверить читаемость оформления.</p><p><a href="#">Пример ссылки</a> и <strong>выделенный текст</strong>.</p>',
         'signature'=>$signature];
     $slots=['post.author.identity'=>$name,'post.author.character'=>'Персонаж','post.author.character_name'=>($fixture['af_apui_character_name_html']??$fixture['af_atf_slots']['post.author.character_name'])?:('<div class="atf-post__character-name">'.$name.'</div>'),
-        'post.author.profile_fields'=>$fixture['af_apui_profile_fields_html']??'Звание: Искатель','post.author.rail'=>$fixture['af_apui_rail_html']??af_aa_postbit_preview_statistics($user),'post.author.plaque'=>$plaque,'post.author.profile_actions'=>'<a class="atf-post__profile-action" href="#">Профиль</a>','post.post_counter'=>'#1'];
+        'post.author.profile_fields'=>$fixture['af_apui_profile_fields_html']??$fixture['user_details'],'post.author.rail'=>$fixture['af_apui_rail_html']??af_aa_postbit_preview_statistics($user),'post.author.plaque'=>$plaque,'post.author.profile_actions'=>af_adaptivethemeframework_post_context($fixture)['post']['profile_actions_html'],'post.post_counter'=>'#1'];
     $source=file_get_contents($path);
     $source=preg_replace_callback('/\{\$post\[\'([^\']+)\'\](?:\[\'([^\']+)\'\])?\}/',static function($m)use($values,$slots){return isset($m[2])?($slots[$m[2]]??''):($values[$m[1]]??'');},$source);
     return preg_replace('/\{\$[a-z_]+\}/','',$source);
@@ -177,6 +201,10 @@ function af_aa_render_workshop(): void {
     $base=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedappearance/assets/';
     $version=(string)max(filemtime(__DIR__.'/assets/studio.js'),filemtime(__DIR__.'/assets/studio.css'));
     foreach(af_aa_studio_surface_registry()[$target]['css'] as $asset) $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni(rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/'.$asset).'" />';
+    if($target==='postbit'&&!str_contains($headerinclude,'font-awesome-6/css/all.min.css')) {
+        $fa='advancedfontawesome/assets/font-awesome-6/css/all.min.css';
+        if(is_file(AF_ADDONS.$fa))$headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni(rtrim((string)$mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/'.$fa).'" data-af-font-awesome="6" />';
+    }
     $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni($base.'studio.css?v='.$version).'" /><script src="'.htmlspecialchars_uni($base.'studio.js?v='.$version).'" defer></script>';
     $seed=['list'=>$list,'target'=>$target,'surface'=>af_aa_studio_surface_registry()[$target],'uid'=>$uid,'csrf'=>$mybb->post_code,'fields'=>af_aa_studio_fields(),'fonts'=>af_aa_personal_fonts(),'components'=>array_keys(af_aa_studio_components($target)),
         'canvas_presets'=>$target!=='postbit' && function_exists('af_elementtheme_effect_presets')?af_elementtheme_effect_presets():[],

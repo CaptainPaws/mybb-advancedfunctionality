@@ -28,7 +28,7 @@ function af_aa_postbit_surface(): array
     // Keep validating old sparse presets; obsolete geometry fields are never offered by this adapter.
     $legacy=array_diff(array_keys(af_aa_studio_fields()),array_keys(af_aa_postbit_fields()));
     $entry=static fn($label,$selector,$fields,$old=false)=>['label'=>$label,'selector'=>$selector,'editable_fields'=>array_values(array_diff($fields,['darkening'])),'fields'=>$old?array_values(array_unique(array_merge($fields,$legacy))):$fields];
-    return ['purpose'=>'appearance_postbit_bg','css'=>['adaptivethemeframework/assets/surfaces/postbit.css','adaptivethemeframework/assets/surfaces/signature.css','advancedprofileui/assets/advancedprofileui.css'],'canvas'=>false,'components'=>[
+    $surface=['purpose'=>'appearance_postbit_bg','css'=>['adaptivethemeframework/assets/surfaces/postbit.css','adaptivethemeframework/assets/surfaces/signature.css','advancedprofileui/assets/advancedprofileui.css'],'canvas'=>false,'components'=>[
         'decoration'=>$entry('Декоративные акценты','',['gem_color','gem_glow']),
         'topbar'=>$entry('Верхняя панель','.atf-post__topbar',array_merge($background,$haze),true),
         'sidebar'=>$entry('Боковая панель','.atf-post__sidebar-inner',array_merge($background,$haze),true),
@@ -50,6 +50,12 @@ function af_aa_postbit_surface(): array
         'signature_buttons'=>$entry('Подпись · кнопки-ссылки','.af-asb-signature .af-asb-signature__button',array_merge($type,['background_color','border_color','hover_color','hover_background_color','hover_border_color'])),
         'signature'=>$entry('Подпись','.atf-post__signature',array_merge($background,$type,['link_color','hover_color']),true),
     ]];
+    $surface['components']['profile_fields']=$entry('Дополнительные поля · все','.atf-post__profile-fields',$type);
+    $surface['components']['user_status']=$entry('Статус пользователя','.atf-post__title',$type);
+    if(function_exists('af_apf_postbit_field_definitions'))foreach(af_apf_postbit_field_definitions() as $fid=>$field) {
+        $surface['components']['profile_field_'.$fid]=$entry('Поле · '.$field['name'],'.atf-post__profile-fields .af-apf-postbit-field--fid'.$fid,$type);
+    }
+    return $surface;
 }
 
 /** Reuse Gallery's configured source policy. No server-side fetch and no active image formats. */
@@ -241,7 +247,7 @@ function af_aa_postbit_plaque_settings(int $uid,array $settings): array
 function af_aa_postbit_preview_statistics(array $user): string
 {
     $html='<div class="af-apui-postbit-rail"><div class="author_statistics af-apui-postbit-userdetails">';
-    foreach (['postnum'=>['Сообщения','✉'],'threadnum'=>['Темы','◇'],'reputation'=>['Репутация','♡']] as $key=>[$label,$icon]) $html.='<div class="af-apui-stat-item"><span class="af-apui-stat-item__icon" title="'.$label.'">'.$icon.'</span><span class="af-apui-stat-item__value">'.(int)($user[$key]??0).'</span></div>';
+    foreach (['postnum'=>['Сообщения','fa-comments'],'threadnum'=>['Темы','fa-copy'],'reputation'=>['Репутация','fa-heart']] as $key=>[$label,$icon]) $html.='<div class="af-apui-stat-item"><span class="af-apui-stat-item__icon" title="'.$label.'"><i class="fa-solid '.$icon.'" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">'.(int)($user[$key]??0).'</span></div>';
     return $html.'</div></div>';
 }
 
