@@ -342,7 +342,7 @@ body.atf-active .af-ae-popup-surface .af-ff-search { color:var(--atf-color-text)
 /* JSColor owns all spectrum and swatch colours. Only its opaque UI is themed
    through supported constructor options; this portal adds no second frame. */
 .af-ae-color-layer {
-  position:fixed !important; inset:auto !important; margin:0 !important; padding:0;
+  position:fixed !important; inset:auto; margin:0 !important; padding:0;
   width:max-content; height:auto; max-width:calc(100vw - 16px); max-height:calc(100dvh - 16px);
   overflow:auto; border:0; background:transparent; z-index:2147483100;
 }

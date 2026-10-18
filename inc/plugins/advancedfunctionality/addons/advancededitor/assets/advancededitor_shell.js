@@ -930,7 +930,7 @@
       });
     });
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['id'] });
-    document.addEventListener('mousedown', function (e) { document.querySelectorAll('.af-ae-shell').forEach(function (wrapper) { if (!wrapper.contains(e.target) && !e.target.closest('.af-ae-popup')) { var ta = wrapper.__afAeTextarea; if (ta && ta.__afAeAdapter) ta.__afAeAdapter.closeDropDown(); } }); });
+    document.addEventListener('mousedown', function (e) { document.querySelectorAll('.af-ae-shell').forEach(function (wrapper) { if (!wrapper.contains(e.target) && !e.target.closest('.af-ae-popup, [data-af-color-layer]')) { var ta = wrapper.__afAeTextarea; if (ta && ta.__afAeAdapter) ta.__afAeAdapter.closeDropDown(); } }); });
     document.addEventListener('af:editor-ready', function(e) {
       var detail = e.detail || {}; if (detail.instance && !detail.instance.__afAeSourceAdapter && detail.textarea.__afAeCountUpdate) detail.instance.bind('valuechanged', detail.textarea.__afAeCountUpdate);
     });
