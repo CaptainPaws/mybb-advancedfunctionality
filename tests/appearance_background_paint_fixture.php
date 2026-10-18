@@ -2,7 +2,11 @@
 // Uses the actual validator/compiler and isolated no-DB contracts.
 ob_start();require __DIR__.'/appearance_postbit_settings_regression.php';ob_end_clean();
 $result=[];
-foreach(['full'=>['overlay_mode'=>'darken','overlay_intensity'=>1,'overlay_start'=>.3,'overlay_end'=>.3],
+foreach(['full'=>['overlay_gradient'=>'uniform','overlay_mode'=>'darken','overlay_intensity'=>1,'overlay_start'=>.3,'overlay_end'=>.3],
+    'q20'=>['overlay_mode'=>'darken','overlay_intensity'=>.2],
+    'q50'=>['overlay_mode'=>'darken','overlay_intensity'=>.5],
+    'q80'=>['overlay_mode'=>'darken','overlay_intensity'=>.8],
+    'gradient'=>['overlay_mode'=>'darken','overlay_gradient'=>'linear','overlay_intensity'=>1,'overlay_start'=>.2,'overlay_end'=>.8,'overlay_angle'=>180],
     'color'=>['overlay_mode'=>'none','background_saturation'=>100],
     'half'=>['overlay_mode'=>'none','background_saturation'=>50],
     'gray'=>['overlay_mode'=>'none','background_saturation'=>0]] as $name=>$values){

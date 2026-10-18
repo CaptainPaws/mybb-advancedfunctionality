@@ -9,7 +9,7 @@ function af_aa_postbit_fields(): array
         'background_url'=>['url'], 'image_url'=>['url'], 'image_media_id'=>['media'],
         'background_saturation'=>['number',0,100,1],
         'background_repeat'=>['enum',['no-repeat','repeat','repeat-x','repeat-y']],
-        'overlay_mode'=>['enum',['none','darken','lighten']], 'overlay_color'=>['color'],
+        'overlay_mode'=>['enum',['none','darken','lighten']], 'overlay_gradient'=>['enum',['uniform','linear']], 'overlay_color'=>['color'],
         'overlay_intensity'=>['number',0,1,.01], 'overlay_start'=>['number',0,1,.01], 'overlay_end'=>['number',0,1,.01], 'overlay_angle'=>['number',0,360,1],
         'haze_color'=>['color'], 'haze_intensity'=>['number',0,1,.01], 'haze_opacity'=>['number',0,1,.01], 'haze_angle'=>['number',0,360,1],
         'glow_color'=>['color'], 'glow_intensity'=>['number',0,20,1], 'gem_color'=>['color'], 'gem_glow'=>['number',0,12,1],
@@ -23,12 +23,26 @@ function af_aa_postbit_fields(): array
 /** Shared compiler/UI defaults: inherited sliders must not silently start at transparent stops. */
 function af_aa_postbit_overlay_defaults(): array
 {
-    return ['overlay_mode'=>'darken','overlay_intensity'=>.5,'overlay_start'=>1,'overlay_end'=>1,'overlay_angle'=>180];
+    return ['overlay_mode'=>'darken','overlay_intensity'=>.5,'overlay_start'=>0,'overlay_end'=>1,'overlay_angle'=>180,'overlay_gradient'=>'uniform'];
+}
+
+/** Linear opacity, with spatial stops independent from strength. Old 1/1 defaults remain uniform. */
+function af_aa_postbit_overlay_mask(array $v): string
+{
+    if(($v['overlay_mode']??'darken')==='none')return 'none';
+    $color=$v['overlay_color']??(($v['overlay_mode']??'darken')==='lighten'?'#ffffff':'#000000');
+    $paint='color-mix(in srgb,'.$color.' '.(100*($v['overlay_intensity']??.5)).'%,transparent)';
+    $start=(float)($v['overlay_start']??0);$end=(float)($v['overlay_end']??1);
+    $hasStops=array_key_exists('overlay_start',$v)||array_key_exists('overlay_end',$v);
+    $gradient=$v['overlay_gradient']??($hasStops&&!($start===1.0&&$end===1.0)?'linear':'uniform');
+    if($gradient==='uniform')return 'linear-gradient('.$paint.','.$paint.')';
+    // Reverse endpoints produce the same spatial interval instead of invalid/backtracking stops.
+    return 'linear-gradient('.($v['overlay_angle']??180).'deg,transparent '.(100*min($start,$end)).'%,'.$paint.' '.(100*max($start,$end)).'%)';
 }
 
 function af_aa_postbit_surface(): array
 {
-    $background=['background_color','background_opacity','background_media_id','background_url','background_position','background_size','background_repeat','gradient_color','gradient_angle','darkening','overlay_mode','overlay_color','overlay_intensity','overlay_start','overlay_end','overlay_angle'];
+    $background=['background_color','background_opacity','background_media_id','background_url','background_position','background_size','background_repeat','gradient_color','gradient_angle','darkening','overlay_mode','overlay_gradient','overlay_color','overlay_intensity','overlay_start','overlay_end','overlay_angle'];
     $haze=['haze_color','haze_intensity','haze_opacity','haze_angle'];
     $type=['text_align','letter_spacing','text_color','font_family','font_size','font_weight','font_style','line_height','glow_color','glow_intensity'];
     $image=['image_media_id','image_url','image_fit','image_position','image_scale'];
@@ -174,16 +188,9 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $si
             $mode=$v['overlay_mode']??null;
             if ($mode===null && !array_key_exists('overlay_mode',$v) && isset($v['darkening'])) {$mode='darken';$v['overlay_intensity']=$v['darkening'];}
             // Sparse settings from a slider/color edit still express an overlay override.
-            if($mode===null && array_intersect(array_keys($v),['overlay_color','overlay_intensity','overlay_start','overlay_end','overlay_angle']))$mode=$defaults['overlay_mode'];
+            if($mode===null && array_intersect(array_keys($v),['overlay_gradient','overlay_color','overlay_intensity','overlay_start','overlay_end','overlay_angle']))$mode=$defaults['overlay_mode'];
             if ($mode!==null) {
-                $mask='none';
-                if ($mode!=='none') {
-                    $color=$v['overlay_color']??($mode==='lighten'?'#ffffff':'#000000');
-                    $intensity=$v['overlay_intensity']??$defaults['overlay_intensity'];
-                    // Intensity is global strength: 100% must be opaque even with soft gradient stops.
-                    $strength=static fn($stop)=>100*$intensity*($stop+(1-$stop)*$intensity);
-                    $mask='linear-gradient('.($v['overlay_angle']??$defaults['overlay_angle']).'deg,color-mix(in srgb,'.$color.' '.$strength($v['overlay_start']??$defaults['overlay_start']).'%,transparent),color-mix(in srgb,'.$color.' '.$strength($v['overlay_end']??$defaults['overlay_end']).'%,transparent))';
-                }
+                $mask=af_aa_postbit_overlay_mask($v+['overlay_mode'=>$mode]);
                 $vars[]=$prefix.'mask:'.$mask.';';
             }
             if (isset($v['gradient_color'])) $vars[]=$prefix.'gradient:linear-gradient('.($v['gradient_angle']??135).'deg,color-mix(in srgb,'.($v['background_color']??'#000000').' '.(100*($v['background_opacity']??.18)).'%,transparent),color-mix(in srgb,'.$v['gradient_color'].' '.(100*($v['background_opacity']??.18)).'%,transparent));';
@@ -205,9 +212,7 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $si
         $layers=[];
         if (isset($v['haze_color'])) $layers[]='linear-gradient('.($v['haze_angle']??115).'deg,color-mix(in srgb,'.$v['haze_color'].' '.(100*($v['haze_intensity']??.18)*($v['haze_opacity']??1)).'%,transparent),transparent 70%)';
         if (($v['overlay_mode']??'none')!=='none') {
-            $color=$v['overlay_color']??($v['overlay_mode']==='lighten'?'#ffffff':'#000000');
-            $intensity=$v['overlay_intensity']??.5;
-            $layers[]='linear-gradient('.($v['overlay_angle']??180).'deg,color-mix(in srgb,'.$color.' '.(100*$intensity*($v['overlay_start']??1)).'%,transparent),color-mix(in srgb,'.$color.' '.(100*$intensity*($v['overlay_end']??1)).'%,transparent))';
+            $layers[]=af_aa_postbit_overlay_mask($v);
         } elseif (!array_key_exists('overlay_mode',$v) && isset($v['darkening'])) $layers[]='linear-gradient(rgb(0 0 0 / '.$v['darkening'].'),rgb(0 0 0 / '.$v['darkening'].'))';
         if (isset($v['gradient_color'])) $layers[]='linear-gradient('.($v['gradient_angle']??135).'deg,color-mix(in srgb,'.($v['background_color']??'#000000').' '.(100*($v['background_opacity']??.18)).'%,transparent),color-mix(in srgb,'.$v['gradient_color'].' '.(100*($v['background_opacity']??.18)).'%,transparent))';
         if ($key==='signature') $rule[]='--af-sig-overlay:'.($layers?implode(',',$layers):'none').';';

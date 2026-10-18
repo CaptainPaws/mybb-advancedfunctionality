@@ -19,10 +19,21 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{execFileSync}=
    const image=await page.locator(selector).screenshot();
    const pixel=JSON.parse(execFileSync('python3',['-c','from PIL import Image;import sys,json,io;im=Image.open(io.BytesIO(sys.stdin.buffer.read())).convert("RGB");print(json.dumps(im.getpixel((10,50))))'],{input:image}).toString());
    samples[name].push(pixel);
+   if(name==='gradient'){
+    const points=JSON.parse(execFileSync('python3',['-c','from PIL import Image;import sys,json,io;im=Image.open(io.BytesIO(sys.stdin.buffer.read())).convert("RGB");print(json.dumps([im.getpixel((10,y)) for y in [10,50,90]]))'],{input:image}).toString());
+    assert.ok(points[0][0]>215&&points[0][1]>25,'Gradient darkened before the 20% start: '+JSON.stringify(points));
+    assert.ok(points[1][0]>100&&points[1][0]<116,'Gradient midpoint is not linear: '+JSON.stringify(points));
+    assert.ok(points[2].every(v=>v<3),'Gradient failed to reach full opacity after 80%');
+   }
+
    assert.equal(await page.locator(selector).evaluate(el=>getComputedStyle(el).filter),'none','Filter leaked to content');
   }
  }
  for(let i=0;i<3;i++){
+  for(const [key,opacity] of Object.entries({q20:.2,q50:.5,q80:.8})){
+   const expected=[220,30,30].map(v=>v*(1-opacity));
+   assert.ok(samples[key][i].every((v,j)=>Math.abs(v-expected[j])<=2),'Nonlinear uniform opacity '+key+': '+JSON.stringify(samples[key][i]));
+  }
   assert.ok(samples.full[i].every(v=>v<=2),'100% is not opaque black: '+JSON.stringify(samples));
   const gray=samples.gray[i];assert.ok(Math.max(...gray)-Math.min(...gray)<=2,'0% saturation is not gray');
   const color=samples.color[i],half=samples.half[i];assert.ok(color[0]-color[1]>150,'100% saturation lost source color');
