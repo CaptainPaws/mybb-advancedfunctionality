@@ -2,6 +2,7 @@
 /** External workflow/palette fixtures; the ATF resolver and Canvas renderer remain real. */
 require_once AF_ADDONS.'advancedprofilefields/postbit-fields.php';
 $mybb->settings['allowlinkmycode']=1;
+$mybb->settings['af_adaptivethemeframework_enabled']=1;
 function my_strlen($v){return mb_strlen($v,'UTF-8');}
 function my_substr($v,$start,$length=null){return mb_substr($v,$start,$length,'UTF-8');}
 function my_strtolower($v){return mb_strtolower($v,'UTF-8');}

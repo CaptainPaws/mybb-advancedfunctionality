@@ -19,6 +19,12 @@ function af_aa_postbit_fields(): array
     return $fields;
 }
 
+/** Shared compiler/UI defaults: inherited sliders must not silently start at transparent stops. */
+function af_aa_postbit_overlay_defaults(): array
+{
+    return ['overlay_mode'=>'darken','overlay_intensity'=>.5,'overlay_start'=>1,'overlay_end'=>1,'overlay_angle'=>180];
+}
+
 function af_aa_postbit_surface(): array
 {
     $background=['background_color','background_opacity','background_media_id','background_url','background_position','background_size','background_repeat','gradient_color','gradient_angle','darkening','overlay_mode','overlay_color','overlay_intensity','overlay_start','overlay_end','overlay_angle'];
@@ -28,7 +34,7 @@ function af_aa_postbit_surface(): array
     // Keep validating old sparse presets; obsolete geometry fields are never offered by this adapter.
     $legacy=array_diff(array_keys(af_aa_studio_fields()),array_keys(af_aa_postbit_fields()));
     $entry=static fn($label,$selector,$fields,$old=false)=>['label'=>$label,'selector'=>$selector,'editable_fields'=>array_values(array_diff($fields,['darkening'])),'fields'=>$old?array_values(array_unique(array_merge($fields,$legacy))):$fields];
-    $surface=['purpose'=>'appearance_postbit_bg','css'=>['adaptivethemeframework/assets/surfaces/postbit.css','adaptivethemeframework/assets/surfaces/signature.css','advancedprofileui/assets/advancedprofileui.css'],'canvas'=>false,'components'=>[
+    $surface=['overlay_defaults'=>af_aa_postbit_overlay_defaults(),'purpose'=>'appearance_postbit_bg','css'=>['adaptivethemeframework/assets/surfaces/postbit.css','adaptivethemeframework/assets/surfaces/signature.css','advancedprofileui/assets/advancedprofileui.css'],'canvas'=>false,'components'=>[
         'decoration'=>$entry('Декоративные акценты','',['gem_color','gem_glow']),
         'topbar'=>$entry('Верхняя панель','.atf-post__topbar',array_merge($background,$haze),true),
         'sidebar'=>$entry('Боковая панель','.atf-post__sidebar-inner',array_merge($background,$haze),true),
@@ -155,14 +161,17 @@ function af_aa_postbit_compile(int $uid,array $s,bool $preview=false,?string $si
                 if (!isset($v['background_repeat'])) $vars[]=$prefix.'repeat:no-repeat;';
             }
             if (isset($v['haze_color'])) $vars[]=$prefix.'haze:linear-gradient('.($v['haze_angle']??115).'deg,color-mix(in srgb,'.$v['haze_color'].' '.(100*($v['haze_intensity']??.18)*($v['haze_opacity']??1)).'%,transparent),transparent 70%);';
+            $defaults=af_aa_postbit_overlay_defaults();
             $mode=$v['overlay_mode']??null;
             if ($mode===null && !array_key_exists('overlay_mode',$v) && isset($v['darkening'])) {$mode='darken';$v['overlay_intensity']=$v['darkening'];}
+            // Sparse settings from a slider/color edit still express an overlay override.
+            if($mode===null && array_intersect(array_keys($v),['overlay_color','overlay_intensity','overlay_start','overlay_end','overlay_angle']))$mode=$defaults['overlay_mode'];
             if ($mode!==null) {
                 $mask='none';
                 if ($mode!=='none') {
                     $color=$v['overlay_color']??($mode==='lighten'?'#ffffff':'#000000');
-                    $intensity=$v['overlay_intensity']??.5;
-                    $mask='linear-gradient('.($v['overlay_angle']??180).'deg,color-mix(in srgb,'.$color.' '.(100*$intensity*($v['overlay_start']??1)).'%,transparent),color-mix(in srgb,'.$color.' '.(100*$intensity*($v['overlay_end']??1)).'%,transparent))';
+                    $intensity=$v['overlay_intensity']??$defaults['overlay_intensity'];
+                    $mask='linear-gradient('.($v['overlay_angle']??$defaults['overlay_angle']).'deg,color-mix(in srgb,'.$color.' '.(100*$intensity*($v['overlay_start']??$defaults['overlay_start'])).'%,transparent),color-mix(in srgb,'.$color.' '.(100*$intensity*($v['overlay_end']??$defaults['overlay_end'])).'%,transparent))';
                 }
                 $vars[]=$prefix.'mask:'.$mask.';';
             }

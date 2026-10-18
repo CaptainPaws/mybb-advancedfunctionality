@@ -200,7 +200,7 @@ function af_aa_render_workshop(): void {
     af_aa_ensure_header_bits();$headerinclude.=af_aa_studio_fonts_link();add_breadcrumb('Мастерская оформления','apstudio.php');
     $base=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedappearance/assets/';
     $version=(string)max(filemtime(__DIR__.'/assets/studio.js'),filemtime(__DIR__.'/assets/studio.css'));
-    foreach(af_aa_studio_surface_registry()[$target]['css'] as $asset) $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni(rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/'.$asset).'" />';
+    foreach(af_aa_studio_surface_registry()[$target]['css'] as $asset) $headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni(rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/'.$asset.'?v='.substr(hash_file('sha256',AF_ADDONS.$asset),0,16)).'" />';
     if($target==='postbit'&&!str_contains($headerinclude,'font-awesome-6/css/all.min.css')) {
         $fa='advancedfontawesome/assets/font-awesome-6/css/all.min.css';
         if(is_file(AF_ADDONS.$fa))$headerinclude.='<link rel="stylesheet" href="'.htmlspecialchars_uni(rtrim((string)$mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/'.$fa).'" data-af-font-awesome="6" />';

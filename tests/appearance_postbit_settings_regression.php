@@ -80,3 +80,15 @@ foreach([['background_url'=>''],['background_media_id'=>null],['background_url'=
 }
 check(af_aa_postbit_effective_settings(['components'=>['signature'=>['overlay_mode'=>'none','text_color'=>'#123456']]])['components']['signature']['overlay_mode']==='none','Default overwrote a custom mask');
 echo "Appearance background passed: default across roots, explicit removal/custom image preserved, no stored-preset mutation.\n";
+
+foreach(['topbar','sidebar'] as $zone) {
+ foreach([['overlay_intensity'=>.7],['overlay_color'=>'#123456'],['overlay_start'=>0,'overlay_end'=>1]] as $override) {
+  $out=af_aa_personal_compile_css(7,['components'=>[$zone=>$override]],true);
+  check(str_contains($out,'--aa-'.$zone.'-mask:linear-gradient('),'Sparse overlay not compiled for '.$zone);
+ }
+ $off=af_aa_personal_compile_css(7,['components'=>[$zone=>['overlay_mode'=>'none','overlay_intensity'=>1]]]);
+ check(str_contains($off,'--aa-'.$zone.'-mask:none;'),'Explicit no-overlay ignored');
+ $legacy=af_aa_personal_compile_css(7,['components'=>[$zone=>['darkening'=>.2,'overlay_color'=>'#000000']]]);
+ check(str_contains($legacy,'#000000 20%'),'Legacy darkening precedence changed');
+}
+echo "Overlay settings passed: sparse edits, explicit none, legacy precedence and both zone scopes.\n";
