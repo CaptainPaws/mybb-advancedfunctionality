@@ -748,6 +748,19 @@ body.atf-active .atf-thread__moderation:has(> :is(#inlinemoderation_options, #mo
 body.atf-active .atf-thread__moderation .atf-thread-mod-clear > svg { width: 17px; height: 17px; place-self: center; pointer-events: none; }
 body.atf-active .atf-thread__moderation .atf-thread-mod-actions :is(input, button):hover { filter: brightness(1.12); }
 body.atf-active .atf-thread__moderation .atf-thread-mod-actions :is(input, button):focus-visible { outline: 2px solid var(--atf-color-accent); outline-offset: 2px; }
+/* Legacy MyBB button skins may use important background images/gradients.
+   Submit controls in the moderator panel must use the ATF button surface. */
+body.atf-active .atf-thread__moderation:has(> :is(#inlinemoderation_options, #moderator_options)) :is(input[type="submit"], button[type="submit"]) {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--atf-color-accent) !important;
+  background-image: none !important;
+  color: var(--atf-color-accent-contrast) !important;
+  -webkit-text-fill-color: var(--atf-color-accent-contrast);
+  border: 1px solid var(--atf-color-accent) !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
 @container atf-thread-controls (max-width: 48rem) {
   body.atf-active .atf-thread__moderation:has(> :is(#inlinemoderation_options, #moderator_options)) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
