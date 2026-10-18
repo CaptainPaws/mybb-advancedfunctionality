@@ -8,7 +8,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
 define('AF_AG_ID', 'advancedgallery');
-define('AF_AG_VER', '1.2.2');
+define('AF_AG_VER', '1.3.0');
 define('AF_AG_BASE', AF_ADDONS . AF_AG_ID . '/');
 define('AF_AG_ASSETS', AF_AG_BASE . 'assets/');
 define('AF_AG_TPL_FILE', AF_AG_BASE . 'templates/advancedgallery.html');
@@ -18,6 +18,7 @@ define('AF_AG_ASSETS_BLACKLIST_DEFAULT', "index.php\nusercp.php\nuserlist.php\ns
 
 require_once __DIR__ . '/providers.php';
 require_once __DIR__ . '/media_api.php';
+require_once __DIR__ . '/maintenance.php';
 require_once __DIR__ . '/storage.php';
 require_once __DIR__ . '/avatar.php';
 
@@ -549,6 +550,7 @@ SQL;
 
     ag_ensure_default_album_schema();
     ag_ensure_system_album_schema();
+    ag_ensure_cleanup_schema();
     ag_ensure_storage_setting();
     ag_ensure_provider_schema();
     ag_ensure_provider_settings();
@@ -565,7 +567,7 @@ function af_advancedgallery_uninstall(): bool
 {
     global $db;
 
-    foreach (['af_gallery_external_media','af_gallery_provider_secrets'] as $table) {
+    foreach (['af_gallery_external_media','af_gallery_provider_secrets','af_gallery_audits','af_gallery_cleanup_jobs'] as $table) {
         if ($db->table_exists($table)) $db->drop_table($table);
     }
     $db->delete_query('settings', "name IN ('af_advancedgallery_imgbb_enabled','af_advancedgallery_imgbb_max_mb','af_advancedgallery_imgbb_groups','af_advancedgallery_imgbb_allow_url','af_advancedgallery_imgbb_default')");

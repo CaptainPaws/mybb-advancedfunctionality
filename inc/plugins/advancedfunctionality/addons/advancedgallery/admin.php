@@ -2,10 +2,10 @@
 /**
  * AF Addon: AdvancedGallery — Admin controller
  */
-if (!defined('IN_MYBB')) { die('No direct access'); }
+if (!defined('IN_MYBB') || !defined('IN_ADMINCP') || !IN_ADMINCP) { die('No direct access'); }
 require_once __DIR__.'/advancedgallery.php';
 require_once __DIR__.'/providers/admin.php';
-if (!defined('IN_ADMINCP')) { define('IN_ADMINCP', 1); }
+require_once __DIR__.'/admin_media.php';
 
 class AF_Admin_Advancedgallery
 {
@@ -19,6 +19,10 @@ class AF_Admin_Advancedgallery
     public static function render(string $action = ''): string
     {
         global $db, $mybb;
+
+        if (!ag_cleanup_admin()) return '<p>Нет прав администратора.</p>';
+        ag_ensure_cleanup_schema();
+        if ($mybb->get_input('ag_tab')==='users') return ag_admin_media_render();
 
         $action = $action !== '' ? $action : $mybb->get_input('action');
 
@@ -110,7 +114,7 @@ class AF_Admin_Advancedgallery
             $pendingRows = '<tr><td colspan="5">No pending media.</td></tr>';
         }
 
-        $html = '';
+        $html = ag_admin_assets().ag_admin_nav();
         $html .= '<div class="af-box">';
         $html .= '<h2 style="margin:0 0 8px 0;">AdvancedGallery</h2>';
         $html .= '<p style="margin:0 0 12px 0;">Overview of gallery content and pending moderation queue.</p>';

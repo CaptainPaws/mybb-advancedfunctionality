@@ -268,16 +268,47 @@ function ag_prepare_upload_album(int $uid, string $purpose): int
 }
 
 /** Serialize deletion against retention's UPDATE; no successful selection can lose its file. */
-function ag_delete_unretained_media(int $mediaId): bool
+function ag_delete_unretained_media(int $mediaId,int $adminOwner=0,bool $allowRetained=false,bool $allowProtected=false,bool $allowLinked=false,bool $allowUnknown=false): bool
 {
     global $db;
+    $admin=$adminOwner>0 && ag_cleanup_admin();
+    if ($adminOwner>0 && !$admin) return false;
+    $staged=[];$committed=false;$GLOBALS['ag_cleanup_delete_result']=['bytes'=>0,'cleanup_failed'=>false];
+    // MyBB may terminate on an SQL error instead of throwing. Keep filesystem recovery at shutdown too.
+    register_shutdown_function(static function() use (&$staged,&$committed): void {
+        foreach (array_reverse($staged) as [$original,$temporary]) {
+            if (!is_file($temporary)) continue;
+            if ($committed) @unlink($temporary);
+            elseif (!file_exists($original)) @rename($temporary,$original);
+        }
+    });
     $db->write_query('START TRANSACTION');
     try {
         $q = $db->write_query('SELECT * FROM '.TABLE_PREFIX.'af_gallery_media WHERE id='.(int)$mediaId.' FOR UPDATE');
         $media = $db->fetch_array($q);
-        if (!$media || !ag_can_delete_media($media) || ag_media_is_retained($media)) {
+        if (!$media || ($admin ? (int)$media['uid_owner']!==$adminOwner : !ag_can_delete_media($media))
+            || (ag_media_is_retained($media) && !($admin && $allowRetained))
+            || ($admin && !empty($media['cleanup_protected']) && !$allowProtected)
+            || ($admin && !empty($media['usage_flags']) && !$allowLinked)
+            || ($admin && empty($media['usage_flags']) && empty($media['usage_checked_at']) && !$allowUnknown)) {
             $db->write_query('ROLLBACK');
             return false;
+        }
+        // Stage in the same directory: a failed rename or SQL operation restores all files.
+        $originalAbsolute=$media['type']==='local'?ag_cleanup_local_path((string)$media['storage_path'],(int)$media['uid_owner']):'';
+        if ($media['type']==='local') foreach (array_unique([$media['thumb_path'],$media['preview_path'],$media['storage_path']]) as $path) {
+            if ($path==='') continue;
+            $absolute=ag_cleanup_local_path((string)$path,(int)$media['uid_owner']);
+            if (!is_file($absolute)) continue;
+            $relative=ltrim(af_ag_relpath($absolute),'./');
+            $variants=array_unique([$path,$absolute,$relative,'./'.$relative]);
+            $literals=implode(',',array_map(static fn($value)=>"'".$db->escape_string((string)$value)."'",$variants));
+            $shared=$db->fetch_array($db->simple_select('af_gallery_media','id',"id<>".$mediaId." AND type='local' AND (storage_path IN ({$literals}) OR thumb_path IN ({$literals}) OR preview_path IN ({$literals}))",['limit'=>1]));
+            if ($shared) continue;
+            $temporary=$absolute.'.ag-delete-'.bin2hex(random_bytes(12));
+            $bytes=$absolute===$originalAbsolute?(int)filesize($absolute):0;
+            if (!@rename($absolute,$temporary)) throw new RuntimeException('Не удалось подготовить локальный файл к удалению.');
+            $staged[]=[$absolute,$temporary,$bytes];
         }
         $albums = $db->simple_select('af_gallery_album_media', 'album_id', "media_id='{$mediaId}'");
         $affected = [];
@@ -287,17 +318,22 @@ function ag_delete_unretained_media(int $mediaId): bool
         if ($affected) $db->update_query('af_gallery_albums', ['updated_at' => TIME_NOW], 'id IN ('.implode(',', $affected).')');
         if ($db->table_exists('af_gallery_external_media')) $db->delete_query('af_gallery_external_media', "media_id='{$mediaId}'");
         $db->delete_query('af_gallery_media', "id='{$mediaId}'");
+        if ($admin) ag_cleanup_log($adminOwner,$mediaId,'admin_delete',['type'=>$media['type'],'provider'=>$media['provider'],'original_bytes'=>(int)$media['filesize'],'usage_flags'=>(int)($media['usage_flags']??0),'override_linked'=>$allowLinked,'override_protected'=>$allowProtected,'override_unknown'=>$allowUnknown]);
         $db->write_query('COMMIT');
+        $committed=true;
     } catch (Throwable $e) {
         $db->write_query('ROLLBACK');
+        foreach (array_reverse($staged) as [$original,$temporary]) @rename($temporary,$original);
         throw $e;
     }
-    if ($media['type'] === 'local') {
-        foreach (array_unique([$media['storage_path'], $media['thumb_path'], $media['preview_path']]) as $path) {
-            $absolute = af_ag_abs_path((string)$path);
-            if ($absolute && is_file($absolute)) @unlink($absolute);
+    foreach ($staged as [$original,$temporary,$bytes]) {
+        if (@unlink($temporary)) $GLOBALS['ag_cleanup_delete_result']['bytes']+=$bytes;
+        else {
+            $GLOBALS['ag_cleanup_delete_result']['cleanup_failed']=true;
+            ag_cleanup_log((int)$media['uid_owner'],$mediaId,'cleanup_file_error',['staged_path'=>$temporary]);
         }
     }
+    unset($GLOBALS['ag_media_url_rows'][$mediaId]);
     return true;
 }
 
