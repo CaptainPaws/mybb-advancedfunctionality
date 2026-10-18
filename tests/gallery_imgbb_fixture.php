@@ -53,7 +53,7 @@ if (PHP_SAPI==='cli') {
         check($original===$db->fetch_array($db->simple_select('af_gallery_media','*','id=1')),'Migration changed local media');
         check(ag_provider_secret('imgbb')===IMGBB_TEST_KEY && $mybb->settings['af_advancedgallery_imgbb_enabled']==='1','Reactivation reset secret/settings');
         check(!str_contains(json_encode($mybb->settings),IMGBB_TEST_KEY),'Secret copied into settings');
-        check(!str_contains(ag_provider_upload_controls(),IMGBB_TEST_KEY) && !str_contains(ag_provider_admin_widget(),IMGBB_TEST_KEY),'API key in HTML');
+        check(!str_contains(ag_provider_upload_controls(),IMGBB_TEST_KEY) && str_contains(ag_provider_admin_widget(),IMGBB_TEST_KEY),'Public key exposure or missing ACP current key');
         $mybb->user['uid']=8;ag_get_default_album_id(8,true);$mybb->user['uid']=7;
         ag_get_default_album_id(7,true);
         file_put_contents('/tmp/ag-imgbb-requests.log','');
@@ -66,11 +66,11 @@ if (PHP_SAPI==='cli') {
         check(!glob('/tmp/ag-external-*'),'Temporary originals leaked after HTTP request');
         check(count_rows('af_gallery_media',"type='local'")===1,'Persistent local originals created');
         check((int)$db->fetch_field($db->write_query('SELECT COUNT(*) AS n FROM test_af_gallery_external_media e LEFT JOIN test_af_gallery_media m ON m.id=e.media_id WHERE m.id IS NULL'),'n')===0,'Orphan external metadata after deletion');
-        check(!str_contains(ag_provider_admin_widget(),'PRIVATE_DELETE_TOKEN') && !str_contains(ag_provider_admin_widget(),IMGBB_TEST_KEY),'Private URL/key in admin HTML');
+        check(!str_contains(ag_provider_admin_widget(),'PRIVATE_DELETE_TOKEN') && str_contains(ag_provider_admin_widget(),IMGBB_TEST_KEY),'Private URL exposed or current key absent in ACP');
         $_POST=['imgbb_enabled'=>'1','imgbb_max_mb'=>'1','imgbb_groups'=>'2,4','imgbb_allow_url'=>'1','imgbb_default'=>'1','imgbb_api_key'=>''];
         ag_provider_admin_save();check(ag_provider_secret('imgbb')===IMGBB_TEST_KEY,'Blank ACP field erased key');
         $_POST['imgbb_api_key']='fixture_alternative_private_key';ag_provider_admin_save();
-        check(ag_provider_secret('imgbb')==='fixture_alternative_private_key' && !str_contains(ag_provider_admin_widget(),'fixture_alternative_private_key'),'ACP replacement key exposed');
+        check(ag_provider_secret('imgbb')==='fixture_alternative_private_key' && str_contains(ag_provider_admin_widget(),'fixture_alternative_private_key'),'ACP replacement key not displayed');
         $_POST['imgbb_remove_key']='1';ag_provider_admin_save();check(ag_provider_secret('imgbb')==='','Explicit key removal failed');
         unset($_POST['imgbb_remove_key']);$_POST['imgbb_api_key']=IMGBB_TEST_KEY;ag_provider_admin_save();$_POST=[];
         af_advancedgallery_activate();check(ag_provider_secret('imgbb')===IMGBB_TEST_KEY,'Reactivation reset API key');

@@ -88,7 +88,7 @@ function ag_provider_secret(string $provider): string
 }
 function ag_ensure_provider_settings(): void
 {
-    $gid=af_ag_ensure_group('af_advancedgallery_external','Внешние хранилища','AdvancedGallery: внешние провайдеры. API-ключ задаётся отдельно на странице администрирования Gallery и никогда не выводится обратно в форму.');
+    $gid=af_ag_ensure_group('af_advancedgallery_external','Внешние хранилища','AdvancedGallery: внешние провайдеры. API-ключ задаётся и просматривается только на административной странице Gallery. В пользовательскую галерею ключ не передаётся.');
     foreach ([
         ['enabled','Включить ImgBB','Загрузка на ImgBB через сервер форума. Требуется API-ключ и PHP cURL.','yesno','0'],
         ['max_mb','Максимальный размер изображения ImgBB (МБ)','Размер одного файла. Верхняя граница API — 32 000 000 байт. Локальная объёмная квота не расходуется.','numeric','10'],

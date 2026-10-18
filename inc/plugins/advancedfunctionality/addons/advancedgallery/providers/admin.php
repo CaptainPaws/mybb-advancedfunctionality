@@ -28,6 +28,10 @@ function ag_provider_admin_save(): string
 function ag_provider_admin_widget(): string
 {
     global $db,$mybb;
+    $savedKey=ag_provider_secret('imgbb');
+    $keyStatus=$savedKey!==''
+        ? '<div class="success" role="status"><strong>ImgBB: API-ключ сохранён</strong><p>Текущий ключ: <code>••••••••'.htmlspecialchars_uni(substr($savedKey,-4)).'</code></p><details><summary>Показать сохранённый ключ</summary><p><label>Текущий ImgBB API Key <input type="text" readonly autocomplete="off" value="'.htmlspecialchars_uni($savedKey).'" aria-label="Сохранённый ImgBB API Key"></label></p></details></div>'
+        : '<div class="error" role="status"><strong>ImgBB: API-ключ не задан</strong></div>';
     $h='<section class="af-box"><h3>Внешние хранилища</h3><form method="post" action="index.php?module=advancedfunctionality&amp;af_view=advancedgallery&amp;action=external_save">'
         .'<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">';
     foreach (['enabled'=>'Включить ImgBB','allow_url'=>'Разрешить загрузку через URL','default'=>'ImgBB выбран по умолчанию'] as $key=>$label) {
@@ -35,8 +39,9 @@ function ag_provider_admin_widget(): string
     }
     $h.='<p><label>Максимальный размер изображения (МБ) <input type="number" min="1" max="32" name="imgbb_max_mb" value="'.(int)af_ag_get_setting('imgbb_max_mb',10).'"></label></p>'
         .'<p><label>Разрешённые ID групп MyBB через запятую <input name="imgbb_groups" value="'.htmlspecialchars_uni((string)af_ag_get_setting('imgbb_groups','')).'"></label></p>'
-        .'<p><label>ImgBB API Key <input type="password" name="imgbb_api_key" autocomplete="new-password" value=""></label> '
-        .(ag_provider_secret('imgbb')!==''?'Ключ сохранён.':'Ключ не задан.').' Оставьте поле пустым, чтобы сохранить ключ.</p>'
+        .$keyStatus
+        .'<p><label>Новый ImgBB API Key (для замены) <input type="password" name="imgbb_api_key" autocomplete="new-password" value=""></label> '
+        .' Оставьте поле пустым, чтобы сохранить текущий ключ.</p>'
         .'<p><label><input type="checkbox" name="imgbb_remove_key" value="1"> Удалить сохранённый ключ</label></p><button type="submit" class="button">Сохранить внешние хранилища</button></form>';
     if (!$db->table_exists('af_gallery_external_media')) return $h.'<p>Реактивируйте Gallery для добавления таблиц внешних хранилищ.</p></section>';
     $page=max(1,(int)$mybb->get_input('external_page',MyBB::INPUT_INT));$offset=($page-1)*50;
