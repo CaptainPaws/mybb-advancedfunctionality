@@ -11,6 +11,9 @@
     const mediaInput=one(form,'[name=ag_avatar_media_id]'), confirmInput=one(form,'[name=ag_avatar_confirm]');
     const save=one(form,'[data-avatar-save]'), recent=one(form,'[data-avatar-recent]');
     const saveAllowed=!save.disabled;
+    // name=action masks HTMLFormElement.action; read the HTML attribute explicitly.
+    const endpoint=new URL(form.getAttribute('action')||location.href,document.baseURI);
+    if(endpoint.origin!==location.origin)continue;
     const purpose=form.dataset.galleryPurpose, field=form.dataset.fileField;
     let mode='upload', file=null, gallery=null, objectUrl='', revision=0, busy=false;
     const report=message=>{status.textContent=message;};
@@ -117,10 +120,10 @@
       return state;
     }
     async function readState(){
-      const url=new URL(form.action,location.href);url.search='';url.searchParams.set('action','avatar');url.searchParams.set('af_avatar_state','1');
+      const url=new URL(endpoint.href);url.search='';url.searchParams.set('action','avatar');url.searchParams.set('af_avatar_state','1');
       url.searchParams.set('role',form.dataset.avatarCard);url.searchParams.set('my_post_key',one(form,'[name=my_post_key]').value);
       const response=await fetch(url.href,{credentials:'same-origin',cache:'no-store'});
-      let payload;try{payload=await response.json();}catch{throw new Error(`Состояние аватара недоступно (HTTP ${response.status}). Проверьте авторизацию и установку обновлённых файлов AF.`);}
+      let payload;try{payload=await response.json();}catch{throw new Error(`Проверка состояния недоступна: GET ${url.pathname} (HTTP ${response.status}), ответ не JSON. Обновите страницу и проверьте установку AF.`);}
       if(!response.ok || !payload.ok)throw new Error(payload.error||'Не удалось проверить текущее состояние аватара.');
       return checkedState(payload.avatar);
     }
@@ -137,7 +140,8 @@
       if(!response.ok || serverError)throw new Error(safeText(serverError?.textContent||`Сервер вернул HTTP ${response.status}.`));
       // A redirect body (HTML, JavaScript or MyBB AJAX data) is not a save receipt.
       // Verify durable user state with one GET. Never repeat the POST or execute scripts.
-      const state=await readState();
+      let state;
+      try{state=await readState();}catch(error){throw new Error(`Запрос сохранения отправлен, но результат не удалось проверить. Это не означает отказ сохранения. ${error.message} Обновите страницу для проверки; повторный POST не выполнялся. Выбранное изображение осталось в карточке.`);}
       if(state.version!==beforeVersion)return {state};
       throw new Error('Ответ обработчика неоднозначен, а состояние аватара не изменилось. Обновите страницу перед повторной попыткой. Выбранное изображение сохранено в карточке.');
     }
@@ -162,9 +166,9 @@
           }
         }
         data.set('atf_avatar_async','1');data.delete('ajax');
-        beforeVersion=(await readState()).version;
+        try{beforeVersion=(await readState()).version;}catch(error){throw new Error(`Сохранение не отправлено: ${error.message} Выбранное изображение осталось в карточке.`);}
         report(removing?'Удаление…':'Сохранение…');
-        const response=await fetch(form.action,{method:'POST',body:data,credentials:'same-origin',cache:'no-store'});
+        const response=await fetch(endpoint.href,{method:'POST',body:data,credentials:'same-origin',cache:'no-store'});
         if(new URL(response.url).origin!==location.origin)throw new Error('Неверный адрес ответа сервера.');
         const result=await parseResult(response);
         const current=one(form,'[data-avatar-current]'), state=result.state;
