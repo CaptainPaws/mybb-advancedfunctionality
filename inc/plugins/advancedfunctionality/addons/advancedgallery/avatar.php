@@ -1,6 +1,7 @@
 <?php
 /** Primary account avatars: Gallery selection feeds the unmodified MyBB upload handler. */
 if (!defined('IN_MYBB')) die('No direct access');
+require_once dirname(__DIR__,2).'/avatar.php';
 
 function ag_avatar_available(string $purpose='account_avatar'): bool
 {
@@ -13,14 +14,7 @@ function ag_avatar_available(string $purpose='account_avatar'): bool
 
 function ag_avatar_allowed_mimes(string $purpose='account_avatar'): array
 {
-    global $cache;
-    if ($purpose==='character_avatar') return ['image/jpeg','image/png','image/webp','image/gif'];
-    $out=[];
-    foreach ((array)$cache->read('attachtypes') as $type) {
-        if (!empty($type['avatarfile']) && is_member($type['groups']) && (int)$type['maxsize']>0
-            && in_array($type['mimetype'],['image/jpeg','image/png','image/gif'],true)) $out[]=$type['mimetype'];
-    }
-    return array_values(array_unique($out));
+    return af_avatar_capabilities($purpose==='character_avatar'?'secondary':'primary')['mimes'];
 }
 
 /** Only an approved, owned local original; never accept a browser-supplied URL/path. */
@@ -41,7 +35,7 @@ function ag_avatar_source(int $id,string $purpose='account_avatar'): array
     $image=@getimagesize($path);
     $mime=$image['mime']??'';
     if (!in_array($mime,ag_avatar_allowed_mimes($purpose),true) || $mime!==$media['mime']) {
-        throw new RuntimeException('Этот формат не разрешён для аватаров MyBB. Используйте разрешённый JPG, PNG или GIF.');
+        throw new RuntimeException('Этот формат изображения не поддерживается для выбранного аватара. Проверьте типы аватаров ACP и возможности обработки изображений.');
     }
     if ($purpose==='account_avatar' && $mime==='image/gif' && !empty($mybb->settings['maxavatardims'])) {
         $dims=preg_split('/[|x]/i',(string)$mybb->settings['maxavatardims']);

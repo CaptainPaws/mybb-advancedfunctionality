@@ -17,6 +17,7 @@
     const picker=()=>{
       const api=window.AF_GalleryPicker;
       if(!api || typeof api.open!=='function') throw new Error('Gallery Picker не загрузился. Обновите страницу или используйте загрузку файла.');
+      if(typeof api.supportsPurpose!=='function' || !api.supportsPurpose(purpose))throw new Error(`Не удалось открыть галерею. Gallery Picker не поддерживает ${purpose}: обновите файлы Gallery и кэш статических ресурсов.`);
       return api;
     };
     function releaseUrl(){if(objectUrl){URL.revokeObjectURL(objectUrl);objectUrl='';}}
@@ -51,9 +52,9 @@
       });
     }
     function validateFile(candidate){
-      if(!candidate || !limits.mimes.includes(candidate.type))throw new Error('Этот формат изображения не разрешён для данного аватара.');
+      if(!candidate || !limits.mimes.includes(candidate.type))throw new Error('Этот формат изображения не поддерживается для выбранного аватара.');
       const max=limits.maxBytes, mimeMax=limits.mimeLimits[candidate.type]||0;
-      if(!candidate.size || (max && candidate.size>max) || (mimeMax && candidate.size>mimeMax))throw new Error('Файл превышает разрешённый размер. Ограничения указаны в заголовке карточки.');
+      if(!candidate.size || (max && candidate.size>max) || (mimeMax && candidate.size>mimeMax))throw new Error(`Допустимый размер файла: до ${Math.round(Math.min(...[max,mimeMax].filter(value=>value>0))/1024)} КБ.`);
     }
     function chooseFile(candidate){
       if(busy || fileInput.disabled)return;
@@ -110,25 +111,35 @@
       }catch(error){recent.textContent=error.message;}
     }
     loadRecent();
+    let beforeVersion=form.dataset.avatarVersion;
+    function checkedState(state){
+      if(!state || state.role!==form.dataset.avatarCard || String(state.uid)!==form.dataset.avatarOwner || typeof state.version!=='string')throw new Error('Ответ состояния аватара не соответствует текущему пользователю.');
+      return state;
+    }
+    async function readState(){
+      const url=new URL(form.action,location.href);url.search='';url.searchParams.set('action','af_avatar_state');
+      url.searchParams.set('role',form.dataset.avatarCard);url.searchParams.set('my_post_key',one(form,'[name=my_post_key]').value);
+      const response=await fetch(url.href,{credentials:'same-origin',cache:'no-store'});
+      let payload;try{payload=await response.json();}catch{throw new Error(`Состояние аватара недоступно (HTTP ${response.status}). Проверьте авторизацию и установку обновлённых файлов AF.`);}
+      if(!response.ok || !payload.ok)throw new Error(payload.error||'Не удалось проверить текущее состояние аватара.');
+      return checkedState(payload.avatar);
+    }
+    const safeText=html=>new DOMParser().parseFromString(String(html),'text/html').body.textContent.trim().slice(0,500);
     async function parseResult(response){
-      let doc=new DOMParser().parseFromString(await response.text(),'text/html');
+      const text=await response.text();let payload=null;
+      try{payload=JSON.parse(text);}catch{}
+      if(payload?.errors || payload?.error || payload?.ok===false)throw new Error(safeText(payload.error||(payload.errors||[]).join(' '))||'Сервер отклонил сохранение аватара.');
+      if(response.ok && payload?.ok===true && payload.avatar)return {state:checkedState(payload.avatar)};
+      let doc=new DOMParser().parseFromString(text,'text/html');
       let card=doc.querySelector(`[data-avatar-card="${form.dataset.avatarCard}"]`);
-      if(!card){
-        // MyBB may return its intermediate redirect template rather than HTTP Location.
-        const refresh=doc.querySelector('meta[http-equiv="refresh" i]');
-        const match=refresh?.content.match(/url\s*=\s*["']?([^"']+)/i);
-        if(match){
-          const target=new URL(match[1].trim(),location.href);
-          const expected=new URL(form.action,location.href);
-          if(target.origin===location.origin && target.pathname===expected.pathname && target.searchParams.get('action')==='avatar'){
-            const result=await fetch(target.href,{credentials:'same-origin',cache:'no-store'});
-            doc=new DOMParser().parseFromString(await result.text(),'text/html');card=doc.querySelector(`[data-avatar-card="${form.dataset.avatarCard}"]`);
-          }
-        }
-      }
-      if(!response.ok || !card)throw new Error(doc.querySelector('.error,.error_page,[role=alert]')?.textContent.trim().slice(0,400)||'Сервер не подтвердил сохранение. Выбранное изображение осталось в карточке.');
-      if(card.dataset.saveError==='1')throw new Error(card.querySelector('[data-avatar-server-error]')?.textContent.trim()||'Не удалось сохранить аватар.');
-      return card;
+      if(card?.dataset.saveError==='1')throw new Error(card.querySelector('[data-avatar-server-error]')?.textContent.trim()||'Не удалось сохранить аватар.');
+      const serverError=doc.querySelector('.error,.error_page,#error,[role=alert]');
+      if(!response.ok || serverError)throw new Error(safeText(serverError?.textContent||`Сервер вернул HTTP ${response.status}.`));
+      // A redirect body (HTML, JavaScript or MyBB AJAX data) is not a save receipt.
+      // Verify durable user state with one GET. Never repeat the POST or execute scripts.
+      const state=await readState();
+      if(state.version!==beforeVersion)return {state};
+      throw new Error('Ответ обработчика неоднозначен, а состояние аватара не изменилось. Обновите страницу перед повторной попыткой. Выбранное изображение сохранено в карточке.');
     }
     async function submitAvatar(submitter){
       if(busy)return;
@@ -150,14 +161,23 @@
             data.set(field,candidate,candidate.name);data.set('ag_avatar_confirm','1');data.set('ag_avatar_media_id',String(gallery.media_id));
           }
         }
+        data.set('atf_avatar_async','1');data.delete('ajax');
+        beforeVersion=(await readState()).version;
         report(removing?'Удаление…':'Сохранение…');
         const response=await fetch(form.action,{method:'POST',body:data,credentials:'same-origin',cache:'no-store'});
         if(new URL(response.url).origin!==location.origin)throw new Error('Неверный адрес ответа сервера.');
         const result=await parseResult(response);
-        one(form,'[data-avatar-current]').replaceChildren(...[...result.querySelector('[data-avatar-current]').childNodes].map(node=>document.importNode(node,true)));
-        one(form,'[data-avatar-remove]').disabled=result.querySelector('[data-avatar-remove]').disabled;
+        const current=one(form,'[data-avatar-current]'), state=result.state;
+        current.replaceChildren();
+        if(state.url || state.display_url){
+          const url=new URL(state.display_url||state.url,location.href);
+          if(!['http:','https:'].includes(url.protocol))throw new Error('Обработчик вернул недопустимый адрес аватара.');
+          const image=document.createElement('img');image.src=url.href;image.alt='Текущий аватар';image.decoding='async';current.append(image);
+        }else{const empty=document.createElement('span');empty.className='atf-avatar-editor__empty';empty.textContent='Аватар не установлен';current.append(empty);}
+        one(form,'[data-avatar-remove]').disabled=!state.has_avatar;
+        form.dataset.avatarVersion=state.version;
         const error=one(form,'[data-avatar-server-error]');if(error)error.remove();form.dataset.saveError='0';
-        reset();report(removing?'Аватар удалён.':'Аватар сохранён.');
+        reset();report(removing?'Аватар удалён.':'Аватар успешно обновлён.');
       }catch(error){report(error.message);}
       finally{busy=false;save.disabled=!saveAllowed;form.removeAttribute('aria-busy');}
     }

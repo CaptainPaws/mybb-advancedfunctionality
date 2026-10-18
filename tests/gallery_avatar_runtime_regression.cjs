@@ -9,11 +9,13 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
     page.setDefaultTimeout(5000);
     const html=fs.readFileSync(process.env.ATF_AVATAR_HTML||'work/avatar-editor.html','utf8');
     const gif=Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7','base64');
-    const posts=[],purposes=[];let failNext=false;
+    const posts=[],purposes=[];let failNext=false;let legacyNext=false;let ambiguousNext=false;const versions={primary:0,secondary:0};
+    const state=role=>({uid:7,role,url:'https://forum.test/current.gif?v='+versions[role],version:role+'-'+versions[role],has_avatar:true});
     const field=(raw,name)=>raw.match(new RegExp('name="'+name+'"\\r\\n\\r\\n([^\\r]+)'))?.[1]||'';
     await page.route('**/*',async route=>{
       const request=route.request(),url=new URL(request.url());
       if(url.pathname.endsWith('.gif'))return route.fulfill({contentType:'image/gif',body:gif});
+      if(url.searchParams.get('action')==='af_avatar_state')return route.fulfill({json:{ok:true,avatar:state(url.searchParams.get('role'))}});
       if(url.pathname.endsWith('gallery.php')){
         const action=url.searchParams.get('action'),purpose=url.searchParams.get('purpose');
         if(action==='picker'){
@@ -25,9 +27,12 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
       }
       if(request.method()==='POST'){
         const raw=request.postData()||'';posts.push({action:field(raw,'action'),raw,bytes:request.postDataBuffer()});
-        let result=html;
-        if(failNext){failNext=false;result=result.replace('data-save-error="0"','data-save-error="1"').replace('<header class="atf-avatar-editor__header">','<p data-avatar-server-error>Проверочная ошибка</p><header class="atf-avatar-editor__header">');}
-        return route.fulfill({contentType:'text/html; charset=utf-8',body:result});
+        const role=field(raw,'action')==='do_avatar'?'primary':'secondary';
+        if(failNext){failNext=false;return route.fulfill({json:{errors:['Проверочная ошибка']}});}
+        if(ambiguousNext){ambiguousNext=false;return route.fulfill({contentType:'text/html; charset=utf-8',body:'<p>Неоднозначный ответ без сохранения</p>'});}
+        versions[role]++;
+        if(legacyNext){legacyNext=false;return route.fulfill({contentType:'text/html; charset=utf-8',body:'<html><p>Сохранено</p><a href="usercp.php?action=avatar">Продолжить</a></html>'});}
+        return route.fulfill({json:{ok:true,avatar:state(role)}});
       }
       return route.fulfill({contentType:'text/html; charset=utf-8',body:'<html><body style="margin:24px;background:#060e17">'+html+'</body></html>'});
     });
@@ -49,27 +54,31 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
         await card.locator('[data-avatar-cancel]').click();assert.equal(await card.locator('[data-avatar-selection]').isVisible(),false);
         await card.locator('[data-avatar-recent] button').click();await card.locator('[data-avatar-selection]').waitFor({state:'visible'});
       }
-      await card.locator('[data-avatar-save]').click();await card.locator('[data-avatar-status]').filter({hasText:'Аватар сохранён.'}).waitFor();
+      await card.locator('[data-avatar-save]').click();await card.locator('[data-avatar-status]').filter({hasText:'Аватар успешно обновлён.'}).waitFor();
       const post=posts.at(-1);assert.equal(post.action,role==='primary'?'do_avatar':'do_apf_secondary_avatar');
       assert.ok(post.raw.includes(`name="${role==='primary'?'avatarupload':'secondary_avatar_upload'}"`));
       assert.ok(!post.raw.includes(`name="${role==='primary'?'secondary_avatar_upload':'avatarupload'}"`));
       assert.ok(post.bytes.includes(gif),'Original GIF bytes lost');assert.equal(field(post.raw,'ag_avatar_confirm'),'1');
     }
     assert.deepEqual(purposes,['account_avatar','character_avatar']);
+    legacyNext=true;
     const primary=page.locator('[data-avatar-card=primary]');
     await primary.locator('[data-avatar-tab=upload]').click();
     const beforeUpload=posts.length;
     await primary.locator('input[type=file]').setInputFiles({name:'local.gif',mimeType:'image/gif',buffer:gif});
     assert.equal(posts.length,beforeUpload,'File saved without confirmation');
-    await primary.locator('[data-avatar-save]').click();await primary.locator('[data-avatar-status]').filter({hasText:'Аватар сохранён.'}).waitFor();
+    await primary.locator('[data-avatar-save]').click();await primary.locator('[data-avatar-status]').filter({hasText:'Аватар успешно обновлён.'}).waitFor();
     assert.ok(posts.at(-1).raw.includes('name="avatarupload"') && !posts.at(-1).raw.includes('name="ag_avatar_confirm"'));
     await primary.locator('[data-avatar-tab=url]').click();await primary.locator('[data-avatar-url]').fill('https://forum.test/original.gif');
-    await primary.locator('[data-avatar-save]').click();await primary.locator('[data-avatar-status]').filter({hasText:'Аватар сохранён.'}).waitFor();
+    await primary.locator('[data-avatar-save]').click();await primary.locator('[data-avatar-status]').filter({hasText:'Аватар успешно обновлён.'}).waitFor();
     assert.equal(field(posts.at(-1).raw,'avatarurl'),'https://forum.test/original.gif');assert.ok(!posts.at(-1).raw.includes('filename='),'URL submitted stale upload');
 
     await primary.locator('[data-avatar-recent] button').click();await primary.locator('[data-avatar-selection]').waitFor({state:'visible'});
     failNext=true;await primary.locator('[data-avatar-save]').click();await primary.locator('[data-avatar-status]').filter({hasText:'Проверочная ошибка'}).waitFor();
     assert.equal(await primary.locator('[data-avatar-selection]').isVisible(),true,'Error discarded selection');
+    const beforeAmbiguous=posts.length;ambiguousNext=true;await primary.locator('[data-avatar-save]').click();
+    await primary.locator('[data-avatar-status]').filter({hasText:'состояние аватара не изменилось'}).waitFor();
+    assert.equal(posts.length,beforeAmbiguous+1,'Ambiguous response retried POST');assert.equal(await primary.locator('[data-avatar-selection]').isVisible(),true);
     page.once('dialog',dialog=>dialog.accept());await primary.locator('[data-avatar-remove]').evaluate(button=>button.disabled=false);await primary.locator('[data-avatar-remove]').click();
     await primary.locator('[data-avatar-status]').filter({hasText:'Аватар удалён.'}).waitFor();assert.equal(field(posts.at(-1).raw,'remove'),'1');
     assert.ok(!posts.at(-1).raw.includes('filename='),'Remove submitted another avatar image');
@@ -77,6 +86,6 @@ const fs=require('node:fs'), assert=require('node:assert/strict');
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Mobile overflow');
     await page.screenshot({path:'work/avatar-editor-mobile.png',fullPage:true});
-    console.log('Two-avatar runtime passed: real Gallery modal for both contexts, recent selection/cancel, isolated multipart routes with original GIFs, save/remove, retained error state, mobile width.');
+    console.log('Two-avatar runtime + truthful receipts/legacy state recovery passed: real Gallery modal for both contexts, recent selection/cancel, isolated multipart routes with original GIFs, save/remove, retained error state, mobile width.');
   }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

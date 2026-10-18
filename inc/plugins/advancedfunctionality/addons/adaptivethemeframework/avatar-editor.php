@@ -1,6 +1,7 @@
 <?php
 /** UserCP inner composition only; MyBB and APF retain all persistence. */
 if (!defined('IN_MYBB')) die('No direct access');
+require_once dirname(__DIR__,2).'/avatar.php';
 
 function af_atf_avatar_editor_prepare(): void
 {
@@ -8,18 +9,12 @@ function af_atf_avatar_editor_prepare(): void
     if (!defined('THIS_SCRIPT') || THIS_SCRIPT!=='usercp.php' || $mybb->get_input('action')!=='avatar') return;
     $uid=(int)($mybb->user['uid']??0);
     $allowed=$uid>0 && !empty($mybb->usergroup['canusercp']);
-    $primaryTypes=[];$primaryBytes=0;
-    foreach ((array)$GLOBALS['cache']->read('attachtypes') as $type) {
-        if (!empty($type['avatarfile']) && is_member($type['groups']) && (int)$type['maxsize']>0
-            && in_array($type['mimetype'],['image/jpeg','image/png','image/gif','image/bmp'],true)) {
-            $primaryTypes[$type['mimetype']]=(int)$type['maxsize']*1024;
-        }
-    }
+    $primaryCaps=af_avatar_capabilities('primary');
+    $primaryTypes=$primaryCaps['mime_limits'];
     $secondary=$allowed && function_exists('af_apf_is_enabled') && af_apf_is_enabled() && function_exists('af_apf_get_secondary_avatar');
     $gallery=function_exists('ag_can_view') && ag_can_view() && function_exists('ag_avatar_source');
-    $dimensions=preg_split('/[x|]/i',(string)($mybb->settings['maxavatardims']??''));
-    $maxWidth=max(0,(int)($dimensions[0]??0));$maxHeight=max(0,(int)($dimensions[1]??0));
-    $primaryBytes=max(0,(int)($mybb->settings['avatarsize']??0))*1024;
+    $maxWidth=$primaryCaps['max_width'];$maxHeight=$primaryCaps['max_height'];
+    $primaryBytes=$primaryCaps['max_bytes'];
     $cards=[[
         'key'=>'primary','title'=>'Основной аватар','subtitle'=>'Аватар, отображаемый рядом с вашими сообщениями на форуме',
         'action'=>'do_avatar','field'=>'avatarupload','remove'=>'remove','save'=>'Сохранить основной аватар',
@@ -28,8 +23,6 @@ function af_atf_avatar_editor_prepare(): void
         'url'=>$allowed && !empty($mybb->settings['allowremoteavatars']),
         'url_hint'=>!empty($mybb->settings['allowremoteavatars'])?'URL проверяется штатным обработчиком MyBB. Также поддерживается Gravatar по email.':'URL аватаров отключены настройками MyBB. Используйте загрузку файла или Gallery.',
         'gallery'=>$gallery && ag_avatar_available('account_avatar'),'purpose'=>'account_avatar',
-        'mimes'=>array_keys($primaryTypes),'mime_limits'=>$primaryTypes,'max_bytes'=>$primaryBytes,
-        'max_width'=>$maxWidth,'max_height'=>$maxHeight,
         'error'=>(string)($avatar_error??''),
         'limits'=>($maxWidth||$maxHeight?'Максимальный размер: '.($maxWidth?:'∞').' × '.($maxHeight?:'∞').' px':'Размер изображения: без ограничения').($primaryBytes?' · до '.($primaryBytes/1024).' КБ':''),
     ]];
@@ -39,11 +32,15 @@ function af_atf_avatar_editor_prepare(): void
         'current'=>af_apf_get_secondary_avatar($uid),'has_current'=>af_apf_get_secondary_avatar($uid)!=='',
         'upload'=>true,'url'=>false,'url_hint'=>'URL не поддерживается обработчиком аватара персонажа. Загрузите файл или выберите изображение из галереи.',
         'gallery'=>$gallery && ag_avatar_available('character_avatar'),'purpose'=>'character_avatar',
-        'mimes'=>['image/jpeg','image/png','image/webp','image/gif'],'mime_limits'=>[],
-        'max_bytes'=>max(0,(int)($mybb->settings['maxavatarsize']??0))*1024,'max_width'=>0,'max_height'=>0,
         'error'=>!empty($GLOBALS['af_apf_secondary_avatar_error'])?htmlspecialchars_uni($GLOBALS['af_apf_secondary_avatar_error']):'',
         'limits'=>'Пропорции сохраняются'.(!empty($mybb->settings['maxavatarsize'])?' · до '.(int)$mybb->settings['maxavatarsize'].' КБ':''),
     ];
+    foreach ($cards as &$card) {
+        $caps=af_avatar_capabilities($card['key']);
+        foreach (['mimes','mime_limits','max_bytes','max_width','max_height'] as $key) $card[$key]=$caps[$key];
+        $card['notice']=$caps['notice'];$card['state']=af_avatar_state($card['key']);
+    }
+    unset($card);
     ob_start();require __DIR__.'/templates/components/avatar-editor.php';
     $GLOBALS['atf_avatar_editor']=ob_get_clean();
     // The new component owns both inner cards; APF's legacy slot is no longer rendered.

@@ -1,6 +1,7 @@
 <?php
 /** Short fixture: real Gallery providers, no forum DB. Optional multipart HTTP + stock MyBB upload. */
 define('IN_MYBB',1);
+define('TIME_NOW',time());
 define('MYBB_ROOT',sys_get_temp_dir().'/ag-avatar-regression/');
 define('AF_ADDONS',dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/');
 class MyBB {
@@ -16,6 +17,8 @@ class MyBB {
 }
 class AvatarDB {
     public array $media=[],$queries=[],$values=[];
+    public array $user=['avatar'=>'','avatardimensions'=>'','avatartype'=>''];
+    function update_query($table,$row,$where){if($table!=='users')throw new RuntimeException('Wrong table');$this->user=array_replace($this->user,$row);}
     function table_exists($table){return $table==='af_apf_values';}
     function escape_string($s){return addslashes((string)$s);}
     function fetch_field($row,$key){return $row[$key]??'';}
@@ -23,6 +26,7 @@ class AvatarDB {
     function delete_query($table,$where){if($table!=='af_apf_values')throw new RuntimeException('Wrong delete');$this->values[7]='';}
     function simple_select($table,$fields,$where,$options=[]) {
         $this->queries[]=$where;
+        if ($table==='users')return $this->user;
         if ($table==='af_apf_values')return ['field_value'=>$this->values[7]??''];
         if (!preg_match("/id='(\d+)'/",$where,$id)) return [];
         $row=$this->media[(int)$id[1]]??[];
@@ -32,7 +36,7 @@ class AvatarDB {
     function fetch_array($value){return $value;}
 }
 class AvatarCache {
-    public array $types=[['mimetype'=>'image/gif','avatarfile'=>1,'groups'=>'2','maxsize'=>100],['mimetype'=>'image/png','avatarfile'=>1,'groups'=>'2','maxsize'=>100]];
+    public array $types=[['mimetype'=>'image/gif','avatarfile'=>1,'groups'=>'2','maxsize'=>100],['mimetype'=>'image/png','avatarfile'=>1,'groups'=>'2','maxsize'=>100],['mimetype'=>'image/jpeg','avatarfile'=>1,'groups'=>'2','maxsize'=>100],['mimetype'=>'image/webp','avatarfile'=>1,'groups'=>'2','maxsize'=>4024]];
     function read($key){return $this->types;}
 }
 function is_member($groups){return str_contains((string)$groups,'2');}
@@ -54,6 +58,11 @@ $mybb->input=$_POST;
 if (PHP_SAPI!=='cli') {
     header('Content-Type: application/json');
     try {
+        if (($_POST['media_format']??'')==='webp') {
+            $original=MYBB_ROOT.'uploads/af_gallery/7/original.webp';
+            copy(getenv('AF_TEST_WEBP'),$original);
+            $db->media[42]['storage_path']='uploads/af_gallery/7/original.webp';$db->media[42]['mime']='image/webp';
+        }
         if (!empty($_POST['disabled'])) $mybb->settings['af_advancedgallery_enabled']=0;
         if (!empty($_POST['denied'])) $mybb->usergroup['canuploadavatars']=0;
         if (!empty($_POST['foreign'])) $db->media[42]['uid_owner']=8;
@@ -79,9 +88,16 @@ if (PHP_SAPI!=='cli') {
         ag_avatar_validate_submission();
         // Optional exact upstream upload_avatar(): tests must supply MyBB 1.8.40 source.
         require getenv('MYBB_UPLOAD_SOURCE');
-        class AvatarPlugins {function run_hooks($hook,$value=null){return $value;}}
+        class AvatarPlugins {function run_hooks($hook,$value=null){if($hook==='usercp_do_avatar_start'){ag_avatar_validate_submission();af_atf_avatar_native_guard();af_avatar_primary_compat();}if($hook==='usercp_do_avatar_end'){if(!empty($_POST['mismatch_receipt']))af_avatar_saved_response('primary','not-saved');af_avatar_native_saved();}return $value;}}
         $plugins=new AvatarPlugins();
         $lang=(object)['error_uploadfailed'=>'Upload failed','error_avatartype'=>'Type denied','error_uploadsize'=>'Size denied'];
+        if (!empty($_POST['atf_avatar_async']) && !empty($_POST['native_route'])) {
+            require AF_ADDONS.'adaptivethemeframework/avatar-editor.php';
+            @mkdir(MYBB_ROOT.'inc',0755,true);@symlink(getenv('MYBB_UPLOAD_SOURCE'),MYBB_ROOT.'inc/functions_upload.php');
+            $mybb->input['action']='do_avatar';
+            require getenv('MYBB_AVATAR_ROUTE');
+            throw new RuntimeException($avatar_error ?: 'No native save receipt');
+        }
         $result=upload_avatar();
         echo json_encode(['result'=>$result,'original_hash'=>hash_file('sha256',$original),
             'avatar_hash'=>isset($result['avatar'])?hash_file('sha256',$result['avatar']):null]);
@@ -112,3 +128,5 @@ function get_extension($name){return pathinfo($name,PATHINFO_EXTENSION);}
 function my_strtolower($s){return strtolower($s);}
 function copy_file_to_cdn($path,&$cdn=''){return false;}
 function my_chmod($path,$mode){return true;}
+
+function inline_error($message){return is_array($message)?implode(" ",$message):(string)$message;}

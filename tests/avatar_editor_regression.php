@@ -2,6 +2,8 @@
 /** Reuse Gallery permission fixture; exercise real ATF component without a forum DB. */
 require __DIR__.'/gallery_avatar_regression.php';
 define('THIS_SCRIPT','usercp.php');
+define('AF_APF_SECONDARY_AVATAR_KEY','profile_secondary_avatar');
+function af_apf_secondary_avatar_path(int $uid): string {return '';}
 function af_apf_is_enabled(): bool {return !empty($GLOBALS['mybb']->settings['af_advancedprofilefields_enabled']);}
 function af_apf_get_secondary_avatar(int $uid): string {return 'https://forum.test/secondary.gif';}
 function af_apf_validate_secondary_avatar_upload(array $file): string {return '';}
@@ -18,6 +20,12 @@ avatar_check(str_contains($html,'200 × 250') && str_contains($html,'400 КБ'),
 avatar_check(substr_count($html,'name="my_post_key"')===2 && substr_count($html,'data-gallery-purpose=')===2,'CSRF/Gallery context missing');
 avatar_check(!str_contains($html,'Выбрать из моей галереи'),'Old standalone Gallery UI remains');
 avatar_check(str_contains($headerinclude,'data-atf-avatar-runtime'),'Editor runtime missing');
+$primaryCaps=af_avatar_capabilities('primary');
+if (function_exists('imagecreatefromwebp')) avatar_check(in_array('image/webp',$primaryCaps['mimes'],true) && str_contains($html,'JPG, PNG, WebP, GIF'),'Working WebP decoder not reflected in UI');
+$page='<html><head></head><body>'.$html.'</body></html>';af_advancedgallery_pre_output($page);
+avatar_check((bool)preg_match('/advancedgallery\.js\?v=[a-f0-9]{16}/',$page),'Gallery content revision missing');
+avatar_check(str_contains($page,'"account_avatar"') && str_contains($page,'"character_avatar"'),'PHP purpose registry missing from config');
+$once=$page;af_advancedgallery_pre_output($page);avatar_check(substr_count($page,'/advancedgallery.js?v=')===1,'Duplicate Gallery runtime');
 af_atf_avatar_editor_prepare();avatar_check(substr_count($headerinclude,'data-atf-avatar-runtime')===1,'Duplicate runtime');
 avatar_check(ag_avatar_available('character_avatar'),'Character Gallery context unavailable');
 avatar_check(in_array('image/webp',ag_avatar_allowed_mimes('character_avatar'),true),'APF WebP lost');

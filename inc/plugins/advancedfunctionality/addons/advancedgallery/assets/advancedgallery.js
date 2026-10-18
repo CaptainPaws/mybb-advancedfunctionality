@@ -482,7 +482,8 @@
     options = options || {};
     if (insertFn && typeof insertFn === 'object') { options = insertFn; insertFn = options.onSelect; }
     var purpose = options.purpose || '';
-    if (purpose && ['character_avatar', 'account_avatar', 'signature_background', 'signature_images', 'appearance_avatars', 'appearance_postbit_bg', 'appearance_profile_bg', 'appearance_sheet_bg', 'appearance_theme_bg'].indexOf(purpose) === -1) throw new Error('Unknown Gallery purpose');
+    var allowedPurposes=getPickerConfig().purposes || ['character_avatar', 'account_avatar', 'signature_background', 'signature_images', 'appearance_avatars', 'appearance_postbit_bg', 'appearance_profile_bg', 'appearance_sheet_bg', 'appearance_theme_bg'];
+    if (purpose && allowedPurposes.indexOf(purpose) === -1) throw new Error('Unknown Gallery purpose: ' + purpose);
     if (purpose && typeof insertFn !== 'function') throw new Error('Appearance picker requires onSelect');
     if (purpose !== pickerState.purpose && pickerState.modal) { closePicker(); pickerState.modal.remove(); pickerState.modal = null; }
     var token = ++pickerState.openToken;
@@ -568,6 +569,7 @@
   }
 
   window.AF_GalleryPicker = {
+    supportsPurpose: function(purpose) { return (getPickerConfig().purposes || ['account_avatar','character_avatar','signature_background','signature_images','appearance_avatars','appearance_postbit_bg','appearance_profile_bg','appearance_sheet_bg','appearance_theme_bg']).indexOf(purpose)!==-1; },
     open: function (insertFn, options) { return openPicker(insertFn, options); },
     reload: function () { loadPickerData(); },
     select: function (mediaId, options) { return selectGalleryMedia(mediaId, options || {}); },

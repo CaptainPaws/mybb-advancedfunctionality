@@ -16,6 +16,7 @@ define('AF_APF_SIG', 'af-apf-');
 define('AF_APF_VALUES_TABLE', 'af_apf_values');
 define('AF_APF_SECONDARY_AVATAR_KEY', 'profile_secondary_avatar');
 define('AF_APF_SECONDARY_AVATAR_DIR', 'uploads/avatars');
+require_once dirname(__DIR__,2).'/avatar.php';
 
 /* -------------------- LANG -------------------- */
 
@@ -1142,6 +1143,7 @@ function af_apf_usercp_start(): void
     if (!empty($mybb->input['remove_secondary_avatar'])) {
         if (af_apf_set_system_value($uid, AF_APF_SECONDARY_AVATAR_KEY, '')) {
             af_apf_delete_secondary_avatar_file($uid, $oldPath);
+            if (function_exists('af_avatar_saved_response')) af_avatar_saved_response('secondary','');
             redirect('usercp.php?action=avatar', 'Дополнительный аватар удалён.');
         }
         $error = 'Не удалось удалить дополнительный аватар.';
@@ -1174,6 +1176,7 @@ function af_apf_usercp_start(): void
                 } else {
                     @chmod($destination, 0644);
                     af_apf_delete_secondary_avatar_file($uid, $oldPath);
+                    if (function_exists('af_avatar_saved_response')) af_avatar_saved_response('secondary',$relative);
                     redirect('usercp.php?action=avatar', 'Дополнительный аватар обновлён.');
                 }
             }
@@ -1217,7 +1220,8 @@ function af_apf_validate_secondary_avatar_upload(array $file): string
     if ($tmp === '' || !is_uploaded_file($tmp)) {
         return 'Загруженный файл не прошёл проверку HTTP upload.';
     }
-    $maxKb = max(0, (int)($mybb->settings['maxavatarsize'] ?? 0));
+    $caps=af_avatar_capabilities('secondary');
+    $maxKb=(int)($caps['max_bytes']/1024);
     $size = (int)($file['size'] ?? 0);
     if ($size <= 0 || ($maxKb > 0 && $size > $maxKb * 1024)) {
         return $maxKb > 0
@@ -1225,8 +1229,7 @@ function af_apf_validate_secondary_avatar_upload(array $file): string
     }
     $info = @getimagesize($tmp);
     $mime = af_apf_detect_image_mime($tmp);
-    $allowed = ['image/jpeg' => IMAGETYPE_JPEG, 'image/png' => IMAGETYPE_PNG,
-        'image/webp' => IMAGETYPE_WEBP, 'image/gif' => IMAGETYPE_GIF];
+    $allowed=$caps['image_types'];
     if (!is_array($info) || !isset($allowed[$mime]) || (int)($info[2] ?? 0) !== $allowed[$mime]) {
         return 'Разрешены только настоящие изображения JPG, PNG, WEBP и GIF.';
     }

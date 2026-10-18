@@ -742,13 +742,8 @@ function af_advancedgallery_pre_output(string &$page = ''): void
     $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AG_ID . '/assets';
 
     // ---------------------------------------------------------------------
-    // 1) Нормализуем ?v=... / &v=... / &amp;v=... ТОЛЬКО у advancedgallery.css/js
+    // 1) Сохраняем версию владельца assets: старый runtime не должен кешироваться навсегда
     // ---------------------------------------------------------------------
-    $page = preg_replace(
-        '~(advancedgallery\.(?:css|js))(?:\?(?:amp;)?v=\d+|&(amp;)?v=\d+)~iu',
-        '$1',
-        $page
-    );
 
     // ---------------------------------------------------------------------
     // 2) Дедуп: оставляем только ПЕРВОЕ подключение advancedgallery.css и .js
@@ -784,16 +779,17 @@ function af_advancedgallery_pre_output(string &$page = ''): void
     $hasJs  = (bool)preg_match('~advancedgallery\.js~iu', $page);
 
     // ---------------------------------------------------------------------
-    // 3) Если чего-то нет — вставляем ОДИН комплект (без ?v=, чтобы не плодить варианты)
+    // 3) Единственный комплект с версией исходного файла для обновления кеша
     // ---------------------------------------------------------------------
     if (!$hasCss || !$hasJs) {
-        $cssTag = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/advancedgallery.css" />';
-        $jsTag  = '<script src="'.$assetsBase.'/advancedgallery.js"></script>';
+        $cssTag = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/advancedgallery.css?v='.substr(hash_file('sha256',AF_AG_ASSETS.'advancedgallery.css'),0,16).'" />';
+        $jsTag  = '<script src="'.$assetsBase.'/advancedgallery.js?v='.substr(hash_file('sha256',AF_AG_ASSETS.'advancedgallery.js'),0,16).'"></script>';
 
         // Конфиг нужен и для gallery.php, и для кнопки/модалки в редакторе
         $cfg = [
             'pickerUrl' => $bburl . '/gallery.php?action=picker',
             'dataUrl'   => $bburl . '/gallery.php?action=picker_data',
+            'purposes' => array_keys(ag_system_album_purposes()),
         ];
 
         $cfgTag = '<script>window.AF_GalleryPickerConfig='
@@ -819,12 +815,7 @@ function af_advancedgallery_pre_output(string &$page = ''): void
             $page .= $inject;
         }
 
-        // Финальный проход: ещё раз нормализуем и дедуп (на случай странных инжекторов)
-        $page = preg_replace(
-            '~(advancedgallery\.(?:css|js))(?:\?(?:amp;)?v=\d+|&(amp;)?v=\d+)~iu',
-            '$1',
-            $page
-        );
+        // Финальный дедуп сохраняет content revision в URL.
 
         $seenCss2 = 0;
         $page = preg_replace_callback(

@@ -1,3 +1,5 @@
+> Исправления сохранения/подтверждения, актуальная поддержка WebP и versioning Gallery: [avatar-save-formats-fix.md](avatar-save-formats-fix.md).
+
 # UserCP: единый интерфейс двух аватаров
 
 ## Макет и границы
