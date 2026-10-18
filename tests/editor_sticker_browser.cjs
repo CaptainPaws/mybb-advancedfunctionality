@@ -24,7 +24,8 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=r
   assert.equal(await page.locator('[data-tab=mine]').getAttribute('class'),'af-ae-stikers-tab is-active');
   const before=await page.locator('.af-ae-stiker').count();
   await page.locator('[data-sticker-source]').selectOption('url');
-  await page.locator('[name=sticker_url]').fill('https://images.example.org/browser.png');
+  await page.locator('[name=sticker_title]').fill('Мой внешний GIF');
+  await page.locator('[name=sticker_url]').fill('https://images.example.org/browser.gif');
   await page.getByRole('button',{name:'Добавить по URL',exact:true}).click();
   await page.waitForFunction(n=>document.querySelectorAll('.af-ae-stiker').length===n+1,before);
   assert.match(await usage.innerText(),/0.59 МБ/);
@@ -32,6 +33,13 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=r
   const uploaded=page.locator('.af-ae-stiker').filter({has:page.locator('img[alt^=browser]')});
   await uploaded.locator('[data-del]').click();
   await usage.filter({hasText:'Стикеры: 0.00 МБ / 1.00 МБ'}).waitFor();
+  const externalCard=page.locator('.af-ae-stiker[title="Мой внешний GIF"]');
+  assert.equal(await externalCard.locator('.af-ae-stiker-source').innerText(),'URL');
+  await externalCard.locator('.af-ae-stiker-unavailable').waitFor();
+  // Turn deletion mode off before inserting the external sticker through the same command.
+  await page.locator('#af-ae-stiker-toggle').click();
+  await page.locator('.af-ae-stiker[title="Мой внешний GIF"]').click();
+  assert.equal(await page.evaluate(()=>window.insertedSticker),'[img]https://images.example.org/browser.gif[/img]');
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.goto(origin+'/?action=page&uid=8&group=4');

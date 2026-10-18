@@ -38,12 +38,35 @@ class StickerTestDB {
 }
 
 function verify_post_check($key,$silent=false) {return $key==='fixture-key';}
+function rebuild_settings() {}
 function is_moderator($fid=0,$action='',$uid=0) {return $uid===9;}
 function check($value,$message) {if(!$value) throw new RuntimeException($message);}
 $db=new StickerTestDB();
 $mybb=(object)['user'=>['uid'=>(int)($_GET['uid']??7),'usergroup'=>(int)($_GET['group']??2),'additionalgroups'=>(string)($_GET['additional']??'')],'usergroup'=>[],'settings'=>['bburl'=>'http://127.0.0.1:8102'],'request_method'=>strtolower($_SERVER['REQUEST_METHOD']??'get'),'input'=>$_POST+$_GET];
+if(PHP_SAPI==='cli' && ($argv[1]??'')==='--lifecycle') {
+ define('AF_ADDONS',dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/');
+ require dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/advancededitor/advancededitor.php';
+} else {
 require dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/stikers/stikers.php';
+}
+class StickerFixtureInspector extends AF_AE_StickerRemote {
+ protected function addresses(string $host): array {return $host==='images.example.org'?['93.184.216.34']:['127.0.0.1'];}
+ protected function read(string $url,string $host,string $ip): array {
+  $gif=str_ends_with(parse_url($url,PHP_URL_PATH),'.gif');
+  return ['status'=>200,'mime'=>$gif?'image/gif':'image/png','body'=>base64_decode($gif?'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7':'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6l8AAAAASUVORK5CYII=')];
+ }
+}
+$GLOBALS['af_ae_sticker_remote_inspector']=new StickerFixtureInspector();
 if(PHP_SAPI==='cli') {
+ if(($argv[1]??'')==='--lifecycle') {
+  $db->write_query('CREATE TABLE IF NOT EXISTS test_settings (sid INT AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191),title VARCHAR(191),description TEXT,optionscode TEXT,value TEXT,disporder INT,gid INT)');
+  $db->write_query('CREATE TABLE IF NOT EXISTS test_settinggroups (gid INT AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191),title VARCHAR(191),description TEXT,disporder INT,isdefault INT)');
+  $before=(int)$db->fetch_field($db->simple_select(AF_AE_STIKERS_TABLE,'COUNT(*) AS n',"source='url'"),'n');
+  check($before>0,'Need persisted external fixtures');
+  af_advancededitor_uninstall();af_advancededitor_activate();af_advancededitor_activate();
+  check((int)$db->fetch_field($db->simple_select(AF_AE_STIKERS_TABLE,'COUNT(*) AS n',"source='url'"),'n')===$before,'Reinstall lost external references');
+  echo "Sticker uninstall/reinstall preserves external references and catalog tables.\n";
+ }
  if(($argv[1]??'')==='--init') {
   foreach([AF_AE_STIKERS_TABLE,AF_AE_STIKERS_CATEGORY_TABLE,AF_AE_STIKERS_RECENT_TABLE,'usergroups'] as $table) $db->write_query('DROP TABLE IF EXISTS '.TABLE_PREFIX.$table);
   $db->write_query('CREATE TABLE test_usergroups (gid INT PRIMARY KEY,cancp INT DEFAULT 0,issupermod INT DEFAULT 0)');
@@ -60,6 +83,13 @@ if(PHP_SAPI==='cli') {
   check((int)$db->fetch_field($db->simple_select(AF_AE_STIKERS_TABLE,'SUM(uid) AS n'),'n')===0,'Migration guessed legacy owners');
   $db->update_query(AF_AE_STIKERS_TABLE,['uid'=>7],"slug='legacy' OR slug='system'");
   check(af_ae_sticker_usage(7)['used_bytes']===100,'Legacy bytes/system exclusion');
+  $legacyUrl='http://images.example.org/legacy.gif';
+  $db->insert_query(AF_AE_STIKERS_TABLE,['title'=>'legacy URL','slug'=>'legacy_url','path'=>'','url'=>$legacyUrl,'is_user_sticker'=>1,'uid'=>7]);
+  $db->write_query('ALTER TABLE '.TABLE_PREFIX.AF_AE_STIKERS_TABLE.' DROP COLUMN source');
+  af_advancededitor_stikers_ensure_schema();
+  $legacyRow=$db->fetch_array($db->simple_select(AF_AE_STIKERS_TABLE,'*',"slug='legacy_url'"));
+  check($legacyRow['source']==='url' && $legacyRow['url']===$legacyUrl && (int)$legacyRow['uid']===7,'Source migration changed an existing URL or owner');
+
   af_advancededitor_stikers_save_settings(['thumb_size'=>70],$message);
   af_advancededitor_stikers_ensure_schema();
   check(af_advancededitor_stikers_get_settings()['user_quota_mb']===1 && af_advancededitor_stikers_get_settings()['thumb_size']===70,'Repeated ensure/save reset quotas');
@@ -72,6 +102,6 @@ if(($_GET['action']??'')==='js') {header('Content-Type: application/javascript')
 if(($_GET['action']??'')==='page') {
  $config=af_advancededitor_stikers_get_client_config();
  foreach(['listUrl','uploadUrl','deleteUrl','recentUrl'] as $key) $config[$key].='&'.http_build_query(['uid'=>$mybb->user['uid'],'group'=>$mybb->user['usergroup'],'additional'=>$mybb->user['additionalgroups']]);
- echo '<!doctype html><meta charset="utf-8"><script>window.afAePayload={postKey:"fixture-key",stikers:'.json_encode($config).'};window.af_modal={open:function(o){document.body.innerHTML=o.html;},close:function(){}};</script><script src="?action=js"></script><button onclick="af_ae_stikers_exec({insert:function(){}})">Стикеры</button>';exit;
+ echo '<!doctype html><meta charset="utf-8"><script>window.afAePayload={postKey:"fixture-key",stikers:'.json_encode($config).'};window.af_modal={open:function(o){document.body.innerHTML=o.html;},close:function(){}};</script><script src="?action=js"></script><button onclick="af_ae_stikers_exec({insert:function(code){window.insertedSticker=code;}})">Стикеры</button>';exit;
 }
 af_advancededitor_stikers_handle_ajax();

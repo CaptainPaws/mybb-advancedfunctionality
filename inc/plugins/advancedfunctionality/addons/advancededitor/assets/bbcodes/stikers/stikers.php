@@ -374,6 +374,15 @@ function af_advancededitor_stikers_ensure_schema(): void
             return [];
         });
     }
+    if (!$db->field_exists('source', AF_AE_STIKERS_TABLE)) {
+        af_ae_sticker_locked(0, static function() use ($db) {
+            if (!$db->field_exists('source', AF_AE_STIKERS_TABLE)) {
+                $db->write_query("ALTER TABLE ".TABLE_PREFIX.AF_AE_STIKERS_TABLE." ADD source VARCHAR(16) NOT NULL DEFAULT 'local'");
+                $db->write_query("UPDATE ".TABLE_PREFIX.AF_AE_STIKERS_TABLE." SET source='url' WHERE is_user_sticker=1 AND path='' AND url REGEXP '^https?://'");
+            }
+            return [];
+        });
+    }
     af_advancededitor_stikers_ensure_default_category();
 }
 
@@ -668,7 +677,7 @@ function af_advancededitor_stikers_get_front_payload(int $uid): array
     if ($uid > 0) {
         $uq = $db->simple_select(
             AF_AE_STIKERS_TABLE,
-            'id,title,url',
+            'id,title,url,source',
             "is_user_sticker=1 AND uid={$uid}",
             ['order_by' => 'id', 'order_dir' => 'DESC']
         );
@@ -678,6 +687,7 @@ function af_advancededitor_stikers_get_front_payload(int $uid): array
                 'id' => (int)$r['id'],
                 'title' => (string)$r['title'],
                 'url' => (string)$r['url'],
+                'source' => (string)$r['source'],
             ];
         }
     }
@@ -693,7 +703,8 @@ function af_advancededitor_stikers_get_front_payload(int $uid): array
                 r.used_at,
                 s.id AS sticker_exists,
                 s.title,
-                s.url
+                s.url,
+                s.source
              FROM " . TABLE_PREFIX . AF_AE_STIKERS_RECENT_TABLE . " r
              LEFT JOIN " . TABLE_PREFIX . AF_AE_STIKERS_TABLE . " s
                ON s.id = r.sticker_id
@@ -728,6 +739,7 @@ function af_advancededitor_stikers_get_front_payload(int $uid): array
 
             $recent[] = [
                 'id' => $stickerId,
+                'source' => (string)($r['source'] ?? 'local'),
                 'title' => (string)($r['title'] ?: 'Стикер'),
                 'url' => $url,
             ];
@@ -867,7 +879,9 @@ function af_advancededitor_stikers_handle_ajax(): bool
         try {
             $external=$mybb->input['sticker_url'] ?? '';
             if (!is_string($external)) throw new RuntimeException('Некорректная ссылка на стикер.');
-            $data=af_ae_sticker_save($uid,isset($_FILES['sticker']) && is_array($_FILES['sticker']) ? $_FILES['sticker'] : null,trim($external));
+            $name=$mybb->input['sticker_title'] ?? '';
+            if (!is_string($name)) throw new RuntimeException('Некорректное название стикера.');
+            $data=af_ae_sticker_save($uid,isset($_FILES['sticker']) && is_array($_FILES['sticker']) ? $_FILES['sticker'] : null,trim($external),$name);
             $result=['success'=>true,'message'=>'Стикер добавлен.','data'=>$data];
         } catch (Throwable $e) {
             $result=['success'=>false,'message'=>get_class($e)===RuntimeException::class ? $e->getMessage() : 'Не удалось сохранить стикер.','data'=>null];

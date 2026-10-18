@@ -309,8 +309,9 @@
     }
 
     return '<div class="af-ae-stikers-grid">' + items.map(function (s) {
-      return '<button type="button" class="af-ae-stiker" data-id="' + Number(s.id || 0) + '" data-url="' + htmlEscape(s.url || '') + '" title="' + htmlEscape(s.title || '') + '">' +
+      return '<button type="button" class="af-ae-stiker" data-id="' + Number(s.id || 0) + '" data-external="'+(s.source==='url'?'1':'0')+'" data-url="' + htmlEscape(s.url || '') + '" title="' + htmlEscape(s.title || '') + '">' +
         '<img src="' + htmlEscape(s.url || '') + '" alt="' + htmlEscape(s.title || '') + '">' +
+        (s.source==='url' ? '<span class="af-ae-stiker-source" title="Внешний стикер">URL</span>' : '') +
         (removable ? '<span class="af-ae-stiker-del" data-del="1">×</span>' : '') +
         '</button>';
     }).join('') + '</div>';
@@ -368,6 +369,13 @@
         '<div class="af-ae-stikers-body"></div>' +
       '</div>';
 
+    wrap.addEventListener('error',function(event){
+      var image=event.target, card=image.closest && image.closest('.af-ae-stiker[data-external="1"]');
+      if(!card || image.tagName!=='IMG') return;
+      image.style.display='none';
+      if(card.querySelector('.af-ae-stiker-unavailable')) return;
+      var fallback=document.createElement('span');fallback.className='af-ae-stiker-unavailable';fallback.textContent='Недоступен';fallback.setAttribute('role','img');fallback.setAttribute('aria-label','Внешний стикер недоступен');card.appendChild(fallback);
+    },true);
     document.body.appendChild(wrap);
 
     function close() {
@@ -464,7 +472,7 @@
               '</label>' +
               '<button type="button" class="af-ae-stikers-btn af-ae-stikers-gear-btn" id="af-ae-stiker-toggle" title="Режим удаления">⚙</button>' +
             '</div>'+
-            (data.sizes && Number(data.sizes.allow_external)===1 ? '<form class="af-ae-stikers-url"><label>URL изображения <input type="url" name="sticker_url" placeholder="https://…" required></label><button class="af-ae-stikers-btn" type="submit">Добавить по URL</button><small>Сохраняется только ссылка. Квота не расходуется.</small></form>' : '');
+            (data.sizes && Number(data.sizes.allow_external)===1 ? '<form class="af-ae-stikers-url"><label>Название <input type="text" name="sticker_title" maxlength="60" placeholder="Мой стикер"></label><label>URL изображения <input type="url" name="sticker_url" placeholder="https://…" required></label><button class="af-ae-stikers-btn" type="submit">Добавить по URL</button><small>Сохраняется только ссылка. Квота не расходуется.</small></form>' : '');
         }
 
         bodyEl.innerHTML = extra + renderGrid(
@@ -550,7 +558,7 @@
             }
 
             insertSticker(ed, url);
-            pushLocalRecent({ id: id, url: url, title: '' });
+            pushLocalRecent({ id: id, url: url, title: '', source: btn.getAttribute('data-external')==='1'?'url':'local' });
 
             var fd2 = new FormData();
             fd2.append('sticker_id', String(id));

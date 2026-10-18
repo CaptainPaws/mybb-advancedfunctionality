@@ -187,3 +187,6 @@
 
 .af-ae-stikers-source { display:flex; align-items:center; flex-wrap:wrap; gap:.5em; margin-block:.5em; }
 .af-ae-stikers-url small { flex-basis:100%; opacity:.8; }
+
+.af-ae-stiker-source { position:absolute; bottom:1px; left:3px; font-size:9px; padding:1px 3px; border-radius:3px; background:#2d3138; color:#fff; }
+.af-ae-stiker-unavailable { display:grid; place-items:center; width:var(--af-ae-stiker-thumb-size,50px); min-height:50px; font-size:10px; overflow-wrap:anywhere; color:inherit; }

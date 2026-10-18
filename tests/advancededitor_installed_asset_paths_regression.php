@@ -36,3 +36,7 @@ if (!preg_match('/stikers\.js\?v=[a-f0-9]{16}$/',$stickerJs)) {
     throw new RuntimeException('Sticker lazy runtime lacks content-based cache invalidation: '.$stickerJs);
 }
 echo "PASS: sticker lazy runtime URL includes a content hash\n";
+
+$stickerCss=$packs['packs']['stikers']['assets']['css'][0] ?? '';
+if (!preg_match('/stikers\.css\?v=[a-f0-9]{16}$/',$stickerCss)) throw new RuntimeException('Sticker source/fallback CSS lacks content-based cache invalidation');
+echo "PASS: sticker stylesheet URL includes a content hash\n";

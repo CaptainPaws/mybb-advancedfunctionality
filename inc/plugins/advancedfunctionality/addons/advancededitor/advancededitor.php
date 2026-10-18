@@ -1682,15 +1682,7 @@ function af_advancededitor_uninstall(): void
     if ($db->table_exists(AF_AE_TABLE)) {
         $db->drop_table(AF_AE_TABLE);
     }
-    if ($db->table_exists(AF_AE_STIKERS_RECENT_TABLE)) {
-        $db->drop_table(AF_AE_STIKERS_RECENT_TABLE);
-    }
-    if ($db->table_exists(AF_AE_STIKERS_TABLE)) {
-        $db->drop_table(AF_AE_STIKERS_TABLE);
-    }
-    if ($db->table_exists(AF_AE_STIKERS_CATEGORY_TABLE)) {
-        $db->drop_table(AF_AE_STIKERS_CATEGORY_TABLE);
-    }
+    // Preserve the sticker library (including external references) across reinstall.
 
     // настройки + группа
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_LAYOUT) . "'");
@@ -2709,6 +2701,9 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
 
                 $resolvedCss = af_advancededitor_feature_css_url($fileRel);
                 if ($resolvedCss !== '') {
+                    if ($fileRel === 'assets/bbcodes/stikers/stikers.css' && is_file($addonBaseFs . '/' . $fileRel)) {
+                        $resolvedCss .= (strpos($resolvedCss, '?') === false ? '?' : '&') . 'v=' . substr(hash_file('sha256', $addonBaseFs . '/' . $fileRel), 0, 16);
+                    }
                     $packCss[] = $resolvedCss;
                 }
             }

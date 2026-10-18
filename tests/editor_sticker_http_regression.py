@@ -66,3 +66,14 @@ assert not upload(PNG)['success']
 assert call('af_ae_stikers_delete',dict(id=large['data']['id']))['success']
 assert listing()['storage']['used_bytes']==100
 print('Sticker HTTP passed: actual bytes/formats, parallel quota enforcement, UID/CSRF, staff groups/forum moderation, URL toggle, no local URL bytes, over-quota preservation and deletion.')
+
+external_gif=call('af_ae_stikers_upload',dict(sticker_url='https://images.example.org/verified.gif',sticker_title='Мой GIF'))
+assert external_gif['success'],external_gif
+record=next(s for s in listing()['user_stickers'] if s['id']==external_gif['data']['id'])
+assert record['source']=='url' and record['title']=='Мой GIF',record
+assert listing()['storage']['used_bytes']==100
+assert not any(s['id']==record['id'] for s in listing(8)['user_stickers'])
+for url in ['http://images.example.org/image.png','https://127.0.0.1/image.png','https://[::1]/image.png','https://private.example.org/image.png']:
+    assert not call('af_ae_stikers_upload',dict(sticker_url=url))['success'],url
+assert call('af_ae_stikers_delete',dict(id=record['id']))['success']
+print('External sticker HTTP passed: HTTPS/public destinations, title/source persistence, GIF support, owner isolation, metadata-only deletion and no quota bytes.')

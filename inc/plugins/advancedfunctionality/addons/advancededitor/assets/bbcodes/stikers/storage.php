@@ -1,5 +1,6 @@
 <?php
 if (!defined('IN_MYBB')) die('No direct access');
+require_once __DIR__.'/external.php';
 
 function af_ae_sticker_staff(): bool
 {
@@ -49,26 +50,25 @@ function af_ae_sticker_locked(int $uid, callable $operation): array
     finally {$db->write_query("SELECT RELEASE_LOCK('{$escaped}')");}
 }
 
-function af_ae_sticker_save(int $uid, ?array $file, string $external=''): array
+function af_ae_sticker_save(int $uid, ?array $file, string $external='', string $name=''): array
 {
     global $db;
     if ($uid<=0) throw new RuntimeException('Требуется авторизация.');
     $settings=af_advancededitor_stikers_get_settings();
-    $remote=$external!=='';
+    $remote=$external!=='';$metadata=[];
     if ($remote) {
         if (!$settings['allow_external']) throw new RuntimeException('Внешние стикеры отключены.');
-        $url=filter_var($external,FILTER_VALIDATE_URL);
-        $parts=$url?parse_url($url):false;
-        if (!$parts || !in_array(strtolower($parts['scheme'] ?? ''),['https','http'],true) || isset($parts['user']) || isset($parts['pass']) || strlen($url)>255 || preg_match('/[\x00-\x20\\\\]/',$url)) throw new RuntimeException('Укажите прямой HTTP/HTTPS URL изображения.');
-        // URL is stored as a reference only. PHP never fetches it.
+        $metadata=af_ae_sticker_inspect_external($external);
+        $name=trim($name);
+        if (preg_match('//u',$name)!==1 || strlen($name)>240) throw new RuntimeException('Название должно быть в UTF-8, не длиннее 240 байт.');
     } else {
         $error='';
         if (!$file || !af_advancededitor_stikers_is_allowed_upload($file,$error,true)) throw new RuntimeException($error ?: 'Файл не получен.');
     }
-    return af_ae_sticker_locked($uid,static function() use ($uid,$file,$remote,$external,$db) {
+    return af_ae_sticker_locked($uid,static function() use ($uid,$file,$remote,$external,$db,$metadata,$name) {
         $count=(int)$db->fetch_field($db->simple_select(AF_AE_STIKERS_TABLE,'COUNT(id) AS c',"is_user_sticker=1 AND uid={$uid}"),'c');
         if ($count>=af_advancededitor_stikers_max_per_user()) throw new RuntimeException('Достигнут лимит пользовательских стикеров.');
-        $target='';$ext='';$title='Внешний стикер';$url=$external;
+        $target='';$ext=$metadata['ext'] ?? '';$title=$name!==''?$name:'Внешний стикер';$url=$external;
         if (!$remote) {
             $usage=af_ae_sticker_usage($uid);
             $size=filesize($file['tmp_name']);
@@ -86,7 +86,7 @@ function af_ae_sticker_save(int $uid, ?array $file, string $external=''): array
         // A database driver may terminate the request: do not leave an unregistered original.
         register_shutdown_function(static function() use (&$saved,$target) {if (!$saved && $target!=='') @unlink($target);});
         try {
-            $values=['title'=>$title,'slug'=>$title,'path'=>$target,'url'=>$url,'ext'=>$ext,'is_user_sticker'=>1,'uid'=>$uid,'category_id'=>0,'sortorder'=>0,'created_at'=>TIME_NOW];
+            $values=['title'=>$title,'slug'=>$title,'path'=>$target,'url'=>$url,'ext'=>$ext,'is_user_sticker'=>1,'uid'=>$uid,'category_id'=>0,'sortorder'=>0,'created_at'=>TIME_NOW,'source'=>$remote?'url':'local'];
             $quoted=[];foreach ($values as $value) $quoted[]="'".$db->escape_string((string)$value)."'";
             $ok=$db->write_query('INSERT INTO '.TABLE_PREFIX.AF_AE_STIKERS_TABLE.' (`'.implode('`,`',array_keys($values)).'`) VALUES ('.implode(',',$quoted).')',true);
             if (!$ok) throw new RuntimeException('Не удалось записать стикер.');
