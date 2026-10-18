@@ -18,6 +18,18 @@
  function choose(state,value){state.input.value=JSON.stringify(value);if(!state.ctx.quick)try{localStorage.setItem(state.key,state.input.value);}catch(_){}state.ta.form.dispatchEvent(new CustomEvent('af:mask-changed',{bubbles:true,detail:{pid:state.ctx.pid}}));}
  function clearReserve(state){state.input.value='';try{localStorage.removeItem(state.key);sessionStorage.removeItem(state.key+':pending');}catch(_){}}
  function notice(root,message){let el=root.querySelector('.af-aa-mask-notice');if(!el){el=document.createElement('p');el.className='af-aa-mask-notice';el.setAttribute('role','status');root.append(el);}el.textContent=message;}
+ // ATF owns frame siblings inside the avatar container; runtime HTML owns only the media.
+ function updateAvatar(avatar,html){
+  if(!avatar||typeof html!=='string')return;
+  const incoming=document.createElement('template');incoming.innerHTML=html;
+  // Preview restores can include the original container contents, including its frame.
+  Array.from(incoming.content.children).filter(el=>el.matches('.atf-gothic-frame')).forEach(el=>el.remove());
+  const media=Array.from(avatar.childNodes).filter(el=>!el.matches?.('.atf-gothic-frame'));
+  const current=document.createElement('template');media.forEach(el=>current.content.append(el.cloneNode(true)));
+  if(current.innerHTML===incoming.innerHTML)return;
+  const frame=Array.from(avatar.children).find(el=>el.matches('.atf-gothic-frame'));
+  media.forEach(el=>el.remove());avatar.insertBefore(incoming.content,frame||null);
+ }
  async function refresh(pid){if(pendingRefresh.has(pid))return pendingRefresh.get(pid);const task=(async()=>{const root=document.getElementById('post_'+pid);if(!root||number(root.dataset.authorUid)!==seed.uid)return;const data=await api('runtime',{pid,tid:0,fid:0});if(!root.isConnected)return;
    root.classList.remove('af-aa-postbit-user-'+seed.uid,'af-aa-postbit-mask-'+pid);root.classList.add(data.masked?'af-aa-postbit-mask-'+pid:'af-aa-postbit-user-'+seed.uid);
    const slot=root.querySelector('.atf-post__slot--before');if(!slot)return;
@@ -26,9 +38,7 @@
    const config=document.createElement('script');config.type='application/json';config.setAttribute('data-af-appearance-post-effects-config','');config.textContent=JSON.stringify(data.canvas);slot.append(config);
    // Keep unchanged avatar nodes (and their listeners); never rebuild the rest of the sidebar.
    for(const [selector,html] of [['.atf-post__primary-avatar-media',data.topbar_html],['.atf-post__secondary-avatar',data.sidebar_html]]){
-    const avatar=root.querySelector(selector);if(!avatar||typeof html!=='string')continue;
-    const template=document.createElement('template');template.innerHTML=html;
-    if(avatar.innerHTML!==template.innerHTML)avatar.replaceChildren(template.content);
+    updateAvatar(root.querySelector(selector),html);
    }
    window.afElementEffects?.refresh();
   })().finally(()=>pendingRefresh.delete(pid));pendingRefresh.set(pid,task);return task;}
@@ -55,5 +65,5 @@
   // The Editor only clears a draft after a confirmed redirect; use the same confirmation for its mask reserve.
   if(/showthread\.php$/.test(location.pathname)&&/^(#pid_?\d+|#post\d+)$/i.test(location.hash))document.querySelectorAll('textarea[name="message"]').forEach(ta=>{const state=attach(ta);try{if(state&&!ta.value.trim()&&sessionStorage.getItem(state.key+':pending')&&sessionStorage.getItem(state.key+':pending')!==location.href&&!document.querySelector('.error,.error_message,.alert--error'))clearReserve(state);}catch(_){}});
   new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(added))).observe(document.body,{subtree:true,childList:true});}
- window.afAppearanceMasks={attach,api,choose,refresh,seed,notice};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+ window.afAppearanceMasks={attach,api,choose,refresh,seed,notice,updateAvatar};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
