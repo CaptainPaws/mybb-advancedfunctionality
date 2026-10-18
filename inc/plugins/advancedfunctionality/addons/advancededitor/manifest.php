@@ -5,7 +5,7 @@
 return [
     'id'       => 'advancededitor',
     'name'     => 'Advanced Editor',
-    'version'  => '1.1.6',
+    'version'  => '1.1.7',
     'author'   => 'CaptainPaws',
     'bootstrap'=> 'advancededitor.php',
 

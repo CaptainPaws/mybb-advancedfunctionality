@@ -35,7 +35,7 @@ function af_ae_sticker_usage(int $uid): array
     $settings=af_advancededitor_stikers_get_settings();
     $limit=(int)$settings['user_quota_mb']*1048576;
     if ($settings['staff_exempt'] && af_ae_sticker_staff()) $limit=0;
-    return ['used_bytes'=>$used,'limit_bytes'=>$limit,'available_bytes'=>$limit>0?max(0,$limit-$used):null,'full'=>$limit>0 && $used>=$limit];
+    return ['percent'=>$limit>0?min(100,round($used/$limit*100,2)):null,'used_bytes'=>$used,'limit_bytes'=>$limit,'available_bytes'=>$limit>0?max(0,$limit-$used):null,'full'=>$limit>0 && $used>=$limit];
 }
 
 function af_ae_sticker_locked(int $uid, callable $operation): array

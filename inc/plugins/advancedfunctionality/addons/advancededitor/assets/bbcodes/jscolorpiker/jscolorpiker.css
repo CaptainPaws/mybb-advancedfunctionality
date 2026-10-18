@@ -73,6 +73,14 @@
   position: relative;
 }
 
+.af-ae-jscolor-title { display:flex; align-items:center; justify-content:space-between; gap:8px; padding-bottom:7px; border-bottom:1px solid var(--atf-color-border,#bbb); }
+.af-ae-jscolor-close { font-size:18px; line-height:1; cursor:pointer; }
+.af-ae-jscolor-popup { min-width:0; width:300px; max-width:calc(100vw - 16px); max-height:calc(100dvh - 16px); overflow:auto; }
+body.atf-active .af-ae-jscolor-popup { padding:13px; }
+body.atf-active .af-ae-jscolor-preview { border-color:var(--atf-color-border-strong); border-radius:3px; }
+body.atf-active .af-ae-jscolor-title { color:var(--atf-color-accent); }
+body.atf-active .af-ae-jscolor-popup .af-ae-jscolor-close { background:transparent; border:0; padding:3px 6px; }
+
 .af-ae-jscolor-host .jscolor-picker,
 .af-ae-jscolor-host .jscolor-wrap,
 .af-ae-jscolor-host #jscolor-palette {

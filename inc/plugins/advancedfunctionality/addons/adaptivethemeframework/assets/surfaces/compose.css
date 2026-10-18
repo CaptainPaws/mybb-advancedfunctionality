@@ -71,7 +71,7 @@ body.atf-active .sceditor-container :is( textarea.sceditor-source) {
   width: 100% !important;
   color: var(--atf-color-text) !important;
   caret-color: var(--atf-color-accent);
-  background: var(--atf-color-surface) !important;
+  background: var(--af-ae-editor-surface, var(--atf-color-surface)) !important;
   border: 0 !important;
   border-radius: 0 0 var(--atf-radius-md) var(--atf-radius-md);
   font: inherit;

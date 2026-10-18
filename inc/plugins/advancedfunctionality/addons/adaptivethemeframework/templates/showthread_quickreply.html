@@ -1,6 +1,6 @@
 <div id="quickreply_spinner" class="showthread_spinner" style="display: none"><img src="{$theme['imgdir']}/spinner.gif" alt="" /></div>
 {$moderation_notice}
-<form method="post" action="newreply.php?tid={$tid}&amp;processed=1" name="quick_reply_form" id="quick_reply_form" class="atf-card atf-editor atf-quick-reply">
+<form method="post" action="newreply.php?tid={$tid}&amp;processed=1" name="quick_reply_form" id="quick_reply_form" class="atf-card atf-editor atf-quick-reply atf-ornate">
   <input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
   <input type="hidden" name="subject" value="RE: {$reply_subject}" />
   <input type="hidden" name="action" value="do_newreply" />
@@ -10,14 +10,18 @@
   <input type="hidden" name="from_page" value="{$page}" />
   <input type="hidden" name="tid" value="{$tid}" />
   <input type="hidden" name="method" value="quickreply" />
+  <span class="atf-gothic-frame" aria-hidden="true"><i class="atf-gothic-corner atf-gothic-corner--tl"></i><i class="atf-gothic-corner atf-gothic-corner--tr"></i><i class="atf-gothic-corner atf-gothic-corner--bl"></i><i class="atf-gothic-corner atf-gothic-corner--br"></i></span>
   <header class="atf-quick-reply__header"><strong>{$lang->quick_reply}</strong><span class="smalltext">{$lang->message_note}</span></header>
   <div style="{$collapsed['quickreply_e']}" id="quickreply_e" class="atf-quick-reply__body">
     <div class="atf-quick-reply__editor"><textarea rows="8" cols="80" name="message" id="message" tabindex="1"></textarea></div>
     <div class="editor_control_bar atf-quick-reply__multiquote" style="display: none;" id="quickreply_multiquote"><span class="smalltext">{$lang->quickreply_multiquote_selected} <a href="./newreply.php?tid={$tid}&amp;load_all_quotes=1" onclick="return Thread.loadMultiQuoted();">{$lang->quickreply_multiquote_now}</a> {$lang->or} <a href="javascript:void(0)" onclick="Thread.clearMultiQuoted(); return false;">{$lang->quickreply_multiquote_deselect}</a>.</span></div>
     <table class="atf-quick-reply__captcha"><tbody>{$captcha}</tbody></table>
     <footer class="atf-quick-reply__footer">
-      <div class="atf-quick-reply__options">{$option_signature}<label><input type="checkbox" class="checkbox" name="postoptions[disablesmilies]" value="1" /> <span>{$lang->disable_smilies}</span></label>{$closeoption}</div>
-      <div class="atf-quick-reply__actions"><input type="submit" class="button" value="{$lang->post_reply}" tabindex="2" accesskey="s" id="quick_reply_submit" /> <input type="submit" class="button" name="previewpost" value="{$lang->preview_post}" tabindex="3" /></div>
+      <details class="atf-quick-reply__settings" data-atf-quick-settings>
+        <summary aria-expanded="false" aria-controls="atf-quick-reply-options">Дополнительные настройки<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+        <div id="atf-quick-reply-options" class="atf-quick-reply__options">{$option_signature}<label><input type="checkbox" class="checkbox" name="postoptions[disablesmilies]" value="1" /> <span>{$lang->disable_smilies}</span></label>{$closeoption}</div>
+      </details>
+      <div class="atf-quick-reply__actions"><input type="submit" class="button" name="previewpost" value="{$lang->preview_post}" tabindex="2" /> <input type="submit" class="button" value="{$lang->post_reply}" tabindex="3" accesskey="s" id="quick_reply_submit" /></div>
     </footer>
   </div>
 </form>

@@ -375,6 +375,7 @@
         popup.setAttribute('data-af-popup-owner', ta.id || ta.name);
         popup.appendChild(node);
         document.body.appendChild(popup);
+        if (window.afAtfDecorateSurface) window.afAtfDecorateSurface(popup);
         // Browser top layer also sits above a fullscreen shell. Neither UI
         // node is reparented on mode/fullscreen transitions.
         if (typeof popup.showPopover === 'function') {
@@ -705,10 +706,7 @@
       helpButton.setAttribute('data-af-command', 'af_formathelp');
       helpButton.title = help.title || 'Подсказка по форматированию';
       helpButton.setAttribute('aria-label', helpButton.title);
-      var helpIcon = document.createElement('i');
-      helpIcon.className = 'fa-regular fa-circle-question';
-      helpIcon.setAttribute('aria-hidden', 'true');
-      helpButton.appendChild(helpIcon);
+      helpButton.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.7 2.2c-1.2.7-1.2 1.3-1.2 2.3M12 17h.01"/></svg>';
       counter.querySelector('.af-ccp-bar').prepend(helpButton);
     }
     if (counter && counter.classList.contains('af-ccp-wrap')) {

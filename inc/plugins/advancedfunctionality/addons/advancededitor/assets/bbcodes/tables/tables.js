@@ -1162,7 +1162,7 @@
   function createCompactField(iconSvg, label, controlHtml, extraClass) {
     return [
       '<label class="af-ae-tables-dropdown__field' + (extraClass ? ' ' + extraClass : '') + '" title="' + escHtml(label) + '">',
-      '  <span class="af-ae-tables-dropdown__fieldhead">' + createIconLabel(iconSvg, label) + '</span>',
+      '  <span class="af-ae-tables-dropdown__fieldhead"><span class="af-ae-tables-dropdown__field-label">' + escHtml(label) + '</span></span>',
       controlHtml,
       '</label>'
     ].join('');
@@ -1202,7 +1202,7 @@
   function createColorField(name, label, placeholder, iconKey) {
     return [
       '<label class="af-ae-color-chip" title="' + escHtml(label) + '">',
-      '  <span class="af-ae-color-chip__label">' + createIconLabel(ICONS[iconKey], label) + '</span>',
+      '  <span class="af-ae-color-chip__label">' + escHtml(label) + '</span>',
       '  <div class="af-ae-color af-ae-color--chip">',
       '    <input class="af-ae-color__value" type="text" name="' + name + '" value="" placeholder="' + placeholder + '">',
       '    <button type="button" class="af-ae-color__pick" data-af-color-for="' + name + '" aria-label="' + escHtml(label) + '"></button>',
@@ -1635,7 +1635,7 @@
       createCompactField(ICONS.cellwidth, 'Ширина колонок',
         '<input type="text" name="cellwidth" value="" placeholder="160px">'),
       createCompactField(ICONS.align, 'Выравнивание таблицы',
-        '<select name="align"><option value="left">L</option><option value="center" selected>C</option><option value="right">R</option></select>'),
+        '<select name="align"><option value="left">Слева</option><option value="center" selected>По центру</option><option value="right">Справа</option></select>'),
       createCompactField(ICONS.headers, 'Заголовки',
         '<select name="headers"><option value="none" selected>Нет</option><option value="col">Строка</option><option value="row">Столбец</option><option value="both">Оба</option></select>'),
       createCompactField(ICONS.borderwidth, 'Ширина границы',
@@ -1754,11 +1754,19 @@
     }
 
     if (dropdown) {
-      dropdown.style.overflow = 'visible';
-      dropdown.style.maxWidth = 'none';
-      if (dropdown.offsetWidth < 460) {
-        dropdown.style.width = '460px';
-      }
+      dropdown.style.overflow = 'auto';
+      dropdown.style.width = 'min(540px, calc(100vw - 16px))';
+      dropdown.style.maxWidth = 'calc(100vw - 16px)';
+      dropdown.style.maxHeight = 'calc(100dvh - 16px)';
+      if (window.afAtfDecorateSurface) window.afAtfDecorateSurface(dropdown);
+      // Native SCEditor and the source adapter both retain their own close handler.
+      var bounds = dropdown.getBoundingClientRect();
+      var fixed = getComputedStyle(dropdown).position === 'fixed';
+      var anchor = caller && caller.jquery ? caller[0] : caller;
+      var rect = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : bounds;
+      var top = rect.bottom + bounds.height + 6 > innerHeight ? rect.top - bounds.height - 6 : rect.bottom + 6;
+      dropdown.style.left = (Math.max(8, Math.min(rect.left, innerWidth - bounds.width - 8)) + (fixed ? 0 : window.scrollX)) + 'px';
+      dropdown.style.top = (Math.max(8, Math.min(top, innerHeight - bounds.height - 8)) + (fixed ? 0 : window.scrollY)) + 'px';
     }
 
     openBuilderState(node, dropdown || null, target);

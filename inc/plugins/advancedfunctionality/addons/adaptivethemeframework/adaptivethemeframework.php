@@ -22,7 +22,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.32.8');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.32.9');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1613,6 +1613,7 @@ function af_adaptivethemeframework_compose_thread_browsers(): void
     }
     $uids = array_values(array_unique(array_filter(array_map('intval', array_keys((array)($doneusers ?? []))))));
     $avatars = '';
+    $visibleCount = 0;
     if ($uids) {
         $query = $db->simple_select(
             'users',
@@ -1632,6 +1633,8 @@ function af_adaptivethemeframework_compose_thread_browsers(): void
             if (!$visible) {
                 continue;
             }
+            ++$visibleCount;
+            if ($visibleCount > 8) continue;
             $username = trim(strip_tags((string)($user['username'] ?? '')));
             $avatar = trim((string)($user['avatar'] ?? ''));
             if ($avatar === '') {
@@ -1664,14 +1667,25 @@ function af_adaptivethemeframework_compose_thread_browsers(): void
         return;
     }
 
+    if ($visibleCount > 8) $avatars .= '<span class="atf-thread-browser atf-thread-browser--more" title="Ещё участников: '.($visibleCount-8).'">+'.($visibleCount-8).'</span>';
     $labelText = isset($lang->users_browsing_thread)
         ? rtrim(strip_tags((string)$lang->users_browsing_thread), " \t\n\r\0\x0B:")
         : 'Пользователи, просматривающие тему';
     $usersbrowsing = '<div class="atf-thread-browsers">'
-        . '<span class="atf-thread-browsers__label">' . htmlspecialchars_uni($labelText) . '</span>'
+        . '<span class="atf-thread-browsers__label">' . htmlspecialchars_uni($labelText) . ' <span class="atf-thread-browsers__count">'.$visibleCount.'</span></span>'
         . '<span class="atf-thread-browsers__avatars">' . $avatars . '</span>'
         . ($meta ? '<span class="atf-thread-browsers__meta">' . htmlspecialchars_uni(implode(' · ', $meta)) . '</span>' : '')
         . '</div>';
+}
+
+/** Present native thread actions as labelled SVG buttons without changing their URLs. */
+function af_adaptivethemeframework_thread_tool(string $html, string $path): string
+{
+    return (string)preg_replace_callback('~<a\b([^>]*)>(.*?)</a>~is', static function ($match) use ($path) {
+        $label = htmlspecialchars_uni(trim(html_entity_decode(strip_tags($match[2]), ENT_QUOTES, 'UTF-8')));
+        $attributes = preg_replace('~\s+(?:title|aria-label)\s*=\s*(?:"[^"]*"|\'[^\']*\')~i', '', $match[1]);
+        return '<a'.$attributes.' title="'.$label.'" aria-label="'.$label.'"><svg class="atf-thread-tool__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'.$path.'</svg><span class="atf-thread-tool__label">'.$label.'</span></a>';
+    }, $html);
 }
 
 /** Compose the showthread shell after core has prepared all native values. */
@@ -1686,6 +1700,10 @@ function af_adaptivethemeframework_compose_showthread(): void
         return;
     }
     af_adaptivethemeframework_compose_thread_browsers();
+    $printthread = af_adaptivethemeframework_thread_tool((string)$printthread, '<path d="M7 8V3h10v5M7 17H4V9h16v8h-3M7 14h10v7H7zM17 11h.01"/>');
+    $sendthread = af_adaptivethemeframework_thread_tool((string)$sendthread, '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/>');
+    $addremovesubscription = af_adaptivethemeframework_thread_tool((string)$addremovesubscription, '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>');
+    $addpoll = af_adaptivethemeframework_thread_tool((string)$addpoll, '<path d="M4 21V10h4v11M10 21V3h4v18M16 21V7h4v14"/>');
     // The stock header contains the same late-bound token. Move it rather than
     // duplicating the breadcrumb trail in the ATF shell.
     $header = str_replace('<navigation>', '', (string)$header);

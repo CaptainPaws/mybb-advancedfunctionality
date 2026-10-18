@@ -517,3 +517,27 @@
 #jscolor-palette {
   z-index: 100000 !important;
 }
+/* ATF uses the shared dropdown surface; keep all existing builder controls. */
+body.atf-active .af-ae-tables-dropdown {
+  min-width:0; width:100%; max-width:none; padding:9px;
+  background:transparent; color:var(--atf-color-text); border:0; border-radius:0;
+  box-shadow:none; backdrop-filter:none;
+}
+body.atf-active .af-ae-tables-dropdown__field {
+  padding:5px; gap:5px; border-radius:3px;
+  background:var(--atf-color-surface); border-color:var(--atf-color-border); box-shadow:none;
+}
+body.atf-active .af-ae-tables-dropdown__fieldhead { gap:5px; min-height:24px; }
+.af-ae-tables-dropdown__field-label { font-size:11px; line-height:1.35; }
+body.atf-active .af-ae-tables-dropdown__checkbox,
+body.atf-active .af-ae-tables-dropdown__summary { background:var(--atf-color-surface); border-color:var(--atf-color-border); color:var(--atf-color-text-muted); border-radius:3px; }
+body.atf-active .af-ae-tables-dropdown__summary { font-size:11px; padding:8px; }
+body.atf-active .af-ae-tables-dropdown .af-ae-ui-label { background:transparent; border:0; color:var(--atf-color-accent); }
+@media (max-width:40rem) {
+  body.atf-active .af-ae-tables-dropdown__grid--compact { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  body.atf-active .af-ae-tables-dropdown__colors { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+body.atf-active .af-ae-tables-dropdown__colors { grid-template-columns:repeat(3,minmax(0,1fr)); }
+body.atf-active .af-ae-tables-dropdown .af-ae-color-chip { flex-direction:column; align-items:flex-start; min-width:0; background:var(--atf-color-surface); border-color:var(--atf-color-border); border-radius:3px; color:var(--atf-color-text-muted); font-size:11px; }
+@media (max-width:40rem) { body.atf-active .af-ae-tables-dropdown__colors { grid-template-columns:repeat(2,minmax(0,1fr)); } }

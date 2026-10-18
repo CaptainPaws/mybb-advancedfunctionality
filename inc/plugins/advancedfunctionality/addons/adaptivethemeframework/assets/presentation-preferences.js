@@ -93,3 +93,22 @@
   };
   window.afAtfInitializeSignatures();
 })();
+
+/* Explicitly called by lazy feature dialogs; no DOM observer or editor runtime. */
+window.afAtfDecorateSurface = function (surface) {
+  if (!surface || !document.body.classList.contains('atf-active')) return;
+  surface.classList.add('atf-ornate');
+  if (surface.querySelector(':scope > .atf-gothic-frame')) return;
+  var frame = document.createElement('span');
+  frame.className = 'atf-gothic-frame'; frame.setAttribute('aria-hidden', 'true');
+  ['tl', 'tr', 'bl', 'br'].forEach(function (corner) {
+    var node = document.createElement('i');
+    node.className = 'atf-gothic-corner atf-gothic-corner--' + corner;
+    frame.appendChild(node);
+  });
+  surface.appendChild(frame);
+};
+document.addEventListener('toggle', function (event) {
+  if (!event.target.matches?.('details[data-atf-quick-settings]')) return;
+  event.target.querySelector('summary').setAttribute('aria-expanded', String(event.target.open));
+}, true);

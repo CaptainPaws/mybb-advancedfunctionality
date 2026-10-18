@@ -6,7 +6,7 @@ return [
     'id' => 'adaptivethemeframework',
     'name' => 'Adaptive Theme Framework',
     'description' => 'Presentation framework for adaptive AF component-slot layouts.',
-    'version' => '0.32.8',
+    'version' => '0.32.9',
     'author' => 'AdvancedFunctionality',
     'bootstrap' => 'adaptivethemeframework.php',
     'admin' => [
@@ -26,6 +26,12 @@ return [
     // scoped to the routes that use that surface.
     'assets' => ['front' => ['css' => ['assets/adaptivethemeframework.css'], 'js' => []]],
     'theme_stylesheets' => [
+        [
+            'id' => 'gothic_ornaments',
+            'file' => 'assets/ornaments.css',
+            'attach' => [['file' => 'global']],
+            'enabled_setting' => 'af_adaptivethemeframework_enabled',
+        ],
         [
             'id' => 'section_separator',
             'file' => 'assets/section-separator.css',

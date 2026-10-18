@@ -8,7 +8,7 @@
     data: null,
     removeMode: false,
     activeTab: 'recent',
-    uploadSource: 'url'
+    uploadSource: 'file'
   };
 
   function payload() {
@@ -301,11 +301,11 @@
     });
 
     if (loading) {
-      return '<div class="af-ae-stikers-loading">Загрузка...</div>';
+      return '<div class="af-ae-stikers-loading" role="status">Загрузка стикеров…</div>';
     }
 
     if (!items.length) {
-      return '<div class="af-ae-stikers-empty">Пусто</div>';
+      return '<div class="af-ae-stikers-empty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h8m0 0 7-7h-5a2 2 0 0 0-2 2v5ZM8 8h.01M15 8h.01M8 12q3 3 6 0"/></svg><strong>Здесь пока нет стикеров</strong><span>Выберите другую категорию или добавьте свой стикер.</span></div>';
     }
 
     return '<div class="af-ae-stikers-grid">' + items.map(function (s) {
@@ -354,18 +354,23 @@
     ensureStickerRuntimeCss(p);
 
     var old = document.getElementById('af-ae-stikers-modal');
-    if (old) old.remove();
+    if (old) {
+      if (old.afAeClose) old.afAeClose();
+      else old.remove();
+    }
 
+    var previousFocus = document.activeElement;
     var wrap = document.createElement('div');
     wrap.id = 'af-ae-stikers-modal';
     wrap.innerHTML =
       '<div class="af-ae-stikers-backdrop"></div>' +
-      '<div class="af-ae-stikers-modal">' +
+      '<div class="af-ae-stikers-modal" role="dialog" aria-modal="true" aria-labelledby="af-ae-stikers-title">' +
         '<div class="af-ae-stikers-head">' +
-          '<strong>Стикеры</strong>' +
-          '<button type="button" class="af-ae-stikers-close">×</button>' +
+          '<strong id="af-ae-stikers-title">Стикеры</strong>' +
+          '<button type="button" class="af-ae-stikers-close" aria-label="Закрыть"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>' +
         '</div>' +
         '<div class="af-ae-stikers-tabs"></div>' +
+        '<div class="af-ae-stikers-controls"></div>' +
         '<div class="af-ae-stikers-body"></div>' +
       '</div>';
 
@@ -377,12 +382,25 @@
       var fallback=document.createElement('span');fallback.className='af-ae-stiker-unavailable';fallback.textContent='Недоступен';fallback.setAttribute('role','img');fallback.setAttribute('aria-label','Внешний стикер недоступен');card.appendChild(fallback);
     },true);
     document.body.appendChild(wrap);
+    if (window.afAtfDecorateSurface) window.afAtfDecorateSurface(wrap.querySelector('.af-ae-stikers-modal'));
+    function onKeydown(event) {
+      if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+      if (event.key !== 'Tab') return;
+      var nodes = Array.from(wrap.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),[tabindex="0"]')).filter(function (node) { return node.getClientRects().length && !node.closest('[hidden]'); });
+      var first = nodes[0], last = nodes[nodes.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    wrap.addEventListener('keydown', onKeydown);
+    wrap.querySelector('.af-ae-stikers-close').focus();
 
     function close() {
       document.removeEventListener('af:editor-destroyed', onDestroy);
       wrap.remove();
+      if (previousFocus && previousFocus.isConnected) previousFocus.focus();
     }
     function onDestroy(event) { if (event.detail && event.detail.textarea === ed.textarea) close(); }
+    wrap.afAeClose = close;
     document.addEventListener('af:editor-destroyed', onDestroy);
 
     wrap.querySelector('.af-ae-stikers-close').addEventListener('click', close);
@@ -448,6 +466,7 @@
 
       var tabsEl = wrap.querySelector('.af-ae-stikers-tabs');
       var bodyEl = wrap.querySelector('.af-ae-stikers-body');
+      var controlsEl = wrap.querySelector('.af-ae-stikers-controls');
 
       tabsEl.innerHTML = tabs.map(function (t, i) {
         return '<button type="button" class="af-ae-stikers-tab' + (i === 0 ? ' is-active' : '') + '" data-tab="' + t.key + '">' + htmlEscape(t.title) + '</button>';
@@ -460,44 +479,59 @@
         var extra = '';
 
         if (t.key === 'mine' && isAuth()) {
-          var storage=data.storage, mb=function(bytes){return (Number(bytes)/1048576).toFixed(2);};
-          var usage=storage ? 'Стикеры: '+mb(storage.used_bytes)+' МБ'+(storage.limit_bytes>0?' / '+mb(storage.limit_bytes)+' МБ · Осталось: '+mb(storage.available_bytes)+' МБ':' · Без ограничений') : 'Загрузка данных о стикерах…';
-          extra = '<div class="af-ae-stikers-storage" role="status">'+htmlEscape(usage)+'</div>'+
-            (storage && storage.full ? '<p>Квота стикеров исчерпана. Освободите место для новой локальной загрузки.</p>' : '')+
-            (data.sizes && Number(data.sizes.allow_external)===1 ? '<label class="af-ae-stikers-source">Добавить стикер: <select data-sticker-source><option value="url">По внешнему URL</option><option value="file">С устройства</option></select></label>' : '')+
+          var storage = data.storage;
+          var limits = data.limits || p.limits || {};
+          var mb = function (bytes) { return (Number(bytes) / 1048576).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}); };
+          var percent = storage && storage.percent != null ? Number(storage.percent) : null;
+          var usage = storage ? 'Использовано: ' + mb(storage.used_bytes) + (storage.limit_bytes > 0 ? ' / ' + mb(storage.limit_bytes) + ' МБ · Осталось: ' + mb(storage.available_bytes) + ' МБ' : ' МБ · Без ограничений') : 'Загрузка данных о стикерах…';
+          var external = data.sizes && Number(data.sizes.allow_external) === 1;
+          var formats = Array.isArray(limits.ext) ? limits.ext : [];
+          var accept = formats.map(function (ext) { return '.' + ext; }).join(',');
+          extra = '<div class="af-ae-stikers-storage" role="status"><span>' + htmlEscape(usage) + '</span>' +
+            (percent !== null && storage.limit_bytes > 0 ? '<span class="af-ae-stikers-percent">' + Math.round(percent) + '%</span><progress max="100" value="' + percent + '" aria-label="Заполнение квоты стикеров"></progress>' : '') + '</div>' +
+            (storage && storage.full ? '<p class="af-ae-stikers-warning">Квота исчерпана. Удалите локальные стикеры или добавьте внешний URL, если он разрешён.</p>' : '') +
+            (external ? '<div class="af-ae-stikers-source"><select data-sticker-source hidden aria-hidden="true" tabindex="-1"><option value="file">С устройства</option><option value="url">По внешнему URL</option></select><button type="button" data-source="file">С устройства</button><button type="button" data-source="url">По внешнему URL</button></div>' : '') +
             '<div class="af-ae-stikers-tools">' +
-              '<label class="af-ae-stikers-btn af-ae-stikers-upload-btn">' +
-                '<input type="file" id="af-ae-stiker-upload" accept=".webp,.gif,.png,.jpg,.jpeg">' +
-                '<span>Выбрать файл с устройства</span>' +
+              '<label class="af-ae-stikers-upload-btn">' +
+                '<input type="file" id="af-ae-stiker-upload" accept="' + htmlEscape(accept) + '">' +
+                '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16v4h16v-4M12 16V3m-5 5 5-5 5 5"/></svg>' +
+                '<span><strong>Добавить стикер с устройства</strong><small>' + htmlEscape(formats.join(', ').toUpperCase()) + (limits.max_size ? ' · до ' + mb(limits.max_size) + ' МБ' : '') + '</small></span>' +
+                '<span class="af-ae-stikers-file-action">Выбрать файл</span>' +
               '</label>' +
-              '<button type="button" class="af-ae-stikers-btn af-ae-stikers-gear-btn" id="af-ae-stiker-toggle" title="Режим удаления">⚙</button>' +
-            '</div>'+
-            (data.sizes && Number(data.sizes.allow_external)===1 ? '<form class="af-ae-stikers-url"><label>Название <input type="text" name="sticker_title" maxlength="60" placeholder="Мой стикер"></label><label>URL изображения <input type="url" name="sticker_url" placeholder="https://…" required></label><button class="af-ae-stikers-btn" type="submit">Добавить по URL</button><small>Сохраняется только ссылка. Квота не расходуется.</small></form>' : '');
+              '<button type="button" class="af-ae-stikers-btn af-ae-stikers-gear-btn" id="af-ae-stiker-toggle" title="Режим удаления" aria-label="Режим удаления" aria-pressed="' + state.removeMode + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-1 3-3 1-2 4 2 2v4l4 2 3-1 3 1 4-2v-4l2-2-2-4-3-1-1-3z"/><circle cx="12" cy="12" r="3"/></svg></button>' +
+            '</div>' +
+            (external ? '<form class="af-ae-stikers-url"><label for="af-ae-sticker-url">URL изображения</label><input id="af-ae-sticker-url" type="url" name="sticker_url" placeholder="https://…" required><button class="af-ae-stikers-btn" type="submit">Добавить</button><input aria-label="Название стикера" type="text" name="sticker_title" maxlength="60" placeholder="Название (необязательно)"><small>Сохраняется только ссылка. Локальная квота не расходуется.</small></form>' : '');
         }
 
-        bodyEl.innerHTML = extra + renderGrid(
+        controlsEl.innerHTML = extra;
+        controlsEl.hidden = !extra;
+        bodyEl.innerHTML = renderGrid(
           t.list,
           t.key === 'mine' && state.removeMode,
           state.loading && !state.loaded && !state.data
         );
 
-        var urlForm=bodyEl.querySelector('.af-ae-stikers-url');
+        var urlForm=controlsEl.querySelector('.af-ae-stikers-url');
         if(urlForm) urlForm.addEventListener('submit',function(event){
           event.preventDefault();
           var fd=new FormData(urlForm), button=urlForm.querySelector('button');button.disabled=true;
           req(p.uploadUrl,'POST',fd,function(err,res){button.disabled=false;if(err || !res || !res.success){alert((res && res.message) || 'Не удалось добавить ссылку.');return;}loadAndPaint();});
         });
-        var sourceSelect=bodyEl.querySelector('[data-sticker-source]');
-        var fileLabel=bodyEl.querySelector('.af-ae-stikers-upload-btn');
+        var sourceSelect=controlsEl.querySelector('[data-sticker-source]');
+        var fileLabel=controlsEl.querySelector('.af-ae-stikers-upload-btn');
         function syncUploadSource() {
           var byUrl=!!sourceSelect && sourceSelect.value==='url';
           if(sourceSelect) state.uploadSource=sourceSelect.value;
-          if(fileLabel) fileLabel.style.display=byUrl?'none':'';
-          if(urlForm) urlForm.style.display=byUrl?'flex':'none';
+          if(fileLabel) fileLabel.hidden=byUrl;
+          if(urlForm) urlForm.hidden=!byUrl;
+          controlsEl.querySelectorAll('[data-source]').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.source === state.uploadSource)); });
         }
         if(sourceSelect) {sourceSelect.value=state.uploadSource;sourceSelect.addEventListener('change',syncUploadSource);}
+        controlsEl.querySelectorAll('[data-source]').forEach(function (button) {
+          button.addEventListener('click', function () { sourceSelect.value=button.dataset.source; sourceSelect.dispatchEvent(new Event('change')); });
+        });
         syncUploadSource();
-        var upload = bodyEl.querySelector('#af-ae-stiker-upload');
+        var upload = controlsEl.querySelector('#af-ae-stiker-upload');
         if (upload) {
           upload.disabled=!!(data.storage && data.storage.full);
           upload.addEventListener('change', function () {
@@ -506,8 +540,10 @@
 
             var fd = new FormData();
             fd.append('sticker', f);
+            upload.disabled=true; fileLabel.setAttribute('aria-busy','true');
 
             req(p.uploadUrl, 'POST', fd, function (err, res) {
+              upload.disabled=false; fileLabel.removeAttribute('aria-busy');
               if (err || !res || !res.success) {
                 alert((res && res.message) || (err && err.message) || 'Ошибка загрузки');
                 return;
@@ -517,7 +553,7 @@
           });
         }
 
-        var toggle = bodyEl.querySelector('#af-ae-stiker-toggle');
+        var toggle = controlsEl.querySelector('#af-ae-stiker-toggle');
         if (toggle) {
           toggle.addEventListener('click', function () {
             state.removeMode = !state.removeMode;

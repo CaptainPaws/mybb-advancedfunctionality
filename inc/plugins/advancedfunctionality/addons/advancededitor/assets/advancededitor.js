@@ -1410,7 +1410,7 @@
       var shell = frame && frame.closest('[data-af-editor-shell="1"]');
       if (!shell && !document.body.classList.contains('atf-active')) return;
       var host = window.getComputedStyle(shell || document.body);
-      var surface = host.getPropertyValue('--atf-color-surface').trim() || host.backgroundColor || '#fff';
+      var surface = host.getPropertyValue('--af-ae-editor-surface').trim() || host.getPropertyValue('--atf-color-surface').trim() || host.backgroundColor || '#fff';
       var text = host.getPropertyValue('--atf-color-text').trim() || host.color || '#333';
       var muted = host.getPropertyValue('--atf-color-text-muted').trim() || '#aeb5ca';
       var accent = host.getPropertyValue('--atf-color-accent').trim() || '#788dff';

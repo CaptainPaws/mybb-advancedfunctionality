@@ -384,6 +384,14 @@
       }
     };
 
+    if (document.body.classList.contains('atf-active')) {
+      var theme = getComputedStyle(host.closest('.af-ae-jscolor-popup'));
+      options.backgroundColor = theme.backgroundColor;
+      options.borderColor = theme.borderColor;
+      options.controlBorderColor = theme.borderColor;
+      options.borderRadius = 3;
+      options.padding = 6;
+    }
     Ctor = getJscolorCtor();
     if (!Ctor) return null;
 
@@ -526,7 +534,9 @@
     popupEl.style.display = 'block';
 
     width = popupEl.offsetWidth || 320;
-    top = rect.bottom + window.pageYOffset + 6;
+    var height = popupEl.offsetHeight;
+    var available = document.documentElement.clientHeight;
+    top = Math.max(8, Math.min(available - height - 8, rect.bottom + height + 6 > available ? rect.top - height - 6 : rect.bottom + 6)) + window.pageYOffset;
     left = rect.left + window.pageXOffset;
 
     maxLeft = window.pageXOffset + document.documentElement.clientWidth - width - 8;
@@ -580,8 +590,9 @@
     popup.className = 'af-ae-jscolor-popup';
     popup.innerHTML = '' +
       '<div class="af-ae-jscolor-wrap">' +
+        '<div class="af-ae-jscolor-title"><strong>Цвет текста</strong><button type="button" class="af-ae-jscolor-close" aria-label="Закрыть">×</button></div>' +
         '<div class="af-ae-jscolor-top">' +
-          '<input type="text" class="af-ae-jscolor-input" value="' + DEFAULT_COLOR + '">' +
+          '<input type="text" aria-label="Цвет HEX" class="af-ae-jscolor-input" value="' + DEFAULT_COLOR + '">' +
           '<span class="af-ae-jscolor-preview" style="background:' + DEFAULT_COLOR + ';"></span>' +
         '</div>' +
         '<div class="af-ae-jscolor-host"></div>' +
@@ -591,6 +602,8 @@
       '</div>';
 
     document.body.appendChild(popup);
+    if (window.afAtfDecorateSurface) window.afAtfDecorateSurface(popup);
+    popup.querySelector('.af-ae-jscolor-close').addEventListener('click', closePopup);
 
     input = popup.querySelector('.af-ae-jscolor-input');
     preview = popup.querySelector('.af-ae-jscolor-preview');
@@ -628,6 +641,7 @@
     positionPopup();
 
     window.setTimeout(function () {
+      if (popupEl === popup) positionPopup();
       if (input) {
         try { input.focus(); } catch (e2) {}
       }
