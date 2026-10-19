@@ -179,14 +179,14 @@ body.atf-active .atf-compose,
 body.atf-active .atf-compose * { box-sizing: border-box; }
 body.atf-active .atf-compose__form {
   display: grid;
-  gap: var(--atf-space-4);
+  gap: .65rem;
   min-width: 0;
 }
 body.atf-active .atf-compose__header,
 body.atf-active .atf-compose__section,
 body.atf-active .atf-compose__delete {
   min-width: 0;
-  padding: var(--atf-space-5);
+  padding: .8rem;
   background: color-mix(in srgb, var(--atf-color-page-subtle) 88%, transparent);
   border: 1px solid var(--atf-color-border);
   border-radius: var(--atf-radius-lg);
@@ -203,7 +203,7 @@ body.atf-active .atf-compose__section-heading p {
 }
 body.atf-active .atf-compose__section--content {
   display: grid;
-  gap: var(--atf-space-5);
+  gap: .75rem;
 }
 body.atf-active .atf-compose__field { display: grid; gap: var(--atf-space-2); min-width: 0; }
 body.atf-active .atf-compose__label { font-weight: var(--atf-font-weight-bold); }
@@ -221,9 +221,9 @@ body.atf-active .atf-compose :is(input[type="text"], input[type="number"], input
 }
 body.atf-active .atf-compose :is(input[type="text"], textarea) { width: 100%; min-width: 0; }
 body.atf-active .atf-compose :is(input, select, textarea):focus-visible { outline: 0; box-shadow: var(--atf-focus-ring); border-color: var(--atf-color-accent); }
-body.atf-active .atf-compose__editor { min-width: 0; overflow: hidden; }
+body.atf-active .atf-compose__editor { min-width: 0; overflow: visible; }
 body.atf-active .atf-compose__editor > textarea { display: block; resize: vertical; }
-body.atf-active .atf-compose__options { display: grid; gap: var(--atf-space-4); }
+body.atf-active .atf-compose__options { display: grid; gap: .65rem; }
 body.atf-active .atf-compose__choices { display: grid; gap: var(--atf-space-2); margin-top: var(--atf-space-3); }
 body.atf-active .atf-compose__choices label,
 body.atf-active .atf-compose__post-icons label,
@@ -274,10 +274,138 @@ body.atf-active .atf-compose__delete small { display: block; color: var(--atf-co
 @media (max-width: 48rem) {
   body.atf-active .atf-compose__header,
 body.atf-active .atf-compose__section,
-body.atf-active .atf-compose__delete { padding: var(--atf-space-4); }
+body.atf-active .atf-compose__delete { padding: .65rem; }
   body.atf-active .atf-compose__attachment { grid-template-columns: minmax(0, 1fr); }
   body.atf-active .atf-compose__attachment-icon { display: none; }
   body.atf-active .atf-compose__actions { align-items: stretch; }
   body.atf-active .atf-compose__actions > * { width: 100%; }
   body.atf-active .atf-compose__delete { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Full MyBB compose forms share ATF controls, without claiming editor internals. */
+body.atf-active .atf-compose__header h1 { font-size: 1.2rem; line-height: 1.35; }
+body.atf-active .atf-compose__section-title,
+body.atf-active .atf-compose__delete h2 { font-size: .9rem; line-height: 1.35; }
+body.atf-active .atf-compose__eyebrow { margin-bottom: .25rem; }
+body.atf-active .atf-compose__field { gap: .35rem; }
+body.atf-active .atf-compose__subject > input { flex: 1 1 16rem; width: auto; }
+body.atf-active .atf-compose__subject > select { flex: 0 1 14rem; min-width: 0; }
+body.atf-active .atf-compose input.textbox,
+body.atf-active .atf-compose select {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2rem;
+  padding: .35rem .55rem;
+  color: var(--atf-color-text) !important;
+  background: var(--atf-color-page-subtle) !important;
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-sm);
+  font: inherit;
+  color-scheme: dark;
+}
+body.atf-active .atf-compose input::placeholder { color: var(--atf-color-text-muted); opacity: 1; }
+body.atf-active .atf-compose__options { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+/* Captcha and third-party mandatory controls remain visible, outside disclosures. */
+body.atf-active .atf-compose__options > :not(.atf-compose__disclosure) { grid-column: 1 / -1; }
+body.atf-active .atf-compose__disclosure > summary { cursor: pointer; color: var(--atf-color-text); }
+body.atf-active .atf-compose__disclosure > summary::marker { color: var(--atf-color-accent); }
+body.atf-active .atf-compose__disclosure > summary:focus-visible { outline: 2px solid var(--atf-color-accent); outline-offset: 3px; }
+body.atf-active .atf-compose__choices { display: flex; flex-wrap: wrap; gap: .45rem 1rem; margin-top: .5rem; }
+body.atf-active .atf-compose__choices > br { display: none; }
+body.atf-active .atf-compose__subscription { display: grid; gap: .35rem; }
+body.atf-active .atf-compose__subscription .atf-compose__hint { margin: 0; font-size: .75rem; }
+body.atf-active .atf-compose__subscription-choices { margin: 0; }
+body.atf-active .atf-compose__subscription-choices label { padding: .2rem 0; font-size: .8rem; }
+body.atf-active .atf-compose__attachment { gap: .6rem; padding: .6rem; }
+body.atf-active .atf-compose__actions > .button,
+body.atf-active .atf-compose__actions > .atf-button,
+body.atf-active .atf-compose__attachment-actions > .button,
+body.atf-active .atf-compose__delete > input[type="submit"] {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: .35rem .75rem;
+  color: var(--atf-color-text) !important;
+  background: var(--atf-color-surface-raised) !important;
+  background-image: none !important;
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-sm);
+  box-shadow: none;
+  text-shadow: none;
+  font: inherit;
+  cursor: pointer;
+}
+body.atf-active .atf-compose__actions > .atf-button--primary {
+  color: var(--atf-color-accent-contrast, var(--atf-color-on-accent)) !important;
+  background: var(--atf-color-accent) !important;
+  border-color: var(--atf-color-accent);
+}
+body.atf-active .atf-compose__delete { border-inline-start: 3px solid var(--atf-color-danger, #b33a3a); margin-bottom: 1rem; }
+body.atf-active .atf-compose__delete > input[type="submit"] { color: #fff !important; background: var(--atf-color-danger, #b33a3a) !important; border-color: var(--atf-color-danger, #b33a3a); }
+body.atf-active .atf-compose__delete small { max-width: 65ch; line-height: 1.4; }
+body.atf-active .atf-compose__actions > :focus-visible,
+body.atf-active .atf-compose__delete > input:focus-visible { outline: 2px solid var(--atf-color-accent); outline-offset: 2px; }
+
+/* Native jEditable emits type="cancel". Preserve that attribute and its handler. */
+body.atf-active form.atf-quick-edit { padding: .65rem; min-width: 0; color: var(--atf-color-text); }
+body.atf-active form.atf-quick-edit > div[id^="editreason_"] { margin: .5rem 0; font-size: .8rem; }
+body.atf-active form.atf-quick-edit input[id$="_editreason"] {
+  box-sizing: border-box;
+  width: min(100%, 32rem);
+  max-width: 100%;
+  min-width: 0;
+  min-height: 2rem;
+  padding: .35rem .55rem;
+  font: inherit;
+  color: var(--atf-color-text) !important;
+  background: var(--atf-color-page-subtle) !important;
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-sm);
+  color-scheme: dark;
+}
+body.atf-active form.atf-quick-edit > button[type="submit"],
+body.atf-active form.atf-quick-edit > button[type="cancel"] {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  margin: .35rem .35rem 0 0;
+  padding: .35rem .75rem;
+  font: inherit;
+  line-height: 1.3;
+  color: var(--atf-color-text) !important;
+  background: var(--atf-color-page-subtle) !important;
+  background-image: none !important;
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-sm);
+  box-shadow: none;
+  text-shadow: none;
+  cursor: pointer;
+}
+body.atf-active form.atf-quick-edit > button[type="submit"] { color: var(--atf-color-accent-contrast, var(--atf-color-on-accent)) !important; background: var(--atf-color-accent) !important; border-color: var(--atf-color-accent); }
+body.atf-active form.atf-quick-edit > button:hover { filter: brightness(1.08); }
+body.atf-active form.atf-quick-edit > button:focus-visible,
+body.atf-active form.atf-quick-edit input[id$="_editreason"]:focus-visible { outline: 2px solid var(--atf-color-accent); outline-offset: 2px; }
+@media (max-width: 48rem) {
+  body.atf-active .atf-compose__options { grid-template-columns: minmax(0, 1fr); }
+  body.atf-active .atf-compose__actions > * { width: auto; flex: 1 1 auto; }
+  body.atf-active .atf-compose__subject > select { flex-basis: 100%; }
+  body.atf-active form.atf-quick-edit > button { max-width: 100%; white-space: normal; }
+}
+/* Avoid a second outer form surface when lazy SCEditor becomes available. */
+body.atf-active .atf-compose form.atf-compose__form { padding: 0; background: transparent; border: 0; box-shadow: none; }
+body.atf-active form.atf-quick-edit.atf-editor { padding: .65rem; }
+body.atf-active .atf-compose input[type="file"]::file-selector-button {
+  padding: .3rem .6rem;
+  margin-inline-end: .6rem;
+  color: var(--atf-color-text);
+  background: var(--atf-color-page-subtle);
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-sm);
+  font: inherit;
+  cursor: pointer;
 }
