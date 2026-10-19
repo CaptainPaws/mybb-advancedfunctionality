@@ -327,6 +327,21 @@
     if (window.afAtfDecorateSurface && !surface.classList.contains('atf-ornate')) window.afAtfDecorateSurface(surface);
   };
 
+  function resolveEditorMode(ta) {
+    if (!registry.wysiwyg || (ta && (ta.disabled || ta.readOnly))) return 'source';
+    var cfg = P.cfg || {}, mode = '';
+    if (Number(cfg.rememberModeEnabled) === 1) {
+      try { mode = localStorage.getItem('af_ae_editor_mode'); } catch (e) {}
+      if (['source', 'partial', 'full'].indexOf(mode) !== -1) return mode;
+    }
+    return {wysiwyg_full:'full', wysiwyg_partial:'partial'}[cfg.defaultEditorMode] || 'source';
+  }
+  window.afAeResolveEditorMode = resolveEditorMode;
+  window.afAeRememberEditorMode = function (mode) {
+    if (Number((P.cfg || {}).rememberModeEnabled) !== 1 || ['source','partial','full'].indexOf(mode) === -1) return;
+    try { localStorage.setItem('af_ae_editor_mode', mode); } catch (e) {}
+  };
+
   // All popup positions use viewport coordinates, including manual popovers.
   window.afAePlacePopup = function (surface, anchor) {
     if (!surface || !anchor || !anchor.isConnected) return;
@@ -616,7 +631,7 @@
     document.documentElement.classList.toggle('af-ae-shell-fullscreen-active', !!document.querySelector('.af-ae-shell-maximized'));
   }
 
-  function ensureWysiwyg(ta) {
+  function ensureWysiwyg(ta, requestedMode) {
     var editor = currentEditor(ta);
     if (editor && !editor.__afAeSourceAdapter) {
       bindEditorSurface(ta, editor);
@@ -625,7 +640,7 @@
     // Capture a user-resized source surface before SCEditor hides it.
     if (ta.__afAeSurfaceMetrics) ta.__afAeSurfaceMetrics.height = Math.round(ta.getBoundingClientRect().height || ta.__afAeSurfaceMetrics.height);
     if (!window.afAdvancedEditorWysiwyg) throw new Error('WYSIWYG runtime did not register');
-    ta.__afAeRequestedMode = (P.cfg || {}).wysiwygMode === 'full' ? 'full' : 'partial';
+    ta.__afAeRequestedMode = requestedMode || ((P.cfg || {}).wysiwygMode === 'full' ? 'full' : 'partial');
     if (!window.afAdvancedEditorWysiwyg.init(ta)) throw ta.__afAeInitError || new Error('WYSIWYG initialization failed');
     // The original textarea is a hidden data source after SCEditor activation.
     // The lightweight shell must never display it next to the editor widget.
@@ -653,6 +668,7 @@
     if (!wrapper || !ta.isConnected) return Promise.resolve();
     var before = ta.value, start = ta.selectionStart, end = ta.selectionEnd;
     var capability = b.capability;
+    if (capability === 'wysiwyg') ta.__afAeModeIntent = (ta.__afAeModeIntent || 0) + 1;
     var pending = capability ? loadCapability(capability) : Promise.resolve();
     caller.setAttribute('aria-busy', 'true');
     return pending.then(function () {
@@ -663,6 +679,7 @@
       if (capability === 'wysiwyg') {
         if (editor && !editor.__afAeSourceAdapter) { editor.toggleSourceMode(); return; }
         ensureWysiwyg(ta);
+        window.afAeRememberEditorMode(ta.__afAeRequestedMode);
         return;
       }
       if (capability && requiresCapability(capability, 'wysiwyg')) editor = ensureWysiwyg(ta);
@@ -900,6 +917,10 @@
       if (count && !count.hasAttribute('data-af-ae-was-hidden')) { count.setAttribute('data-af-ae-was-hidden', count.hidden ? '1' : '0'); count.hidden = true; }
     }
     document.dispatchEvent(new CustomEvent('af:editor-ready', { detail: { textarea: ta, instance: ta.__afAeAdapter, quickEdit: quick } }));
+    var startupMode = resolveEditorMode(ta), intent = ta.__afAeModeIntent || 0;
+    if (startupMode !== 'source') loadCapability('wysiwyg').then(function () {
+      if (ta.isConnected && ta.__afAeShell === wrapper && (ta.__afAeModeIntent || 0) === intent) ensureWysiwyg(ta, startupMode);
+    }).catch(function (error) { report(wrapper, {cmd:'source', title:'WYSIWYG'}, error); });
   }
   function destroy(ta) {
     if (!ta.__afAeShell) return;

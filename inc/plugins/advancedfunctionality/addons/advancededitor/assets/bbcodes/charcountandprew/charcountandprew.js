@@ -183,7 +183,6 @@
 
   // ====== FORM UI: bar + preview box ======
     function buildUiAboveEditor(ta) {
-    if (ta.__afAeShell && ta.__afAeShell.querySelector(':scope > .af-ccp-wrap')) return null;
     var sc = null;
     try { sc = ta.closest('.sceditor-container'); } catch (e) { sc = null; }
 
@@ -191,15 +190,15 @@
     if (!anchor || !anchor.parentNode) return null;
 
     var parent = anchor.parentNode;
-    if (parent.querySelector && parent.querySelector(':scope > .af-ccp-wrap')) return null;
-
-    var wrap = document.createElement('div');
+    var wrap = ta.__afAeShell ? ta.__afAeShell.querySelector(':scope > .af-ccp-wrap') : parent.querySelector(':scope > .af-ccp-wrap');
+    if (wrap && wrap.querySelector('.af-ccp-preview')) return {wrap:wrap,valueEl:wrap.querySelector('.af-ccp-value'),previewBox:wrap.querySelector('.af-ccp-preview'),previewBody:wrap.querySelector('.af-ccp-preview-body')};
+    wrap = wrap || document.createElement('div');
     wrap.className = 'af-ccp-wrap';
 
-    var bar = document.createElement('div');
+    var bar = wrap.querySelector('.af-ccp-bar') || document.createElement('div');
     bar.className = 'af-ccp-bar';
 
-    var value = document.createElement('span');
+    var value = bar.querySelector('.af-ccp-value') || document.createElement('span');
     value.className = 'af-ccp-value';
     value.textContent = '0';
 
@@ -211,9 +210,9 @@
     label.className = 'af-ccp-label';
     label.textContent = '';
 
-    bar.appendChild(label);
-    bar.appendChild(value);
-    bar.appendChild(hint);
+    if (!bar.querySelector('.af-ccp-label')) bar.appendChild(label);
+    if (!value.parentNode) bar.appendChild(value);
+    if (!bar.querySelector('.af-ccp-muted')) bar.appendChild(hint);
 
     var previewBox = document.createElement('div');
     previewBox.className = 'af-ccp-preview';
@@ -243,17 +242,7 @@
     wrap.appendChild(bar);
     wrap.appendChild(previewBox);
 
-    anchor.parentNode.insertBefore(wrap, anchor);
-
-    // хук на кнопку закрытия (без привязки к previewBtn)
-    closeBtn.addEventListener('click', function (ev) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        pb.innerHTML = '';
-        previewBox.hidden = true;
-        wrap.classList.remove('af-ccp-preview-open');
-        return false;
-    }, true);
+    if (!wrap.parentNode) { if (ta.__afAeShell) anchor.appendChild(wrap); else anchor.parentNode.insertBefore(wrap, anchor); }
 
     return { wrap: wrap, valueEl: value, previewBox: previewBox, previewBody: pb };
     }
@@ -334,6 +323,7 @@
   function ajaxPreview(ui, form, ta, inst) {
     if (!ui || !form) return;
 
+    var request = ui.wrap.__afCcpPreviewRequest = (ui.wrap.__afCcpPreviewRequest || 0) + 1;
     var raw = getEditorRawText(ta, inst);
     if (!raw.trim()) {
       ui.previewBody.innerHTML = '';
@@ -359,6 +349,7 @@
     })
       .then(function (r) { return r.text(); })
       .then(function (txt) {
+        if (!ui.wrap.isConnected || ui.wrap.__afCcpPreviewRequest !== request) return;
         var res = extractPreviewHtmlFromResponse(txt);
         var html = res && res.html ? res.html : '';
         html = unescapeWeirdString(html);
@@ -379,16 +370,18 @@
         } catch (e) {}
       })
       .catch(function () {
+        if (!ui.wrap.isConnected || ui.wrap.__afCcpPreviewRequest !== request) return;
         ui.previewBody.innerHTML = '<div class="af-ccp-muted">Ошибка превью (fetch).</div>';
         ui.previewBox.hidden = false;
       });
   }
 
-  function closePreview(ui) {
+  function closePreview(ui, restoreFocus) {
     if (!ui) return;
     ui.previewBody.innerHTML = '';
     ui.previewBox.hidden = true;
-    if (ui.wrap) ui.wrap.classList.remove('af-ccp-preview-open');
+    if (ui.wrap) { ui.wrap.__afCcpPreviewRequest = (ui.wrap.__afCcpPreviewRequest || 0) + 1; ui.wrap.classList.remove('af-ccp-preview-open'); }
+    if (restoreFocus !== false && ui.restoreSelection) ui.restoreSelection();
   }
 
     function togglePreview(ui, form, ta, inst) {
@@ -401,6 +394,18 @@
         return;
     }
 
+    var input = inst && inst.getSourceEditor ? inst.getSourceEditor() : ta;
+    if (input && input.jquery) input = input[0];
+    var isSource = !inst || (inst.sourceMode && inst.sourceMode());
+    var start = input && input.selectionStart, end = input && input.selectionEnd;
+    var body = !isSource && inst.getBody && inst.getBody(), selection = body && body.ownerDocument.getSelection();
+    var range = selection && selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+    ui.restoreSelection = function () {
+      if (!ta.isConnected) return;
+      if (inst && inst.focus) inst.focus(); else ta.focus();
+      if (isSource && input && input.setSelectionRange) input.setSelectionRange(start, end);
+      if (range && range.startContainer.isConnected && inst.getRangeHelper) inst.getRangeHelper().selectRange(range);
+    };
     if (ui.wrap) ui.wrap.classList.add('af-ccp-preview-open');
     ajaxPreview(ui, form, ta, inst);
     }
@@ -443,6 +448,15 @@
       };
     })();
     if (!ui) return;
+    ui.wrap.__afCcpPreviewUi = ui;
+    if (!ui.wrap.__afCcpCloseBound) {
+      ui.wrap.__afCcpCloseBound = true;
+      ui.wrap.addEventListener('click', function (event) {
+        if (!event.target.closest('.af-ccp-preview-close')) return;
+        event.preventDefault(); event.stopPropagation();
+        closePreview(ui.wrap.__afCcpPreviewUi);
+      });
+    }
 
     var binding = {
       instance: inst,
@@ -484,7 +498,7 @@
       previewBtn.addEventListener('click', function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        togglePreview(ui, form, ta, inst);
+        togglePreview(ui, form, ta, binding.instance);
         return false;
       }, true);
     }
@@ -498,7 +512,7 @@
           if (sub && sub.name === 'previewpost') {
             ev.preventDefault();
             ev.stopPropagation();
-            togglePreview(ui, form, ta, inst);
+            togglePreview(ui, form, ta, binding.instance);
             return false;
           }
         } catch (e) {}
@@ -516,12 +530,9 @@
 
         var t = ev.target;
         if (!t) return;
-        if (wrap.contains(t)) return;
+        if (wrap.contains(t) || (t.closest && t.closest('[name=previewpost]'))) return;
 
-        // закрыть
-        pb.hidden = true;
-        var body = wrap.querySelector('.af-ccp-preview-body');
-        if (body) body.innerHTML = '';
+        if (wrap.__afCcpPreviewUi) closePreview(wrap.__afCcpPreviewUi, false);
       }, true);
     }
   }
