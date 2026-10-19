@@ -137,6 +137,15 @@ function af_advancededitor_shell_registry(array $available, array $custom, array
     }
     $capabilities = array_merge($capabilities, (array)($GLOBALS['af_ae_external_capabilities'] ?? []));
     $buttons = array_merge($buttons, (array)($GLOBALS['af_ae_external_buttons'] ?? []));
+    // Link/code require their dialog even when basic BBCode tags are available.
+    if (isset($capabilities['dialogs'])) {
+        foreach (['link', 'code'] as $command) {
+            if (isset($buttons[$command]) && (empty($buttons[$command]['handler']) || $buttons[$command]['handler'] === 'dialogs')) {
+                $buttons[$command]['handler'] = 'dialogs';
+                $buttons[$command]['capability'] = 'dialogs';
+            }
+        }
+    }
     if (isset($buttons['image']) && isset($capabilities['media'])) {
         $buttons['image']['handler']='media';$buttons['image']['capability']='media';
         $mediaConfig=af_advancededitor_media_config();

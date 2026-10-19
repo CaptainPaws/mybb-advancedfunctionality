@@ -515,6 +515,7 @@
             '</div>';
 
         document.body.appendChild(backdrop);
+        if (window.afAeDecorateModal) window.afAeDecorateModal(backdrop.querySelector('.af-kb-modal'));
 
         backdrop.addEventListener('click', function (event) {
             if (event.target === backdrop || (event.target && event.target.classList && event.target.classList.contains('af-kb-modal-close'))) {

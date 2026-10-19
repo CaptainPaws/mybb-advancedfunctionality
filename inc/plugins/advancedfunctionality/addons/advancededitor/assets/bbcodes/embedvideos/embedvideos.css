@@ -59,3 +59,19 @@
 
 .af-ev-back:hover,
 .af-ev-insert:hover { filter: brightness(0.97); }
+
+body.atf-active .af-ev-dd { min-width: 0; width: min(360px, calc(100vw - 3rem)); color: var(--atf-color-text); }
+body.atf-active .af-ev-dd button,
+body.atf-active .af-ev-dd input {
+  box-sizing: border-box;
+  color: var(--atf-color-text) !important;
+  background: var(--atf-color-page, #10151d) !important;
+  background-image: none !important;
+  border: 1px solid var(--atf-color-border);
+  border-radius: 3px;
+  min-width: 0;
+}
+body.atf-active .af-ev-dd button:hover,
+body.atf-active .af-ev-dd button:focus-visible { border-color: var(--atf-color-accent); outline-color: var(--atf-color-accent); }
+body.atf-active .af-ev-dd .af-ev-insert { color: var(--atf-color-accent-contrast) !important; background: var(--atf-color-accent) !important; }
+body.atf-active .af-ev-dd .af-ev-title { color: var(--atf-color-accent); }

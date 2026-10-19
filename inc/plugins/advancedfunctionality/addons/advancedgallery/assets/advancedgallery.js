@@ -628,6 +628,8 @@
     if(!Object.prototype.hasOwnProperty.call(modal,'_agUploadDisplay'))modal._agUploadDisplay=originalUpload?originalUpload.style.display:'';
     pickerState.mediaTool=!!options.mediaTool && !pickerState.purpose;
     dialog.classList.toggle('ag-media-dialog',pickerState.mediaTool);
+    pickerState.modal.classList.toggle('ag-media-picker',pickerState.mediaTool);
+    if(pickerState.mediaTool && window.afAeDecorateModal)window.afAeDecorateModal(dialog);
     var tabs=$one('[data-ag-media-tabs]',modal), urlPane=$one('[data-ag-media-url]',modal);
     if(pickerState.mediaTool && !tabs) {
       tabs=document.createElement('div');tabs.className='ag-media-tabs';tabs.setAttribute('data-ag-media-tabs','');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Источник изображения');

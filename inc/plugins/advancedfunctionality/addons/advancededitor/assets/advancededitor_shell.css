@@ -363,3 +363,78 @@ body.atf-active .af-ae-jscolor-host .jscolor-border { background:var(--atf-color
 
 body.atf-active .af-ae-popup-surface .af-ae-fontsize-picker__option span,
 body.atf-active .af-ae-popup-surface .af-ae-fontsize-picker__option strong { color:inherit !important; }
+
+/* Shared presentation for existing editor dialogs; no additional modal runtime. */
+body.atf-active .af-ae-modal-surface {
+  box-sizing: border-box;
+  color: var(--atf-color-text, #e6e9ef);
+  background: var(--atf-color-page-subtle, #171d26);
+  border: 1px solid var(--atf-color-border-strong, #607089);
+  border-radius: 4px;
+  box-shadow: 0 16px 48px #0009;
+  color-scheme: dark;
+}
+body.atf-active .af-ae-modal-surface input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+body.atf-active .af-ae-modal-surface textarea,
+body.atf-active .af-ae-modal-surface select,
+body.atf-active .af-ae-basic-dialog input,
+body.atf-active .af-ae-basic-dialog textarea {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  padding: .45rem .6rem;
+  color: var(--atf-color-text, #e6e9ef) !important;
+  background: var(--atf-color-page, #10151d) !important;
+  border: 1px solid var(--atf-color-border, #3a485b);
+  border-radius: 3px;
+  font: inherit;
+  color-scheme: dark;
+}
+body.atf-active .af-ae-modal-surface input::placeholder { color: var(--atf-color-text-muted, #a5b4c6); opacity: 1; }
+body.atf-active .af-ae-modal-surface button,
+body.atf-active .af-ae-modal-surface input[type="submit"],
+body.atf-active .af-ae-modal-surface .button,
+body.atf-active .af-ae-basic-dialog button {
+  appearance: none;
+  box-sizing: border-box;
+  padding: .4rem .7rem;
+  color: var(--atf-color-text, #e6e9ef) !important;
+  background: var(--atf-color-page, #10151d) !important;
+  background-image: none !important;
+  border: 1px solid var(--atf-color-border, #3a485b);
+  border-radius: 3px;
+  text-shadow: none;
+  font: inherit;
+  cursor: pointer;
+}
+body.atf-active .af-ae-modal-surface button[type="submit"],
+body.atf-active .af-ae-modal-surface button.is-active,
+body.atf-active .af-ae-modal-surface button[aria-selected="true"],
+body.atf-active .af-ae-modal-surface .button--primary,
+body.atf-active .af-ae-basic-dialog button[type="submit"] {
+  color: var(--atf-color-accent-contrast, #071424) !important;
+  background: var(--atf-color-accent, #91baff) !important;
+  border-color: var(--atf-color-accent, #91baff);
+}
+body.atf-active .af-ae-modal-surface button:disabled { opacity: .5; cursor: default; }
+body.atf-active .af-ae-modal-surface button:hover { border-color: var(--atf-color-accent); }
+body.atf-active .af-ae-modal-surface :focus-visible,
+body.atf-active .af-ae-basic-dialog :focus-visible { outline: 2px solid var(--atf-color-accent, #91baff); outline-offset: 2px; }
+.af-ae-basic-dialog { display: grid; gap: .65rem; width: min(28rem, calc(100vw - 3rem)); max-width: 100%; }
+.af-ae-basic-dialog label { display: grid; gap: .3rem; min-width: 0; }
+.af-ae-basic-dialog input, .af-ae-basic-dialog textarea { width: 100%; }
+.af-ae-basic-dialog textarea { resize: vertical; max-height: 45vh; }
+.af-ae-basic-dialog footer { display: flex; justify-content: flex-end; gap: .5rem; }
+.af-ae-basic-dialog [role="status"]:empty { display: none; }
+.af-ae-basic-dialog [role="status"] { margin: 0; color: var(--atf-color-text); }
+/* KB retains its own search, result rendering and lazy-loading. */
+body.atf-active .af-kb-insert { z-index: 2147483100; box-sizing: border-box; }
+body.atf-active .af-kb-insert .af-kb-modal { display: flex; flex-direction: column; gap: .65rem; max-height: calc(100dvh - 2rem); overflow: auto; }
+body.atf-active .af-kb-insert .af-kb-insert-list { overflow: auto; min-height: 0; }
+body.atf-active .af-kb-insert .af-kb-insert-item { min-width: 0; border-color: var(--atf-color-border); background: var(--atf-color-page); }
+body.atf-active .af-kb-insert .af-kb-insert-item-title { color: var(--atf-color-text); overflow-wrap: anywhere; }
+body.atf-active .af-kb-insert .af-kb-insert-item-meta,
+body.atf-active .af-kb-insert .af-kb-insert-hint,
+body.atf-active .af-kb-insert .af-kb-insert-empty { color: var(--atf-color-text-muted); }
+body.atf-active .af-aa-mask-modal { align-items: center; padding: 1rem; }
+body.atf-active .af-aa-mask-panel { max-height: calc(100dvh - 2rem); overflow: auto; }

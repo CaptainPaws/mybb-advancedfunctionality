@@ -320,6 +320,13 @@
     }, { signal: signal });
   }
 
+  // Presentation only: providers keep their own forms and lifecycles.
+  window.afAeDecorateModal = function (surface) {
+    if (!surface) return;
+    surface.classList.add('af-ae-modal-surface');
+    if (window.afAtfDecorateSurface && !surface.classList.contains('atf-ornate')) window.afAtfDecorateSurface(surface);
+  };
+
   // All popup positions use viewport coordinates, including manual popovers.
   window.afAePlacePopup = function (surface, anchor) {
     if (!surface || !anchor || !anchor.isConnected) return;

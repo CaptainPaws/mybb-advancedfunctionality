@@ -39,17 +39,24 @@
   var previous=document.querySelector('.ae-media-fallback');if(previous) previous.remove();
   var root=document.createElement('div');root.className='ae-media-fallback';root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','Вставить изображение');
   root.innerHTML='<div class="ae-media-dialog"><button type="button" data-close aria-label="Закрыть">×</button><h3>Изображение</h3><p>Галерея недоступна. Можно вставить изображение по URL.</p><form><label>URL изображения <input type="url" required placeholder="https://…"></label><button type="submit">Вставить</button><p role="status"></p></form></div>';
-  function close(){root.remove();if(token===generation){activeOwner=null;ed.focus();}}root.querySelector('[data-close]').onclick=close;
+  function close(){root.remove();if(token===generation){activeOwner=null;generation++;insert.restore();}}root.querySelector('[data-close]').onclick=close;
   root.addEventListener('keydown',function(event){if(event.key==='Escape')close();});
   root.querySelector('form').onsubmit=function(event){event.preventDefault();var value=root.querySelector('input').value.trim();if(!/^https?:\/\/[^\s\[\]<>]+$/i.test(value)){root.querySelector('[role=status]').textContent='Укажите прямую HTTP/HTTPS-ссылку.';return;}close();insert('[img]'+value+'[/img]');};
-  document.body.appendChild(root);root.querySelector('input').focus();
+  document.body.appendChild(root);if(window.afAeDecorateModal)window.afAeDecorateModal(root.firstElementChild);root.querySelector('input').focus();
  }
  window.af_ae_media_exec=function(ed,button,caller){
   var config=(window.afAePayload || window.afAdvancedEditorPayload || {}).mediaGallery || {enabled:false}, insert=bookmark(ed), token=++generation;
   activeOwner=caller.closest('.af-ae-shell');
   if(!config.enabled){fallback(ed,insert,token);return;}
   caller.setAttribute('aria-busy','true');
+  var previous=document.querySelector('.ae-media-fallback');if(previous)previous.remove();
+  var shell=document.createElement('div');shell.className='ae-media-fallback';shell.setAttribute('role','dialog');shell.setAttribute('aria-modal','true');shell.setAttribute('aria-label','Изображение');
+  shell.innerHTML='<section class="ae-media-dialog"><header><h3>Изображение</h3><button type="button" aria-label="Закрыть">×</button></header><p role="status" aria-live="polite">Загрузка медиатеки…</p></section>';
+  function cancel(){if(token===generation){generation++;activeOwner=null;insert.restore();}shell.remove();}
+  shell.querySelector('button').onclick=cancel;
+  shell.addEventListener('keydown',function(event){if(event.key==='Escape')cancel();});
+  document.body.appendChild(shell);if(window.afAeDecorateModal)window.afAeDecorateModal(shell.firstElementChild);shell.querySelector('button').focus();
   return ensure(config).then(function(){if(token!==generation)return;return window.AF_GalleryPicker.open({mediaTool:true,tab:button.cmd==='af_gallery'?'mine':'url',onSelect:insert,onClose:function(){if(token===generation){activeOwner=null;insert.restore();}},onError:function(error){if(!document.querySelector('#af-gallery-picker.is-open'))throw error;}});})
-   .finally(function(){caller.removeAttribute('aria-busy');});
+   .then(function(){shell.remove();}).catch(function(error){if(token!==generation)return;shell.querySelector('[role=status]').textContent=error.message || 'Не удалось открыть медиатеку. Повторите попытку.';}).finally(function(){caller.removeAttribute('aria-busy');});
  };
 })();
