@@ -453,3 +453,5 @@ body.atf-active .af-ccp-preview-close {
 }
 body.atf-active .af-ccp-preview-close:hover { border-color: var(--atf-color-accent); }
 body.atf-active .af-ccp-preview-close:focus-visible { outline: 2px solid var(--atf-color-accent); outline-offset: 2px; }
+/* The decorative frame must anchor to the modal, not the viewport or preview. */
+body.atf-active .af-ae-modal-surface.atf-ornate { position: relative; isolation: isolate; }

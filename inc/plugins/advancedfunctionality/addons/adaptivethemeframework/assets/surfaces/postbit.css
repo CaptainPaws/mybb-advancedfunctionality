@@ -1306,3 +1306,36 @@ body.atf-active .atf-post.af-atf-display .atf-post__sidebar-inner {
   background-position: center, center, center, center, var(--aa-sidebar-position, center);
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, var(--aa-sidebar-repeat, no-repeat);
 }
+
+/* Shared default BBCode surfaces: posts, AJAX previews and editor iframe copy. */
+body.atf-active blockquote.mycode_quote:not(.af-aqr-tquote):not(.af-aqr-spoiler),
+body.atf-active blockquote.af-aqr-spoiler {
+  --atf-bbcode-surface: linear-gradient(rgb(10 17 25 / .9), rgb(10 17 25 / .9)), url("https://warprift.ru/uploads/af_gallery/1/2026/10/2240bb976cd73c5cbb555246b3001753.png");
+  box-sizing: border-box;
+  margin: .65rem 0;
+  padding: .75rem .9rem;
+  color: var(--atf-color-text) !important;
+  background-color: var(--atf-color-page-subtle) !important;
+  background-image: var(--atf-bbcode-surface) !important;
+  background-position: center;
+  background-size: cover;
+  border: 1px solid var(--atf-color-border-strong, var(--atf-color-border));
+  border-inline-start: 3px solid var(--atf-color-accent);
+  border-radius: var(--atf-radius-sm, 3px);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / .4);
+  overflow-wrap: anywhere;
+}
+body.atf-active blockquote.mycode_quote:not(.af-aqr-tquote):not(.af-aqr-spoiler) > cite {
+  display: block;
+  margin: 0 0 .5rem;
+  padding: 0 0 .4rem;
+  color: var(--atf-color-accent);
+  border-bottom: 1px solid var(--atf-color-border);
+  font-weight: 600;
+  font-style: normal;
+}
+body.atf-active blockquote.af-aqr-spoiler { padding: 0; }
+body.atf-active blockquote.af-aqr-spoiler > cite { display: none; }
+body.atf-active .af-aqr-spoiler-head { color: var(--atf-color-text); background: rgb(0 0 0 / .18); }
+body.atf-active .af-aqr-spoiler-head:focus-visible { outline: 2px solid var(--atf-color-accent); outline-offset: -3px; }
+body.atf-active .af-aqr-spoiler-body { padding: .65rem .9rem; }

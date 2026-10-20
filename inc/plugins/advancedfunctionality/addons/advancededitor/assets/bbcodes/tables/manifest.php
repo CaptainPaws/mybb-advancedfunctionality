@@ -3,7 +3,7 @@
 return [
     'view_assets' => ['js' => [], 'css' => ['bbcodes/tables/tables_view.css']],
     'view_markers' => ['af-bb-table'],
-    'runtime' => ['activation' => 'click', 'requires' => []],
+    'runtime' => ['activation' => 'click', 'requires' => ['jscolorpiker']],
     'id'    => 'tables',
     'title' => 'Таблицы',
     'tags'  => ['table', 'tr', 'td', 'th'],

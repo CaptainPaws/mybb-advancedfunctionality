@@ -1438,6 +1438,7 @@
         + ';font-weight:' + weight + ';line-height:' + lineHeight
         + ';letter-spacing:' + letterSpacing + ';margin:0;padding:0;box-sizing:border-box}'
         + 'html body{background:' + surface + '!important;color:' + text + '!important;color-scheme:' + (document.body.classList.contains('atf-active') ? 'dark' : 'normal') + ';box-sizing:border-box;min-height:100%;padding:10px}'
+        + 'html body p,html body table,html body code:before{color:inherit}'
         + 'a{color:' + accent + '}::placeholder{color:' + muted + ';opacity:.8}'
         + '::-webkit-scrollbar-thumb{background:' + muted + ';border-radius:999px}';
       head.appendChild(style);
@@ -1476,9 +1477,10 @@
       // CSS, while the iframe otherwise cannot inherit that CSS.
       try {
         var host = document.querySelector('.post_body, .atf-post__message, .post-content, .af-ccp-preview-body');
-        var quoteSample = document.querySelector('.post_body blockquote.mycode_quote, .atf-post__message blockquote.mycode_quote');
+        var quoteSample = document.querySelector('.post_body blockquote.mycode_quote:not(.af-aqr-tquote):not(.af-aqr-spoiler), .atf-post__message blockquote.mycode_quote:not(.af-aqr-tquote):not(.af-aqr-spoiler)');
         var generated = false;
-        if (!quoteSample && host) {
+        if (!quoteSample && (host || document.body.classList.contains('atf-active'))) {
+          host = host || document.body;
           quoteSample = document.createElement('blockquote');
           quoteSample.className = 'mycode_quote';
           quoteSample.innerHTML = '<cite>Цитата</cite><span>Текст цитаты</span>';
@@ -1490,21 +1492,21 @@
         }
         if (quoteSample) {
           var computed = window.getComputedStyle(quoteSample);
-          var properties = ['background-color', 'background-image', 'color',
+          var properties = ['background-color', 'background-image', 'background-size', 'background-position', 'color',
             'border-top', 'border-right', 'border-bottom', 'border-left',
             'border-radius', 'padding', 'margin', 'box-shadow', 'font-family',
             'font-size', 'line-height'];
           var declaration = properties.map(function (prop) {
             return prop + ':' + computed.getPropertyValue(prop) + ';';
           }).join('');
-          css += '\nblockquote.mycode_quote,blockquote{' + declaration + '}\n';
+          css += '\nblockquote.mycode_quote:not(.af-aqr-tquote),blockquote:not(.af-aqr-tquote){' + declaration + '}\n';
           var citeSample = quoteSample.querySelector('cite');
           if (citeSample) {
             var citeStyle = window.getComputedStyle(citeSample);
-            css += 'blockquote cite{display:' + citeStyle.display +
+            css += 'blockquote:not(.af-aqr-tquote) cite{display:' + citeStyle.display +
               ';color:' + citeStyle.color + ';font-weight:' + citeStyle.fontWeight +
               ';font-style:' + citeStyle.fontStyle + ';margin:' + citeStyle.margin +
-              ';padding:' + citeStyle.padding + ';}\n';
+              ';padding:' + citeStyle.padding + ';border-bottom:' + citeStyle.borderBottom + ';}\n';
           }
           if (generated) quoteSample.remove();
         }

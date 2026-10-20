@@ -3,7 +3,7 @@
 return [
     'view_assets' => ['js' => [], 'css' => ['bbcodes/tquote/tquote_view.css']],
     'view_markers' => ['af-aqr-tquote'],
-    'runtime' => ['activation' => 'click', 'requires' => []],
+    'runtime' => ['activation' => 'click', 'requires' => ['jscolorpiker']],
     'id'    => 'tquote',
     'title' => 'Типографическая цитата',
 
