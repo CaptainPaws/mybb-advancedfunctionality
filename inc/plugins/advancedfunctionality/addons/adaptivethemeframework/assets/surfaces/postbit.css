@@ -1320,7 +1320,6 @@ body.atf-active blockquote.af-aqr-spoiler {
   background-position: center;
   background-size: cover;
   border: 1px solid var(--atf-color-border-strong, var(--atf-color-border));
-  border-inline-start: 3px solid var(--atf-color-accent);
   border-radius: var(--atf-radius-sm, 3px);
   box-shadow: inset 0 0 0 1px rgb(0 0 0 / .4);
   overflow-wrap: anywhere;
@@ -1330,7 +1329,7 @@ body.atf-active blockquote.mycode_quote:not(.af-aqr-tquote):not(.af-aqr-spoiler)
   margin: 0 0 .5rem;
   padding: 0 0 .4rem;
   color: var(--atf-color-accent);
-  border-bottom: 1px solid var(--atf-color-border);
+  border-bottom: 0;
   font-weight: 600;
   font-style: normal;
 }
@@ -1350,3 +1349,5 @@ body.atf-active blockquote.af-aqr-spoiler {
 body.atf-active blockquote.af-aqr-spoiler { padding: .3rem; }
 body.atf-active blockquote.atf-ornate > .atf-gothic-frame { z-index: 1; }
 body.atf-active blockquote.af-aqr-spoiler > .af-aqr-spoiler-head { position: relative; z-index: 2; }
+
+body.atf-active blockquote.mycode_quote > cite[hidden] { display: none !important; }

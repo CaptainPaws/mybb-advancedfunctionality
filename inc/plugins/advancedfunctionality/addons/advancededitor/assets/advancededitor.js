@@ -1438,7 +1438,7 @@
         + ';font-weight:' + weight + ';line-height:' + lineHeight
         + ';letter-spacing:' + letterSpacing + ';margin:0;padding:0;box-sizing:border-box}'
         + 'html body{background:' + surface + '!important;color:' + text + '!important;color-scheme:' + (document.body.classList.contains('atf-active') ? 'dark' : 'normal') + ';box-sizing:border-box;min-height:100%;padding:10px}'
-        + 'html body p,html body table,html body code:before{color:inherit}'
+        + 'html body p,html body table,html body code:before{color:inherit}blockquote>cite[hidden]{display:none!important}blockquote>cite{border-bottom:0!important}'
         + 'a{color:' + accent + '}::placeholder{color:' + muted + ';opacity:.8}'
         + '::-webkit-scrollbar-thumb{background:' + muted + ';border-radius:999px}';
       head.appendChild(style);

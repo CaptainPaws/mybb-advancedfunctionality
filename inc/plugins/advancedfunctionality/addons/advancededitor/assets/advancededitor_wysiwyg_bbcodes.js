@@ -440,7 +440,7 @@ function installMybbQuote(bb) {
       // The displayed name is separate from the stored BBCode attributes.
       return '<blockquote class="mycode_quote" data-af-quote-attrs="' + escHtml(JSON.stringify(a)) + '"' +
         (a.pid ? ' data-pid="' + escHtml(a.pid) + '"' : '') + ' data-author="' + escHtml(author) + '">' +
-        '<cite class="sceditor-ignore" contenteditable="false">' + escHtml(author || 'Цитата') + '</cite>' + (content || '') + '</blockquote>';
+        '<cite class="sceditor-ignore" contenteditable="false"' + (!author && !a.pid ? ' hidden' : '') + '>' + escHtml(author || 'Цитата') + '</cite>' + (content || '') + '</blockquote>';
     },
     format: function (element, content) {
       var attrs = {}, raw = element.getAttribute('data-af-quote-attrs');

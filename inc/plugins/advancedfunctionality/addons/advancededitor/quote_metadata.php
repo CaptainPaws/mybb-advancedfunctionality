@@ -54,6 +54,11 @@ function af_advancededitor_quote_source_metadata(string $message): string
 function af_advancededitor_quote_html_metadata(string $message): string
 {
     return preg_replace_callback('~(?P<open><blockquote\b[^>]*\bclass=["\'][^"\']*\bmycode_quote\b[^"\']*["\'][^>]*>)\s*<cite(?P<attrs>[^>]*)>(?P<header>[\s\S]*?)</cite>~i', static function ($match) {
+        global $lang;
+        $label = trim(html_entity_decode($match['header'], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        if (!str_contains($match['header'], '<') && $label === trim((string)($lang->quote ?? 'Quote:'))) {
+            return $match['open'] . '<cite' . $match['attrs'] . ' hidden>' . $match['header'] . '</cite>';
+        }
         if (!preg_match('~\bhref=["\'][^"\']*[?&](?:amp;)?pid=(\d+)~i', $match['header'], $id)) return $match[0];
         $metadata = af_advancededitor_quote_metadata((int)$id[1]);
         if (!$metadata) return $match[0];
