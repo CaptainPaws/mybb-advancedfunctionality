@@ -143,3 +143,12 @@ body.atf-active #alerts_content .af-aam-avatar{
   body.atf-active :is(.af-aam-modal-table,.af-aas-modal-table) tbody td{padding:var(--atf-space-2)}
   body.atf-active #alerts_content .alert__time{white-space:normal}
 }
+body.atf-active .modal.atf-reputation-dialog {
+  color: var(--atf-color-text);
+  background: var(--atf-color-page-subtle) !important;
+  border: 1px solid var(--atf-color-border-strong, var(--atf-color-border));
+  border-radius: var(--atf-radius-sm);
+}
+body.atf-active .atf-reputation-result { position: relative; padding: 1.25rem; color: var(--atf-color-text); background: var(--atf-color-page-subtle); }
+body.atf-active .atf-reputation-result h2 { margin: 0 0 .65rem; font-size: 1.05rem; }
+body.atf-active .atf-reputation-result p { margin: 0; line-height: 1.5; }

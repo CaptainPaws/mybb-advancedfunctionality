@@ -1731,9 +1731,20 @@ function af_advancededitor_activate(): void
     af_advancededitor_install();
 }
 
+/** Native Quick Edit uses the same server-side BBCode pipeline as full posts. */
+function af_advancededitor_xmlhttp_init(): void
+{
+    global $mybb;
+    if (empty($mybb->settings['af_advancededitor_enabled']) || $mybb->get_input('action') !== 'edit_post') return;
+    af_ae_bbcode_dispatch_init();
+}
+
 function af_ae_bbcode_dispatch_init(): void
 {
     global $plugins;
+    static $registered = false;
+    if ($registered) return;
+    $registered = true;
 
     // ВАЖНО:
     // - parse_message_start: даём пакам шанс преобразовать BBCode ДО стандартного парсинга MyBB

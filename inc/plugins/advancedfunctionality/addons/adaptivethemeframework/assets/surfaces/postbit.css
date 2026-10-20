@@ -1339,3 +1339,14 @@ body.atf-active blockquote.af-aqr-spoiler > cite { display: none; }
 body.atf-active .af-aqr-spoiler-head { color: var(--atf-color-text); background: rgb(0 0 0 / .18); }
 body.atf-active .af-aqr-spoiler-head:focus-visible { outline: 2px solid var(--atf-color-accent); outline-offset: -3px; }
 body.atf-active .af-aqr-spoiler-body { padding: .65rem .9rem; }
+/* Keep the lower-right illustration visible; fade its upper edge into the surface. */
+body.atf-active blockquote.mycode_quote:not(.af-aqr-tquote):not(.af-aqr-spoiler),
+body.atf-active blockquote.af-aqr-spoiler {
+  position: relative;
+  --atf-bbcode-surface: linear-gradient(to bottom, var(--atf-color-page-subtle) 0%, var(--atf-color-page-subtle) 15%, rgb(10 17 25 / .8) 45%, rgb(10 17 25 / .25) 100%), url("https://warprift.ru/uploads/af_gallery/1/2026/10/2240bb976cd73c5cbb555246b3001753.png");
+  background-position: bottom right;
+  padding: 1rem 1.15rem;
+}
+body.atf-active blockquote.af-aqr-spoiler { padding: .3rem; }
+body.atf-active blockquote.atf-ornate > .atf-gothic-frame { z-index: 1; }
+body.atf-active blockquote.af-aqr-spoiler > .af-aqr-spoiler-head { position: relative; z-index: 2; }

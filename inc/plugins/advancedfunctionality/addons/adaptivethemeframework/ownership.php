@@ -29,6 +29,7 @@ function af_adaptivethemeframework_template_seeds(): array
         'forumdisplay_threads_sep' => __DIR__ . '/templates/forumdisplay_threads_sep.html',
         'forumdisplay_thread' => __DIR__ . '/templates/forumdisplay_thread.html',
         'member_profile' => __DIR__ . '/templates/member_profile.html',
+        'reputation_added' => __DIR__ . '/templates/reputation_added.html',
         'reputation' => __DIR__ . '/templates/reputation.html',
         'reputation_vote' => __DIR__ . '/templates/reputation_vote.html',
         'reputation_no_votes' => __DIR__ . '/templates/reputation_no_votes.html',

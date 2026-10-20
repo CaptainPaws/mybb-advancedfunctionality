@@ -123,7 +123,7 @@
         '<button type="button" class="af-tquote-ui-swatch" data-af-color-for="' + name + '" aria-label="' + escHtml(label) + '">' +
           '<span class="af-tquote-ui-swatch-icon">' + ICONS[iconKey] + '</span>' +
         '</button>' +
-        '<input type="text" class="af-tquote-ui-value" data-af-color-input="' + name + '" value="' + escHtml(normHex(value) || getDefaultColor(name)) + '" maxlength="9">' +
+        '<input type="hidden" tabindex="-1" aria-hidden="true" class="af-tquote-ui-value" data-af-color-input="' + name + '" value="' + escHtml(normHex(value) || getDefaultColor(name)) + '" maxlength="9">' +
       '</div>';
   }
 
@@ -916,6 +916,7 @@
       if (!node || node.nodeType !== 1) continue;
 
       node.__afTquoteJscolorPopupGuardBound = true;
+      if (node.matches('input.af-tquote-ui-value')) continue;
       node.style.pointerEvents = 'auto';
       node.setAttribute('data-af-tquote-color-popup', '1');
     }

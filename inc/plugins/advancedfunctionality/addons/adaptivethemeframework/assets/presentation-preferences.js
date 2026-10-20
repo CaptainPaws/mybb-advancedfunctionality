@@ -210,3 +210,48 @@ document.addEventListener('toggle', function (event) {
   window.visualViewport?.addEventListener('resize', position);
   window.visualViewport?.addEventListener('scroll', position);
 })();
+
+/* Native parser/AJAX owners render content. ATF adds decoration and refreshes only scores. */
+(() => {
+  const quotes = 'blockquote.mycode_quote:not(.af-aqr-tquote), blockquote.af-aqr-spoiler';
+  const handledResults = new WeakSet();
+  function refreshReputation(result) {
+    if (handledResults.has(result)) return;
+    handledResults.add(result);
+    const modal = result.closest('.modal');
+    modal?.classList.add('atf-reputation-dialog');
+    window.afAtfDecorateSurface?.(result);
+    let identity = null;
+    for (let node = result.parentElement; node && !identity; node = node.parentElement) {
+      identity = Array.from(node.classList).map(name => /^modal_(\d+)_(\d+)$/.exec(name)).find(Boolean);
+    }
+    if (!identity || !/^\d+$/.test(identity[2]) || !document.getElementById('post_' + identity[2])) return;
+    const pid = identity[2], url = new URL(location.href);
+    if (!/\/showthread\.php$/.test(url.pathname)) return;
+    url.searchParams.set('pid', pid); url.searchParams.delete('page'); url.hash = '';
+    fetch(url.href, {credentials:'same-origin', cache:'no-store'}).then(response => {
+      if (!response.ok) throw new Error('Reputation refresh failed');
+      return response.text();
+    }).then(html => {
+      const fresh = new DOMParser().parseFromString(html, 'text/html').getElementById('post_' + pid);
+      const current = document.getElementById('post_' + pid);
+      const replacement = fresh?.querySelector('.atf-post-reputation');
+      const widget = current?.querySelector('.atf-post-reputation');
+      if (!replacement || !widget) throw new Error('Reputation widget unavailable');
+      widget.replaceWith(document.importNode(replacement, true));
+    }).catch(() => { result.dataset.atfRefreshFailed = '1'; });
+  }
+  function enhance(root) {
+    if (!document.body.classList.contains('atf-active') || root.nodeType !== 1) return;
+    if (root.matches(quotes)) window.afAtfDecorateSurface?.(root);
+    root.querySelectorAll(quotes).forEach(node => window.afAtfDecorateSurface?.(node));
+    if (root.matches('[data-atf-reputation-result]')) refreshReputation(root);
+    root.querySelectorAll('[data-atf-reputation-result]').forEach(refreshReputation);
+  }
+  function ready() {
+    enhance(document.body);
+    new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(enhance)))
+      .observe(document.body, {childList:true, subtree:true});
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready, {once:true}); else ready();
+})();
