@@ -451,18 +451,18 @@
         ability.targeting = ability.target;
         ability.range = String(source.range ?? "");
         ability.formula_profile = String(source.formula_profile || "");
-        ability.duration_value = String(source.duration_value || source.duration || "");
+        ability.duration_value = String(source.duration_value ?? source.duration ?? "");
         ability.cooldown_value = String(source.cooldown_value ?? "");
-        ability.cooldown_unit = String(source.cooldown_unit || "own_turn");
         ability.cost_value = String(source.cost_value ?? "");
         ability.cost_resource = String(source.cost_resource || "");
         ability.effects = Array.isArray(source.effects) ? source.effects.map((effect) => {
           const item = effect && typeof effect === "object" ? { ...effect } : {};
           return {
+            ...item,
             effect_type: String(item.effect_type || item.kind || ""), value: String(item.value ?? ""),
-            formula_profile: String(item.formula_profile || item.formula_ref || ""), coefficient: String(item.coefficient ?? ""),
+            formula_profile: String(item.formula_profile || ""), coefficient: String(item.coefficient ?? ""),
             target: String(item.target || item.targeting || ""), damage_type: String(item.damage_type || ""), element: String(item.element || ""),
-            duration_value: String(item.duration_value ?? item.duration ?? ""), duration_unit: String(item.duration_unit || "target_turn"),
+            duration_value: String(item.duration_value ?? item.duration ?? ""), ...(Object.prototype.hasOwnProperty.call(item, "duration_unit") ? {duration_unit: item.duration_unit} : {}),
             status_key: String(item.status_key || ""), stat_key: String(item.stat_key || ""), operation: String(item.operation || ""),
             resource_key: String(item.resource_key || ""), notes: String(item.notes || "")
           };
@@ -560,13 +560,18 @@
             target: AF_ATF.qs(".af-atf-ability-targeting", row).value,
             range: AF_ATF.qs(".af-atf-ability-range", row).value,
             formula_profile: AF_ATF.qs(".af-atf-ability-formula-profile", row).value,
-            duration_value: current.duration_value || current.duration || "",
+            duration_value: AF_ATF.qs(".af-atf-ability-duration-value", row).value,
+            duration_unit: AF_ATF.qs(".af-atf-ability-duration-unit", row).value,
+            action_cost: AF_ATF.qs(".af-atf-ability-action-cost", row).value,
             cooldown_value: AF_ATF.qs(".af-atf-ability-cooldown-value", row).value,
-            cooldown_unit: "own_turn",
+            cooldown_unit: AF_ATF.qs(".af-atf-ability-cooldown-unit", row).value,
             cost_value: AF_ATF.qs(".af-atf-ability-cost-value", row).value,
             cost_resource: AF_ATF.qs(".af-atf-ability-cost-resource", row).value,
             ability_description: descriptionValue,
             sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
+          });
+          ["action_cost", "duration_unit", "cooldown_unit"].forEach((key) => {
+            if (collected[key] === "" && !Object.prototype.hasOwnProperty.call(current, key)) delete collected[key];
           });
           // Preserve object identity: nested-effect callbacks close over this
           // object. Replacing it made Add/Remove Effect write to a stale object
@@ -635,7 +640,10 @@
                   <span class="af-atf-ability-label">Схема расчёта <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Выбирает точную формулу из справочника механик; описание выбранной схемы приведено в подсказке списка.">?</button></span>
                   <select class="select af-atf-input af-atf-ability-formula-profile">${renderSelectOptions("formula_profile", ability.formula_profile)}</select>
                 </label>
-                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Кулдаун <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Количество собственных ходов персонажа до повторного использования способности.">?</button></span><input type="number" step="1" min="0" class="textbox text_input af-atf-input af-atf-ability-cooldown-value" value="${AF_ATF.escapeAttr(ability.cooldown_value)}" /><span class="af-atf-field-suffix">ходов персонажа</span></label>
+                <label class="af-atf-ability-field"><span class="af-atf-ability-label">Кулдаун <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Интервал до повторного использования способности; единица выбирается отдельно.">?</button></span><input type="number" step="1" min="0" class="textbox text_input af-atf-input af-atf-ability-cooldown-value" value="${AF_ATF.escapeAttr(ability.cooldown_value)}" /><select class="select af-atf-ability-cooldown-unit">${renderSelectOptions("duration_unit", ability.cooldown_unit)}</select></label>
+                <label class="af-atf-ability-field"><span>Стоимость в очках действий</span><input type="number" min="0" step="any" class="textbox af-atf-input af-atf-ability-action-cost" value="${AF_ATF.escapeAttr(ability.action_cost ?? "")}" /></label>
+                <label class="af-atf-ability-field"><span>Общая длительность</span><input type="number" min="0" step="any" class="textbox af-atf-input af-atf-ability-duration-value" value="${AF_ATF.escapeAttr(ability.duration_value)}" /></label>
+                <label class="af-atf-ability-field"><span>Единица общей длительности</span><select class="select af-atf-ability-duration-unit">${renderSelectOptions("duration_unit", ability.duration_unit)}</select></label>
                 <label class="af-atf-ability-field"><span class="af-atf-ability-label">Стоимость <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Количество выбранного ресурса, которое тратится при использовании способности.">?</button></span><input type="number" step="any" class="textbox text_input af-atf-input af-atf-ability-cost-value" value="${AF_ATF.escapeAttr(ability.cost_value)}" /></label>
                 <label class="af-atf-ability-field"><span class="af-atf-ability-label">Ресурс</span><select class="select af-atf-input af-atf-ability-cost-resource">${renderSelectOptions("resource", ability.cost_resource)}</select></label>
                 <label class="af-atf-ability-field">
@@ -666,7 +674,7 @@
                   <label data-for="target">Цель<select class="select af-atf-effect-target">${renderSelectOptions("targeting", effect.target)}</select></label>
                   <label data-for="damage_type">Тип урона<select class="select af-atf-effect-damage-type">${renderSelectOptions("damage_type", effect.damage_type)}</select></label>
                   <label data-for="element">Стихия<select class="select af-atf-effect-element">${renderSelectOptions("element", effect.element)}</select></label>
-                  <label data-for="duration"><span>Длительность (ходов цели) <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Количество ходов цели, в течение которых действует эффект.">?</button></span><input type="number" step="1" min="0" class="textbox af-atf-effect-duration" value="${AF_ATF.escapeAttr(effect.duration_value)}"></label>
+                  <label data-for="duration"><span>Длительность эффекта <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Длительность эффекта; единица выбирается отдельно.">?</button></span><input type="number" step="1" min="0" class="textbox af-atf-effect-duration" value="${AF_ATF.escapeAttr(effect.duration_value)}"><select class="select af-atf-effect-duration-unit">${renderSelectOptions("duration_unit", effect.duration_unit)}</select></label>
                   <label data-for="status"><span>Статус / контроль <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Статус или контроль, накладываемый на выбранную цель.">?</button></span><select class="select af-atf-effect-status">${renderSelectOptions("status", effect.status_key)}</select></label>
                   <label data-for="stat">Характеристика<select class="select af-atf-effect-stat">${renderSelectOptions("stat", effect.stat_key)}</select></label>
                   <label data-for="operation"><span>Операция <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Определяет, как указанное значение изменяет текущую характеристику или ресурс.">?</button></span><select class="select af-atf-effect-operation">${renderSelectOptions("operation", effect.operation)}</select></label>
@@ -677,7 +685,8 @@
                   effect.effect_type = AF_ATF.qs('.af-atf-effect-type', effectRow).value;
                   const map = {value:'value', formula:'formula_profile', target:'target', 'damage-type':'damage_type', element:'element', duration:'duration_value', status:'status_key', stat:'stat_key', operation:'operation', resource:'resource_key', notes:'notes'};
                   Object.keys(map).forEach((suffix) => { const input = AF_ATF.qs('.af-atf-effect-' + suffix, effectRow); if (input) effect[map[suffix]] = input.value; });
-                  effect.duration_unit = 'target_turn';
+                  const unit = AF_ATF.qs('.af-atf-effect-duration-unit', effectRow).value;
+                  if (unit !== '' || Object.prototype.hasOwnProperty.call(effect, 'duration_unit')) effect.duration_unit = unit;
                   const relevant = {damage:['value','formula','target','damage_type','element'], heal:['value','formula','target'], shield:['value','formula','target','duration'], status:['status','target','duration'], control:['status','target','duration'], stat_modifier:['stat','operation','value','target','duration'], resource:['resource','operation','value','target']};
                   const valueLabels = {damage:'Значение урона',heal:'Значение лечения',shield:'Прочность щита',stat_modifier:'Величина модификатора',resource:'Изменение ресурса'};
                   const valueLabel = AF_ATF.qs('.af-atf-effect-value-label', effectRow); if (valueLabel) valueLabel.textContent = valueLabels[effect.effect_type] || 'Значение';

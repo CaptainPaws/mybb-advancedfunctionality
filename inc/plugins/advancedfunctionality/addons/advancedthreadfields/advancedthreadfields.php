@@ -4594,19 +4594,23 @@ function af_atf_normalize_character_ability_row(array $row, int $fallbackSortord
         if (!is_array($effect)) {
             continue;
         }
-        $normalizedEffect = [];
+        $normalizedEffect = $effect;
         foreach (['effect_type', 'value', 'formula_profile', 'coefficient', 'target', 'damage_type', 'element', 'duration_value', 'duration_unit', 'status_key', 'stat_key', 'operation', 'resource_key', 'notes'] as $key) {
             $legacyKey = $key === 'effect_type' ? 'kind' : ($key === 'target' ? 'targeting' : '');
             $value = $effect[$key] ?? ($legacyKey !== '' ? ($effect[$legacyKey] ?? '') : '');
             $normalizedEffect[$key] = is_scalar($value) ? my_substr(trim((string)$value), 0, $key === 'notes' ? 2000 : 128) : '';
         }
-        $normalizedEffect['duration_unit'] = 'target_turn';
-        if (implode('', $normalizedEffect) !== '') {
+        if (!array_key_exists('duration_unit', $effect)) unset($normalizedEffect['duration_unit']);
+        $meaningful = false;
+        foreach (['effect_type', 'kind', 'value', 'formula_profile', 'formula_ref', 'status_key', 'stat_key', 'resource_key'] as $field) {
+            if (isset($normalizedEffect[$field]) && $normalizedEffect[$field] !== '') $meaningful = true;
+        }
+        if ($meaningful) {
             $effects[] = $normalizedEffect;
         }
     }
 
-    return [
+    $normalized = [
         'slot_index' => max(1, (int)($row['slot_index'] ?? $sortorder)),
         'title' => my_substr($name, 0, 255),
         'ability_name' => my_substr($name, 0, 255),
@@ -4623,7 +4627,6 @@ function af_atf_normalize_character_ability_row(array $row, int $fallbackSortord
         'duration_value' => my_substr(trim((string)($row['duration_value'] ?? $row['duration'] ?? '')), 0, 64),
         'range' => my_substr(trim((string)($row['range'] ?? '')), 0, 64),
         'cooldown_value' => my_substr(trim((string)($row['cooldown_value'] ?? '')), 0, 64),
-        'cooldown_unit' => 'own_turn',
         'cost_value' => my_substr(trim((string)($row['cost_value'] ?? '')), 0, 64),
         'cost_resource' => my_substr(trim((string)($row['cost_resource'] ?? '')), 0, 128),
         'damage_value' => my_substr(trim((string)($row['damage_value'] ?? '')), 0, 64),
@@ -4636,6 +4639,10 @@ function af_atf_normalize_character_ability_row(array $row, int $fallbackSortord
         'ability_kb_key' => my_substr($kbKey, 0, 128),
         'sortorder' => max(0, $sortorder),
     ];
+    foreach (['action_cost', 'duration_unit', 'cooldown_unit'] as $field) {
+        if (array_key_exists($field, $row)) $normalized[$field] = $row[$field];
+    }
+    return $normalized;
 }
 
 function af_atf_character_ability_profile_applied_lines(array $ability): array
@@ -6135,6 +6142,11 @@ function af_atf_dh_validate(&$ph): void
 
         if ($type === 'character_abilities') {
             $val = af_atf_normalize_character_abilities_json(is_string($raw) ? $raw : '');
+            foreach ((array)json_decode($val, true) as $ability) {
+                if (is_array($ability) && array_key_exists('action_cost', $ability) && $ability['action_cost'] !== '' && (!is_scalar($ability['action_cost']) || is_bool($ability['action_cost']) || !is_numeric($ability['action_cost']) || !is_finite((float)$ability['action_cost']) || (float)$ability['action_cost'] < 0)) {
+                    $ph->set_error('invalid_field_'.$fieldid);
+                }
+            }
             if ((int)$f['required'] === 1 && $val === '[]') {
                 $ph->set_error('missing_required_field_'.$fieldid);
                 continue;
@@ -6470,6 +6482,7 @@ function af_atf_format_value_for_display(array $field, string $val): string
             ['key' => 'target', 'label' => 'Цель', 'set' => 'ability_targeting'],
             ['key' => 'range', 'label' => 'Дальность', 'set' => 'ability_range'],
             ['key' => 'formula_profile', 'label' => 'Схема расчёта', 'set' => 'formula_profile'],
+            ['key' => 'action_cost', 'label' => 'Очки действий', 'set' => ''],
         ];
 
         foreach ($list as $ability) {
@@ -6511,7 +6524,7 @@ function af_atf_format_value_for_display(array $field, string $val): string
             foreach ([['cooldown_value', 'cooldown_unit', 'Кулдаун', 'combat_duration_unit'], ['cost_value', 'cost_resource', 'Стоимость', 'ability_resource']] as $compound) {
                 $rawValue = trim((string)($ability[$compound[0]] ?? ''));
                 if ($rawValue === '') continue;
-                $unit = $compound[0] === 'cooldown_value' ? 'ходов персонажа' : af_atf_character_ability_display_label($compound[3], (string)($ability[$compound[1]] ?? ''));
+                $unit = $compound[0] === 'cooldown_value' ? af_atf_character_ability_display_label('combat_duration_unit', (string)($ability['cooldown_unit'] ?? '')) : af_atf_character_ability_display_label($compound[3], (string)($ability[$compound[1]] ?? ''));
                 $chips .= '<span class="af-atf-ability-display-chip"><span class="af-atf-ability-display-chip-label">'
                     . htmlspecialchars_uni($compound[2]) . ':</span> <span class="af-atf-ability-display-chip-value">'
                     . htmlspecialchars_uni($rawValue . ($unit !== '' ? ' · ' . $unit : '')) . '</span></span>';
@@ -6544,7 +6557,7 @@ function af_atf_format_value_for_display(array $field, string $val): string
                     if ($raw !== '') $parts[] = af_atf_character_ability_display_label($spec[1], $raw);
                 }
                 $duration = trim((string)($effect['duration_value'] ?? ''));
-                if ($duration !== '') $parts[] = $duration . ' ходов цели';
+                if ($duration !== '') $parts[] = $duration . (!empty($effect['duration_unit']) ? ' ' . af_atf_character_ability_display_label('combat_duration_unit', (string)$effect['duration_unit']) : ' (единица не указана)');
                 $effectRows[] = '<li><strong>' . htmlspecialchars_uni($label) . '</strong>' . ($parts ? ': ' . htmlspecialchars_uni(implode(' · ', $parts)) : '') . '</li>';
             }
             if (!$effectRows) {

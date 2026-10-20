@@ -1385,6 +1385,44 @@
                 cell.appendChild(label);
 
                 var input;
+                // New typed JSON/optional fields must not materialize defaults on load.
+                if (col.type === 'json' || col.optional === true) {
+                    input = document.createElement(col.type === 'json' ? 'textarea' : (col.type === 'select' ? 'select' : 'input'));
+                    if (col.type === 'json') {
+                        input.rows = 4;
+                        input.value = Object.prototype.hasOwnProperty.call(row, col.key) ? JSON.stringify(row[col.key], null, 2) : '';
+                    } else if (col.type === 'select') {
+                        addSelectOptions(input, col.options || []);
+                        var currentValue = Object.prototype.hasOwnProperty.call(row, col.key) ? String(row[col.key]) : '';
+                        if (currentValue && !Array.prototype.some.call(input.options, function (option) { return option.value === currentValue; })) {
+                            var savedOption = document.createElement('option'); savedOption.value = currentValue; savedOption.textContent = currentValue; input.appendChild(savedOption);
+                        }
+                        input.value = currentValue;
+                    } else {
+                        input.type = col.type === 'number' ? 'number' : 'text';
+                        if (col.type === 'number') input.step = 'any';
+                        input.value = Object.prototype.hasOwnProperty.call(row, col.key) ? String(row[col.key]) : '';
+                    }
+                    bindFieldSync(input, function () {
+                        if (input.value.trim() === '' && col.optional === true) {
+                            delete row[col.key];
+                            input.setCustomValidity('');
+                            onChange();
+                            return;
+                        }
+                        try {
+                            var value = col.type === 'json' ? JSON.parse(input.value) : (col.type === 'number' ? Number(input.value) : input.value);
+                            if (col.type === 'number' && (!input.value.trim() || !Number.isFinite(value))) throw new Error('number');
+                            row[col.key] = value;
+                            input.setCustomValidity('');
+                            onChange();
+                        } catch (error) {
+                            input.setCustomValidity(col.type === 'json' ? 'Введите корректный JSON.' : 'Введите конечное число.');
+                        }
+                    });
+                    cell.appendChild(input);
+                    return cell;
+                }
                 if (col.type === 'select') {
                     input = document.createElement('select');
                     addSelectOptions(input, col.options || ['']);
@@ -1881,6 +1919,7 @@
                     { key: 'value', label: 'value', type: 'number', default: 0 },
                     { key: 'formula_ref', label: 'formula_ref', default: '' },
                     { key: 'duration', label: 'duration', type: 'number', default: 0 },
+                    { key: 'duration_unit', label: 'duration_unit', type: 'select', options: ['', 'own_turn', 'target_turn', 'round'], optional: true },
                     { key: 'hit_count', label: 'hit_count', type: 'number', default: 1 },
                     { key: 'status_key', label: 'status_key', default: '' },
                     { key: 'notes', label: 'notes', default: '' }
@@ -2080,15 +2119,17 @@
                     var normalizeRows = function (items, schema) {
                         return (Array.isArray(items) ? items : []).map(function (item) {
                             var src = (item && typeof item === 'object' && !Array.isArray(item)) ? item : {};
-                            var out = {};
+                            var out = Object.assign({}, src);
                             schema.forEach(function (def) {
+                                var canonical = {kind:'effect_type', targeting:'target', duration:'duration_value'}[def.key];
+                                if (canonical && !Object.prototype.hasOwnProperty.call(src, def.key) && Object.prototype.hasOwnProperty.call(src, canonical)) return;
                                 if (def.type === 'number') out[def.key] = numberOrZero(src[def.key] != null ? src[def.key] : def.default);
                                 else out[def.key] = String(src[def.key] != null ? src[def.key] : def.default || '');
                             });
                             return out;
                         });
                     };
-                    return {
+                    return Object.assign({}, source, {
                         slot_index: slotIndex,
                         ability_name: String(source.ability_name || ''),
                         icon_url: String(source.icon_url || ''),
@@ -2170,7 +2211,7 @@
                         ability_key: String(source.ability_key || ''),
                         notes: String(source.notes || ''),
                         sortorder: sort
-                    };
+                    });
                 }
 
                 function renderBestiaryNestedRows(container, title, rows, defs, seed) {
@@ -2386,6 +2427,7 @@
                 var entryKeyInput = document.querySelector('input[name="key"]');
                 var entryKey = entryKeyInput ? String(entryKeyInput.value || '').trim() : '';
                 var serviceKindByEntryKey = {
+                    formula_def: 'formula_def',
                     formula_profile: 'formula_profile',
                     weapon_type: 'weapon_type',
                     ability_type: 'snippet',
@@ -2410,6 +2452,41 @@
                     { key: 'visibility.internal', label: 'visibility.internal', default: true }
                 ]);
                 var serviceKind = String(payload.rules.service_kind || '');
+                if (['status_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'resource_def'].indexOf(serviceKind) !== -1) {
+                    var serviceHelp = document.createElement('p');
+                    serviceHelp.className = 'af-kb-help';
+                    serviceHelp.textContent = 'Новые машинные записи: schema=af_kb.arpg.mechanic.v1, key и version. Поля описаны в ACS_KB_MECHANICS_CONTRACT.md. Старые описания сохраняются без преобразования. KB проверяет данные, но не исполняет бой.';
+                    rulesRoot.appendChild(serviceHelp);
+                    rulesRoot.appendChild(fieldCell(payload.rules, { key: 'entries', label: 'Механические определения (JSON)', type: 'json' }, syncToRaw));
+                    return;
+                }
+                if (serviceKind === 'formula_def') {
+                    var help = document.createElement('p');
+                    help.className = 'af-kb-help';
+                    help.textContent = 'Математическое определение: inputs — JSON-объект типов number/integer; expression — JSON AST literal/input/operation. Вычисления здесь не выполняются. Версию, единицу и округление укажите явно.';
+                    rulesRoot.appendChild(help);
+                    renderSeededArrayEditor(rulesRoot, 'Определения формул', 'entries', [
+                        { key: 'key', label: 'Ключ' },
+                        { key: 'version', label: 'Версия содержимого' },
+                        { key: 'inputs', label: 'Входные переменные (JSON)', type: 'json' },
+                        { key: 'expression', label: 'Выражение AST (JSON)', type: 'json' },
+                        { key: 'output_type', label: 'Тип результата', type: 'select', options: ['', 'number', 'integer'] },
+                        { key: 'output_unit', label: 'Единица результата' },
+                        { key: 'rounding', label: 'Округление', type: 'select', options: ['', 'none', 'floor', 'ceil', 'truncate', 'half_up', 'half_even'] },
+                        { key: 'min_value', label: 'Минимум (необязательно)', type: 'number', optional: true },
+                        { key: 'max_value', label: 'Максимум (необязательно)', type: 'number', optional: true },
+                        { key: 'notes', label: 'Описание' }
+                    ], [{ key: 'formula', label: 'Новое определение', seed: { key: '', version: '', inputs: {}, expression: {}, output_type: '', output_unit: '', rounding: '', notes: '' } }]);
+                    return;
+                }
+                if (serviceKind === 'modifier_template') {
+                    var modifierHelp = document.createElement('p');
+                    modifierHelp.className = 'af-kb-help';
+                    modifierHelp.textContent = 'B2: schema=af_kb.arpg.math-modifier.v1. B3: именованный шаблон schema=af_kb.arpg.mechanic.v1, key/version и modifier с контрактом B2. Старые текстовые поля сохраняются. Фазы и приоритеты здесь не исполняются.';
+                    rulesRoot.appendChild(modifierHelp);
+                    rulesRoot.appendChild(fieldCell(payload.rules, { key: 'entries', label: 'Шаблоны модификаторов (JSON)', type: 'json' }, syncToRaw));
+                    return;
+                }
                 if (serviceKind === 'formula_profile') {
                     if ((!Array.isArray(payload.rules.entries) || !payload.rules.entries.length) && Array.isArray(payload.rules.formula_profile_registry)) {
                         payload.rules.entries = payload.rules.formula_profile_registry.slice();
@@ -2422,7 +2499,10 @@
                         { key: 'calc_family', label: 'Calc family', type: 'select', options: ['damage', 'shield', 'heal', 'buff', 'debuff', 'control', 'utility', 'mobility', 'passive'], default: 'utility' },
                         { key: 'duration_supported', label: 'Duration supported (0/1)', type: 'number', default: 0 },
                         { key: 'ui_hint', label: 'UI hint (human-readable)', default: '' },
-                        { key: 'active', label: 'Active (0/1)', type: 'number', default: 1 }
+                        { key: 'active', label: 'Active (0/1)', type: 'number', default: 1 },
+                        { key: 'formula_def_key', label: 'Ключ formula_def (необязательно)', optional: true },
+                        { key: 'formula_def_version', label: 'Версия formula_def (необязательно)', optional: true },
+                        { key: 'parameters', label: 'Параметры формулы (JSON, необязательно)', type: 'json', optional: true }
                     ], [
                         { key: 'default', label: 'default', seed: { key: '', title: '', group: 'utility', description: '', calc_family: 'utility', duration_supported: 0, ui_hint: '', active: 1 } }
                     ]);
@@ -2464,6 +2544,40 @@
             if (entityType === 'item') renderItemRules();
             if (entityType === 'bestiary') renderBestiaryRules();
             if (entityType === 'service_mechanics') renderServiceRules();
+            if (['ability', 'talent', 'item', 'bestiary', 'origin', 'origin_variant'].indexOf(entityType) !== -1) {
+                var mathSection = createSection(rulesRoot, 'Математические модификаторы (opt-in, без исполнения)');
+                mathSection.appendChild(fieldCell(payload.rules, { key: 'math_modifiers', label: 'math_modifiers (JSON-массив, необязательно)', type: 'json', optional: true }, syncToRaw));
+            }
+            if (['ability', 'item', 'bestiary'].indexOf(entityType) !== -1) {
+                var mechanicsSection = createSection(rulesRoot, 'Боевые параметры (необязательно, без исполнения)');
+                var extraFields = [
+                    {key:'action_cost',label:'Стоимость в очках действий',type:'number',optional:true},
+                    {key:'cooldown_unit',label:'Единица legacy-кулдауна',type:'select',options:['','own_turn','target_turn','round'],optional:true},
+                    {key:'duration_unit',label:'Единица legacy-длительности',type:'select',options:['','own_turn','target_turn','round'],optional:true},
+                    {key:'formula_profile',label:'Профиль формулы (ключ)',optional:true},
+                    {key:'formula_refs',label:'Ссылки на формулы (JSON)',type:'json',optional:true},
+                    {key:'target_count',label:'Количество целей (JSON)',type:'json',optional:true},
+                    {key:'application_conditions',label:'Условия применения (JSON)',type:'json',optional:true},
+                    {key:'application_mode',label:'Режим применения',optional:true},
+                    {key:'summon',label:'Призыв (JSON)',type:'json',optional:true},
+                    {key:'usage_limits',label:'Ограничения применения (JSON)',type:'json',optional:true},
+                    {key:'costs',label:'Затраты: использование / поддержание (JSON)',type:'json',optional:true},
+                    {key:'timing',label:'Кулдаун / восстановление / периодичность (JSON)',type:'json',optional:true}
+                ];
+                if (entityType === 'item') extraFields = extraFields.concat([
+                    {key:'equip_requirements',label:'Требования экипировки (JSON)',type:'json',optional:true},
+                    {key:'slot_restrictions',label:'Ограничения слотов (JSON)',type:'json',optional:true},
+                    {key:'on_equip',label:'Эффекты при надевании (JSON)',type:'json',optional:true},
+                    {key:'on_unequip',label:'Эффекты при снятии (JSON)',type:'json',optional:true},
+                    {key:'consumption_type',label:'Тип расходования',optional:true},
+                    {key:'use_ability_ref',label:'Применяемая способность (ключ)',optional:true}
+                ]);
+                if (entityType === 'bestiary') extraFields = extraFields.concat([
+                    {key:'immunities',label:'Иммунитеты (JSON)',type:'json',optional:true},
+                    {key:'effects',label:'Механические эффекты (JSON)',type:'json',optional:true}
+                ]);
+                extraFields.forEach(function (field) { mechanicsSection.appendChild(fieldCell(payload.rules, field, syncToRaw)); });
+            }
             if (heavyTypes.indexOf(entityType) === -1 && simpleTypes.indexOf(entityType) === -1 && entityType !== 'service_mechanics') renderSimpleRules();
 
             rawRoot.innerHTML = '<label>raw json</label><textarea id="af-arpg-raw-json" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea>';
@@ -2543,7 +2657,7 @@
             } else if (def.type === 'number') {
                 input = document.createElement('input');
                 input.type = 'number';
-                input.value = value != null ? String(value) : '0';
+                input.value = value != null ? String(value) : (def.optional ? '' : '0');
             } else if (def.type === 'url') {
                 input = document.createElement('input');
                 input.type = 'url';
@@ -2576,7 +2690,7 @@
                     var legacyOption = document.createElement('option'); legacyOption.value = selectedValue; legacyOption.textContent = selectedValue; input.appendChild(legacyOption);
                 }
                 input.value = selectedValue || (def.allowEmpty ? '' : (input.options[0] ? input.options[0].value : ''));
-                obj[def.name] = input.value;
+                if (!def.optional || Object.prototype.hasOwnProperty.call(obj, def.name)) obj[def.name] = input.value;
             } else if (def.type === 'checkbox') {
                 input = document.createElement('input');
                 input.type = 'checkbox';
@@ -2645,7 +2759,9 @@
 
             function commitValue() {
                 var liveValue = getFieldValue(input);
-                if (def.type === 'lines') {
+                if (def.optional && String(liveValue).trim() === '') {
+                    delete obj[def.name];
+                } else if (def.type === 'lines') {
                     obj[def.name] = splitLines(liveValue);
                 } else if (def.type === 'json') {
                     obj[def.name] = readJson(liveValue, {});
@@ -3429,8 +3545,9 @@
             var normalizeRows = function (items, schema) {
                 return (Array.isArray(items) ? items : []).map(function (item) {
                     var source = (item && typeof item === 'object' && !Array.isArray(item)) ? item : {};
-                    var out = {};
+                    var out = Object.assign({}, source);
                     schema.forEach(function (def) {
+                        if (def.optional && !Object.prototype.hasOwnProperty.call(source, def.key)) return;
                         if (def.type === 'number') {
                             out[def.key] = numberOrZero(source[def.key] != null ? source[def.key] : def.default);
                         } else {
@@ -3441,7 +3558,7 @@
                 });
             };
 
-            return {
+            return Object.assign({}, row, {
                 slot_index: slotIndex,
                 title: title,
                 ability_name: title,
@@ -3459,7 +3576,6 @@
                 value_mode: String(row.value_mode || ''),
                 range: String(row.range != null ? row.range : ''),
                 cooldown_value: String(row.cooldown_value != null ? row.cooldown_value : ''),
-                cooldown_unit: String(row.cooldown_unit || 'own_turn'),
                 cost_value: String(row.cost_value != null ? row.cost_value : ''),
                 cost_resource: String(row.cost_resource || ''),
                 cast_time: numberOrZero(row.cast_time != null ? row.cast_time : 0),
@@ -3485,9 +3601,8 @@
                     effect = effect && typeof effect === 'object' ? Object.assign({}, effect) : {};
                     effect.effect_type = String(effect.effect_type || effect.kind || '');
                     effect.target = String(effect.target || effect.targeting || '');
-                    effect.formula_profile = String(effect.formula_profile || effect.formula_ref || '');
+                    effect.formula_profile = String(effect.formula_profile || '');
                     effect.duration_value = String(effect.duration_value != null ? effect.duration_value : (effect.duration != null ? effect.duration : ''));
-                    effect.duration_unit = String(effect.duration_unit || 'target_turn');
                     return effect;
                 }), [
                     { key: 'effect_type', default: '' },
@@ -3498,7 +3613,7 @@
                     { key: 'damage_type', default: '' },
                     { key: 'element', default: '' },
                     { key: 'duration_value', default: '' },
-                    { key: 'duration_unit', default: '' },
+                    { key: 'duration_unit', default: '', optional: true },
                     { key: 'status_key', default: '' },
                     { key: 'stat_key', default: '' },
                     { key: 'operation', default: '' },
@@ -3547,7 +3662,7 @@
                 ]),
                 ability_kb_key: String(row.ability_kb_key || row.ability_key || ''),
                 sortorder: sort
-            };
+            });
         }
 
         function renderInlineAbilitySummary(container, ability, idx, titlePrefix) {
@@ -5555,7 +5670,11 @@
                             { name: 'target', label: 'Цель', type: 'select', options: abilityTargetingOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'range', label: 'Дальность', type: 'select', options: abilityRangeOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'formula_profile', label: 'Схема расчёта', type: 'select', options: abilityFormulaProfileOptions, allowEmpty: true, emptyLabel: '—', help: 'Выбирает точную формулу из справочника механик.' },
-                            { name: 'cooldown_value', label: 'Кулдаун (ходов персонажа)', type: 'number', help: 'Количество собственных ходов персонажа до повторного использования способности.' }
+                            { name: 'action_cost', label: 'Стоимость в очках действий', type: 'number', optional: true },
+                            { name: 'duration_value', label: 'Общая длительность', type: 'number', optional: true },
+                            { name: 'duration_unit', label: 'Единица длительности', type: 'select', options: durationUnitOptions, allowEmpty: true, optional: true },
+                            { name: 'cooldown_unit', label: 'Единица кулдауна', type: 'select', options: durationUnitOptions, allowEmpty: true, optional: true },
+                            { name: 'cooldown_value', label: 'Кулдаун', type: 'number' }
                             ,{ name: 'cost_value', label: 'Стоимость', type: 'number', help: 'Количество ресурса, которое тратится при использовании способности.' }
                             ,{ name: 'cost_resource', label: 'Ресурс', type: 'select', options: abilityResourceOptions, allowEmpty: true, emptyLabel: '—' }
                         ];
@@ -5565,7 +5684,6 @@
                         var coreGrid = document.createElement('div');
                         coreGrid.className = 'af-kb-row';
                         coreDefs.forEach(function (d) { coreGrid.appendChild(createInput(d, normalized, function () {
-                            normalized.cooldown_unit = 'own_turn';
                             normalized.ability_type = normalized.type || 'active';
                             normalized.ability_name = normalized.title || '';
                             normalized.icon_url = normalized.icon || '';
@@ -5608,16 +5726,16 @@
                                     {name:'target',label:'Цель',type:'select',options:abilityTargetingOptions,allowEmpty:true,emptyLabel:'—'},
                                     {name:'damage_type',label:'Тип урона',type:'select',options:abilityDamageTypeOptions,allowEmpty:true,emptyLabel:'—'},
                                     {name:'element',label:'Стихия',type:'select',options:characterElementOptions,allowEmpty:true,emptyLabel:'—'},
-                                    {name:'duration_value',label:'Длительность (ходов цели)',type:'number',help:'Количество ходов цели, в течение которых действует эффект.'},
+                                    {name:'duration_value',label:'Длительность эффекта',type:'number',help:'Количество ходов цели, в течение которых действует эффект.'},
+                                    {name:'duration_unit',label:'Единица длительности',type:'select',options:durationUnitOptions,allowEmpty:true,optional:true},
                                     {name:'status_key',label:'Статус / контроль',type:'select',options:effectStatusOptions,allowEmpty:true,emptyLabel:'—',help:'Статус или контроль, накладываемый на выбранную цель.'},
                                     {name:'stat_key',label:'Характеристика',type:'select',options:effectStatOptions,allowEmpty:true,emptyLabel:'—'},
                                     {name:'operation',label:'Операция',type:'select',options:effectOperationOptions,allowEmpty:true,emptyLabel:'—',help:'Определяет, как указанное значение изменяет текущую характеристику или ресурс.'},
                                     {name:'resource_key',label:'Ресурс',type:'select',options:abilityResourceOptions,allowEmpty:true,emptyLabel:'—'}
                                 ];
                                 defs.forEach(function (def) {
-                                    if (def.name !== 'effect_type' && (relevant[String(effect.effect_type || '')] || []).indexOf(def.name) === -1) return;
-                                    effect.duration_unit = 'target_turn';
-                                    effectCard.appendChild(createInput(def, effect, function () { effect.duration_unit = 'target_turn'; syncRawDebounced(); if (def.name === 'effect_type') renderEffects(); }));
+                                    if (def.name !== 'effect_type' && def.name !== 'duration_unit' && (relevant[String(effect.effect_type || '')] || []).indexOf(def.name) === -1) return;
+                                    effectCard.appendChild(createInput(def, effect, function () { syncRawDebounced(); if (def.name === 'effect_type') renderEffects(); }));
                                 });
                                 var remove = document.createElement('button'); remove.type='button'; remove.className='af-kb-remove'; remove.textContent='Удалить эффект';
                                 remove.addEventListener('click', function(){ normalized.effects.splice(effectIndex,1); renderEffects(); syncRawDebounced(); }); effectHeader.appendChild(remove);

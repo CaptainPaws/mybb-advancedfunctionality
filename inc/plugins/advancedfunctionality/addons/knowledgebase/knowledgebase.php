@@ -1209,6 +1209,20 @@ function af_kb_default_arpg_type_definitions(): array
             ], (array)($fieldsMap[$typeKey] ?? [])),
         ];
 
+        // Optional machine contracts are metadata, never defaults applied to old entries.
+        $schema['math_modifier_contract'] = af_kb_arpg_math_contract();
+        $schema['mechanics_contract'] = af_kb_arpg_mechanics_contract();
+        if ($typeKey === 'arpg_mechanics') {
+            $schema['service_entry_contracts']['formula_def'] = [
+                'key' => 'string', 'version' => 'string', 'inputs' => 'numeric_type_map',
+                'expression' => 'bounded_numeric_ast', 'output_type' => 'number|integer',
+                'output_unit' => 'string', 'rounding' => af_kb_arpg_math_contract()['rounding'],
+                'min_value' => 'optional_number', 'max_value' => 'optional_number', 'notes' => 'string',
+            ];
+            $schema['service_entry_contracts']['formula_profile_optional'] = [
+                'formula_def_key' => 'string', 'formula_def_version' => 'string', 'parameters' => 'numeric_map',
+            ];
+        }
         $schema['root_defaults']['rules'] = array_replace_recursive(
             (array)($schema['root_defaults']['rules'] ?? []),
             af_kb_default_type_profile_payload_arpg($typeKey)
@@ -2656,6 +2670,8 @@ function af_kb_arpg_mechanics_options_fallback(string $setKey): array
 function af_kb_normalize_arpg_mechanics_entry_row_by_service_kind($row, string $serviceKind, int $fallbackSortorder = 0): array
 {
     $source = is_array($row) ? $row : [];
+    if (($source['schema'] ?? null) === af_kb_arpg_mechanics_contract()['schema']) return $source;
+    if ($serviceKind === 'modifier_template' && ($source['schema'] ?? null) === af_kb_arpg_math_contract()['modifier_schema']) return $source;
     $key = trim((string)($source['key'] ?? ''));
     if ($key === '') {
         return [];
@@ -2663,10 +2679,14 @@ function af_kb_normalize_arpg_mechanics_entry_row_by_service_kind($row, string $
 
     $serviceKind = trim($serviceKind);
 
+    if ($serviceKind === 'formula_def' || ($serviceKind === 'modifier_template' && ($source['schema'] ?? null) === af_kb_arpg_math_contract()['modifier_schema'])) {
+        return $source; // Typed contracts are checked on save/read, never truncated or coerced.
+    }
+
     if ($serviceKind === 'formula_profile') {
         $group = trim((string)($source['group'] ?? ''));
         $calcFamily = trim((string)($source['calc_family'] ?? ''));
-        return [
+        $normalized = [
             'key' => $key,
             'title' => trim((string)($source['title'] ?? $key)),
             'label_ru' => trim((string)($source['label_ru'] ?? '')),
@@ -2678,6 +2698,10 @@ function af_kb_normalize_arpg_mechanics_entry_row_by_service_kind($row, string $
             'ui_hint' => trim((string)($source['ui_hint'] ?? '')),
             'active' => !isset($source['active']) || !empty($source['active']) ? 1 : 0,
         ];
+        foreach (['formula_def_key', 'formula_def_version', 'parameters'] as $field) {
+            if (array_key_exists($field, $source)) $normalized[$field] = $source[$field];
+        }
+        return $normalized;
     }
 
     if ($serviceKind === 'weapon_type') {
@@ -5941,6 +5965,13 @@ function af_kb_validate_rules_json_by_type_dnd(string $type, string $normalizedJ
 
 function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalizedJson, array &$errors): string
 {
+    // Check opt-in fields before existing legacy projections can drop a schema marker.
+    $unprojected = af_kb_decode_json($normalizedJson);
+    if (is_array($unprojected)) {
+        $leaf = af_kb_arpg_extract_rules_leaf($unprojected);
+        af_kb_arpg_validate_math_fields($leaf, $errors);
+        $errors = array_merge($errors, af_kb_arpg_public_mechanics_errors($leaf));
+    }
     // The public character route predates ARPG envelopes and is consumed by
     // CharacterSheets in this shape. Keep it lossless while dispatching it
     // through the ARPG mechanic profile.
@@ -6418,13 +6449,12 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         if (!is_array($effect)) continue;
         $effect['effect_type'] = (string)($effect['effect_type'] ?? $effect['kind'] ?? '');
         $effect['target'] = (string)($effect['target'] ?? $effect['targeting'] ?? '');
-        $effect['formula_profile'] = (string)($effect['formula_profile'] ?? $effect['formula_ref'] ?? '');
+        $effect['formula_profile'] = (string)($effect['formula_profile'] ?? '');
         $effect['duration_value'] = (string)($effect['duration_value'] ?? $effect['duration'] ?? '');
-        $effect['duration_unit'] = 'target_turn';
         $effectRows[] = $effect;
     }
 
-    return [
+    $normalized = [
         'slot_index' => $slotIndex,
         'title' => $title,
         'ability_name' => $title,
@@ -6442,7 +6472,6 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         'value_mode' => (string)($row['value_mode'] ?? 'flat'),
         'range' => (string)($row['range'] ?? ''),
         'cooldown_value' => (string)($row['cooldown_value'] ?? ''),
-        'cooldown_unit' => 'own_turn',
         'cost_value' => (string)($row['cost_value'] ?? ''),
         'cost_resource' => (string)($row['cost_resource'] ?? ''),
         'damage_value' => isset($row['damage_value']) ? (float)$row['damage_value'] : 0.0,
@@ -6464,22 +6493,7 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
             ['key' => 'duration', 'type' => 'number', 'default' => 0],
             ['key' => 'notes', 'default' => ''],
         ]),
-        'effects' => $normalizeTypedRows($effectRows, [
-            ['key' => 'effect_type', 'default' => ''],
-            ['key' => 'value', 'default' => ''],
-            ['key' => 'formula_profile', 'default' => ''],
-            ['key' => 'coefficient', 'default' => ''],
-            ['key' => 'target', 'default' => ''],
-            ['key' => 'damage_type', 'default' => ''],
-            ['key' => 'element', 'default' => ''],
-            ['key' => 'duration_value', 'default' => ''],
-            ['key' => 'duration_unit', 'default' => 'target_turn'],
-            ['key' => 'status_key', 'default' => ''],
-            ['key' => 'stat_key', 'default' => ''],
-            ['key' => 'operation', 'default' => ''],
-            ['key' => 'resource_key', 'default' => ''],
-            ['key' => 'notes', 'default' => ''],
-        ]),
+        'effects' => $effectRows,
         'modifiers' => $normalizeTypedRows($row['modifiers'] ?? [], [
             ['key' => 'stat_key', 'default' => ''],
             ['key' => 'mode', 'default' => 'flat'],
@@ -6525,6 +6539,10 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         'notes' => (string)($row['notes'] ?? ''),
         'sortorder' => $sort,
     ];
+    foreach (['duration_unit', 'cooldown_unit', 'action_cost', 'timing', 'costs', 'target_count', 'application_conditions', 'application_mode', 'summon', 'usage_limits', 'formula_refs'] as $field) {
+        if (array_key_exists($field, $row)) $normalized[$field] = $row[$field];
+    }
+    return $normalized;
 }
 
 function af_kb_extract_character_abilities_from_payload(array $payload): array
@@ -7043,6 +7061,37 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
 
 function af_kb_validate_arpg_service_entity(string $entityKind, array $payload, array &$errors): void
 {
+    $mechanicKeys = [];
+    foreach (is_array($payload['rules']['entries'] ?? null) ? $payload['rules']['entries'] : [] as $index => $definition) {
+        foreach (af_kb_arpg_service_mechanics_errors($entityKind, $definition) as $error) $errors[] = 'entries.' . $index . ': ' . $error;
+        if (is_array($definition) && ($definition['schema'] ?? null) === af_kb_arpg_mechanics_contract()['schema'] && is_string($definition['key'] ?? null)) {
+            if (!array_is_list($payload['rules']['entries']) || count($payload['rules']['entries']) > 128) $errors[] = 'Typed mechanic entries require a list of at most 128 rows.';
+            if (isset($mechanicKeys[$definition['key']])) $errors[] = 'Duplicate mechanic key: ' . $definition['key'];
+            $mechanicKeys[$definition['key']] = true;
+        }
+    }
+    if ($entityKind === 'formula_def') {
+        $entries = $payload['rules']['entries'] ?? null;
+        if (!is_array($entries) || !array_is_list($entries) || count($entries) > 128) {
+            $errors[] = 'ARPG formula_def requires a list of at most 128 definitions.';
+        } else {
+            $keys = [];
+            foreach ($entries as $index => $definition) {
+                foreach (af_kb_arpg_formula_definition_errors($definition) as $error) $errors[] = 'entries.' . $index . ': ' . $error;
+                if (is_array($definition) && is_string($definition['key'] ?? null)) {
+                    if (isset($keys[$definition['key']])) $errors[] = 'Duplicate formula_def key: ' . $definition['key'];
+                    $keys[$definition['key']] = true;
+                }
+            }
+        }
+    }
+    if ($entityKind === 'modifier_template') {
+        foreach ((array)($payload['rules']['entries'] ?? []) as $index => $definition) {
+            if (is_array($definition) && ($definition['schema'] ?? null) === af_kb_arpg_math_contract()['modifier_schema']) {
+                foreach (af_kb_arpg_math_modifier_errors($definition) as $error) $errors[] = 'entries.' . $index . ': ' . $error;
+            }
+        }
+    }
     if ((string)($payload['rules']['type_profile'] ?? '') !== 'service_mechanics') {
         $errors[] = 'ARPG service entry requires rules.type_profile="service_mechanics".';
     }
@@ -7073,6 +7122,7 @@ function af_kb_validate_arpg_service_entity(string $entityKind, array $payload, 
                 $errors[] = 'ARPG formula_profile entry #' . ($idx + 1) . ' must be an object.';
                 continue;
             }
+            foreach (af_kb_arpg_formula_profile_errors($entry) as $error) $errors[] = 'entries.' . $idx . ': ' . $error;
             if (trim((string)($entry['key'] ?? '')) === '') {
                 $errors[] = 'ARPG formula_profile entry #' . ($idx + 1) . ' requires key.';
             }
@@ -7116,6 +7166,7 @@ function af_kb_validate_arpg_entry_by_type(string $type, array $payload, array &
 
     $isService = !empty($typeDef['service']);
     $payload = af_kb_validate_arpg_envelope($type, $payload, $isService, $errors);
+    af_kb_arpg_validate_math_fields((array)($payload['rules'] ?? []), $errors);
 
     if ($isService) {
         $payload['rules']['type_profile'] = 'service_mechanics';
@@ -7864,6 +7915,916 @@ function af_kb_extract_rules_from_meta_json(string $metaJson): ?array
     }
 
     return $rules;
+}
+
+/** B3 data schemas, not a status/event/combat interpreter. No defaults on legacy rows. */
+function af_kb_arpg_mechanics_contract(): array
+{
+    return [
+        'schema' => 'af_kb.arpg.mechanic.v1', 'time_units' => ['own_turn', 'target_turn', 'round'],
+        'events' => ['on_apply', 'on_turn_start', 'on_turn_end', 'on_round_end', 'on_expire'],
+        'service_optional_fields' => ['condition_ref' => 'condition_ref?', 'effect_ref' => 'effect_ref', 'priority' => 'integer', 'limits' => 'counts', 'formula_refs' => 'formula_ref[]'],
+        'services' => [
+            'status_def' => ['type' => 'token', 'duration' => 'time', 'phase' => 'token', 'decrement' => 'counter', 'repeat_rule' => 'token', 'max_stacks' => 'positive_integer', 'removal_conditions' => 'condition_ref[]', 'expiry_conditions' => 'condition_ref[]', 'immunities' => 'scope[]', 'resistances' => 'resistance[]', 'periodic_effects' => 'periodic[]', 'formula_refs' => 'formula_ref[]', 'events' => 'events'],
+            'trigger_template' => ['event' => 'token', 'condition_ref' => 'condition_ref?', 'effect_ref' => 'effect_ref', 'priority' => 'integer', 'limits' => 'counts', 'formula_refs' => 'formula_ref[]'],
+            'condition_template' => ['predicate' => 'predicate'],
+            'modifier_template' => ['modifier' => 'math_modifier'],
+            'scaling_table' => ['input' => 'token', 'unit' => 'token', 'rows' => 'scaling_rows', 'interpolation' => 'token', 'out_of_range' => 'token', 'formula_refs' => 'formula_ref[]'],
+            'combat_template' => ['phases' => 'token[]', 'limits' => 'counts', 'formula_refs' => 'formula_ref[]'],
+            'resource_def' => ['resource_key' => 'token', 'unit' => 'token'],
+        ],
+        'public_fields' => [
+            'action_cost' => 'nonnegative_number', 'target_count' => 'target_count', 'application_conditions' => 'condition_ref[]', 'application_mode' => 'token', 'summon' => 'summon', 'usage_limits' => 'counts', 'timing' => 'timing', 'costs' => 'cost[]',
+            'equip_requirements' => 'condition_ref[]', 'slot_restrictions' => 'slots', 'on_equip' => 'effects', 'on_unequip' => 'effects', 'consumption_type' => 'token', 'use_ability_ref' => 'ability_ref', 'formula_refs' => 'formula_ref[]',
+        ],
+    ];
+}
+
+/** Small structural validator. Ref/phase/unit tokens describe author choices, not rules. */
+function af_kb_arpg_mechanics_value_errors($value, string $type, string $path, array &$errors, int $depth = 0): void
+{
+    if ($depth > 12) { $errors[] = $path . ': structure depth exceeded'; return; }
+    if (str_ends_with($type, '?')) {
+        if ($value === null) return;
+        $type = substr($type, 0, -1);
+    }
+    if (str_ends_with($type, '[]')) {
+        if (!is_array($value) || !array_is_list($value) || count($value) > 128) { $errors[] = $path . ': list of at most 128 rows required'; return; }
+        foreach ($value as $index => $item) af_kb_arpg_mechanics_value_errors($item, substr($type, 0, -2), $path . '.' . $index, $errors, $depth + 1);
+        return;
+    }
+    if ($type === 'token' || $type === 'ability_ref') {
+        if (!af_kb_arpg_math_token($value)) $errors[] = $path . ': token required';
+        return;
+    }
+    if ($type === 'version') {
+        if (!is_string($value) || preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/D', $value) !== 1) $errors[] = $path . ': explicit version required';
+        return;
+    }
+    if ($type === 'condition_ref') {
+        if (!is_string($value) || !str_starts_with($value, 'condition_template:') || !af_kb_arpg_validate_ref_string($value)) $errors[] = $path . ': condition_template:key required';
+        return;
+    }
+    if (in_array($type, ['number', 'integer', 'positive_integer', 'nonnegative_number'], true)) {
+        if (($type === 'number' && !af_kb_arpg_math_number($value)) || ($type === 'nonnegative_number' && (!af_kb_arpg_math_number($value) || $value < 0)) || (in_array($type, ['integer', 'positive_integer'], true) && (!is_int($value) || ($type === 'positive_integer' && $value < 1)))) $errors[] = $path . ': invalid numeric value';
+        return;
+    }
+    if ($type === 'math_modifier') {
+        foreach (af_kb_arpg_math_modifier_errors($value) as $error) $errors[] = $path . ': ' . $error;
+        return;
+    }
+    if (!is_array($value)) { $errors[] = $path . ': object required'; return; }
+    $shapes = [
+        'time' => ['value' => 'nonnegative_number', 'unit' => 'token'],
+        'counter' => ['event' => 'token', 'amount' => 'nonnegative_number'],
+        'formula_ref' => ['key' => 'token', 'version' => 'version'],
+        'effect_ref' => ['type' => 'token', 'key' => 'token', 'effect_index' => 'integer'],
+        'scope' => ['scope' => 'token', 'key' => 'token'],
+        'resistance' => ['scope' => 'token', 'unit' => 'token', 'value' => 'number'],
+        'periodic' => ['effect' => 'effect_ref', 'period' => 'time', 'phase' => 'token'],
+        'target_count' => ['min' => 'integer', 'max' => 'integer'],
+        'summon' => ['bestiary_key' => 'token', 'count' => 'positive_integer'],
+        'slots' => ['allowed' => 'token[]', 'blocked' => 'token[]'],
+    ];
+    if (isset($shapes[$type])) {
+        foreach ($shapes[$type] as $field => $fieldType) {
+            if (!array_key_exists($field, $value)) $errors[] = $path . '.' . $field . ': required';
+            else af_kb_arpg_mechanics_value_errors($value[$field], $fieldType, $path . '.' . $field, $errors, $depth + 1);
+        }
+    }
+    if ($type === 'time' && !in_array($value['unit'] ?? null, af_kb_arpg_mechanics_contract()['time_units'], true)) $errors[] = $path . ': unknown time unit';
+    if ($type === 'counter' && !in_array($value['event'] ?? null, af_kb_arpg_mechanics_contract()['events'], true)) $errors[] = $path . ': unknown counter event';
+    if ($type === 'effect_ref' && (!in_array($value['type'] ?? null, ['arpg_ability', 'arpg_item', 'arpg_bestiary'], true) || !is_int($value['effect_index'] ?? null) || $value['effect_index'] < 0)) $errors[] = $path . ': invalid effect reference';
+    if ($type === 'target_count' && (isset($value['min'], $value['max'])) && (!is_int($value['min']) || !is_int($value['max']) || $value['min'] < 0 || $value['min'] > $value['max'])) $errors[] = $path . ': invalid target bounds';
+    if ($type === 'resistance') {
+        foreach (['damage_type', 'element', 'status_key'] as $field) if (isset($value[$field])) af_kb_arpg_mechanics_value_errors($value[$field], 'token', $path . '.' . $field, $errors, $depth + 1);
+    }
+    if ($type === 'summon' && array_key_exists('duration', $value)) af_kb_arpg_mechanics_value_errors($value['duration'], 'time', $path . '.duration', $errors, $depth + 1);
+    if ($type === 'counts') foreach ($value as $key => $limit) {
+        if (!af_kb_arpg_math_token($key) || !is_int($limit) || $limit < 0) $errors[] = $path . ': named nonnegative integer limits required';
+    }
+    if ($type === 'events') foreach ($value as $event => $effects) {
+        if (!in_array($event, af_kb_arpg_mechanics_contract()['events'], true)) $errors[] = $path . ': unknown status event';
+        af_kb_arpg_mechanics_value_errors($effects, 'effect_ref[]', $path . '.' . $event, $errors, $depth + 1);
+    }
+    if ($type === 'timing') foreach ($value as $field => $time) {
+        if (!in_array($field, ['cooldown', 'recharge', 'period', 'decrement'], true)) $errors[] = $path . ': unknown timing field';
+        else af_kb_arpg_mechanics_value_errors($time, $field === 'decrement' ? 'counter' : 'time', $path . '.' . $field, $errors, $depth + 1);
+    }
+    if ($type === 'cost') {
+        if (!in_array($value['kind'] ?? null, ['resource', 'item'], true) || !in_array($value['timing'] ?? null, ['use', 'sustain'], true)) $errors[] = $path . ': explicit cost kind/timing required';
+        $field = ($value['kind'] ?? null) === 'item' ? 'item_key' : 'resource_key';
+        af_kb_arpg_mechanics_value_errors($value[$field] ?? null, 'token', $path . '.' . $field, $errors, $depth + 1);
+        af_kb_arpg_mechanics_value_errors($value['value'] ?? null, 'nonnegative_number', $path . '.value', $errors, $depth + 1);
+        if (($value['kind'] ?? null) === 'item' && (!is_int($value['value'] ?? null))) $errors[] = $path . ': item count must be integer';
+        if (($value['timing'] ?? null) === 'sustain' || array_key_exists('period', $value)) af_kb_arpg_mechanics_value_errors($value['period'] ?? null, 'time', $path . '.period', $errors, $depth + 1);
+    }
+    if ($type === 'scaling_rows') {
+        if (!array_is_list($value) || count($value) > 128 || !$value) $errors[] = $path . ': nonempty ordered rows required';
+        $previous = null;
+        foreach ($value as $row) {
+            if (!is_array($row) || !af_kb_arpg_math_number($row['at'] ?? null) || !af_kb_arpg_math_number($row['value'] ?? null)) { $errors[] = $path . ': numeric at/value required'; continue; }
+            if ($previous !== null && $row['at'] <= $previous) $errors[] = $path . ': strictly ascending at values required';
+            $previous = $row['at'];
+        }
+    }
+    if ($type === 'predicate') {
+        $op = $value['operator'] ?? null;
+        if (in_array($op, ['all', 'any', 'not'], true)) {
+            if (array_diff(array_keys($value), ['operator', 'conditions'])) $errors[] = $path . ': unknown predicate fields';
+            if (!is_array($value['conditions'] ?? null) || !array_is_list($value['conditions']) || !count($value['conditions']) || count($value['conditions']) > 8 || ($op === 'not' && count($value['conditions']) !== 1)) { $errors[] = $path . ': invalid predicate arity'; return; }
+            foreach ($value['conditions'] as $index => $child) af_kb_arpg_mechanics_value_errors($child, 'predicate', $path . '.' . $index, $errors, $depth + 1);
+        } else {
+            if (array_diff(array_keys($value), ['operator', 'input', 'value']) || !in_array($op, ['eq', 'neq', 'lt', 'lte', 'gt', 'gte'], true) || !af_kb_arpg_math_token($value['input'] ?? null) || !array_key_exists('value', $value) || (!is_string($value['value']) && !is_bool($value['value']) && !af_kb_arpg_math_number($value['value']))) $errors[] = $path . ': invalid comparison predicate';
+        }
+    }
+}
+
+function af_kb_arpg_service_mechanics_errors(string $kind, $entry): array
+{
+    $contract = af_kb_arpg_mechanics_contract();
+    if (!is_array($entry) || ($entry['schema'] ?? null) !== $contract['schema']) return [];
+    $errors = [];
+    if (!isset($contract['services'][$kind])) return ['unsupported mechanic kind'];
+    foreach (['key', 'version'] as $field) if (!is_string($entry[$field] ?? null) || preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/D', $entry[$field]) !== 1) $errors[] = $field . ': explicit key/version required';
+    foreach ($contract['services'][$kind] as $field => $type) {
+        if (!array_key_exists($field, $entry)) $errors[] = $field . ': required';
+        else af_kb_arpg_mechanics_value_errors($entry[$field], $type, $field, $errors);
+    }
+    foreach ($contract['service_optional_fields'] as $field => $type) if (!isset($contract['services'][$kind][$field]) && array_key_exists($field, $entry)) af_kb_arpg_mechanics_value_errors($entry[$field], $type, $field, $errors);
+    af_kb_arpg_math_bounds($entry, $errors, $kind);
+    if ($kind === 'scaling_table' && (!in_array($entry['interpolation'] ?? null, ['none', 'step', 'linear'], true) || !in_array($entry['out_of_range'] ?? null, ['error', 'clamp'], true))) $errors[] = 'scaling_table: unsupported explicit interpolation/boundary rule';
+    return $errors;
+}
+
+/** Public additions are optional; validate only explicitly supplied fields. */
+function af_kb_arpg_public_mechanics_errors(array $rules, int $depth = 0): array
+{
+    if ($depth > 4) return ['mechanics nesting limit exceeded'];
+    $errors = [];
+    foreach (af_kb_arpg_mechanics_contract()['public_fields'] as $field => $type) {
+        if (!array_key_exists($field, $rules)) continue;
+        if ($field === 'action_cost' && ($rules[$field] === '' || (is_string($rules[$field]) && is_numeric($rules[$field]) && is_finite((float)$rules[$field]) && (float)$rules[$field] >= 0))) continue;
+        if ($type === 'effects') {
+            if (!is_array($rules[$field]) || !array_is_list($rules[$field])) $errors[] = $field . ': effect list required';
+            else {
+                $issues = [];
+                af_kb_arpg_acs_ability(['effects' => $rules[$field]], $field, $issues);
+                foreach ($issues as $issue) if ($issue['severity'] === 'error') $errors[] = $field . ': ' . $issue['code'];
+            }
+            continue;
+        }
+        af_kb_arpg_mechanics_value_errors($rules[$field], $type, $field, $errors);
+    }
+    foreach (['character_abilities', 'ability_keys'] as $field) foreach (is_array($rules[$field] ?? null) ? $rules[$field] : [] as $index => $ability) {
+        if (is_array($ability)) foreach (af_kb_arpg_public_mechanics_errors($ability, $depth + 1) as $error) $errors[] = $field . '.' . $index . ': ' . $error;
+    }
+    return $errors;
+}
+
+function af_kb_arpg_mechanics_reference(string $kind, array $reference, array $definition, string $path, array &$diagnostics): array
+{
+    if (($definition['schema'] ?? null) !== af_kb_arpg_mechanics_contract()['schema']) {
+        // B2 math-modifier contracts already have their own validator.
+        if ($kind === 'modifier_template' && ($definition['schema'] ?? null) === af_kb_arpg_math_contract()['modifier_schema']) return $reference;
+        af_kb_arpg_acs_diagnostic($diagnostics, 'mechanic_contract_missing', $path);
+        return $reference + ['definition' => $definition, 'executable' => false];
+    }
+    $errors = af_kb_arpg_service_mechanics_errors($kind, $definition);
+    foreach ($errors as $error) $diagnostics[] = ['severity' => 'error', 'code' => 'invalid_mechanic_contract', 'path' => $path, 'detail' => $error];
+    return array_merge($reference, ['resolved' => !$errors, 'definition' => $definition, 'definition_version' => ['version' => $definition['version'] ?? null, 'fingerprint' => af_kb_arpg_acs_fingerprint($definition)], 'executable' => false]);
+}
+
+/** B1 reference lookup, no recursive expansion and no event interpretation. */
+function af_kb_arpg_mechanics_links($value, string $type, string $path, array &$diagnostics): array
+{
+    if ($value === null) return [];
+    if (str_ends_with($type, '?')) $type = substr($type, 0, -1);
+    $links = [];
+    if (str_ends_with($type, '[]') && is_array($value)) {
+        foreach ($value as $index => $item) $links[$index] = af_kb_arpg_mechanics_links($item, substr($type, 0, -2), $path . '.' . $index, $diagnostics);
+    } elseif ($type === 'condition_ref' && is_string($value) && str_starts_with($value, 'condition_template:')) {
+        $links = af_kb_arpg_acs_reference('condition_template', substr($value, 19), $path, $diagnostics);
+    } elseif ($type === 'ability_ref' && is_string($value)) {
+        $links = af_kb_arpg_acs_reference('arpg_ability', $value, $path, $diagnostics);
+    } elseif ($type === 'formula_ref' && is_array($value) && is_string($value['key'] ?? null)) {
+        $links = af_kb_arpg_acs_reference('formula_def', $value['key'], $path, $diagnostics);
+        if (isset($links['formula']) && $links['formula']['version'] !== ($value['version'] ?? null)) { af_kb_arpg_acs_diagnostic($diagnostics, 'formula_version_mismatch', $path); $links['formula'] = null; }
+    } elseif ($type === 'effect_ref' && is_array($value) && is_string($value['type'] ?? null) && is_string($value['key'] ?? null)) {
+        $row = af_kb_arpg_acs_lookup($value['type'], $value['key']);
+        $source = $row ? af_kb_arpg_acs_source($row, $diagnostics) : ['rules' => []];
+        $index = $value['effect_index'] ?? null;
+        if (!$row || (isset($row['active']) && !$row['active']) || !is_int($index) || !is_array($source['rules']['effects'][$index] ?? null)) af_kb_arpg_acs_diagnostic($diagnostics, 'effect_reference_unresolved', $path);
+        else {
+            $ability = $source['rules'];
+            $ability['effects'] = [$source['rules']['effects'][$index]];
+            $prepared = af_kb_arpg_acs_ability($ability, $path, $diagnostics);
+            if (!$prepared['effects']) af_kb_arpg_acs_diagnostic($diagnostics, 'effect_reference_unresolved', $path);
+            $links = ['source' => $value, 'effect' => $prepared['effects'][0] ?? null, 'fingerprint' => af_kb_arpg_acs_fingerprint($source['rules']['effects'][$index]), 'executable' => false];
+        }
+    } elseif ($type === 'events' && is_array($value)) {
+        foreach ($value as $event => $effects) $links[$event] = af_kb_arpg_mechanics_links($effects, 'effect_ref[]', $path . '.' . $event, $diagnostics);
+    } elseif ($type === 'periodic' && is_array($value)) {
+        $links = af_kb_arpg_mechanics_links($value['effect'] ?? null, 'effect_ref', $path . '.effect', $diagnostics);
+    } elseif ($type === 'cost' && is_array($value)) {
+        $kind = ($value['kind'] ?? null) === 'item' ? 'arpg_item' : 'resource_def';
+        $key = $value[($value['kind'] ?? null) === 'item' ? 'item_key' : 'resource_key'] ?? null;
+        $links = af_kb_arpg_acs_reference($kind, $key, $path, $diagnostics);
+    } elseif ($type === 'summon' && is_array($value)) {
+        $links = af_kb_arpg_acs_reference('arpg_bestiary', $value['bestiary_key'] ?? null, $path, $diagnostics);
+    } elseif ($type === 'math_modifier' && is_array($value)) {
+        $links = af_kb_arpg_math_modifier_references(['math_modifiers' => [$value]], $path, $diagnostics);
+    }
+    return $links;
+}
+
+/** Additive projection of explicit B3 fields; all evaluation remains outside KB. */
+function af_kb_arpg_normalize_mechanics_contracts(array $rules, array $normalized, array &$diagnostics): array
+{
+    foreach (af_kb_arpg_public_mechanics_errors($rules) as $error) $diagnostics[] = ['severity' => 'error', 'code' => 'invalid_mechanic_field', 'path' => 'definition', 'detail' => $error];
+    $contract = af_kb_arpg_mechanics_contract();
+    foreach ($contract['public_fields'] as $field => $type) if (array_key_exists($field, $rules)) {
+        $normalized[$field] = $rules[$field];
+        if ($type === 'effects' && is_array($rules[$field])) $normalized[$field] = af_kb_arpg_acs_ability(['effects' => $rules[$field]], $field, $diagnostics)['effects'];
+        else $normalized['mechanic_references'][$field] = af_kb_arpg_mechanics_links($rules[$field], $type, $field, $diagnostics);
+    }
+    $legacyCosts = [];
+    foreach (is_array($rules['resources'] ?? null) ? $rules['resources'] : [] as $index => $resource) {
+        if (is_array($resource) && ($resource['op'] ?? null) === 'spend') $legacyCosts[] = ['kind' => 'resource', 'resource_key' => $resource['resource_key'] ?? null, 'value' => $resource['value'] ?? null, 'legacy_per' => $resource['per'] ?? null, 'source' => 'resources.' . $index, 'raw' => $resource];
+    }
+    $hasSingleCost = array_key_exists('cost_value', $rules) && $rules['cost_value'] !== '' && $rules['cost_value'] !== null;
+    if ($hasSingleCost && $legacyCosts) af_kb_arpg_acs_diagnostic($diagnostics, 'cost_source_conflict', 'costs');
+    if ($hasSingleCost && !$legacyCosts) $legacyCosts[] = ['kind' => 'resource', 'resource_key' => $rules['cost_resource'] ?? null, 'value' => $rules['cost_value'], 'source' => 'cost_value'];
+    if (array_key_exists('costs', $rules) && $legacyCosts) af_kb_arpg_acs_diagnostic($diagnostics, 'cost_source_conflict', 'costs');
+    if (!array_key_exists('costs', $rules) && $legacyCosts) {
+        $normalized['costs'] = $legacyCosts;
+        af_kb_arpg_acs_diagnostic($diagnostics, 'legacy_cost_timing_unspecified', 'costs', 'warning');
+    }
+    foreach (['cooldown' => ['cooldown_value', 'cooldown', 'cooldown_unit'], 'duration' => ['duration_value', 'duration', 'duration_unit']] as $timer => $fields) {
+        foreach (array_slice($fields, 0, 2) as $field) if (array_key_exists($field, $rules) && $rules[$field] !== '') {
+            $normalized['legacy_timing'][$timer] = ['value' => $rules[$field], 'unit' => $rules[$fields[2]] ?? null, 'source' => $field];
+            break;
+        }
+    }
+    if (isset($rules['combat_stats']) && is_array($rules['effects'] ?? null)) $normalized['effects'] = af_kb_arpg_acs_ability($rules, 'bestiary', $diagnostics)['effects'];
+    $kind = $rules['service_kind'] ?? null;
+    $seen = [];
+    if (is_string($kind) && isset($contract['services'][$kind])) foreach (is_array($rules['entries'] ?? null) ? $rules['entries'] : [] as $index => $definition) {
+        if (!is_array($definition)) continue;
+        if ($kind === 'modifier_template' && ($definition['schema'] ?? null) === af_kb_arpg_math_contract()['modifier_schema']) continue;
+        if (($definition['schema'] ?? null) === $contract['schema']) {
+            if (!array_is_list($rules['entries']) || count($rules['entries']) > 128 || (is_string($definition['key'] ?? null) && isset($seen[$definition['key']]))) af_kb_arpg_acs_diagnostic($diagnostics, 'invalid_mechanic_contract', 'entries.' . $index);
+            if (is_string($definition['key'] ?? null)) $seen[$definition['key']] = true;
+        }
+        $reference = af_kb_arpg_mechanics_reference($kind, [], $definition, 'entries.' . $index, $diagnostics);
+        foreach ($contract['services'][$kind] + $contract['service_optional_fields'] as $field => $type) if (isset($definition[$field])) $reference['references'][$field] = af_kb_arpg_mechanics_links($definition[$field], $type, 'entries.' . $index . '.' . $field, $diagnostics);
+        $normalized['mechanics_definitions'][$index] = $reference;
+    }
+    return $normalized;
+}
+
+/** B2 describes mathematics; these helpers validate data and never evaluate it. */
+function af_kb_arpg_math_contract(): array
+{
+    return [
+        'formula_schema' => 'af_kb.arpg.formula.v1',
+        'modifier_schema' => 'af_kb.arpg.math-modifier.v1',
+        'input_types' => ['number', 'integer'],
+        'rounding' => ['none', 'floor', 'ceil', 'truncate', 'half_up', 'half_even'],
+        'ast_operators' => ['add' => [2, 2], 'subtract' => [2, 2], 'multiply' => [2, 2], 'divide' => [2, 2], 'negate' => [1, 1], 'min' => [2, 8], 'max' => [2, 8]],
+        'modifier_operations' => ['add_flat', 'add_relative_percent', 'multiply', 'set', 'clamp_min', 'clamp_max'],
+        'formula_fields' => ['key', 'version', 'inputs', 'expression', 'output_type', 'output_unit', 'rounding', 'min_value', 'max_value', 'notes', 'active'],
+        'modifier_fields' => ['schema', 'stat_key', 'operation', 'value', 'unit', 'phase', 'priority', 'condition_ref', 'min_value', 'max_value'],
+    ];
+}
+
+function af_kb_arpg_math_number($value): bool
+{
+    return (is_int($value) || is_float($value)) && is_finite((float)$value);
+}
+
+function af_kb_arpg_math_token($value): bool
+{
+    return is_string($value) && preg_match('/^[a-zA-Z][a-zA-Z0-9_.\/-]{0,63}$/D', $value) === 1;
+}
+
+function af_kb_arpg_math_bounds(array $row, array &$errors, string $path): void
+{
+    foreach (['min_value', 'max_value'] as $field) {
+        if (array_key_exists($field, $row) && !af_kb_arpg_math_number($row[$field])) $errors[] = $path . '.' . $field . ': finite JSON number required';
+    }
+    if (isset($row['min_value'], $row['max_value']) && af_kb_arpg_math_number($row['min_value']) && af_kb_arpg_math_number($row['max_value']) && $row['min_value'] > $row['max_value']) $errors[] = $path . ': min_value exceeds max_value';
+}
+
+/** AST grammar only: bounded size/depth, exact node fields, declared numeric inputs. */
+function af_kb_arpg_validate_formula_ast($node, array $inputs, array &$errors, int &$nodes, int $depth = 0): void
+{
+    if (++$nodes > 256 || $depth > 16) {
+        $errors[] = 'expression: AST limit exceeded';
+        return;
+    }
+    if (!is_array($node) || !isset($node['type']) || !is_string($node['type'])) {
+        $errors[] = 'expression: typed AST object required (strings/PHP are not accepted)';
+        return;
+    }
+    $fields = ['literal' => ['type', 'value'], 'input' => ['type', 'name'], 'operation' => ['type', 'operator', 'args']][$node['type']] ?? null;
+    if ($fields === null || array_diff(array_keys($node), $fields) || array_diff($fields, array_keys($node))) {
+        $errors[] = 'expression: unknown node type or fields';
+        return;
+    }
+    if ($node['type'] === 'literal') {
+        if (!af_kb_arpg_math_number($node['value'])) $errors[] = 'expression.literal: finite JSON number required';
+    } elseif ($node['type'] === 'input') {
+        if (!is_string($node['name']) || !array_key_exists($node['name'], $inputs)) $errors[] = 'expression.input: undeclared input';
+    } else {
+        $arity = is_string($node['operator']) ? (af_kb_arpg_math_contract()['ast_operators'][$node['operator']] ?? null) : null;
+        if (!$arity || !is_array($node['args']) || !array_is_list($node['args']) || count($node['args']) < $arity[0] || count($node['args']) > $arity[1]) {
+            $errors[] = 'expression.operation: unsupported operator or arity';
+            return;
+        }
+        foreach ($node['args'] as $arg) {
+            if ($nodes >= 256) { $errors[] = 'expression: AST limit exceeded'; break; }
+            af_kb_arpg_validate_formula_ast($arg, $inputs, $errors, $nodes, $depth + 1);
+        }
+    }
+}
+
+function af_kb_arpg_formula_definition_errors($definition): array
+{
+    $errors = [];
+    if (!is_array($definition)) return ['formula_def: object required'];
+    $contract = af_kb_arpg_math_contract();
+    if (array_diff(array_keys($definition), $contract['formula_fields'])) $errors[] = 'formula_def: unknown fields';
+    foreach (['key', 'version', 'inputs', 'expression', 'output_type', 'output_unit', 'rounding', 'notes'] as $field) {
+        if (!array_key_exists($field, $definition)) $errors[] = 'formula_def.' . $field . ': required';
+    }
+    if (!is_string($definition['key'] ?? null) || preg_match('/^[a-z][a-z0-9_-]{1,63}$/D', $definition['key']) !== 1) $errors[] = 'formula_def.key: invalid key';
+    if (!is_string($definition['version'] ?? null) || preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/D', $definition['version']) !== 1) $errors[] = 'formula_def.version: explicit content version required';
+    $inputs = $definition['inputs'] ?? null;
+    if (!is_array($inputs) || ($inputs !== [] && array_is_list($inputs)) || count($inputs) > 64) {
+        $errors[] = 'formula_def.inputs: map of at most 64 typed inputs required';
+        $inputs = [];
+    }
+    foreach ($inputs as $name => $type) {
+        if (!is_string($name) || preg_match('/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/D', $name) !== 1 || !in_array($type, $contract['input_types'], true)) $errors[] = 'formula_def.inputs: invalid name or numeric type';
+    }
+    $nodes = 0;
+    af_kb_arpg_validate_formula_ast($definition['expression'] ?? null, $inputs, $errors, $nodes);
+    if (!in_array($definition['output_type'] ?? null, $contract['input_types'], true)) $errors[] = 'formula_def.output_type: numeric type required';
+    if (!af_kb_arpg_math_token($definition['output_unit'] ?? null)) $errors[] = 'formula_def.output_unit: explicit unit token required';
+    if (!in_array($definition['rounding'] ?? null, $contract['rounding'], true)) $errors[] = 'formula_def.rounding: explicit supported rounding required';
+    if (!is_string($definition['notes'] ?? null)) $errors[] = 'formula_def.notes: string required';
+    if (array_key_exists('active', $definition) && !in_array($definition['active'], [true, false, 0, 1], true)) $errors[] = 'formula_def.active: boolean or 0/1 required';
+    af_kb_arpg_math_bounds($definition, $errors, 'formula_def');
+    return $errors;
+}
+
+/** Optional binding syntax only. Missing bindings remain valid legacy profile storage. */
+function af_kb_arpg_formula_profile_errors(array $profile): array
+{
+    $errors = [];
+    foreach (['formula_def_key', 'formula_def_version'] as $field) {
+        if (array_key_exists($field, $profile) && !is_string($profile[$field])) $errors[] = 'formula_profile.' . $field . ': string required';
+    }
+    $key = $profile['formula_def_key'] ?? '';
+    $version = $profile['formula_def_version'] ?? '';
+    if ($key !== '' || $version !== '') {
+        if (!is_string($key) || preg_match('/^[a-z][a-z0-9_-]{1,63}$/D', $key) !== 1) $errors[] = 'formula_profile.formula_def_key: invalid key';
+        if (!is_string($version) || preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/D', $version) !== 1) $errors[] = 'formula_profile.formula_def_version: pinned version required';
+    }
+    if (array_key_exists('parameters', $profile)) {
+        if (!is_array($profile['parameters']) || ($profile['parameters'] !== [] && array_is_list($profile['parameters']))) {
+            $errors[] = 'formula_profile.parameters: named numeric map required';
+        } else {
+            foreach ($profile['parameters'] as $name => $value) {
+                if (!is_string($name) || preg_match('/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/D', $name) !== 1 || !af_kb_arpg_math_number($value)) $errors[] = 'formula_profile.parameters: invalid name or finite numeric value';
+            }
+        }
+    }
+    return $errors;
+}
+
+function af_kb_arpg_math_modifier_errors($modifier): array
+{
+    if (!is_array($modifier)) return ['math_modifier: object required'];
+    $errors = [];
+    $contract = af_kb_arpg_math_contract();
+    if (array_diff(array_keys($modifier), $contract['modifier_fields'])) $errors[] = 'math_modifier: unknown fields';
+    if (($modifier['schema'] ?? null) !== $contract['modifier_schema']) $errors[] = 'math_modifier.schema: explicit opt-in required';
+    if (!is_string($modifier['stat_key'] ?? null) || !array_key_exists($modifier['stat_key'], af_kb_arpg_character_stat_registry())) $errors[] = 'math_modifier.stat_key: unknown stat';
+    if (!in_array($modifier['operation'] ?? null, $contract['modifier_operations'], true)) $errors[] = 'math_modifier.operation: unsupported operation';
+    if (!af_kb_arpg_math_number($modifier['value'] ?? null)) $errors[] = 'math_modifier.value: finite JSON number required';
+    foreach (['unit', 'phase'] as $field) {
+        if (!af_kb_arpg_math_token($modifier[$field] ?? null)) $errors[] = 'math_modifier.' . $field . ': explicit token required';
+    }
+    if (!is_int($modifier['priority'] ?? null)) $errors[] = 'math_modifier.priority: integer required';
+    if (!array_key_exists('condition_ref', $modifier) || ($modifier['condition_ref'] !== null && (!is_string($modifier['condition_ref']) || !str_starts_with($modifier['condition_ref'], 'condition_template:') || !af_kb_arpg_validate_ref_string($modifier['condition_ref'])))) $errors[] = 'math_modifier.condition_ref: null or condition_template:key required';
+    af_kb_arpg_math_bounds($modifier, $errors, 'math_modifier');
+    return $errors;
+}
+
+/** Validate opt-in containers only; never reinterpret legacy modifiers[]. */
+function af_kb_arpg_validate_math_fields(array $rules, array &$errors, string $path = 'rules', int $depth = 0): void
+{
+    if ($depth > 4) { $errors[] = $path . ': math container depth exceeded'; return; }
+    if (array_key_exists('math_modifiers', $rules)) {
+        if ($depth > 0) $errors[] = $path . '.math_modifiers: nested opt-in containers are not supported; use a standalone ARPG definition';
+        if (!is_array($rules['math_modifiers']) || !array_is_list($rules['math_modifiers'])) $errors[] = $path . '.math_modifiers: list required';
+        else foreach ($rules['math_modifiers'] as $index => $modifier) {
+            foreach (af_kb_arpg_math_modifier_errors($modifier) as $error) $errors[] = $path . '.math_modifiers.' . $index . ': ' . $error;
+        }
+    }
+    // A tagged new modifier in the legacy bucket would be consumed as flat by CS.
+    foreach (['modifiers', 'base_stats'] as $legacyBucket) {
+        foreach (is_array($rules[$legacyBucket] ?? null) ? $rules[$legacyBucket] : [] as $modifier) {
+            if (is_array($modifier) && ($modifier['schema'] ?? null) === af_kb_arpg_math_contract()['modifier_schema']) $errors[] = $path . '.' . $legacyBucket . ': opt-in modifiers belong in math_modifiers';
+        }
+    }
+    foreach (['character_abilities', 'ability_keys'] as $field) {
+        foreach (is_array($rules[$field] ?? null) ? $rules[$field] : [] as $index => $ability) {
+            if (is_array($ability)) af_kb_arpg_validate_math_fields($ability, $errors, $path . '.' . $field . '.' . $index, $depth + 1);
+        }
+    }
+}
+
+/** A validated definition snapshot; no executor and no inferred legacy formula. */
+function af_kb_arpg_formula_snapshot(array $definition): array
+{
+    return ['schema' => af_kb_arpg_math_contract()['formula_schema'], 'key' => $definition['key'], 'version' => $definition['version'],
+        'fingerprint' => af_kb_arpg_acs_fingerprint($definition), 'definition' => $definition, 'executable' => false];
+}
+
+function af_kb_arpg_math_modifier_references(array $rules, string $path, array &$diagnostics): array
+{
+    $references = [];
+    foreach (is_array($rules['math_modifiers'] ?? null) ? $rules['math_modifiers'] : [] as $index => $modifier) {
+        if (is_array($modifier) && is_string($modifier['condition_ref'] ?? null) && str_starts_with($modifier['condition_ref'], 'condition_template:')) {
+            $references[$index] = af_kb_arpg_acs_reference('condition_template', substr($modifier['condition_ref'], strlen('condition_template:')), $path . '.math_modifiers.' . $index . '.condition_ref', $diagnostics);
+        }
+    }
+    return $references;
+}
+
+function af_kb_arpg_formula_reference(string $kind, array $reference, string $path, array &$diagnostics): array
+{
+    $definition = $reference['definition'];
+    $errors = $kind === 'formula_def' ? af_kb_arpg_formula_definition_errors($definition) : af_kb_arpg_formula_profile_errors($definition);
+    foreach ($errors as $error) $diagnostics[] = ['severity' => 'error', 'code' => 'invalid_formula_contract', 'path' => $path, 'detail' => $error];
+    if ($errors) return array_merge($reference, ['resolved' => false]);
+    if ($kind === 'formula_def') return array_merge($reference, ['formula' => af_kb_arpg_formula_snapshot($definition)]);
+    if (empty($definition['formula_def_key'])) {
+        af_kb_arpg_acs_diagnostic($diagnostics, 'formula_binding_missing', $path . '.formula_def_key');
+        return array_merge($reference, ['formula' => null]);
+    }
+    $formula = af_kb_arpg_acs_reference('formula_def', $definition['formula_def_key'], $path . '.formula_def_key', $diagnostics);
+    $snapshot = $formula['formula'] ?? null;
+    if ($snapshot !== null && $snapshot['version'] !== $definition['formula_def_version']) {
+        af_kb_arpg_acs_diagnostic($diagnostics, 'formula_version_mismatch', $path . '.formula_def_version');
+        $snapshot = null;
+    }
+    if ($snapshot !== null) {
+        foreach ($definition['parameters'] ?? [] as $name => $value) {
+            $type = $snapshot['definition']['inputs'][$name] ?? null;
+            if ($type === null || ($type === 'integer' && !is_int($value))) af_kb_arpg_acs_diagnostic($diagnostics, 'formula_parameter_mismatch', $path . '.parameters.' . $name);
+        }
+    }
+    return array_merge($reference, ['formula' => $snapshot, 'parameters' => $definition['parameters'] ?? []]);
+}
+
+/** Additive B2 projection hook; the B1 source selector and normalization remain unchanged. */
+function af_kb_arpg_normalize_math_contracts(array $rules, array $normalized, array &$diagnostics): array
+{
+    $errors = [];
+    af_kb_arpg_validate_math_fields($rules, $errors);
+    foreach ($errors as $error) $diagnostics[] = ['severity' => 'error', 'code' => 'invalid_math_modifier', 'path' => 'math_modifiers', 'detail' => $error];
+    if (array_key_exists('math_modifiers', $rules)) $normalized['math_modifiers'] = $rules['math_modifiers'];
+    if (!empty($rules['math_modifiers'])) $normalized['math_modifier_conditions'] = af_kb_arpg_math_modifier_references($rules, 'rules', $diagnostics);
+    if (!in_array($rules['service_kind'] ?? null, ['formula_def', 'formula_profile', 'modifier_template'], true)) return $normalized;
+    if (($rules['service_kind'] ?? null) === 'formula_def' && (!is_array($rules['entries'] ?? null) || !array_is_list($rules['entries']) || count($rules['entries']) > 128)) {
+        af_kb_arpg_acs_diagnostic($diagnostics, 'invalid_formula_contract', 'entries');
+        return $normalized;
+    }
+    $seen = [];
+    foreach (is_array($rules['entries'] ?? null) ? $rules['entries'] : [] as $index => $entry) {
+        $path = 'entries.' . $index;
+        if (($rules['service_kind'] ?? null) === 'formula_def') {
+            $errors = af_kb_arpg_formula_definition_errors($entry);
+            if (is_array($entry) && is_string($entry['key'] ?? null)) {
+                if (isset($seen[$entry['key']])) $errors[] = 'duplicate formula key';
+                $seen[$entry['key']] = true;
+            }
+            foreach ($errors as $error) $diagnostics[] = ['severity' => 'error', 'code' => 'invalid_formula_contract', 'path' => $path, 'detail' => $error];
+            if (!$errors) $normalized['formula_definitions'][] = af_kb_arpg_formula_snapshot($entry);
+        } elseif (($rules['service_kind'] ?? null) === 'formula_profile' && is_array($entry)) {
+            $normalized['formula_bindings'][$index] = af_kb_arpg_formula_reference('formula_profile', ['definition' => $entry, 'resolved' => true], $path, $diagnostics);
+        } elseif (is_array($entry) && ($entry['schema'] ?? null) === af_kb_arpg_math_contract()['modifier_schema']) {
+            foreach (af_kb_arpg_math_modifier_errors($entry) as $error) $diagnostics[] = ['severity' => 'error', 'code' => 'invalid_math_modifier', 'path' => $path, 'detail' => $error];
+        }
+    }
+    return $normalized;
+}
+
+/** Read-only ACS definition adapter. Never call save/migration or sheet helpers here. */
+function af_kb_arpg_acs_diagnostic(array &$diagnostics, string $code, string $path, string $severity = 'error'): void
+{
+    $diagnostics[] = ['severity' => $severity, 'code' => $code, 'path' => $path];
+}
+
+/** Sort object keys only; list order, scalar types and explicit zero remain significant. */
+function af_kb_arpg_acs_canonical($value)
+{
+    if (is_object($value)) {
+        $fields = get_object_vars($value);
+        ksort($fields, SORT_STRING);
+        foreach ($fields as &$field) $field = af_kb_arpg_acs_canonical($field);
+        return (object)$fields;
+    }
+    if (is_array($value)) {
+        if (!array_is_list($value)) ksort($value, SORT_STRING);
+        foreach ($value as &$field) $field = af_kb_arpg_acs_canonical($field);
+    }
+    return $value;
+}
+
+function af_kb_arpg_acs_fingerprint($value): string
+{
+    return 'sha256:' . hash('sha256', json_encode(af_kb_arpg_acs_canonical($value), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+}
+
+/** Select a whole projection, never merge competing projections. */
+function af_kb_arpg_acs_source(array $entry, array &$diagnostics): array
+{
+    $candidates = [];
+    $objects = [];
+    foreach (['data_json', 'meta_json'] as $column) {
+        $json = $entry[$column] ?? '';
+        if ($json === '' || $json === null) continue;
+        if (!is_string($json)) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'invalid_json', $column);
+            continue;
+        }
+        try {
+            $object = json_decode($json, false, 512, JSON_THROW_ON_ERROR);
+            // JSON numbers outside PHP's finite range must fail diagnostically,
+            // before canonicalization or fingerprint encoding can throw.
+            json_encode($object, JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'invalid_json', $column);
+            continue;
+        }
+        if (!is_object($object)) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'expected_json_object', $column);
+            continue;
+        }
+        if ($column === 'meta_json') {
+            if (!property_exists($object, 'rules')) continue;
+            $object = $object->rules;
+            $path = 'meta_json.rules';
+        } elseif (!isset($object->schema) && !isset($object->type_profile) && !isset($object->rules) && isset($object->meta) && is_object($object->meta) && property_exists($object->meta, 'rules')) {
+            $object = $object->meta->rules;
+            $path = 'data_json.meta.rules';
+        } else {
+            $path = 'data_json';
+        }
+        if (!is_object($object)) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'expected_rules_object', $path);
+            continue;
+        }
+        if (!get_object_vars($object)) continue;
+        if (property_exists($object, 'mechanic') && $object->mechanic !== 'arpg') af_kb_arpg_acs_diagnostic($diagnostics, 'mechanic_mismatch', $path . '.mechanic');
+        // Compare mechanical leaves, not presentation/envelope fields.
+        $leaf = $object;
+        if (property_exists($object, 'rules') && !is_object($object->rules)) af_kb_arpg_acs_diagnostic($diagnostics, 'expected_rules_object', $path . '.rules');
+        for ($depth = 0; $depth < 4 && ($leaf->schema ?? null) !== AF_KB_ARPG_RULES_SCHEMA && isset($leaf->rules) && is_object($leaf->rules); $depth++) $leaf = $leaf->rules;
+        if ($depth === 4 && ($leaf->schema ?? null) !== AF_KB_ARPG_RULES_SCHEMA && isset($leaf->rules) && is_object($leaf->rules)) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'rules_depth_exceeded', $path);
+        }
+        $objects[$path] = $leaf;
+        $candidates[$path] = json_decode(json_encode($object, JSON_THROW_ON_ERROR), true, 512, JSON_THROW_ON_ERROR);
+    }
+    $selected = array_key_first($candidates);
+    if ($selected === null) {
+        af_kb_arpg_acs_diagnostic($diagnostics, 'rules_missing', 'source');
+        return ['path' => null, 'rules' => [], 'candidates' => [], 'fingerprint' => null];
+    }
+    foreach ($objects as $path => $object) {
+        if (af_kb_arpg_acs_fingerprint($object) !== af_kb_arpg_acs_fingerprint($objects[$selected])) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'source_conflict', $path);
+        }
+    }
+    return ['path' => $selected, 'rules' => af_kb_arpg_extract_rules_leaf($candidates[$selected]),
+        'candidates' => $candidates, 'fingerprint' => af_kb_arpg_acs_fingerprint($objects[$selected])];
+}
+
+/** Raw row lookup: af_kb_get_entry() is a presentation projection without data_json/id. */
+function af_kb_arpg_acs_lookup(string $type, string $key): ?array
+{
+    global $db;
+    if ($key === '' || !isset($db) || !$db->table_exists('af_kb_entries')) return null;
+    $row = $db->fetch_array($db->simple_select('af_kb_entries', '*', "type='" . $db->escape_string($type) . "' AND `key`='" . $db->escape_string($key) . "'", ['limit' => 1]));
+    return is_array($row) ? $row : null;
+}
+
+/** Resolve a reference without executing or recursively expanding it. No seed fallback. */
+function af_kb_arpg_acs_reference(string $kind, $key, string $path, array &$diagnostics): array
+{
+    $reference = ['kind' => $kind, 'key' => $key, 'resolved' => false];
+    if (!is_string($key) || trim($key) === '') {
+        af_kb_arpg_acs_diagnostic($diagnostics, 'reference_missing', $path);
+        return $reference;
+    }
+    $key = trim($key);
+    $publicReference = in_array($kind, ['arpg_ability', 'arpg_item', 'arpg_bestiary'], true);
+    $row = af_kb_arpg_acs_lookup($publicReference ? $kind : 'arpg_mechanics', $key);
+    $rows = $row ? [$row] : [];
+    if (!$publicReference && $key !== $kind) {
+        $aggregate = af_kb_arpg_acs_lookup('arpg_mechanics', $kind);
+        if ($aggregate) $rows[] = $aggregate;
+    }
+    if (in_array($kind, ['formula_def', 'formula_profile'], true)) {
+        $matchesCount = 0;
+        foreach ($rows as $candidate) {
+            $candidateIssues = [];
+            $candidateRules = af_kb_arpg_acs_source($candidate, $candidateIssues)['rules'];
+            if ($candidateIssues || ($candidateRules['service_kind'] ?? null) !== $kind) continue;
+            if (empty($candidateRules['entries'])) $matchesCount += (($candidate['key'] ?? null) === $key) ? 1 : 0;
+            else foreach ((array)$candidateRules['entries'] as $candidateDefinition) {
+                if (is_array($candidateDefinition) && ($candidateDefinition['key'] ?? null) === $key) $matchesCount++;
+            }
+        }
+        if ($matchesCount > 1) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'formula_key_ambiguous', $path);
+            return $reference;
+        }
+    }
+    foreach ($rows as $row) {
+        $issues = [];
+        $source = af_kb_arpg_acs_source($row, $issues);
+        $rules = $source['rules'];
+        if ($issues || (array_key_exists('active', $row) && !(bool)$row['active'])) continue;
+        $definition = $rules;
+        if (!$publicReference) {
+            if (($rules['service_kind'] ?? null) !== $kind) continue;
+            if (!empty($rules['entries'])) {
+                $matches = array_values(array_filter((array)($rules['entries'] ?? []), static fn($item) => is_array($item) && ($item['key'] ?? null) === $key));
+                if (count($matches) !== 1 || (isset($matches[0]['active']) && !$matches[0]['active']) || (isset($matches[0]['is_active']) && !$matches[0]['is_active'])) continue;
+                $definition = $matches[0];
+            } elseif (($row['key'] ?? '') !== $key) continue;
+        }
+        $resolved = array_merge($reference, ['resolved' => true, 'entry_id' => $row['id'] ?? null, 'entry_key' => $row['key'] ?? null, 'fingerprint' => $source['fingerprint']]);
+        if (in_array($kind, ['formula_def', 'formula_profile'], true)) return af_kb_arpg_formula_reference($kind, $resolved + ['definition' => $definition], $path, $diagnostics);
+        if (isset(af_kb_arpg_mechanics_contract()['services'][$kind])) return af_kb_arpg_mechanics_reference($kind, $resolved, $definition, $path, $diagnostics);
+        return $resolved;
+    }
+    af_kb_arpg_acs_diagnostic($diagnostics, 'reference_unresolved', $path);
+    return $reference;
+}
+
+/** Aliases preserve original keys and report ambiguity instead of choosing silently. */
+function af_kb_arpg_acs_aliases(array $row, array $aliases, string $path, array &$diagnostics): array
+{
+    foreach ($aliases as $canonical => $legacy) {
+        if (!array_key_exists($legacy, $row)) continue;
+        if (!array_key_exists($canonical, $row) || $row[$canonical] === '') {
+            $row[$canonical] = $row[$legacy];
+        } elseif ($row[$legacy] !== '' && $row[$canonical] !== $row[$legacy]) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'alias_conflict', $path . '.' . $canonical);
+        }
+    }
+    return $row;
+}
+
+function af_kb_arpg_acs_numeric(array $row, array $keys, string $path, array &$diagnostics): void
+{
+    foreach ($keys as $key) {
+        if (!array_key_exists($key, $row) || $row[$key] === '') continue;
+        if (!is_scalar($row[$key]) || is_bool($row[$key]) || !is_numeric($row[$key]) || !is_finite((float)$row[$key])) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'invalid_number', $path . '.' . $key);
+        }
+    }
+}
+
+/** Damage category and element are independent. Unknown legacy values are never reclassified. */
+function af_kb_arpg_acs_damage(array $row, string $path, array &$diagnostics): array
+{
+    $category = $row['damage_type'] ?? null;
+    if ($category !== null && $category !== '' && !in_array($category, ['physical', 'elemental', 'true', 'healing', 'hybrid'], true)) {
+        af_kb_arpg_acs_diagnostic($diagnostics, 'ambiguous_damage_type', $path . '.damage_type');
+        $category = null;
+    }
+    return ['category' => $category, 'element' => $row['element'] ?? null, 'scope' => $row['scope'] ?? null];
+}
+
+function af_kb_arpg_acs_modifiers(array $rules, string $path, array &$diagnostics): void
+{
+    foreach (['base_stats', 'modifiers'] as $bucket) {
+        if (isset($rules[$bucket]) && !is_array($rules[$bucket])) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'expected_array', $path . '.' . $bucket);
+        }
+        foreach (is_array($rules[$bucket] ?? null) ? $rules[$bucket] : [] as $index => $modifier) {
+            $modifierPath = $path . '.' . $bucket . '.' . $index;
+            if (!is_array($modifier)) {
+                af_kb_arpg_acs_diagnostic($diagnostics, 'expected_modifier_object', $modifierPath);
+                continue;
+            }
+            foreach (['mode', 'operation'] as $operation) {
+                if (isset($modifier[$operation]) && !in_array($modifier[$operation], af_kb_arpg_origin_modifier_operations(), true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_operation', $modifierPath . '.' . $operation);
+            }
+            af_kb_arpg_acs_numeric($modifier, ['value'], $modifierPath, $diagnostics);
+        }
+    }
+}
+
+/** Shared path for KB abilities, inline character abilities and bestiary objects. */
+function af_kb_arpg_acs_ability(array $ability, string $path, array &$diagnostics): array
+{
+    $ability = af_kb_arpg_acs_aliases($ability, ['target' => 'targeting', 'duration_value' => 'duration'], $path, $diagnostics);
+    af_kb_arpg_acs_modifiers($ability, $path, $diagnostics);
+    af_kb_arpg_acs_numeric($ability, ['cooldown', 'cooldown_value', 'cost_value', 'duration_value', 'damage_value', 'heal_value', 'shield_value'], $path, $diagnostics);
+    $references = [];
+    foreach (['formula_profile' => 'formula_profile', 'formula_ref' => 'formula_def', 'ability_kb_key' => 'arpg_ability', 'ability_key' => 'arpg_ability', 'cost_resource' => 'resource_def'] as $field => $kind) {
+        if (isset($ability[$field]) && $ability[$field] !== '') $references[$field] = af_kb_arpg_acs_reference($kind, $ability[$field], $path . '.' . $field, $diagnostics);
+    }
+    if (!empty($ability['math_modifiers'])) $references['math_modifiers'] = af_kb_arpg_math_modifier_references($ability, $path, $diagnostics);
+    foreach (['cooldown_value' => 'cooldown_unit', 'duration_value' => 'duration_unit'] as $value => $unit) {
+        if (isset($ability[$value]) && $ability[$value] !== '' && (!isset($ability[$unit]) || $ability[$unit] === '')) af_kb_arpg_acs_diagnostic($diagnostics, 'duration_unit_missing', $path . '.' . $unit);
+        if (isset($ability[$unit]) && $ability[$unit] !== '' && !in_array($ability[$unit], ['own_turn', 'target_turn', 'round'], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_duration_unit', $path . '.' . $unit);
+    }
+    if (isset($ability['cooldown']) && $ability['cooldown'] !== '' && !isset($ability['cooldown_value']) && empty($ability['cooldown_unit'])) af_kb_arpg_acs_diagnostic($diagnostics, 'duration_unit_missing', $path . '.cooldown_unit');
+    if (isset($ability['cost_value']) && $ability['cost_value'] !== '' && empty($ability['cost_resource'])) af_kb_arpg_acs_diagnostic($diagnostics, 'required_field_missing', $path . '.cost_resource');
+    $effects = [];
+    if (isset($ability['effects']) && !is_array($ability['effects'])) af_kb_arpg_acs_diagnostic($diagnostics, 'expected_array', $path . '.effects');
+    foreach (is_array($ability['effects'] ?? null) ? $ability['effects'] : [] as $index => $original) {
+        $effectPath = $path . '.effects.' . $index;
+        $diagnosticStart = count($diagnostics);
+        if (!is_array($original)) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'expected_effect_object', $effectPath);
+            continue;
+        }
+        // Units, notes and default operation alone do not constitute an effect. Zero is meaningful.
+        $meaningful = false;
+        foreach ($original as $field => $value) {
+            if (in_array($field, ['notes', 'duration', 'duration_value', 'duration_unit', 'target', 'targeting', 'damage_type', 'element', 'operation', 'value_mode', 'hit_count'], true)) continue;
+            if ($value !== '' && $value !== null && $value !== []) $meaningful = true;
+        }
+        if (!$meaningful) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'empty_effect', $effectPath, 'warning');
+            continue;
+        }
+        $effect = af_kb_arpg_acs_aliases($original, ['effect_type' => 'kind', 'target' => 'targeting', 'duration_value' => 'duration'], $effectPath, $diagnostics);
+        $inherited = [];
+        foreach (['formula_profile', 'target', 'damage_type'] as $field) {
+            if ((!array_key_exists($field, $effect) || $effect[$field] === '') && array_key_exists($field, $ability)) {
+                $effect[$field] = $ability[$field];
+                $inherited[] = $field;
+            }
+        }
+        $type = $effect['effect_type'] ?? '';
+        if (!in_array($type, ['damage', 'heal', 'shield', 'status', 'stat_modifier', 'resource', 'control', 'dispel', 'cleanse', 'movement', 'summon'], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_effect_type', $effectPath . '.effect_type');
+        if (isset($effect['operation']) && $effect['operation'] !== '' && !in_array($effect['operation'], ['add', 'subtract', 'set', 'percent'], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_operation', $effectPath . '.operation');
+        if (isset($effect['value_mode']) && !in_array($effect['value_mode'], ['flat', 'percent', 'text', ''], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_value_mode', $effectPath . '.value_mode');
+        af_kb_arpg_acs_numeric($effect, ['value', 'coefficient', 'hit_count', 'duration_value'], $effectPath, $diagnostics);
+        if (isset($effect['duration_value']) && $effect['duration_value'] !== '' && empty($effect['duration_unit'])) af_kb_arpg_acs_diagnostic($diagnostics, 'duration_unit_missing', $effectPath . '.duration_unit');
+        if (isset($effect['duration_unit']) && $effect['duration_unit'] !== '' && !in_array($effect['duration_unit'], ['own_turn', 'target_turn', 'round'], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_duration_unit', $effectPath . '.duration_unit');
+        $refs = [];
+        foreach (['formula_profile' => 'formula_profile', 'formula_ref' => 'formula_def', 'status_key' => 'status_def', 'resource_key' => 'resource_def'] as $field => $kind) {
+            if (isset($effect[$field]) && $effect[$field] !== '') $refs[$field] = af_kb_arpg_acs_reference($kind, $effect[$field], $effectPath . '.' . $field, $diagnostics);
+        }
+        foreach (['status' => 'status_key', 'resource' => 'resource_key', 'stat_modifier' => 'stat_key'] as $requiredType => $field) {
+            if ($type === $requiredType && (!isset($effect[$field]) || $effect[$field] === '')) af_kb_arpg_acs_diagnostic($diagnostics, 'required_field_missing', $effectPath . '.' . $field);
+        }
+        if (in_array($type, ['stat_modifier', 'resource'], true)) {
+            foreach (['operation', 'value'] as $field) {
+                if (!array_key_exists($field, $effect) || $effect[$field] === '' || $effect[$field] === null) af_kb_arpg_acs_diagnostic($diagnostics, 'required_field_missing', $effectPath . '.' . $field);
+            }
+        }
+        if ($type === 'stat_modifier' && isset($effect['stat_key']) && (!is_string($effect['stat_key']) || !array_key_exists($effect['stat_key'], af_kb_arpg_character_stat_registry()))) af_kb_arpg_acs_diagnostic($diagnostics, 'unknown_stat', $effectPath . '.stat_key');
+        if (in_array($type, ['damage', 'heal', 'shield'], true) && (!array_key_exists('value', $effect) || $effect['value'] === '' || $effect['value'] === null) && empty($effect['formula_profile']) && empty($effect['formula_ref'])) af_kb_arpg_acs_diagnostic($diagnostics, 'effect_value_missing', $effectPath);
+        $damage = af_kb_arpg_acs_damage($effect, $effectPath, $diagnostics);
+        $effects[] = ['source_index' => $index, 'parameters' => $effect, 'inherited' => $inherited,
+            'damage' => $damage, 'references' => $refs, 'supported' => !array_filter(array_slice($diagnostics, $diagnosticStart), static fn($item) => $item['severity'] === 'error'), 'executable' => false, 'raw' => $original];
+    }
+    $result = ['parameters' => $ability, 'effects' => $effects, 'references' => $references,
+        'damage' => af_kb_arpg_acs_damage($ability, $path, $diagnostics), 'executable' => false];
+    // Embedded abilities have no outer entry projection of their own.
+    if (str_starts_with($path, 'character_abilities.') || str_starts_with($path, 'ability_keys.')) $result = af_kb_arpg_normalize_mechanics_contracts($ability, $result, $diagnostics);
+    return $result;
+}
+
+/** Preserve both map and object-row resistances, with no invented units/arithmetic. */
+function af_kb_arpg_acs_resistances($values, string $path, array &$diagnostics): array
+{
+    if (!is_array($values)) {
+        af_kb_arpg_acs_diagnostic($diagnostics, 'expected_array', $path);
+        return [];
+    }
+    $rows = [];
+    foreach ($values as $key => $value) {
+        $row = is_array($value) ? $value : ['value' => $value];
+        if (!is_array($value) && !is_int($key)) $row['legacy_key'] = $key;
+        $damage = af_kb_arpg_acs_damage($row, $path . '.' . $key, $diagnostics);
+        if (!array_key_exists('scope', $row) || !array_key_exists('unit', $row)) af_kb_arpg_acs_diagnostic($diagnostics, 'resistance_semantics_unspecified', $path . '.' . $key, 'warning');
+        af_kb_arpg_acs_numeric($row, ['value'], $path . '.' . $key, $diagnostics);
+        $rows[] = ['source_index' => $key, 'parameters' => $row, 'damage' => $damage, 'unit' => $row['unit'] ?? null, 'raw' => $value];
+    }
+    return $rows;
+}
+
+/**
+ * One public normalizer for stored ARPG rows. Character ability index is zero-based,
+ * never slot_index. It reads the untouched character_abilities row, not the lossy UI adapter.
+ */
+function af_kb_arpg_normalize_entry(array $entry, ?int $abilityIndex = null): array
+{
+    $diagnostics = [];
+    $source = af_kb_arpg_acs_source($entry, $diagnostics);
+    $rules = $source['rules'];
+    $type = $entry['type'] ?? '';
+    $normalized = ['definition' => $rules];
+    if (!in_array($type, ['arpg_ability', 'character', 'arpg_item', 'arpg_bestiary', 'arpg_mechanics'], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_entry_type', 'source.type');
+    if ($type !== 'character') {
+        $expectedProfile = ['arpg_ability' => 'ability', 'arpg_item' => 'item', 'arpg_bestiary' => 'bestiary', 'arpg_mechanics' => 'service_mechanics'][$type] ?? null;
+        if (isset($rules['type_profile']) && $rules['type_profile'] !== $expectedProfile) af_kb_arpg_acs_diagnostic($diagnostics, 'type_profile_mismatch', 'definition.type_profile');
+        if (isset($rules['schema']) && !in_array($rules['schema'], [AF_KB_ARPG_RULES_SCHEMA, AF_KB_ARPG_MECHANICS_SCHEMA], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_rules_schema', 'definition.schema');
+        if (!isset($rules['schema'])) af_kb_arpg_acs_diagnostic($diagnostics, 'legacy_schema_missing', 'definition.schema', 'warning');
+        if (!array_intersect(['type_profile', 'effects', 'damage_value', 'heal_value', 'shield_value', 'item_kind', 'combat_stats', 'service_kind', 'formula_profile', 'formula_ref'], array_keys($rules))) af_kb_arpg_acs_diagnostic($diagnostics, 'unrecognized_definition', 'definition');
+    }
+    if (isset($entry['active']) && !$entry['active']) af_kb_arpg_acs_diagnostic($diagnostics, 'inactive_definition', 'source.active');
+    if ($type === 'character') {
+        if (($rules['schema'] ?? null) !== AF_KB_CHARACTER_SCHEMA || ($rules['character_meta']['mechanic'] ?? null) !== 'arpg') af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_character_contract', 'definition.schema');
+        $abilities = $rules['character_abilities'] ?? [];
+        if ($abilityIndex === null || $abilityIndex < 0 || !is_array($abilities) || !isset($abilities[$abilityIndex]) || !is_array($abilities[$abilityIndex])) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'character_ability_missing', 'character_abilities');
+        } else {
+            $normalized['ability_profile'] = af_kb_arpg_acs_ability($abilities[$abilityIndex], 'character_abilities.' . $abilityIndex, $diagnostics);
+        }
+    } elseif ($abilityIndex !== null) {
+        af_kb_arpg_acs_diagnostic($diagnostics, 'unexpected_ability_index', 'source.ability_index');
+    }
+    if ($type === 'arpg_ability') $normalized['ability_profile'] = af_kb_arpg_acs_ability($rules, 'ability', $diagnostics);
+    if ($type === 'arpg_item') {
+        $normalized['item_profile'] = $rules;
+        $normalized['effects'] = af_kb_arpg_acs_ability($rules, 'item', $diagnostics)['effects'];
+    }
+    foreach (['base_stats', 'modifiers', 'passive_effects', 'triggers', 'conditions', 'stacking', 'resources', 'immunities', 'grants'] as $field) {
+        if (!array_key_exists($field, $rules)) continue;
+        $normalized[$field] = $rules[$field];
+        if (!is_array($rules[$field])) af_kb_arpg_acs_diagnostic($diagnostics, 'expected_array', $field);
+    }
+    if (!in_array($type, ['arpg_ability', 'arpg_item'], true)) af_kb_arpg_acs_modifiers($rules, 'definition', $diagnostics);
+    foreach (['resists', 'resistances', 'weaknesses'] as $field) {
+        if (array_key_exists($field, $rules)) $normalized[$field] = af_kb_arpg_acs_resistances($rules[$field], $field, $diagnostics);
+    }
+    if ($type === 'arpg_bestiary') {
+        $normalized['combat_stats'] = $rules['combat_stats'] ?? [];
+        if (!is_array($normalized['combat_stats'])) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'expected_object', 'combat_stats');
+        } else {
+            foreach (af_kb_arpg_character_stat_keys() as $key) {
+                if (!array_key_exists($key, $normalized['combat_stats'])) af_kb_arpg_acs_diagnostic($diagnostics, 'required_stat_missing', 'combat_stats.' . $key);
+            }
+            af_kb_arpg_acs_numeric($normalized['combat_stats'], array_keys($normalized['combat_stats']), 'combat_stats', $diagnostics);
+        }
+        $normalized['ability_keys'] = [];
+        if (isset($rules['ability_keys']) && !is_array($rules['ability_keys'])) af_kb_arpg_acs_diagnostic($diagnostics, 'expected_array', 'ability_keys');
+        foreach (is_array($rules['ability_keys'] ?? null) ? $rules['ability_keys'] : [] as $index => $ability) {
+            $row = is_string($ability) ? ['ability_kb_key' => $ability] : $ability;
+            if (!is_array($row)) {
+                af_kb_arpg_acs_diagnostic($diagnostics, 'expected_ability_object', 'ability_keys.' . $index);
+                continue;
+            }
+            $normalized['ability_keys'][] = ['source_index' => $index, 'ability' => af_kb_arpg_acs_ability($row, 'ability_keys.' . $index, $diagnostics), 'raw' => $ability];
+        }
+    }
+    if ($type === 'arpg_mechanics') {
+        $normalized['service_kind'] = $rules['service_kind'] ?? null;
+        $normalized['entries'] = $rules['entries'] ?? [];
+        if (!in_array($normalized['service_kind'], af_kb_arpg_service_entity_kinds(), true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_service_kind', 'service_kind');
+        if (!is_array($normalized['entries'])) af_kb_arpg_acs_diagnostic($diagnostics, 'expected_array', 'entries');
+    }
+    $normalized = af_kb_arpg_normalize_math_contracts($rules, $normalized, $diagnostics);
+    $normalized = af_kb_arpg_normalize_mechanics_contracts($rules, $normalized, $diagnostics);
+    $key = $entry['key'] ?? null;
+    return ['schema' => AF_KB_ARPG_SHEET_NORMALIZED_SCHEMA,
+        'source' => ['type' => $type, 'id' => $entry['id'] ?? null, 'key' => $key, 'projection' => $source['path'], 'ability_index' => $abilityIndex,
+            'updated_at' => $entry['updated_at'] ?? null, 'origin' => $rules['character_meta']['source'] ?? 'knowledgebase'],
+        'definition_key' => $type === 'character' && $abilityIndex !== null ? (string)$key . '#character_abilities/' . $abilityIndex : $key,
+        'definition_version' => ['revision' => $entry['revision'] ?? $rules['revision'] ?? null, 'declared_version' => $rules['version'] ?? null, 'fingerprint' => $source['fingerprint']],
+        'normalized' => $normalized, 'diagnostics' => $diagnostics,
+        'supported' => !array_filter($diagnostics, static fn($item) => $item['severity'] === 'error'), 'executable' => false,
+        'raw' => ['entry' => $entry, 'candidates' => $source['candidates']]];
+}
+
+/** Read one stored definition, including a character ability selected by zero-based index. */
+function af_kb_arpg_read_definition(string $type, string $key, ?int $abilityIndex = null): array
+{
+    $row = af_kb_arpg_acs_lookup($type, $key);
+    $result = af_kb_arpg_normalize_entry($row ?? ['type' => $type, 'key' => $key], $abilityIndex);
+    if ($row === null) {
+        af_kb_arpg_acs_diagnostic($result['diagnostics'], 'definition_not_found', 'source');
+        $result['supported'] = false;
+    }
+    return $result;
 }
 
 function af_kb_extract_rules_for_consumer($entry, string $consumer = 'generic'): array
