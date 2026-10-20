@@ -1111,13 +1111,25 @@
       event.preventDefault();
       event.stopPropagation();
 
-      picker = createJscolorInstance(root, input, swatch, onChange);
-      if (picker && typeof picker.show === 'function') {
-        try { window.afAeShowColor(picker, swatch); } catch (e0) {}
+      // Swatches are also mounted by the floating WYSIWYG toolbar, which
+      // can bypass activation of the tquote capability and its dependencies.
+      var shell = window.afAdvancedEditorShell;
+      var ready = getJscolorCtor() ? Promise.resolve() : shell && shell.loadCapability
+        ? shell.loadCapability('jscolorpiker') : Promise.reject(new Error('Color runtime unavailable'));
+      swatch.setAttribute('aria-busy', 'true');
+      ready.then(function () {
+        if (!root.isConnected || !swatch.isConnected) return;
+        picker = createJscolorInstance(root, input, swatch, onChange);
+        if (!picker || typeof picker.show !== 'function') throw new Error('Color picker did not initialize');
+        window.afAeShowColor(picker, swatch);
+        var error = root.querySelector('[data-af-color-error]'); if (error) error.remove();
         window.setTimeout(bindJscolorPopupGuards, 0);
-        window.setTimeout(bindJscolorPopupGuards, 30);
-        window.setTimeout(bindJscolorPopupGuards, 100);
-      }
+      }).catch(function () {
+        if (!root.isConnected) return;
+        var error = root.querySelector('[data-af-color-error]');
+        if (!error) { error = document.createElement('p'); error.setAttribute('data-af-color-error', '1'); error.setAttribute('role', 'alert'); root.appendChild(error); }
+        error.textContent = 'Не удалось загрузить палитру. Нажмите на цвет ещё раз.';
+      }).finally(function () { swatch.removeAttribute('aria-busy'); });
     });
 
     input.addEventListener('input', function () {
