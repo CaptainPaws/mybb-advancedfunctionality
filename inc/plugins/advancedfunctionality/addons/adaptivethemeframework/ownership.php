@@ -234,6 +234,7 @@ function af_adaptivethemeframework_template_seeds(): array
         'delete_attachments_button' => __DIR__ . '/templates/delete_attachments_button.html',
         // MyBB 1.8.40 posting routes share this semantic compose shell and
         // its layout-bearing option, icon, poll and attachment fragments.
+        'changeuserbox' => __DIR__ . '/templates/changeuserbox.html',
         'newthread' => __DIR__ . '/templates/newthread.html',
         'newreply' => __DIR__ . '/templates/newreply.html',
         'editpost' => __DIR__ . '/templates/editpost.html',

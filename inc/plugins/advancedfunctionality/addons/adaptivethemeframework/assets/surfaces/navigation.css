@@ -141,3 +141,55 @@ body.atf-active .atf-tabs__item--active { color: var(--atf-color-text); border-c
   body.atf-active .atf-breadcrumbs__item { flex: 0 0 auto; }
   body.atf-active .atf-breadcrumbs__link,
 body.atf-active .atf-breadcrumbs__current { max-width: 15rem; }}
+
+/* Keep the native pagination form; only its popup presentation belongs to ATF. */
+body.atf-active .popup_menu.drop_go_page {
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100vw - 1rem);
+  max-height: calc(100dvh - 1rem);
+  overflow: auto;
+  margin: 0;
+  padding: .7rem;
+  inset: auto;
+  color: var(--atf-color-text);
+  background: var(--atf-color-page-subtle) !important;
+  border: 1px solid var(--atf-color-border-strong, var(--atf-color-border));
+  border-radius: var(--atf-radius-sm);
+  box-shadow: var(--atf-shadow-md);
+  z-index: 100010;
+  color-scheme: dark;
+}
+body.atf-active .drop_go_page form { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; margin: 0; padding: 0; }
+body.atf-active .drop_go_page label { flex-basis: 100%; padding-inline-end: 1.5rem; font-size: .8rem; }
+body.atf-active .drop_go_page input[type="number"] {
+  box-sizing: border-box;
+  width: 5rem;
+  min-width: 0;
+  max-width: 100%;
+  height: 2rem;
+  padding: .3rem .45rem;
+  font: inherit;
+  color: var(--atf-color-text) !important;
+  background: var(--atf-color-page) !important;
+  border: 1px solid var(--atf-color-border);
+  border-radius: var(--atf-radius-sm);
+}
+body.atf-active .drop_go_page input[type="submit"],
+body.atf-active .drop_go_page .atf-page-jump-close {
+  appearance: none;
+  height: 2rem;
+  padding: .3rem .65rem;
+  color: var(--atf-color-accent-contrast, var(--atf-color-on-accent)) !important;
+  background: var(--atf-color-accent) !important;
+  background-image: none !important;
+  border: 1px solid var(--atf-color-accent);
+  border-radius: var(--atf-radius-sm);
+  font: inherit;
+  text-shadow: none;
+  cursor: pointer;
+}
+body.atf-active .drop_go_page .atf-page-jump-close { position: absolute; inset-inline-end: .3rem; top: .3rem; height: 1.5rem; padding: 0 .35rem; color: var(--atf-color-text) !important; background: transparent !important; border-color: transparent; }
+body.atf-active .drop_go_page input[type="submit"]:hover { filter: brightness(1.1); }
+body.atf-active .drop_go_page :focus-visible { outline: 2px solid var(--atf-color-accent); outline-offset: 2px; }
+body.atf-active .drop_go_page .atf-page-jump-close:hover { background: var(--atf-color-surface-raised) !important; border-color: var(--atf-color-border); }

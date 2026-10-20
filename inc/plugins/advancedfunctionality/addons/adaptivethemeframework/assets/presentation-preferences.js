@@ -153,3 +153,60 @@ document.addEventListener('toggle', function (event) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initializeModeration, {once:true});
   else initializeModeration();
 })();
+
+/* Enhance native MyBB page-jump popups without replacing their form or plugin. */
+(() => {
+  let active = null;
+  const owners = new WeakMap();
+  function close(popup, restoreFocus) {
+    if (popup.hidePopover && popup.matches(':popover-open')) popup.hidePopover();
+    popup.style.display = 'none';
+    const owner = owners.get(popup);
+    if (owner) { owner.setAttribute('aria-expanded', 'false'); if (restoreFocus) owner.focus(); }
+    if (active === popup) active = null;
+  }
+  function position() {
+    if (!active) return;
+    const popup = active, owner = owners.get(popup);
+    if (!owner?.isConnected) { close(popup, false); return; }
+    const rect = owner.getBoundingClientRect(), view = window.visualViewport;
+    const left = view?.offsetLeft || 0, top = view?.offsetTop || 0;
+    const width = view?.width || document.documentElement.clientWidth, height = view?.height || innerHeight;
+    popup.style.position = 'fixed';
+    popup.style.left = Math.max(left + 8, Math.min(rect.left, left + width - popup.offsetWidth - 8)) + 'px';
+    const y = rect.bottom + popup.offsetHeight + 6 > top + height ? rect.top - popup.offsetHeight - 6 : rect.bottom + 6;
+    popup.style.top = Math.max(top + 8, Math.min(y, top + height - popup.offsetHeight - 8)) + 'px';
+  }
+  document.addEventListener('click', event => {
+    const owner = event.target.closest('.go_page');
+    if (!owner || !document.body.classList.contains('atf-active')) return;
+    const popup = document.getElementById(owner.id + '_popup');
+    if (!popup?.classList.contains('drop_go_page')) return;
+    // The native jQuery handler has already decided whether to open or close.
+    if (popup.style.display === 'none') { close(popup, false); return; }
+    if (active && active !== popup) close(active, false);
+    if (!owners.has(popup)) {
+      owners.set(popup, owner);
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'atf-page-jump-close';
+      button.textContent = '×'; button.setAttribute('aria-label', document.querySelector('[data-atf-close-label]')?.dataset.atfCloseLabel || 'Закрыть');
+      button.addEventListener('click', () => close(popup, true));
+      popup.appendChild(button);
+      new MutationObserver(() => {
+        if (popup.style.display === 'none' && active === popup) close(popup, false);
+      }).observe(popup, {attributes:true, attributeFilter:['style']});
+    }
+    active = popup;
+    owner.setAttribute('aria-expanded', 'true'); owner.setAttribute('aria-controls', popup.id);
+    if (popup.showPopover) { popup.setAttribute('popover', 'manual'); if (!popup.matches(':popover-open')) popup.showPopover(); }
+    position();
+    popup.querySelector('input[name="page"]')?.focus();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && active) { event.preventDefault(); close(active, true); }
+  });
+  window.addEventListener('resize', position);
+  window.addEventListener('scroll', position, true);
+  window.visualViewport?.addEventListener('resize', position);
+  window.visualViewport?.addEventListener('scroll', position);
+})();

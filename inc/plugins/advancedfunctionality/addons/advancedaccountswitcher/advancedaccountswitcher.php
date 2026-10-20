@@ -25,6 +25,17 @@ function af_advancedaccountswitcher_menu_provider(): void
     af_menu_register_item(['key'=>'advanced_account_switcher','source_addon'=>AF_AAS_ID,'label'=>'Аккаунты','icon'=>'fa-solid fa-users','type'=>'modal','default_container'=>'secondary','default_sortorder'=>10,'visibility'=>'af_advancedaccountswitcher_menu_visible','action'=>['url'=>'usercp.php?action=af_aas','trigger_selector'=>'#af_aas_trigger','trigger_class'=>'af-aas-trigger','modal_selector'=>'#af_aas_modal','owner_template'=>'af_aas_panel_widget','trigger_renderer'=>'af_aas_render_menu_trigger']]);
 }
 
+/** Adapt the owned change-user link without touching session-changing endpoints. */
+function af_aas_adapt_change_user_action(string $page, string $bburl, bool $allowed = true): string
+{
+    $destination = htmlspecialchars(rtrim($bburl, '/') . '/usercp.php?action=af_aas', ENT_QUOTES, 'UTF-8');
+    return preg_replace_callback('~<a\b[^>]*\bdata-atf-change-user=["\']1["\'][^>]*>~i', static function (array $match) use ($destination, $allowed): string {
+        $tag = preg_replace('~\s+href\s*=\s*(["\']).*?\1~i', '', $match[0]);
+        if (!$allowed) return substr($tag, 0, -1) . ' role="link" aria-disabled="true">';
+        return substr($tag, 0, -1) . ' href="' . $destination . '" data-af-aas-open="1" aria-haspopup="dialog" aria-controls="af_aas_modal" aria-expanded="false">';
+    }, $page);
+}
+
 /** Publish the safe GET destination only; AAS continues to own every POST action. */
 function af_aas_register_atf_ucp_navigation(): void
 {
@@ -435,6 +446,12 @@ function af_advancedaccountswitcher_init()
     }
 
     $bburl = rtrim((string)$mybb->settings['bburl'], '/');
+
+    // Only ATF's explicit change-user action is adapted. Real logout links
+    // remain logout links; switching continues through AAS's existing UI.
+    if (!empty($mybb->user['uid'])) {
+        $page = af_aas_adapt_change_user_action($page, $bburl, af_aas_user_allowed((int)$mybb->user['uid']));
+    }
 
     // ====== Навигация: МЕНЯЕМ memberlist.php -> userlist.php ВЕЗДЕ В HTML
     $prettyUserlistUrl = $bburl . '/userlist.php';

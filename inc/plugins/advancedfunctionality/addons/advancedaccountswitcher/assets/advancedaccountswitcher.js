@@ -41,7 +41,7 @@
     }
     mountModal();
 
-    function triggers() { return document.querySelectorAll('#af_aas_trigger'); }
+    function triggers() { return document.querySelectorAll('#af_aas_trigger, [data-af-aas-open]'); }
     function setExpanded(value) {
       Array.prototype.forEach.call(triggers(), function (node) { node.setAttribute('aria-expanded', value); });
     }
@@ -81,7 +81,7 @@
     }
 
     document.addEventListener('click', function (e) {
-      var trigger = e.target.closest('#af_aas_trigger');
+      var trigger = e.target.closest('#af_aas_trigger, [data-af-aas-open]');
       if (!trigger) return;
       if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
         e.preventDefault();
@@ -97,7 +97,7 @@
 
     document.addEventListener('click', function (e) {
       if (modal.style.display === 'none') return;
-      if (e.target.closest('#af_aas_modal') || e.target.closest('#af_aas_trigger')) return;
+      if (e.target.closest('#af_aas_modal') || e.target.closest('#af_aas_trigger, [data-af-aas-open]')) return;
       closeModal();
     });
 
