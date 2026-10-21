@@ -230,7 +230,8 @@ function af_kb_arpg_element_damage(array $row, string $path, array &$diagnostics
     // controls likewise do not declare a damage component.
     $isCharacter = ($row['type_profile'] ?? null) === 'character';
     $kind = $row['effect_type'] ?? $row['kind'] ?? null;
-    $isDamage = !$isCharacter && ($kind === null || in_array($kind, ['damage', 'proc'], true));
+    $isResistance = ($row['unit'] ?? null) === 'RES';
+    $isDamage = !$isCharacter && !$isResistance && ($kind === null || in_array($kind, ['damage', 'proc'], true));
     $hasExplicit = array_key_exists('damage_element', $row) && $row['damage_element'] !== '' && $row['damage_element'] !== null;
     if ($isDamage && (($row['damage_type'] ?? null) === 'elemental' || $hasExplicit)) {
         if (!$hasExplicit || !is_string($element) || !isset(af_kb_arpg_primary_elements()[$canonical])) {
@@ -240,7 +241,7 @@ function af_kb_arpg_element_damage(array $row, string $path, array &$diagnostics
             af_kb_arpg_acs_diagnostic($diagnostics, 'damage_element_conflict', $path . '.damage_element');
         }
     }
-    if (!$isCharacter && $hasExplicit && !in_array($row['damage_type'] ?? null, ['elemental','hybrid'], true)) {
+    if (!$isCharacter && !$isResistance && $hasExplicit && !in_array($row['damage_type'] ?? null, ['elemental','hybrid'], true)) {
         af_kb_arpg_acs_diagnostic($diagnostics, 'damage_element_not_elemental', $path . '.damage_type');
     }
     $direction = null;

@@ -864,6 +864,13 @@
                   effect.effect_type = AF_ATF.qs('.af-atf-effect-type', effectRow).value;
                   const map = {value:'value', formula:'formula_profile', target:'target', 'damage-type':'damage_type', 'damage-element':'damage_element', duration:'duration_value', status:'status_key', stat:'stat_key', operation:'operation', resource:'resource_key', notes:'notes'};
                   Object.keys(map).forEach((suffix) => { const input = AF_ATF.qs('.af-atf-effect-' + suffix, effectRow); if (input) effect[map[suffix]] = input.value; });
+                  const damageElement = AF_ATF.qs('.af-atf-effect-damage-element', effectRow);
+                  if (!damageElement.value) delete effect.damage_element;
+                  const needsElement = effect.effect_type === 'damage' && effect.damage_type === 'elemental';
+                  damageElement.required = needsElement;
+                  const damageError = needsElement && !damageElement.value ? 'Выберите стихию урона. Направление магии не определяет её автоматически.' : '';
+                  damageElement.setCustomValidity(damageError);
+                  AF_ATF.qs('.af-atf-damage-error', effectRow).textContent = damageError;
                   effect.duration_unit = 'target_turn';
                   const relevant = {damage:['value','formula','target','damage_type','element'], heal:['value','formula','target'], shield:['value','formula','target','duration'], status:['status','target','duration'], control:['status','target','duration'], stat_modifier:['stat','operation','value','target','duration'], resource:['resource','operation','value','target']};
                   const valueLabels = {damage:'Значение урона',heal:'Значение лечения',shield:'Прочность щита',stat_modifier:'Величина модификатора',resource:'Изменение ресурса'};
