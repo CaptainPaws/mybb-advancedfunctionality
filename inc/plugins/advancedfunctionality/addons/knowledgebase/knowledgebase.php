@@ -13,6 +13,7 @@ define('AF_KB_BASE', AF_ADDONS . AF_KB_ID . '/');
 define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
 define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
 require_once AF_KB_BASE . 'modules/arpg_elements.php';
+require_once AF_KB_BASE . 'modules/arpg_editor.php';
 require_once AF_KB_BASE . 'modules/arpg_bestiary.php';
 define('AF_KB_MARK', '<!--af_kb_assets-->');
 define('AF_KB_RULES_SCHEMA', 'af_kb.rules.v1');
@@ -6007,8 +6008,13 @@ function af_kb_validate_rules_json_by_type_dnd(string $type, string $normalizedJ
 
 function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalizedJson, array &$errors): string
 {
-    // Check opt-in fields before existing legacy projections can drop a schema marker.
+    // Explicit editor selections are resolved on the server before validation.
     $unprojected = af_kb_decode_json($normalizedJson);
+    if (is_array($unprojected)) {
+        if (is_array($unprojected['rules'] ?? null)) $unprojected['rules'] = af_kb_arpg_prepare_editor_refs($unprojected['rules'], $errors);
+        else $unprojected = af_kb_arpg_prepare_editor_refs($unprojected, $errors);
+        $normalizedJson = json_encode($unprojected, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
     if (is_array($unprojected)) {
         $leaf = af_kb_arpg_extract_rules_leaf($unprojected);
         af_kb_arpg_validate_math_fields($leaf, $errors);
@@ -6483,7 +6489,7 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         $rows = [];
         foreach ((array)$items as $item) {
             $source = is_array($item) ? $item : [];
-            $rowOut = [];
+            $rowOut = $source;
             foreach ($defs as $def) {
                 $key = (string)($def['key'] ?? '');
                 if ($key === '') {
@@ -6600,7 +6606,7 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
     foreach (['damage_element', 'magic_direction_ref', 'duration_unit', 'cooldown_unit', 'action_cost', 'timing', 'costs', 'target_count', 'application_conditions', 'application_mode', 'summon', 'usage_limits', 'formula_refs'] as $field) {
         if (array_key_exists($field, $row)) $normalized[$field] = $row[$field];
     }
-    return $normalized;
+    return array_replace($row, $normalized);
 }
 
 function af_kb_extract_character_abilities_from_payload(array $payload): array
@@ -14442,6 +14448,8 @@ function af_kb_handle_edit(): void
     $kb_mechanic_key = htmlspecialchars_uni($kb_mechanic_raw);
 
     $typeSchema = af_kb_get_type_schema($entry['type'], $kb_mechanic_raw);
+    // Catalog enumeration belongs only to this authorized edit form, never schema reads.
+    if ($kb_mechanic_raw === 'arpg' && af_kb_can_edit()) $typeSchema['editor_choices'] = af_kb_arpg_editor_choices();
     if ((string)($entry['type'] ?? '') === 'character') {
         $typeSchema = af_kb_strip_character_stats_from_schema($typeSchema);
     }

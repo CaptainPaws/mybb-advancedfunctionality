@@ -1,0 +1,12 @@
+const {JSDOM,VirtualConsole}=require('jsdom'); const fs=require('fs'); const assert=require('assert');
+const vc=new VirtualConsole();vc.sendTo(console);
+const dom=new JSDOM('<form><div id="af-kb-rules-ui" data-type="arpg_ability" data-mechanic="arpg"></div><textarea id="af-kb-rules-json-raw"></textarea><textarea id="af-kb-meta-json">{}</textarea></form>',{url:'https://test.invalid/misc.php?action=kb_edit',runScripts:'outside-only',virtualConsole:vc});
+const w=dom.window,d=w.document; const root=d.getElementById('af-kb-rules-ui');
+root.setAttribute('data-type-schema',JSON.stringify({editor_choices:{formula_def:[{value:'hit',label:'Урон от атаки'}],formula_profile:[{value:'atk',label:'Атака'}],magic_direction:[{value:'blood',label:'Кровь · Жизнь'}]},modifier_stat_options:[{value:'accuracy',label:'Точность'}],root_defaults:{rules:{type_profile:'ability'}}}));
+d.getElementById('af-kb-rules-json-raw').value=JSON.stringify({mechanic:'arpg',rules:{type_profile:'ability',damage_type:'physical',effects:[],extension:{keep:1}}});
+w.eval(fs.readFileSync(require('path').join(__dirname,'../inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase.js'),'utf8'));d.dispatchEvent(new w.Event('DOMContentLoaded'));
+const sections=[...d.querySelectorAll('.af-kb-kvlist')]; const section=title=>sections.find(n=>n.querySelector('h4')?.textContent===title);
+const formula=section('Формулы');assert(formula,'visual form did not initialize');formula.querySelector('button').click();let select=formula.querySelector('select');select.value='hit';select.dispatchEvent(new w.Event('change',{bubbles:true}));
+const data=()=>JSON.parse(d.getElementById('af-kb-rules-json-raw').value).rules;assert.equal(data().formula_refs[0]._editor_formula_key,'hit');assert.deepEqual(data().extension,{keep:1});
+section('Кулдаун и восстановление').querySelector('button').click(); const cooldown=[...section('Кулдаун и восстановление').querySelectorAll('.af-kb-kvlist')].find(n=>n.querySelector('h4').textContent==='Кулдаун'); cooldown.querySelector('button').click();assert.equal(data().timing.cooldown.unit,'round');
+const effects=section('Эффекты');effects.querySelector('button').click();assert.equal(data().effects.length,1);console.log('Visual ability formula, cooldown, effects and extension preservation: OK');dom.window.close();
