@@ -4433,7 +4433,6 @@ function af_kb_get_type_schema_arpg(string $typeKey): array
         $schema = af_kb_get_type_schema_dnd($typeKey);
         $schema['primary_element_options'] = [];
         foreach (af_kb_arpg_primary_elements() as $key => $labels) $schema['primary_element_options'][] = ['value'=>$key,'label'=>$labels['ru']];
-        if (af_kb_can_edit()) $schema['editor_choices'] = af_kb_arpg_editor_choices();
         $schema['internal_profile'] = 'arpg_character';
         $profile = af_kb_get_type_profile_definition_arpg($typeKey);
         $schema['defaults'] = array_replace_recursive(
@@ -4489,9 +4488,6 @@ function af_kb_get_type_schema_arpg(string $typeKey): array
     }
     if ($typeKey === 'arpg_element' && af_kb_can_edit()) {
         $schema['element_parent_options'] = af_kb_arpg_element_editor_options();
-    }
-    if (af_kb_can_edit() && in_array($typeKey, ['arpg_ability','arpg_bestiary','character','arpg_character','arpg_talent'], true)) {
-        $schema['editor_choices'] = af_kb_arpg_editor_choices();
     }
     $schema['primary_element_options'] = [];
     foreach (af_kb_arpg_primary_elements() as $key => $labels) $schema['primary_element_options'][] = ['value'=>$key,'label'=>$labels['ru']];
@@ -14452,6 +14448,8 @@ function af_kb_handle_edit(): void
     $kb_mechanic_key = htmlspecialchars_uni($kb_mechanic_raw);
 
     $typeSchema = af_kb_get_type_schema($entry['type'], $kb_mechanic_raw);
+    // Catalog enumeration belongs only to this authorized edit form, never schema reads.
+    if ($kb_mechanic_raw === 'arpg' && af_kb_can_edit()) $typeSchema['editor_choices'] = af_kb_arpg_editor_choices();
     if ((string)($entry['type'] ?? '') === 'character') {
         $typeSchema = af_kb_strip_character_stats_from_schema($typeSchema);
     }
