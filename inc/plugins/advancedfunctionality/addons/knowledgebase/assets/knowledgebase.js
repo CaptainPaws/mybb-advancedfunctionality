@@ -1598,7 +1598,7 @@
 
                     // Ключевой фикс:
                     // если поле отсутствовало в payload, материализуем default сразу в rules.
-                    if (getRuleValue(def.key, null) == null && Object.prototype.hasOwnProperty.call(def, 'default')) {
+                    if (!def.optional && getRuleValue(def.key, null) == null && Object.prototype.hasOwnProperty.call(def, 'default')) {
                         setRuleValue(def.key, def.type === 'number' ? numberOrZero(def.default) : def.default);
                         currentValue = getRuleValue(def.key, def.default);
                     }
@@ -1611,7 +1611,9 @@
                     } else if (def.type === 'number') {
                         input = document.createElement('input');
                         input.type = 'number';
-                        input.value = String(numberOrZero(currentValue));
+                        input.step = 'any';
+                        if (def.min != null) input.min = String(def.min);
+                        input.value = def.optional && currentValue === '' ? '' : String(numberOrZero(currentValue));
                     } else {
                         input = document.createElement('input');
                         input.type = 'text';
@@ -1619,7 +1621,14 @@
                     }
 
                     bindFieldSync(input, function () {
-                        setRuleValue(def.key, (def.type === 'number') ? numberOrZero(input.value) : input.value);
+                        if (def.optional && input.value.trim() === '') {
+                            var parts = def.key.split('.');
+                            var parent = payload.rules;
+                            while (parts.length > 1 && parent) parent = parent[parts.shift()];
+                            if (parent) delete parent[parts[0]];
+                        } else {
+                            setRuleValue(def.key, (def.type === 'number') ? numberOrZero(input.value) : input.value);
+                        }
                         syncToRaw();
                     });
 
@@ -1752,6 +1761,7 @@
                         { key: 'shield_bonus_base', label: 'shield_bonus_base', type: 'number', default: 0 },
                         { key: 'status_hit_base', label: 'status_hit_base', type: 'number', default: 0 },
                         { key: 'status_resist_base', label: 'status_resist_base', type: 'number', default: 0 },
+                        { key: 'accuracy_base', label: 'Точность (Accuracy)', type: 'number', optional: true, min: 0 },
                         { key: 'luck_base', label: 'luck_base', type: 'number', default: 0 },
                         { key: 'hp_per_level', label: 'hp_per_level', type: 'number', default: 0 },
                         { key: 'defense_per_level', label: 'defense_per_level', type: 'number', default: 0 },
@@ -1795,6 +1805,7 @@
                         { key: 'shield_bonus_base', label: 'shield_bonus_base', type: 'number', default: 0 },
                         { key: 'status_hit_base', label: 'status_hit_base', type: 'number', default: 0 },
                         { key: 'status_resist_base', label: 'status_resist_base', type: 'number', default: 0 },
+                        { key: 'accuracy_base', label: 'Точность (Accuracy)', type: 'number', optional: true, min: 0 },
                         { key: 'luck_base', label: 'luck_base', type: 'number', default: 0 },
                         { key: 'hp_per_level', label: 'hp_per_level', type: 'number', default: 0 },
                         { key: 'defense_per_level', label: 'defense_per_level', type: 'number', default: 0 },
@@ -1848,6 +1859,7 @@
                     ], 'Character profile');
 
                     renderRuleFields(rulesRoot, [
+                        { key: 'character_stats.character_accuracy', label: 'Точность (Accuracy)', type: 'number', optional: true, min: 0 },
                         { key: 'character_stats.character_hp', label: 'character_stats.character_hp', type: 'number', default: 0 },
                         { key: 'character_stats.character_defense', label: 'character_stats.character_defense', type: 'number', default: 0 },
                         { key: 'character_stats.character_element_damage_bonus', label: 'character_stats.character_element_damage_bonus', type: 'number', default: 0 },
@@ -2234,6 +2246,7 @@
                     { key: 'combat_stats.hp', label: 'combat_stats.hp', type: 'number', default: 0 },
                     { key: 'combat_stats.atk', label: 'combat_stats.atk', type: 'number', default: 0 },
                     { key: 'combat_stats.def', label: 'combat_stats.def', type: 'number', default: 0 },
+                    { key: 'combat_stats.accuracy', label: 'Точность (Accuracy)', type: 'number', optional: true, min: 0 },
                     { key: 'combat_stats.speed', label: 'combat_stats.speed', type: 'number', default: 0 },
                     { key: 'combat_stats.crit_rate', label: 'combat_stats.crit_rate', type: 'number', default: 0 },
                     { key: 'combat_stats.crit_dmg', label: 'combat_stats.crit_dmg', type: 'number', default: 0 },
@@ -4485,7 +4498,7 @@
                         character_post: String(profileC.character_post || ''),
                         character_userinfo: String(profileC.character_userinfo || '')
                     },
-                    character_stats: {
+                    character_stats: Object.assign({}, Object.prototype.hasOwnProperty.call(statsC, 'character_accuracy') ? {character_accuracy: statsC.character_accuracy} : {}, {
                         character_hp: numberOrZero(statsC.character_hp != null ? statsC.character_hp : 0),
                         character_defense: numberOrZero(statsC.character_defense != null ? statsC.character_defense : 0),
                         character_element_damage_bonus: numberOrZero(statsC.character_element_damage_bonus != null ? statsC.character_element_damage_bonus : 0),
@@ -4496,7 +4509,7 @@
                         character_healing_bonus: numberOrZero(statsC.character_healing_bonus != null ? statsC.character_healing_bonus : 0),
                         character_shield_strength: numberOrZero(statsC.character_shield_strength != null ? statsC.character_shield_strength : 0),
                         character_luck: numberOrZero(statsC.character_luck != null ? statsC.character_luck : 0)
-                    },
+                    }),
                     character_abilities: abilitiesC.map(function (row) {
                         return normalizeCharacterAbilityRow(row, 0);
                     }),
@@ -5609,6 +5622,9 @@
                         }
                     }
                 });
+                if (isArpgCharacter) {
+                    profileGrid.appendChild(createInput({name: 'character_accuracy', label: 'Точность (Accuracy)', type: 'number', optional: true}, state.character_stats, syncRawDebounced));
+                }
                 fields.profileFields.appendChild(profileGrid);
                 var abilitiesBox = document.createElement('div');
                 abilitiesBox.className = 'af-kb-rule-card';
