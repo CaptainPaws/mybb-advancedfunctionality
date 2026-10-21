@@ -45,6 +45,7 @@ function af_charactersheets_require_modules(array $modules): void
         'sheets_crud' => ['metadata', 'attributes', 'bootstrap'],
         'calculator' => ['attributes', 'experience', 'sheets_crud'],
         'render' => ['calculator', 'postbit'],
+        'combat_snapshot' => ['permissions', 'metadata', 'arpg_stats'],
         'ajax' => ['render'],
         'acp_skills' => ['attributes', 'bootstrap'],
     ];
@@ -233,4 +234,11 @@ function af_charactersheets_handle_thread_move_for_acceptance(array $args): void
 {
     af_charactersheets_require_modules(['permissions', 'postbit', 'bootstrap', 'sheets_crud']);
     af_charactersheets_handle_thread_move_for_acceptance_impl($args);
+}
+
+/** Server-only preparation API. No endpoint or persistent snapshot is created. */
+function af_charactersheets_create_combat_snapshot(int $sheetId, int $actorUid, array $context = []): array
+{
+    af_charactersheets_require_modules(['combat_snapshot']);
+    return af_charactersheets_prepare_combat_snapshot($sheetId, $actorUid, $context);
 }

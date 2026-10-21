@@ -11904,8 +11904,6 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
     $originKey = trim((string)($profile['character_origin'] ?? $profile['character_race'] ?? ''));
     $originVariantKey = trim((string)($profile['character_origin_variant'] ?? ''));
     $archetypeKey = trim((string)($profile['character_archetype'] ?? $profile['character_class'] ?? ''));
-    $level = max(1, (int)af_kb_arpg_to_float($profile['character_level'] ?? $profile['level'] ?? 1));
-    $levelSteps = max(0, $level - 1);
 
     $originRules = af_kb_arpg_entry_rules_by_key('arpg_origin', $originKey);
     $originVariantRules = af_kb_arpg_entry_rules_by_key('arpg_origin_variant', $originVariantKey);
@@ -11917,6 +11915,14 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
     }
     $archetypeRules = af_kb_arpg_entry_rules_by_key('arpg_archetype', $archetypeKey);
 
+    return af_kb_build_arpg_character_stats_from_sources($profile, $manualStats, $originRules, $originVariantRules, $archetypeRules);
+}
+
+/** Pure arithmetic over captured sources; no lookup/cache, writes or synchronization. */
+function af_kb_build_arpg_character_stats_from_sources(array $profile, array $manualStats, array $originRules, array $originVariantRules, array $archetypeRules): array
+{
+    $level = max(1, (int)af_kb_arpg_to_float($profile['character_level'] ?? $profile['level'] ?? 1));
+    $levelSteps = max(0, $level - 1);
     $buildValue = static function (string $stat) use ($originRules, $originVariantRules, $archetypeRules, $levelSteps): float {
         $baseMap = [
             'character_hp' => ['hp_base', 'base_hp'],
