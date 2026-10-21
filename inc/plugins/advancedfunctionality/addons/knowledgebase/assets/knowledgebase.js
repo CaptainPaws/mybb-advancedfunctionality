@@ -362,6 +362,9 @@
             return null;
         }
 
+        if (container.__afKbRepeater) return container.__afKbRepeater;
+        container.setAttribute('data-af-kb-repeater','');
+
         function currentIndex() {
             return parseInt(container.getAttribute(indexAttr) || '0', 10);
         }
@@ -409,17 +412,15 @@
 
             if (target.classList.contains('af-kb-remove')) {
                 var item = target.closest('.af-kb-block-item, .af-kb-rel-item-edit');
-                if (item && container.contains(item)) {
+                if (item && container.contains(item) && target.closest('[data-af-kb-repeater]') === container) {
                     item.remove();
                     scheduleRefresh(container);
                 }
             }
         });
 
-        return {
-            addItem: addItem,
-            container: container
-        };
+        container.__afKbRepeater = {addItem:addItem,container:container};
+        return container.__afKbRepeater;
     }
 
     function setValue(selector, value) {
@@ -856,7 +857,7 @@
 
         root.innerHTML = [
             '<details open="open" class="af-kb-collapsible">',
-            '<summary>Tags</summary>',
+            '<summary>Метки</summary>',
             '<label>Tags (comma separated)</label>',
             '<input type="text" id="af-kb-meta-tags" />',
             '</details>',
@@ -932,6 +933,7 @@
         if (/^arpg_/i.test(type)) {
             mechanic = 'arpg';
         }
+        var liveFieldCommitters = [];
         var typeSchema = readJson(root.getAttribute('data-type-schema') || '{}', {});
         var itemKindOptionsRaw = readJson(root.getAttribute('data-item-kinds') || '[]', []);
         var itemKindOptions = (Array.isArray(itemKindOptionsRaw) && itemKindOptionsRaw.length ? itemKindOptionsRaw : [
@@ -1046,6 +1048,9 @@
         }
 
         var arpgLabels = {"type":"Тип способности","subtype":"Подтип","slot":"Слот способности","damage_type":"Тип урона","targeting":"Цель","range":"Дальность","cast_time":"Время применения","cooldown":"Кулдаун","duration":"Длительность","max_charges":"Количество зарядов","level_cap":"Максимальный уровень","kind":"Тип эффекта","value":"Величина","value_mode":"Способ расчёта","hit_count":"Количество попаданий","status_key":"Статус","notes":"Примечание","op":"Действие","resource_key":"Ресурс","per":"Период расходования","formula_ref":"Формула расчёта","active":"Активная","passive":"Пассивная","ultimate":"Ультимативная","physical":"Физический","elemental":"Стихийный","true":"Истинный","healing":"Лечение","hybrid":"Смешанный","damage":"Урон","heal":"Лечение","shield":"Щит","barrier":"Барьер","status":"Статус","proc":"Срабатывание","self":"На себя","single_enemy":"Один противник","single_ally":"Один союзник","line":"Линия","cone":"Конус","aoe_ground":"Область на земле","aoe_around_self":"Область вокруг себя","global":"Все цели","custom":"Особый вариант","flat":"Фиксированное значение","percent":"Проценты","cast":"Применение","spend":"Потратить","gain":"Получить","drain":"Отнять","restore":"Восстановить","resource_spend":"Расход ресурса","resource_gain":"Получение ресурса","resource_drain":"Отнятие ресурса","resource_restore":"Восстановление ресурса","resources":"Ресурсы","effects":"Эффекты","modifiers":"Модификаторы","triggers":"Срабатывания","conditions":"Условия","stacking":"Накопление эффектов","upgrade_requirements":"Требования улучшения","grants":"Предоставляемые возможности","default":"Новая запись","basic":"Базовый слот","skill_1":"Первый навык","skill_2":"Второй навык","skill_3":"Третий навык","support":"Поддержка","aura":"Аура","toggle":"Переключаемая","summon":"Призыв","reaction":"Реакция","movement":"Перемещение","own_turn":"Собственные ходы","target_turn":"Ходы цели","round":"Раунды","Resources":"Ресурсы"};
+        Object.assign(arpgLabels,{stat_key:'Характеристика',mode:'Операция',condition_text:'Условие',event:'Событие',action_text:'Действие',condition_type:'Вид условия',stack_key:'Группа накопления',max_stacks:'Максимум уровней эффекта',policy:'Правило накопления',level:'Уровень',required_item_key:'Требуемый предмет',required_qty:'Количество предметов',required_currency_key:'Требуемая валюта',required_currency_qty:'Количество валюты',grant_type:'Вид возможности',value_num:'Числовая величина',tag:'Метка',ability_unlock:'Доступ к способности',item_unlock:'Доступ к предмету',resource_bonus:'Бонус ресурса',passive_flag:'Пассивная возможность',duration_unit:'Единица длительности',sortorder:'Порядок',ability_name:'Название способности',ability_description:'Описание способности',ability_kb_key:'Способность из Базы знаний',slot_index:'Номер слота',icon_url:'Ссылка на иконку',icon_class:'Класс иконки',multiplier:'Множитель',override:'Заменить значение',normal:'Обычный',elite:'Элитный',champion:'Чемпион',boss:'Босс',world_boss:'Мировой босс',raid_boss:'Рейдовый босс'});
+        (typeSchema.primary_element_options || []).forEach(function (option) { arpgLabels[option.value] = option.label; });
+        Object.assign(arpgLabels,{wind:'Воздух (старый ключ)',electric:'Электрический',dark:'Тёмный (старый ключ)',fire:'Огонь',water:'Вода',air:'Воздух',earth:'Земля',ice:'Лёд',lightning:'Молния',nature:'Природа',light:'Свет',shadow:'Тьма',death:'Смерть',life:'Жизнь',chaos:'Хаос',mind:'Разум',abyss:'Бездна',gravity:'Гравитация',astral:'Астрал',space:'Пространство'});
         function arpgLabel(value) { return mechanic === 'arpg' && arpgLabels[value] ? arpgLabels[value] : value; }
 
         function createAbilityVisualControls(syncToRaw, mechanicsOptions, modifierStatOptions) {
@@ -1499,11 +1504,11 @@
             };
 
             root.innerHTML = [
-                '<details open="open" class="af-kb-collapsible"><summary>UI</summary><div id="af-kb-arpg-ui" class="af-kb-help">Presentation fields from <code>ui</code> are edited in the Icon, Banner and Background fields below. Unknown <code>ui</code> keys remain available in raw JSON and are preserved.</div></details>',
-                '<details open="open" class="af-kb-collapsible"><summary>Tags</summary><div id="af-kb-arpg-tags"></div></details>',
-                '<details open="open" class="af-kb-collapsible"><summary>Blocks</summary><div id="af-kb-arpg-blocks"></div></details>',
-                '<details open="open" class="af-kb-collapsible"><summary>Rules</summary><div id="af-kb-arpg-rules"></div></details>',
-                '<details class="af-kb-collapsible"><summary>Debug raw JSON</summary><div id="af-kb-arpg-raw"></div></details>'
+                '<details open="open" class="af-kb-collapsible"><summary>Оформление</summary><div id="af-kb-arpg-ui" class="af-kb-help">Presentation fields from <code>ui</code> are edited in the Icon, Banner and Background fields below. Unknown <code>ui</code> keys remain available in raw JSON and are preserved.</div></details>',
+                '<details open="open" class="af-kb-collapsible"><summary>Метки</summary><div id="af-kb-arpg-tags"></div></details>',
+                '<details open="open" class="af-kb-collapsible"><summary>Блоки описания</summary><div id="af-kb-arpg-blocks"></div></details>',
+                '<details open="open" class="af-kb-collapsible"><summary>Параметры</summary><div id="af-kb-arpg-rules"></div></details>',
+                '<details class="af-kb-collapsible"><summary>Расширенный технический JSON</summary><div id="af-kb-arpg-raw"></div></details>'
             ].join('');
 
             var tagsRoot = root.querySelector('#af-kb-arpg-tags');
@@ -1657,46 +1662,24 @@
                     return JSON.parse(JSON.stringify(seedDefs[0].seed || {}));
                 }
 
-                function redraw() {
-                    list.innerHTML = '';
-                    if (!arr.length) {
-                        var empty = document.createElement('div');
-                        empty.className = 'af-kb-help';
-                        empty.textContent = 'Список пуст.';
-                        list.appendChild(empty);
-                        return;
-                    }
-
-                    arr.forEach(function (row, idx) {
-                        if (!row || typeof row !== 'object' || Array.isArray(row)) row = arr[idx] = {};
-                        var card = document.createElement('div');
-                        card.className = 'af-kb-block-item';
-                        var grid = document.createElement('div');
-                        grid.className = 'af-kb-row';
-                        columns.forEach(function (col) { grid.appendChild(fieldCell(row, col, syncToRaw)); });
+                var empty = document.createElement('div'); empty.className='af-kb-help'; empty.textContent='Список пуст.'; list.appendChild(empty);
+                function updateEmpty() { empty.hidden = arr.length !== 0; }
+                function appendRow(row) {
+                    var card = document.createElement('div'); card.className='af-kb-block-item';
+                    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+                        card.textContent='Сохранённое значение: ' + String(row);
+                    } else {
+                        var grid=document.createElement('div'); grid.className='af-kb-row';
+                        columns.forEach(function (column) {grid.appendChild(fieldCell(row,column,syncToRaw));});
                         if (key === 'character_abilities') renderVisualMechanics(grid,row,false);
-                        var del = document.createElement('button');
-                        del.type = 'button';
-                        del.className = 'af-kb-remove';
-                        del.textContent = 'Удалить';
-                        del.addEventListener('click', function () {
-                            arr.splice(idx, 1);
-                            redraw();
-                            syncToRaw();
-                        });
                         card.appendChild(grid);
-                        card.appendChild(del);
-                        list.appendChild(card);
-                    });
+                    }
+                    var remove=document.createElement('button'); remove.type='button'; remove.className='af-kb-remove'; remove.textContent='Удалить';
+                    remove.addEventListener('click',function () {arr.splice(arr.indexOf(row),1);card.remove();updateEmpty();syncToRaw();});
+                    card.appendChild(remove);list.appendChild(card);
                 }
-
-                add.addEventListener('click', function () {
-                    arr.push(getSeed());
-                    redraw();
-                    syncToRaw();
-                });
-
-                redraw();
+                arr.forEach(appendRow);updateEmpty();
+                add.addEventListener('click',function () {var row=getSeed();arr.push(row);appendRow(row);updateEmpty();syncToRaw();});
             }
 
             function renderPassiveEffectEditor(container) {
@@ -2131,7 +2114,7 @@
                 renderSeededArrayEditor(rulesRoot, 'effects', 'effects', [
                     { key: 'damage_element', label: 'Основная стихия урона', type: 'select', options: primaryElementOptions, optional: true },
                     { key: 'magic_direction_ref', label: 'Направление магии', type: 'picker', source: 'magic_direction' },
-                    { key: 'kind', label: 'kind', default: 'damage' },
+                    { key: 'kind', label: 'Тип эффекта', default: 'damage' },
                     { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
                     { key: 'targeting', label: 'targeting', type: 'select', options: enums.targeting, default: 'single_enemy' },
                     { key: 'value_mode', label: 'value_mode', default: 'flat' },
@@ -2151,14 +2134,16 @@
                     { key: 'proc', label: 'proc', seed: { kind: 'proc', damage_type: '', targeting: 'single_enemy', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } }
                 ]);
 
-                ['modifiers', 'triggers', 'conditions', 'stacking', 'upgrade_requirements'].forEach(function (k) {
-                    renderSeededArrayEditor(
-                        rulesRoot,
-                        k,
-                        k,
-                        [{ key: 'kind', label: 'kind', default: '' }, { key: 'value', label: 'value', default: '' }],
-                        [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]
-                    );
+                var rowSchemas = {
+                    modifiers:[{key:'stat_key',label:'Характеристика',type:'select',options:modifierStatOptions,optional:true},{key:'mode',label:'Операция',type:'select',options:[{value:'flat',label:'Прибавить значение'},{value:'percent',label:'Прибавить процент'}],optional:true},{key:'value',label:'Величина',type:'number',optional:true},{key:'duration',label:'Длительность',type:'number',optional:true},{key:'condition_text',label:'Условие',optional:true}],
+                    triggers:[{key:'event',label:'Событие',optional:true},{key:'action_text',label:'Действие',optional:true},{key:'condition_text',label:'Условие',optional:true}],
+                    conditions:[{key:'condition_type',label:'Вид условия',optional:true},{key:'value',label:'Значение условия',optional:true}],
+                    stacking:[{key:'stack_key',label:'Группа накопления',optional:true},{key:'max_stacks',label:'Максимум уровней эффекта',type:'number',optional:true},{key:'policy',label:'Правило накопления',optional:true}],
+                    upgrade_requirements:[{key:'level',label:'Требуемый уровень',type:'number',optional:true},{key:'required_item_key',label:'Предмет',type:'picker',source:'arpg_item'},{key:'required_qty',label:'Количество предметов',type:'number',optional:true},{key:'required_currency_key',label:'Валюта',optional:true},{key:'required_currency_qty',label:'Количество валюты',type:'number',optional:true}],
+                    grants:[{key:'grant_type',label:'Вид возможности',type:'select',options:enums.grantType,optional:true},{key:'value',label:'Значение',optional:true},{key:'value_num',label:'Числовая величина',type:'number',optional:true},{key:'duration',label:'Длительность',type:'number',optional:true}]
+                };
+                Object.keys(rowSchemas).forEach(function (key) {
+                    renderSeededArrayEditor(rulesRoot,key,key,rowSchemas[key].concat([{key:'notes',label:'Примечание',optional:true}]),[{key:'default',label:'Новая запись',seed:{}}]);
                 });
             }
 
@@ -2207,7 +2192,7 @@
                         rulesRoot,
                         pair[1],
                         k,
-                        [{ key: 'kind', label: 'kind', default: '' }, { key: 'value', label: 'value', default: '' }],
+                        [{ key: 'kind', label: 'Тип эффекта', default: '' }, { key: 'value', label: 'value', default: '' }],
                         [{ key: 'default', label: k === 'requirements' ? 'Требование' : (k === 'mutual_exclusives' ? 'Несовместимый талант' : 'Пассивный эффект'), seed: { kind: '', value: '' } }]
                     );
                 });
@@ -2323,7 +2308,7 @@
                         rulesRoot,
                         k,
                         k,
-                        [{ key: 'kind', label: 'kind', default: '' }, { key: 'value', label: 'value', default: '' }],
+                        [{ key: 'kind', label: 'Тип эффекта', default: '' }, { key: 'value', label: 'value', default: '' }],
                         [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]
                     );
                 });
@@ -2566,7 +2551,7 @@
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { op: 'spend', resource_key: '', value: 0, per: 'cast', duration: 0, notes: '' });
                             renderBestiaryNestedRows(card, 'effects', normalized.effects, [
-                                { name: 'kind', label: 'kind', type: 'select', options: enums.effectKind },
+                                { name: 'kind', label: 'Тип эффекта', type: 'select', options: enums.effectKind },
                                 { name: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType },
                                 { name: 'targeting', label: 'targeting', type: 'select', options: enums.targeting },
                                 { name: 'value_mode', label: 'value_mode', type: 'text' },
@@ -2642,7 +2627,7 @@
 
                 renderSeededArrayEditor(rulesRoot, 'loot', 'loot', [
                     { key: 'loot_key', label: 'loot_key', default: '' },
-                    { key: 'kind', label: 'kind', type: 'select', options: ['item', 'currency', 'material', 'reward', 'custom'], default: 'item' },
+                    { key: 'kind', label: 'Тип эффекта', type: 'select', options: ['item', 'currency', 'material', 'reward', 'custom'], default: 'item' },
                     { key: 'qty_min', label: 'qty_min', type: 'number', default: 1 },
                     { key: 'qty_max', label: 'qty_max', type: 'number', default: 1 },
                     { key: 'chance', label: 'chance', type: 'number', default: 100 },
@@ -2859,14 +2844,13 @@
         // ---------- Универсальные билд-блоки формы ----------
         // Регистрируем все commit-функции полей, чтобы на submit гарантированно
         // снять актуальные значения (включая textarea под SCEditor).
-        var liveFieldCommitters = [];
         function createInput(def, obj, onChange) {
             var wrap = document.createElement('div');
             if (def.fullWidth) {
                 wrap.classList.add('af-kb-field--full');
             }
             var label = document.createElement('label');
-            label.textContent = def.label || def.name;
+            label.textContent = arpgLabel(def.label || def.name);
             wrap.appendChild(label);
             if (def.help) {
                 var help = document.createElement('button');
@@ -2919,7 +2903,7 @@
                         if (opt.help) option.title = String(opt.help);
                     } else {
                         option.value = String(opt);
-                        option.textContent = String(opt);
+                        option.textContent = String(arpgLabel(opt));
                     }
                     input.appendChild(option);
                 });
@@ -3009,6 +2993,7 @@
             }
 
             function commitValue() {
+                if (!input.isConnected) return;
                 var liveValue = getFieldValue(input);
                 if (def.optional && String(liveValue).trim() === '') {
                     delete obj[def.name];
@@ -3063,48 +3048,18 @@
 
         function renderObjectList(container, list, title, fieldsDef, onChange, addPreset) {
             container.innerHTML = '';
-
-            var head = document.createElement('div');
-            head.className = 'af-kb-inline';
-            head.innerHTML = '<div class="af-kb-help"><strong>' + esc(title) + '</strong></div>';
-
-            var addBtn = document.createElement('button');
-            addBtn.type = 'button';
-            addBtn.className = 'af-kb-add';
-            addBtn.textContent = 'Добавить';
-            addBtn.addEventListener('click', function () {
-                list.push(deepClone(addPreset || {}));
-                renderObjectList(container, list, title, fieldsDef, onChange, addPreset);
-                onChange();
-            });
-
-            head.appendChild(addBtn);
-            container.appendChild(head);
-
-            list.forEach(function (obj, idx) {
-                var card = document.createElement('div');
-                card.className = 'af-kb-rule-card';
-
-                var row = document.createElement('div');
-                row.className = 'af-kb-row';
-                fieldsDef.forEach(function (def) {
-                    row.appendChild(createInput(def, obj, onChange));
-                });
-                card.appendChild(row);
-
-                var remove = document.createElement('button');
-                remove.type = 'button';
-                remove.className = 'af-kb-remove';
-                remove.textContent = 'Удалить';
-                remove.addEventListener('click', function () {
-                    list.splice(idx, 1);
-                    renderObjectList(container, list, title, fieldsDef, onChange, addPreset);
-                    onChange();
-                });
-                card.appendChild(remove);
-
-                container.appendChild(card);
-            });
+            var head=document.createElement('div');head.className='af-kb-inline';
+            var caption=document.createElement('strong');caption.textContent=arpgLabel(title);head.appendChild(caption);
+            var add=document.createElement('button');add.type='button';add.className='af-kb-add';add.textContent='Добавить';head.appendChild(add);container.appendChild(head);
+            function append(obj) {
+                var card=document.createElement('div');card.className='af-kb-rule-card';
+                var row=document.createElement('div');row.className='af-kb-row';
+                fieldsDef.forEach(function (def) {row.appendChild(createInput(def,obj,onChange));});card.appendChild(row);
+                var remove=document.createElement('button');remove.type='button';remove.className='af-kb-remove';remove.textContent='Удалить';
+                remove.addEventListener('click',function () {list.splice(list.indexOf(obj),1);card.remove();onChange();});card.appendChild(remove);container.appendChild(card);
+            }
+            list.forEach(append);
+            add.addEventListener('click',function () {var obj=deepClone(addPreset || {});list.push(obj);append(obj);onChange();});
         }
 
         function renderKvList(container, list, title, onChange) {
@@ -4218,7 +4173,7 @@
                 { name: 'format', label: 'format', type: 'text', hint: 'например value / value+unit' }
             ] },
             { key: 'speed', label: 'Speed', fields: [
-                { name: 'kind', label: 'kind', type: 'select', options: ['walk', 'fly', 'swim', 'climb', 'burrow'] },
+                { name: 'kind', label: 'Тип эффекта', type: 'select', options: ['walk', 'fly', 'swim', 'climb', 'burrow'] },
                 { name: 'value', label: 'value', type: 'number', required: true },
                 { name: 'mode', label: 'mode', type: 'select', options: ['set', 'add'] }
             ] },
