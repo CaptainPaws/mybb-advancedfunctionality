@@ -1096,7 +1096,7 @@
                         }
                         picker.value = current || '';
                         var selected = choices.find(function (option) {return option.value === current;});
-                        hint.textContent = !choices.length ? 'Нет доступных записей.' : (selected && col.pinAbility ? [arpgLabel(selected.type || ''),selected.description || ''].filter(Boolean).join(' · ') : 'Версия ссылки сохраняется до явного изменения выбора.');
+                        hint.textContent = !choices.length ? 'Нет доступных записей.' : (selected && (col.pinAbility || selected.description) ? [col.pinAbility ? arpgLabel(selected.type || '') : '',selected.description || ''].filter(Boolean).join(' · ') : 'Версия ссылки сохраняется до явного изменения выбора.');
                     }
                     filter.addEventListener('input', fillChoices);
                     picker.addEventListener('change', function () {
