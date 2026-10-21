@@ -4430,6 +4430,8 @@ function af_kb_get_type_schema_arpg(string $typeKey): array
 {
     if ($typeKey === 'character') {
         $schema = af_kb_get_type_schema_dnd($typeKey);
+        $schema['primary_element_options'] = [];
+        foreach (af_kb_arpg_primary_elements() as $key => $labels) $schema['primary_element_options'][] = ['value'=>$key,'label'=>$labels['ru']];
         $schema['internal_profile'] = 'arpg_character';
         $profile = af_kb_get_type_profile_definition_arpg($typeKey);
         $schema['defaults'] = array_replace_recursive(
@@ -6595,7 +6597,7 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         'notes' => (string)($row['notes'] ?? ''),
         'sortorder' => $sort,
     ];
-    foreach (['duration_unit', 'cooldown_unit', 'action_cost', 'timing', 'costs', 'target_count', 'application_conditions', 'application_mode', 'summon', 'usage_limits', 'formula_refs'] as $field) {
+    foreach (['damage_element', 'magic_direction_ref', 'duration_unit', 'cooldown_unit', 'action_cost', 'timing', 'costs', 'target_count', 'application_conditions', 'application_mode', 'summon', 'usage_limits', 'formula_refs'] as $field) {
         if (array_key_exists($field, $row)) $normalized[$field] = $row[$field];
     }
     return $normalized;
@@ -14417,7 +14419,7 @@ function af_kb_handle_edit(): void
     if ($errors) {
         $items = '';
         foreach ($errors as $error) {
-            $items .= '<li>'.htmlspecialchars_uni($error).'</li>';
+            $items .= '<li>'.htmlspecialchars_uni(af_kb_arpg_element_error_message((string)$error)).'</li>';
         }
         $kb_errors = '<div class="af-kb-errors"><ul>'.$items.'</ul></div>';
     }
@@ -14756,7 +14758,7 @@ function af_kb_handle_type_edit(): void
     if ($errors) {
         $items = '';
         foreach ($errors as $error) {
-            $items .= '<li>'.htmlspecialchars_uni($error).'</li>';
+            $items .= '<li>'.htmlspecialchars_uni(af_kb_arpg_element_error_message((string)$error)).'</li>';
         }
         $kb_errors = '<div class="af-kb-errors"><ul>'.$items.'</ul></div>';
     }

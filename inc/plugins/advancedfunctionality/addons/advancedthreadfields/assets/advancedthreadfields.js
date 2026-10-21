@@ -741,6 +741,7 @@
             type: AF_ATF.qs(".af-atf-ability-type", row).value,
             subtype: AF_ATF.qs(".af-atf-ability-subtype", row).value,
             slot: AF_ATF.qs(".af-atf-ability-slot", row).value,
+            damage_element: AF_ATF.qs(".af-atf-ability-damage-element", row).value,
             damage_type: AF_ATF.qs(".af-atf-ability-damage-type", row).value,
             target: AF_ATF.qs(".af-atf-ability-targeting", row).value,
             range: AF_ATF.qs(".af-atf-ability-range", row).value,
@@ -832,6 +833,7 @@
                 <span class="af-atf-ability-label">Описание способности</span>
                 <textarea class="textbox textarea af-atf-input af-atf-ability-description" rows="4" placeholder="Описание способности">${AF_ATF.escapeAttr(ability.ability_description)}</textarea>
               </label>
+              <label>Стихия урона<select class="select af-atf-ability-damage-element">${renderSelectOptions("damage_element", ability.damage_element)}</select><span class="af-atf-ability-damage-error" role="status"></span></label>
               <div class="af-atf-effects"><strong>Эффекты</strong><div class="af-atf-effects-list"></div><button type="button" class="button af-atf-effect-add">Добавить эффект</button></div>
               <label style="display:none;">
                 <input type="number" class="textbox text_input af-atf-ability-slot-index" value="${AF_ATF.escapeAttr(ability.slot_index || index + 1)}" />
@@ -850,7 +852,7 @@
                   <label data-for="formula"><span>Схема расчёта <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Выбирает формулу вычисления эффекта из справочника механик.">?</button></span><select class="select af-atf-effect-formula">${renderSelectOptions("formula_profile", effect.formula_profile)}</select></label>
                   <label data-for="target">Цель<select class="select af-atf-effect-target">${renderSelectOptions("targeting", effect.target)}</select></label>
                   <label data-for="damage_type">Тип урона<select class="select af-atf-effect-damage-type">${renderSelectOptions("damage_type", effect.damage_type)}</select></label>
-                  <label data-for="element">Стихия<select class="select af-atf-effect-element">${renderSelectOptions("element", effect.element)}</select></label>
+                  <label data-for="element">Стихия урона<select class="select af-atf-effect-damage-element">${renderSelectOptions("damage_element", effect.damage_element)}</select><span class="af-atf-damage-error" role="status"></span></label>
                   <label data-for="duration"><span>Длительность (ходов цели) <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Количество ходов цели, в течение которых действует эффект.">?</button></span><input type="number" step="1" min="0" class="textbox af-atf-effect-duration" value="${AF_ATF.escapeAttr(effect.duration_value)}"></label>
                   <label data-for="status"><span>Статус / контроль <button type="button" class="af-ability-help" aria-label="Подсказка" data-tooltip="Статус или контроль, накладываемый на выбранную цель.">?</button></span><select class="select af-atf-effect-status">${renderSelectOptions("status", effect.status_key)}</select></label>
                   <label data-for="stat">Характеристика<select class="select af-atf-effect-stat">${renderSelectOptions("stat", effect.stat_key)}</select></label>
@@ -860,8 +862,15 @@
                   `;
                 const collectEffect = () => {
                   effect.effect_type = AF_ATF.qs('.af-atf-effect-type', effectRow).value;
-                  const map = {value:'value', formula:'formula_profile', target:'target', 'damage-type':'damage_type', element:'element', duration:'duration_value', status:'status_key', stat:'stat_key', operation:'operation', resource:'resource_key', notes:'notes'};
+                  const map = {value:'value', formula:'formula_profile', target:'target', 'damage-type':'damage_type', 'damage-element':'damage_element', duration:'duration_value', status:'status_key', stat:'stat_key', operation:'operation', resource:'resource_key', notes:'notes'};
                   Object.keys(map).forEach((suffix) => { const input = AF_ATF.qs('.af-atf-effect-' + suffix, effectRow); if (input) effect[map[suffix]] = input.value; });
+                  const damageElement = AF_ATF.qs('.af-atf-effect-damage-element', effectRow);
+                  if (!damageElement.value) delete effect.damage_element;
+                  const needsElement = effect.effect_type === 'damage' && effect.damage_type === 'elemental';
+                  damageElement.required = needsElement;
+                  const damageError = needsElement && !damageElement.value ? 'Выберите стихию урона. Направление магии не определяет её автоматически.' : '';
+                  damageElement.setCustomValidity(damageError);
+                  AF_ATF.qs('.af-atf-damage-error', effectRow).textContent = damageError;
                   effect.duration_unit = 'target_turn';
                   const relevant = {damage:['value','formula','target','damage_type','element'], heal:['value','formula','target'], shield:['value','formula','target','duration'], status:['status','target','duration'], control:['status','target','duration'], stat_modifier:['stat','operation','value','target','duration'], resource:['resource','operation','value','target']};
                   const valueLabels = {damage:'Значение урона',heal:'Значение лечения',shield:'Прочность щита',stat_modifier:'Величина модификатора',resource:'Изменение ресурса'};
@@ -880,6 +889,12 @@
 
             const setValue = () => {
               state[index] = collectAbilityFromRow(row, index);
+              const input = AF_ATF.qs('.af-atf-ability-damage-element', row);
+              if (!input.value) delete state[index].damage_element;
+              input.required = state[index].damage_type === 'elemental';
+              const message = input.required && !input.value ? 'Выберите стихию урона.' : '';
+              input.setCustomValidity(message);
+              AF_ATF.qs('.af-atf-ability-damage-error', row).textContent = message;
               sync();
             };
 

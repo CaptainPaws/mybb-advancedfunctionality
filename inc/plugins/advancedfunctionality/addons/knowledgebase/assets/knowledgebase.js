@@ -1389,6 +1389,7 @@
                 var label = document.createElement('label');
                 label.textContent = col.label;
                 cell.appendChild(label);
+                cell.dataset.kbField = col.key;
 
                 var input;
                 // New typed JSON/optional fields must not materialize defaults on load.
@@ -1427,6 +1428,21 @@
                         }
                     });
                     cell.appendChild(input);
+                    if (col.key === 'damage_element') {
+                        var help = document.createElement('div'); help.className = 'af-kb-help'; help.setAttribute('role', 'status');
+                        cell.appendChild(help);
+                        var validateDamage = function () {
+                            var kind = row.effect_type || row.kind;
+                            var required = row.damage_type === 'elemental' && (!kind || kind === 'damage' || kind === 'proc');
+                            input.required = required;
+                            var message = required && !input.value ? 'Выберите основную стихию стихийного урона. Направление магии её не задаёт.' : '';
+                            input.setCustomValidity(message); help.textContent = message;
+                        };
+                        input.addEventListener('change', validateDamage);
+                        // Other controls in the same card/root may change damage_type.
+                        root.addEventListener('change', validateDamage);
+                        validateDamage();
+                    }
                     return cell;
                 }
                 if (col.type === 'select') {
@@ -1922,7 +1938,8 @@
                         { key: 'ability_name', label: 'ability_name', default: '' },
                         { key: 'icon_url', label: 'icon_url', default: '' },
                         { key: 'ability_type', label: 'ability_type', default: 'active' },
-                        { key: 'damage_type', label: 'damage_type', default: '' },
+                        { key: 'damage_type', label: 'Тип урона', type: 'select', options: enums.damageType, default: '' },
+                        { key: 'damage_element', label: 'Стихия урона', type: 'select', options: primaryElementOptions, optional: true },
                         { key: 'targeting', label: 'targeting', default: '' },
                         { key: 'range', label: 'range', type: 'number', default: 0 },
                         { key: 'cast_time', label: 'cast_time', type: 'number', default: 0 },
@@ -2824,6 +2841,18 @@
                 input.value = value || '';
             }
 
+            if (mechanic === 'arpg' && def.name === 'damage_element') {
+                var damageHelp=document.createElement('div');damageHelp.className='af-kb-help';damageHelp.setAttribute('role','status');wrap.appendChild(damageHelp);
+                var checkDamage=function () {
+                    var kind=obj.effect_type || obj.kind;
+                    var required=obj.damage_type === 'elemental' && (!kind || kind === 'damage' || kind === 'proc');
+                    var value=input.value === 'wind' ? 'air' : input.value;
+                    var known=(typeSchema.primary_element_options || []).some(function (option) {return option.value === value;});
+                    var message=required && !value ? 'Выберите основную стихию урона.' : (value && !known ? 'Выберите одну из 17 основных стихий.' : (value && ['elemental','hybrid'].indexOf(obj.damage_type) === -1 ? 'Стихия урона допустима только для стихийного или смешанного урона.' : ''));
+                    input.required=required;input.setCustomValidity(message);damageHelp.textContent=message;
+                };
+                root.addEventListener('change',checkDamage);checkDamage();
+            }
             input.dataset.field = def.name;
             if (def.editorPolicy) {
                 input.setAttribute('data-af-kb-editor-policy', def.editorPolicy);
@@ -5746,6 +5775,7 @@
                             { name: 'subtype', label: 'Подтип', type: 'select', options: abilitySubtypeOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'slot', label: 'Слот', type: 'select', options: abilitySlotOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'damage_type', label: 'Тип урона', type: 'select', options: abilityDamageTypeOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'damage_element', label: 'Стихия урона (только для стихийного урона)', type: 'select', options: typeSchema.primary_element_options || [], allowEmpty: true, optional: true, emptyLabel: '—' },
                             { name: 'target', label: 'Цель', type: 'select', options: abilityTargetingOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'range', label: 'Дальность', type: 'select', options: abilityRangeOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'formula_profile', label: 'Схема расчёта', type: 'select', options: abilityFormulaProfileOptions, allowEmpty: true, emptyLabel: '—', help: 'Выбирает точную формулу из справочника механик.' },
@@ -5796,7 +5826,7 @@
                                 var effectCard = document.createElement('div'); effectCard.className = 'af-kb-effect-card af-ability-editor-grid'; effectsBox.appendChild(effectCard);
                                 var effectHeader = document.createElement('div'); effectHeader.className = 'af-kb-effect-header';
                                 var effectTitle = document.createElement('strong'); effectTitle.textContent = 'Эффект #' + (effectIndex + 1); effectHeader.appendChild(effectTitle); effectCard.appendChild(effectHeader);
-                                var relevant = {damage:['value','formula_profile','target','damage_type','element'],heal:['value','formula_profile','target'],shield:['value','formula_profile','target','duration_value'],status:['status_key','target','duration_value'],control:['status_key','target','duration_value'],stat_modifier:['stat_key','operation','value','target','duration_value'],resource:['resource_key','operation','value','target']};
+                                var relevant = {damage:['value','formula_profile','target','damage_type','damage_element'],heal:['value','formula_profile','target'],shield:['value','formula_profile','target','duration_value'],status:['status_key','target','duration_value'],control:['status_key','target','duration_value'],stat_modifier:['stat_key','operation','value','target','duration_value'],resource:['resource_key','operation','value','target']};
                                 var valueLabels = {damage:'Значение урона',heal:'Значение лечения',shield:'Прочность щита',stat_modifier:'Величина модификатора',resource:'Изменение ресурса'};
                                 var defs = [
                                     {name:'effect_type',label:'Тип эффекта',type:'select',options:effectTypeOptions,allowEmpty:true,emptyLabel:'—'},
@@ -5804,7 +5834,7 @@
                                     {name:'formula_profile',label:'Схема расчёта',type:'select',options:abilityFormulaProfileOptions,allowEmpty:true,emptyLabel:'—',help:'Выбирает формулу вычисления эффекта из справочника механик.'},
                                     {name:'target',label:'Цель',type:'select',options:abilityTargetingOptions,allowEmpty:true,emptyLabel:'—'},
                                     {name:'damage_type',label:'Тип урона',type:'select',options:abilityDamageTypeOptions,allowEmpty:true,emptyLabel:'—'},
-                                    {name:'element',label:'Стихия',type:'select',options:characterElementOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'damage_element',label:'Стихия урона',type:'select',options:typeSchema.primary_element_options || [],allowEmpty:true,optional:true,emptyLabel:'—'},
                                     {name:'duration_value',label:'Длительность эффекта',type:'number',help:'Количество ходов цели, в течение которых действует эффект.'},
                                     {name:'duration_unit',label:'Единица длительности',type:'select',options:durationUnitOptions,allowEmpty:true,optional:true},
                                     {name:'status_key',label:'Статус / контроль',type:'select',options:effectStatusOptions,allowEmpty:true,emptyLabel:'—',help:'Статус или контроль, накладываемый на выбранную цель.'},
