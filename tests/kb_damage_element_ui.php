@@ -11,6 +11,7 @@ foreach ([
     ['type_profile'=>'character','element'=>'fire','damage_element'=>''],
     ['type_profile'=>'character','damage_type'=>'elemental','element'=>'fire'],
     ['damage_type'=>'physical','damage_element'=>''],
+    ['damage_type'=>'elemental','unit'=>'RES','scope'=>'elemental','element'=>'fire','value'=>3],
     ['kind'=>'heal','damage_type'=>'elemental'],
     ['damage_type'=>'elemental','damage_element'=>'wind'],
     ['effects'=>[['kind'=>'damage','damage_type'=>'elemental','damage_element'=>'life'], ['kind'=>'heal']]],
