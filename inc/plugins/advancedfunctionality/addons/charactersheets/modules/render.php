@@ -972,6 +972,12 @@ function af_charactersheets_arpg_payload_is_canonical(array $character_source): 
     $payload = (array)($character_source['payload'] ?? []);
     $meta = (array)($payload['meta'] ?? []);
 
+    // KB/ATF character.contract.v1 declares its mode in character_meta.mechanic.
+    // An Accuracy-only payload must not depend on unrelated legacy stat keys.
+    if (($meta['mechanic'] ?? '') === 'arpg') {
+        return true;
+    }
+
     $schemaCandidates = [
         (string)($meta['schema'] ?? ''),
         (string)($meta['rules_schema'] ?? ''),
