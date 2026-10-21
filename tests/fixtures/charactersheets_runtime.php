@@ -19,8 +19,9 @@ function cs_check(bool $ok, string $message): void { if (!$ok) throw new Runtime
 class CsResult { public int $position = 0; public function __construct(public array $rows) {} }
 class CsDatabase {
     public array $queries = [];
+    public array $writes = [];
     public array $sheet = ['id'=>1, 'tid'=>52, 'uid'=>7, 'slug'=>'thread-52', 'base_json'=>'{}', 'build_json'=>'{}', 'progress_json'=>'{}'];
-    public function table_exists($table) { return in_array($table, ['af_charactersheets_accept', 'af_cs_sheets'], true); }
+    public function table_exists($table) { return in_array($table, ['af_charactersheets_accept', 'af_cs_sheets'], true) || ($table === 'af_kb_entries' && str_starts_with($GLOBALS['mode'], 'accuracy_')); }
     public function escape_string($value) { return addslashes($value); }
     public function simple_select($table, $fields='*', $where='', $options=[]) {
         $this->queries[] = [$table, $fields, $where];
@@ -29,6 +30,13 @@ class CsDatabase {
             'af_charactersheets_accept' => [['tid'=>52, 'uid'=>7, 'accepted'=>1, 'sheet_slug'=>'thread-52']],
             'af_cs_sheets' => str_contains($where, 'uid IN (') ? [['id'=>2, 'uid'=>8, 'slug'=>'fallback-8']] : [$this->sheet],
             'threads' => [['tid'=>52, 'fid'=>2, 'uid'=>7, 'subject'=>'Test Character']],
+            'af_kb_entries' => str_starts_with($GLOBALS['mode'], 'accuracy_') && str_contains($where, "type='character'") ? [[
+                'id'=>12, 'type'=>'character', 'key'=>'oc-52', 'active'=>1,
+                'data_json'=>json_encode(['schema'=>'af_kb.character.contract.v1', 'type_profile'=>'character',
+                    'character_profile'=>['character_name'=>'Test Character', 'character_element'=>'fire'],
+                    'character_stats'=>$GLOBALS['mode'] === 'accuracy_missing' ? [] : ['character_accuracy'=>$GLOBALS['mode'] === 'accuracy_zero' ? 0 : 27.5],
+                    'character_abilities'=>[], 'character_meta'=>['mechanic'=>'arpg']]),
+            ]] : [],
             'users' => [['uid'=>7, 'username'=>'Test owner']],
             default => [],
         };
@@ -44,7 +52,7 @@ class CsDatabase {
             'fid'=>$uid === 11 ? 99 : 2, 'firstpost'=>100+$uid, 'sheet_slug'=>$uid === 7 ? 'canonical-7' : '',
         ], [7, 8, 9, 10, 11]));
     }
-    public function update_query(...$args) {}
+    public function update_query(...$args) { $this->writes[] = $args; }
 }
 class CsMybb {
     public array $settings = ['af_charactersheets_enabled'=>1, 'af_characterworkflow_target_forums'=>'2', 'bburl'=>'https://example.test'];
@@ -64,6 +72,7 @@ class CsTemplates {
         return addcslashes(file_get_contents($file), '\\"');
     }
 }
+function my_substr($s, $start, $length) { return implode('', array_slice(preg_split('//u', (string)$s, -1, PREG_SPLIT_NO_EMPTY), $start, $length)); }
 function htmlspecialchars_uni($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function af_inv_equipment_slots() { return []; } // Optional Inventory provider boundary.
 function forum_permissions($fid) { return ['canview'=>1, 'canviewthreads'=>1]; }
@@ -82,6 +91,15 @@ function output_page($html) {
     cs_check(str_contains($urls, 'charactersheets.js') && str_contains($urls, 'charactersheets.css'), 'Full route assets missing');
     cs_check(!str_contains($urls, 'charactersheets-trigger'), 'Trigger runtime leaked into full route');
     cs_check(!in_array('ajax.php', cs_modules(), true), 'API handlers leaked into a view route');
+    if (str_starts_with($GLOBALS['mode'], 'accuracy_')) {
+        $expected = match ($GLOBALS['mode']) { 'accuracy_value'=>'27.5', 'accuracy_zero'=>'0', default=>'—' };
+        cs_check(str_contains($html, 'data-afcs-render-profile="arpg"'), 'Wrong render mode');
+        cs_check(str_contains($html, 'af-cs-arpg-panel--stats'), 'Stats template did not render');
+        cs_check(preg_match('~Точность</span><strong[^>]*>' . preg_quote($expected, '~') . '</strong>~u', $html) === 1, 'Accuracy DTO did not reach visible template: ' . $expected);
+        cs_check(substr_count($html, '>Точность</span>') === 1, 'Accuracy rendered more than once');
+        cs_check(preg_match('~Сила атаки</span>.*?Точность</span>.*?Скорость</span>~s', $html) === 1, 'Stat order changed');
+        cs_check($GLOBALS['db']->writes === [], 'View wrote persistent data');
+    }
     if (getenv('AF_TEST_HTML')) echo $html;
     else echo json_encode(['mode'=>$GLOBALS['mode'], 'rendered'=>true, 'modules'=>cs_modules(), 'queries'=>$GLOBALS['db']->queries, 'warnings'=>$GLOBALS['warnings']]);
 }
@@ -105,7 +123,7 @@ set_error_handler(static function ($severity, $message) {
 });
 try {
     require AF_ADDONS . 'charactersheets/charactersheets.php';
-    if (in_array($mode, ['full', 'embed'], true)) {
+    if (in_array($mode, ['full', 'embed', 'accuracy_value', 'accuracy_zero', 'accuracy_missing'], true)) {
         af_charactersheets_render_page(); // Real dispatch, calculator, renderer, eval and output.
     } elseif (in_array($mode, ['showthread', 'threaded'], true)) {
         require AF_ADDONS . 'characterworkflow/characterworkflow.php';
