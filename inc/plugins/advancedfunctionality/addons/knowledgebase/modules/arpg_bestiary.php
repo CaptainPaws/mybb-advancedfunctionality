@@ -102,3 +102,27 @@ function af_kb_arpg_bestiary_ability_pin(array $ability, string $path, array &$d
         }
     }
 }
+
+/** Explicit editor selection/refresh only; never invoked by reads or previews. */
+function af_kb_arpg_prepare_bestiary_ability_ref(array $ability, array &$errors): array
+{
+    if (!array_key_exists('_editor_ability_key', $ability)) return $ability;
+    $key = $ability['_editor_ability_key']; unset($ability['_editor_ability_key']);
+    if ($key === '') {
+        unset($ability['ability_kb_key'], $ability['ability_key'], $ability['ability_definition_version'], $ability['ability_fingerprint']);
+        return $ability;
+    }
+    if (!is_string($key) || !preg_match(AF_KB_KEY_PATTERN, $key)) {
+        $errors[] = 'Выберите существующую способность из Базы знаний.'; return $ability;
+    }
+    $diagnostics = [];
+    $reference = af_kb_arpg_acs_reference('arpg_ability', $key, 'ability_keys', $diagnostics);
+    if ($diagnostics || empty($reference['resolved']) || !is_array($reference['definition_version'] ?? null) || empty($reference['fingerprint'])) {
+        $errors[] = 'Выбранная способность недоступна. Проверьте запись Базы знаний.'; return $ability;
+    }
+    $ability['ability_kb_key'] = $key;
+    unset($ability['ability_key']);
+    $ability['ability_definition_version'] = $reference['definition_version'];
+    $ability['ability_fingerprint'] = $reference['fingerprint'];
+    return $ability;
+}

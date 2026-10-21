@@ -1051,6 +1051,7 @@
         Object.assign(arpgLabels,{stat_key:'Характеристика',mode:'Операция',condition_text:'Условие',event:'Событие',action_text:'Действие',condition_type:'Вид условия',stack_key:'Группа накопления',max_stacks:'Максимум уровней эффекта',policy:'Правило накопления',level:'Уровень',required_item_key:'Требуемый предмет',required_qty:'Количество предметов',required_currency_key:'Требуемая валюта',required_currency_qty:'Количество валюты',grant_type:'Вид возможности',value_num:'Числовая величина',tag:'Метка',ability_unlock:'Доступ к способности',item_unlock:'Доступ к предмету',resource_bonus:'Бонус ресурса',passive_flag:'Пассивная возможность',duration_unit:'Единица длительности',sortorder:'Порядок',ability_name:'Название способности',ability_description:'Описание способности',ability_kb_key:'Способность из Базы знаний',slot_index:'Номер слота',icon_url:'Ссылка на иконку',icon_class:'Класс иконки',multiplier:'Множитель',override:'Заменить значение',normal:'Обычный',elite:'Элитный',champion:'Чемпион',boss:'Босс',world_boss:'Мировой босс',raid_boss:'Рейдовый босс'});
         (typeSchema.primary_element_options || []).forEach(function (option) { arpgLabels[option.value] = option.label; });
         Object.assign(arpgLabels,{wind:'Воздух (старый ключ)',electric:'Электрический',dark:'Тёмный (старый ключ)',fire:'Огонь',water:'Вода',air:'Воздух',earth:'Земля',ice:'Лёд',lightning:'Молния',nature:'Природа',light:'Свет',shadow:'Тьма',death:'Смерть',life:'Жизнь',chaos:'Хаос',mind:'Разум',abyss:'Бездна',gravity:'Гравитация',astral:'Астрал',space:'Пространство'});
+        Object.assign(arpgLabels,{family:'Семейство',archetype:'Архетип',faction:'Фракция',rank:'Ранг',threat_tier:'Уровень угрозы',level:'Уровень','Bestiary core':'Основные параметры монстра','Combat stats':'Боевые характеристики','combat_stats.hp':'Здоровье (HP)','combat_stats.atk':'Атака','combat_stats.def':'Защита','combat_stats.speed':'Скорость','combat_stats.crit_rate':'Шанс критического удара','combat_stats.crit_dmg':'Критический урон','combat_stats.element_damage_bonus':'Бонус стихийного урона','combat_stats.mastery':'Мастерство','combat_stats.healing_bonus':'Бонус лечения','combat_stats.shield_strength':'Прочность щита','combat_stats.status_hit':'Попадание статусом','combat_stats.luck':'Удача',weaknesses:'Уязвимости',loot:'Добыча',loot_key:'Запись добычи',qty_min:'Минимальное количество',qty_max:'Максимальное количество',chance:'Шанс, %',item:'Предмет',currency:'Валюта',material:'Материал',reward:'Награда'});
         function arpgLabel(value) { return mechanic === 'arpg' && arpgLabels[value] ? arpgLabels[value] : value; }
 
         function createAbilityVisualControls(syncToRaw, mechanicsOptions, modifierStatOptions) {
@@ -1083,7 +1084,7 @@
                     var choices = (typeSchema.editor_choices || {})[col.source] || [];
                     var filter = document.createElement('input'); filter.type = 'search'; filter.placeholder = 'Поиск по названию';
                     var picker = document.createElement('select');
-                    var current = col.key === 'magic_direction_ref' ? (Object.prototype.hasOwnProperty.call(row,'_editor_magic_direction_key') ? row._editor_magic_direction_key : (row.magic_direction_ref || {}).key) : (row._editor_formula_key || row[col.key]);
+                    var current = col.pinAbility ? (Object.prototype.hasOwnProperty.call(row,'_editor_ability_key') ? row._editor_ability_key : row.ability_kb_key || row.ability_key) : col.key === 'magic_direction_ref' ? (Object.prototype.hasOwnProperty.call(row,'_editor_magic_direction_key') ? row._editor_magic_direction_key : (row.magic_direction_ref || {}).key) : (row._editor_formula_key || row[col.key]);
                     var hint = document.createElement('div'); hint.className = 'af-kb-help';
                     function fillChoices() {
                         picker.innerHTML = '';
@@ -1094,18 +1095,24 @@
                             addSelectOptions(picker, [{value:current,label:'Сохранённая ссылка: ' + current}]);
                         }
                         picker.value = current || '';
-                        hint.textContent = choices.length ? 'Версия ссылки сохраняется до явного изменения выбора.' : 'Нет доступных записей.';
+                        var selected = choices.find(function (option) {return option.value === current;});
+                        hint.textContent = !choices.length ? 'Нет доступных записей.' : (selected && (col.pinAbility || selected.description) ? [col.pinAbility ? arpgLabel(selected.type || '') : '',selected.description || ''].filter(Boolean).join(' · ') : 'Версия ссылки сохраняется до явного изменения выбора.');
                     }
                     filter.addEventListener('input', fillChoices);
                     picker.addEventListener('change', function () {
                         current = picker.value;
-                        if (col.key === 'magic_direction_ref') row._editor_magic_direction_key = current;
+                        if (col.pinAbility) row._editor_ability_key = current;
+                        else if (col.key === 'magic_direction_ref') row._editor_magic_direction_key = current;
                         else if (col.pinFormula) row._editor_formula_key = current;
                         else if (current) row[col.key] = (col.prefix || '') + current;
                         else if (col.key === 'condition_ref') row[col.key] = null;
                         else delete row[col.key];
-                        onChange();
+                        fillChoices(); onChange();
                     });
+                    if (col.pinAbility) {
+                        var refresh = document.createElement('button'); refresh.type='button';refresh.textContent='Обновить закреплённую версию';
+                        refresh.addEventListener('click',function () { if (current) {row._editor_ability_key=current;hint.textContent='Текущая версия KB будет закреплена при сохранении формы.';onChange();} });cell.appendChild(refresh);
+                    }
                     if (col.prefix && typeof current === 'string') current = current.replace(col.prefix, '');
                     fillChoices(); cell.appendChild(filter); cell.appendChild(picker); cell.appendChild(hint);
                     if (!choices.length) {
@@ -1208,7 +1215,7 @@
                 var section = createSection(container, title);
                 var list = document.createElement('div'); section.appendChild(list);
                 var rows = Array.isArray(owner[key]) ? owner[key] : [];
-                var add = document.createElement('button'); add.type = 'button'; add.textContent = 'Добавить'; section.appendChild(add);
+                var add = document.createElement('button'); add.type = 'button'; add.className='af-kb-add'; add.textContent = 'Добавить'; section.appendChild(add);
                 function append(row) {
                     if (!row || typeof row !== 'object' || Array.isArray(row)) {
                         var legacy = document.createElement('div'); legacy.textContent = 'Сохранённая запись: ' + String(row); list.appendChild(legacy); return;
@@ -1216,7 +1223,7 @@
                     var card = document.createElement('div'); card.className = 'af-kb-block-item';
                     columns.forEach(function (column) { card.appendChild(fieldCell(row, column, syncToRaw)); });
                     if (afterRow) afterRow(card, row);
-                    var remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Удалить';
+                    var remove = document.createElement('button'); remove.type = 'button'; remove.className='af-kb-remove'; remove.textContent = 'Удалить';
                     remove.addEventListener('click', function () { rows.splice(rows.indexOf(row),1); owner[key] = rows; card.remove(); syncToRaw(); });
                     card.appendChild(remove); list.appendChild(card);
                 }
@@ -2422,7 +2429,11 @@
                     var box = document.createElement('div');
                     box.className = 'af-kb-rule-card';
                     container.appendChild(box);
-                    renderObjectList(box, rows, title, defs, syncToRaw, seed);
+                    visualControls.visualList(box,{rows:rows},'rows',title,defs.map(function (def) {
+                        var column=Object.assign({},def,{key:def.name,optional:true});
+                        if(def.name === 'formula_ref'){column.type='picker';column.source='formula_def';}
+                        return column;
+                    }),seed);
                 }
 
                 renderRuleFields(rulesRoot, [
@@ -2451,19 +2462,58 @@
                     { key: 'combat_stats.luck', label: 'combat_stats.luck', type: 'number', optional: true }
                 ], 'Combat stats');
 
-                if (payload.rules.resists && !Array.isArray(payload.rules.resists) && typeof payload.rules.resists === 'object') {
-                    var resMapSection = createSection(rulesRoot, 'RES: словарь основных стихий');
-                    resMapSection.appendChild(fieldCell(payload.rules, {key:'resists',label:'RES (JSON; scope=elemental, unit=RES)',type:'json'}, syncToRaw));
-                } else renderSeededArrayEditor(rulesRoot, 'resists', 'resists', [
-                    {key:'element',label:'Основная стихия RES',type:'select',options:primaryElementOptions,optional:true},
-                    {key:'scope',label:'Область (elemental для RES)',type:'select',options:['','physical','elemental','status'],optional:true},
-                    {key:'unit',label:'Единица (RES)',optional:true},
-                    { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
-                    { key: 'value', label: 'value', type: 'number', default: 0 },
-                    { key: 'notes', label: 'notes', default: '' }
-                ], [
-                    { key: 'default', label: 'default', seed: { damage_type: 'physical', value: 0, notes: '' } }
-                ]);
+                (function renderElementResistances() {
+                    var section=createSection(rulesRoot,'Сопротивления основным стихиям','Пусто — значение не задано. 0 — явно сохранённое отсутствие сопротивления. Направления магии не имеют отдельного RES.');
+                    var table=document.createElement('table');table.className='af-kb-resistance-table';section.appendChild(table);
+                    var source=payload.rules.resists;
+                    function canonical(key) {return key === 'wind' ? 'air' : key;}
+                    function matches(key) {
+                        var found=[];
+                        if (Array.isArray(source)) source.forEach(function (row,index) {
+                            if (!row || typeof row !== 'object') return;
+                            var identity=row.damage_element || row.element || row.legacy_key || row.damage_type;
+                            if (canonical(identity) === key) found.push({index:index,row:row,value:row.value});
+                        });
+                        else if (source && typeof source === 'object') Object.keys(source).forEach(function (identity) {
+                            if (canonical(identity) === key) {var row=source[identity];found.push({index:identity,row:row,value:row && typeof row === 'object' ? row.value : row});}
+                        });
+                        return found;
+                    }
+                    primaryElementOptions.filter(function (option) {return option.value;}).forEach(function (option) {
+                        var tr=document.createElement('tr');var label=document.createElement('th');label.scope='row';label.textContent=option.label;tr.appendChild(label);
+                        var td=document.createElement('td');var input=document.createElement('input');input.type='number';input.step='any';input.min='0';input.placeholder='Не задано';input.setAttribute('aria-label','Сопротивление: '+option.label);input.dataset.resElement=option.value;
+                        var existing=matches(option.value); input.value=existing.length === 1 && existing[0].value != null ? String(existing[0].value) : '';
+                        var help=document.createElement('div');help.className='af-kb-help';help.setAttribute('role','status');
+                        if (existing.length>1) {input.disabled=true;help.textContent='Конфликт старых ссылок на эту стихию. Требуется явное исправление дубликатов в техническом режиме.';}
+                        input.addEventListener('input',function () {
+                            if (input.validity.badInput) {input.setCustomValidity('Введите конечное неотрицательное сопротивление.');help.textContent=input.validationMessage;return;}
+                            var value=input.value.trim();var number=Number(value);
+                            var error=value !== '' && (!Number.isFinite(number) || number<0) ? 'Введите конечное неотрицательное сопротивление.' : '';
+                            input.setCustomValidity(error);help.textContent=error;if(error)return;
+                            var found=matches(option.value)[0];
+                            if (value === '') {
+                                if (found) {if(Array.isArray(source))source.splice(found.index,1);else delete source[found.index];}
+                            } else if(found) {
+                                if(found.row && typeof found.row === 'object')found.row.value=number;else source[found.index]=number;
+                            } else {
+                                if (!source || typeof source !== 'object')source=[];
+                                var row={scope:'elemental',unit:'RES',value:number};
+                                if(Array.isArray(source)){row.element=option.value;source.push(row);}else source[option.value]=row;
+                            }
+                            payload.rules.resists=source;syncToRaw();
+                        });
+                        td.appendChild(input);td.appendChild(help);tr.appendChild(td);table.appendChild(tr);
+                    });
+                    // Legacy non-elemental resistances stay editable, outside the canonical RES table.
+                    if(Array.isArray(source))source.forEach(function (row) {
+                        if(!row || typeof row !== 'object')return;
+                        var key=canonical(row.damage_element || row.element || row.legacy_key || row.damage_type);
+                        if(!primaryElementOptions.some(function (option) {return option.value === key;})) {
+                            var legacy=createSection(section,'Сохранённое сопротивление: '+String(key || 'без стихии'));
+                            legacy.appendChild(fieldCell(row,{key:'value',label:'Величина',type:'number',optional:true},syncToRaw));
+                        }
+                    });
+                })();
 
                 renderSeededArrayEditor(rulesRoot, 'weaknesses', 'weaknesses', [
                     { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
@@ -2474,13 +2524,13 @@
                 ]);
 
                 (function renderBestiaryAbilities() {
-                    var wrap = createSection(rulesRoot, 'ability_keys');
+                    var wrap = createSection(rulesRoot, 'Способности монстра');
                     var list = document.createElement('div');
                     wrap.appendChild(list);
                     var addBtn = document.createElement('button');
                     addBtn.type = 'button';
                     addBtn.className = 'af-kb-add';
-                    addBtn.textContent = 'Добавить ability';
+                    addBtn.textContent = 'Добавить способность';
                     wrap.appendChild(addBtn);
                     var arr = ensureRuleArray('ability_keys');
 
@@ -2489,13 +2539,14 @@
                         if (!arr.length) {
                             var empty = document.createElement('div');
                             empty.className = 'af-kb-help';
-                            empty.textContent = 'Список ability_keys пуст.';
+                            empty.textContent = 'Способности не добавлены.';
                             list.appendChild(empty);
                             return;
                         }
 
                         arr.forEach(function (row, idx) {
-                            var normalized = normalizeBestiaryAbilityRow(row, idx + 1);
+                            var external = typeof row === 'string' || (row && (row.ability_kb_key || row.ability_key || Object.prototype.hasOwnProperty.call(row,'_editor_ability_key')));
+                            var normalized = external ? (typeof row === 'string' ? {ability_kb_key:row} : row) : normalizeBestiaryAbilityRow(row, idx + 1);
                             arr[idx] = normalized;
                             var card = document.createElement('div');
                             card.className = 'af-kb-block-item';
@@ -2504,16 +2555,21 @@
                             var summary = document.createElement('div');
                             card.appendChild(summary);
                             var refreshSummary = function () {
-                                renderInlineAbilitySummary(summary, normalized, idx, 'Ability');
+                                renderInlineAbilitySummary(summary, normalized, idx, 'Способность');
                             };
                             refreshSummary();
                             card.addEventListener('input', refreshSummary);
                             card.addEventListener('change', refreshSummary);
 
                             var title = document.createElement('h4');
-                            title.textContent = 'Ability #' + (idx + 1);
+                            title.textContent = 'Способность #' + (idx + 1);
                             card.appendChild(title);
 
+                            card.appendChild(fieldCell(normalized,{key:'ability_kb_key',label:'Способность из Базы знаний',type:'picker',source:'arpg_ability',pinAbility:true},syncToRaw));
+                            var inlineBody=document.createElement('details');var inlineCaption=document.createElement('summary');inlineCaption.textContent='Собственное определение / сохранённые дополнительные поля';inlineBody.appendChild(inlineCaption);card.appendChild(inlineBody);
+                            if(!external)inlineBody.open=true;
+                            else {var note=document.createElement('p');note.className='af-kb-help';note.textContent='Используется закреплённое определение KB. Его характеристики редактируются в записи способности; версия обновляется отдельной кнопкой.';inlineBody.appendChild(note);}
+                            if (!external) {
                             var coreGrid = document.createElement('div');
                             coreGrid.className = 'af-kb-row af-ability-editor-grid';
                             [
@@ -2532,17 +2588,14 @@
                                 { key: 'duration', label: 'duration', type: 'number', default: 0 },
                                 { key: 'max_charges', label: 'max_charges', type: 'number', default: 0 },
                                 { key: 'level_cap', label: 'level_cap', type: 'number', default: 0 },
-                                { key: 'ability_kb_key', label: 'ability_kb_key', default: '' },
-                                { key: 'ability_definition_version', label: 'Версия определения KB (JSON)', type: 'json', optional: true },
-                                { key: 'ability_fingerprint', label: 'Fingerprint способности KB', optional: true },
-                                { key: 'magic_direction_ref', label: 'Направление (versioned KB ref, JSON)', type: 'json', optional: true },
+                                { key: 'magic_direction_ref', label: 'Направление магии', type:'picker', source:'magic_direction' },
                                 { key: 'damage_element', label: 'Основная стихия урона', type: 'select', options: primaryElementOptions, optional: true },
                                 { key: 'sortorder', label: 'sortorder', type: 'number', default: 0 },
                                 { key: 'notes', label: 'notes', default: '' }
                             ].forEach(function (col) { coreGrid.appendChild(fieldCell(normalized, col, function () { refreshSummary(); syncToRaw(); })); });
-                            card.appendChild(coreGrid);
+                            inlineBody.appendChild(coreGrid);
 
-                            renderBestiaryNestedRows(card, 'resources', normalized.resources, [
+                            renderBestiaryNestedRows(inlineBody, 'resources', normalized.resources, [
                                 { name: 'op', label: 'op', type: 'text' },
                                 { name: 'resource_key', label: 'resource_key', type: 'text' },
                                 { name: 'value', label: 'value', type: 'number' },
@@ -2550,8 +2603,9 @@
                                 { name: 'duration', label: 'duration', type: 'number' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { op: 'spend', resource_key: '', value: 0, per: 'cast', duration: 0, notes: '' });
-                            renderBestiaryNestedRows(card, 'effects', normalized.effects, [
+                            renderBestiaryNestedRows(inlineBody, 'effects', normalized.effects, [
                                 { name: 'kind', label: 'Тип эффекта', type: 'select', options: enums.effectKind },
+                                { name:'damage_element',label:'Стихия урона',type:'select',options:primaryElementOptions },
                                 { name: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType },
                                 { name: 'targeting', label: 'targeting', type: 'select', options: enums.targeting },
                                 { name: 'value_mode', label: 'value_mode', type: 'text' },
@@ -2562,7 +2616,7 @@
                                 { name: 'status_key', label: 'status_key', type: 'text' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { kind: 'damage', damage_type: '', targeting: '', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' });
-                            renderBestiaryNestedRows(card, 'modifiers', normalized.modifiers, [
+                            renderBestiaryNestedRows(inlineBody, 'modifiers', normalized.modifiers, [
                                 { name: 'stat_key', label: 'stat_key', type: 'text' },
                                 { name: 'mode', label: 'mode', type: 'text' },
                                 { name: 'value', label: 'value', type: 'number' },
@@ -2570,24 +2624,24 @@
                                 { name: 'condition_text', label: 'condition_text', type: 'text' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { stat_key: '', mode: 'flat', value: 0, duration: 0, condition_text: '', notes: '' });
-                            renderBestiaryNestedRows(card, 'triggers', normalized.triggers, [
+                            renderBestiaryNestedRows(inlineBody, 'triggers', normalized.triggers, [
                                 { name: 'event', label: 'event', type: 'text' },
                                 { name: 'action_text', label: 'action_text', type: 'text' },
                                 { name: 'condition_text', label: 'condition_text', type: 'text' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { event: '', action_text: '', condition_text: '', notes: '' });
-                            renderBestiaryNestedRows(card, 'conditions', normalized.conditions, [
+                            renderBestiaryNestedRows(inlineBody, 'conditions', normalized.conditions, [
                                 { name: 'condition_type', label: 'condition_type', type: 'text' },
                                 { name: 'value', label: 'value', type: 'text' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { condition_type: '', value: '', notes: '' });
-                            renderBestiaryNestedRows(card, 'stacking', normalized.stacking, [
+                            renderBestiaryNestedRows(inlineBody, 'stacking', normalized.stacking, [
                                 { name: 'stack_key', label: 'stack_key', type: 'text' },
                                 { name: 'max_stacks', label: 'max_stacks', type: 'number' },
                                 { name: 'policy', label: 'policy', type: 'text' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { stack_key: '', max_stacks: 1, policy: '', notes: '' });
-                            renderBestiaryNestedRows(card, 'upgrade_requirements', normalized.upgrade_requirements, [
+                            renderBestiaryNestedRows(inlineBody, 'upgrade_requirements', normalized.upgrade_requirements, [
                                 { name: 'level', label: 'level', type: 'number' },
                                 { name: 'required_item_key', label: 'required_item_key', type: 'text' },
                                 { name: 'required_qty', label: 'required_qty', type: 'number' },
@@ -2595,7 +2649,7 @@
                                 { name: 'required_currency_qty', label: 'required_currency_qty', type: 'number' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { level: 1, required_item_key: '', required_qty: 0, required_currency_key: '', required_currency_qty: 0, notes: '' });
-                            renderBestiaryNestedRows(card, 'grants', normalized.grants, [
+                            renderBestiaryNestedRows(inlineBody, 'grants', normalized.grants, [
                                 { name: 'grant_type', label: 'grant_type', type: 'select', options: enums.grantType },
                                 { name: 'value', label: 'value', type: 'text' },
                                 { name: 'value_num', label: 'value_num', type: 'number' },
@@ -2603,6 +2657,8 @@
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { grant_type: '', value: '', value_num: 0, duration: 0, notes: '' });
 
+                            renderVisualMechanics(inlineBody,normalized,false);
+                            }
                             var del = document.createElement('button');
                             del.type = 'button';
                             del.className = 'af-kb-remove';
@@ -2617,7 +2673,7 @@
                     }
 
                     addBtn.addEventListener('click', function () {
-                        arr.push(normalizeBestiaryAbilityRow({}, arr.length + 1));
+                        arr.push({ability_kb_key:'',_editor_ability_key:''});
                         redrawAbilities();
                         syncToRaw();
                     });
@@ -2625,6 +2681,14 @@
                     redrawAbilities();
                 })();
 
+                visualControls.visualList(rulesRoot,payload.rules,'effects','Эффекты монстра',[
+                    {key:'kind',label:'Тип воздействия',type:'select',options:enums.effectKind,optional:true},
+                    {key:'damage_type',label:'Тип урона',type:'select',options:enums.damageType,optional:true},
+                    {key:'damage_element',label:'Стихия урона',type:'select',options:primaryElementOptions,optional:true},
+                    {key:'value',label:'Величина',type:'number',optional:true},
+                    {key:'formula_ref',label:'Формула расчёта',type:'picker',source:'formula_def'},
+                    {key:'notes',label:'Примечание',optional:true}
+                ],{kind:'damage',damage_type:'physical',value:0});
                 renderSeededArrayEditor(rulesRoot, 'loot', 'loot', [
                     { key: 'loot_key', label: 'loot_key', default: '' },
                     { key: 'kind', label: 'Тип эффекта', type: 'select', options: ['item', 'currency', 'material', 'reward', 'custom'], default: 'item' },
@@ -2760,17 +2824,17 @@
             if (entityType === 'bestiary') renderBestiaryRules();
             if (entityType === 'service_mechanics') renderServiceRules();
             if (['ability', 'talent', 'item', 'bestiary', 'origin', 'origin_variant'].indexOf(entityType) !== -1) {
-                if (entityType !== 'ability') {
+                if (entityType !== 'ability' && entityType !== 'bestiary') {
                 var mathSection = createSection(rulesRoot, 'Математические модификаторы (opt-in, без исполнения)');
                 mathSection.appendChild(fieldCell(payload.rules, { key: 'math_modifiers', label: 'math_modifiers (JSON-массив, необязательно)', type: 'json', optional: true }, syncToRaw));
                 }
             }
-            if (entityType === 'ability') renderVisualMechanics(rulesRoot,payload.rules,true);
+            if (entityType === 'ability' || entityType === 'bestiary') renderVisualMechanics(rulesRoot,payload.rules,true);
             if (entityType === 'talent') {
                 var directionSection = createSection(rulesRoot, 'Магическое направление (классификация без RES)');
                 directionSection.appendChild(fieldCell(payload.rules, {key:'magic_direction_ref',label:'Версионированная ссылка из записи направления (JSON)',type:'json',optional:true}, syncToRaw));
             }
-            if (['item', 'bestiary'].indexOf(entityType) !== -1) {
+            if (entityType === 'item') {
                 var mechanicsSection = createSection(rulesRoot, 'Боевые параметры (необязательно, без исполнения)');
                 var extraFields = [
                     {key:'action_cost',label:'Стоимость в очках действий',type:'number',optional:true},
