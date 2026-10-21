@@ -11,6 +11,7 @@ function accuracy_read(array $rules, string $type = 'arpg_bestiary'): array {
 }
 accuracy_check(isset(af_kb_arpg_character_stat_registry()['accuracy']), 'Missing registry entry');
 $legacy = af_kb_default_type_profile_payload_arpg('arpg_bestiary');
+$legacy['combat_stats']['status_resist'] = 0; // Explicit independent stat; no default is inferred.
 $legacy['schema'] = AF_KB_ARPG_RULES_SCHEMA;
 $legacy['type_profile'] = 'bestiary';
 $legacy['family'] = $legacy['archetype'] = $legacy['faction'] = 'fixture';
@@ -50,6 +51,7 @@ foreach (['arpg_origin', 'arpg_archetype'] as $type) {
     $rules = af_kb_default_type_profile_payload_arpg($type);
     accuracy_check(!array_key_exists('accuracy_base', $rules), 'Origin/archetype default invented');
     $rules['accuracy_base'] = 0;
+    $rules['status_resist_base'] = 0;
     $migrated = af_kb_arpg_migrate_legacy_rules_contract($type, $rules);
     accuracy_check($migrated['accuracy_base'] === 0, 'Origin/archetype zero lost');
     $read = accuracy_read($migrated, $type);

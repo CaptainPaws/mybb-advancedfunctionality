@@ -1160,6 +1160,11 @@
                     defaults = {};
                 }
 
+                if (normalizeArpgEntityType(type) === 'bestiary' && defaults.rules) defaults.rules.combat_stats = {};
+                if (defaults.rules && ['origin','archetype'].indexOf(normalizeArpgEntityType(type)) !== -1) {
+                    delete defaults.rules.status_resist_base;
+                    delete defaults.rules.status_resistance_base;
+                }
                 return defaults;
             }
 
@@ -1761,7 +1766,7 @@
                         { key: 'healing_bonus_base', label: 'healing_bonus_base', type: 'number', default: 0 },
                         { key: 'shield_bonus_base', label: 'shield_bonus_base', type: 'number', default: 0 },
                         { key: 'status_hit_base', label: 'status_hit_base', type: 'number', default: 0 },
-                        { key: 'status_resist_base', label: 'status_resist_base', type: 'number', default: 0 },
+                        { key: Object.prototype.hasOwnProperty.call(payload.rules, 'status_resistance_base') ? 'status_resistance_base' : 'status_resist_base', label: 'Сопротивление статусам', type: 'number', optional: true, min: 0 },
                         { key: 'accuracy_base', label: 'Точность (Accuracy)', type: 'number', optional: true, min: 0 },
                         { key: 'luck_base', label: 'luck_base', type: 'number', default: 0 },
                         { key: 'hp_per_level', label: 'hp_per_level', type: 'number', default: 0 },
@@ -1805,7 +1810,7 @@
                         { key: 'healing_bonus_base', label: 'healing_bonus_base', type: 'number', default: 0 },
                         { key: 'shield_bonus_base', label: 'shield_bonus_base', type: 'number', default: 0 },
                         { key: 'status_hit_base', label: 'status_hit_base', type: 'number', default: 0 },
-                        { key: 'status_resist_base', label: 'status_resist_base', type: 'number', default: 0 },
+                        { key: Object.prototype.hasOwnProperty.call(payload.rules, 'status_resistance_base') ? 'status_resistance_base' : 'status_resist_base', label: 'Сопротивление статусам', type: 'number', optional: true, min: 0 },
                         { key: 'accuracy_base', label: 'Точность (Accuracy)', type: 'number', optional: true, min: 0 },
                         { key: 'luck_base', label: 'luck_base', type: 'number', default: 0 },
                         { key: 'hp_per_level', label: 'hp_per_level', type: 'number', default: 0 },
@@ -2166,7 +2171,7 @@
 
             function renderBestiaryRules() {
                 function normalizeBestiaryAbilityRow(row, fallbackSortorder) {
-                    var source = (row && typeof row === 'object' && !Array.isArray(row)) ? row : {};
+                    var source = typeof row === 'string' ? {ability_kb_key:row} : ((row && typeof row === 'object' && !Array.isArray(row)) ? row : {});
                     var sort = numberOrZero(source.sortorder != null ? source.sortorder : (fallbackSortorder || 0));
                     var slotIndex = numberOrZero(source.slot_index != null ? source.slot_index : (sort > 0 ? sort : 1));
                     var abilityType = String(source.type || source.ability_type || 'active');
@@ -2285,23 +2290,26 @@
                 ], 'Bestiary core');
 
                 renderRuleFields(rulesRoot, [
-                    { key: 'combat_stats.hp', label: 'combat_stats.hp', type: 'number', default: 0 },
-                    { key: 'combat_stats.atk', label: 'combat_stats.atk', type: 'number', default: 0 },
-                    { key: 'combat_stats.def', label: 'combat_stats.def', type: 'number', default: 0 },
+                    { key: 'combat_stats.hp', label: 'combat_stats.hp', type: 'number', optional: true },
+                    { key: 'combat_stats.atk', label: 'combat_stats.atk', type: 'number', optional: true },
+                    { key: 'combat_stats.def', label: 'combat_stats.def', type: 'number', optional: true },
                     { key: 'combat_stats.accuracy', label: 'Точность (Accuracy)', type: 'number', optional: true, min: 0 },
-                    { key: 'combat_stats.speed', label: 'combat_stats.speed', type: 'number', default: 0 },
-                    { key: 'combat_stats.crit_rate', label: 'combat_stats.crit_rate', type: 'number', default: 0 },
-                    { key: 'combat_stats.crit_dmg', label: 'combat_stats.crit_dmg', type: 'number', default: 0 },
-                    { key: 'combat_stats.element_damage_bonus', label: 'combat_stats.element_damage_bonus', type: 'number', default: 0 },
-                    { key: 'combat_stats.mastery', label: 'combat_stats.mastery', type: 'number', default: 0 },
-                    { key: 'combat_stats.healing_bonus', label: 'combat_stats.healing_bonus', type: 'number', default: 0 },
-                    { key: 'combat_stats.shield_strength', label: 'combat_stats.shield_strength', type: 'number', default: 0 },
-                    { key: 'combat_stats.status_hit', label: 'combat_stats.status_hit', type: 'number', default: 0 },
-                    { key: 'combat_stats.status_resist', label: 'combat_stats.status_resist', type: 'number', default: 0 },
-                    { key: 'combat_stats.luck', label: 'combat_stats.luck', type: 'number', default: 0 }
+                    { key: 'combat_stats.speed', label: 'combat_stats.speed', type: 'number', optional: true },
+                    { key: 'combat_stats.crit_rate', label: 'combat_stats.crit_rate', type: 'number', optional: true },
+                    { key: 'combat_stats.crit_dmg', label: 'combat_stats.crit_dmg', type: 'number', optional: true },
+                    { key: 'combat_stats.element_damage_bonus', label: 'combat_stats.element_damage_bonus', type: 'number', optional: true },
+                    { key: 'combat_stats.mastery', label: 'combat_stats.mastery', type: 'number', optional: true },
+                    { key: 'combat_stats.healing_bonus', label: 'combat_stats.healing_bonus', type: 'number', optional: true },
+                    { key: 'combat_stats.shield_strength', label: 'combat_stats.shield_strength', type: 'number', optional: true },
+                    { key: 'combat_stats.status_hit', label: 'combat_stats.status_hit', type: 'number', optional: true },
+                    { key: Object.prototype.hasOwnProperty.call(payload.rules.combat_stats || {}, 'status_resistance') ? 'combat_stats.status_resistance' : 'combat_stats.status_resist', label: 'Сопротивление статусам', type: 'number', optional: true, min: 0 },
+                    { key: 'combat_stats.luck', label: 'combat_stats.luck', type: 'number', optional: true }
                 ], 'Combat stats');
 
-                renderSeededArrayEditor(rulesRoot, 'resists', 'resists', [
+                if (payload.rules.resists && !Array.isArray(payload.rules.resists) && typeof payload.rules.resists === 'object') {
+                    var resMapSection = createSection(rulesRoot, 'RES: словарь основных стихий');
+                    resMapSection.appendChild(fieldCell(payload.rules, {key:'resists',label:'RES (JSON; scope=elemental, unit=RES)',type:'json'}, syncToRaw));
+                } else renderSeededArrayEditor(rulesRoot, 'resists', 'resists', [
                     {key:'element',label:'Основная стихия RES',type:'select',options:primaryElementOptions,optional:true},
                     {key:'scope',label:'Область (elemental для RES)',type:'select',options:['','physical','elemental','status'],optional:true},
                     {key:'unit',label:'Единица (RES)',optional:true},
@@ -2380,6 +2388,10 @@
                                 { key: 'max_charges', label: 'max_charges', type: 'number', default: 0 },
                                 { key: 'level_cap', label: 'level_cap', type: 'number', default: 0 },
                                 { key: 'ability_kb_key', label: 'ability_kb_key', default: '' },
+                                { key: 'ability_definition_version', label: 'Версия определения KB (JSON)', type: 'json', optional: true },
+                                { key: 'ability_fingerprint', label: 'Fingerprint способности KB', optional: true },
+                                { key: 'magic_direction_ref', label: 'Направление (versioned KB ref, JSON)', type: 'json', optional: true },
+                                { key: 'damage_element', label: 'Основная стихия урона', type: 'select', options: primaryElementOptions, optional: true },
                                 { key: 'sortorder', label: 'sortorder', type: 'number', default: 0 },
                                 { key: 'notes', label: 'notes', default: '' }
                             ].forEach(function (col) { coreGrid.appendChild(fieldCell(normalized, col, function () { refreshSummary(); syncToRaw(); })); });
