@@ -8,6 +8,8 @@
 
 **EXISTING** означает обнаруженный интерфейс с прочитанным телом функции и ограничениями; не означает пригодность для атомарной ACS-операции. **PROPOSED** означает новый интерфейс/адаптер, которого в текущем коде нет. Все `AF_ACS_*` ниже — PROPOSED. Пути аддонов ниже относительно `inc/plugins/advancedfunctionality/addons/`, если не указано иначе. В репозитории не найден AGENTS.md. Полные комплексы тестов не запускались; аудит статический.
 
+**Уточнение ACS-DOC-01 (2026-10-21).** Указанный выше аудит и ссылки на строки — исторические доказательства той ревизии, а не повторный аудит runtime текущей main. Действующая классификация — [17 основных стихий и дочерние направления](ACS_MASTER_SPECIFICATION.md#element-taxonomy). Новые element/direction contracts ниже — PROPOSED; наличие прежних readers/JSON-полей не делает их READY. Принятый этап 1 этим уточнением не переоткрывается.
+
 ## 2. Владение данными и направления
 
 | Контракт | Владелец постоянных данных | Направление | Этап |
@@ -63,11 +65,29 @@ af_kb_arpg_character_stat_registry(): array
 
 `formula_def` — типизированный AST `literal/input/operation`; существующая грамматика: add/subtract/multiply/divide (2 аргумента), negate (1), min/max (2–8), до 256 узлов/16 рёбер, до 64 inputs, output_type number/integer, rounding none/floor/ceil/truncate/half_up/half_even. Нет eval/PHP/динамических вызовов. Formula profile связывает точные formula_def_key и formula_def_version, parameters — конечные JSON-числа. Отсутствующая/двусмысленная/неактивная/несовпавшая версия — diagnostics/supported=false; legacy preview не fallback. Действующие схемы B1/B2/B3 описаны в `docs/ACS_KB_NORMALIZATION_CONTRACT.md`, `ACS_KB_FORMULA_CONTRACT.md`, `ACS_KB_MECHANICS_CONTRACT.md` и подтверждены соответствующими функциями source.
 
-**Расхождения с целевым baseline.** Реестр содержит 13 ключей, `accuracy` отсутствует; есть `status_resist`, а S1.2 называет показатель status_resistance. Большой enum legacy damage_type не доказывает каноническую семантику 11 стихий. `af_kb_seed_arpg_elements()` (строка 2414) создаёт только восемь: fire, water, earth, wind, lightning, ice, light, shadow. Это не доказывает отсутствия дополнительных записей в production БД, но seed не покрывает целевые природу/пространство/разум. Их реальные KB keys и наличие должны быть проверены/подготовлены как данные; придумывать эквиваленты void/quantum/imaginary по названию запрещено. `af_kb_arpg_acs_resistances()` (строка 8715) передаёт scope/unit и предупреждение resistance_semantics_unspecified; adapter не должен молча трактовать legacy числа как утверждённую RES. Новые mechanics-поля A1.70–A1.86 нельзя считать реализованными только потому, что JSON передаёт произвольные данные. Каждый тип должен пройти capability validation.
+**Расхождения с целевым baseline.** Реестр содержит 13 ключей, `accuracy` отсутствует; есть `status_resist`, а S1.2 называет показатель status_resistance. Большой enum legacy damage_type не доказывает каноническую семантику 17 основных стихий. `af_kb_seed_arpg_elements()` (строка 2414) создаёт только восемь: fire, water, earth, wind, lightning, ice, light, shadow. Это не доказывает отсутствия дополнительных записей в production БД, но seed исходного аудита не покрывает новый канонический набор из 17 основных стихий и использует legacy `wind` вместо `air`. Наличие записей и соответствие ключам D1.4 должны быть проверены/подготовлены как данные; придумывать эквиваленты void/quantum/imaginary по названию запрещено. `af_kb_arpg_acs_resistances()` (строка 8715) передаёт scope/unit и предупреждение resistance_semantics_unspecified; adapter не должен молча трактовать legacy числа как утверждённую RES. Новые mechanics-поля A1.70–A1.86 нельзя считать реализованными только потому, что JSON передаёт произвольные данные. Каждый тип должен пройти capability validation.
 
 **PROPOSED IC-KB-1.** `AF_ACS_KnowledgeBaseAdapter::snapshot(type,key,abilityIndex)` возвращает `{snapshot_id,contract_id,schema_version,definition_version,hash,normalized,capabilities}`; исходные данные только серверные. Adapter проверяет права чтения записи и готовность всей цепочки ссылок. Новый snapshot не обновляет старый. Ошибка не угадывает формулу и блокирует затронутое действие.
 
-**PROPOSED IC-KB-2.** Отдельная задача этапа 1/2: проверить полноту всех 11 arpg_element и их явные ключи/RES units; добавить accuracy во все нужные KB/CS/Fields paths и бестиарий, подготовить явное правило legacy-данных владельцем контента; однозначно сопоставить status_resist → status_resistance без двойного применения. Этапы 5/8/9/10 расширяют схемы и нормализацию по capability matrix статусов, prepared/spawn/objects/transform/loot/achievements. Место — существующие KB registry/schema/normalizer/editor функции, без глобальной переписи KB.
+**PROPOSED IC-KB-2.** Этап 2, задача [ACS-2.1.3](ACS_IMPLEMENTATION_ROADMAP.md#acs-2-1-3): проверить и обеспечить реестр 17 основных стихий D1.4 с явными ключами/RES units, расширяемые дочерние направления и совместимость `wind` → `air` без destructive migration. Accuracy round trip, политика отсутствующих legacy-значений и status_resist → status_resistance остаются отдельными требованиями 2.1; это не новый показатель поверх прежнего. Этапы 5/8/9/10 расширяют схемы и нормализацию по capability matrix статусов, prepared/spawn/objects/transform/loot/achievements. Место — существующие KB registry/schema/normalizer/editor функции, без глобальной переписи KB.
+
+<a id="element-capabilities"></a>
+### 4.1. IC-KB-2: capabilities стихий и направлений — PROPOSED
+
+Канонический набор из 17 ключей: `fire`, `water`, `air`, `earth`, `ice`, `lightning`, `nature`, `light`, `shadow`, `death`, `life`, `chaos`, `mind`, `abyss`, `gravity`, `astral`, `space`. Источник имён и смысла — [D1.4 / ACS-DOC-01](ACS_MASTER_SPECIFICATION.md#element-taxonomy); предлагаемая схема — [Architecture §5.2.1](ACS_TECHNICAL_ARCHITECTURE.md#element-direction-contract).
+
+| Capability | Статус нового контракта | Необходимая проверка |
+|---|---|---|
+| `canonical_elements_17` | PROPOSED | Ровно 17 основных identities, уникальные канонические keys и version/hash; каждый RES конечный, неотрицательный, с явной единицей; нет отдельного RES направления |
+| `magic_direction_hierarchy` | PROPOSED | Стабильные ключи направлений, ровно один типизированный parent_ref, существование pinned родителей, root основной стихии, отсутствие циклов/коллизий; расширение через KB без правки PHP-реестра основных стихий |
+| `explicit_damage_element` | PROPOSED | Классификация magic_direction отдельно от effect/damage_kind; elemental-компонент содержит явный основной damage_element; родитель направления не используется как implicit damage type |
+| `legacy_element_aliases` | PROPOSED | Версионированное boundary-сопоставление wind→air с сохранением raw provenance, обнаружение конфликтов, без второго RES или изменений старых записей |
+| `element_snapshot_provenance` | PROPOSED | Версии schema/contract/registry/alias policy, hashes и pinned direction/parent refs; одинаковая нормализация KB, CS, бестиария и ACS adapter |
+
+Это новые проектные имена capabilities, а не обнаруженные PHP API или уже реализованные результаты. Действующий readiness gate — `canonical_elements_17`; историческое требование о прежнем количестве сохранено только в provenance D1.4 Master. **EXISTING** reader/editor/normalizer может передавать произвольный JSON, но **READY** требует проверки указанной конкретной capability; PROPOSED/отсутствующая обязательная capability даёт BLOCKED только зависимой ACS-операции, не обычному форуму.
+
+Editors/save/read/normalizers должны сохранять primary key, direction refs, явный effect kind/damage_element и версии без потерь. Для бестиария валидируется тот же реестр RES и definitions, что для персонажа; количество направлений не расширяет карту базовых RES. Неизвестный ключ/несовместимая версия/цикл/оборванный родитель/конфликт alias диагностируется; не подставляются RES=0, похожая стихия или направление-урон. Новая схема KB — PROPOSED, примеры blood/metal/crystal/sound и прочие направления не требуют автоматического seed. Кровь не основная стихия и не получает собственный RES; `blood` не означает автоматический life-урон. Не вводятся контрстихии, новые множители или elemental reaction matrix.
+
 
 ## 5. IC-CS — CharacterSheets
 
@@ -78,6 +98,8 @@ af_kb_arpg_character_stat_registry(): array
 **PROPOSED.** `AF_ACS_CharacterSheetAdapter::createSnapshot(sheet_id,actor_uid,context)` (этап 2) возвращает canonical base stats/resources/abilities/equipment source IDs/source breakdown/hash/version. Перед ним проверяются форум/сессия/владелец и capability. На регистрации фиксируется один снимок; повторное открытие панели его не пересобирает. Требуется явное разделение уже включённых equipment modifiers и боевого слоя, чтобы не посчитать предмет дважды. Нужна ограниченная snapshot-функция CS либо проверенный адаптер существующего view с документированными побочными эффектами; новая функция пока отсутствует.
 
 Постоянные изменения разрешаются отдельной операцией этапа 10. ACS меняет только session state при отдыхе и бою; sync в build_json напрямую запрещён. Ошибка snapshot блокирует регистрацию конкретного участника, не создаёт частичного entity. `modules/experience.php::af_charactersheets_grant_exp(...)` существует, но всегда возвращает false; использовать для выдачи EXP нельзя (IC-BALANCE).
+
+**PROPOSED IC-CS-ELEMENTS (этап 2).** CharacterSheets должен передавать 17 основных стихий/RES и отдельную классификацию направлений по IC-KB-2, с сохранением явного damage_element и версий. Лист/бестиарий и ACS adapter используют одну нормализацию ключей и wind→air policy; legacy missing и alias conflict диагностируются, не становятся дополнительным RES или нулём. UI классификация/иконки не определяют боевой урон, equipment modifiers не применяются повторно. Snapshot фиксирует source breakdown и версии всей иерархии; существующий CS view этим контрактом не объявляется безопасным combat snapshot.
 
 ## 6. IC-INV — AdvancedInventory
 
@@ -122,6 +144,8 @@ ACS читает результат покупки через Inventory, не в
 **EXISTING.** `advancedthreadfields/advancedthreadfields.php`: `af_atf_get_values_by_tid($tid)` читает fieldid→raw, `af_atf_get_profile_character_payload(int $tid): array` возвращает tid/about_html/fields[key]={key,raw,html}. Это UI/profile контракт, не canonical stats. `af_atf_bridge_sync_character_kb_from_thread(int $tid,array $thread=[],array $context=[]): array` и штатные workflow paths связывают анкету/KB; `af_atf_character_stats_field_keys()` и `af_atf_normalize_character_abilities_json(string $raw): string` участвуют в round trip.
 
 Хуки newthread/editpost/datahandler/showthread/postbit относятся к полям и синхронизации анкет; ACS не должен повторно запускать bridge при каждом боевом посте. **PROPOSED** этап 2: адаптер идентичности tid→sheet/KB/uid, проверка механики arpg/акцепта и прав через существующий workflow; статические ссылки фиксируются в snapshot. Добавление accuracy должно пройти UI→save→KB→CS round trip. Отсутствующая связь блокирует регистрацию с безопасной причиной, не создаёт персонажа по имени из текста. Ни HTML, ни литературное поле не являются источником числового состояния ACS.
+
+**PROPOSED IC-FIELDS-ELEMENTS (этап 2).** Поля ARPG-анкеты и обратный prefill KB сохраняют основную стихию и отдельные direction refs по IC-KB-2/IC-CS-ELEMENTS; проверяется UI→save→KB→CS→read без потери ключей, версии/alias provenance и без изменения старых записей при просмотре. Классификация анкеты не подменяет явный damage_element способности. Обычный showthread не запускает синхронизацию или полный audit иерархии.
 
 ## 9. IC-THEME — Adaptive Theme Framework
 
@@ -181,6 +205,7 @@ ACS читает результат покупки через Inventory, не в
 | Работа | Статус | Где реализовать | Блокирует |
 |---|---|---|---|
 | Accuracy, status-resist mapping, capability validation | PROPOSED | KB/CS/Fields + ACS adapters; 1–2 | регистрацию/HitCheck при неполном snapshot |
+| 17 основных стихий, направления, RES/aliases/provenance | PROPOSED | IC-KB-2, IC-CS-ELEMENTS, IC-FIELDS-ELEMENTS; ACS-2.1.3 и потребители 2/3/5/7/8/9/12 | только операции, требующие новой element capability |
 | Pure combat snapshot, equipment source breakdown | PROPOSED | CS adapter/ограниченный CS API; 2 | воспроизводимые исходные характеристики |
 | MyBB publish coordinator, form extension | PROPOSED | ACS gateway + scoped Editor/Theme; 4 | атомарный combat_post |
 | Inventory global reservations/idempotent ops | PROPOSED | Inventory writers + ACS adapter; 6 | предметные затраты/custody/prepared items/loot issue |
