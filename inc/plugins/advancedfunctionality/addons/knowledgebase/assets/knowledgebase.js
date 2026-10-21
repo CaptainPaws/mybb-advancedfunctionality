@@ -2971,6 +2971,18 @@
                 input.value = value || '';
             }
 
+            if (mechanic === 'arpg' && def.name === 'damage_element') {
+                var damageHelp=document.createElement('div');damageHelp.className='af-kb-help';damageHelp.setAttribute('role','status');wrap.appendChild(damageHelp);
+                var checkDamage=function () {
+                    var kind=obj.effect_type || obj.kind;
+                    var required=obj.damage_type === 'elemental' && (!kind || kind === 'damage' || kind === 'proc');
+                    var value=input.value === 'wind' ? 'air' : input.value;
+                    var known=(typeSchema.primary_element_options || []).some(function (option) {return option.value === value;});
+                    var message=required && !value ? 'Выберите основную стихию урона.' : (value && !known ? 'Выберите одну из 17 основных стихий.' : (value && ['elemental','hybrid'].indexOf(obj.damage_type) === -1 ? 'Стихия урона допустима только для стихийного или смешанного урона.' : ''));
+                    input.required=required;input.setCustomValidity(message);damageHelp.textContent=message;
+                };
+                root.addEventListener('change',checkDamage);checkDamage();
+            }
             input.dataset.field = def.name;
             if (def.editorPolicy) {
                 input.setAttribute('data-af-kb-editor-policy', def.editorPolicy);
