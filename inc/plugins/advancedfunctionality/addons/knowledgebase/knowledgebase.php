@@ -12,6 +12,7 @@ define('AF_KB_VER', '1.0.5');
 define('AF_KB_BASE', AF_ADDONS . AF_KB_ID . '/');
 define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
 define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
+require_once AF_KB_BASE . 'modules/arpg_elements.php';
 define('AF_KB_MARK', '<!--af_kb_assets-->');
 define('AF_KB_RULES_SCHEMA', 'af_kb.rules.v1');
 define('AF_KB_CHARACTER_SCHEMA', 'af_kb.character.contract.v1');
@@ -405,6 +406,8 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'description_text' => '',
         ],
         'arpg_element' => [
+            'entity_kind' => 'primary_element',
+            'parent_ref' => null,
             'family' => '',
             'counter_element' => '',
             'description_text' => '',
@@ -1008,6 +1011,8 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.description_text', 'type' => 'string', 'required' => true, 'default' => ''],
             ],
             'arpg_element' => [
+                ['path' => 'rules.entity_kind', 'type' => 'select', 'options' => ['primary_element','magic_direction']],
+                ['path' => 'rules.parent_ref', 'type' => 'object', 'required' => false],
                 ['path' => 'rules.family', 'type' => 'string', 'required' => true, 'default' => ''],
                 ['path' => 'rules.counter_element', 'type' => 'string', 'required' => true, 'default' => ''],
                 ['path' => 'rules.description_text', 'type' => 'string', 'required' => true, 'default' => ''],
@@ -1119,7 +1124,7 @@ function af_kb_default_arpg_type_definitions(): array
                     ['path' => 'ability_type', 'type' => 'select', 'options' => [['value' => 'active'], ['value' => 'passive']], 'default' => 'active'],
                     ['path' => 'subtype', 'type' => 'string', 'default' => ''],
                     ['path' => 'slot', 'type' => 'string', 'default' => ''],
-                    ['path' => 'damage_type', 'type' => 'select', 'options' => [['value' => 'physical'], ['value' => 'fire'], ['value' => 'ice'], ['value' => 'water'], ['value' => 'electric'], ['value' => 'wind'], ['value' => 'earth'], ['value' => 'nature'], ['value' => 'light'], ['value' => 'dark'], ['value' => 'void'], ['value' => 'quantum'], ['value' => 'imaginary'], ['value' => 'aether'], ['value' => 'anomaly'], ['value' => 'ether'], ['value' => 'fusion'], ['value' => 'glacio'], ['value' => 'aero'], ['value' => 'havoc'], ['value' => 'spectro'], ['value' => 'dendro'], ['value' => 'pyro'], ['value' => 'hydro'], ['value' => 'electro'], ['value' => 'cryo'], ['value' => 'anemo'], ['value' => 'geo'], ['value' => 'lightning'], ['value' => 'poison'], ['value' => 'acid'], ['value' => 'bleed'], ['value' => 'arcane'], ['value' => 'holy'], ['value' => 'shadow'], ['value' => 'slash'], ['value' => 'pierce'], ['value' => 'blunt'], ['value' => 'true'], ['value' => 'kinetic'], ['value' => 'custom']], 'default' => 'physical'],
+                    ['path' => 'damage_type', 'type' => 'select', 'options' => [['value' => 'elemental'], ['value' => 'healing'], ['value' => 'hybrid'], ['value' => 'physical'], ['value' => 'fire'], ['value' => 'ice'], ['value' => 'water'], ['value' => 'electric'], ['value' => 'wind'], ['value' => 'earth'], ['value' => 'nature'], ['value' => 'light'], ['value' => 'dark'], ['value' => 'void'], ['value' => 'quantum'], ['value' => 'imaginary'], ['value' => 'aether'], ['value' => 'anomaly'], ['value' => 'ether'], ['value' => 'fusion'], ['value' => 'glacio'], ['value' => 'aero'], ['value' => 'havoc'], ['value' => 'spectro'], ['value' => 'dendro'], ['value' => 'pyro'], ['value' => 'hydro'], ['value' => 'electro'], ['value' => 'cryo'], ['value' => 'anemo'], ['value' => 'geo'], ['value' => 'lightning'], ['value' => 'poison'], ['value' => 'acid'], ['value' => 'bleed'], ['value' => 'arcane'], ['value' => 'holy'], ['value' => 'shadow'], ['value' => 'slash'], ['value' => 'pierce'], ['value' => 'blunt'], ['value' => 'true'], ['value' => 'kinetic'], ['value' => 'custom']], 'default' => 'physical'],
                     ['path' => 'targeting', 'type' => 'select', 'options' => [['value' => 'self'], ['value' => 'single_enemy'], ['value' => 'single_ally'], ['value' => 'line'], ['value' => 'cone'], ['value' => 'aoe_ground'], ['value' => 'aoe_around_self'], ['value' => 'global'], ['value' => 'custom']], 'default' => 'single_enemy'],
                     ['path' => 'range', 'type' => 'number', 'default' => 0],
                     ['path' => 'cast_time', 'type' => 'number', 'default' => 0],
@@ -1185,6 +1190,11 @@ function af_kb_default_arpg_type_definitions(): array
             ['path' => 'rules.resistances', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
             ['path' => 'rules.weaknesses', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
         ];
+
+        if (in_array($typeKey, ['arpg_ability','arpg_talent','arpg_item','arpg_bestiary'], true)) {
+            $fieldsMap[$typeKey][] = ['path'=>'rules.magic_direction_ref', 'type'=>'object', 'required'=>false];
+            $fieldsMap[$typeKey][] = ['path'=>'rules.damage_element', 'type'=>'string', 'required'=>false];
+        }
 
         $schema = [
             'schema' => 'af_kb.ui.v1',
@@ -2425,62 +2435,65 @@ function af_kb_seed_arpg_elements(): void
         return;
     }
 
-    $seed = [
-        ['key' => 'fire', 'title_ru' => 'Огонь', 'title_en' => 'Fire', 'counter' => 'water'],
-        ['key' => 'water', 'title_ru' => 'Вода', 'title_en' => 'Water', 'counter' => 'lightning'],
-        ['key' => 'earth', 'title_ru' => 'Земля', 'title_en' => 'Earth', 'counter' => 'wind'],
-        ['key' => 'wind', 'title_ru' => 'Ветер', 'title_en' => 'Wind', 'counter' => 'earth'],
-        ['key' => 'lightning', 'title_ru' => 'Молния', 'title_en' => 'Lightning', 'counter' => 'earth'],
-        ['key' => 'ice', 'title_ru' => 'Лёд', 'title_en' => 'Ice', 'counter' => 'fire'],
-        ['key' => 'light', 'title_ru' => 'Свет', 'title_en' => 'Light', 'counter' => 'shadow'],
-        ['key' => 'shadow', 'title_ru' => 'Тьма', 'title_en' => 'Shadow', 'counter' => 'light'],
-    ];
-
-    foreach ($seed as $idx => $row) {
-        $key = (string)$row['key'];
-        $existing = $db->fetch_array($db->simple_select(
-            'af_kb_entries',
-            'id',
-            "type='arpg_element' AND `key`='" . $db->escape_string($key) . "'",
-            ['limit' => 1]
-        ));
-        if ($existing) {
-            continue;
+    if (!af_kb_arpg_element_lock()) throw new RuntimeException('element_seed_busy');
+    try {
+        $seed = [];
+        foreach (af_kb_arpg_primary_elements() as $key => $labels) {
+            $seed[] = ['key'=>$key, 'title_ru'=>$labels['ru'], 'title_en'=>$labels['en']];
         }
 
-        $payload = af_kb_arpg_envelope_defaults('arpg_element');
-        $payload['rules'] = array_replace_recursive(
-            (array)($payload['rules'] ?? []),
-            af_kb_default_type_profile_payload_arpg('arpg_element'),
-            [
-                'family' => $key,
-                'counter_element' => (string)($row['counter'] ?? ''),
-            ]
-        );
-        $metaJson = af_kb_normalize_json((string)json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        foreach ($seed as $idx => $row) {
+            $key = (string)$row['key'];
+            if ($key === 'air' && af_kb_arpg_element_lookup('wind')) continue;
+            $existing = $db->fetch_array($db->simple_select(
+                'af_kb_entries',
+                'id',
+                "type='arpg_element' AND `key`='" . $db->escape_string($key) . "'",
+                ['limit' => 1]
+            ));
+            if ($existing) {
+                continue;
+            }
 
-        $db->insert_query('af_kb_entries', [
-            'type' => 'arpg_element',
-            'key' => $db->escape_string($key),
-            'title_ru' => $db->escape_string((string)$row['title_ru']),
-            'title_en' => $db->escape_string((string)$row['title_en']),
-            'short_ru' => '',
-            'short_en' => '',
-            'body_ru' => '',
-            'body_en' => '',
-            'tech_ru' => '',
-            'tech_en' => '',
-            'meta_json' => $db->escape_string($metaJson),
-            'data_json' => '{}',
-            'icon_class' => '',
-            'icon_url' => '',
-            'banner_url' => '',
-            'bg_url' => '',
-            'active' => 1,
-            'sortorder' => 10 + $idx,
-            'updated_at' => TIME_NOW,
-            'item_kind' => '',
-        ]);
+            $payload = af_kb_arpg_envelope_defaults('arpg_element');
+            $payload['rules'] = array_replace_recursive(
+                (array)($payload['rules'] ?? []),
+                af_kb_default_type_profile_payload_arpg('arpg_element'),
+                [
+                    'family' => $key,
+                    'element_schema' => 'af_kb.element.v1',
+                    'entity_kind' => 'primary_element',
+                    'element_revision' => 1,
+                    'root_element' => $key,
+                ]
+            );
+            $metaJson = af_kb_normalize_json((string)json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+
+            $db->insert_query('af_kb_entries', [
+                'type' => 'arpg_element',
+                'key' => $db->escape_string($key),
+                'title_ru' => $db->escape_string((string)$row['title_ru']),
+                'title_en' => $db->escape_string((string)$row['title_en']),
+                'short_ru' => '',
+                'short_en' => '',
+                'body_ru' => '',
+                'body_en' => '',
+                'tech_ru' => '',
+                'tech_en' => '',
+                'meta_json' => $db->escape_string($metaJson),
+                'data_json' => '{}',
+                'icon_class' => '',
+                'icon_url' => '',
+                'banner_url' => '',
+                'bg_url' => '',
+                'active' => 1,
+                'sortorder' => 10 + $idx,
+                'updated_at' => TIME_NOW,
+                'item_kind' => '',
+            ]);
+        }
+    } finally {
+        af_kb_arpg_element_lock(true);
     }
 }
 
@@ -2934,6 +2947,17 @@ function af_kb_get_public_type_options(string $typeKey, int $limit = 500): array
     global $db;
 
     $typeKey = trim($typeKey);
+    if ($typeKey === 'arpg_element') {
+        $options = [];
+        foreach (af_kb_arpg_list_primary_elements() as $canonical => $definition) {
+            $node = $definition['definition'];
+            if (!$node || !$node['active'] || $node['kind'] !== 'primary_element') continue;
+            $options[] = ['key'=>$node['source_key'], 'canonical_key'=>$canonical,
+                'label_ru'=>$canonical === 'air' ? 'Воздух' : ($node['title_ru'] ?: af_kb_arpg_primary_elements()[$canonical]['ru']),
+                'label_en'=>$canonical === 'air' ? 'Air' : ($node['title_en'] ?: af_kb_arpg_primary_elements()[$canonical]['en'])];
+        }
+        return array_slice($options, 0, max(1,min(1000,$limit)));
+    }
     if ($typeKey === '' || !$db->table_exists('af_kb_entries')) {
         return [];
     }
@@ -4459,6 +4483,11 @@ function af_kb_get_type_schema_arpg(string $typeKey): array
         $schema['modifier_stat_options'] = af_kb_arpg_character_stat_options();
         $schema['modifier_operations'] = af_kb_arpg_origin_modifier_operations();
     }
+    if ($typeKey === 'arpg_element' && af_kb_can_edit()) {
+        $schema['element_parent_options'] = af_kb_arpg_element_editor_options();
+    }
+    $schema['primary_element_options'] = [];
+    foreach (af_kb_arpg_primary_elements() as $key => $labels) $schema['primary_element_options'][] = ['value'=>$key,'label'=>$labels['ru']];
     $schema['passive_effect_options'] = af_kb_arpg_passive_effect_options();
 
     return $schema;
@@ -5198,6 +5227,10 @@ function af_kb_is_ru(): bool
 
 function af_kb_pick_text(array $row, string $field): string
 {
+    // Presentation alias only: keep the stored legacy key/title and all references.
+    if ($field === 'title' && ($row['type'] ?? '') === 'arpg_element' && ($row['key'] ?? '') === 'wind') {
+        return af_kb_is_ru() ? 'Воздух' : 'Air';
+    }
     $suffix = af_kb_is_ru() ? '_ru' : '_en';
     $key = $field . $suffix;
     $value = (string)($row[$key] ?? '');
@@ -5977,6 +6010,7 @@ function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalized
     if (is_array($unprojected)) {
         $leaf = af_kb_arpg_extract_rules_leaf($unprojected);
         af_kb_arpg_validate_math_fields($leaf, $errors);
+        af_kb_arpg_validate_element_fields($leaf, $errors);
         $errors = array_merge($errors, af_kb_arpg_public_mechanics_errors($leaf));
     }
     // The public character route predates ARPG envelopes and is consumed by
@@ -6759,7 +6793,7 @@ function af_kb_arpg_service_entity_kinds(): array
 
 function af_kb_arpg_damage_type_values(): array
 {
-    return ['', 'physical', 'fire', 'ice', 'lightning', 'poison', 'acid', 'bleed', 'arcane', 'holy', 'shadow', 'true', 'kinetic', 'custom'];
+    return ['', 'physical', 'elemental', 'healing', 'hybrid', 'fire', 'ice', 'lightning', 'poison', 'acid', 'bleed', 'arcane', 'holy', 'shadow', 'true', 'kinetic', 'custom'];
 }
 
 function af_kb_arpg_get_payload_path(array $payload, string $path, bool &$exists = false)
@@ -6851,6 +6885,11 @@ function af_kb_validate_arpg_envelope(string $type, array $payload, bool $isServ
 
 function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, array &$errors): void
 {
+    if ($entityKind === 'element') {
+        $kind = $payload['rules']['entity_kind'] ?? 'primary_element';
+        if (!in_array($kind, ['primary_element','magic_direction'], true)) $errors[] = 'element_kind_invalid';
+        if ($kind === 'magic_direction' && !is_string($payload['rules']['parent_ref']['key'] ?? null)) $errors[] = 'element_parent_required';
+    }
     $accuracyPath = match ($entityKind) {
         'origin', 'archetype' => 'rules.accuracy_base',
         'bestiary' => 'rules.combat_stats.accuracy',
@@ -7204,6 +7243,7 @@ function af_kb_validate_arpg_entry_by_type(string $type, array $payload, array &
     $isService = !empty($typeDef['service']);
     $payload = af_kb_validate_arpg_envelope($type, $payload, $isService, $errors);
     af_kb_arpg_validate_math_fields((array)($payload['rules'] ?? []), $errors);
+    af_kb_arpg_validate_element_fields((array)($payload['rules'] ?? []), $errors);
 
     if ($isService) {
         $payload['rules']['type_profile'] = 'service_mechanics';
@@ -8649,7 +8689,9 @@ function af_kb_arpg_acs_damage(array $row, string $path, array &$diagnostics): a
         af_kb_arpg_acs_diagnostic($diagnostics, 'ambiguous_damage_type', $path . '.damage_type');
         $category = null;
     }
-    return ['category' => $category, 'element' => $row['element'] ?? null, 'scope' => $row['scope'] ?? null];
+    $elements = af_kb_arpg_element_damage($row, $path, $diagnostics);
+    return ['category' => $category, 'element' => $elements['element'], 'source_element' => $elements['source_element'],
+        'magic_direction' => $elements['magic_direction'], 'scope' => $row['scope'] ?? null];
 }
 
 function af_kb_arpg_acs_modifiers(array $rules, string $path, array &$diagnostics): void
@@ -8759,10 +8801,25 @@ function af_kb_arpg_acs_resistances($values, string $path, array &$diagnostics):
     foreach ($values as $key => $value) {
         $row = is_array($value) ? $value : ['value' => $value];
         if (!is_array($value) && !is_int($key)) $row['legacy_key'] = $key;
+        $resistanceElement = $row['damage_element'] ?? $row['element'] ?? $row['legacy_key'] ?? (!is_int($key) ? $key : null);
+        $explicitElemental = ($row['scope'] ?? null) === 'elemental' || ($row['unit'] ?? '') === 'RES' || ($row['damage_type'] ?? null) === 'elemental' || isset($row['damage_element']);
+        if ($explicitElemental || !is_int($key) || isset(af_kb_arpg_primary_elements()[is_string($resistanceElement) ? af_kb_arpg_canonical_element_key($resistanceElement) : ''])) {
+            if (!str_contains($path, 'weakness')) {
+                if (($row['unit'] ?? '') === 'RES' && isset($row['scope']) && $row['scope'] !== 'elemental') af_kb_arpg_acs_diagnostic($diagnostics, 'element_resistance_scope_invalid', $path . '.' . $key);
+                if ($explicitElemental && isset($row['unit']) && $row['unit'] !== 'RES') af_kb_arpg_acs_diagnostic($diagnostics, 'element_resistance_unit_invalid', $path . '.' . $key);
+            }
+            $canonical = is_string($resistanceElement) ? af_kb_arpg_canonical_element_key($resistanceElement) : '';
+            if (!isset(af_kb_arpg_primary_elements()[$canonical])) af_kb_arpg_acs_diagnostic($diagnostics, 'element_resistance_key_invalid', $path . '.' . $key);
+            if (!is_numeric($row['value'] ?? null) || !is_finite((float)$row['value']) || (float)$row['value'] < 0) af_kb_arpg_acs_diagnostic($diagnostics, 'element_resistance_value_invalid', $path . '.' . $key);
+            foreach ($rows as $previous) {
+                if (($previous['canonical_element'] ?? null) === $canonical) af_kb_arpg_acs_diagnostic($diagnostics, 'element_resistance_alias_collision', $path . '.' . $key);
+            }
+            $row['canonical_element'] = $canonical;
+        }
         $damage = af_kb_arpg_acs_damage($row, $path . '.' . $key, $diagnostics);
         if (!array_key_exists('scope', $row) || !array_key_exists('unit', $row)) af_kb_arpg_acs_diagnostic($diagnostics, 'resistance_semantics_unspecified', $path . '.' . $key, 'warning');
         af_kb_arpg_acs_numeric($row, ['value'], $path . '.' . $key, $diagnostics);
-        $rows[] = ['source_index' => $key, 'parameters' => $row, 'damage' => $damage, 'unit' => $row['unit'] ?? null, 'raw' => $value];
+        $rows[] = ['source_index' => $key, 'canonical_element' => $row['canonical_element'] ?? null, 'parameters' => $row, 'damage' => $damage, 'unit' => $row['unit'] ?? null, 'raw' => $value];
     }
     return $rows;
 }
@@ -8794,13 +8851,18 @@ function af_kb_arpg_normalize_entry(array $entry, ?int $abilityIndex = null): ar
             af_kb_arpg_acs_diagnostic($diagnostics, 'invalid_stat_value', $accuracyPath);
         }
     }
-    if (!in_array($type, ['arpg_ability', 'character', 'arpg_item', 'arpg_bestiary', 'arpg_mechanics', 'arpg_origin', 'arpg_archetype'], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_entry_type', 'source.type');
+    if (!in_array($type, ['arpg_ability', 'character', 'arpg_item', 'arpg_bestiary', 'arpg_mechanics', 'arpg_origin', 'arpg_archetype', 'arpg_element'], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_entry_type', 'source.type');
     if ($type !== 'character') {
-        $expectedProfile = ['arpg_ability' => 'ability', 'arpg_item' => 'item', 'arpg_bestiary' => 'bestiary', 'arpg_mechanics' => 'service_mechanics', 'arpg_origin' => 'origin', 'arpg_archetype' => 'archetype'][$type] ?? null;
+        $expectedProfile = ['arpg_ability' => 'ability', 'arpg_item' => 'item', 'arpg_bestiary' => 'bestiary', 'arpg_mechanics' => 'service_mechanics', 'arpg_origin' => 'origin', 'arpg_archetype' => 'archetype', 'arpg_element' => 'element'][$type] ?? null;
         if (isset($rules['type_profile']) && $rules['type_profile'] !== $expectedProfile) af_kb_arpg_acs_diagnostic($diagnostics, 'type_profile_mismatch', 'definition.type_profile');
         if (isset($rules['schema']) && !in_array($rules['schema'], [AF_KB_ARPG_RULES_SCHEMA, AF_KB_ARPG_MECHANICS_SCHEMA], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_rules_schema', 'definition.schema');
         if (!isset($rules['schema'])) af_kb_arpg_acs_diagnostic($diagnostics, 'legacy_schema_missing', 'definition.schema', 'warning');
         if (!array_intersect(['type_profile', 'effects', 'damage_value', 'heal_value', 'shield_value', 'item_kind', 'combat_stats', 'service_kind', 'formula_profile', 'formula_ref', 'accuracy_base', 'hp_base'], array_keys($rules))) af_kb_arpg_acs_diagnostic($diagnostics, 'unrecognized_definition', 'definition');
+    }
+    if ($type === 'arpg_element') {
+        $element = af_kb_arpg_read_element((string)($entry['key'] ?? ''), null, $entry);
+        $normalized['element_definition'] = $element;
+        $diagnostics = array_merge($diagnostics, $element['diagnostics']);
     }
     if (isset($entry['active']) && !$entry['active']) af_kb_arpg_acs_diagnostic($diagnostics, 'inactive_definition', 'source.active');
     if ($type === 'character') {
@@ -8871,7 +8933,12 @@ function af_kb_arpg_normalize_entry(array $entry, ?int $abilityIndex = null): ar
 /** Read one stored definition, including a character ability selected by zero-based index. */
 function af_kb_arpg_read_definition(string $type, string $key, ?int $abilityIndex = null): array
 {
-    $row = af_kb_arpg_acs_lookup($type, $key);
+    if ($type === 'arpg_element') {
+        $element = af_kb_arpg_read_element($key);
+        $row = af_kb_arpg_element_lookup($element['source_key']);
+    } else {
+        $row = af_kb_arpg_acs_lookup($type, $key);
+    }
     $result = af_kb_arpg_normalize_entry($row ?? ['type' => $type, 'key' => $key], $abilityIndex);
     if ($row === null) {
         af_kb_arpg_acs_diagnostic($result['diagnostics'], 'definition_not_found', 'source');
@@ -9477,6 +9544,13 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                         'arpg_archetype' => af_kb_get_public_type_options('arpg_archetype'),
                         'arpg_faction' => af_kb_get_public_type_options('arpg_faction'),
                     ];
+                    $arpgElementReference = null;
+                    if ($isKbEditorPage && af_kb_can_edit() && $mybb->get_input('type') === 'arpg_element') {
+                        $elementInfo = af_kb_arpg_read_element((string)$mybb->get_input('key'));
+                        if ($elementInfo['supported'] && $elementInfo['definition']) {
+                            $arpgElementReference = array_intersect_key($elementInfo['definition'], array_flip(['key','kind','definition_version','fingerprint']));
+                        }
+                    }
                     $arpgOriginVariantUiOptions = [];
                     foreach ($arpgPublicTypeUiOptions['arpg_origin'] as $originOption) {
                         $originKey = trim((string)($originOption['key'] ?? $originOption['value'] ?? ''));
@@ -9509,6 +9583,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                         . json_encode($arpgMechanicsUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                         . ';window.afKbArpgPublicTypeOptions='
                         . json_encode($arpgPublicTypeUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                        . ';window.afKbArpgElementReference=' . json_encode($arpgElementReference, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP)
                         . ';window.afKbArpgOriginVariantOptions='
                         . json_encode($arpgOriginVariantUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                         . ';</script>';
@@ -12986,6 +13061,7 @@ function af_kb_handle_view(): void
 
         $escapedType = $db->escape_string($type);
         $where = "e.type='{$escapedType}'";
+        if ($type === 'arpg_element' && af_kb_arpg_element_lookup('air')) $where .= " AND e.`key`<>'wind'";
         if (!af_kb_can_edit()) {
             $where .= " AND e.active=1";
         }
@@ -13617,18 +13693,25 @@ function af_kb_handle_edit(): void
                 error($lang->af_kb_not_found ?? 'Not found');
             }
 
-            $db->delete_query('af_kb_blocks', 'entry_id='.(int)$existing['id']);
-            $db->delete_query('af_kb_relations', "from_type='".$db->escape_string($type)."' AND from_key='".$db->escape_string($key)."'");
-            $db->delete_query('af_kb_entries', 'id='.(int)$existing['id']);
+            $taxonomyLock = $type === 'arpg_element' ? af_kb_arpg_element_lock() : false;
+            if ($type === 'arpg_element' && !$taxonomyLock) error('element_edit_busy');
+            try {
+                $db->delete_query('af_kb_blocks', 'entry_id='.(int)$existing['id']);
+                $db->delete_query('af_kb_relations', "from_type='".$db->escape_string($type)."' AND from_key='".$db->escape_string($key)."'");
+                $db->delete_query('af_kb_entries', 'id='.(int)$existing['id']);
 
-            $db->insert_query('af_kb_log', [
-                'uid'      => (int)$mybb->user['uid'],
-                'action'   => $db->escape_string('delete'),
-                'type'     => $db->escape_string($type),
-                'key'      => $db->escape_string($key),
-                'diff_json'=> $db->escape_string('{}'),
-                'dateline' => TIME_NOW,
-            ]);
+                $db->insert_query('af_kb_log', [
+                    'uid'      => (int)$mybb->user['uid'],
+                    'action'   => $db->escape_string('delete'),
+                    'type'     => $db->escape_string($type),
+                    'key'      => $db->escape_string($key),
+                    'diff_json'=> $db->escape_string('{}'),
+                    'dateline' => TIME_NOW,
+                ]);
+
+            } finally {
+                if ($taxonomyLock) af_kb_arpg_element_lock(true);
+            }
 
             redirect(af_kb_url(['type' => $type]), 'Deleted');
         }
@@ -14031,7 +14114,23 @@ function af_kb_handle_edit(): void
                     $txStarted = true;
                 }
 
+                $elementLock = false;
                 try {
+                    if ($type === 'arpg_element') {
+                        $elementLock = af_kb_arpg_element_lock();
+                        if (!$elementLock) throw new RuntimeException('element_edit_busy');
+                        if ($entry && (string)$entry['key'] !== $key) throw new RuntimeException('element_identity_immutable');
+                        $current = af_kb_arpg_element_lookup($key);
+                        if ($entry && !$current) throw new RuntimeException('element_definition_deleted');
+                        if (!$entry && $current) throw new RuntimeException('element_duplicate_key');
+                        $elementErrors = [];
+                        $rulesObject['rules'] = af_kb_arpg_prepare_element($key, (array)$rulesObject['rules'], $current, $elementErrors, null, (bool)$data['active']);
+                        if ($elementErrors) throw new RuntimeException(implode(', ', array_unique($elementErrors)));
+                        $entryDataJsonNormalized = json_encode($rulesObject, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+                        $metaPayload['rules'] = $rulesObject;
+                        $data['data_json'] = $db->escape_string($entryDataJsonNormalized);
+                        $data['meta_json'] = $db->escape_string(json_encode($metaPayload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+                    }
                     if ($entry) {
                         $db->update_query('af_kb_entries', $data, 'id=' . (int)$entry['id']);
                         $entryId = (int)$entry['id'];
@@ -14148,12 +14247,15 @@ function af_kb_handle_edit(): void
                         $db->write_query('COMMIT');
                     }
 
+                    if ($elementLock) { af_kb_arpg_element_lock(true); $elementLock = false; }
                     redirect(af_kb_url(['type' => $type, 'key' => $key]), 'Saved');
                 } catch (Throwable $e) {
                     if ($txStarted) {
                         $db->write_query('ROLLBACK');
                     }
                     $errors[] = $e->getMessage();
+                } finally {
+                    if ($elementLock) af_kb_arpg_element_lock(true);
                 }
             }
         }
@@ -15036,6 +15138,7 @@ function af_kb_handle_json_list(): void
     $catKey = trim((string)$mybb->get_input('cat'));
     $isAjax = (int)$mybb->get_input('ajax', MyBB::INPUT_INT) === 1;
     $where = "type='".$db->escape_string($type)."'";
+    if ($type === 'arpg_element' && af_kb_arpg_element_lookup('air')) $where .= " AND `key`<>'wind'";
     if (!af_kb_can_edit()) {
         $where .= ' AND active=1';
     }

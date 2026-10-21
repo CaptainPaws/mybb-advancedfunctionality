@@ -1134,6 +1134,7 @@
             var simpleTypes = ['origin', 'origin_variant', 'archetype', 'element', 'faction', 'lore', 'character'];
             var heavyTypes = ['ability', 'talent', 'item', 'bestiary', 'character'];
             var serviceKinds = ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'formula_profile', 'weapon_type', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
+            var primaryElementOptions = [{value:'',label:'—'}].concat(typeSchema.primary_element_options || []);
             var modifierStatOptions = Array.isArray(typeSchema.modifier_stat_options)
                 ? typeSchema.modifier_stat_options.slice()
                 : [];
@@ -1238,7 +1239,7 @@
             var enums = {
                 abilitySubtype: ['', 'active', 'passive', 'ultimate', 'support', 'aura', 'toggle', 'summon', 'reaction', 'movement'],
                 abilitySlot: ['', 'basic', 'skill_1', 'skill_2', 'skill_3', 'support', 'ultimate', 'passive', 'custom'],
-                damageType: ['', 'physical', 'fire', 'ice', 'water', 'electric', 'wind', 'earth', 'nature', 'light', 'dark', 'void', 'quantum', 'imaginary', 'aether', 'anomaly', 'ether', 'fusion', 'glacio', 'aero', 'havoc', 'spectro', 'dendro', 'pyro', 'hydro', 'electro', 'cryo', 'anemo', 'geo', 'lightning', 'poison', 'acid', 'bleed', 'arcane', 'holy', 'shadow', 'slash', 'pierce', 'blunt', 'true', 'kinetic', 'custom'],
+                damageType: ['', 'physical', 'elemental', 'healing', 'hybrid', 'fire', 'ice', 'water', 'electric', 'wind', 'earth', 'nature', 'light', 'dark', 'void', 'quantum', 'imaginary', 'aether', 'anomaly', 'ether', 'fusion', 'glacio', 'aero', 'havoc', 'spectro', 'dendro', 'pyro', 'hydro', 'electro', 'cryo', 'anemo', 'geo', 'lightning', 'poison', 'acid', 'bleed', 'arcane', 'holy', 'shadow', 'slash', 'pierce', 'blunt', 'true', 'kinetic', 'custom'],
                 targeting: ['', 'self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom'],
                 rarity: ['', 'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic', 'set', 'unique', 'custom'],
                 itemKind: ['', 'weapon', 'armor', 'accessory', 'artifact', 'consumable', 'material', 'quest', 'custom'],
@@ -1827,10 +1828,49 @@
 
                 if (entityType === 'element') {
                     renderRuleFields(rulesRoot, [
+                        { key: 'entity_kind', label: 'Классификация', type: 'select', options: [
+                            {value:'primary_element',label:'Основная стихия'}, {value:'magic_direction',label:'Магическое направление'}
+                        ], default: 'primary_element' },
                         { key: 'family', label: 'family', default: '' },
                         { key: 'counter_element', label: 'counter_element', default: '' },
                         { key: 'description_text', label: 'description_text', default: '' }
                     ], 'Element core');
+                    var parentBox = createSection(rulesRoot, 'Иерархия направления', 'Направление не создаёт RES и не определяет тип урона способности. Родитель обязателен только для направления.');
+                    var parentInput = document.createElement('input');
+                    parentInput.type = 'text';
+                    parentInput.placeholder = 'Ключ родителя, например life или blood';
+                    parentInput.value = String((payload.rules.parent_ref || {}).key || '');
+                    var initialParentKey = parentInput.value;
+                    var suggestions = document.createElement('datalist');
+                    suggestions.id = 'af-kb-element-parents';
+                    parentInput.setAttribute('list', suggestions.id);
+                    var parentOptions = Array.isArray(typeSchema.element_parent_options) ? typeSchema.element_parent_options : [];
+                    parentOptions.forEach(function (row) {
+                        var option = document.createElement('option'); option.value = row.key;
+                        option.label = row.label + ' → ' + row.root_element; suggestions.appendChild(option);
+                    });
+                    var rootHint = document.createElement('div'); rootHint.className = 'af-kb-help';
+                    function showRoot() {
+                        var option = parentOptions.find(function (row) { return row.key === parentInput.value.trim(); });
+                        rootHint.textContent = 'Корневая стихия: ' + (option ? option.root_element : (parentInput.value === initialParentKey && payload.rules.root_element ? payload.rules.root_element : 'определяется сервером при сохранении'));
+                    }
+                    parentInput.addEventListener('input', function () {
+                        payload.rules.parent_ref = parentInput.value.trim() ? {key:parentInput.value.trim()} : null;
+                        showRoot(); syncToRaw();
+                    });
+                    parentBox.appendChild(parentInput); parentBox.appendChild(suggestions); parentBox.appendChild(rootHint);
+                    var versionHint = document.createElement('div'); versionHint.className = 'af-kb-help';
+                    versionHint.textContent = 'Версия определения: ' + (payload.rules.element_revision || 'legacy / новое');
+                    var reference = window.afKbArpgElementReference;
+                    if (reference) {
+                        var referenceBox = document.createElement('textarea'); referenceBox.readOnly = true;
+                        referenceBox.className = 'af-kb-plain-textarea';
+                        referenceBox.value = JSON.stringify(reference); referenceBox.setAttribute('aria-label', 'Версионированная ссылка на определение');
+                        parentBox.appendChild(referenceBox);
+                    }
+                    parentBox.appendChild(versionHint); showRoot();
+                    function updateParentState() { parentInput.disabled = payload.rules.entity_kind !== 'magic_direction'; }
+                    rulesRoot.addEventListener('change', updateParentState); updateParentState();
                 }
 
                 if (entityType === 'lore') {
@@ -1924,6 +1964,8 @@
                 ]);
 
                 renderSeededArrayEditor(rulesRoot, 'effects', 'effects', [
+                    { key: 'damage_element', label: 'Основная стихия урона', type: 'select', options: primaryElementOptions, optional: true },
+                    { key: 'magic_direction_ref', label: 'Направление (версионированная ссылка JSON)', type: 'json', optional: true },
                     { key: 'kind', label: 'kind', default: 'damage' },
                     { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
                     { key: 'targeting', label: 'targeting', type: 'select', options: enums.targeting, default: 'single_enemy' },
@@ -2260,6 +2302,9 @@
                 ], 'Combat stats');
 
                 renderSeededArrayEditor(rulesRoot, 'resists', 'resists', [
+                    {key:'element',label:'Основная стихия RES',type:'select',options:primaryElementOptions,optional:true},
+                    {key:'scope',label:'Область (elemental для RES)',type:'select',options:['','physical','elemental','status'],optional:true},
+                    {key:'unit',label:'Единица (RES)',optional:true},
                     { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
                     { key: 'value', label: 'value', type: 'number', default: 0 },
                     { key: 'notes', label: 'notes', default: '' }
@@ -2561,6 +2606,10 @@
                 var mathSection = createSection(rulesRoot, 'Математические модификаторы (opt-in, без исполнения)');
                 mathSection.appendChild(fieldCell(payload.rules, { key: 'math_modifiers', label: 'math_modifiers (JSON-массив, необязательно)', type: 'json', optional: true }, syncToRaw));
             }
+            if (entityType === 'talent') {
+                var directionSection = createSection(rulesRoot, 'Магическое направление (классификация без RES)');
+                directionSection.appendChild(fieldCell(payload.rules, {key:'magic_direction_ref',label:'Версионированная ссылка из записи направления (JSON)',type:'json',optional:true}, syncToRaw));
+            }
             if (['ability', 'item', 'bestiary'].indexOf(entityType) !== -1) {
                 var mechanicsSection = createSection(rulesRoot, 'Боевые параметры (необязательно, без исполнения)');
                 var extraFields = [
@@ -2575,7 +2624,9 @@
                     {key:'summon',label:'Призыв (JSON)',type:'json',optional:true},
                     {key:'usage_limits',label:'Ограничения применения (JSON)',type:'json',optional:true},
                     {key:'costs',label:'Затраты: использование / поддержание (JSON)',type:'json',optional:true},
-                    {key:'timing',label:'Кулдаун / восстановление / периодичность (JSON)',type:'json',optional:true}
+                    {key:'timing',label:'Кулдаун / восстановление / периодичность (JSON)',type:'json',optional:true},
+                    {key:'magic_direction_ref',label:'Направление: {key, definition_version, fingerprint} (не задаёт урон)',type:'json',optional:true},
+                    {key:'damage_element',label:'Фактическая основная стихия урона',type:'select',options:primaryElementOptions,optional:true},
                 ];
                 if (entityType === 'item') extraFields = extraFields.concat([
                     {key:'equip_requirements',label:'Требования экипировки (JSON)',type:'json',optional:true},
