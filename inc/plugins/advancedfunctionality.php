@@ -483,7 +483,7 @@ class AF_Admin
                         }
                     }
 
-                    if (!empty($meta['admin']['slug']) && $enabled) {
+                    if (!empty($meta['admin']['slug']) && ($enabled || $meta['id'] === 'advancedcombatsystem')) {
                         $desc .= ($desc ? ' ' : '').'(Админ-страница: '
                             . 'Advanced functionality → <a href="index.php?module='.AF_PLUGIN_ID.'&amp;af_view='.htmlspecialchars_uni($meta['admin']['slug']).'">'
                             . htmlspecialchars_uni($meta['admin']['title'] ?? $meta['name']).'</a>)';
@@ -1147,7 +1147,9 @@ class AF_Admin
             'title' => 'Theme Stylesheets',
         ]];
         foreach (self::discoverAddons() as $meta) {
-            if (!self::isAddonEnabled($meta['id'])) continue;
+            // ACS maintenance (install/upgrade/confirmed uninstall) must remain
+            // reachable while disabled, behind the same MyBB ACP permissions.
+            if (!self::isAddonEnabled($meta['id']) && $meta['id'] !== 'advancedcombatsystem') continue;
             if (empty($meta['admin']['slug'])) continue;
             $out[] = [
                 'id'    => $meta['id'],
@@ -1162,7 +1164,7 @@ class AF_Admin
     public static function findAdminController(string $slug): ?array
     {
         foreach (self::discoverAddons() as $meta) {
-            if (!self::isAddonEnabled($meta['id'])) continue;
+            if (!self::isAddonEnabled($meta['id']) && $meta['id'] !== 'advancedcombatsystem') continue;
             if (!empty($meta['admin']['slug']) && $meta['admin']['slug'] === $slug) {
                 $path  = $meta['path'].($meta['admin']['controller'] ?? '');
                 $klass = 'AF_Admin_'.preg_replace('~[^A-Za-z0-9]+~', '', ucfirst($slug));
@@ -1196,7 +1198,14 @@ class AF_Admin
         }
         require_once $bootstrap;
 
-        if ($isAtf) {
+        if ($id === 'advancedcombatsystem') {
+            // ACS owns separate, resumable install and non-destructive activate.
+            // Other addons retain their existing lifecycle contract.
+            if (!af_advancedcombatsystem_is_installed()) {
+                af_advancedcombatsystem_install();
+            }
+            if (af_advancedcombatsystem_activate() !== true) { return false; }
+        } elseif ($isAtf) {
             $GLOBALS['af_adaptivethemeframework_activation_stage'] = 'is_installed';
             $installedFn = 'af_'.$id.'_is_installed';
             $installed = function_exists($installedFn) && (bool)$installedFn();
