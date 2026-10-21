@@ -25,3 +25,12 @@ element_assert($again['effects'][0]['custom_allowed_field']===['keep'=>true] && 
 $legacy=af_kb_normalize_inline_ability_row(['title'=>'Old','effects'=>[['kind'=>'heal','value'=>0,'extension'=>1]],'modifiers'=>[['stat_key'=>'atk','mode'=>'flat','value'=>2,'extension'=>1]],'extension'=>['nested'=>true]]);
 element_assert($legacy['extension']===['nested'=>true] && $legacy['modifiers'][0]['extension']===1,'Inline legacy extension lost');
 echo "Visual ability new/existing save-read and explicit direction pinning: OK\n";
+
+$db->entries['formula_profile']=['id'=>100,'type'=>'arpg_mechanics','key'=>'formula_profile','active'=>1,'title_ru'=>'Профили расчёта','title_en'=>'Formula profiles',
+    'data_json'=>json_encode(['schema'=>AF_KB_ARPG_RULES_SCHEMA,'type_profile'=>'service_mechanics','service_kind'=>'formula_profile','entries'=>[
+        ['key'=>'atk_profile','title'=>'Урон от атаки','description'=>'Описание формулы','active'=>1],
+        ['key'=>'disabled_profile','title'=>'Скрытая формула','is_active'=>0],
+    ]])];
+$choices=af_kb_arpg_editor_choices();
+element_assert(count($choices['formula_profile'])===1 && $choices['formula_profile'][0]['label']==='Урон от атаки','Profile title lost or inactive choice offered');
+echo "Persisted formula profile names and inactive filtering: OK\n";

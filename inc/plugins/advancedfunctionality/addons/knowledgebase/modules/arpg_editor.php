@@ -9,7 +9,7 @@ function af_kb_arpg_editor_choices(): array
     $query = $db->simple_select('af_kb_entries', '*', "active=1 AND type IN ('arpg_element','arpg_mechanics','arpg_ability','arpg_bestiary','arpg_item')", ['order_by'=>'title_ru, `key`']);
     while ($row = $db->fetch_array($query)) {
         if (!af_kb_entry_visible_in_context($row, 'catalog', true)) continue;
-        $label = (string)($row['title_ru'] ?: $row['title_en'] ?: $row['key']);
+        $label = (string)(($row['title_ru'] ?? '') ?: ($row['title_en'] ?? '') ?: $row['key']);
         if ($row['type'] === 'arpg_element') {
             $element = af_kb_arpg_read_element($row['key']);
             if ($element['supported'] && ($element['definition']['kind'] ?? '') === 'magic_direction') {
@@ -28,11 +28,15 @@ function af_kb_arpg_editor_choices(): array
         }
         $kind = $rules['service_kind'] ?? '';
         if (!in_array($kind, ['formula_def','formula_profile','condition_template'], true)) continue;
-        $definitions = $rules['entries'] ?? [$rules];
+        $definitions = !empty($rules['entries']) ? $rules['entries'] : ($rules['formula_profile_registry'] ?? [$rules]);
         foreach ($definitions as $definition) {
-            if (!is_array($definition) || empty($definition['key']) || (isset($definition['active']) && !$definition['active'])) continue;
+            if (!is_array($definition) || empty($definition['key']) || (isset($definition['active']) && !$definition['active']) || (isset($definition['is_active']) && !$definition['is_active'])) continue;
             $key = $definition['key'];
-            $choices[$kind][] = ['value'=>$key, 'label'=>(string)($definition['label_ru'] ?? $definition['title_ru'] ?? ($label . ' · ' . $key)), 'version'=>$definition['version'] ?? null];
+            $name = $label . ' · ' . $key;
+            foreach (['label_ru','title_ru','title','label_en','title_en'] as $field) {
+                if (is_string($definition[$field] ?? null) && trim($definition[$field]) !== '') {$name=$definition[$field];break;}
+            }
+            $choices[$kind][] = ['value'=>$key, 'label'=>$name, 'description'=>(string)($definition['description'] ?? $definition['notes'] ?? ''), 'version'=>$definition['version'] ?? null];
         }
     }
     return $choices;
