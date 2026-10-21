@@ -152,6 +152,7 @@ function af_kb_arpg_character_stat_registry(): array
         'hp' => ['label' => 'Здоровье', 'vm_field' => 'character_hp'],
         'atk' => ['label' => 'Сила атаки', 'vm_field' => 'character_attack_power'],
         'def' => ['label' => 'Защита', 'vm_field' => 'character_defense'],
+        'accuracy' => ['label' => 'Точность', 'vm_field' => 'character_accuracy'],
         'speed' => ['label' => 'Скорость', 'vm_field' => 'character_speed'],
         'crit_rate' => ['label' => 'Шанс крита', 'vm_field' => 'character_crit_rate'],
         'crit_dmg' => ['label' => 'Крит. урон', 'vm_field' => 'character_crit_damage'],
@@ -242,6 +243,7 @@ function af_kb_arpg_origin_modifier_stat_definitions(): array
         $definition['origin_field'] = $originField;
         $definitions[$key] = $definition;
     }
+    $definitions['accuracy'] = af_kb_arpg_character_stat_registry()['accuracy'] + ['origin_field' => 'accuracy_base'];
     return $definitions;
 }
 
@@ -877,6 +879,7 @@ function af_kb_default_type_definitions(): array
                 ['path' => 'character_stats.character_elemental_mastery', 'type' => 'number', 'default' => 0],
                 ['path' => 'character_stats.character_healing_bonus', 'type' => 'number', 'default' => 0],
                 ['path' => 'character_stats.character_shield_strength', 'type' => 'number', 'default' => 0],
+                ['path' => 'character_stats.character_accuracy', 'type' => 'number', 'min' => 0],
                 ['path' => 'character_stats.character_luck', 'type' => 'number', 'default' => 0],
                 ['path' => 'character_abilities', 'type' => 'array', 'default' => [], 'item' => ['type' => 'object', 'fields' => [
                     ['path' => 'slot_index', 'type' => 'number', 'required' => true, 'default' => 1],
@@ -965,6 +968,7 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.shield_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.status_hit_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.status_resist_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.accuracy_base', 'type' => 'number', 'required' => false],
                 ['path' => 'rules.luck_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.hp_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.defense_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
@@ -988,6 +992,7 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.shield_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.status_hit_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.status_resist_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.accuracy_base', 'type' => 'number', 'required' => false],
                 ['path' => 'rules.luck_base', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.hp_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.defense_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
@@ -1101,6 +1106,7 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.combat_stats.shield_strength', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.combat_stats.status_hit', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.combat_stats.status_resist', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.accuracy', 'type' => 'number', 'required' => false],
                 ['path' => 'rules.combat_stats.luck', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.resists', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [['path' => 'damage_type', 'type' => 'string', 'required' => true], ['path' => 'value', 'type' => 'number', 'required' => true], ['path' => 'notes', 'type' => 'string', 'default' => '']]], 'default' => []],
                 ['path' => 'rules.weaknesses', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [['path' => 'damage_type', 'type' => 'string', 'required' => true], ['path' => 'value', 'type' => 'number', 'required' => true], ['path' => 'notes', 'type' => 'string', 'default' => '']]], 'default' => []],
@@ -3400,6 +3406,7 @@ function af_kb_character_stats_labels_dictionary(): array
         'character_elemental_mastery' => ['ru' => 'Мастерство стихий', 'en' => 'Elemental Mastery'],
         'character_healing_bonus' => ['ru' => 'Бонус лечения', 'en' => 'Healing Bonus'],
         'character_shield_strength' => ['ru' => 'Сила щита', 'en' => 'Shield Strength'],
+        'character_accuracy' => ['ru' => 'Точность', 'en' => 'Accuracy'],
         'character_luck' => ['ru' => 'Удача', 'en' => 'Luck'],
     ];
 }
@@ -5980,6 +5987,12 @@ function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalized
         if (!is_array($decoded)) {
             $decoded = [];
         }
+        if (array_key_exists('character_accuracy', (array)($decoded['character_stats'] ?? []))) {
+            $accuracy = $decoded['character_stats']['character_accuracy'];
+            if (!is_numeric($accuracy) || !is_finite((float)$accuracy) || (float)$accuracy < 0) {
+                $errors[] = 'Accuracy must be a finite non-negative number: character_stats.character_accuracy';
+            }
+        }
         $profile = is_array($decoded['character_profile'] ?? null) ? $decoded['character_profile'] : [];
         $origin = trim((string)($profile['character_origin'] ?? ''));
         $variant = trim((string)($profile['character_origin_variant'] ?? ''));
@@ -5998,6 +6011,12 @@ function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalized
             $errors
         );
         $character = af_kb_decode_json($normalized);
+        // Keep explicit Accuracy only; the existing character route owns the
+        // projection of all other stats. Never synthesize a legacy value.
+        if (is_array($character) && array_key_exists('character_accuracy', (array)($decoded['character_stats'] ?? []))) {
+            $character['character_stats']['character_accuracy'] = $decoded['character_stats']['character_accuracy'];
+            $normalized = json_encode($character, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+        }
         if (!is_array($character)
             || ($character['schema'] ?? '') !== AF_KB_CHARACTER_SCHEMA
             || ($character['type_profile'] ?? '') !== 'character'
@@ -6377,6 +6396,11 @@ function af_kb_arpg_migrate_legacy_rules_contract(string $type, array $rules): a
             'status_resist' => af_kb_arpg_pick_first($legacyCombat, ['status_resist', 'status_resistance'], $legacyCombat['status_resist'] ?? 0),
             'luck' => af_kb_arpg_pick_first($legacyCombat, ['luck'], $legacyCombat['luck'] ?? 0),
         ];
+
+        // Accuracy has no legacy fallback, unit conversion or implicit zero.
+        if (array_key_exists('accuracy', $legacyCombat)) {
+            $rules['combat_stats']['accuracy'] = $legacyCombat['accuracy'];
+        }
 
         $rules['resists'] = af_kb_arpg_pick_array($rules, ['resists']);
         $rules['weaknesses'] = af_kb_arpg_pick_array($rules, ['weaknesses']);
@@ -6827,6 +6851,18 @@ function af_kb_validate_arpg_envelope(string $type, array $payload, bool $isServ
 
 function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, array &$errors): void
 {
+    $accuracyPath = match ($entityKind) {
+        'origin', 'archetype' => 'rules.accuracy_base',
+        'bestiary' => 'rules.combat_stats.accuracy',
+        default => null,
+    };
+    if ($accuracyPath !== null) {
+        $exists = false;
+        $value = af_kb_arpg_get_payload_path($payload, $accuracyPath, $exists);
+        if ($exists && (!is_numeric($value) || !is_finite((float)$value) || (float)$value < 0)) {
+            $errors[] = 'Accuracy must be a finite non-negative number: ' . $accuracyPath;
+        }
+    }
     $requiredMap = [
         'origin' => ['rules.type_profile', 'rules.size', 'rules.creature_type', 'rules.movement_speed', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_rate_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.status_hit_base', 'rules.status_resist_base', 'rules.luck_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.racial_bonuses_text', 'rules.racial_traits_text', 'rules.starting_notes'],
         'archetype' => ['rules.type_profile', 'rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_rate_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.status_hit_base', 'rules.status_resist_base', 'rules.luck_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.slot_rules_text', 'rules.description_notes'],
@@ -6992,6 +7028,7 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
 
         $combatStats = (array)($payload['rules']['combat_stats'] ?? []);
         foreach (af_kb_arpg_character_stat_keys() as $statKey) {
+            if ($statKey === 'accuracy' && !array_key_exists($statKey, $combatStats)) continue;
             if (!is_numeric($combatStats[$statKey] ?? null)) {
                 $errors[] = 'ARPG bestiary requires numeric "rules.combat_stats.' . $statKey . '".';
             }
@@ -8741,13 +8778,29 @@ function af_kb_arpg_normalize_entry(array $entry, ?int $abilityIndex = null): ar
     $rules = $source['rules'];
     $type = $entry['type'] ?? '';
     $normalized = ['definition' => $rules];
-    if (!in_array($type, ['arpg_ability', 'character', 'arpg_item', 'arpg_bestiary', 'arpg_mechanics'], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_entry_type', 'source.type');
+    $accuracyPath = match ($type) {
+        'character' => ($rules['character_meta']['mechanic'] ?? null) === 'arpg' ? 'character_stats.character_accuracy' : null,
+        'arpg_origin', 'arpg_archetype' => 'accuracy_base',
+        'arpg_bestiary' => 'combat_stats.accuracy',
+        default => null,
+    };
+    if ($accuracyPath !== null) {
+        $accuracyExists = false;
+        $accuracy = af_kb_arpg_get_payload_path($rules, $accuracyPath, $accuracyExists);
+        if (!$accuracyExists || $accuracy === null || $accuracy === '') {
+            // Bestiary missing keys are reported by the registry check below.
+            if ($type !== 'arpg_bestiary' || $accuracyExists) af_kb_arpg_acs_diagnostic($diagnostics, 'required_stat_missing', $accuracyPath);
+        } elseif (!is_numeric($accuracy) || !is_finite((float)$accuracy) || (float)$accuracy < 0) {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'invalid_stat_value', $accuracyPath);
+        }
+    }
+    if (!in_array($type, ['arpg_ability', 'character', 'arpg_item', 'arpg_bestiary', 'arpg_mechanics', 'arpg_origin', 'arpg_archetype'], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_entry_type', 'source.type');
     if ($type !== 'character') {
-        $expectedProfile = ['arpg_ability' => 'ability', 'arpg_item' => 'item', 'arpg_bestiary' => 'bestiary', 'arpg_mechanics' => 'service_mechanics'][$type] ?? null;
+        $expectedProfile = ['arpg_ability' => 'ability', 'arpg_item' => 'item', 'arpg_bestiary' => 'bestiary', 'arpg_mechanics' => 'service_mechanics', 'arpg_origin' => 'origin', 'arpg_archetype' => 'archetype'][$type] ?? null;
         if (isset($rules['type_profile']) && $rules['type_profile'] !== $expectedProfile) af_kb_arpg_acs_diagnostic($diagnostics, 'type_profile_mismatch', 'definition.type_profile');
         if (isset($rules['schema']) && !in_array($rules['schema'], [AF_KB_ARPG_RULES_SCHEMA, AF_KB_ARPG_MECHANICS_SCHEMA], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_rules_schema', 'definition.schema');
         if (!isset($rules['schema'])) af_kb_arpg_acs_diagnostic($diagnostics, 'legacy_schema_missing', 'definition.schema', 'warning');
-        if (!array_intersect(['type_profile', 'effects', 'damage_value', 'heal_value', 'shield_value', 'item_kind', 'combat_stats', 'service_kind', 'formula_profile', 'formula_ref'], array_keys($rules))) af_kb_arpg_acs_diagnostic($diagnostics, 'unrecognized_definition', 'definition');
+        if (!array_intersect(['type_profile', 'effects', 'damage_value', 'heal_value', 'shield_value', 'item_kind', 'combat_stats', 'service_kind', 'formula_profile', 'formula_ref', 'accuracy_base', 'hp_base'], array_keys($rules))) af_kb_arpg_acs_diagnostic($diagnostics, 'unrecognized_definition', 'definition');
     }
     if (isset($entry['active']) && !$entry['active']) af_kb_arpg_acs_diagnostic($diagnostics, 'inactive_definition', 'source.active');
     if ($type === 'character') {
@@ -11825,6 +11878,12 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
         'character_status_resist' => $buildValue('character_status_resist'),
     ];
 
+    foreach ([$originRules, $archetypeRules] as $accuracyRules) {
+        if (is_numeric($accuracyRules['accuracy_base'] ?? null)) {
+            $stats['character_accuracy'] = ($stats['character_accuracy'] ?? 0) + (float)$accuracyRules['accuracy_base'];
+        }
+    }
+
     $stats = af_kb_arpg_apply_origin_variant_modifiers($stats, $originVariantRules, $levelSteps);
 
     $manualMap = [
@@ -11838,6 +11897,7 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
         'character_healing_bonus' => ['character_healing_bonus', 'healing_bonus'],
         'character_shield_strength' => ['character_shield_strength', 'shield_strength'],
         'character_healing_received_bonus' => ['character_healing_received_bonus', 'healing_received_bonus'],
+        'character_accuracy' => ['character_accuracy', 'accuracy'],
         'character_luck' => ['character_luck', 'luck'],
         'character_status_hit' => ['character_status_hit', 'status_hit'],
         'character_status_resist' => ['character_status_resist', 'status_resist'],
@@ -11848,7 +11908,8 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
             if (!array_key_exists($alias, $manualStats)) {
                 continue;
             }
-            $stats[$target] += af_kb_arpg_to_float($manualStats[$alias]);
+            if ($target === 'character_accuracy' && !is_numeric($manualStats[$alias])) break;
+            $stats[$target] = ($stats[$target] ?? 0) + af_kb_arpg_to_float($manualStats[$alias]);
             break;
         }
     }
@@ -12349,6 +12410,7 @@ function af_kb_build_character_application_prefill(array $entry): array
         'character_elemental_mastery' => ['character_elemental_mastery', 'elemental_mastery', 'mastery'],
         'character_healing_bonus' => ['character_healing_bonus', 'healing_bonus'],
         'character_shield_strength' => ['character_shield_strength', 'shield_strength'],
+        'character_accuracy' => ['character_accuracy', 'accuracy'],
         'character_luck' => ['character_luck', 'luck'],
     ];
     if (!$isArpgCharacter) {
