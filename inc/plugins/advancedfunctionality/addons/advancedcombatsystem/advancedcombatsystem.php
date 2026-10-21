@@ -39,6 +39,8 @@ function af_advancedcombatsystem_lifecycle(string $operation, callable $command)
     if (!defined('IN_ADMINCP') || !IN_ADMINCP || $mybb->request_method !== 'post') {
         throw new RuntimeException('ACS_ACP_POST_REQUIRED');
     }
+    require_once __DIR__.'/modules/Application/AuthorizationService.php';
+    (new AF_ACS_AuthorizationService)->requirePermission('admin.lifecycle');
     verify_post_check($mybb->get_input('my_post_key'));
     try {
         // Turning ACS off must remain possible even with broken dependencies.
