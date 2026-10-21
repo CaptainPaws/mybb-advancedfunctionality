@@ -11908,7 +11908,12 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
             if (!array_key_exists($alias, $manualStats)) {
                 continue;
             }
-            if ($target === 'character_accuracy' && !is_numeric($manualStats[$alias])) break;
+            if ($target === 'character_accuracy') {
+                // The application stores an explicit base total, not another bonus.
+                // Preserve zero and avoid adding origin totals on every round-trip.
+                if (is_numeric($manualStats[$alias])) $stats[$target] = (float)$manualStats[$alias];
+                break;
+            }
             $stats[$target] = ($stats[$target] ?? 0) + af_kb_arpg_to_float($manualStats[$alias]);
             break;
         }
@@ -12437,6 +12442,11 @@ function af_kb_build_character_application_prefill(array $entry): array
                 $prefill['character_stats'] = json_encode($statsCompact, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
             }
         }
+    }
+
+    if ($isArpgCharacter && is_numeric($rules['character_stats']['character_accuracy'] ?? null)) {
+        $prefill['character_accuracy'] = (string)$rules['character_stats']['character_accuracy'];
+        $prefill['character_stats'] = json_encode(['character_accuracy' => $rules['character_stats']['character_accuracy']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     $abilitiesNormalized = af_kb_reduce_embedded_abilities_to_application_dto($abilities);

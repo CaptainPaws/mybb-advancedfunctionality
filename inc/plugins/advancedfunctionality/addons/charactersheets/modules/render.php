@@ -944,6 +944,9 @@ function af_charactersheets_arpg_merge_runtime_stats(array $characterStats, arra
         $rawNumeric = is_numeric($rawValue) ? (float)$rawValue : null;
         $computedNumeric = (float)$computedValue;
 
+        // An explicit Accuracy of zero is authoritative, unlike old seeded stats.
+        if ($statKey === 'character_accuracy' && $rawNumeric !== null) continue;
+
         $shouldOverride = !$hasRaw
             || $rawValue === null
             || $rawValue === ''
@@ -1115,6 +1118,7 @@ function af_charactersheets_arpg_apply_origin_variant_modifiers(array $stats, ar
         'hp' => ['character_hp', false],
         'def' => ['character_defense', false],
         'atk' => ['character_attack_power', false],
+        'accuracy' => ['character_accuracy', false],
         'speed' => ['character_speed', false],
         'crit_rate' => ['character_crit_rate', false],
         'crit_dmg' => ['character_crit_damage', false],
@@ -1239,6 +1243,12 @@ function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $
         'character_status_hit' => $sum('status_hit_base'),
         'character_status_resist' => $sum('status_resist_base'),
     ];
+
+    foreach ([$originRules, $originVariantRules, $archetypeRules] as $accuracyRules) {
+        if (is_numeric($accuracyRules['accuracy_base'] ?? null)) {
+            $stats['character_accuracy'] = ($stats['character_accuracy'] ?? 0) + (float)$accuracyRules['accuracy_base'];
+        }
+    }
 
     $stats['character_attack_power'] += $sum('base_damage_bonus');
     $stats['character_defense'] += $sum('base_defense_bonus');
@@ -1511,6 +1521,16 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $archetypeRules = af_charactersheets_arpg_extract_entry_rules((array)($archetypeResolved['entry'] ?? []));
     $equipmentRuleSources = af_charactersheets_arpg_collect_equipment_rule_sources($build, $uid);
     $talentRuleSources = af_charactersheets_arpg_collect_talent_rule_sources($build, $uid);
+    if (!$has_kb_character) {
+        $rawAccuracy = $atf_index['character_accuracy']['value'] ?? null;
+        if ($rawAccuracy === null && isset($atf_index['character_stats'])) {
+            $rawStats = af_charactersheets_json_decode((string)($atf_index['character_stats']['value'] ?? '{}'));
+            $rawAccuracy = $rawStats['character_accuracy'] ?? null;
+        }
+        if (is_numeric($rawAccuracy) && is_finite((float)$rawAccuracy) && (float)$rawAccuracy >= 0) {
+            $character_stats['character_accuracy'] = (float)$rawAccuracy;
+        }
+    }
     $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level, $originVariantRules);
     $character_stats = af_charactersheets_arpg_merge_runtime_stats($character_stats, $computedKbStats);
     // Canonical character payloads may already contain non-zero base totals.
@@ -1622,6 +1642,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         ['label' => 'Здоровье', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_hp', $sheet_view, ['mechanics.hp_total'])],
         ['label' => 'Защита', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_defense', $sheet_view, ['mechanics.ac_total'])],
         ['label' => 'Сила атаки', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_attack_power', $sheet_view, ['mechanics.damage_bonus'])],
+        ['label' => 'Точность', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_accuracy', [])],
         ['label' => 'Скорость', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_speed', $sheet_view, ['mechanics.speed_total'])],
         ['label' => 'Шанс крита', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_crit_rate', $sheet_view, ['character_computed_state.fixed_bonuses.crit_rate'])],
         ['label' => 'Крит. урон', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_crit_damage', $sheet_view, ['character_computed_state.fixed_bonuses.crit_dmg', 'character_computed_state.resources.crit_dmg'])],
@@ -1665,6 +1686,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         'combat' => [
             'hp_total' => (int)af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_hp', ['mechanics.hp_total']),
             'def_total' => (int)af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_defense', ['mechanics.ac_total']),
+            'accuracy_total' => isset($character_stats['character_accuracy']) ? (float)$character_stats['character_accuracy'] : null,
             'speed_total' => (int)af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_speed', ['mechanics.speed_total']),
             'damage_total' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_attack_power', $sheet_view, ['mechanics.damage_bonus']),
             'humanity_total' => (float)($mechanics['humanity_total'] ?? 0),
