@@ -3,7 +3,7 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/../Application/AuthorizationService.php';
 
-/** On-demand observations. Never include an external bootstrap or call a reader. */
+/** Lightweight observations by default; explicit ACP validation uses read-only owner APIs. */
 final class AF_ACS_Diagnostics
 {
     private array $sourceCache = [];
@@ -49,7 +49,7 @@ final class AF_ACS_Diagnostics
     }
 
     /** Separate evidence (EXISTING/PROPOSED) from safe readiness. */
-    public function capabilities(): array
+    public function capabilities(bool $validateData = false, array $targets = []): array
     {
         (new AF_ACS_AuthorizationService)->requirePermission('admin.integrations.view');
         $addons = [];
@@ -106,6 +106,48 @@ final class AF_ACS_Diagnostics
                 'reason' => $rowReason, 'implementation_blocker' => $ready ? null : $reason,
                 'roadmap_stage' => $stage, 'remediation' => $remediation,
             ];
+        }
+        require_once __DIR__.'/../Infrastructure/Adapters/CapabilityValidator.php';
+        $checks = [];
+        if ($validateData) {
+            require_once __DIR__.'/IntegrationCapabilities.php';
+            $checks = (new AF_ACS_IntegrationCapabilities)->inspect($targets);
+        }
+        if ($validateData) foreach ($definitions as $id=>$definition) $rows[$id]['interfaces'] = $this->interfaces($definition[4]);
+        if (isset($checks['kb.definition_reader'])) {
+            $rows['kb.definition_reader'] = array_replace($rows['kb.definition_reader'],$checks['kb.definition_reader'],
+                ['implementation_blocker'=>$checks['kb.definition_reader']['reason'],'roadmap_stage'=>'2.1.6',
+                    'remediation'=>'Validation applies only to the selected definition, for read-only preparation. Resolver execution and immutable registration require later gates.']);
+        }
+        $kb = $base.'knowledgebase/'; $cs = $base.'charactersheets/';
+        $capSources = [
+            'accuracy_registry'=>[$kb.'knowledgebase.php'=>['af_kb_arpg_character_stat_registry']],
+            'accuracy_roundtrip'=>[$kb.'knowledgebase.php'=>['af_kb_validate_rules_json_by_type_arpg','af_kb_arpg_normalize_entry']],
+            'canonical_elements_17'=>[$kb.'modules/arpg_elements.php'=>['af_kb_arpg_primary_elements','af_kb_arpg_list_primary_elements']],
+            'magic_direction_hierarchy'=>[$kb.'modules/arpg_elements.php'=>['af_kb_arpg_read_element']],
+            'legacy_element_aliases'=>[$kb.'modules/arpg_elements.php'=>['af_kb_arpg_canonical_element_key']],
+            'explicit_damage_element'=>[$kb.'modules/arpg_elements.php'=>['af_kb_arpg_element_damage']],
+            'element_snapshot_provenance'=>[$kb.'modules/arpg_elements.php'=>['af_kb_arpg_read_element']],
+            'status_resistance_mapping'=>[$kb.'modules/arpg_bestiary.php'=>['af_kb_arpg_status_resistance']],
+            'bestiary_snapshot'=>[$kb.'knowledgebase.php'=>['af_kb_arpg_read_definition']],
+            'character_snapshot'=>[$cs.'charactersheets.php'=>['af_charactersheets_create_combat_snapshot']],
+            'equipment_source_breakdown'=>[$cs.'modules/combat_snapshot.php'=>['af_charactersheets_prepare_combat_snapshot']],
+            'snapshot_read_only'=>[$cs.'modules/combat_snapshot.php'=>['af_charactersheets_prepare_combat_snapshot']],
+            'definition_versioning'=>[$kb.'knowledgebase.php'=>['af_kb_arpg_acs_fingerprint','af_kb_arpg_normalize_entry']],
+        ];
+        foreach (AF_ACS_CapabilityValidator::IDS as $id) {
+            $owner = in_array($id, ['character_snapshot','equipment_source_breakdown','snapshot_read_only'], true) ? 'charactersheets' : 'knowledgebase';
+            $meta = $addons[$owner] ?? null;
+            $check = $checks[$id] ?? AF_ACS_CapabilityValidator::row($id,false,'declarations_only',[]);
+            $detected = $meta !== null;
+            $enabled = $detected && function_exists('af_is_addon_enabled') && af_is_addon_enabled($owner);
+            $observed = $this->interfaces($capSources[$id]);
+            if (array_filter($observed,static fn($api) => !$api['declared'])) { $check['interface_status'] = 'BLOCKED'; $check['readiness'] = 'BLOCKED'; $check['reason'] = 'INTERFACE_MISSING'; }
+            if (!$enabled) { $check['readiness'] = 'BLOCKED'; $check['reason'] = $detected ? 'OWNER_DISABLED' : 'OWNER_NOT_DETECTED'; }
+            $rows[$id] = $check + ['contract_id'=>in_array($id,['canonical_elements_17','magic_direction_hierarchy','legacy_element_aliases','explicit_damage_element','element_snapshot_provenance'],true) ? 'IC-KB-2' : ($owner === 'charactersheets' ? 'IC-CS' : 'IC-KB'),
+                'owner'=>$owner,'detected'=>$detected,'enabled'=>$enabled,'version'=>$meta['version'] ?? null,'version_evidence'=>'manifest / scope: '.$check['scope'],
+                'interfaces'=>$observed,'implementation_blocker'=>$check['reason'],'roadmap_stage'=>'2.1.6',
+                'remediation'=>'Run explicit read-only validation; select at most one sheet/definition. READY applies only to the displayed scope; correct missing data through its owner.'];
         }
         return $rows;
     }

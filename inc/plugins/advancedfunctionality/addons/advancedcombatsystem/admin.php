@@ -136,17 +136,32 @@ class AF_Admin_Advancedcombatsystem
 
     private static function integrations(AF_ACS_Diagnostics $diagnostics): void
     {
-        global $lang;
+        global $lang, $mybb;
+        (new AF_ACS_AuthorizationService)->requirePermission('admin.integrations.view');
         echo '<p>'.self::esc($lang->af_advancedcombatsystem_capability_note).'</p>';
+        echo '<p>'.self::esc($lang->af_advancedcombatsystem_probe_note).'</p>';
+        $targets = ['sheet_id'=>max(0,(int)$mybb->get_input('acs_probe_sheet_id')),
+            'kb_type'=>$mybb->get_input('acs_probe_kb_type'),'kb_key'=>$mybb->get_input('acs_probe_kb_key')];
+        echo '<form method="get" action="index.php"><input type="hidden" name="module" value="advancedfunctionality">'
+            .'<input type="hidden" name="af_view" value="advancedcombatsystem"><input type="hidden" name="acs_section" value="integrations">'
+            .'<label>'.self::esc($lang->af_advancedcombatsystem_probe_sheet).' <input type="number" min="1" name="acs_probe_sheet_id" value="'.($targets['sheet_id'] ?: '').'"></label> '
+            .'<label>KB type <select name="acs_probe_kb_type">';
+        foreach (['arpg_bestiary','arpg_ability','arpg_element','character'] as $type) {
+            echo '<option value="'.$type.'"'.($targets['kb_type'] === $type ? ' selected' : '').'>'.$type.'</option>';
+        }
+        echo '</select></label> <label>KB key <input type="text" maxlength="64" name="acs_probe_kb_key" value="'.self::esc($targets['kb_key']).'"></label> '
+            .'<button type="submit">'.self::esc($lang->af_advancedcombatsystem_probe_run).'</button></form>';
         $table = new Table;
         foreach (['contracts', 'owner', 'interfaces', 'readiness', 'stage_action'] as $key) { $label = 'af_advancedcombatsystem_'.$key; $table->construct_header(self::esc($lang->$label)); }
-        foreach ($diagnostics->capabilities() as $row) {
+        foreach ($diagnostics->capabilities(true, $targets) as $row) {
             $apis = [];
             foreach ($row['interfaces'] as $name => $evidence) { $apis[] = $name.': '.($evidence['declared'] ? 'yes' : 'no').' / '.($evidence['loaded'] ? 'yes' : 'no').' / '.($evidence['callable_now'] ? 'yes' : 'no'); }
             $table->construct_cell(self::esc($row['contract_id'].' / '.$row['capability'].' / '.$row['interface_status']));
             $table->construct_cell(self::esc($row['owner'].' / '.($row['detected'] ? 'yes' : 'no').' / '.($row['enabled'] ? 'yes' : 'no').' / '.($row['version'] ?? 'unknown')).'<br>'.self::esc($row['version_evidence']));
             $table->construct_cell(implode('<br>', array_map([self::class, 'esc'], $apis)));
-            $table->construct_cell(self::esc($row['readiness'].' / '.($row['reason'] ?? '—')).'<br>'.self::esc($row['implementation_blocker'] ?? ''));
+            $details = [];
+            foreach (array_slice($row['diagnostics'] ?? [],0,8) as $issue) $details[] = self::esc(substr($issue['code'].' / '.$issue['path'],0,160));
+            $table->construct_cell(self::esc($row['readiness'].' / '.($row['reason'] ?? '—')).'<br>'.self::esc($row['scope'] ?? 'interface').'<br>'.implode('<br>',$details));
             $table->construct_cell(self::esc($row['roadmap_stage'].' / '.$row['remediation']));
             $table->construct_row();
         }
