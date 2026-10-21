@@ -431,6 +431,8 @@ function af_advancedthreadfields_on_enable(): void
     }
 
     af_atf_seed_character_contract_fields();
+    // Newly seeded fields must be visible after enable, without a page-view repair.
+    af_atf_rebuild_cache(true);
 }
 
 function af_advancedthreadfields_on_disable(): void
@@ -1585,6 +1587,7 @@ function af_atf_seed_character_contract_fields(): void
         ['name' => 'character_elemental_mastery', 'title' => 'Elemental mastery', 'type' => 'number', 'sortorder' => 260, 'maxlen' => 11],
         ['name' => 'character_healing_bonus', 'title' => 'Healing bonus', 'type' => 'number', 'sortorder' => 270, 'maxlen' => 11],
         ['name' => 'character_shield_strength', 'title' => 'Shield strength', 'type' => 'number', 'sortorder' => 280, 'maxlen' => 11],
+        ['name' => 'character_accuracy', 'title' => 'Точность (Accuracy)', 'type' => 'number', 'sortorder' => 285, 'maxlen' => 32],
         ['name' => 'character_luck', 'title' => 'Luck', 'type' => 'number', 'sortorder' => 290, 'maxlen' => 11],
         ['name' => 'character_abil', 'title' => 'Abilities', 'type' => 'character_abilities', 'sortorder' => 300, 'maxlen' => 0],
     ];
@@ -3459,6 +3462,7 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
     }
 
     foreach ($fields as $f) {
+        if (($activeMechanic ?? '') === 'dnd' && ($f['name'] ?? '') === 'character_accuracy') continue;
         $fieldid = (int)$f['fieldid'];
         if (isset($skipFieldIds[$fieldid])) {
             continue;
@@ -3949,6 +3953,9 @@ function af_atf_build_input_html(array $field, string $value): string
             return '<input type="url" class="text_input af-atf-input" name="'.$nameAttr.'" value="'.$safeValue.'"'.$maxAttr.' />';
 
         case 'number':
+            if ((string)($field['name'] ?? '') === 'character_accuracy') {
+                return '<input type="number" min="0" step="any" class="text_input af-atf-input" name="'.$nameAttr.'" value="'.$safeValue.'"'.$maxAttr.' />';
+            }
             return '<input type="number" class="text_input af-atf-input" name="'.$nameAttr.'" value="'.$safeValue.'"'.$maxAttr.' />';
 
         case 'text':
@@ -4457,6 +4464,7 @@ function af_atf_character_stats_field_keys(): array
         'character_elemental_mastery',
         'character_healing_bonus',
         'character_shield_strength',
+        'character_accuracy',
         'character_luck',
     ];
 }
@@ -4484,6 +4492,7 @@ function af_atf_character_stats_labels(): array
         'character_elemental_mastery' => 'Мастерство стихий',
         'character_healing_bonus' => 'Бонус лечения',
         'character_shield_strength' => 'Сила щита',
+        'character_accuracy' => 'Точность',
         'character_luck' => 'Удача',
     ];
 }
@@ -4898,7 +4907,7 @@ function af_atf_newthread_do_end(): void
 
         $type = (string)$f['type'];
         $fieldName = (string)($f['name'] ?? '');
-        if ($activeMechanic === 'dnd' && ($fieldName === 'character_element' || $fieldName === 'character_faction')) {
+        if ($activeMechanic === 'dnd' && ($fieldName === 'character_element' || $fieldName === 'character_faction' || $fieldName === 'character_accuracy')) {
             $values[$fieldid] = '';
             continue;
         }
@@ -5553,6 +5562,8 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         ],
     ];
 
+    $rules = af_atf_bridge_sync_accuracy($rules, $index);
+
     $rulesJson = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($rulesJson) || $rulesJson === '') {
         $result['reason'] = 'rules_encode_failed';
@@ -5651,6 +5662,7 @@ function af_atf_bridge_sync_existing_canon(int $tid, array $thread, array $index
             'created_at' => TIME_NOW,
         ];
     }
+    $rules = af_atf_bridge_sync_accuracy($rules, $index);
     $rules['character_profile'] = $profile;
     $rules['character_abilities'] = $abilities;
     $rules['character_meta'] = $characterMeta;
@@ -5795,6 +5807,27 @@ function af_atf_bridge_collect_character_profile_extras(array $index, array $kno
     return $extras;
 }
 
+/** Transfer only the explicitly stored base Accuracy, never a computed/equipment total. */
+function af_atf_bridge_sync_accuracy(array $rules, array $index): array
+{
+    $present = isset($index['character_accuracy']);
+    $raw = $present ? ($index['character_accuracy']['value'] ?? '') : null;
+    if (!$present && isset($index['character_stats'])) {
+        $stats = json_decode((string)($index['character_stats']['value'] ?? '{}'), true);
+        $present = true;
+        $raw = is_array($stats) ? ($stats['character_accuracy'] ?? null) : null;
+    }
+    if (!$present) return $rules;
+    unset($rules['character_stats']['character_accuracy']);
+    if (is_scalar($raw) && !is_bool($raw) && trim((string)$raw) !== '') {
+        $raw = str_replace(',', '.', trim((string)$raw));
+        if (is_numeric($raw) && is_finite((float)$raw) && (float)$raw >= 0) {
+            $rules['character_stats']['character_accuracy'] = (float)$raw;
+        }
+    }
+    return $rules;
+}
+
 function af_atf_bridge_extract_oc_stats(array $index): array
 {
     $aliases = [
@@ -5871,7 +5904,7 @@ function af_atf_editpost_do_end(): void
 
         $type = (string)$f['type'];
         $fieldName = (string)($f['name'] ?? '');
-        if ($activeMechanic === 'dnd' && ($fieldName === 'character_element' || $fieldName === 'character_faction')) {
+        if ($activeMechanic === 'dnd' && ($fieldName === 'character_element' || $fieldName === 'character_faction' || $fieldName === 'character_accuracy')) {
             $values[$fieldid] = '';
             continue;
         }
@@ -6042,9 +6075,17 @@ function af_atf_dh_validate(&$ph): void
         }
 
         $type = (string)$f['type'];
-        if ($activeMechanic === 'dnd' && ($fieldName === 'character_element' || $fieldName === 'character_faction')) {
+        if ($activeMechanic === 'dnd' && ($fieldName === 'character_element' || $fieldName === 'character_faction' || $fieldName === 'character_accuracy')) {
             $clean[$fieldid] = '';
             continue;
+        }
+
+        if ($fieldName === 'character_accuracy') {
+            $value = is_scalar($raw) && !is_bool($raw) ? trim((string)$raw) : '';
+            if ($value !== '' && (!is_numeric($value) || !is_finite((float)$value) || (float)$value < 0)) {
+                $ph->set_error('invalid_field_'.$fieldid);
+                continue;
+            }
         }
 
         // usernames: нормализуем к "uid,uid,uid" (уникальные, >0)
