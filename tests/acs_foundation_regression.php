@@ -12,11 +12,15 @@ mysqli_report(getenv('ACS_TEST_REPORT_OFF') ? MYSQLI_REPORT_OFF : MYSQLI_REPORT_
 define('IN_MYBB', true);
 define('IN_ADMINCP', true);
 define('TABLE_PREFIX', 'fixture_');
+define('MYBB_ROOT', dirname(__DIR__).'/');
 define('AF_ADDONS', dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/');
 class ACS_TestMybb {
     public array $settings = ['af_advancedcombatsystem_enabled' => '0'];
     public string $request_method = 'post';
     public int $version_code = 1840;
+    public array $user = ['uid' => 2];
+    public array $usergroup = ['cancp' => 1];
+    public array $admin = ['permissions' => ['advancedfunctionality' => ['index' => 1]]];
     public string $post_code = 'fixture-token';
     public array $input = ['my_post_key' => 'fixture-token'];
     public function get_input(string $name): string { return $this->input[$name] ?? ''; }
@@ -28,6 +32,11 @@ function verify_post_check(string $key): void { if ($key !== 'fixture-token') th
 function af_clear_addon_lifecycle_diagnostic(string $id): void { unset($GLOBALS['lifecycleDiagnostics'][$id]); }
 function af_store_addon_lifecycle_diagnostic(string $id, string $operation, string $phase, Throwable $error): void { $GLOBALS['lifecycleDiagnostics'][$id] = [$operation, $phase, $error->getMessage()]; }
 function af_sync_addon_languages(array $meta, bool $force): void {}
+function af_discover_addons(): array {
+    $addons = [];
+    foreach (glob(AF_ADDONS.'*/manifest.php') as $file) { $addons[] = require $file; }
+    return $addons;
+}
 function af_load_addon_lang(string $id, bool $admin): void {
     $meta = require AF_ADDONS.'advancedcombatsystem/manifest.php';
     $GLOBALS['lang'] = (object)$meta['lang']['english']['admin'];
@@ -193,11 +202,35 @@ try {
     af_advancedcombatsystem_install();
     check(af_advancedcombatsystem_is_installed(), 'reinstall after empty uninstall');
     require AF_ADDONS.'advancedcombatsystem/admin.php';
+    $page = new class {
+        public array $tabs = [];
+        public function output_nav_tabs(array $tabs, string $active): void { $this->tabs = $tabs; }
+    };
     $mybb->request_method = 'get';
     $journalBefore = $empty->query('SELECT * FROM fixture_af_acs_schema_migrations')->fetch_assoc();
     ob_start(); AF_Admin_Advancedcombatsystem::dispatch(); $html = ob_get_clean();
     check(str_contains($html, '001_foundation') && str_contains($html, 'completed'), 'ACP renders schema and migration result');
+    check(array_keys($page->tabs) === ['main', 'permissions', 'sessions', 'diagnostics', 'integrations'], 'standard ACP navigation exposes five sections');
     check($journalBefore === $empty->query('SELECT * FROM fixture_af_acs_schema_migrations')->fetch_assoc(), 'ACP GET does not mutate migration state');
+    $reader = new AF_ACS_Repository($db);
+    $reader->recordDiagnostic('fixture:readonly', 'INTERNAL_ERROR', 'fixture', 'test');
+    $empty->query("UPDATE fixture_af_acs_diagnostics SET details_json='{\"schema_version\":1,\"secret\":\"do-not-export-this\"}'");
+    $fingerprint = static function () use ($empty, $definition): string {
+        $data = [];
+        foreach ($definition['tables'] as $name => $ddl) { $data[$name] = $empty->query('SELECT * FROM fixture_af_acs_'.$name)->fetch_all(MYSQLI_ASSOC); }
+        return hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
+    };
+    $beforeDiagnostics = $fingerprint();
+    foreach (['permissions', 'sessions', 'diagnostics', 'integrations'] as $section) {
+        $mybb->input['acs_section'] = $section;
+        ob_start(); AF_Admin_Advancedcombatsystem::dispatch(); $output = ob_get_clean();
+        check($output !== '' && !str_contains($output, 'do-not-export-this'), 'ACP '.$section.' renders without private diagnostic payload');
+    }
+    check($beforeDiagnostics === $fingerprint(), 'all diagnostic views leave all eight tables unchanged');
+    $mybb->request_method = 'post';
+    $mybb->settings['af_advancedcombatsystem_enabled'] = '0';
+    af_advancedcombatsystem_deactivate(); af_advancedcombatsystem_activate();
+    check($beforeDiagnostics === $fingerprint(), 'reactivation preserves recorded diagnostic rows and schema');
     echo "All ACS-1.2 focused checks passed.\n";
 } finally {
     foreach ($databases as $database) { $admin->query('DROP DATABASE `'.$database.'`'); }

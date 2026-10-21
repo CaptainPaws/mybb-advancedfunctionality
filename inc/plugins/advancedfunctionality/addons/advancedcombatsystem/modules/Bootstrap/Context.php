@@ -8,11 +8,13 @@ final class AF_ACS_Context
 {
     public const INACTIVE = 'inactive';
     public const VIEW = 'view';
-    // Reserved vocabulary only; no request can enter interactive in ACS-1.1.
+    // Reserved vocabulary only; no request can enter interactive in stage 1.
     public const INTERACTIVE = 'interactive';
 
     /**
-     * Only the existing AF ACP page is a view in ACS-1.1.
+     * Only the existing AF ACP page is a view in stage 1.
+     * Context identifies a surface; it grants no permissions. Authorization is
+     * checked separately by ACP/commands without loading it on ordinary pages.
      * Frontend session detection requires the later session/read contracts;
      * a tid, op or context supplied by a client cannot enable combat runtime.
      * Read enabled each time so disable/reactivate cannot leave stale context.

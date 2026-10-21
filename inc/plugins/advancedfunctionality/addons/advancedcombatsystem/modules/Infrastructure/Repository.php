@@ -206,4 +206,19 @@ class AF_ACS_Repository
         });
         return $id;
     }
+
+    /** ACP-only, bounded metadata projection: never select details_json. */
+    public function recentDiagnostics(): array
+    {
+        require_once __DIR__.'/../Application/AuthorizationService.php';
+        (new AF_ACS_AuthorizationService)->requirePermission('admin.diagnostics.view');
+        $rows = $this->sql('SELECT error_id,category,operation,phase,created_at FROM '.$this->table('diagnostics').' ORDER BY created_at DESC,error_id DESC LIMIT 20')['rows'];
+        foreach ($rows as &$row) {
+            foreach (['error_id', 'operation', 'phase'] as $field) {
+                if (!preg_match('/\A[a-z0-9:_.-]{1,64}\z/D', $row[$field])) { $row[$field] = 'redacted'; }
+            }
+            if (!in_array($row['category'], ['VALIDATION_ERROR', 'STATE_CONFLICT', 'PERMISSION_DENIED', 'DEPENDENCY_ERROR', 'INTERNAL_ERROR', 'RECOVERY_REQUIRED'], true)) { $row['category'] = 'INTERNAL_ERROR'; }
+        }
+        return $rows;
+    }
 }
