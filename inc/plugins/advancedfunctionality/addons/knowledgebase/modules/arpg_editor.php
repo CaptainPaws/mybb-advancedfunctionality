@@ -41,6 +41,7 @@ function af_kb_arpg_editor_choices(): array
 /** Only explicit editor commands create/refresh refs. Existing pins are untouched. */
 function af_kb_arpg_prepare_editor_refs(array $row, array &$errors, int $depth = 0): array
 {
+    $row = af_kb_arpg_prepare_bestiary_ability_ref($row, $errors);
     if ($depth > 16) { $errors[] = 'element_validation_depth_limit'; return $row; }
     if (array_key_exists('_editor_magic_direction_key', $row)) {
         $key = $row['_editor_magic_direction_key']; unset($row['_editor_magic_direction_key']);
