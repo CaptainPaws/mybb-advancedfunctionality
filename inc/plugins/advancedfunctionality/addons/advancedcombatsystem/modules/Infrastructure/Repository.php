@@ -36,6 +36,11 @@ class AF_ACS_Repository
     /** SQL templates are developer-owned; every data value is bound as text. */
     protected function sql(string $sql, array $parameters = []): array
     {
+        return AF_ACS_TransactionManager::databaseSettings($this->connection, fn() => $this->statement($sql, $parameters));
+    }
+
+    private function statement(string $sql, array $parameters): array
+    {
         $statement = null;
         try {
             $statement = $this->connection->prepare($sql);

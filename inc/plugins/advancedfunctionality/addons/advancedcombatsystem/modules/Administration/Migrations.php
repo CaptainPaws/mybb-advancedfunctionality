@@ -21,14 +21,14 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
         $row = $this->sql('SELECT VERSION() AS version,@@innodb_page_size AS page_size,@@character_set_connection AS charset,@@session.sql_mode AS sql_mode')['rows'][0];
         $maria = stripos($row['version'], 'MariaDB') !== false;
         preg_match('/(\d+\.\d+\.\d+)/', $row['version'], $parts);
-        if (!isset($parts[1]) || version_compare($parts[1], $maria ? '10.6.0' : '8.0.0', '<')
-            || (int)$row['page_size'] < 16384 || $row['charset'] !== 'utf8mb4'
-            || !preg_match('/(?:^|,)STRICT_(?:TRANS|ALL)_TABLES(?:,|$)/', $row['sql_mode'])) {
-            throw new RuntimeException('ACS_DB_INCOMPATIBLE');
-        }
+        if (!isset($parts[1]) || version_compare($parts[1], $maria ? '10.6.0' : '8.0.0', '<')) { throw new RuntimeException('ACS_DB_VERSION_UNSUPPORTED'); }
+        if ((int)$row['page_size'] < 16384) { throw new RuntimeException('ACS_DB_PAGE_SIZE_UNSUPPORTED'); }
+        if ($row['charset'] !== 'utf8mb4') { throw new RuntimeException('ACS_DB_UTF8MB4_UNAVAILABLE'); }
+        if (!preg_match('/(?:^|,)STRICT_(?:TRANS|ALL)_TABLES(?:,|$)/', $row['sql_mode'])) { throw new RuntimeException('ACS_DB_STRICT_MODE_UNAVAILABLE'); }
         $engines = $this->sql('SELECT SUPPORT FROM information_schema.ENGINES WHERE ENGINE=?', ['InnoDB'])['rows'];
         $collation = $this->sql('SELECT COLLATION_NAME FROM information_schema.COLLATIONS WHERE COLLATION_NAME=?', ['utf8mb4_unicode_ci'])['rows'];
-        if (!$engines || !in_array($engines[0]['SUPPORT'], ['YES', 'DEFAULT'], true) || !$collation) { throw new RuntimeException('ACS_DB_INCOMPATIBLE'); }
+        if (!$engines || !in_array($engines[0]['SUPPORT'], ['YES', 'DEFAULT'], true)) { throw new RuntimeException('ACS_DB_INNODB_UNAVAILABLE'); }
+        if (!$collation) { throw new RuntimeException('ACS_DB_COLLATION_UNAVAILABLE'); }
         return ['server' => $row['version'], 'engine' => 'InnoDB', 'charset' => 'utf8mb4', 'collation' => 'utf8mb4_unicode_ci', 'row_format' => 'Dynamic'];
     }
 
@@ -115,8 +115,13 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
         return array_column($rows, null, 'version');
     }
 
-    /** Read only, including on ACP GET; no probe, schema writes or lazy install. */
+    /** No persistent writes on ACP GET; scoped session settings are restored. */
     public function status(): array
+    {
+        return AF_ACS_TransactionManager::databaseSettings($this->connection, fn() => $this->inspectStatus());
+    }
+
+    private function inspectStatus(): array
     {
         $result = ['schema_version' => null, 'migrations' => [], 'error' => null, 'database' => null];
         try {

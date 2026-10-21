@@ -3,7 +3,7 @@
 return [
     'id' => 'advancedcombatsystem',
     'name' => 'AdvancedCombatSystem',
-    'version' => '0.2.0',
+    'version' => '0.2.1',
     'author' => 'CaptainPaws',
     'description' => 'AdvancedCombatSystem SQL foundation and lifecycle (ACS-1.2).',
     'bootstrap' => 'advancedcombatsystem.php',

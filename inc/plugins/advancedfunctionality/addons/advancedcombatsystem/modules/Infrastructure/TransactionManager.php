@@ -6,10 +6,57 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 final class AF_ACS_TransactionManager
 {
     private bool $locked = false;
+    private static ?WeakMap $settingsScopes = null;
 
     public function __construct(private mysqli $connection, private string $lockName) {}
 
+    /** MyBB/ATF share the connection: scope ACS settings and restore them exactly. */
+    public static function databaseSettings(mysqli $connection, callable $callback): mixed
+    {
+        self::$settingsScopes ??= new WeakMap;
+        if (isset(self::$settingsScopes[$connection])) { return $callback(); }
+        try {
+            $result = $connection->query('SELECT @@character_set_client AS client,@@character_set_connection AS connection,@@character_set_results AS results,@@collation_connection AS collation,@@session.sql_mode AS sql_mode');
+            if (!$result) { throw new RuntimeException('ACS_DB_SESSION_UNAVAILABLE'); }
+            $saved = $result->fetch_assoc();
+            $clientCharset = $connection->character_set_name();
+        } catch (mysqli_sql_exception $error) { throw new RuntimeException('ACS_DB_SESSION_UNAVAILABLE'); }
+        self::$settingsScopes[$connection] = true;
+        try {
+            if (!$connection->set_charset('utf8mb4')) { throw new RuntimeException('ACS_DB_UTF8MB4_UNAVAILABLE'); }
+            $modes = $saved['sql_mode'];
+            if (!preg_match('/(?:^|,)STRICT_(?:TRANS|ALL)_TABLES(?:,|$)/', $modes)) {
+                $modes .= ($modes === '' ? '' : ',').'STRICT_ALL_TABLES';
+            }
+            self::setSession($connection, 'SET SESSION sql_mode=?', [$modes]);
+            return $callback();
+        } catch (mysqli_sql_exception $error) { throw new RuntimeException('ACS_DB_SESSION_SETTINGS_FAILED'); }
+        finally {
+            try {
+                if (!$connection->set_charset($clientCharset)) { throw new RuntimeException('ACS_DB_SESSION_RESTORE_FAILED'); }
+                self::setSession($connection, 'SET SESSION character_set_client=?,character_set_connection=?,character_set_results=?,collation_connection=?,sql_mode=?', [$saved['client'], $saved['connection'], $saved['results'], $saved['collation'], $saved['sql_mode']]);
+            } catch (Throwable $error) { throw new RuntimeException('ACS_DB_SESSION_RESTORE_FAILED'); }
+            finally { unset(self::$settingsScopes[$connection]); }
+        }
+    }
+
+    private static function setSession(mysqli $connection, string $sql, array $values): void
+    {
+        $statement = $connection->prepare($sql);
+        if (!$statement) { throw new RuntimeException('ACS_DB_SESSION_SETTINGS_FAILED'); }
+        try {
+            if (!$statement->bind_param(str_repeat('s', count($values)), ...$values) || !$statement->execute()) {
+                throw new RuntimeException('ACS_DB_SESSION_SETTINGS_FAILED');
+            }
+        } finally { $statement->close(); }
+    }
+
     public function exclusive(callable $callback): mixed
+    {
+        return self::databaseSettings($this->connection, fn() => $this->exclusiveWithSettings($callback));
+    }
+
+    private function exclusiveWithSettings(callable $callback): mixed
     {
         if ($this->locked) { throw new RuntimeException('ACS_NESTED_MAINTENANCE'); }
         try {
