@@ -681,6 +681,11 @@
 })();
 
 (function () {
+    // This runtime is a separate closure from the editor policy guard above.
+    function afKbEndpoint(name, fallback) {
+        return (window.afKbEndpoints && window.afKbEndpoints[name]) || fallback;
+    }
+
     var SKILL_STAT_OPTIONS = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 
     function normalizeSkillStatValue(skillObj) {
