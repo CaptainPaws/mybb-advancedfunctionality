@@ -334,7 +334,11 @@ function af_clear_addon_lifecycle_diagnostic(string $addon): void
 
 function af_format_addon_lifecycle_diagnostic(array $diagnostic): string
 {
-    return 'ATF activation failed; stage: '.($diagnostic['stage'] ?? 'unknown')
+    $addon = (string)($diagnostic['addon'] ?? 'Addon');
+    $name = ['adaptivethemeframework' => 'ATF', 'advancedcombatsystem' => 'AdvancedCombatSystem'][$addon] ?? $addon;
+    $operation = (string)($diagnostic['operation'] ?? 'enable');
+    $action = in_array($operation, ['enable', 'activate'], true) ? 'activation' : $operation;
+    return $name.' '.$action.' failed; stage: '.($diagnostic['stage'] ?? 'unknown')
         .'; exception: '.($diagnostic['exception'] ?? 'unknown')
         .'; message: '.($diagnostic['message'] ?? 'unknown');
 }

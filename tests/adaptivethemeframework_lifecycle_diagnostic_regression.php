@@ -21,4 +21,14 @@ atf_lifecycle_assert(strpos($core, "\$GLOBALS['af_adaptivethemeframework_activat
 atf_lifecycle_assert(strpos($atf, 'function af_adaptivethemeframework_schema_readiness(): bool') !== false, 'Schema-only readiness check is missing');
 atf_lifecycle_assert(strpos($atf, 'check_duplicate_leases') < strpos($atf, "'add_index[' . \$name . ']'"), 'Duplicate leases are not checked before index DDL');
 
+// Exercise the real shared formatter without bootstrapping MyBB.
+$start = strpos($core, 'function af_format_addon_lifecycle_diagnostic(');
+$end = strpos($core, "\nclass AF_Admin", $start);
+eval(substr($core, $start, $end - $start));
+$base = ['stage' => 'acs_lifecycle', 'exception' => 'RuntimeException', 'message' => 'ACS_DB_VERSION_UNSUPPORTED'];
+$acs = af_format_addon_lifecycle_diagnostic($base + ['addon' => 'advancedcombatsystem', 'operation' => 'install']);
+atf_lifecycle_assert(str_starts_with($acs, 'AdvancedCombatSystem install failed;'), 'ACS failure is still attributed to ATF');
+$atfMessage = af_format_addon_lifecycle_diagnostic($base + ['addon' => 'adaptivethemeframework', 'operation' => 'enable']);
+atf_lifecycle_assert(str_starts_with($atfMessage, 'ATF activation failed;'), 'ATF diagnostic naming regressed');
+
 echo "ATF lifecycle diagnostic regression checks passed.\n";

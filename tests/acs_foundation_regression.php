@@ -60,13 +60,26 @@ $fresh = static function () use ($admin, $socket, &$databases): mysqli {
     $admin->query('CREATE DATABASE `'.$name.'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
     $link = new mysqli('localhost', 'root', '', $name, 0, $socket);
     $link->set_charset('utf8mb4');
+    if (getenv('ACS_TEST_MYBB_DEFAULTS')) {
+        $link->set_charset('utf8');
+        $link->query("SET SESSION sql_mode=''");
+    }
     return $link;
+};
+$connectionState = static function (mysqli $link): array {
+    $row = $link->query('SELECT @@character_set_client AS client,@@character_set_connection AS connection,@@character_set_results AS results,@@collation_connection AS collation,@@session.sql_mode AS sql_mode')->fetch_assoc();
+    $row['mysqlnd_charset'] = $link->character_set_name();
+    return $row;
 };
 try {
     $connection = $fresh();
+    // Preserve non-default result/collation settings too, including SQL NULL.
+    $connection->query('SET SESSION character_set_results=NULL');
+    $sharedState = $connectionState($connection);
     $db = (object)['write_link' => $connection];
     check(!af_advancedcombatsystem_is_installed(), 'empty database is not installed');
     check(af_advancedcombatsystem_install(), 'clean lifecycle install');
+    check($sharedState === $connectionState($connection), 'install restores shared MyBB/ATF charset, collation, results and sql_mode');
     $migrations = af_advancedcombatsystem_migrations();
     $state = $migrations->status();
     check($state['schema_version'] === '001_foundation' && $state['migrations'][0]['step'] === 8, 'eight steps read back and version registered');
@@ -85,6 +98,7 @@ try {
     denied(fn() => af_advancedcombatsystem_upgrade(), 'changed migration checksum blocks upgrade', 'ACS_MIGRATION_JOURNAL_MISMATCH');
     $connection->query("UPDATE fixture_af_acs_schema_migrations SET checksum='".$journal['checksum']."'");
     check(af_advancedcombatsystem_activate(), 'activate installed foundation');
+    check($sharedState === $connectionState($connection), 'reactivation preserves shared MyBB/ATF connection settings');
     $mybb->settings['af_advancedcombatsystem_enabled'] = '1';
     require AF_ADDONS.'advancedcombatsystem/modules/Infrastructure/SnapshotStore.php';
     require AF_ADDONS.'advancedcombatsystem/modules/Infrastructure/OperationStore.php';
@@ -94,10 +108,11 @@ try {
     // Stage-2 creation services do not exist: seed infrastructure parent fixtures.
     $connection->query("INSERT INTO fixture_af_acs_sessions (tid,owner_uid,status,schema_version,config_json,created_at,updated_at) VALUES (1,1,'active',1,'{\"schema_version\":1}',1,1),(2,2,'active',1,'{\"schema_version\":1}',1,1)");
     $source = ['source_system' => 'fixture', 'source_key' => 'source:1', 'contract_id' => 'fixture.v1', 'contract_version' => '1'];
-    $payload = ['schema_version' => 1, 'numeric_policy' => 'binary64-half_up-v1', 'engine_version' => 'fixture-1', 'value' => 0.1];
+    $payload = ['schema_version' => 1, 'numeric_policy' => 'binary64-half_up-v1', 'engine_version' => 'fixture-1', 'value' => 0.1, 'text' => 'Текст 🐾'];
     $snapshotId = $snapshots->append('1', $source, $payload);
     $snapshot = $snapshots->get($snapshotId);
     check($snapshot['content_hash'] === hash('sha256', $snapshot['payload_json']), 'immutable snapshot hash and arithmetic identifiers stored');
+    check(json_decode($snapshot['payload_json'], true, 512, JSON_THROW_ON_ERROR) === $payload, 'ACS stores four-byte Unicode even with MyBB utf8 connection');
     $request = ['schema_version' => 1, 'name' => "bound ' value"];
     $op = $operations->register('fixture:once', '1', 'audit', $request);
     check($op === $operations->register('fixture:once', '1', 'audit', $request), 'operation registration idempotent');
@@ -136,6 +151,7 @@ try {
     $connection->query('ALTER TABLE fixture_af_acs_sessions ADD COLUMN unexpected int NULL');
     denied(fn() => af_advancedcombatsystem_upgrade(), 'schema mismatch blocks without hidden repair', 'ACS_SCHEMA_COLUMNS_MISMATCH');
     check($migrations->status()['error'] === 'ACS_SCHEMA_COLUMNS_MISMATCH', 'ACP status exposes safe compatibility code');
+    check($sharedState === $connectionState($connection), 'failed migration restores shared connection settings');
     $connection->query('ALTER TABLE fixture_af_acs_sessions DROP COLUMN unexpected');
     $mybb->request_method = 'get';
     denied(fn() => af_advancedcombatsystem_upgrade(), 'GET cannot migrate');
