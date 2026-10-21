@@ -362,6 +362,9 @@
             return null;
         }
 
+        if (container.__afKbRepeater) return container.__afKbRepeater;
+        container.setAttribute('data-af-kb-repeater','');
+
         function currentIndex() {
             return parseInt(container.getAttribute(indexAttr) || '0', 10);
         }
@@ -409,17 +412,15 @@
 
             if (target.classList.contains('af-kb-remove')) {
                 var item = target.closest('.af-kb-block-item, .af-kb-rel-item-edit');
-                if (item && container.contains(item)) {
+                if (item && container.contains(item) && target.closest('[data-af-kb-repeater]') === container) {
                     item.remove();
                     scheduleRefresh(container);
                 }
             }
         });
 
-        return {
-            addItem: addItem,
-            container: container
-        };
+        container.__afKbRepeater = {addItem:addItem,container:container};
+        return container.__afKbRepeater;
     }
 
     function setValue(selector, value) {
@@ -681,6 +682,11 @@
 })();
 
 (function () {
+    // This runtime is a separate closure from the editor policy guard above.
+    function afKbEndpoint(name, fallback) {
+        return (window.afKbEndpoints && window.afKbEndpoints[name]) || fallback;
+    }
+
     var SKILL_STAT_OPTIONS = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 
     function normalizeSkillStatValue(skillObj) {
@@ -851,7 +857,7 @@
 
         root.innerHTML = [
             '<details open="open" class="af-kb-collapsible">',
-            '<summary>Tags</summary>',
+            '<summary>Метки</summary>',
             '<label>Tags (comma separated)</label>',
             '<input type="text" id="af-kb-meta-tags" />',
             '</details>',
@@ -867,7 +873,7 @@
             '</div>',
             '</details>',
             '<details class="af-kb-collapsible">',
-            '<summary>Debug raw JSON</summary>',
+            '<summary>Расширенный JSON</summary>',
             '<textarea id="af-kb-meta-raw-preview" rows="8" readonly="readonly"></textarea>',
             '</details>'
         ].join('');
@@ -927,6 +933,7 @@
         if (/^arpg_/i.test(type)) {
             mechanic = 'arpg';
         }
+        var liveFieldCommitters = [];
         var typeSchema = readJson(root.getAttribute('data-type-schema') || '{}', {});
         var itemKindOptionsRaw = readJson(root.getAttribute('data-item-kinds') || '[]', []);
         var itemKindOptions = (Array.isArray(itemKindOptionsRaw) && itemKindOptionsRaw.length ? itemKindOptionsRaw : [
@@ -1038,6 +1045,252 @@
             // input может не стрелять у sceditor, поэтому страхуемся
             raw.addEventListener('input', sync);
             raw.addEventListener('change', sync);
+        }
+
+        var arpgLabels = {"type":"Тип способности","subtype":"Подтип","slot":"Слот способности","damage_type":"Тип урона","targeting":"Цель","range":"Дальность","cast_time":"Время применения","cooldown":"Кулдаун","duration":"Длительность","max_charges":"Количество зарядов","level_cap":"Максимальный уровень","kind":"Тип эффекта","value":"Величина","value_mode":"Способ расчёта","hit_count":"Количество попаданий","status_key":"Статус","notes":"Примечание","op":"Действие","resource_key":"Ресурс","per":"Период расходования","formula_ref":"Формула расчёта","active":"Активная","passive":"Пассивная","ultimate":"Ультимативная","physical":"Физический","elemental":"Стихийный","true":"Истинный","healing":"Лечение","hybrid":"Смешанный","damage":"Урон","heal":"Лечение","shield":"Щит","barrier":"Барьер","status":"Статус","proc":"Срабатывание","self":"На себя","single_enemy":"Один противник","single_ally":"Один союзник","line":"Линия","cone":"Конус","aoe_ground":"Область на земле","aoe_around_self":"Область вокруг себя","global":"Все цели","custom":"Особый вариант","flat":"Фиксированное значение","percent":"Проценты","cast":"Применение","spend":"Потратить","gain":"Получить","drain":"Отнять","restore":"Восстановить","resource_spend":"Расход ресурса","resource_gain":"Получение ресурса","resource_drain":"Отнятие ресурса","resource_restore":"Восстановление ресурса","resources":"Ресурсы","effects":"Эффекты","modifiers":"Модификаторы","triggers":"Срабатывания","conditions":"Условия","stacking":"Накопление эффектов","upgrade_requirements":"Требования улучшения","grants":"Предоставляемые возможности","default":"Новая запись","basic":"Базовый слот","skill_1":"Первый навык","skill_2":"Второй навык","skill_3":"Третий навык","support":"Поддержка","aura":"Аура","toggle":"Переключаемая","summon":"Призыв","reaction":"Реакция","movement":"Перемещение","own_turn":"Собственные ходы","target_turn":"Ходы цели","round":"Раунды","Resources":"Ресурсы"};
+        Object.assign(arpgLabels,{stat_key:'Характеристика',mode:'Операция',condition_text:'Условие',event:'Событие',action_text:'Действие',condition_type:'Вид условия',stack_key:'Группа накопления',max_stacks:'Максимум уровней эффекта',policy:'Правило накопления',level:'Уровень',required_item_key:'Требуемый предмет',required_qty:'Количество предметов',required_currency_key:'Требуемая валюта',required_currency_qty:'Количество валюты',grant_type:'Вид возможности',value_num:'Числовая величина',tag:'Метка',ability_unlock:'Доступ к способности',item_unlock:'Доступ к предмету',resource_bonus:'Бонус ресурса',passive_flag:'Пассивная возможность',duration_unit:'Единица длительности',sortorder:'Порядок',ability_name:'Название способности',ability_description:'Описание способности',ability_kb_key:'Способность из Базы знаний',slot_index:'Номер слота',icon_url:'Ссылка на иконку',icon_class:'Класс иконки',multiplier:'Множитель',override:'Заменить значение',normal:'Обычный',elite:'Элитный',champion:'Чемпион',boss:'Босс',world_boss:'Мировой босс',raid_boss:'Рейдовый босс'});
+        (typeSchema.primary_element_options || []).forEach(function (option) { arpgLabels[option.value] = option.label; });
+        Object.assign(arpgLabels,{wind:'Воздух (старый ключ)',electric:'Электрический',dark:'Тёмный (старый ключ)',fire:'Огонь',water:'Вода',air:'Воздух',earth:'Земля',ice:'Лёд',lightning:'Молния',nature:'Природа',light:'Свет',shadow:'Тьма',death:'Смерть',life:'Жизнь',chaos:'Хаос',mind:'Разум',abyss:'Бездна',gravity:'Гравитация',astral:'Астрал',space:'Пространство'});
+        Object.assign(arpgLabels,{family:'Семейство',archetype:'Архетип',faction:'Фракция',rank:'Ранг',threat_tier:'Уровень угрозы',level:'Уровень','Bestiary core':'Основные параметры монстра','Combat stats':'Боевые характеристики','combat_stats.hp':'Здоровье (HP)','combat_stats.atk':'Атака','combat_stats.def':'Защита','combat_stats.speed':'Скорость','combat_stats.crit_rate':'Шанс критического удара','combat_stats.crit_dmg':'Критический урон','combat_stats.element_damage_bonus':'Бонус стихийного урона','combat_stats.mastery':'Мастерство','combat_stats.healing_bonus':'Бонус лечения','combat_stats.shield_strength':'Прочность щита','combat_stats.status_hit':'Попадание статусом','combat_stats.luck':'Удача',weaknesses:'Уязвимости',loot:'Добыча',loot_key:'Запись добычи',qty_min:'Минимальное количество',qty_max:'Максимальное количество',chance:'Шанс, %',item:'Предмет',currency:'Валюта',material:'Материал',reward:'Награда'});
+        function arpgLabel(value) { return mechanic === 'arpg' && arpgLabels[value] ? arpgLabels[value] : value; }
+
+        function createAbilityVisualControls(syncToRaw, mechanicsOptions, modifierStatOptions) {
+            function bindFieldSync(node, handler) { node.addEventListener(node.tagName === 'SELECT' || node.type === 'checkbox' ? 'change' : 'input',handler); }
+            function deepClone(value) { return JSON.parse(JSON.stringify(value)); }
+            function addSelectOptions(select, options) {
+                options.forEach(function (option) {
+                    var node = document.createElement('option');
+                    node.value = String(typeof option === 'object' ? option.value : option);
+                    node.textContent = String(typeof option === 'object' ? option.label : arpgLabel(option) || '—');
+                    select.appendChild(node);
+                });
+            }
+            function createSection(container, title, help) {
+                var wrap = document.createElement('div');
+                wrap.className = 'af-kb-kvlist';
+                wrap.innerHTML = '<h4>' + esc(arpgLabel(title)) + '</h4>' + (help ? '<div class="af-kb-help">' + esc(help) + '</div>' : '');
+                container.appendChild(wrap);
+                return wrap;
+            }
+
+            function fieldCell(row, col, onChange) {
+                var cell = document.createElement('div');
+                var label = document.createElement('label');
+                label.textContent = arpgLabel(col.label);
+                cell.appendChild(label);
+                cell.dataset.kbField = col.key;
+
+                if (col.type === 'picker') {
+                    var choices = (typeSchema.editor_choices || {})[col.source] || [];
+                    var filter = document.createElement('input'); filter.type = 'search'; filter.placeholder = 'Поиск по названию';
+                    var picker = document.createElement('select');
+                    var current = col.pinAbility ? (Object.prototype.hasOwnProperty.call(row,'_editor_ability_key') ? row._editor_ability_key : row.ability_kb_key || row.ability_key) : col.key === 'magic_direction_ref' ? (Object.prototype.hasOwnProperty.call(row,'_editor_magic_direction_key') ? row._editor_magic_direction_key : (row.magic_direction_ref || {}).key) : (row._editor_formula_key || row[col.key]);
+                    var hint = document.createElement('div'); hint.className = 'af-kb-help';
+                    function fillChoices() {
+                        picker.innerHTML = '';
+                        addSelectOptions(picker, [{value:'',label:'— Не выбрано —'}].concat(choices.filter(function (option) {
+                            return option.value === current || option.label.toLowerCase().indexOf(filter.value.toLowerCase()) !== -1;
+                        })));
+                        if (current && !Array.prototype.some.call(picker.options, function (opt) { return opt.value === current; })) {
+                            addSelectOptions(picker, [{value:current,label:'Сохранённая ссылка: ' + current}]);
+                        }
+                        picker.value = current || '';
+                        var selected = choices.find(function (option) {return option.value === current;});
+                        hint.textContent = !choices.length ? 'Нет доступных записей.' : (selected && (col.pinAbility || selected.description) ? [col.pinAbility ? arpgLabel(selected.type || '') : '',selected.description || ''].filter(Boolean).join(' · ') : 'Версия ссылки сохраняется до явного изменения выбора.');
+                    }
+                    filter.addEventListener('input', fillChoices);
+                    picker.addEventListener('change', function () {
+                        current = picker.value;
+                        if (col.pinAbility) row._editor_ability_key = current;
+                        else if (col.key === 'magic_direction_ref') row._editor_magic_direction_key = current;
+                        else if (col.pinFormula) row._editor_formula_key = current;
+                        else if (current) row[col.key] = (col.prefix || '') + current;
+                        else if (col.key === 'condition_ref') row[col.key] = null;
+                        else delete row[col.key];
+                        fillChoices(); onChange();
+                    });
+                    if (col.pinAbility) {
+                        var refresh = document.createElement('button'); refresh.type='button';refresh.textContent='Обновить закреплённую версию';
+                        refresh.addEventListener('click',function () { if (current) {row._editor_ability_key=current;hint.textContent='Текущая версия KB будет закреплена при сохранении формы.';onChange();} });cell.appendChild(refresh);
+                    }
+                    if (col.prefix && typeof current === 'string') current = current.replace(col.prefix, '');
+                    fillChoices(); cell.appendChild(filter); cell.appendChild(picker); cell.appendChild(hint);
+                    if (!choices.length) {
+                        var link = document.createElement('a'); link.href = afKbEndpoint('list', 'misc.php?action=kb_list') + '&type=' + encodeURIComponent(col.source === 'magic_direction' ? 'arpg_element' : (col.source.indexOf('arpg_') === 0 ? col.source : 'arpg_mechanics'));
+                        link.textContent = 'Открыть соответствующий раздел Базы знаний'; cell.appendChild(link);
+                    }
+                    return cell;
+                }
+                var input;
+                // New typed JSON/optional fields must not materialize defaults on load.
+                if (col.type === 'json' || col.optional === true) {
+                    input = document.createElement(col.type === 'json' ? 'textarea' : (col.type === 'select' ? 'select' : 'input'));
+                    if (col.type === 'json') {
+                        input.rows = 4;
+                        input.value = Object.prototype.hasOwnProperty.call(row, col.key) ? JSON.stringify(row[col.key], null, 2) : '';
+                    } else if (col.type === 'select') {
+                        addSelectOptions(input, col.options || []);
+                        var currentValue = Object.prototype.hasOwnProperty.call(row, col.key) ? String(row[col.key]) : '';
+                        if (currentValue && !Array.prototype.some.call(input.options, function (option) { return option.value === currentValue; })) {
+                            var savedOption = document.createElement('option'); savedOption.value = currentValue; savedOption.textContent = currentValue; input.appendChild(savedOption);
+                        }
+                        input.value = currentValue;
+                    } else {
+                        input.type = col.type === 'number' ? 'number' : 'text';
+                        if (col.type === 'number') input.step = 'any';
+                        input.value = Object.prototype.hasOwnProperty.call(row, col.key) ? String(row[col.key]) : '';
+                    }
+                    bindFieldSync(input, function () {
+                        if (input.value.trim() === '' && col.optional === true) {
+                            delete row[col.key];
+                            input.setCustomValidity('');
+                            onChange();
+                            return;
+                        }
+                        try {
+                            var value = col.type === 'json' ? JSON.parse(input.value) : (col.type === 'number' ? Number(input.value) : input.value);
+                            if (col.type === 'number' && (!input.value.trim() || !Number.isFinite(value))) throw new Error('number');
+                            row[col.key] = value;
+                            input.setCustomValidity('');
+                            onChange();
+                        } catch (error) {
+                            input.setCustomValidity(col.type === 'json' ? 'Введите корректный JSON.' : 'Введите конечное число.');
+                        }
+                    });
+                    cell.appendChild(input);
+                    if (col.key === 'damage_element') {
+                        var help = document.createElement('div'); help.className = 'af-kb-help'; help.setAttribute('role', 'status');
+                        cell.appendChild(help);
+                        var validateDamage = function () {
+                            var kind = row.effect_type || row.kind;
+                            var required = row.damage_type === 'elemental' && (!kind || kind === 'damage' || kind === 'proc');
+                            input.required = required;
+                            var message = required && !input.value ? 'Выберите основную стихию стихийного урона. Направление магии её не задаёт.' : '';
+                            input.setCustomValidity(message); help.textContent = message;
+                        };
+                        input.addEventListener('change', validateDamage);
+                        // Other controls in the same card/root may change damage_type.
+                        root.addEventListener('change', validateDamage);
+                        validateDamage();
+                    }
+                    return cell;
+                }
+                if (col.type === 'select') {
+                    input = document.createElement('select');
+                    addSelectOptions(input, col.options || ['']);
+                    input.value = row[col.key] != null ? String(row[col.key]) : String(col.default != null ? col.default : '');
+                    if (row[col.key] == null && col.default != null) row[col.key] = col.default;
+                } else if (col.type === 'number') {
+                    input = document.createElement('input');
+                    input.type = 'number';
+                    input.step = 'any';
+                    var numValue = row[col.key];
+                    if (numValue == null || numValue === '') {
+                        numValue = col.default != null ? col.default : 0;
+                        row[col.key] = Number(numValue);
+                    }
+                    input.value = String(numberOrZero(numValue));
+                } else {
+                    input = document.createElement('input');
+                    input.type = 'text';
+                    var textValue = row[col.key];
+                    if (textValue == null) {
+                        textValue = col.default != null ? col.default : '';
+                        row[col.key] = textValue;
+                    }
+                    input.value = String(textValue);
+                }
+
+                bindFieldSync(input, function () {
+                    row[col.key] = (col.type === 'number') ? numberOrZero(input.value) : input.value;
+                    onChange();
+                });
+
+                cell.appendChild(input);
+                return cell;
+            }
+
+            // Scoped visual editors: untouched objects and unknown extension fields stay intact.
+            function visualList(container, owner, key, title, columns, seed, afterRow) {
+                var section = createSection(container, title);
+                var list = document.createElement('div'); section.appendChild(list);
+                var rows = Array.isArray(owner[key]) ? owner[key] : [];
+                var add = document.createElement('button'); add.type = 'button'; add.className='af-kb-add'; add.textContent = 'Добавить'; section.appendChild(add);
+                function append(row) {
+                    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+                        var legacy = document.createElement('div'); legacy.textContent = 'Сохранённая запись: ' + String(row); list.appendChild(legacy); return;
+                    }
+                    var card = document.createElement('div'); card.className = 'af-kb-block-item';
+                    columns.forEach(function (column) { card.appendChild(fieldCell(row, column, syncToRaw)); });
+                    if (afterRow) afterRow(card, row);
+                    var remove = document.createElement('button'); remove.type = 'button'; remove.className='af-kb-remove'; remove.textContent = 'Удалить';
+                    remove.addEventListener('click', function () { rows.splice(rows.indexOf(row),1); owner[key] = rows; card.remove(); syncToRaw(); });
+                    card.appendChild(remove); list.appendChild(card);
+                }
+                rows.forEach(append);
+                add.addEventListener('click', function () { var row = deepClone(seed || {}); rows.push(row); owner[key] = rows; append(row); syncToRaw(); });
+            }
+            function visualObject(container, owner, key, title, columns, seed, nested) {
+                var section = createSection(container, title);
+                var body = document.createElement('div'); section.appendChild(body);
+                var button = document.createElement('button'); button.type = 'button'; section.appendChild(button);
+                function draw() {
+                    body.innerHTML = '';
+                    var exists = owner[key] && typeof owner[key] === 'object' && !Array.isArray(owner[key]);
+                    button.textContent = exists ? 'Удалить параметр' : 'Указать параметр';
+                    if (!exists) return;
+                    columns.forEach(function (column) { body.appendChild(fieldCell(owner[key],column,syncToRaw)); });
+                    if (nested) nested(body,owner[key]);
+                }
+                button.addEventListener('click',function () { if (owner[key]) delete owner[key]; else owner[key] = deepClone(seed || {}); draw(); syncToRaw(); });
+                draw();
+            }
+            function visualTime(container, owner, key, title) {
+                visualObject(container,owner,key,title,[
+                    {key:'value',label:'Длительность',type:'number',optional:true},
+                    {key:'unit',label:'Единица времени',type:'select',options:timeOptions,optional:true}
+                ],{value:0,unit:'round'});
+            }
+            var timeOptions = [{value:'own_turn',label:'Собственные ходы'},{value:'target_turn',label:'Ходы цели'},{value:'round',label:'Раунды'}];
+            function renderVisualMechanics(container, owner, allowMath) {
+                container.appendChild(fieldCell(owner,{key:'formula_profile',label:'Расчёт по готовому профилю',type:'picker',source:'formula_profile'},syncToRaw));
+                container.appendChild(fieldCell(owner,{key:'magic_direction_ref',label:'Направление магии (классификация, не тип урона)',type:'picker',source:'magic_direction'},syncToRaw));
+                container.appendChild(fieldCell(owner,{key:'action_cost',label:'Стоимость в очках действий',type:'number',optional:true},syncToRaw));
+                container.appendChild(fieldCell(owner,{key:'application_mode',label:'Режим применения',type:'select',options:[{value:'',label:'Не указан'}].concat(mechanicsOptions('ability_subtype')),optional:true},syncToRaw));
+                visualList(container,owner,'formula_refs','Формулы',[{key:'key',label:'Формула',type:'picker',source:'formula_def',pinFormula:true}],{});
+                visualObject(container,owner,'target_count','Количество целей',[{key:'min',label:'Минимум целей',type:'number',optional:true},{key:'max',label:'Максимум целей',type:'number',optional:true}],{min:1,max:1});
+                // Scalar refs use a wrapper only for editing; untouched arrays are never rewritten.
+                var conditionOwner = {rows:(Array.isArray(owner.application_conditions) ? owner.application_conditions : []).map(function (ref) { return {ref:ref}; })};
+                var conditionsBox = document.createElement('div'); container.appendChild(conditionsBox);
+                visualList(conditionsBox,conditionOwner,'rows','Условия применения',[{key:'ref',label:'Условие',type:'picker',source:'condition_template',prefix:'condition_template:'}],{});
+                conditionsBox.addEventListener('change',function () { owner.application_conditions = conditionOwner.rows.map(function (item) {return item.ref;}); syncToRaw(); });
+                conditionsBox.addEventListener('click',function (event) { if (event.target.tagName === 'BUTTON') { owner.application_conditions = conditionOwner.rows.map(function (item) {return item.ref;}); syncToRaw(); } });
+                visualObject(container,owner,'summon','Призыв',[{key:'bestiary_key',label:'Существо из бестиария',type:'picker',source:'arpg_bestiary'},{key:'count',label:'Количество существ',type:'number',optional:true}],{count:1},function (body, row) {visualTime(body,row,'duration','Длительность призыва');});
+                visualObject(container,owner,'usage_limits','Ограничения применения',[
+                    {key:'per_turn',label:'За ход',type:'number',optional:true},{key:'per_round',label:'За раунд',type:'number',optional:true},{key:'per_session',label:'За сессию',type:'number',optional:true}
+                ],{});
+                visualObject(container,owner,'timing','Кулдаун и восстановление',[],{},function (body,row) {
+                    visualTime(body,row,'cooldown','Кулдаун'); visualTime(body,row,'recharge','Восстановление'); visualTime(body,row,'period','Периодичность');
+                });
+                visualList(container,owner,'costs','Затраты',[
+                    {key:'kind',label:'Что расходуется',type:'select',options:[{value:'resource',label:'Ресурс'},{value:'item',label:'Предмет'}],optional:true},
+                    {key:'resource_key',label:'Ресурс',type:'select',options:[{value:'',label:'—'}].concat(mechanicsOptions('ability_resource')),optional:true},
+                    {key:'item_key',label:'Предмет',type:'picker',source:'arpg_item'},
+                    {key:'value',label:'Количество единиц',type:'number',optional:true},
+                    {key:'timing',label:'Когда расходуется',type:'select',options:[{value:'use',label:'При использовании'},{value:'sustain',label:'На поддержание'}],optional:true}
+                ],{kind:'resource',value:0,timing:'use'},function (body,row) {visualTime(body,row,'period','Период поддержания');});
+                if (allowMath) visualList(container,owner,'math_modifiers','Математические модификаторы (добавляются только по вашему выбору)',[
+                    {key:'stat_key',label:'Характеристика',type:'select',options:modifierStatOptions,optional:true},
+                    {key:'operation',label:'Операция',type:'select',options:[{value:'add_flat',label:'Прибавить значение'},{value:'add_relative_percent',label:'Прибавить процент'},{value:'multiply',label:'Умножить'},{value:'set',label:'Установить значение'},{value:'clamp_min',label:'Нижний предел'},{value:'clamp_max',label:'Верхний предел'}],optional:true},
+                    {key:'value',label:'Величина',type:'number',optional:true},
+                    {key:'unit',label:'Единица (контракт определения)',optional:true},
+                    {key:'phase',label:'Фаза (контракт определения)',optional:true},
+                    {key:'priority',label:'Приоритет (целое число)',type:'number',optional:true},
+                    {key:'condition_ref',label:'Условие (пусто — без условия)',type:'picker',source:'condition_template',prefix:'condition_template:'}
+                ],{schema:'af_kb.arpg.math-modifier.v1',operation:'add_flat',value:0,priority:0,condition_ref:null});
+            }
+
+            return {fieldCell:fieldCell,createSection:createSection,visualList:visualList,visualObject:visualObject,visualTime:visualTime,renderMechanics:renderVisualMechanics};
         }
 
         function bindArpgMode() {
@@ -1258,11 +1511,11 @@
             };
 
             root.innerHTML = [
-                '<details open="open" class="af-kb-collapsible"><summary>UI</summary><div id="af-kb-arpg-ui" class="af-kb-help">Presentation fields from <code>ui</code> are edited in the Icon, Banner and Background fields below. Unknown <code>ui</code> keys remain available in raw JSON and are preserved.</div></details>',
-                '<details open="open" class="af-kb-collapsible"><summary>Tags</summary><div id="af-kb-arpg-tags"></div></details>',
-                '<details open="open" class="af-kb-collapsible"><summary>Blocks</summary><div id="af-kb-arpg-blocks"></div></details>',
-                '<details open="open" class="af-kb-collapsible"><summary>Rules</summary><div id="af-kb-arpg-rules"></div></details>',
-                '<details class="af-kb-collapsible"><summary>Debug raw JSON</summary><div id="af-kb-arpg-raw"></div></details>'
+                '<details open="open" class="af-kb-collapsible"><summary>Оформление</summary><div id="af-kb-arpg-ui" class="af-kb-help">Presentation fields from <code>ui</code> are edited in the Icon, Banner and Background fields below. Unknown <code>ui</code> keys remain available in raw JSON and are preserved.</div></details>',
+                '<details open="open" class="af-kb-collapsible"><summary>Метки</summary><div id="af-kb-arpg-tags"></div></details>',
+                '<details open="open" class="af-kb-collapsible"><summary>Блоки описания</summary><div id="af-kb-arpg-blocks"></div></details>',
+                '<details open="open" class="af-kb-collapsible"><summary>Параметры</summary><div id="af-kb-arpg-rules"></div></details>',
+                '<details class="af-kb-collapsible"><summary>Расширенный технический JSON</summary><div id="af-kb-arpg-raw"></div></details>'
             ].join('');
 
             var tagsRoot = root.querySelector('#af-kb-arpg-tags');
@@ -1339,7 +1592,7 @@
                     var o = document.createElement('option');
                     var isDefinition = v && typeof v === 'object' && !Array.isArray(v);
                     o.value = String(isDefinition ? (v.value || '') : v);
-                    o.textContent = String(isDefinition ? (v.label || v.value || '—') : (v || '—'));
+                    o.textContent = String(isDefinition ? (v.label || v.value || '—') : (arpgLabel(v) || '—'));
                     sel.appendChild(o);
                 });
             }
@@ -1376,110 +1629,10 @@
                 cur[parts[parts.length - 1]] = value;
             }
 
-            function createSection(container, title, help) {
-                var wrap = document.createElement('div');
-                wrap.className = 'af-kb-kvlist';
-                wrap.innerHTML = '<h4>' + esc(title) + '</h4>' + (help ? '<div class="af-kb-help">' + esc(help) + '</div>' : '');
-                container.appendChild(wrap);
-                return wrap;
-            }
-
-            function fieldCell(row, col, onChange) {
-                var cell = document.createElement('div');
-                var label = document.createElement('label');
-                label.textContent = col.label;
-                cell.appendChild(label);
-                cell.dataset.kbField = col.key;
-
-                var input;
-                // New typed JSON/optional fields must not materialize defaults on load.
-                if (col.type === 'json' || col.optional === true) {
-                    input = document.createElement(col.type === 'json' ? 'textarea' : (col.type === 'select' ? 'select' : 'input'));
-                    if (col.type === 'json') {
-                        input.rows = 4;
-                        input.value = Object.prototype.hasOwnProperty.call(row, col.key) ? JSON.stringify(row[col.key], null, 2) : '';
-                    } else if (col.type === 'select') {
-                        addSelectOptions(input, col.options || []);
-                        var currentValue = Object.prototype.hasOwnProperty.call(row, col.key) ? String(row[col.key]) : '';
-                        if (currentValue && !Array.prototype.some.call(input.options, function (option) { return option.value === currentValue; })) {
-                            var savedOption = document.createElement('option'); savedOption.value = currentValue; savedOption.textContent = currentValue; input.appendChild(savedOption);
-                        }
-                        input.value = currentValue;
-                    } else {
-                        input.type = col.type === 'number' ? 'number' : 'text';
-                        if (col.type === 'number') input.step = 'any';
-                        input.value = Object.prototype.hasOwnProperty.call(row, col.key) ? String(row[col.key]) : '';
-                    }
-                    bindFieldSync(input, function () {
-                        if (input.value.trim() === '' && col.optional === true) {
-                            delete row[col.key];
-                            input.setCustomValidity('');
-                            onChange();
-                            return;
-                        }
-                        try {
-                            var value = col.type === 'json' ? JSON.parse(input.value) : (col.type === 'number' ? Number(input.value) : input.value);
-                            if (col.type === 'number' && (!input.value.trim() || !Number.isFinite(value))) throw new Error('number');
-                            row[col.key] = value;
-                            input.setCustomValidity('');
-                            onChange();
-                        } catch (error) {
-                            input.setCustomValidity(col.type === 'json' ? 'Введите корректный JSON.' : 'Введите конечное число.');
-                        }
-                    });
-                    cell.appendChild(input);
-                    if (col.key === 'damage_element') {
-                        var help = document.createElement('div'); help.className = 'af-kb-help'; help.setAttribute('role', 'status');
-                        cell.appendChild(help);
-                        var validateDamage = function () {
-                            var kind = row.effect_type || row.kind;
-                            var required = row.damage_type === 'elemental' && (!kind || kind === 'damage' || kind === 'proc');
-                            input.required = required;
-                            var message = required && !input.value ? 'Выберите основную стихию стихийного урона. Направление магии её не задаёт.' : '';
-                            input.setCustomValidity(message); help.textContent = message;
-                        };
-                        input.addEventListener('change', validateDamage);
-                        // Other controls in the same card/root may change damage_type.
-                        root.addEventListener('change', validateDamage);
-                        validateDamage();
-                    }
-                    return cell;
-                }
-                if (col.type === 'select') {
-                    input = document.createElement('select');
-                    addSelectOptions(input, col.options || ['']);
-                    input.value = row[col.key] != null ? String(row[col.key]) : String(col.default != null ? col.default : '');
-                    if (row[col.key] == null && col.default != null) row[col.key] = col.default;
-                } else if (col.type === 'number') {
-                    input = document.createElement('input');
-                    input.type = 'number';
-                    input.step = 'any';
-                    var numValue = row[col.key];
-                    if (numValue == null || numValue === '') {
-                        numValue = col.default != null ? col.default : 0;
-                        row[col.key] = Number(numValue);
-                    }
-                    input.value = String(numberOrZero(numValue));
-                } else {
-                    input = document.createElement('input');
-                    input.type = 'text';
-                    var textValue = row[col.key];
-                    if (textValue == null) {
-                        textValue = col.default != null ? col.default : '';
-                        row[col.key] = textValue;
-                    }
-                    input.value = String(textValue);
-                }
-
-                bindFieldSync(input, function () {
-                    row[col.key] = (col.type === 'number') ? numberOrZero(input.value) : input.value;
-                    onChange();
-                });
-
-                cell.appendChild(input);
-                return cell;
-            }
-
+            var visualControls = createAbilityVisualControls(syncToRaw,mechanicsOptions,modifierStatOptions);
+            var fieldCell = visualControls.fieldCell;
+            var createSection = visualControls.createSection;
+            var renderVisualMechanics = visualControls.renderMechanics;
             function renderSeededArrayEditor(container, title, key, columns, seedDefs) {
                 var wrap = createSection(container, title);
                 var list = document.createElement('div');
@@ -1499,7 +1652,7 @@
                 seedDefs.forEach(function (d) {
                     var opt = document.createElement('option');
                     opt.value = d.key;
-                    opt.textContent = d.label;
+                    opt.textContent = arpgLabel(d.label);
                     select.appendChild(opt);
                 });
 
@@ -1516,45 +1669,24 @@
                     return JSON.parse(JSON.stringify(seedDefs[0].seed || {}));
                 }
 
-                function redraw() {
-                    list.innerHTML = '';
-                    if (!arr.length) {
-                        var empty = document.createElement('div');
-                        empty.className = 'af-kb-help';
-                        empty.textContent = 'Список пуст.';
-                        list.appendChild(empty);
-                        return;
-                    }
-
-                    arr.forEach(function (row, idx) {
-                        if (!row || typeof row !== 'object' || Array.isArray(row)) row = arr[idx] = {};
-                        var card = document.createElement('div');
-                        card.className = 'af-kb-block-item';
-                        var grid = document.createElement('div');
-                        grid.className = 'af-kb-row';
-                        columns.forEach(function (col) { grid.appendChild(fieldCell(row, col, syncToRaw)); });
-                        var del = document.createElement('button');
-                        del.type = 'button';
-                        del.className = 'af-kb-remove';
-                        del.textContent = 'Удалить';
-                        del.addEventListener('click', function () {
-                            arr.splice(idx, 1);
-                            redraw();
-                            syncToRaw();
-                        });
+                var empty = document.createElement('div'); empty.className='af-kb-help'; empty.textContent='Список пуст.'; list.appendChild(empty);
+                function updateEmpty() { empty.hidden = arr.length !== 0; }
+                function appendRow(row) {
+                    var card = document.createElement('div'); card.className='af-kb-block-item';
+                    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+                        card.textContent='Сохранённое значение: ' + String(row);
+                    } else {
+                        var grid=document.createElement('div'); grid.className='af-kb-row';
+                        columns.forEach(function (column) {grid.appendChild(fieldCell(row,column,syncToRaw));});
+                        if (key === 'character_abilities') renderVisualMechanics(grid,row,false);
                         card.appendChild(grid);
-                        card.appendChild(del);
-                        list.appendChild(card);
-                    });
+                    }
+                    var remove=document.createElement('button'); remove.type='button'; remove.className='af-kb-remove'; remove.textContent='Удалить';
+                    remove.addEventListener('click',function () {arr.splice(arr.indexOf(row),1);card.remove();updateEmpty();syncToRaw();});
+                    card.appendChild(remove);list.appendChild(card);
                 }
-
-                add.addEventListener('click', function () {
-                    arr.push(getSeed());
-                    redraw();
-                    syncToRaw();
-                });
-
-                redraw();
+                arr.forEach(appendRow);updateEmpty();
+                add.addEventListener('click',function () {var row=getSeed();arr.push(row);appendRow(row);updateEmpty();syncToRaw();});
             }
 
             function renderPassiveEffectEditor(container) {
@@ -1610,7 +1742,7 @@
                 defs.forEach(function (def) {
                     var cell = document.createElement('div');
                     var label = document.createElement('label');
-                    label.textContent = def.label;
+                    label.textContent = arpgLabel(def.label);
                     cell.appendChild(label);
 
                     var currentValue = getRuleValue(
@@ -1969,7 +2101,8 @@
                     { key: 'duration', label: 'duration', type: 'number', default: 0 },
                     { key: 'max_charges', label: 'max_charges', type: 'number', default: 1 },
                     { key: 'level_cap', label: 'level_cap', type: 'number', default: 20 }
-                ], 'Ability core');
+                ], 'Основные параметры способности');
+                rulesRoot.appendChild(fieldCell(payload.rules,{key:'damage_element',label:'Стихия урона',type:'select',options:primaryElementOptions,optional:true},syncToRaw));
 
                 renderSeededArrayEditor(rulesRoot, 'resources', 'resources', [
                     { key: 'op', label: 'op', default: 'spend' },
@@ -1987,13 +2120,13 @@
 
                 renderSeededArrayEditor(rulesRoot, 'effects', 'effects', [
                     { key: 'damage_element', label: 'Основная стихия урона', type: 'select', options: primaryElementOptions, optional: true },
-                    { key: 'magic_direction_ref', label: 'Направление (версионированная ссылка JSON)', type: 'json', optional: true },
-                    { key: 'kind', label: 'kind', default: 'damage' },
+                    { key: 'magic_direction_ref', label: 'Направление магии', type: 'picker', source: 'magic_direction' },
+                    { key: 'kind', label: 'Тип эффекта', default: 'damage' },
                     { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
                     { key: 'targeting', label: 'targeting', type: 'select', options: enums.targeting, default: 'single_enemy' },
                     { key: 'value_mode', label: 'value_mode', default: 'flat' },
                     { key: 'value', label: 'value', type: 'number', default: 0 },
-                    { key: 'formula_ref', label: 'formula_ref', default: '' },
+                    { key: 'formula_ref', label: 'Формула расчёта', type: 'picker', source: 'formula_def' },
                     { key: 'duration', label: 'duration', type: 'number', default: 0 },
                     { key: 'duration_unit', label: 'duration_unit', type: 'select', options: ['', 'own_turn', 'target_turn', 'round'], optional: true },
                     { key: 'hit_count', label: 'hit_count', type: 'number', default: 1 },
@@ -2008,14 +2141,16 @@
                     { key: 'proc', label: 'proc', seed: { kind: 'proc', damage_type: '', targeting: 'single_enemy', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } }
                 ]);
 
-                ['modifiers', 'triggers', 'conditions', 'stacking', 'upgrade_requirements'].forEach(function (k) {
-                    renderSeededArrayEditor(
-                        rulesRoot,
-                        k,
-                        k,
-                        [{ key: 'kind', label: 'kind', default: '' }, { key: 'value', label: 'value', default: '' }],
-                        [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]
-                    );
+                var rowSchemas = {
+                    modifiers:[{key:'stat_key',label:'Характеристика',type:'select',options:modifierStatOptions,optional:true},{key:'mode',label:'Операция',type:'select',options:[{value:'flat',label:'Прибавить значение'},{value:'percent',label:'Прибавить процент'}],optional:true},{key:'value',label:'Величина',type:'number',optional:true},{key:'duration',label:'Длительность',type:'number',optional:true},{key:'condition_text',label:'Условие',optional:true}],
+                    triggers:[{key:'event',label:'Событие',optional:true},{key:'action_text',label:'Действие',optional:true},{key:'condition_text',label:'Условие',optional:true}],
+                    conditions:[{key:'condition_type',label:'Вид условия',optional:true},{key:'value',label:'Значение условия',optional:true}],
+                    stacking:[{key:'stack_key',label:'Группа накопления',optional:true},{key:'max_stacks',label:'Максимум уровней эффекта',type:'number',optional:true},{key:'policy',label:'Правило накопления',optional:true}],
+                    upgrade_requirements:[{key:'level',label:'Требуемый уровень',type:'number',optional:true},{key:'required_item_key',label:'Предмет',type:'picker',source:'arpg_item'},{key:'required_qty',label:'Количество предметов',type:'number',optional:true},{key:'required_currency_key',label:'Валюта',optional:true},{key:'required_currency_qty',label:'Количество валюты',type:'number',optional:true}],
+                    grants:[{key:'grant_type',label:'Вид возможности',type:'select',options:enums.grantType,optional:true},{key:'value',label:'Значение',optional:true},{key:'value_num',label:'Числовая величина',type:'number',optional:true},{key:'duration',label:'Длительность',type:'number',optional:true}]
+                };
+                Object.keys(rowSchemas).forEach(function (key) {
+                    renderSeededArrayEditor(rulesRoot,key,key,rowSchemas[key].concat([{key:'notes',label:'Примечание',optional:true}]),[{key:'default',label:'Новая запись',seed:{}}]);
                 });
             }
 
@@ -2064,7 +2199,7 @@
                         rulesRoot,
                         pair[1],
                         k,
-                        [{ key: 'kind', label: 'kind', default: '' }, { key: 'value', label: 'value', default: '' }],
+                        [{ key: 'kind', label: 'Тип эффекта', default: '' }, { key: 'value', label: 'value', default: '' }],
                         [{ key: 'default', label: k === 'requirements' ? 'Требование' : (k === 'mutual_exclusives' ? 'Несовместимый талант' : 'Пассивный эффект'), seed: { kind: '', value: '' } }]
                     );
                 });
@@ -2180,7 +2315,7 @@
                         rulesRoot,
                         k,
                         k,
-                        [{ key: 'kind', label: 'kind', default: '' }, { key: 'value', label: 'value', default: '' }],
+                        [{ key: 'kind', label: 'Тип эффекта', default: '' }, { key: 'value', label: 'value', default: '' }],
                         [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]
                     );
                 });
@@ -2294,7 +2429,11 @@
                     var box = document.createElement('div');
                     box.className = 'af-kb-rule-card';
                     container.appendChild(box);
-                    renderObjectList(box, rows, title, defs, syncToRaw, seed);
+                    visualControls.visualList(box,{rows:rows},'rows',title,defs.map(function (def) {
+                        var column=Object.assign({},def,{key:def.name,optional:true});
+                        if(def.name === 'formula_ref'){column.type='picker';column.source='formula_def';}
+                        return column;
+                    }),seed);
                 }
 
                 renderRuleFields(rulesRoot, [
@@ -2323,19 +2462,58 @@
                     { key: 'combat_stats.luck', label: 'combat_stats.luck', type: 'number', optional: true }
                 ], 'Combat stats');
 
-                if (payload.rules.resists && !Array.isArray(payload.rules.resists) && typeof payload.rules.resists === 'object') {
-                    var resMapSection = createSection(rulesRoot, 'RES: словарь основных стихий');
-                    resMapSection.appendChild(fieldCell(payload.rules, {key:'resists',label:'RES (JSON; scope=elemental, unit=RES)',type:'json'}, syncToRaw));
-                } else renderSeededArrayEditor(rulesRoot, 'resists', 'resists', [
-                    {key:'element',label:'Основная стихия RES',type:'select',options:primaryElementOptions,optional:true},
-                    {key:'scope',label:'Область (elemental для RES)',type:'select',options:['','physical','elemental','status'],optional:true},
-                    {key:'unit',label:'Единица (RES)',optional:true},
-                    { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
-                    { key: 'value', label: 'value', type: 'number', default: 0 },
-                    { key: 'notes', label: 'notes', default: '' }
-                ], [
-                    { key: 'default', label: 'default', seed: { damage_type: 'physical', value: 0, notes: '' } }
-                ]);
+                (function renderElementResistances() {
+                    var section=createSection(rulesRoot,'Сопротивления основным стихиям','Пусто — значение не задано. 0 — явно сохранённое отсутствие сопротивления. Направления магии не имеют отдельного RES.');
+                    var table=document.createElement('table');table.className='af-kb-resistance-table';section.appendChild(table);
+                    var source=payload.rules.resists;
+                    function canonical(key) {return key === 'wind' ? 'air' : key;}
+                    function matches(key) {
+                        var found=[];
+                        if (Array.isArray(source)) source.forEach(function (row,index) {
+                            if (!row || typeof row !== 'object') return;
+                            var identity=row.damage_element || row.element || row.legacy_key || row.damage_type;
+                            if (canonical(identity) === key) found.push({index:index,row:row,value:row.value});
+                        });
+                        else if (source && typeof source === 'object') Object.keys(source).forEach(function (identity) {
+                            if (canonical(identity) === key) {var row=source[identity];found.push({index:identity,row:row,value:row && typeof row === 'object' ? row.value : row});}
+                        });
+                        return found;
+                    }
+                    primaryElementOptions.filter(function (option) {return option.value;}).forEach(function (option) {
+                        var tr=document.createElement('tr');var label=document.createElement('th');label.scope='row';label.textContent=option.label;tr.appendChild(label);
+                        var td=document.createElement('td');var input=document.createElement('input');input.type='number';input.step='any';input.min='0';input.placeholder='Не задано';input.setAttribute('aria-label','Сопротивление: '+option.label);input.dataset.resElement=option.value;
+                        var existing=matches(option.value); input.value=existing.length === 1 && existing[0].value != null ? String(existing[0].value) : '';
+                        var help=document.createElement('div');help.className='af-kb-help';help.setAttribute('role','status');
+                        if (existing.length>1) {input.disabled=true;help.textContent='Конфликт старых ссылок на эту стихию. Требуется явное исправление дубликатов в техническом режиме.';}
+                        input.addEventListener('input',function () {
+                            if (input.validity.badInput) {input.setCustomValidity('Введите конечное неотрицательное сопротивление.');help.textContent=input.validationMessage;return;}
+                            var value=input.value.trim();var number=Number(value);
+                            var error=value !== '' && (!Number.isFinite(number) || number<0) ? 'Введите конечное неотрицательное сопротивление.' : '';
+                            input.setCustomValidity(error);help.textContent=error;if(error)return;
+                            var found=matches(option.value)[0];
+                            if (value === '') {
+                                if (found) {if(Array.isArray(source))source.splice(found.index,1);else delete source[found.index];}
+                            } else if(found) {
+                                if(found.row && typeof found.row === 'object')found.row.value=number;else source[found.index]=number;
+                            } else {
+                                if (!source || typeof source !== 'object')source=[];
+                                var row={scope:'elemental',unit:'RES',value:number};
+                                if(Array.isArray(source)){row.element=option.value;source.push(row);}else source[option.value]=row;
+                            }
+                            payload.rules.resists=source;syncToRaw();
+                        });
+                        td.appendChild(input);td.appendChild(help);tr.appendChild(td);table.appendChild(tr);
+                    });
+                    // Legacy non-elemental resistances stay editable, outside the canonical RES table.
+                    if(Array.isArray(source))source.forEach(function (row) {
+                        if(!row || typeof row !== 'object')return;
+                        var key=canonical(row.damage_element || row.element || row.legacy_key || row.damage_type);
+                        if(!primaryElementOptions.some(function (option) {return option.value === key;})) {
+                            var legacy=createSection(section,'Сохранённое сопротивление: '+String(key || 'без стихии'));
+                            legacy.appendChild(fieldCell(row,{key:'value',label:'Величина',type:'number',optional:true},syncToRaw));
+                        }
+                    });
+                })();
 
                 renderSeededArrayEditor(rulesRoot, 'weaknesses', 'weaknesses', [
                     { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
@@ -2346,13 +2524,13 @@
                 ]);
 
                 (function renderBestiaryAbilities() {
-                    var wrap = createSection(rulesRoot, 'ability_keys');
+                    var wrap = createSection(rulesRoot, 'Способности монстра');
                     var list = document.createElement('div');
                     wrap.appendChild(list);
                     var addBtn = document.createElement('button');
                     addBtn.type = 'button';
                     addBtn.className = 'af-kb-add';
-                    addBtn.textContent = 'Добавить ability';
+                    addBtn.textContent = 'Добавить способность';
                     wrap.appendChild(addBtn);
                     var arr = ensureRuleArray('ability_keys');
 
@@ -2361,13 +2539,14 @@
                         if (!arr.length) {
                             var empty = document.createElement('div');
                             empty.className = 'af-kb-help';
-                            empty.textContent = 'Список ability_keys пуст.';
+                            empty.textContent = 'Способности не добавлены.';
                             list.appendChild(empty);
                             return;
                         }
 
                         arr.forEach(function (row, idx) {
-                            var normalized = normalizeBestiaryAbilityRow(row, idx + 1);
+                            var external = typeof row === 'string' || (row && (row.ability_kb_key || row.ability_key || Object.prototype.hasOwnProperty.call(row,'_editor_ability_key')));
+                            var normalized = external ? (typeof row === 'string' ? {ability_kb_key:row} : row) : normalizeBestiaryAbilityRow(row, idx + 1);
                             arr[idx] = normalized;
                             var card = document.createElement('div');
                             card.className = 'af-kb-block-item';
@@ -2376,16 +2555,21 @@
                             var summary = document.createElement('div');
                             card.appendChild(summary);
                             var refreshSummary = function () {
-                                renderInlineAbilitySummary(summary, normalized, idx, 'Ability');
+                                renderInlineAbilitySummary(summary, normalized, idx, 'Способность');
                             };
                             refreshSummary();
                             card.addEventListener('input', refreshSummary);
                             card.addEventListener('change', refreshSummary);
 
                             var title = document.createElement('h4');
-                            title.textContent = 'Ability #' + (idx + 1);
+                            title.textContent = 'Способность #' + (idx + 1);
                             card.appendChild(title);
 
+                            card.appendChild(fieldCell(normalized,{key:'ability_kb_key',label:'Способность из Базы знаний',type:'picker',source:'arpg_ability',pinAbility:true},syncToRaw));
+                            var inlineBody=document.createElement('details');var inlineCaption=document.createElement('summary');inlineCaption.textContent='Собственное определение / сохранённые дополнительные поля';inlineBody.appendChild(inlineCaption);card.appendChild(inlineBody);
+                            if(!external)inlineBody.open=true;
+                            else {var note=document.createElement('p');note.className='af-kb-help';note.textContent='Используется закреплённое определение KB. Его характеристики редактируются в записи способности; версия обновляется отдельной кнопкой.';inlineBody.appendChild(note);}
+                            if (!external) {
                             var coreGrid = document.createElement('div');
                             coreGrid.className = 'af-kb-row af-ability-editor-grid';
                             [
@@ -2404,17 +2588,14 @@
                                 { key: 'duration', label: 'duration', type: 'number', default: 0 },
                                 { key: 'max_charges', label: 'max_charges', type: 'number', default: 0 },
                                 { key: 'level_cap', label: 'level_cap', type: 'number', default: 0 },
-                                { key: 'ability_kb_key', label: 'ability_kb_key', default: '' },
-                                { key: 'ability_definition_version', label: 'Версия определения KB (JSON)', type: 'json', optional: true },
-                                { key: 'ability_fingerprint', label: 'Fingerprint способности KB', optional: true },
-                                { key: 'magic_direction_ref', label: 'Направление (versioned KB ref, JSON)', type: 'json', optional: true },
+                                { key: 'magic_direction_ref', label: 'Направление магии', type:'picker', source:'magic_direction' },
                                 { key: 'damage_element', label: 'Основная стихия урона', type: 'select', options: primaryElementOptions, optional: true },
                                 { key: 'sortorder', label: 'sortorder', type: 'number', default: 0 },
                                 { key: 'notes', label: 'notes', default: '' }
                             ].forEach(function (col) { coreGrid.appendChild(fieldCell(normalized, col, function () { refreshSummary(); syncToRaw(); })); });
-                            card.appendChild(coreGrid);
+                            inlineBody.appendChild(coreGrid);
 
-                            renderBestiaryNestedRows(card, 'resources', normalized.resources, [
+                            renderBestiaryNestedRows(inlineBody, 'resources', normalized.resources, [
                                 { name: 'op', label: 'op', type: 'text' },
                                 { name: 'resource_key', label: 'resource_key', type: 'text' },
                                 { name: 'value', label: 'value', type: 'number' },
@@ -2422,8 +2603,9 @@
                                 { name: 'duration', label: 'duration', type: 'number' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { op: 'spend', resource_key: '', value: 0, per: 'cast', duration: 0, notes: '' });
-                            renderBestiaryNestedRows(card, 'effects', normalized.effects, [
-                                { name: 'kind', label: 'kind', type: 'select', options: enums.effectKind },
+                            renderBestiaryNestedRows(inlineBody, 'effects', normalized.effects, [
+                                { name: 'kind', label: 'Тип эффекта', type: 'select', options: enums.effectKind },
+                                { name:'damage_element',label:'Стихия урона',type:'select',options:primaryElementOptions },
                                 { name: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType },
                                 { name: 'targeting', label: 'targeting', type: 'select', options: enums.targeting },
                                 { name: 'value_mode', label: 'value_mode', type: 'text' },
@@ -2434,7 +2616,7 @@
                                 { name: 'status_key', label: 'status_key', type: 'text' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { kind: 'damage', damage_type: '', targeting: '', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' });
-                            renderBestiaryNestedRows(card, 'modifiers', normalized.modifiers, [
+                            renderBestiaryNestedRows(inlineBody, 'modifiers', normalized.modifiers, [
                                 { name: 'stat_key', label: 'stat_key', type: 'text' },
                                 { name: 'mode', label: 'mode', type: 'text' },
                                 { name: 'value', label: 'value', type: 'number' },
@@ -2442,24 +2624,24 @@
                                 { name: 'condition_text', label: 'condition_text', type: 'text' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { stat_key: '', mode: 'flat', value: 0, duration: 0, condition_text: '', notes: '' });
-                            renderBestiaryNestedRows(card, 'triggers', normalized.triggers, [
+                            renderBestiaryNestedRows(inlineBody, 'triggers', normalized.triggers, [
                                 { name: 'event', label: 'event', type: 'text' },
                                 { name: 'action_text', label: 'action_text', type: 'text' },
                                 { name: 'condition_text', label: 'condition_text', type: 'text' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { event: '', action_text: '', condition_text: '', notes: '' });
-                            renderBestiaryNestedRows(card, 'conditions', normalized.conditions, [
+                            renderBestiaryNestedRows(inlineBody, 'conditions', normalized.conditions, [
                                 { name: 'condition_type', label: 'condition_type', type: 'text' },
                                 { name: 'value', label: 'value', type: 'text' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { condition_type: '', value: '', notes: '' });
-                            renderBestiaryNestedRows(card, 'stacking', normalized.stacking, [
+                            renderBestiaryNestedRows(inlineBody, 'stacking', normalized.stacking, [
                                 { name: 'stack_key', label: 'stack_key', type: 'text' },
                                 { name: 'max_stacks', label: 'max_stacks', type: 'number' },
                                 { name: 'policy', label: 'policy', type: 'text' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { stack_key: '', max_stacks: 1, policy: '', notes: '' });
-                            renderBestiaryNestedRows(card, 'upgrade_requirements', normalized.upgrade_requirements, [
+                            renderBestiaryNestedRows(inlineBody, 'upgrade_requirements', normalized.upgrade_requirements, [
                                 { name: 'level', label: 'level', type: 'number' },
                                 { name: 'required_item_key', label: 'required_item_key', type: 'text' },
                                 { name: 'required_qty', label: 'required_qty', type: 'number' },
@@ -2467,7 +2649,7 @@
                                 { name: 'required_currency_qty', label: 'required_currency_qty', type: 'number' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { level: 1, required_item_key: '', required_qty: 0, required_currency_key: '', required_currency_qty: 0, notes: '' });
-                            renderBestiaryNestedRows(card, 'grants', normalized.grants, [
+                            renderBestiaryNestedRows(inlineBody, 'grants', normalized.grants, [
                                 { name: 'grant_type', label: 'grant_type', type: 'select', options: enums.grantType },
                                 { name: 'value', label: 'value', type: 'text' },
                                 { name: 'value_num', label: 'value_num', type: 'number' },
@@ -2475,6 +2657,8 @@
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { grant_type: '', value: '', value_num: 0, duration: 0, notes: '' });
 
+                            renderVisualMechanics(inlineBody,normalized,false);
+                            }
                             var del = document.createElement('button');
                             del.type = 'button';
                             del.className = 'af-kb-remove';
@@ -2489,7 +2673,7 @@
                     }
 
                     addBtn.addEventListener('click', function () {
-                        arr.push(normalizeBestiaryAbilityRow({}, arr.length + 1));
+                        arr.push({ability_kb_key:'',_editor_ability_key:''});
                         redrawAbilities();
                         syncToRaw();
                     });
@@ -2497,9 +2681,17 @@
                     redrawAbilities();
                 })();
 
+                visualControls.visualList(rulesRoot,payload.rules,'effects','Эффекты монстра',[
+                    {key:'kind',label:'Тип воздействия',type:'select',options:enums.effectKind,optional:true},
+                    {key:'damage_type',label:'Тип урона',type:'select',options:enums.damageType,optional:true},
+                    {key:'damage_element',label:'Стихия урона',type:'select',options:primaryElementOptions,optional:true},
+                    {key:'value',label:'Величина',type:'number',optional:true},
+                    {key:'formula_ref',label:'Формула расчёта',type:'picker',source:'formula_def'},
+                    {key:'notes',label:'Примечание',optional:true}
+                ],{kind:'damage',damage_type:'physical',value:0});
                 renderSeededArrayEditor(rulesRoot, 'loot', 'loot', [
                     { key: 'loot_key', label: 'loot_key', default: '' },
-                    { key: 'kind', label: 'kind', type: 'select', options: ['item', 'currency', 'material', 'reward', 'custom'], default: 'item' },
+                    { key: 'kind', label: 'Тип эффекта', type: 'select', options: ['item', 'currency', 'material', 'reward', 'custom'], default: 'item' },
                     { key: 'qty_min', label: 'qty_min', type: 'number', default: 1 },
                     { key: 'qty_max', label: 'qty_max', type: 'number', default: 1 },
                     { key: 'chance', label: 'chance', type: 'number', default: 100 },
@@ -2632,14 +2824,17 @@
             if (entityType === 'bestiary') renderBestiaryRules();
             if (entityType === 'service_mechanics') renderServiceRules();
             if (['ability', 'talent', 'item', 'bestiary', 'origin', 'origin_variant'].indexOf(entityType) !== -1) {
+                if (entityType !== 'ability' && entityType !== 'bestiary') {
                 var mathSection = createSection(rulesRoot, 'Математические модификаторы (opt-in, без исполнения)');
                 mathSection.appendChild(fieldCell(payload.rules, { key: 'math_modifiers', label: 'math_modifiers (JSON-массив, необязательно)', type: 'json', optional: true }, syncToRaw));
+                }
             }
+            if (entityType === 'ability' || entityType === 'bestiary') renderVisualMechanics(rulesRoot,payload.rules,true);
             if (entityType === 'talent') {
                 var directionSection = createSection(rulesRoot, 'Магическое направление (классификация без RES)');
                 directionSection.appendChild(fieldCell(payload.rules, {key:'magic_direction_ref',label:'Версионированная ссылка из записи направления (JSON)',type:'json',optional:true}, syncToRaw));
             }
-            if (['ability', 'item', 'bestiary'].indexOf(entityType) !== -1) {
+            if (entityType === 'item') {
                 var mechanicsSection = createSection(rulesRoot, 'Боевые параметры (необязательно, без исполнения)');
                 var extraFields = [
                     {key:'action_cost',label:'Стоимость в очках действий',type:'number',optional:true},
@@ -2665,15 +2860,11 @@
                     {key:'consumption_type',label:'Тип расходования',optional:true},
                     {key:'use_ability_ref',label:'Применяемая способность (ключ)',optional:true}
                 ]);
-                if (entityType === 'bestiary') extraFields = extraFields.concat([
-                    {key:'immunities',label:'Иммунитеты (JSON)',type:'json',optional:true},
-                    {key:'effects',label:'Механические эффекты (JSON)',type:'json',optional:true}
-                ]);
                 extraFields.forEach(function (field) { mechanicsSection.appendChild(fieldCell(payload.rules, field, syncToRaw)); });
             }
             if (heavyTypes.indexOf(entityType) === -1 && simpleTypes.indexOf(entityType) === -1 && entityType !== 'service_mechanics') renderSimpleRules();
 
-            rawRoot.innerHTML = '<label>raw json</label><textarea id="af-arpg-raw-json" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea>';
+            rawRoot.innerHTML = '<label>Расширенный технический режим JSON</label><textarea id="af-arpg-raw-json" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea>';
             var rawField = rawRoot.querySelector('#af-arpg-raw-json');
             rawField.value = JSON.stringify(payload, null, 2);
             rawField.addEventListener('input', function () {
@@ -2713,14 +2904,13 @@
         // ---------- Универсальные билд-блоки формы ----------
         // Регистрируем все commit-функции полей, чтобы на submit гарантированно
         // снять актуальные значения (включая textarea под SCEditor).
-        var liveFieldCommitters = [];
         function createInput(def, obj, onChange) {
             var wrap = document.createElement('div');
             if (def.fullWidth) {
                 wrap.classList.add('af-kb-field--full');
             }
             var label = document.createElement('label');
-            label.textContent = def.label || def.name;
+            label.textContent = arpgLabel(def.label || def.name);
             wrap.appendChild(label);
             if (def.help) {
                 var help = document.createElement('button');
@@ -2773,7 +2963,7 @@
                         if (opt.help) option.title = String(opt.help);
                     } else {
                         option.value = String(opt);
-                        option.textContent = String(opt);
+                        option.textContent = String(arpgLabel(opt));
                     }
                     input.appendChild(option);
                 });
@@ -2863,6 +3053,7 @@
             }
 
             function commitValue() {
+                if (!input.isConnected) return;
                 var liveValue = getFieldValue(input);
                 if (def.optional && String(liveValue).trim() === '') {
                     delete obj[def.name];
@@ -2917,48 +3108,18 @@
 
         function renderObjectList(container, list, title, fieldsDef, onChange, addPreset) {
             container.innerHTML = '';
-
-            var head = document.createElement('div');
-            head.className = 'af-kb-inline';
-            head.innerHTML = '<div class="af-kb-help"><strong>' + esc(title) + '</strong></div>';
-
-            var addBtn = document.createElement('button');
-            addBtn.type = 'button';
-            addBtn.className = 'af-kb-add';
-            addBtn.textContent = 'Добавить';
-            addBtn.addEventListener('click', function () {
-                list.push(deepClone(addPreset || {}));
-                renderObjectList(container, list, title, fieldsDef, onChange, addPreset);
-                onChange();
-            });
-
-            head.appendChild(addBtn);
-            container.appendChild(head);
-
-            list.forEach(function (obj, idx) {
-                var card = document.createElement('div');
-                card.className = 'af-kb-rule-card';
-
-                var row = document.createElement('div');
-                row.className = 'af-kb-row';
-                fieldsDef.forEach(function (def) {
-                    row.appendChild(createInput(def, obj, onChange));
-                });
-                card.appendChild(row);
-
-                var remove = document.createElement('button');
-                remove.type = 'button';
-                remove.className = 'af-kb-remove';
-                remove.textContent = 'Удалить';
-                remove.addEventListener('click', function () {
-                    list.splice(idx, 1);
-                    renderObjectList(container, list, title, fieldsDef, onChange, addPreset);
-                    onChange();
-                });
-                card.appendChild(remove);
-
-                container.appendChild(card);
-            });
+            var head=document.createElement('div');head.className='af-kb-inline';
+            var caption=document.createElement('strong');caption.textContent=arpgLabel(title);head.appendChild(caption);
+            var add=document.createElement('button');add.type='button';add.className='af-kb-add';add.textContent='Добавить';head.appendChild(add);container.appendChild(head);
+            function append(obj) {
+                var card=document.createElement('div');card.className='af-kb-rule-card';
+                var row=document.createElement('div');row.className='af-kb-row';
+                fieldsDef.forEach(function (def) {row.appendChild(createInput(def,obj,onChange));});card.appendChild(row);
+                var remove=document.createElement('button');remove.type='button';remove.className='af-kb-remove';remove.textContent='Удалить';
+                remove.addEventListener('click',function () {list.splice(list.indexOf(obj),1);card.remove();onChange();});card.appendChild(remove);container.appendChild(card);
+            }
+            list.forEach(append);
+            add.addEventListener('click',function () {var obj=deepClone(addPreset || {});list.push(obj);append(obj);onChange();});
         }
 
         function renderKvList(container, list, title, onChange) {
@@ -3829,6 +3990,7 @@
                         break;
                     }
                 }
+                if (isRuUi && mechanic === 'arpg') return arpgLabel(cleanKey);
                 return cleanKey.replace(/_/g, ' ').replace(/\b\w/g, function (ch) { return ch.toUpperCase(); });
             };
             var iconWrap = document.createElement('div');
@@ -4072,7 +4234,7 @@
                 { name: 'format', label: 'format', type: 'text', hint: 'например value / value+unit' }
             ] },
             { key: 'speed', label: 'Speed', fields: [
-                { name: 'kind', label: 'kind', type: 'select', options: ['walk', 'fly', 'swim', 'climb', 'burrow'] },
+                { name: 'kind', label: 'Тип эффекта', type: 'select', options: ['walk', 'fly', 'swim', 'climb', 'burrow'] },
                 { name: 'value', label: 'value', type: 'number', required: true },
                 { name: 'mode', label: 'mode', type: 'select', options: ['set', 'add'] }
             ] },
@@ -5721,6 +5883,9 @@
                 var abilitiesBox = document.createElement('div');
                 abilitiesBox.className = 'af-kb-rule-card';
                 fields.profileLists.appendChild(abilitiesBox);
+                var characterVisual = createAbilityVisualControls(syncRawDebounced, function (key) {
+                    return (mechanicsOptionSets[key] || []).map(function (option) {return {value:option.key,label:option.label_ru || option.label_en || option.key};});
+                },typeSchema.modifier_stat_options || []);
                 function renderCharacterAbilities() {
                     abilitiesBox.innerHTML = '';
 
@@ -5854,6 +6019,7 @@
                         };
                         renderEffects();
 
+                        if (mechanic === 'arpg') characterVisual.renderMechanics(card,normalized,false);
                         var del = document.createElement('button');
                         del.type = 'button';
                         del.className = 'af-kb-remove';
