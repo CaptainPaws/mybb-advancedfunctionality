@@ -5763,6 +5763,7 @@
                             { name: 'subtype', label: 'Подтип', type: 'select', options: abilitySubtypeOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'slot', label: 'Слот', type: 'select', options: abilitySlotOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'damage_type', label: 'Тип урона', type: 'select', options: abilityDamageTypeOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'damage_element', label: 'Стихия урона (только для стихийного урона)', type: 'select', options: typeSchema.primary_element_options || [], allowEmpty: true, optional: true, emptyLabel: '—' },
                             { name: 'target', label: 'Цель', type: 'select', options: abilityTargetingOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'range', label: 'Дальность', type: 'select', options: abilityRangeOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'formula_profile', label: 'Схема расчёта', type: 'select', options: abilityFormulaProfileOptions, allowEmpty: true, emptyLabel: '—', help: 'Выбирает точную формулу из справочника механик.' },
@@ -5813,7 +5814,7 @@
                                 var effectCard = document.createElement('div'); effectCard.className = 'af-kb-effect-card af-ability-editor-grid'; effectsBox.appendChild(effectCard);
                                 var effectHeader = document.createElement('div'); effectHeader.className = 'af-kb-effect-header';
                                 var effectTitle = document.createElement('strong'); effectTitle.textContent = 'Эффект #' + (effectIndex + 1); effectHeader.appendChild(effectTitle); effectCard.appendChild(effectHeader);
-                                var relevant = {damage:['value','formula_profile','target','damage_type','element'],heal:['value','formula_profile','target'],shield:['value','formula_profile','target','duration_value'],status:['status_key','target','duration_value'],control:['status_key','target','duration_value'],stat_modifier:['stat_key','operation','value','target','duration_value'],resource:['resource_key','operation','value','target']};
+                                var relevant = {damage:['value','formula_profile','target','damage_type','damage_element'],heal:['value','formula_profile','target'],shield:['value','formula_profile','target','duration_value'],status:['status_key','target','duration_value'],control:['status_key','target','duration_value'],stat_modifier:['stat_key','operation','value','target','duration_value'],resource:['resource_key','operation','value','target']};
                                 var valueLabels = {damage:'Значение урона',heal:'Значение лечения',shield:'Прочность щита',stat_modifier:'Величина модификатора',resource:'Изменение ресурса'};
                                 var defs = [
                                     {name:'effect_type',label:'Тип эффекта',type:'select',options:effectTypeOptions,allowEmpty:true,emptyLabel:'—'},
@@ -5821,7 +5822,7 @@
                                     {name:'formula_profile',label:'Схема расчёта',type:'select',options:abilityFormulaProfileOptions,allowEmpty:true,emptyLabel:'—',help:'Выбирает формулу вычисления эффекта из справочника механик.'},
                                     {name:'target',label:'Цель',type:'select',options:abilityTargetingOptions,allowEmpty:true,emptyLabel:'—'},
                                     {name:'damage_type',label:'Тип урона',type:'select',options:abilityDamageTypeOptions,allowEmpty:true,emptyLabel:'—'},
-                                    {name:'element',label:'Стихия',type:'select',options:characterElementOptions,allowEmpty:true,emptyLabel:'—'},
+                                    {name:'damage_element',label:'Стихия урона',type:'select',options:typeSchema.primary_element_options || [],allowEmpty:true,optional:true,emptyLabel:'—'},
                                     {name:'duration_value',label:'Длительность эффекта',type:'number',help:'Количество ходов цели, в течение которых действует эффект.'},
                                     {name:'duration_unit',label:'Единица длительности',type:'select',options:durationUnitOptions,allowEmpty:true,optional:true},
                                     {name:'status_key',label:'Статус / контроль',type:'select',options:effectStatusOptions,allowEmpty:true,emptyLabel:'—',help:'Статус или контроль, накладываемый на выбранную цель.'},

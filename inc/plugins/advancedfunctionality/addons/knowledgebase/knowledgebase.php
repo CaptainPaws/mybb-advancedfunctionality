@@ -4430,6 +4430,8 @@ function af_kb_get_type_schema_arpg(string $typeKey): array
 {
     if ($typeKey === 'character') {
         $schema = af_kb_get_type_schema_dnd($typeKey);
+        $schema['primary_element_options'] = [];
+        foreach (af_kb_arpg_primary_elements() as $key => $labels) $schema['primary_element_options'][] = ['value'=>$key,'label'=>$labels['ru']];
         $schema['internal_profile'] = 'arpg_character';
         $profile = af_kb_get_type_profile_definition_arpg($typeKey);
         $schema['defaults'] = array_replace_recursive(
