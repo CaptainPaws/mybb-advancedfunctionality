@@ -3181,6 +3181,12 @@ function af_atf_get_character_ability_select_payload(): array
             $payload['element'][] = ['key' => $key, 'label_ru' => $label, 'label_en' => $label];
         }
     }
+    $payload['damage_element'] = [];
+    if (function_exists('af_kb_arpg_primary_elements')) {
+        foreach (af_kb_arpg_primary_elements() as $key => $label) {
+            $payload['damage_element'][] = ['key'=>$key, 'label_ru'=>$label['ru'], 'label_en'=>$label['en']];
+        }
+    }
     $payload['stat'] = [];
     foreach (af_atf_character_stats_labels() as $key => $label) {
         $payload['stat'][] = ['key' => $key, 'label_ru' => $label, 'label_en' => $label];
@@ -4648,7 +4654,7 @@ function af_atf_normalize_character_ability_row(array $row, int $fallbackSortord
         'ability_kb_key' => my_substr($kbKey, 0, 128),
         'sortorder' => max(0, $sortorder),
     ];
-    foreach (['action_cost', 'duration_unit', 'cooldown_unit'] as $field) {
+    foreach (['damage_element', 'magic_direction_ref', 'action_cost', 'duration_unit', 'cooldown_unit'] as $field) {
         if (array_key_exists($field, $row)) $normalized[$field] = $row[$field];
     }
     return $normalized;
@@ -6183,6 +6189,11 @@ function af_atf_dh_validate(&$ph): void
 
         if ($type === 'character_abilities') {
             $val = af_atf_normalize_character_abilities_json(is_string($raw) ? $raw : '');
+            if (function_exists('af_kb_arpg_validate_element_fields')) {
+                $elementErrors = [];
+                af_kb_arpg_validate_element_fields(['character_abilities'=>(array)json_decode($val, true)], $elementErrors);
+                foreach (array_unique($elementErrors) as $code) $ph->set_error(af_kb_arpg_element_error_message($code));
+            }
             foreach ((array)json_decode($val, true) as $ability) {
                 if (is_array($ability) && array_key_exists('action_cost', $ability) && $ability['action_cost'] !== '' && (!is_scalar($ability['action_cost']) || is_bool($ability['action_cost']) || !is_numeric($ability['action_cost']) || !is_finite((float)$ability['action_cost']) || (float)$ability['action_cost'] < 0)) {
                     $ph->set_error('invalid_field_'.$fieldid);

@@ -1389,6 +1389,7 @@
                 var label = document.createElement('label');
                 label.textContent = col.label;
                 cell.appendChild(label);
+                cell.dataset.kbField = col.key;
 
                 var input;
                 // New typed JSON/optional fields must not materialize defaults on load.
@@ -1427,6 +1428,21 @@
                         }
                     });
                     cell.appendChild(input);
+                    if (col.key === 'damage_element') {
+                        var help = document.createElement('div'); help.className = 'af-kb-help'; help.setAttribute('role', 'status');
+                        cell.appendChild(help);
+                        var validateDamage = function () {
+                            var kind = row.effect_type || row.kind;
+                            var required = row.damage_type === 'elemental' && (!kind || kind === 'damage' || kind === 'proc');
+                            input.required = required;
+                            var message = required && !input.value ? 'Выберите основную стихию стихийного урона. Направление магии её не задаёт.' : '';
+                            input.setCustomValidity(message); help.textContent = message;
+                        };
+                        input.addEventListener('change', validateDamage);
+                        // Other controls in the same card/root may change damage_type.
+                        root.addEventListener('change', validateDamage);
+                        validateDamage();
+                    }
                     return cell;
                 }
                 if (col.type === 'select') {
@@ -1922,7 +1938,8 @@
                         { key: 'ability_name', label: 'ability_name', default: '' },
                         { key: 'icon_url', label: 'icon_url', default: '' },
                         { key: 'ability_type', label: 'ability_type', default: 'active' },
-                        { key: 'damage_type', label: 'damage_type', default: '' },
+                        { key: 'damage_type', label: 'Тип урона', type: 'select', options: enums.damageType, default: '' },
+                        { key: 'damage_element', label: 'Стихия урона', type: 'select', options: primaryElementOptions, optional: true },
                         { key: 'targeting', label: 'targeting', default: '' },
                         { key: 'range', label: 'range', type: 'number', default: 0 },
                         { key: 'cast_time', label: 'cast_time', type: 'number', default: 0 },

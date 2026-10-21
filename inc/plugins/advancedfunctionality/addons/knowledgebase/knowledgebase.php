@@ -6595,7 +6595,7 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         'notes' => (string)($row['notes'] ?? ''),
         'sortorder' => $sort,
     ];
-    foreach (['duration_unit', 'cooldown_unit', 'action_cost', 'timing', 'costs', 'target_count', 'application_conditions', 'application_mode', 'summon', 'usage_limits', 'formula_refs'] as $field) {
+    foreach (['damage_element', 'magic_direction_ref', 'duration_unit', 'cooldown_unit', 'action_cost', 'timing', 'costs', 'target_count', 'application_conditions', 'application_mode', 'summon', 'usage_limits', 'formula_refs'] as $field) {
         if (array_key_exists($field, $row)) $normalized[$field] = $row[$field];
     }
     return $normalized;
@@ -14417,7 +14417,7 @@ function af_kb_handle_edit(): void
     if ($errors) {
         $items = '';
         foreach ($errors as $error) {
-            $items .= '<li>'.htmlspecialchars_uni($error).'</li>';
+            $items .= '<li>'.htmlspecialchars_uni(af_kb_arpg_element_error_message((string)$error)).'</li>';
         }
         $kb_errors = '<div class="af-kb-errors"><ul>'.$items.'</ul></div>';
     }
@@ -14756,7 +14756,7 @@ function af_kb_handle_type_edit(): void
     if ($errors) {
         $items = '';
         foreach ($errors as $error) {
-            $items .= '<li>'.htmlspecialchars_uni($error).'</li>';
+            $items .= '<li>'.htmlspecialchars_uni(af_kb_arpg_element_error_message((string)$error)).'</li>';
         }
         $kb_errors = '<div class="af-kb-errors"><ul>'.$items.'</ul></div>';
     }

@@ -226,15 +226,21 @@ function af_kb_arpg_element_damage(array $row, string $path, array &$diagnostics
 {
     $element = $row['damage_element'] ?? $row['element'] ?? null;
     $canonical = is_string($element) ? af_kb_arpg_canonical_element_key($element) : null;
-    if (($row['damage_type'] ?? null) === 'elemental' || array_key_exists('damage_element', $row)) {
-        if (!is_string($element) || !isset(af_kb_arpg_primary_elements()[$canonical])) {
+    // Classification on a character is not an attack declaration. Empty optional
+    // controls likewise do not declare a damage component.
+    $isCharacter = ($row['type_profile'] ?? null) === 'character';
+    $kind = $row['effect_type'] ?? $row['kind'] ?? null;
+    $isDamage = !$isCharacter && ($kind === null || in_array($kind, ['damage', 'proc'], true));
+    $hasExplicit = array_key_exists('damage_element', $row) && $row['damage_element'] !== '' && $row['damage_element'] !== null;
+    if ($isDamage && (($row['damage_type'] ?? null) === 'elemental' || $hasExplicit)) {
+        if (!$hasExplicit || !is_string($element) || !isset(af_kb_arpg_primary_elements()[$canonical])) {
             af_kb_arpg_acs_diagnostic($diagnostics, 'damage_element_required', $path . '.damage_element');
         }
-        if (isset($row['damage_element'], $row['element']) && (!is_string($row['element']) || af_kb_arpg_canonical_element_key($row['element']) !== $canonical)) {
+        if ($hasExplicit && isset($row['element']) && $row['element'] !== '' && (!is_string($row['element']) || af_kb_arpg_canonical_element_key($row['element']) !== $canonical)) {
             af_kb_arpg_acs_diagnostic($diagnostics, 'damage_element_conflict', $path . '.damage_element');
         }
     }
-    if (isset($row['damage_element']) && !in_array($row['damage_type'] ?? null, ['elemental','hybrid'], true)) {
+    if (!$isCharacter && $hasExplicit && !in_array($row['damage_type'] ?? null, ['elemental','hybrid'], true)) {
         af_kb_arpg_acs_diagnostic($diagnostics, 'damage_element_not_elemental', $path . '.damage_type');
     }
     $direction = null;
@@ -279,4 +285,16 @@ function af_kb_arpg_validate_element_fields(array $row, array &$errors, int $dep
             if (is_array($child)) af_kb_arpg_validate_element_fields($child, $errors, $depth + 1);
         }
     }
+}
+
+/** UI translation only: stable diagnostic codes remain unchanged in owner APIs. */
+function af_kb_arpg_element_error_message(string $code): string
+{
+    return [
+        'damage_element_required' => 'Для стихийного урона выберите «Стихия урона»: одну из 17 основных стихий.',
+        'damage_element_conflict' => 'Стихия урона конфликтует с сохранённой стихией компонента. Проверьте оба значения.',
+        'damage_element_not_elemental' => 'Стихия урона допустима только для стихийного или смешанного урона.',
+        'magic_direction_version_mismatch' => 'Версия магического направления изменилась. Выберите направление заново.',
+        'magic_direction_unavailable' => 'Выбранное магическое направление недоступно.',
+    ][$code] ?? $code;
 }
