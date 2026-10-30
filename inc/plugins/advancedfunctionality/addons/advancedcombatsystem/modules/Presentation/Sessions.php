@@ -54,6 +54,7 @@ final class AF_ACS_SessionsPage
                         echo '<h3>Передать владение сессией</h3><label>UID нового владельца <input type="number" min="1" name="uid" required></label><label>Причина <input name="reason" maxlength="1000" required></label><button type="submit">Передать владение</button></form>';
                     }
                 }
+                if($view['can_manage'])echo '<p><a href="'.($admin?'../':'').'showthread.php?tid='.self::esc($session['tid']).'&amp;acs_session='.self::esc($session['id']).'">Открыть панель GM в связанной теме</a></p>';
                 require_once __DIR__.'/Entities.php';
                 AF_ACS_EntitiesPage::render((string)$session['id'],$view,$url);
                 echo '<p>Закрытие, архив и reopen пока недоступны: проверки обязательств будут реализованы на этапе 10.</p>';

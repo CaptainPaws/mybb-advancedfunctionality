@@ -5,13 +5,13 @@ require_once __DIR__.'/../Infrastructure/Repository.php';
 
 final class AF_ACS_Migrations extends AF_ACS_Repository
 {
-    public const VERSION = '002_entities';
+    public const VERSION = '003_encounters';
 
     /** Explicit ordered registry; never execute a filename supplied by a client. */
     private function registry(): array
     {
         $registry = [];
-        foreach (['001_foundation','002_entities'] as $version) {
+        foreach (['001_foundation','002_entities','003_encounters'] as $version) {
             $file = __DIR__.'/../../migrations/'.$version.'.php';
             $migration = require $file;
             $migration['checksum'] = hash_file('sha256', $file);

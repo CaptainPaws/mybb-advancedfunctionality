@@ -31,7 +31,7 @@ $server->query('CREATE DATABASE `'.$database.'` CHARACTER SET utf8mb4 COLLATE ut
 try {
     $link=new mysqli('localhost','root','',$database,0,$socket);$link->set_charset('utf8mb4');
     $migrations=new AF_ACS_Migrations($link);$migrations->run();
-    snapshot_assert($migrations->status()['schema_version']==='002_entities','Schema version');
+    snapshot_assert($migrations->status()['schema_version']==='003_encounters','Schema version');
     // Simulate interrupted DDL after groups/entities, never use this against production.
     foreach(['entity_states','resources','controllers'] as $table)$link->query('DROP TABLE fixture_af_acs_'.$table);
     $link->query("UPDATE fixture_af_acs_schema_migrations SET status='failed',step=2 WHERE version='002_entities'");
@@ -120,4 +120,5 @@ try {
     snapshot_assert($db->tables===$externalBefore && $link->query('SELECT COUNT(*) FROM fixture_af_acs_operations')->fetch_row()===$acsBefore,'GET form changed permanent data');
     snapshot_assert(!function_exists('af_charactersheets_compute_sheet_view'),'Registration loaded saving view/calculator');
     echo "ACS entities: migration resume/repeat, owner snapshot, missing Accuracy rollback, replay/pins, two monster IDs/groups, 17 RES/blood/equipment, access/CSRF, future pet binding and reactivation passed\n";
+    if(isset($acsEncounterFixture))$acsEncounterFixture(compact('sid','result','first','second','registeredPet','link','access','sessions','entities','migrations'));
 } finally {$server->query('DROP DATABASE `'.$database.'`');}

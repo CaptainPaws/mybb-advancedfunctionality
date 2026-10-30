@@ -27,7 +27,7 @@ class AF_ACS_Repository
 
     protected function table(string $name): string
     {
-        if (!in_array($name, ['schema_migrations', 'sessions', 'session_roles', 'snapshots', 'operations', 'events', 'event_details', 'diagnostics', 'control_groups', 'entities', 'entity_states', 'resources', 'controllers'], true)) {
+        if (!in_array($name, ['schema_migrations', 'sessions', 'session_roles', 'snapshots', 'operations', 'events', 'event_details', 'diagnostics', 'control_groups', 'entities', 'entity_states', 'resources', 'controllers', 'encounters', 'sides', 'side_relationships', 'participants'], true)) {
             throw new RuntimeException('ACS_UNKNOWN_TABLE');
         }
         return '`'.$this->prefix.'af_acs_'.$name.'`';
@@ -68,7 +68,7 @@ class AF_ACS_Repository
         $rows = $this->sql('SELECT version,status,step,checksum FROM '.$this->table('schema_migrations'))['rows'];
         $known = [];
         $names = [];
-        foreach (['001_foundation','002_entities'] as $version) {
+        foreach (['001_foundation','002_entities','003_encounters'] as $version) {
             $file = __DIR__.'/../../migrations/'.$version.'.php';
             $migration = require $file;
             $known[$version] = ['checksum'=>hash_file('sha256',$file),'steps'=>count($migration['tables'])];
