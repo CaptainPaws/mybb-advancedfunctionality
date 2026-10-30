@@ -11,7 +11,7 @@ $acsEncounterFixture=static function(array $f):void {
     $beforeSnapshots=$link->query('SELECT COUNT(*) FROM fixture_af_acs_snapshots')->fetch_row();
     foreach(['side_relationships','participants'] as $table)$link->query('DROP TABLE fixture_af_acs_'.$table);
     $link->query("UPDATE fixture_af_acs_schema_migrations SET status='failed',step=2 WHERE version='003_encounters'");
-    $migrations->run();$migrations->run();snapshot_assert($migrations->status()['schema_version']==='003_encounters','003 resume failed');
+    $migrations->run();$migrations->run();snapshot_assert($migrations->status()['schema_version']==='004_round_roster','003 resume failed');
     snapshot_assert($link->query('SELECT COUNT(*) FROM fixture_af_acs_snapshots')->fetch_row()===$beforeSnapshots,'003 changed existing snapshots');
     $version=$sessions->view($sid)['session']['session_version'];
     $create=['session_id'=>$sid,'expected_version'=>$version,'name'=>'Test <encounter>','reason'=>'Prepare fixture','operation_key'=>'encounter_fixture_01','tid'=>'51'];
@@ -29,8 +29,8 @@ $acsEncounterFixture=static function(array $f):void {
     $groups=array_column($view['participants'],'control_group_id','entity_id');
     snapshot_assert($groups[$result['entity_id']]===$groups[$registeredPet['entity_id']],'Pet group split');
     snapshot_assert($groups[$first['entity_id']]!==$groups[$second['entity_id']],'Monsters merged by GM uid');
-    $ready=$service->readiness($sid,$eid);snapshot_assert($ready['preparation_ready'] && !$ready['can_start'],'Readiness failed or start faked: '.json_encode($ready));
-    snapshot_assert($ready['blocked_capabilities'][0]['stage']==='ACS-2.3.1','Roster gate missing');
+    $ready=$service->readiness($sid,$eid);snapshot_assert($ready['preparation_ready'] && $ready['can_start'],'Readiness failed or start faked: '.json_encode($ready));
+    snapshot_assert(!$ready['blocked_capabilities'],'Valid roster remains blocked');
     $before=$service->view($sid,$eid);
     blocked(fn()=>$service->command('start',$create),'ACS_ENCOUNTER_TRANSITION_BLOCKED');
     blocked(fn()=>$command('controller_assign',['entity_id'=>$result['entity_id'],'uid'=>'8']),'ACS_CONTROL_INVALID');
@@ -67,6 +67,7 @@ $acsEncounterFixture=static function(array $f):void {
     foreach($events as $index=>$event)snapshot_assert($event['event_sequence']===(string)($index+1),'Encounter sequence gap/duplicate');
     $mybb->request_method='post';$mybb->input=['my_post_key'=>'bad'];blocked(fn()=>$command('side_create',['name'=>'No CSRF']),'ACS_CSRF_REQUIRED');$mybb->input=['my_post_key'=>'token'];
     $persisted=$service->view($sid,$eid);$GLOBALS['af_acs_deactivated']=true;blocked(fn()=>$command('side_create',['name'=>'Disabled']),'ACS_DISABLED');unset($GLOBALS['af_acs_deactivated']);$migrations->assertInstalled();snapshot_assert($service->view($sid,$eid)===$persisted,'Reactivation changed encounter');
+    if(isset($GLOBALS['acsRoundFixture']))$GLOBALS['acsRoundFixture'](compact('link','sid','eid','service','repo','access','sessions','entities','result','first','second','registeredPet','command','migrations'));
     echo "ACS encounters: create/retry/CAS, two sides/hostile, character+pet group, independent monsters, NPC-only assignment, readiness/roster gate, scopes/permissions/CSRF, 5 GM tabs/read-only audit and 003 resume passed\n";
 };
 require __DIR__.'/acs_entities_regression.php';

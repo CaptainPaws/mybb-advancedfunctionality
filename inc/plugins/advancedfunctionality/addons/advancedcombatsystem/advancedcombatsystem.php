@@ -164,6 +164,7 @@ function af_advancedcombatsystem_xmlhttp(): void
             $data=match($op) {
                 'encounter_list'=>$encounters->list($sid,$mybb->get_input('after')?:'0'),
                 'encounter_get'=>$encounters->view($sid,$eid),
+                'encounter_round_get'=>$encounters->roundView($sid,$eid,$mybb->get_input('after')?:'0'),
                 'encounter_events'=>$encounters->events($sid,$eid,$mybb->get_input('after')?:'0'),
                 'encounter_readiness'=>$encounters->readiness($sid,$eid),
                 default=>$encounters->command(substr($op,10),$input),
@@ -223,7 +224,7 @@ function af_advancedcombatsystem_session_failure(Throwable $error): array
         return ['category'=>'VALIDATION_ERROR','request_id'=>$id,'error_id'=>$id,'message'=>'Регистрация заблокирована: источник не прошёл проверку.','diagnostics'=>$diagnostics];
     }
     $category=match($error->getMessage()) {
-        'ACS_ENCOUNTER_TRANSITION_BLOCKED','ACS_PARTICIPANT_EXISTS','ACS_ENTITY_UNAVAILABLE','ACS_CONTROL_INVALID','ACS_SNAPSHOT_INVALID','ACS_ENTITY_ALREADY_REGISTERED','ACS_DEFINITION_VERSION_CONFLICT','ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SESSION_TRANSITION_BLOCKED'=>'STATE_CONFLICT',
+        'ACS_FIRST_ROUND_EXISTS','ACS_ROSTER_BLOCKED','ACS_ROSTER_INVALID','ACS_TURN_STATE_INVALID','ACS_ENCOUNTER_TRANSITION_BLOCKED','ACS_PARTICIPANT_EXISTS','ACS_ENTITY_UNAVAILABLE','ACS_CONTROL_INVALID','ACS_SNAPSHOT_INVALID','ACS_ENTITY_ALREADY_REGISTERED','ACS_DEFINITION_VERSION_CONFLICT','ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SESSION_TRANSITION_BLOCKED'=>'STATE_CONFLICT',
         'ACS_GM_REQUIRED','ACS_ENCOUNTER_UNAVAILABLE','ACS_REGISTRATION_DENIED','ACS_SESSION_UNAVAILABLE','ACS_THREAD_UNAVAILABLE','ACS_CREATE_DENIED','ACS_ROLE_ESCALATION_DENIED','ACS_ADMIN_PERMISSION_REQUIRED','ACS_LOGIN_REQUIRED','ACS_CSRF_REQUIRED'=>'PERMISSION_DENIED',
         'ACS_RELATION_INVALID','ACS_SIDE_UNAVAILABLE','ACS_INVALID_JSON','ACS_JSON_TOO_LARGE','ACS_INVALID_KEY','ACS_ENTITY_KIND_INVALID','ACS_SOURCE_REQUIRED','ACS_HP_INTEGER_REQUIRED','ACS_HP_RANGE','ACS_DEFINITION_LIMIT','ACS_INVALID_TEXT','ACS_REASON_REQUIRED','ACS_ROLE_INVALID','ACS_INVALID_INTEGER','ACS_INTEGER_RANGE','ACS_OPERATION_KEY_REQUIRED','ACS_POST_REQUIRED','ACS_REQUEST_TOO_LARGE','ACS_RATE_LIMIT','ACS_OWNER_PROTECTED','ACS_OWNER_UNCHANGED','ACS_USER_UNAVAILABLE'=>'VALIDATION_ERROR',
         'ACS_COMMIT_UNKNOWN','ACS_ROLLBACK_UNKNOWN','ACS_RECOVERY_REQUIRED'=>'RECOVERY_REQUIRED',
