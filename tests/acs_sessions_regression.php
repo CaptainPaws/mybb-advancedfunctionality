@@ -28,7 +28,7 @@ function is_moderator(...$args):bool{return false;}
 function ensure(bool $ok,string $message):void{if(!$ok)throw new RuntimeException($message);}
 function fails(callable $f,string $code):void{try{$f();}catch(Throwable $e){ensure(str_contains($e->getMessage(),$code),'Wrong failure: '.$e->getMessage());return;}throw new RuntimeException('Expected '.$code);}
 require AF_ADDONS.'advancedcombatsystem/advancedcombatsystem.php';
-ensure(af_advancedcombatsystem_init()==='inactive' && !class_exists('AF_ACS_SessionService',false),'Ordinary bootstrap loaded command stack');
+ensure(af_advancedcombatsystem_init()==='inactive' && !class_exists('AF_ACS_SessionService',false) && !class_exists('AF_ACS_EncounterService',false),'Ordinary bootstrap loaded command stack');
 $server=new mysqli('localhost','root','','',0,$socket);$database='acs221_'.bin2hex(random_bytes(6));
 $server->query('CREATE DATABASE `'.$database.'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
 try {
@@ -89,6 +89,7 @@ try {
  require AF_ADDONS.'advancedcombatsystem/modules/Presentation/ThreadComponents.php';$mybb->settings['af_adaptivethemeframework_enabled']='1';
  af_advancedcombatsystem_register_thread_component();ensure($GLOBALS['component']['slot']==='thread.before_posts','Wrong ATF extension');
  ensure(str_contains(af_advancedcombatsystem_thread_session_link(['tid'=>10]),'session_id='.$id),'GM topic link missing');
+ ensure(!class_exists('AF_ACS_EncounterService',false) && !class_exists('AF_ACS_EncountersPage',false),'Ordinary topic loaded GM stack');
  $mybb->user['uid']=6;ensure(af_advancedcombatsystem_thread_session_link(['tid'=>10])==='','Foreign topic link leaked');
  $mybb->user['uid']=2;ensure(af_advancedcombatsystem_thread_session_link(['tid'=>999])==='','Ordinary topic changed');
  $link->query('RENAME TABLE fixture_af_acs_session_roles TO fixture_roles_unavailable');

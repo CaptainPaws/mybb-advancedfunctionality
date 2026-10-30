@@ -32,6 +32,7 @@ final class AF_ACS_Context
             return self::VIEW;
         }
 
+        if(defined('THIS_SCRIPT') && THIS_SCRIPT==='showthread.php' && $mybb->get_input('acs_session')!=='')return self::VIEW;
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_sessions')return self::VIEW;
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='xmlhttp.php' && $mybb->get_input('action')==='af_addon_api' && $mybb->get_input('addon')==='advancedcombatsystem')return self::VIEW;
         return self::INACTIVE;

@@ -123,6 +123,15 @@ function af_advancedcombatsystem_entities(?AF_ACS_PermanentPetSource $pets=null)
     return new AF_ACS_EntityService(new AF_ACS_EntityRepository($db),new AF_ACS_SessionAccess,new AF_ACS_RegistrationSource($pets));
 }
 
+/** Explicit GM command/view surface; never invoked on ordinary thread views. */
+function af_advancedcombatsystem_encounters(): AF_ACS_EncounterService
+{
+    global $db;
+    if(!af_is_addon_enabled('advancedcombatsystem') || !empty($GLOBALS['af_acs_deactivated']))throw new RuntimeException('ACS_DISABLED');
+    require_once __DIR__.'/modules/Application/EncounterService.php';
+    return new AF_ACS_EncounterService(new AF_ACS_EncounterRepository($db),new AF_ACS_SessionAccess);
+}
+
 function af_advancedcombatsystem_sessions_page(): void
 {
     global $header,$headerinclude,$footer;
@@ -149,6 +158,17 @@ function af_advancedcombatsystem_xmlhttp(): void
         $service=af_advancedcombatsystem_sessions();$op=$mybb->get_input('op');
         if($op==='list')$data=$service->list($mybb->get_input('after')?:'0');
         elseif($op==='get')$data=$service->view($mybb->get_input('session_id'));
+        elseif(str_starts_with($op,'encounter_')) {
+            $encounters=af_advancedcombatsystem_encounters();$sid=$mybb->get_input('session_id');$eid=$mybb->get_input('encounter_id');
+            $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid'] as $field)$input[$field]=$mybb->get_input($field);
+            $data=match($op) {
+                'encounter_list'=>$encounters->list($sid,$mybb->get_input('after')?:'0'),
+                'encounter_get'=>$encounters->view($sid,$eid),
+                'encounter_events'=>$encounters->events($sid,$eid,$mybb->get_input('after')?:'0'),
+                'encounter_readiness'=>$encounters->readiness($sid,$eid),
+                default=>$encounters->command(substr($op,10),$input),
+            };
+        }
         elseif(in_array($op,['entity_list','entity_snapshot','entity_register','entity_validate'],true)) {
             $entities=af_advancedcombatsystem_entities();$sid=$mybb->get_input('session_id');
             $input=[];foreach(['session_id','expected_version','operation_key','reason','kind','source_key','name','initial_hp'] as $field)$input[$field]=$mybb->get_input($field);
@@ -164,7 +184,10 @@ function af_advancedcombatsystem_xmlhttp(): void
             $data=$service->command($op,$input);
         }
         $version=$data['session_version']??$data['session']['session_version']??null;
-        $response=['ok'=>true,'request_id'=>bin2hex(random_bytes(16)),'data'=>$data,'versions'=>$version===null?(object)[]:['session_version'=>$version],'warnings'=>[]];
+        $versions=$version===null?[]:['session_version'=>$version];
+        $encounterVersion=$data['encounter_version']??$data['encounter']['encounter_version']??null;
+        if($encounterVersion!==null)$versions['encounter_version']=$encounterVersion;
+        $response=['ok'=>true,'request_id'=>bin2hex(random_bytes(16)),'data'=>$data,'versions'=>$versions?:new stdClass,'warnings'=>[]];
     } catch(Throwable $error) {
         $failure=af_advancedcombatsystem_session_failure($error);
         http_response_code(match($failure['category']) {'PERMISSION_DENIED'=>403,'STATE_CONFLICT','RECOVERY_REQUIRED'=>409,'VALIDATION_ERROR'=>422,default=>503});
@@ -200,9 +223,9 @@ function af_advancedcombatsystem_session_failure(Throwable $error): array
         return ['category'=>'VALIDATION_ERROR','request_id'=>$id,'error_id'=>$id,'message'=>'Регистрация заблокирована: источник не прошёл проверку.','diagnostics'=>$diagnostics];
     }
     $category=match($error->getMessage()) {
-        'ACS_ENTITY_ALREADY_REGISTERED','ACS_DEFINITION_VERSION_CONFLICT','ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SESSION_TRANSITION_BLOCKED'=>'STATE_CONFLICT',
-        'ACS_REGISTRATION_DENIED','ACS_SESSION_UNAVAILABLE','ACS_THREAD_UNAVAILABLE','ACS_CREATE_DENIED','ACS_ROLE_ESCALATION_DENIED','ACS_ADMIN_PERMISSION_REQUIRED','ACS_LOGIN_REQUIRED','ACS_CSRF_REQUIRED'=>'PERMISSION_DENIED',
-        'ACS_INVALID_JSON','ACS_JSON_TOO_LARGE','ACS_INVALID_KEY','ACS_ENTITY_KIND_INVALID','ACS_SOURCE_REQUIRED','ACS_HP_INTEGER_REQUIRED','ACS_HP_RANGE','ACS_DEFINITION_LIMIT','ACS_INVALID_TEXT','ACS_REASON_REQUIRED','ACS_ROLE_INVALID','ACS_INVALID_INTEGER','ACS_INTEGER_RANGE','ACS_OPERATION_KEY_REQUIRED','ACS_POST_REQUIRED','ACS_REQUEST_TOO_LARGE','ACS_RATE_LIMIT','ACS_OWNER_PROTECTED','ACS_OWNER_UNCHANGED','ACS_USER_UNAVAILABLE'=>'VALIDATION_ERROR',
+        'ACS_ENCOUNTER_TRANSITION_BLOCKED','ACS_PARTICIPANT_EXISTS','ACS_ENTITY_UNAVAILABLE','ACS_CONTROL_INVALID','ACS_SNAPSHOT_INVALID','ACS_ENTITY_ALREADY_REGISTERED','ACS_DEFINITION_VERSION_CONFLICT','ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SESSION_TRANSITION_BLOCKED'=>'STATE_CONFLICT',
+        'ACS_GM_REQUIRED','ACS_ENCOUNTER_UNAVAILABLE','ACS_REGISTRATION_DENIED','ACS_SESSION_UNAVAILABLE','ACS_THREAD_UNAVAILABLE','ACS_CREATE_DENIED','ACS_ROLE_ESCALATION_DENIED','ACS_ADMIN_PERMISSION_REQUIRED','ACS_LOGIN_REQUIRED','ACS_CSRF_REQUIRED'=>'PERMISSION_DENIED',
+        'ACS_RELATION_INVALID','ACS_SIDE_UNAVAILABLE','ACS_INVALID_JSON','ACS_JSON_TOO_LARGE','ACS_INVALID_KEY','ACS_ENTITY_KIND_INVALID','ACS_SOURCE_REQUIRED','ACS_HP_INTEGER_REQUIRED','ACS_HP_RANGE','ACS_DEFINITION_LIMIT','ACS_INVALID_TEXT','ACS_REASON_REQUIRED','ACS_ROLE_INVALID','ACS_INVALID_INTEGER','ACS_INTEGER_RANGE','ACS_OPERATION_KEY_REQUIRED','ACS_POST_REQUIRED','ACS_REQUEST_TOO_LARGE','ACS_RATE_LIMIT','ACS_OWNER_PROTECTED','ACS_OWNER_UNCHANGED','ACS_USER_UNAVAILABLE'=>'VALIDATION_ERROR',
         'ACS_COMMIT_UNKNOWN','ACS_ROLLBACK_UNKNOWN','ACS_RECOVERY_REQUIRED'=>'RECOVERY_REQUIRED',
         default=>'INTERNAL_ERROR',
     };
