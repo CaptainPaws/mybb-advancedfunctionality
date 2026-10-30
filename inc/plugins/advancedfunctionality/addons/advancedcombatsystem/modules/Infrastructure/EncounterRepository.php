@@ -114,8 +114,59 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
         }
         self::integer($encounter['encounter_version'],'18446744073709551614');self::integer($encounter['next_event_sequence'],'18446744073709551614');
         if($this->sql('UPDATE '.$this->table('encounters').' SET encounter_version=encounter_version+1,next_event_sequence=next_event_sequence+1 WHERE session_id=? AND id=? AND encounter_version=?',[$session['id'],$id,$encounter['encounter_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
+        if($op==='participant_add' && $encounter['status']==='active')$result['admission']='next_round';
         if(isset($request['_snapshot_id']))$result+=['entity_id'=>$request['entity_id'],'snapshot_id'=>$request['_snapshot_id'],'control_group_id'=>$request['_group_id']];
         $session['_command_result']=['encounter_id'=>$id,'encounter_version'=>$this->encounter($session['id'],$id)['encounter_version'],'encounter_sequence'=>$encounter['next_event_sequence']]+$result;
         return $session;
     }
+    /** Snapshot input read under the existing session/encounter command lock. */
+    public function rosterSources(string $sid,string $eid): array
+    {
+        $rows=$this->sql('SELECT p.id AS participant_id,p.entity_id,p.side_id,p.participant_version,e.name,e.kind,e.owner_uid,e.control_group_id,e.entity_version,e.template_snapshot_id,g.group_version,g.config_json AS group_config,s.life_state,s.state_version,s.layers_json,x.content_hash,c.controller_uid,c.assignment_version FROM '.$this->table('participants').' p JOIN '.$this->table('entities').' e ON e.id=p.entity_id AND e.session_id=? JOIN '.$this->table('control_groups').' g ON g.id=e.control_group_id AND g.session_id=e.session_id JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id JOIN '.$this->table('snapshots').' x ON x.id=e.template_snapshot_id AND x.session_id=e.session_id JOIN '.$this->table('controllers')." c ON c.entity_id=e.id AND c.session_id=e.session_id AND c.status='active' AND (c.valid_until IS NULL OR c.valid_until>?) WHERE p.encounter_id=? AND p.participation='engaged' ORDER BY e.control_group_id,e.id",[$sid,time(),$eid])['rows'];
+        foreach($rows as &$row)foreach(['participant_id','entity_id','side_id','participant_version','owner_uid','control_group_id','entity_version','template_snapshot_id','group_version','state_version','controller_uid','assignment_version'] as $field)if($row[$field]!==null)$row[$field]=(string)$row[$field];unset($row);
+        return $rows;
+    }
+    public function firstRound(string $eid): ?array
+    {
+        $row=$this->sql('SELECT * FROM '.$this->table('rounds').' WHERE encounter_id=? AND round_number=1',[$eid])['rows'][0]??null;
+        return $row?$this->ids($row,['id','encounter_id','round_number','round_version','opened_at','closed_at']):null;
+    }
+    public function roundTurns(string $roundId,string $after='0'): array
+    {
+        return array_map(fn($r)=>$this->ids($r,['id','round_id','control_group_id','turn_version','ap_budget','ap_spent','seal_quota_spent','pre_round_ap_commitment']),$this->sql('SELECT * FROM '.$this->table('turns').' WHERE round_id=? AND id>? ORDER BY id LIMIT 100',[$roundId,self::integer($after,zero:true)])['rows']);
+    }
+    public function individualTurns(array $turnIds): array
+    {
+        if(!$turnIds)return [];
+        if(count($turnIds)>100)throw new RuntimeException('ACS_QUERY_LIMIT');
+        $placeholders=implode(',',array_fill(0,count($turnIds),'?'));
+        return array_map(fn($r)=>$this->ids($r,['id','turn_id','entity_id','entity_turn_version','start_done','end_done','reaction_used']),$this->sql('SELECT * FROM '.$this->table('entity_turns').' WHERE turn_id IN ('.$placeholders.') ORDER BY turn_id,entity_id',$turnIds)['rows']);
+    }
+    public function openFirstRound(array $session,array $encounter,array $sources): array
+    {
+        $this->commandWrite();
+        if($encounter['status']!=='preparation' || $encounter['round_number']!=='0' || $encounter['start_operation_id']!==null || $this->firstRound($encounter['id']))throw new RuntimeException('ACS_FIRST_ROUND_EXISTS');
+        $groups=[];foreach($sources as $source)$groups[$source['control_group_id']][]=$source;
+        if(!$groups)throw new RuntimeException('ACS_ROSTER_INVALID');
+        $round=$this->sql('INSERT INTO '.$this->table('rounds').' (encounter_id,round_number,status,round_version,opened_at,closed_at) VALUES (?,1,?,1,?,NULL)',[$encounter['id'],'open',time()])['id'];
+        $rosters=[];$entityCount=0;
+        foreach($groups as $group=>$members) {
+            $frozen=[];foreach($members as $member) {
+                unset($member['group_config'],$member['layers_json']);$frozen[]=$member;++$entityCount;
+            }
+            $payload=['schema_version'=>1,'contract_id'=>'IC-ACS.round-roster.v1','clock_version'=>AF_ACS_Clock::VERSION,'numeric_policy'=>'binary64-half_up-v1',
+                'round_id'=>$round,'round_number'=>1,'control_group_id'=>(string)$group,'group_version'=>$members[0]['group_version'],
+                'initial_ap'=>3,'pre_round_ap_commitment'=>0,'waiting_policy'=>'next_round','members'=>$frozen];
+            $payload['fingerprint']=hash('sha256',self::json($payload));$json=self::json($payload);$rosters[$group]=$json;
+            $turn=$this->sql('INSERT INTO '.$this->table('turns').' (round_id,control_group_id,status,ap_budget,ap_spent,seal_quota_spent,pre_round_ap_commitment,turn_version,deadline_at,remaining_deadline_seconds,closed_by_submission,roster_json) VALUES (?,?,?,3,0,0,0,1,NULL,NULL,NULL,?)',[$round,(string)$group,'pending',$json])['id'];
+            foreach($members as $member)$this->sql('INSERT INTO '.$this->table('entity_turns').' (turn_id,entity_id,start_done,end_done,reaction_used,entity_turn_version) VALUES (?,?,0,0,0,1)',[$turn,$member['entity_id']]);
+        }
+        self::integer($encounter['next_event_sequence'],'18446744073709551614');
+        if($this->sql('UPDATE '.$this->table('encounters').' SET status=?,round_number=1,start_operation_id=?,encounter_version=encounter_version+1,next_event_sequence=next_event_sequence+1 WHERE session_id=? AND id=? AND encounter_version=? AND status=?', ['active','encounter:'.$encounter['id'].':first-round',$session['id'],$encounter['id'],$encounter['encounter_version'],'preparation'])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
+        $session['_command_result']=['encounter_id'=>$encounter['id'],'encounter_version'=>$this->encounter($session['id'],$encounter['id'])['encounter_version'],
+            'encounter_sequence'=>$encounter['next_event_sequence'],'round_id'=>$round,'round_number'=>'1','turn_count'=>(string)count($groups),'entity_turn_count'=>(string)$entityCount,
+            'round_roster_hash'=>AF_ACS_Clock::rosterHash($rosters),'clock_version'=>AF_ACS_Clock::VERSION,'ap_refresh_boundary'=>AF_ACS_Clock::apRefresh($round)];
+        return $session;
+    }
+
 }
