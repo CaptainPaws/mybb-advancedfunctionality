@@ -26,6 +26,18 @@ final class AF_ACS_Clock
         return $from===AF_ACS_TurnState::Pending && in_array($to,[AF_ACS_TurnState::Resolved,AF_ACS_TurnState::Passed,AF_ACS_TurnState::Forfeited],true);
     }
     public static function closed(AF_ACS_TurnState $state): bool {return $state!==AF_ACS_TurnState::Pending;}
+    public static function availableAP(int $budget,int $spent,int $commitment=0): int
+    {
+        if($budget<0 || $spent<0 || $spent>$budget || $commitment!==0)throw new RuntimeException('ACS_AP_STATE_INVALID');return $budget-$spent;
+    }
+    /** A1.7 + N1: exact integer quarter, one terminal half_up, then resource clamp. */
+    public static function restHP(int $current,int $maximum,bool $full): int
+    {
+        if($current<0 || $maximum<0 || $current>$maximum || $maximum>9007199254740991)throw new RuntimeException('ACS_HP_RANGE');
+        if($full)return $maximum;
+        $recovery=intdiv($maximum,4)+(($maximum%4)>=2?1:0);
+        return min($maximum,$current+$recovery);
+    }
     /** Stable serialization order is not initiative; every pending group has the same opportunity. */
     public static function rosterHash(array $groupPayloads): string
     {

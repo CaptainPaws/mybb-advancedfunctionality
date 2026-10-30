@@ -31,7 +31,7 @@ $server->query('CREATE DATABASE `'.$database.'` CHARACTER SET utf8mb4 COLLATE ut
 try {
     $link=new mysqli('localhost','root','',$database,0,$socket);$link->set_charset('utf8mb4');
     $migrations=new AF_ACS_Migrations($link);$migrations->run();
-    snapshot_assert($migrations->status()['schema_version']==='004_round_roster','Schema version');
+    snapshot_assert($migrations->status()['schema_version']==='005_clock_resources','Schema version');
     // Simulate interrupted DDL after groups/entities, never use this against production.
     foreach(['entity_states','resources','controllers'] as $table)$link->query('DROP TABLE fixture_af_acs_'.$table);
     $link->query("UPDATE fixture_af_acs_schema_migrations SET status='failed',step=2 WHERE version='002_entities'");

@@ -158,6 +158,15 @@ function af_advancedcombatsystem_xmlhttp(): void
         $service=af_advancedcombatsystem_sessions();$op=$mybb->get_input('op');
         if($op==='list')$data=$service->list($mybb->get_input('after')?:'0');
         elseif($op==='get')$data=$service->view($mybb->get_input('session_id'));
+        elseif(str_starts_with($op,'clock_')) {
+            $clock=af_advancedcombatsystem_encounters()->clock();$sid=$mybb->get_input('session_id');
+            $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','round_id','entity_turn_id','control_group_id','confirm_full'] as $f)$input[$f]=$mybb->get_input($f);
+            $data=match($op) {
+                'clock_overview'=>$clock->overview($sid),
+                'clock_ap_available'=>$clock->available($sid,$mybb->get_input('turn_id'),$mybb->get_input('entity_id'),(int)AF_ACS_Repository::integer($mybb->get_input('cost')?:'0','2147483647',true)),
+                default=>$clock->command(substr($op,6),$input),
+            };
+        }
         elseif(str_starts_with($op,'encounter_')) {
             $encounters=af_advancedcombatsystem_encounters();$sid=$mybb->get_input('session_id');$eid=$mybb->get_input('encounter_id');
             $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid'] as $field)$input[$field]=$mybb->get_input($field);
@@ -224,15 +233,24 @@ function af_advancedcombatsystem_session_failure(Throwable $error): array
         return ['category'=>'VALIDATION_ERROR','request_id'=>$id,'error_id'=>$id,'message'=>'Регистрация заблокирована: источник не прошёл проверку.','diagnostics'=>$diagnostics];
     }
     $category=match($error->getMessage()) {
-        'ACS_FIRST_ROUND_EXISTS','ACS_ROSTER_BLOCKED','ACS_ROSTER_INVALID','ACS_TURN_STATE_INVALID','ACS_ENCOUNTER_TRANSITION_BLOCKED','ACS_PARTICIPANT_EXISTS','ACS_ENTITY_UNAVAILABLE','ACS_CONTROL_INVALID','ACS_SNAPSHOT_INVALID','ACS_ENTITY_ALREADY_REGISTERED','ACS_DEFINITION_VERSION_CONFLICT','ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SESSION_TRANSITION_BLOCKED'=>'STATE_CONFLICT',
-        'ACS_GM_REQUIRED','ACS_ENCOUNTER_UNAVAILABLE','ACS_REGISTRATION_DENIED','ACS_SESSION_UNAVAILABLE','ACS_THREAD_UNAVAILABLE','ACS_CREATE_DENIED','ACS_ROLE_ESCALATION_DENIED','ACS_ADMIN_PERMISSION_REQUIRED','ACS_LOGIN_REQUIRED','ACS_CSRF_REQUIRED'=>'PERMISSION_DENIED',
-        'ACS_RELATION_INVALID','ACS_SIDE_UNAVAILABLE','ACS_INVALID_JSON','ACS_JSON_TOO_LARGE','ACS_INVALID_KEY','ACS_ENTITY_KIND_INVALID','ACS_SOURCE_REQUIRED','ACS_HP_INTEGER_REQUIRED','ACS_HP_RANGE','ACS_DEFINITION_LIMIT','ACS_INVALID_TEXT','ACS_REASON_REQUIRED','ACS_ROLE_INVALID','ACS_INVALID_INTEGER','ACS_INTEGER_RANGE','ACS_OPERATION_KEY_REQUIRED','ACS_POST_REQUIRED','ACS_REQUEST_TOO_LARGE','ACS_RATE_LIMIT','ACS_OWNER_PROTECTED','ACS_OWNER_UNCHANGED','ACS_USER_UNAVAILABLE'=>'VALIDATION_ERROR',
+        'ACS_CLOCK_BOUNDARY_STATE','ACS_CLOCK_DEPENDENCY_BLOCKED','ACS_COMBAT_RESET_REQUIRED','ACS_COOLDOWN_SOURCE_UNAVAILABLE','ACS_COOLDOWN_UNCONFIRMED','ACS_RESOURCE_STATE_CONFLICT','ACS_REST_COMBAT_ACTIVE','ACS_REST_LIMIT','ACS_REST_WINDOW_UNAVAILABLE','ACS_REST_POLICY_UNAVAILABLE','ACS_AP_STATE_INVALID','ACS_FIRST_ROUND_EXISTS','ACS_ROSTER_BLOCKED','ACS_ROSTER_INVALID','ACS_TURN_STATE_INVALID','ACS_ENCOUNTER_TRANSITION_BLOCKED','ACS_PARTICIPANT_EXISTS','ACS_ENTITY_UNAVAILABLE','ACS_CONTROL_INVALID','ACS_SNAPSHOT_INVALID','ACS_ENTITY_ALREADY_REGISTERED','ACS_DEFINITION_VERSION_CONFLICT','ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SESSION_TRANSITION_BLOCKED'=>'STATE_CONFLICT',
+        'ACS_AP_ACCESS_DENIED','ACS_GM_REQUIRED','ACS_ENCOUNTER_UNAVAILABLE','ACS_REGISTRATION_DENIED','ACS_SESSION_UNAVAILABLE','ACS_THREAD_UNAVAILABLE','ACS_CREATE_DENIED','ACS_ROLE_ESCALATION_DENIED','ACS_ADMIN_PERMISSION_REQUIRED','ACS_LOGIN_REQUIRED','ACS_CSRF_REQUIRED'=>'PERMISSION_DENIED',
+        'ACS_REST_CONFIRMATION_REQUIRED','ACS_REST_NO_TARGETS','ACS_CLOCK_OPERATION_UNAVAILABLE','ACS_RELATION_INVALID','ACS_SIDE_UNAVAILABLE','ACS_INVALID_JSON','ACS_JSON_TOO_LARGE','ACS_INVALID_KEY','ACS_ENTITY_KIND_INVALID','ACS_SOURCE_REQUIRED','ACS_HP_INTEGER_REQUIRED','ACS_HP_RANGE','ACS_DEFINITION_LIMIT','ACS_INVALID_TEXT','ACS_REASON_REQUIRED','ACS_ROLE_INVALID','ACS_INVALID_INTEGER','ACS_INTEGER_RANGE','ACS_OPERATION_KEY_REQUIRED','ACS_POST_REQUIRED','ACS_REQUEST_TOO_LARGE','ACS_RATE_LIMIT','ACS_OWNER_PROTECTED','ACS_OWNER_UNCHANGED','ACS_USER_UNAVAILABLE'=>'VALIDATION_ERROR',
         'ACS_COMMIT_UNKNOWN','ACS_ROLLBACK_UNKNOWN','ACS_RECOVERY_REQUIRED'=>'RECOVERY_REQUIRED',
         default=>'INTERNAL_ERROR',
     };
+    $publicMessage=match($error->getMessage()) {
+        'ACS_REST_LIMIT'=>'Короткий отдых группы уже использован в этом интервале.',
+        'ACS_REST_COMBAT_ACTIVE'=>'Отдых недоступен до завершения активного столкновения, паузы или засады.',
+        'ACS_REST_WINDOW_UNAVAILABLE'=>'Для короткого отдыха нужно подтверждённое завершённое столкновение.',
+        'ACS_REST_CONFIRMATION_REQUIRED'=>'Подтвердите разрешение мастера на полноценный отдых.',
+        'ACS_COOLDOWN_SOURCE_UNAVAILABLE','ACS_COOLDOWN_UNCONFIRMED'=>'Кулдаун не имеет подтверждённого источника и версии. Граница не обработана.',
+        'ACS_CLOCK_DEPENDENCY_BLOCKED'=>'Граница требует ещё не подключённого обработчика эффектов.',
+        default=>'Сессия или команда недоступна. Проверьте права, поля и версию данных.',
+    };
     $id=bin2hex(random_bytes(16));$requestId=$id;
-    try {if(!in_array($category,['INTERNAL_ERROR','RECOVERY_REQUIRED'],true))return ['category'=>$category,'request_id'=>$requestId,'error_id'=>$id,'message'=>'Сессия или команда недоступна. Проверьте права, поля и версию данных.'];
+    try {if(!in_array($category,['INTERNAL_ERROR','RECOVERY_REQUIRED'],true))return ['category'=>$category,'request_id'=>$requestId,'error_id'=>$id,'message'=>$publicMessage];
         require_once __DIR__.'/modules/Infrastructure/Repository.php';$id=(new AF_ACS_Repository($db))->recordDiagnostic($id,$category,'session_command','validation');}
     catch(Throwable $diagnosticError) {error_log('ACS session '.$id.' '.$category);}
-    return ['category'=>$category,'request_id'=>$requestId,'error_id'=>$id,'message'=>'Сессия или команда недоступна. Проверьте права, поля и версию данных.'];
+    return ['category'=>$category,'request_id'=>$requestId,'error_id'=>$id,'message'=>$publicMessage];
 }

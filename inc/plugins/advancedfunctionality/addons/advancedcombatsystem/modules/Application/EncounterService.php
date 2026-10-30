@@ -17,6 +17,10 @@ final class AF_ACS_EncounterService
         if($write && $session['status']!=='active')throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
         return $session;
     }
+    public function clock(): AF_ACS_ClockService
+    {
+        require_once __DIR__.'/ClockService.php';return new AF_ACS_ClockService($this->repository,$this->access);
+    }
     public function context(string $sid,string $tid): array {return $this->authorize($sid,tid:$tid);}
     public function list(string $sid,string $after='0',?string $tid=null): array
     {
@@ -118,19 +122,21 @@ final class AF_ACS_EncounterService
             $a=(string)$ids[$i];$b=(string)$ids[$j];if(strlen($a)>strlen($b)||(strlen($a)===strlen($b)&&strcmp($a,$b)>0))[$a,$b]=[$b,$a];
             if(!in_array($relations[$a.':'.$b]??null,['allied','neutral','hostile'],true))$issues[]=['code'=>'side_relationship_missing','side_a'=>$a,'side_b'=>$b];
         }
-        $issues=array_merge($issues,$this->rosterIssues($this->repository->rosterSources($sid,$eid)));
+        $issues=array_merge($issues,$this->rosterIssues($this->repository->rosterSources($sid,$eid),$sid));
         return ['preparation_ready'=>!$issues,'can_start'=>!$issues,'diagnostics'=>array_slice($issues,0,100),
             'blocked_capabilities'=>$issues?[['capability'=>'round_roster','status'=>'BLOCKED','stage'=>'ACS-2.3.1','reason'=>'Исправьте причины блокировки подготовки.']]:[],
             'encounter_version'=>$encounter['encounter_version'],'session_version'=>$session['session_version']];
     }
     /** Read-only dependency gate: no silently skipped AP modifiers, ticks or upkeep. */
-    private function rosterIssues(array $sources): array
+    private function rosterIssues(array $sources,string $sid): array
     {
         $issues=[];$seen=[];
         if(!$sources)$issues[]=['code'=>'participants_missing'];
         foreach($sources as $source) {
             if(isset($seen[$source['entity_id']]))$issues[]=['code'=>'ACS_CONTROL_INVALID','entity_id'=>$source['entity_id']];
             $seen[$source['entity_id']]=true;
+            try{foreach($this->repository->allCooldowns($sid,$source['entity_id']) as $cooldown)$this->repository->cooldownSource($sid,$cooldown);}
+            catch(Throwable $error){$issues[]=['code'=>'cooldown_source_unavailable','entity_id'=>$source['entity_id']];}
             try {
                 $group=json_decode($source['group_config'],true,32,JSON_THROW_ON_ERROR);
                 $layers=json_decode($source['layers_json'],true,32,JSON_THROW_ON_ERROR);
@@ -194,7 +200,7 @@ final class AF_ACS_EncounterService
                 if($op==='round_start') {
                     $ready=$this->readiness($sid,$encounter['id']);
                     if(!$ready['can_start'])throw new RuntimeException('ACS_ROSTER_BLOCKED');
-                    return $this->repository->openFirstRound($session,$encounter,$this->repository->rosterSources($sid,$encounter['id']));
+                    return $this->repository->openFirstRound($session,$encounter,$this->repository->rosterSources($sid,$encounter['id']),$request['actor_uid']);
                 }
                 if(in_array($op,['participant_add','participant_side'],true)){$this->side($encounter['id'],$request['side_id']);$entity=$this->entity($sid,$request['entity_id'],$encounter['id']);}
                 if($op==='relation_set'){$this->side($encounter['id'],$request['side_a']);$this->side($encounter['id'],$request['side_b']);}

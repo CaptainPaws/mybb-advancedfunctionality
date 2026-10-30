@@ -1,10 +1,12 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SessionRepository.php';
+require_once __DIR__.'/ClockPersistence.php';
 
 /** Prepared, scoped SQL. All mutators require the existing audited command transaction. */
 final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
 {
+    use AF_ACS_ClockPersistence;
     private function ids(array $row,array $fields): array
     {
         foreach($fields as $field)if(isset($row[$field]))$row[$field]=(string)$row[$field];return $row;
@@ -49,7 +51,7 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     }
     public function entity(string $sid,string $id): ?array
     {
-        $row=$this->sql('SELECT e.*,s.life_state,s.hp,s.hp_max,s.state_version,g.session_id AS group_session,g.owner_uid AS group_owner,g.kind AS group_kind,x.payload_json,x.content_hash FROM '.$this->table('entities').' e JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id JOIN '.$this->table('control_groups').' g ON g.id=e.control_group_id JOIN '.$this->table('snapshots').' x ON x.id=e.template_snapshot_id AND x.session_id=e.session_id WHERE e.session_id=? AND e.id=?',[$sid,$id])['rows'][0]??null;
+        $row=$this->sql('SELECT e.*,s.life_state,s.hp,s.hp_max,s.state_version,s.layers_json,g.session_id AS group_session,g.owner_uid AS group_owner,g.kind AS group_kind,x.payload_json,x.content_hash FROM '.$this->table('entities').' e JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id JOIN '.$this->table('control_groups').' g ON g.id=e.control_group_id JOIN '.$this->table('snapshots').' x ON x.id=e.template_snapshot_id AND x.session_id=e.session_id WHERE e.session_id=? AND e.id=?',[$sid,$id])['rows'][0]??null;
         return $row?$this->ids($row,['id','session_id','control_group_id','owner_uid','group_owner','group_session','template_snapshot_id','entity_version','hp','hp_max','state_version']):null;
     }
     public function controllers(string $sid,string $entity): array
@@ -142,7 +144,7 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
         $placeholders=implode(',',array_fill(0,count($turnIds),'?'));
         return array_map(fn($r)=>$this->ids($r,['id','turn_id','entity_id','entity_turn_version','start_done','end_done','reaction_used']),$this->sql('SELECT * FROM '.$this->table('entity_turns').' WHERE turn_id IN ('.$placeholders.') ORDER BY turn_id,entity_id',$turnIds)['rows']);
     }
-    public function openFirstRound(array $session,array $encounter,array $sources): array
+    public function openFirstRound(array $session,array $encounter,array $sources,string $actor): array
     {
         $this->commandWrite();
         if($encounter['status']!=='preparation' || $encounter['round_number']!=='0' || $encounter['start_operation_id']!==null || $this->firstRound($encounter['id']))throw new RuntimeException('ACS_FIRST_ROUND_EXISTS');
@@ -158,11 +160,12 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
                 'round_id'=>$round,'round_number'=>1,'control_group_id'=>(string)$group,'group_version'=>$members[0]['group_version'],
                 'initial_ap'=>3,'pre_round_ap_commitment'=>0,'waiting_policy'=>'next_round','members'=>$frozen];
             $payload['fingerprint']=hash('sha256',self::json($payload));$json=self::json($payload);$rosters[$group]=$json;
-            $turn=$this->sql('INSERT INTO '.$this->table('turns').' (round_id,control_group_id,status,ap_budget,ap_spent,seal_quota_spent,pre_round_ap_commitment,turn_version,deadline_at,remaining_deadline_seconds,closed_by_submission,roster_json) VALUES (?,?,?,3,0,0,0,1,NULL,NULL,NULL,?)',[$round,(string)$group,'pending',$json])['id'];
+            $turn=$this->sql('INSERT INTO '.$this->table('turns').' (round_id,control_group_id,status,ap_budget,ap_spent,seal_quota_spent,pre_round_ap_commitment,turn_version,deadline_at,remaining_deadline_seconds,closed_by_submission,roster_json) VALUES (?,?,?,0,0,0,0,1,NULL,NULL,NULL,?)',[$round,(string)$group,'pending',$json])['id'];
             foreach($members as $member)$this->sql('INSERT INTO '.$this->table('entity_turns').' (turn_id,entity_id,start_done,end_done,reaction_used,entity_turn_version) VALUES (?,?,0,0,0,1)',[$turn,$member['entity_id']]);
         }
         self::integer($encounter['next_event_sequence'],'18446744073709551614');
         if($this->sql('UPDATE '.$this->table('encounters').' SET status=?,round_number=1,start_operation_id=?,encounter_version=encounter_version+1,next_event_sequence=next_event_sequence+1 WHERE session_id=? AND id=? AND encounter_version=? AND status=?', ['active','encounter:'.$encounter['id'].':first-round',$session['id'],$encounter['id'],$encounter['encounter_version'],'preparation'])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
+        $this->initializeRoundAP($session['id'],$encounter['id'],$round,$actor,$encounter['next_event_sequence']);
         $session['_command_result']=['encounter_id'=>$encounter['id'],'encounter_version'=>$this->encounter($session['id'],$encounter['id'])['encounter_version'],
             'encounter_sequence'=>$encounter['next_event_sequence'],'round_id'=>$round,'round_number'=>'1','turn_count'=>(string)count($groups),'entity_turn_count'=>(string)$entityCount,
             'round_roster_hash'=>AF_ACS_Clock::rosterHash($rosters),'clock_version'=>AF_ACS_Clock::VERSION,'ap_refresh_boundary'=>AF_ACS_Clock::apRefresh($round)];

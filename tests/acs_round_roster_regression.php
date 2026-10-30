@@ -8,7 +8,7 @@ $GLOBALS['acsRoundFixture']=static function(array $f):void {
     $link->query('UPDATE fixture_af_acs_operations SET updated_at=0');
     foreach(['turns','entity_turns'] as $table)$link->query('DROP TABLE fixture_af_acs_'.$table);
     $link->query("UPDATE fixture_af_acs_schema_migrations SET status='failed',step=1 WHERE version='004_round_roster'");
-    $migrations->run();$migrations->run();snapshot_assert($migrations->status()['schema_version']==='004_round_roster','004 resume/repeat failed');
+    $migrations->run();$migrations->run();snapshot_assert($migrations->status()['schema_version']==='005_clock_resources','004 resume/repeat failed');
     $view=$service->view($sid,$eid);
     $input=['session_id'=>$sid,'encounter_id'=>$eid,'expected_version'=>$view['session']['session_version'],'encounter_version'=>$view['encounter']['encounter_version'],'operation_key'=>'first_round_fixture1','reason'=>'Open first round','tid'=>'51'];
     // A pre-existing active layer must never be ignored merely to open a roster.
@@ -72,6 +72,7 @@ $GLOBALS['acsRoundFixture']=static function(array $f):void {
     $mybb->user['uid']=9;blocked(fn()=>$service->roundView($sid,$eid),'ACS_GM_REQUIRED');$mybb->user['uid']=7;
     $GLOBALS['af_acs_deactivated']=true;blocked(fn()=>$service->command('round_start',$input),'ACS_DISABLED');unset($GLOBALS['af_acs_deactivated']);$migrations->assertInstalled();
     snapshot_assert($service->roundView($sid,$eid)===$read,'Reactivation changed roster');
+    if(isset($GLOBALS['acsResourcesFixture']))$GLOBALS['acsResourcesFixture'](compact('link','sid','eid','service','repo','access','sessions','entities','result','first','second','registeredPet','command','migrations','round','entityTurns','groups'));
     echo "ACS round roster: one atomic first round/replay, character+pet one turn, independent monsters, stable per-entity boundaries, unsupported layer gate, GET no ticks, late-group deferral, closed-turn persistence and 004 resume passed\n";
 };
 require __DIR__.'/acs_encounters_regression.php';
