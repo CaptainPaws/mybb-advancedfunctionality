@@ -3,9 +3,9 @@
 return [
     'id' => 'advancedcombatsystem',
     'name' => 'AdvancedCombatSystem',
-    'version' => '0.3.0',
+    'version' => '0.4.0',
     'author' => 'CaptainPaws',
-    'description' => 'AdvancedCombatSystem SQL foundation and lifecycle (ACS-1.2).',
+    'description' => 'AdvancedCombatSystem sessions, thread links and roles (ACS-2.2.1).',
     'bootstrap' => 'advancedcombatsystem.php',
     'admin' => [
         'slug' => 'advancedcombatsystem',
@@ -32,7 +32,7 @@ return [
                 'af_advancedcombatsystem_status' => 'Состояние',
                 'af_advancedcombatsystem_enabled' => 'Включён',
                 'af_advancedcombatsystem_disabled' => 'Отключён',
-                'af_advancedcombatsystem_notice' => 'ACS-1.3: права, диагностика и интеграционные ограничения. Игровая механика ещё не реализована.',
+                'af_advancedcombatsystem_notice' => 'ACS: сессии и роли. Существа, столкновения, раунды и AP ещё не реализованы.',
                 'af_advancedcombatsystem_schema' => 'Версия схемы',
                 'af_advancedcombatsystem_migrations' => 'Миграции: версия / результат / шаг / error_id',
                 'af_advancedcombatsystem_compatibility' => 'Совместимость БД',

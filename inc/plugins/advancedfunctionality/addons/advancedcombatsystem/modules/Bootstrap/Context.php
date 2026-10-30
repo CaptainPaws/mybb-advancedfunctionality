@@ -12,10 +12,10 @@ final class AF_ACS_Context
     public const INTERACTIVE = 'interactive';
 
     /**
-     * Only the existing AF ACP page is a view in stage 1.
+     * The AF ACP and explicit session page are read views.
      * Context identifies a surface; it grants no permissions. Authorization is
      * checked separately by ACP/commands without loading it on ordinary pages.
-     * Frontend session detection requires the later session/read contracts;
+     * The showthread link provider resolves only persisted memberships;
      * a tid, op or context supplied by a client cannot enable combat runtime.
      * Read enabled each time so disable/reactivate cannot leave stale context.
      */
@@ -32,6 +32,8 @@ final class AF_ACS_Context
             return self::VIEW;
         }
 
+        if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_sessions')return self::VIEW;
+        if(defined('THIS_SCRIPT') && THIS_SCRIPT==='xmlhttp.php' && $mybb->get_input('action')==='af_addon_api' && $mybb->get_input('addon')==='advancedcombatsystem')return self::VIEW;
         return self::INACTIVE;
     }
 }
