@@ -5,15 +5,19 @@ require_once __DIR__.'/../Infrastructure/Repository.php';
 
 final class AF_ACS_Migrations extends AF_ACS_Repository
 {
-    public const VERSION = '001_foundation';
+    public const VERSION = '002_entities';
 
     /** Explicit ordered registry; never execute a filename supplied by a client. */
     private function registry(): array
     {
-        $file = __DIR__.'/../../migrations/001_foundation.php';
-        $migration = require $file;
-        $migration['checksum'] = hash_file('sha256', $file);
-        return [$migration];
+        $registry = [];
+        foreach (['001_foundation','002_entities'] as $version) {
+            $file = __DIR__.'/../../migrations/'.$version.'.php';
+            $migration = require $file;
+            $migration['checksum'] = hash_file('sha256', $file);
+            $registry[] = $migration;
+        }
+        return $registry;
     }
 
     public function environment(): array
@@ -52,7 +56,7 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
 
     private static function type(string $type): string
     {
-        return preg_replace('/\b(bigint|int)\(\d+\)/', '$1', strtolower($type));
+        return preg_replace('/\b(bigint|int|tinyint)\(\d+\)/', '$1', strtolower($type));
     }
 
     /** Exact readback: never repair a mismatching table, column or index silently. */
@@ -70,7 +74,7 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
             if (preg_match('/^(PRIMARY KEY|UNIQUE KEY (\w+)|KEY (\w+)) \(([^)]+)\)$/', $line, $match)) {
                 $indexName = $match[1] === 'PRIMARY KEY' ? 'PRIMARY' : ($match[2] ?: $match[3]);
                 $indexes[$indexName] = ['unique' => !str_starts_with($match[1], 'KEY '), 'columns' => explode(',', $match[4])];
-            } elseif (preg_match('/^(\w+) ((?:bigint|int)(?: unsigned)?|(?:var)?char\(\d+\)|longtext) (.+)$/', $line, $match)) {
+            } elseif (preg_match('/^(\w+) ((?:bigint|int|tinyint)(?: unsigned)?|double|(?:var)?char\(\d+\)|longtext) (.+)$/', $line, $match)) {
                 preg_match('/DEFAULT (\d+)/', $match[3], $default);
                 $expected[] = ['name' => $match[1], 'type' => $match[2], 'nullable' => !str_contains($match[3], 'NOT NULL'), 'default' => $default[1] ?? null, 'extra' => str_contains($match[3], 'AUTO_INCREMENT') ? 'auto_increment' : ''];
             }

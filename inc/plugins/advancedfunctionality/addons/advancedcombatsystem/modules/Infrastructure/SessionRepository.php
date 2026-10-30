@@ -6,7 +6,7 @@ require_once __DIR__.'/Repository.php';
 class AF_ACS_SessionRepository extends AF_ACS_Repository
 {
     private bool $inCommand = false;
-    private function commandWrite(): void {if(!$this->inCommand)throw new RuntimeException('ACS_COMMAND_REQUIRED');}
+    protected function commandWrite(): void {if(!$this->inCommand)throw new RuntimeException('ACS_COMMAND_REQUIRED');}
     private function sessionRow(array $row): array
     {
         if((string)$row['schema_version']!=='1')throw new RuntimeException('ACS_SESSION_SCHEMA_UNSUPPORTED');
@@ -85,12 +85,12 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
             $version=self::integer($session['session_version'],'18446744073709551614');
             $sequence=self::integer($session['next_sequence'],'18446744073709551614');
             $this->sql('INSERT INTO '.$this->table('operations').' (operation_key,session_id,kind,payload_hash,status,operation_version,request_json,result_json,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',[$key,$id,$kind,$hash,'prepared',1,$json,self::json(['schema_version'=>1]),time()]);
-            $event=$this->sql('INSERT INTO '.$this->table('events').' (session_id,session_sequence,operation_key,event_type,actor_uid,engine_version,created_at) VALUES (?,?,?,?,?,?,?)',[$id,$sequence,$key,$kind,$request['actor_uid'],'acs-sessions-1',time()])['id'];
-            $details=self::json(['schema_version'=>1,'numeric_policy'=>'binary64-half_up-v1','request'=>$request,'before_version'=>$version]);
+            $event=$this->sql('INSERT INTO '.$this->table('events').' (session_id,session_sequence,operation_key,event_type,actor_uid,engine_version,created_at) VALUES (?,?,?,?,?,?,?)',[$id,$sequence,$key,$kind,$request['actor_uid'],$kind==='entity.register'?'acs-registration-1':'acs-sessions-1',time()])['id'];
+            $details=self::json(['schema_version'=>1,'numeric_policy'=>'binary64-half_up-v1','request'=>$request,'before_version'=>$version,'result'=>$session['_command_result']??[],'snapshot_refs'=>isset($session['_command_result']['snapshot_id'])?[$session['_command_result']['snapshot_id']]:[]]);
             $visibility=self::json(['schema_version'=>1,'scope'=>'session_management']);
             $this->sql('INSERT INTO '.$this->table('event_details').' (event_id,schema_version,numeric_policy,payload_json,visibility_json,content_hash) VALUES (?,?,?,?,?,?)',[$event,1,'binary64-half_up-v1',$details,$visibility,hash('sha256',$details."\n".$visibility)]);
             if($this->sql('UPDATE '.$this->table('sessions').' SET session_version=session_version+1,next_sequence=next_sequence+1,updated_at=? WHERE id=? AND session_version=?',[time(),$id,$version])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
-            $result=['schema_version'=>1,'session_id'=>$id,'session_version'=>(string)$this->session($id)['session_version'],'event_id'=>$event];
+            $result=['schema_version'=>1,'session_id'=>$id,'session_version'=>(string)$this->session($id)['session_version'],'event_id'=>$event]+($session['_command_result']??[]);
             $this->sql('UPDATE '.$this->table('operations').' SET status=?,operation_version=operation_version+1,result_json=? WHERE operation_key=?',['committed',self::json($result),$key]);
             return $result;
         });

@@ -10,7 +10,7 @@ final class AF_ACS_SessionService
     {
         $session=$this->repository->session(AF_ACS_Repository::integer($id));
         $this->authorize($session,false);
-        return ['session'=>$session,'members'=>$this->repository->members($id),'can_manage'=>$this->canManage($session)];
+        return ['session'=>$session,'members'=>$this->repository->members($id),'can_manage'=>$this->canManage($session),'can_register_own'=>$session['status']==='active' && (bool)array_intersect(array_column($this->repository->roles($id,$this->access->uid()),'role'),['owner','gm','assistant_gm','player'])];
     }
     private function canManage(array $session): bool
     {
