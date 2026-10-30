@@ -11,7 +11,7 @@ $acsEncounterFixture=static function(array $f):void {
     $beforeSnapshots=$link->query('SELECT COUNT(*) FROM fixture_af_acs_snapshots')->fetch_row();
     foreach(['side_relationships','participants'] as $table)$link->query('DROP TABLE fixture_af_acs_'.$table);
     $link->query("UPDATE fixture_af_acs_schema_migrations SET status='failed',step=2 WHERE version='003_encounters'");
-    $migrations->run();$migrations->run();snapshot_assert($migrations->status()['schema_version']==='004_round_roster','003 resume failed');
+    $migrations->run();$migrations->run();snapshot_assert($migrations->status()['schema_version']==='005_clock_resources','003 resume failed');
     snapshot_assert($link->query('SELECT COUNT(*) FROM fixture_af_acs_snapshots')->fetch_row()===$beforeSnapshots,'003 changed existing snapshots');
     $version=$sessions->view($sid)['session']['session_version'];
     $create=['session_id'=>$sid,'expected_version'=>$version,'name'=>'Test <encounter>','reason'=>'Prepare fixture','operation_key'=>'encounter_fixture_01','tid'=>'51'];
