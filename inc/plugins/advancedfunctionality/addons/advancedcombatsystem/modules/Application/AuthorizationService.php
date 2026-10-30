@@ -11,7 +11,7 @@ enum AF_ACS_Role: string
     case Observer = 'observer';
 }
 
-/** No session grants, assignment UI or administrator-to-character bypass. */
+/** Global AF ACP permissions and server-resolved session membership remain separate. */
 final class AF_ACS_AuthorizationService
 {
     public static function matrix(): array
@@ -23,14 +23,15 @@ final class AF_ACS_AuthorizationService
             'admin.integrations.view' => ['scope' => 'global', 'policy' => 'AF_ACP_INDEX'],
             'admin.schema.manage' => ['scope' => 'global', 'policy' => 'AF_ACP_INDEX'],
             'admin.lifecycle' => ['scope' => 'global', 'policy' => 'AF_ACP_INDEX'],
-            'session.view' => ['scope' => 'session', 'policy' => 'RESERVED_DENY'],
-            'session.manage' => ['scope' => 'session', 'policy' => 'RESERVED_DENY'],
+            'session.view' => ['scope' => 'session', 'policy' => 'NATIVE_THREAD_AND_MEMBERSHIP'],
+            'session.manage' => ['scope' => 'session', 'policy' => 'NATIVE_THREAD_AND_OWNER_GM'],
             'entity.control' => ['scope' => 'entity', 'policy' => 'RESERVED_DENY'],
             'entity.consume' => ['scope' => 'entity', 'policy' => 'RESERVED_DENY'],
             'confirmed.correct' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
             'rewards.adjust' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
             'persistent.modify' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
             'control.transfer' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
+            'session.owner.transfer' => ['scope'=>'critical','policy'=>'AF_ACP_INDEX_SESSION_ONLY'],
             'session.reopen' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
             'admin.recover' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
         ];
@@ -49,7 +50,7 @@ final class AF_ACS_AuthorizationService
         return in_array($permission, [1, '1', true], true);
     }
 
-    /** Future session context/role cannot grant anything until a resolver exists. */
+    /** The role argument is never a grant; session permissions resolve persisted membership. */
     public function decision(string $permission, ?string $sessionId = null, ?AF_ACS_Role $role = null): array
     {
         $entry = self::matrix()[$permission] ?? null;
@@ -58,8 +59,15 @@ final class AF_ACS_AuthorizationService
             $allowed = $this->afAdministrator();
             return ['allowed' => $allowed, 'reason' => $allowed ? null : 'ACS_ADMIN_PERMISSION_REQUIRED'];
         }
+        if($permission==='session.owner.transfer' && $sessionId!==null && $sessionId!=='') {
+            $allowed=$this->afAdministrator();return ['allowed'=>$allowed,'reason'=>$allowed?null:'ACS_ADMIN_PERMISSION_REQUIRED'];
+        }
         if ($entry['scope'] === 'critical') { return ['allowed' => false, 'reason' => 'ACS_CRITICAL_OPERATION_NOT_IMPLEMENTED']; }
         if ($sessionId === null || $sessionId === '') { return ['allowed' => false, 'reason' => 'ACS_SESSION_CONTEXT_REQUIRED']; }
+        if(in_array($permission,['session.view','session.manage'],true) && function_exists('af_advancedcombatsystem_sessions')) {
+            try {$view=af_advancedcombatsystem_sessions()->view($sessionId);$allowed=$permission==='session.view' || $view['can_manage'];return ['allowed'=>$allowed,'reason'=>$allowed?null:'ACS_SESSION_UNAVAILABLE'];}
+            catch(Throwable $error) {return ['allowed'=>false,'reason'=>'ACS_SESSION_UNAVAILABLE'];}
+        }
         return ['allowed' => false, 'reason' => 'ACS_SESSION_AUTHORIZATION_NOT_IMPLEMENTED'];
     }
 
