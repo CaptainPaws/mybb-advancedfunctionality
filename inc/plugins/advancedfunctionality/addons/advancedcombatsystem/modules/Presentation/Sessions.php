@@ -20,12 +20,21 @@ final class AF_ACS_SessionsPage
         $sid=$mybb->get_input('session_id');
         if($mybb->request_method==='post') {
             try {
-                $input=[];foreach(['operation_key','reason','tid','owner_uid','session_id','expected_version','uid','role'] as $key)$input[$key]=$mybb->get_input($key);
-                $result=$service->command($mybb->get_input('op'),$input);$sid=$result['session_id'];echo '<p>Изменение сохранено.</p>';
+                $input=[];foreach(['operation_key','reason','tid','owner_uid','session_id','expected_version','uid','role','kind','source_key','name','initial_hp'] as $key)$input[$key]=$mybb->get_input($key);
+                $op=$mybb->get_input('op');
+                if($op==='entity_validate') {
+                    $validation=af_advancedcombatsystem_entities()->validate($input['session_id'],$input);
+                    if(!$validation['ready'])throw new AF_ACS_RegistrationBlocked($validation['diagnostics']);
+                    echo '<p>Источник проверен и готов к регистрации. При добавлении он будет проверен повторно.</p>';
+                } else {
+                    $result=$op==='entity_register'?af_advancedcombatsystem_entities()->register($input):$service->command($op,$input);
+                    $sid=$result['session_id'];echo '<p>Изменение сохранено.</p>';
+                }
             } catch(Throwable $error) {
                 // No exception contents, SQL or protected data in browser output.
                 $failure=af_advancedcombatsystem_session_failure($error);
                 echo '<div class="error">'.self::esc($failure['message']).' Код обращения: '.self::esc($failure['error_id']).'</div>';
+                foreach($failure['diagnostics']??[] as $issue)echo '<p>'.self::esc($issue['message']).' ('.self::esc($issue['code']).' · '.self::esc($issue['path']??'source').')</p>';
             }
         }
         if($sid!=='') {
@@ -45,6 +54,8 @@ final class AF_ACS_SessionsPage
                         echo '<h3>Передать владение сессией</h3><label>UID нового владельца <input type="number" min="1" name="uid" required></label><label>Причина <input name="reason" maxlength="1000" required></label><button type="submit">Передать владение</button></form>';
                     }
                 }
+                require_once __DIR__.'/Entities.php';
+                AF_ACS_EntitiesPage::render((string)$session['id'],$view,$url);
                 echo '<p>Закрытие, архив и reopen пока недоступны: проверки обязательств будут реализованы на этапе 10.</p>';
             } catch(Throwable $error) {echo '<p>Сессия недоступна.</p>';}
         }

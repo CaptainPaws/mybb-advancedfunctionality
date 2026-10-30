@@ -25,6 +25,8 @@ final class AF_ACS_AuthorizationService
             'admin.lifecycle' => ['scope' => 'global', 'policy' => 'AF_ACP_INDEX'],
             'session.view' => ['scope' => 'session', 'policy' => 'NATIVE_THREAD_AND_MEMBERSHIP'],
             'session.manage' => ['scope' => 'session', 'policy' => 'NATIVE_THREAD_AND_OWNER_GM'],
+            'entity.register.own' => ['scope'=>'entity','policy'=>'SESSION_MEMBER_AND_VERIFIED_OWNER'],
+            'entity.register.bestiary' => ['scope'=>'entity','policy'=>'NATIVE_THREAD_AND_OWNER_GM'],
             'entity.control' => ['scope' => 'entity', 'policy' => 'RESERVED_DENY'],
             'entity.consume' => ['scope' => 'entity', 'policy' => 'RESERVED_DENY'],
             'confirmed.correct' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
@@ -64,8 +66,9 @@ final class AF_ACS_AuthorizationService
         }
         if ($entry['scope'] === 'critical') { return ['allowed' => false, 'reason' => 'ACS_CRITICAL_OPERATION_NOT_IMPLEMENTED']; }
         if ($sessionId === null || $sessionId === '') { return ['allowed' => false, 'reason' => 'ACS_SESSION_CONTEXT_REQUIRED']; }
-        if(in_array($permission,['session.view','session.manage'],true) && function_exists('af_advancedcombatsystem_sessions')) {
-            try {$view=af_advancedcombatsystem_sessions()->view($sessionId);$allowed=$permission==='session.view' || $view['can_manage'];return ['allowed'=>$allowed,'reason'=>$allowed?null:'ACS_SESSION_UNAVAILABLE'];}
+        if(in_array($permission,['session.view','session.manage','entity.register.own','entity.register.bestiary'],true) && function_exists('af_advancedcombatsystem_sessions')) {
+            try {$view=af_advancedcombatsystem_sessions()->view($sessionId);$allowed=$permission==='session.view' || $view['can_manage'];
+                if($permission==='entity.register.own')$allowed=$view['can_register_own'];return ['allowed'=>$allowed,'reason'=>$allowed?null:'ACS_SESSION_UNAVAILABLE'];}
             catch(Throwable $error) {return ['allowed'=>false,'reason'=>'ACS_SESSION_UNAVAILABLE'];}
         }
         return ['allowed' => false, 'reason' => 'ACS_SESSION_AUTHORIZATION_NOT_IMPLEMENTED'];

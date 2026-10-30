@@ -3,16 +3,16 @@
 return [
     'id' => 'advancedcombatsystem',
     'name' => 'AdvancedCombatSystem',
-    'version' => '0.4.0',
+    'version' => '0.5.0',
     'author' => 'CaptainPaws',
-    'description' => 'AdvancedCombatSystem sessions, thread links and roles (ACS-2.2.1).',
+    'description' => 'AdvancedCombatSystem sessions, entities and immutable snapshots (ACS-2.2.2).',
     'bootstrap' => 'advancedcombatsystem.php',
     'admin' => [
         'slug' => 'advancedcombatsystem',
         'title' => 'AdvancedCombatSystem',
         'controller' => 'admin.php',
     ],
-    // No frontend combat surface exists in ACS-1.1.
+    // No global frontend combat assets.
     // AF still loads the lightweight bootstrap independently of this policy.
     'frontend' => [
         'mode' => 'contextual',
@@ -32,7 +32,7 @@ return [
                 'af_advancedcombatsystem_status' => 'Состояние',
                 'af_advancedcombatsystem_enabled' => 'Включён',
                 'af_advancedcombatsystem_disabled' => 'Отключён',
-                'af_advancedcombatsystem_notice' => 'ACS: сессии и роли. Существа, столкновения, раунды и AP ещё не реализованы.',
+                'af_advancedcombatsystem_notice' => 'ACS: сессии, роли и регистрация существ со снимками. Столкновения, раунды и AP ещё не реализованы.',
                 'af_advancedcombatsystem_schema' => 'Версия схемы',
                 'af_advancedcombatsystem_migrations' => 'Миграции: версия / результат / шаг / error_id',
                 'af_advancedcombatsystem_compatibility' => 'Совместимость БД',
@@ -48,7 +48,7 @@ return [
                 'af_advancedcombatsystem_diagnostics' => 'Диагностика',
                 'af_advancedcombatsystem_integrations' => 'Интеграции',
                 'af_advancedcombatsystem_sessions_pending' => 'Управление сессиями появится на этапе 2. Список и назначение ролей пока недоступны.',
-                'af_advancedcombatsystem_permissions_note' => 'Глобальные права читаются из ACP MyBB/AF. Сессионные, права существа и критические полномочия запрещены до реализации контекста и аудита. Роли не назначаются на этой странице.',
+                'af_advancedcombatsystem_permissions_note' => 'Глобальные права читаются из ACP MyBB/AF, сессионные — из сохранённых ролей. Регистрация собственного существа требует подтверждения владельца источником. Боевые и критические операции без реализации запрещены.',
                 'af_advancedcombatsystem_role' => 'Роль',
                 'af_advancedcombatsystem_scope' => 'Область',
                 'af_advancedcombatsystem_permission' => 'Полномочие',
@@ -77,7 +77,7 @@ return [
                 'af_advancedcombatsystem_status' => 'Status',
                 'af_advancedcombatsystem_enabled' => 'Enabled',
                 'af_advancedcombatsystem_disabled' => 'Disabled',
-                'af_advancedcombatsystem_notice' => 'ACS-1.3: authorization, diagnostics and integration gates. Gameplay mechanics are not implemented yet.',
+                'af_advancedcombatsystem_notice' => 'ACS: sessions, roles and entity registration with immutable snapshots. Encounters, rounds and AP are not implemented.',
                 'af_advancedcombatsystem_schema' => 'Schema version',
                 'af_advancedcombatsystem_migrations' => 'Migrations: version / result / step / error_id',
                 'af_advancedcombatsystem_compatibility' => 'Database compatibility',
@@ -93,7 +93,7 @@ return [
                 'af_advancedcombatsystem_diagnostics' => 'Diagnostics',
                 'af_advancedcombatsystem_integrations' => 'Integrations',
                 'af_advancedcombatsystem_sessions_pending' => 'Session management arrives in stage 2. No session list or role assignment is available yet.',
-                'af_advancedcombatsystem_permissions_note' => 'Global permissions use MyBB/AF ACP access. Session, entity and critical grants are denied until context and auditing are implemented. This page does not assign roles.',
+                'af_advancedcombatsystem_permissions_note' => 'Global permissions use MyBB/AF ACP access; session permissions use persisted membership. Registering an owned entity requires source ownership verification. Unimplemented combat and critical operations are denied.',
                 'af_advancedcombatsystem_role' => 'Role',
                 'af_advancedcombatsystem_scope' => 'Scope',
                 'af_advancedcombatsystem_permission' => 'Permission',

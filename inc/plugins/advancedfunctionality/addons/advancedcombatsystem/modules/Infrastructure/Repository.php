@@ -27,7 +27,7 @@ class AF_ACS_Repository
 
     protected function table(string $name): string
     {
-        if (!in_array($name, ['schema_migrations', 'sessions', 'session_roles', 'snapshots', 'operations', 'events', 'event_details', 'diagnostics'], true)) {
+        if (!in_array($name, ['schema_migrations', 'sessions', 'session_roles', 'snapshots', 'operations', 'events', 'event_details', 'diagnostics', 'control_groups', 'entities', 'entity_states', 'resources', 'controllers'], true)) {
             throw new RuntimeException('ACS_UNKNOWN_TABLE');
         }
         return '`'.$this->prefix.'af_acs_'.$name.'`';
@@ -66,14 +66,23 @@ class AF_ACS_Repository
             throw new RuntimeException('ACS_DISABLED');
         }
         $rows = $this->sql('SELECT version,status,step,checksum FROM '.$this->table('schema_migrations'))['rows'];
-        $checksum = hash_file('sha256', __DIR__.'/../../migrations/001_foundation.php');
-        if (count($rows) !== 1 || $rows[0]['version'] !== '001_foundation' || $rows[0]['status'] !== 'completed'
-            || (string)$rows[0]['step'] !== '8' || !hash_equals($checksum, $rows[0]['checksum'])) {
-            throw new RuntimeException('ACS_SCHEMA_NOT_READY');
+        $known = [];
+        $names = [];
+        foreach (['001_foundation','002_entities'] as $version) {
+            $file = __DIR__.'/../../migrations/'.$version.'.php';
+            $migration = require $file;
+            $known[$version] = ['checksum'=>hash_file('sha256',$file),'steps'=>count($migration['tables'])];
+            foreach (array_keys($migration['tables']) as $name) $names[]=$this->prefix.'af_acs_'.$name;
         }
-        $names = array_map(fn($name) => $this->prefix.'af_acs_'.$name, ['schema_migrations', 'sessions', 'session_roles', 'snapshots', 'operations', 'events', 'event_details', 'diagnostics']);
-        $count = $this->sql('SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN (?,?,?,?,?,?,?,?) AND ENGINE=? AND TABLE_COLLATION=? AND ROW_FORMAT=?', [...$names, 'InnoDB', 'utf8mb4_unicode_ci', 'Dynamic'])['rows'][0]['n'];
-        if ((string)$count !== '8') { throw new RuntimeException('ACS_SCHEMA_NOT_TRANSACTIONAL'); }
+        if (count($rows)!==count($known)) throw new RuntimeException('ACS_SCHEMA_NOT_READY');
+        foreach ($rows as $row) {
+            $expected=$known[$row['version']]??null;
+            if (!$expected || $row['status']!=='completed' || (int)$row['step']!==$expected['steps']
+                || !hash_equals($expected['checksum'],$row['checksum'])) throw new RuntimeException('ACS_SCHEMA_NOT_READY');
+        }
+        $placeholders=implode(',',array_fill(0,count($names),'?'));
+        $count=$this->sql('SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('.$placeholders.') AND ENGINE=? AND TABLE_COLLATION=? AND ROW_FORMAT=?',[...$names,'InnoDB','utf8mb4_unicode_ci','Dynamic'])['rows'][0]['n'];
+        if ((int)$count!==count($names)) throw new RuntimeException('ACS_SCHEMA_NOT_TRANSACTIONAL');
     }
 
     /** Exact decimal IDs/versions; callers never pass floats or overflowing ints. */
@@ -124,6 +133,18 @@ class AF_ACS_Repository
         } finally { ini_set('serialize_precision', (string)$precision); }
         if (strlen($json) > 262144) { throw new InvalidArgumentException('ACS_JSON_TOO_LARGE'); }
         return $json;
+    }
+
+
+    /** Caller must own the session transaction; insert-only, no historical mutator. */
+    protected function insertSnapshot(string $sessionId, array $source, array $payload): string
+    {
+        $json = self::json($payload);
+        // Arithmetic/engine identifiers are explicit, never inferred on reload.
+        self::text($payload['numeric_policy'] ?? '', 64);
+        self::text($payload['engine_version'] ?? '', 64);
+        $values = [self::integer($sessionId), self::key($source['source_system'] ?? '', 32), self::text($source['source_key'] ?? '', 191), self::key($source['contract_id'] ?? '', 96), self::text($source['contract_version'] ?? '', 64), $payload['schema_version'], hash('sha256', $json), $json, time()];
+        return $this->sql('INSERT INTO '.$this->table('snapshots').' (session_id,source_system,source_key,contract_id,contract_version,schema_version,content_hash,payload_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)', $values)['id'];
     }
 
     protected function lockSession(string $sessionId): array

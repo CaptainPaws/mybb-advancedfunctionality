@@ -82,7 +82,7 @@ try {
  ensure($service->view($own['session_id'])['session']['owner_uid']==='5','Configured GM could not create');
  fails(fn()=>$service->command('create',array_replace($input,['operation_key'=>'gm_other_owner_001'])),'ACS_CREATE_DENIED');
  $mybb->user['uid']=2;$mybb->usergroup['cancp']=1;$mybb->request_method='get';$mybb->input=['acs_section'=>'sessions','session_id'=>$id];
- $db=(object)['write_link'=>$link];
+ $db=new class($link) {public function __construct(public mysqli $write_link){} public function table_exists(string $name):bool{return false;}};
  require AF_ADDONS.'advancedcombatsystem/admin.php';
  ob_start();AF_Admin_Advancedcombatsystem::dispatch();$html=ob_get_clean();
  ensure(str_contains($html,'Доступные сессии') && str_contains($html,'Назначить / изменить роль') && !str_contains($html,'Test <thread>'),'ACP dispatch or escaping failed');
