@@ -56,6 +56,8 @@ class AF_Admin_Advancedcombatsystem
             $auth->requirePermission('admin.diagnostics.view');
             self::schema($diagnostics->schema());
             self::errors($diagnostics->recentErrors());
+            require_once __DIR__.'/modules/Administration/EffectsDiagnostics.php';
+            AF_ACS_EffectsDiagnostics::render();
             self::integrations($diagnostics);
             return;
         }
@@ -76,6 +78,8 @@ class AF_Admin_Advancedcombatsystem
         echo '<p>Hit/Crit: '.self::esc(AF_ACS_HitCrit::VERSION).'</p>';
         require_once __DIR__.'/modules/Domain/Damage.php';
         echo '<p>Damage: '.self::esc(AF_ACS_Damage::VERSION).'</p>';
+        require_once __DIR__.'/modules/Domain/Effects.php';
+        echo '<p>Effects: '.self::esc(AF_ACS_Effects::VERSION).'</p>';
         echo '<p>'.self::esc($lang->af_advancedcombatsystem_notice).'</p>';
         self::schema($diagnostics->schema());
         self::commands();

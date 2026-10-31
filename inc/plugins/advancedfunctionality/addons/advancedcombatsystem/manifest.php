@@ -3,9 +3,9 @@
 return [
     'id' => 'advancedcombatsystem',
     'name' => 'AdvancedCombatSystem',
-    'version' => '0.14.0',
+    'version' => '0.15.0',
     'author' => 'CaptainPaws',
-    'description' => 'AdvancedCombatSystem defense and mixed damage (ACS-3.2.2).',
+    'description' => 'AdvancedCombatSystem virtual barriers, HP and costs (ACS-3.3.1).',
     'bootstrap' => 'advancedcombatsystem.php',
     'admin' => [
         'slug' => 'advancedcombatsystem',
