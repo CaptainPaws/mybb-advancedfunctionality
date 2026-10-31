@@ -72,6 +72,8 @@ class AF_Admin_Advancedcombatsystem
         echo '<p>Formula Compiler: '.self::esc(AF_ACS_Formula::VERSION).' ('.self::esc(AF_ACS_Formula::SCHEMA).')</p>';
         require_once __DIR__.'/modules/Domain/Modifiers.php';
         echo '<p>Modifier Pipeline: '.self::esc(AF_ACS_Modifiers::VERSION).'</p>';
+        require_once __DIR__.'/modules/Domain/HitCrit.php';
+        echo '<p>Hit/Crit: '.self::esc(AF_ACS_HitCrit::VERSION).'</p>';
         echo '<p>'.self::esc($lang->af_advancedcombatsystem_notice).'</p>';
         self::schema($diagnostics->schema());
         self::commands();
