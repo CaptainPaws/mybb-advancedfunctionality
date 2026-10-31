@@ -140,6 +140,39 @@ final class AF_ACS_KnowledgeBaseAdapter
         } catch (Throwable $error) { return $this->failure('source_read_failed'); }
     }
 
+    /** Explicit owner-authorized acquisition of an exact formula; evaluation uses this retained copy only. */
+    public function readFormula(array $pin, int $actorUid, string $expectedUnit): array
+    {
+        try {
+            if (!$this->available($actorUid)) return $this->failure('access_denied');
+            if (!is_string($pin['key'] ?? null) || !preg_match('/\A[a-z][a-z0-9_-]{1,63}\z/D',$pin['key'])) return $this->failure('invalid_formula_contract');
+            // Inspect both potential owner records before the KB resolver can return their contents.
+            foreach (array_unique([$pin['key'],'formula_def']) as $entryKey) {
+                $candidate=af_kb_arpg_acs_lookup('arpg_mechanics',$entryKey);
+                if ($candidate && !$this->visible($candidate,$actorUid)) return $this->failure('definition_access_denied');
+            }
+            $issues=[];
+            $reference=af_kb_arpg_acs_reference('formula_def',$pin['key'],'formula',$issues);
+            if (empty($reference['resolved']) || !isset($reference['formula']) || array_filter($issues,static fn($i)=>$i['severity']==='error')) {
+                $code=$issues[0]['code'] ?? 'reference_unresolved';
+                return $this->failure($code);
+            }
+            $entry=af_kb_arpg_acs_lookup('arpg_mechanics',$reference['entry_key']);
+            if (!$entry || !$this->visible($entry,$actorUid)) return $this->failure('definition_access_denied');
+            if (empty($entry['active'])) return $this->failure('inactive_definition');
+            $source=af_kb_arpg_acs_source($entry,$issues);
+            if ($issues || (string)($entry['id'] ?? '')!==(string)$reference['entry_id'] || $source['fingerprint']!==$reference['fingerprint']) return $this->failure('source_changed_during_read');
+            if (array_key_exists('schema',$source['rules']) && $source['rules']['schema']!==AF_KB_ARPG_RULES_SCHEMA) return $this->failure('unsupported_rules_schema');
+            require_once __DIR__.'/../../Domain/Formula.php';
+            AF_ACS_Formula::compile($reference['formula'],$pin,$expectedUnit); // Structural diagnostics only, never execute AST on read.
+            return ['schema_version'=>1,'contract_id'=>'IC-KB.read.v1','ready'=>true,'executable'=>false,'persistent'=>false,
+                'source'=>['type'=>'arpg_mechanics','key'=>$reference['entry_key'],'id'=>$reference['entry_id']],
+                'definition_version'=>$reference['definition_version'],'data'=>['formula'=>$reference['formula']],
+                'compiler_version'=>AF_ACS_Formula::VERSION,'diagnostics'=>[]];
+        } catch (AF_ACS_FormulaError $error) { return $this->failure($error->diagnosticCode); }
+        catch (Throwable $error) { return $this->failure('source_read_failed'); }
+    }
+
     /** Fixed-size primary catalog only; never enumerate all characters/directions. */
     public function primaryElements(int $actorUid): array
     {
