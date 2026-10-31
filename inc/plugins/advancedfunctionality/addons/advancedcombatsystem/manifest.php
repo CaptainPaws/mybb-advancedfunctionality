@@ -3,9 +3,9 @@
 return [
     'id' => 'advancedcombatsystem',
     'name' => 'AdvancedCombatSystem',
-    'version' => '0.12.0',
+    'version' => '0.13.0',
     'author' => 'CaptainPaws',
-    'description' => 'AdvancedCombatSystem modifier pipeline (ACS-3.1.3).',
+    'description' => 'AdvancedCombatSystem Hit/Crit calculations (ACS-3.2.1).',
     'bootstrap' => 'advancedcombatsystem.php',
     'admin' => [
         'slug' => 'advancedcombatsystem',
