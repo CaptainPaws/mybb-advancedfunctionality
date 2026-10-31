@@ -16,8 +16,25 @@ final class AF_ACS_Damage
         foreach ($values as $value) $sum=AF_ACS_Numeric::operation('add',$sum,$nonnegative?self::nonnegative($value):AF_ACS_Numeric::number($value));
         return $sum;
     }
+    /** Projection from a verified immutable registration; never invents individual element-definition hashes. */
+    public static function retainedCatalog(string $registrationJson,string $contentHash): array
+    {return ['contract_id'=>'IC-ACS.retained-element-registry.v1','registration_json'=>$registrationJson,'content_hash'=>$contentHash];}
     private static function catalog(array $catalog): array
     {
+        if (($catalog['contract_id']??null)==='IC-ACS.retained-element-registry.v1') {
+            if(!is_string($catalog['registration_json']??null)||!is_string($catalog['content_hash']??null)||!hash_equals($catalog['content_hash'],hash('sha256',$catalog['registration_json'])))self::fail('damage_element_contract_unavailable');
+            try{$p=json_decode($catalog['registration_json'],true,64,JSON_THROW_ON_ERROR);}catch(JsonException $e){self::fail('damage_element_contract_unavailable');}
+            $s=$p['source_snapshot']??[];
+            $cs=($s['contract_id']??null)==='IC-CS.combat-preparation.v1'&&($s['element_registry_version']??null)==='primary-elements-17-v1'&&($s['element_alias_policy']??null)==='wind-air-v1';
+            $kb=($s['contract_id']??null)==='IC-KB.read.v1'&&($s['definition_version']['schema']??null)==='af_kb.arpg.rules.v1'&&($s['capabilities']['canonical_elements_17']['readiness']??null)==='READY'&&($s['capabilities']['legacy_element_aliases']['readiness']??null)==='READY';
+            if(($p['contract_id']??null)!=='IC-ACS.entity-registration.v1'||($p['schema_version']??null)!==1||($s['schema_version']??null)!==1||($p['numeric_policy']??null)!==AF_ACS_Numeric::POLICY||($s['ready']??null)!==true
+                ||(!$cs&&!$kb)
+                ||!is_array($s['resistances']??null)||count($s['resistances'])!==17)self::fail('damage_element_contract_unavailable');
+            $elements=[];foreach($s['resistances'] as $key=>$row){
+                if(!is_string($key)||!is_array($row))self::fail('damage_element_contract_unavailable');self::nonnegative($row['value']??null);
+                $elements[$key]=['source_key'=>$row['source_element']??$key,'definition'=>['definition_version'=>null,'fingerprint'=>null]];
+            }ksort($elements,SORT_STRING);return $elements;
+        }
         if (($catalog['contract_id']??null)!=='IC-KB-2' || ($catalog['schema_version']??null)!==1 || ($catalog['ready']??null)!==true
             || !is_array($catalog['data']??null) || count($catalog['data'])!==17) self::fail('damage_element_contract_unavailable');
         foreach ($catalog['data'] as $key=>$node) {
@@ -123,7 +140,7 @@ final class AF_ACS_Damage
         return new AF_ACS_DamageResult(['trace_version'=>self::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'components'=>$rows,
             'total_raw'=>$totalRaw,'total_after_crit'=>$totalAfter,'total_post_defense'=>$totalPost,'integer_budget'=>$budget->clamped,'allocation_sum'=>$sum],
             ['trace_version'=>self::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'registry_version'=>'primary-elements-17-v1',
-                'alias_policy'=>'wind-air-v1','element_provenance'=>$provenance,'allocation_order'=>array_map(static fn($i)=>$rows[$i]['source_index'],$ranks),'terminal'=>$budget->jsonSerialize(),'stage'=>'before_barriers_hp']);
+                'alias_policy'=>'wind-air-v1','registry_snapshot_hash'=>$elementCatalog['content_hash']??null,'element_provenance'=>$provenance,'allocation_order'=>array_map(static fn($i)=>$rows[$i]['source_index'],$ranks),'terminal'=>$budget->jsonSerialize(),'stage'=>'before_barriers_hp']);
     }
     public static function attempt(array $components,array $target,array $penetration,array $catalog): array
     {

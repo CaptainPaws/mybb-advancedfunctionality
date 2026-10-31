@@ -75,7 +75,6 @@ final class AF_ACS_HitCrit
         $hit=self::hit($accuracy,$speed,$policy);$rate=self::nonnegative($critRate);$damage=self::nonnegative($critDamage);
         if ($rate>100) throw new AF_ACS_FormulaError('crit_rate_out_of_range');
         if (!array_is_list($components) || !$components) throw new AF_ACS_FormulaError('crit_components_invalid');
-        if (($rate==0 && $criticalOutcome===true) || ($rate==100 && $criticalOutcome===false)) throw new AF_ACS_FormulaError('crit_outcome_conflict');
         $factor=AF_ACS_Numeric::operation('add',1,AF_ACS_Numeric::operation('divide',$damage,100));
         $rows=[];$eligible=false;
         foreach ($components as $i=>$component) {
@@ -91,6 +90,7 @@ final class AF_ACS_HitCrit
             $rows[]=['source_index'=>$i,'kb_effect_index'=>$index,'kind'=>$component['kind'],'can_crit'=>$can,
                 'permission_source'=>$permission===null?'baseline':'kb_explicit','raw_component'=>$raw,'raw_after_crit'=>$after,'crit_applied'=>$criticalOutcome===null?null:($criticalOutcome&&$can)];
         }
+        if ($eligible && (($rate==0 && $criticalOutcome===true)||($rate==100 && $criticalOutcome===false))) throw new AF_ACS_FormulaError('crit_outcome_conflict');
         if ($criticalOutcome===true && !$eligible) throw new AF_ACS_FormulaError('crit_not_allowed');
         return new AF_ACS_HitCritResult(array_merge(array_diff_key($hit,['trace'=>true]),['crit_rate'=>$rate,'crit_dmg'=>$damage,
             'can_crit'=>$eligible,'critical_outcome'=>$criticalOutcome,'components'=>$rows]),

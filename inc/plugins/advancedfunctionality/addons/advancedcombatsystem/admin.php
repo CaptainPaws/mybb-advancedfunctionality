@@ -80,6 +80,8 @@ class AF_Admin_Advancedcombatsystem
         echo '<p>Damage: '.self::esc(AF_ACS_Damage::VERSION).'</p>';
         require_once __DIR__.'/modules/Domain/Effects.php';
         echo '<p>Effects: '.self::esc(AF_ACS_Effects::VERSION).'</p>';
+        require_once __DIR__.'/modules/Domain/Resolver.php';
+        echo '<p>Resolver preview: '.self::esc(AF_ACS_Resolver::VERSION).'</p>';
         echo '<p>'.self::esc($lang->af_advancedcombatsystem_notice).'</p>';
         self::schema($diagnostics->schema());
         self::commands();

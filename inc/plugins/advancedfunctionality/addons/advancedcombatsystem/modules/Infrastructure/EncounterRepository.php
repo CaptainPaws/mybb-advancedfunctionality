@@ -13,6 +13,12 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     {
         foreach($fields as $field)if(isset($row[$field]))$row[$field]=(string)$row[$field];return $row;
     }
+    /** Unknown persistent effect projections must not be silently treated as empty by preview v1. */
+    public function assertPreviewStorage(): void
+    {
+        $rows=$this->sql('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN (?,?)',[$this->prefix.'af_acs_effects',$this->prefix.'af_acs_barrier_pools'])['rows'];
+        if($rows)throw new RuntimeException('ACS_PREVIEW_EFFECT_STORAGE_UNSUPPORTED');
+    }
     public function encounter(string $sid,string $id,bool $lock=false): ?array
     {
         $row=$this->sql('SELECT * FROM '.$this->table('encounters').' WHERE session_id=? AND id=?'.($lock?' FOR UPDATE':''),[self::integer($sid),self::integer($id)])['rows'][0]??null;
@@ -53,7 +59,7 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     }
     public function entity(string $sid,string $id): ?array
     {
-        $row=$this->sql('SELECT e.*,s.life_state,s.hp,s.hp_max,s.state_version,s.layers_json,g.session_id AS group_session,g.owner_uid AS group_owner,g.kind AS group_kind,x.payload_json,x.content_hash FROM '.$this->table('entities').' e JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id JOIN '.$this->table('control_groups').' g ON g.id=e.control_group_id JOIN '.$this->table('snapshots').' x ON x.id=e.template_snapshot_id AND x.session_id=e.session_id WHERE e.session_id=? AND e.id=?',[$sid,$id])['rows'][0]??null;
+        $row=$this->sql('SELECT e.*,s.life_state,s.hp,s.hp_max,s.state_version,s.stats_json,s.layers_json,g.session_id AS group_session,g.owner_uid AS group_owner,g.kind AS group_kind,x.payload_json,x.content_hash FROM '.$this->table('entities').' e JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id JOIN '.$this->table('control_groups').' g ON g.id=e.control_group_id JOIN '.$this->table('snapshots').' x ON x.id=e.template_snapshot_id AND x.session_id=e.session_id WHERE e.session_id=? AND e.id=?',[$sid,$id])['rows'][0]??null;
         return $row?$this->ids($row,['id','session_id','control_group_id','owner_uid','group_owner','group_session','template_snapshot_id','entity_version','hp','hp_max','state_version']):null;
     }
     public function controllers(string $sid,string $entity): array
