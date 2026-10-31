@@ -66,6 +66,8 @@ class AF_Admin_Advancedcombatsystem
         $table->construct_cell(self::esc(af_is_addon_enabled($meta['id']) ? $lang->af_advancedcombatsystem_enabled : $lang->af_advancedcombatsystem_disabled));
         $table->construct_row();
         $table->output(self::esc($lang->af_advancedcombatsystem_name));
+        require_once __DIR__.'/modules/Domain/Numeric.php';
+        echo '<p>Numeric Engine: '.self::esc(AF_ACS_Numeric::POLICY).'</p>';
         echo '<p>'.self::esc($lang->af_advancedcombatsystem_notice).'</p>';
         self::schema($diagnostics->schema());
         self::commands();
