@@ -38,6 +38,16 @@ final class AF_ACS_Clock
         $recovery=intdiv($maximum,4)+(($maximum%4)>=2?1:0);
         return min($maximum,$current+$recovery);
     }
+    public static function deadlinePolicy(array $config): array
+    {
+        $p=$config['deadline_policy']??['schema_version'=>1,'mode'=>'off','seconds'=>null];
+        if(!is_array($p) || ($p['schema_version']??null)!==1 || !in_array($p['mode']??null,['off','notify','timeout_pass','gm_skip'],true))throw new RuntimeException('ACS_DEADLINE_POLICY_INVALID');
+        if($p['mode']!=='off' && (!is_int($p['seconds']??null) || $p['seconds']<=0 || $p['seconds']>9007199254740991))throw new RuntimeException('ACS_DEADLINE_POLICY_INVALID');return $p;
+    }
+    public static function deadlineAfter(int $now,int $seconds): int
+    {
+        if($now<0 || $seconds<0 || $now>9007199254740991-$seconds)throw new RuntimeException('ACS_DEADLINE_RANGE');return $now+$seconds;
+    }
     /** Stable serialization order is not initiative; every pending group has the same opportunity. */
     public static function rosterHash(array $groupPayloads): string
     {
