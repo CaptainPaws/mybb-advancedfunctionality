@@ -30,7 +30,7 @@ final class AF_ACS_EncountersPage
         $list=$service->list($sid,$mybb->get_input('encounter_after')?:'0',$tid);
         $session=$service->context($sid,$tid);
         $eid=$mybb->get_input('acs_encounter');$tab=$mybb->get_input('acs_tab')?:'overview';
-        $tabs=['overview'=>'Обзор','participants'=>'Участники','rounds'=>'Раунды','events'=>'События','management'=>'Управление'];
+        $tabs=['overview'=>'Обзор','preview'=>'Предпросмотр','participants'=>'Участники','rounds'=>'Раунды','events'=>'События','management'=>'Управление'];
         if(!isset($tabs[$tab]))$tab='overview';
         $base='showthread.php?tid='.$tid.'&acs_session='.$sid;$notice='';$readiness=null;
         if($mybb->request_method==='post' && $mybb->get_input('acs_encounter_op')!=='') {
@@ -64,7 +64,8 @@ final class AF_ACS_EncountersPage
             }
             $view=$service->view($sid,$eid,$tid,$mybb->get_input('participant_after')?:'0',$mybb->get_input('side_after')?:'0',$mybb->get_input('relation_after')?:'0');$encounter=$view['encounter'];$url=$base.'&acs_encounter='.$eid.'&acs_tab='.$tab;
             echo '<nav aria-label="Панель GM">';foreach($tabs as $key=>$name)echo '<a href="'.self::esc($base.'&acs_encounter='.$eid.'&acs_tab='.$key).'"'.($tab===$key?' aria-current="page"':'').'>'.self::esc($name).'</a> ';echo '</nav>';
-            if($tab==='overview') {
+            if($tab==='preview'){require_once __DIR__.'/BuilderController.php';AF_ACS_BuilderController::render($sid,$eid,$tid);}
+            elseif($tab==='overview') {
                 $config=json_decode($encounter['config_json'],true);echo '<h3>'.self::esc($config['title']).'</h3><p>'.self::esc(self::state($encounter['status'])).' · версия '.self::esc($encounter['encounter_version']).'</p><p>Завершение столкновения и закрытие сессии — отдельные операции будущих этапов.</p>';
             } elseif($tab==='rounds') {
                 $roundView=$service->roundView($sid,$eid,$mybb->get_input('turn_after')?:'0');
