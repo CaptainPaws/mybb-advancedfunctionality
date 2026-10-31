@@ -27,6 +27,10 @@ final class AF_ACS_AuthorizationService
             'session.manage' => ['scope' => 'session', 'policy' => 'NATIVE_THREAD_AND_OWNER_GM'],
             'entity.register.own' => ['scope'=>'entity','policy'=>'SESSION_MEMBER_AND_VERIFIED_OWNER'],
             'entity.register.bestiary' => ['scope'=>'entity','policy'=>'NATIVE_THREAD_AND_OWNER_GM'],
+            'encounter.pause' => ['scope'=>'session','policy'=>'OWNER_GM_CONFIRM_REASON'],
+            'encounter.deadline.manage' => ['scope'=>'session','policy'=>'OWNER_GM_CONFIRM_REASON'],
+            'turn.skip' => ['scope'=>'session','policy'=>'OWNER_GM_BOUNDARIES_OBLIGATIONS'],
+            'round.advance' => ['scope'=>'session','policy'=>'OWNER_GM_ROSTER_CLOSED'],
             'encounter.manage' => ['scope'=>'session','policy'=>'NATIVE_THREAD_AND_OWNER_GM'],
             'entity.control' => ['scope' => 'entity', 'policy' => 'RESERVED_DENY'],
             'entity.consume' => ['scope' => 'entity', 'policy' => 'RESERVED_DENY'],
@@ -67,7 +71,7 @@ final class AF_ACS_AuthorizationService
         }
         if ($entry['scope'] === 'critical') { return ['allowed' => false, 'reason' => 'ACS_CRITICAL_OPERATION_NOT_IMPLEMENTED']; }
         if ($sessionId === null || $sessionId === '') { return ['allowed' => false, 'reason' => 'ACS_SESSION_CONTEXT_REQUIRED']; }
-        if(in_array($permission,['session.view','session.manage','entity.register.own','entity.register.bestiary','encounter.manage'],true) && function_exists('af_advancedcombatsystem_sessions')) {
+        if(in_array($permission,['session.view','session.manage','entity.register.own','entity.register.bestiary','encounter.manage','encounter.pause','encounter.deadline.manage','turn.skip','round.advance'],true) && function_exists('af_advancedcombatsystem_sessions')) {
             try {$view=af_advancedcombatsystem_sessions()->view($sessionId);$allowed=$permission==='session.view' || $view['can_manage'];
                 if($permission==='entity.register.own')$allowed=$view['can_register_own'];return ['allowed'=>$allowed,'reason'=>$allowed?null:'ACS_SESSION_UNAVAILABLE'];}
             catch(Throwable $error) {return ['allowed'=>false,'reason'=>'ACS_SESSION_UNAVAILABLE'];}

@@ -158,6 +158,11 @@ function af_advancedcombatsystem_xmlhttp(): void
         $service=af_advancedcombatsystem_sessions();$op=$mybb->get_input('op');
         if($op==='list')$data=$service->list($mybb->get_input('after')?:'0');
         elseif($op==='get')$data=$service->view($mybb->get_input('session_id'));
+        elseif(str_starts_with($op,'round_manage_')) {
+            $rounds=af_advancedcombatsystem_encounters()->rounds();$sid=$mybb->get_input('session_id');$eid=$mybb->get_input('encounter_id');
+            $input=[];foreach(['session_id','encounter_id','expected_version','encounter_version','turn_id','turn_version','round_id','operation_key','reason','confirm','deadline_mode','seconds'] as $field)$input[$field]=$mybb->get_input($field);
+            $data=$op==='round_manage_overview'?$rounds->overview($sid,$eid,$mybb->get_input('after')?:'0'):$rounds->command(substr($op,13),$input);
+        }
         elseif(str_starts_with($op,'clock_')) {
             $clock=af_advancedcombatsystem_encounters()->clock();$sid=$mybb->get_input('session_id');
             $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','round_id','entity_turn_id','control_group_id','confirm_full'] as $f)$input[$f]=$mybb->get_input($f);
@@ -233,13 +238,18 @@ function af_advancedcombatsystem_session_failure(Throwable $error): array
         return ['category'=>'VALIDATION_ERROR','request_id'=>$id,'error_id'=>$id,'message'=>'Регистрация заблокирована: источник не прошёл проверку.','diagnostics'=>$diagnostics];
     }
     $category=match($error->getMessage()) {
-        'ACS_CLOCK_BOUNDARY_STATE','ACS_CLOCK_DEPENDENCY_BLOCKED','ACS_COMBAT_RESET_REQUIRED','ACS_COOLDOWN_SOURCE_UNAVAILABLE','ACS_COOLDOWN_UNCONFIRMED','ACS_RESOURCE_STATE_CONFLICT','ACS_REST_COMBAT_ACTIVE','ACS_REST_LIMIT','ACS_REST_WINDOW_UNAVAILABLE','ACS_REST_POLICY_UNAVAILABLE','ACS_AP_STATE_INVALID','ACS_FIRST_ROUND_EXISTS','ACS_ROSTER_BLOCKED','ACS_ROSTER_INVALID','ACS_TURN_STATE_INVALID','ACS_ENCOUNTER_TRANSITION_BLOCKED','ACS_PARTICIPANT_EXISTS','ACS_ENTITY_UNAVAILABLE','ACS_CONTROL_INVALID','ACS_SNAPSHOT_INVALID','ACS_ENTITY_ALREADY_REGISTERED','ACS_DEFINITION_VERSION_CONFLICT','ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SESSION_TRANSITION_BLOCKED'=>'STATE_CONFLICT',
+        'ACS_ROUND_STATE_CONFLICT','ACS_ROUND_OBLIGATIONS_BLOCKED','ACS_OBLIGATIONS_SCHEMA_UNVERIFIED','ACS_PENDING_TURNS_REMAIN','ACS_FORFEIT_EXCEPTION_UNAVAILABLE','ACS_CLOCK_BOUNDARY_STATE','ACS_CLOCK_DEPENDENCY_BLOCKED','ACS_COMBAT_RESET_REQUIRED','ACS_COOLDOWN_SOURCE_UNAVAILABLE','ACS_COOLDOWN_UNCONFIRMED','ACS_RESOURCE_STATE_CONFLICT','ACS_REST_COMBAT_ACTIVE','ACS_REST_LIMIT','ACS_REST_WINDOW_UNAVAILABLE','ACS_REST_POLICY_UNAVAILABLE','ACS_AP_STATE_INVALID','ACS_FIRST_ROUND_EXISTS','ACS_ROSTER_BLOCKED','ACS_ROSTER_INVALID','ACS_TURN_STATE_INVALID','ACS_ENCOUNTER_TRANSITION_BLOCKED','ACS_PARTICIPANT_EXISTS','ACS_ENTITY_UNAVAILABLE','ACS_CONTROL_INVALID','ACS_SNAPSHOT_INVALID','ACS_ENTITY_ALREADY_REGISTERED','ACS_DEFINITION_VERSION_CONFLICT','ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SESSION_TRANSITION_BLOCKED'=>'STATE_CONFLICT',
         'ACS_AP_ACCESS_DENIED','ACS_GM_REQUIRED','ACS_ENCOUNTER_UNAVAILABLE','ACS_REGISTRATION_DENIED','ACS_SESSION_UNAVAILABLE','ACS_THREAD_UNAVAILABLE','ACS_CREATE_DENIED','ACS_ROLE_ESCALATION_DENIED','ACS_ADMIN_PERMISSION_REQUIRED','ACS_LOGIN_REQUIRED','ACS_CSRF_REQUIRED'=>'PERMISSION_DENIED',
-        'ACS_REST_CONFIRMATION_REQUIRED','ACS_REST_NO_TARGETS','ACS_CLOCK_OPERATION_UNAVAILABLE','ACS_RELATION_INVALID','ACS_SIDE_UNAVAILABLE','ACS_INVALID_JSON','ACS_JSON_TOO_LARGE','ACS_INVALID_KEY','ACS_ENTITY_KIND_INVALID','ACS_SOURCE_REQUIRED','ACS_HP_INTEGER_REQUIRED','ACS_HP_RANGE','ACS_DEFINITION_LIMIT','ACS_INVALID_TEXT','ACS_REASON_REQUIRED','ACS_ROLE_INVALID','ACS_INVALID_INTEGER','ACS_INTEGER_RANGE','ACS_OPERATION_KEY_REQUIRED','ACS_POST_REQUIRED','ACS_REQUEST_TOO_LARGE','ACS_RATE_LIMIT','ACS_OWNER_PROTECTED','ACS_OWNER_UNCHANGED','ACS_USER_UNAVAILABLE'=>'VALIDATION_ERROR',
+        'ACS_DEADLINE_POLICY_INVALID','ACS_DEADLINE_DISABLED','ACS_DEADLINE_AUTOMATIC_DISABLED','ACS_DEADLINE_NOT_DUE','ACS_DEADLINE_RANGE','ACS_ROUND_OPERATION_UNAVAILABLE','ACS_ROUND_CONFIRMATION_REQUIRED','ACS_REST_CONFIRMATION_REQUIRED','ACS_REST_NO_TARGETS','ACS_CLOCK_OPERATION_UNAVAILABLE','ACS_RELATION_INVALID','ACS_SIDE_UNAVAILABLE','ACS_INVALID_JSON','ACS_JSON_TOO_LARGE','ACS_INVALID_KEY','ACS_ENTITY_KIND_INVALID','ACS_SOURCE_REQUIRED','ACS_HP_INTEGER_REQUIRED','ACS_HP_RANGE','ACS_DEFINITION_LIMIT','ACS_INVALID_TEXT','ACS_REASON_REQUIRED','ACS_ROLE_INVALID','ACS_INVALID_INTEGER','ACS_INTEGER_RANGE','ACS_OPERATION_KEY_REQUIRED','ACS_POST_REQUIRED','ACS_REQUEST_TOO_LARGE','ACS_RATE_LIMIT','ACS_OWNER_PROTECTED','ACS_OWNER_UNCHANGED','ACS_USER_UNAVAILABLE'=>'VALIDATION_ERROR',
         'ACS_COMMIT_UNKNOWN','ACS_ROLLBACK_UNKNOWN','ACS_RECOVERY_REQUIRED'=>'RECOVERY_REQUIRED',
         default=>'INTERNAL_ERROR',
     };
     $publicMessage=match($error->getMessage()) {
+        'ACS_ROUND_OBLIGATIONS_BLOCKED','ACS_OBLIGATIONS_SCHEMA_UNVERIFIED'=>'Операция заблокирована незавершёнными или неподтверждёнными обязательствами. Черновики и sealed данные сохранены.',
+        'ACS_PENDING_TURNS_REMAIN'=>'Сначала закройте все допустимые pending ходы и их границы.',
+        'ACS_FORFEIT_EXCEPTION_UNAVAILABLE'=>'Не все существа группы выбыли. Для обычного пропуска используйте gm_skip.',
+        'ACS_ROUND_CONFIRMATION_REQUIRED'=>'Подтвердите опасную операцию и укажите причину.',
+        'ACS_DEADLINE_AUTOMATIC_DISABLED'=>'Выбранная политика не разрешает автоматический пропуск или уведомление.',
         'ACS_REST_LIMIT'=>'Короткий отдых группы уже использован в этом интервале.',
         'ACS_REST_COMBAT_ACTIVE'=>'Отдых недоступен до завершения активного столкновения, паузы или засады.',
         'ACS_REST_WINDOW_UNAVAILABLE'=>'Для короткого отдыха нужно подтверждённое завершённое столкновение.',

@@ -17,6 +17,10 @@ final class AF_ACS_EncounterService
         if($write && $session['status']!=='active')throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
         return $session;
     }
+    public function rounds(?callable $now=null): AF_ACS_RoundManagementService
+    {
+        require_once __DIR__.'/RoundManagementService.php';return new AF_ACS_RoundManagementService($this->repository,$this->access,$now);
+    }
     public function clock(): AF_ACS_ClockService
     {
         require_once __DIR__.'/ClockService.php';return new AF_ACS_ClockService($this->repository,$this->access);
@@ -85,12 +89,12 @@ final class AF_ACS_EncounterService
         if((float)$entity['hp']>(float)$entity['hp_max'])throw new RuntimeException('ACS_HP_RANGE');
         $entity['_controller']=$controllers[0];return $entity;
     }
-    public function readiness(string $sid,string $eid): array
+    public function readiness(string $sid,string $eid,bool $forNext=false): array
     {
         $session=$this->authorize($sid);$encounter=$this->repository->encounter($sid,$eid);
         if(!$encounter)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
         $issues=[];
-        if($session['status']!=='active' || $encounter['status']!=='preparation')$issues[]=['code'=>'preparation_required'];
+        if($session['status']!=='active' || $encounter['status']!==($forNext?'active':'preparation'))$issues[]=['code'=>'preparation_required'];
         $config=$this->repository->configSnapshot($sid,$encounter['config_snapshot_id']);
         try {
             if(!$config || !hash_equals($config['content_hash'],hash('sha256',$config['payload_json'])))throw new RuntimeException('Invalid config');
@@ -149,7 +153,7 @@ final class AF_ACS_EncounterService
     public function roundView(string $sid,string $eid,string $after='0'): array
     {
         $this->authorize($sid);if(!$this->repository->encounter($sid,$eid))throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
-        $round=$this->repository->firstRound($eid);if(!$round)return ['round'=>null,'turns'=>[],'next_after'=>null];
+        $encounter=$this->repository->encounter($sid,$eid);$round=$this->repository->currentRound($encounter);if(!$round)return ['round'=>null,'turns'=>[],'next_after'=>null];
         $turns=$this->repository->roundTurns($round['id'],$after);
         $individuals=[];foreach($this->repository->individualTurns(array_column($turns,'id')) as $row) {
             $row['start_boundary']=AF_ACS_Clock::entityStart($row['id']);$row['end_boundary']=AF_ACS_Clock::entityEnd($row['id']);

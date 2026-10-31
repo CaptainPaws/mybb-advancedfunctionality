@@ -37,14 +37,14 @@ final class AF_ACS_EncountersPage
             try {
                 // The posted session may not redirect a command to another thread/scope.
                 if($mybb->get_input('session_id')!==$sid || $mybb->get_input('tid')!==$tid)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
-                $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid','round_id','entity_turn_id','control_group_id','confirm_full'] as $field)$input[$field]=$mybb->get_input($field);
+                $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid','round_id','entity_turn_id','control_group_id','confirm_full','confirm','deadline_mode','seconds','turn_id','turn_version'] as $field)$input[$field]=$mybb->get_input($field);
                 $op=$mybb->get_input('acs_encounter_op');
                 if($op==='readiness') {
                     (new AF_ACS_SessionAccess)->csrf();$eid=$input['encounter_id'];$readiness=$service->readiness($sid,$eid);
                     $notice='<p>'.($readiness['preparation_ready']?'Подготовка проверена.':'Подготовка содержит блокировки.').' Для запуска первого раунда откройте вкладку «Раунды».</p>';
                     foreach($readiness['diagnostics'] as $issue)$notice.='<p>'.self::esc(self::issue($issue['code'])).(isset($issue['entity_id'])?' · существо #'.self::esc($issue['entity_id']):'').'</p>';
                 } else {
-                    $result=str_starts_with($op,'clock_')?$service->clock()->command(substr($op,6),$input):$service->command($op,$input);$eid=$result['encounter_id']??$eid;$notice='<p>Изменение сохранено.</p>';
+                    $result=str_starts_with($op,'manage_')?$service->rounds()->command(substr($op,7),$input):(str_starts_with($op,'clock_')?$service->clock()->command(substr($op,6),$input):$service->command($op,$input));$eid=$result['encounter_id']??$eid;$notice='<p>Изменение сохранено.</p>';
                     $session=$service->context($sid,$tid);$list=$service->list($sid,tid:$tid);
                 }
             } catch(Throwable $error) {
@@ -86,7 +86,8 @@ final class AF_ACS_EncountersPage
                         echo '</ul></td></tr>';
                     }
                     echo '</table>';require_once __DIR__.'/Clock.php';AF_ACS_ClockPage::rounds($view,$roundView,$url,$service->clock());
-                    echo '<p>Начало/конец индивидуальных ходов не обрабатываются просмотром. Публикация, пропуски и обработчики эффектов подключаются отдельными этапами.</p>';
+                    echo '<p>Начало/конец индивидуальных ходов не обрабатываются просмотром. Публикация и полноценные обработчики эффектов подключаются отдельными этапами.</p>';
+                    require_once __DIR__.'/RoundManagement.php';AF_ACS_RoundManagementPage::render($view,$roundView,$url,$service->rounds());
                     if($roundView['next_after']!==null)echo '<a href="'.self::esc($url.'&turn_after='.$roundView['next_after']).'">Следующие группы</a>';
                 }
             } elseif($tab==='participants') {
@@ -132,6 +133,6 @@ final class AF_ACS_EncountersPage
         } catch(Throwable $error) {ob_end_clean();throw $error;}
     }
     private static function state(string $state): string {return ['preparation'=>'Подготовка','active'=>'Активно','ambush_ready'=>'Засада подготовлена','paused'=>'Пауза','completed'=>'Завершено'][$state]??'Состояние недоступно';}
-    private static function event(string $event): string {return ['encounter.round_start'=>'Запущен первый раунд','encounter.create'=>'Создано столкновение','encounter.side_create'=>'Добавлена сторона','encounter.relation_set'=>'Изменены отношения сторон','encounter.participant_add'=>'Добавлен участник','encounter.participant_side'=>'Изменена сторона участника','encounter.controller_assign'=>'Назначен управляющий'][$event]??'Подтверждённое событие';}
+    private static function event(string $event): string {return ['encounter.pause'=>'Пауза','encounter.resume'=>'Возобновление','encounter.gm_skip'=>'Ручной пропуск','encounter.gm_forfeit'=>'Закрытие выбывшей группы','encounter.deadline_set'=>'Настройка дедлайнов','encounter.extend_deadline'=>'Продление дедлайна','encounter.deadline_process'=>'Обработка дедлайна','encounter.round_next'=>'Следующий раунд','encounter.round_start'=>'Запущен первый раунд','encounter.create'=>'Создано столкновение','encounter.side_create'=>'Добавлена сторона','encounter.relation_set'=>'Изменены отношения сторон','encounter.participant_add'=>'Добавлен участник','encounter.participant_side'=>'Изменена сторона участника','encounter.controller_assign'=>'Назначен управляющий'][$event]??'Подтверждённое событие';}
     private static function issue(string $code): string {return ['cooldown_source_unavailable'=>'Кулдаун не имеет подтверждённого источника/версии.','round_boundary_contract_unavailable'=>'Активные слои или настройки AP требуют ещё не подключённого обработчика границ.','participants_missing'=>'Добавьте хотя бы одного участника.','side_relationship_missing'=>'Явно задайте отношения используемых сторон.','ACS_CONTROL_INVALID'=>'Проверьте владельца, управляющего и группу существа.','ACS_SIDE_UNAVAILABLE'=>'Участнику нужна допустимая сторона.','ACS_ENTITY_UNAVAILABLE'=>'Существо недоступно либо занято другим столкновением.','ACS_SNAPSHOT_HASH_MISMATCH'=>'Нарушена целостность сохранённого снимка.','ACS_SNAPSHOT_INVALID'=>'Сохранённый снимок несовместим или неполон.','ACS_DEPENDENCY_UNAVAILABLE'=>'Обязательная зависимость отключена.','preparation_required'=>'Нужны активная сессия и состояние подготовки.','config_snapshot_invalid'=>'Снимок конфигурации не прошёл проверку.'][$code]??'Участник не прошёл серверную проверку.';}
 }

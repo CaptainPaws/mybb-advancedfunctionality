@@ -58,7 +58,7 @@ trait AF_ACS_ClockPersistence
         self::integer($p['initial_turns'],'2147483647',true);self::integer($cooldown['remaining_turns'],'2147483647',true);
         if((int)$cooldown['remaining_turns']>(int)$p['initial_turns'])throw new RuntimeException('ACS_COOLDOWN_SOURCE_UNAVAILABLE');return $p;
     }
-    public function applyEntityStart(array $session,array $encounter,array $individual,string $actor): array
+    public function processEntityStart(array $session,array $encounter,array $individual,string $actor): array
     {
         $this->commandWrite();$key=AF_ACS_Clock::entityStart($individual['id']);$changed=[];
         if((string)$individual['start_done']!=='0' || (string)$individual['end_done']!=='0')throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE');
@@ -75,7 +75,12 @@ trait AF_ACS_ClockPersistence
         self::integer($individual['entity_turn_version'],'18446744073709551614');
         if($this->sql('UPDATE '.$this->table('entity_turns').' SET start_done=1,entity_turn_version=entity_turn_version+1 WHERE id=? AND entity_turn_version=? AND start_done=0',[$individual['id'],$individual['entity_turn_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
         $this->recordBoundary($key,'clock.entity_start',$session['id'],$encounter['id'],$actor,['entity_turn_id'=>$individual['id']],['entity_turn_id'=>$individual['id'],'cooldowns'=>$changed,'parent_encounter_sequence'=>$encounter['next_event_sequence']]);
-        $session=$this->change($session,$encounter,'clock_boundary',[]);$session['_command_result']+=['boundary_key'=>$key,'entity_turn_id'=>$individual['id'],'cooldowns'=>$changed];return $session;
+        return ['boundary_key'=>$key,'entity_turn_id'=>$individual['id'],'cooldowns'=>$changed];
+    }
+    public function applyEntityStart(array $session,array $encounter,array $individual,string $actor): array
+    {
+        $result=$this->processEntityStart($session,$encounter,$individual,$actor);
+        $session=$this->change($session,$encounter,'clock_boundary',[]);$session['_command_result']+=$result;return $session;
     }
     public function restWindow(string $sid): ?array
     {
