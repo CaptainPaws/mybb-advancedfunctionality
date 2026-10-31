@@ -3,9 +3,9 @@
 return [
     'id' => 'advancedcombatsystem',
     'name' => 'AdvancedCombatSystem',
-    'version' => '0.11.0',
+    'version' => '0.12.0',
     'author' => 'CaptainPaws',
-    'description' => 'AdvancedCombatSystem typed formula compiler (ACS-3.1.2).',
+    'description' => 'AdvancedCombatSystem modifier pipeline (ACS-3.1.3).',
     'bootstrap' => 'advancedcombatsystem.php',
     'admin' => [
         'slug' => 'advancedcombatsystem',
