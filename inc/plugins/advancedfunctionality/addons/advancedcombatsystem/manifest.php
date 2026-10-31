@@ -3,9 +3,9 @@
 return [
     'id' => 'advancedcombatsystem',
     'name' => 'AdvancedCombatSystem',
-    'version' => '0.9.0',
+    'version' => '0.10.0',
     'author' => 'CaptainPaws',
-    'description' => 'AdvancedCombatSystem pause, deadlines, skip and round management (ACS-2.3.3).',
+    'description' => 'AdvancedCombatSystem numeric engine (ACS-3.1.1).',
     'bootstrap' => 'advancedcombatsystem.php',
     'admin' => [
         'slug' => 'advancedcombatsystem',
