@@ -152,6 +152,7 @@ function af_advancedcombatsystem_session_settings(): void
 function af_advancedcombatsystem_xmlhttp(): void
 {
     global $mybb;
+    if(in_array($mybb->get_input('op'),['draft_save','draft_restore'],true)){require_once __DIR__.'/modules/Presentation/ApiController.php';AF_ACS_ApiController::dispatch();}
     if($mybb->get_input('op')==='combat_preview'){require_once __DIR__.'/modules/Presentation/BuilderController.php';AF_ACS_BuilderController::dispatch();}
     try {
         if(empty($mybb->user['uid']))throw new RuntimeException('ACS_LOGIN_REQUIRED');

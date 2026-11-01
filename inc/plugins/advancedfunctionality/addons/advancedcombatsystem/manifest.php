@@ -3,7 +3,7 @@
 return [
     'id' => 'advancedcombatsystem',
     'name' => 'AdvancedCombatSystem',
-    'version' => '0.16.0',
+    'version' => '0.17.0',
     'author' => 'CaptainPaws',
     'description' => 'AdvancedCombatSystem conditional read-only Resolver preview (ACS-3.3.2).',
     'bootstrap' => 'advancedcombatsystem.php',

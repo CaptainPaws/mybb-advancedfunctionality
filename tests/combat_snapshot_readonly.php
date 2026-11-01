@@ -5,7 +5,7 @@ define('MYBB_ROOT',dirname(__DIR__).'/');
 define('AF_ADDONS',MYBB_ROOT.'inc/plugins/advancedfunctionality/addons/');
 define('THIS_SCRIPT','showthread.php');
 function af_is_addon_enabled(string $id): bool { return !in_array($id,$GLOBALS['disabled'] ?? [],true); }
-function forum_permissions(int $fid): array { return ['canview'=>1,'canviewthreads'=>1]; }
+function forum_permissions(int $fid): array { return ['canview'=>1,'canviewthreads'=>1,'canpostreplys'=>empty($GLOBALS['fixture_deny_post'])?1:0,'canonlyreplyownthreads'=>!empty($GLOBALS['fixture_reply_own_only'])?1:0]; }
 function get_forum(int $fid): array { return ['fid'=>$fid,'password'=>'']; }
 final class SnapshotRows {
     public int $position = 0;
