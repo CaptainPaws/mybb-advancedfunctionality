@@ -167,6 +167,19 @@ ACS читает результат покупки через Inventory, не в
 
 При unknown publish сначала lookup submission_id; existing pid возвращается без replay. Модерационное состояние поста должно быть проверено до применения механики по контракту этапа 4; нельзя применять бой, затем молча оставить непривязанный moderated draft. Согласованную политику видимости для moderated боевых постов фиксирует интеграционный PR до допуска форума; новые игровые правила не вводятся догадкой.
 
+<a id="acs-appearance-boundary"></a>
+### 10.1. ACS-4.0 — AdvancedAppearance и независимая подготовка
+
+Последующее утверждённое уточнение [Master §6.1](ACS_MASTER_SPECIFICATION.md#acs-appearance-boundary) и [Architecture §7.4](ACS_TECHNICAL_ARCHITECTURE.md#acs-appearance-boundary): AdvancedAppearance владеет только оформлением. Декоративные имя/аватар/изображения/рамки/фоны/постбит/эффекты не определяют `entity_id`, `sheet_id`, owner/controller, KB refs, immutable CombatSnapshot или подтверждённые events и не дают игровых прав.
+
+**Обязательный контракт разделения.** Смена маски разрешена до/во время/после боя. Она не вызывает Resolver, не меняет HP/AP/характеристики/состояние хода, не пересобирает snapshot, не меняет sealed actions, RNG tape, результаты или события. Маска и её versions/fingerprints не входят в CombatSnapshot, mechanical dependency_set, simulation_hash, confirmation_hash механики и mechanical event hash. Смена оформления не требует повторного подтверждения бросков. IC-THEME отображает визуальные данные отдельно от механических ссылок и не превращает presentation ref в источник расчёта.
+
+**PROPOSED интеграция, не READY API.** Развести механический commit, сохранение оформления средствами Appearance и последующие cache/notification операции. Маска может сопровождать оба режима поста, но Appearance handler не выполняет собственный COMMIT внутри активной ACS tx. Отдельный повтор/ошибка/смена оформления после публикации не повторяет post/механику и не изменяет подтверждённый бой. Сохранить обычную смену маски и её MyBB workflow; отключение Appearance не является adapter strategy.
+
+IC-EDITOR разделяется по назначению: UI подготовки/draft/preview/seal может использовать существующий editor и доказанные ограниченные extension points до готовности публикационного gateway. Для этих операций оформление не обязательная capability; нет второго SCEditor, изменения Source/WYSIWYG или MyBB post insert. При этом authorization, draft CAS, безопасное seal-хранилище, tape/quota и правила preview остаются обязательными. Наличие такого UI **не означает** готовность IC-EDITOR publish callbacks или IC-MYBB-1.
+
+Исторические [ACS-4.1.1](ACS_4_1_1_PUBLICATION_AUDIT.md) и [ACS-4.1.2](ACS_4_1_2_GATEWAY_CONTRACT.md) остаются provenance: nested Appearance transaction, неизвестные installed engines/hooks, cache/shutdown и отсутствие проверенного coordinator по-прежнему блокируют **публикацию**, но не независимую подготовку. **IC-MYBB-1 остаётся BLOCKED**, новый Appearance writer/outcome protocol — PROPOSED. Общее прежнее требование доказать IC-MYBB/IC-EDITOR перед этапом 4 уточняется только в части независимой подготовки, см. [Roadmap](ACS_IMPLEMENTATION_ROADMAP.md#stage-4).
+
 ## 11. IC-PROFILE — AdvancedProfileUI
 
 **EXISTING.** `advancedprofileui/modules/profile_providers.php`:
