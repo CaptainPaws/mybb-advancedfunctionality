@@ -4,7 +4,7 @@ require_once __DIR__.'/../../Application/AuthorizationService.php';
 require_once __DIR__.'/MigrationJournal.php';
 require_once __DIR__.'/BackgroundWorker.php';
 require_once __DIR__.'/RuntimeAssessment.php';
-// Shared EngineMigration implementation: HTTP may call ONLY its static read-only observer.
+// Shared EngineMigration implementation; DDL is restricted to the trusted ACP adapter.
 require_once dirname(__DIR__,8).'/tools/acs/EngineMigration.php';
 final class AF_ACS_MigrationService
 {
@@ -19,7 +19,15 @@ final class AF_ACS_MigrationService
     public function diagnose(array $selected,array $evidence=[]):array
     {
         (new AF_ACS_AuthorizationService)->requirePermission('admin.diagnostics.view');
-        $data=AcsEngineMigration::readOnlyReport(fn($q)=>$this->select($q),(string)$this->db->table_prefix);
+        $access=AcsEngineMigration::readOnlyAccess(function($sql){
+            // Preserve numeric SQL errors, never raw error text or SHOW GRANTS output.
+            if(isset($this->db->write_link)&&$this->db->write_link instanceof mysqli){
+                $q=$this->db->write_link->query($sql);if(!$q)throw new RuntimeException('access_probe_failed',$this->db->write_link->errno);return $q->fetch_all(MYSQLI_ASSOC);
+            }
+            return $this->select($sql);
+        },(string)$this->db->table_prefix);
+        try{$data=AcsEngineMigration::readOnlyReport(fn($q)=>$this->select($q),(string)$this->db->table_prefix);}
+        catch(Throwable $e){$data=['version'=>null,'tables'=>array_fill_keys(AcsEngineMigration::ORDER,['engine'=>null,'bytes'=>null,'schema'=>'NOT_VERIFIED'])];}
         $issues=[];
         if(!is_string($data['version'])||!preg_match('/\A8\.0\.46(?:[-.]|$)/',$data['version']))$issues[]='mysql_version';
         foreach($selected as $t){$r=$data['tables'][$t];if(!$r['engine']||!in_array($r['engine'],['MyISAM','InnoDB'],true))$issues[]='table_unavailable';if($r['schema']!=='PRELIMINARY')$issues[]='schema_unverified';}
@@ -30,7 +38,7 @@ final class AF_ACS_MigrationService
         $runtime=AF_ACS_MigrationRuntimeAssessment::collect(fn($q)=>$this->select($q),$this->db);
         if(($runtime['visible_other_connections']??0)>0)$issues[]='active_connections';
         if(($runtime['enabled_tasks']??0)>0)$issues[]='tasks_need_review';
-        return ['checked_at'=>time(),'database'=>$data,'selected'=>$selected,'status'=>'BLOCKED','issues'=>array_values(array_unique($issues)),'worker'=>$this->worker->status(),
+        return ['checked_at'=>time(),'database'=>$data,'access'=>$access,'selected'=>$selected,'status'=>'BLOCKED','issues'=>array_values(array_unique($issues)),'worker'=>$this->worker->status(),
             'backup'=>isset($evidence['backup'])?'RECORDED':'MISSING','restore'=>$evidence['backup']['result']??'NOT_VERIFIED','staging'=>$evidence['staging']['result']??'MISSING','runtime'=>$runtime,'space'=>'NOT_VERIFIED','maintenance'=>'NOT_VERIFIED','engine_journal'=>'NOT_VERIFIED','publication'=>'BLOCKED'];
     }
     public function command(array $in):array
@@ -111,6 +119,12 @@ final class AF_ACS_MigrationService
         $out['space']=[];foreach(['data','temporary','innodb_temporary','php_temporary'] as $k){$v=$r['space'][$k]??[];$out['space'][$k]=['free_bytes'=>is_int($v['free_bytes']??null)?$v['free_bytes']:null,'status'=>in_array($v['status']??null,['OBSERVED_NOT_PROVEN','UNAVAILABLE','PHP_FILESYSTEM_ONLY'],true)?$v['status']:'UNAVAILABLE'];}
         return $out;
     }
+    public static function safeAccess(array $raw):array
+    {
+        $keys=['replication_status','triggers','foreign_keys','table_catalog','grants','server_metadata','grant_lock_tables','grant_select','grant_alter','grant_create','grant_insert','grant_trigger'];
+        foreach(AcsEngineMigration::ORDER as $t){$keys[]='metadata_'.$t;$keys[]='select_'.$t;}
+        $out=[];foreach($keys as $k)if(isset($raw[$k])&&is_array($raw[$k]))$out[$k]=['status'=>in_array($raw[$k]['status']??null,['PASS','DIRECT_GRANT','DENIED','NOT_VERIFIED'],true)?$raw[$k]['status']:'NOT_VERIFIED','errno'=>is_int($raw[$k]['errno']??null)?$raw[$k]['errno']:null];return $out;
+    }
     public function export(array $state):array
     {
         (new AF_ACS_AuthorizationService)->requirePermission('admin.diagnostics.view');
@@ -124,7 +138,7 @@ final class AF_ACS_MigrationService
                     'schema'=>in_array($r['schema']??null,['PRELIMINARY','BLOCKED'],true)?$r['schema']:'NOT_VERIFIED'];}
             $report=['checked_at'=>max(0,(int)($raw['checked_at']??0)),'status'=>'BLOCKED','database'=>['version'=>$version,'tables'=>$tables],
                 'issues'=>array_values(array_intersect(array_keys(self::messages()),$raw['issues']??[])),
-                'runtime'=>$this->safeRuntime(is_array($raw['runtime']??null)?$raw['runtime']:[]),'space'=>'NOT_VERIFIED','worker'=>$this->worker->status(),'maintenance'=>'NOT_VERIFIED','engine_journal'=>'NOT_VERIFIED','publication'=>'BLOCKED'];
+                'access'=>self::safeAccess($raw['access']??[]),'runtime'=>$this->safeRuntime(is_array($raw['runtime']??null)?$raw['runtime']:[]),'space'=>'NOT_VERIFIED','worker'=>$this->worker->status(),'maintenance'=>'NOT_VERIFIED','engine_journal'=>'NOT_VERIFIED','publication'=>'BLOCKED'];
         }
         $events=[];foreach($state['events']??[] as $e){if(in_array($e['operation']??null,['check','prepare','start','register_backup','register_staging'],true))$events[]=['at'=>max(0,(int)($e['at']??0)),'operation'=>$e['operation'],'status'=>($e['status']??null)==='RECORDED'?'RECORDED':'BLOCKED'];}
         $evidence=[];foreach(['backup','staging'] as $kind){$r=$state['evidence'][$kind]??null;if(is_array($r))$evidence[$kind]=['source'=>'administrator_statement','result'=>in_array($r['result']??null,['not_checked','passed','failed'],true)?$r['result']:'unknown','created_at'=>(int)($r['created_at']??0),'verified_at'=>isset($r['verified_at'])?(int)$r['verified_at']:null,'registered_at'=>(int)($r['registered_at']??0),'scope_current'=>$kind==='backup'||($r['scope']??null)===$state['selected']];}

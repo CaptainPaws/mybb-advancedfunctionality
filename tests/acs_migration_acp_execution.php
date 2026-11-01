@@ -43,6 +43,42 @@ try{axfail(fn()=>$timed->acpStep(),'ddl_outcome_unknown');}finally{$timed->close
 axcheck(AcsEngineMigration::readAcpState($cancelDir)['intent']!==null,'Timed-out SQL lost intent');
 $recovered=AcsEngineMigration::forAcp($normal,'fixture_',$cancelDir,$uuid);try{$recovered->acpStep(true);}finally{$recovered->closeAcp();}
 axcheck(AcsEngineMigration::readAcpState($cancelDir)['intent']===null,'Cancellation recovery failed');
+// Real restricted account: schema ALL permits table operations, not global replication status.
+$c->query("DROP USER IF EXISTS 'acs_permission_probe'@'localhost'");
+$c->query("CREATE USER 'acs_permission_probe'@'localhost' IDENTIFIED BY ''");
+$c->query("GRANT ALL ON acs414b_test.* TO 'acs_permission_probe'@'localhost'");
+$config['database']['username']='acs_permission_probe';
+$limited=new mysqli('localhost','acs_permission_probe','','acs414b_test',0,'/tmp/acs414b/socket/mysql.sock');
+$probes=AcsEngineMigration::readOnlyAccess(fn($sql)=>$limited->query($sql)->fetch_all(MYSQLI_ASSOC),'fixture_');
+axcheck($probes['replication_status']===['status'=>'DENIED','errno'=>1227]&&$probes['metadata_posts']['status']==='PASS'&&$probes['grant_lock_tables']['status']==='DIRECT_GRANT','Independent read-only permissions probes');
+$pj=new AF_ACS_MigrationJournal($base.'/permissions-ui');$px=new AF_ACS_MigrationAcpExecution($db,$pj,$base.'/permissions-engine');
+$pr=['op'=>'begin','csrf'=>'fixture','backup'=>'1','key'=>str_repeat('b',32),'revision'=>0];$ps=$px->command($pr);
+axcheck($ps['job']['error']==='database_replication_status_denied'&&$ps['job']['mysql_errno']===1227&&$ps['job']['status']==='ready'&&$ps['job']['failure_phase']==='before_ddl'&&$px->status()===null,'Pre-DDL refusal not classified');
+axcheck($px->command($pr)===$ps,'Denied request replay repeated work');
+// Existing legacy recovery_required must be released by proof, not journal deletion.
+$ps=$pj->command(str_repeat('c',32),'legacy-fixture',$ps['revision'],function($v){$v['job']['status']='recovery_required';$v['job']['error']='database_permissions';return $v;});
+$ps=$px->command(['op'=>'recover','csrf'=>'fixture','key'=>str_repeat('d',32),'revision'=>$ps['revision']]);
+axcheck($ps['job']['status']==='ready'&&$ps['job']['error_operation']==='replication_status'&&count($ps['events'])>=2,'Legacy pre-DDL recovery stuck or history lost');
+$c->query("GRANT REPLICATION CLIENT ON *.* TO 'acs_permission_probe'@'localhost'");
+$c->query("REVOKE LOCK TABLES ON acs414b_test.* FROM 'acs_permission_probe'@'localhost'");
+$ps=$px->command(['op'=>'next','csrf'=>'fixture','key'=>str_repeat('e',32),'revision'=>$ps['revision']]);
+axcheck($ps['job']['error']==='database_lock_tables_denied'&&$ps['job']['status']==='ready'&&$px->status()===null,'LOCK TABLES denial conflated with replication');
+$c->query("GRANT LOCK TABLES ON acs414b_test.* TO 'acs_permission_probe'@'localhost'");
+$ps=$px->command(['op'=>'next','csrf'=>'fixture','key'=>str_repeat('f',32),'revision'=>$ps['revision']]);
+axcheck($ps['job']['error']===null&&$px->status()['done']===1,'Cannot continue existing job after grant');
+// Reproduce a durable intent with a lost completion. Denied preflight cannot clear it.
+$raw=AcsEngineMigration::readAcpState($base.'/permissions-engine');$raw['intent']=['table'=>'threadsubscriptions','time'=>time()];unset($raw['completed']['threadsubscriptions']);
+$raw['journal_hash']=hash('sha256',json_encode($raw,JSON_UNESCAPED_SLASHES));
+file_put_contents($base.'/permissions-engine/engine-state.php',"<?php http_response_code(404); exit; ?>\n".json_encode($raw));
+$c->query("REVOKE REPLICATION CLIENT ON *.* FROM 'acs_permission_probe'@'localhost'");
+$ps=$px->command(['op'=>'recover','csrf'=>'fixture','key'=>str_repeat('a',32),'revision'=>$ps['revision']]);
+axcheck($ps['job']['status']==='recovery_required'&&$px->status()['unknown'],'Unknown ALTER lost recovery gate on preflight denial');
+$c->query("GRANT REPLICATION CLIENT ON *.* TO 'acs_permission_probe'@'localhost'");
+$ps=$px->command(['op'=>'recover','csrf'=>'fixture','key'=>str_repeat('9',32),'revision'=>$ps['revision']]);
+axcheck($ps['job']['status']==='ready'&&$px->status()['done']===1&&!$px->status()['unknown'],'Unknown result not adopted without duplicate ALTER');
+$limited->close();$config['database']['username']='root';$c->query("DROP USER 'acs_permission_probe'@'localhost'");
+// Return the isolated fixture to the starting engine; not part of any recovery protocol.
+$c->query('ALTER TABLE fixture_threadsubscriptions ENGINE=MyISAM');
 $x=new AF_ACS_MigrationAcpExecution($db,$j,$engineDir);
 $req=['op'=>'begin','csrf'=>'fixture','backup'=>'1','key'=>str_repeat('1',32),'revision'=>0];
 axfail(fn()=>$x->command(array_replace($req,['backup'=>''])),'backup_statement_required');
@@ -54,7 +90,7 @@ axcheck($x->command($req)===$s&&$x->status()['done']===1,'Replay repeated ALTER'
 // Unexpected schema change between requests is detected; previous success remains intact.
 $c->query('ALTER TABLE fixture_mailqueue ADD KEY unexpected(value)');
 $s=$x->command(['op'=>'next','csrf'=>'fixture','key'=>str_repeat('2',32),'revision'=>$s['revision']]);
-axcheck($s['job']['status']==='recovery_required'&&$x->status()['done']===1,'Failed sequence did not stop');
+axcheck($s['job']['status']==='ready'&&$s['job']['failure_phase']==='before_ddl'&&$x->status()['done']===1,'Failed sequence did not stop');
 $c->query('ALTER TABLE fixture_mailqueue DROP KEY unexpected');
 $s=$x->command(['op'=>'recover','csrf'=>'fixture','key'=>str_repeat('3',32),'revision'=>$s['revision']]);axcheck($s['job']['status']==='ready','Recovery failed');
 // Simulate lost completion receipt: actual ALTER committed, durable intent was not cleared.
@@ -69,4 +105,4 @@ axcheck($x->status()['complete']&&$s['job']['status']==='completed','Completion'
 axfail(fn()=>$x->command(['op'=>'begin','csrf'=>'fixture','backup'=>'1','key'=>str_repeat('a',32),'revision'=>$s['revision']]),'migration_already_complete');
 // A new journal observing already-InnoDB tables must not perform conversion.
 $y=new AF_ACS_MigrationAcpExecution($db,new AF_ACS_MigrationJournal($base.'/already'),$base.'/new-engine');$s=$y->command($req);axcheck(($s['job']['no_change']??false)&&!file_exists($base.'/new-engine/engine-state.php'),'Already InnoDB repeated work');
-echo "ACP engine: rights/CSRF/backup/maintenance, actual single-table ALTER, replay, stopped partial failure, unknown-outcome recovery, ten verified tables with FULLTEXT/AUTO_INCREMENT/data, completed/already-InnoDB refusal passed\n";
+echo "ACP engine: exact replication/LOCK TABLES denials, pre-DDL ready/legacy recovery, pending-intent gate, grants repair, rights/CSRF/backup/maintenance, actual single-table ALTER, replay, stopped partial failure, unknown-outcome recovery, ten verified tables with FULLTEXT/AUTO_INCREMENT/data, completed/already-InnoDB refusal passed\n";

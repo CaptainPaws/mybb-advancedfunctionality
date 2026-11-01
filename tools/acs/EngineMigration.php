@@ -1,6 +1,15 @@
 <?php
 declare(strict_types=1);
 
+/** Sanitized operation identity only; never raw SQL/server error text. */
+final class AcsEngineMigrationSqlException extends RuntimeException
+{
+    public function __construct(public readonly string $operation, int $errno)
+    {
+        parent::__construct('database_'.$operation.(in_array($errno,[1044,1045,1142,1143,1227],true)?'_denied':'_failed'),$errno);
+    }
+}
+
 /** Standalone DBA tool. No MyBB bootstrap, lifecycle hooks or web entry point. */
 final class AcsEngineMigration
 {
@@ -22,11 +31,64 @@ final class AcsEngineMigration
         }
         return ['version'=>is_string($version)&&preg_match('/\A[0-9a-zA-Z. +_\-]{1,100}\z/D',$version)?$version:null,'tables'=>$tables];
     }
+    /** Independent read-only probes; failures do not suppress the other observations. */
+    public static function readOnlyAccess(callable $select,string $prefix):array
+    {
+        self::ensure(preg_match('/\A[a-zA-Z0-9_]+\z/D',$prefix)===1,'configuration_identifier');
+        $out=[];
+        $probe=static function(string $name,string $sql)use($select,&$out):?array{
+            try{$r=$select($sql);$out[$name]=['status'=>'PASS','errno'=>null];return $r;}
+            catch(Throwable $e){$n=(int)$e->getCode();$out[$name]=['status'=>in_array($n,[1044,1045,1142,1143,1227],true)?'DENIED':'NOT_VERIFIED','errno'=>$n?:null];return null;}
+        };
+        $probe('replication_status','SHOW REPLICA STATUS');
+        $probe('triggers','SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()');
+        $probe('foreign_keys','SELECT CONSTRAINT_NAME FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND UNIQUE_CONSTRAINT_SCHEMA<>DATABASE()');
+        $probe('table_catalog',"SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME");
+        $grants=$probe('grants','SHOW GRANTS');
+        $db=$probe('server_metadata','SELECT DATABASE() AS db');
+        $scope=isset($db[0]['db'])?'`'.str_replace('`','``',$db[0]['db']).'`.*':null;
+        $text=$grants===null?'':implode("\n",array_map(fn($r)=>implode(' ',$r),$grants));
+        foreach(['LOCK TABLES','SELECT','ALTER','CREATE','INSERT','TRIGGER'] as $priv){
+            $ok=$scope!==null&&preg_match('/GRANT (?:ALL PRIVILEGES|[^\n]*\b'.preg_quote($priv,'/').'\b[^\n]*) ON (?:\*\.\*|'.preg_quote($scope,'/').') TO /',$text)===1;
+            $out['grant_'.strtolower(str_replace(' ','_',$priv))]=['status'=>$ok?'DIRECT_GRANT':'NOT_VERIFIED','errno'=>null];
+        }
+        // Schema/table/role grants can differ. NOT_VERIFIED is not a claim that access is denied.
+        foreach(self::ORDER as $t){
+            $probe('metadata_'.$t,'SHOW INDEX FROM `'.$prefix.$t.'`');
+            $probe('select_'.$t,'SELECT * FROM `'.$prefix.$t.'` LIMIT 0');
+        }
+        return $out;
+    }
     private static function schemaUnsupported(string $ddl):bool
     {
         return preg_match('/\b(?:FOREIGN KEY|GENERATED ALWAYS|SPATIAL KEY|PARTITION BY|ROW_FORMAT=(?:FIXED|COMPRESSED|REDUNDANT))\b/i',$ddl)===1;
     }
     private bool $acp=false;
+    // Conservative until this process owns both mutexes and has checked the durable state.
+    private bool $acpDdlMayHaveStarted=true;
+    public function acpFailureIsBeforeDdl():bool {return $this->acp&&!$this->acpDdlMayHaveStarted;}
+    private static function sqlOperation(string $sql):string
+    {
+        if(str_starts_with($sql,'SHOW REPLICA STATUS'))return 'replication_status';
+        if(str_starts_with($sql,'SHOW GRANTS'))return 'grants';
+        if(str_starts_with($sql,'LOCK TABLES'))return 'lock_tables';
+        if(str_starts_with($sql,'ALTER TABLE'))return 'alter';
+        if(str_contains($sql,'information_schema.TRIGGERS'))return 'triggers';
+        if(str_contains($sql,'information_schema.REFERENTIAL_CONSTRAINTS'))return 'foreign_keys';
+        if(str_contains($sql,'information_schema.TABLES'))return 'table_catalog';
+        if(str_starts_with($sql,'SHOW CREATE TABLE'))return 'table_definition';
+        if(str_starts_with($sql,'SHOW FULL COLUMNS'))return 'table_columns';
+        if(str_starts_with($sql,'SHOW INDEX'))return 'table_indexes';
+        if(str_starts_with($sql,'SELECT CAST('))return 'table_data';
+        if(str_contains($sql,'GET_LOCK('))return 'migration_mutex';
+        if(str_starts_with($sql,'SET SESSION'))return 'session_setup';
+        return 'server_metadata';
+    }
+    private function query(string $sql,int $mode=MYSQLI_STORE_RESULT):mysqli_result|bool
+    {
+        try{return $this->db->query($sql,$mode);}
+        catch(mysqli_sql_exception $e){if(!$this->acp)throw $e;throw new AcsEngineMigrationSqlException(self::sqlOperation($sql),(int)$e->getCode());}
+    }
     private float $deadline=0;
     private ?Closure $acpConnect=null;
     private array $acpCatalog=[];
@@ -48,7 +110,7 @@ final class AcsEngineMigration
         $o->lock=fopen($dir.'/engine-lock.php','c+');chmod($dir.'/engine-lock.php',0600);self::ensure($o->lock!==false&&flock($o->lock,LOCK_EX|LOCK_NB),'tool_already_running');
         if(fstat($o->lock)['size']===0){fwrite($o->lock,self::ACP_HEADER);fflush($o->lock);}
         $limit=(int)ini_get('max_execution_time');self::ensure($limit===0||$limit>=15,'http_budget_too_small');$o->deadline=microtime(true)+10;
-        $o->db->query('SET SESSION lock_wait_timeout=2');$o->db->query('SET SESSION innodb_lock_wait_timeout=2');return $o;
+        $o->query('SET SESSION lock_wait_timeout=2');$o->query('SET SESSION innodb_lock_wait_timeout=2');return $o;
     }
     private function budget():void {if($this->acp)self::ensure(microtime(true)<$this->deadline,'http_budget_exhausted');}
     private static function rowHash(array $row):string
@@ -86,7 +148,7 @@ final class AcsEngineMigration
     }
     private static function json(array $a):string {return json_encode($a,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);}
     private static function hash(array $a):string {return hash('sha256',self::json($a));}
-    private function rows(string $sql):array {$this->budget();$q=$this->db->query($sql);return $q->fetch_all(MYSQLI_ASSOC);}
+    private function rows(string $sql):array {$this->budget();$q=$this->query($sql);return $q->fetch_all(MYSQLI_ASSOC);}
     private function q(string $v):string {return "'".$this->db->real_escape_string($v)."'";}
     private function table(string $logical):string {return '`'.$this->config['prefix'].$logical.'`';}
     private function identity():array
@@ -178,7 +240,7 @@ final class AcsEngineMigration
     {
         if($this->acp){
             $hashes=[];$bytes=0;$fields=array_map(fn($c)=>'CAST(`'.str_replace('`','``',$c['Field']).'` AS BINARY)',$meta['columns']);
-            $q=$this->db->query('SELECT '.implode(',',$fields).' FROM '.$this->table($name),MYSQLI_USE_RESULT);
+            $q=$this->query('SELECT '.implode(',',$fields).' FROM '.$this->table($name),MYSQLI_USE_RESULT);
             try{while($row=$q->fetch_row()){$this->budget();foreach($row as $v)$bytes+=strlen($v??'');self::ensure($bytes<=16777216&&count($hashes)<50000,'table_exceeds_http_limit');$hashes[]=self::rowHash($row);}}finally{$q->free();}
             sort($hashes,SORT_STRING);$h=hash_init('sha256');foreach($hashes as $v)hash_update($h,$v."\n");return ['count'=>count($hashes),'sha256'=>hash_final($h)];
         }
@@ -187,7 +249,7 @@ final class AcsEngineMigration
         $raw=$dir.'/hashes';$sorted=$dir.'/sorted';$out=fopen($raw,'xb');$count=0;
         try {
             $fields=array_map(fn($c)=>'CAST(`'.str_replace('`','``',$c['Field']).'` AS BINARY)',$meta['columns']);
-            $q=$this->db->query('SELECT '.implode(',',$fields).' FROM '.$this->table($name),MYSQLI_USE_RESULT);
+            $q=$this->query('SELECT '.implode(',',$fields).' FROM '.$this->table($name),MYSQLI_USE_RESULT);
             try {while($row=$q->fetch_row()){self::ensure(fwrite($out,self::rowHash($row)."\n")===65,'scratch_write_failed');$count++;}}
             finally {$q->free();fclose($out);$out=null;}
             $proc=proc_open(['/usr/bin/sort','--buffer-size=16M','--temporary-directory='.$dir,'-o',$sorted,$raw],[0=>['file','/dev/null','r'],1=>['file','/dev/null','w'],2=>['file','/dev/null','w']],$pipes,null,['LC_ALL'=>'C']);
@@ -290,7 +352,7 @@ final class AcsEngineMigration
         self::ensure($this->rows('SHOW REPLICA STATUS')===[],'replica_applier_not_supported');
         $parts=array_map(fn($t)=>'`'.str_replace('`','``',$t).'` WRITE',$this->acpCatalog);
         // Physical DB-scoped write barrier; no global mode change or fictitious transaction.
-        $this->db->query('LOCK TABLES '.implode(',',$parts));$this->acpLocksHeld=true;
+        $this->query('LOCK TABLES '.implode(',',$parts));$this->acpLocksHeld=true;
         $this->acpPreconditions();
     }
     private function acpPreconditions():void
@@ -312,6 +374,10 @@ final class AcsEngineMigration
         $key='acs_engine_'.substr(hash('sha256',self::json($this->identity())),0,40);
         self::ensure($this->rows('SELECT GET_LOCK('.$this->q($key).',0) AS acquired')[0]['acquired']==='1','database_tool_mutex_busy');
         try{
+            // Read under the file lock + DB mutex BEFORE any permission preflight.
+            // A pending or unreadable state always retains the recovery gate.
+            $previous=file_exists($this->file())?$this->state():null;
+            $this->acpDdlMayHaveStarted=$previous!==null&&$previous['intent']!==null;
             $this->acpAcquire();
             if(!file_exists($this->file())){
                 if($recover)return ['no_ddl'=>true];$b=[];
@@ -327,12 +393,12 @@ final class AcsEngineMigration
             self::ensure($s['intent']===null,'recovery_required');$this->acpValidateSchemas($s);$next=null;
             foreach(self::ORDER as $t)if($s['baseline'][$t]['engine']==='MyISAM'&&!isset($s['completed'][$t])){$next=$t;break;}
             if($next===null)return $s;
-            $this->acpPreconditions();$this->budget();$s['before'][$next]=$this->snapshot($next);$s['intent']=['table'=>$next,'before_hash'=>self::hash($s['before'][$next]),'time'=>time(),'connection_id'=>$this->db->thread_id];$this->save($s);
+            $this->acpPreconditions();$this->budget();$s['before'][$next]=$this->snapshot($next);$this->acpDdlMayHaveStarted=true;$s['intent']=['table'=>$next,'before_hash'=>self::hash($s['before'][$next]),'time'=>time(),'connection_id'=>$this->db->thread_id];$this->save($s);
             $auto=$s['before'][$next]['auto'];self::ensure($auto===null||preg_match('/\A[0-9]+\z/D',$auto)===1,'auto_increment_invalid');
             $sql='ALTER TABLE '.$this->table($next).' ENGINE=InnoDB, ALGORITHM=COPY, LOCK=EXCLUSIVE'.($auto===null?'':', AUTO_INCREMENT='.$auto);
-            $this->budget();$this->db->query($sql,MYSQLI_ASYNC);
+            $this->budget();$this->query($sql,MYSQLI_ASYNC);
             while(true){$read=[$this->db];$error=[];$reject=[];
-                if(mysqli_poll($read,$error,$reject,0,20000)>0){$this->db->reap_async_query();break;}
+                if(mysqli_poll($read,$error,$reject,0,20000)>0){try{$this->db->reap_async_query();}catch(mysqli_sql_exception $e){throw new AcsEngineMigrationSqlException('alter',(int)$e->getCode());}break;}
                 if(microtime(true)>=$this->deadline){
                     try{$cancel=($this->acpConnect)();$cancel->query('KILL QUERY '.(int)$this->db->thread_id);$cancel->close();}catch(Throwable $ignored){}
                     throw new RuntimeException('ddl_outcome_unknown');
