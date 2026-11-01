@@ -26,3 +26,8 @@ m.restore({ draft_id: '40', draft_version: '2', prose: 'Серверная ве�
 assert.equal(m.pending, null); assert.deepEqual(m.actions[0].parameters, { preserved: 0 });
 assert.equal(m.version, '2'); assert.equal(m.prose, 'Серверная версия');
 console.log('ACS builder state: ordered add/edit/remove, preserved parameters, draft/preview serialization, stable retry and restore passed');
+
+const sealed = new DraftModel(); sealed.restore({draft_id:'40',draft_version:'3',prose:'',actions:[a,pet],sealed_prefix:[{id:'1',action:a}]});
+assert.throws(()=>sealed.update(0,pet));assert.throws(()=>sealed.remove(0));assert.throws(()=>sealed.move(1,-1));sealed.update(1,a);sealed.add(pet);
+sealed.sealPending={command:'seal',body:{operation_key:'retained_seal_key'}};assert.throws(()=>sealed.text('blocked'));
+console.log('Sealed prefix immutable and append-only in builder state passed');

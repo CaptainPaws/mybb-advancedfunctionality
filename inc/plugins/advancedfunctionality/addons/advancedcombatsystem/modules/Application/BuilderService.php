@@ -19,6 +19,11 @@ final class AF_ACS_BuilderService
             'resolver_scenario_impossible'=>'Этот условный сценарий невозможен при текущих вероятностях. Выберите другой сценарий.',
             'preview_target_forbidden','ACS_DRAFT_UNAVAILABLE','ACS_GM_REQUIRED','ACS_SESSION_UNAVAILABLE'=>'Нет разрешённого доступа к выбранной группе или цели.',
             'builder_input_invalid'=>'Некорректная последовательность действий.',
+            'ACS_SEAL_SUMMARY_CHANGED'=>'Зависимости изменились. Проверьте пересчитанную сводку на прежних бросках и подтвердите её заново.',
+            'ACS_SEAL_PIN_CHANGED','ACS_SEAL_VERSION_UNSUPPORTED'=>'Закреплённое определение или версия движка не совпадает. Броски сохранены; новый roll не выполняется.',
+            'ACS_SEAL_IMMUTABLE'=>'Запечатанный префикс неизменяем. Отмена разрешена только с конца.',
+            'preview_action_cost_unsupported'=>'Для способности за 0 AP или иной неподдержанной стоимости нужен проверенный лимит KB. Запечатывание не выполняется.',
+            'ACS_SEAL_QUOTA_EXHAUSTED'=>'Квота подготовки группы исчерпана. Отмена действий не возвращает попытки.',
             'preview_dependency_unavailable'=>'Нужная интеграция отключена. Проверьте состояние Knowledge Base и CharacterSheets.',
             'preview_ability_pin_mismatch','preview_source_version_unavailable'=>'Закреплённая версия способности недоступна или не совпадает с источником регистрации.',
             'preview_source_invalid','preview_stats_layer_unavailable','preview_stats_missing'=>'Снимок существа неполон или несовместим с текущим read-only контрактом.',
@@ -65,9 +70,9 @@ final class AF_ACS_BuilderService
         $token=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'session'=>$scope['session']['session_version'],'encounter'=>$scope['encounter']['encounter_version'],'round'=>$scope['round']['round_version'],'turns'=>$versions,'selected'=>$selected]));
         return ['session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>(string)$scope['round']['round_number'],'encounter_status'=>$scope['encounter']['status'],'turns'=>$turns,'turn'=>$chosen,'actors'=>$actors,'targets'=>$targets,'scope_token'=>$token,'draft_id'=>$draft,'preview_scope'=>$scope['gm']?'gm':'own_draft_only','publication_enabled'=>false];
     }
-    public function preview(array $input):array
+    public function prepare(array $input,?string $sealedDraft=null):array
     {
-        $this->access->csrf();
+
         if(array_diff(array_keys($input),['session_id','encounter_id','turn_id','scope_token','actions','scenario'])||!is_array($input['actions']??null)||!array_is_list($input['actions'])||!count($input['actions'])||count($input['actions'])>20||!in_array($input['scenario']??null,['hit','crit','miss'],true))throw new RuntimeException('builder_input_invalid');
         $sid=AF_ACS_Repository::integer($input['session_id']??null);$eid=AF_ACS_Repository::integer($input['encounter_id']??null);$turn=AF_ACS_Repository::integer($input['turn_id']??null);
         $scope=$this->context($sid,$eid,$turn);
@@ -80,7 +85,7 @@ final class AF_ACS_BuilderService
             if(!in_array($actor,array_column($scope['actors'],'id'),true))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
             $visible=false;foreach($scope['targets'] as $t)if($t['id']===$target&&in_array($actor,$t['actors'],true))$visible=true;
             if(!$visible)throw new RuntimeException('preview_target_forbidden');
-            $p=$q->inspect($sid,$eid,$actor,$target);
+            $p=$q->inspect($sid,$eid,$actor,$target,$sealedDraft);
             foreach($p['context']['abilities'][$actor][$action['ability_key']]['components']??[] as $component)if($component['damage_type']==='elemental'&&!empty($p['context']['stats'][$actor]['element_damage_bonus']))throw new RuntimeException('preview_element_bonus_contract_unavailable');
             if(($p['choices'][$action['ability_key']]['supported']??false)!==true)throw new RuntimeException('builder_parameters_unsupported');
             if($context===null)$context=$p['context'];else foreach(['entities','groups'] as $f)$context['state'][$f]=array_replace($context['state'][$f],$p['context']['state'][$f]);
@@ -88,6 +93,12 @@ final class AF_ACS_BuilderService
             $context['allowed_targets'][$actor]=array_values(array_unique([...($context['allowed_targets'][$actor]??[]),$target]));
             $ordered[]=['actor_id'=>$actor,'ability_key'=>$action['ability_key'],'targets'=>[$target],'scenario'=>$input['scenario']];$prepared[]=[$actor,$target,$p['versions']];
         }
+        return ['context'=>$context,'ordered'=>$ordered,'prepared'=>$prepared,'scope'=>$scope];
+    }
+    public function preview(array $input):array
+    {
+        $this->access->csrf();$p=$this->prepare($input);$context=$p['context'];$ordered=$p['ordered'];$prepared=$p['prepared'];$scope=$p['scope'];
+        $sid=$scope['session_id'];$eid=$scope['encounter_id'];$turn=$scope['turn']['id'];$q=new AF_ACS_QueryService($this->repo,$this->access);
         $result=AF_ACS_Resolver::resolve($context,$ordered);$rows=[];
         foreach($prepared as [$actor,$target,$versions])if($q->inspect($sid,$eid,$actor,$target)['versions']!==$versions)throw new RuntimeException('builder_version_conflict');
         if($this->context($sid,$eid,$turn)['scope_token']!==$scope['scope_token'])throw new RuntimeException('builder_version_conflict');

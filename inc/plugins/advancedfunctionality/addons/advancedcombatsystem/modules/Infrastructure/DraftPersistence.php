@@ -11,7 +11,7 @@ trait AF_ACS_DraftPersistence
     }
     public function builderDraft(string $sid,string $turn,string $uid):?string
     {
-        $row=$this->sql('SELECT d.id FROM '.$this->table('drafts').' d JOIN '.$this->table('encounters').' e ON e.id=d.encounter_id WHERE e.session_id=? AND d.turn_id=? AND d.author_uid=? AND d.status=? ORDER BY d.id DESC LIMIT 1',[$sid,$turn,$uid,'draft'])['rows'][0]??null;
+        $row=$this->sql('SELECT d.id FROM '.$this->table('drafts').' d JOIN '.$this->table('encounters')." e ON e.id=d.encounter_id WHERE e.session_id=? AND d.turn_id=? AND d.author_uid=? AND d.status IN ('draft','sealed') ORDER BY d.id DESC LIMIT 1",[$sid,$turn,$uid])['rows'][0]??null;
         return $row?(string)$row['id']:null;
     }
     public function draft(string $id,string $uid): ?array
@@ -40,17 +40,22 @@ trait AF_ACS_DraftPersistence
             $draftId=$request['draft_id'];$version=$request['expected_draft_version'];$now=time();
             if($draftId===null){
                 if($version!=='0')throw new RuntimeException('ACS_DRAFT_VERSION_CONFLICT');
-                if($this->sql('SELECT id FROM '.$this->table('drafts').' WHERE turn_id=? AND author_uid=? AND status=? LIMIT 1 FOR UPDATE',[$request['turn_id'],$request['author_uid'],'draft'])['rows'])throw new RuntimeException('ACS_DRAFT_ALREADY_EXISTS');
+                if($this->sql('SELECT id FROM '.$this->table('drafts')." WHERE turn_id=? AND author_uid=? AND status IN ('draft','sealed') LIMIT 1 FOR UPDATE",[$request['turn_id'],$request['author_uid']])['rows'])throw new RuntimeException('ACS_DRAFT_ALREADY_EXISTS');
                 $draftId=$this->sql('INSERT INTO '.$this->table('drafts').' (encounter_id,turn_id,author_uid,status,draft_version,mechanics_json,prose,dependency_json,confirmation_hash,pid,updated_at) VALUES (?,?,?,?,1,?,?,?,NULL,NULL,?)',[$request['encounter_id'],$request['turn_id'],$request['author_uid'],'draft',$mechanics,$prose,self::json($dependencies),$now])['id'];
             }else{
                 $row=$this->draft($draftId,$request['author_uid']);
                 if(!$row||$row['session_id']!==$request['session_id']||$row['encounter_id']!==$request['encounter_id']||$row['turn_id']!==$request['turn_id'])throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
-                if($row['status']!=='draft'||$row['pid']!==null||$row['confirmation_hash']!==null)throw new RuntimeException('ACS_DRAFT_READ_ONLY');
+                if(!in_array($row['status'],['draft','sealed'],true)||$row['pid']!==null)throw new RuntimeException('ACS_DRAFT_READ_ONLY');
+                $incoming=json_decode($mechanics,true,32,JSON_THROW_ON_ERROR)['actions'];$prefix=$this->sealRows($draftId,true);
+                foreach($prefix as $i=>$sealed)if(!isset($incoming[$i])||$incoming[$i]!==$this->sealPayload($sealed)['action'])throw new RuntimeException('ACS_SEAL_IMMUTABLE');
+                $oldDependencies=json_decode($row['dependency_json'],true,32,JSON_THROW_ON_ERROR);if(isset($oldDependencies['seal']))$dependencies['seal']=$oldDependencies['seal'];
+                $confirmation=$mechanics===$row['mechanics_json']?$row['confirmation_hash']:null;
+                $status=count($prefix)>0&&count($prefix)===count($incoming)?'sealed':'draft';
                 self::integer($version,'18446744073709551614');
-                if($this->sql('UPDATE '.$this->table('drafts').' SET mechanics_json=?,prose=?,dependency_json=?,draft_version=draft_version+1,updated_at=? WHERE id=? AND author_uid=? AND draft_version=? AND status=?',[$mechanics,$prose,self::json($dependencies),$now,$draftId,$request['author_uid'],$version,'draft'])['affected']!==1)throw new RuntimeException('ACS_DRAFT_VERSION_CONFLICT');
+                if($this->sql('UPDATE '.$this->table('drafts').' SET mechanics_json=?,prose=?,dependency_json=?,status=?,confirmation_hash=?,draft_version=draft_version+1,updated_at=? WHERE id=? AND author_uid=? AND draft_version=? AND status=?',[$mechanics,$prose,self::json($dependencies),$status,$confirmation,$now,$draftId,$request['author_uid'],$version,$row['status']])['affected']!==1)throw new RuntimeException('ACS_DRAFT_VERSION_CONFLICT');
             }
             $saved=$this->draft($draftId,$request['author_uid']);
-            $result=['schema_version'=>1,'draft_id'=>$draftId,'draft_version'=>$saved['draft_version'],'session_id'=>$request['session_id'],'encounter_id'=>$request['encounter_id'],'turn_id'=>$request['turn_id'],'status'=>'draft','saved_at'=>$saved['updated_at']];
+            $result=['schema_version'=>1,'draft_id'=>$draftId,'draft_version'=>$saved['draft_version'],'session_id'=>$request['session_id'],'encounter_id'=>$request['encounter_id'],'turn_id'=>$request['turn_id'],'status'=>$saved['status'],'saved_at'=>$saved['updated_at']];
             $receipt=$request;unset($receipt['operation_key']);
             $this->sql('INSERT INTO '.$this->table('operations').' (operation_key,session_id,encounter_id,kind,payload_hash,status,operation_version,request_json,result_json,updated_at) VALUES (?,?,?,?,?,?,1,?,?,?)',[$key,$request['session_id'],$request['encounter_id'],'draft.save',$hash,'committed',self::json($receipt),self::json($result),$now]);
             return $result;
