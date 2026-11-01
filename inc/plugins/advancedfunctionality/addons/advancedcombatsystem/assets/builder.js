@@ -2,20 +2,21 @@
   'use strict';
   const copy = value => JSON.parse(JSON.stringify(value));
   class DraftModel {
-    constructor() { this.actions = []; this.prose = ''; this.id = ''; this.version = '0'; this.dirty = false; this.pending = null; this.revision = 0; }
-    changed() { if (this.pending) throw new Error('Сначала завершите или восстановите предыдущее сохранение.'); this.dirty = true; this.revision++; }
+    constructor() { this.actions = []; this.prose = ''; this.id = ''; this.version = '0'; this.dirty = false; this.pending = null; this.sealPending = null; this.sealedCount = 0; this.revision = 0; }
+    changed() { if (this.pending || this.sealPending) throw new Error('Сначала завершите или восстановите предыдущее сохранение.'); this.dirty = true; this.revision++; }
     add(action) { if (this.actions.length >= 100) throw new Error('Достигнут технический предел черновика: 100 действий.'); this.changed(); this.actions.push(copy(action)); }
-    update(index, action) { if (!this.actions[index]) throw new Error('Действие не найдено.'); this.changed(); this.actions[index] = copy(action); }
-    remove(index) { if (!this.actions[index]) return; this.changed(); this.actions.splice(index, 1); }
-    move(index, delta) { const to = index + delta; if (!this.actions[index] || to < 0 || to >= this.actions.length) return; this.changed(); [this.actions[index], this.actions[to]] = [this.actions[to], this.actions[index]]; }
+    update(index, action) { if (index < this.sealedCount) throw new Error('Запечатанное действие неизменно.'); if (!this.actions[index]) throw new Error('Действие не найдено.'); this.changed(); this.actions[index] = copy(action); }
+    remove(index) { if (index < this.sealedCount) throw new Error('Отмена seal разрешена только отдельной кнопкой с конца.'); if (!this.actions[index]) return; this.changed(); this.actions.splice(index, 1); }
+    move(index, delta) { const to = index + delta; if (index < this.sealedCount || to < this.sealedCount) throw new Error('Запечатанный порядок неизменен.'); if (!this.actions[index] || to < 0 || to >= this.actions.length) return; this.changed(); [this.actions[index], this.actions[to]] = [this.actions[to], this.actions[index]]; }
     text(value) { if (this.prose !== value) { this.changed(); this.prose = value; } }
     begin(scope, key) {
+      if (this.sealPending) throw new Error('Сначала восстановите исход seal.');
       if (this.pending) return copy(this.pending);
       this.pending = { session_id: scope.session_id, encounter_id: scope.encounter_id, turn_id: scope.turn.id, draft_id: this.id, expected_draft_version: this.version, operation_key: key, prose: this.prose, actions: JSON.stringify(this.actions) };
       return copy(this.pending);
     }
     ack(receipt) { this.id = String(receipt.draft_id); this.version = String(receipt.draft_version); this.pending = null; this.dirty = false; }
-    restore(dto) { this.actions = copy(dto.actions); this.prose = dto.prose; this.id = String(dto.draft_id); this.version = String(dto.draft_version); this.pending = null; this.dirty = false; this.revision++; }
+    restore(dto) { this.actions = copy(dto.actions); this.prose = dto.prose; this.id = String(dto.draft_id); this.version = String(dto.draft_version); this.pending = null; this.sealPending = null; this.sealedCount = (dto.sealed_prefix || []).length; this.dirty = false; this.revision++; }
     preview(scope, scenario) { return { session_id: scope.session_id, encounter_id: scope.encounter_id, turn_id: scope.turn.id, scope_token: scope.scope_token, scenario, actions: JSON.stringify(this.actions) }; }
   }
   if (typeof module !== 'undefined' && module.exports) module.exports = { DraftModel };
@@ -25,7 +26,7 @@
     if (root.dataset.acsMounted) return;
     root.dataset.acsMounted = '1';
     const config = JSON.parse(root.querySelector('[data-acs-builder-config]').textContent);
-    let ctx = config.context, model = new DraftModel(), editing = null, loading = false, saving = false, previewBusy = false, epoch = 0, editable = ctx.turn.status === 'pending';
+    let ctx = config.context, model = new DraftModel(), editing = null, loading = false, saving = false, previewBusy = false, epoch = 0, sealView = null, editable = ctx.turn.status === 'pending';
     const field = key => root.querySelector('[data-field="' + key + '"]');
     const part = key => root.querySelector('[data-part="' + key + '"]');
     const command = key => root.querySelector('[data-command="' + key + '"]');
@@ -33,7 +34,7 @@
     const status = (text, error) => { part('status').textContent = text; part('status').classList.toggle('acs-error', !!error); };
     const statuses = { pending: 'Ожидает действий', resolved: 'Завершён', passed: 'Пропущен', forfeited: 'Исключён' };
     const storageKey = () => ['acs-draft', ctx.author_uid, ctx.session_id, ctx.encounter_id, ctx.turn.id].join(':');
-    function localSave() { try { if (model.dirty || model.pending) sessionStorage.setItem(storageKey(), JSON.stringify(model)); else sessionStorage.removeItem(storageKey()); } catch (_) { /* Server save remains usable when browser storage is unavailable. */ } }
+    function localSave() { try { if (model.dirty || model.pending || model.sealPending) sessionStorage.setItem(storageKey(), JSON.stringify(model)); else sessionStorage.removeItem(storageKey()); } catch (_) { /* Server save remains usable when browser storage is unavailable. */ } }
     function invalidate() { part('preview').replaceChildren(); epoch++; localSave(); }
     function options(select, rows, chosen, placeholder) {
       select.replaceChildren(); const empty = node('option', placeholder || 'Выберите'); empty.value = ''; select.append(empty);
@@ -53,7 +54,7 @@
       const a = choices.find(x => x.key === field('ability').value);
       part('action-info').textContent = a?.supported ? 'Стоимость: ' + a.ap_cost + ' AP из общего бюджета группы.' : (!choices.length ? (actor(field('actor').value)?.catalog_notice || 'Нет поддержанных закреплённых способностей. Обычная атака без утверждённого определения не подставляется.') : 'Выберите поддержанную способность. Недоступные определения показаны с причиной.');
       if (!ctx.targets.length) part('action-info').textContent += ' Нет разрешённых целей в текущей области видимости. Мастерские данные не открываются игроку автоматически.';
-      command('add').disabled = loading || !!model.pending || !editable || !a?.supported || !field('target').value;
+      command('add').disabled = loading || (!!model.pending || !!model.sealPending) || !editable || !a?.supported || !field('target').value;
     }
     function queue() {
       part('queue').replaceChildren(); let sum = 0, known = true;
@@ -63,31 +64,40 @@
         li.append(node('p', ab?.supported ? 'Стоимость: ' + ab.ap_cost + ' AP' : 'Предпросмотр заблокирован: источник способности недоступен.'));
         if (ab?.supported) sum += ab.ap_cost; else known = false;
         const params = a.parameters && Object.keys(a.parameters).length;
+        if (i < model.sealedCount) li.append(node('p', 'Запечатано: способность, цель и порядок неизменны.'));
         if (params) li.append(node('p', 'Сохранены параметры, для которых пока нет интерфейса. Они не удалены; предпросмотр заблокирован.'));
         [['edit', 'Изменить'], ['up', 'Выше'], ['down', 'Ниже'], ['remove', 'Удалить'], ...(params ? [['clear-parameters', 'Сбросить неподдерживаемые параметры']] : [])].forEach(([cmd, label]) => {
-          const b = node('button', label); b.type = 'button'; b.dataset.command = cmd; b.dataset.index = String(i); b.disabled = !editable || !!model.pending || loading || (cmd === 'up' && i === 0) || (cmd === 'down' && i === model.actions.length - 1); li.append(b);
+          const b = node('button', label); b.type = 'button'; b.dataset.command = cmd; b.dataset.index = String(i); b.disabled = i < model.sealedCount || (cmd === 'up' && i === model.sealedCount) || !editable || (!!model.pending || !!model.sealPending) || loading || (cmd === 'up' && i === 0) || (cmd === 'down' && i === model.actions.length - 1); li.append(b);
         }); part('queue').append(li);
       });
       if (!model.actions.length) part('queue').append(node('li', 'Пока нет подготовленных действий.'));
       const total = node('p', known ? 'Планируемая стоимость: ' + sum + ' / ' + ctx.turn.ap + ' доступных AP группы. AP пока не списываются.' : 'Общая стоимость не определена: проверьте источники действий.');
       if (known && sum > ctx.turn.ap) total.className = 'acs-error'; part('queue-total').replaceChildren(total);
-      command('preview').disabled = loading || previewBusy || !model.actions.length || !known || !editable || ctx.encounter_status !== 'active' || !ctx.targets.length;
+      command('preview').disabled = loading || previewBusy || !model.actions.length || !known || !editable || ctx.encounter_status !== 'active' || !ctx.targets.length || model.sealedCount > 0;
     }
     function overview() {
       part('overview').replaceChildren(); const line = node('div'); line.className = 'acs-summary';
       ['Раунд: ' + ctx.round, 'Группа: ' + ctx.turn.group_id, 'AP: ' + ctx.turn.ap + ' / ' + ctx.turn.maximum_ap, 'Ход: ' + (statuses[ctx.turn.status] || 'Недоступен'), ctx.encounter_status === 'paused' ? 'Столкновение на паузе' : 'Столкновение активно', 'Черновик: ' + (model.id ? '#' + model.id + ', версия ' + model.version : 'новый') + (model.dirty ? ' — не сохранён' : '')].forEach(t => line.append(node('span', t)));
       part('overview').append(line, node('p', 'Участники группы: ' + ctx.turn.members.map(m => m.name).join(', ')));
       options(field('group'), ctx.turns.map(t => ({ id: t.id, label: 'Группа ' + t.group_id + ' — ' + t.members.map(m => m.name).join(', ') + ' (' + (statuses[t.status] || t.status) + ')' })), ctx.turn.id, 'Выберите группу');
-      field('group').disabled = loading || !!model.pending;
-      field('prose').disabled = loading || !!model.pending || !editable;
-      field('actor').disabled = field('ability').disabled = field('target').disabled = loading || !!model.pending || !editable;
-      command('save').disabled = loading || saving || !editable;
+      field('group').disabled = loading || (!!model.pending || !!model.sealPending);
+      field('prose').disabled = loading || (!!model.pending || !!model.sealPending) || !editable;
+      field('actor').disabled = field('ability').disabled = field('target').disabled = loading || (!!model.pending || !!model.sealPending) || !editable;
+      command('save').disabled = loading || saving || !!model.sealPending || !editable || editing !== null;
       command('refresh').disabled = loading;
       command('save').textContent = model.pending ? 'Повторить тот же запрос сохранения' : 'Сохранить черновик';
       command('restore').disabled = loading;
       command('cancel-edit').hidden = editing === null;
       command('add').textContent = editing === null ? 'Добавить действие' : 'Применить изменение';
       info(); queue();
+      const locked = loading || saving || !!model.pending || !editable || ctx.encounter_status !== 'active' || model.dirty || editing !== null;
+      const remaining = sealView ? sealView.quota_budget - sealView.quota_used : ctx.turn.ap;
+      const newCost = model.actions.slice(model.sealedCount).reduce((n, a) => n + (ability(a)?.ap_cost || 0), 0);
+      command('seal').disabled = locked || !ctx.targets.length || model.actions.length <= model.sealedCount || newCost > remaining;
+      command('cancel-seal').disabled = locked || !model.sealedCount;
+      command('confirm-seal').disabled = locked || model.actions.length !== model.sealedCount || !sealView?.confirmable || sealView?.blocked || sealView?.confirmed;
+      command('seal-refresh').disabled = loading || saving || !model.id;
+      if (model.sealPending) ['seal','cancel-seal','confirm-seal'].forEach(c => { command(c).disabled = c !== model.sealPending.command || loading || saving; });
     }
     async function api(op, body, post) {
       const values = new URLSearchParams(body);
@@ -103,7 +113,7 @@
       ctx = data; editable = data.turn.status === 'pending'; epoch++; actionForm(); overview();
     }
     async function restore(automatic) {
-      if (!automatic && (model.dirty || model.pending) && !window.confirm('Восстановить серверную версию? Локальные несохранённые изменения будут заменены.')) return;
+      if (!automatic && (model.dirty || model.pending || model.sealPending) && !window.confirm('Восстановить серверную версию? Локальные несохранённые изменения будут заменены.')) return;
       loading = true; overview();
       try {
       await refresh();
@@ -112,7 +122,47 @@
       const dto = await api('draft_restore', { draft_id: id }, false);
       model.restore(dto); editable = !!dto.editable; field('prose').value = model.prose; editing = null; invalidate(); actionForm(); overview();
       status(dto.dependency_changed ? 'Черновик восстановлен. Зависимости изменились — нужен новый условный предпросмотр.' : 'Черновик восстановлен с сервера.', false);
+      await refreshSeal();
       } finally { loading = false; overview(); }
+    }
+    async function refreshSeal() {
+      if (!model.id) return;
+      sealView = await api('seal_status', { draft_id: model.id }, false);
+      const prefix = sealView.history.filter(h => h.status === 'sealed').map(h => h.action);
+      if (JSON.stringify(model.actions.slice(0, prefix.length)) === JSON.stringify(prefix)) model.sealedCount = prefix.length;
+      else { editable = false; status('Локальная копия расходится с запечатанным префиксом. Сохраните свой текст отдельно и восстановите серверный черновик.', true); }
+      const box = part('seal'); box.replaceChildren(node('p', 'Квота подготовки: ' + sealView.quota_used + ' / ' + (sealView.quota_budget ?? 'недоступно') + ' AP. Отмена не возвращает квоту.'));
+      if (sealView.changed) box.append(node('p', 'Зависимости изменились. Сводка пересчитана на прежних значениях; требуется новое подтверждение.'));
+      if (sealView.blocked) box.append(node('p', sealView.reason || 'Сводка заблокирована. Броски сохранены.'));
+      sealView.history.forEach(h => {
+        box.append(node('p', 'Попытка #' + h.id + ': ' + (h.status === 'cancelled' ? 'отменена' : 'запечатана') + ', квота ' + h.ap_cost + ' AP; hit u=' + h.rolls.hit.u + ', crit u=' + h.rolls.crit.u + ' (резерв, если проверка не использована).'));
+      });
+      if (sealView.summary) {
+        box.append(node('h4', sealView.summary.label));
+        sealView.summary.actions.forEach(a => box.append(node('p', (actor(a.actor_id)?.name || 'Существо') + ': ' + ({hit:'попадание',crit:'критическое попадание',miss:'промах'}[a.outcome]) + ', урон ' + a.damage + ', P_hit=' + a.probabilities.P_hit + '%, P_crit=' + a.probabilities.P_crit + '%.')));
+        box.append(node('p', sealView.confirmed ? 'Сводка подтверждена. Публикация по-прежнему отключена.' : 'Сводка требует явного подтверждения. Реальные HP/AP не изменены.'));
+      }
+      overview();
+    }
+    async function sealCommand(commandName) {
+      const routes = {seal:'seal','cancel-seal':'seal_cancel_tail','confirm-seal':'seal_confirm'};
+      if (!model.id || model.dirty) throw new Error('Сначала сохраните черновик.');
+      if (!model.sealPending) {
+        if (commandName === 'cancel-seal' && !window.confirm('Отменить последнее запечатанное действие? История и броски сохранятся, квота не вернётся.')) return;
+        const body = {draft_id:model.id,expected_draft_version:model.version,operation_key:crypto.randomUUID().replace(/-/g,'')};
+        if (commandName === 'confirm-seal') body.confirmation_hash = sealView.confirmation_hash;
+        model.sealPending = {command:commandName,body};
+      }
+      const pending = copy(model.sealPending); saving = true; localSave(); overview();
+      try {
+        await api(routes[pending.command], pending.body, true); model.sealPending = null; localSave(); saving = false;
+        await restore(true); status('Операция seal сохранена. Реальное боевое состояние не изменено.',false);
+      } catch(e) {
+        if (['ACS_SEAL_IMMUTABLE','ACS_SEAL_SUMMARY_CHANGED','ACS_SEAL_QUOTA_EXHAUSTED','ACS_DRAFT_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SEAL_TURN_UNAVAILABLE'].includes(e.code)) {
+          model.sealPending = null; localSave(); await refreshSeal();
+        }
+        status(e.message + (model.sealPending ? ' Повторите ту же кнопку: ключ и запрос сохранены.' : ' Обновите черновик и проверьте сводку.'),true);
+      } finally { saving = false; overview(); }
     }
     async function save() {
       // Technical request bounds only; costs and execution permission remain server-owned.
@@ -171,14 +221,16 @@
         else if (cmd === 'restore') await restore(false);
         else if (cmd === 'refresh') { await refresh(); invalidate(); status('Сведения обновлены. Локальные действия и текст сохранены.', false); }
         else if (cmd === 'preview') await preview();
+        else if (['seal','cancel-seal','confirm-seal'].includes(cmd)) await sealCommand(cmd);
+        else if (cmd === 'seal-refresh') await refreshSeal();
       } catch (e) { status(e.message, true); }
     });
-    window.addEventListener('beforeunload', event => { if (model.dirty || model.pending) { localSave(); event.preventDefault(); event.returnValue = ''; } });
+    window.addEventListener('beforeunload', event => { if (model.dirty || model.pending || model.sealPending) { localSave(); event.preventDefault(); event.returnValue = ''; } });
     (async () => {
       try {
         let local = null; try { local = JSON.parse(sessionStorage.getItem(storageKey())); } catch (_) {}
         if (local && Array.isArray(local.actions) && typeof local.prose === 'string') {
-          Object.assign(model, local); field('prose').value = model.prose; actionForm(); overview(); status('Восстановлена локальная несохранённая копия этой вкладки. При неизвестном результате повторите сохранение тем же запросом.', false);
+          Object.assign(model, local); field('prose').value = model.prose; actionForm(); overview(); status('Восстановлена локальная копия. Неизвестный запрос повторяйте с прежним ключом.', false); if(model.id) await refreshSeal();
         } else { actionForm(); overview(); if (ctx.draft_id) await restore(true); }
       } catch (e) { status(e.message, true); }
     })();

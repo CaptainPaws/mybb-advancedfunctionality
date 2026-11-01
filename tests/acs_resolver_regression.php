@@ -45,7 +45,7 @@ $zero=$combo;$zero['state']['barriers'][1]['strength']=20;$zero['state']['barrie
 $z=AF_ACS_Resolver::resolve($zero,$actions);resolver_check($z->serverState()['entities'][1]['hp']===10&&$z->serverPlan()['actions'][0]['derived'][0]['calculated']===0,'Absorbed damage healed through lifesteal');
 $duplicate=$combo;$duplicate['abilities'][1]['strike']['lifesteal'][]=$half;resolver_block(fn()=>AF_ACS_Resolver::resolve($duplicate,$actions),'resolver_derived_source_invalid');
 $bad=$actions;$bad[0]['targets']=['999'];resolver_block(fn()=>AF_ACS_Resolver::resolve($context,$bad),'resolver_target_forbidden');
-resolver_block(fn()=>AF_ACS_Resolver::resolve($context,$actions,[],'seal'),'resolver_mode_unsupported');resolver_block(fn()=>AF_ACS_Resolver::resolve($context,$actions,[0.1]),'preview_random_tape_forbidden');
+resolver_block(fn()=>AF_ACS_Resolver::resolve($context,$actions,[],'seal'),'resolver_tape_invalid');resolver_block(fn()=>AF_ACS_Resolver::resolve($context,$actions,[0.1]),'preview_random_tape_forbidden');
 $insufficient=$actions;for($i=0;$i<3;$i++)$insufficient[]=$actions[0];$before=$context;
 try{AF_ACS_Resolver::resolve($context,$insufficient);throw new RuntimeException('AP overrun accepted');}catch(AF_ACS_FormulaError $e){resolver_check($e->diagnosticCode==='effects_cost_unaffordable','Unexpected AP error');}
 resolver_check($context===$before,'Atomic failure mutated input');

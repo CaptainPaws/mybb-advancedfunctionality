@@ -45,7 +45,7 @@ final class AF_ACS_QueryService
         }
         return ['view'=>$view,'actors'=>$actors,'targets'=>$targets,'members'=>$members];
     }
-    public function inspect(string $sid,string $eid,string $actor,string $target):array
+    public function inspect(string $sid,string $eid,string $actor,string $target,?string $sealedDraft=null):array
     {
         $selection=$this->select($sid,$eid);$this->repo->assertPreviewStorage();$view=$selection['view'];
         if(!isset($selection['actors'][$actor])||!isset($selection['targets'][$target])||$actor===$target)self::fail('preview_target_forbidden');
@@ -75,7 +75,7 @@ final class AF_ACS_QueryService
         }
         if(count($turns)!==2||$turns[$actor]['status']!=='pending'||!$turns[$actor]['started'])self::fail('preview_turn_unavailable');
         (new AF_ACS_EncounterService($this->repo,$this->access))->clock()->available($sid,$turns[$actor]['id'],$actor);
-        $this->repo->assertNoObligations($sid,$eid,$turns[$actor]['id'],true);
+        $this->repo->assertNoObligations($sid,$eid,$turns[$actor]['id'],true,$sealedDraft);
         $state=['schema_version'=>1,'entities'=>[],'groups'=>$groups,'barriers'=>[],'next_barrier_order'=>0];$stats=[];$defenses=[];$catalog=null;
         foreach($sources as $id=>$source){$id=(string)$id;$row=$source['row'];$s=$source['source'];$stat=$s['characteristics']??null;if(!is_array($stat))self::fail('preview_stats_missing');
             foreach(['accuracy','speed','crit_rate','crit_dmg','def'] as $name)AF_ACS_Numeric::number($stat[$name]??null);$stats[$id]=$stat;
@@ -111,6 +111,11 @@ final class AF_ACS_QueryService
             if($gm&&$visibility===['schema_version'=>1,'scope'=>'gm'])$targets[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$m['name'],'side_id'=>$m['side_id']];
         }
         return ['session'=>$view['session'],'encounter'=>$encounter,'round'=>$round,'actors'=>$actors,'targets'=>$targets,'gm'=>$gm];
+    }
+    /** Internal pinned owner data, only after the coordinator has prepared/authorized selectors. */
+    public function sealDefinition(string $sid,string $actor,string $key):array
+    {
+        $source=$this->source($sid,$actor);return $source['registration']['pinned_abilities'][$key]??throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
     }
     public function builderCatalog(string $sid,string $actor):array
     {

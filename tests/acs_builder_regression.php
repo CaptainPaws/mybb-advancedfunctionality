@@ -49,6 +49,7 @@ $GLOBALS['acsBuilderFixture']=static function(array $f):void{
     snapshot_assert(str_contains($html,'data-acs-builder')&&str_contains($html,'data-af-ae-skip="1"')&&str_contains($html,'Боевая публикация пока не подключена')&&!str_contains($html,'name="message"'),'Scoped builder/limited prose field missing');
     snapshot_assert($capture()===$afterSave,'Builder render wrote SQL');
     if(getenv('ACS_BUILDER_DOM_FIXTURE')==='1')file_put_contents('/tmp/acs422-builder-fixture.json',json_encode(['html'=>$html,'context'=>$builder->context($sid,$eid,$turnId),'preview'=>$preview,'draft'=>$drafts->restore($saved['draft_id'])],JSON_THROW_ON_ERROR));
+    if(isset($GLOBALS['acsSealFixture']))$GLOBALS['acsSealFixture'](compact('link','sid','eid','builder','repo','access','result','first','registeredPet','turnId','actions','saved'));
     echo "ACS Builder: own group/pet catalog, shared sequential AP, hidden target gate, safe draft reload, preview after save, no mutations and scoped UI passed\n";
 };
 require __DIR__.'/acs_preview_regression.php';

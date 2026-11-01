@@ -5,7 +5,7 @@ require_once __DIR__.'/Effects.php';
 /** One deterministic preview path. Context/plans are trusted prepared/pinned server data, never POST payloads. */
 final class AF_ACS_Resolver
 {
-    public const VERSION='acs-resolver-preview-1';
+    public const VERSION='acs-resolver-2';
     private static function fail(string $code): never {throw new AF_ACS_FormulaError($code,'resolver');}
     private static function ref(mixed $ref):void
     {if(!is_array($ref)||array_diff(array_keys($ref),['key','version','fingerprint'])||!is_string($ref['key']??null)||$ref['key']===''||!is_string($ref['version']??null)||$ref['version']===''||!is_string($ref['fingerprint']??null)||!preg_match('/\Asha256:[a-f0-9]{64}\z/D',$ref['fingerprint']))self::fail('resolver_source_invalid');}
@@ -51,13 +51,15 @@ final class AF_ACS_Resolver
     public static function resolve(array $context,array $orderedActions,array $fixedRandomTape=[],string $mode='preview'): AF_ACS_ResolverResult
     {
         if(array_diff(array_keys($context),['schema_version','state','stats','defenses','element_catalog','turns','encounter_status','abilities','allowed_targets','modifier_stages','source_snapshots','penetration','reflections']))self::fail('resolver_context_unsupported');
-        if($mode!=='preview')self::fail('resolver_mode_unsupported');if($fixedRandomTape!==[])self::fail('preview_random_tape_forbidden');
+        if(!in_array($mode,['preview','seal'],true))self::fail('resolver_mode_unsupported');
+        if($mode==='preview'&&$fixedRandomTape!==[])self::fail('preview_random_tape_forbidden');
+        if($mode==='seal'&&(!array_is_list($fixedRandomTape)||count($fixedRandomTape)!==count($orderedActions)||!$fixedRandomTape))self::fail('resolver_tape_invalid');
         if(($context['schema_version']??null)!==1||($context['encounter_status']??null)!=='active'||!array_is_list($orderedActions)||!$orderedActions)self::fail('resolver_context_invalid');
         $state=AF_ACS_Effects::simulate($context['state'],['costs'=>[],'effects'=>[]])->serverState();$initial=$state;$plans=[];
         foreach($orderedActions as $i=>$action){
             if(!is_array($action)||array_diff(array_keys($action),['actor_id','ability_key','targets','scenario']))self::fail('resolver_action_invalid');
             $actor=(string)($action['actor_id']??'');$key=$action['ability_key']??null;$targets=$action['targets']??null;$scenario=$action['scenario']??null;
-            if(!is_string($key)||!is_array($targets)||!array_is_list($targets)||count($targets)!==1||!in_array($scenario,['hit','crit','miss'],true))self::fail('resolver_action_unsupported');
+            if(!is_string($key)||!is_array($targets)||!array_is_list($targets)||count($targets)!==1||($mode==='preview'&&!in_array($scenario,['hit','crit','miss'],true))||($mode==='seal'&&array_key_exists('scenario',$action)))self::fail('resolver_action_unsupported');
             $turn=$context['turns'][$actor]??null;$ability=$context['abilities'][$actor][$key]??null;
             if(!is_array($ability)||!is_array($turn)||($turn['status']??null)!=='pending'||($turn['started']??null)!==true||($turn['group_id']??null)!==($state['entities'][$actor]['group_id']??null))self::fail('resolver_turn_or_source_invalid');
             $target=(string)$targets[0];if(!isset($state['entities'][$target])||!in_array($target,$context['allowed_targets'][$actor]??[],true))self::fail('resolver_target_forbidden');
@@ -73,6 +75,15 @@ final class AF_ACS_Resolver
             }
             if(!$parts)self::fail('resolver_components_missing');
             $prob=AF_ACS_HitCrit::strike($a['accuracy']??null,$s['speed']??null,$a['crit_rate']??null,$a['crit_dmg']??null,$rawParts,null,$ability['hit_policy']??null)->serverData();
+            $rollTrace=null;
+            if($mode==='seal'){
+                $t=$fixedRandomTape[$i];
+                if(!is_array($t)||array_keys($t)!==['rng_version','hit','crit']||$t['rng_version']!=='uniform53-v1')self::fail('resolver_tape_invalid');
+                foreach(['hit','crit'] as $kind){$v=$t[$kind];if(!is_array($v)||array_keys($v)!==['sample_n','u']||!is_int($v['sample_n'])||$v['sample_n']<0||$v['sample_n']>9007199254740991||!is_float($v['u'])||!is_finite($v['u'])||$v['u']!==$v['sample_n']/9007199254740992.0)self::fail('resolver_tape_invalid');}
+                $hit=AF_ACS_Numeric::operation('multiply',100,$t['hit']['u'])<$prob['P_hit'];$crit=$hit&&$prob['can_crit']&&AF_ACS_Numeric::operation('multiply',100,$t['crit']['u'])<$prob['crit_rate'];
+                $scenario=$hit?($crit?'crit':'hit'):'miss';
+                $rollTrace=['rng_version'=>$t['rng_version'],'hit'=>$t['hit'],'crit'=>$t['crit'],'hit_success'=>$hit,'crit_success'=>$crit,'crit_used'=>$hit&&$prob['can_crit']];
+            }
             $outcome=$scenario==='crit';if($scenario==='miss')$outcome=false;
             if($outcome&&$prob['crit_rate']==0)self::fail('resolver_scenario_impossible');
             if($scenario==='hit'&&$prob['crit_rate']==100&&$prob['can_crit'])self::fail('resolver_scenario_impossible');
@@ -107,10 +118,10 @@ final class AF_ACS_Resolver
                 $state=self::apply($state,[['kind'=>'heal','entity_id'=>$actor,'amount'=>$amount]],null,[],$details);
                 $derived[]=['id'=>'action:'.$i.':lifesteal:'.$lindex,'cause'=>$causal,'kind'=>'lifesteal','source_ref'=>$rule['source_ref'],'basis_hp_loss'=>$loss,'calculated'=>$amount];
             }
-            $plans[]=['action_index'=>$i,'conditional'=>true,'scenario'=>$scenario,'actor_id'=>$actor,'targets'=>[$target],'ability_ref'=>$ability['source_ref'],'costs'=>$ability['costs'],
+            $plans[]=['action_index'=>$i,'conditional'=>$mode==='preview','rolls'=>$rollTrace,'scenario'=>$scenario,'actor_id'=>$actor,'targets'=>[$target],'ability_ref'=>$ability['source_ref'],'costs'=>$ability['costs'],
                 'probabilities'=>array_intersect_key($prob,array_flip(['P_hit','P_evade','crit_rate','can_crit']))+['P_crit'=>$prob['can_crit']?$prob['crit_rate']:0,'crit_scope'=>'conditional_on_hit'],'allocation'=>$allocation->serverData(),'causal_id'=>$causal,'derived'=>$derived,'formula_trace'=>$formulaTrace,'modifier_trace'=>$modifierTrace,'effects_trace'=>$details];
         }
-        $plan=['engine_version'=>self::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'mode'=>'preview','conditional'=>true,'actions'=>$plans,
+        $plan=['engine_version'=>self::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'mode'=>$mode,'conditional'=>$mode==='preview','actions'=>$plans,
             'end_condition_check_required'=>true,'encounter_transition'=>null,'persistent'=>false];
         try{$copy=json_decode(json_encode($plan,JSON_THROW_ON_ERROR|JSON_PRESERVE_ZERO_FRACTION),true,64,JSON_THROW_ON_ERROR);}catch(JsonException $e){self::fail('resolver_trace_invalid');}
         if($copy!==$plan)self::fail('ACS_NUMERIC_SERIALIZATION_PRECISION');
@@ -123,5 +134,5 @@ final class AF_ACS_ResolverResult implements JsonSerializable
     public function serverState():array{return $this->state;}
     public function serverPlan():array{return $this->plan;}
     public function serverInitial():array{return $this->initial;}
-    public function jsonSerialize():array{return ['engine_version'=>AF_ACS_Resolver::VERSION,'mode'=>'preview','conditional'=>true,'persistent'=>false];}
+    public function jsonSerialize():array{return ['engine_version'=>AF_ACS_Resolver::VERSION,'mode'=>$this->plan['mode'],'conditional'=>$this->plan['conditional'],'persistent'=>false];}
 }
