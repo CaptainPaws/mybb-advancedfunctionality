@@ -57,6 +57,10 @@ try {
  $changed=$evService->command(array_replace($req,['op'=>'prepare','revision'=>2,'key'=>str_repeat('4',32),'tables'=>['mailqueue','forums','users','threads','posts'],'conditional_confirmed'=>'1']));
  wcheck(in_array('staging_missing',$changed['report']['issues'],true),'Staging scope drift ignored');
  $encoded=json_encode($evService->export($changed));wcheck(!str_contains($encoded,'Restored the complete')&&!str_contains($encoded,'Backup 123'),'Free-text evidence leaked in export');
+ $unc=new AF_ACS_MigrationService($db,new AF_ACS_MigrationJournal($root.'unchecked'),new AF_ACS_MigrationBackgroundWorker);
+ $unreq=array_replace($backupReq,['evidence'=>array_replace($proof,['result'=>'not_checked','verified'=>'','method'=>''])]);
+ $u=$unc->command($unreq);wcheck($u['evidence']['backup']['verified_at']===null&&in_array('restore_unverified',$u['report']['issues'],true),'Unchecked backup became verified');
+ $u=$unc->command(array_replace($backupReq,['key'=>str_repeat('8',32),'revision'=>1]));wcheck($u['evidence']['backup']['result']==='passed'&&count($u['evidence_history'])===2,'Legacy restore update lost history');
  // A protected pre-existing job is observed; changing the page never launches it again.
  $j->command(str_repeat('e',32),'fixture',2,function($x){$x['job']=['id'=>'opaque','status'=>'running'];return $x;});
  wfails(fn()=>$service->command(array_replace($req,['op'=>'prepare','revision'=>3,'key'=>str_repeat('f',32)])),'unfinished_operation');
@@ -65,13 +69,11 @@ try {
  $mybb->request_method='post';$mybb->input=['migration_op'=>'check','migration_revision'=>'0','migration_key'=>str_repeat('1',32),'my_post_key'=>'fixture-csrf','migration_tables'=>['forums','users','threads','posts']];
  ob_start();AF_ACS_MigrationWizard::render();$savedHtml=ob_get_clean();wcheck(str_contains($savedHtml,'8.0.46'),'Controller did not persist check');
  $before=count($db->calls);ob_start();AF_ACS_MigrationWizard::render();ob_end_clean();wcheck(count($db->calls)===$before,'Controller repeated POST work');
- $mybb->input=['migration_op'=>'register_backup','migration_revision'=>'1','migration_key'=>str_repeat('7',32),'my_post_key'=>'fixture-csrf','migration_tables'=>['forums','users','threads','posts']];foreach($proof as $k=>$v)$mybb->input['evidence_'.$k]=$v;
- ob_start();AF_ACS_MigrationWizard::render();$evidenceHtml=ob_get_clean();wcheck(str_contains($evidenceHtml,'Заявление администратора сохранено')&&str_contains($evidenceHtml,str_repeat('b',64)),'Controller evidence registration failed');
  $mybb->request_method='get';$mybb->input=[];ob_start();AF_ACS_MigrationWizard::render();$html=ob_get_clean();wcheck(str_contains($html,'8.0.46'),'GET lost saved report');
- wcheck(str_contains($html,'Инструменты → Миграция БД')&&str_contains($html,'Запустить миграцию</button>')&&str_contains($html,'<button disabled>Запустить'),'UI gates');
+ wcheck(str_contains($html,'Миграция базы данных')&&str_contains($html,'Выполнить миграцию</button>')&&!str_contains($html,'name="evidence_checksum"'),'UI gates');
  wcheck(!str_contains($html,'SECRET_PASSWORD')&&!str_contains($html,'SECRET_PREFIX_'),'HTML secret');
  preg_match('~data:application/json;base64,([A-Za-z0-9+/=]+)~',$html,$m);wcheck(isset($m[1])&&json_decode(base64_decode($m[1]),true)['publication']==='BLOCKED','Safe export');
- echo "Migration wizard: permissions/CSRF, read-only runtime/writers, backup+restore/staging statement registration and validation, scope drift, replay/reload, no HTTP DDL grant and safe UI/export passed\n";
+ echo "Migration wizard: permissions/CSRF, read-only runtime/writers, backup+restore/staging statement registration and validation, scope drift, replay/reload, legacy evidence compatibility and compact UI/safe export passed\n";
 } finally {
  $it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);foreach($it as $f){if($f->isDir())rmdir($f->getPathname());else unlink($f->getPathname());}rmdir($root);
 }
