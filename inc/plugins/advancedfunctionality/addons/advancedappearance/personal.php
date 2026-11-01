@@ -3,7 +3,9 @@
 if (!defined('IN_MYBB')) die('No direct access');
 
 class AF_AA_PersonalException extends RuntimeException {}
+class AF_AA_TransactionContextException extends AF_AA_PersonalException {}
 require_once __DIR__.'/slot_entitlements.php';
+require_once __DIR__.'/post_mask_uow.php';
 
 function af_aa_personal_targets(): array
 {
@@ -157,25 +159,71 @@ function af_aa_personal_target(string $target, bool $write=true): array
 }
 
 /** Serialize per-owner quotas and assignments even when MyBB users is a legacy MyISAM table. */
-function af_aa_personal_transaction(int $uid, callable $work)
+function af_aa_personal_transaction(int $uid, callable $work, ?AF_AA_PostMaskUnitOfWork $unit=null)
 {
     global $db;
     af_aa_personal_actor($uid);
-    $database=(string)$db->fetch_field($db->write_query('SELECT DATABASE() AS db_name'),'db_name');
-    $key='af_aa_owner_'.sha1($database.':'.TABLE_PREFIX.':'.$uid);
+    if ($unit!==null) {
+        // Split reads/cached replica routing is not a supported joined mask path.
+        if (!isset($db->read_link,$db->write_link) || $db->read_link!==$db->write_link) {
+            $unit->markRollbackOnly();throw new AF_AA_PersonalException('Joined mask requires one writer connection.',503);
+        }
+        try {
+            $unit->assertActiveWriterAndOwnerLock($db,$uid);
+            $unit->afterCompletion(static function()use($uid){af_aa_personal_invalidate($uid);});
+            return $work();
+        } catch(Throwable $e) {$unit->markRollbackOnly();throw $e;}
+    }
+    $key=af_aa_personal_owner_lock_key($uid);
     $acquired=(int)$db->fetch_field($db->write_query("SELECT GET_LOCK('{$key}',10) AS acquired"),'acquired');
     if ($acquired!==1) throw new AF_AA_PersonalException('Busy; retry this request.',409);
+    $started=false;
     try {
-        $db->write_query('START TRANSACTION');
+        // SET TRANSACTION refuses an already active transaction without committing it.
+        // Preserve the existing isolation policy; never ROLLBACK an outer transaction.
+        af_aa_personal_assert_standalone();
+        if (!$db->write_query('START TRANSACTION')) throw new AF_AA_PersonalException('Transaction unavailable.',503);
+        $started=true;
         $result=$work();
-        $db->write_query('COMMIT');
+        if (!$db->write_query('COMMIT')) throw new AF_AA_PersonalException('Transaction outcome unavailable.',503);
+        $started=false;
         af_aa_personal_invalidate($uid);
         return $result;
     } catch (Throwable $e) {
-        $db->write_query('ROLLBACK'); throw $e;
+        if ($started) $db->write_query('ROLLBACK'); throw $e;
     } finally {
         $db->write_query("SELECT RELEASE_LOCK('{$key}')");
     }
+}
+
+/** Shared namespace for standalone writers and future coordinator lock ordering. */
+function af_aa_personal_owner_lock_key(int $uid): string
+{
+    global $db;
+    if ($uid<=0) throw new AF_AA_PersonalException('Invalid owner.',403);
+    $database=(string)$db->fetch_field($db->write_query('SELECT DATABASE() AS db_name'),'db_name');
+    if ($database==='') throw new AF_AA_PersonalException('Owner lock context unavailable.',503);
+    return 'af_aa_owner_'.sha1($database.':'.TABLE_PREFIX.':'.$uid);
+}
+
+/** Fail closed on unsupported metadata or an ambient transaction; no BEGIN/COMMIT. */
+function af_aa_personal_assert_standalone(): void
+{
+    global $db;
+    $row=null;
+    foreach (['transaction_isolation','tx_isolation'] as $variable) {
+        try {
+            $q=$db->write_query('SELECT @@session.autocommit AS autocommit, @@session.'.$variable.' AS isolation_level',true);
+            if ($q && ($row=$db->fetch_array($q))) break;
+        } catch(Throwable $e) {$row=null;}
+    }
+    $isolation=str_replace('-',' ',strtoupper((string)($row['isolation_level']??'')));
+    if ((string)($row['autocommit']??'')!=='1' || !in_array($isolation,['READ UNCOMMITTED','READ COMMITTED','REPEATABLE READ','SERIALIZABLE'],true)) {
+        throw new AF_AA_PersonalException('Standalone transaction context unavailable.',409);
+    }
+    try {$ok=$db->write_query('SET TRANSACTION ISOLATION LEVEL '.$isolation,true);}
+    catch(Throwable $e) {$ok=false;}
+    if (!$ok) throw new AF_AA_TransactionContextException('An active transaction requires an explicit mask unit of work.',409);
 }
 
 function af_aa_personal_invalidate(int $uid): void

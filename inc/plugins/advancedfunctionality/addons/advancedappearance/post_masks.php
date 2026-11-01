@@ -110,9 +110,14 @@ function af_aa_mask_prepare(int $uid,int $pid,string $json): array {
     return $out;
 }
 /** Called only after the real MyBB handler successfully wrote a post/draft. */
-function af_aa_mask_commit(int $pid,int $uid,array $prepared): void {
+function af_aa_mask_commit(int $pid,int $uid,array $prepared,?AF_AA_PostMaskUnitOfWork $unit=null): void {
     global $db;
-    $post=get_post($pid);if(!$post || (int)$post['uid']!==$uid) throw new AF_AA_PersonalException('Post ownership changed.',409);
+    if ($unit!==null) {
+        $unit->assertActiveWriterAndOwnerLock($db,$uid);
+        $post=$db->fetch_array($db->write_query('SELECT pid,uid,visible FROM '.TABLE_PREFIX.'posts WHERE pid='.(int)$pid));
+        $unit->afterCompletion(static function()use($pid){unset($GLOBALS['af_aa_mask_rows'][$pid]);});
+    } else $post=get_post($pid);
+    if(!$post || (int)$post['uid']!==$uid) throw new AF_AA_PersonalException('Post ownership changed.',409);
     af_aa_personal_transaction($uid,static function()use($pid,$uid,$post,$prepared,$db){
         $where="entity_type='post' AND entity_id='{$pid}' AND target_key='".AF_AA_MASK_TARGET."'";
         if($prepared['mode']==='clear') {$db->delete_query(AF_AA_ASSIGNMENTS_TABLE_NAME,$where);return;}
@@ -123,7 +128,7 @@ function af_aa_mask_commit(int $pid,int $uid,array $prepared): void {
         $db->write_query('INSERT INTO '.AF_AA_ASSIGNMENTS_TABLE." (entity_type,entity_id,target_key,preset_id,is_enabled,created_at,updated_at,mask_owner_uid,mask_snapshot_json,mask_topbar_media_id,mask_sidebar_media_id)
             VALUES ('post',{$pid},'".AF_AA_MASK_TARGET."',{$source},{$enabled},".TIME_NOW.','.TIME_NOW.",{$uid},'{$json}',{$top},{$side})
             ON DUPLICATE KEY UPDATE preset_id={$source},is_enabled={$enabled},updated_at=".TIME_NOW.",mask_owner_uid={$uid},mask_snapshot_json='{$json}',mask_topbar_media_id={$top},mask_sidebar_media_id={$side}");
-    });
+    },$unit);
     unset($GLOBALS['af_aa_mask_rows'][$pid]);
 }
 function af_aa_mask_validate_handler($handler): void {
@@ -150,8 +155,9 @@ function af_aa_mask_validate_handler($handler): void {
 function af_aa_mask_after_handler($handler): void {
     $key=spl_object_id($handler);$pending=$GLOBALS['af_aa_mask_pending'][$key]??null;unset($GLOBALS['af_aa_mask_pending'][$key]);
     if(!$pending || !$handler->pid) return;
-    try {af_aa_mask_commit((int)$handler->pid,$pending['uid'],$pending['mask']);}
-    catch(Throwable $e) {error_log('[AdvancedAppearance] post saved; mask persistence failed for pid '.(int)$handler->pid);$handler->return_values['af_aa_mask_warning']='Сообщение сохранено, но маска не применена. Откройте редактирование для повторной попытки.';}
+    $unit=AF_AA_PostMaskScope::forHandler($handler);
+    try {af_aa_mask_commit((int)$handler->pid,$pending['uid'],$pending['mask'],$unit);}
+    catch(Throwable $e) {if($unit!==null){$unit->markRollbackOnly();throw $e;}if($e instanceof AF_AA_TransactionContextException)throw $e;error_log('[AdvancedAppearance] post saved; mask persistence failed for pid '.(int)$handler->pid);$handler->return_values['af_aa_mask_warning']='Сообщение сохранено, но маска не применена. Откройте редактирование для повторной попытки.';}
 }
 function af_aa_mask_after_merge($handler): void {
     // Native automatic merge keeps the old PID and its existing appearance; never overwrite it implicitly.
