@@ -174,20 +174,28 @@
 
 **Требования:** A1.13–A1.16, A1.46, A1.49–A1.52, A1.55–A1.60, A1.62, A1.89–A1.91.
 
-**Зависимости:** 1–3; **IC-MYBB-1 и IC-EDITOR-1 должны быть доказаны** на установленном MyBB 1.8.40. До 6 допускаются только действия без внешнего inventory expense.
+**Зависимости (уточнение ACS-4.0):** 1–3. UI подготовки, draft/CAS/autosave, read-only preview и seal с собственным безопасным ACS-хранилищем можно реализовывать и принимать отдельно, до разблокировки боевой публикации. Для них необходимы доказанные ограниченные Theme/Editor extension points и собственные права/версии/idempotency; маска не обязательная механическая capability. **IC-MYBB-1 и публикационная часть IC-EDITOR-1 должны быть доказаны** на установленном MyBB 1.8.40 перед Gateway/combat commit. До 6 допускаются только действия без внешнего inventory expense.
+
+Это последующее интеграционное уточнение [Master §6.1](ACS_MASTER_SPECIFICATION.md#acs-appearance-boundary), [Architecture §7.4](ACS_TECHNICAL_ARCHITECTURE.md#acs-appearance-boundary) и [Contracts §10.1](ACS_INTEGRATION_CONTRACTS.md#acs-appearance-boundary), не изменение механики или последовательности 12 этапов. Прежнее общее ограничение всего этапа 4 сохранено в [исторических аудитах 4.1.1](ACS_4_1_1_PUBLICATION_AUDIT.md) и [4.1.2](ACS_4_1_2_GATEWAY_CONTRACT.md) как provenance. Их результаты не объявляются READY: nested commits/engines/hooks/cache/shutdown/coordinator по-прежнему блокируют публикацию.
 
 **Компоненты и файлы:** пути относительно нового `inc/plugins/advancedfunctionality/addons/advancedcombatsystem/`, если не указано иначе: modules/Application/{DraftService,SealService,PublishService,RecoveryService}.php; Adapters/MybbPostGateway.php; modules/Presentation/{ApiController,BuilderController,ThreadComponents}.php; migrations/004_*.php; scoped Editor/Theme form extension. `Adapters/` означает `modules/Infrastructure/Adapters/`.
 
 **Ограниченные задания Codex:**
 
-- 4.1: Сначала отдельный integration audit/PR: штатный PostDataHandler, hooks/engines/moderation/attachments/flood и побочные начисления AF; доказать transaction coordinator без правок ядра. Если не доказано — blocked, не прямой SQL posts.
-- 4.2: Server draft/CAS/autosave, append-only sealed actions, immutable random tape и общая AP quota, отмена только хвоста. Confirm привязать к версии simulation; preview не RNG.
+- 4.1: Отдельный integration audit/PR: штатный PostDataHandler, hooks/engines/moderation/attachments/flood и побочные начисления AF; доказать transaction coordinator без правок ядра. Если не доказано — публикационный Gateway/commit BLOCKED, не прямой SQL posts; независимую подготовку из 4.2 это не блокирует. Сохранение маски отделить от механического commit, запретить собственный COMMIT Appearance внутри активной ACS tx, не отключать аддон.
+- 4.2: Независимый UI подготовки в существующем Theme/Editor, server draft/CAS/autosave, append-only sealed actions, immutable random tape и общая AP quota, отмена только хвоста. Confirm привязать к версии simulation; preview не RNG. Выполняется до снятия IC-MYBB-1 BLOCKED без MyBB post insert, закрытия turn или окончательного списания HP/AP/предметов. Маски меняются свободно; их refs/версии не входят в snapshot/dependency_set/simulation_hash/confirmation_hash/RNG tape/mechanical event hash. Смена маски не вызывает Resolver и не меняет sealed данные.
 - 4.3: Idempotent submission registration→common transaction→pid/events/projections/post_links/turn resolved/outbox; unknown outcome→lookup/recovery. Карточка в Theme post.before_body, prose отдельно.
 - 4.4: Поддержать narrative mode и штатное редактирование/Quick Edit без resolver. Проверить две вкладки и потерю HTTP response.
 
 **Ожидаемый результат:** Один атомарный боевой пост за ход группы; механическая карточка и литература в одном MyBB-сообщении.
 
-**Критерии готовности:**
+**Критерии готовности независимой подготовки (без объявления готовности публикации):**
+
+- UI подготовки/draft/preview/seal доступен при BLOCKED IC-MYBB-1 по своим правам/контрактам; отсутствуют post insert и окончательные resource mutations. Preview не генерирует RNG, seal соблюдает собственные tape/quota invariants.
+- Смена декоративного имени/аватара/рамки до, во время и после боя не меняет entity/sheet/owner/controller, CombatSnapshot, механические hashes, sealed actions, RNG tape, HP/AP, события или состояние хода; не требует нового подтверждения бросков.
+- Ошибка оформления не блокирует подготовку/preview/seal. Обычная смена маски/MyBB workflow сохранены; последующая ошибка оформления не пересчитывает подтверждённый бой.
+
+**Критерии готовности публикации (только после снятия gates):**
 
 - Дубликат submission возвращает тот же pid, AP/HP не применяются дважды; один post_link на turn защищён UNIQUE.
 - Cancel не возвращает seal quota и не даёт нового roll; invalid action блокирует весь пост.
@@ -202,6 +210,8 @@
 2. Отменить последнее действие, вновь открыть editor: прежние броски/квота сохранены.
 3. Изменить цель/ресурс другим разрешённым событием: commit показывает конфликт, не новый roll.
 4. Quick Edit меняет только прозу, карточка/HP/AP прежние; narrative post не закрывает боевой ход.
+5. Отдельная приёмка подготовки при BLOCKED публикации: открыть UI/draft/preview и разрешённый seal; MyBB post не создаётся, окончательные ресурсы не списываются, доступ к combat commit закрыт.
+6. Сменить маску после seal и после опубликованного в безопасной конфигурации поста: механические hashes/tape/подтверждение/HP/AP/ход/история неизменны; отдельно проверить обычную смену маски и отказ её сохранения без повторного боя.
 
 <a id="stage-5"></a>
 ### Этап 5. Статусы, реакции и способности

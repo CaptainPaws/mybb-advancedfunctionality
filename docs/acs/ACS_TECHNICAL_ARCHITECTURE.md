@@ -1148,13 +1148,28 @@ Automatic timeout, tick, trigger, start_operation и outbox dispatch идут в
 5. Через MybbPostGateway создать один штатный пост с prose; получить pid. В рамках этой же tx применить AP/resources/effects/Inventory safe operations, event log, projections, post_links, turn resolved, draft published, submission published и outbox. Никаких внешних уведомлений до commit.
 6. Commit. Вернуть pid/result snapshot/versions. Обрыв ответа после commit восстанавливается submission_status, не новым постом.
 
-Отдельно проверить post hooks, автоматически начисляющие баланс/EXP/уведомления: они не должны совершать необратимое I/O до общего commit или расходиться при rollback. Без подтверждённого control над их побочными эффектами общий протокол считается **не готовым**, даже если ACS tables InnoDB. Нет правок ядра MyBB: scoped addon hooks/gateway и разрешённые адаптеры. При отсутствии безопасной границы этап 4 blocked с конкретным отчётом, не обход через прямой INSERT posts.
+Отдельно проверить post hooks, автоматически начисляющие баланс/EXP/уведомления: они не должны совершать необратимое I/O до общего commit или расходиться при rollback. Без подтверждённого control над их побочными эффектами общий протокол считается **не готовым**, даже если ACS tables InnoDB. Нет правок ядра MyBB: scoped addon hooks/gateway и разрешённые адаптеры. При отсутствии безопасной границы публикационная часть этапа 4 blocked с конкретным отчётом, не обход через прямой INSERT posts; независимая подготовка/draft/preview/seal развивается по §7.4 и собственным безопасным контрактам.
 
 ### 7.3. Внешние операции без общей транзакции
 
 Для наград/outbox и иных явно координируемых owner systems: operation_key+payload_hash → prepare/reserve → lookup → commit/ack; ответ и внешняя ссылка сохраняются. Дубликат key не повторяет действие. Компенсация возможна только при соответствующем owner API: обратное начисление/возврат имущества — новое событие, не удаление старого. Необратимые внешние side effects не допускаются посреди атомарной публикации без доказанного протокола.
 
 Статус `prepared` не означает механическое применение. ACS не выставляет completed/issued пока нет подтверждения owner. При timeout после external call — recovery_required; оператор сначала lookup, затем reconcile либо разрешённая compensation. Не освобождать резерв или loot winner автоматически только из-за сетевой ошибки. Некритичные AAM/statistics отправляются после commit через outbox и не блокируют бой.
+
+<a id="acs-appearance-boundary"></a>
+### 7.4. ACS-4.0 — отдельная граница оформления
+
+Нормативное основание — [Master §6.1](ACS_MASTER_SPECIFICATION.md#acs-appearance-boundary). Механическая identity (`entity_id`, `sheet_id`, owner/controller), immutable CombatSnapshot, KB references и подтверждённые events принадлежат ACS/владельцам боевых данных. AdvancedAppearance отвечает за декоративное имя, аватар, изображения, рамки, фоны, постбит и визуальные эффекты. Смена оформления в любой момент не меняет механическую identity/права и не запускает Resolver, пересборку snapshot, HP/AP transitions или открытие/закрытие хода.
+
+В snapshot builder, dependency collector и canonical hash projection **не включаются** mask/preset/appearance refs, их versions/fingerprints или декоративные payloads: CombatSnapshot, mechanical dependency_set, simulation_hash, confirmation_hash механики, RNG tape и mechanical event hash остаются одинаковыми при одной лишь смене маски. Sealed actions и RNG tape не меняются, повторное подтверждение бросков не требуется. Presentation может читать текущие разрешённые визуальные данные отдельно, не подмешивая их в сохранённую механическую истину и не раскрывая скрытые identities.
+
+Предлагаемая граница ответственности (реализация ещё **PROPOSED**):
+
+1. Подготовка/draft/preview/seal ACS использует собственные permissions/CAS/idempotency и безопасное хранилище, не вызывает сохранение маски или MyBB insert hooks. Необязательный сбой оформления не блокирует эти операции. Seal фиксирует только предусмотренные tape/quota, не завершает turn и не списывает окончательные ресурсы.
+2. Будущий coordinator публикует механический результат и MyBB post только после доказанного IC-MYBB-1. Обработчик Appearance не начинает/не фиксирует независимую транзакцию внутри этой tx. Конкретный способ сохранения оформления должен быть проверен отдельно: допустим собственный post-commit путь либо joinable writer без собственного COMMIT; это проектные варианты, не готовые API.
+3. Оформление принадлежит AdvancedAppearance; его сохранение/повтор и последующие cache/notification операции не повторяют механический commit. Ошибка оформления после commit не откатывает и не пересчитывает бой, не меняет HP/AP/events и не создаёт новый post. Обычная смена маски в MyBB сохраняется, глобальное отключение Appearance запрещено.
+
+[Аудит ACS-4.1.1](ACS_4_1_1_PUBLICATION_AUDIT.md) и [контракт ACS-4.1.2](ACS_4_1_2_GATEWAY_CONTRACT.md) сохраняются как provenance проверенных ревизий. Их вывод о nested START/COMMIT остаётся техническим риском публикации до исправления, а не основанием включить маску в механический dependency_set или заблокировать весь этап 4. Installed core, engines/read-your-writes, runtime hooks, cache/shutdown, owner writers и coordinator по-прежнему требуют доказательств; **IC-MYBB-1 остаётся BLOCKED, не READY**. Новые SQL-таблицы и изменения existing DDL этим уточнением не вводятся.
 
 ## 8. Recovery, версии, воспроизводимость и rollback
 
