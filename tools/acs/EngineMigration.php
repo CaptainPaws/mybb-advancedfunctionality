@@ -1,17 +1,38 @@
 <?php
 declare(strict_types=1);
-if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 
 /** Standalone DBA tool. No MyBB bootstrap, lifecycle hooks or web entry point. */
 final class AcsEngineMigration
 {
     public const ORDER=['threadsubscriptions','mailqueue','moderatorlog','datacache','privatemessages','attachments','forums','users','threads','posts'];
+    /** Bounded HTTP-safe observations only. Never constructs a migration or reads row data. */
+    public static function readOnlyReport(callable $select,string $prefix):array
+    {
+        self::ensure(preg_match('/\A[a-zA-Z0-9_]+\z/D',$prefix)===1,'configuration_identifier');
+        $version=$select('SELECT VERSION() AS version')[0]['version']??null;
+        $names=array_map(fn($t)=>"'".$prefix.$t."'",self::ORDER);
+        $rows=$select('SELECT TABLE_NAME,ENGINE,DATA_LENGTH,INDEX_LENGTH FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('.implode(',',$names).')');
+        $by=[];foreach($rows as $r)$by[$r['TABLE_NAME']]=$r;
+        $tables=[];
+        foreach(self::ORDER as $t){
+            $r=$by[$prefix.$t]??null;$schema='NOT_VERIFIED';
+            if($r){$ddl=$select('SHOW CREATE TABLE `'.$prefix.$t.'`');$values=array_values($ddl[0]??[]);
+                if(isset($values[1]))$schema=self::schemaUnsupported($values[1])?'BLOCKED':'PRELIMINARY';}
+            $tables[$t]=['engine'=>$r['ENGINE']??null,'bytes'=>$r?(int)$r['DATA_LENGTH']+(int)$r['INDEX_LENGTH']:null,'schema'=>$schema];
+        }
+        return ['version'=>is_string($version)&&preg_match('/\A[0-9a-zA-Z. +_\-]{1,100}\z/D',$version)?$version:null,'tables'=>$tables];
+    }
+    private static function schemaUnsupported(string $ddl):bool
+    {
+        return preg_match('/\b(?:FOREIGN KEY|GENERATED ALWAYS|SPATIAL KEY|PARTITION BY|ROW_FORMAT=(?:FIXED|COMPRESSED|REDUNDANT))\b/i',$ddl)===1;
+    }
     private mysqli $db;
     private array $config;
     private string $dir;
     private $lock;
     public function __construct(string $configFile,string $stateDir)
     {
+        self::ensure(PHP_SAPI==='cli','cli_execution_required');
         umask(0077);
         $this->config=self::privateJson($configFile);
         $c=$this->config;
@@ -109,7 +130,7 @@ final class AcsEngineMigration
         self::ensure(count($r)===1&&in_array($r[0]['ENGINE'],['MyISAM','InnoDB'],true),'unexpected_engine_or_missing_table');
         self::ensure(!str_contains(strtolower($r[0]['CREATE_OPTIONS']),'partition'),'partitioned_table_unsupported');
         $ddl=array_values($this->rows('SHOW CREATE TABLE '.$this->table($name))[0])[1];
-        self::ensure(!preg_match('/\b(?:FOREIGN KEY|GENERATED ALWAYS|SPATIAL KEY|ROW_FORMAT=(?:FIXED|COMPRESSED|REDUNDANT))\b/i',$ddl),'unsupported_schema_feature');
+        self::ensure(!self::schemaUnsupported($ddl),'unsupported_schema_feature');
         self::ensure($this->rows('SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND EVENT_OBJECT_TABLE='.$lit)===[],'trigger_requires_separate_audit');
         // TRIGGER privilege is required even for an empty inventory; SHOW CREATE privilege check.
         $privs=$this->rows('SHOW GRANTS');$grantText=implode("\n",array_map(fn($r)=>implode(' ',$r),$privs));
@@ -172,6 +193,7 @@ final class AcsEngineMigration
     }
     public function run(string $mode,?string $approval=null):array
     {
+        self::ensure(PHP_SAPI==='cli','cli_execution_required');
         if($mode==='inspect'){$out=[];foreach($this->config['tables'] as $t)$out[$t]=$this->metadata($t);return ['identity'=>$this->identity(),'tables'=>$out,'notice'=>'Read-only schema observations, not approval or consistent baseline'];}
         if($mode==='capture'){
             self::ensure(!file_exists($this->file()),'state_exists');$this->preconditions();$b=[];foreach($this->config['tables'] as $t)$b[$t]=$this->snapshot($t);$this->preconditions();
