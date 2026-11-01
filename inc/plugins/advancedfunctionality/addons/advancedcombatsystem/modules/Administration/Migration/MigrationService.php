@@ -51,9 +51,13 @@ final class AF_ACS_MigrationService
         if(in_array($op,['register_backup','register_staging'],true)){
             $v=$in['evidence']??[];
             $date=static function($value){if(!is_string($value)||!preg_match('/\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}\z/D',$value))throw new RuntimeException('evidence_invalid');$d=DateTimeImmutable::createFromFormat('!Y-m-d\TH:i',$value,new DateTimeZone('UTC'));if(!$d||$d->format('Y-m-d\TH:i')!==$value||$d->getTimestamp()<=0||$d->getTimestamp()>time())throw new RuntimeException('evidence_invalid');return $d->getTimestamp();};
-            $at=$date($v['date']??null);$verified=$date($v['verified']??null);
-            if($at>$verified||!in_array($v['result']??null,['passed','failed'],true)||!is_string($v['reference']??null)||!preg_match('/\A[\p{L}\p{N} _.-]{3,100}\z/uD',$v['reference'])||!is_string($v['method']??null)||mb_strlen(trim($v['method']))<20||mb_strlen($v['method'])>800||preg_match('/[<>\x00-\x1f]/u',$v['method']))throw new RuntimeException('evidence_invalid');
-            $record=['created_at'=>$at,'verified_at'=>$verified,'result'=>$v['result'],'reference'=>$v['reference'],'method'=>trim($v['method']),'source'=>'administrator_statement','registered_at'=>time(),'registered_by'=>(int)$mybb->user['uid']];
+            $at=$date($v['date']??null);
+            $result=$v['result']??'';if($op==='register_backup'&&($result===''||$result===null))$result='not_checked';
+            $unchecked=$op==='register_backup'&&$result==='not_checked';
+            $verified=$unchecked?null:$date($v['verified']??null);
+            $method=$unchecked?'':($v['method']??null);
+            if((!$unchecked&&$at>$verified)||!in_array($result,$op==='register_backup'?['not_checked','passed','failed']:['passed','failed'],true)||!is_string($v['reference']??null)||!preg_match('/\A[\p{L}\p{N} _.-]{3,100}\z/uD',$v['reference'])||(!$unchecked&&(!is_string($method)||mb_strlen(trim($method))<20||mb_strlen($method)>800||preg_match('/[<>\x00-\x1f]/u',$method))))throw new RuntimeException('evidence_invalid');
+            $record=['created_at'=>$at,'verified_at'=>$verified,'result'=>$result,'reference'=>$v['reference'],'method'=>trim($method),'source'=>'administrator_statement','registered_at'=>time(),'registered_by'=>(int)$mybb->user['uid']];
             if($op==='register_backup'){if(!is_string($v['checksum']??null)||!preg_match('/\A[a-fA-F0-9]{64}\z/D',$v['checksum']))throw new RuntimeException('evidence_invalid');$record['sha256']=strtolower($v['checksum']);}
             else $record['scope']=$selected;
         }
@@ -74,7 +78,7 @@ final class AF_ACS_MigrationService
         return ['active_connections'=>'Обнаружены другие пользовательские DB-подключения. Они могут писать; требуется исключительное окно обслуживания и проверка хостингом.',
         'tasks_need_review'=>'Есть включённые MyBB tasks. Их число не доказывает исполнение, но расписание/cron и внешние задания нужно проверить перед миграцией.',
         'http_not_proven'=>'Выполнение ALTER из ACP не доказано безопасным: нет верхней границы времени DDL, проверок данных и восстановления после разрыва HTTP.',
-        'evidence_invalid'=>'Проверьте даты UTC, SHA-256, результат и описание проверки. Будущие даты, пустые отчёты и одна отметка не принимаются.',
+        'evidence_invalid'=>'Проверьте дату архива UTC и SHA-256. Для выполненной проверки обязательны её дата и описание (от 20 символов). Если восстановление ещё не выполнялось, выберите «Не проверено».',
         'backup_missing'=>'Зарегистрируйте полную резервную копию и результат её восстановления через форму ниже.',
         'restore_unverified'=>'Успешное тестовое восстановление не зарегистрировано. Восстановите копию в отдельную базу через хостинг и укажите результат.',
         'staging_missing'=>'Нет подтверждения теста на изолированной копии установленного форума. Synthetic fixture его не заменяет.',
@@ -123,7 +127,7 @@ final class AF_ACS_MigrationService
                 'runtime'=>$this->safeRuntime(is_array($raw['runtime']??null)?$raw['runtime']:[]),'space'=>'NOT_VERIFIED','worker'=>$this->worker->status(),'maintenance'=>'NOT_VERIFIED','engine_journal'=>'NOT_VERIFIED','publication'=>'BLOCKED'];
         }
         $events=[];foreach($state['events']??[] as $e){if(in_array($e['operation']??null,['check','prepare','start','register_backup','register_staging'],true))$events[]=['at'=>max(0,(int)($e['at']??0)),'operation'=>$e['operation'],'status'=>($e['status']??null)==='RECORDED'?'RECORDED':'BLOCKED'];}
-        $evidence=[];foreach(['backup','staging'] as $kind){$r=$state['evidence'][$kind]??null;if(is_array($r))$evidence[$kind]=['source'=>'administrator_statement','result'=>in_array($r['result']??null,['passed','failed'],true)?$r['result']:'unknown','created_at'=>(int)($r['created_at']??0),'verified_at'=>(int)($r['verified_at']??0),'registered_at'=>(int)($r['registered_at']??0),'scope_current'=>$kind==='backup'||($r['scope']??null)===$state['selected']];}
+        $evidence=[];foreach(['backup','staging'] as $kind){$r=$state['evidence'][$kind]??null;if(is_array($r))$evidence[$kind]=['source'=>'administrator_statement','result'=>in_array($r['result']??null,['not_checked','passed','failed'],true)?$r['result']:'unknown','created_at'=>(int)($r['created_at']??0),'verified_at'=>isset($r['verified_at'])?(int)$r['verified_at']:null,'registered_at'=>(int)($r['registered_at']??0),'scope_current'=>$kind==='backup'||($r['scope']??null)===$state['selected']];}
         if(isset($evidence['backup'])){$h=$state['evidence']['backup']['sha256']??null;if(is_string($h)&&preg_match('/\A[a-f0-9]{64}\z/D',$h))$evidence['backup']['sha256']=$h;}
         return ['version'=>2,'evidence'=>$evidence,'revision'=>(int)$state['revision'],'selected'=>array_values(array_intersect(AcsEngineMigration::ORDER,$state['selected'])),'report'=>$report,'events'=>$events,'publication'=>'BLOCKED'];
     }
