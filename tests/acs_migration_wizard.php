@@ -11,7 +11,7 @@ $mybb=new class {
 };
 $db=new class {
  public $table_prefix='SECRET_PREFIX_';public $calls=[];
- function query($sql,$hide){$this->calls[]=$sql;if(!preg_match('/\A(?:SELECT|SHOW CREATE TABLE|SHOW VARIABLES)\b/',$sql))throw new LogicException('SQL mutation');
+ function query($sql,$hide){$this->calls[]=$sql;if(!preg_match('/\A(?:SELECT|SHOW CREATE TABLE|SHOW VARIABLES|SHOW GRANTS|SHOW INDEX|SHOW REPLICA STATUS)\b/',$sql))throw new LogicException('SQL mutation');
   if(str_contains($sql,'VERSION()'))$rows=[['version'=>'8.0.46']];
   elseif(str_starts_with($sql,'SHOW VARIABLES'))$rows=[['Variable_name'=>'datadir','Value'=>'/private/SECRET_PATH'],['Variable_name'=>'event_scheduler','Value'=>'OFF']];
   elseif(str_contains($sql,'performance_schema.threads'))$rows=[['n'=>'2']];
@@ -24,6 +24,18 @@ $db=new class {
 require dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/modules/Administration/Migration/Wizard.php';
 function wcheck($v,$m){if(!$v)throw new RuntimeException($m);}
 function wfails($fn,$code){try{$fn();throw new LogicException('Expected '.$code);}catch(RuntimeException $e){wcheck($e->getMessage()===$code,$e->getMessage());}}
+// Each probe is independent and exports no server error text, grant rows or account names.
+$probes=AcsEngineMigration::readOnlyAccess(function($sql){
+ wcheck(preg_match('/\A(?:SELECT|SHOW)\b/',$sql),'Non read-only access probe');
+ if($sql==='SHOW REPLICA STATUS')throw new RuntimeException('SECRET_PASSWORD /private/PATH',1227);
+ if(str_starts_with($sql,'SHOW INDEX'))throw new RuntimeException('SECRET_ACCOUNT',1142);
+ if($sql==='SELECT DATABASE() AS db')return [['db'=>'SECRET_SCHEMA']];
+ if($sql==='SHOW GRANTS')return [['grant'=>"GRANT ALL PRIVILEGES ON `SECRET_SCHEMA`.* TO 'SECRET_ACCOUNT'@'localhost'"]];
+ return [];
+},'fixture_');
+wcheck($probes['replication_status']===['status'=>'DENIED','errno'=>1227]&&$probes['metadata_posts']['errno']===1142&&$probes['select_posts']['status']==='PASS','Access failures merged or probes stopped');
+wcheck(!str_contains(json_encode($probes),'SECRET_'),'Access probe leaked server text/grants');
+$sanitized=AF_ACS_MigrationService::safeAccess($probes+['SECRET_PATH'=>['status'=>'PASS']]);wcheck(!str_contains(json_encode($sanitized),'SECRET_'),'Access export not allowlisted');
 $dir=$root.'private-preparation';$j=new AF_ACS_MigrationJournal($dir);$service=new AF_ACS_MigrationService($db,$j,new AF_ACS_MigrationBackgroundWorker);
 $req=['op'=>'check','csrf'=>'fixture-csrf','key'=>str_repeat('a',32),'revision'=>0,'tables'=>['forums','users','threads','posts']];
 try {
