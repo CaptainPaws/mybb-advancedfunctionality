@@ -8,7 +8,7 @@ $GLOBALS['acsRoundFixture']=static function(array $f):void {
     $link->query('UPDATE fixture_af_acs_operations SET updated_at=0');
     foreach(['turns','entity_turns'] as $table)$link->query('DROP TABLE fixture_af_acs_'.$table);
     $link->query("UPDATE fixture_af_acs_schema_migrations SET status='failed',step=1 WHERE version='004_round_roster'");
-    $migrations->run();$migrations->run();snapshot_assert($migrations->status()['schema_version']==='005_clock_resources','004 resume/repeat failed');
+    $migrations->run();$migrations->run();snapshot_assert($migrations->status()['schema_version']==='006_drafts','004 resume/repeat failed');
     $view=$service->view($sid,$eid);
     $input=['session_id'=>$sid,'encounter_id'=>$eid,'expected_version'=>$view['session']['session_version'],'encounter_version'=>$view['encounter']['encounter_version'],'operation_key'=>'first_round_fixture1','reason'=>'Open first round','tid'=>'51'];
     // A pre-existing active layer must never be ignored merely to open a roster.

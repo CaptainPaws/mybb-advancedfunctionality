@@ -43,6 +43,16 @@ class AF_ACS_SessionAccess
         }
         return $thread;
     }
+    /** Preparing a combat reply does not bypass native posting restrictions. */
+    public function draftThread(string $tid): void
+    {
+        global $mybb;
+        $thread=$this->thread($tid);$fid=(int)($thread['fid']??0);
+        $permissions=forum_permissions($fid,(int)$this->uid());
+        if(!$fid||empty($permissions['canpostreplys'])||!empty($mybb->user['suspendposting'])
+            || (!empty($permissions['canonlyreplyownthreads'])&&(string)($thread['uid']??'')!==$this->uid())
+            || (!empty($thread['closed'])&&!is_moderator($fid,'canpostclosedthreads')))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
+    }
     public function defaults(): array
     {
         global $mybb;
