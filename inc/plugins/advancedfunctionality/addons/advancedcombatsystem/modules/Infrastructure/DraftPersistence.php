@@ -4,6 +4,16 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 /** Draft-only persistence. Does not use command(), emit combat events or change session versions. */
 trait AF_ACS_DraftPersistence
 {
+    public function builderEncounter(string $sid):?string
+    {
+        $row=$this->sql('SELECT id FROM '.$this->table('encounters')." WHERE session_id=? AND status IN ('active','paused') ORDER BY id DESC LIMIT 1",[$sid])['rows'][0]??null;
+        return $row?(string)$row['id']:null;
+    }
+    public function builderDraft(string $sid,string $turn,string $uid):?string
+    {
+        $row=$this->sql('SELECT d.id FROM '.$this->table('drafts').' d JOIN '.$this->table('encounters').' e ON e.id=d.encounter_id WHERE e.session_id=? AND d.turn_id=? AND d.author_uid=? AND d.status=? ORDER BY d.id DESC LIMIT 1',[$sid,$turn,$uid,'draft'])['rows'][0]??null;
+        return $row?(string)$row['id']:null;
+    }
     public function draft(string $id,string $uid): ?array
     {
         $row=$this->sql('SELECT d.*,e.session_id FROM '.$this->table('drafts').' d JOIN '.$this->table('encounters').' e ON e.id=d.encounter_id WHERE d.id=? AND d.author_uid=?',[self::integer($id),$uid])['rows'][0]??null;

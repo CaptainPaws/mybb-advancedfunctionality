@@ -26,13 +26,13 @@ trait AF_ACS_RoundManagementPersistence
         if(!in_array($name,['drafts','sealed_actions','submissions','effects'],true))throw new RuntimeException('ACS_UNKNOWN_TABLE');
         return $this->sql('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?',[$this->prefix.'af_acs_'.$name])['rows']?'`'.$this->prefix.'af_acs_'.$name.'`':null;
     }
-    public function assertNoObligations(string $sid,string $eid,?string $turn=null): void
+    public function assertNoObligations(string $sid,string $eid,?string $turn=null,bool $readOnlyPreview=false): void
     {
         if($this->sql('SELECT operation_key FROM '.$this->table('operations')." WHERE session_id=? AND (encounter_id=? OR encounter_id IS NULL) AND status IN ('prepared','recovery_required') LIMIT 1",[$sid,$eid])['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
         try {
             $drafts=$this->futureTable('drafts');$sealed=$this->futureTable('sealed_actions');$submissions=$this->futureTable('submissions');
             $scope='encounter_id=?'.($turn===null?'':' AND turn_id=?');$args=$turn===null?[$eid]:[$eid,$turn];
-            if($drafts && $this->sql('SELECT id FROM '.$drafts.' WHERE '.$scope." AND status NOT IN ('published','cancelled') LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
+            if($drafts && $this->sql('SELECT id FROM '.$drafts.' WHERE '.$scope." AND status NOT IN ('published','cancelled')".($readOnlyPreview?" AND (status<>'draft' OR confirmation_hash IS NOT NULL OR pid IS NOT NULL)":"")." LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
             if($sealed && !$drafts)throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
             if($sealed && $this->sql('SELECT a.id FROM '.$sealed.' a JOIN '.$drafts.' d ON d.id=a.draft_id WHERE d.encounter_id=?'.($turn===null?'':' AND d.turn_id=?')." AND a.status NOT IN ('published','cancelled','consumed') LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
             if($submissions && $this->sql('SELECT submission_id FROM '.$submissions.' WHERE '.$scope." AND status NOT IN ('published','rejected','cancelled') LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
