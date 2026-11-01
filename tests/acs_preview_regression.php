@@ -54,6 +54,7 @@ $GLOBALS['acsResourcesFixture']=static function(array $f):void{
     ob_start();AF_ACS_BuilderController::render($sid,$eid,'51',$q);$html=ob_get_clean();
     snapshot_assert(str_contains($html,'Условный сценарий')&&str_contains($html,'preview-fixture')&&str_contains($html,'preview_versions'),'Preview form unavailable');
     snapshot_assert($capture()===$before,'Preview GET form mutated SQL');
+    if(isset($GLOBALS['acsBuilderFixture']))$GLOBALS['acsBuilderFixture'](compact('link','sid','eid','service','repo','access','result','first','registeredPet','entityTurns','groups','ability','grant'));
     echo "ACS Preview: persisted pins/turn/control/versions, conditional result replay, GM visibility, CSRF/GET, attacker injection and zero SQL mutations passed\n";
 };
 require __DIR__.'/acs_round_roster_regression.php';

@@ -3,7 +3,7 @@ if(!defined('IN_MYBB')){die('No direct access');}
 require_once __DIR__.'/EncounterService.php';
 require_once __DIR__.'/../Domain/Resolver.php';
 
-/** GM visibility scope only until per-player awareness exists. Control is still checked independently. */
+/** Numeric preview remains GM-scoped; own builder catalogs expose no GM-only targets. */
 final class AF_ACS_QueryService
 {
     public function __construct(private AF_ACS_EncounterRepository $repo,private AF_ACS_SessionAccess $access){}
@@ -75,7 +75,7 @@ final class AF_ACS_QueryService
         }
         if(count($turns)!==2||$turns[$actor]['status']!=='pending'||!$turns[$actor]['started'])self::fail('preview_turn_unavailable');
         (new AF_ACS_EncounterService($this->repo,$this->access))->clock()->available($sid,$turns[$actor]['id'],$actor);
-        $this->repo->assertNoObligations($sid,$eid,$turns[$actor]['id']);
+        $this->repo->assertNoObligations($sid,$eid,$turns[$actor]['id'],true);
         $state=['schema_version'=>1,'entities'=>[],'groups'=>$groups,'barriers'=>[],'next_barrier_order'=>0];$stats=[];$defenses=[];$catalog=null;
         foreach($sources as $id=>$source){$id=(string)$id;$row=$source['row'];$s=$source['source'];$stat=$s['characteristics']??null;if(!is_array($stat))self::fail('preview_stats_missing');
             foreach(['accuracy','speed','crit_rate','crit_dmg','def'] as $name)AF_ACS_Numeric::number($stat[$name]??null);$stats[$id]=$stat;
@@ -87,17 +87,48 @@ final class AF_ACS_QueryService
             foreach($this->repo->allCooldowns($sid,$id) as $cd)if((int)$cd['remaining_turns']>0)self::fail('preview_cooldown_contract_unavailable');
         }
         if($catalog===null)self::fail('preview_retained_registry_unavailable');
-        $abilities=[];$choices=[];
-        $grants=$this->grants($sources[$actor]['source']);
-        foreach($grants as $key=>$grant){
-            $dto=$sources[$actor]['registration']['pinned_abilities'][$key]??null;
-            if(!is_array($dto)||($dto['definition_version']['fingerprint']??null)!==$grant['fingerprint'])self::fail('preview_ability_pin_mismatch');
-            foreach(['revision','declared_version'] as $field)if(($dto['definition_version'][$field]??null)!==($grant['definition_version'][$field]??null))self::fail('preview_ability_pin_mismatch');
-            try{foreach($grant['_profiles']??[] as $inline)$this->inline($inline,$dto['data']['definition']);$abilities[$key]=$this->ability($dto);$choices[$key]=['key'=>$key,'supported'=>true,'label'=>is_string($dto['data']['definition']['name']??null)?mb_substr($dto['data']['definition']['name'],0,191):$key];}
-            catch(DomainException $e){$choices[$key]=['key'=>$key,'supported'=>false,'label'=>$key,'reason'=>$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage()];}
-        }
+        [$abilities,$choices]=$this->pinnedAbilities($sources[$actor]);
         return ['selection'=>$selection,'versions'=>$versions,'choices'=>$choices,'context'=>['schema_version'=>1,'state'=>$state,'stats'=>$stats,'defenses'=>$defenses,'element_catalog'=>$catalog,'turns'=>$turns,
             'encounter_status'=>'active','abilities'=>[$actor=>$abilities],'allowed_targets'=>[$actor=>[$target]]]];
+    }
+    /** Own controls may be listed without exposing GM-only targets or their counts. */
+    public function builderScope(string $sid,string $eid):array
+    {
+        $view=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);
+        if(!$view['can_register_own'])self::fail('preview_target_forbidden');
+        $encounter=$this->repo->encounter($sid,$eid);
+        if(!$encounter||!in_array($encounter['status'],['active','paused'],true))self::fail('preview_encounter_not_active');
+        $round=$this->repo->currentRound($encounter);if(!$round||$round['status']!=='open')self::fail('preview_turn_unavailable');
+        $roles=array_column($this->repo->roles($sid,$this->access->uid()),'role');
+        $gm=$this->access->administrator()||in_array('gm',$roles,true)||(in_array('owner',$roles,true)&&$view['session']['owner_uid']===$this->access->uid());
+        $actors=[];$targets=[];$members=$this->repo->participants($eid,'0',201);
+        if(count($members)>100)self::fail('preview_scope_unavailable');
+        foreach($members as $m){if($m['participation']!=='engaged')continue;
+            $own=$m['controller_uid']===$this->access->uid()&&($m['owner_uid']===null||$m['owner_uid']===$this->access->uid());
+            if($own&&count($this->repo->controllers($sid,$m['entity_id']))!==1)$own=false;
+            if($own)$actors[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$m['name'],'group_id'=>$m['control_group_id'],'side_id'=>$m['side_id']];
+            $visibility=json_decode($m['visibility_json'],true,16,JSON_THROW_ON_ERROR);
+            if($gm&&$visibility===['schema_version'=>1,'scope'=>'gm'])$targets[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$m['name'],'side_id'=>$m['side_id']];
+        }
+        return ['session'=>$view['session'],'encounter'=>$encounter,'round'=>$round,'actors'=>$actors,'targets'=>$targets,'gm'=>$gm];
+    }
+    public function builderCatalog(string $sid,string $actor):array
+    {
+        if(!af_is_addon_enabled('knowledgebase'))self::fail('preview_dependency_unavailable');
+        [, $choices]=$this->pinnedAbilities($this->source($sid,$actor));return array_values($choices);
+    }
+    private function pinnedAbilities(array $source):array
+    {
+        $abilities=[];$choices=[];
+        $grants=$this->grants($source['source']);
+        foreach($grants as $key=>$grant){
+            $dto=$source['registration']['pinned_abilities'][$key]??null;
+            if(!is_array($dto)||($dto['definition_version']['fingerprint']??null)!==$grant['fingerprint'])self::fail('preview_ability_pin_mismatch');
+            foreach(['revision','declared_version'] as $field)if(($dto['definition_version'][$field]??null)!==($grant['definition_version'][$field]??null))self::fail('preview_ability_pin_mismatch');
+            try{foreach($grant['_profiles']??[] as $inline)$this->inline($inline,$dto['data']['definition']);$abilities[$key]=$this->ability($dto);$choices[$key]=['key'=>$key,'supported'=>true,'label'=>is_string($dto['data']['definition']['name']??null)&&$dto['data']['definition']['name']!==''?mb_substr($dto['data']['definition']['name'],0,191):'Способность '.$key,'ap_cost'=>$abilities[$key]['costs'][0]['amount']];}
+            catch(DomainException $e){$choices[$key]=['key'=>$key,'supported'=>false,'label'=>$key,'reason'=>$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage()];}
+        }
+        return [$abilities,$choices];
     }
     /** Cached dependency definitions alone are not a grant to use an ability. Only direct owner refs qualify. */
     private function grants(array $source):array

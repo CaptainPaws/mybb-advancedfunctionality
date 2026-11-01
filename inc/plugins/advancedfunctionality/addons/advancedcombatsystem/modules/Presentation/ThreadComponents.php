@@ -16,10 +16,11 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
     // Optional slot failures must not invoke MyBB's fatal SQL error renderer.
     $statement=null;
     try {
-        $selected=$mybb->get_input('acs_session');
+        $builder=$mybb->get_input('acs_builder');
+        $selected=$builder!==''?$builder:$mybb->get_input('acs_session');
         $filter=$selected!==''?' AND s.id=?':'';
         if($selected!=='' && !preg_match('/\A[1-9][0-9]{0,19}\z/D',$selected))return '';
-        $statement=$link->prepare('SELECT s.id,r.role FROM `'.TABLE_PREFIX.'af_acs_sessions` s JOIN `'.TABLE_PREFIX.'af_acs_session_roles` r ON r.session_id=s.id WHERE s.tid=? AND r.uid=? AND r.role IN (\'owner\',\'gm\',\'assistant_gm\') AND (r.expires_at IS NULL OR r.expires_at>?) '.$filter.' ORDER BY s.id LIMIT 10');
+        $statement=$link->prepare('SELECT s.id,r.role FROM `'.TABLE_PREFIX.'af_acs_sessions` s JOIN `'.TABLE_PREFIX.'af_acs_session_roles` r ON r.session_id=s.id WHERE s.tid=? AND r.uid=? AND r.role IN (\'owner\',\'gm\',\'assistant_gm\',\'player\') AND (r.expires_at IS NULL OR r.expires_at>?) '.$filter.' ORDER BY s.id LIMIT 10');
         if(!$statement)return '';
         $now=time();
         if($selected!=='')$statement->bind_param('iiis',$tid,$uid,$now,$selected);else $statement->bind_param('iii',$tid,$uid,$now);
@@ -28,9 +29,15 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
         while($row=$rows->fetch_assoc()) {
             $id=htmlspecialchars_uni((string)$row['id']);
             $links[]='<a href="misc.php?action=acs_sessions&amp;session_id='.$id.'">Сессия ACS #'.$id.'</a>';
+            $links[]='<a href="showthread.php?tid='.$tid.'&amp;acs_builder='.$id.'">Подготовить ход ACS</a>';
+            if($builder===(string)$row['id']) {
+                require_once __DIR__.'/BuilderController.php';
+                if(!headers_sent())header('Cache-Control: private, no-store');
+                $links[]=AF_ACS_BuilderController::renderBuilder((string)$row['id'],(string)$tid);
+            }
             if(in_array($row['role'],['owner','gm'],true)) {
                 $links[]='<a href="showthread.php?tid='.$tid.'&amp;acs_session='.$id.'">Панель GM</a>';
-                if($selected===(string)$row['id']) {
+                if($builder===''&&$selected===(string)$row['id']) {
                     require_once __DIR__.'/Encounters.php';
                     if(!headers_sent())header('Cache-Control: private, no-store');
                     $links[]=AF_ACS_EncountersPage::render((string)$row['id'],(string)$tid);

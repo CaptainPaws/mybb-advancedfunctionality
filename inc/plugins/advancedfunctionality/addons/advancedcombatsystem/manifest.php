@@ -3,9 +3,9 @@
 return [
     'id' => 'advancedcombatsystem',
     'name' => 'AdvancedCombatSystem',
-    'version' => '0.17.0',
+    'version' => '0.18.0',
     'author' => 'CaptainPaws',
-    'description' => 'AdvancedCombatSystem conditional read-only Resolver preview (ACS-3.3.2).',
+    'description' => 'AdvancedCombatSystem draft builder and conditional preview (ACS-4.2.2).',
     'bootstrap' => 'advancedcombatsystem.php',
     'admin' => [
         'slug' => 'advancedcombatsystem',
@@ -18,6 +18,7 @@ return [
         'mode' => 'contextual',
         'routes' => [],
         'response_rules' => [],
+        'resources' => ['builder'=>['mode'=>'contextual','routes'=>[],'response_rules'=>[['has_acs_builder'=>true]],'directory_fallback'=>false]],
         'directory_fallback' => false,
     ],
     'lang' => [
