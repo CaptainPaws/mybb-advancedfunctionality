@@ -23,15 +23,17 @@ class AF_Admin_Advancedcombatsystem
         af_load_addon_lang($meta['id'], true);
         require_once __DIR__.'/modules/Administration/Diagnostics.php';
         $diagnostics = new AF_ACS_Diagnostics;
-        $sections = ['main', 'permissions', 'sessions', 'diagnostics', 'integrations'];
+        $sections = ['main', 'permissions', 'sessions', 'diagnostics', 'integrations', 'publication'];
         $section = $mybb->get_input('acs_section');
         if (!in_array($section, $sections, true)) { $section = 'main'; }
         $tabs = [];
         foreach ($sections as $key) {
             $label = 'af_advancedcombatsystem_'.$key;
-            $tabs[$key] = ['title' => $lang->$label, 'link' => 'index.php?module=advancedfunctionality&af_view=advancedcombatsystem&acs_section='.$key];
+            $tabs[$key] = ['title' => $key === 'publication' ? 'Публикация' : $lang->$label, 'link' => 'index.php?module=advancedfunctionality&af_view=advancedcombatsystem&acs_section='.$key];
         }
         if (isset($page) && method_exists($page, 'output_nav_tabs')) { $page->output_nav_tabs($tabs, $section); }
+
+        if ($section === 'publication') { require_once __DIR__.'/modules/Administration/PublicationDiagnostics.php'; AF_ACS_PublicationDiagnostics::render(); return; }
 
         if($section==='sessions') {require_once __DIR__.'/modules/Presentation/Sessions.php';try {AF_ACS_SessionsPage::render(true);}catch(Throwable $error){echo '<p>Сессии ACS недоступны. Проверьте установку в разделе «Основные».</p>';}return;}
         if ($mybb->request_method === 'post') {
