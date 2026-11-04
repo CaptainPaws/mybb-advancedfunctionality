@@ -10,7 +10,7 @@ $GLOBALS['acsPublicationFixture']=static function(array $fixture):void {
     foreach(['post_links','combat_results','combat_receipts','outbox'] as $t)$link->query('DROP TABLE fixture_af_acs_'.$t);
     $link->query("DELETE FROM fixture_af_acs_schema_migrations WHERE version='009_combat_commit'");$migrations->run();
     $link->query('DROP TABLE fixture_af_acs_outbox');$link->query("UPDATE fixture_af_acs_schema_migrations SET status='failed',step=3 WHERE version='009_combat_commit'");
-    $migrations->run();$migrations->run();snapshot_assert($migrations->status()['schema_version']==='009_combat_commit','009 upgrade/resume failed');
+    $migrations->run();$migrations->run();snapshot_assert($migrations->status()['schema_version']===AF_ACS_Migrations::VERSION,'009 upgrade/resume failed');
     snapshot_assert($link->query("SELECT * FROM fixture_af_acs_schema_migrations WHERE version<>'009_combat_commit' ORDER BY version")->fetch_all(MYSQLI_ASSOC)===$legacy,'Prior migration records changed');
     $store=new AF_ACS_SubmissionStore($link);$writer=new AF_ACS_CombatCommitWriter($link,$access);
     $d=$drafts->restore($saved['draft_id']);$active=[];

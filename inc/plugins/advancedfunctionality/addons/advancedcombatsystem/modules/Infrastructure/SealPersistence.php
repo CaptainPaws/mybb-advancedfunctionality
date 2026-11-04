@@ -15,7 +15,8 @@ trait AF_ACS_SealPersistence
             if(!in_array($r['check_kind'],['hit','crit','status'],true)||$r['rng_version']!==$t['rng_version'])throw new RuntimeException('ACS_SEAL_TAPE_INVALID');
             $v=json_decode($r['value_json'],true,8,JSON_THROW_ON_ERROR);if(($v['schema_version']??null)!==1)throw new RuntimeException('ACS_SEAL_TAPE_INVALID');
             $sample=['sample_n'=>$v['sample_n']??null,'u'=>$v['u']??null];
-            require_once __DIR__.'/../Domain/Effects.php';AF_ACS_Effects::statusSample($sample);
+            require_once __DIR__.'/../Domain/Effects.php';
+            try{AF_ACS_Effects::statusSample($sample);}catch(AF_ACS_FormulaError|DomainException $error){throw new RuntimeException('ACS_SEAL_TAPE_INVALID');}
             $index=(int)self::integer((string)$r['roll_index'],'2147483647',true);
             if($r['check_kind']==='status'){
                 if(isset($statuses[$index]))throw new RuntimeException('ACS_SEAL_TAPE_INVALID');$statuses[$index]=$sample;

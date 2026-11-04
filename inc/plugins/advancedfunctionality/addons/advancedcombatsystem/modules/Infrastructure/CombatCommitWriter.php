@@ -2,13 +2,14 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SubmissionStore.php';
 require_once __DIR__.'/CombatCommitPersistence.php';
+require_once __DIR__.'/StatusPersistence.php';
 require_once __DIR__.'/TerminalReceiptPersistence.php';
 require_once __DIR__.'/../Application/BuilderService.php';
 
 /** The only producer of terminal, persistent Resolver results. Never calls a native post writer. */
 final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 {
-    use AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence;
+    use AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence;
     private AF_ACS_SubmissionStore $submissions;
     private AF_ACS_EncounterRepository $preparation;
     private AF_ACS_SessionAccess $access;
@@ -181,7 +182,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             $result=AF_ACS_Resolver::resolve($prepared['context'],$ordered,$frozen['tape'],'seal');
             $controls=$this->controls($current,$frozen,$prepared,$result);$controls['fence_hash']=$fingerprint;
             $current=$this->phase($current,'committing',['schema_version'=>1,'pid'=>$current['pid'],'controls'=>array_diff_key($controls,['summary'=>true])]);
-            $changes=$this->project($current,$f,$turn,$result);
+            $changes=$this->project($current,$f,$turn,$result,$frozen);
             return $this->finish($current,$f,$result,$controls,$changes,$fid);
         });
     }

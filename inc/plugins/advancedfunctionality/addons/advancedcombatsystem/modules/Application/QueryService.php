@@ -81,7 +81,9 @@ final class AF_ACS_QueryService
         if(count($turns)!==2||$turns[$actor]['status']!=='pending'||!$turns[$actor]['started'])self::fail('preview_turn_unavailable');
         (new AF_ACS_EncounterService($this->repo,$this->access))->clock()->available($sid,$turns[$actor]['id'],$actor);
         $this->repo->assertNoObligations($sid,$eid,$turns[$actor]['id'],true,$sealedDraft);
-        $state=['schema_version'=>1,'entities'=>[],'groups'=>$groups,'barriers'=>[],'next_barrier_order'=>0];$stats=[];$defenses=[];$statusImmunities=[];$catalog=null;
+        $statusProjection=$this->repo->statusProjection($sid);$versions['status_state_hash']=$statusProjection['fingerprint'];
+        foreach($statusProjection['instances'] as $instance)if($instance['status']==='active'&&$instance['spec']['scope']==='combat'&&$instance['encounter_id']!==$eid)self::fail('ACS_COMBAT_RESET_REQUIRED');
+        $state=['status_instances'=>$statusProjection['instances'],'next_status_order'=>$statusProjection['next_order'],'schema_version'=>1,'entities'=>[],'groups'=>$groups,'barriers'=>[],'next_barrier_order'=>0];$stats=[];$defenses=[];$statusImmunities=[];$catalog=null;
         foreach($sources as $id=>$source){$id=(string)$id;$row=$source['row'];$s=$source['source'];$stat=$s['characteristics']??null;if(!is_array($stat))self::fail('preview_stats_missing');
             foreach(['accuracy','speed','crit_rate','crit_dmg','def'] as $name)AF_ACS_Numeric::number($stat[$name]??null);$stats[$id]=$stat;
             $statusImmunities[$id]=$s['data']['definition']['immunities']??[];
@@ -95,7 +97,7 @@ final class AF_ACS_QueryService
         if($catalog===null)self::fail('preview_retained_registry_unavailable');
         [$abilities,$choices]=$this->pinnedAbilities($sources[$actor]);
         return ['selection'=>$selection,'versions'=>$versions,'choices'=>$choices,'context'=>['schema_version'=>1,'state'=>$state,'stats'=>$stats,'defenses'=>$defenses,'element_catalog'=>$catalog,'turns'=>$turns,
-            'encounter_status'=>'active','abilities'=>[$actor=>$abilities],'allowed_targets'=>[$actor=>[$target]],'relationships'=>[$actor=>[$target=>'hostile']],'status_immunities'=>$statusImmunities]];
+            'encounter_status'=>'active','abilities'=>[$actor=>$abilities],'allowed_targets'=>[$actor=>[$target]],'relationships'=>[$actor=>[$target=>'hostile']],'status_immunities'=>$statusImmunities,'status_scope'=>['session_id'=>$sid,'encounter_id'=>$eid]]];
     }
     /** Own controls may be listed without exposing GM-only targets or their counts. */
     public function builderScope(string $sid,string $eid):array
@@ -174,11 +176,18 @@ final class AF_ACS_QueryService
         foreach(['resources','costs','timing','usage_limits','application_conditions','summon','math_modifiers','modifiers','base_stats','conditions','stacking','grants','immunities','upgrade_requirements','application_mode','damage_value','heal_value','shield_value','formula_refs','formula_ref','triggers','passive_effects','reflection','lifesteal'] as $f)if(!empty($d[$f]))self::fail('preview_ability_contract_unavailable');
         foreach(['range','cast_time','cooldown','cooldown_value','max_charges','duration','duration_value','cost_value'] as $f)if(!empty($d[$f]))self::fail('preview_ability_contract_unavailable');
         $cost=$d['action_cost']??1;if(!is_int($cost)||$cost<1)self::fail('preview_action_cost_unsupported');
-        $parts=[];$statuses=[];foreach($dto['data']['ability_profile']['effects']??[] as $effect){$p=$effect['parameters'];
-            $fields=['kind','effect_type','target','targeting','value','value_mode','damage_type','damage_element','element','formula_profile','formula_ref','condition_ref','duration','duration_value','duration_unit','status_key','resource_key','stat_key','operation','hit_count','coefficient','can_crit','magic_direction_ref','notes','base_chance','polarity','trigger','probability_check'];
+        $parts=[];$statuses=[];$removals=[];foreach($dto['data']['ability_profile']['effects']??[] as $effect){$p=$effect['parameters'];
+            $fields=['kind','effect_type','target','targeting','value','value_mode','damage_type','damage_element','element','formula_profile','formula_ref','condition_ref','duration','duration_value','duration_unit','status_key','resource_key','stat_key','operation','hit_count','coefficient','can_crit','magic_direction_ref','notes','base_chance','polarity','trigger','probability_check','categories','limit','mass','chance','chance_scope','remove_stacks'];
             if(array_diff(array_keys($p),$fields))self::fail('preview_effect_unsupported');
             if(array_key_exists('hit_count',$p)&&!in_array($p['hit_count'],['',null,1],true))self::fail('preview_effect_unsupported');
             if(array_key_exists('coefficient',$p)&&!in_array($p['coefficient'],['',null],true))self::fail('preview_effect_unsupported');
+            if(in_array($p['effect_type']??null,['cleanse','dispel'],true)){
+                $allowed=['kind','effect_type','target','targeting','damage_type','damage_element','element','magic_direction_ref','hit_count','trigger','categories','limit','mass','chance','chance_scope','remove_stacks','notes'];
+                foreach($p as $field=>$value)if(!in_array($field,$allowed,true)&&$value!==null&&$value!==''&&$value!==[]&&$value!==false)self::fail('status_removal_override_unsupported');
+                if(($p['target']??'single_enemy')!=='single_enemy'||($p['targeting']??'single_enemy')!=='single_enemy')self::fail('status_target_unsupported');
+                $removals[]=AF_ACS_KnowledgeBaseAdapter::removalEffect($dto,$effect);continue;
+            }
+            if(array_intersect(array_keys($p),['categories','limit','mass','chance','chance_scope','remove_stacks']))self::fail('preview_effect_unsupported');
             if(($p['effect_type']??null)==='status'){
                 if(array_key_exists('can_crit',$p)&&$p['can_crit']!==false)self::fail('status_override_unsupported');
                 foreach(['condition_ref','formula_ref','formula_profile','coefficient','operation','resource_key','stat_key'] as $field)if(!empty($p[$field]))self::fail('status_override_unsupported');
@@ -205,10 +214,10 @@ final class AF_ACS_QueryService
             if($type==='elemental'){$explicit=$effect['parameters']['damage_element']??null;if(!is_string($explicit)||!is_string($element))self::fail('damage_element_missing');}
             $parts[]=['source_index'=>$effect['source_index'],'kb_effect_index'=>$effect['source_index'],'damage_type'=>$type,'damage_element'=>$type==='elemental'?$element:null]+$value;
         }
-        if(!$parts&&!$statuses)self::fail('preview_damage_value_missing');
+        if(!$parts&&!$statuses&&!$removals)self::fail('preview_damage_value_missing');
         if(!is_string($dto['definition_version']['declared_version']??null))self::fail('preview_source_version_unavailable');
         return ['supported'=>true,'source_ref'=>['key'=>$dto['source']['key'],'version'=>$dto['definition_version']['declared_version'],'fingerprint'=>$dto['definition_version']['fingerprint']],
-            'components'=>$parts,'costs'=>[['kind'=>'ap','amount'=>$cost]],'hit_policy'=>$policy]+($statuses?['statuses'=>$statuses]:[]);
+            'components'=>$parts,'costs'=>[['kind'=>'ap','amount'=>$cost]],'hit_policy'=>$policy]+($statuses?['statuses'=>$statuses]:[])+($removals?['removals'=>$removals]:[]);
     }
     public function preview(array $input):array
     {
