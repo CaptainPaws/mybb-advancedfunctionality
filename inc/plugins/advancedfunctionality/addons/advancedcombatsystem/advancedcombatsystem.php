@@ -161,7 +161,7 @@ function af_advancedcombatsystem_xmlhttp(): void
 {
     global $mybb;
     if(in_array($mybb->get_input('op'),['builder_context','builder_preview'],true)){require_once __DIR__.'/modules/Presentation/BuilderController.php';AF_ACS_BuilderController::dispatchBuilder();}
-    if(in_array($mybb->get_input('op'),['draft_save','draft_restore','seal','seal_cancel_tail','seal_confirm','seal_status'],true)){require_once __DIR__.'/modules/Presentation/ApiController.php';AF_ACS_ApiController::dispatch();}
+    if(in_array($mybb->get_input('op'),['draft_save','draft_restore','seal','seal_cancel_tail','seal_confirm','seal_prepare_reactions','seal_status'],true)){require_once __DIR__.'/modules/Presentation/ApiController.php';AF_ACS_ApiController::dispatch();}
     if($mybb->get_input('op')==='combat_preview'){require_once __DIR__.'/modules/Presentation/BuilderController.php';AF_ACS_BuilderController::dispatch();}
     try {
         if(empty($mybb->user['uid']))throw new RuntimeException('ACS_LOGIN_REQUIRED');
@@ -173,6 +173,13 @@ function af_advancedcombatsystem_xmlhttp(): void
             $rounds=af_advancedcombatsystem_encounters()->rounds();$sid=$mybb->get_input('session_id');$eid=$mybb->get_input('encounter_id');
             $input=[];foreach(['session_id','encounter_id','expected_version','encounter_version','turn_id','turn_version','round_id','operation_key','reason','confirm','deadline_mode','seconds'] as $field)$input[$field]=$mybb->get_input($field);
             $data=$op==='round_manage_overview'?$rounds->overview($sid,$eid,$mybb->get_input('after')?:'0'):$rounds->command(substr($op,13),$input);
+        }
+        elseif(str_starts_with($op,'reaction_')) {
+            if($op!=='reaction_view'&&array_diff(array_keys($_POST),['action','addon','op','my_post_key','session_id','encounter_id','entity_id','expected_version','encounter_version','operation_key','reason','trigger_key','reaction_id','reaction_version']))throw new RuntimeException('ACS_REACTION_INPUT_INVALID');
+            $reactions=af_advancedcombatsystem_encounters()->reactions();$input=[];
+            foreach(['session_id','encounter_id','entity_id','expected_version','encounter_version','operation_key','reason'] as $field)$input[$field]=$mybb->get_input($field);
+            if($op==='reaction_view')$data=$reactions->view($input['session_id'],$input['encounter_id'],$input['entity_id']);
+            else{if($op==='reaction_register')$input['trigger_key']=$mybb->get_input('trigger_key');else foreach(['reaction_id','reaction_version'] as $field)$input[$field]=$mybb->get_input($field);$data=$reactions->command(substr($op,9),$input);}
         }
         elseif(str_starts_with($op,'clock_')) {
             $clock=af_advancedcombatsystem_encounters()->clock();$sid=$mybb->get_input('session_id');

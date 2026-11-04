@@ -89,7 +89,7 @@ final class AF_ACS_BuilderService
             foreach($p['context']['abilities'][$actor][$action['ability_key']]['components']??[] as $component)if($component['damage_type']==='elemental'&&!empty($p['context']['stats'][$actor]['element_damage_bonus']))throw new RuntimeException('preview_element_bonus_contract_unavailable');
             if(($p['choices'][$action['ability_key']]['supported']??false)!==true)throw new RuntimeException('builder_parameters_unsupported');
             if($context===null)$context=$p['context'];else foreach(['entities','groups'] as $f)$context['state'][$f]=array_replace($context['state'][$f],$p['context']['state'][$f]);
-            foreach(['stats','defenses','turns','abilities','status_immunities'] as $f)$context[$f]=array_replace($context[$f],$p['context'][$f]);
+            foreach(['stats','defenses','turns','abilities','status_immunities','reaction_turns','reaction_kinds'] as $f)$context[$f]=array_replace($context[$f],$p['context'][$f]);
             $context['relationships'][$actor]=array_replace($context['relationships'][$actor]??[],$p['context']['relationships'][$actor]);
             $context['allowed_targets'][$actor]=array_values(array_unique([...($context['allowed_targets'][$actor]??[]),$target]));
             $ordered[]=['actor_id'=>$actor,'ability_key'=>$action['ability_key'],'targets'=>[$target],'scenario'=>$input['scenario']];$prepared[]=[$actor,$target,$p['versions']];

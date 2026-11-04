@@ -123,6 +123,79 @@ final class AF_ACS_Effects
         $events[]=['type'=>'upkeep_result','id'=>$id,'source_entity_id'=>$source]+$state['status_instances'][$id]['last_upkeep'];
         self::interruptSustained($state,$events,$key);
     }
+    public const REACTION_PHASES=['on_targeted','before_hit','after_hit','after_damage'];
+    private static function retainedNode(array $node):array
+    {
+        self::fields($node,['json','ref']);self::ref($node['ref']??null);
+        if(!is_string($node['json']??null)||!hash_equals($node['ref']['fingerprint'],'sha256:'.hash('sha256',$node['json'])))self::fail('reaction_pin_invalid');
+        try{$d=json_decode($node['json'],true,64,JSON_THROW_ON_ERROR);}catch(JsonException $e){self::fail('reaction_pin_invalid');}
+        if(!is_array($d)||($d['version']??null)!==$node['ref']['version'])self::fail('reaction_pin_invalid');return $d;
+    }
+    /** Bounded retained KB graph, not a second effects interpreter. */
+    public static function reactionSpec(array $snapshot):array
+    {
+        self::fields($snapshot,['schema_version','trigger','ability','condition']);if(($snapshot['schema_version']??null)!==1)self::fail('reaction_schema_unsupported');
+        $t=self::retainedNode($snapshot['trigger']??[]);$a=self::retainedNode($snapshot['ability']??[]);
+        self::fields($t,['schema','key','version','event','priority','condition_ref','effect_ref','limits','formula_refs']);
+        if(($t['schema']??null)!=='af_kb.arpg.mechanic.v1'||($t['key']??null)!==$snapshot['trigger']['ref']['key']||!in_array($t['event']??null,self::REACTION_PHASES,true)||!empty($t['formula_refs']))self::fail('reaction_trigger_unsupported');
+        $priority=AF_ACS_Numeric::integer($t['priority']??null,-2147483648,2147483647);
+        if(!is_array($t['limits']??null)||!in_array($t['limits'],[[],['per_round'=>1]],true))self::fail('reaction_limits_unsupported');
+        $predicate=null;
+        if(($t['condition_ref']??null)!==null){$c=self::retainedNode($snapshot['condition']??[]);self::fields($c,['schema','key','version','predicate']);
+            if(($c['schema']??null)!=='af_kb.arpg.mechanic.v1'||$t['condition_ref']!=='condition_template:'.$snapshot['condition']['ref']['key']||($c['key']??null)!==$snapshot['condition']['ref']['key'])self::fail('reaction_condition_unsupported');
+            $predicate=$c['predicate']??null;if(!is_array($predicate))self::fail('reaction_condition_unsupported');self::reactionCondition($predicate,['event.phase'=>$t['event']],true);
+        }elseif(($snapshot['condition']??null)!==null)self::fail('reaction_condition_unsupported');
+        self::fields($a,['schema','type_profile','version','revision','name','title','description','notes','icon_url','icon_class','sortorder','active','type','subtype','slot','damage_type','targeting','range','cast_time','cooldown','cooldown_value','cooldown_unit','duration','duration_value','duration_unit','max_charges','level_cap','resources','effects','modifiers','base_stats','triggers','conditions','stacking','upgrade_requirements','action_cost','cost_value','cost_resource','costs','formula_profile','formula_ref','formula_refs','target_count','application_conditions','application_mode','summon','usage_limits','timing','math_modifiers','passive_effects','reflection','lifesteal','grants','immunities','magic_direction_ref','damage_element','element','can_crit','auto_hit','damage_value','heal_value','shield_value']);
+        if(($a['type']??'active')!=='active'||!is_array($a['effects']??null)||!array_is_list($a['effects'])||!empty($a['target_count'])&&$a['target_count']!==['min'=>1,'max'=>1])self::fail('reaction_effect_unsupported');
+        $ref=$t['effect_ref']??[];self::fields($ref,['type','key','effect_index']);$index=AF_ACS_Numeric::integer($ref['effect_index']??null,0,2147483647);
+        if(($ref['type']??null)!=='arpg_ability'||($ref['key']??null)!==$snapshot['ability']['ref']['key']||($a['schema']??null)!=='af_kb.arpg.rules.v1'||($a['targeting']??null)!=='self')self::fail('reaction_effect_unsupported');
+        foreach(['resources','cost_value','cost_resource','conditions','application_conditions','usage_limits','timing','formula_refs','formula_ref','math_modifiers','modifiers','base_stats','passive_effects','reflection','lifesteal','triggers','max_charges','cooldown','cooldown_value','cast_time','duration','duration_value','range','action_cost','stacking','upgrade_requirements','application_mode','summon','grants','immunities','formula_profile','damage_value','heal_value','shield_value'] as $field)if(!empty($a[$field]))self::fail('reaction_ability_override_unsupported');
+        $e=$a['effects'][$index]??null;if(!is_array($e))self::fail('reaction_effect_unsupported');
+        self::fields($e,['kind','effect_type','target','targeting','value','value_mode','can_crit','notes','categories','limit','mass','chance','chance_scope','remove_stacks']);
+        foreach(['target','targeting'] as $field)if(array_key_exists($field,$e)&&$e[$field]!=='self')self::fail('reaction_effect_unsupported');
+        if(array_key_exists('can_crit',$e)&&!is_bool($e['can_crit'])||array_key_exists('can_crit',$a)&&!is_bool($a['can_crit']))self::fail('reaction_effect_unsupported');
+        $kind=$e['effect_type']??$e['kind']??null;
+        if(isset($e['kind'],$e['effect_type'])&&$e['kind']!==$e['effect_type']||($e['target']??'self')!=='self'||($e['targeting']??'self')!=='self'||($e['can_crit']??false)!==false||($a['can_crit']??false)!==false)self::fail('reaction_effect_unsupported');
+        if($kind==='heal'){
+            foreach(['categories','limit','mass','chance','chance_scope','remove_stacks'] as $field)if(array_key_exists($field,$e))self::fail('reaction_effect_unsupported');
+            if(!in_array($e['value_mode']??'flat',['flat',''],true))self::fail('reaction_effect_unsupported');$effect=['kind'=>'heal','amount'=>self::integer($e['value']??null)];$probability=100;
+        }elseif(in_array($kind,['cleanse','dispel'],true)){
+            if(array_key_exists('value',$e)||array_key_exists('value_mode',$e)||array_key_exists('mass',$e)&&!is_bool($e['mass'])||($e['mass']??false)||array_key_exists('limit',$e)&&$e['limit']!==1||array_key_exists('chance_scope',$e)&&$e['chance_scope']!=='operation')self::fail('reaction_mass_or_override_unsupported');
+            $policy=['kind'=>$kind,'categories'=>array_key_exists('categories',$e)?$e['categories']:[],'limit'=>1,'remove_stacks'=>$e['remove_stacks']??null,'chance'=>array_key_exists('chance',$e)?$e['chance']:100];self::removalSpec($policy);$effect=['kind'=>'status_remove','policy'=>$policy];$probability=$policy['chance'];
+        }else self::fail('reaction_effect_unsupported');
+        $costs=[];if(!is_array($a['costs']??[])||!array_is_list($a['costs']??[]))self::fail('reaction_cost_unsupported');
+        foreach($a['costs']??[] as $cost){if(!is_array($cost))self::fail('reaction_cost_unsupported');self::fields($cost,['kind','resource_key','value','timing']);$key=$cost['resource_key']??null;
+            if(($cost['kind']??null)!=='resource'||($cost['timing']??null)!=='use'||!is_string($key)||!preg_match('/\A[a-z][a-z0-9_.-]{0,63}\z/D',$key)||$key==='ap')self::fail('reaction_cost_unsupported');
+            $costs[]=['kind'=>$key==='hp'?'hp':'resource','amount'=>self::integer($cost['value']??null)]+($key==='hp'?[]:['resource'=>$key]);
+        }
+        return ['phase'=>$t['event'],'priority'=>$priority,'condition'=>$predicate,'effect'=>$effect,'probability'=>$probability,'costs'=>$costs,'trigger_ref'=>$snapshot['trigger']['ref'],'ability_ref'=>$snapshot['ability']['ref'],'effect_ref'=>$ref];
+    }
+    /** Closed KB predicate vocabulary; no display names, masks or arbitrary object paths. */
+    public static function reactionCondition(?array $p,array $input,bool $validate=false,int $depth=0):bool
+    {
+        if($p===null)return true;if($depth>12)self::fail('reaction_condition_unsupported');$op=$p['operator']??null;
+        if(in_array($op,['all','any'],true)){self::fields($p,['operator','conditions']);$children=$p['conditions']??null;
+            if(!is_array($children)||!array_is_list($children)||count($children)<1||count($children)>8)self::fail('reaction_condition_unsupported');$values=[];
+            foreach($children as $c){if(!is_array($c))self::fail('reaction_condition_unsupported');$values[]=self::reactionCondition($c,$input,$validate,$depth+1);}return $op==='all'?!in_array(false,$values,true):in_array(true,$values,true);
+        }
+        if($op==='not'){self::fields($p,['operator','conditions']);if(!is_array($p['conditions']??null)||!array_is_list($p['conditions'])||count($p['conditions'])!==1||!is_array($p['conditions'][0]))self::fail('reaction_condition_unsupported');return !self::reactionCondition($p['conditions'][0],$input,$validate,$depth+1);}
+        self::fields($p,['operator','input','value']);$path=$p['input']??null;$value=$p['value']??null;
+        if(!in_array($op,['eq','neq','lt','lte','gt','gte'],true)||!is_string($path)||!in_array($path,['actor.hp','actor.max_hp','actor.life_state','actor.kind','event.phase','event.hit_success','event.hp_loss'],true)||!is_scalar($value))self::fail('reaction_condition_unsupported');
+        $numeric=in_array($path,['actor.hp','actor.max_hp','event.hp_loss'],true);
+        if($numeric)AF_ACS_Numeric::number($value);elseif(!in_array($op,['eq','neq'],true)||($path==='event.hit_success'?!is_bool($value):!is_string($value)))self::fail('reaction_condition_unsupported');
+        if($validate&&isset($input['event.phase'])&&($path==='event.hp_loss'&&$input['event.phase']!=='after_damage'||$path==='event.hit_success'&&!in_array($input['event.phase'],['after_hit','after_damage'],true)))self::fail('reaction_condition_phase_unsupported');
+        if($validate)return true;if(!array_key_exists($path,$input))self::fail('reaction_condition_context_missing');$actual=$input[$path];
+        return match($op){'eq'=>$numeric?$actual==$value:$actual===$value,'neq'=>$numeric?$actual!=$value:$actual!==$value,'lt'=>$actual<$value,'lte'=>$actual<=$value,'gt'=>$actual>$value,'gte'=>$actual>=$value};
+    }
+    /** All costs and the one permitted component succeed atomically or leave the attack untouched. */
+    public static function reactionAttempt(array $state,string $source,array $spec,array $scope,?array $roll,string $mode):array
+    {
+        if($mode==='preview'&&$spec['probability']<100)return ['executed'=>false,'reason'=>'probability_pending','state'=>$state,'trace'=>[]];
+        $effect=$spec['effect'];if($effect['kind']==='heal')$effect['entity_id']=$source;
+        else{$effect+=['target'=>$source,'session_id'=>$scope['session_id']??null,'encounter_id'=>$scope['encounter_id']??null,'roll'=>$roll];}
+        try{$r=self::simulate($state,['actor_id'=>$source,'costs'=>$spec['costs'],'effects'=>[$effect]]);return ['executed'=>true,'reason'=>null,'state'=>$r->serverState(),'trace'=>$r->serverTrace()];}
+        catch(AF_ACS_FormulaError $e){if(!in_array($e->diagnosticCode,['effects_cost_unaffordable','effects_resource_invalid','effects_actor_unavailable'],true))throw $e;return ['executed'=>false,'reason'=>$e->diagnosticCode,'state'=>$state,'trace'=>[]];}
+    }
     public static function ordinaryActionAllowed(array $state,string $entity):bool
     {
         foreach($state['status_instances']??[] as $row)if($row['status']==='active'&&$row['target_entity_id']===$entity&&($row['spec']['mechanical_parameters']['blocks_ordinary_actions']??false)===true)return false;

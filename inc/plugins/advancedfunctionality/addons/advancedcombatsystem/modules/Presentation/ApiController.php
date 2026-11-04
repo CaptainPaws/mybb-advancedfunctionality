@@ -22,7 +22,7 @@ final class AF_ACS_ApiController
             if(!af_is_addon_enabled('advancedcombatsystem')||!empty($GLOBALS['af_acs_deactivated']))throw new RuntimeException('ACS_DISABLED');
             if((int)($_SERVER['CONTENT_LENGTH']??0)>262144)throw new RuntimeException('ACS_REQUEST_TOO_LARGE');
             $op=$mybb->get_input('op');$input=[];
-            if(in_array($op,['seal','seal_cancel_tail','seal_confirm','seal_status'],true)){
+            if(in_array($op,['seal','seal_cancel_tail','seal_confirm','seal_prepare_reactions','seal_status'],true)){
                 require_once __DIR__.'/../Application/SealService.php';
                 $seal=new AF_ACS_SealService(new AF_ACS_EncounterRepository($db),new AF_ACS_SessionAccess);
                 if($op==='seal_status'){
@@ -32,7 +32,7 @@ final class AF_ACS_ApiController
                     if(array_diff(array_keys($_POST),['action','addon','op','my_post_key','draft_id','expected_draft_version','operation_key','confirmation_hash']))throw new RuntimeException('ACS_SEAL_INPUT_INVALID');
                     $input=[];foreach(['draft_id','expected_draft_version','operation_key'] as $f)$input[$f]=$mybb->get_input($f);
                     if($op==='seal_confirm')$input['confirmation_hash']=$mybb->get_input('confirmation_hash');
-                    $data=$seal->command(match($op){'seal'=>'seal','seal_cancel_tail'=>'cancel_tail',default=>'confirm'},$input);
+                    $data=$seal->command(match($op){'seal'=>'seal','seal_cancel_tail'=>'cancel_tail','seal_prepare_reactions'=>'prepare_reactions',default=>'confirm'},$input);
                 }
             }elseif($op==='draft_save'){
                 if(array_diff(array_keys($_POST),['action','addon','op','my_post_key','session_id','encounter_id','turn_id','draft_id','expected_draft_version','operation_key','prose','actions']))throw new RuntimeException('ACS_DRAFT_INPUT_INVALID');
@@ -40,7 +40,7 @@ final class AF_ACS_ApiController
                 $raw=$mybb->get_input('actions');if(strlen($raw)>65536)throw new RuntimeException('ACS_REQUEST_TOO_LARGE');
                 $input['actions']=json_decode($raw,true,32,JSON_THROW_ON_ERROR);
             }else $input=['draft_id'=>$mybb->get_input('draft_id')];
-            if(!in_array($op,['seal','seal_cancel_tail','seal_confirm','seal_status'],true))$data=self::handle(new AF_ACS_DraftService(new AF_ACS_EncounterRepository($db),new AF_ACS_SessionAccess),$op,$input);
+            if(!in_array($op,['seal','seal_cancel_tail','seal_confirm','seal_prepare_reactions','seal_status'],true))$data=self::handle(new AF_ACS_DraftService(new AF_ACS_EncounterRepository($db),new AF_ACS_SessionAccess),$op,$input);
             $result=['ok'=>true,'data'=>$data];
         }catch(Throwable $e){
             $candidate=$e->getMessage();if(in_array($op??'',['seal','seal_confirm','seal_cancel_tail'],true)&&($e instanceof DomainException||in_array($candidate,['builder_input_invalid','builder_parameters_unsupported','preview_target_forbidden'],true)))$candidate='ACS_SEAL_UNSUPPORTED';$code=in_array($candidate,['ACS_SEAL_UNSUPPORTED','ACS_SEAL_IMMUTABLE','ACS_SEAL_SUMMARY_CHANGED','ACS_SEAL_QUOTA_EXHAUSTED','ACS_SEAL_TURN_UNAVAILABLE','ACS_SEAL_NOTHING_TO_APPEND','ACS_SEAL_NOTHING_TO_CANCEL','ACS_SEAL_PIN_CHANGED','ACS_DRAFT_VERSION_CONFLICT','ACS_DRAFT_ALREADY_EXISTS','ACS_OPERATION_KEY_CONFLICT','ACS_RECOVERY_REQUIRED','ACS_DRAFT_TURN_UNAVAILABLE','ACS_DRAFT_READ_ONLY','ACS_LOGIN_REQUIRED','ACS_CSRF_REQUIRED','ACS_POST_REQUIRED','ACS_DRAFT_UNAVAILABLE','ACS_RATE_LIMIT','ACS_DISABLED','ACS_SCHEMA_NOT_READY','ACS_REQUEST_TOO_LARGE','ACS_DRAFT_INPUT_INVALID'],true)?$candidate:'ACS_DRAFT_UNAVAILABLE';

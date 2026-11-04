@@ -58,6 +58,23 @@ final class AF_ACS_KnowledgeBaseAdapter
         }
         return AF_ACS_Effects::instanceSpec($definition,$effect['parameters']??[],$ref['tick_definitions']??[],AF_ACS_Effects::upkeepSpec($costs,$definition['mechanical_parameters']??[]));
     }
+    /** Explicit graph acquisition for a controller command, never performed by Resolver/recovery. */
+    public function reactionDefinition(string $key,int $actor):array
+    {
+        if(!$this->available($actor))throw new RuntimeException('ACS_REACTION_DEFINITION_UNAVAILABLE');require_once __DIR__.'/../../Domain/Effects.php';
+        $issues=[];$trigger=af_kb_arpg_acs_reference('trigger_template',$key,'reaction',$issues);$seen=[];
+        if(empty($trigger['resolved'])||$issues||!$this->references($trigger,$actor,$issues,$seen))throw new RuntimeException('ACS_REACTION_DEFINITION_UNAVAILABLE');
+        $definition=$trigger['definition'];$effect=$definition['effect_ref']??[];
+        if(($effect['type']??null)!=='arpg_ability')throw new RuntimeException('ACS_REACTION_DEFINITION_UNAVAILABLE');
+        $ability=$this->readDefinition('arpg_ability',(string)($effect['key']??''),$actor);if(empty($ability['ready']))throw new RuntimeException('ACS_REACTION_DEFINITION_UNAVAILABLE');
+        $node=static function(array $d,string $key):array{$json=json_encode(af_kb_arpg_acs_canonical($d),JSON_THROW_ON_ERROR|JSON_PRESERVE_ZERO_FRACTION|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);return ['json'=>$json,'ref'=>['key'=>$key,'version'=>$d['version']??null,'fingerprint'=>'sha256:'.hash('sha256',$json)]];};
+        $condition=null;
+        if(($definition['condition_ref']??null)!==null){$ref=af_kb_arpg_acs_reference('condition_template',substr($definition['condition_ref'],19),'reaction.condition',$issues);
+            if(empty($ref['resolved'])||$issues||!$this->references($ref,$actor,$issues,$seen))throw new RuntimeException('ACS_REACTION_DEFINITION_UNAVAILABLE');$condition=$node($ref['definition'],$ref['key']);}
+        $snapshot=['schema_version'=>1,'trigger'=>$node($definition,$key),'ability'=>$node($ability['data']['definition'],$effect['key']),'condition'=>$condition];
+        if($snapshot['ability']['ref']['fingerprint']!==$ability['definition_version']['fingerprint'])throw new RuntimeException('ACS_REACTION_PIN_CHANGED');
+        return ['snapshot'=>$snapshot,'spec'=>AF_ACS_Effects::reactionSpec($snapshot)];
+    }
     private function available(int $actorUid): bool
     {
         global $mybb;

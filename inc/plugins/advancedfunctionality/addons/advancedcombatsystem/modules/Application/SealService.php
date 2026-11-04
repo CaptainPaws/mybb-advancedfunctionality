@@ -43,6 +43,7 @@ final class AF_ACS_SealService
                 $v=$p['prepared'][$i][2];unset($v['session_version'],$v['encounter_version']);ksort($v);$dependencies[]=$v;
             }
             $ordered=$p['ordered'];foreach($ordered as &$a)unset($a['scenario']);unset($a);
+            $p['context']=$this->repo->reactionContext($p['context'],$active);
             $resolved=AF_ACS_Resolver::resolve($p['context'],$ordered,$tape,'seal');
             if($this->prepare($draft,$actions)['prepared']!==$p['prepared'])throw new RuntimeException('ACS_SEAL_SUMMARY_CHANGED');
             $latest=$this->repo->draft($draft['id'],$draft['author_uid']);if(!$latest||$latest['draft_version']!==$draft['draft_version'])throw new RuntimeException('ACS_DRAFT_VERSION_CONFLICT');
@@ -53,6 +54,7 @@ final class AF_ACS_SealService
             $dependencyHash=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'dependencies'=>$dependencies]));
             if(isset($resolved->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'boundaries'=>$resolved->serverPlan()['entity_end_boundaries']]));
             if(array_filter($resolved->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'instances'=>$resolved->serverState()['status_instances']]));
+            if(($reactionHash=AF_ACS_Resolver::reactionHash($resolved,$p['context']))!==null)$summary['reaction_hash']=$reactionHash;
             $mechanical=$summary;unset($mechanical['label']);
             $simulationHash=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'actions'=>$actions,'tape'=>$tape,'summary'=>$mechanical]));
             $confirmation=hash('sha256','acs-confirm-v1'."\n".$dependencyHash."\n".$simulationHash);
@@ -66,7 +68,7 @@ final class AF_ACS_SealService
     public function command(string $op,array $input):array
     {
         $this->access->csrf();
-        if(!in_array($op,['seal','cancel_tail','confirm'],true)||array_diff(array_keys($input),['draft_id','expected_draft_version','operation_key','confirmation_hash']))throw new RuntimeException('ACS_SEAL_INPUT_INVALID');
+        if(!in_array($op,['seal','cancel_tail','confirm','prepare_reactions'],true)||array_diff(array_keys($input),['draft_id','expected_draft_version','operation_key','confirmation_hash']))throw new RuntimeException('ACS_SEAL_INPUT_INVALID');
         $draft=$this->draft(AF_ACS_Repository::integer($input['draft_id']??null));
         $key=$input['operation_key']??null;if(!is_string($key)||!preg_match('/\A[a-z0-9][a-z0-9_.-]{15,95}\z/D',$key))throw new RuntimeException('ACS_OPERATION_KEY_REQUIRED');
         $request=['schema_version'=>1,'op'=>$op,'author_uid'=>$this->access->uid(),'session_id'=>$draft['session_id'],'draft_id'=>$draft['id'],'expected_draft_version'=>AF_ACS_Repository::integer($input['expected_draft_version']??null,'18446744073709551614'),'operation_key'=>$key];
@@ -100,6 +102,8 @@ final class AF_ACS_SealService
                 if(!$active)throw new RuntimeException('ACS_SEAL_NOTHING_TO_CANCEL');$last=end($active);$this->repo->cancelSeal((string)$last['id']);array_splice($actions,count($active)-1,1);
                 $d['mechanics_json']=AF_ACS_Repository::json(['schema_version'=>1,'actions'=>$actions]);
             }
+            if($op==='prepare_reactions')$p=$this->prepare($d,$actions);
+            if(in_array($op,['seal','prepare_reactions'],true)){$this->repo->prepareReactionRolls($d,$p['context'],$this->random??new AF_ACS_RandomSource);}
             $view=$this->view($d);$confirmation=null;
             if($op==='confirm'){
                 if($view['blocked']||!$view['confirmable']||$view['confirmation_hash']===null||!hash_equals($view['confirmation_hash'],$request['confirmation_hash']))throw new RuntimeException('ACS_SEAL_SUMMARY_CHANGED');

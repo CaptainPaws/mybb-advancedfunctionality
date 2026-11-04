@@ -37,7 +37,7 @@ try {
     $link->query('DROP TABLE fixture_af_acs_effects');$link->query("DELETE FROM fixture_af_acs_schema_migrations WHERE version='010_status_instances'");$migrations->run();
     $link->query('DROP TABLE fixture_af_acs_effects');$link->query("UPDATE fixture_af_acs_schema_migrations SET status='failed',step=0 WHERE version='010_status_instances'");
     $migrations->run();$migrations->run();
-    resolver_check($migrations->status()['schema_version']==='010_status_instances','010 resume/version failed');
+    resolver_check($migrations->status()['schema_version']===AF_ACS_Migrations::VERSION,'010 resume/version failed');
     resolver_check($link->query("SELECT * FROM fixture_af_acs_schema_migrations WHERE version<'010_status_instances' ORDER BY version")->fetch_all(MYSQLI_ASSOC)===$old,'001–009 migration records changed');
     $repository=new StatusSqlFixture($link);$snapshot=$repository->seed($dto);
     $definition=$prepared['statuses'][0];$op=instance_apply($definition['instance']);$op['effect_definition_ref']=$definition['effect_definition_ref'];$op['status_definition_ref']=$definition['status_definition_ref'];

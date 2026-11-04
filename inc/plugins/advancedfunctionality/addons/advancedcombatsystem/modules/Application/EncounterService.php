@@ -21,6 +21,10 @@ final class AF_ACS_EncounterService
     {
         require_once __DIR__.'/RoundManagementService.php';return new AF_ACS_RoundManagementService($this->repository,$this->access,$now);
     }
+    public function reactions():AF_ACS_ReactionService
+    {
+        require_once __DIR__.'/ReactionService.php';return new AF_ACS_ReactionService($this->repository,$this->access);
+    }
     public function clock(): AF_ACS_ClockService
     {
         require_once __DIR__.'/ClockService.php';return new AF_ACS_ClockService($this->repository,$this->access);
