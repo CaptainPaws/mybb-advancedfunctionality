@@ -36,6 +36,7 @@ $GLOBALS['acsPublishServiceFixture']=static function(array $f):void {
         return array_intersect_key($capture(),array_flip(['entity_states','resources','turns','events','event_details','sealed_actions','rolls','snapshots','combat_results','combat_receipts','post_links','outbox']));
     };
     $countPosts=static fn()=>(int)$link->query('SELECT COUNT(*) FROM fixture_posts')->fetch_row()[0];
+    if (isset($GLOBALS['acsEditorPublicationFixture'])) { ($GLOBALS['acsEditorPublicationFixture'])(get_defined_vars());return; }
     if (isset($GLOBALS['acsPostLifecycleFixture'])) { ($GLOBALS['acsPostLifecycleFixture'])(get_defined_vars());return; }
     $r=$issue();$id=$r['submission_id'];snapshot_assert($service->issue($request)===$r,'Lost issuance response changed identity');
     $before=$capture();$result=$service->publish($id);

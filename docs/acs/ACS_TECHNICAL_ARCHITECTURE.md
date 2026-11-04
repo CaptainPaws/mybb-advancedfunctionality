@@ -59,7 +59,9 @@
 
 В ACS-4.3.4-R2 подключены source-gated native class_moderation observers и author-driven `ModerationService::resumeApproved`, используемый PublishService/RecoveryService. Native approve сам не применяет механику; автор повторно проверяет sealed plan/controls/turn/pid и проходит прежний writer. Move/delete/hidden до commit требуют quarantine; после COMMITTED добавляется operational audit-наблюдение без изменения receipt/result/outbox. `PublicationStatusQuery` проверяет общий SQL-only terminal verifier без загрузки Builder/Resolver. [Lifecycle source/hook order, политика и fixtures](ACS_4_3_4_R2_POST_LIFECYCLE.md); installed acceptance и frontend остаются BLOCKED.
 
-`AF_ACS_Publication::card()` отдаёт только статус/метку; `mechanics_confirmed=true` исключительно для COMMITTED. Postbit и editor wiring ещё не реализованы. Обычная видимая литература до commit — поддерживаемая политика; атомарная скрытая публикация литературы и карточки не обещается.
+В ACS-4.4.1-R2 добавлен test-only frontend поверх существующей native формы/AdvancedEditor, общий newreply endpoint (полный/Quick Reply) и ранний global_start/end ownership bridge в AF plugin. Wire action acs_publication переводится в do_newreply только проверенным ранним guard; при отключённом ACS нет fallback INSERT. Проза сохраняется existing draft_save до freeze, submission_id сохраняется на retry, source/CSRF/UID/origin/confirmation gates остаются серверными. [Конфигурация, binding и проверки](ACS_4_4_1_R2_EDITOR_PUBLICATION.md). publication_enabled=false; postbit/GM UI и installed acceptance остаются BLOCKED.
+
+`AF_ACS_Publication::card()` отдаёт только статус/метку; `mechanics_confirmed=true` исключительно для COMMITTED. Postbit wiring ещё не реализован; editor test binding добавлен в 4.4.1. Обычная видимая литература до commit — поддерживаемая политика; атомарная скрытая публикация литературы и карточки не обещается.
 
 Подробные свидетельства и ограничения: [аудит R2](ACS_STAGE_4_REVISION_2_AUDIT.md).
 
