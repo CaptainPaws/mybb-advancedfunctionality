@@ -1,5 +1,7 @@
 # ACS-4.1.4B-UI-2 — практический сценарий ACP и границы HTTP-выполнения
 
+> Исторический отчёт. По ACS Stage 4 Revision 2 мигратор полностью удалён из репозитория; приведённые пути и команды больше не действуют. Актуальное состояние: [ACS-4.0-CLEANUP](ACS_4_0_CLEANUP.md).
+
 Исходная main: `2ef31e4540833a19c1972051959e20851f03261d`, включает merged PR #1010. Переработана **существующая** вкладка ACS → Инструменты → Миграция БД, не создана параллельная страница. Основание: [план 4.1.4A](ACS_4_1_4A_ENGINE_MIGRATION_PLAN.md), [CLI 4.1.4B](ACS_4_1_4B_ENGINE_MIGRATION_TOOL.md), [предыдущий UI](ACS_4_1_4B_UI_MIGRATION_WIZARD.md), четыре нормативных документа [Master](ACS_MASTER_SPECIFICATION.md), [Architecture](ACS_TECHNICAL_ARCHITECTURE.md), [Contracts](ACS_INTEGRATION_CONTRACTS.md), [Roadmap](ACS_IMPLEMENTATION_ROADMAP.md). Последующее уточнение UX ниже заменяет прежнее универсальное требование «обязательно worker/catalog для любой подготовки», но **не отменяет инварианты выполнения CLI**.
 
 ## Что теперь реально доступно

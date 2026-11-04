@@ -1,5 +1,7 @@
 # ACS-4.1.4B — контролируемая подготовка MyISAM → InnoDB
 
+> Исторический отчёт. По ACS Stage 4 Revision 2 мигратор полностью удалён из репозитория; приведённые пути и команды больше не действуют. Актуальное состояние: [ACS-4.0-CLEANUP](ACS_4_0_CLEANUP.md).
+
 Исходная main: `dc07a33014baabe1d6da8c0bccaab62e57bf7ee8` (merge PR #1008, утверждённый [план 4.1.4A](ACS_4_1_4A_ENGINE_MIGRATION_PLAN.md)). **Production миграция не выполнялась. IC-MYBB-1 остаётся BLOCKED.** Переход движков не устраняет отдельно известные hooks/locks/receipts/outbox/cache/shutdown gates.
 
 Добавлены только standalone CLI `tools/acs-engine-migration.php`, библиотека `tools/acs/EngineMigration.php`, focused fixture `tests/acs_engine_migration.php` и этот runbook. Нет ACS migrations, activate/upgrade/ACP dispatch, Gateway, MyBB Core changes или изменения runtime аддонов. Скрипт отказывает вне PHP CLI.

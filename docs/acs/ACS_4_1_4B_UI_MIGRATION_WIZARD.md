@@ -1,5 +1,7 @@
 # ACS-4.1.4B-UI — мастер подготовки в ACP
 
+> Исторический отчёт. По ACS Stage 4 Revision 2 мигратор полностью удалён из репозитория; приведённые пути и команды больше не действуют. Актуальное состояние: [ACS-4.0-CLEANUP](ACS_4_0_CLEANUP.md).
+
 Исходная main: `4857df384e1345cd08ee66733b3f47232f1d81a3` (PR #1009 с CLI EngineMigration действительно merged). Прочитаны четыре нормативных документа ACS, [4.1.4A](ACS_4_1_4A_ENGINE_MIGRATION_PLAN.md), [4.1.4B](ACS_4_1_4B_ENGINE_MIGRATION_TOOL.md), [4.1.4](ACS_4_1_4_POST_HOOK_CONFLICTS.md). Механика не меняется. **Production ALTER не выполнялся; IC-MYBB-1 остаётся BLOCKED.**
 
 ## Результат и граница выполнения
