@@ -6,7 +6,7 @@ require_once __DIR__.'/Damage.php';
 final class AF_ACS_Effects
 {
     public const VERSION='acs-effects-1';
-    public static function instanceSpec(array $definition,array $p,array $tickDefinitions=[]):array
+    public static function instanceSpec(array $definition,array $p,array $tickDefinitions=[],?array $upkeep=null):array
     {
         if(($definition['schema']??null)!=='af_kb.arpg.mechanic.v1')self::fail('status_instance_schema_unsupported');
         $allowed=['schema','key','version','type','duration','phase','decrement','repeat_rule','max_stacks','removal_conditions','expiry_conditions','immunities','resistances','periodic_effects','formula_refs','events',
@@ -45,6 +45,7 @@ final class AF_ACS_Effects
             $declared=$definition['decrement']['event']??null;
             if(($declared!==$end&&!($duration!==null&&$declared===$originalEnd))||AF_ACS_Numeric::number($definition['decrement']['amount']??null)!=1)self::fail('status_duration_decrement_unsupported');
         }
+        if($upkeep!==null)$spec['upkeep']=$upkeep;
         self::statusSpec($spec);return $spec;
     }
     /** Exact retained effect component, never a live ability cast, text formula or implicit stack multiplier. */
@@ -73,6 +74,55 @@ final class AF_ACS_Effects
             if($result['damage_type']==='elemental'&&(!is_string($result['damage_element'])||isset($effect['element'])&&$effect['element']!==$result['damage_element']))self::fail('status_tick_element_missing');
         }return $result;
     }
+    /** Typed KB sustain costs, assigned only to an unambiguous single status component. */
+    public static function upkeepSpec(array $costs,array $mechanics=[]):?array
+    {
+        if(!$costs)return null;
+        if(!array_is_list($costs))self::fail('upkeep_cost_schema_invalid');$prepared=[];
+        foreach($costs as $cost){
+            if(!is_array($cost))self::fail('upkeep_cost_schema_invalid');self::fields($cost,['kind','resource_key','value','timing','period']);
+            if(($cost['kind']??null)!=='resource'||($cost['timing']??null)!=='sustain'||!is_array($cost['period']??null)||($cost['period']['unit']??null)!=='own_turn'||array_diff(array_keys($cost['period']),['value','unit'])||AF_ACS_Numeric::number($cost['period']['value']??null)!=1)self::fail('upkeep_cost_schema_unsupported');
+            $key=$cost['resource_key']??null;if(!is_string($key)||!preg_match('/\A[a-z][a-z0-9_.-]{0,63}\z/D',$key))self::fail('upkeep_resource_invalid');
+            $amount=self::integer($cost['value']??null);$kind=in_array($key,['hp','ap'],true)?$key:'resource';
+            $prepared[]=['kind'=>$kind,'amount'=>$amount]+($kind==='resource'?['resource'=>$key]:[]);
+        }
+        foreach(['autonomous','upkeep_hp_allow_zero'] as $field)if(array_key_exists($field,$mechanics)&&!is_bool($mechanics[$field]))self::fail('upkeep_policy_invalid');
+        $keys=$mechanics['interrupt_on_status_keys']??[];if(!is_array($keys)||!array_is_list($keys))self::fail('upkeep_policy_invalid');
+        foreach($keys as $key)if(!is_string($key)||!preg_match('/\A[a-z][a-z0-9_.-]{0,95}\z/D',$key))self::fail('upkeep_policy_invalid');
+        return ['costs'=>$prepared,'autonomous'=>$mechanics['autonomous']??false,'hp_allow_zero'=>$mechanics['upkeep_hp_allow_zero']??false,'interrupt_on_status_keys'=>$keys];
+    }
+    private static function stopSustained(array &$row,string $reason,string $cause,array &$events):void
+    {
+        $row['status']='removed';$row['stacks']=0;$row['termination']=['reason'=>$reason,'causal_event'=>$cause];self::bump($row);
+        $events[]=['type'=>'sustained_stopped','id'=>$row['id'],'reason'=>$reason,'causal_event'=>$cause];
+    }
+    /** Called after every atomic effect, before later healing can hide an incapacitation. */
+    private static function interruptSustained(array &$state,array &$events,string $cause):void
+    {
+        foreach($state['status_instances']??[] as $id=>$row){
+            if($row['status']!=='active'||!isset($row['spec']['upkeep']))continue;$policy=$row['spec']['upkeep'];$source=$row['source_entity_id'];$reason=null;
+            if(isset($state['entities'][$source])&&$state['entities'][$source]['life_state']!=='active'&&!$policy['autonomous'])$reason='source_inactive';
+            foreach($state['status_instances'] as $control)if($control['status']==='active'&&$control['target_entity_id']===$source&&in_array($control['spec']['effect_key'],$policy['interrupt_on_status_keys'],true))$reason='kb_control';
+            if($reason!==null)self::stopSustained($state['status_instances'][$id],$reason,$cause,$events);
+        }
+    }
+    /** Only Clock submits this operation, with costs read from the immutable instance. */
+    private static function upkeep(array &$state,array $op,array &$events,array &$signals):void
+    {
+        self::fields($op,['kind','id','boundary']);$id=(string)($op['id']??'');$key=$op['boundary']??null;
+        if(!is_string($key)||!preg_match('/\Aentity_turn:([1-9][0-9]{0,19}):start\z/D',$key,$m))self::fail('upkeep_boundary_invalid');self::id($m[1]);
+        $row=$state['status_instances'][$id]??null;if(!$row||!isset($row['spec']['upkeep']))self::fail('upkeep_instance_invalid');
+        if($row['status']!=='active'||($row['last_upkeep']['boundary_key']??null)===$key)return;
+        $source=$row['source_entity_id'];if(!isset($state['entities'][$source]))self::fail('upkeep_source_missing');$p=$row['spec']['upkeep'];
+        $copy=$state;$paid=[];$transitions=[];$reason=null;
+        try{self::payCosts($copy,$source,$p['costs'],$p['hp_allow_zero'],$paid,$transitions);}
+        catch(AF_ACS_FormulaError $e){if(!in_array($e->getMessage(),['effects_cost_unaffordable','effects_resource_invalid'],true))throw $e;$reason=$e->getMessage();}
+        if($reason===null){$state=$copy;$events=[...$events,...$paid];$signals=[...$signals,...$transitions];}
+        else self::stopSustained($state['status_instances'][$id],$reason,$key,$events);
+        $state['status_instances'][$id]['last_upkeep']=['boundary_key'=>$key,'paid'=>$reason===null,'reason'=>$reason,'costs'=>$p['costs']];self::bump($state['status_instances'][$id]);
+        $events[]=['type'=>'upkeep_result','id'=>$id,'source_entity_id'=>$source]+$state['status_instances'][$id]['last_upkeep'];
+        self::interruptSustained($state,$events,$key);
+    }
     public static function ordinaryActionAllowed(array $state,string $entity):bool
     {
         foreach($state['status_instances']??[] as $row)if($row['status']==='active'&&$row['target_entity_id']===$entity&&($row['spec']['mechanical_parameters']['blocks_ordinary_actions']??false)===true)return false;
@@ -81,7 +131,7 @@ final class AF_ACS_Effects
     /** Closed prepared lifecycle contract; duration is stored, never advanced here. */
     public static function statusSpec(array $spec):void
     {
-        self::fields($spec,['schema_version','effect_key','scope','category','polarity','repeat_rule','source_scope','duration','stack_max','stack_per_apply','cleansable','dispellable','mechanical_parameters','periodic','duration_event']);
+        self::fields($spec,['schema_version','effect_key','scope','category','polarity','repeat_rule','source_scope','duration','stack_max','stack_per_apply','cleansable','dispellable','mechanical_parameters','periodic','duration_event','upkeep']);
         if(($spec['schema_version']??null)!==1)self::fail('status_instance_schema_unsupported');
         foreach(['effect_key','category'] as $field)if(!is_string($spec[$field]??null)||!preg_match('/\A[a-z][a-z0-9_.-]{0,95}\z/D',$spec[$field]))self::fail('status_instance_key_invalid');
         if(!in_array($spec['scope']??null,['combat','session','persistent'],true)||!in_array($spec['polarity']??null,['negative','positive'],true)
@@ -95,11 +145,18 @@ final class AF_ACS_Effects
         if(array_key_exists('blocks_ordinary_actions',$spec['mechanical_parameters'])&&!is_bool($spec['mechanical_parameters']['blocks_ordinary_actions']))self::fail('status_control_contract_invalid');
         if(($spec['mechanical_parameters']['blocks_ordinary_actions']??false)===true&&($spec['duration']['unit']!=='target_turn'||(!empty($spec['periodic'])&&($spec['duration_event']??null)!=='on_turn_end')))self::fail('status_control_timing_unsupported');
         if(isset($spec['periodic'])&&!in_array($spec['duration_event']??null,$spec['duration']['unit']==='round'?['on_round_end']:['on_turn_start','on_turn_end'],true))self::fail('status_tick_decrement_unsupported');
+        if(isset($spec['upkeep'])){
+            $u=$spec['upkeep'];if(!is_array($u))self::fail('upkeep_policy_invalid');self::fields($u,['costs','autonomous','hp_allow_zero','interrupt_on_status_keys']);
+            if(!is_array($u['costs']??null)||!array_is_list($u['costs']))self::fail('upkeep_policy_invalid');
+            foreach($u['costs'] as $c){if(!is_array($c))self::fail('upkeep_policy_invalid');self::fields($c,['kind','amount','resource']);if(!in_array($c['kind']??null,['hp','ap','resource'],true))self::fail('upkeep_policy_invalid');}
+            $raw=[];foreach($u['costs'] as $c)$raw[]=['kind'=>'resource','resource_key'=>$c['kind']==='resource'?$c['resource']:$c['kind'],'value'=>$c['amount'],'timing'=>'sustain','period'=>['value'=>1,'unit'=>'own_turn']];
+            if(!$raw||self::upkeepSpec($raw,['autonomous'=>$u['autonomous']??null,'upkeep_hp_allow_zero'=>$u['hp_allow_zero']??null,'interrupt_on_status_keys'=>$u['interrupt_on_status_keys']??null])!==$u||$spec['source_scope']!=='source')self::fail('upkeep_policy_invalid');
+        }
         if(isset($spec['periodic'])&&(!is_array($spec['periodic'])||!array_is_list($spec['periodic'])||!$spec['periodic']))self::fail('status_tick_definition_missing');
     }
     private static function statusInstance(string $id,array $row):void
     {
-        self::fields($row,['schema_version','id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','stacks','remaining_duration','duration_unit','applied_order','version','status','origin_action_index','last_tick_boundary','last_duration_boundary']);
+        self::fields($row,['schema_version','id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','stacks','remaining_duration','duration_unit','applied_order','version','status','origin_action_index','last_tick_boundary','last_duration_boundary','upkeep_priority','last_upkeep','termination']);
         if(($row['schema_version']??null)!==1||($row['id']??null)!==$id||(!preg_match('/\Anew:[1-9][0-9]*\z/D',$id)&&self::id($id)!==$id))self::fail('status_instance_identity_invalid');
         foreach(['session_id','encounter_id','source_entity_id','target_entity_id'] as $field)self::id($row[$field]??null);
         if(!is_array($row['spec']??null))self::fail('status_instance_schema_unsupported');self::statusSpec($row['spec']);
@@ -107,6 +164,12 @@ final class AF_ACS_Effects
         foreach(['last_tick_boundary','last_duration_boundary'] as $field)if(array_key_exists($field,$row)){
             if(!is_string($row[$field])||!preg_match('/\A(?:entity_turn|round):([1-9][0-9]{0,19}):(?:start|end|ap_refresh|next)\z/D',$row[$field],$match))self::fail('status_boundary_invalid');self::id($match[1]);
         }
+        if(isset($row['upkeep_priority']))AF_ACS_Numeric::integer($row['upkeep_priority'],1,2147483647);
+        if(isset($row['last_upkeep'])){
+            $u=$row['last_upkeep'];if(!is_array($u))self::fail('upkeep_result_invalid');self::fields($u,['boundary_key','paid','reason','costs']);
+            if(!is_bool($u['paid']??null)||!preg_match('/\Aentity_turn:[1-9][0-9]{0,19}:start\z/D',$u['boundary_key']??'')||($u['costs']??null)!==($row['spec']['upkeep']['costs']??null)||!in_array($u['reason']??null,[null,'effects_cost_unaffordable','effects_resource_invalid'],true)||$u['paid']!==($u['reason']===null))self::fail('upkeep_result_invalid');
+        }
+        if(isset($row['termination'])){self::fields($row['termination'],['reason','causal_event']);if($row['status']!=='removed'||!in_array($row['termination']['reason']??null,['source_inactive','kb_control','effects_cost_unaffordable','effects_resource_invalid'],true)||!is_string($row['termination']['causal_event']??null))self::fail('upkeep_result_invalid');}
         self::ref($row['status_definition_ref']??null);$ref=$row['effect_definition_ref']??null;
         if(!is_array($ref)||!in_array($ref['type']??null,['arpg_ability','arpg_item','arpg_bestiary'],true))self::fail('status_definition_missing');
         self::fields($ref,['type','key','version','fingerprint','effect_index']);self::ref(array_intersect_key($ref,array_flip(['key','version','fingerprint'])));
@@ -348,20 +411,9 @@ final class AF_ACS_Effects
         }
         if($budget!==$sum||($d['allocation_sum']??null)!==$sum)self::fail('effects_allocation_invalid');return $d;
     }
-    /** Costs first, then effects in the retained action/target/component order. Failure returns no state. */
-    public static function simulate(array $state,array $action): AF_ACS_EffectsResult
+    private static function payCosts(array &$v,?string $actor,array $costs,bool $sacrifice,array &$events,array &$signals):void
     {
-        $v=self::state($state);$dependencies=$v;$events=[];$signals=[];
-        self::fields($action,['actor_id','costs','hp_cost_policy','effects']);
-        foreach(['costs','effects'] as $field)if(!is_array($action[$field]??null)||!array_is_list($action[$field]))self::fail('effects_action_invalid');
-        $actor=isset($action['actor_id'])?self::id($action['actor_id']):null;
-        if(($actor!==null&&(!isset($v['entities'][$actor])||$v['entities'][$actor]['life_state']!=='active'))||($action['costs']&&$actor===null))self::fail('effects_actor_unavailable');
-        $sacrifice=false;
-        if(array_key_exists('hp_cost_policy',$action)){
-            $p=$action['hp_cost_policy'];if(!is_array($p)||!is_bool($p['allow_zero']??null))self::fail('effects_cost_policy_invalid');
-            self::fields($p,['allow_zero','source_ref']);self::ref($p['source_ref']??null);$sacrifice=$p['allow_zero'];
-        }
-        foreach($action['costs'] as $cost){
+        foreach($costs as $cost){
             if(!is_array($cost))self::fail('effects_cost_invalid');self::fields($cost,['kind','resource','amount']);$amount=self::integer($cost['amount']??null);
             $e=&$v['entities'][$actor];$kind=$cost['kind']??null;
             if($kind==='hp'){
@@ -377,9 +429,27 @@ final class AF_ACS_Effects
             } else self::fail('effects_cost_invalid');
             $events[]=['type'=>'cost_paid','entity_id'=>$actor,'kind'=>$kind,'resource'=>$cost['resource']??null,'amount'=>$amount,'is_damage'=>false];unset($e);
         }
+    }
+    /** Costs first, then effects in the retained action/target/component order. Failure returns no state. */
+    public static function simulate(array $state,array $action): AF_ACS_EffectsResult
+    {
+        $v=self::state($state);$dependencies=$v;$events=[];$signals=[];
+        self::interruptSustained($v,$events,'state_check');
+        self::fields($action,['actor_id','costs','hp_cost_policy','effects']);
+        foreach(['costs','effects'] as $field)if(!is_array($action[$field]??null)||!array_is_list($action[$field]))self::fail('effects_action_invalid');
+        $actor=isset($action['actor_id'])?self::id($action['actor_id']):null;
+        if(($actor!==null&&(!isset($v['entities'][$actor])||$v['entities'][$actor]['life_state']!=='active'))||($action['costs']&&$actor===null))self::fail('effects_actor_unavailable');
+        $sacrifice=false;
+        if(array_key_exists('hp_cost_policy',$action)){
+            $p=$action['hp_cost_policy'];if(!is_array($p)||!is_bool($p['allow_zero']??null))self::fail('effects_cost_policy_invalid');
+            self::fields($p,['allow_zero','source_ref']);self::ref($p['source_ref']??null);$sacrifice=$p['allow_zero'];
+        }
+        self::payCosts($v,$actor,$action['costs'],$sacrifice,$events,$signals);
+        self::interruptSustained($v,$events,'action_cost');
         foreach($action['effects'] as $op){
             if(!is_array($op)||!is_string($op['kind']??null))self::fail('effects_operation_invalid');$kind=$op['kind'];
-            if(in_array($kind,['status_apply','status_remove','status_combat_end','status_duration_boundary'],true)){
+            if($kind==='status_upkeep'){self::upkeep($v,$op,$events,$signals);}
+            elseif(in_array($kind,['status_apply','status_remove','status_combat_end','status_duration_boundary'],true)){
                 self::statusOperation($v,$op,$events);
             }elseif($kind==='damage'){
                 self::fields($op,['kind','targets']);if(!is_array($op['targets']??null)||!array_is_list($op['targets']))self::fail('effects_operation_invalid');$seen=[];
@@ -427,6 +497,7 @@ final class AF_ACS_Effects
                 $room=$p['maximum_strength']-$p['strength'];$amount=array_key_exists('amount',$op)?self::integer($op['amount']):$room;$restore=min($amount,$room);$p['strength']+=$restore;if($restore)self::bump($p);unset($p);
                 $events[]=['type'=>'barrier_restored','pool_id'=>$id,'restored'=>$restore,'excess'=>$amount-$restore];
             } else self::fail('effects_operation_unsupported');
+            self::interruptSustained($v,$events,'effect:'.$kind);
         }
         $v=self::state($v);
         return new AF_ACS_EffectsResult($v,['engine_version'=>self::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'events'=>$events,'signals'=>$signals,

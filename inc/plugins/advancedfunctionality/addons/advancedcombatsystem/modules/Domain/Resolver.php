@@ -131,7 +131,7 @@ final class AF_ACS_Resolver
         if($mode==='preview'&&$fixedRandomTape!==[])self::fail('preview_random_tape_forbidden');
         if($mode==='seal'&&(!array_is_list($fixedRandomTape)||count($fixedRandomTape)!==count($orderedActions)||!$fixedRandomTape))self::fail('resolver_tape_invalid');
         if(($context['schema_version']??null)!==1||($context['encounter_status']??null)!=='active'||!array_is_list($orderedActions)||!$orderedActions)self::fail('resolver_context_invalid');
-        $state=AF_ACS_Effects::simulate($context['state'],['costs'=>[],'effects'=>[]])->serverState();$initial=$state;$plans=[];
+        $checked=AF_ACS_Effects::simulate($context['state'],['costs'=>[],'effects'=>[]]);$state=$checked->serverState();$initial=$checked->serverDependencies();$initialTrace=$checked->serverTrace();$plans=[];
         foreach($orderedActions as $i=>$action){
             if(!is_array($action)||array_diff(array_keys($action),['actor_id','ability_key','targets','scenario']))self::fail('resolver_action_invalid');
             $actor=(string)($action['actor_id']??'');$key=$action['ability_key']??null;$targets=$action['targets']??null;$scenario=$action['scenario']??null;
@@ -220,7 +220,7 @@ final class AF_ACS_Resolver
             }
         }
         $plan=['engine_version'=>self::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'mode'=>$mode,'conditional'=>$mode==='preview','actions'=>$plans,
-            'end_condition_check_required'=>true,'encounter_transition'=>null,'persistent'=>false]+($endTraces?['entity_end_boundaries'=>$endTraces]:[]);
+            'end_condition_check_required'=>true,'encounter_transition'=>null,'persistent'=>false]+($endTraces?['entity_end_boundaries'=>$endTraces]:[])+($initialTrace['events']?['initial_effects_trace'=>$initialTrace]:[]);
         try{$copy=json_decode(json_encode($plan,JSON_THROW_ON_ERROR|JSON_PRESERVE_ZERO_FRACTION),true,64,JSON_THROW_ON_ERROR);}catch(JsonException $e){self::fail('resolver_trace_invalid');}
         if($copy!==$plan)self::fail('ACS_NUMERIC_SERIALIZATION_PRECISION');
         return new AF_ACS_ResolverResult($state,$copy,$initial);

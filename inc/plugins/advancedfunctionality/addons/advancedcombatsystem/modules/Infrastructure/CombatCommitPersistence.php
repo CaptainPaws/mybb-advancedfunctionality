@@ -103,10 +103,13 @@ trait AF_ACS_CombatCommitPersistence
         foreach ($f['resources'] as $r) { $resources[(string)$r['entity_id']][$r['resource_key']]=$r; }
         foreach ($after['entities'] as $id=>$value) {
             $id=(string)$id;$old=$before['entities'][$id];$s=$states[$id];$resource=$resources[$id]['hp']??null;
-            if ($old['resources']!==[] || $value['resources']!==[] || $value['recovery_blocked'] || !$resource
-                || count($resources[$id])!==1 || (string)$resource['is_integer']!=='1'
+            if ($old['resources']!==$value['resources'] || $value['recovery_blocked'] || !$resource
+                || count($resources[$id])!==count($old['resources'])+1 || (string)$resource['is_integer']!=='1'
                 || (float)$resource['current_value']!==(float)$old['hp'] || (float)$resource['maximum_value']!==(float)$old['max_hp']) {
                 throw new RuntimeException('ACS_COMBAT_RESOURCE_WRITER_UNSUPPORTED');
+            }
+            foreach($old['resources'] as $key=>$balance){$stored=$resources[$id][$key]??null;
+                if(!$stored||(string)$stored['is_integer']!=='1'||(string)$stored['current_value']!==(string)$balance['current']||(string)$stored['maximum_value']!==(string)$balance['maximum'])throw new RuntimeException('ACS_COMBAT_RESOURCE_WRITER_UNSUPPORTED');
             }
             if ($value===$old) { continue; }
             self::integer((string)$resource['resource_version'],'18446744073709551614');

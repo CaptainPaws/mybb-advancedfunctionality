@@ -10,7 +10,7 @@ enum AF_ACS_TurnState: string
     case Forfeited='forfeited';
 }
 
-/** Pure Clock identities and virtual boundary evaluation. No SQL, polling or upkeep. */
+/** Pure Clock identities and virtual boundary evaluation. No SQL or polling. */
 final class AF_ACS_Clock
 {
     public const VERSION='acs-clock-1';
@@ -24,8 +24,8 @@ final class AF_ACS_Clock
     public static function roundEnd(string $roundId):string{return 'round:'.self::id($roundId).':next';}
     public static function hasStartWork(array $instances,string $entity,string $sid,string $eid):bool
     {
-        foreach($instances as $row)if($row['status']==='active'&&$row['session_id']===$sid&&!empty($row['spec']['periodic'])&&($row['spec']['scope']!=='combat'||$row['encounter_id']===$eid)
-            &&$row['duration_unit']!=='round'&&($row['duration_unit']==='own_turn'?$row['source_entity_id']:$row['target_entity_id'])===$entity)return true;
+        foreach($instances as $row)if($row['status']==='active'&&$row['session_id']===$sid&&(!empty($row['spec']['periodic'])||isset($row['spec']['upkeep']))&&($row['spec']['scope']!=='combat'||$row['encounter_id']===$eid)
+            &&((isset($row['spec']['upkeep'])&&$row['source_entity_id']===$entity)||($row['duration_unit']!=='round'&&($row['duration_unit']==='own_turn'?$row['source_entity_id']:$row['target_entity_id'])===$entity)))return true;
         return false;
     }
     /** Same boundary vocabulary; pure status/Damage/Effects pipeline, no RNG or scheduler. */
@@ -36,7 +36,7 @@ final class AF_ACS_Clock
         $key=match($phase){'entity_start'=>self::entityStart($boundary['id']),'entity_end'=>self::entityEnd($boundary['id']),
             'round_start'=>self::apRefresh($boundary['id']),'round_end'=>self::roundEnd($boundary['id']),default=>throw new RuntimeException('ACS_STATUS_BOUNDARY_INVALID')};
         self::id($boundary['session_id']);self::id($boundary['encounter_id']);
-        $initial=AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>[]])->serverState();$state=$initial;$events=[];$signals=[];$tickKeys=[];
+        $initial=$state;$checked=AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>[]]);$state=$checked->serverState();$events=$checked->serverTrace()['events'];$signals=$checked->serverTrace()['signals'];$tickKeys=[];
         $queue=array_keys($state['status_instances']??[]);
         usort($queue,static fn($a,$b)=>$state['status_instances'][$a]['applied_order']<=>$state['status_instances'][$b]['applied_order']?:strlen((string)$a)<=>strlen((string)$b)?:strcmp((string)$a,(string)$b));
         foreach($queue as $id){$row=$state['status_instances'][$id];
@@ -67,6 +67,17 @@ final class AF_ACS_Clock
             }
             $r=AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>[['kind'=>'status_duration_boundary','id'=>(string)$id,'boundary'=>$key,'tick'=>$doTick,'decrement'=>$decrement]]]);
             $state=$r->serverState();$events[]=['effect_id'=>(string)$id,'ticks'=>$steps,'duration'=>$r->serverTrace()['events']];
+        }
+        // Mandatory ticks and their immediate state transitions are complete before upkeep.
+        if($phase==='entity_start'){
+            $queue=array_keys($state['status_instances']??[]);
+            usort($queue,static fn($a,$b)=>($state['status_instances'][$a]['upkeep_priority']??PHP_INT_MAX)<=>($state['status_instances'][$b]['upkeep_priority']??PHP_INT_MAX)
+                ?:$state['status_instances'][$a]['applied_order']<=>$state['status_instances'][$b]['applied_order']?:strlen((string)$a)<=>strlen((string)$b)?:strcmp((string)$a,(string)$b));
+            foreach($queue as $id){$row=$state['status_instances'][$id];
+                if($row['status']!=='active'||!isset($row['spec']['upkeep'])||$row['source_entity_id']!==($boundary['entity_id']??null)||$row['session_id']!==$boundary['session_id']||($row['spec']['scope']==='combat'&&$row['encounter_id']!==$boundary['encounter_id']))continue;
+                $r=AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>[['kind'=>'status_upkeep','id'=>(string)$id,'boundary'=>$key]]]);$state=$r->serverState();
+                $events=[...$events,...$r->serverTrace()['events']];$signals=[...$signals,...$r->serverTrace()['signals']];
+            }
         }
         return new AF_ACS_EffectsResult($state,['engine_version'=>self::VERSION,'boundary_key'=>$key,'events'=>$events,'signals'=>$signals,'tick_keys'=>$tickKeys,'persistent'=>false],$initial);
     }

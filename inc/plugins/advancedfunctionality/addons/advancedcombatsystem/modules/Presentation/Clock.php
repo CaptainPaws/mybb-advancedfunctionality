@@ -29,6 +29,29 @@ final class AF_ACS_ClockPage
         echo '<h3>Кулдауны</h3><ul>';
         foreach($data['cooldowns'] as $row)echo '<li>'.self::esc($row['name']).' · '.self::esc($row['ability_key']).': '.self::esc($row['remaining_turns']).' ходов · '.($row['scope']==='session'?'сессионный':'боевой').(!empty($row['ready'])?'':' · источник не подтверждён, обработка заблокирована').'</li>';
         echo '</ul><p>Кулдаун появляется только после подтверждённого действия. На этом этапе кнопки создания кулдауна или исполнения способности нет.</p>';
+        self::sustained($view,$url,$clock);
+    }
+    public static function sustained(array $view,string $url,AF_ACS_ClockService $clock):void
+    {
+        $data=$clock->sustained($view['session']['id'],$view['encounter']['id']);echo '<h3>Поддерживаемые эффекты</h3><p>Оплата в начале хода источника после обязательных тиков. Без выбора — FIFO.</p>';
+        foreach($data['sources'] as $source){echo '<h4>Источник #'.self::esc($source['source_entity_id']).'</h4><ol>';$ids=[];
+            foreach($source['effects'] as $e){if($e['status']==='active')$ids[]=$e['id'];
+                $costs=[];foreach($e['costs'] as $c)$costs[]=$c['amount'].' '.($c['resource']??strtoupper($c['kind']));
+                echo '<li>#'.self::esc($e['id']).' '.self::esc($e['effect_key']).' · '.self::esc(implode(', ',$costs)).' · '.($e['priority']===null?'FIFO':'приоритет '.self::esc($e['priority'])).' · '.self::esc(self::payment($e)).'</li>';
+            }echo '</ol>';
+            if($ids&&($source['turn']['editable']??false)){
+                if($source['turn']['applies_next'])echo '<p>Начало уже обработано. Новый порядок применяется со следующего начала хода источника.</p>';
+                self::form($url,'upkeep_order',$view,['entity_turn_id'=>$source['turn']['id']]);
+                echo '<label>Порядок ID активных эффектов через запятую <input name="effect_order" value="'.self::esc(implode(',',$ids)).'" maxlength="2800" required></label><button>Сохранить порядок поддержания</button></form>';
+            }
+        }
+    }
+    private static function payment(array $e):string
+    {
+        if($e['termination_reason']!==null)return 'Прекращён: '.match($e['termination_reason']){'source_inactive'=>'источник выведен из строя','kb_control'=>'условие контроля KB',default=>'недостаточно допустимых ресурсов'};
+        if($e['status']!=='active')return 'Завершён';
+        if($e['last_payment']===null)return 'Оплата ещё не выполнялась';
+        return $e['last_payment']['paid']?'Последняя оплата выполнена':'Последняя оплата отклонена';
     }
     public static function rest(array $view,string $url,AF_ACS_ClockService $clock): void
     {

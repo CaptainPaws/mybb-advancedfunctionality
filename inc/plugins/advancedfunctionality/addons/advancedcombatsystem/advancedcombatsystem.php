@@ -176,8 +176,9 @@ function af_advancedcombatsystem_xmlhttp(): void
         }
         elseif(str_starts_with($op,'clock_')) {
             $clock=af_advancedcombatsystem_encounters()->clock();$sid=$mybb->get_input('session_id');
-            $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','round_id','entity_turn_id','control_group_id','confirm_full'] as $f)$input[$f]=$mybb->get_input($f);
+            $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','round_id','entity_turn_id','control_group_id','confirm_full','effect_order'] as $f)$input[$f]=$mybb->get_input($f);
             $data=match($op) {
+                'clock_sustained'=>$clock->sustained($sid,$mybb->get_input('encounter_id')),
                 'clock_overview'=>$clock->overview($sid),
                 'clock_ap_available'=>$clock->available($sid,$mybb->get_input('turn_id'),$mybb->get_input('entity_id'),(int)AF_ACS_Repository::integer($mybb->get_input('cost')?:'0','2147483647',true)),
                 default=>$clock->command(substr($op,6),$input),

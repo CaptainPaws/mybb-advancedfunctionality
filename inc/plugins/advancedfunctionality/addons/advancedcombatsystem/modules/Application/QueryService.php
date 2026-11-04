@@ -32,10 +32,8 @@ final class AF_ACS_QueryService
         foreach($immunities as $scope)if(!is_array($scope)||count($scope)!==2||array_diff(array_keys($scope),['scope','key'])
             ||!in_array($scope['scope']??null,['status_key','status_type'],true)||!is_string($scope['key']??null)||$scope['key']==='')self::fail('status_immunity_scope_unsupported');
         foreach(['weaknesses','passive_effects','triggers','reflection','lifesteal','math_modifiers'] as $field)if(!empty($rules[$field]))self::fail('preview_effect_contract_unavailable');
-        foreach($this->repo->entityResources($id) as $resource){
-            if($resource['resource_key']!=='hp'||(string)$resource['current_value']!==(string)$e['hp']||(string)$resource['maximum_value']!==(string)$e['hp_max'])self::fail('preview_resource_contract_unavailable');
-        }
-        return ['row'=>$e,'registration'=>$p,'source'=>$s];
+        $resources=$this->repo->statusResources($id,$e);
+        return ['row'=>$e,'registration'=>$p,'source'=>$s,'resources'=>$resources];
     }
     public function select(string $sid,string $eid):array
     {
@@ -74,6 +72,7 @@ final class AF_ACS_QueryService
                 $versions[$id===$actor?'actor_group_version':'target_group_version']=(string)$group['group_version'];
                 $groups[$turn['control_group_id']]=['ap'=>['current'=>$available,'maximum'=>self::int($turn['ap_budget'])],'version'=>self::int($turn['turn_version'])];
                 foreach(['entity_version','state_version','content_hash'] as $f)$versions[$id===$actor?'actor_'.$f:'target_'.$f]=$source['row'][$f];
+                $versions[$id===$actor?'actor_resources_hash':'target_resources_hash']=$source['resources']['fingerprint'];
                 $versions[$id===$actor?'actor_turn_version':'target_turn_version']=$turn['turn_version'];
                 $versions[$id===$actor?'actor_entity_turn_version':'target_entity_turn_version']=$individual['entity_turn_version'];
             }
@@ -93,7 +92,7 @@ final class AF_ACS_QueryService
             foreach(['accuracy','speed','crit_rate','crit_dmg','def'] as $name)AF_ACS_Numeric::number($stat[$name]??null);$stats[$id]=$stat;
             $statusImmunities[$id]=$s['data']['definition']['immunities']??[];
             $ref=['key'=>'entity-'.$id,'version'=>'registration-1','fingerprint'=>'sha256:'.$row['content_hash']];
-            $state['entities'][$id]=['hp'=>self::int($row['hp']),'max_hp'=>self::int($row['hp_max']),'life_state'=>$row['life_state'],'recovery_blocked'=>false,'group_id'=>$row['control_group_id'],'resources'=>[],'source_ref'=>$ref,'version'=>self::int($row['state_version'])];
+            $state['entities'][$id]=['hp'=>self::int($row['hp']),'max_hp'=>self::int($row['hp_max']),'life_state'=>$row['life_state'],'recovery_blocked'=>false,'group_id'=>$row['control_group_id'],'resources'=>$source['resources']['values'],'source_ref'=>$ref,'version'=>self::int($row['state_version'])];
             $res=[];foreach($s['resistances']??[] as $key=>$r)$res[$key]=['scope'=>'elemental','unit'=>'RES','value'=>$r['value']];
             $defenses[$id]=['def'=>$stat['def'],'resistances'=>$res,'immunities'=>[],'vulnerabilities'=>[]];
             if(($s['element_registry_version']??null)==='primary-elements-17-v1'||($s['capabilities']['canonical_elements_17']['readiness']??null)==='READY')$catalog=AF_ACS_Damage::retainedCatalog($row['payload_json'],$row['content_hash']);
@@ -178,7 +177,7 @@ final class AF_ACS_QueryService
         if(array_diff(array_keys($d),$fields))self::fail('preview_ability_contract_unavailable');
         if(!empty($d['target_count'])&&$d['target_count']!==['min'=>1,'max'=>1])self::fail('preview_ability_unsupported');
         if(($d['type']??'active')!=='active'||($d['targeting']??null)!=='single_enemy')self::fail('preview_ability_unsupported');
-        foreach(['resources','costs','timing','usage_limits','application_conditions','summon','math_modifiers','modifiers','base_stats','conditions','stacking','grants','immunities','upgrade_requirements','application_mode','damage_value','heal_value','shield_value','formula_refs','formula_ref','triggers','passive_effects','reflection','lifesteal'] as $f)if(!empty($d[$f]))self::fail('preview_ability_contract_unavailable');
+        foreach(['resources','timing','usage_limits','application_conditions','summon','math_modifiers','modifiers','base_stats','conditions','stacking','grants','immunities','upgrade_requirements','application_mode','damage_value','heal_value','shield_value','formula_refs','formula_ref','triggers','passive_effects','reflection','lifesteal'] as $f)if(!empty($d[$f]))self::fail('preview_ability_contract_unavailable');
         foreach(['range','cast_time','cooldown','cooldown_value','max_charges','duration','duration_value','cost_value'] as $f)if(!empty($d[$f]))self::fail('preview_ability_contract_unavailable');
         $cost=$d['action_cost']??1;if(!is_int($cost)||$cost<1)self::fail('preview_action_cost_unsupported');
         $parts=[];$statuses=[];$removals=[];foreach($dto['data']['ability_profile']['effects']??[] as $effect){$p=$effect['parameters'];
@@ -219,6 +218,7 @@ final class AF_ACS_QueryService
             if($type==='elemental'){$explicit=$effect['parameters']['damage_element']??null;if(!is_string($explicit)||!is_string($element))self::fail('damage_element_missing');}
             $parts[]=['source_index'=>$effect['source_index'],'kb_effect_index'=>$effect['source_index'],'damage_type'=>$type,'damage_element'=>$type==='elemental'?$element:null]+$value;
         }
+        if(!empty($d['costs'])&&!$statuses)self::fail('upkeep_status_binding_missing');
         if(!$parts&&!$statuses&&!$removals)self::fail('preview_damage_value_missing');
         if(!is_string($dto['definition_version']['declared_version']??null))self::fail('preview_source_version_unavailable');
         return ['supported'=>true,'source_ref'=>['key'=>$dto['source']['key'],'version'=>$dto['definition_version']['declared_version'],'fingerprint'=>$dto['definition_version']['fingerprint']],

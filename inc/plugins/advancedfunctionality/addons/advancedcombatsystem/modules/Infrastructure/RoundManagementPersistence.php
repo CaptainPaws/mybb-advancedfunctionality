@@ -123,6 +123,7 @@ trait AF_ACS_RoundManagementPersistence
             $this->processEntityEnd($session,$encounter,$row,$actor);
             $boundaries[]=['entity_turn_id'=>$row['id'],'start'=>$start,'end'=>$end];
         }
+        $turn=$this->clockTurn($session['id'],$turn['id']); // start upkeep may spend shared AP and advance its CAS version
         self::integer($turn['turn_version'],'18446744073709551614');
         if($this->sql('UPDATE '.$this->table('turns').' SET status=?,deadline_at=NULL,remaining_deadline_seconds=NULL,turn_version=turn_version+1 WHERE id=? AND turn_version=? AND status=?',[$state,$turn['id'],$turn['turn_version'],'pending'])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
         $key='turn:'.$turn['id'].':closed';$session=$this->change($session,$encounter,'round_management',[]);
