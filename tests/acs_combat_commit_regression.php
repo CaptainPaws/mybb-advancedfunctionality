@@ -58,6 +58,7 @@ $GLOBALS['acsPublicationFixture']=static function(array $fixture):void {
         return $store->confirmPost($id,$r['state_version'],'501',static function(){},'1');
     };
     $unchanged=static function(array $before,string $label)use($capture):void { snapshot_assert($capture()===$before,'Partial combat mutation: '.$label); };
+    if (isset($GLOBALS['acsPresentationFixture'])) { ($GLOBALS['acsPresentationFixture'])(get_defined_vars());return; }
     if (isset($GLOBALS['acsRecoveryFixture'])) { ($GLOBALS['acsRecoveryFixture'])(get_defined_vars());return; }
     // Failure late enough to include HP/AP, clocks, event/result/link/COMMITTED/receipt writes.
     $r=$intent();$mybb->input['af_aa_mask']='fixture-cosmetic-only';$before=$capture();

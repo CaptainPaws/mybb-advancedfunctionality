@@ -18,7 +18,7 @@ return [
         'mode' => 'contextual',
         'routes' => [],
         'response_rules' => [],
-        'resources' => ['publication'=>['mode'=>'contextual','routes'=>[],'response_rules'=>[['has_acs_publication'=>true]],'directory_fallback'=>false],'builder'=>['mode'=>'contextual','routes'=>[],'response_rules'=>[['has_acs_builder'=>true]],'directory_fallback'=>false]],
+        'resources' => ['presentation'=>['mode'=>'contextual','routes'=>[],'response_rules'=>[['has_acs_card'=>true],['has_acs_recovery'=>true]],'directory_fallback'=>false],'publication'=>['mode'=>'contextual','routes'=>[],'response_rules'=>[['has_acs_publication'=>true]],'directory_fallback'=>false],'builder'=>['mode'=>'contextual','routes'=>[],'response_rules'=>[['has_acs_builder'=>true]],'directory_fallback'=>false]],
         'directory_fallback' => false,
     ],
     'lang' => [

@@ -2,9 +2,9 @@
 
 > Последующая поставка ACS-4.1-R2 добавила bounded MyBB Post Gateway и fixtures; текущие возможности и ограничения описаны в [отчёте Gateway](ACS_4_1_R2_GATEWAY_IMPLEMENTATION.md). Карта ниже фиксирует исходную поставку 4.0-R2 и не является заявлением installed READY.
 
-## Текущая карта Stage 4 R2 после ACS-4.4.1-R2
+## Текущая карта Stage 4 R2 после ACS-4.4.2-R2
 
-База задачи 5: main `8c3e1d91` (PR #1018). [Отчёт Editor publication](ACS_4_4_1_R2_EDITOR_PUBLICATION.md) фиксирует тестовый frontend/native binding и remaining installed blockers. [Отчёт lifecycle](ACS_4_3_4_R2_POST_LIFECYCLE.md) фиксирует native observers, author approval и installed blockers. [Отчёт RecoveryService](ACS_4_3_3_R2_RECOVERY_SERVICE.md) фиксирует safe recovery и оставшиеся identity blockers. [Отчёт PublishService](ACS_4_3_2_R2_PUBLISH_SERVICE.md) и [отчёт writer](ACS_4_3_1B_R2_COMBAT_WRITER.md) отличают backend fixtures от installed приёмки.
+База задачи 6: main `80b37615` (PR #1019). [Отчёт карточки и GM UI](ACS_4_4_2_R2_RESULT_GM_UI.md) фиксирует bounded presentation и оставшуюся installed-приёмку. [Отчёт Editor publication](ACS_4_4_1_R2_EDITOR_PUBLICATION.md) фиксирует тестовый frontend/native binding и remaining installed blockers. [Отчёт lifecycle](ACS_4_3_4_R2_POST_LIFECYCLE.md) фиксирует native observers, author approval и installed blockers. [Отчёт RecoveryService](ACS_4_3_3_R2_RECOVERY_SERVICE.md) фиксирует safe recovery и оставшиеся identity blockers. [Отчёт PublishService](ACS_4_3_2_R2_PUBLISH_SERVICE.md) и [отчёт writer](ACS_4_3_1B_R2_COMBAT_WRITER.md) отличают backend fixtures от installed приёмки.
 
 | Компонент | Фактический прогресс / остаток |
 |---|---|
@@ -13,13 +13,13 @@
 | Submission journal / 4.3.1 | Durable CAS/claims/audit/freeze/quarantine есть; COMMITTING/COMMITTED теперь пишет transactional writer; recovery известных исходов/GM audit добавлены; binding неизвестного pid BLOCKED |
 | Combat writer / **задача 1, 4.3.1B-R2** | Реализован: migration 009, HP/AP и текущий HP-resource scope, state/clock closure/events/results/post_link/terminal receipt/outbox в одной tx. Rollback/replay/concurrency fixtures пройдены. Подготовительные controller grants=false не обходятся. Неподдержанные эффекты/resources остаются заблокированы |
 | PublishService / задача 2 | Серверный coordinator реализован: issuance/reuse через существующий журнал, fresh sealed-plan prevalidation, один Gateway lifecycle вне ACS tx, writer/receipt, safe rejection и quarantine. Проверен bounded upstream fixture; тестовый HTTP/native entry binding добавлен задачей 5; installed acceptance BLOCKED |
-| RecoveryService / задача 3 | Реализованы status/receipt/recover и GM CAS/audit команды known-pid resume, доказанный unsent reject и hold. Неизвестный pid/legacy identity evidence остаются BLOCKED без привязки по эвристике. Fixtures пройдены; native observers добавлены задачей 4, frontend/installed acceptance ещё отсутствуют |
+| RecoveryService / задача 3 | Реализованы status/receipt/recover и GM CAS/audit команды known-pid resume, доказанный unsent reject и hold. Неизвестный pid/legacy identity evidence остаются BLOCKED без привязки по эвристике. Fixtures пройдены; native observers добавлены задачей 4, GM frontend добавлен задачей 6; installed acceptance отсутствует |
 | Moderation/lifecycle / задача 4 | Реализованы source-gated native observers, author-driven approval revalidation через Publish/Recovery и SQL-only status query. Pending не расходует HP/AP, изменения после COMMITTED только наблюдаются. Bounded upstream fixtures пройдены; installed hooks/полные move/merge routes/активные аддоны BLOCKED |
 | AdvancedEditor / задача 5 | Реализованы test-only native form/Quick Reply UI, server issue/reuse, global_start/end binding, summary/status/retry, сохранение prose/seals и отказ вложений. PHP/browser fixtures пройдены; publication_enabled=false, installed AE/theme/addon acceptance BLOCKED |
-| Postbit/GM UI / задача 6 | **Не начата**; read-only status API есть, карточка и GM интерфейс не подключены |
+| Postbit/GM UI / задача 6 | Реализованы batched SQL-only карточки через ATF post.before_body и компактная GM очередь/форма через RecoveryService; CSRF/CAS/audit. GM-only detailed scope, неизвестный PID не связывается. Installed theme/APUI acceptance BLOCKED |
 | Outbox consumers / installed 4.5 / задача 7 | Есть только pending storage, потребители не запускаются. Installed MySQL/MyBB/manual acceptance BLOCKED; локальная MariaDB её не заменяет |
 
-После PR задачи 5 автоматического перехода к задаче 6 нет. Карта ниже сохранена как история исходной поставки 4.0-R2.
+После PR задачи 6 автоматического перехода к задаче 7 нет. Карта ниже сохранена как история исходной поставки 4.0-R2.
 
 ## Основание и область доказательств
 

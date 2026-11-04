@@ -100,6 +100,14 @@ final class AF_ACS_RecoveryService
         return $this->inspect($id);
     }
 
+    /** GM-only quarantine command for a stuck phase; intentionally never calls recover()/commit(). */
+    public function requestReview(string $id,string $expectedStateVersion,string $reason): array
+    {
+        $this->access->csrf();$this->context($id,true);
+        $this->store->requestRecoveryReview($id,$expectedStateVersion,$reason);
+        return $this->inspect($id);
+    }
+
     /** Manual CAS decision, with persisted owner/GM checks repeated under the journal lock. */
     public function resolve(string $id, string $expectedStateVersion, string $strategy, string $reason): array
     {

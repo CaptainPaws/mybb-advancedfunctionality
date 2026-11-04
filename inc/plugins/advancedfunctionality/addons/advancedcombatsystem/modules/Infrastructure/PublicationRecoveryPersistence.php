@@ -61,6 +61,16 @@ trait AF_ACS_PublicationRecoveryPersistence
         },$actor);
     }
 
+    /** Explicit GM review request; no writer commit or native publication is reachable here. */
+    public function requestRecoveryReview(string $id,string $version,string $reason): array
+    {
+        if (trim($reason)==='' || strlen($reason)>1024) { throw new InvalidArgumentException('ACS_RECOVERY_COMMAND_INVALID'); }
+        $actor=self::integer((string)(int)($GLOBALS['mybb']->user['uid']??0));
+        return $this->change($id,$version,function($r){$this->recoveryActor($r,true,true);},static function($r)use($reason){
+            return ['recovery_required','gm_recovery_quarantine',['schema_version'=>1,'manual'=>true,'strategy'=>'quarantine','reason'=>$reason,'last_known_phase'=>$r['last_phase']],null];
+        },$actor);
+    }
+
     /** A manual command never accepts a replacement pid or changes sealed state. */
     public function resolveRecovery(string $id, string $version, string $strategy, string $reason): array
     {
