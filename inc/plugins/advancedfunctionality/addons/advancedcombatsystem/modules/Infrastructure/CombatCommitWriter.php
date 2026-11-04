@@ -4,13 +4,14 @@ require_once __DIR__.'/SubmissionStore.php';
 require_once __DIR__.'/CombatCommitPersistence.php';
 require_once __DIR__.'/StatusPersistence.php';
 require_once __DIR__.'/ReactionPersistence.php';
+require_once __DIR__.'/BarrierPersistence.php';
 require_once __DIR__.'/TerminalReceiptPersistence.php';
 require_once __DIR__.'/../Application/BuilderService.php';
 
 /** The only producer of terminal, persistent Resolver results. Never calls a native post writer. */
 final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 {
-    use AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence;
+    use AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
     private AF_ACS_SubmissionStore $submissions;
     private AF_ACS_EncounterRepository $preparation;
     private AF_ACS_SessionAccess $access;
@@ -89,7 +90,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         foreach ($result->serverPlan()['actions'] as $i=>$step) {
             $steps[]=['sealed_action_id'=>$frozen['seals'][$i]['id'],'actor_id'=>$step['actor_id'],'target_id'=>$step['targets'][0],
                 'ability_key'=>$frozen['actions'][$i]['ability_key'],'outcome'=>$step['scenario'],'rolls'=>$step['rolls'],
-                'probabilities'=>$step['probabilities'],'costs'=>$step['costs'],'damage'=>$step['allocation']['integer_budget']]+(isset($step['status_evaluations'])?['status_evaluation_hash'=>hash('sha256',self::json(['schema_version'=>1,'evaluations'=>$step['status_evaluations']]))]:[]);
+                'probabilities'=>$step['probabilities'],'costs'=>$step['costs'],'damage'=>$step['allocation']['integer_budget']]+AF_ACS_Resolver::targetSummary($step)+(isset($step['status_evaluations'])?['status_evaluation_hash'=>hash('sha256',self::json(['schema_version'=>1,'evaluations'=>$step['status_evaluations']]))]:[]);
         }
         $entities=[];
         foreach ($result->serverState()['entities'] as $id=>$e) { $entities[]=['entity_id'=>(string)$id,'hp'=>$e['hp'],'max_hp'=>$e['max_hp'],'life_state'=>$e['life_state']]; }
@@ -200,8 +201,13 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         self::integer((string)$encounter['encounter_version'],'18446744073709551614');self::integer((string)$encounter['next_event_sequence'],'18446744073709551614');
         $event=$this->sql('INSERT INTO '.$this->table('events').' (session_id,session_sequence,encounter_id,event_sequence,operation_key,event_type,source_entity_id,actor_uid,submission_id,engine_version,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
             [$row['session_id'],$session['next_sequence'],$row['encounter_id'],$encounter['next_event_sequence'],$operation,'combat.resolved',$controls['summary']['actions'][0]['actor_id'],$row['author_uid'],$row['submission_id'],AF_ACS_Resolver::VERSION,$now])['id'];
+        $boundaryHistory=[];$turnIds=[];
+        foreach($f['individuals'] as $individual)if((string)$individual['turn_id']===$row['turn_id'])$turnIds[]=(string)$individual['id'];
+        foreach($f['boundaries'] as $boundary){if($boundary['status']!=='committed'||!in_array($boundary['kind'],['clock.entity_start','clock.ap_refresh'],true))continue;
+            $data=json_decode($boundary['result_json'],true,64,JSON_THROW_ON_ERROR);if(in_array($data['entity_turn_id']??null,$turnIds,true)||isset($data['round_id'])&&(string)$data['round_id']===(string)(self::indexed($f['turns'])[$row['turn_id']]['round_id']??''))$boundaryHistory[]=['boundary_key'=>$boundary['operation_key'],'result'=>$data];
+        }
         $payload=self::json(['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,
-            'persistent'=>true,'submission_id'=>$row['submission_id'],'summary'=>$controls['summary'],'plan'=>$resolved->serverPlan(),
+            'persistent'=>true,'submission_id'=>$row['submission_id'],'boundary_history'=>$boundaryHistory,'summary'=>$controls['summary'],'plan'=>$resolved->serverPlan(),
             'dependency_fence_hash'=>$controls['fence_hash'],'initial'=>$resolved->serverInitial(),'final'=>$resolved->serverState(),'changes'=>$changes]);$resultHash=hash('sha256',$payload);
         $visibility=self::json(['schema_version'=>1,'scope'=>'combat_participants']);
         $this->sql('INSERT INTO '.$this->table('event_details').' (event_id,schema_version,numeric_policy,payload_json,visibility_json,content_hash) VALUES (?,1,?,?,?,?)',

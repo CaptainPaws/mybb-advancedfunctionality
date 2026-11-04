@@ -23,7 +23,8 @@ trait AF_ACS_CombatCommitPersistence
         foreach (['participants','sides','side_relationships'] as $name) {
             $f[$name]=$this->sql('SELECT * FROM '.$this->table($name).' WHERE encounter_id=? ORDER BY id'.$suffix,[$eid])['rows'];
         }
-        $f['effects']=$this->statusRows($sid,$lock);$f['reactions']=$this->reactionRows($sid,$eid,$lock);
+        $f['effects']=$this->statusRows($sid,$lock);$f['reactions']=$this->reactionRows($sid,$eid,$lock);$f['barriers']=$this->barrierRows($sid,$eid,$lock);
+        $f['barrier_targets']=$this->sql('SELECT t.* FROM '.$this->table('barrier_targets').' t JOIN '.$this->table('barrier_pools').' p ON p.id=t.pool_id JOIN '.$this->table('effects').' e ON e.id=p.effect_id WHERE e.session_id=? AND e.encounter_id=? ORDER BY t.pool_id,t.entity_id'.$suffix,[$sid,$eid])['rows'];
         $f['reaction_rolls']=$this->sql('SELECT * FROM '.$this->table('rolls')." WHERE session_id=? AND sealed_action_id IS NULL AND check_kind='reaction' ORDER BY id".$suffix,[$sid])['rows'];
         $f['reaction_snapshots']=$this->sql('SELECT s.id,s.content_hash,SHA2(s.payload_json,256) AS actual_hash FROM '.$this->table('snapshots').' s JOIN '.$this->table('reactions').' r ON r.definition_snapshot_id=s.id WHERE s.session_id=? AND r.encounter_id=? ORDER BY s.id'.$suffix,[$sid,$eid])['rows'];
         $f['seals']=$this->sql('SELECT * FROM '.$this->table('sealed_actions').' WHERE draft_id=? ORDER BY action_index'.$suffix,[$draft])['rows'];
@@ -113,9 +114,6 @@ trait AF_ACS_CombatCommitPersistence
     private function project(array $row, array $f, array $turn, AF_ACS_ResolverResult $result,array $frozen): array
     {
         $before=$result->serverInitial();$after=$result->serverState();$changes=[];
-        if ($before['barriers']!==[] || $after['barriers']!==[] || $before['next_barrier_order']!==$after['next_barrier_order']) {
-            throw new RuntimeException('ACS_COMBAT_EFFECT_WRITER_UNSUPPORTED');
-        }
         $states=self::indexed($f['entity_states'],'entity_id');$resources=[];
         foreach ($f['resources'] as $r) { $resources[(string)$r['entity_id']][$r['resource_key']]=$r; }
         foreach ($after['entities'] as $id=>$value) {
@@ -151,7 +149,7 @@ trait AF_ACS_CombatCommitPersistence
             if ((string)$individual['end_done']!=='0' || isset($boundaries[$end])) { throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE'); }
             $startMissing=(string)$individual['start_done']==='0';
             if ($startMissing) {
-                $instances=[];foreach($f['effects'] as $effect)$instances[]=json_decode($effect['payload_json'],true,64,JSON_THROW_ON_ERROR)['instance'];
+                $instances=[];foreach($f['effects'] as $effect){$payload=json_decode($effect['payload_json'],true,64,JSON_THROW_ON_ERROR);if(($payload['kind']??null)==='barrier')continue;$instances[]=$payload['instance'];}
                 if(AF_ACS_Clock::hasStartWork($instances,(string)$individual['entity_id'],$row['session_id'],$row['encounter_id']))throw new RuntimeException('ACS_STATUS_START_REQUIRED');
                 foreach ($f['cooldowns'] as $cd) { if ((string)$cd['entity_id']===(string)$individual['entity_id']) { throw new RuntimeException('ACS_CLOCK_DEPENDENCY_BLOCKED'); } }
                 if (isset($boundaries[$start])) { throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE'); }
@@ -170,6 +168,7 @@ trait AF_ACS_CombatCommitPersistence
         $this->operation($row,'turn:'.$row['turn_id'].':closed','round.turn_closed',['turn_id'=>$row['turn_id']],['turn_id'=>$row['turn_id'],'status'=>'resolved','submission_id'=>$row['submission_id']]);
         $snapshotIds=[];foreach($frozen['seals'] as $i=>$seal)$snapshotIds[$i]=$seal['payload']['definition_snapshot_id'];
         $statuses=$this->persistStatusInstances($row['session_id'],$before['status_instances']??[],$after['status_instances']??[],$snapshotIds);
-        return ['entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses];
+        $barriers=$this->persistBarriers($row['session_id'],$row['encounter_id'],$before['barriers'],$after['barriers'],$result->serverPlan()['reaction_updates']??[]);
+        return ['entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers];
     }
 }

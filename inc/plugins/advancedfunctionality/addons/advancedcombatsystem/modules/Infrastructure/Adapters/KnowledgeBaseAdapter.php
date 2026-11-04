@@ -72,6 +72,13 @@ final class AF_ACS_KnowledgeBaseAdapter
         if(($definition['condition_ref']??null)!==null){$ref=af_kb_arpg_acs_reference('condition_template',substr($definition['condition_ref'],19),'reaction.condition',$issues);
             if(empty($ref['resolved'])||$issues||!$this->references($ref,$actor,$issues,$seen))throw new RuntimeException('ACS_REACTION_DEFINITION_UNAVAILABLE');$condition=$node($ref['definition'],$ref['key']);}
         $snapshot=['schema_version'=>1,'trigger'=>$node($definition,$key),'ability'=>$node($ability['data']['definition'],$effect['key']),'condition'=>$condition];
+        $queue=$ability['data']['definition']['passive_effects']??[];$passives=[];$seen=[];$bytes=0;
+        while($queue){$wrapper=array_shift($queue);if(!is_array($wrapper)||array_diff(array_keys($wrapper),['kind','control_type','effect_ref'])||($wrapper['kind']??null)!=='control'||($wrapper['control_type']??null)!=='passive')throw new RuntimeException('ACS_PASSIVE_SCHEMA_UNSUPPORTED');$ref=$wrapper['effect_ref']??[];
+            if(($ref['type']??null)!=='arpg_ability'||!is_string($ref['key']??null)||!is_int($ref['effect_index']??null))throw new RuntimeException('ACS_PASSIVE_SCHEMA_UNSUPPORTED');$id=$ref['key'].':'.$ref['effect_index'];if(isset($seen[$id]))continue;$seen[$id]=true;
+            $dto=$this->readDefinition('arpg_ability',$ref['key'],$actor);if(empty($dto['ready']))throw new RuntimeException('ACS_PASSIVE_DEFINITION_UNAVAILABLE');$d=$dto['data']['definition'];$n=$node($d,$ref['key']);$bytes+=strlen($n['json']);if($bytes>262144)throw new RuntimeException('ACS_JSON_TOO_LARGE');
+            $passives[]=['source'=>$n,'effect_index'=>$ref['effect_index']];array_push($queue,...($d['passive_effects']??[]));
+        }
+        if($passives)$snapshot['passives']=$passives;
         if($snapshot['ability']['ref']['fingerprint']!==$ability['definition_version']['fingerprint'])throw new RuntimeException('ACS_REACTION_PIN_CHANGED');
         return ['snapshot'=>$snapshot,'spec'=>AF_ACS_Effects::reactionSpec($snapshot)];
     }

@@ -35,12 +35,23 @@ final class AF_ACS_CombatCardQuery extends AF_ACS_Repository
                 $summary=json_decode($records[$id]['card_summary'],true,64,JSON_THROW_ON_ERROR);
                 $actions=json_decode($records[$id]['card_actions'],true,64,JSON_THROW_ON_ERROR);
                 if(($summary['schema_version']??null)!==1 || !is_array($summary['actions']??null) || !is_array($actions) || count($summary['actions'])!==count($actions))throw new RuntimeException('ACS_CARD_RESULT_INVALID');
-                $details=[];
+                $details=[];$statusRows=json_decode($records[$id]['card_statuses']??'null',true,64,JSON_THROW_ON_ERROR)??[];
+                $history=json_decode($records[$id]['card_boundaries']??'null',true,64,JSON_THROW_ON_ERROR)??[];
                 foreach($summary['actions'] as $i=>$step){
                     $entry=array_intersect_key($step,array_flip(['actor_id','target_id','ability_key','outcome','rolls','probabilities','costs','damage']));
                     foreach(['actor_id','target_id'] as $k){$entry[$k]=self::integer($entry[$k]??null);$names[$row['session_id']][$entry[$k]]=true;}
-                    $entry['components']=[];
-                    foreach($actions[$i]['allocation']['components']??[] as $c)$entry['components'][]=array_intersect_key($c,array_flip(['damage_type','element','raw','after_crit','effective_defense','post_defense','allocated','immunity']));
+                    $entry['components']=[];$entry['mechanics']=[];
+                    foreach($actions[$i]['strikes']??[$actions[$i]] as $strike){
+                        foreach($strike['allocation']['components']??[] as $c)$entry['components'][]=array_intersect_key($c,array_flip(['damage_type','element','raw','after_crit','effective_defense','post_defense','allocated','immunity']));
+                        $original=(string)($strike['original_target']??$entry['target_id']);$actual=(string)($strike['resolved_target']??$original);
+                        $entry['mechanics'][]=['type'=>'target','original_target'=>$original,'resolved_target'=>$actual,'outcome'=>$strike['scenario'],'rolls'=>$strike['rolls'],'damage'=>$strike['allocation']['integer_budget']];
+                        foreach($strike['reactions']??[] as $reaction)$entry['mechanics'][]=['type'=>'reaction']+array_intersect_key($reaction,array_flip(['id','entity_id','phase','executed','reason','redirect_success','original_target','resolved_target']));
+                    }
+                    foreach($statusRows as $status)if(in_array($status['target_entity_id'],[$entry['actor_id'],...($actions[$i]['targets']??[]),$actual],true))$entry['mechanics'][]=['type'=>'status','effect_key'=>$status['spec']['effect_key'],'target_entity_id'=>$status['target_entity_id'],'stacks'=>$status['stacks'],'remaining_duration'=>$status['remaining_duration'],'duration_unit'=>$status['duration_unit'],'status'=>$status['status']];
+                    if($i===0)foreach($history as $boundary)foreach($boundary['result']['statuses']['trace']['events']??[] as $event){
+                        if(($event['type']??null)==='upkeep_result')$entry['mechanics'][]=['type'=>'upkeep']+array_intersect_key($event,array_flip(['id','source_entity_id','paid','reason','costs','boundary_key']));
+                        elseif(isset($event['effect_id']))$entry['mechanics'][]=['type'=>'tick','effect_id'=>$event['effect_id'],'tick_count'=>count($event['ticks']??[]),'boundary_key'=>$boundary['boundary_key']];
+                    }
                     $details[]=$entry;
                 }
                 $card['details']=$details;$card['result_hash']=$receipt['result_hash'];

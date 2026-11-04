@@ -22,9 +22,10 @@ trait AF_ACS_StatusPersistence
     {
         $this->commandWrite();require_once __DIR__.'/../Domain/Clock.php';
         if($session['status']!=='active'||$encounter['status']!=='active')throw new RuntimeException('ACS_STATUS_CLOCK_PAUSED');
-        $this->statusRows($session['id'],true);$projection=$this->statusProjection($session['id']);
-        $state=['schema_version'=>1,'entities'=>[],'groups'=>[],'barriers'=>[],'next_barrier_order'=>0,'status_instances'=>$projection['instances'],'next_status_order'=>$projection['next_order']];
+        $this->statusRows($session['id'],true);$projection=$this->statusProjection($session['id']);$barriers=$this->barrierProjection($session['id'],$encounter['id']);
+        $state=['schema_version'=>1,'entities'=>[],'groups'=>[],'barriers'=>$barriers['pools'],'next_barrier_order'=>$barriers['next_order'],'status_instances'=>$projection['instances'],'next_status_order'=>$projection['next_order']];
         $defenses=[];$catalog=['by_target'=>[]];$resources=[];$needed=[];$groupTurns=[];
+        foreach($barriers['pools'] as $pool)foreach(array_unique([$pool['source_entity_id'],...$pool['targets']]) as $poolEntity)$needed[$poolEntity]=true;
         foreach($projection['instances'] as $effect)if($effect['status']==='active'&&isset($effect['spec']['upkeep'])&&($effect['spec']['scope']!=='combat'||$effect['encounter_id']===$encounter['id']))$needed[$effect['source_entity_id']]=true;
         if(in_array($phase,['entity_start','round_start'],true))foreach($projection['instances'] as $effect){
             if($effect['status']!=='active'||empty($effect['spec']['periodic'])||($effect['spec']['scope']==='combat'&&$effect['encounter_id']!==$encounter['id']))continue;
@@ -78,7 +79,8 @@ trait AF_ACS_StatusPersistence
             if($this->boundary($key,$session['id']))throw new RuntimeException('ACS_STATUS_BOUNDARY_RECEIPT_CONFLICT');
             $this->recordBoundary($key,'clock.status_tick',$session['id'],$encounter['id'],$actor,['parent_boundary'=>$trace['boundary_key']],['parent_boundary'=>$trace['boundary_key'],'trace'=>$trace]);
         }
-        return ['trace'=>$trace,'entities'=>$changes,'groups'=>$groupChanges,'statuses'=>$statuses];
+        $poolChanges=$this->persistBarriers($session['id'],$encounter['id'],$state['barriers'],$after['barriers'],[]);
+        return ['trace'=>$trace,'entities'=>$changes,'groups'=>$groupChanges,'statuses'=>$statuses,'barriers'=>$poolChanges];
     }
     /** Server-persisted source priority; expected session/encounter CAS is owned by command(). */
     public function setUpkeepOrder(array $session,array $encounter,array $individual,array $ids):array
@@ -103,9 +105,9 @@ trait AF_ACS_StatusPersistence
     {
         require_once __DIR__.'/../Domain/Effects.php';
         require_once __DIR__.'/Adapters/KnowledgeBaseAdapter.php';
-        $rows=$this->statusRows($sid);$instances=[];$next=1;
+        $rows=$this->statusRows($sid);$instances=[];$next=1;$barrierEncounters=[];
         foreach($rows as $row){
-            $p=json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR);$instance=$p['instance']??null;
+            $p=json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR);$next=max($next,(int)$row['applied_order']+1);if(($p['kind']??null)==='barrier'){$barrierEncounters[(string)$row['encounter_id']]=true;continue;}$instance=$p['instance']??null;
             if(($p['schema_version']??null)!==1||!is_array($instance))throw new RuntimeException('ACS_STATUS_SCHEMA_UNSUPPORTED');
             $id=self::integer((string)$row['id']);
             foreach(['id','session_id','encounter_id','source_entity_id','target_entity_id'] as $field)if(($instance[$field]??null)!==(string)$row[$field])throw new RuntimeException('ACS_STATUS_PROJECTION_INVALID');
@@ -125,6 +127,7 @@ trait AF_ACS_StatusPersistence
                 ||$expectedRef!==$instance['effect_definition_ref']||$expectedStatus!==$instance['status_definition_ref'])throw new RuntimeException('ACS_STATUS_PIN_INVALID');
             $instances[$id]=$instance;$next=max($next,$instance['applied_order']+1);
         }
+        foreach(array_keys($barrierEncounters) as $encounter)$this->barrierProjection($sid,(string)$encounter);
         return ['instances'=>$instances,'next_order'=>$next,'fingerprint'=>hash('sha256',self::json(['schema_version'=>1,'rows'=>$rows]))];
     }
     /** Existing combat-reset command only, after persisted encounter completion. */
