@@ -3,13 +3,14 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SubmissionStore.php';
 require_once __DIR__.'/CombatCommitPersistence.php';
 require_once __DIR__.'/StatusPersistence.php';
+require_once __DIR__.'/ReactionPersistence.php';
 require_once __DIR__.'/TerminalReceiptPersistence.php';
 require_once __DIR__.'/../Application/BuilderService.php';
 
 /** The only producer of terminal, persistent Resolver results. Never calls a native post writer. */
 final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 {
-    use AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence;
+    use AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence;
     private AF_ACS_SubmissionStore $submissions;
     private AF_ACS_EncounterRepository $preparation;
     private AF_ACS_SessionAccess $access;
@@ -96,6 +97,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             'rng_version'=>'uniform53-v1','actions'=>$steps,'virtual_entities'=>$entities,'virtual_groups'=>$result->serverState()['groups']];
         if(isset($result->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',self::json(['schema_version'=>1,'boundaries'=>$result->serverPlan()['entity_end_boundaries']]));
         if(array_filter($result->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',self::json(['schema_version'=>1,'instances'=>$result->serverState()['status_instances']]));
+        if(($reactionHash=AF_ACS_Resolver::reactionHash($result,$prepared['context']))!==null)$summary['reaction_hash']=$reactionHash;
         $dependency=hash('sha256',self::json(['schema_version'=>1,'dependencies'=>$dependencies]));
         $simulation=hash('sha256',self::json(['schema_version'=>1,'actions'=>$frozen['actions'],'tape'=>$frozen['tape'],'summary'=>$summary]));
         $confirmation=hash('sha256',"acs-confirm-v1\n".$dependency."\n".$simulation);
@@ -128,6 +130,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         $prepared=$builder->prepare(['session_id'=>$row['session_id'],'encounter_id'=>$row['encounter_id'],'turn_id'=>$row['turn_id'],
             'scope_token'=>$scope['scope_token'],'actions'=>$frozen['actions'],'scenario'=>'hit'],$row['draft_id']);
         $ordered=$prepared['ordered'];foreach ($ordered as &$a) { unset($a['scenario']); }unset($a);
+        $prepared['context']=$this->preparation->reactionContext($prepared['context'],$frozen['seals']);
         $result=AF_ACS_Resolver::resolve($prepared['context'],$ordered,$frozen['tape'],'seal');
         $controls=$this->controls($row,$frozen,$prepared,$result,false);
         if ($this->submissions->submission($id)!==$row || !hash_equals(self::factsHash($before),self::factsHash($this->facts($row)))) {
@@ -181,6 +184,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
                 || (string)$post['thread_visible']!=='1' || (string)$post['closed']!==(string)($topic['closed']??'0')
                 || (string)$post['forum_open']!=='1' || $post['forum_type']!=='f') { throw new RuntimeException('ACS_COMBAT_POST_INVALID'); }
             $ordered=$prepared['ordered'];foreach ($ordered as &$a) { unset($a['scenario']); }unset($a);
+            $prepared['context']=$this->preparation->reactionContext($prepared['context'],$frozen['seals']);
             $result=AF_ACS_Resolver::resolve($prepared['context'],$ordered,$frozen['tape'],'seal');
             $controls=$this->controls($current,$frozen,$prepared,$result);$controls['fence_hash']=$fingerprint;
             $current=$this->phase($current,'committing',['schema_version'=>1,'pid'=>$current['pid'],'controls'=>array_diff_key($controls,['summary'=>true])]);

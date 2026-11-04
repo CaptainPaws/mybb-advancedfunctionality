@@ -56,7 +56,7 @@ final class AF_ACS_QueryService
         foreach($this->repo->allRelations($eid) as $r)if(($r['side_a']===$sideA&&$r['side_b']===$sideB||$r['side_a']===$sideB&&$r['side_b']===$sideA)&&$r['relationship']==='hostile')$hostile=true;
         if(!$hostile)self::fail('preview_target_forbidden');
         $round=$this->repo->currentRound($view['encounter']);if(!$round||$round['status']!=='open')self::fail('preview_turn_unavailable');
-        $sources=[$actor=>$this->source($sid,$actor),$target=>$this->source($sid,$target)];if($sources[$actor]['row']['life_state']!=='active')self::fail('preview_actor_unavailable');$turns=[];$groups=[];$versions=['session_version'=>$view['session']['session_version'],'encounter_version'=>$view['encounter']['encounter_version'],'round_version'=>(string)$round['round_version']];
+        $sources=[$actor=>$this->source($sid,$actor),$target=>$this->source($sid,$target)];if($sources[$actor]['row']['life_state']!=='active')self::fail('preview_actor_unavailable');$turns=[];$groups=[];$reactionTurns=[];$reactionKinds=[];$versions=['session_version'=>$view['session']['session_version'],'encounter_version'=>$view['encounter']['encounter_version'],'round_version'=>(string)$round['round_version']];
         foreach($this->repo->allRoundTurns($round['id']) as $turn){
             foreach($sources as $id=>$source){$id=(string)$id;if($source['row']['control_group_id']!==$turn['control_group_id'])continue;
                 $r=json_decode($turn['roster_json'],true,32,JSON_THROW_ON_ERROR);$fp=$r['fingerprint']??null;unset($r['fingerprint']);
@@ -65,6 +65,7 @@ final class AF_ACS_QueryService
                 if(!$member||$member['content_hash']!==$source['row']['content_hash']||$member['template_snapshot_id']!==$source['row']['template_snapshot_id'])self::fail('preview_roster_invalid');
                 $individual=null;foreach($this->repo->individualTurns([$turn['id']]) as $x)if($x['entity_id']===$id)$individual=$x;
                 if(!$individual)self::fail('preview_turn_unavailable');
+                $reactionTurns[$id]=['id'=>$individual['id'],'used'=>(int)$individual['reaction_used'],'version'=>(int)$individual['entity_turn_version']];$reactionKinds[$id]=$source['row']['kind'];
                 $turns[$id]=['id'=>$turn['id'],'status'=>$turn['status'],'group_id'=>$turn['control_group_id'],'started'=>(string)$individual['start_done']==='1'&&(string)$individual['end_done']==='0'];
                 $available=AF_ACS_Clock::availableAP(self::int($turn['ap_budget']),self::int($turn['ap_spent']),self::int($turn['pre_round_ap_commitment']));
                 $group=$this->repo->restGroup($sid,$turn['control_group_id']);
@@ -80,6 +81,7 @@ final class AF_ACS_QueryService
         if(count($turns)!==2||$turns[$actor]['status']!=='pending'||!$turns[$actor]['started'])self::fail('preview_turn_unavailable');
         if(!(new AF_ACS_EncounterService($this->repo,$this->access))->clock()->available($sid,$turns[$actor]['id'],$actor)['actions_ready'])self::fail('ACS_STATUS_ACTION_NOT_READY');
         $this->repo->assertNoObligations($sid,$eid,$turns[$actor]['id'],true,$sealedDraft);
+        $reactions=$this->repo->reactionProjection($sid,$eid);$versions['reaction_registry_hash']=$reactions['fingerprint'];
         $statusProjection=$this->repo->statusProjection($sid);$versions['status_state_hash']=$statusProjection['fingerprint'];
         foreach($statusProjection['instances'] as $instance)if($instance['status']==='active'&&$instance['spec']['scope']==='combat'&&$instance['encounter_id']!==$eid)self::fail('ACS_COMBAT_RESET_REQUIRED');
         $endBoundaries=[];
@@ -101,7 +103,7 @@ final class AF_ACS_QueryService
         if($catalog===null)self::fail('preview_retained_registry_unavailable');
         [$abilities,$choices]=$this->pinnedAbilities($sources[$actor]);
         return ['selection'=>$selection,'versions'=>$versions,'choices'=>$choices,'context'=>['schema_version'=>1,'state'=>$state,'stats'=>$stats,'defenses'=>$defenses,'element_catalog'=>$catalog,'turns'=>$turns,
-            'encounter_status'=>'active','abilities'=>[$actor=>$abilities],'allowed_targets'=>[$actor=>[$target]],'relationships'=>[$actor=>[$target=>'hostile']],'status_immunities'=>$statusImmunities,'status_scope'=>['session_id'=>$sid,'encounter_id'=>$eid],'entity_end_boundaries'=>$endBoundaries]];
+            'encounter_status'=>'active','abilities'=>[$actor=>$abilities],'allowed_targets'=>[$actor=>[$target]],'relationships'=>[$actor=>[$target=>'hostile']],'status_immunities'=>$statusImmunities,'status_scope'=>['session_id'=>$sid,'encounter_id'=>$eid],'entity_end_boundaries'=>$endBoundaries,'reactions'=>$reactions['entries'],'reaction_turns'=>$reactionTurns,'reaction_kinds'=>$reactionKinds]];
     }
     /** Own controls may be listed without exposing GM-only targets or their counts. */
     public function builderScope(string $sid,string $eid):array
@@ -128,6 +130,13 @@ final class AF_ACS_QueryService
     public function sealDefinition(string $sid,string $actor,string $key):array
     {
         $source=$this->source($sid,$actor);return $source['registration']['pinned_abilities'][$key]??throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
+    }
+    /** Cached dependencies are not grants. Registration requires an exact direct owner ability ref. */
+    public function reactionGrant(string $sid,string $entity,array $pin):void
+    {
+        $source=$this->source($sid,$entity);$grant=$this->grants($source['source'])[$pin['key']]??null;$dto=$source['registration']['pinned_abilities'][$pin['key']]??null;
+        if(!$grant||!is_array($dto)||$grant['fingerprint']!==$pin['fingerprint']||($dto['definition_version']['fingerprint']??null)!==$pin['fingerprint']||($dto['definition_version']['declared_version']??null)!==$pin['version'])throw new RuntimeException('ACS_REACTION_GRANT_REQUIRED');
+        foreach($grant['_profiles']??[] as $inline)$this->inline($inline,$dto['data']['definition']);
     }
     public function builderCatalog(string $sid,string $actor):array
     {

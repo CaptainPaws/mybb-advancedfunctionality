@@ -6,11 +6,12 @@ require_once __DIR__.'/DraftPersistence.php';
 require_once __DIR__.'/SealPersistence.php';
 require_once __DIR__.'/RoundManagementPersistence.php';
 require_once __DIR__.'/StatusPersistence.php';
+require_once __DIR__.'/ReactionPersistence.php';
 
 /** Prepared, scoped SQL. All mutators require the existing audited command transaction. */
 final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
 {
-    use AF_ACS_StatusPersistence;
+    use AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence;
     use AF_ACS_ClockPersistence;
     use AF_ACS_DraftPersistence;
     use AF_ACS_SealPersistence;

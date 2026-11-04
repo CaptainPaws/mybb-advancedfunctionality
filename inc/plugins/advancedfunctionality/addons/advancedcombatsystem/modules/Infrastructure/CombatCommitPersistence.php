@@ -23,7 +23,9 @@ trait AF_ACS_CombatCommitPersistence
         foreach (['participants','sides','side_relationships'] as $name) {
             $f[$name]=$this->sql('SELECT * FROM '.$this->table($name).' WHERE encounter_id=? ORDER BY id'.$suffix,[$eid])['rows'];
         }
-        $f['effects']=$this->statusRows($sid,$lock);
+        $f['effects']=$this->statusRows($sid,$lock);$f['reactions']=$this->reactionRows($sid,$eid,$lock);
+        $f['reaction_rolls']=$this->sql('SELECT * FROM '.$this->table('rolls')." WHERE session_id=? AND sealed_action_id IS NULL AND check_kind='reaction' ORDER BY id".$suffix,[$sid])['rows'];
+        $f['reaction_snapshots']=$this->sql('SELECT s.id,s.content_hash,SHA2(s.payload_json,256) AS actual_hash FROM '.$this->table('snapshots').' s JOIN '.$this->table('reactions').' r ON r.definition_snapshot_id=s.id WHERE s.session_id=? AND r.encounter_id=? ORDER BY s.id'.$suffix,[$sid,$eid])['rows'];
         $f['seals']=$this->sql('SELECT * FROM '.$this->table('sealed_actions').' WHERE draft_id=? ORDER BY action_index'.$suffix,[$draft])['rows'];
         $f['rolls']=$this->sql('SELECT x.* FROM '.$this->table('rolls').' x JOIN '.$this->table('sealed_actions').' a ON a.id=x.sealed_action_id WHERE a.draft_id=? ORDER BY x.id'.$suffix,[$draft])['rows'];
         $f['snapshots']=$this->sql('SELECT id,content_hash,SHA2(payload_json,256) AS actual_hash FROM '.$this->table('snapshots').' WHERE session_id=? AND (id IN (SELECT template_snapshot_id FROM '.$this->table('entities').' WHERE session_id=?) OR id IN (SELECT definition_snapshot_id FROM '.$this->table('sealed_actions').' WHERE draft_id=?) OR id IN (SELECT definition_snapshot_id FROM '.$this->table('effects').' WHERE session_id=?)) ORDER BY id'.$suffix,[$sid,$sid,$draft,$sid])['rows'];
@@ -93,6 +95,21 @@ trait AF_ACS_CombatCommitPersistence
             [$key,$row['session_id'],$row['encounter_id'],$kind,hash('sha256',$json),'committed',$json,self::json($result),time()]);
     }
 
+    private function projectReactions(array $facts,AF_ACS_ResolverResult $result):array
+    {
+        $versions=[];$individuals=self::indexed($facts['individuals']);$rows=self::indexed($facts['reactions']);
+        foreach($result->serverPlan()['reaction_updates']??[] as $id=>$update){$row=$rows[$id]??null;
+            if(!$row||(int)$row['reaction_version']!==$update['before_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');
+            $config=json_decode($row['config_json'],true,64,JSON_THROW_ON_ERROR);$config['last_execution']=$update['execution'];
+            if($this->sql('UPDATE '.$this->table('reactions').' SET config_json=?,reaction_version=? WHERE id=? AND reaction_version=? AND status=?',[self::json($config),$update['after_version'],(string)$id,$row['reaction_version'],'active'])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
+        }
+        foreach($result->serverPlan()['reaction_limits']??[] as $entity=>$slot){$old=$individuals[$slot['id']]??null;
+            if(!$old||(string)$old['entity_id']!==(string)$entity||(int)$old['entity_turn_version']!==$slot['version'])throw new RuntimeException('ACS_REACTION_LIMIT_CONFLICT');
+            if((int)$old['reaction_used']===$slot['used'])continue;
+            if((int)$old['reaction_used']!==0||$slot['used']!==1)throw new RuntimeException('ACS_REACTION_LIMIT_CONFLICT');self::integer((string)$old['entity_turn_version'],'18446744073709551614');
+            if($this->sql('UPDATE '.$this->table('entity_turns').' SET reaction_used=1,entity_turn_version=entity_turn_version+1 WHERE id=? AND entity_turn_version=? AND reaction_used=0',[$slot['id'],$old['entity_turn_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');$versions[$slot['id']]=(string)((int)$old['entity_turn_version']+1);
+        }return $versions;
+    }
     private function project(array $row, array $f, array $turn, AF_ACS_ResolverResult $result,array $frozen): array
     {
         $before=$result->serverInitial();$after=$result->serverState();$changes=[];
@@ -103,7 +120,7 @@ trait AF_ACS_CombatCommitPersistence
         foreach ($f['resources'] as $r) { $resources[(string)$r['entity_id']][$r['resource_key']]=$r; }
         foreach ($after['entities'] as $id=>$value) {
             $id=(string)$id;$old=$before['entities'][$id];$s=$states[$id];$resource=$resources[$id]['hp']??null;
-            if ($old['resources']!==$value['resources'] || $value['recovery_blocked'] || !$resource
+            if (array_keys($old['resources'])!==array_keys($value['resources']) || $value['recovery_blocked'] || !$resource
                 || count($resources[$id])!==count($old['resources'])+1 || (string)$resource['is_integer']!=='1'
                 || (float)$resource['current_value']!==(float)$old['hp'] || (float)$resource['maximum_value']!==(float)$old['max_hp']) {
                 throw new RuntimeException('ACS_COMBAT_RESOURCE_WRITER_UNSUPPORTED');
@@ -111,19 +128,24 @@ trait AF_ACS_CombatCommitPersistence
             foreach($old['resources'] as $key=>$balance){$stored=$resources[$id][$key]??null;
                 if(!$stored||(string)$stored['is_integer']!=='1'||(string)$stored['current_value']!==(string)$balance['current']||(string)$stored['maximum_value']!==(string)$balance['maximum'])throw new RuntimeException('ACS_COMBAT_RESOURCE_WRITER_UNSUPPORTED');
             }
+            foreach($old['resources'] as $key=>$balance)if($value['resources'][$key]['maximum']!==$balance['maximum'])throw new RuntimeException('ACS_COMBAT_RESOURCE_WRITER_UNSUPPORTED');
             if ($value===$old) { continue; }
             self::integer((string)$resource['resource_version'],'18446744073709551614');
             if ($this->sql('UPDATE '.$this->table('entity_states').' SET hp=?,hp_max=?,life_state=?,state_version=? WHERE entity_id=? AND state_version=?',
                 [$value['hp'],$value['max_hp'],$value['life_state'],$value['version'],$id,$s['state_version']])['affected']!==1) { throw new RuntimeException('ACS_VERSION_CONFLICT'); }
             if ($this->sql('UPDATE '.$this->table('resources').' SET current_value=?,maximum_value=?,resource_version=resource_version+1 WHERE id=? AND resource_version=?',
                 [$value['hp'],$value['max_hp'],$resource['id'],$resource['resource_version']])['affected']!==1) { throw new RuntimeException('ACS_VERSION_CONFLICT'); }
+            foreach($value['resources'] as $key=>$balance){$stored=$resources[$id][$key];if($balance['current']===$old['resources'][$key]['current'])continue;self::integer((string)$stored['resource_version'],'18446744073709551614');
+                if($this->sql('UPDATE '.$this->table('resources').' SET current_value=?,resource_version=resource_version+1 WHERE id=? AND resource_version=?',[$balance['current'],$stored['id'],$stored['resource_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');}
             $changes[]=['entity_id'=>$id,'before'=>$old,'after'=>$value];
         }
         $group=(string)$turn['control_group_id'];$ap=$before['groups'][$group]['ap']['current']-$after['groups'][$group]['ap']['current'];
         if ($ap<0 || $ap>AF_ACS_Clock::availableAP((int)$turn['ap_budget'],(int)$turn['ap_spent'],(int)$turn['pre_round_ap_commitment'])) { throw new RuntimeException('ACS_AP_STATE_INVALID'); }
         foreach ($after['groups'] as $id=>$state) { if ((string)$id!==$group && $state!==$before['groups'][$id]) { throw new RuntimeException('ACS_COMBAT_GROUP_WRITER_UNSUPPORTED'); } }
+        $reactionVersions=$this->projectReactions($f,$result);
         $boundaries=self::indexed($f['boundaries'],'operation_key');$closed=[];
         foreach ($f['individuals'] as $individual) {
+            if(isset($reactionVersions[(string)$individual['id']]))$individual['entity_turn_version']=$reactionVersions[(string)$individual['id']];
             if ((string)$individual['turn_id']!==$row['turn_id']) { continue; }
             $id=(string)$individual['id'];$start=AF_ACS_Clock::entityStart($id);$end=AF_ACS_Clock::entityEnd($id);
             if ((string)$individual['end_done']!=='0' || isset($boundaries[$end])) { throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE'); }
