@@ -1,0 +1,167 @@
+# AF theme stylesheets: audit, unified bundle, and migration
+
+## Previous data flow
+
+1. `af_discover_addons()` reads addon manifests in stable, name-sorted order.
+2. `af_discover_addon_css_candidates()` combines manifest `assets` and
+   `theme_stylesheets` declarations with top-level files discovered in each
+   `assets/` directory. `af_discover_theme_stylesheets()` excludes admin-only
+   and explicitly excluded candidates.
+3. `af_sync_theme_stylesheets()` used to create one MyBB `themestylesheets`
+   record per source and per theme through `af_register_theme_stylesheet()`.
+   `af_theme_stylesheets` stores its SID, source checksum, last synchronized
+   checksum, delivery mode, and manual-edit flag.
+4. The old generated name `af_a_914810.css` is not random: it is
+   `af_` + an abbreviation of the addon id + the first six characters of
+   `sha1(addon id|logical id|source path)`. There were many files because the
+   Cartesian product of enabled frontend CSS sources and themes was created.
+5. MyBB's `cache_stylesheet()` may write both the editable `.css` cache and an
+   optimized `.min.css` variant. AF selected `.min.css` when it existed and
+   otherwise `.css`; they represent one layer, not two intended layers. The
+   final HTML normalizer also treats those two names as the same layer.
+6. At runtime addon asset collection and addon-specific calls pass through
+   `af_theme_stylesheet_delivery_decision()`. Theme/auto suppressed the server
+   file when a usable attached MyBB stylesheet existed; file mode allowed the
+   source URL. A final queue prune and HTML-link normalization handled addons
+   that queued the same asset by another supported path.
+
+This infrastructure is part of AF core. It is installed and synchronized by
+AF install/activation/runtime signature checks and does **not** depend on the
+Adaptive Responsive Layout addon. That addon is merely another CSS producer;
+it also has its own direct responsive asset/runtime-style injection.
+
+The selected legacy modes and checksums live in `af_theme_stylesheets`. AF
+deactivation does not remove them, activation performs a safe sync, and even
+uninstall deliberately keeps the registry and theme stylesheets for recovery.
+
+## Unified design
+
+Every MyBB theme has exactly one new AF-managed stylesheet named
+`advancedstyles.css`. The deterministic build order is addon id, then normalized
+source path. Every block is a versioned, length-delimited section. Its
+base64-encoded JSON header contains the addon id, logical id, source path, byte
+length, body SHA-1, and an identity derived from all three identifiers. The
+parser consumes the declared byte count instead of searching CSS for an end
+comment, so marker-looking text inside a rule or comment cannot select another
+block. Admin-only CSS is never included.
+
+The AF page lists sections by readable addon name and source path. Its compact
+editor loads one section body. Saving checks the hashes of both the complete
+bundle and the opened section, rejects concurrent changes, splices only the
+selected byte range, updates the MyBB cache, and never changes server CSS.
+
+If whole-file editing damages the structure, section saves are refused.
+**Repair structure with full recovery copy** rebuilds current seed sections and
+appends the complete previous file byte-for-byte as a final recovery section.
+That final section intentionally retains the old cascade until its necessary
+rules have been moved to their proper sections and it is emptied.
+
+The bundle has one registry record identified by addon `__af_bundle__` and
+logical id `advancedstyles`; existing source registry rows remain as migration
+and routing metadata. Existing `af_*.css` records and their CSS bodies are never
+deleted or rewritten by migration. After successful bundle caching they are
+detached, so they cannot duplicate either the bundle or server files.
+
+Source registry rows deliberately have `stylesheet_sid = 0`. Their
+`is_integrated` bit means that the source was accepted as bundle input, not that
+it owns a MyBB stylesheet. Diagnostics verify the source's structured section
+against the bundle row and report **bundle source**, **missing from bundle**,
+**file-mode source**, or **bundle detached** instead of presenting a source as
+an unintegrated per-addon stylesheet.
+
+### Modes
+
+* **Theme mode** attaches `advancedstyles.css` globally. Every registered AF
+  server CSS request resolves to that bundle and the corresponding file URL is
+  suppressed. If the bundle cache is unexpectedly unavailable, delivery fails
+  open to the source files rather than rendering an unstyled forum.
+* **File mode** detaches (but does not delete) `advancedstyles.css`. AF source
+  files are queued in the existing addon order. Switching back merely reattaches
+  the same database stylesheet, so ACP edits remain intact.
+
+Mode is theme-wide because one bundle cannot safely mix per-source theme and
+file delivery. Old `auto` callers map to theme mode.
+
+## Command semantics
+
+* **Integrate into ACP** remains accepted at the action boundary for compatibility; the UI routes editing through bundle sections and does not create an individual
+  legacy row. New normal synchronization does not create further opaque names.
+* **Sync all / Sync addon** rebuilds source input and updates the bundle only if
+  its database CSS still equals AF's last synchronized checksum. An ACP-edited
+  bundle is reported as a manual override and is not overwritten. Since the
+  output is one cascade, addon sync validates/rebuilds the complete bundle.
+  Neither command replaces edits made with the section editor.
+* **Force resync** requires explicit confirmation and intentionally replaces
+  the complete bundle with current server sources, clearing manual overrides.
+* **Rebuild missing / Restore from seed (safe)** are compatibility actions for
+  the unified bundle. Both use non-force synchronization, recreate a missing
+  `advancedstyles.css`, preserve manual bundle edits, and never create an
+  individual per-source MyBB stylesheet.
+* **Show diff/hash status** is read-only.
+
+On the first bundle creation, legacy rows whose CSS differs from their last
+synchronized checksum (or is already flagged as edited) are copied to structured
+recovery blocks at the end of `advancedstyles.css`. This preserves their cascade
+effect while leaving the originals untouched. Later normal sync regards that
+bundle as its baseline; force resync is the explicit operation that discards
+both those migrated blocks and later ACP edits.
+
+## Migration and rollback
+
+1. Back up the database, especially `themestylesheets`, `themes`, and
+   `af_theme_stylesheets`.
+2. Activate/update AF or run **Sync all**. Confirm that every theme shows an
+   editable `advancedstyles.css` link and inspect the marked migrated overrides.
+3. Select **Theme mode** for each theme and refresh the MyBB theme cache if the
+   ACP editor reports that it is needed. Verify page source contains one
+   `advancedstyles(.min).css` link and no addon source CSS links.
+4. Test relevant pages and responsive breakpoints. Only after acceptance should
+   **Force resync** be considered; it is destructive to bundle edits by design.
+
+Rollback is non-destructive: select **File mode** to use server CSS immediately.
+To restore the exact pre-migration theme-cache arrangement, reattach the retained
+legacy stylesheets to the values shown by their AF diagnostics/manifest and
+detach `advancedstyles.css`. No source or legacy CSS record has to be recovered
+from a deleted file.
+
+## Regression investigation limits (2026-09-24)
+
+The production PHP error log, production database, theme cache, and the referenced
+59-name candidate list were not present in this repository. Commit `4b43bd2` was
+also not present in the supplied Git object database. Consequently, neither the
+exact production exception nor a production cleanup is claimed here. The closest
+available implementation is the sequence `f61c184`, `0a07f60`, and `e941498`; its
+section editor was reapplied to the current, working plugin instead of replacing
+the plugin with an older snapshot.
+
+The repository evidence does establish the cache-regeneration path. Legacy AF
+registry rows retain `stylesheet_sid`; their matching rows remain in
+`themestylesheets`; normal bundle migration only clears `attachedto`. Calls to
+`update_theme_stylesheet_list()` make MyBB rebuild theme metadata/cache from those
+database rows. Deleting only `cache/themes/theme1/af_*.css` therefore cannot be a
+durable cleanup: a later activation/synchronization invokes that call after bundle
+sync and MyBB can write the cache file again from the still-existing master-theme
+row. The unified sync path does not call `af_register_theme_stylesheet()` and thus
+does not create new per-source rows; it creates or updates only
+`advancedstyles.css`.
+
+Production cleanup must therefore be a separately reviewed data operation: take
+a recoverable export of `themes`, `themestylesheets`, and `af_theme_stylesheets`;
+join each of the exact 59 names to the master and child rows and registry SID;
+copy unique/manual CSS into the appropriate bundle section; then delete only the
+confirmed rows and their registry references before running MyBB's stylesheet-list
+and cache rebuild. A wildcard deletion is intentionally not implemented because
+the required allow-list and production contents are unavailable.
+
+## Verified lifecycle call paths
+
+* Install creates/upgrades the stylesheet registry before its first safe sync,
+  after settings and language setup. It also writes the ACP proxy and gateway.
+* Activation preserves the proxy/router, refreshes languages, synchronizes master
+  templates, performs a non-forced stylesheet sync, refreshes the gateway, and
+  records activation state.
+* Deactivation changes only the refresh flag. Reactivation therefore retains AF
+  settings, registry state, and ACP CSS. A normal sync compares the database CSS
+  to `last_synced_checksum`; a mismatch is treated as a manual override.
+* Force resync is the only normal command that intentionally replaces the bundle,
+  and the ACP requires the explicit confirmation field before invoking it.
