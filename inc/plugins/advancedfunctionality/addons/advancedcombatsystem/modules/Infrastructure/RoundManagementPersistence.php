@@ -36,7 +36,9 @@ trait AF_ACS_RoundManagementPersistence
             if($drafts && $this->sql('SELECT id FROM '.$drafts.' WHERE '.$scope.$otherDraft." AND status NOT IN ('published','cancelled')".($readOnlyPreview?" AND (status<>'draft' OR confirmation_hash IS NOT NULL OR pid IS NOT NULL)":"")." LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
             if($sealed && !$drafts)throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
             if($sealed && $this->sql('SELECT a.id FROM '.$sealed.' a JOIN '.$drafts.' d ON d.id=a.draft_id WHERE d.encounter_id=?'.($turn===null?'':' AND d.turn_id=?')." AND a.status NOT IN ('published','cancelled','consumed')".($sealedDraft===null?'':' AND d.id<>'.self::integer($sealedDraft))." LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
-            if($submissions && $this->sql('SELECT submission_id FROM '.$submissions.' WHERE '.$scope." AND status NOT IN ('published','rejected','cancelled') LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
+            // A read-only sealed calculation may inspect its own frozen, claimed submission only.
+            $ownSubmission=$readOnlyPreview && $sealedDraft!==null ? ' AND NOT (draft_id='.self::integer($sealedDraft).' AND active_turn_id IS NOT NULL AND active_turn_id=turn_id)' : '';
+            if($submissions && $this->sql('SELECT submission_id FROM '.$submissions.' WHERE '.$scope." AND status NOT IN ('published','committed','rejected','cancelled')".$ownSubmission.' LIMIT 1',$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
             $effects=$this->futureTable('effects');
             if($effects && $this->sql('SELECT id FROM '.$effects." WHERE session_id=? AND (encounter_id=? OR encounter_id IS NULL) AND status NOT IN ('expired','removed','ended') LIMIT 1",[$sid,$eid])['rows'])throw new RuntimeException('ACS_CLOCK_DEPENDENCY_BLOCKED');
         } catch(Throwable $error) {

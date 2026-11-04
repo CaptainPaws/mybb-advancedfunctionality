@@ -26,6 +26,10 @@ Upstream MyBB 1.8.41 имеет pre-insert и поздний post-end hooks, н�
 
 MyISAM posts/users/threads — поддерживаемая архитектурная граница, не требование миграции. Read/write routing проверяется для authoritative readback ACS и известного pid, а не ради общей транзакции. Appearance nested commit за пределами ACS tx не нарушает ACS atomicity; normal side effects должны сохраняться и проверяться на staging.
 
+### IC-ACS-COMMIT-1 — R2, internal writer
+
+`AF_ACS_CombatCommitWriter::commit(submission_id, expected_state_version)` применяет только подтверждённый frozen server submission, сам вызывает существующий Resolver с исходным tape и фиксирует terminal receipt. `receipt(submission_id)` — авторизованный writer lookup без повторной механики. Контракт требует current actor/control grant, POST_CONFIRMED pid и свежие SQL dependencies; client plan/damage/pid/tape не принимаются. [Полный scope и ограничения](ACS_4_3_1B_R2_COMBAT_WRITER.md). Gateway, PublishService и Recovery не вызываются writer; outbox consumers не включаются. Наличие этого API не разблокирует IC-EDITOR publish или installed IC-MYBB-1.
+
 ### IC-EDITOR-1 — R2, preparation сохранена; publish wiring BLOCKED
 
 Одна форма, один AdvancedEditor/SCEditor. Поля: `acs_mode`, `draft_id`, `draft_version`, `submission_id`, `confirmation_hash`, обычный `message`. Submission ID создаёт сервер и переиспользует после потери ответа; он не является правом доступа. Проза и sealed actions сохраняются при любой ошибке. Draft CAS и frozen `publishing` запрещают незаметное изменение отправленного снимка. В текущем persistence ID — 32 lowercase hex; `expected_draft_version` — decimal string; hash — SHA256 lowercase hex. HTTP issue/submit endpoint пока отсутствует.
