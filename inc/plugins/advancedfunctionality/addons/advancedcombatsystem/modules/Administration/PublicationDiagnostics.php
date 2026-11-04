@@ -103,7 +103,7 @@ final class AF_ACS_PublicationDiagnostics
             $report['integrations'][]=self::row($label,$enabled?'WARNING':'NOT_VERIFIED','Файл: '.($detected?'есть':'нет').'; enabled: '.($enabled===null?'неизвестно':($enabled?'да':'нет')).'. '.$reason.' Текущая регистрация не доказывает безопасное исполнение.');
         }
         $report['integrations'][]=self::row('MyBB cache/shutdown','NOT_VERIFIED','Backend и внешние side effects не трассировались. Нужна проверка восстановления координируемой публикации; конфигурация не экспортируется.');
-        $report['integrations'][]=self::row('ACS coordinator','BLOCKED','Доказанный publication coordinator/Gateway отсутствует; нужны PID/submission receipt и восстановление координируемых операций.');
+        $report['integrations'][]=self::row('ACS coordinator','BLOCKED','Внутренний bounded Gateway проверен upstream fixtures; installed binding и publication coordinator/recovery не подтверждены. Наличие класса не разрешает публикацию.');
         return $report;
     }
     public static function render():void

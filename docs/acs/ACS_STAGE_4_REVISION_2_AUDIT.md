@@ -1,5 +1,7 @@
 # ACS-4.0-R2 — аудит этапа 4 и остаток работ
 
+> Последующая поставка ACS-4.1-R2 добавила bounded MyBB Post Gateway и fixtures; текущие возможности и ограничения описаны в [отчёте Gateway](ACS_4_1_R2_GATEWAY_IMPLEMENTATION.md). Карта ниже фиксирует исходную поставку 4.0-R2 и не является заявлением installed READY.
+
 ## Основание и область доказательств
 
 Проверенная локальная исходная `main`: `781f5ab6` (merge PR #1013). Перед отправкой поставка согласована с `main` = `3c588f0f`: сохранено удаление ACP migration wizard, CLI и migration library коммитами `7570c43f`/`3c588f0f`. Нормативная поставка — Revision 2 в [Master](ACS_MASTER_SPECIFICATION.md), [Architecture](ACS_TECHNICAL_ARCHITECTURE.md#publication-r2), [Contracts](ACS_INTEGRATION_CONTRACTS.md#publication-r2), [Roadmap](ACS_IMPLEMENTATION_ROADMAP.md#stage-4). Цель: warprift.ru, MyBB 1.8.41, PHP 8.5.12, MySQL 8.0.46.

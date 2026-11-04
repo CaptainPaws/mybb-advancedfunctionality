@@ -14,6 +14,16 @@ final class AF_ACS_SubmissionStore extends AF_ACS_Repository
         $this->preparation = new AF_ACS_EncounterRepository($database);
     }
 
+    /** Gateway and native callbacks must use this writer outside every ACS transaction/lock. */
+    public function assertMybbBoundary(object $database): void
+    {
+        if (($database->write_link ?? null) !== $this->connection
+            || ($database->read_link ?? null) !== $this->connection) {
+            throw new RuntimeException('ACS_MYBB_WRITER_MISMATCH');
+        }
+        $this->transactions->assertExternalBoundary();
+    }
+
     private static function submissionId(string $id): string
     {
         if (!preg_match('/\A[a-f0-9]{32}\z/D', $id)) { throw new InvalidArgumentException('ACS_SUBMISSION_ID_INVALID'); }
@@ -151,20 +161,24 @@ final class AF_ACS_SubmissionStore extends AF_ACS_Repository
     }
 
     /** No timeout-based retry/release. last_phase survives quarantine; existing PID is retained. */
-    public function quarantine(string $id, string $version, string $reason, callable $authorize): array
+    public function quarantine(string $id, string $version, string $reason, callable $authorize, array $diagnostic = []): array
     {
-        return $this->change($id,$version,$authorize,static fn($row)=>['recovery_required',self::key($reason,64),['schema_version'=>1,'last_known_phase'=>$row['last_phase']],null]);
+        if (array_diff(array_keys($diagnostic), ['gateway_phase','observed_pid'])) { throw new InvalidArgumentException('ACS_GATEWAY_DIAGNOSTIC_INVALID'); }
+        if (isset($diagnostic['gateway_phase'])) { self::key($diagnostic['gateway_phase'],64); }
+        if (isset($diagnostic['observed_pid'])) { self::integer($diagnostic['observed_pid'],'4294967295'); }
+        return $this->change($id,$version,$authorize,static fn($row)=>['recovery_required',self::key($reason,64),['schema_version'=>1,'last_known_phase'=>$row['last_phase'],'gateway'=>$diagnostic],null]);
     }
 
     /** Known pid only; this readback is insufficient to discover a lost pid from author/time. */
-    public function confirmPost(string $id, string $version, string $pid, callable $authorize): array
+    public function confirmPost(string $id, string $version, string $pid, callable $authorize, ?string $expectedFid = null): array
     {
         self::integer($pid,'4294967295');
-        return $this->change($id,$version,$authorize,function ($row) use ($pid) {
+        return $this->change($id,$version,$authorize,function ($row) use ($pid, $expectedFid) {
             if ($row['status'] !== 'posting') { throw new RuntimeException('ACS_POST_CONFIRMATION_DENIED'); }
             // Authoritative writer read, independent of MyBB read replicas/caches.
-            $post = $this->sql('SELECT pid,uid,tid,visible FROM `'.$this->prefix.'posts` WHERE pid=?',[$pid])['rows'][0] ?? null;
+            $post = $this->sql('SELECT pid,uid,tid,visible'.($expectedFid === null ? '' : ',fid').' FROM `'.$this->prefix.'posts` WHERE pid=?',[$pid])['rows'][0] ?? null;
             if (!$post || (string)$post['uid'] !== $row['author_uid'] || (string)$post['tid'] !== $row['tid']
+                || ($expectedFid !== null && (string)$post['fid'] !== $expectedFid)
                 || !in_array((string)$post['visible'],['0','1'],true)) { throw new RuntimeException('ACS_POST_CONFIRMATION_DENIED'); }
             $to = (string)$post['visible'] === '0' ? 'moderation_pending' : 'post_confirmed';
             return [$to,'native_pid_readback',['schema_version'=>1,'pid'=>$pid,'visible'=>(string)$post['visible']],$pid];

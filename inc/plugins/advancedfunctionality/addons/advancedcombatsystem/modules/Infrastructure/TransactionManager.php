@@ -94,6 +94,33 @@ final class AF_ACS_TransactionManager
         }
     }
 
+    /** Non-committing guard: never rolls back caller work or releases a caller lock. */
+    public function assertExternalBoundary(): void
+    {
+        $statement = $this->connection->prepare('SELECT @@session.autocommit AS ac, IS_USED_LOCK(?) = CONNECTION_ID() AS owns_acs_lock');
+        if (!$statement) { throw new RuntimeException('ACS_EXTERNAL_BOUNDARY_UNAVAILABLE'); }
+        try {
+            $statement->bind_param('s', $this->lockName);
+            if (!$statement->execute()) { throw new RuntimeException('ACS_EXTERNAL_BOUNDARY_UNAVAILABLE'); }
+            $row = $statement->get_result()->fetch_assoc();
+            if ($this->locked || (int)$row['owns_acs_lock'] === 1 || (int)$row['ac'] !== 1) {
+                throw new RuntimeException('ACS_EXTERNAL_BOUNDARY_HELD');
+            }
+        } finally { $statement->close(); }
+        // MySQL and MariaDB reject SET TRANSACTION inside BEGIN, even before a table is read.
+        // Reassert the session's configured isolation for the next transaction; never START/COMMIT.
+        $variable = stripos($this->connection->server_info,'MariaDB') !== false ? 'tx_isolation' : 'transaction_isolation';
+        $isolation = $this->connection->query('SELECT @@session.'.$variable)->fetch_row()[0];
+        if (!in_array($isolation,['READ-UNCOMMITTED','READ-COMMITTED','REPEATABLE-READ','SERIALIZABLE'],true)) {
+            throw new RuntimeException('ACS_EXTERNAL_BOUNDARY_UNAVAILABLE');
+        }
+        try {
+            if (!$this->connection->query('SET TRANSACTION ISOLATION LEVEL '.str_replace('-',' ',$isolation))) {
+                throw new RuntimeException('ACS_EXTERNAL_BOUNDARY_HELD');
+            }
+        } catch (mysqli_sql_exception $error) { throw new RuntimeException('ACS_EXTERNAL_BOUNDARY_HELD'); }
+    }
+
     public function run(callable $callback): mixed
     {
         return $this->exclusive(function () use ($callback) {

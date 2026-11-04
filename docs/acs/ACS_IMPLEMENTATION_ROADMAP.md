@@ -181,7 +181,7 @@
 | Задача | Текущий результат и следующий шаг |
 |---|---|
 | ACS-4.0-R2 | Новое архитектурное решение, четыре документа и [точная карта реализации](ACS_STAGE_4_REVISION_2_AUDIT.md). Реестр A1 и исторические аудиты не переписаны |
-| ACS-4.1-R2 | BLOCKED installed binding: Gateway в исходной main отсутствует. Проверен upstream 1.8.41; требуется installed lifecycle/permissions/flood/spam/attachments/moderation/merge и runtime hooks. Никакого direct INSERT или ACS tx через PostDataHandler |
+| ACS-4.1-R2 | Внутренний bounded Gateway/DTO реализованы и проверены upstream fixtures; [отчёт](ACS_4_1_R2_GATEWAY_IMPLEMENTATION.md). Installed binding BLOCKED: полный runtime/addon/AJAX lifecycle не подтверждён; attachments/upload и conversion/merge не поддерживаются. Никакого direct INSERT или ACS tx через PostDataHandler |
 | ACS-4.2-R2 | Сохранены draft/CAS/autosave, builder/preview, seal/tape/quota/hash. Добавлен internal frozen submission snapshot; выдача submission_id и привязка формы к publish ещё не подключены. Подготовка не меняет окончательные HP/AP |
 | ACS-4.3.1-R2 | Добавлен ACS-only durable journal, CAS, UNIQUE turn/pid, audit, freeze и safe quarantine. Это часть реализации, не приёмка всего state machine: механический writer, terminal receipt и проверенное recovery evidence ещё нужны |
 | ACS-4.3.2-R2 | BLOCKED до реального Gateway/commit writer. PublishService отсутствует: реализовать register→validate→persist POSTING→native post→confirm pid→ACS-only transaction. В одной tx HP/AP/events/results/post_link/entities/turn/COMMITTED/outbox; stale version→recovery, tape неизменен |
