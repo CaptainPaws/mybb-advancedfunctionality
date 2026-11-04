@@ -97,6 +97,7 @@
       command('cancel-seal').disabled = locked || !model.sealedCount;
       command('confirm-seal').disabled = locked || model.actions.length !== model.sealedCount || !sealView?.confirmable || sealView?.blocked || sealView?.confirmed;
       command('seal-refresh').disabled = loading || saving || !model.id;
+      ['compose','compose-quick'].forEach(c => { const b = command(c); if (b) b.disabled = !config.test_publication_allowed || locked || !sealView?.confirmed; });
       if (model.sealPending) ['seal','cancel-seal','confirm-seal'].forEach(c => { command(c).disabled = c !== model.sealPending.command || loading || saving; });
     }
     async function api(op, body, post) {
@@ -140,7 +141,7 @@
       if (sealView.summary) {
         box.append(node('h4', sealView.summary.label));
         sealView.summary.actions.forEach(a => box.append(node('p', (actor(a.actor_id)?.name || 'Существо') + ': ' + ({hit:'попадание',crit:'критическое попадание',miss:'промах'}[a.outcome]) + ', урон ' + a.damage + ', P_hit=' + a.probabilities.P_hit + '%, P_crit=' + a.probabilities.P_crit + '%.')));
-        box.append(node('p', sealView.confirmed ? 'Сводка подтверждена. Публикация по-прежнему отключена.' : 'Сводка требует явного подтверждения. Реальные HP/AP не изменены.'));
+        box.append(node('p', sealView.confirmed ? 'Сводка подтверждена. Общая публикация выключена; тестовая отправка доступна только разрешённому пользователю.' : 'Сводка требует явного подтверждения. Реальные HP/AP не изменены.'));
       }
       overview();
     }
@@ -223,6 +224,10 @@
         else if (cmd === 'preview') await preview();
         else if (['seal','cancel-seal','confirm-seal'].includes(cmd)) await sealCommand(cmd);
         else if (cmd === 'seal-refresh') await refreshSeal();
+        else if (cmd === 'compose' || cmd === 'compose-quick') {
+          if (!config.test_publication_allowed || model.dirty || model.pending || model.sealPending || !sealView?.confirmed) throw new Error('Сначала сохраните и подтвердите сводку.');
+          window.location.assign((cmd === 'compose' ? 'newreply.php' : 'showthread.php') + '?tid=' + encodeURIComponent(ctx.tid) + '&acs_draft=' + encodeURIComponent(model.id));
+        }
       } catch (e) { status(e.message, true); }
     });
     window.addEventListener('beforeunload', event => { if (model.dirty || model.pending || model.sealPending) { localSave(); event.preventDefault(); event.returnValue = ''; } });

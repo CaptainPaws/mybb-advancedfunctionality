@@ -2296,6 +2296,7 @@ global $plugins;
 $plugins->add_hook('global_start', 'advancedfunctionality_load_lang', 0);
 
 // Подключение аддонов
+$plugins->add_hook('global_start', 'advancedfunctionality_combat_reply_guard', PHP_INT_MIN);
 $plugins->add_hook('global_start', 'advancedfunctionality_bootstrap_addons', 1);
 $plugins->add_hook('usercp_start', 'advancedfunctionality_avatar_state_bridge', 0);
 $plugins->add_hook('global_start', 'advancedfunctionality_profile_lazy_endpoint_bridge', 2);
@@ -2318,6 +2319,23 @@ $plugins->add_hook('postbit_pm', 'advancedfunctionality_apf_postbit_provider', 2
 $plugins->add_hook('xmlhttp', 'af_xmlhttp_router', -1);
 $plugins->add_hook('admin_style_themes_edit_stylesheet_simple_commit', 'af_theme_stylesheet_acp_resign', 100);
 $plugins->add_hook('admin_style_themes_edit_stylesheet_advanced_commit', 'af_theme_stylesheet_acp_resign', 100);
+
+/** A stale ACS combat form must never fall through to ordinary MyBB insertion when disabled. */
+function advancedfunctionality_combat_reply_guard(): void
+{
+    global $mybb,$plugins;
+    if (!defined('THIS_SCRIPT') || THIS_SCRIPT!=='newreply.php') { return; }
+    if (in_array($mybb->get_input('acs_mode'),['','narrative'],true) && $mybb->get_input('acs_operation')==='') { return; }
+    $hooks=$plugins->hooks['global_start']??[];ksort($hooks);$priority=reset($hooks);$first=$priority?reset($priority):null;
+    if (($first['function']??null)!==__FUNCTION__) {
+        http_response_code(409);header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode(['ok'=>false,'error'=>['code'=>'ACS_NATIVE_LIFECYCLE_UNVERIFIED','message'=>'Порядок обработчиков MyBB не подтверждён. Отправка заблокирована.']],JSON_UNESCAPED_UNICODE);exit;
+    }
+    $entry=AF_ADDONS.'advancedcombatsystem/modules/Bootstrap/EditorPublicationEntry.php';
+    if (is_file($entry)) { require_once $entry;af_advancedcombatsystem_reply_guard();return; }
+    http_response_code(409);header('Content-Type: application/json; charset=UTF-8');header('Cache-Control: private, no-store');
+    echo json_encode(['ok'=>false,'error'=>['code'=>'ACS_EDITOR_TEST_DISABLED','message'=>'Боевая публикация недоступна. Текст сохраните; обычная публикация не выполнена.']],JSON_UNESCAPED_UNICODE);exit;
+}
 
 function advancedfunctionality_bootstrap_addons()
 {
