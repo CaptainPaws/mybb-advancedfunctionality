@@ -2,6 +2,24 @@
 
 > Последующая поставка ACS-4.1-R2 добавила bounded MyBB Post Gateway и fixtures; текущие возможности и ограничения описаны в [отчёте Gateway](ACS_4_1_R2_GATEWAY_IMPLEMENTATION.md). Карта ниже фиксирует исходную поставку 4.0-R2 и не является заявлением installed READY.
 
+## Текущая карта Stage 4 R2 после ACS-4.3.1B-R2
+
+База новой задачи: main `2c4a216d`. [Отчёт writer](ACS_4_3_1B_R2_COMBAT_WRITER.md) отличает backend fixtures от installed приёмки.
+
+| Компонент | Фактический прогресс / остаток |
+|---|---|
+| Draft/Seal/Builder/Resolver | Сохранены; исходные snapshot/tape/formulas неизменны; publication_enabled=false |
+| Gateway / 4.1-R2 | Bounded backend реализован, PR #1014 в main; installed entry binding/addon/AJAX integration BLOCKED |
+| Submission journal / 4.3.1 | Durable CAS/claims/audit/freeze/quarantine есть; COMMITTING/COMMITTED теперь пишет transactional writer; recovery/manual evidence ещё отсутствуют |
+| Combat writer / **задача 1, 4.3.1B-R2** | Реализован: migration 009, HP/AP и текущий HP-resource scope, state/clock closure/events/results/post_link/terminal receipt/outbox в одной tx. Rollback/replay/concurrency fixtures пройдены. Подготовительные controller grants=false не обходятся. Неподдержанные эффекты/resources остаются заблокированы |
+| PublishService / задача 2 | **Не начата**; Gateway не вызывается writer и не связан с ним coordinator |
+| RecoveryService / задача 3 | **Не начата**; writer receipt lookup — инфраструктура, не полный recovery протокол |
+| Moderation/lifecycle / задача 4 | **Не начата**; writer лишь отказывает pending/invalid post; native observers не подключены |
+| Editor/Postbit/GM UI / задачи 5–6 | **Не начаты**; второй editor не создан, публикация не включена |
+| Outbox consumers / installed 4.5 / задача 7 | Есть только pending storage, потребители не запускаются. Installed MySQL/MyBB/manual acceptance BLOCKED; локальная MariaDB её не заменяет |
+
+После PR этой задачи автоматического перехода к задаче 2 нет. Карта ниже сохранена как история исходной поставки 4.0-R2.
+
 ## Основание и область доказательств
 
 Проверенная локальная исходная `main`: `781f5ab6` (merge PR #1013). Перед отправкой поставка согласована с `main` = `3c588f0f`: сохранено удаление ACP migration wizard, CLI и migration library коммитами `7570c43f`/`3c588f0f`. Нормативная поставка — Revision 2 в [Master](ACS_MASTER_SPECIFICATION.md), [Architecture](ACS_TECHNICAL_ARCHITECTURE.md#publication-r2), [Contracts](ACS_INTEGRATION_CONTRACTS.md#publication-r2), [Roadmap](ACS_IMPLEMENTATION_ROADMAP.md#stage-4). Цель: warprift.ru, MyBB 1.8.41, PHP 8.5.12, MySQL 8.0.46.

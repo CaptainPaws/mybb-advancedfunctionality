@@ -11,7 +11,7 @@
 
 Все изменения одной боевой операции выполняются в одной **ACS-only** транзакции на проверенном writer: HP/AP и состояния сущностей, результаты, events/details, post_link, переход хода, COMMITTED и outbox. Никакой `PostDataHandler`, Appearance/Balance/CS/AAM hook, mail/cache/shutdown или другой произвольный MyBB callback не вызывается внутри этой транзакции. Короткие транзакции журнала завершаются до передачи управления MyBB.
 
-Прежние §7.1–7.2 о единой транзакции, `publishWithinTransaction`, staging rollback MyBB и обязательном переводе MyBB на InnoDB **заменены** R2. Старый проект DDL в §5 не является миграцией или свидетельством реализации. Текущие исполняемые схемы — `migrations/001`–`008`; исторические миграции не редактируются. К таблицам MyBB SQL FK нет.
+Прежние §7.1–7.2 о единой транзакции, `publishWithinTransaction`, staging rollback MyBB и обязательном переводе MyBB на InnoDB **заменены** R2. Старый проект DDL в §5 не является миграцией или свидетельством реализации. Текущие исполняемые схемы — `migrations/001`–`009`; исторические миграции не редактируются. К таблицам MyBB SQL FK нет.
 
 ### Последовательность и доказательства
 
@@ -45,7 +45,7 @@
 
 `SubmissionStore` — внутренний persistence API, не HTTP-контракт. `confirmPost` принимает **только pid из текущего доверенного штатного вызова**, проверяет его на writer и не ищет кандидатов. Его нельзя подключать к клиентскому pid или использовать как ручное разрешение RECOVERY_REQUIRED. Возвращаемый handler merge pid сам по себе не доказывает новый боевой пост: будущий Gateway обязан отклонить/карантинировать merge/draft-conversion и неподдержанные ветки. Универсального publication endpoint пока нет.
 
-Не реализованы transactional combat writer/post_links/outbox и переходы фиксации: наличие состояний COMMITTING/COMMITTED их не заменяет. Схемы результатов/post_links/outbox должны добавляться следующей миграцией с UNIQUE submission_id, turn_id, pid и consumer receipt keys, в той же транзакции, что projections/receipt. Текущий журнал намеренно не позволяет объявить механику COMMITTED отдельной записью статуса.
+В ACS-4.3.1B-R2 добавлены transactional CombatCommitWriter, post_links/results/terminal receipts/outbox и переходы фиксации в миграции 009; [контракт, ограничения и проверки](ACS_4_3_1B_R2_COMBAT_WRITER.md). Gateway/coordinator/Recovery и frontend не входят в writer; installed acceptance остаётся BLOCKED. Прежний проект хранения ниже сохраняется как provenance, актуальная исполняемая схема — миграции. Миграция 009 защищает submission_id/turn_id/pid и связывает projections/result/receipt/outbox в одной транзакции. Consumer delivery receipts и внешние owner APIs ещё не реализованы. COMMITTED нельзя объявить отдельной сменой статуса без механической фиксации.
 
 ### Recovery и visibility
 
