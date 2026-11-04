@@ -2,12 +2,13 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SubmissionStore.php';
 require_once __DIR__.'/CombatCommitPersistence.php';
+require_once __DIR__.'/TerminalReceiptPersistence.php';
 require_once __DIR__.'/../Application/BuilderService.php';
 
 /** The only producer of terminal, persistent Resolver results. Never calls a native post writer. */
 final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 {
-    use AF_ACS_CombatCommitPersistence;
+    use AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence;
     private AF_ACS_SubmissionStore $submissions;
     private AF_ACS_EncounterRepository $preparation;
     private AF_ACS_SessionAccess $access;
@@ -28,28 +29,6 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         $this->access->thread($row['tid']);
         if (!$this->preparation->roles($row['session_id'],$row['author_uid'])) { throw new RuntimeException('ACS_COMBAT_PERMISSION_DENIED'); }
         return $row;
-    }
-
-    private function terminal(array $row): ?array
-    {
-        $r=$this->sql('SELECT r.*,s.status AS publication_status,s.request_hash AS submission_hash,s.sealed_json AS submission_sealed,s.result_json AS terminal_result,s.pid AS linked_pid,s.turn_id AS linked_turn,l.id AS link_id,l.pid AS post_pid,l.turn_id AS post_turn,c.event_id AS result_event,c.result_hash AS mechanical_hash,SHA2(c.payload_json,256) AS actual_result_hash FROM '.$this->table('combat_receipts').' r JOIN '.$this->table('submissions').' s ON s.submission_id=r.submission_id LEFT JOIN '.$this->table('post_links').' l ON l.submission_id=r.submission_id LEFT JOIN '.$this->table('combat_results').' c ON c.submission_id=r.submission_id WHERE r.submission_id=?',[$row['submission_id']])['rows'][0]??null;
-        if (!$r) {
-            if ($row['status']==='committed') { throw new RuntimeException('ACS_COMBAT_RECEIPT_MISSING'); }
-            return null;
-        }
-        // One joined SELECT observes receipt and terminal state from the same InnoDB read view.
-        if ($r['publication_status']!=='committed' || !hash_equals($r['request_hash'],$row['request_hash'])
-            || !hash_equals($r['request_hash'],$r['submission_hash']) || $r['submission_sealed']!==$row['sealed_json']
-            || !hash_equals($r['sealed_hash'],hash('sha256',$row['sealed_json']))
-            || !hash_equals($r['receipt_hash'],hash('sha256',$r['receipt_json']))) { throw new RuntimeException('ACS_COMBAT_RECEIPT_INVALID'); }
-        $receipt=json_decode($r['receipt_json'],true,32,JSON_THROW_ON_ERROR);
-        if (($receipt['schema_version']??null)!==1 || ($receipt['status']??null)!=='COMMITTED'
-            || ($receipt['submission_id']??null)!==$row['submission_id'] || (string)$r['pid']!==(string)$r['linked_pid']
-            || (string)$r['turn_id']!==$row['turn_id'] || (string)$r['linked_turn']!==$row['turn_id'] || $r['terminal_result']!==$r['receipt_json']
-            || (string)$r['post_pid']!==(string)$r['pid'] || (string)$r['post_turn']!==$row['turn_id']
-            || (string)$r['link_id']!==($receipt['post_link_id']??null) || (string)$r['result_event']!==($receipt['event_id']??null)
-            || ($receipt['result_hash']??null)!==$r['mechanical_hash'] || $r['mechanical_hash']!==$r['actual_result_hash']) { throw new RuntimeException('ACS_COMBAT_RECEIPT_INVALID'); }
-        return $receipt;
     }
 
     /** Authoritative receipt lookup after a lost/unknown commit response; no Resolver or post creation. */
@@ -127,9 +106,15 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 
     /** Read-only pre-publication revalidation with the existing sealed tape. No post creation. */
     public function validatePublication(string $id, string $expectedStateVersion): array
+    { return $this->validateFrozenPlan($id,$expectedStateVersion,['registered','validating']); }
+
+    public function validateApprovedPost(string $id, string $expectedStateVersion): array
+    { return $this->validateFrozenPlan($id,$expectedStateVersion,['moderation_pending']); }
+
+    private function validateFrozenPlan(string $id, string $expectedStateVersion, array $states): array
     {
         $this->transactions->assertExternalBoundary();$this->access->csrf();$row=$this->own($id);
-        if (!in_array($row['status'],['registered','validating'],true) || $row['state_version']!==self::integer($expectedStateVersion)) {
+        if (!in_array($row['status'],$states,true) || $row['state_version']!==self::integer($expectedStateVersion)) {
             throw new RuntimeException('ACS_VERSION_CONFLICT');
         }
         $this->access->draftThread($row['tid']);

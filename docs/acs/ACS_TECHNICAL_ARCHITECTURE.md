@@ -57,6 +57,8 @@
 
 В ACS-4.3.3-R2 реализован `Application/RecoveryService.php`: общий terminal receipt verifier, authoritative known-pid state, консервативный quarantine и audited GM CAS-команды без Gateway/нового INSERT. Native confirmation теперь сохраняет исходный fid, writer проверяет его перед commit. [Команды и ограничения](ACS_4_3_3_R2_RECOVERY_SERVICE.md): неизвестный pid/legacy incomplete identity остаются заблокированы; explicit GM hold не становится доказательством связи. Native lifecycle observers/approval и frontend относятся к следующим задачам.
 
+В ACS-4.3.4-R2 подключены source-gated native class_moderation observers и author-driven `ModerationService::resumeApproved`, используемый PublishService/RecoveryService. Native approve сам не применяет механику; автор повторно проверяет sealed plan/controls/turn/pid и проходит прежний writer. Move/delete/hidden до commit требуют quarantine; после COMMITTED добавляется operational audit-наблюдение без изменения receipt/result/outbox. `PublicationStatusQuery` проверяет общий SQL-only terminal verifier без загрузки Builder/Resolver. [Lifecycle source/hook order, политика и fixtures](ACS_4_3_4_R2_POST_LIFECYCLE.md); installed acceptance и frontend остаются BLOCKED.
+
 `AF_ACS_Publication::card()` отдаёт только статус/метку; `mechanics_confirmed=true` исключительно для COMMITTED. Postbit и editor wiring ещё не реализованы. Обычная видимая литература до commit — поддерживаемая политика; атомарная скрытая публикация литературы и карточки не обещается.
 
 Подробные свидетельства и ограничения: [аудит R2](ACS_STAGE_4_REVISION_2_AUDIT.md).
