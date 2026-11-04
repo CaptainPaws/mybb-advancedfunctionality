@@ -1,5 +1,8 @@
 # AdvancedCombatSystem 1.0 — Integration Contracts
 
+> **ACS Stage 4 Revision 2:** ACS не требует изменения движков существующих таблиц MyBB. Боевые данные остаются в собственных таблицах InnoDB; публикация через MyBB проектируется как отдельный координируемый процесс с восстановлением. ACP MyISAM Migration Wizard выведен из эксплуатации. Миграция MyBB, REPLICATION CLIENT и подтверждения резервных копий мигратора не являются зависимостями ACS. См. [ACS-4.0-CLEANUP](ACS_4_0_CLEANUP.md).
+
+
 ## 1. Область и доказательства аудита
 
 Связанные документы: [Master Specification](ACS_MASTER_SPECIFICATION.md), [Technical Architecture](ACS_TECHNICAL_ARCHITECTURE.md), [Roadmap](ACS_IMPLEMENTATION_ROADMAP.md).
@@ -178,7 +181,7 @@ ACS читает результат покупки через Inventory, не в
 
 IC-EDITOR разделяется по назначению: UI подготовки/draft/preview/seal может использовать существующий editor и доказанные ограниченные extension points до готовности публикационного gateway. Для этих операций оформление не обязательная capability; нет второго SCEditor, изменения Source/WYSIWYG или MyBB post insert. При этом authorization, draft CAS, безопасное seal-хранилище, tape/quota и правила preview остаются обязательными. Наличие такого UI **не означает** готовность IC-EDITOR publish callbacks или IC-MYBB-1.
 
-Исторические [ACS-4.1.1](ACS_4_1_1_PUBLICATION_AUDIT.md) и [ACS-4.1.2](ACS_4_1_2_GATEWAY_CONTRACT.md) остаются provenance: nested Appearance transaction, неизвестные installed engines/hooks, cache/shutdown и отсутствие проверенного coordinator по-прежнему блокируют **публикацию**, но не независимую подготовку. **IC-MYBB-1 остаётся BLOCKED**, новый Appearance writer/outcome protocol — PROPOSED. Общее прежнее требование доказать IC-MYBB/IC-EDITOR перед этапом 4 уточняется только в части независимой подготовки, см. [Roadmap](ACS_IMPLEMENTATION_ROADMAP.md#stage-4).
+Исторические [ACS-4.1.1](ACS_4_1_1_PUBLICATION_AUDIT.md) и [ACS-4.1.2](ACS_4_1_2_GATEWAY_CONTRACT.md) остаются provenance: непроверенные installed hooks, cache/shutdown и отсутствие проверенного coordinator по-прежнему блокируют **публикацию**, но не независимую подготовку. **IC-MYBB-1 остаётся BLOCKED**, новый Appearance writer/outcome protocol — PROPOSED. Общее прежнее требование доказать IC-MYBB/IC-EDITOR перед этапом 4 уточняется только в части независимой подготовки, см. [Roadmap](ACS_IMPLEMENTATION_ROADMAP.md#stage-4).
 
 ## 11. IC-PROFILE — AdvancedProfileUI
 

@@ -1,5 +1,8 @@
 # AdvancedCombatSystem 1.0 — Implementation Roadmap
 
+> **ACS Stage 4 Revision 2:** ACS не требует изменения движков существующих таблиц MyBB. Боевые данные остаются в собственных таблицах InnoDB; публикация через MyBB проектируется как отдельный координируемый процесс с восстановлением. ACP MyISAM Migration Wizard выведен из эксплуатации. Миграция MyBB, REPLICATION CLIENT и подтверждения резервных копий мигратора не являются зависимостями ACS. См. [ACS-4.0-CLEANUP](ACS_4_0_CLEANUP.md).
+
+
 ## 1. Порядок работы и статусы
 
 Основание: [Master Specification](ACS_MASTER_SPECIFICATION.md), [Technical Architecture](ACS_TECHNICAL_ARCHITECTURE.md), [Integration Contracts](ACS_INTEGRATION_CONTRACTS.md). Проект warprift.ru, MyBB 1.8.40, PHP 8.5.0. Это план разработки; исходные пути/доказательства аудита зафиксированы в Contracts. Новые проектные пути и контракты ниже **PROPOSED**. ACS-DOC-01 не присваивает новые статусы реализации или приёмки и не переоткрывает принятый этап 1.

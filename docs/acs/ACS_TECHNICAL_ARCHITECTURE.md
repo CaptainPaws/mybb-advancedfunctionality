@@ -1,5 +1,8 @@
 # AdvancedCombatSystem 1.0 — Technical Architecture
 
+> **ACS Stage 4 Revision 2:** ACS не требует изменения движков существующих таблиц MyBB. Боевые данные остаются в собственных таблицах InnoDB; публикация через MyBB проектируется как отдельный координируемый процесс с восстановлением. ACP MyISAM Migration Wizard выведен из эксплуатации. Миграция MyBB, REPLICATION CLIENT и подтверждения резервных копий мигратора не являются зависимостями ACS. См. [ACS-4.0-CLEANUP](ACS_4_0_CLEANUP.md).
+
+
 ## 1. Статус и границы
 
 Основание: [Master Specification](ACS_MASTER_SPECIFICATION.md), включая N1/N2/M1/H1/C1/D1/S1 и A1.1–A1.95. Реальные внешние интерфейсы и ревизия main зафиксированы в [Integration Contracts](ACS_INTEGRATION_CONTRACTS.md). План — [12 этапов](ACS_IMPLEMENTATION_ROADMAP.md).
@@ -1139,7 +1142,9 @@ Automatic timeout, tick, trigger, start_operation и outbox dispatch идут в
 
 Любое изменение увеличивает соответствующие versions. Encounter_version используется для уведомления, но несвязанное событие не обязано конфликтовать с sealed action: commit сравнивает реальный dependency_set (state target, shared pools, relationships, zone/cover, source/cost/cooldowns, control, KB pinned refs). Изменение summary требует нового пользовательского confirmation_hash с прежними rolls. Клиентское expected не является достаточной проверкой: сервер сам строит множество зависимостей.
 
-### 7.2. Успешная публикация
+### 7.2. Исторический проект атомарной публикации (заменён Stage 4 Revision 2)
+
+Следующая последовательность сохранена для истории проекта. Актуальный контракт — отдельная координируемая публикация с восстановлением; общий rollback таблиц MyBB и их перевод в InnoDB не требуются. Новый PublishService здесь не реализован.
 
 1. Валидировать форму/CSRF/forum/контроль и operation key; registered submission с hash payload, без расходов. Если key уже есть: другой hash → conflict, published → существующий pid, recovery_required → запрещён blind retry.
 2. Выполнить штатную MyBB validation до необратимых эффектов. Проверить доступность безопасных IC-MYBB/IC-INV контрактов и транзакционные engines всех затронутых таблиц/handlers.

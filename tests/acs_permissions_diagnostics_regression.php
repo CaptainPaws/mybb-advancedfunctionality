@@ -97,3 +97,6 @@ unlink($fixture.'inc/plugins/advancedfunctionality');
 unlink($fixture.'inc/plugins/advancedfunctionality.php');
 rmdir($fixture.'inc/plugins'); rmdir($fixture.'inc'); rmdir($fixture);
 echo "ACS-1.3 focused permissions/capability checks passed.\n";
+
+check(!class_exists('AcsEngineMigration', false), 'diagnostics do not load retired engine migrator');
+check(!(new AF_ACS_AuthorizationService)->decision('admin.migration.manage')['allowed'], 'retired migration permission denied');

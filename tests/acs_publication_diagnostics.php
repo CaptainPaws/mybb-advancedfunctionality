@@ -15,7 +15,7 @@ $db=new class {
         check(str_starts_with($sql,'SELECT '),'non-read query');check($hidden===1,'SQL errors not hidden');$this->queries[]=$sql;
         if($this->fail)throw new RuntimeException('SECRET_DB_EXCEPTION');
         if(str_contains($sql,'VERSION()'))return (object)['rows'=>[['version'=>'10.11.19-MariaDB','connection_id'=>$writer&&$this->split?'22':'11']]];
-        if(str_contains($sql,'information_schema.TABLES'))return (object)['rows'=>[['TABLE_NAME'=>$this->table_prefix.'posts','ENGINE'=>'InnoDB'],['TABLE_NAME'=>$this->table_prefix.'users','ENGINE'=>'MyISAM']]];
+        if(str_contains($sql,'information_schema.TABLES'))return (object)['rows'=>[['TABLE_NAME'=>$this->table_prefix.'posts','ENGINE'=>'InnoDB'],['TABLE_NAME'=>$this->table_prefix.'users','ENGINE'=>'MyISAM'],['TABLE_NAME'=>$this->table_prefix.'af_acs_sessions','ENGINE'=>'MyISAM']]];
         if(str_contains($sql,'information_schema.TRIGGERS'))return (object)['rows'=>[['TRIGGER_NAME'=>'SECRET_TRIGGER_NAME','EVENT_OBJECT_TABLE'=>$this->table_prefix.'posts','ACTION_TIMING'=>'AFTER','EVENT_MANIPULATION'=>'INSERT']]];
         throw new RuntimeException('Unexpected SQL');
     }
@@ -38,7 +38,8 @@ try {
     check(count($r['hooks'])===2&&$r['hooks'][0]['priority']===7,'native hook shape/priority');
     check($r['hooks'][1]['owner']==='balance','deferred source owner');
     $tables=array_column($r['tables'],null,'name');
-    check($tables['posts']['status']==='PASS'&&$tables['users']['status']==='BLOCKED','engines');
+    check($tables['posts']['status']==='PASS'&&$tables['users']['status']==='PASS','MyBB engines are informational');
+    check($tables['af_acs_sessions']['status']==='BLOCKED','owned ACS engine still required');
     check($tables['af_acs_rolls']['status']==='BLOCKED','required current ACS table');
     check($r['database'][1]['status']==='PASS','same connection observation');
     $db->split=true;check($d->collect()['database'][1]['status']==='NOT_VERIFIED','split route');$db->split=false;

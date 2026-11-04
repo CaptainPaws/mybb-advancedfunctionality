@@ -21,7 +21,6 @@ final class AF_ACS_AuthorizationService
             'admin.permissions.view' => ['scope' => 'global', 'policy' => 'AF_ACP_INDEX'],
             'admin.diagnostics.view' => ['scope' => 'global', 'policy' => 'AF_ACP_INDEX'],
             'admin.integrations.view' => ['scope' => 'global', 'policy' => 'AF_ACP_INDEX'],
-            'admin.migration.manage' => ['scope'=>'global','policy'=>'AF_ACP_AND_MYBB_OPTIMIZEDB'],
             'admin.schema.manage' => ['scope' => 'global', 'policy' => 'AF_ACP_INDEX'],
             'admin.lifecycle' => ['scope' => 'global', 'policy' => 'AF_ACP_INDEX'],
             'session.view' => ['scope' => 'session', 'policy' => 'NATIVE_THREAD_AND_MEMBERSHIP'],
@@ -65,10 +64,6 @@ final class AF_ACS_AuthorizationService
         if (!$entry) { return ['allowed' => false, 'reason' => 'ACS_UNKNOWN_PERMISSION']; }
         if ($entry['scope'] === 'global') {
             $allowed = $this->afAdministrator();
-            if($permission==='admin.migration.manage') {
-                global $mybb;
-                $allowed=$allowed&&((function_exists('is_super_admin')&&is_super_admin((int)$mybb->user['uid']))||in_array($mybb->admin['permissions']['tools']['optimizedb']??null,[1,'1',true],true));
-            }
             return ['allowed' => $allowed, 'reason' => $allowed ? null : 'ACS_ADMIN_PERMISSION_REQUIRED'];
         }
         if($permission==='session.owner.transfer' && $sessionId!==null && $sessionId!=='') {

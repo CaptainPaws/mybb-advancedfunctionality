@@ -33,7 +33,7 @@ final class AF_ACS_PublicationDiagnostics
         (new AF_ACS_AuthorizationService)->requirePermission('admin.diagnostics.view');
         global $mybb,$db,$plugins;
         $report=['report_version'=>1,'scope'=>'Текущий ACP bootstrap; не трассировка newreply/Quick Edit. Регистрация не доказывает исполнение.',
-            'publication'=>self::row('IC-MYBB-1','BLOCKED','Нет доказанного coordinator, outcome-протокола handlers и staging rollback. Диагностика не разрешает публикацию.'),'mybb'=>[],'database'=>[],'tables'=>[],'triggers'=>[],'hooks'=>[],'integrations'=>[]];
+            'publication'=>self::row('IC-MYBB-1','BLOCKED','Координируемая публикация с восстановлением по ACS Stage 4 Revision 2 ещё не реализована. Диагностика не разрешает публикацию.'),'mybb'=>[],'database'=>[],'tables'=>[],'triggers'=>[],'hooks'=>[],'integrations'=>[]];
         $v=(string)($mybb->version??'');
         $report['mybb'][]=self::row('MyBB', $v==='1.8.40'?'PASS':'WARNING',preg_match('/\A[0-9.]{1,20}\z/D',$v)?$v:'Версия не распознана');
         $report['mybb'][]=self::row('PHP','PASS',PHP_VERSION);
@@ -65,7 +65,7 @@ final class AF_ACS_PublicationDiagnostics
             $metadata=self::select($db,'SELECT TABLE_NAME, ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME'.$where,true);
             $engines=[];foreach($metadata??[] as $r)$engines[$r['TABLE_NAME']]=$r['ENGINE'];
             foreach($tables as $name){$engine=$engines[$db->table_prefix.$name]??null;
-                $report['tables'][]=self::row($name,$metadata===null?'NOT_VERIFIED':($engine===null?(in_array($name,$required,true)?'BLOCKED':'WARNING'):(strtoupper($engine)==='INNODB'?'PASS':'BLOCKED')), $metadata===null?'Нет metadata-доступа':($engine===null?'Не обнаружена; для optional owner/future ветки сверить применимость.':'Engine: '.self::identifier($engine)));
+                $report['tables'][]=self::row($name,$metadata===null?'NOT_VERIFIED':($engine===null?(in_array($name,$required,true)?'BLOCKED':'WARNING'):(!str_starts_with($name,'af_acs_')||strtoupper($engine)==='INNODB'?'PASS':'BLOCKED')), $metadata===null?'Нет metadata-доступа':($engine===null?'Не обнаружена; для optional owner/future ветки сверить применимость.':'Engine: '.self::identifier($engine)));
             }
             $triggers=self::select($db,'SELECT TRIGGER_NAME, EVENT_OBJECT_TABLE, ACTION_TIMING, EVENT_MANIPULATION FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND EVENT_OBJECT_TABLE'.$where,true);
             if($triggers===null)$report['triggers'][]=self::row('Triggers','NOT_VERIFIED','Нет metadata-доступа.');
@@ -102,8 +102,8 @@ final class AF_ACS_PublicationDiagnostics
             $detected=is_file(__DIR__.'/../../../'.$id.'/'.$id.'.php');$enabled=function_exists('af_is_addon_enabled')?af_is_addon_enabled($id):null;
             $report['integrations'][]=self::row($label,$enabled?'WARNING':'NOT_VERIFIED','Файл: '.($detected?'есть':'нет').'; enabled: '.($enabled===null?'неизвестно':($enabled?'да':'нет')).'. '.$reason.' Текущая регистрация не доказывает безопасное исполнение.');
         }
-        $report['integrations'][]=self::row('MyBB cache/shutdown','NOT_VERIFIED','Backend и внешние side effects не трассировались. Нужна staging-проверка после commit/rollback; конфигурация не экспортируется.');
-        $report['integrations'][]=self::row('ACS coordinator','BLOCKED','Доказанный publication coordinator/Gateway отсутствует; нужны общий UoW, PID/submission receipt и rollback всех owner writes.');
+        $report['integrations'][]=self::row('MyBB cache/shutdown','NOT_VERIFIED','Backend и внешние side effects не трассировались. Нужна проверка восстановления координируемой публикации; конфигурация не экспортируется.');
+        $report['integrations'][]=self::row('ACS coordinator','BLOCKED','Доказанный publication coordinator/Gateway отсутствует; нужны PID/submission receipt и восстановление координируемых операций.');
         return $report;
     }
     public static function render():void
@@ -119,6 +119,6 @@ final class AF_ACS_PublicationDiagnostics
         }
         echo '<h3>Зарегистрированные hooks текущего bootstrap</h3><table class="general"><tr><th>Hook</th><th>Callback</th><th>Priority</th><th>Addon/plugin</th></tr>';
         foreach($report['hooks'] as $r)echo '<tr><td>'.$esc($r['hook']).'</td><td>'.$esc($r['callback']).'</td><td>'.$esc($r['priority']).'</td><td>'.$esc($r['owner']).'</td></tr>';
-        echo '</table><p>Нужен отдельный inventory newreply/Quick Edit на staging. Пустой список в ACP не доказывает отсутствие hooks публикации.</p>';
+        echo '</table><p>Нужен отдельный аудит newreply/Quick Edit. Пустой список в ACP не доказывает отсутствие hooks публикации.</p>';
     }
 }
