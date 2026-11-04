@@ -100,6 +100,28 @@
       ['compose','compose-quick'].forEach(c => { const b = command(c); if (b) b.disabled = !config.test_publication_allowed || locked || !sealView?.confirmed; });
       if (model.sealPending) ['seal','cancel-seal','confirm-seal'].forEach(c => { command(c).disabled = c !== model.sealPending.command || loading || saving; });
     }
+    async function loadUpkeep() {
+      const data = await api('clock_sustained', { session_id: ctx.session_id, encounter_id: ctx.encounter_id }, false);
+      const container = part('upkeep'); container.replaceChildren();
+      data.sources.forEach(source => {
+        container.append(node('h4', 'Поддержание источника #' + source.source_entity_id));
+        const order = source.effects.filter(e => e.status === 'active').map(e => e.id);
+        source.effects.forEach(e => container.append(node('p', '#' + e.id + ' ' + e.effect_key + ' · ' + e.costs.map(c => c.amount + ' ' + (c.resource || c.kind.toUpperCase())).join(', ') + ' · ' + (e.priority === null ? 'FIFO' : 'приоритет ' + e.priority) + ' · ' + (e.termination_reason ? ({source_inactive:'Прекращён: источник выведен из строя',kb_control:'Прекращён по условию KB',effects_cost_unaffordable:'Прекращён: недостаточно ресурсов',effects_resource_invalid:'Прекращён: ресурс недоступен'}[e.termination_reason] || 'Прекращён') : e.status !== 'active' ? 'Завершён' : e.last_payment ? (e.last_payment.paid ? 'Последняя оплата выполнена' : 'Оплата отклонена') : 'Оплата ещё не выполнялась'))));
+        if (!order.length || !source.turn || !source.turn.editable) return;
+        if (source.turn.applies_next) container.append(node('p', 'Начало уже обработано. Новый порядок применяется со следующего начала хода источника.'));
+        const label = node('label', 'Порядок ID активных эффектов через запятую '), input = node('input'); input.value = order.join(','); input.maxLength = 2800; label.append(input);
+        const save = node('button', 'Сохранить порядок'); save.type = 'button';
+        save.addEventListener('click', async () => {
+          save.disabled = true;
+          try {
+            await api('clock_upkeep_order', { session_id: ctx.session_id, encounter_id: ctx.encounter_id, entity_turn_id: source.turn.id, expected_version: data.session_version, encounter_version: data.encounter_version, effect_order: input.value, operation_key: crypto.randomUUID().replace(/-/g, ''), reason: 'Выбор порядка поддержания' }, true);
+            await loadUpkeep(); status('Порядок поддержания сохранён. Обновите контекст действий перед подготовкой.', false);
+          } catch (e) { status(e.message, true); save.disabled = false; }
+        }); container.append(label, save);
+      });
+      if (!data.sources.length) container.append(node('p', 'Доступных поддерживаемых эффектов нет.'));
+    }
+    command('upkeep-load').addEventListener('click', () => loadUpkeep().catch(e => status(e.message, true)));
     async function api(op, body, post) {
       const values = new URLSearchParams(body);
       if (post) values.set('my_post_key', config.post_key);

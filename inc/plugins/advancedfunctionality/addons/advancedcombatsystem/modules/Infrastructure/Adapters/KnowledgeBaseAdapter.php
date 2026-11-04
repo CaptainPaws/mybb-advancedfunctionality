@@ -45,7 +45,18 @@ final class AF_ACS_KnowledgeBaseAdapter
         $check=AF_ACS_Effects::status($status,['source'=>'1','target'=>'2','relationship'=>'hostile','immunities'=>[],
             'cast_success'=>false,'hit_success'=>false,'hp_loss'=>0,'status_hit'=>0,'status_resistance'=>0])->serverData();
         if(!$check['supported'])$fail($check['reasons'][0]);
-        $status['instance']=AF_ACS_Effects::instanceSpec($definition,$p,$ref['tick_definitions']??[]);return $status;
+        $status['instance']=self::statusInstanceSpec($dto,$effect);return $status;
+    }
+    /** Preserve existing cost rows; never assign one ability upkeep to several status instances. */
+    public static function statusInstanceSpec(array $dto,array $effect):array
+    {
+        require_once __DIR__.'/../../Domain/Effects.php';
+        $ref=$effect['references']['status_key']??[];$definition=$ref['definition']??[];$costs=$dto['data']['definition']['costs']??[];
+        if($costs){
+            $statuses=array_filter($dto['data']['ability_profile']['effects']??[],static fn($e)=>($e['parameters']['effect_type']??null)==='status');
+            if(count($statuses)!==1)throw new AF_ACS_FormulaError('upkeep_status_binding_ambiguous');
+        }
+        return AF_ACS_Effects::instanceSpec($definition,$effect['parameters']??[],$ref['tick_definitions']??[],AF_ACS_Effects::upkeepSpec($costs,$definition['mechanical_parameters']??[]));
     }
     private function available(int $actorUid): bool
     {

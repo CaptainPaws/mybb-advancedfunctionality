@@ -52,6 +52,7 @@ final class AF_ACS_SealService
             $summary=['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'rng_version'=>'uniform53-v1','label'=>'Запечатанные серверные результаты — ещё не опубликованы','actions'=>$rows,'virtual_entities'=>$entities,'virtual_groups'=>$resolved->serverState()['groups']];
             $dependencyHash=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'dependencies'=>$dependencies]));
             if(isset($resolved->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'boundaries'=>$resolved->serverPlan()['entity_end_boundaries']]));
+            if(array_filter($resolved->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'instances'=>$resolved->serverState()['status_instances']]));
             $mechanical=$summary;unset($mechanical['label']);
             $simulationHash=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'actions'=>$actions,'tape'=>$tape,'summary'=>$mechanical]));
             $confirmation=hash('sha256','acs-confirm-v1'."\n".$dependencyHash."\n".$simulationHash);

@@ -3,7 +3,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SessionService.php';
 require_once __DIR__.'/../Domain/Clock.php';
 
-/** Explicit state boundaries/rest only. No action execution, AP spending or arbitrary healing. */
+/** Explicit state boundaries/rest only. Includes mandatory upkeep; no arbitrary spending or healing. */
 final class AF_ACS_ClockService
 {
     public function __construct(private AF_ACS_EncounterRepository $repository,private AF_ACS_SessionAccess $access) {}
@@ -47,8 +47,49 @@ final class AF_ACS_ClockService
         foreach($groups as &$g)$g['short_available']=$rest && !$this->repository->boundary('rest:'.$sid.':'.$g['id'].':'.$window['encounter_id'].':short',$sid);unset($g);
         return ['session_version'=>$session['session_version'],'cooldowns'=>$cooldowns,'rest_allowed'=>$rest,'full_rest_allowed'=>$fullRest,'rest_window'=>$window,'rest_reason'=>$reason,'groups'=>$groups,'history'=>$this->repository->restHistory($sid)];
     }
+    /** Own controlled sources or the existing GM management scope only; no target/definition traces. */
+    private function upkeepAccess(string $sid,string $source):array
+    {
+        $v=(new AF_ACS_SessionService($this->repository,$this->access))->view($sid);$e=$this->repository->entity($sid,$source);
+        if(!$e)throw new RuntimeException('ACS_UPKEEP_ACCESS_DENIED');
+        if(!$v['can_manage']){
+            $c=$this->repository->controllers($sid,$source);
+            if(!$v['can_register_own']||count($c)!==1||$c[0]['controller_uid']!==$this->access->uid()||$e['owner_uid']!==null&&$e['owner_uid']!==$this->access->uid())throw new RuntimeException('ACS_UPKEEP_ACCESS_DENIED');
+        }return $v;
+    }
+    public function sustained(string $sid,string $eid):array
+    {
+        $v=(new AF_ACS_SessionService($this->repository,$this->access))->view($sid);$encounter=$this->repository->encounter($sid,$eid);if(!$encounter)throw new RuntimeException('ACS_UPKEEP_ACCESS_DENIED');
+        $groups=[];$turns=[];$round=$this->repository->currentRound($encounter);
+        if($round)foreach($this->repository->allRoundTurns($round['id']) as $turn)foreach($this->repository->individualTurns([$turn['id']]) as $i)$turns[$i['entity_id']]=['id'=>$i['id'],'editable'=>$encounter['status']==='active','applies_next'=>$i['start_done']==='1'];
+        foreach($this->repository->statusProjection($sid)['instances'] as $row){
+            if(!isset($row['spec']['upkeep'])||$row['spec']['scope']==='combat'&&$row['encounter_id']!==$eid)continue;
+            try{$this->upkeepAccess($sid,$row['source_entity_id']);}catch(RuntimeException $e){if($e->getMessage()!=='ACS_UPKEEP_ACCESS_DENIED')throw $e;continue;}
+            $source=$row['source_entity_id'];$groups[$source]['source_entity_id']=$source;$groups[$source]['turn']=$turns[$source]??null;
+            $groups[$source]['effects'][]=['id'=>$row['id'],'effect_key'=>$row['spec']['effect_key'],'status'=>$row['status'],'priority'=>$row['upkeep_priority']??null,'applied_order'=>$row['applied_order'],'costs'=>$row['spec']['upkeep']['costs'],'last_payment'=>$row['last_upkeep']??null,'termination_reason'=>$row['termination']['reason']??null];
+        }
+        foreach($groups as &$group)usort($group['effects'],static fn($a,$b)=>($a['priority']??PHP_INT_MAX)<=>($b['priority']??PHP_INT_MAX)?:$a['applied_order']<=>$b['applied_order']);unset($group);
+        return ['session_version'=>$v['session']['session_version'],'encounter_version'=>$encounter['encounter_version'],'sources'=>array_values($groups)];
+    }
+    private function order(array $input):array
+    {
+        $this->access->csrf();$sid=AF_ACS_Repository::integer($input['session_id']??null);$eid=AF_ACS_Repository::integer($input['encounter_id']??null);$id=AF_ACS_Repository::integer($input['entity_turn_id']??null);
+        $individual=$this->repository->clockEntityTurn($sid,$id);if(!$individual)throw new RuntimeException('ACS_UPKEEP_ACCESS_DENIED');$this->upkeepAccess($sid,$individual['entity_id']);
+        $raw=$input['effect_order']??null;
+        if(is_string($raw))$raw=$raw===''?[]:explode(',',trim($raw));
+        if(!is_array($raw)||!array_is_list($raw)||count($raw)>128)throw new RuntimeException('ACS_UPKEEP_ORDER_INVALID');
+        $ids=[];foreach($raw as $value)$ids[]=AF_ACS_Repository::integer(is_string($value)?trim($value):$value);
+        $key=(string)($input['operation_key']??'');if(!preg_match('/\A[a-z0-9][a-z0-9_.-]{15,95}\z/D',$key))throw new RuntimeException('ACS_OPERATION_KEY_REQUIRED');
+        $reason=trim((string)($input['reason']??''));if($reason===''||mb_strlen($reason)>1000)throw new RuntimeException('ACS_REASON_REQUIRED');
+        $request=['schema_version'=>1,'session_id'=>$sid,'actor_uid'=>$this->access->uid(),'encounter_id'=>$eid,'entity_turn_id'=>$id,'order'=>$ids,'reason'=>$reason,'expected_version'=>AF_ACS_Repository::integer($input['expected_version']??null),'encounter_version'=>AF_ACS_Repository::integer($input['encounter_version']??null)];
+        return $this->repository->command('session:'.$this->access->uid().':'.$key,'encounter.upkeep_order',$request,
+            function($s)use($sid,$individual){$this->upkeepAccess($sid,$individual['entity_id']);if($s['status']!=='active')throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');},
+            function($s)use($request){$e=$this->repository->encounter($s['id'],$request['encounter_id'],true);if(!$e||$e['encounter_version']!==$request['encounter_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');
+                return $this->repository->setUpkeepOrder($s,$e,$this->repository->clockEntityTurn($s['id'],$request['entity_turn_id']),$request['order']);});
+    }
     public function command(string $op,array $input): array
     {
+        if($op==='upkeep_order')return $this->order($input);
         $this->access->csrf();$sid=AF_ACS_Repository::integer($input['session_id']??null);$session=$this->context($sid);
         if($session['status']!=='active')throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
         if(!in_array($op,['entity_start','ap_refresh','combat_reset','rest_short','rest_full'],true))throw new RuntimeException('ACS_CLOCK_OPERATION_UNAVAILABLE');
