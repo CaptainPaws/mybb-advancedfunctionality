@@ -2,6 +2,7 @@
 
 > **ACS Stage 4 Revision 2:** ACS не требует изменения движков существующих таблиц MyBB. Боевые данные остаются в собственных таблицах InnoDB; публикация через MyBB проектируется как отдельный координируемый процесс с восстановлением. ACP MyISAM Migration Wizard выведен из эксплуатации. Миграция MyBB, REPLICATION CLIENT и подтверждения резервных копий мигратора не являются зависимостями ACS. См. [ACS-4.0-CLEANUP](ACS_4_0_CLEANUP.md).
 
+> **Revision 2 — ACS-4.0-R2.** Целевая установка: MyBB **1.8.41**, PHP **8.5.12**, MySQL **8.0.46**. Это последующее решение об интеграции, явно заменяющее прежнее требование общей SQL-атомарности MyBB/ACS. При противоречии публикационных требований ниже применяется R2. Исходные A1.1–A1.95, игровые формулы и исторические аудиты сохраняются как provenance; они не переписываются задним числом. Предыдущие упоминания 1.8.40/8.5.0 относятся к прежней проверке, а не к подтверждённой установленной среде.
 
 ## 1. Порядок работы и статусы
 
@@ -171,50 +172,40 @@
 3. Проверить mixed damage и два барьера; нанесение 0 урона остаётся попаданием.
 
 <a id="stage-4"></a>
-### Этап 4. Черновики, запечатывание и атомарная публикация
+### Этап 4 — Revision 2. Черновики, Seal и согласованная публикация
 
-**Цель:** Связать один combat_post с неизменяемой механикой и редактируемой прозой; обеспечить защиту повторов.
+**Цель:** атомарная механика внутри ACS; MyBB-post связан устойчивым протоколом без общей транзакции и без миграции MyISAM. Основание — R2 в [Master](ACS_MASTER_SPECIFICATION.md), [Architecture](ACS_TECHNICAL_ARCHITECTURE.md#publication-r2), [Contracts](ACS_INTEGRATION_CONTRACTS.md#publication-r2). A1.1–A1.95 и игровые формулы сохранены. Старое требование common transaction заменено, исторические аудиты остаются provenance.
 
-**Требования:** A1.13–A1.16, A1.46, A1.49–A1.52, A1.55–A1.60, A1.62, A1.89–A1.91.
+**Зависимости:** этапы 1–3; собственные InnoDB/locks/CAS/tape ACS. Подготовка независима от публикации. Installed IC-MYBB-1/публикационная IC-EDITOR-1 и реальные side effects проверяются до включения боевого submit. Миграция MyBB не gate. Внешний Inventory expense остаётся зависимостью этапа 6.
 
-**Зависимости (уточнение ACS-4.0):** 1–3. UI подготовки, draft/CAS/autosave, read-only preview и seal с собственным безопасным ACS-хранилищем можно реализовывать и принимать отдельно, до разблокировки боевой публикации. Для них необходимы доказанные ограниченные Theme/Editor extension points и собственные права/версии/idempotency; маска не обязательная механическая capability. **IC-MYBB-1 и публикационная часть IC-EDITOR-1 должны быть доказаны** на установленном MyBB 1.8.40 перед Gateway/combat commit. До 6 допускаются только действия без внешнего inventory expense.
+| Задача | Текущий результат и следующий шаг |
+|---|---|
+| ACS-4.0-R2 | Новое архитектурное решение, четыре документа и [точная карта реализации](ACS_STAGE_4_REVISION_2_AUDIT.md). Реестр A1 и исторические аудиты не переписаны |
+| ACS-4.1-R2 | BLOCKED installed binding: Gateway в исходной main отсутствует. Проверен upstream 1.8.41; требуется installed lifecycle/permissions/flood/spam/attachments/moderation/merge и runtime hooks. Никакого direct INSERT или ACS tx через PostDataHandler |
+| ACS-4.2-R2 | Сохранены draft/CAS/autosave, builder/preview, seal/tape/quota/hash. Добавлен internal frozen submission snapshot; выдача submission_id и привязка формы к publish ещё не подключены. Подготовка не меняет окончательные HP/AP |
+| ACS-4.3.1-R2 | Добавлен ACS-only durable journal, CAS, UNIQUE turn/pid, audit, freeze и safe quarantine. Это часть реализации, не приёмка всего state machine: механический writer, terminal receipt и проверенное recovery evidence ещё нужны |
+| ACS-4.3.2-R2 | BLOCKED до реального Gateway/commit writer. PublishService отсутствует: реализовать register→validate→persist POSTING→native post→confirm pid→ACS-only transaction. В одной tx HP/AP/events/results/post_link/entities/turn/COMMITTED/outbox; stale version→recovery, tape неизменен |
+| ACS-4.3.3-R2 | BLOCKED evidence binding: quarantine сохраняет last_phase и не повторяет INSERT. RecoveryService/GM разрешение ещё не реализованы. Добавить доказательный lookup известных исходов, авторизованные ручные audit decisions; не привязывать по uid/tid/time |
+| ACS-4.3.4-R2 | Политика выбрана: литература может быть видна до ACS, moderation ждёт native approval без HP/AP. Добавлена чистая status projection; wiring карточки и moderation/delete/move observers ещё нужны |
+| ACS-4.4-R2 | Существующий editor/builder сохранён, publication_enabled=false. Narrative/edit/Quick Edit и маски независимы. Нужны единый submit lifecycle, статусы, postbit-card и компактный GM recovery UI; второй SCEditor запрещён |
+| ACS-4.5-R2 | BLOCKED installed acceptance. Минимальные fixtures — журнал/границы/потеря ответа/CAS/UNIQUE и прежние draft/seal tests. Полная проверка на warprift.ru 1.8.41/8.5.12/8.0.46 не подменяется fixture |
 
-Это последующее интеграционное уточнение [Master §6.1](ACS_MASTER_SPECIFICATION.md#acs-appearance-boundary), [Architecture §7.4](ACS_TECHNICAL_ARCHITECTURE.md#acs-appearance-boundary) и [Contracts §10.1](ACS_INTEGRATION_CONTRACTS.md#acs-appearance-boundary), не изменение механики или последовательности 12 этапов. Прежнее общее ограничение всего этапа 4 сохранено в [исторических аудитах 4.1.1](ACS_4_1_1_PUBLICATION_AUDIT.md) и [4.1.2](ACS_4_1_2_GATEWAY_CONTRACT.md) как provenance. Их результаты не объявляются READY: nested commits/engines/hooks/cache/shutdown/coordinator по-прежнему блокируют публикацию.
+**Порядок реализации:** 4.0 → сохранение 4.2 и journal foundation → доказанный Gateway → transactional combat writer → Recovery/moderation → Editor/Postbit/GM UI → installed acceptance. Наличие класса/таблицы не означает implemented/accepted всей задачи. Точная история доказательств и ограничений находится в аудите R2.
 
-**Компоненты и файлы:** пути относительно нового `inc/plugins/advancedfunctionality/addons/advancedcombatsystem/`, если не указано иначе: modules/Application/{DraftService,SealService,PublishService,RecoveryService}.php; Adapters/MybbPostGateway.php; modules/Presentation/{ApiController,BuilderController,ThreadComponents}.php; migrations/004_*.php; scoped Editor/Theme form extension. `Adapters/` означает `modules/Infrastructure/Adapters/`.
+**Приёмка 4.5-R2:**
 
-**Ограниченные задания Codex:**
+1. Двойной submit, две вкладки и конкурентные действия одного хода: один claim, одна механика, никакого нового roll.
+2. MyBB отказ до INSERT: доказанный REJECTED, prose/tape сохранены; никаких окончательных HP/AP.
+3. INSERT состоялся, pid/HTTP потерян: доказанное восстановление либо понятный RECOVERY_REQUIRED; никакого слепого INSERT.
+4. Ошибка ACS после поста: полный rollback ACS, post остаётся с неподтверждённым статусом. Повтор использует тот же план/tape, проверяет актуальность.
+5. COMMIT состоялся, ответ потерян: writer receipt возвращает тот же результат без HP/AP/EXP/уведомлений повторно.
+6. Конфликт state versions и нерешённая предыдущая операция: блокировка зависимых ходов, без устаревшего commit.
+7. Native moderation: HP/AP не применяются до одобрения и актуальной проверки; удаление/скрытие/перенос до commit→recovery. После COMMITTED история не откатывается автоматически.
+8. Quick Edit/full edit меняют прозу; маски не меняют snapshot/hash/tape и не вызывают Resolver. Один существующий editor.
+9. Appearance, Balance→CS, AAM, счётчики, подписки, вложения и shutdown работают штатно вне ACS tx; новые ACS outbox consumers идемпотентны.
+10. MyISAM форумные таблицы сохраняют движок; ядро не изменяется. Pending карточка не показывает виртуальный урон как применённый.
 
-- 4.1: Отдельный integration audit/PR: штатный PostDataHandler, hooks/engines/moderation/attachments/flood и побочные начисления AF; доказать transaction coordinator без правок ядра. Если не доказано — публикационный Gateway/commit BLOCKED, не прямой SQL posts; независимую подготовку из 4.2 это не блокирует. Сохранение маски отделить от механического commit, запретить собственный COMMIT Appearance внутри активной ACS tx, не отключать аддон.
-- 4.2: Независимый UI подготовки в существующем Theme/Editor, server draft/CAS/autosave, append-only sealed actions, immutable random tape и общая AP quota, отмена только хвоста. Confirm привязать к версии simulation; preview не RNG. Выполняется до снятия IC-MYBB-1 BLOCKED без MyBB post insert, закрытия turn или окончательного списания HP/AP/предметов. Маски меняются свободно; их refs/версии не входят в snapshot/dependency_set/simulation_hash/confirmation_hash/RNG tape/mechanical event hash. Смена маски не вызывает Resolver и не меняет sealed данные.
-- 4.3: Idempotent submission registration→common transaction→pid/events/projections/post_links/turn resolved/outbox; unknown outcome→lookup/recovery. Карточка в Theme post.before_body, prose отдельно.
-- 4.4: Поддержать narrative mode и штатное редактирование/Quick Edit без resolver. Проверить две вкладки и потерю HTTP response.
-
-**Ожидаемый результат:** Один атомарный боевой пост за ход группы; механическая карточка и литература в одном MyBB-сообщении.
-
-**Критерии готовности независимой подготовки (без объявления готовности публикации):**
-
-- UI подготовки/draft/preview/seal доступен при BLOCKED IC-MYBB-1 по своим правам/контрактам; отсутствуют post insert и окончательные resource mutations. Preview не генерирует RNG, seal соблюдает собственные tape/quota invariants.
-- Смена декоративного имени/аватара/рамки до, во время и после боя не меняет entity/sheet/owner/controller, CombatSnapshot, механические hashes, sealed actions, RNG tape, HP/AP, события или состояние хода; не требует нового подтверждения бросков.
-- Ошибка оформления не блокирует подготовку/preview/seal. Обычная смена маски/MyBB workflow сохранены; последующая ошибка оформления не пересчитывает подтверждённый бой.
-
-**Критерии готовности публикации (только после снятия gates):**
-
-- Дубликат submission возвращает тот же pid, AP/HP не применяются дважды; один post_link на turn защищён UNIQUE.
-- Cancel не возвращает seal quota и не даёт нового roll; invalid action блокирует весь пост.
-- Изменившийся результат требует подтверждения с тем же tape; проза и draft сохраняются при ошибке.
-- Реальная MyBB validation и side effects участвуют в безопасном протоколе.
-
-**Минимальные технические проверки:** php -l; точечные transaction rollback/duplicate key/response loss/CAS fixtures; gate review engines/hooks; отсутствие resolver на text edit. Не запускать полноценные комплексы.
-
-**Ручная приёмка на форуме:**
-
-1. Seal атаку, написать отыгрыш, отправить дважды: один пост и одно списание.
-2. Отменить последнее действие, вновь открыть editor: прежние броски/квота сохранены.
-3. Изменить цель/ресурс другим разрешённым событием: commit показывает конфликт, не новый roll.
-4. Quick Edit меняет только прозу, карточка/HP/AP прежние; narrative post не закрывает боевой ход.
-5. Отдельная приёмка подготовки при BLOCKED публикации: открыть UI/draft/preview и разрешённый seal; MyBB post не создаётся, окончательные ресурсы не списываются, доступ к combat commit закрыт.
-6. Сменить маску после seal и после опубликованного в безопасной конфигурации поста: механические hashes/tape/подтверждение/HP/AP/ход/история неизменны; отдельно проверить обычную смену маски и отказ её сохранения без повторного боя.
+**Критерий готовности:** вся механика атомарна внутри ACS; устойчивый журнал связывает обычный MyBB post и ACS с восстановлением после частичных сбоев. Неопределённость блокирует, повтор не повторяет механику. Общая SQL-атомарность MyBB+ACS и exactly-once INSERT без доказанной идентификации не заявляются.
 
 <a id="stage-5"></a>
 ### Этап 5. Статусы, реакции и способности
@@ -642,7 +633,7 @@ D1.12 в матрице относится к окончательной ред�
 | 1 | — (реализация не начиналась) | — | — | проверить целевую БД и runtime dependencies |
 | 2 | — (реализация не начиналась) | — | — | accuracy legacy content policy и snapshot API |
 | 3 | — (реализация не начиналась) | — | — | завершить предыдущие этапы и relevant KB capabilities |
-| 4 | — (реализация не начиналась) | — | — | IC-MYBB-1/IC-EDITOR-1: общая транзакционная граница |
+| 4 | R2: подготовка и journal foundation частично реализованы | installed manual test BLOCKED | не принят | IC-MYBB-1/native binding, ACS commit/outbox/recovery и Editor/Postbit wiring; общая tx отменена |
 | 5 | — (реализация не начиналась) | — | — | завершить предыдущие этапы и relevant KB capabilities |
 | 6 | — (реализация не начиналась) | — | — | IC-INV-1: глобальный reservation protocol |
 | 7 | — (реализация не начиналась) | — | — | завершить предыдущие этапы и relevant KB capabilities |

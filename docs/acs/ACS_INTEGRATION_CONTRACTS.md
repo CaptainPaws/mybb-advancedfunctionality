@@ -2,6 +2,46 @@
 
 > **ACS Stage 4 Revision 2:** ACS не требует изменения движков существующих таблиц MyBB. Боевые данные остаются в собственных таблицах InnoDB; публикация через MyBB проектируется как отдельный координируемый процесс с восстановлением. ACP MyISAM Migration Wizard выведен из эксплуатации. Миграция MyBB, REPLICATION CLIENT и подтверждения резервных копий мигратора не являются зависимостями ACS. См. [ACS-4.0-CLEANUP](ACS_4_0_CLEANUP.md).
 
+> **Revision 2 — ACS-4.0-R2.** Целевая установка: MyBB **1.8.41**, PHP **8.5.12**, MySQL **8.0.46**. Это последующее решение об интеграции, явно заменяющее прежнее требование общей SQL-атомарности MyBB/ACS. При противоречии публикационных требований ниже применяется R2. Исходные A1.1–A1.95, игровые формулы и исторические аудиты сохраняются как provenance; они не переписываются задним числом. Предыдущие упоминания 1.8.40/8.5.0 относятся к прежней проверке, а не к подтверждённой установленной среде.
+
+<a id="publication-r2"></a>
+## Revision 2: действующие публикационные контракты
+
+### IC-MYBB-1 — R2, installed binding BLOCKED
+
+Прежний `AF_ACS_MybbPostGateway::publishWithinTransaction` отменён как целевой API; исполняемого Gateway в проверенной main нет. Будущий Gateway связывает журнал с **обычной публикацией MyBB вне ACS-транзакции**, без правок ядра, прямого INSERT posts и отключения побочных hooks. Сигнатура и конкретный entry-script adapter должны быть доказаны установленным runtime, а не введены флагом `validated=true`.
+
+Вход — доверенная серверная операция, authenticated actor, tid, проза/вложения, submission_id, immutable request hash и control hashes. MyBB сохраняет permissions, закрытую тему, пароли, flood/spam, captcha, moderation, attachments, подписки, counters, Appearance, Balance→CS, AAM и shutdown. Наличие PostDataHandler не доказывает полноту entry-script проверок.
+
+Выход должен различать:
+
+| Outcome | Обязательное доказательство | Действие ACS |
+|---|---|---|
+| доказанный отказ до создания | конкретная пройденная граница до INSERT, не просто exception | REJECTED без механики; tape/prose сохранены |
+| подтверждённый новый pid | результат доверенного вызова + writer readback uid/tid/pid/visibility/newness | POST_CONFIRMED, затем отдельная ACS tx |
+| pending moderation | подтверждённый новый pid + visible=0 | MODERATION_PENDING, HP/AP не применяются |
+| неизвестный исход | timeout/exception/fatal/потеря ответа в опасной фазе | RECOVERY_REQUIRED, INSERT не повторяется |
+
+Upstream MyBB 1.8.41 имеет pre-insert и поздний post-end hooks, но между INSERT и поздним hook остаётся окно неопределённости. См. [точные файлы, SHA и ветки](ACS_STAGE_4_REVISION_2_AUDIT.md). Маркер submission_id, записанный отдельным InnoDB hook, не атомарен с MyISAM INSERT. `MAX(pid)`, один uid/tid/time и поиск по тексту не являются доказанным idempotency lookup. Пока installed extension point не доказан, exactly-once создания поста и автоматическое восстановление потерянного pid не заявляются.
+
+MyISAM posts/users/threads — поддерживаемая архитектурная граница, не требование миграции. Read/write routing проверяется для authoritative readback ACS и известного pid, а не ради общей транзакции. Appearance nested commit за пределами ACS tx не нарушает ACS atomicity; normal side effects должны сохраняться и проверяться на staging.
+
+### IC-EDITOR-1 — R2, preparation сохранена; publish wiring BLOCKED
+
+Одна форма, один AdvancedEditor/SCEditor. Поля: `acs_mode`, `draft_id`, `draft_version`, `submission_id`, `confirmation_hash`, обычный `message`. Submission ID создаёт сервер и переиспользует после потери ответа; он не является правом доступа. Проза и sealed actions сохраняются при любой ошибке. Draft CAS и frozen `publishing` запрещают незаметное изменение отправленного снимка. В текущем persistence ID — 32 lowercase hex; `expected_draft_version` — decimal string; hash — SHA256 lowercase hex. HTTP issue/submit endpoint пока отсутствует.
+
+`narrative_post` использует обычный путь MyBB и не применяет/не закрывает механику. Карточка combat_post загружается по подтверждённому post_link через существующие Theme/Postbit extension points, отдельно от редактируемого message. Не создавать второе поле/редактор с копией SCEditor и не включать механическую карточку в prose.
+
+Edit и Quick Edit меняют только прозу; они не вызывают Seal/Resolver/PublishService. Маски свободно меняются, их refs и версии не включаются в snapshot/dependencies/simulation/confirmation/tape/mechanical hash. UI различает COMMITTED, processing, recovery, moderation. До COMMITTED нельзя представлять виртуальный HP/AP как применённый.
+
+### Зависимости R2
+
+- IC-THEME: существующие slots допускают независимый builder; publication card/status и GM recovery UI требуют отдельного wiring и permission checks.
+- IC-BAL/IC-CS/IC-ALERTS/IC-STATS: обычные MyBB hooks остаются у владельцев. ACS rewards/EXP/outbox не повторяют обычные post rewards. Новые ACS начисления/уведомления требуют устойчивого idempotent owner receipt; они не становятся безопасными от существования класса.
+- IC-INV: внешние расходы по-прежнему заблокированы до доказанного reserve/consume/lookup; смена публикационной архитектуры это не разблокирует.
+- Recovery: authenticated session GM + CSRF + CAS + отдельный audit; клиентский pid и кандидаты не доказательство. Удаление/редактирование committed post не запускает Resolver и не стирает историю.
+
+[Исторический контракт 4.1.2](ACS_4_1_2_GATEWAY_CONTRACT.md) и [аудит 4.1.1](ACS_4_1_1_PUBLICATION_AUDIT.md) сохраняются без изменений; их требования общей tx/движков заменены R2, наблюдения о hooks и gap остаются provenance. Детальный текущий статус — [аудит R2](ACS_STAGE_4_REVISION_2_AUDIT.md).
 
 ## 1. Область и доказательства аудита
 

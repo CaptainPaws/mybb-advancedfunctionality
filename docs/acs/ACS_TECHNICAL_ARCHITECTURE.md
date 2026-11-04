@@ -2,6 +2,60 @@
 
 > **ACS Stage 4 Revision 2:** ACS не требует изменения движков существующих таблиц MyBB. Боевые данные остаются в собственных таблицах InnoDB; публикация через MyBB проектируется как отдельный координируемый процесс с восстановлением. ACP MyISAM Migration Wizard выведен из эксплуатации. Миграция MyBB, REPLICATION CLIENT и подтверждения резервных копий мигратора не являются зависимостями ACS. См. [ACS-4.0-CLEANUP](ACS_4_0_CLEANUP.md).
 
+> **Revision 2 — ACS-4.0-R2.** Целевая установка: MyBB **1.8.41**, PHP **8.5.12**, MySQL **8.0.46**. Это последующее решение об интеграции, явно заменяющее прежнее требование общей SQL-атомарности MyBB/ACS. При противоречии публикационных требований ниже применяется R2. Исходные A1.1–A1.95, игровые формулы и исторические аудиты сохраняются как provenance; они не переписываются задним числом. Предыдущие упоминания 1.8.40/8.5.0 относятся к прежней проверке, а не к подтверждённой установленной среде.
+
+<a id="publication-r2"></a>
+## Revision 2: границы транзакций и журнал публикации
+
+### Владение и совместимость
+
+Все изменения одной боевой операции выполняются в одной **ACS-only** транзакции на проверенном writer: HP/AP и состояния сущностей, результаты, events/details, post_link, переход хода, COMMITTED и outbox. Никакой `PostDataHandler`, Appearance/Balance/CS/AAM hook, mail/cache/shutdown или другой произвольный MyBB callback не вызывается внутри этой транзакции. Короткие транзакции журнала завершаются до передачи управления MyBB.
+
+Прежние §7.1–7.2 о единой транзакции, `publishWithinTransaction`, staging rollback MyBB и обязательном переводе MyBB на InnoDB **заменены** R2. Старый проект DDL в §5 не является миграцией или свидетельством реализации. Текущие исполняемые схемы — `migrations/001`–`008`; исторические миграции не редактируются. К таблицам MyBB SQL FK нет.
+
+### Последовательность и доказательства
+
+1. Аутентифицировать actor, проверить доступ к теме/черновику, sealed actions и confirmation; зарегистрировать устойчивый `submission_id` и immutable request hash. Повтор того же ID возвращает журнал; иной payload конфликтует.
+2. Под ACS locks зафиксировать VALIDATING, перечитать версии, исходный tape и подтверждённую simulation. Зарезервировать ход; нерешённые зависимые операции блокируют дальнейшую механику.
+3. До опасного внешнего вызова сохранить POSTING и control hashes, завершить транзакцию. Gateway следует проверенному обычному пути MyBB, включая entry-script validation; один `validate_post()` недостаточен.
+4. При подтверждённом новом pid проверить writer readback, uid/tid, visibility и допустимость ветки. Сохранить POST_CONFIRMED или MODERATION_PENDING отдельной короткой транзакцией. Нет pid/неизвестен исход — RECOVERY_REQUIRED, без повторного INSERT. Ошибка после pid не означает, что пост не создан.
+5. При POST_CONFIRMED сохранить фазу COMMITTING, затем под ACS locks проверить живые права, допустимость post_link, все dependency versions и сохранённый план. Версионный конфликт переводит в recovery; новый RNG запрещён.
+6. В одной ACS-транзакции записать всю механику, unique post_link/turn/result, terminal COMMITTED и outbox. Падение откатывает всю механику. Неизвестный COMMIT разрешается writer lookup receipt, а не повторным применением. Достоверный COMMITTED возвращается при повторе после потери HTTP.
+7. Outbox доставляет некритичные ACS-уведомления после commit. Consumer имеет устойчивый receipt/key и payload hash; внешняя доставка без идемпотентного owner API остаётся BLOCKED. Обычные MyBB-уведомления и начисления принадлежат MyBB и не повторяются ACS.
+
+### Состояния
+
+| Логическое / сохранённое состояние | Что доказано / допустимое продолжение |
+|---|---|
+| REGISTERED / `registered` | Намерение и sealed snapshot сохранены; VALIDATING или доказанный отказ |
+| VALIDATING / `validating` | Внутренние проверки; POSTING только после control hashes |
+| POSTING / `posting` | MyBB мог создать пост; только подтверждение pid или recovery |
+| POST_CONFIRMED / `post_confirmed` | Получен и проверен конкретный pid; COMMITTING или recovery |
+| MODERATION_PENDING / `moderation_pending` | Конкретный pid, visible=0; никакого HP/AP до штатного одобрения и повторной проверки |
+| COMMITTING / `committing` | Начинается фиксация ACS; lookup receipt при неизвестном результате |
+| COMMITTED / `committed` | Вся механика/receipt/outbox зафиксированы; terminal, механика не повторяется |
+| RECOVERY_REQUIRED / `recovery_required` | Сохранена `last_phase`; автоматический возврат в REGISTERED запрещён |
+| REJECTED / `rejected` | Доказан отказ без применения механики; terminal |
+
+Это единственная публикационная модель. Общие `operations.status=prepared/committed` продолжают обслуживать draft/admin/clock и не являются вторым автоматом публикации. `AF_ACS_Publication` задаёт словарь и разрешённый граф; граф сам по себе не доказывает существование evidence/writer для каждого перехода.
+
+### Текущий журнал и оставшаяся фиксация
+
+`008_publication_journal` создаёт только `af_acs_submissions` и append-only `af_acs_publication_audit`: PK submission_id, UNIQUE active_turn_id и подтверждённый pid, state_version CAS, last_phase, immutable request/sealed snapshot, evidence/result. До POSTING сохраняется отдельная фаза. Snapshot фиксирует прежний tape, без новых бросков. Пока нет узкого dependency barrier, любые новые state-changing session commands блокируются при незавершённой публикации; точный replay ранее committed команды возвращает свой receipt.
+
+`SubmissionStore` — внутренний persistence API, не HTTP-контракт. `confirmPost` принимает **только pid из текущего доверенного штатного вызова**, проверяет его на writer и не ищет кандидатов. Его нельзя подключать к клиентскому pid или использовать как ручное разрешение RECOVERY_REQUIRED. Возвращаемый handler merge pid сам по себе не доказывает новый боевой пост: будущий Gateway обязан отклонить/карантинировать merge/draft-conversion и неподдержанные ветки. Универсального publication endpoint пока нет.
+
+Не реализованы transactional combat writer/post_links/outbox и переходы фиксации: наличие состояний COMMITTING/COMMITTED их не заменяет. Схемы результатов/post_links/outbox должны добавляться следующей миграцией с UNIQUE submission_id, turn_id, pid и consumer receipt keys, в той же транзакции, что projections/receipt. Текущий журнал намеренно не позволяет объявить механику COMMITTED отдельной записью статуса.
+
+### Recovery и visibility
+
+Автовосстановление разрешено только по устойчивому доказательству предыдущего действия. POSTING без достоверного pid блокируется; нет timeout lease, автоматического удаления или blind retry. Даже отсутствие поста по эвристическому поиску не доказывает, что INSERT не состоялся. При известном pid проверяются удаление/перенос/скрытие на writer; до commit это конфликт, после commit — audit/предупреждение без отката истории.
+
+Ручное решение требует актуальных GM-полномочий именно этой сессии, CSRF, CAS, контекста доказательств и отдельного append-only audit события. Ни совпадение uid/tid/time, ни клиентский pid не разрешают привязку. До реализации такого evidence protocol предоставляется только диагностика, без «повторить отправку». Модерация выполняется MyBB; ACS ждёт approval, проверяет свежесть с исходным tape и может потребовать recovery.
+
+`AF_ACS_Publication::card()` отдаёт только статус/метку; `mechanics_confirmed=true` исключительно для COMMITTED. Postbit и editor wiring ещё не реализованы. Обычная видимая литература до commit — поддерживаемая политика; атомарная скрытая публикация литературы и карточки не обещается.
+
+Подробные свидетельства и ограничения: [аудит R2](ACS_STAGE_4_REVISION_2_AUDIT.md).
 
 ## 1. Статус и границы
 
@@ -1136,6 +1190,8 @@ Automatic timeout, tick, trigger, start_operation и outbox dispatch идут в
 
 ### 7.1. Граница безопасности
 
+> Исторический проект до R2. Требование общей MyBB/ACS tx ниже заменено [Revision 2](#publication-r2).
+
 Для ACS предлагается сериализация механических команд на строке session, затем encounter. Это сознательный простой порядок для ACS 1.0: меньше гонок shared_pool/targets/clocks, свободный порядок игроков определяется успешным commit. Это не обязательная игровая инициатива. Query не берут exclusive locks и не меняют clocks. Более тонкая блокировка возможна позднее только с доказательством сохранения инвариантов.
 
 Глобальный lock order PROPOSED: session → encounter → round → turns по id → entities/states/resources по id → effects/shared pools по id → draft/sealed/submission → внешние Inventory/balance строки по `(system,item/uid,id)`. В адаптерах порядок должен быть совместим с их writers; иначе coordinator блокируется до scoped исправления. Не удерживать SQL locks при HTTP/внешнем сетевом I/O. Запись предварительного submission registration происходит отдельно до основной tx; повтор не меняет payload_hash. Deadlocks обрабатываются ограниченным повтором только доказанно rolled-back transaction с тем же tape/key, не новым RNG.
@@ -1144,7 +1200,7 @@ Automatic timeout, tick, trigger, start_operation и outbox dispatch идут в
 
 ### 7.2. Исторический проект атомарной публикации (заменён Stage 4 Revision 2)
 
-Следующая последовательность сохранена для истории проекта. Актуальный контракт — отдельная координируемая публикация с восстановлением; общий rollback таблиц MyBB и их перевод в InnoDB не требуются. Новый PublishService здесь не реализован.
+> Исторический протокол, заменён [Revision 2](#publication-r2); не реализовывать common transaction через MyBB hooks.
 
 1. Валидировать форму/CSRF/forum/контроль и operation key; registered submission с hash payload, без расходов. Если key уже есть: другой hash → conflict, published → существующий pid, recovery_required → запрещён blind retry.
 2. Выполнить штатную MyBB validation до необратимых эффектов. Проверить доступность безопасных IC-MYBB/IC-INV контрактов и транзакционные engines всех затронутых таблиц/handlers.

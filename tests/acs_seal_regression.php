@@ -4,7 +4,7 @@ $GLOBALS['acsSealFixture']=static function(array $f):void{
     extract($f);global $mybb,$db;
     require_once AF_ADDONS.'advancedcombatsystem/modules/Application/SealService.php';
     $mybb->user['uid']=7;$mybb->request_method='post';$mybb->input=['my_post_key'=>'token'];
-    $migrations=new AF_ACS_Migrations($link);$link->query('DROP TABLE fixture_af_acs_rolls');$link->query("UPDATE fixture_af_acs_schema_migrations SET status='failed',step=1 WHERE version='007_sealed_actions'");$migrations->run();$migrations->run();snapshot_assert($migrations->status()['schema_version']==='007_sealed_actions','007 resume/repeat failed');
+    $migrations=new AF_ACS_Migrations($link);$link->query('DROP TABLE fixture_af_acs_rolls');$link->query("UPDATE fixture_af_acs_schema_migrations SET status='failed',step=1 WHERE version='007_sealed_actions'");$migrations->run();$migrations->run();snapshot_assert($migrations->status()['schema_version']===AF_ACS_Migrations::VERSION,'007 resume/repeat failed');
     $originalSnapshots=$link->query('SELECT * FROM fixture_af_acs_snapshots ORDER BY id')->fetch_all(MYSQLI_ASSOC);
     $drafts=new AF_ACS_DraftService($repo,$access);$draws=0;$pet=$registeredPet['entity_id'];$petState=$repo->entity($sid,$pet);$petResources=$repo->entityResources($pet);
     $random=new AF_ACS_RandomSource(function()use(&$draws,$link,$pet){$draws++;if($draws===5){
@@ -60,6 +60,7 @@ $GLOBALS['acsSealFixture']=static function(array $f):void{
     $mybb->request_method='get';blocked(fn()=>$seal->command('seal',$seal2),'ACS_POST_REQUIRED');$mybb->request_method='post';
     snapshot_assert($draws===6,'Read/denied operation used RNG');
     if(getenv('ACS_SEAL_DOM_FIXTURE')==='1'){$mybb->input=['acs_encounter'=>$eid];file_put_contents('/tmp/acs423-seal-fixture.json',json_encode(['html'=>AF_ACS_BuilderController::renderBuilder($sid,'51',$builder),'context'=>$builder->context($sid,$eid,$turnId),'initial'=>$initial,'sealed'=>$view,'sealedDraft'=>$sealedDraft,'changed'=>$changed,'confirmed'=>$confirmed,'confirmedDraft'=>$confirmedDraft,'cancelled'=>$cancelled,'cancelledDraft'=>$cancelledDraft],JSON_THROW_ON_ERROR));}
+    if (isset($GLOBALS['acsPublicationFixture'])) { ($GLOBALS['acsPublicationFixture'])(get_defined_vars()); }
     echo "ACS Seal: one tape/replay, pinned append-only actions, cancel history/no quota refund, shared AP quota, conflict/reconfirm same rolls, mask separation and no combat mutations passed\n";
 };
 require __DIR__.'/acs_builder_regression.php';

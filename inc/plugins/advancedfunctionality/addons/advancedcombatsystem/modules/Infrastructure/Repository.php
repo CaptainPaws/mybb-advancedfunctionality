@@ -27,7 +27,7 @@ class AF_ACS_Repository
 
     protected function table(string $name): string
     {
-        if (!in_array($name, ['schema_migrations', 'sessions', 'session_roles', 'snapshots', 'operations', 'events', 'event_details', 'diagnostics', 'control_groups', 'entities', 'entity_states', 'resources', 'controllers', 'encounters', 'sides', 'side_relationships', 'participants', 'rounds', 'turns', 'entity_turns', 'cooldowns', 'drafts', 'sealed_actions', 'rolls'], true)) {
+        if (!in_array($name, ['schema_migrations', 'sessions', 'session_roles', 'snapshots', 'operations', 'events', 'event_details', 'diagnostics', 'control_groups', 'entities', 'entity_states', 'resources', 'controllers', 'encounters', 'sides', 'side_relationships', 'participants', 'rounds', 'turns', 'entity_turns', 'cooldowns', 'drafts', 'sealed_actions', 'rolls', 'submissions', 'publication_audit'], true)) {
             throw new RuntimeException('ACS_UNKNOWN_TABLE');
         }
         return '`'.$this->prefix.'af_acs_'.$name.'`';
@@ -68,7 +68,7 @@ class AF_ACS_Repository
         $rows = $this->sql('SELECT version,status,step,checksum FROM '.$this->table('schema_migrations'))['rows'];
         $known = [];
         $names = [];
-        foreach (['001_foundation','002_entities','003_encounters','004_round_roster','005_clock_resources','006_drafts','007_sealed_actions'] as $version) {
+        foreach (['001_foundation','002_entities','003_encounters','004_round_roster','005_clock_resources','006_drafts','007_sealed_actions','008_publication_journal'] as $version) {
             $file = __DIR__.'/../../migrations/'.$version.'.php';
             $migration = require $file;
             $known[$version] = ['checksum'=>hash_file('sha256',$file),'steps'=>count($migration['tables'])];
@@ -83,6 +83,14 @@ class AF_ACS_Repository
         $placeholders=implode(',',array_fill(0,count($names),'?'));
         $count=$this->sql('SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('.$placeholders.') AND ENGINE=? AND TABLE_COLLATION=? AND ROW_FORMAT=?',[...$names,'InnoDB','utf8mb4_unicode_ci','Dynamic'])['rows'][0]['n'];
         if ((int)$count!==count($names)) throw new RuntimeException('ACS_SCHEMA_NOT_TRANSACTIONAL');
+    }
+
+    /** Conservative session-wide barrier until publication dependencies can be narrowed safely. */
+    protected function assertNoPendingPublication(string $sid): void
+    {
+        if ($this->sql('SELECT submission_id FROM '.$this->table('submissions')." WHERE session_id=? AND status NOT IN ('committed','rejected') LIMIT 1", [$sid])['rows']) {
+            throw new RuntimeException('ACS_PUBLICATION_UNRESOLVED');
+        }
     }
 
     /** Exact decimal IDs/versions; callers never pass floats or overflowing ints. */

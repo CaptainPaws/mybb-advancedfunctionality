@@ -7,9 +7,9 @@ final class AF_ACS_PublicationDiagnostics
 {
     private const REFERENCE = [
         'inc/datahandlers/post.php'=>'9d7a5aee7cf100bff0cbd918934b16524f3d556e94ced4719bef97622c6a5d13',
-        'newreply.php'=>'2c4bf98727f0a85142b8f988ef94a830053db1fa8014774f67eee71f8c040035',
+        'newreply.php'=>'affb30736516ac15f7597424b27df39c074093bbed8922e54e121bda9fdc4f43',
         'inc/db_mysqli.php'=>'99f7077ef3dd5c2032e9a690dfd50f4b707147d7ec43621ed5bc875cb8edde4a',
-        'inc/class_core.php'=>'8b7228b6918becbdea1d3d51cd8081604e988e72f898308e68998603491c06fc',
+        'inc/class_core.php'=>'6fe9f32d470218e4fc0b15e9631007d9108c1e2cae53f8abf1862ec771488d7b',
     ];
     private static function row(string $name,string $status,string $detail):array { return compact('name','status','detail'); }
     private static function identifier(mixed $value):string
@@ -35,13 +35,13 @@ final class AF_ACS_PublicationDiagnostics
         $report=['report_version'=>1,'scope'=>'Текущий ACP bootstrap; не трассировка newreply/Quick Edit. Регистрация не доказывает исполнение.',
             'publication'=>self::row('IC-MYBB-1','BLOCKED','Координируемая публикация с восстановлением по ACS Stage 4 Revision 2 ещё не реализована. Диагностика не разрешает публикацию.'),'mybb'=>[],'database'=>[],'tables'=>[],'triggers'=>[],'hooks'=>[],'integrations'=>[]];
         $v=(string)($mybb->version??'');
-        $report['mybb'][]=self::row('MyBB', $v==='1.8.40'?'PASS':'WARNING',preg_match('/\A[0-9.]{1,20}\z/D',$v)?$v:'Версия не распознана');
+        $report['mybb'][]=self::row('MyBB', $v==='1.8.41'?'PASS':'WARNING',preg_match('/\A[0-9.]{1,20}\z/D',$v)?$v:'Версия не распознана');
         $report['mybb'][]=self::row('PHP','PASS',PHP_VERSION);
         $report['mybb'][]=self::row('DB driver','NOT_VERIFIED',self::identifier(is_object($db)?get_class($db):'unavailable'));
         $report['mybb'][]=self::row('PostDataHandler',is_file(MYBB_ROOT.'inc/datahandlers/post.php')?'NOT_VERIFIED':'BLOCKED',is_file(MYBB_ROOT.'inc/datahandlers/post.php')?'Штатный путь существует; файл не подключается и handler не вызывается.':'Файл штатного handler отсутствует.');
         foreach(self::REFERENCE as $file=>$expected){
             $path=MYBB_ROOT.$file;$actual=is_file($path)&&is_readable($path)?@hash_file('sha256',$path):false;
-            $report['mybb'][]=self::row($file,$actual===false?'BLOCKED':($actual===$expected?'PASS':'WARNING'), 'SHA256: '.($actual?:'недоступен').'; эталон 1.8.40: '.$expected);
+            $report['mybb'][]=self::row($file,$actual===false?'BLOCKED':($actual===$expected?'PASS':'WARNING'), 'SHA256: '.($actual?:'недоступен').'; upstream 1.8.41 (не installed): '.$expected);
         }
         $required=['posts','threads','forums','users','threadsubscriptions','attachments','mailqueue','privatemessages','moderatorlog','datacache'];
         $tables=['posts','threads','forums','users','threadsubscriptions','attachments','mailqueue','privatemessages','moderatorlog','datacache','af_balance','af_balance_tx','af_post_rewards','af_cs_sheets','aam_alerts','af_aa_assignments','af_gallery_media'];
@@ -65,7 +65,7 @@ final class AF_ACS_PublicationDiagnostics
             $metadata=self::select($db,'SELECT TABLE_NAME, ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME'.$where,true);
             $engines=[];foreach($metadata??[] as $r)$engines[$r['TABLE_NAME']]=$r['ENGINE'];
             foreach($tables as $name){$engine=$engines[$db->table_prefix.$name]??null;
-                $report['tables'][]=self::row($name,$metadata===null?'NOT_VERIFIED':($engine===null?(in_array($name,$required,true)?'BLOCKED':'WARNING'):(!str_starts_with($name,'af_acs_')||strtoupper($engine)==='INNODB'?'PASS':'BLOCKED')), $metadata===null?'Нет metadata-доступа':($engine===null?'Не обнаружена; для optional owner/future ветки сверить применимость.':'Engine: '.self::identifier($engine)));
+                $report['tables'][]=self::row($name,$metadata===null?'NOT_VERIFIED':($engine===null?(in_array($name,$required,true)?'BLOCKED':'WARNING'):(!str_starts_with($name,'af_acs_')||strtoupper($engine)==='INNODB'?'PASS':'BLOCKED')), $metadata===null?'Нет metadata-доступа':($engine===null?'Не обнаружена; для optional owner/future ветки сверить применимость.':'Engine: '.self::identifier($engine).(str_starts_with($name,'af_acs_')?'; ACS требует InnoDB.':'; Revision 2 не требует миграции MyBB.')));
             }
             $triggers=self::select($db,'SELECT TRIGGER_NAME, EVENT_OBJECT_TABLE, ACTION_TIMING, EVENT_MANIPULATION FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND EVENT_OBJECT_TABLE'.$where,true);
             if($triggers===null)$report['triggers'][]=self::row('Triggers','NOT_VERIFIED','Нет metadata-доступа.');
