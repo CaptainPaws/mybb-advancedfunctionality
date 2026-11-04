@@ -58,6 +58,7 @@ $GLOBALS['acsPublicationFixture']=static function(array $fixture):void {
         return $store->confirmPost($id,$r['state_version'],'501',static function(){},'1');
     };
     $unchanged=static function(array $before,string $label)use($capture):void { snapshot_assert($capture()===$before,'Partial combat mutation: '.$label); };
+    if (isset($GLOBALS['acsRecoveryFixture'])) { ($GLOBALS['acsRecoveryFixture'])(get_defined_vars());return; }
     // Failure late enough to include HP/AP, clocks, event/result/link/COMMITTED/receipt writes.
     $r=$intent();$mybb->input['af_aa_mask']='fixture-cosmetic-only';$before=$capture();
     $link->query("CREATE TRIGGER fixture_fail_outbox BEFORE INSERT ON fixture_af_acs_outbox FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='fixture failure'");

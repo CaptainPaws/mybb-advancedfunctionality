@@ -1,11 +1,13 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/EncounterRepository.php';
+require_once __DIR__.'/PublicationRecoveryPersistence.php';
 require_once __DIR__.'/../Domain/Publication.php';
 
 /** Internal R2 journal. No endpoint, MyBB insertion, Resolver or combat writer. */
 final class AF_ACS_SubmissionStore extends AF_ACS_Repository
 {
+    use AF_ACS_PublicationRecoveryPersistence;
     private AF_ACS_EncounterRepository $preparation;
 
     public function __construct(object $database)
@@ -123,17 +125,17 @@ final class AF_ACS_SubmissionStore extends AF_ACS_Repository
     }
 
     /** All journal writes are short ACS-only transactions; authorization callback must be read-only. */
-    private function change(string $id, string $version, callable $authorize, callable $choose): array
+    private function change(string $id, string $version, callable $authorize, callable $choose, ?string $actor = null, bool $allowSame = false): array
     {
         self::integer($version, '18446744073709551614');
-        return $this->transactions->run(function () use ($id, $version, $authorize, $choose) {
+        return $this->transactions->run(function () use ($id, $version, $authorize, $choose, $actor, $allowSame) {
             $this->writable(); $row = $this->submission($id);
             if (!$row) { throw new RuntimeException('ACS_SUBMISSION_NOT_FOUND'); }
             $this->lockSession($row['session_id']); $row = $this->submission($id);
             $authorize($row);
             if ($row['state_version'] !== $version) { throw new RuntimeException('ACS_VERSION_CONFLICT'); }
             [$to, $reason, $evidence, $pid] = $choose($row);
-            AF_ACS_Publication::requireTransition($row['status'], $to);
+            if (!$allowSame || $to !== $row['status']) { AF_ACS_Publication::requireTransition($row['status'], $to); }
             $last = $to === 'recovery_required' ? $row['last_phase'] : $to;
             if ($pid !== null) {
                 self::integer($pid, '4294967295');
@@ -147,7 +149,7 @@ final class AF_ACS_SubmissionStore extends AF_ACS_Repository
                 $this->sql('UPDATE '.$this->table('drafts')." SET status='sealed',draft_version=draft_version+1,updated_at=? WHERE id=? AND status='publishing'", [time(),$row['draft_id']]);
             }
             $updated = $this->submission($id);
-            $this->audit($updated, $row['status'], $to, $row['author_uid'], $reason, $evidence);
+            $this->audit($updated, $row['status'], $to, $actor ?? $row['author_uid'], $reason, $evidence);
             return $updated;
         });
     }
@@ -203,7 +205,7 @@ final class AF_ACS_SubmissionStore extends AF_ACS_Repository
                 || ($expectedFid !== null && (string)$post['fid'] !== $expectedFid)
                 || !in_array((string)$post['visible'],['0','1'],true)) { throw new RuntimeException('ACS_POST_CONFIRMATION_DENIED'); }
             $to = (string)$post['visible'] === '0' ? 'moderation_pending' : 'post_confirmed';
-            return [$to,'native_pid_readback',['schema_version'=>1,'pid'=>$pid,'visible'=>(string)$post['visible']],$pid];
+            return [$to,'native_pid_readback',['schema_version'=>1,'pid'=>$pid,'visible'=>(string)$post['visible'],'fid'=>$expectedFid],$pid];
         });
     }
 

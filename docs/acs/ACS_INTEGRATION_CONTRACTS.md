@@ -36,6 +36,12 @@ MyISAM posts/users/threads — поддерживаемая архитектур
 
 Prevalidation использует `CombatCommitWriter::validatePublication` без записи HP/AP. Gateway владеет единственным native lifecycle и durable POSTING, writer независимо перепроверяет права/versions/pid/confirmation при commit. Никакая ACS tx не охватывает Gateway. `MODERATION_PENDING` и `RECOVERY_REQUIRED` не возобновляются автоматически coordinator; approval/reconciliation — следующие задачи. Ошибка после подтверждённого поста проверяет receipt и сохраняет quarantine, не отправляет пост повторно. CSRF/ownership проверяются и на replay. Consumer delivery, frontend и installed binding не реализованы.
 
+### IC-ACS-RECOVERY-1 — R2, server commands; unknown identity BLOCKED
+
+`AF_ACS_RecoveryService(database, access?)` предоставляет read-only `inspect(id)`, POST/CSRF `recover(id, expected_state_version)` и GM-only `resolve(id, expected_state_version, strategy, reason)`. Сначала используется общий verified terminal receipt lookup writer; COMMITTED не откатывается при удалении/изменении MyBB поста. Известный pid проверяется на authoritative writer вместе с исходным fid из native confirmation audit. Полный mechanical retry остаётся за authenticated автором и существующим CombatCommitWriter, без GM impersonation.
+
+GM стратегии: `resume_known_post`, `reject_unsent` (только доказанный pre-dispatch), `hold`; persisted owner/GM membership/expiry перепроверяются под SQL lock, CAS и реальный audit actor обязательны. Ни один endpoint/UI не зарегистрирован. Команда не принимает новый pid: diagnostic observed_pid и uid/tid/time/text не являются identity proof. Неизвестные и legacy incomplete outcomes остаются в quarantine, sealed history/claim сохраняются. Approval/delete/move observers ещё не подключены. [Точные команды, evidence и fixtures](ACS_4_3_3_R2_RECOVERY_SERVICE.md).
+
 ### IC-EDITOR-1 — R2, preparation сохранена; publish wiring BLOCKED
 
 Одна форма, один AdvancedEditor/SCEditor. Поля: `acs_mode`, `draft_id`, `draft_version`, `submission_id`, `confirmation_hash`, обычный `message`. Submission ID создаёт сервер и переиспользует после потери ответа; он не является правом доступа. Проза и sealed actions сохраняются при любой ошибке. Draft CAS и frozen `publishing` запрещают незаметное изменение отправленного снимка. В текущем persistence ID — 32 lowercase hex; `expected_draft_version` — decimal string; hash — SHA256 lowercase hex. HTTP issue/submit endpoint пока отсутствует.

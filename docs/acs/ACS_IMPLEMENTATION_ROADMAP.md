@@ -186,7 +186,7 @@
 | ACS-4.3.1-R2 | Добавлен ACS-only durable journal, CAS, UNIQUE turn/pid, audit, freeze и safe quarantine. Это часть реализации, не приёмка всего state machine: terminal writer/receipt добавлены отдельной 4.3.1B; проверенное recovery evidence ещё нужно |
 | ACS-4.3.1B-R2 | Transactional CombatCommitWriter и миграция 009 реализованы для текущего AP/direct-attack/HP scope; [контракт и fixtures](ACS_4_3_1B_R2_COMBAT_WRITER.md). Atomic projections/events/clock closure/post_link/result/COMMITTED receipt/outbox, immutable tape, UNIQUE/CAS и duplicate lookup. Явный combat controller grant обязателен; native Gateway не вызывается, consumers не включены; installed acceptance не выполнена |
 | ACS-4.3.2-R2 | Внутренний PublishService реализован и проверен bounded upstream fixtures: server issuance/reuse, frozen plan revalidation, Gateway вне ACS tx, writer/terminal receipt, moderation wait и quarantine. [Контракт и проверки](ACS_4_3_2_R2_PUBLISH_SERVICE.md). HTTP/native entry binding, frontend и installed acceptance BLOCKED; publication_enabled=false |
-| ACS-4.3.3-R2 | BLOCKED evidence binding: quarantine сохраняет last_phase и не повторяет INSERT. RecoveryService/GM разрешение ещё не реализованы. Добавить доказательный lookup известных исходов, авторизованные ручные audit decisions; не привязывать по uid/tid/time |
+| ACS-4.3.3-R2 | Реализованы внутренние RecoveryService и GM CAS/audit команды: receipt lookup, known-pid retry/resume, unsent reject, quarantine/hold. [Проверки и ограничения](ACS_4_3_3_R2_RECOVERY_SERVICE.md). Unknown-pid binding/legacy incomplete evidence BLOCKED; heuristic binding и повтор INSERT запрещены. Native observers/GM frontend/installed acceptance ещё отсутствуют |
 | ACS-4.3.4-R2 | Политика выбрана: литература может быть видна до ACS, moderation ждёт native approval без HP/AP. Добавлена чистая status projection; wiring карточки и moderation/delete/move observers ещё нужны |
 | ACS-4.4-R2 | Существующий editor/builder сохранён, publication_enabled=false. Narrative/edit/Quick Edit и маски независимы. Нужны единый submit lifecycle, статусы, postbit-card и компактный GM recovery UI; второй SCEditor запрещён |
 | ACS-4.5-R2 | BLOCKED installed acceptance. Минимальные fixtures — журнал/границы/потеря ответа/CAS/UNIQUE и прежние draft/seal tests. Полная проверка на warprift.ru 1.8.41/8.5.12/8.0.46 не подменяется fixture |
@@ -634,7 +634,7 @@ D1.12 в матрице относится к окончательной ред�
 | 1 | — (реализация не начиналась) | — | — | проверить целевую БД и runtime dependencies |
 | 2 | — (реализация не начиналась) | — | — | accuracy legacy content policy и snapshot API |
 | 3 | — (реализация не начиналась) | — | — | завершить предыдущие этапы и relevant KB capabilities |
-| 4 | R2: подготовка и journal foundation частично реализованы | installed manual test BLOCKED | не принят | IC-MYBB-1/native binding, ACS commit/outbox/recovery и Editor/Postbit wiring; общая tx отменена |
+| 4 | R2: подготовка, journal, bounded Gateway, writer/coordinator и safe recovery реализованы в backend scope | installed manual test BLOCKED | не принят | Native binding/lifecycle observers, unknown-pid identity proof, consumers и Editor/Postbit/GM wiring; общая tx отменена |
 | 5 | — (реализация не начиналась) | — | — | завершить предыдущие этапы и relevant KB capabilities |
 | 6 | — (реализация не начиналась) | — | — | IC-INV-1: глобальный reservation protocol |
 | 7 | — (реализация не начиналась) | — | — | завершить предыдущие этапы и relevant KB capabilities |
