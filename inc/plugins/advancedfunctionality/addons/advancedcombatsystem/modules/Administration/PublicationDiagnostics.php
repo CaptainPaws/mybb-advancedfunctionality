@@ -9,6 +9,7 @@ final class AF_ACS_PublicationDiagnostics
         'inc/datahandlers/post.php'=>'9d7a5aee7cf100bff0cbd918934b16524f3d556e94ced4719bef97622c6a5d13',
         'newreply.php'=>'affb30736516ac15f7597424b27df39c074093bbed8922e54e121bda9fdc4f43',
         'inc/db_mysqli.php'=>'99f7077ef3dd5c2032e9a690dfd50f4b707147d7ec43621ed5bc875cb8edde4a',
+        'inc/class_moderation.php'=>'891913789e5a20adceff7bbebcb68ae660fe04dc9653afe81e3cc58bf70fd4cc',
         'inc/class_core.php'=>'6fe9f32d470218e4fc0b15e9631007d9108c1e2cae53f8abf1862ec771488d7b',
     ];
     private static function row(string $name,string $status,string $detail):array { return compact('name','status','detail'); }
@@ -32,11 +33,11 @@ final class AF_ACS_PublicationDiagnostics
     {
         (new AF_ACS_AuthorizationService)->requirePermission('admin.diagnostics.view');
         global $mybb,$db,$plugins;
-        $report=['report_version'=>1,'scope'=>'Текущий ACP bootstrap; не трассировка newreply/Quick Edit. Регистрация не доказывает исполнение.',
-            'publication'=>self::row('IC-MYBB-1','BLOCKED','Координируемая публикация с восстановлением по ACS Stage 4 Revision 2 ещё не реализована. Диагностика не разрешает публикацию.'),'mybb'=>[],'database'=>[],'tables'=>[],'triggers'=>[],'hooks'=>[],'integrations'=>[]];
+        $report=['report_version'=>2,'scope'=>'Текущий ACP bootstrap; не трассировка newreply/Quick Edit. Регистрация не доказывает исполнение.',
+            'publication'=>self::row('IC-MYBB-1','BLOCKED','Backend, test editor и карточка Stage 4 R2 реализованы в ограниченном scope. Installed-приёмка не подтверждена; publication_enabled=false. Диагностика не разрешает публикацию.'),'mybb'=>[],'database'=>[],'tables'=>[],'triggers'=>[],'hooks'=>[],'integrations'=>[],'acceptance'=>[],'outbox'=>[]];
         $v=(string)($mybb->version??'');
         $report['mybb'][]=self::row('MyBB', $v==='1.8.41'?'PASS':'WARNING',preg_match('/\A[0-9.]{1,20}\z/D',$v)?$v:'Версия не распознана');
-        $report['mybb'][]=self::row('PHP','PASS',PHP_VERSION);
+        $report['mybb'][]=self::row('PHP',PHP_VERSION==='8.5.12'?'PASS':'WARNING',PHP_VERSION);
         $report['mybb'][]=self::row('DB driver','NOT_VERIFIED',self::identifier(is_object($db)?get_class($db):'unavailable'));
         $report['mybb'][]=self::row('PostDataHandler',is_file(MYBB_ROOT.'inc/datahandlers/post.php')?'NOT_VERIFIED':'BLOCKED',is_file(MYBB_ROOT.'inc/datahandlers/post.php')?'Штатный путь существует; файл не подключается и handler не вызывается.':'Файл штатного handler отсутствует.');
         foreach(self::REFERENCE as $file=>$expected){
@@ -55,7 +56,7 @@ final class AF_ACS_PublicationDiagnostics
             $read=self::select($db,'SELECT VERSION() AS version, CONNECTION_ID() AS connection_id');
             $write=self::select($db,'SELECT VERSION() AS version, CONNECTION_ID() AS connection_id',true);
             $version=$write[0]['version']??null;
-            $report['database'][]=self::row('MySQL/MariaDB',$version?'PASS':'NOT_VERIFIED',is_string($version)?substr(preg_replace('/[^a-zA-Z0-9. +_\-]/','',$version),0,100):'Нет metadata-доступа');
+            $report['database'][]=self::row('MySQL/MariaDB',$version===null?'NOT_VERIFIED':($version==='8.0.46'?'PASS':'WARNING'),is_string($version)?substr(preg_replace('/[^a-zA-Z0-9. +_\-]/','',$version),0,100):'Нет metadata-доступа');
             $same=isset($read[0]['connection_id'],$write[0]['connection_id'])&&$read[0]['connection_id']===$write[0]['connection_id'];
             // Only object identity plus server connection IDs; no host, user, password or IDs exported.
             $links=isset($db->read_link,$db->write_link)&&$db->read_link===$db->write_link;
@@ -76,7 +77,7 @@ final class AF_ACS_PublicationDiagnostics
             }
         } else $report['database'][]=self::row('Metadata','NOT_VERIFIED','DB adapter/prefix не поддержан; запросы не выполнялись.');
         foreach(($plugins->hooks??[]) as $hook=>$priorities){
-            if(!preg_match('/\A(?:datahandler_(?:post|pm)_|newreply_|newthread_|editpost_|post_|moderation_|xmlhttp(?:_|$)|global_end|shutdown)/',$hook))continue;
+            if(!preg_match('/\A(?:datahandler_(?:post|pm)_|newreply_|newthread_|editpost_|post_|moderation_|xmlhttp(?:_|$)|class_moderation_|postbit(?:_|$)|global_start|global_end|shutdown)/',$hook))continue;
             foreach($priorities as $priority=>$callbacks)foreach($callbacks as $entry){
                 $cb=$entry['function']??$entry['class_method']??null;$source=$entry['file']??'';$name='[неименованный callback]';
                 try {
@@ -91,19 +92,27 @@ final class AF_ACS_PublicationDiagnostics
         }
         usort($report['hooks'],fn($a,$b)=>[$a['hook'],$a['priority'],$a['callback']]<=>[$b['hook'],$b['priority'],$b['callback']]);
         $risks=[
-            'advancedappearance'=>['AdvancedAppearance','Требуется joinable owner writer без собственного START/COMMIT и outcome-aware cache.'],
-            'balance'=>['Balance','Нужны writer/read-your-writes, locks и receipts начислений.'],
-            'charactersheets'=>['CharacterSheets','Нужен аудит Balance→EXP→progress записи и lost updates.'],
-            'advancedpostcounter'=>['AdvancedPostCounter','Проверить users engine, counters и shutdown rebuild после outcome.'],
-            'advancedalertsandmentions'=>['AAM','Нужны outcome-aware alerts/cache и идемпотентная доставка.'],
-            'smarturltitles'=>['SmartURLTitles','Сетевые transformations завершать до transaction и фиксации prose.'],
+            'advancedappearance'=>['AdvancedAppearance','Маски — косметика; native hooks работают вне ACS tx. Проверить newreply/Quick Edit и неизменность sealed hashes/tape.'],
+            'balance'=>['Balance','Обычные post rewards остаются native. ACS outbox rewards отключены до owner API с durable idempotency key/receipt lookup.'],
+            'charactersheets'=>['CharacterSheets','Проверить обычный Balance→EXP→progress вне ACS tx; повтор ACS delivery без owner receipt запрещён.'],
+            'advancedpostcounter'=>['AdvancedPostCounter','Проверить pre-INSERT counters и shutdown rebuild. MyISAM допустим; rollback native side effects не обещается.'],
+            'advancedalertsandmentions'=>['AAM','Проверить native mentions/alerts. ACS outbox delivery отключена до доказанного owner receipt; её нельзя дублировать с native alerts.'],
+            'smarturltitles'=>['SmartURLTitles','Native transformations выполняются вне ACS tx; sealed mechanics не меняются при преобразовании прозы.'],
         ];
         foreach($risks as $id=>[$label,$reason]){
             $detected=is_file(__DIR__.'/../../../'.$id.'/'.$id.'.php');$enabled=function_exists('af_is_addon_enabled')?af_is_addon_enabled($id):null;
             $report['integrations'][]=self::row($label,$enabled?'WARNING':'NOT_VERIFIED','Файл: '.($detected?'есть':'нет').'; enabled: '.($enabled===null?'неизвестно':($enabled?'да':'нет')).'. '.$reason.' Текущая регистрация не доказывает безопасное исполнение.');
         }
         $report['integrations'][]=self::row('MyBB cache/shutdown','NOT_VERIFIED','Backend и внешние side effects не трассировались. Нужна проверка восстановления координируемой публикации; конфигурация не экспортируется.');
-        $report['integrations'][]=self::row('ACS coordinator','BLOCKED','Внутренний bounded Gateway проверен upstream fixtures; installed binding и publication coordinator/recovery не подтверждены. Наличие класса не разрешает публикацию.');
+        $report['integrations'][]=self::row('ACS coordinator','BLOCKED','Gateway/Publish/writer/Recovery/moderation и test UI проверены bounded fixtures. Installed source, runtime hooks, native/quick reply, edit, theme и owner side effects ещё требуют ручной приёмки.');
+        foreach ([
+            'installed.runtime'=>'Подтвердить MyBB 1.8.41 / PHP 8.5.12 / MySQL 8.0.46, SHA и routing на изолированной копии установленного форума.',
+            'installed.hooks'=>'Снять runtime hooks newreply/Quick Reply/Quick Edit/moderation/showthread; ACP snapshot не заменяет эти поверхности.',
+            'installed.failures'=>'Проверить double submit, lost response, post-INSERT failure, ACS rollback, concurrency и recovery без повторных HP/AP/бросков.',
+            'installed.presentation'=>'Проверить moderation/delete/move, narrative/edit, masks, AE/ATF/APUI и статус карточки.',
+            'administrator.decision'=>'Обязательны сохранённые installed evidence, отсутствие blocking conflicts и отдельное явное решение администратора. Автовключения нет.',
+        ] as $name=>$detail) $report['acceptance'][]=self::row($name,'NOT_VERIFIED',$detail);
+        $report['outbox'][]=self::row('ACS combat.committed consumers','BLOCKED','Есть transactional pending outbox; ACS dispatcher/consumers не реализованы. Native MyBB rewards/alerts не заменяются. Owner receipt/idempotency и installed-проверка обязательны до добавления consumers.');
         return $report;
     }
     public static function render():void
@@ -112,7 +121,7 @@ final class AF_ACS_PublicationDiagnostics
         echo '<h2>Публикация → Совместимость</h2><p>'.$esc($report['scope']).'</p><p>IC-MYBB-1: BLOCKED. Только read-only metadata; тестовые посты и rollback probes не выполняются.</p>';
         $json=json_encode($report,JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_INVALID_UTF8_SUBSTITUTE|JSON_THROW_ON_ERROR);
         echo '<p><a class="button" download="acs-publication-compatibility.json" href="data:application/json;base64,'.base64_encode($json).'">Экспорт обезличенного технического отчёта</a></p>';
-        foreach(['mybb'=>'MyBB','database'=>'База данных','tables'=>'Таблицы: известный write set и текущая схема ACS','triggers'=>'Triggers','integrations'=>'Интеграции'] as $key=>$title){
+        foreach(['mybb'=>'MyBB','database'=>'База данных','tables'=>'Таблицы: известный write set и текущая схема ACS','triggers'=>'Triggers','integrations'=>'Интеграции','outbox'=>'ACS outbox','acceptance'=>'Installed-приёмка: evidence отсутствует в этом snapshot'] as $key=>$title){
             echo '<h3>'.$esc($title).'</h3><table class="general"><tr><th>Проверка</th><th>Статус</th><th>Сведения</th></tr>';
             foreach($report[$key] as $r)echo '<tr><td>'.$esc($r['name']).'</td><td>'.$esc($r['status']).'</td><td>'.$esc($r['detail']).'</td></tr>';
             echo '</table>';

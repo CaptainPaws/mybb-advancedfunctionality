@@ -43,7 +43,7 @@
 
 `008_publication_journal` создаёт только `af_acs_submissions` и append-only `af_acs_publication_audit`: PK submission_id, UNIQUE active_turn_id и подтверждённый pid, state_version CAS, last_phase, immutable request/sealed snapshot, evidence/result. До POSTING сохраняется отдельная фаза. Snapshot фиксирует прежний tape, без новых бросков. Пока нет узкого dependency barrier, любые новые state-changing session commands блокируются при незавершённой публикации; точный replay ранее committed команды возвращает свой receipt.
 
-`SubmissionStore` — внутренний persistence API, не HTTP-контракт. `confirmPost` принимает **только pid из текущего доверенного штатного вызова**, проверяет его на writer и не ищет кандидатов. Его нельзя подключать к клиентскому pid или использовать как ручное разрешение RECOVERY_REQUIRED. Возвращаемый handler merge pid сам по себе не доказывает новый боевой пост: будущий Gateway обязан отклонить/карантинировать merge/draft-conversion и неподдержанные ветки. Универсального publication endpoint пока нет.
+`SubmissionStore` — внутренний persistence API, не HTTP-контракт. `confirmPost` принимает **только pid из текущего доверенного штатного вызова**, проверяет его на writer и не ищет кандидатов. Его нельзя подключать к клиентскому pid или использовать как ручное разрешение RECOVERY_REQUIRED. Возвращаемый handler merge pid сам по себе не доказывает новый боевой пост: Gateway отклоняет/карантинирует merge/draft-conversion и неподдержанные ветки. Test-only native endpoint добавлен в 4.4.1; универсального production endpoint нет.
 
 В ACS-4.3.1B-R2 добавлены transactional CombatCommitWriter, post_links/results/terminal receipts/outbox и переходы фиксации в миграции 009; [контракт, ограничения и проверки](ACS_4_3_1B_R2_COMBAT_WRITER.md). Gateway/coordinator/Recovery и frontend не входят в writer; installed acceptance остаётся BLOCKED. Прежний проект хранения ниже сохраняется как provenance, актуальная исполняемая схема — миграции. Миграция 009 защищает submission_id/turn_id/pid и связывает projections/result/receipt/outbox в одной транзакции. Consumer delivery receipts и внешние owner APIs ещё не реализованы. COMMITTED нельзя объявить отдельной сменой статуса без механической фиксации.
 
@@ -64,6 +64,12 @@
 `AF_ACS_Publication::card()` отдаёт только статус/метку; `mechanics_confirmed=true` исключительно для COMMITTED. Postbit wiring добавлен в 4.4.2: batched CombatCardQuery проверяет terminal receipt/result hash/post_link и authoritative post identity, затем pure renderer выводит сохранённые поля без Resolver. Детали доступны только persisted owner/GM текущего gm-only visibility scope. RecoveryPage загружается только явно, решения проходят RecoveryService, CSRF/CAS/audit; quarantine не вызывает writer даже для GM-автора. [Контракт и проверки](ACS_4_4_2_R2_RESULT_GM_UI.md). Editor test binding добавлен в 4.4.1. Обычная видимая литература до commit — поддерживаемая политика; атомарная скрытая публикация литературы и карточки не обещается.
 
 Подробные свидетельства и ограничения: [аудит R2](ACS_STAGE_4_REVISION_2_AUDIT.md).
+
+### Итоговая проверка ACS-4.5-R2
+
+[Матрица фактических проверок и installed checklist](ACS_4_5_R2_INTEGRATION_ACCEPTANCE.md): точечные локальные PHP/SQL/native/browser fixtures PASS; installed MyBB/hooks/MySQL 8.0.46 не доступны и не приняты. ACP compatibility export v2 отражает R2, moderation/global_start/postbit hooks и отдельные outbox/installed blockers, выполняет только SELECT и не разрешает публикацию. Version/SHA PASS — только metadata, не общая готовность.
+
+ACS outbox содержит pending `combat.committed`, но dispatcher/consumers не зарегистрированы. Balance/AAM и CS callbacks не дают доказанного submission-key receipt/lookup; внешние эффекты остаются отключены, обычные MyBB hooks выполняются вне ACS transaction. `publication_enabled=false` сохраняется до обязательной installed-приёмки и явного решения администратора; кодовые fixtures и этот отчёт не снимают test-only gates. Этап 5 автоматически не начинается.
 
 ## 1. Статус и границы
 
