@@ -79,6 +79,7 @@ $GLOBALS['acsPublicationFixture']=static function(array $f):void {
             if($name==='datahandler_post_validate_post' && $this->mode==='draft_race') $arg->data['pid']=1;
             if($name==='datahandler_post_insert_post') {
                 snapshot_assert($this->store->submission($this->context->submission['submission_id'])['status']==='posting','Native hook entered before durable POSTING');
+                if($this->mode==='service_reenter') ($GLOBALS['acsPublishReenter'])();
                 if($this->mode==='before_insert_throw') throw new RuntimeException('fixture before insert');
                 if($this->mode==='wrong_uid') $arg->post_insert_data['uid']=8;
                 if($this->mode==='wrong_tid') $arg->post_insert_data['tid']=52;
@@ -91,6 +92,7 @@ $GLOBALS['acsPublicationFixture']=static function(array $f):void {
                     'submission_id'=>$this->context->submission['submission_id']],JSON_THROW_ON_ERROR));
                 exit(86); // Real request termination: Gateway shutdown quarantine must persist.
             }
+            if($name==='newreply_do_newreply_end' && $this->mode==='state_conflict') $this->db->write_link->query('UPDATE fixture_af_acs_entity_states SET state_version=state_version+1');
             if($name==='datahandler_post_insert_post_end' && $this->mode==='late_throw') throw new RuntimeException('fixture late hook');
             return $arg;
         }
@@ -98,6 +100,10 @@ $GLOBALS['acsPublicationFixture']=static function(array $f):void {
     $plugins->gateway=$gateway;
     $GLOBALS['acsGatewayTopic']=['tid'=>51,'fid'=>1,'uid'=>7,'visible'=>1,'subject'=>'Fixture','closed'=>0,'sticky'=>0,'lastpost'=>0];
     $game=[];foreach(['sessions','encounters','turns','entity_states','resources','rolls','sealed_actions','snapshots','events','event_details'] as $t) $game[$t]=$link->query('SELECT * FROM fixture_af_acs_'.$t.' ORDER BY 1')->fetch_all(MYSQLI_ASSOC);
+    if (isset($GLOBALS['acsPublishServiceFixture'])) {
+        ($GLOBALS['acsPublishServiceFixture'])(get_defined_vars());
+        $db=$oldDb;$mybb=$oldMybb;return;
+    }
     $next=0;
     // Each case starts from the same sealed fixture, never production cleanup/recovery logic.
     $context=static function(array $options=[])use(&$next,$link,$store,$baseDraft,$sid,$d,$confirmed,$plugins,&$mybb):AF_ACS_MybbPostContext {

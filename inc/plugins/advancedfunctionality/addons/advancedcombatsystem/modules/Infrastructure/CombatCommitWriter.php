@@ -82,7 +82,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         return ['snapshot'=>$s,'actions'=>$actions,'tape'=>$tape,'seals'=>$seals];
     }
 
-    private function controls(array $row, array $frozen, array $prepared, AF_ACS_ResolverResult $result): array
+    private function controls(array $row, array $frozen, array $prepared, AF_ACS_ResolverResult $result, bool $requirePost = true): array
     {
         $dependencies=[];
         foreach ($frozen['seals'] as $i=>$s) {
@@ -108,8 +108,31 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         $evidence=json_decode($row['evidence_json'],true,32,JSON_THROW_ON_ERROR);
         if (!hash_equals($saved['dependency_hash']??'',$dependency) || !hash_equals($saved['simulation_hash']??'',$simulation)
             || !hash_equals($frozen['snapshot']['confirmation_hash'],$confirmation)
-            || ($evidence['pid']??null)!==$row['pid'] || ($evidence['visible']??null)!=='1') { throw new RuntimeException('ACS_COMBAT_CONFIRMATION_CONFLICT'); }
+            || ($requirePost && (($evidence['pid']??null)!==$row['pid'] || ($evidence['visible']??null)!=='1'))) { throw new RuntimeException('ACS_COMBAT_CONFIRMATION_CONFLICT'); }
         return ['dependency_hash'=>$dependency,'simulation_hash'=>$simulation,'confirmation_hash'=>$confirmation,'summary'=>$summary];
+    }
+
+    /** Read-only pre-publication revalidation with the existing sealed tape. No post creation. */
+    public function validatePublication(string $id, string $expectedStateVersion): array
+    {
+        $this->transactions->assertExternalBoundary();$this->access->csrf();$row=$this->own($id);
+        if (!in_array($row['status'],['registered','validating'],true) || $row['state_version']!==self::integer($expectedStateVersion)) {
+            throw new RuntimeException('ACS_VERSION_CONFLICT');
+        }
+        $this->access->draftThread($row['tid']);
+        $before=$this->facts($row);$frozen=$this->frozen($row);
+        $this->authorizeFacts($row,$before,$frozen['actions']);
+        $builder=new AF_ACS_BuilderService($this->preparation,$this->access);
+        $scope=$builder->context($row['session_id'],$row['encounter_id'],$row['turn_id']);
+        $prepared=$builder->prepare(['session_id'=>$row['session_id'],'encounter_id'=>$row['encounter_id'],'turn_id'=>$row['turn_id'],
+            'scope_token'=>$scope['scope_token'],'actions'=>$frozen['actions'],'scenario'=>'hit'],$row['draft_id']);
+        $ordered=$prepared['ordered'];foreach ($ordered as &$a) { unset($a['scenario']); }unset($a);
+        $result=AF_ACS_Resolver::resolve($prepared['context'],$ordered,$frozen['tape'],'seal');
+        $controls=$this->controls($row,$frozen,$prepared,$result,false);
+        if ($this->submissions->submission($id)!==$row || !hash_equals(self::factsHash($before),self::factsHash($this->facts($row)))) {
+            throw new RuntimeException('ACS_COMBAT_DEPENDENCY_CONFLICT');
+        }
+        return $controls;
     }
 
     private function phase(array $row, string $to, array $evidence): array

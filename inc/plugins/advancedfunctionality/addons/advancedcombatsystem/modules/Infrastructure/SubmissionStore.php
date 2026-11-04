@@ -44,6 +44,19 @@ final class AF_ACS_SubmissionStore extends AF_ACS_Repository
     /** Caller rechecks authenticated ownership/native permissions on initial request AND replay. */
     public function register(array $request, callable $authorize): array
     {
+        return $this->registration($request,$authorize,false);
+    }
+
+    /** Server issues an ID once, under the same session lock as registration. */
+    public function issue(array $request, callable $authorize): array
+    {
+        if (array_key_exists('submission_id',$request)) { throw new InvalidArgumentException('ACS_SUBMISSION_INPUT_INVALID'); }
+        $request['submission_id']=bin2hex(random_bytes(16));
+        return $this->registration($request,$authorize,true);
+    }
+
+    private function registration(array $request, callable $authorize, bool $issue): array
+    {
         if (array_diff(array_keys($request), ['schema_version','submission_id','draft_id','author_uid','expected_draft_version','confirmation_hash'])
             || ($request['schema_version'] ?? null) !== 1) { throw new InvalidArgumentException('ACS_SUBMISSION_INPUT_INVALID'); }
         $id = self::submissionId($request['submission_id'] ?? '');
@@ -53,13 +66,22 @@ final class AF_ACS_SubmissionStore extends AF_ACS_Repository
         $request = ['schema_version'=>1,'submission_id'=>$id,'draft_id'=>$request['draft_id'],'author_uid'=>$request['author_uid'],
             'expected_draft_version'=>$request['expected_draft_version'],'confirmation_hash'=>$request['confirmation_hash']];
         $json = self::json($request); $hash = hash('sha256', $json);
-        return $this->transactions->run(function () use ($request, $id, $json, $hash, $authorize) {
+        return $this->transactions->run(function () use ($request, $id, $json, $hash, $authorize, $issue) {
             $this->writable();
             $draft = $this->preparation->draft($request['draft_id'], $request['author_uid']);
             if (!$draft) { throw new RuntimeException('ACS_DRAFT_UNAVAILABLE'); }
             $session = $this->lockSession($draft['session_id']);
             $draft = $this->preparation->draft($request['draft_id'], $request['author_uid']);
             $authorize($draft);
+            if ($issue) {
+                // Durable request identity survives freeze, rejection, commit and a lost issuance response.
+                $candidates=$this->sql('SELECT submission_id,request_json FROM '.$this->table('submissions').' WHERE draft_id=? AND author_uid=? ORDER BY created_at,submission_id',[$request['draft_id'],$request['author_uid']])['rows'];
+                foreach ($candidates as $candidate) {
+                    $original=json_decode($candidate['request_json'],true,32,JSON_THROW_ON_ERROR);
+                    $original['submission_id']=$id;
+                    if ($original===$request) { return $this->submission($candidate['submission_id']); }
+                }
+            }
             $old = $this->submission($id);
             if ($old) {
                 if (!hash_equals($old['request_hash'], $hash)) { throw new RuntimeException('ACS_SUBMISSION_CONFLICT'); }
