@@ -7,9 +7,9 @@
 <a id="publication-r2"></a>
 ## Revision 2: действующие публикационные контракты
 
-### IC-MYBB-1 — R2, installed binding BLOCKED
+### IC-MYBB-1 — R2, Gateway implemented in fixtures; installed binding BLOCKED
 
-Прежний `AF_ACS_MybbPostGateway::publishWithinTransaction` отменён как целевой API; исполняемого Gateway в проверенной main нет. Будущий Gateway связывает журнал с **обычной публикацией MyBB вне ACS-транзакции**, без правок ядра, прямого INSERT posts и отключения побочных hooks. Сигнатура и конкретный entry-script adapter должны быть доказаны установленным runtime, а не введены флагом `validated=true`.
+Прежний `AF_ACS_MybbPostGateway::publishWithinTransaction` отменён как целевой API. В ACS-4.1-R2 добавлен внутренний `AF_ACS_MybbPostGateway::publish(AF_ACS_MybbPostContext): AF_ACS_MybbPostResult`; [поддерживаемые branches и обязанности caller](ACS_4_1_R2_GATEWAY_IMPLEMENTATION.md). Его bounded native lifecycle проверен fixtures; installed binding остаётся BLOCKED. Gateway связывает журнал с **обычной публикацией MyBB вне ACS-транзакции**, без правок ядра, прямого INSERT posts и отключения побочных hooks. Конкретный entry-script adapter должен быть доказан установленным runtime, а не введены флагом `validated=true`.
 
 Вход — доверенная серверная операция, authenticated actor, tid, проза/вложения, submission_id, immutable request hash и control hashes. MyBB сохраняет permissions, закрытую тему, пароли, flood/spam, captcha, moderation, attachments, подписки, counters, Appearance, Balance→CS, AAM и shutdown. Наличие PostDataHandler не доказывает полноту entry-script проверок.
 

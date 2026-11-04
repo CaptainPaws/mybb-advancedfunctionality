@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 define('IN_MYBB',1);
-define('MYBB_ROOT',dirname(__DIR__).'/');
-define('AF_ADDONS',MYBB_ROOT.'inc/plugins/advancedfunctionality/addons/');
-define('THIS_SCRIPT','showthread.php');
+define('MYBB_ROOT',getenv('ACS_MYBB_FIXTURE_ROOT') ? rtrim(getenv('ACS_MYBB_FIXTURE_ROOT'),'/').'/' : dirname(__DIR__).'/');
+define('AF_ADDONS',dirname(__DIR__).'/inc/plugins/advancedfunctionality/addons/');
+if (!defined('THIS_SCRIPT')) define('THIS_SCRIPT','showthread.php');
 function af_is_addon_enabled(string $id): bool { return !in_array($id,$GLOBALS['disabled'] ?? [],true); }
-function forum_permissions(int $fid): array { return ['canview'=>1,'canviewthreads'=>1,'canpostreplys'=>empty($GLOBALS['fixture_deny_post'])?1:0,'canonlyreplyownthreads'=>!empty($GLOBALS['fixture_reply_own_only'])?1:0]; }
-function get_forum(int $fid): array { return ['fid'=>$fid,'password'=>'']; }
+function forum_permissions(int $fid): array { return ['canview'=>1,'canviewthreads'=>1,'canpostreplys'=>empty($GLOBALS['fixture_deny_post'])?1:0,'canonlyreplyownthreads'=>!empty($GLOBALS['fixture_reply_own_only'])?1:0,'canonlyviewownthreads'=>0,'modposts'=>!empty($GLOBALS['acsGatewayModeration'])?1:0]; }
+function get_forum(int $fid): array { return ['fid'=>$fid,'password'=>$GLOBALS['acsGatewayPassword'] ?? '','open'=>empty($GLOBALS['acsGatewayClosedForum'])?1:0,'type'=>'f','parentlist'=>(string)$fid,'usepostcounts'=>1]; }
 final class SnapshotRows {
     public int $position = 0;
     public function __construct(public array $rows) {}
