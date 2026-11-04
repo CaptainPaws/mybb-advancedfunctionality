@@ -3,6 +3,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 function af_advancedcombatsystem_register_thread_component(): void
 {
     if(!af_is_addon_enabled('advancedcombatsystem') || !af_is_addon_enabled('adaptivethemeframework') || !function_exists('af_adaptivethemeframework_register_component'))return;
+    af_adaptivethemeframework_register_component(['owner'=>'advancedcombatsystem','key'=>'combat_result','slot'=>'post.before_body','renderer'=>'af_advancedcombatsystem_combat_card']);
     af_adaptivethemeframework_register_component(['owner'=>'advancedcombatsystem','key'=>'session_link','slot'=>'thread.before_posts','renderer'=>'af_advancedcombatsystem_thread_session_link']);
 }
 /** Native showthread context. Only an explicitly opened, authorized panel loads the GM stack. */
@@ -36,6 +37,7 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
                 $links[]=AF_ACS_BuilderController::renderBuilder((string)$row['id'],(string)$tid);
             }
             if(in_array($row['role'],['owner','gm'],true)) {
+                $links[]='<a href="misc.php?action=acs_recovery&amp;session_id='.$id.'">Восстановление публикаций</a>';
                 $links[]='<a href="showthread.php?tid='.$tid.'&amp;acs_session='.$id.'">Панель GM</a>';
                 if($builder===''&&$selected===(string)$row['id']) {
                     require_once __DIR__.'/Encounters.php';
@@ -47,4 +49,33 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
         return $links?'<aside class="af-acs">'.implode(' · ',$links).'</aside>':'';
     } catch(Throwable $error) {return isset($selected) && $selected!==''?'<aside class="af-acs">Панель GM недоступна. Проверьте права и версию схемы ACS.</aside>':'';}
     finally {if($statement)$statement->close();}
+}
+
+/** No use of context uid/Appearance: only authoritative PID/TID and the current native viewer. */
+function af_advancedcombatsystem_combat_card(array $context): string
+{
+    global $mybb,$db,$pids;
+    if(!af_is_addon_enabled('advancedcombatsystem')||!empty($GLOBALS['af_acs_deactivated'])||empty($mybb->user['uid']))return '';
+    $pid=(string)($context['pid']??'');$tid=(string)($context['tid']??'');
+    if(!preg_match('/\A[1-9][0-9]{0,9}\z/D',$pid)||!preg_match('/\A[1-9][0-9]{0,9}\z/D',$tid))return '';
+    try {
+        require_once __DIR__.'/../Infrastructure/CombatCardQuery.php';require_once __DIR__.'/CombatCard.php';
+        $ids=is_string($pids??null)?explode(',',$pids):[];
+        $ids=array_values(array_filter($ids,static fn($id)=>preg_match('/\A[1-9][0-9]{0,9}\z/D',$id)));
+        $ids[]=$pid;$ids=array_values(array_unique($ids));sort($ids,SORT_STRING);
+        $chunk=intdiv((int)array_search($pid,$ids,true),100);$ids=array_slice($ids,$chunk*100,100);
+        static $cache=[];$key=(string)$mybb->user['uid'].':'.$tid.':'.implode(',',$ids);
+        if(!isset($cache[$key]))$cache[$key]=(new AF_ACS_CombatCardQuery($db))->forPosts($tid,$ids);
+        if(!isset($cache[$key][$pid]))return '';
+        $html=AF_ACS_CombatCard::render($cache[$key][$pid]);
+        return af_advancedcombatsystem_presentation_css('has_acs_card').$html;
+    } catch(Throwable $error) {if(isset($key))$cache[$key]=[];return '';}
+}
+function af_advancedcombatsystem_presentation_css(string $fact): string
+{
+    global $mybb;
+    static $sent=false;
+    if($sent||!function_exists('af_frontend_asset_allowed')||!af_frontend_asset_allowed('advancedcombatsystem','presentation',null,[$fact=>true]))return '';
+    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/presentation.css?v=1';
+    return '<link rel="stylesheet" href="'.htmlspecialchars_uni($url).'">';
 }

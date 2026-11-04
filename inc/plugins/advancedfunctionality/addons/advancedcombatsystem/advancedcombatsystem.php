@@ -28,6 +28,7 @@ function af_advancedcombatsystem_init(): string
             require_once __DIR__.'/modules/Presentation/ThreadComponents.php';
             $plugins->add_hook('global_end','af_advancedcombatsystem_register_thread_component');
         }
+        if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_recovery')$plugins->add_hook('misc_start','af_advancedcombatsystem_recovery_page');
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_sessions')$plugins->add_hook('misc_start','af_advancedcombatsystem_sessions_page');
     }
     return AF_ACS_Context::current();
@@ -273,4 +274,16 @@ function af_advancedcombatsystem_session_failure(Throwable $error): array
         require_once __DIR__.'/modules/Infrastructure/Repository.php';$id=(new AF_ACS_Repository($db))->recordDiagnostic($id,$category,'session_command','validation');}
     catch(Throwable $diagnosticError) {error_log('ACS session '.$id.' '.$category);}
     return ['category'=>$category,'request_id'=>$requestId,'error_id'=>$id,'message'=>$publicMessage];
+}
+
+/** Explicit native misc page; no recovery commands are executed from a postbit renderer. */
+function af_advancedcombatsystem_recovery_page(): void
+{
+    global $mybb,$header,$headerinclude,$footer;
+    require_once __DIR__.'/modules/Presentation/RecoveryPage.php';
+    require_once __DIR__.'/modules/Presentation/ThreadComponents.php';
+    try {$body=AF_ACS_RecoveryPage::render($mybb->get_input('session_id'));}
+    catch(Throwable $error){http_response_code(403);$body='<p>Восстановление недоступно. Нужны текущие права мастера этой сессии и доступ к теме.</p>';}
+    header('Cache-Control: private, no-store');
+    output_page('<html><head><title>ACS · Восстановление</title>'.$headerinclude.af_advancedcombatsystem_presentation_css('has_acs_recovery').'</head><body>'.$header.'<main>'.$body.'</main>'.$footer.'</body></html>');exit;
 }

@@ -6,7 +6,20 @@ trait AF_ACS_TerminalReceiptPersistence
 {
     private function terminal(array $row): ?array
     {
-        $r=$this->sql('SELECT r.*,s.status AS publication_status,s.request_hash AS submission_hash,s.sealed_json AS submission_sealed,s.result_json AS terminal_result,s.pid AS linked_pid,s.turn_id AS linked_turn,l.id AS link_id,l.pid AS post_pid,l.turn_id AS post_turn,c.event_id AS result_event,c.result_hash AS mechanical_hash,SHA2(c.payload_json,256) AS actual_result_hash FROM '.$this->table('combat_receipts').' r JOIN '.$this->table('submissions').' s ON s.submission_id=r.submission_id LEFT JOIN '.$this->table('post_links').' l ON l.submission_id=r.submission_id LEFT JOIN '.$this->table('combat_results').' c ON c.submission_id=r.submission_id WHERE r.submission_id=?',[$row['submission_id']])['rows'][0]??null;
+        $records=$this->terminalRecords([$row['submission_id']]);
+        return $this->verifyTerminalRecord($row,$records[$row['submission_id']]??null);
+    }
+
+    private function terminalRecords(array $ids, bool $details = false): array
+    {
+        if (!$ids) { return []; }
+        $extra=$details?",JSON_EXTRACT(c.payload_json,'$.summary') AS card_summary,JSON_EXTRACT(c.payload_json,'$.plan.actions') AS card_actions":'';
+        $rows=$this->sql('SELECT r.*,s.status AS publication_status,s.request_hash AS submission_hash,s.sealed_json AS submission_sealed,s.result_json AS terminal_result,s.pid AS linked_pid,s.turn_id AS linked_turn,l.id AS link_id,l.pid AS post_pid,l.turn_id AS post_turn,c.event_id AS result_event,c.result_hash AS mechanical_hash,SHA2(c.payload_json,256) AS actual_result_hash'.$extra.' FROM '.$this->table('combat_receipts').' r JOIN '.$this->table('submissions').' s ON s.submission_id=r.submission_id LEFT JOIN '.$this->table('post_links').' l ON l.submission_id=r.submission_id LEFT JOIN '.$this->table('combat_results').' c ON c.submission_id=r.submission_id WHERE r.submission_id IN ('.implode(',',array_fill(0,count($ids),'?')).')',$ids)['rows'];
+        $out=[];foreach($rows as $r){$out[$r['submission_id']]=$r;}return $out;
+    }
+
+    private function verifyTerminalRecord(array $row, ?array $r): ?array
+    {
         if (!$r) {
             if ($row['status']==='committed') { throw new RuntimeException('ACS_COMBAT_RECEIPT_MISSING'); }
             return null;
