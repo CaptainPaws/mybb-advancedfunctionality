@@ -5,6 +5,32 @@ require_once __DIR__.'/CapabilityValidator.php';
 /** Authenticated, owner-authorized KB reads. No JSON parser, migrations or writes. */
 final class AF_ACS_KnowledgeBaseAdapter
 {
+    /** Narrow projection of an already authorized/pinned B1 effect; never fetch latest or guess missing semantics. */
+    public static function statusEffect(array $dto,array $effect):array
+    {
+        require_once __DIR__.'/../../Domain/Effects.php';
+        $fail=static function(string $code):never{throw new AF_ACS_FormulaError($code,'status');};
+        if(($dto['ready']??null)!==true||($dto['contract_id']??null)!=='IC-KB.read.v1'||($dto['source']['type']??null)!=='arpg_ability'||($effect['supported']??null)!==true)$fail('status_definition_missing');
+        $p=$effect['parameters']??[];$ref=$effect['references']['status_key']??[];$definition=$ref['definition']??null;
+        if(($p['effect_type']??null)!=='status'||($ref['kind']??null)!=='status_def'||($ref['resolved']??null)!==true||!is_array($definition)
+            ||($ref['key']??null)!==($p['status_key']??null)||($definition['schema']??null)!=='af_kb.arpg.mechanic.v1'||($definition['key']??null)!==$ref['key'])$fail('status_definition_missing');
+        foreach(['condition_ref','effect_ref','limits','resistances','immunities','formula_refs'] as $field)if(!empty($definition[$field]))$fail('status_definition_override_unsupported');
+        $pin=$ref['definition_version']??[];
+        if(!is_string($pin['version']??null)||($definition['version']??null)!==$pin['version']||!is_string($pin['fingerprint']??null)
+            ||!hash_equals($pin['fingerprint'],'sha256:'.hash('sha256',json_encode(af_kb_arpg_acs_canonical($definition),JSON_THROW_ON_ERROR|JSON_PRESERVE_ZERO_FRACTION|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES))))$fail('status_definition_pin_invalid');
+        // Application semantics belong to the concrete effect. No fallback to value, phase, labels or parent ability.
+        foreach(['base_chance','polarity','trigger'] as $field)if(!array_key_exists($field,$p))$fail('status_application_contract_missing');
+        $index=$effect['source_index']??null;
+        if(!is_int($index)||($dto['data']['definition']['effects'][$index]??null)!==($effect['raw']??null))$fail('status_effect_reference_invalid');
+        $status=['effect_type'=>'status','effect_definition_ref'=>['type'=>$dto['source']['type'],'key'=>$dto['source']['key'],
+            'version'=>$dto['definition_version']['declared_version']??null,'fingerprint'=>$dto['definition_version']['fingerprint']??null,'effect_index'=>$index],
+            'status_definition_ref'=>['key'=>$ref['key'],'version'=>$pin['version'],'fingerprint'=>$pin['fingerprint']],
+            'status_type'=>$definition['type']??null,'polarity'=>$p['polarity'],'trigger'=>$p['trigger'],'base_chance'=>$p['base_chance']];
+        if(array_key_exists('probability_check',$p))$status['probability_check']=$p['probability_check'];
+        $check=AF_ACS_Effects::status($status,['source'=>'1','target'=>'2','relationship'=>'hostile','immunities'=>[],
+            'cast_success'=>false,'hit_success'=>false,'hp_loss'=>0,'status_hit'=>0,'status_resistance'=>0])->serverData();
+        if(!$check['supported'])$fail($check['reasons'][0]);return $status;
+    }
     private function available(int $actorUid): bool
     {
         global $mybb;

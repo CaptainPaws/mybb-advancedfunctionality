@@ -47,7 +47,7 @@ final class AF_ACS_SealService
             if($this->prepare($draft,$actions)['prepared']!==$p['prepared'])throw new RuntimeException('ACS_SEAL_SUMMARY_CHANGED');
             $latest=$this->repo->draft($draft['id'],$draft['author_uid']);if(!$latest||$latest['draft_version']!==$draft['draft_version'])throw new RuntimeException('ACS_DRAFT_VERSION_CONFLICT');
             $rows=[];
-            foreach($resolved->serverPlan()['actions'] as $i=>$step)$rows[]=['sealed_action_id'=>(string)$active[$i]['id'],'actor_id'=>$step['actor_id'],'target_id'=>$step['targets'][0],'ability_key'=>$actions[$i]['ability_key'],'outcome'=>$step['scenario'],'rolls'=>$step['rolls'],'probabilities'=>$step['probabilities'],'costs'=>$step['costs'],'damage'=>$step['allocation']['integer_budget']];
+            foreach($resolved->serverPlan()['actions'] as $i=>$step)$rows[]=['sealed_action_id'=>(string)$active[$i]['id'],'actor_id'=>$step['actor_id'],'target_id'=>$step['targets'][0],'ability_key'=>$actions[$i]['ability_key'],'outcome'=>$step['scenario'],'rolls'=>$step['rolls'],'probabilities'=>$step['probabilities'],'costs'=>$step['costs'],'damage'=>$step['allocation']['integer_budget']]+(isset($step['status_evaluations'])?['status_evaluation_hash'=>hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'evaluations'=>$step['status_evaluations']]))]:[]);
             $entities=[];foreach($resolved->serverState()['entities'] as $id=>$e)$entities[]=['entity_id'=>(string)$id,'hp'=>$e['hp'],'max_hp'=>$e['max_hp'],'life_state'=>$e['life_state']];
             $summary=['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'rng_version'=>'uniform53-v1','label'=>'Запечатанные серверные результаты — ещё не опубликованы','actions'=>$rows,'virtual_entities'=>$entities,'virtual_groups'=>$resolved->serverState()['groups']];
             $dependencyHash=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'dependencies'=>$dependencies]));
@@ -84,10 +84,16 @@ final class AF_ACS_SealService
                     if(!is_array($c)||count($c)!==1||$c[0]['kind']!=='ap'||!is_int($c[0]['amount'])||$c[0]['amount']<=0)throw new RuntimeException('ACS_SEAL_ZERO_AP_UNSUPPORTED');$cost+=$c[0]['amount'];$costs[]=$c[0]['amount'];}
                 if($used+$cost>$p['scope']['turn']['ap'])throw new RuntimeException('ACS_SEAL_QUOTA_EXHAUSTED');
                 $history=$this->repo->sealRows($d['id']);if(count($history)+count($actions)-count($active)>200)throw new RuntimeException('ACS_SEAL_HISTORY_LIMIT');$next=$history?(int)end($history)['action_index']+1:0;
-                $query=new AF_ACS_QueryService($this->repo,$this->access);$definitions=[];
-                foreach(array_slice($actions,count($active)) as $a)$definitions[]=$query->sealDefinition($d['session_id'],$a['actor_id'],$a['ability_key']);
+                $query=new AF_ACS_QueryService($this->repo,$this->access);$definitions=[];$statusIndexes=[];
+                foreach(array_slice($actions,count($active)) as $a){
+                    $definitions[]=$query->sealDefinition($d['session_id'],$a['actor_id'],$a['ability_key']);
+                    $statusIndexes[]=AF_ACS_Resolver::statusRollIndexes($p['context'],$a['actor_id'],$a['targets'][0],$p['context']['abilities'][$a['actor_id']][$a['ability_key']]);
+                }
                 // Everything above is deterministic preflight. Once drawn, all tape/quota persists even if simulation is blocked.
-                foreach(array_slice($actions,count($active)) as $i=>$a)$this->repo->appendSeal($d,$a,$definitions[$i],$p['context']['abilities'][$a['actor_id']][$a['ability_key']]['source_ref'],$costs[$i],$operation,$next+$i,($this->random??new AF_ACS_RandomSource)->action());
+                foreach(array_slice($actions,count($active)) as $i=>$a){
+                    $ability=$p['context']['abilities'][$a['actor_id']][$a['ability_key']];
+                    $this->repo->appendSeal($d,$a,$definitions[$i],$ability['source_ref'],$costs[$i],$operation,$next+$i,($this->random??new AF_ACS_RandomSource)->action($statusIndexes[$i]));
+                }
             }elseif($op==='cancel_tail'){
                 if(!$active)throw new RuntimeException('ACS_SEAL_NOTHING_TO_CANCEL');$last=end($active);$this->repo->cancelSeal((string)$last['id']);array_splice($actions,count($active)-1,1);
                 $d['mechanics_json']=AF_ACS_Repository::json(['schema_version'=>1,'actions'=>$actions]);

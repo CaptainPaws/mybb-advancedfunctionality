@@ -87,7 +87,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         foreach ($result->serverPlan()['actions'] as $i=>$step) {
             $steps[]=['sealed_action_id'=>$frozen['seals'][$i]['id'],'actor_id'=>$step['actor_id'],'target_id'=>$step['targets'][0],
                 'ability_key'=>$frozen['actions'][$i]['ability_key'],'outcome'=>$step['scenario'],'rolls'=>$step['rolls'],
-                'probabilities'=>$step['probabilities'],'costs'=>$step['costs'],'damage'=>$step['allocation']['integer_budget']];
+                'probabilities'=>$step['probabilities'],'costs'=>$step['costs'],'damage'=>$step['allocation']['integer_budget']]+(isset($step['status_evaluations'])?['status_evaluation_hash'=>hash('sha256',self::json(['schema_version'=>1,'evaluations'=>$step['status_evaluations']]))]:[]);
         }
         $entities=[];
         foreach ($result->serverState()['entities'] as $id=>$e) { $entities[]=['entity_id'=>(string)$id,'hp'=>$e['hp'],'max_hp'=>$e['max_hp'],'life_state'=>$e['life_state']]; }
