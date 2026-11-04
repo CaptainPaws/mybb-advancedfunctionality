@@ -2,12 +2,13 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/EncounterRepository.php';
 require_once __DIR__.'/PublicationRecoveryPersistence.php';
+require_once __DIR__.'/PostLifecyclePersistence.php';
 require_once __DIR__.'/../Domain/Publication.php';
 
 /** Internal R2 journal. No endpoint, MyBB insertion, Resolver or combat writer. */
 final class AF_ACS_SubmissionStore extends AF_ACS_Repository
 {
-    use AF_ACS_PublicationRecoveryPersistence;
+    use AF_ACS_PublicationRecoveryPersistence, AF_ACS_PostLifecyclePersistence;
     private AF_ACS_EncounterRepository $preparation;
 
     public function __construct(object $database)

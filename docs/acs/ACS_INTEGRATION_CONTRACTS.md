@@ -42,6 +42,14 @@ Prevalidation использует `CombatCommitWriter::validatePublication` б�
 
 GM стратегии: `resume_known_post`, `reject_unsent` (только доказанный pre-dispatch), `hold`; persisted owner/GM membership/expiry перепроверяются под SQL lock, CAS и реальный audit actor обязательны. Ни один endpoint/UI не зарегистрирован. Команда не принимает новый pid: diagnostic observed_pid и uid/tid/time/text не являются identity proof. Неизвестные и legacy incomplete outcomes остаются в quarantine, sealed history/claim сохраняются. Approval/delete/move observers ещё не подключены. [Точные команды, evidence и fixtures](ACS_4_3_3_R2_RECOVERY_SERVICE.md).
 
+### IC-MYBB-LIFECYCLE-1 — R2, source-gated observers; installed acceptance BLOCKED
+
+Native class_moderation hooks наблюдают только уже подтверждённые pid/tid на authoritative writer и пишут operational CAS/audit без вызова Gateway/Resolver/внешних owner APIs. Для pre/mixed move/delete branches действует немедленный карантин и best-effort финальная сверка; повтор фактического состояния идемпотентен. COMMITTED receipt/result/outbox не изменяются, обратного урона нет; journal state_version может увеличиться для same-status наблюдения. [Точные hooks/SHA/ограничения](ACS_4_3_4_R2_POST_LIFECYCLE.md).
+
+`ModerationService::resumeApproved(id, expected_state_version)` — authenticated автор + POST/CSRF, повторная server validation прежнего frozen plan/tape, CAS approved-pid confirmation и штатный writer. PublishService/RecoveryService направляют author retry одобренного pending поста сюда. Модератор не подменяет автора; approve без author revalidation не применяет механику. Неподтверждённый source, stale grants/turn/versions или повреждённый/перенесённый пост блокируют продолжение.
+
+`PublicationStatusQuery::forPost(pid, access?)` возвращает только авторизованный read-only статус/метку/approval_ready/result_hash; mechanics_confirmed требует проверенных terminal receipt/result/post_link. API не загружает Builder/Resolver и не пересчитывает страницу. Theme/Postbit/HTTP wiring отсутствует, publication_enabled=false.
+
 ### IC-EDITOR-1 — R2, preparation сохранена; publish wiring BLOCKED
 
 Одна форма, один AdvancedEditor/SCEditor. Поля: `acs_mode`, `draft_id`, `draft_version`, `submission_id`, `confirmation_hash`, обычный `message`. Submission ID создаёт сервер и переиспользует после потери ответа; он не является правом доступа. Проза и sealed actions сохраняются при любой ошибке. Draft CAS и frozen `publishing` запрещают незаметное изменение отправленного снимка. В текущем persistence ID — 32 lowercase hex; `expected_draft_version` — decimal string; hash — SHA256 lowercase hex. HTTP issue/submit endpoint пока отсутствует.

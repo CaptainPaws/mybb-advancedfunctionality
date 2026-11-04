@@ -52,11 +52,12 @@ trait AF_ACS_PublicationRecoveryPersistence
         return $rows;
     }
 
-    public function recoveryQuarantine(string $id, string $version): array
+    public function recoveryQuarantine(string $id, string $version, string $reason = 'recovery_reconciliation_required'): array
     {
+        self::key($reason,64);
         $actor=self::integer((string)(int)($GLOBALS['mybb']->user['uid']??0));
-        return $this->change($id,$version,function($r){$this->recoveryActor($r,false,true);},static function($r){
-            return ['recovery_required','recovery_reconciliation_required',['schema_version'=>1,'last_known_phase'=>$r['last_phase']],null];
+        return $this->change($id,$version,function($r){$this->recoveryActor($r,false,true);},static function($r)use($reason){
+            return ['recovery_required',$reason,['schema_version'=>1,'last_known_phase'=>$r['last_phase']],null];
         },$actor);
     }
 

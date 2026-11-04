@@ -17,6 +17,8 @@ function af_advancedcombatsystem_init(): string
     static $registered=false;
     if(!$registered && af_is_addon_enabled('advancedcombatsystem') && isset($plugins)) {
         $registered=true;
+        require_once __DIR__.'/modules/Bootstrap/PostLifecycleHooks.php';
+        AF_ACS_PostLifecycleHooks::register($plugins);
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='showthread.php' && !empty($mybb->user['uid'])) {
             require_once __DIR__.'/modules/Presentation/ThreadComponents.php';
             $plugins->add_hook('global_end','af_advancedcombatsystem_register_thread_component');
@@ -80,7 +82,7 @@ function af_advancedcombatsystem_activate(): bool
     return af_advancedcombatsystem_lifecycle('activate', static function () {
         af_advancedcombatsystem_migrations()->assertInstalled();
         unset($GLOBALS['af_acs_deactivated']);
-        // No combat hooks/assets exist yet. AF owns the persisted enabled flag.
+        // Passive lifecycle observers only; combat publication remains disabled. AF owns enabled.
     });
 }
 

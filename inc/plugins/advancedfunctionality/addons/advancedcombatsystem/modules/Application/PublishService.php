@@ -73,9 +73,14 @@ final class AF_ACS_PublishService
         $row=$this->own($id);
         if ($receipt=$this->writer->receipt($id)) { return $this->projection($this->own($id),$receipt); }
         if (isset(self::$inFlight[$id])) { return $this->projection($row,null,'ACS_PUBLICATION_IN_PROGRESS'); }
-        if (in_array($row['status'],['rejected','moderation_pending','recovery_required'],true)) { return $this->projection($row); }
+        if (in_array($row['status'],['rejected','recovery_required'],true)) { return $this->projection($row); }
         self::$inFlight[$id]=true;
         try {
+            if ($row['status']==='moderation_pending') {
+                require_once __DIR__.'/ModerationService.php';
+                $resolved=(new AF_ACS_ModerationService($this->database,$this->access))->resumeApproved($id,$row['state_version']);
+                return $this->projection($this->own($id),$resolved['receipt']??null);
+            }
             if (in_array($row['status'],['registered','validating'],true)) {
                 try {
                     $this->writer->validatePublication($id,$row['state_version']);

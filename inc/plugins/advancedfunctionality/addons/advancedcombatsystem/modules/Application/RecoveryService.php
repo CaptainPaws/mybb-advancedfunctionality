@@ -78,7 +78,13 @@ final class AF_ACS_RecoveryService
         if ($row['state_version']!==AF_ACS_Repository::integer($expectedStateVersion)) { throw new RuntimeException('ACS_VERSION_CONFLICT'); }
         if (in_array($row['status'],['rejected','registered','validating','recovery_required'],true)) { return $this->inspect($id); }
         $post=$this->store->recoveryPost($id);
-        if ($row['status']==='moderation_pending' && $post['state']==='moderation_pending') { return $this->inspect($id); }
+        if ($row['status']==='moderation_pending') {
+            if ($post['state']==='moderation_pending' || ($post['state']==='confirmed' && $uid!==$row['author_uid'])) { return $this->inspect($id); }
+            if ($post['state']==='confirmed') {
+                require_once __DIR__.'/ModerationService.php';
+                return (new AF_ACS_ModerationService($this->database,$this->access))->resumeApproved($id,$expectedStateVersion);
+            }
+        }
         if ($row['status']!=='post_confirmed' || $post['state']!=='confirmed') {
             $this->store->recoveryQuarantine($id,$row['state_version']);return $this->inspect($id);
         }
