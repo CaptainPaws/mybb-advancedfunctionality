@@ -2,23 +2,23 @@
 
 > Последующая поставка ACS-4.1-R2 добавила bounded MyBB Post Gateway и fixtures; текущие возможности и ограничения описаны в [отчёте Gateway](ACS_4_1_R2_GATEWAY_IMPLEMENTATION.md). Карта ниже фиксирует исходную поставку 4.0-R2 и не является заявлением installed READY.
 
-## Текущая карта Stage 4 R2 после ACS-4.3.2-R2
+## Текущая карта Stage 4 R2 после ACS-4.3.3-R2
 
-База задачи 2: main `a5b8c8de` (PR #1015). [Отчёт PublishService](ACS_4_3_2_R2_PUBLISH_SERVICE.md) и [отчёт writer](ACS_4_3_1B_R2_COMBAT_WRITER.md) отличают backend fixtures от installed приёмки.
+База задачи 3: main `eeac2898` (PR #1016). [Отчёт RecoveryService](ACS_4_3_3_R2_RECOVERY_SERVICE.md) фиксирует safe recovery и оставшиеся identity blockers. [Отчёт PublishService](ACS_4_3_2_R2_PUBLISH_SERVICE.md) и [отчёт writer](ACS_4_3_1B_R2_COMBAT_WRITER.md) отличают backend fixtures от installed приёмки.
 
 | Компонент | Фактический прогресс / остаток |
 |---|---|
 | Draft/Seal/Builder/Resolver | Сохранены; исходные snapshot/tape/formulas неизменны; publication_enabled=false |
 | Gateway / 4.1-R2 | Bounded backend реализован, PR #1014 в main; installed entry binding/addon/AJAX integration BLOCKED |
-| Submission journal / 4.3.1 | Durable CAS/claims/audit/freeze/quarantine есть; COMMITTING/COMMITTED теперь пишет transactional writer; recovery/manual evidence ещё отсутствуют |
+| Submission journal / 4.3.1 | Durable CAS/claims/audit/freeze/quarantine есть; COMMITTING/COMMITTED теперь пишет transactional writer; recovery известных исходов/GM audit добавлены; binding неизвестного pid BLOCKED |
 | Combat writer / **задача 1, 4.3.1B-R2** | Реализован: migration 009, HP/AP и текущий HP-resource scope, state/clock closure/events/results/post_link/terminal receipt/outbox в одной tx. Rollback/replay/concurrency fixtures пройдены. Подготовительные controller grants=false не обходятся. Неподдержанные эффекты/resources остаются заблокированы |
 | PublishService / задача 2 | Серверный coordinator реализован: issuance/reuse через существующий журнал, fresh sealed-plan prevalidation, один Gateway lifecycle вне ACS tx, writer/receipt, safe rejection и quarantine. Проверен bounded upstream fixture; HTTP/native entry binding и installed acceptance BLOCKED |
-| RecoveryService / задача 3 | **Не начата**; writer receipt lookup — инфраструктура, не полный recovery протокол |
+| RecoveryService / задача 3 | Реализованы status/receipt/recover и GM CAS/audit команды known-pid resume, доказанный unsent reject и hold. Неизвестный pid/legacy identity evidence остаются BLOCKED без привязки по эвристике. Fixtures пройдены; frontend/native observers/installed acceptance не включены |
 | Moderation/lifecycle / задача 4 | **Не начата**; writer лишь отказывает pending/invalid post; native observers не подключены |
 | Editor/Postbit/GM UI / задачи 5–6 | **Не начаты**; второй editor не создан, публикация не включена |
 | Outbox consumers / installed 4.5 / задача 7 | Есть только pending storage, потребители не запускаются. Installed MySQL/MyBB/manual acceptance BLOCKED; локальная MariaDB её не заменяет |
 
-После PR задачи 2 автоматического перехода к задаче 3 нет. Карта ниже сохранена как история исходной поставки 4.0-R2.
+После PR задачи 3 автоматического перехода к задаче 4 нет. Карта ниже сохранена как история исходной поставки 4.0-R2.
 
 ## Основание и область доказательств
 

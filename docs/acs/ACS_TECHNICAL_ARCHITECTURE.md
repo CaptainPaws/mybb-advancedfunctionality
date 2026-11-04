@@ -55,6 +55,8 @@
 
 Ручное решение требует актуальных GM-полномочий именно этой сессии, CSRF, CAS, контекста доказательств и отдельного append-only audit события. Ни совпадение uid/tid/time, ни клиентский pid не разрешают привязку. До реализации такого evidence protocol предоставляется только диагностика, без «повторить отправку». Модерация выполняется MyBB; ACS ждёт approval, проверяет свежесть с исходным tape и может потребовать recovery.
 
+В ACS-4.3.3-R2 реализован `Application/RecoveryService.php`: общий terminal receipt verifier, authoritative known-pid state, консервативный quarantine и audited GM CAS-команды без Gateway/нового INSERT. Native confirmation теперь сохраняет исходный fid, writer проверяет его перед commit. [Команды и ограничения](ACS_4_3_3_R2_RECOVERY_SERVICE.md): неизвестный pid/legacy incomplete identity остаются заблокированы; explicit GM hold не становится доказательством связи. Native lifecycle observers/approval и frontend относятся к следующим задачам.
+
 `AF_ACS_Publication::card()` отдаёт только статус/метку; `mechanics_confirmed=true` исключительно для COMMITTED. Postbit и editor wiring ещё не реализованы. Обычная видимая литература до commit — поддерживаемая политика; атомарная скрытая публикация литературы и карточки не обещается.
 
 Подробные свидетельства и ограничения: [аудит R2](ACS_STAGE_4_REVISION_2_AUDIT.md).

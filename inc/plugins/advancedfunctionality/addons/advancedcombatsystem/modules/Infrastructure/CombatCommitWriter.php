@@ -55,6 +55,19 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
     /** Authoritative receipt lookup after a lost/unknown commit response; no Resolver or post creation. */
     public function receipt(string $id): ?array { $this->transactions->assertExternalBoundary();return $this->terminal($this->own($id)); }
 
+    /** Same terminal verifier, read-only access for the author or persisted session owner/GM. */
+    public function receiptForRecovery(string $id): ?array
+    {
+        $this->transactions->assertExternalBoundary();
+        $row=$this->submissions->submission($id)??throw new RuntimeException('ACS_SUBMISSION_NOT_FOUND');
+        $uid=$this->access->uid();$this->access->thread($row['tid']);
+        $roles=array_column($this->preparation->roles($row['session_id'],$uid),'role');
+        if (!$roles || ($uid!==$row['author_uid'] && !array_intersect($roles,['owner','gm']))) {
+            throw new RuntimeException('ACS_RECOVERY_PERMISSION_DENIED');
+        }
+        return $this->terminal($row);
+    }
+
     private function frozen(array $row): array
     {
         if (!hash_equals($row['request_hash'],hash('sha256',$row['request_json']))) { throw new RuntimeException('ACS_COMBAT_REQUEST_CORRUPT'); }
@@ -172,6 +185,8 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             $turn=$this->authorizeFacts($current,$f,$frozen['actions']);
             $this->preparation->assertNoObligations($current['session_id'],$current['encounter_id'],$current['turn_id'],true,$current['draft_id']);
             if ($this->frozen($current)!==$frozen) { throw new RuntimeException('ACS_COMBAT_FROZEN_INVALID'); }
+            $identity=json_decode($current['evidence_json'],true,32,JSON_THROW_ON_ERROR);
+            if (($identity['fid']??null)!==$fid) { throw new RuntimeException('ACS_COMBAT_POST_INVALID'); }
             $post=$this->sql('SELECT p.pid,p.uid,p.tid,p.fid,p.visible,t.fid AS thread_fid,t.visible AS thread_visible,t.closed,f.open AS forum_open,f.type AS forum_type FROM `'.$this->prefix.'posts` p JOIN `'.$this->prefix.'threads` t ON t.tid=p.tid JOIN `'.$this->prefix.'forums` f ON f.fid=t.fid WHERE p.pid=?',[$current['pid']])['rows'][0]??null;
             if (!$post || (string)$post['uid']!==$current['author_uid'] || (string)$post['tid']!==$current['tid']
                 || (string)$post['fid']!==$fid || (string)$post['visible']!=='1' || (string)$post['thread_fid']!==$fid
