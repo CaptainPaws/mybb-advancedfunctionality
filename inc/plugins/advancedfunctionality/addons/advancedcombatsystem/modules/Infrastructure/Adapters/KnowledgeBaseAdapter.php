@@ -5,6 +5,21 @@ require_once __DIR__.'/CapabilityValidator.php';
 /** Authenticated, owner-authorized KB reads. No JSON parser, migrations or writes. */
 final class AF_ACS_KnowledgeBaseAdapter
 {
+    public static function removalEffect(array $dto,array $effect):array
+    {
+        require_once __DIR__.'/../../Domain/Effects.php';$p=$effect['parameters']??[];$index=$effect['source_index']??null;
+        if(($dto['ready']??null)!==true||($effect['supported']??null)!==true||!is_int($index)||($dto['data']['definition']['effects'][$index]??null)!==($effect['raw']??null)
+            ||!in_array($p['effect_type']??null,['cleanse','dispel'],true))throw new AF_ACS_FormulaError('status_removal_reference_invalid');
+        if(array_key_exists('mass',$p)&&!is_bool($p['mass']))throw new AF_ACS_FormulaError('status_removal_policy_invalid');
+        if((($p['mass']??false)&&array_key_exists('limit',$p))||(!(($p['mass']??false))&&array_key_exists('limit',$p)&&$p['limit']===null))throw new AF_ACS_FormulaError('status_removal_policy_invalid');
+        $policy=['kind'=>$p['effect_type'],'categories'=>(array_key_exists('categories',$p)?$p['categories']:[]),'limit'=>($p['mass']??false)?null:(array_key_exists('limit',$p)?$p['limit']:1),
+            'remove_stacks'=>$p['remove_stacks']??null,'chance'=>array_key_exists('chance',$p)?$p['chance']:100];
+        if((array_key_exists('chance_scope',$p)&&$p['chance_scope']!=='operation')||($policy['chance']<100&&($policy['limit']===null||$policy['limit']>1)&&($p['chance_scope']??null)!=='operation'))throw new AF_ACS_FormulaError('status_removal_probability_scope_unsupported');
+        AF_ACS_Effects::removalSpec($policy);$trigger=array_key_exists('trigger',$p)?$p['trigger']:'on_cast';
+        if(!in_array($trigger,['on_cast','on_hit','on_damage'],true))throw new AF_ACS_FormulaError('status_trigger_unsupported');
+        return ['effect_definition_ref'=>['type'=>$dto['source']['type'],'key'=>$dto['source']['key'],'version'=>$dto['definition_version']['declared_version'],
+            'fingerprint'=>$dto['definition_version']['fingerprint'],'effect_index'=>$index],'trigger'=>$trigger,'policy'=>$policy];
+    }
     /** Narrow projection of an already authorized/pinned B1 effect; never fetch latest or guess missing semantics. */
     public static function statusEffect(array $dto,array $effect):array
     {
@@ -29,7 +44,8 @@ final class AF_ACS_KnowledgeBaseAdapter
         if(array_key_exists('probability_check',$p))$status['probability_check']=$p['probability_check'];
         $check=AF_ACS_Effects::status($status,['source'=>'1','target'=>'2','relationship'=>'hostile','immunities'=>[],
             'cast_success'=>false,'hit_success'=>false,'hp_loss'=>0,'status_hit'=>0,'status_resistance'=>0])->serverData();
-        if(!$check['supported'])$fail($check['reasons'][0]);return $status;
+        if(!$check['supported'])$fail($check['reasons'][0]);
+        $status['instance']=AF_ACS_Effects::instanceSpec($definition,$p);return $status;
     }
     private function available(int $actorUid): bool
     {

@@ -23,9 +23,10 @@ trait AF_ACS_CombatCommitPersistence
         foreach (['participants','sides','side_relationships'] as $name) {
             $f[$name]=$this->sql('SELECT * FROM '.$this->table($name).' WHERE encounter_id=? ORDER BY id'.$suffix,[$eid])['rows'];
         }
+        $f['effects']=$this->statusRows($sid,$lock);
         $f['seals']=$this->sql('SELECT * FROM '.$this->table('sealed_actions').' WHERE draft_id=? ORDER BY action_index'.$suffix,[$draft])['rows'];
         $f['rolls']=$this->sql('SELECT x.* FROM '.$this->table('rolls').' x JOIN '.$this->table('sealed_actions').' a ON a.id=x.sealed_action_id WHERE a.draft_id=? ORDER BY x.id'.$suffix,[$draft])['rows'];
-        $f['snapshots']=$this->sql('SELECT id,content_hash,SHA2(payload_json,256) AS actual_hash FROM '.$this->table('snapshots').' WHERE session_id=? AND (id IN (SELECT template_snapshot_id FROM '.$this->table('entities').' WHERE session_id=?) OR id IN (SELECT definition_snapshot_id FROM '.$this->table('sealed_actions').' WHERE draft_id=?)) ORDER BY id'.$suffix,[$sid,$sid,$draft])['rows'];
+        $f['snapshots']=$this->sql('SELECT id,content_hash,SHA2(payload_json,256) AS actual_hash FROM '.$this->table('snapshots').' WHERE session_id=? AND (id IN (SELECT template_snapshot_id FROM '.$this->table('entities').' WHERE session_id=?) OR id IN (SELECT definition_snapshot_id FROM '.$this->table('sealed_actions').' WHERE draft_id=?) OR id IN (SELECT definition_snapshot_id FROM '.$this->table('effects').' WHERE session_id=?)) ORDER BY id'.$suffix,[$sid,$sid,$draft,$sid])['rows'];
         $f['boundaries']=$this->sql('SELECT operation_key,kind,status,payload_hash,result_json FROM '.$this->table('operations')." WHERE session_id=? AND (kind LIKE 'clock.%' OR kind='round.turn_closed' OR status<>'committed') ORDER BY operation_key".$suffix,[$sid])['rows'];
         return $f;
     }
@@ -92,7 +93,7 @@ trait AF_ACS_CombatCommitPersistence
             [$key,$row['session_id'],$row['encounter_id'],$kind,hash('sha256',$json),'committed',$json,self::json($result),time()]);
     }
 
-    private function project(array $row, array $f, array $turn, AF_ACS_ResolverResult $result): array
+    private function project(array $row, array $f, array $turn, AF_ACS_ResolverResult $result,array $frozen): array
     {
         $before=$result->serverInitial();$after=$result->serverState();$changes=[];
         if ($before['barriers']!==[] || $after['barriers']!==[] || $before['next_barrier_order']!==$after['next_barrier_order']) {
@@ -139,6 +140,8 @@ trait AF_ACS_CombatCommitPersistence
         if ($this->sql('UPDATE '.$this->table('turns')." SET ap_spent=ap_spent+?,status='resolved',closed_by_submission=?,deadline_at=NULL,remaining_deadline_seconds=NULL,turn_version=turn_version+1 WHERE id=? AND turn_version=? AND status='pending'",
             [$ap,$row['submission_id'],$row['turn_id'],$turn['turn_version']])['affected']!==1) { throw new RuntimeException('ACS_VERSION_CONFLICT'); }
         $this->operation($row,'turn:'.$row['turn_id'].':closed','round.turn_closed',['turn_id'=>$row['turn_id']],['turn_id'=>$row['turn_id'],'status'=>'resolved','submission_id'=>$row['submission_id']]);
-        return ['entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed];
+        $snapshotIds=[];foreach($frozen['seals'] as $i=>$seal)$snapshotIds[$i]=$seal['payload']['definition_snapshot_id'];
+        $statuses=$this->persistStatusInstances($row['session_id'],$before['status_instances']??[],$after['status_instances']??[],$snapshotIds);
+        return ['entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses];
     }
 }

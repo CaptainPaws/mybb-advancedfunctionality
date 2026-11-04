@@ -5,10 +5,12 @@ require_once __DIR__.'/ClockPersistence.php';
 require_once __DIR__.'/DraftPersistence.php';
 require_once __DIR__.'/SealPersistence.php';
 require_once __DIR__.'/RoundManagementPersistence.php';
+require_once __DIR__.'/StatusPersistence.php';
 
 /** Prepared, scoped SQL. All mutators require the existing audited command transaction. */
 final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
 {
+    use AF_ACS_StatusPersistence;
     use AF_ACS_ClockPersistence;
     use AF_ACS_DraftPersistence;
     use AF_ACS_SealPersistence;
@@ -17,10 +19,10 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     {
         foreach($fields as $field)if(isset($row[$field]))$row[$field]=(string)$row[$field];return $row;
     }
-    /** Unknown persistent effect projections must not be silently treated as empty by preview v1. */
+    /** Status storage 010 has an explicit projection; persistent barriers remain unsupported. */
     public function assertPreviewStorage(): void
     {
-        $rows=$this->sql('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN (?,?)',[$this->prefix.'af_acs_effects',$this->prefix.'af_acs_barrier_pools'])['rows'];
+        $rows=$this->sql('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?',[$this->prefix.'af_acs_barrier_pools'])['rows'];
         if($rows)throw new RuntimeException('ACS_PREVIEW_EFFECT_STORAGE_UNSUPPORTED');
     }
     public function encounter(string $sid,string $id,bool $lock=false): ?array

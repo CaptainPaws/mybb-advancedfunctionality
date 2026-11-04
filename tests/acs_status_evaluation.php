@@ -78,7 +78,7 @@ resolver_check(!array_filter($v,fn($v)=>$v['roll_used']),'Positive status consum
 // Real owner lookup/normalization into the existing QueryService ability projection. Owner DB forbids writes.
 require_once AF_ADDONS.'advancedcombatsystem/modules/Application/QueryService.php';
 $statusDef=['schema'=>'af_kb.arpg.mechanic.v1','key'=>'status-fixture','version'=>'1','type'=>'debuff',
-    'duration'=>['value'=>1,'unit'=>'own_turn'],'phase'=>'on_turn_start','decrement'=>['event'=>'on_turn_end','amount'=>1],
+    'scope'=>'combat','duration'=>['value'=>1,'unit'=>'own_turn'],'phase'=>'on_turn_start','decrement'=>['event'=>'on_turn_end','amount'=>1],
     'repeat_rule'=>'refresh','max_stacks'=>1,'removal_conditions'=>[],'expiry_conditions'=>[],'immunities'=>[],
     'resistances'=>[],'periodic_effects'=>[],'formula_refs'=>[],'events'=>[]];
 $db->tables['af_kb_entries'][]=snapshot_entry(980,'arpg_mechanics','status-fixture',
