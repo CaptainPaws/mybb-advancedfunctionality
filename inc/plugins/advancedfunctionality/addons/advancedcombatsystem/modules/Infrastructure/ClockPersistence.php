@@ -62,6 +62,7 @@ trait AF_ACS_ClockPersistence
     {
         $this->commandWrite();$key=AF_ACS_Clock::entityStart($individual['id']);$changed=[];
         if((string)$individual['start_done']!=='0' || (string)$individual['end_done']!=='0')throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE');
+        $statuses=$this->processStatusBoundary($session,$encounter,'entity_start',$individual['id'],$actor,$individual['entity_id']);
         foreach($this->allCooldowns($session['id'],$individual['entity_id']) as $cooldown) {
             $source=$this->cooldownSource($session['id'],$cooldown);
             if((string)$source['applied_entity_turn_id']===$individual['id'] || $cooldown['last_boundary_key']===$key)continue;
@@ -74,8 +75,18 @@ trait AF_ACS_ClockPersistence
         }
         self::integer($individual['entity_turn_version'],'18446744073709551614');
         if($this->sql('UPDATE '.$this->table('entity_turns').' SET start_done=1,entity_turn_version=entity_turn_version+1 WHERE id=? AND entity_turn_version=? AND start_done=0',[$individual['id'],$individual['entity_turn_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
-        $this->recordBoundary($key,'clock.entity_start',$session['id'],$encounter['id'],$actor,['entity_turn_id'=>$individual['id']],['entity_turn_id'=>$individual['id'],'cooldowns'=>$changed,'parent_encounter_sequence'=>$encounter['next_event_sequence']]);
-        return ['boundary_key'=>$key,'entity_turn_id'=>$individual['id'],'cooldowns'=>$changed];
+        $this->recordBoundary($key,'clock.entity_start',$session['id'],$encounter['id'],$actor,['entity_turn_id'=>$individual['id']],['entity_turn_id'=>$individual['id'],'cooldowns'=>$changed,'statuses'=>$statuses,'parent_encounter_sequence'=>$encounter['next_event_sequence']]);
+        return ['boundary_key'=>$key,'entity_turn_id'=>$individual['id'],'cooldowns'=>$changed,'statuses'=>$statuses];
+    }
+    public function processEntityEnd(array $session,array $encounter,array $individual,string $actor):array
+    {
+        $this->commandWrite();$key=AF_ACS_Clock::entityEnd($individual['id']);
+        if($old=$this->boundary($key,$session['id'])){if((string)$individual['end_done']!=='1')throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE');return $old;}
+        if((string)$individual['start_done']!=='1'||(string)$individual['end_done']!=='0'||!$this->boundary(AF_ACS_Clock::entityStart($individual['id']),$session['id']))throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE');
+        $statuses=$this->processStatusBoundary($session,$encounter,'entity_end',$individual['id'],$actor,$individual['entity_id']);
+        self::integer($individual['entity_turn_version'],'18446744073709551614');
+        if($this->sql('UPDATE '.$this->table('entity_turns').' SET end_done=1,entity_turn_version=entity_turn_version+1 WHERE id=? AND entity_turn_version=? AND end_done=0',[$individual['id'],$individual['entity_turn_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
+        $this->recordBoundary($key,'clock.entity_end',$session['id'],$encounter['id'],$actor,['entity_turn_id'=>$individual['id']],['entity_turn_id'=>$individual['id'],'statuses'=>$statuses,'parent_encounter_sequence'=>$encounter['next_event_sequence']]);return $this->boundary($key,$session['id']);
     }
     public function applyEntityStart(array $session,array $encounter,array $individual,string $actor): array
     {
@@ -158,7 +169,7 @@ trait AF_ACS_ClockPersistence
         if($old=$this->boundary($key,$sid))return $old;
         $round=$this->clockRound($sid,$roundId);
         if(!$round || (string)$round['encounter_id']!==$eid || $round['status']!=='open')throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE');
-        $after='0';$count=0;
+        $after='0';$count=0;$entityIds=[];
         do {
             $turns=$this->roundTurns($roundId,$after);
             foreach($turns as $turn) {
@@ -166,6 +177,7 @@ trait AF_ACS_ClockPersistence
                 $group=$this->clockGroup($sid,$turn['control_group_id']);
                 if(!$group || json_decode($group['config_json'],true)!==['schema_version'=>1])throw new RuntimeException('ACS_CLOCK_DEPENDENCY_BLOCKED');
                 foreach($this->individualTurns([$turn['id']]) as $individual) {
+                    $entityIds[]=$individual['entity_id'];
                     if($individual['start_done']!=='0' || $individual['end_done']!=='0')throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE');
                     $entity=$this->entity($sid,$individual['entity_id']);
                     if(!$entity || json_decode($entity['layers_json'],true)!==['schema_version'=>1,'layers'=>[]])throw new RuntimeException('ACS_CLOCK_DEPENDENCY_BLOCKED');
@@ -176,7 +188,8 @@ trait AF_ACS_ClockPersistence
             }
         }while(count($turns)===100);
         if(!$count)throw new RuntimeException('ACS_ROSTER_INVALID');
-        $this->recordBoundary($key,'clock.ap_refresh',$sid,$eid,$actor,['round_id'=>$roundId],['round_id'=>$roundId,'initial_budget'=>3,'turn_count'=>(string)$count,'parent_encounter_sequence'=>$sequence]);
+        $statuses=$this->processStatusBoundary($this->session($sid),$this->encounter($sid,$eid),'round_start',$roundId,$actor,null,$entityIds);
+        $this->recordBoundary($key,'clock.ap_refresh',$sid,$eid,$actor,['round_id'=>$roundId],['round_id'=>$roundId,'initial_budget'=>3,'turn_count'=>(string)$count,'statuses'=>$statuses,'parent_encounter_sequence'=>$sequence]);
         return $this->boundary($key,$sid);
     }
     /** A pre-005 roster already initialized AP: acknowledge its confirmed event, never refill. */

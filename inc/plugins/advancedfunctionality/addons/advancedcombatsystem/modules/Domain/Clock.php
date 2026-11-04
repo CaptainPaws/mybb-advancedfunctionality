@@ -1,5 +1,6 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
+require_once __DIR__.'/Effects.php';
 
 enum AF_ACS_TurnState: string
 {
@@ -9,7 +10,7 @@ enum AF_ACS_TurnState: string
     case Forfeited='forfeited';
 }
 
-/** Pure vocabulary/identities. No SQL, time polling, ticks, upkeep or state mutation. */
+/** Pure Clock identities and virtual boundary evaluation. No SQL, polling or upkeep. */
 final class AF_ACS_Clock
 {
     public const VERSION='acs-clock-1';
@@ -20,6 +21,55 @@ final class AF_ACS_Clock
     public static function apRefresh(string $roundId): string {return 'round:'.self::id($roundId).':ap_refresh';}
     public static function entityStart(string $entityTurnId): string {return 'entity_turn:'.self::id($entityTurnId).':start';}
     public static function entityEnd(string $entityTurnId): string {return 'entity_turn:'.self::id($entityTurnId).':end';}
+    public static function roundEnd(string $roundId):string{return 'round:'.self::id($roundId).':next';}
+    public static function hasStartWork(array $instances,string $entity,string $sid,string $eid):bool
+    {
+        foreach($instances as $row)if($row['status']==='active'&&$row['session_id']===$sid&&!empty($row['spec']['periodic'])&&($row['spec']['scope']!=='combat'||$row['encounter_id']===$eid)
+            &&$row['duration_unit']!=='round'&&($row['duration_unit']==='own_turn'?$row['source_entity_id']:$row['target_entity_id'])===$entity)return true;
+        return false;
+    }
+    /** Same boundary vocabulary; pure status/Damage/Effects pipeline, no RNG or scheduler. */
+    public static function advance(array $state,array $boundary,array $defenses=[],array $catalog=[]):AF_ACS_EffectsResult
+    {
+        if(($boundary['encounter_status']??null)!=='active')throw new RuntimeException('ACS_STATUS_CLOCK_PAUSED');
+        $phase=$boundary['phase']??null;$start=in_array($phase,['entity_start','round_start'],true);
+        $key=match($phase){'entity_start'=>self::entityStart($boundary['id']),'entity_end'=>self::entityEnd($boundary['id']),
+            'round_start'=>self::apRefresh($boundary['id']),'round_end'=>self::roundEnd($boundary['id']),default=>throw new RuntimeException('ACS_STATUS_BOUNDARY_INVALID')};
+        self::id($boundary['session_id']);self::id($boundary['encounter_id']);
+        $initial=AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>[]])->serverState();$state=$initial;$events=[];$signals=[];$tickKeys=[];
+        $queue=array_keys($state['status_instances']??[]);
+        usort($queue,static fn($a,$b)=>$state['status_instances'][$a]['applied_order']<=>$state['status_instances'][$b]['applied_order']?:strlen((string)$a)<=>strlen((string)$b)?:strcmp((string)$a,(string)$b));
+        foreach($queue as $id){$row=$state['status_instances'][$id];
+            if($row['status']!=='active'||$row['session_id']!==$boundary['session_id']||($row['spec']['scope']==='combat'&&$row['encounter_id']!==$boundary['encounter_id']))continue;
+            $round=$row['duration_unit']==='round';
+            if($round!==str_starts_with($phase,'round_'))continue;
+            if($round){if(!in_array($row['target_entity_id'],$boundary['entity_ids']??[],true))continue;}
+            elseif(($row['duration_unit']==='own_turn'?$row['source_entity_id']:$row['target_entity_id'])!==($boundary['entity_id']??null))continue;
+            $periodic=!empty($row['spec']['periodic']);
+            $durationAtStart=$periodic&&($row['spec']['duration_event']??null)==='on_turn_start';
+            $decrement=$start===$durationAtStart&&($row['last_duration_boundary']??null)!==$key;
+            $doTick=$periodic&&$start&&($row['last_tick_boundary']??null)!==$key;
+            if($periodic&&!$start&&($row['last_tick_boundary']??null)!==($round?self::apRefresh($boundary['id']):self::entityStart($boundary['id'])))$decrement=false;
+            if(!$doTick&&!$decrement)continue;
+            $steps=[];
+            if($doTick&&$row['remaining_duration']>0){
+                foreach($row['spec']['periodic'] as $tick){
+                    $target=$row['target_entity_id'];if(!isset($state['entities'][$target]))throw new RuntimeException('ACS_STATUS_TARGET_MISSING');
+                    if($state['entities'][$target]['life_state']==='dead'){$steps[]=['type'=>'tick_skipped','reason'=>'dead','entity_id'=>$target];continue;}
+                    if($tick['kind']==='heal')$op=['kind'=>'heal','entity_id'=>$target,'amount'=>$tick['value']];
+                    elseif($tick['kind']==='damage'){
+                        $value=$tick['value'];$allocation=AF_ACS_Damage::calculate([['source_index'=>0,'damage_type'=>$tick['damage_type'],'damage_element'=>$tick['damage_element'],'raw'=>$value,'after_crit'=>$value]],$defenses[$target]??[],[],isset($catalog['by_target'])?($catalog['by_target'][$target]??throw new RuntimeException('ACS_STATUS_CATALOG_MISSING')):$catalog);
+                        $op=['kind'=>'damage','targets'=>[['entity_id'=>$target,'allocation'=>$allocation]]];
+                    }else throw new RuntimeException('ACS_STATUS_TICK_UNSUPPORTED');
+                    $r=AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>[$op]]);$state=$r->serverState();$steps[]=['effect_ref'=>$tick['effect_ref'],'source_ref'=>$tick['source_ref'],'effects'=>$r->serverTrace()];$signals=[...$signals,...$r->serverTrace()['signals']];
+                }
+                $tickKeys[]='effect:'.$id.':tick:'.$key;
+            }
+            $r=AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>[['kind'=>'status_duration_boundary','id'=>(string)$id,'boundary'=>$key,'tick'=>$doTick,'decrement'=>$decrement]]]);
+            $state=$r->serverState();$events[]=['effect_id'=>(string)$id,'ticks'=>$steps,'duration'=>$r->serverTrace()['events']];
+        }
+        return new AF_ACS_EffectsResult($state,['engine_version'=>self::VERSION,'boundary_key'=>$key,'events'=>$events,'signals'=>$signals,'tick_keys'=>$tickKeys,'persistent'=>false],$initial);
+    }
     /** This is a state graph, never authorization or permission to skip boundaries/publication. */
     public static function transitionExists(AF_ACS_TurnState $from,AF_ACS_TurnState $to): bool
     {

@@ -6,13 +6,13 @@ require_once __DIR__.'/Damage.php';
 final class AF_ACS_Effects
 {
     public const VERSION='acs-effects-1';
-    public static function instanceSpec(array $definition,array $p):array
+    public static function instanceSpec(array $definition,array $p,array $tickDefinitions=[]):array
     {
         if(($definition['schema']??null)!=='af_kb.arpg.mechanic.v1')self::fail('status_instance_schema_unsupported');
         $allowed=['schema','key','version','type','duration','phase','decrement','repeat_rule','max_stacks','removal_conditions','expiry_conditions','immunities','resistances','periodic_effects','formula_refs','events',
             'scope','category','source_scope','stack_max','stack_per_apply','cleansable','dispellable','mechanical_parameters'];
         if(array_diff(array_keys($definition),$allowed))self::fail('status_instance_schema_unsupported');
-        foreach(['removal_conditions','expiry_conditions','periodic_effects','events'] as $field)if(!empty($definition[$field]))self::fail('status_instance_callbacks_unsupported');
+        foreach(['removal_conditions','expiry_conditions','events'] as $field)if(!empty($definition[$field]))self::fail('status_instance_callbacks_unsupported');
         if(array_key_exists('stack_max',$definition)&&$definition['stack_max']!==$definition['max_stacks'])self::fail('status_stack_alias_conflict');
         $stack=((array_key_exists('repeat_rule',$definition)?$definition['repeat_rule']:'refresh'))==='stack';
         $spec=['schema_version'=>1,'effect_key'=>$p['status_key']??null,'scope'=>$definition['scope']??null,'category'=>(array_key_exists('category',$definition)?$definition['category']:$definition['type']??null),
@@ -28,12 +28,60 @@ final class AF_ACS_Effects
             if(!in_array($p['duration_unit']??null,['own_turn','target_turn','round'],true))self::fail('status_duration_override_unit_missing');
             $spec['duration']=['value'=>$duration,'unit'=>$p['duration_unit']];
         }elseif(array_key_exists('duration_unit',$p)&&$p['duration_unit']!==null&&$p['duration_unit']!==''&&$p['duration_unit']!==($spec['duration']['unit']??null))self::fail('status_duration_override_value_missing');
+        if(!empty($definition['periodic_effects'])){
+            if(!is_array($definition['periodic_effects'])||!array_is_list($definition['periodic_effects'])||count($tickDefinitions)!==count($definition['periodic_effects']))self::fail('status_tick_definition_missing');
+            $event=$definition['decrement']['event']??null;
+            if(AF_ACS_Numeric::number($definition['decrement']['amount']??null)!=1||!in_array($event,$spec['duration']['unit']==='round'?['on_round_end']:['on_turn_start','on_turn_end'],true))self::fail('status_tick_decrement_unsupported');
+            $spec['duration_event']=$event;
+            $ticks=[];foreach($definition['periodic_effects'] as $i=>$periodic){
+                if(!is_array($periodic)||!is_array($periodic['period']??null)||count($periodic['period'])!==2||AF_ACS_Numeric::number($periodic['period']['value']??null)!=1||($periodic['period']['unit']??null)!==$spec['duration']['unit']
+                    ||($periodic['phase']??null)!==($spec['duration']['unit']==='round'?'on_round_start':'on_turn_start')||($definition['phase']??null)!==$periodic['phase'])self::fail('status_tick_timing_unsupported');
+                $ticks[]=self::tickSpec($tickDefinitions[$i],$periodic['effect']??[]);
+            }
+            $spec['periodic']=$ticks;
+        }elseif($tickDefinitions)self::fail('status_tick_definition_unexpected');
+        else{
+            $end=$spec['duration']['unit']==='round'?'on_round_end':'on_turn_end';$originalEnd=($definition['duration']['unit']??null)==='round'?'on_round_end':'on_turn_end';
+            $declared=$definition['decrement']['event']??null;
+            if(($declared!==$end&&!($duration!==null&&$declared===$originalEnd))||AF_ACS_Numeric::number($definition['decrement']['amount']??null)!=1)self::fail('status_duration_decrement_unsupported');
+        }
         self::statusSpec($spec);return $spec;
+    }
+    /** Exact retained effect component, never a live ability cast, text formula or implicit stack multiplier. */
+    public static function tickSpec(array $snapshot,array $expected):array
+    {
+        self::fields($snapshot,['source_ref','source_json','effect_ref']);$ref=$snapshot['source_ref']??[];
+        self::ref($ref);if(($snapshot['effect_ref']??null)!==$expected||($expected['type']??null)!=='arpg_ability'||($expected['key']??null)!==$ref['key'])self::fail('status_tick_reference_invalid');
+        if(!is_string($snapshot['source_json']??null)||!hash_equals($ref['fingerprint'],'sha256:'.hash('sha256',$snapshot['source_json'])))self::fail('status_tick_pin_invalid');
+        try{$definition=json_decode($snapshot['source_json'],true,64,JSON_THROW_ON_ERROR);}catch(JsonException $e){self::fail('status_tick_pin_invalid');}
+        if(($definition['schema']??null)!=='af_kb.arpg.rules.v1'||($definition['version']??null)!==$ref['version'])self::fail('status_tick_schema_unsupported');
+        if(!is_array($definition['effects']??null)||!array_is_list($definition['effects']))self::fail('status_tick_schema_unsupported');
+        $index=AF_ACS_Numeric::integer($expected['effect_index']??null,0,2147483647);$effect=$definition['effects'][$index]??null;
+        if(!is_array($effect))self::fail('status_tick_definition_missing');
+        self::fields($effect,['kind','effect_type','value','value_mode','damage_type','damage_element','element','can_crit','notes']);
+        $kind=$effect['effect_type']??$effect['kind']??null;
+        if(isset($effect['kind'],$effect['effect_type'])&&$effect['kind']!==$effect['effect_type'])self::fail('status_tick_type_conflict');
+        if(!in_array($kind,['damage','heal'],true)||($effect['can_crit']??false)!==false||!in_array($effect['value_mode']??'flat',['flat',''],true))self::fail('status_tick_effect_unsupported');
+        if(array_key_exists('can_crit',$definition)&&!is_bool($definition['can_crit']))self::fail('status_tick_effect_unsupported');
+        if(!array_key_exists('can_crit',$effect)&&($definition['can_crit']??false)===true)self::fail('status_tick_effect_unsupported');
+        $value=AF_ACS_Numeric::number($effect['value']??null);if($value<0)self::fail('status_tick_value_invalid');
+        $result=['kind'=>$kind,'value'=>$value,'effect_ref'=>$expected,'source_ref'=>$ref];
+        if($kind==='heal')AF_ACS_Numeric::integer($value);
+        else{
+            if(!in_array($effect['damage_type']??null,['physical','elemental','true'],true))self::fail('status_tick_damage_type_missing');
+            $result['damage_type']=$effect['damage_type'];$result['damage_element']=$effect['damage_element']??null;
+            if($result['damage_type']==='elemental'&&(!is_string($result['damage_element'])||isset($effect['element'])&&$effect['element']!==$result['damage_element']))self::fail('status_tick_element_missing');
+        }return $result;
+    }
+    public static function ordinaryActionAllowed(array $state,string $entity):bool
+    {
+        foreach($state['status_instances']??[] as $row)if($row['status']==='active'&&$row['target_entity_id']===$entity&&($row['spec']['mechanical_parameters']['blocks_ordinary_actions']??false)===true)return false;
+        return true;
     }
     /** Closed prepared lifecycle contract; duration is stored, never advanced here. */
     public static function statusSpec(array $spec):void
     {
-        self::fields($spec,['schema_version','effect_key','scope','category','polarity','repeat_rule','source_scope','duration','stack_max','stack_per_apply','cleansable','dispellable','mechanical_parameters']);
+        self::fields($spec,['schema_version','effect_key','scope','category','polarity','repeat_rule','source_scope','duration','stack_max','stack_per_apply','cleansable','dispellable','mechanical_parameters','periodic','duration_event']);
         if(($spec['schema_version']??null)!==1)self::fail('status_instance_schema_unsupported');
         foreach(['effect_key','category'] as $field)if(!is_string($spec[$field]??null)||!preg_match('/\A[a-z][a-z0-9_.-]{0,95}\z/D',$spec[$field]))self::fail('status_instance_key_invalid');
         if(!in_array($spec['scope']??null,['combat','session','persistent'],true)||!in_array($spec['polarity']??null,['negative','positive'],true)
@@ -44,14 +92,21 @@ final class AF_ACS_Effects
         if($per>$max||($spec['repeat_rule']!=='stack'&&($per!==1||$max!==1)))self::fail('status_stack_contract_invalid');
         foreach(['cleansable','dispellable'] as $field)if(!is_bool($spec[$field]??null))self::fail('status_removal_policy_invalid');
         if(!is_array($spec['mechanical_parameters']??null))self::fail('status_mechanics_invalid');
+        if(array_key_exists('blocks_ordinary_actions',$spec['mechanical_parameters'])&&!is_bool($spec['mechanical_parameters']['blocks_ordinary_actions']))self::fail('status_control_contract_invalid');
+        if(($spec['mechanical_parameters']['blocks_ordinary_actions']??false)===true&&($spec['duration']['unit']!=='target_turn'||(!empty($spec['periodic'])&&($spec['duration_event']??null)!=='on_turn_end')))self::fail('status_control_timing_unsupported');
+        if(isset($spec['periodic'])&&!in_array($spec['duration_event']??null,$spec['duration']['unit']==='round'?['on_round_end']:['on_turn_start','on_turn_end'],true))self::fail('status_tick_decrement_unsupported');
+        if(isset($spec['periodic'])&&(!is_array($spec['periodic'])||!array_is_list($spec['periodic'])||!$spec['periodic']))self::fail('status_tick_definition_missing');
     }
     private static function statusInstance(string $id,array $row):void
     {
-        self::fields($row,['schema_version','id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','stacks','remaining_duration','duration_unit','applied_order','version','status','origin_action_index']);
+        self::fields($row,['schema_version','id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','stacks','remaining_duration','duration_unit','applied_order','version','status','origin_action_index','last_tick_boundary','last_duration_boundary']);
         if(($row['schema_version']??null)!==1||($row['id']??null)!==$id||(!preg_match('/\Anew:[1-9][0-9]*\z/D',$id)&&self::id($id)!==$id))self::fail('status_instance_identity_invalid');
         foreach(['session_id','encounter_id','source_entity_id','target_entity_id'] as $field)self::id($row[$field]??null);
         if(!is_array($row['spec']??null))self::fail('status_instance_schema_unsupported');self::statusSpec($row['spec']);
         if(str_starts_with($id,'new:')&&$id!=='new:'.($row['applied_order']??''))self::fail('status_instance_identity_invalid');
+        foreach(['last_tick_boundary','last_duration_boundary'] as $field)if(array_key_exists($field,$row)){
+            if(!is_string($row[$field])||!preg_match('/\A(?:entity_turn|round):([1-9][0-9]{0,19}):(?:start|end|ap_refresh|next)\z/D',$row[$field],$match))self::fail('status_boundary_invalid');self::id($match[1]);
+        }
         self::ref($row['status_definition_ref']??null);$ref=$row['effect_definition_ref']??null;
         if(!is_array($ref)||!in_array($ref['type']??null,['arpg_ability','arpg_item','arpg_bestiary'],true))self::fail('status_definition_missing');
         self::fields($ref,['type','key','version','fingerprint','effect_index']);self::ref(array_intersect_key($ref,array_flip(['key','version','fingerprint'])));
@@ -116,6 +171,18 @@ final class AF_ACS_Effects
             $success=true;if($policy['chance']<100){self::statusSample($op['roll']??null);$success=AF_ACS_Numeric::operation('multiply',100,$op['roll']['u'])<$policy['chance'];}
             $events[]=['type'=>'status_removal_check','kind'=>$policy['kind'],'success'=>$success,'selected'=>$eligible];
             if($success)foreach($eligible as $id){$row=&$state['status_instances'][$id];$row['stacks']=$policy['remove_stacks']===null?0:max(0,$row['stacks']-$policy['remove_stacks']);if(!$row['stacks'])$row['status']='removed';self::bump($row);$events[]=['type'=>'status_removed','id'=>$id,'stacks'=>$row['stacks']];unset($row);}
+        }elseif($kind==='status_duration_boundary'){
+            self::fields($op,['kind','id','boundary','tick','decrement']);$id=(string)$op['id'];$row=&$state['status_instances'][$id];
+            if(!is_array($row)||!is_string($op['boundary']??null)||!is_bool($op['tick']??null))self::fail('status_boundary_invalid');
+            $decrement=$op['decrement']??true;
+            if(!is_bool($decrement))self::fail('status_boundary_invalid');
+            if(($decrement?($row['last_duration_boundary']??null):($row['last_tick_boundary']??null))===$op['boundary']){unset($row);return;}
+            if($row['status']==='active'){
+                if($decrement){$row['remaining_duration']=max(0,$row['remaining_duration']-1);$row['last_duration_boundary']=$op['boundary'];}
+                if($op['tick'])$row['last_tick_boundary']=$op['boundary'];
+                if($decrement&&$row['remaining_duration']===0){$row['stacks']=0;$row['status']='removed';}
+                self::bump($row);$events[]=['type'=>'status_duration','id'=>$id,'remaining'=>$row['remaining_duration'],'status'=>$row['status']];
+            }unset($row);
         }elseif($kind==='status_combat_end'){
             self::fields($op,['kind','encounter_id']);self::id($op['encounter_id']);
             foreach($state['status_instances'] as $id=>&$row)if($row['status']==='active'&&$row['spec']['scope']==='combat'&&$row['encounter_id']===$op['encounter_id']){
@@ -312,7 +379,7 @@ final class AF_ACS_Effects
         }
         foreach($action['effects'] as $op){
             if(!is_array($op)||!is_string($op['kind']??null))self::fail('effects_operation_invalid');$kind=$op['kind'];
-            if(in_array($kind,['status_apply','status_remove','status_combat_end'],true)){
+            if(in_array($kind,['status_apply','status_remove','status_combat_end','status_duration_boundary'],true)){
                 self::statusOperation($v,$op,$events);
             }elseif($kind==='damage'){
                 self::fields($op,['kind','targets']);if(!is_array($op['targets']??null)||!array_is_list($op['targets']))self::fail('effects_operation_invalid');$seen=[];

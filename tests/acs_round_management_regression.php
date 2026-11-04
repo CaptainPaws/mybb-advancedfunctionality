@@ -38,11 +38,11 @@ $GLOBALS['acsResourcesFixture']=static function(array $f):void {
     snapshot_assert($rounds->command('gm_skip',$make(['turn_id'=>$heroTurn]))===$passed,'Different-key duplicate skip changed result');
     snapshot_assert($repo->clockTurn($sid,$heroTurn)['ap_spent']===1 || (string)$repo->clockTurn($sid,$heroTurn)['ap_spent']==='1','Skip spent/refunded AP');
     // Pending draft/sealed obligation blocks skip and is never deleted or modified.
-    $architecture=file_get_contents(dirname(__DIR__).'/docs/acs/ACS_TECHNICAL_ARCHITECTURE.md');preg_match('/CREATE TABLE `\{prefix\}af_acs_drafts` \(.*?;/s',$architecture,$ddl);$link->query(str_replace('{prefix}',TABLE_PREFIX,$ddl[0]));
-    $monsterTurn=$groups[$second['entity_id']];$json=AF_ACS_Repository::json(['schema_version'=>1]);$stmt=$link->prepare("INSERT INTO fixture_af_acs_drafts (encounter_id,turn_id,author_uid,status,draft_version,mechanics_json,prose,dependency_json,updated_at) VALUES (?,?,7,'sealed',1,?,'Keep prose',?,?)");$stamp=time();$stmt->bind_param('ssssi',$eid,$monsterTurn,$json,$json,$stamp);$stmt->execute();$stmt->close();
+    // Use the actual migrated drafts table; never reconstruct retired design DDL.
+    $monsterTurn=$groups[$second['entity_id']];$json=AF_ACS_Repository::json(['schema_version'=>1]);$stmt=$link->prepare("INSERT INTO fixture_af_acs_drafts (encounter_id,turn_id,author_uid,status,draft_version,mechanics_json,prose,dependency_json,updated_at) VALUES (?,?,7,'sealed',1,?,'Keep prose',?,?)");$stamp=time();$stmt->bind_param('ssssi',$eid,$monsterTurn,$json,$json,$stamp);$stmt->execute();$pendingDraft=(string)$stmt->insert_id;$stmt->close();
     $opsBefore=$link->query('SELECT COUNT(*) FROM fixture_af_acs_events')->fetch_row();
     blocked(fn()=>$rounds->command('gm_skip',$make(['turn_id'=>$monsterTurn])),'ACS_ROUND_OBLIGATIONS_BLOCKED');
-    snapshot_assert($link->query('SELECT status,prose FROM fixture_af_acs_drafts')->fetch_row()===['sealed','Keep prose'] && $link->query('SELECT COUNT(*) FROM fixture_af_acs_events')->fetch_row()===$opsBefore,'Skip altered draft or wrote partial event');$link->query('DROP TABLE fixture_af_acs_drafts');
+    snapshot_assert($link->query('SELECT status,prose FROM fixture_af_acs_drafts')->fetch_row()===['sealed','Keep prose'] && $link->query('SELECT COUNT(*) FROM fixture_af_acs_events')->fetch_row()===$opsBefore,'Skip altered draft or wrote partial event');$link->query('DELETE FROM fixture_af_acs_drafts WHERE id='.$pendingDraft);
     blocked(fn()=>$rounds->command('gm_forfeit',$make(['turn_id'=>$monsterTurn])),'ACS_FORFEIT_EXCEPTION_UNAVAILABLE');
     blocked(fn()=>$rounds->command('round_next',$make(['round_id'=>$round['round']['id']])),'ACS_PENDING_TURNS_REMAIN');
     // Approved withdrawal projection fixture: only a fully withdrawn group can forfeit.

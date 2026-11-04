@@ -39,8 +39,8 @@ trait AF_ACS_RoundManagementPersistence
             // A read-only sealed calculation may inspect its own frozen, claimed submission only.
             $ownSubmission=$readOnlyPreview && $sealedDraft!==null ? ' AND NOT (draft_id='.self::integer($sealedDraft).' AND active_turn_id IS NOT NULL AND active_turn_id=turn_id)' : '';
             if($submissions && $this->sql('SELECT submission_id FROM '.$submissions.' WHERE '.$scope." AND status NOT IN ('published','committed','rejected','cancelled')".$ownSubmission.' LIMIT 1',$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
-            $effects=$this->futureTable('effects');
-            if($effects && $this->sql('SELECT id FROM '.$effects." WHERE session_id=? AND (encounter_id=? OR encounter_id IS NULL) AND status NOT IN ('expired','removed','ended') LIMIT 1",[$sid,$eid])['rows'])throw new RuntimeException('ACS_CLOCK_DEPENDENCY_BLOCKED');
+            $this->statusProjection($sid); // Known 010 states are handled by Clock, never skipped.
+
         } catch(Throwable $error) {
             if(in_array($error->getMessage(),['ACS_ROUND_OBLIGATIONS_BLOCKED','ACS_CLOCK_DEPENDENCY_BLOCKED'],true))throw $error;
             throw new RuntimeException('ACS_OBLIGATIONS_SCHEMA_UNVERIFIED');
@@ -120,11 +120,7 @@ trait AF_ACS_RoundManagementPersistence
             if($individual['start_done']==='0')$this->processEntityStart($session,$encounter,$individual,$actor);
             elseif(!$this->boundary($start,$session['id']))throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE');
             $row=$this->clockEntityTurn($session['id'],$individual['id']);$end=AF_ACS_Clock::entityEnd($row['id']);
-            if((string)$row['end_done']==='0') {
-                self::integer($row['entity_turn_version'],'18446744073709551614');
-                if($this->sql('UPDATE '.$this->table('entity_turns').' SET end_done=1,entity_turn_version=entity_turn_version+1 WHERE id=? AND entity_turn_version=?',[$row['id'],$row['entity_turn_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
-                $this->recordBoundary($end,'clock.entity_end',$session['id'],$encounter['id'],$actor,['entity_turn_id'=>$row['id']],['entity_turn_id'=>$row['id'],'parent_encounter_sequence'=>$encounter['next_event_sequence']]);
-            } elseif(!$this->boundary($end,$session['id']))throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE');
+            $this->processEntityEnd($session,$encounter,$row,$actor);
             $boundaries[]=['entity_turn_id'=>$row['id'],'start'=>$start,'end'=>$end];
         }
         self::integer($turn['turn_version'],'18446744073709551614');
@@ -135,12 +131,13 @@ trait AF_ACS_RoundManagementPersistence
     }
     public function nextRound(array $session,array $encounter,array $oldRound,array $sources,string $actor,int $now): array
     {
-        $this->commandWrite();$this->assertNoObligations($session['id'],$encounter['id']);$count=0;
+        $this->commandWrite();$this->assertNoObligations($session['id'],$encounter['id']);$count=0;$entityIds=[];
         foreach($this->allRoundTurns($oldRound['id']) as $turn) {
             ++$count;if(!in_array($turn['status'],['resolved','passed','forfeited'],true))throw new RuntimeException('ACS_PENDING_TURNS_REMAIN');
-            foreach($this->checkTurnBoundaries($session['id'],$turn) as $individual)if($individual['start_done']!=='1' || $individual['end_done']!=='1' || !$this->boundary(AF_ACS_Clock::entityStart($individual['id']),$session['id']) || !$this->boundary(AF_ACS_Clock::entityEnd($individual['id']),$session['id']))throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE');
+            foreach($this->checkTurnBoundaries($session['id'],$turn) as $individual){$entityIds[]=$individual['entity_id'];if($individual['start_done']!=='1' || $individual['end_done']!=='1' || !$this->boundary(AF_ACS_Clock::entityStart($individual['id']),$session['id']) || !$this->boundary(AF_ACS_Clock::entityEnd($individual['id']),$session['id']))throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE');}
         }
         if(!$count || $encounter['status']!=='active' || $oldRound['status']!=='open' || (string)$oldRound['round_number']!==$encounter['round_number'])throw new RuntimeException('ACS_ROUND_STATE_CONFLICT');
+        $endStatuses=$this->processStatusBoundary($session,$encounter,'round_end',$oldRound['id'],$actor,null,$entityIds);
         $n=(int)self::integer((string)$oldRound['round_number'],'2147483646')+1;self::integer((string)$oldRound['round_version'],'18446744073709551614');
         if($this->sql('UPDATE '.$this->table('rounds').' SET status=?,closed_at=?,round_version=round_version+1 WHERE id=? AND round_version=?',['closed',$now,$oldRound['id'],$oldRound['round_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
         $session=$this->openRoundProjection($session,$encounter,$sources,$actor,$n,false,$now);$new=$this->currentRound($this->encounter($session['id'],$encounter['id']));
@@ -148,7 +145,7 @@ trait AF_ACS_RoundManagementPersistence
         foreach($this->allRoundTurns($new['id']) as $turn)foreach($this->individualTurns([$turn['id']]) as $individual) {
             $row=$this->clockEntityTurn($session['id'],$individual['id']);$this->processEntityStart($session,$boundaryContext,$row,$actor);
         }
-        $key='round:'.$oldRound['id'].':next';$session['_command_result']+=['previous_round_id'=>(string)$oldRound['id'],'boundary_key'=>$key];
+        $key='round:'.$oldRound['id'].':next';$session['_command_result']+=['previous_round_id'=>(string)$oldRound['id'],'boundary_key'=>$key,'end_statuses'=>$endStatuses];
         $this->recordBoundary($key,'round.next',$session['id'],$encounter['id'],$actor,['previous_round_id'=>(string)$oldRound['id']],$session['_command_result']);return $session;
     }
     public function recordDeadlineNotice(array $session,array $encounter,array $turn,string $actor): array

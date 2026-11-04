@@ -126,6 +126,8 @@ trait AF_ACS_CombatCommitPersistence
             if ((string)$individual['end_done']!=='0' || isset($boundaries[$end])) { throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE'); }
             $startMissing=(string)$individual['start_done']==='0';
             if ($startMissing) {
+                $instances=[];foreach($f['effects'] as $effect)$instances[]=json_decode($effect['payload_json'],true,64,JSON_THROW_ON_ERROR)['instance'];
+                if(AF_ACS_Clock::hasStartWork($instances,(string)$individual['entity_id'],$row['session_id'],$row['encounter_id']))throw new RuntimeException('ACS_STATUS_START_REQUIRED');
                 foreach ($f['cooldowns'] as $cd) { if ((string)$cd['entity_id']===(string)$individual['entity_id']) { throw new RuntimeException('ACS_CLOCK_DEPENDENCY_BLOCKED'); } }
                 if (isset($boundaries[$start])) { throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE'); }
                 $this->operation($row,$start,'clock.entity_start',['entity_turn_id'=>$id],['entity_turn_id'=>$id,'cooldowns'=>[]]);
@@ -133,7 +135,8 @@ trait AF_ACS_CombatCommitPersistence
             self::integer((string)$individual['entity_turn_version'],'18446744073709551613');
             if ($this->sql('UPDATE '.$this->table('entity_turns').' SET start_done=1,end_done=1,entity_turn_version=entity_turn_version+? WHERE id=? AND entity_turn_version=?',
                 [$startMissing?2:1,$id,$individual['entity_turn_version']])['affected']!==1) { throw new RuntimeException('ACS_VERSION_CONFLICT'); }
-            $this->operation($row,$end,'clock.entity_end',['entity_turn_id'=>$id],['entity_turn_id'=>$id]);$closed[]=$id;
+            $endTrace=$result->serverPlan()['entity_end_boundaries'][$end]??null;
+            $this->operation($row,$end,'clock.entity_end',['entity_turn_id'=>$id],['entity_turn_id'=>$id]+($endTrace?['statuses'=>$endTrace]:[]));$closed[]=$id;
         }
         if (!$closed) { throw new RuntimeException('ACS_ROSTER_INVALID'); }
         self::integer((string)$turn['turn_version'],'18446744073709551614');
