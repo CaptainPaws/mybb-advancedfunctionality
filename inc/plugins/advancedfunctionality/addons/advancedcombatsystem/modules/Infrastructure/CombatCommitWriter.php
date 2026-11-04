@@ -94,6 +94,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         foreach ($result->serverState()['entities'] as $id=>$e) { $entities[]=['entity_id'=>(string)$id,'hp'=>$e['hp'],'max_hp'=>$e['max_hp'],'life_state'=>$e['life_state']]; }
         $summary=['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,
             'rng_version'=>'uniform53-v1','actions'=>$steps,'virtual_entities'=>$entities,'virtual_groups'=>$result->serverState()['groups']];
+        if(isset($result->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',self::json(['schema_version'=>1,'boundaries'=>$result->serverPlan()['entity_end_boundaries']]));
         $dependency=hash('sha256',self::json(['schema_version'=>1,'dependencies'=>$dependencies]));
         $simulation=hash('sha256',self::json(['schema_version'=>1,'actions'=>$frozen['actions'],'tape'=>$frozen['tape'],'summary'=>$summary]));
         $confirmation=hash('sha256',"acs-confirm-v1\n".$dependency."\n".$simulation);

@@ -45,7 +45,7 @@ final class AF_ACS_KnowledgeBaseAdapter
         $check=AF_ACS_Effects::status($status,['source'=>'1','target'=>'2','relationship'=>'hostile','immunities'=>[],
             'cast_success'=>false,'hit_success'=>false,'hp_loss'=>0,'status_hit'=>0,'status_resistance'=>0])->serverData();
         if(!$check['supported'])$fail($check['reasons'][0]);
-        $status['instance']=AF_ACS_Effects::instanceSpec($definition,$p);return $status;
+        $status['instance']=AF_ACS_Effects::instanceSpec($definition,$p,$ref['tick_definitions']??[]);return $status;
     }
     private function available(int $actorUid): bool
     {
@@ -167,6 +167,20 @@ final class AF_ACS_KnowledgeBaseAdapter
                         $dto['normalized']['ability_profiles'][] = af_kb_arpg_acs_ability($ability,'character_abilities.'.$index,$issues);
                     }
                 }
+            }
+            // Capture only explicit periodic effect refs at the owner-authorized acquisition boundary.
+            foreach($dto['normalized']['ability_profile']['effects']??[] as $i=>$effect){
+                $status=$effect['references']['status_key']['definition']??[];$ticks=[];
+                foreach($status['periodic_effects']??[] as $periodic){
+                    $reference=$periodic['effect']??[];
+                    if(($reference['type']??null)!=='arpg_ability')return $this->failure('status_tick_reference_unsupported');
+                    $row=af_kb_arpg_acs_lookup('arpg_ability',(string)($reference['key']??''));
+                    if(!$row||empty($row['active'])||!$this->visible($row,$actorUid))return $this->failure('definition_access_denied');
+                    $source=af_kb_arpg_acs_source($row,$issues);
+                    $ticks[]=['source_ref'=>['key'=>$reference['key'],'version'=>$source['rules']['version']??null,'fingerprint'=>$source['fingerprint']],
+                        'source_json'=>json_encode(af_kb_arpg_acs_canonical($source['rules']),JSON_THROW_ON_ERROR|JSON_PRESERVE_ZERO_FRACTION|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),'effect_ref'=>$reference];
+                }
+                if($ticks)$dto['normalized']['ability_profile']['effects'][$i]['references']['status_key']['tick_definitions']=$ticks;
             }
             $seen = [];
             if (!$this->references($dto['normalized'],$actorUid,$issues,$seen)) return $this->failure('definition_access_denied');
