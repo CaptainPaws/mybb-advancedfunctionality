@@ -2,9 +2,9 @@
 
 > Последующая поставка ACS-4.1-R2 добавила bounded MyBB Post Gateway и fixtures; текущие возможности и ограничения описаны в [отчёте Gateway](ACS_4_1_R2_GATEWAY_IMPLEMENTATION.md). Карта ниже фиксирует исходную поставку 4.0-R2 и не является заявлением installed READY.
 
-## Текущая карта Stage 4 R2 после ACS-4.4.2-R2
+## Текущая карта Stage 4 R2 после локальной ACS-4.5-R2 проверки
 
-База задачи 6: main `80b37615` (PR #1019). [Отчёт карточки и GM UI](ACS_4_4_2_R2_RESULT_GM_UI.md) фиксирует bounded presentation и оставшуюся installed-приёмку. [Отчёт Editor publication](ACS_4_4_1_R2_EDITOR_PUBLICATION.md) фиксирует тестовый frontend/native binding и remaining installed blockers. [Отчёт lifecycle](ACS_4_3_4_R2_POST_LIFECYCLE.md) фиксирует native observers, author approval и installed blockers. [Отчёт RecoveryService](ACS_4_3_3_R2_RECOVERY_SERVICE.md) фиксирует safe recovery и оставшиеся identity blockers. [Отчёт PublishService](ACS_4_3_2_R2_PUBLISH_SERVICE.md) и [отчёт writer](ACS_4_3_1B_R2_COMBAT_WRITER.md) отличают backend fixtures от installed приёмки.
+База задачи 7: main `573c9e4c` (PR #1020). [Итоговая матрица и installed checklist](ACS_4_5_R2_INTEGRATION_ACCEPTANCE.md): локальные targeted checks PASS, installed acceptance NOT_VERIFIED, production enablement BLOCKED. [Отчёт карточки и GM UI](ACS_4_4_2_R2_RESULT_GM_UI.md) фиксирует bounded presentation и оставшуюся installed-приёмку. [Отчёт Editor publication](ACS_4_4_1_R2_EDITOR_PUBLICATION.md) фиксирует тестовый frontend/native binding и remaining installed blockers. [Отчёт lifecycle](ACS_4_3_4_R2_POST_LIFECYCLE.md) фиксирует native observers, author approval и installed blockers. [Отчёт RecoveryService](ACS_4_3_3_R2_RECOVERY_SERVICE.md) фиксирует safe recovery и оставшиеся identity blockers. [Отчёт PublishService](ACS_4_3_2_R2_PUBLISH_SERVICE.md) и [отчёт writer](ACS_4_3_1B_R2_COMBAT_WRITER.md) отличают backend fixtures от installed приёмки.
 
 | Компонент | Фактический прогресс / остаток |
 |---|---|
@@ -17,9 +17,9 @@
 | Moderation/lifecycle / задача 4 | Реализованы source-gated native observers, author-driven approval revalidation через Publish/Recovery и SQL-only status query. Pending не расходует HP/AP, изменения после COMMITTED только наблюдаются. Bounded upstream fixtures пройдены; installed hooks/полные move/merge routes/активные аддоны BLOCKED |
 | AdvancedEditor / задача 5 | Реализованы test-only native form/Quick Reply UI, server issue/reuse, global_start/end binding, summary/status/retry, сохранение prose/seals и отказ вложений. PHP/browser fixtures пройдены; publication_enabled=false, installed AE/theme/addon acceptance BLOCKED |
 | Postbit/GM UI / задача 6 | Реализованы batched SQL-only карточки через ATF post.before_body и компактная GM очередь/форма через RecoveryService; CSRF/CAS/audit. GM-only detailed scope, неизвестный PID не связывается. Installed theme/APUI acceptance BLOCKED |
-| Outbox consumers / installed 4.5 / задача 7 | Есть только pending storage, потребители не запускаются. Installed MySQL/MyBB/manual acceptance BLOCKED; локальная MariaDB её не заменяет |
+| Outbox consumers / installed 4.5 / задача 7 | Локальная интеграционная матрица задач 1–6 и boundary/browser/interruption checks PASS. ACP diagnostics обновлена под R2/runtime hook inventory. Pending outbox без dispatcher/consumers: owner receipt API не подтверждены. Installed MySQL/MyBB/addons/manual acceptance NOT_VERIFIED, включение BLOCKED; краткий checklist в итоговом отчёте |
 
-После PR задачи 6 автоматического перехода к задаче 7 нет. Карта ниже сохранена как история исходной поставки 4.0-R2.
+Проверка задачи 7 не включает публикацию и не переводит проект к этапу 5. Решение администратора возможно только после обязательной installed-приёмки. Карта ниже сохранена как история исходной поставки 4.0-R2.
 
 ## Основание и область доказательств
 

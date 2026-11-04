@@ -60,6 +60,10 @@ AF plugin bridge работает первым global_start даже при вы
 
 narrative использует обычный native путь, не применяет/не закрывает механику; edit/Quick Edit не регистрируют ACS dispatch и меняют прозу. Маски остаются в native input, вне snapshot/dependency/RNG hashes. Вложения/preview/MyBB savedraft/conversion в combat режиме явно отклоняются. UI показывает processing/confirmed/moderation/recovery/rejected; applied damage требует terminal receipt. Theme/Postbit card и GM recovery UI добавлены в 4.4.2. Installed source, реальный editor/theme/addons и MySQL 8.0.46 ещё не приняты.
 
+### IC-ACCEPTANCE-1 — ACS-4.5-R2, installed NOT_VERIFIED
+
+[Итоговая матрица/checklist](ACS_4_5_R2_INTEGRATION_ACCEPTANCE.md) разделяет локальные fixtures на MariaDB 11.8.8 и отсутствующую приёмку installed MyBB 1.8.41/MySQL 8.0.46. Read-only ACP export v2 включает source SHA class_moderation, frontend/moderation hook registrations, outbox и manual acceptance blockers; ACP bootstrap не доказывает исполнение newreply/Quick Reply/edit hooks. Metadata/version PASS не даёт разрешения включить публикацию. Новые ACS outbox consumers не подключены: owner-approved durable key/effect/receipt/lookup не подтверждены для Balance/CS/AAM. Повторять native rewards/alerts через outbox запрещено. До обязательных installed PASS, разрешения blocking conflicts и явного решения администратора сохраняются publication_enabled=false/test-only guards.
+
 ### Зависимости R2
 
 - IC-THEME: существующие slots допускают независимый builder; publication card зарегистрирована в post.before_body, использует PID/TID и текущего зрителя, игнорирует cosmetic uid/appearance. Подробности только persisted owner/GM; остальные члены сессии видят статус. GM misc UI проверяет native доступ, persisted owner/GM, CSRF/CAS и вызывает только RecoveryService resolve/requestReview. Неизвестный PID вводить/привязывать нельзя. [Ограничения и fixtures](ACS_4_4_2_R2_RESULT_GM_UI.md).
