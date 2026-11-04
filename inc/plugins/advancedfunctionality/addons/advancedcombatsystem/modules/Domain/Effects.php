@@ -6,6 +6,73 @@ require_once __DIR__.'/Damage.php';
 final class AF_ACS_Effects
 {
     public const VERSION='acs-effects-1';
+    /** S1.1–S1.3: applicability only. Never creates an instance or executes status payloads. */
+    public static function status(array $definition,array $event,?array $roll=null,string $mode='preview'): AF_ACS_StatusEvaluation
+    {
+        $result=['effect_definition_ref'=>$definition['effect_definition_ref']??null,'status_definition_ref'=>$definition['status_definition_ref']??null,
+            'source'=>$event['source']??null,'target'=>$event['target']??null,'trigger'=>$definition['trigger']??null,
+            'immunity'=>null,'P_status'=>null,'roll_ref'=>$event['roll_ref']??null,'roll_used'=>false,'success'=>null,'supported'=>false,'reasons'=>[],
+            'trace'=>['version'=>'acs-status-evaluation-1','numeric_policy'=>AF_ACS_Numeric::POLICY,'persistent'=>false]];
+        try {
+            if(!in_array($mode,['preview','seal'],true)||($mode==='preview'&&$roll!==null))self::fail('status_mode_invalid');
+            self::fields($definition,['effect_type','effect_definition_ref','status_definition_ref','status_type','polarity','trigger','base_chance','probability_check']);
+            if(($definition['effect_type']??null)!=='status')self::fail('status_effect_type_unsupported');
+            if(!in_array($definition['trigger']??null,['on_cast','on_hit','on_damage'],true))self::fail('status_trigger_unsupported');
+            $ref=$definition['effect_definition_ref']??null;
+            if(!is_array($ref)||!in_array($ref['type']??null,['arpg_ability','arpg_item','arpg_bestiary'],true))self::fail('status_definition_missing');
+            self::fields($ref,['type','key','version','fingerprint','effect_index']);
+            self::ref(array_intersect_key($ref,array_flip(['key','version','fingerprint'])));
+            AF_ACS_Numeric::integer($ref['effect_index']??null,0,2147483647);self::ref($definition['status_definition_ref']??null);
+            if(!is_string($definition['status_type']??null)||!preg_match('/\A[a-zA-Z][a-zA-Z0-9_.\/-]{0,63}\z/D',$definition['status_type']))self::fail('status_definition_missing');
+            if(!in_array($definition['polarity']??null,['negative','positive'],true))self::fail('status_polarity_missing');
+            $b=AF_ACS_Numeric::number($definition['base_chance']??null);if($b<0||$b>100)self::fail('status_base_chance_invalid');
+            self::id($event['source']??null);self::id($event['target']??null);
+            if(!in_array($event['relationship']??null,['ally','self','hostile'],true))self::fail('status_relationship_missing');
+            foreach(['cast_success','hit_success'] as $field)if(!is_bool($event[$field]??null))self::fail('status_event_invalid');
+            $loss=self::integer($event['hp_loss']??null);
+            $check=!($definition['polarity']==='positive'&&in_array($event['relationship'],['ally','self'],true));
+            if(array_key_exists('probability_check',$definition)){
+                if(!is_bool($definition['probability_check'])||(!$definition['probability_check']&&$check))self::fail('status_override_unsupported');
+                $check=$definition['probability_check'];
+            }
+            $immune=false;$immunities=$event['immunities']??null;
+            if(!is_array($immunities)||!array_is_list($immunities))self::fail('status_immunity_contract_unsupported');
+            foreach($immunities as $scope){
+                if(!is_array($scope)||count($scope)!==2||array_diff(array_keys($scope),['scope','key'])||!is_string($scope['key']??null)||$scope['key']==='')self::fail('status_immunity_contract_unsupported');
+                $match=match($scope['scope']){'status_key'=>$scope['key']===$definition['status_definition_ref']['key'],
+                    'status_type'=>$scope['key']===$definition['status_type'],default=>throw new AF_ACS_FormulaError('status_immunity_scope_unsupported','effects')};
+                $immune=$immune||$match;
+            }
+            $p=100;$h=null;$r=null;
+            if($check){
+                $h=AF_ACS_Numeric::number($event['status_hit']??null);$r=AF_ACS_Numeric::number($event['status_resistance']??null);
+                if($h<0||$r<0)self::fail('status_negative_stat');
+                $p=$b;
+                if($h!=0||$r!=0){
+                    $delta=AF_ACS_Numeric::operation('subtract',$h,$r);$sum=AF_ACS_Numeric::operation('add',$h,$r);
+                    $p=AF_ACS_Numeric::terminal(AF_ACS_Numeric::operation('add',$b,AF_ACS_Numeric::operation('divide',AF_ACS_Numeric::operation('multiply',30,$delta),$sum)),'none','number',0,100)->clamped;
+                }
+            }
+            $gate=$event['cast_success']&&match($definition['trigger']){'on_cast'=>true,'on_hit'=>$event['hit_success'],'on_damage'=>$loss>0};
+            $result['supported']=true;$result['immunity']=['immune'=>$immune];$result['P_status']=$p;
+            $result['trace']+=['base_chance'=>$b,'status_hit'=>$h,'status_resistance'=>$r,'probability_check'=>$check,'trigger_satisfied'=>$gate];
+            if(!$gate||$immune){$result['success']=false;$result['reasons']=[$immune?'immune':'trigger_not_satisfied'];}
+            elseif(!$check){$result['success']=true;$result['roll_ref']=null;}
+            elseif($mode==='seal'){
+                self::statusSample($roll);if(!is_array($result['roll_ref']))self::fail('status_roll_binding_missing');
+                $result['roll_used']=true;$result['success']=AF_ACS_Numeric::operation('multiply',100,$roll['u'])<$p;
+                $result['reasons']=$result['success']?[]:['probability_failed'];
+            }
+        }catch(AF_ACS_FormulaError $e){$result['supported']=false;$result['success']=false;$result['reasons']=[$e->diagnosticCode];}
+        catch(DomainException $e){$result['supported']=false;$result['success']=false;$result['reasons']=[$e->getMessage()];}
+        return new AF_ACS_StatusEvaluation($result);
+    }
+    /** Shared sealed sample validation; no coercion, random generation or rounding. */
+    public static function statusSample(?array $sample):void
+    {
+        if($sample===null||array_keys($sample)!==['sample_n','u']||!is_int($sample['sample_n'])||$sample['sample_n']<0||$sample['sample_n']>9007199254740991
+            ||!is_float($sample['u'])||!is_finite($sample['u'])||$sample['u']!==$sample['sample_n']/9007199254740992.0)self::fail('status_roll_invalid');
+    }
     private static function fail(string $code): never {throw new AF_ACS_FormulaError($code,'effects');}
     private static function id(mixed $id): string
     {
@@ -180,6 +247,12 @@ final class AF_ACS_Effects
         catch(AF_ACS_FormulaError $e){return ['ready'=>false,'evaluation'=>null,'diagnostics'=>[$e->diagnostic()]];}
         catch(DomainException $e){return ['ready'=>false,'evaluation'=>null,'diagnostics'=>[['severity'=>'error','category'=>'VALIDATION_ERROR','code'=>$e->getMessage(),'path'=>'effects']]];}
     }
+}
+final class AF_ACS_StatusEvaluation implements JsonSerializable
+{
+    public function __construct(private readonly array $data){}
+    public function serverData():array{return $this->data;}
+    public function jsonSerialize():array{return ['supported'=>$this->data['supported'],'persistent'=>false];}
 }
 final class AF_ACS_EffectsResult implements JsonSerializable
 {

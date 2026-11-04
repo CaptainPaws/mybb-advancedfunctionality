@@ -10,10 +10,24 @@ trait AF_ACS_SealPersistence
     }
     public function sealTape(string $id):array
     {
-        $rows=$this->sql('SELECT check_kind,rng_version,value_json FROM '.$this->table('rolls').' WHERE sealed_action_id=? ORDER BY check_kind',[$id])['rows'];$t=['rng_version'=>'uniform53-v1'];
-        foreach($rows as $r){if(!in_array($r['check_kind'],['hit','crit'],true)||$r['rng_version']!==$t['rng_version'])throw new RuntimeException('ACS_SEAL_TAPE_INVALID');$v=json_decode($r['value_json'],true,8,JSON_THROW_ON_ERROR);if(($v['schema_version']??null)!==1)throw new RuntimeException('ACS_SEAL_TAPE_INVALID');$t[$r['check_kind']]=['sample_n'=>$v['sample_n'],'u'=>$v['u']];}
-        if(count($rows)!==2||!isset($t['hit'],$t['crit']))throw new RuntimeException('ACS_SEAL_TAPE_INVALID');return ['rng_version'=>$t['rng_version'],'hit'=>$t['hit'],'crit'=>$t['crit']];
+        $rows=$this->sql('SELECT check_kind,roll_index,rng_version,value_json FROM '.$this->table('rolls').' WHERE sealed_action_id=? ORDER BY check_kind,roll_index',[$id])['rows'];$t=['rng_version'=>'uniform53-v1'];$statuses=[];
+        foreach($rows as $r){
+            if(!in_array($r['check_kind'],['hit','crit','status'],true)||$r['rng_version']!==$t['rng_version'])throw new RuntimeException('ACS_SEAL_TAPE_INVALID');
+            $v=json_decode($r['value_json'],true,8,JSON_THROW_ON_ERROR);if(($v['schema_version']??null)!==1)throw new RuntimeException('ACS_SEAL_TAPE_INVALID');
+            $sample=['sample_n'=>$v['sample_n']??null,'u'=>$v['u']??null];
+            require_once __DIR__.'/../Domain/Effects.php';AF_ACS_Effects::statusSample($sample);
+            $index=(int)self::integer((string)$r['roll_index'],'2147483647',true);
+            if($r['check_kind']==='status'){
+                if(isset($statuses[$index]))throw new RuntimeException('ACS_SEAL_TAPE_INVALID');$statuses[$index]=$sample;
+            }else{
+                if($index!==0||isset($t[$r['check_kind']]))throw new RuntimeException('ACS_SEAL_TAPE_INVALID');$t[$r['check_kind']]=$sample;
+            }
+        }
+        if(!isset($t['hit'],$t['crit']))throw new RuntimeException('ACS_SEAL_TAPE_INVALID');
+        $tape=['rng_version'=>$t['rng_version'],'hit'=>$t['hit'],'crit'=>$t['crit']];
+        if($statuses){ksort($statuses,SORT_NUMERIC);$tape['status']=$statuses;}return $tape;
     }
+
     public function sealPayload(array $row):array
     {
         require_once __DIR__.'/../Domain/Resolver.php';
@@ -59,7 +73,9 @@ trait AF_ACS_SealPersistence
         $snapshot=$this->insertSnapshot($draft['session_id'],['source_system'=>'knowledgebase','source_key'=>$action['ability_key'],'contract_id'=>'ic-acs.sealed-definition.v1','contract_version'=>'1'],['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'definition'=>$definition]);
         $payload=['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'rng_version'=>'uniform53-v1','tape_hash'=>hash('sha256',self::json(['schema_version'=>1,'tape'=>$tape])),'history_index'=>$historyIndex,'ap_cost'=>$cost,'action'=>$action,'pin'=>$pin,'definition_snapshot_id'=>$snapshot];$json=self::json($payload);
         $id=$this->sql('INSERT INTO '.$this->table('sealed_actions').' (draft_id,action_index,actor_entity_id,definition_snapshot_id,seal_operation_key,ap_cost,zero_ap_limit_key,status,sealed_hash,payload_json,created_at) VALUES (?,?,?,?,?,?,NULL,?,?,?,?)',[$draft['id'],$historyIndex,$action['actor_id'],$snapshot,$key.':action:'.$historyIndex,$cost,'sealed',hash('sha256',$json),$json,time()])['id'];
-        foreach(['hit','crit'] as $kind)$this->sql('INSERT INTO '.$this->table('rolls').' (session_id,sealed_action_id,causal_key,check_kind,roll_index,rng_version,value_json,created_at) VALUES (?,?,?,?,0,?,?,?)',[$draft['session_id'],$id,'sealed-action:'.$id,$kind,$tape['rng_version'],self::json(['schema_version'=>1]+$tape[$kind]),time()]);return $id;
+        $checks=[['hit',0,$tape['hit']],['crit',0,$tape['crit']]];
+        foreach($tape['status']??[] as $index=>$sample)$checks[]=['status',$index,$sample];
+        foreach($checks as [$kind,$index,$sample])$this->sql('INSERT INTO '.$this->table('rolls').' (session_id,sealed_action_id,causal_key,check_kind,roll_index,rng_version,value_json,created_at) VALUES (?,?,?,?,?,?,?,?)',[$draft['session_id'],$id,'sealed-action:'.$id,$kind,$index,$tape['rng_version'],self::json(['schema_version'=>1]+$sample),time()]);return $id;
     }
     public function cancelSeal(string $id):void
     {

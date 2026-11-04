@@ -6,6 +6,45 @@ require_once __DIR__.'/Effects.php';
 final class AF_ACS_Resolver
 {
     public const VERSION='acs-resolver-2';
+    private static function statusEvent(array $context,string $actor,string $target,array $a,array $s):array
+    {
+        if(array_key_exists('status_resist',$s)&&array_key_exists('status_resistance',$s)&&$s['status_resist']!==$s['status_resistance'])self::fail('status_resistance_alias_conflict');
+        return ['source'=>$actor,'target'=>$target,'relationship'=>$context['relationships'][$actor][$target]??null,
+            'immunities'=>$context['status_immunities'][$target]??[],'status_hit'=>$a['status_hit']??null,
+            'status_resistance'=>(array_key_exists('status_resistance',$s)?$s['status_resistance']:($s['status_resist']??null)),'cast_success'=>true,'hit_success'=>false,'hp_loss'=>0];
+    }
+    /** Reserve separate checks even when the eventual hit/immunity gate makes them unused. */
+    public static function statusRollIndexes(array $context,string $actor,string $target,array $ability):array
+    {
+        $indexes=[];$seen=[];$last=-1;$trace=[];
+        $event=self::statusEvent($context,$actor,$target,self::stats($context,$actor,$trace),self::stats($context,$target,$trace));
+        if(!is_array($ability['statuses']??[])||!array_is_list($ability['statuses']??[]))self::fail('status_components_invalid');
+        foreach($ability['statuses']??[] as $definition){
+            if(!is_array($definition))self::fail('status_components_invalid');
+            $index=$definition['effect_definition_ref']['effect_index']??null;
+            if(!is_int($index)||$index<0||$index>2147483647||$index<=$last||isset($seen[$index]))self::fail('status_component_order_invalid');
+            $seen[$index]=true;$last=$index;
+            $ref=$definition['effect_definition_ref'];
+            if(array_intersect_key($ref,array_flip(['key','version','fingerprint']))!==($ability['source_ref']??null))self::fail('status_effect_source_mismatch');
+            foreach($ability['components']??[] as $component)if(($component['kb_effect_index']??$component['source_index']??null)===$index)self::fail('status_effect_index_conflict');
+            $evaluation=AF_ACS_Effects::status($definition,$event)->serverData();
+            if(!$evaluation['supported'])self::fail($evaluation['reasons'][0]);
+            if($evaluation['trace']['probability_check'])$indexes[]=$index;
+        }
+        return $indexes;
+    }
+    private static function statuses(array $ability,string $phase,array $event,array $samples,string $mode,int $actionIndex):array
+    {
+        $out=[];
+        foreach($ability['statuses']??[] as $definition){
+            $trigger=$definition['trigger']??null;
+            if($trigger!==$phase&&!(($phase==='on_cast')&&!in_array($trigger,['on_cast','on_hit','on_damage'],true)))continue;
+            $index=$definition['effect_definition_ref']['effect_index']??null;
+            $event['roll_ref']=isset($samples[$index])?['action_index'=>$actionIndex,'check_kind'=>'status','roll_index'=>$index]:null;
+            $out[]=AF_ACS_Effects::status($definition,$event,$samples[$index]??null,$mode)->serverData();
+        }
+        return $out;
+    }
     private static function fail(string $code): never {throw new AF_ACS_FormulaError($code,'resolver');}
     private static function ref(mixed $ref):void
     {if(!is_array($ref)||array_diff(array_keys($ref),['key','version','fingerprint'])||!is_string($ref['key']??null)||$ref['key']===''||!is_string($ref['version']??null)||$ref['version']===''||!is_string($ref['fingerprint']??null)||!preg_match('/\Asha256:[a-f0-9]{64}\z/D',$ref['fingerprint']))self::fail('resolver_source_invalid');}
@@ -50,7 +89,7 @@ final class AF_ACS_Resolver
     }
     public static function resolve(array $context,array $orderedActions,array $fixedRandomTape=[],string $mode='preview'): AF_ACS_ResolverResult
     {
-        if(array_diff(array_keys($context),['schema_version','state','stats','defenses','element_catalog','turns','encounter_status','abilities','allowed_targets','modifier_stages','source_snapshots','penetration','reflections']))self::fail('resolver_context_unsupported');
+        if(array_diff(array_keys($context),['schema_version','state','stats','defenses','element_catalog','turns','encounter_status','abilities','allowed_targets','modifier_stages','source_snapshots','penetration','reflections','relationships','status_immunities']))self::fail('resolver_context_unsupported');
         if(!in_array($mode,['preview','seal'],true))self::fail('resolver_mode_unsupported');
         if($mode==='preview'&&$fixedRandomTape!==[])self::fail('preview_random_tape_forbidden');
         if($mode==='seal'&&(!array_is_list($fixedRandomTape)||count($fixedRandomTape)!==count($orderedActions)||!$fixedRandomTape))self::fail('resolver_tape_invalid');
@@ -63,7 +102,7 @@ final class AF_ACS_Resolver
             $turn=$context['turns'][$actor]??null;$ability=$context['abilities'][$actor][$key]??null;
             if(!is_array($ability)||!is_array($turn)||($turn['status']??null)!=='pending'||($turn['started']??null)!==true||($turn['group_id']??null)!==($state['entities'][$actor]['group_id']??null))self::fail('resolver_turn_or_source_invalid');
             $target=(string)$targets[0];if(!isset($state['entities'][$target])||!in_array($target,$context['allowed_targets'][$actor]??[],true))self::fail('resolver_target_forbidden');
-            if(is_array($ability)&&array_diff(array_keys($ability),['supported','source_ref','components','costs','hit_policy','lifesteal','hp_cost_policy']))self::fail('resolver_ability_unsupported');
+            if(is_array($ability)&&array_diff(array_keys($ability),['supported','source_ref','components','costs','hit_policy','lifesteal','hp_cost_policy','statuses']))self::fail('resolver_ability_unsupported');
             if(($ability['supported']??null)!==true||!is_array($ability['source_ref']??null))self::fail('resolver_capability_blocked');
             self::ref($ability['source_ref']);
             $preflight=[];foreach($context['reflections'][$target]??[] as $rule)self::rule($rule,$preflight,true);$preflight=[];foreach($ability['lifesteal']??[] as $rule)self::rule($rule,$preflight,false);
@@ -73,12 +112,17 @@ final class AF_ACS_Resolver
                 $raw=array_key_exists('value',$component)?AF_ACS_Numeric::number($component['value']):self::formula($component,$component['inputs']??[],$component['unit'],false,$formulaTrace);
                 $rawParts[]=['kind'=>'direct_attack','raw'=>$raw]+(isset($component['kb_effect_index'])?['kb_effect_index'=>$component['kb_effect_index']]:[]);$parts[]=$component;
             }
-            if(!$parts)self::fail('resolver_components_missing');
-            $prob=AF_ACS_HitCrit::strike($a['accuracy']??null,$s['speed']??null,$a['crit_rate']??null,$a['crit_dmg']??null,$rawParts,null,$ability['hit_policy']??null)->serverData();
-            $rollTrace=null;
+            if(!$parts&&empty($ability['statuses']))self::fail('resolver_components_missing');
+            $prob=$parts?AF_ACS_HitCrit::strike($a['accuracy']??null,$s['speed']??null,$a['crit_rate']??null,$a['crit_dmg']??null,$rawParts,null,$ability['hit_policy']??null)->serverData():AF_ACS_HitCrit::hit($a['accuracy']??null,$s['speed']??null,$ability['hit_policy']??null)+['crit_rate'=>0,'can_crit'=>false];
+            $statusIndexes=self::statusRollIndexes($context,$actor,$target,$ability);$statusSamples=[];$rollTrace=null;
             if($mode==='seal'){
                 $t=$fixedRandomTape[$i];
-                if(!is_array($t)||array_keys($t)!==['rng_version','hit','crit']||$t['rng_version']!=='uniform53-v1')self::fail('resolver_tape_invalid');
+                if(!is_array($t)||array_keys($t)!==($statusIndexes?['rng_version','hit','crit','status']:['rng_version','hit','crit'])||$t['rng_version']!=='uniform53-v1')self::fail('resolver_tape_invalid');
+                if($statusIndexes){
+                    if(!is_array($t['status'])||array_keys($t['status'])!==$statusIndexes)self::fail('resolver_status_tape_invalid');
+                    foreach($t['status'] as $sample)AF_ACS_Effects::statusSample(is_array($sample)?$sample:null);
+                    $statusSamples=$t['status'];
+                }
                 foreach(['hit','crit'] as $kind){$v=$t[$kind];if(!is_array($v)||array_keys($v)!==['sample_n','u']||!is_int($v['sample_n'])||$v['sample_n']<0||$v['sample_n']>9007199254740991||!is_float($v['u'])||!is_finite($v['u'])||$v['u']!==$v['sample_n']/9007199254740992.0)self::fail('resolver_tape_invalid');}
                 $hit=AF_ACS_Numeric::operation('multiply',100,$t['hit']['u'])<$prob['P_hit'];$crit=$hit&&$prob['can_crit']&&AF_ACS_Numeric::operation('multiply',100,$t['crit']['u'])<$prob['crit_rate'];
                 $scenario=$hit?($crit?'crit':'hit'):'miss';
@@ -89,13 +133,21 @@ final class AF_ACS_Resolver
             if($scenario==='hit'&&$prob['crit_rate']==100&&$prob['can_crit'])self::fail('resolver_scenario_impossible');
             if($scenario==='miss'&&$prob['P_evade']==0)self::fail('resolver_scenario_impossible');
             // For a miss no critical check is claimed, including rate100.
-            $critical=$scenario==='miss'?null:AF_ACS_HitCrit::strike($a['accuracy'],$s['speed'],$a['crit_rate'],$a['crit_dmg'],$rawParts,$outcome,$ability['hit_policy']??null)->serverData();
+            $critical=$scenario==='miss'||!$parts?null:AF_ACS_HitCrit::strike($a['accuracy'],$s['speed'],$a['crit_rate'],$a['crit_dmg'],$rawParts,$outcome,$ability['hit_policy']??null)->serverData();
             $components=[];foreach($parts as $n=>$part)$components[]=['source_index'=>$part['source_index'],'damage_type'=>$part['damage_type'],'damage_element'=>$part['damage_element']??null,
                 'raw'=>$rawParts[$n]['raw'],'after_crit'=>$scenario==='miss'?0:$critical['components'][$n]['raw_after_crit']];
-            $allocation=self::damage($components,$target,$context);$effects=[];$details=[];
-            if($scenario!=='miss')$effects[]=['kind'=>'damage','targets'=>[['entity_id'=>$target,'allocation'=>$allocation]]];
-            $state=self::apply($state,$effects,$actor,$ability['costs'],$details,$ability['hp_cost_policy']??null);
-            $loss=0;$absorbed=0;foreach($details[0]['events'] as $event)if($event['type']==='damage'){$loss=AF_ACS_Numeric::integer($loss+$event['hp_loss']);$absorbed=AF_ACS_Numeric::integer($absorbed+$event['absorbed']);}
+            $allocation=$parts?self::damage($components,$target,$context):new AF_ACS_DamageResult(['trace_version'=>AF_ACS_Damage::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'integer_budget'=>0,'allocation_sum'=>0,'components'=>[]],[]);$effects=[];$details=[];
+            if($scenario!=='miss'&&$parts)$effects[]=['kind'=>'damage','targets'=>[['entity_id'=>$target,'allocation'=>$allocation]]];
+            $hasStatuses=!empty($ability['statuses']);
+            $state=self::apply($state,$hasStatuses?[]:$effects,$actor,$ability['costs'],$details,$ability['hp_cost_policy']??null);
+            $event=self::statusEvent($context,$actor,$target,$a,$s);
+            $statusResults=self::statuses($ability,'on_cast',$event,$statusSamples,$mode,$i);
+            $event['hit_success']=$scenario!=='miss';
+            $statusResults=[...$statusResults,...self::statuses($ability,'on_hit',$event,$statusSamples,$mode,$i)];
+            if($hasStatuses)$state=self::apply($state,$effects,null,[],$details);
+            $loss=0;$absorbed=0;foreach($details[$hasStatuses?1:0]['events'] as $damageEvent)if($damageEvent['type']==='damage'){$loss=AF_ACS_Numeric::integer($loss+$damageEvent['hp_loss']);$absorbed=AF_ACS_Numeric::integer($absorbed+$damageEvent['absorbed']);}
+            $event['hp_loss']=$loss;
+            $statusResults=[...$statusResults,...self::statuses($ability,'on_damage',$event,$statusSamples,$mode,$i)];
             $seenReflection=[];$seenLifesteal=[];
             $causal='action:'.$i.':primary';$derived=[];
             if($scenario!=='miss')foreach($context['reflections'][$target]??[] as $rindex=>$rule){
@@ -119,7 +171,7 @@ final class AF_ACS_Resolver
                 $derived[]=['id'=>'action:'.$i.':lifesteal:'.$lindex,'cause'=>$causal,'kind'=>'lifesteal','source_ref'=>$rule['source_ref'],'basis_hp_loss'=>$loss,'calculated'=>$amount];
             }
             $plans[]=['action_index'=>$i,'conditional'=>$mode==='preview','rolls'=>$rollTrace,'scenario'=>$scenario,'actor_id'=>$actor,'targets'=>[$target],'ability_ref'=>$ability['source_ref'],'costs'=>$ability['costs'],
-                'probabilities'=>array_intersect_key($prob,array_flip(['P_hit','P_evade','crit_rate','can_crit']))+['P_crit'=>$prob['can_crit']?$prob['crit_rate']:0,'crit_scope'=>'conditional_on_hit'],'allocation'=>$allocation->serverData(),'causal_id'=>$causal,'derived'=>$derived,'formula_trace'=>$formulaTrace,'modifier_trace'=>$modifierTrace,'effects_trace'=>$details];
+                'probabilities'=>array_intersect_key($prob,array_flip(['P_hit','P_evade','crit_rate','can_crit']))+['P_crit'=>$prob['can_crit']?$prob['crit_rate']:0,'crit_scope'=>'conditional_on_hit'],'allocation'=>$allocation->serverData(),'causal_id'=>$causal,'derived'=>$derived,'formula_trace'=>$formulaTrace,'modifier_trace'=>$modifierTrace,'effects_trace'=>$details]+($hasStatuses?['status_evaluations'=>$statusResults]:[]);
         }
         $plan=['engine_version'=>self::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'mode'=>$mode,'conditional'=>$mode==='preview','actions'=>$plans,
             'end_condition_check_required'=>true,'encounter_transition'=>null,'persistent'=>false];
