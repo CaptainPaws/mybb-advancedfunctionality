@@ -56,54 +56,64 @@ final class AF_ACS_QueryService
         foreach($this->repo->allRelations($eid) as $r)if(($r['side_a']===$sideA&&$r['side_b']===$sideB||$r['side_a']===$sideB&&$r['side_b']===$sideA)&&$r['relationship']==='hostile')$hostile=true;
         if(!$hostile)self::fail('preview_target_forbidden');
         $round=$this->repo->currentRound($view['encounter']);if(!$round||$round['status']!=='open')self::fail('preview_turn_unavailable');
+        $reactions=$this->repo->reactionProjection($sid,$eid);$barriers=$this->repo->barrierProjection($sid,$eid);
         $sources=[$actor=>$this->source($sid,$actor),$target=>$this->source($sid,$target)];if($sources[$actor]['row']['life_state']!=='active')self::fail('preview_actor_unavailable');$turns=[];$groups=[];$reactionTurns=[];$reactionKinds=[];$versions=['session_version'=>$view['session']['session_version'],'encounter_version'=>$view['encounter']['encounter_version'],'round_version'=>(string)$round['round_version']];
+        if($barriers['pools']||array_filter($reactions['entries'],static fn($e)=>isset($e['spec']['selection']))){
+            $needed=[];foreach($barriers['pools'] as $pool)array_push($needed,$pool['source_entity_id'],...$pool['targets']);foreach($reactions['entries'] as $reaction)array_push($needed,$reaction['entity_id'],...$reaction['protected_targets']);
+            foreach($selection['members'] as $m){$id=$m['entity_id'];if(isset($sources[$id])||!in_array($id,$needed,true))continue;if(json_decode($m['visibility_json'],true)!==['schema_version'=>1,'scope'=>'gm'])continue;$sources[$id]=$this->source($sid,$id);}
+        }
         foreach($this->repo->allRoundTurns($round['id']) as $turn){
             foreach($sources as $id=>$source){$id=(string)$id;if($source['row']['control_group_id']!==$turn['control_group_id'])continue;
                 $r=json_decode($turn['roster_json'],true,32,JSON_THROW_ON_ERROR);$fp=$r['fingerprint']??null;unset($r['fingerprint']);
                 if(!is_string($fp)||!hash_equals($fp,hash('sha256',AF_ACS_Repository::json($r))))self::fail('preview_roster_invalid');
                 $member=null;foreach($r['members']??[] as $m)if($m['entity_id']===$id)$member=$m;
+                if(!$member&&!in_array($id,[$actor,$target],true))continue;
                 if(!$member||$member['content_hash']!==$source['row']['content_hash']||$member['template_snapshot_id']!==$source['row']['template_snapshot_id'])self::fail('preview_roster_invalid');
                 $individual=null;foreach($this->repo->individualTurns([$turn['id']]) as $x)if($x['entity_id']===$id)$individual=$x;
-                if(!$individual)self::fail('preview_turn_unavailable');
+                if(!$individual){if(in_array($id,[$actor,$target],true))self::fail('preview_turn_unavailable');continue;}
                 $reactionTurns[$id]=['id'=>$individual['id'],'used'=>(int)$individual['reaction_used'],'version'=>(int)$individual['entity_turn_version']];$reactionKinds[$id]=$source['row']['kind'];
                 $turns[$id]=['id'=>$turn['id'],'status'=>$turn['status'],'group_id'=>$turn['control_group_id'],'started'=>(string)$individual['start_done']==='1'&&(string)$individual['end_done']==='0'];
                 $available=AF_ACS_Clock::availableAP(self::int($turn['ap_budget']),self::int($turn['ap_spent']),self::int($turn['pre_round_ap_commitment']));
                 $group=$this->repo->restGroup($sid,$turn['control_group_id']);
                 if((string)$group['group_version']!==(string)$r['group_version'])self::fail('preview_roster_invalid');
-                $versions[$id===$actor?'actor_group_version':'target_group_version']=(string)$group['group_version'];
+                if(in_array($id,[$actor,$target],true))$versions[$id===$actor?'actor_group_version':'target_group_version']=(string)$group['group_version'];
                 $groups[$turn['control_group_id']]=['ap'=>['current'=>$available,'maximum'=>self::int($turn['ap_budget'])],'version'=>self::int($turn['turn_version'])];
+                if(!in_array($id,[$actor,$target],true))continue;
                 foreach(['entity_version','state_version','content_hash'] as $f)$versions[$id===$actor?'actor_'.$f:'target_'.$f]=$source['row'][$f];
                 $versions[$id===$actor?'actor_resources_hash':'target_resources_hash']=$source['resources']['fingerprint'];
                 $versions[$id===$actor?'actor_turn_version':'target_turn_version']=$turn['turn_version'];
                 $versions[$id===$actor?'actor_entity_turn_version':'target_entity_turn_version']=$individual['entity_turn_version'];
             }
         }
-        if(count($turns)!==2||$turns[$actor]['status']!=='pending'||!$turns[$actor]['started'])self::fail('preview_turn_unavailable');
+        if(!isset($turns[$actor],$turns[$target])||$turns[$actor]['status']!=='pending'||!$turns[$actor]['started'])self::fail('preview_turn_unavailable');
         if(!(new AF_ACS_EncounterService($this->repo,$this->access))->clock()->available($sid,$turns[$actor]['id'],$actor)['actions_ready'])self::fail('ACS_STATUS_ACTION_NOT_READY');
         $this->repo->assertNoObligations($sid,$eid,$turns[$actor]['id'],true,$sealedDraft);
-        $reactions=$this->repo->reactionProjection($sid,$eid);$versions['reaction_registry_hash']=$reactions['fingerprint'];
-        $statusProjection=$this->repo->statusProjection($sid);$versions['status_state_hash']=$statusProjection['fingerprint'];
+        $versions['reaction_registry_hash']=$reactions['fingerprint'];$versions['barrier_state_hash']=$barriers['fingerprint'];$protectionProof=[];foreach($sources as $id=>$source)$protectionProof[$id]=[$source['row']['state_version'],$source['row']['content_hash'],$source['resources']['fingerprint']];$versions['protection_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'sources'=>$protectionProof,'turns'=>$reactionTurns,'groups'=>$groups]));
+        $statusProjection=$this->repo->statusProjection($sid);foreach($this->repo->statusRows($sid) as $effect)if(($effect['scope']??null)==='combat'&&$effect['status']==='active'&&(string)$effect['encounter_id']!==$eid&&(json_decode($effect['payload_json'],true,64,JSON_THROW_ON_ERROR)['kind']??null)==='barrier')self::fail('ACS_COMBAT_RESET_REQUIRED');$versions['status_state_hash']=$statusProjection['fingerprint'];
         foreach($statusProjection['instances'] as $instance)if($instance['status']==='active'&&$instance['spec']['scope']==='combat'&&$instance['encounter_id']!==$eid)self::fail('ACS_COMBAT_RESET_REQUIRED');
         $endBoundaries=[];
         foreach($this->repo->individualTurns([$turns[$actor]['id']]) as $individual){
             if($individual['start_done']!=='1'&&AF_ACS_Clock::hasStartWork($statusProjection['instances'],$individual['entity_id'],$sid,$eid))self::fail('ACS_STATUS_START_REQUIRED');
             $endBoundaries[]=['phase'=>'entity_end','id'=>$individual['id'],'entity_id'=>$individual['entity_id'],'session_id'=>$sid,'encounter_id'=>$eid,'encounter_status'=>'active'];
         }
-        $state=['status_instances'=>$statusProjection['instances'],'next_status_order'=>$statusProjection['next_order'],'schema_version'=>1,'entities'=>[],'groups'=>$groups,'barriers'=>[],'next_barrier_order'=>0];$stats=[];$defenses=[];$statusImmunities=[];$catalog=null;
+        $state=['status_instances'=>$statusProjection['instances'],'next_status_order'=>$statusProjection['next_order'],'schema_version'=>1,'entities'=>[],'groups'=>$groups,'barriers'=>$barriers['pools'],'next_barrier_order'=>$barriers['next_order']];$stats=[];$defenses=[];$statusImmunities=[];$catalog=null;
         foreach($sources as $id=>$source){$id=(string)$id;$row=$source['row'];$s=$source['source'];$stat=$s['characteristics']??null;if(!is_array($stat))self::fail('preview_stats_missing');
             foreach(['accuracy','speed','crit_rate','crit_dmg','def'] as $name)AF_ACS_Numeric::number($stat[$name]??null);$stats[$id]=$stat;
             $statusImmunities[$id]=$s['data']['definition']['immunities']??[];
             $ref=['key'=>'entity-'.$id,'version'=>'registration-1','fingerprint'=>'sha256:'.$row['content_hash']];
+            if(!isset($state['groups'][$row['control_group_id']]))$state['groups'][$row['control_group_id']]=['ap'=>['current'=>0,'maximum'=>0],'version'=>1];
             $state['entities'][$id]=['hp'=>self::int($row['hp']),'max_hp'=>self::int($row['hp_max']),'life_state'=>$row['life_state'],'recovery_blocked'=>false,'group_id'=>$row['control_group_id'],'resources'=>$source['resources']['values'],'source_ref'=>$ref,'version'=>self::int($row['state_version'])];
             $res=[];foreach($s['resistances']??[] as $key=>$r)$res[$key]=['scope'=>'elemental','unit'=>'RES','value'=>$r['value']];
             $defenses[$id]=['def'=>$stat['def'],'resistances'=>$res,'immunities'=>[],'vulnerabilities'=>[]];
             if(($s['element_registry_version']??null)==='primary-elements-17-v1'||($s['capabilities']['canonical_elements_17']['readiness']??null)==='READY')$catalog=AF_ACS_Damage::retainedCatalog($row['payload_json'],$row['content_hash']);
             foreach($this->repo->allCooldowns($sid,$id) as $cd)if((int)$cd['remaining_turns']>0)self::fail('preview_cooldown_contract_unavailable');
         }
+        $relationships=[];$hostileTargets=[];$members=array_column($selection['members'],null,'entity_id');$relations=[];foreach($this->repo->allRelations($eid) as $rel){$relations[$rel['side_a'].':'.$rel['side_b']]=$rel['relationship'];$relations[$rel['side_b'].':'.$rel['side_a']]=$rel['relationship'];}
+        foreach($sources as $aId=>$_)foreach($sources as $bId=>$_){$aId=(string)$aId;$bId=(string)$bId;$sa=$members[$aId]['side_id']??null;$sb=$members[$bId]['side_id']??null;$rel=$sa!==null&&$sb!==null?($sa===$sb?'allied':($relations[$sa.':'.$sb]??null)):null;$relationships[$aId][$bId]=$aId===$bId?'self':($rel==='allied'?'ally':$rel);if($rel==='hostile'&&isset($selection['targets'][$bId],$reactionTurns[$bId]))$hostileTargets[$aId][]=$bId;}
         if($catalog===null)self::fail('preview_retained_registry_unavailable');
         [$abilities,$choices]=$this->pinnedAbilities($sources[$actor]);
         return ['selection'=>$selection,'versions'=>$versions,'choices'=>$choices,'context'=>['schema_version'=>1,'state'=>$state,'stats'=>$stats,'defenses'=>$defenses,'element_catalog'=>$catalog,'turns'=>$turns,
-            'encounter_status'=>'active','abilities'=>[$actor=>$abilities],'allowed_targets'=>[$actor=>[$target]],'relationships'=>[$actor=>[$target=>'hostile']],'status_immunities'=>$statusImmunities,'status_scope'=>['session_id'=>$sid,'encounter_id'=>$eid],'entity_end_boundaries'=>$endBoundaries,'reactions'=>$reactions['entries'],'reaction_turns'=>$reactionTurns,'reaction_kinds'=>$reactionKinds]];
+            'encounter_status'=>'active','abilities'=>[$actor=>$abilities],'allowed_targets'=>[$actor=>[$target]],'relationships'=>$relationships,'status_immunities'=>$statusImmunities,'status_scope'=>['session_id'=>$sid,'encounter_id'=>$eid],'entity_end_boundaries'=>$endBoundaries,'reactions'=>$reactions['entries'],'reaction_turns'=>$reactionTurns,'reaction_kinds'=>$reactionKinds,'redirect_targets'=>$hostileTargets]];
     }
     /** Own controls may be listed without exposing GM-only targets or their counts. */
     public function builderScope(string $sid,string $eid):array
@@ -184,8 +194,8 @@ final class AF_ACS_QueryService
         $policy=AF_ACS_HitCritPolicy::fromDefinition($dto,$dto['source'],$dto['definition_version']);$d=$dto['data']['definition'];
         $fields=['schema','type_profile','version','revision','name','title','description','notes','icon_url','icon_class','sortorder','active','type','subtype','slot','damage_type','targeting','range','cast_time','cooldown','cooldown_value','cooldown_unit','duration','duration_value','duration_unit','max_charges','level_cap','resources','effects','modifiers','base_stats','triggers','conditions','stacking','upgrade_requirements','action_cost','cost_value','cost_resource','costs','formula_profile','formula_ref','formula_refs','target_count','application_conditions','application_mode','summon','usage_limits','timing','math_modifiers','passive_effects','reflection','lifesteal','grants','immunities','magic_direction_ref','damage_element','element','can_crit','auto_hit','damage_value','heal_value','shield_value'];
         if(array_diff(array_keys($d),$fields))self::fail('preview_ability_contract_unavailable');
-        if(!empty($d['target_count'])&&$d['target_count']!==['min'=>1,'max'=>1])self::fail('preview_ability_unsupported');
-        if(($d['type']??'active')!=='active'||($d['targeting']??null)!=='single_enemy')self::fail('preview_ability_unsupported');
+        if(!empty($d['target_count'])&&($d['targeting']??null)!=='multiple'&&$d['target_count']!==['min'=>1,'max'=>1])self::fail('preview_ability_unsupported');
+        if(($d['type']??'active')!=='active'||!in_array($d['targeting']??null,['single_enemy','multiple'],true))self::fail('preview_ability_unsupported');
         foreach(['resources','timing','usage_limits','application_conditions','summon','math_modifiers','modifiers','base_stats','conditions','stacking','grants','immunities','upgrade_requirements','application_mode','damage_value','heal_value','shield_value','formula_refs','formula_ref','triggers','passive_effects','reflection','lifesteal'] as $f)if(!empty($d[$f]))self::fail('preview_ability_contract_unavailable');
         foreach(['range','cast_time','cooldown','cooldown_value','max_charges','duration','duration_value','cost_value'] as $f)if(!empty($d[$f]))self::fail('preview_ability_contract_unavailable');
         $cost=$d['action_cost']??1;if(!is_int($cost)||$cost<1)self::fail('preview_action_cost_unsupported');
@@ -197,20 +207,20 @@ final class AF_ACS_QueryService
             if(in_array($p['effect_type']??null,['cleanse','dispel'],true)){
                 $allowed=['kind','effect_type','target','targeting','damage_type','damage_element','element','magic_direction_ref','hit_count','trigger','categories','limit','mass','chance','chance_scope','remove_stacks','notes'];
                 foreach($p as $field=>$value)if(!in_array($field,$allowed,true)&&$value!==null&&$value!==''&&$value!==[]&&$value!==false)self::fail('status_removal_override_unsupported');
-                if(($p['target']??'single_enemy')!=='single_enemy'||($p['targeting']??'single_enemy')!=='single_enemy')self::fail('status_target_unsupported');
+                if(($p['target']??$d['targeting'])!==$d['targeting']||($p['targeting']??$d['targeting'])!==$d['targeting'])self::fail('status_target_unsupported');
                 $removals[]=AF_ACS_KnowledgeBaseAdapter::removalEffect($dto,$effect);continue;
             }
             if(array_intersect(array_keys($p),['categories','limit','mass','chance','chance_scope','remove_stacks']))self::fail('preview_effect_unsupported');
             if(($p['effect_type']??null)==='status'){
                 if(array_key_exists('can_crit',$p)&&$p['can_crit']!==false)self::fail('status_override_unsupported');
                 foreach(['condition_ref','formula_ref','formula_profile','coefficient','operation','resource_key','stat_key'] as $field)if(!empty($p[$field]))self::fail('status_override_unsupported');
-                if(($p['target']??'single_enemy')!=='single_enemy'||($p['targeting']??'single_enemy')!=='single_enemy')self::fail('status_target_unsupported');
+                if(($p['target']??$d['targeting'])!==$d['targeting']||($p['targeting']??$d['targeting'])!==$d['targeting'])self::fail('status_target_unsupported');
                 $statuses[]=AF_ACS_KnowledgeBaseAdapter::statusEffect($dto,$effect);continue;
             }
             if(array_intersect(array_keys($p),['base_chance','polarity','trigger','probability_check']))self::fail('preview_effect_unsupported');
             if(($p['effect_type']??null)!=='damage')self::fail('preview_effect_unsupported');
             foreach(['condition_ref','duration','duration_value','status_key','resource_key','stat_key','operation'] as $f)if(!empty($p[$f]))self::fail('preview_effect_unsupported');
-            if(($p['target']??'single_enemy')!=='single_enemy'||!in_array($p['value_mode']??'flat',['flat',''],true))self::fail('preview_effect_unsupported');
+            if(($p['target']??$d['targeting'])!==$d['targeting']||($p['targeting']??$d['targeting'])!==$d['targeting']||!in_array($p['value_mode']??'flat',['flat',''],true))self::fail('preview_effect_unsupported');
             $value=[];
             if(!empty($p['formula_profile'])||!empty($p['formula_ref'])){
                 if(!empty($p['formula_profile'])&&!empty($p['formula_ref']))self::fail('preview_formula_binding_unavailable');
@@ -230,8 +240,9 @@ final class AF_ACS_QueryService
         if(!empty($d['costs'])&&!$statuses)self::fail('upkeep_status_binding_missing');
         if(!$parts&&!$statuses&&!$removals)self::fail('preview_damage_value_missing');
         if(!is_string($dto['definition_version']['declared_version']??null))self::fail('preview_source_version_unavailable');
+        if($d['targeting']==='multiple'){if(!is_array($d['target_count']??null)||array_diff(array_keys($d['target_count']),['min','max'])||!is_int($d['target_count']['min']??null)||!is_int($d['target_count']['max']??null)||$d['target_count']['min']<1||$d['target_count']['max']<$d['target_count']['min'])self::fail('preview_target_count_unsupported');}
         return ['supported'=>true,'source_ref'=>['key'=>$dto['source']['key'],'version'=>$dto['definition_version']['declared_version'],'fingerprint'=>$dto['definition_version']['fingerprint']],
-            'components'=>$parts,'costs'=>[['kind'=>'ap','amount'=>$cost]],'hit_policy'=>$policy]+($statuses?['statuses'=>$statuses]:[])+($removals?['removals'=>$removals]:[]);
+            'components'=>$parts,'costs'=>[['kind'=>'ap','amount'=>$cost]],'hit_policy'=>$policy]+(($d['targeting']??null)==='multiple'?['targeting'=>'multiple','target_count'=>$d['target_count']]:[])+($statuses?['statuses'=>$statuses]:[])+($removals?['removals'=>$removals]:[]);
     }
     public function preview(array $input):array
     {

@@ -48,7 +48,7 @@ final class AF_ACS_SealService
             if($this->prepare($draft,$actions)['prepared']!==$p['prepared'])throw new RuntimeException('ACS_SEAL_SUMMARY_CHANGED');
             $latest=$this->repo->draft($draft['id'],$draft['author_uid']);if(!$latest||$latest['draft_version']!==$draft['draft_version'])throw new RuntimeException('ACS_DRAFT_VERSION_CONFLICT');
             $rows=[];
-            foreach($resolved->serverPlan()['actions'] as $i=>$step)$rows[]=['sealed_action_id'=>(string)$active[$i]['id'],'actor_id'=>$step['actor_id'],'target_id'=>$step['targets'][0],'ability_key'=>$actions[$i]['ability_key'],'outcome'=>$step['scenario'],'rolls'=>$step['rolls'],'probabilities'=>$step['probabilities'],'costs'=>$step['costs'],'damage'=>$step['allocation']['integer_budget']]+(isset($step['status_evaluations'])?['status_evaluation_hash'=>hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'evaluations'=>$step['status_evaluations']]))]:[]);
+            foreach($resolved->serverPlan()['actions'] as $i=>$step)$rows[]=['sealed_action_id'=>(string)$active[$i]['id'],'actor_id'=>$step['actor_id'],'target_id'=>$step['targets'][0],'ability_key'=>$actions[$i]['ability_key'],'outcome'=>$step['scenario'],'rolls'=>$step['rolls'],'probabilities'=>$step['probabilities'],'costs'=>$step['costs'],'damage'=>$step['allocation']['integer_budget']]+AF_ACS_Resolver::targetSummary($step)+(isset($step['status_evaluations'])?['status_evaluation_hash'=>hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'evaluations'=>$step['status_evaluations']]))]:[]);
             $entities=[];foreach($resolved->serverState()['entities'] as $id=>$e)$entities[]=['entity_id'=>(string)$id,'hp'=>$e['hp'],'max_hp'=>$e['max_hp'],'life_state'=>$e['life_state']];
             $summary=['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'rng_version'=>'uniform53-v1','label'=>'Запечатанные серверные результаты — ещё не опубликованы','actions'=>$rows,'virtual_entities'=>$entities,'virtual_groups'=>$resolved->serverState()['groups']];
             $dependencyHash=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'dependencies'=>$dependencies]));
@@ -91,7 +91,7 @@ final class AF_ACS_SealService
                 $query=new AF_ACS_QueryService($this->repo,$this->access);$definitions=[];$statusIndexes=[];
                 foreach(array_slice($actions,count($active)) as $a){
                     $definitions[]=$query->sealDefinition($d['session_id'],$a['actor_id'],$a['ability_key']);
-                    $statusIndexes[]=AF_ACS_Resolver::statusRollIndexes($p['context'],$a['actor_id'],$a['targets'][0],$p['context']['abilities'][$a['actor_id']][$a['ability_key']]);
+                    $indexes=[];foreach($a['targets'] as $target)$indexes[$target]=AF_ACS_Resolver::statusRollIndexes($p['context'],$a['actor_id'],$target,$p['context']['abilities'][$a['actor_id']][$a['ability_key']]);$statusIndexes[]=count($a['targets'])===1?array_values($indexes)[0]:$indexes;
                 }
                 // Everything above is deterministic preflight. Once drawn, all tape/quota persists even if simulation is blocked.
                 foreach(array_slice($actions,count($active)) as $i=>$a){

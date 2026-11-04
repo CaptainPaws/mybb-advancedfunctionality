@@ -175,11 +175,11 @@ function af_advancedcombatsystem_xmlhttp(): void
             $data=$op==='round_manage_overview'?$rounds->overview($sid,$eid,$mybb->get_input('after')?:'0'):$rounds->command(substr($op,13),$input);
         }
         elseif(str_starts_with($op,'reaction_')) {
-            if($op!=='reaction_view'&&array_diff(array_keys($_POST),['action','addon','op','my_post_key','session_id','encounter_id','entity_id','expected_version','encounter_version','operation_key','reason','trigger_key','reaction_id','reaction_version']))throw new RuntimeException('ACS_REACTION_INPUT_INVALID');
+            if($op!=='reaction_view'&&array_diff(array_keys($_POST),['action','addon','op','my_post_key','session_id','encounter_id','entity_id','expected_version','encounter_version','operation_key','reason','trigger_key','reaction_id','reaction_version','targets']))throw new RuntimeException('ACS_REACTION_INPUT_INVALID');
             $reactions=af_advancedcombatsystem_encounters()->reactions();$input=[];
             foreach(['session_id','encounter_id','entity_id','expected_version','encounter_version','operation_key','reason'] as $field)$input[$field]=$mybb->get_input($field);
             if($op==='reaction_view')$data=$reactions->view($input['session_id'],$input['encounter_id'],$input['entity_id']);
-            else{if($op==='reaction_register')$input['trigger_key']=$mybb->get_input('trigger_key');else foreach(['reaction_id','reaction_version'] as $field)$input[$field]=$mybb->get_input($field);$data=$reactions->command(substr($op,9),$input);}
+            else{if($op==='reaction_register'){$input['trigger_key']=$mybb->get_input('trigger_key');$raw=$mybb->get_input('targets');if($raw!=='')$input['targets']=json_decode($raw,true,16,JSON_THROW_ON_ERROR);}else foreach(['reaction_id','reaction_version'] as $field)$input[$field]=$mybb->get_input($field);$data=$reactions->command(substr($op,9),$input);}
         }
         elseif(str_starts_with($op,'clock_')) {
             $clock=af_advancedcombatsystem_encounters()->clock();$sid=$mybb->get_input('session_id');

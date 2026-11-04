@@ -79,6 +79,11 @@ final class AF_ACS_Clock
                 $events=[...$events,...$r->serverTrace()['events']];$signals=[...$signals,...$r->serverTrace()['signals']];
             }
         }
+        foreach($state['barriers'] as $id=>&$pool){
+            if($pool['status']!=='active'||($pool['last_duration_boundary']??null)===$key)continue;$unit=$pool['duration']['unit'];
+            $eligible=$unit==='round'?$phase==='round_end':($phase==='entity_end'&&($unit==='own_turn'?$pool['source_entity_id']:$pool['targets'][0])===($boundary['entity_id']??null));
+            if(!$eligible)continue;$pool['duration']['value']=max(0,$pool['duration']['value']-1);$pool['last_duration_boundary']=$key;$pool['version']=AF_ACS_Numeric::integer($pool['version']+1,1,9007199254740991);if($pool['duration']['value']===0)$pool['status']='expired';$events[]=['type'=>'barrier_duration','pool_id'=>(string)$id,'remaining_duration'=>$pool['duration']['value'],'status'=>$pool['status']];
+        }unset($pool);
         return new AF_ACS_EffectsResult($state,['engine_version'=>self::VERSION,'boundary_key'=>$key,'events'=>$events,'signals'=>$signals,'tick_keys'=>$tickKeys,'persistent'=>false],$initial);
     }
     /** This is a state graph, never authorization or permission to skip boundaries/publication. */

@@ -13,7 +13,7 @@ final class AF_ACS_CombatCard
         if ($card['details']===null) {return $html.'<p>Подробности ограничены правилами видимости сессии.</p></aside>';}
         $html.='<ol>';
         foreach($card['details'] as $step){
-            $outcome=['hit'=>'попадание','crit'=>'критическое попадание','miss'=>'промах'][$step['outcome']]??'исход недоступен';
+            $outcome=['hit'=>'попадание','crit'=>'критическое попадание','miss'=>'промах','multiple'=>'несколько целей'][$step['outcome']]??'исход недоступен';
             $html.='<li><p><strong>'.self::esc($step['actor_name']).' → '.self::esc($step['target_name']).'</strong> · '.self::esc($outcome).'</p>';
             $costs=[];foreach($step['costs'] as $c)$costs[]=self::esc($c['amount']).' '.($c['kind']==='ap'?'AP':'ресурса');
             $html.='<p>Стоимость: '.implode(', ',$costs).'. Урон: '.self::esc($step['damage']).'.</p>';
@@ -24,7 +24,17 @@ final class AF_ACS_CombatCard
                 $type=['physical'=>'физический','elemental'=>'стихийный','true'=>'истинный'][$c['damage_type']]??'компонент';
                 $html.='<p>Компонент '.($i+1).' · '.$type.': до защиты '.self::esc($c['after_crit']??'—').', эффективная защита '.self::esc($c['effective_defense']??'—').', после защиты '.self::esc($c['post_defense']??'—').', распределённый урон '.self::esc($c['allocated']??'—').'.</p>';
             }
-            $html.='</details></li>';
+            $html.='</details>';
+            foreach($step['mechanics']??[] as $event){
+                $text=match($event['type']){
+                    'target'=>'Цель: '.$event['original_target'].' → '.$event['resolved_target'].'; '.$event['outcome'].'; урон '.$event['damage'].'; hit '.($event['rolls']['hit']['u']??'—').'; crit '.($event['rolls']['crit']['u']??'—'),
+                    'reaction'=>'Реакция '.$event['id'].' · '.$event['phase'].': '.($event['executed']?'исполнена':'пропущена: '.($event['reason']??'—')).(isset($event['redirect_success'])?'; перехват '.($event['redirect_success']?'успешен':'неуспешен'):''),
+                    'status'=>'Статус '.$event['effect_key'].' · '.$event['status'].'; стаки '.$event['stacks'].'; срок '.$event['remaining_duration'].' '.$event['duration_unit'],
+                    'tick'=>'Эффект '.$event['effect_id'].': тиков '.$event['tick_count'].' · '.$event['boundary_key'],
+                    'upkeep'=>'Поддержание '.$event['id'].': '.(!empty($event['paid'])?'оплачено':($event['reason']??'прекращено')),
+                    default=>'',
+                };if($text!=='')$html.='<p>'.self::esc($text).'</p>';
+            }$html.='</li>';
         }
         return $html.'</ol></aside>';
     }

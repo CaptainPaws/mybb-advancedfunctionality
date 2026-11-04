@@ -123,9 +123,9 @@ final class StatusTapeFixture {
     public static function json(array $v):string{return json_encode($v,JSON_THROW_ON_ERROR|JSON_PRESERVE_ZERO_FRACTION|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);}
     private function insertSnapshot(string $sid,array $metadata,array $payload):string{return '9';}
     private function sql(string $sql,array $args):array{
-        if(str_starts_with($sql,'SELECT check_kind')){usort($this->rows,fn($a,$b)=>strcmp($a['check_kind'],$b['check_kind'])?:$a['roll_index']<=>$b['roll_index']);return ['rows'=>$this->rows];}
+        if(str_starts_with($sql,'SELECT causal_key,check_kind')){usort($this->rows,fn($a,$b)=>strcmp($a['check_kind'],$b['check_kind'])?:$a['roll_index']<=>$b['roll_index']);return ['rows'=>$this->rows];}
         $this->inserts[]=[$sql,$args];
-        if(str_contains($sql,'fixture_rolls'))$this->rows[]=['check_kind'=>$args[3],'roll_index'=>$args[4],'rng_version'=>$args[5],'value_json'=>$args[6]];
+        if(str_contains($sql,'fixture_rolls'))$this->rows[]=['causal_key'=>$args[2],'check_kind'=>$args[3],'roll_index'=>$args[4],'rng_version'=>$args[5],'value_json'=>$args[6]];
         return ['id'=>(string)$this->nextId++];
     }
 }

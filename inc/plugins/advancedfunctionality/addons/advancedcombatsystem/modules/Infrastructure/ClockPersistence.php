@@ -213,9 +213,9 @@ trait AF_ACS_ClockPersistence
             self::integer($row['cooldown_version'],'18446744073709551614');
             $this->sql('UPDATE '.$this->table('cooldowns').' SET remaining_turns=0,last_boundary_key=?,cooldown_version=cooldown_version+1 WHERE id=? AND cooldown_version=?',[$key,$row['id'],$row['cooldown_version']]);$changed[]=$row['id'];
         }
-        $statuses=$this->expireCombatStatuses($session,$encounter);
-        $this->recordBoundary($key,'clock.combat_reset',$session['id'],$encounter['id'],$actor,[],['cooldown_ids'=>$changed,'statuses'=>$statuses]);
-        $session=$this->change($session,$encounter,'clock_boundary',[]);$session['_command_result']+=['boundary_key'=>$key,'cooldown_ids'=>$changed,'statuses'=>$statuses];return $session;
+        $statuses=$this->expireCombatStatuses($session,$encounter);$barriers=$this->expireCombatBarriers($session,$encounter);
+        $this->recordBoundary($key,'clock.combat_reset',$session['id'],$encounter['id'],$actor,[],['cooldown_ids'=>$changed,'statuses'=>$statuses,'barriers'=>$barriers]);
+        $session=$this->change($session,$encounter,'clock_boundary',[]);$session['_command_result']+=['boundary_key'=>$key,'cooldown_ids'=>$changed,'statuses'=>$statuses,'barriers'=>$barriers];return $session;
     }
 
 }

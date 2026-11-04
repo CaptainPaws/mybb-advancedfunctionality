@@ -8,7 +8,7 @@ $GLOBALS['acsPresentationFixture']=static function(array $fixture):void {
     $actor=$active[0]['actor_id'];$victim=$active[0]['targets'][0];$reactions=$service->reactions();$entry=5000;
     $old=$link->query("SELECT * FROM fixture_af_acs_schema_migrations WHERE version<'011_reaction_registry' ORDER BY version")->fetch_all(MYSQLI_ASSOC);
     $link->query('DROP TABLE fixture_af_acs_reactions');$link->query("UPDATE fixture_af_acs_schema_migrations SET status='failed',step=0 WHERE version='011_reaction_registry'");$migrations->run();$migrations->run();
-    snapshot_assert($migrations->status()['schema_version']==='011_reaction_registry'&&$link->query("SELECT * FROM fixture_af_acs_schema_migrations WHERE version<'011_reaction_registry' ORDER BY version")->fetch_all(MYSQLI_ASSOC)===$old,'011 resume modified earlier ledger');
+    snapshot_assert($migrations->status()['schema_version']===AF_ACS_Migrations::VERSION&&$link->query("SELECT * FROM fixture_af_acs_schema_migrations WHERE version<'011_reaction_registry' ORDER BY version")->fetch_all(MYSQLI_ASSOC)===$old,'011 resume modified earlier ledger');
     $db->tables['af_kb_entries'][]=snapshot_entry(++$entry,'arpg_mechanics','ep',['schema'=>AF_KB_ARPG_RULES_SCHEMA,'service_kind'=>'resource_def','entries'=>[['schema'=>'af_kb.arpg.mechanic.v1','key'=>'ep','version'=>'1','resource_key'=>'ep','unit'=>'points']]]);
     $grants=[];$definitions=[];
     foreach(['expensive'=>99,'purify'=>1,'healing'=>1] as $key=>$cost){

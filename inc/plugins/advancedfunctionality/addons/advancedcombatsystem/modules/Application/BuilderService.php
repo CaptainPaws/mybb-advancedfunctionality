@@ -79,9 +79,9 @@ final class AF_ACS_BuilderService
         if(!is_string($input['scope_token']??null)||!hash_equals($scope['scope_token'],$input['scope_token']))throw new RuntimeException('builder_version_conflict');
         $q=new AF_ACS_QueryService($this->repo,$this->access);$prepared=[];$ordered=[];$context=null;
         foreach($input['actions'] as $action){
-            if(!is_array($action)||array_diff(array_keys($action),['actor_id','ability_key','targets','parameters'])||!is_string($action['ability_key']??null)||!is_array($action['targets']??null)||!array_is_list($action['targets'])||count($action['targets'])!==1)throw new RuntimeException('builder_input_invalid');
+            if(!is_array($action)||array_diff(array_keys($action),['actor_id','ability_key','targets','parameters'])||!is_string($action['ability_key']??null)||!is_array($action['targets']??null)||!array_is_list($action['targets'])||!$action['targets']||count($action['targets'])>100||count(array_unique($action['targets']))!==count($action['targets']))throw new RuntimeException('builder_input_invalid');
             if(($action['parameters']??[])!==[])throw new RuntimeException('builder_parameters_unsupported');
-            $actor=AF_ACS_Repository::integer($action['actor_id']??null);$target=AF_ACS_Repository::integer($action['targets'][0]);
+            $actor=AF_ACS_Repository::integer($action['actor_id']??null);$targetVersions=[];$orderedTargets=[];foreach($action['targets'] as $id){$target=AF_ACS_Repository::integer($id);$orderedTargets[]=$target;
             if(!in_array($actor,array_column($scope['actors'],'id'),true))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
             $visible=false;foreach($scope['targets'] as $t)if($t['id']===$target&&in_array($actor,$t['actors'],true))$visible=true;
             if(!$visible)throw new RuntimeException('preview_target_forbidden');
@@ -90,9 +90,12 @@ final class AF_ACS_BuilderService
             if(($p['choices'][$action['ability_key']]['supported']??false)!==true)throw new RuntimeException('builder_parameters_unsupported');
             if($context===null)$context=$p['context'];else foreach(['entities','groups'] as $f)$context['state'][$f]=array_replace($context['state'][$f],$p['context']['state'][$f]);
             foreach(['stats','defenses','turns','abilities','status_immunities','reaction_turns','reaction_kinds'] as $f)$context[$f]=array_replace($context[$f],$p['context'][$f]);
-            $context['relationships'][$actor]=array_replace($context['relationships'][$actor]??[],$p['context']['relationships'][$actor]);
+            foreach($p['context']['relationships'] as $id=>$rels)$context['relationships'][$id]=array_replace($context['relationships'][$id]??[],$rels);
+            foreach($p['context']['redirect_targets'] as $id=>$ids)$context['redirect_targets'][$id]=array_values(array_unique([...($context['redirect_targets'][$id]??[]),...$ids]));
             $context['allowed_targets'][$actor]=array_values(array_unique([...($context['allowed_targets'][$actor]??[]),$target]));
-            $ordered[]=['actor_id'=>$actor,'ability_key'=>$action['ability_key'],'targets'=>[$target],'scenario'=>$input['scenario']];$prepared[]=[$actor,$target,$p['versions']];
+            $targetVersions[]=$p['versions'];}
+            $versions=$targetVersions[0];if(count($orderedTargets)>1)$versions['selected_targets_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'versions'=>$targetVersions]));
+            $ordered[]=['actor_id'=>$actor,'ability_key'=>$action['ability_key'],'targets'=>$orderedTargets,'scenario'=>$input['scenario']];$prepared[]=[$actor,$orderedTargets[0],$versions];
         }
         return ['context'=>$context,'ordered'=>$ordered,'prepared'=>$prepared,'scope'=>$scope];
     }
@@ -101,7 +104,7 @@ final class AF_ACS_BuilderService
         $this->access->csrf();$p=$this->prepare($input);$context=$p['context'];$ordered=$p['ordered'];$prepared=$p['prepared'];$scope=$p['scope'];
         $sid=$scope['session_id'];$eid=$scope['encounter_id'];$turn=$scope['turn']['id'];$q=new AF_ACS_QueryService($this->repo,$this->access);
         $result=AF_ACS_Resolver::resolve($context,$ordered);$rows=[];
-        foreach($prepared as [$actor,$target,$versions])if($q->inspect($sid,$eid,$actor,$target)['versions']!==$versions)throw new RuntimeException('builder_version_conflict');
+        if($this->prepare($input)['prepared']!==$prepared)throw new RuntimeException('builder_version_conflict');
         if($this->context($sid,$eid,$turn)['scope_token']!==$scope['scope_token'])throw new RuntimeException('builder_version_conflict');
         foreach($result->serverPlan()['actions'] as $p)$rows[]=['actor_id'=>$p['actor_id'],'target_id'=>$p['targets'][0],'costs'=>$p['costs'],'probabilities'=>$p['probabilities'],'components'=>$p['allocation']['components'],'damage'=>$p['allocation']['integer_budget']];
         // GM-only numeric scope; no raw KB definitions, formula AST or private source snapshots.
