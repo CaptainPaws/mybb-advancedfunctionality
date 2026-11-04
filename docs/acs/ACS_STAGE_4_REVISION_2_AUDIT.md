@@ -2,9 +2,9 @@
 
 > Последующая поставка ACS-4.1-R2 добавила bounded MyBB Post Gateway и fixtures; текущие возможности и ограничения описаны в [отчёте Gateway](ACS_4_1_R2_GATEWAY_IMPLEMENTATION.md). Карта ниже фиксирует исходную поставку 4.0-R2 и не является заявлением installed READY.
 
-## Текущая карта Stage 4 R2 после ACS-4.3.1B-R2
+## Текущая карта Stage 4 R2 после ACS-4.3.2-R2
 
-База новой задачи: main `2c4a216d`. [Отчёт writer](ACS_4_3_1B_R2_COMBAT_WRITER.md) отличает backend fixtures от installed приёмки.
+База задачи 2: main `a5b8c8de` (PR #1015). [Отчёт PublishService](ACS_4_3_2_R2_PUBLISH_SERVICE.md) и [отчёт writer](ACS_4_3_1B_R2_COMBAT_WRITER.md) отличают backend fixtures от installed приёмки.
 
 | Компонент | Фактический прогресс / остаток |
 |---|---|
@@ -12,13 +12,13 @@
 | Gateway / 4.1-R2 | Bounded backend реализован, PR #1014 в main; installed entry binding/addon/AJAX integration BLOCKED |
 | Submission journal / 4.3.1 | Durable CAS/claims/audit/freeze/quarantine есть; COMMITTING/COMMITTED теперь пишет transactional writer; recovery/manual evidence ещё отсутствуют |
 | Combat writer / **задача 1, 4.3.1B-R2** | Реализован: migration 009, HP/AP и текущий HP-resource scope, state/clock closure/events/results/post_link/terminal receipt/outbox в одной tx. Rollback/replay/concurrency fixtures пройдены. Подготовительные controller grants=false не обходятся. Неподдержанные эффекты/resources остаются заблокированы |
-| PublishService / задача 2 | **Не начата**; Gateway не вызывается writer и не связан с ним coordinator |
+| PublishService / задача 2 | Серверный coordinator реализован: issuance/reuse через существующий журнал, fresh sealed-plan prevalidation, один Gateway lifecycle вне ACS tx, writer/receipt, safe rejection и quarantine. Проверен bounded upstream fixture; HTTP/native entry binding и installed acceptance BLOCKED |
 | RecoveryService / задача 3 | **Не начата**; writer receipt lookup — инфраструктура, не полный recovery протокол |
 | Moderation/lifecycle / задача 4 | **Не начата**; writer лишь отказывает pending/invalid post; native observers не подключены |
 | Editor/Postbit/GM UI / задачи 5–6 | **Не начаты**; второй editor не создан, публикация не включена |
 | Outbox consumers / installed 4.5 / задача 7 | Есть только pending storage, потребители не запускаются. Installed MySQL/MyBB/manual acceptance BLOCKED; локальная MariaDB её не заменяет |
 
-После PR этой задачи автоматического перехода к задаче 2 нет. Карта ниже сохранена как история исходной поставки 4.0-R2.
+После PR задачи 2 автоматического перехода к задаче 3 нет. Карта ниже сохранена как история исходной поставки 4.0-R2.
 
 ## Основание и область доказательств
 

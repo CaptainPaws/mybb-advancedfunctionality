@@ -47,6 +47,8 @@
 
 В ACS-4.3.1B-R2 добавлены transactional CombatCommitWriter, post_links/results/terminal receipts/outbox и переходы фиксации в миграции 009; [контракт, ограничения и проверки](ACS_4_3_1B_R2_COMBAT_WRITER.md). Gateway/coordinator/Recovery и frontend не входят в writer; installed acceptance остаётся BLOCKED. Прежний проект хранения ниже сохраняется как provenance, актуальная исполняемая схема — миграции. Миграция 009 защищает submission_id/turn_id/pid и связывает projections/result/receipt/outbox в одной транзакции. Consumer delivery receipts и внешние owner APIs ещё не реализованы. COMMITTED нельзя объявить отдельной сменой статуса без механической фиксации.
 
+В ACS-4.3.2-R2 добавлен внутренний `Application/PublishService.php`: `issue` выдаёт и переиспользует ID под существующим session lock, `publish` проверяет frozen plan через read-only writer verifier и существующий Resolver/старый tape, затем вызывает один Gateway вне ACS tx и отдельный transactional writer. COMMITTED replay читает receipt без native dispatch; pending/recovery не применяют механику. [Точные границы и проверки](ACS_4_3_2_R2_PUBLISH_SERVICE.md). Серверный API не регистрирует HTTP endpoint/hooks: installed whole-request binding и frontend ещё BLOCKED; publication_enabled=false.
+
 ### Recovery и visibility
 
 Автовосстановление разрешено только по устойчивому доказательству предыдущего действия. POSTING без достоверного pid блокируется; нет timeout lease, автоматического удаления или blind retry. Даже отсутствие поста по эвристическому поиску не доказывает, что INSERT не состоялся. При известном pid проверяются удаление/перенос/скрытие на writer; до commit это конфликт, после commit — audit/предупреждение без отката истории.
