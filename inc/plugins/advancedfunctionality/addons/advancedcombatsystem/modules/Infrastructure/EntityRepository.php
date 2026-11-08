@@ -29,6 +29,9 @@ final class AF_ACS_EntityRepository extends AF_ACS_SessionRepository
         $definition=['schema_version'=>1,'registration_version'=>'acs-registration-1','source'=>$registration['source'],
             'source_fingerprint'=>$registration['source_fingerprint'],'participation'=>null];
         $id=$this->sql('INSERT INTO '.$this->table('entities').' (session_id,control_group_id,kind,owner_uid,sheet_id,template_snapshot_id,source_entity_id,spawn_key,name,entity_version,definition_json) VALUES (?,?,?,?,?,?,NULL,?,?,?,?)',[$sid,$group,$kind,$owner,$sheet,$snapshot,$spawn,self::text($registration['name'],191),1,self::json($definition)])['id'];
+        if (isset($registration['snapshot']['equipment_snapshot'])) {
+            $this->initializeEquipment($sid,(string)$id,'1',$registration['snapshot']['equipment_snapshot'],$registration['snapshot']['source_snapshot']);
+        }
         $hp=$registration['hp'];$max=$registration['hp_max'];
         $this->sql('INSERT INTO '.$this->table('entity_states').' (entity_id,life_state,hp,hp_max,state_version,stats_json,layers_json) VALUES (?,?,?,?,?,?,?)',[$id,$hp==='0'?'incapacitated':'active',$hp,$max,1,self::json(['schema_version'=>1,'values'=>$registration['stats']]),self::json(['schema_version'=>1,'layers'=>[]])]);
         foreach ($registration['resources'] as $key=>$resource) {
@@ -37,6 +40,23 @@ final class AF_ACS_EntityRepository extends AF_ACS_SessionRepository
         $this->sql('INSERT INTO '.$this->table('controllers').' (session_id,entity_id,controller_uid,mode,status,assignment_version,valid_from,valid_until,permissions_json) VALUES (?,?,?,?,?,?,?,NULL,?)',[$sid,$id,$registration['controller_uid'],'exclusive','active',1,time(),self::json(['schema_version'=>1,'scope'=>'initial_assignment','combat_operations_enabled'=>false])]);
         $session['_command_result']=['entity_id'=>$id,'snapshot_id'=>$snapshot,'snapshot_hash'=>hash('sha256',self::json($registration['snapshot'])),'control_group_id'=>$group];
         return $session;
+    }
+
+    /** Initial projection only. No owner writes, replacement, equip or consumption endpoint. */
+    private function initializeEquipment(string $sid,string $entityId,string $expectedVersion,array $bundle,array $cs): void
+    {
+        $this->commandWrite();
+        require_once __DIR__.'/../Domain/Equipment.php';
+        AF_ACS_Equipment::baseline($bundle,$cs);
+        $entity=$this->sql('SELECT entity_version,owner_uid FROM '.$this->table('entities').' WHERE session_id=? AND id=? FOR UPDATE',[$sid,$entityId])['rows'][0]??null;
+        if (!$entity || (string)$entity['entity_version']!==$expectedVersion || (int)$entity['owner_uid']!==$bundle['owner_uid']) throw new RuntimeException('ACS_EQUIPMENT_VERSION_CONFLICT');
+        if ($this->sql('SELECT id FROM '.$this->table('equipment').' WHERE session_id=? AND entity_id=? FOR UPDATE',[$sid,$entityId])['rows']) throw new RuntimeException('ACS_EQUIPMENT_ALREADY_INITIALIZED');
+        foreach ($bundle['records'] as $record) {
+            $snapshot=$this->insertSnapshot($sid,['source_system'=>'advancedinventory','source_key'=>(string)$record['inventory_item_id'],'contract_id'=>'ic-acs.equipment.v1','contract_version'=>'1'],$record);
+            $this->sql('INSERT INTO '.$this->table('equipment').' (session_id,entity_id,slot_key,inventory_item_id,item_snapshot_id,status,equipment_version,source_json) VALUES (?,?,?,?,?,?,?,?)',[$sid,$entityId,$record['slot'],$record['inventory_item_id'],$snapshot,'active',1,self::json(['schema_version'=>1,'snapshot_identity'=>$record['snapshot_identity'],'inventory_version'=>$bundle['inventory_version'],'baseline_fingerprint'=>$bundle['baseline_fingerprint']])]);
+        }
+        $updated=$this->sql('UPDATE '.$this->table('entities').' SET entity_version=entity_version+1 WHERE session_id=? AND id=? AND entity_version=?',[$sid,$entityId,$expectedVersion]);
+        if ($updated['affected']!==1) throw new RuntimeException('ACS_EQUIPMENT_VERSION_CONFLICT');
     }
 
     /** Bounded metadata only; full protected snapshots are a separate authorized read. */

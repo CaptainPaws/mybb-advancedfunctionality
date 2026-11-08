@@ -3286,6 +3286,14 @@ function af_inv_get_items(int $uid, array $filters = []): array
     global $db, $mybb;
     $page = max(1, (int)($filters['page'] ?? 1));
     $perPage = max(1, (int)($filters['perPage'] ?? ($mybb->settings['af_advancedinventory_perpage'] ?? 24)));
+    if (!empty($filters['_snapshot_current'])) {
+        // Internal owner read: stable key order and current reads, also inside ACS registration tx.
+        $where='uid='.(int)$uid;$offset=($page-1)*$perPage;
+        $total=(int)$db->fetch_field($db->write_query('SELECT COUNT(*) AS c FROM '.TABLE_PREFIX.AF_ADVINV_TABLE_ITEMS.' WHERE '.$where.' LOCK IN SHARE MODE'),'c');
+        $query=$db->write_query('SELECT * FROM '.TABLE_PREFIX.AF_ADVINV_TABLE_ITEMS.' WHERE '.$where.' ORDER BY id ASC LIMIT '.$offset.','.$perPage.' LOCK IN SHARE MODE');
+        $items=[];while ($row=$db->fetch_array($query)) $items[]=$row;
+        return ['items'=>$items,'total'=>$total,'page'=>$page,'perPage'=>$perPage];
+    }
     $where = ['uid=' . (int)$uid];
     $entityFilter = (string)($filters['entity'] ?? '');
     if ($entityFilter !== '') {
