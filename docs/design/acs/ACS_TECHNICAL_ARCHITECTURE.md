@@ -1046,6 +1046,8 @@ Domain/repositories проверяют целочисленные диапазо
 
 ### 5.5. Предлагаемые изменения хранения у владельцев интеграций
 
+> **ACS-6.1.1:** [owner protocol v1](../../contracts/ACS_INVENTORY_OWNER_PROTOCOL.md) уточняет вариант Inventory ниже: owner-wide guard/version вместо item-level inventory_version, remaining_qty и durable intent/result/hash. [Writer audit](ACS_6_1_1_IMPLEMENTATION.md) фиксирует BLOCKED всех существующих writers. SQL ниже остаётся историческим предложением; новый проверяемый proposal находится только в docs/contracts/fixtures и не подключён к lifecycle. Это не разрешение owner API или боевого расхода.
+
 Следующие таблицы и колонка — **PROPOSED**, отсутствуют в проверенной main. Это часть будущих ограниченных интеграционных PR, а не ACS, уже установленный в чужом аддоне. Их lifecycle и миграции принадлежат соответствующему владельцу (Inventory, balance, AAM). Имена должны быть закреплены в интеграционном PR; функциям ACS запрещено создавать их при обычном запросе. Допускается эквивалентный owner-протокол с теми же гарантиями, если он отдельно доказан и документация обновлена.
 
 ```sql

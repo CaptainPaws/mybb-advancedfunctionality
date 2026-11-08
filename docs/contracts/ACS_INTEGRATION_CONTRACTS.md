@@ -191,6 +191,8 @@ Editors/save/read/normalizers должны сохранять primary key, direc
 
 У экспортёра экипировки есть вызов с `per_page`, но reader ожидает `perPage`. Поэтому нельзя полагаться на получение всех 500 вещей таким экспортом; адаптер должен явно пагинировать реальный reader и проверять total. Сам экспорт не гарантирует атомарности всего комплекта. remove_item может удалить строку при запрошенном количестве больше остатка; не является безопасным боевым списанием. Нет подтверждённого глобального reserve/consume/release/transfer с ключом ACS. Вызов обычного endpoint equip не подтверждает соблюдение боевых AP/custody.
 
+> **ACS-6.1.1 — CONTRACT PREPARED, runtime BLOCKED.** [Owner protocol v1](ACS_INVENTORY_OWNER_PROTOCOL.md), [request schema](ACS_INVENTORY_OWNER_REQUEST.schema.json) и [полный writer audit](../design/acs/ACS_6_1_1_IMPLEMENTATION.md) уточняют этот проект. Owner-wide guard/version сериализует в том числе новые stacks; SQL proposal проверен отдельно, но не установлен. Ни один существующий writer не объявлен reservation-safe; боевой расход остаётся BLOCKED.
+
 **PROPOSED IC-INV-1**, этап 6, предварительное ограниченное изменение Inventory:
 
 ```text
