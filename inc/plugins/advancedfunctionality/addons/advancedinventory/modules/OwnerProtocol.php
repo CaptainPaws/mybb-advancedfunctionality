@@ -304,6 +304,8 @@ final class AF_ADVINV_OwnerProtocol
         catch (mysqli_sql_exception $error) { throw new RuntimeException('INV_AMBIENT_TRANSACTION'); }
     }
 
+    public function assertStorage(): void { $this->schema(); }
+
     private function schema(): void
     {
         foreach (['items','equipped','support_slots','owner_state','external_operations','reservations'] as $table) {

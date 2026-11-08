@@ -315,6 +315,8 @@ class AF_Admin_Advancedinventory
 
     private static function reset_test_data_tables(): array
     {
+        require_once __DIR__.'/modules/WriterBoundary.php';
+        af_advinv_maintenance_gate();
         global $db;
 
         $tables = [

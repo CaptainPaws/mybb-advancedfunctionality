@@ -3,11 +3,14 @@ if (!defined('IN_MYBB')) {
     die('No direct access');
 }
 
+require_once __DIR__.'/../../advancedinventory/modules/WriterBoundary.php';
+
 function af_charactersheets_handle_api(): void
 {
     try {
         af_charactersheets_handle_api_impl();
     } catch (Throwable $e) {
+        if (str_starts_with($e->getMessage(),'INV_')) af_charactersheets_json_error('inventory_conflict',$e->getMessage(),[],409);
         $debug = [];
         if (af_charactersheets_is_api_debug_user()) {
             $debug = [
@@ -754,6 +757,8 @@ function af_charactersheets_handle_api_impl(): void
             af_charactersheets_json_response(['success' => false, 'error' => 'Owner not found']);
         }
 
+        $loadoutWrite=function () use ($do,$owner_uid,$sheet_id,$base,$build,$progress) {
+            global $mybb;
         if ($do === 'set_active_weapon') {
             $slot = (string)$mybb->get_input('slot');
             $allowedWeaponSlots = ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged'];
@@ -766,6 +771,7 @@ function af_charactersheets_handle_api_impl(): void
             if (empty((array)($state['equipped'][$slot] ?? []))) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Weapon is not equipped in this slot']);
             }
+            if (af_advinv_reservation_writers_enabled()) af_advinv_writer()->loadout($owner_uid,$slot,static fn()=>null);
             $buildEquipment = (array)($build['equipment'] ?? []);
             $buildEquipment['active_weapon_slot'] = $slot;
             $build['equipment'] = $buildEquipment;
@@ -801,6 +807,9 @@ function af_charactersheets_handle_api_impl(): void
                 af_charactersheets_json_response(['success' => false, 'error' => 'Invalid slot']);
             }
 
+            if (af_advinv_reservation_writers_enabled()) {
+                af_advinv_writer()->bind($owner_uid,(int)$item['id'],$subtype==='consumable'?af_inv_map_legacy_support_slot($slot):$slot,$subtype==='consumable');
+            } else {
             if ($subtype === 'consumable') {
                 global $db;
                 $slotCode = af_inv_map_legacy_support_slot($slot);
@@ -829,6 +838,7 @@ function af_charactersheets_handle_api_impl(): void
                     $db->insert_query('af_advinv_equipped', ['uid' => $owner_uid, 'equip_slot' => $db->escape_string($slot), 'item_id' => (int)$item['id'], 'updated_at' => TIME_NOW]);
                 }
             }
+            }
             $allowedWeaponSlots = ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged'];
             if (in_array($slot, $allowedWeaponSlots, true) && !empty((array)($build['equipment'] ?? [])) && empty((string)((array)($build['equipment'] ?? [])['active_weapon_slot'] ?? ''))) {
                 $buildEquipment = (array)($build['equipment'] ?? []);
@@ -843,10 +853,15 @@ function af_charactersheets_handle_api_impl(): void
             }
             global $db;
             $slotCode = af_inv_map_legacy_support_slot($slot);
+            if (af_advinv_reservation_writers_enabled()) {
+                $support=array_key_exists($slotCode,af_inv_support_slots());
+                af_advinv_writer()->unbind($owner_uid,$support?$slotCode:$slot,0,$support);
+            } else {
             if (array_key_exists($slotCode, af_inv_support_slots())) {
                 $db->delete_query('af_advinv_support_slots', 'uid=' . $owner_uid . " AND slot_code='" . $db->escape_string($slotCode) . "'");
             } else {
                 $db->delete_query('af_advinv_equipped', 'uid=' . $owner_uid . " AND equip_slot='" . $db->escape_string($slot) . "'");
+            }
             }
             $buildEquipment = (array)($build['equipment'] ?? []);
             if ((string)($buildEquipment['active_weapon_slot'] ?? '') === $slot) {
@@ -855,6 +870,9 @@ function af_charactersheets_handle_api_impl(): void
                 af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
             }
         }
+        };
+        if (af_advinv_reservation_writers_enabled()) af_advinv_writer()->run([$owner_uid],$loadoutWrite);
+        else $loadoutWrite();
     } elseif ($do === 'reset_attributes') {
         if (!$can_staff_reset) {
             af_charactersheets_json_error('no_permission', 'Permission denied', [], 403);

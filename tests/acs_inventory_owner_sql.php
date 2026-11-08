@@ -113,6 +113,8 @@ function parallel(mysqli $locker, string $database, array $requests): array
     return $out;
 }
 
+if (defined('ACS_INV_FIXTURE_LIBRARY')) return;
+
 $database = 'acs612_fixture_'.bin2hex(random_bytes(8));
 $admin = connectFixture();
 $admin->query('CREATE DATABASE `'.$database.'` CHARACTER SET utf8mb4');
