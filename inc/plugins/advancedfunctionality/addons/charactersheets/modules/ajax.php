@@ -771,7 +771,13 @@ function af_charactersheets_handle_api_impl(): void
             if (empty((array)($state['equipped'][$slot] ?? []))) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Weapon is not equipped in this slot']);
             }
-            if (af_advinv_reservation_writers_enabled()) af_advinv_writer()->loadout($owner_uid,$slot,static fn()=>null);
+            if (af_advinv_reservation_writers_enabled()) {
+                $fresh=af_advinv_writer()->rows('SELECT build_json FROM `'.TABLE_PREFIX.AF_CS_SHEETS_TABLE.'` WHERE id=? AND uid=?',[$sheet_id,$owner_uid])[0]??null;
+                if (!$fresh) throw new RuntimeException('INV_SHEET_UNAVAILABLE');
+                $current=json_decode((string)$fresh['build_json'],true,64,JSON_THROW_ON_ERROR);
+                $oldSlot=(string)($current['equipment']['active_weapon_slot']??'');
+                af_advinv_writer()->loadout($owner_uid,[$oldSlot,$slot],static fn()=>null);
+            }
             $buildEquipment = (array)($build['equipment'] ?? []);
             $buildEquipment['active_weapon_slot'] = $slot;
             $build['equipment'] = $buildEquipment;

@@ -85,6 +85,8 @@ function af_advancedshop_order_transaction(int $uid, callable $work)
 {
     global $db;
     if ($uid<1) throw new RuntimeException('auth');
+    require_once __DIR__.'/../advancedinventory/modules/WriterBoundary.php';
+    if (af_advinv_reservation_writers_enabled()) return af_advinv_writer()->run([$uid],$work);
     $database=(string)$db->fetch_field($db->write_query('SELECT DATABASE() AS db_name'),'db_name');
     $key='af_aa_owner_'.sha1($database.':'.TABLE_PREFIX.':'.$uid);
     if ((int)$db->fetch_field($db->write_query("SELECT GET_LOCK('{$key}',10) AS acquired"),'acquired')!==1) throw new RuntimeException('busy');
@@ -154,6 +156,7 @@ function af_advancedshop_checkout_order(int $uid, array $shop, string $requested
         || !empty($mybb->usergroup['isbannedgroup'])) throw new RuntimeException('Not allowed');
     if ($requestedKey!=='' && !preg_match('/^[a-f0-9]{64}$/D',$requestedKey)) throw new RuntimeException('Invalid checkout key.');
     af_advancedshop_require_balance_runtime();
+    if (!empty($mybb->settings['af_advancedinventory_enabled'])) af_advancedshop_ensure_inventory_grant_available($uid);
     return af_advancedshop_order_transaction($uid,function()use($db,$mybb,$uid,$shop,$requestedKey){
         if ($requestedKey!=='') {
             $prior=$db->fetch_array($db->simple_select('af_shop_orders','*',"uid={$uid} AND checkout_key='".$db->escape_string($requestedKey)."' AND shop_id=".(int)$shop['shop_id'],['limit'=>1]));
@@ -183,6 +186,7 @@ function af_advancedshop_checkout_order(int $uid, array $shop, string $requested
                 if (empty($mybb->settings['af_advancedinventory_enabled'])) throw new RuntimeException('Advanced Inventory отключён.');
                 af_advancedshop_ensure_inventory_grant_available($uid);
                 if (defined('AF_ADVINV_TABLE_ITEMS')) $required[]=AF_ADVINV_TABLE_ITEMS;
+                if (af_advinv_reservation_writers_enabled()) $required[]='af_advinv_grant_sources';
             }
         }
         af_advancedshop_assert_transactional_tables($required);

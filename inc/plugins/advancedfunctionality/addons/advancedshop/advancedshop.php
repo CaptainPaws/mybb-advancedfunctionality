@@ -2597,9 +2597,22 @@ function af_advancedshop_customization_inventory_subtype(string $targetKey): str
 
 function af_advancedshop_grant_inventory_item(int $uid, array $item, int $orderId=0, int $line=0): void
 {
+    require_once __DIR__.'/../advancedinventory/modules/ShopDelivery.php';
+    if (($item['source_type']??'')!=='appearance_slot') af_advancedshop_ensure_inventory_grant_available($uid);
+    if (af_advinv_reservation_writers_enabled() && ($item['source_type']??'')!=='appearance_slot') {
+        af_advinv_deliver_shop_line($uid,$orderId,$line,$item);
+        return;
+    }
+    af_advancedshop_grant_inventory_item_locked($uid,$item,$orderId,$line);
+}
+
+/** Internal delivery implementation; modern mode requires the shared owner lock. */
+function af_advancedshop_grant_inventory_item_locked(int $uid, array $item, int $orderId=0, int $line=0): int
+{
+    if (function_exists('af_advinv_reservation_writers_enabled') && af_advinv_reservation_writers_enabled()) af_advinv_writer()->held($uid);
     global $db;
     if (($item['source_type']??'')==='appearance_slot') {
-        af_advancedshop_grant_slot_order_line($uid,$orderId,$line);return;
+        af_advancedshop_grant_slot_order_line($uid,$orderId,$line);return 0;
     }
     af_advancedshop_ensure_inventory_grant_available($uid);
     if (af_advancedshop_normalize_kb_type((string)($item['kb_type'] ?? '')) === 'arpg_talent'
@@ -2652,7 +2665,7 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item, int $orderI
         if ($invId <= 0) {
             throw new RuntimeException('Не удалось выдать appearance-предмет в инвентарь.');
         }
-        return;
+        return $invId;
     }
 
     $kbId = (int)($item['kb_id'] ?? 0);
@@ -2858,6 +2871,7 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item, int $orderI
     if ($invId <= 0) {
         throw new RuntimeException('Не удалось выдать предмет в инвентарь.');
     }
+    return $invId;
 }
 
 function af_advancedshop_ensure_inventory_grant_available(int $uid): void

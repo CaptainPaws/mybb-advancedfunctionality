@@ -25,6 +25,7 @@ final class AF_ADVINV_MybbOwnerAccess implements AF_ADVINV_OwnerAccess
     public function authorize(string $operation, int $ownerUid, array $scope, string $authorizationRef, bool $mutation): void
     {
         global $mybb;
+        if ($operation==='grant') throw new RuntimeException('INV_GRANT_NOT_AUTHORIZED');
         if ($ownerUid !== $this->uid() || $scope !== ['system'=>'inventory', 'context_key'=>'owner:'.$ownerUid]
             || $authorizationRef !== 'inventory-owner-v1') {
             throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');

@@ -227,7 +227,7 @@ try {
     check(scalar($db,'SELECT qty FROM t_af_advinv_items WHERE id=21')==='2','caller transaction not rolled back');
     $db->rollback();
     $db->autocommit(false);fails(fn()=>$owner->consume($rollback),'INV_AMBIENT_TRANSACTION');$db->autocommit(true);
-    $none=new AF_ACS_InventoryAdapter();check($none->reserve($r)['code']==='ACS_INVENTORY_WRITERS_NOT_INTEGRATED','default gateway closed');
+    $none=new AF_ACS_InventoryAdapter();check($none->reserve($r)['code']==='ACS_INVENTORY_COMPOSITION_REQUIRED','default gateway closed');
     $enabled=false;check($adapter->consume($rollback)['code']==='ACS_INVENTORY_UNAVAILABLE','missing dependency');$enabled=true;
     // Missing schema and nontransactional bindings are deployment errors, not fake success.
     $db->query("INSERT INTO t_af_advinv_reservations(operation_key,owner_uid,item_id,initial_qty,remaining_qty,context_system,context_key,status,reservation_version,created_at,updated_at) VALUES ('acs:orphan',10,21,1,1,'acs','s1','active',1,1,1)");
