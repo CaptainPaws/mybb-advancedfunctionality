@@ -15,6 +15,8 @@ define('AF_ADVINV_TABLE_SHOP_MAP', 'af_advinv_shop_map');
 define('AF_ADVINV_TABLE_ENTITIES', 'af_advinv_entities');
 define('AF_ADVINV_TABLE_ENTITY_FILTERS', 'af_advinv_entity_filters');
 
+require_once __DIR__.'/modules/WriterBoundary.php';
+
 af_advancedinventory_init();
 
 function af_advancedinventory_init(): void
@@ -28,6 +30,7 @@ function af_advancedinventory_init(): void
 
 function af_advinv_run_customization_subtype_migration(): void
 {
+    if (af_advinv_reservation_writers_enabled()) return;
     global $db;
 
     static $done = false;
@@ -63,6 +66,7 @@ function af_advancedinventory_register_routes(): void
 
 function af_advancedinventory_install(): void
 {
+    af_advinv_maintenance_gate();
     global $db, $lang;
     if (function_exists('af_load_addon_lang')) {
         af_load_addon_lang('advancedinventory');
@@ -109,6 +113,7 @@ function af_advancedinventory_install(): void
 
 function af_advancedinventory_activate(): void
 {
+    af_advinv_maintenance_gate();
     global $lang;
     if (function_exists('af_load_addon_lang')) {
         af_load_addon_lang('advancedinventory');
@@ -250,6 +255,7 @@ function af_advancedinventory_deactivate(): void
 
 function af_advancedinventory_uninstall(): void
 {
+    af_advinv_maintenance_gate();
     global $db;
     $gid = (int)$db->fetch_field($db->simple_select('settinggroups', 'gid', "name='af_advancedinventory'", ['limit' => 1]), 'gid');
     if ($gid > 0) {
@@ -792,6 +798,7 @@ function af_advancedinventory_build_abilities_fragment(int $ownerUid): string
 
 function af_advancedinventory_ensure_inventory_storage(): void
 {
+    af_advinv_maintenance_gate();
     global $db;
 
     if (!$db->table_exists('af_inventory_items')) {
@@ -809,6 +816,7 @@ function af_advancedinventory_ensure_inventory_storage(): void
 
 function af_advancedinventory_upgrade_schema(): void
 {
+    af_advinv_maintenance_gate();
     global $db;
 
     af_advinv_debug_log('schema_check_start', ['table' => TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS]);
@@ -1159,6 +1167,7 @@ function af_advinv_resolve_active_subfilter(string $entity, string $subtype, int
 
 function af_advinv_normalize_customization_items_in_db(): void
 {
+    af_advinv_maintenance_gate();
     global $db;
 
     if (!$db->table_exists(AF_ADVINV_TABLE_ITEMS)) {
@@ -1704,6 +1713,10 @@ function af_advancedinventory_api_equip(): void
     $allowedSlots = af_inv_candidate_slots_for_item($item);
     if ($slot === '' && $allowedSlots) { $slot = (string)$allowedSlots[0]; }
     if ($slot === '' || !in_array($slot, $allowedSlots, true)) { af_advancedinventory_json(['ok' => false, 'error' => 'slot_invalid'], 422); }
+    if (af_advinv_reservation_writers_enabled()) {
+        af_advinv_writer_http(fn()=>af_advinv_writer()->bind($ownerUid,(int)$item['id'],$slot,false));
+        af_advancedinventory_json(['ok'=>true]);
+    }
     $db->delete_query('af_advinv_equipped', 'uid=' . $ownerUid . ' AND item_id=' . (int)$item['id']);
     $exists = (int)$db->fetch_field($db->simple_select('af_advinv_equipped', 'COUNT(*) c', "uid={$ownerUid} AND equip_slot='" . $db->escape_string($slot) . "'"), 'c');
     if ($exists > 0) {
@@ -1722,6 +1735,10 @@ function af_advancedinventory_api_unequip(): void
     $viewerUid = (int)($mybb->user['uid'] ?? 0);
     if (!af_inv_can_manage_owner($viewerUid, $ownerUid)) { af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403); }
     $slot = trim((string)$mybb->get_input('equip_slot'));
+    if (af_advinv_reservation_writers_enabled()) {
+        af_advinv_writer_http(fn()=>af_advinv_writer()->unbind($ownerUid,$slot,(int)$mybb->get_input('item_id'),false));
+        af_advancedinventory_json(['ok'=>true]);
+    }
     if ($slot !== '') {
         $db->delete_query('af_advinv_equipped', 'uid=' . $ownerUid . " AND equip_slot='" . $db->escape_string($slot) . "'");
     } else {
@@ -1888,6 +1905,10 @@ function af_advancedinventory_api_bind_support_slot(): void
     $slotCode = af_inv_map_legacy_support_slot((string)$mybb->get_input('slot_code'));
     $slotConfigs = af_inv_support_slots();
     if ($slotCode === '' || !isset($slotConfigs[$slotCode])) { af_advancedinventory_json(['ok' => false, 'error' => 'slot_invalid'], 422); }
+    if (af_advinv_reservation_writers_enabled()) {
+        af_advinv_writer_http(fn()=>af_advinv_writer()->bind($ownerUid,(int)$item['id'],$slotCode,true));
+        af_advancedinventory_json(['ok'=>true,'slot_code'=>$slotCode]);
+    }
     $db->delete_query('af_advinv_support_slots', 'uid=' . $ownerUid . ' AND item_id=' . (int)$item['id']);
     $exists = (int)$db->fetch_field($db->simple_select('af_advinv_support_slots', 'COUNT(*) c', "uid={$ownerUid} AND slot_code='" . $db->escape_string($slotCode) . "'"), 'c');
     $row = ['item_id' => (int)$item['id'], 'sortorder' => (int)($slotConfigs[$slotCode]['sortorder'] ?? 0), 'updated_at' => TIME_NOW];
@@ -1908,6 +1929,10 @@ function af_advancedinventory_api_unbind_support_slot(): void
     $viewerUid = (int)($mybb->user['uid'] ?? 0);
     if (!af_inv_can_manage_owner($viewerUid, $ownerUid)) { af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403); }
     $slotCode = af_inv_map_legacy_support_slot((string)$mybb->get_input('slot_code'));
+    if (af_advinv_reservation_writers_enabled()) {
+        af_advinv_writer_http(fn()=>af_advinv_writer()->unbind($ownerUid,$slotCode,(int)$mybb->get_input('item_id'),true));
+        af_advancedinventory_json(['ok'=>true]);
+    }
     if ($slotCode !== '') {
         $db->delete_query('af_advinv_support_slots', 'uid=' . $ownerUid . " AND slot_code='" . $db->escape_string($slotCode) . "'");
     } else {
@@ -1927,6 +1952,10 @@ function af_advancedinventory_api_update(): void
     $rawEntity = trim((string)$mybb->get_input('entity'));
     $entity = af_advancedinventory_normalize_entity($rawEntity);
     $slot = trim((string)$mybb->get_input('slot'));
+    if (af_advinv_reservation_writers_enabled()) {
+        af_advinv_writer_http(fn()=>af_advinv_writer()->update($uid,$itemId,$qty,$rawEntity!==''?$entity:'',$slot));
+        af_advancedinventory_json(['ok'=>true]);
+    }
     $row = ['qty' => $qty, 'updated_at' => TIME_NOW];
     if ($rawEntity !== '') {
         $row['entity'] = $db->escape_string($entity);
@@ -1947,7 +1976,7 @@ function af_advancedinventory_api_delete(): void
     if ($itemId <= 0) { af_advancedinventory_json(['ok' => false, 'error' => 'item_id_invalid'], 422); }
     $item = af_inv_get_item_for_owner($uid, $itemId);
     if (!$item) { af_advancedinventory_json(['ok' => false, 'error' => 'item_not_found'], 404); }
-    af_advinv_delete_owner_item_slot($uid, $item);
+    af_advinv_writer_http(fn()=>af_advinv_delete_owner_item_slot($uid, $item));
     af_advancedinventory_json(['ok' => true, 'deleted_ids' => [$itemId]]);
 }
 
@@ -2000,8 +2029,10 @@ function af_advancedinventory_api_bulk_delete(): void
         af_advancedinventory_json(['ok' => false, 'error' => 'items_not_found'], 404);
     }
 
-    foreach ($items as $item) {
-        af_advinv_delete_owner_item_slot($uid, $item);
+    if (af_advinv_reservation_writers_enabled()) {
+        af_advinv_writer_http(fn()=>af_advinv_writer()->delete($uid,$foundIds));
+    } else {
+        foreach ($items as $item) af_advinv_delete_owner_item_slot($uid,$item);
     }
 
     $missingIds = array_values(array_diff($itemIds, $foundIds));
@@ -2024,6 +2055,10 @@ function af_advinv_delete_owner_item_slot(int $ownerUid, array $item): void
         return;
     }
 
+    if (af_advinv_reservation_writers_enabled()) {
+        af_advinv_writer()->delete($ownerUid,[$itemId]);
+        return;
+    }
     $appearanceInfo = af_advinv_resolve_appearance_item($item);
     if (!empty($appearanceInfo['is_visual_item'])) {
         $targetKey = af_advancedinventory_normalize_appearance_target((string)($appearanceInfo['target_key'] ?? ''));
@@ -2236,6 +2271,14 @@ function af_advancedinventory_api_sell(): void
     }
     if ($sellQty > $itemQty) {
         af_advancedinventory_json(['ok' => false, 'error' => 'qty_exceeds_item'], 422);
+    }
+
+    if (af_advinv_reservation_writers_enabled()) {
+        af_advinv_require_shop_runtime();
+        af_advancedshop_require_balance_runtime();
+        $result=af_advinv_writer_http(fn()=>af_advinv_writer()->sell($ownerUid,$itemId,$sellQty));
+        $result['wallet']=af_advinv_wallet_payload($ownerUid);
+        af_advancedinventory_json($result);
     }
 
     $sale = af_advinv_item_sale_profile($item, $sellQty);
@@ -3058,6 +3101,17 @@ function af_advinv_collect_meta_values(array $meta, array $paths): array
 
 function af_inv_add_item(int $uid, array $item): int
 {
+    if (!af_advinv_reservation_writers_enabled()) return af_advinv_add_item_locked($uid,$item);
+    if (isset($item['qty']) && (!is_int($item['qty']) || $item['qty']<1 || $item['qty']>2147483647)) throw new RuntimeException('INV_INVALID_QUANTITY');
+    return af_advinv_writer()->run([$uid],function ($writer) use ($uid,$item) {
+        $id=af_advinv_add_item_locked($uid,$item);if ($id>0) $writer->touch($uid);return $id;
+    });
+}
+
+/** Internal implementation; an installed owner schema requires the shared boundary. */
+function af_advinv_add_item_locked(int $uid, array $item): int
+{
+    if (af_advinv_reservation_writers_enabled()) af_advinv_writer()->held($uid);
     global $db;
     $uid = max(0, $uid);
     if ($uid <= 0) { return 0; }
@@ -3145,10 +3199,14 @@ function af_inv_add_item(int $uid, array $item): int
     ]);
 
     $where = "uid={$uid} AND entity='" . $db->escape_string($entity) . "' AND subtype='" . $db->escape_string($subtype) . "' AND kb_type='" . $db->escape_string($kbType) . "' AND kb_key='" . $db->escape_string($kbKey) . "' AND MD5(COALESCE(meta_json,''))='" . $db->escape_string($metaHash) . "'";
-    $row = $db->fetch_array($db->simple_select(AF_ADVINV_TABLE_ITEMS, 'id,qty', $where, ['limit' => 1]));
+    if (af_advinv_reservation_writers_enabled()) {
+        $where .= " AND BINARY COALESCE(meta_json,'')=BINARY '".$db->escape_string((string)$metaJson)."' AND NOT EXISTS (SELECT 1 FROM ".TABLE_PREFIX."af_advinv_reservations r WHERE r.item_id=".TABLE_PREFIX.AF_ADVINV_TABLE_ITEMS.".id AND r.status='active')";
+    }
+    $row = $db->fetch_array($db->simple_select(AF_ADVINV_TABLE_ITEMS, 'id,qty', $where, ['limit' => 1,'order_by'=>'id','order_dir'=>'ASC']));
     if ($row) {
         $id = (int)$row['id'];
         $newQty = (int)$row['qty'] + $qty;
+        if ($newQty>2147483647) throw new RuntimeException('INV_QUANTITY_OVERFLOW');
         $updatePayload = ['qty' => $newQty, 'updated_at' => $now];
         if ($hasTitleColumn) {
             $updatePayload['title'] = $db->escape_string($title);
@@ -3166,7 +3224,7 @@ function af_inv_add_item(int $uid, array $item): int
             'item_payload' => $item,
         ]);
 
-        $db->update_query(AF_ADVINV_TABLE_ITEMS, $updatePayload, 'id=' . $id);
+        if ($db->update_query(AF_ADVINV_TABLE_ITEMS, $updatePayload, 'id=' . $id) === false) throw new RuntimeException('INV_DATABASE_ERROR');
         af_advinv_debug_log('af_inv_add_item_merged', ['uid' => $uid, 'id' => $id, 'old_qty' => (int)$row['qty'], 'new_qty' => $newQty]);
         return $id;
     }
@@ -3200,6 +3258,7 @@ function af_inv_add_item(int $uid, array $item): int
     ]);
 
     $newId = (int)$db->insert_query(AF_ADVINV_TABLE_ITEMS, $insertPayload);
+    if ($newId<=0) throw new RuntimeException('INV_DATABASE_ERROR');
     af_advinv_debug_log('af_inv_add_item_inserted', ['uid' => $uid, 'id' => $newId]);
     return $newId;
 }
@@ -3207,9 +3266,12 @@ function af_inv_add_item(int $uid, array $item): int
 function af_inv_remove_item(int $uid, int $itemId, int $qty = 1): bool
 {
     global $db;
+    if ($qty<1) return false;
+    if (af_advinv_reservation_writers_enabled()) return af_advinv_writer()->decrement($uid,$itemId,$qty);
     $row = $db->fetch_array($db->simple_select(AF_ADVINV_TABLE_ITEMS, 'id,qty', 'id=' . (int)$itemId . ' AND uid=' . (int)$uid, ['limit' => 1]));
     if (!$row) { return false; }
-    $left = (int)$row['qty'] - max(1, $qty);
+    if ($qty>(int)$row['qty']) return false;
+    $left = (int)$row['qty'] - $qty;
     if ($left <= 0) {
         $db->delete_query(AF_ADVINV_TABLE_ITEMS, 'id=' . (int)$row['id'] . ' AND uid=' . (int)$uid);
         return true;
@@ -4838,6 +4900,7 @@ function af_advancedinventory_ensure_setting(string $name, string $title, string
 
 function af_advancedinventory_migrate_from_shop(): void
 {
+    af_advinv_maintenance_gate();
     global $db;
     if (!$db->table_exists(AF_ADVINV_TABLE_ITEMS)) { return; }
     $done = (string)$db->fetch_field($db->simple_select('datacache', 'cache', "title='af_advancedinventory_migrated'", ['limit' => 1]), 'cache');

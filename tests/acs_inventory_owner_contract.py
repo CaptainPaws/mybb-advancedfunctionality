@@ -75,7 +75,7 @@ expected = {
         'af_advancedinventory_api_equip', 'af_advancedinventory_api_unequip',
         'af_advancedinventory_api_bind_support_slot', 'af_advancedinventory_api_unbind_support_slot',
         'af_advancedinventory_api_update', 'af_advinv_delete_owner_item_slot',
-        'af_advancedinventory_api_sell', 'af_inv_add_item', 'af_inv_remove_item',
+        'af_advancedinventory_api_sell', 'af_advinv_add_item_locked', 'af_inv_remove_item',
     },
     'charactersheets/modules/ajax.php': {'af_charactersheets_handle_api_impl'},
 }
