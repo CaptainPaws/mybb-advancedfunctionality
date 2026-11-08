@@ -93,7 +93,9 @@ admin = (base / 'advancedinventory/admin.php').read_text()
 assert "'af_advinv_items'," in admin and "'af_advinv_equipped'," in admin
 assert "$db->delete_query($table, '1=1')" in admin
 # Guard against treating these legacy paths as an owner gateway.
-assert not (base / 'advancedcombatsystem/modules/Infrastructure/Adapters/InventoryAdapter.php').exists()
+adapter = (base / 'advancedcombatsystem/modules/Infrastructure/Adapters/InventoryAdapter.php').read_text()
+assert 'ACS_INVENTORY_WRITERS_NOT_INTEGRATED' in adapter
+assert 'af_inv_remove_item(' not in adapter and '->sql(' not in adapter
 print('PASS: six payloads, strict quantities, hash binding and direct writer inventory (not runtime authorization/atomicity)')
 if __name__ == '__main__':
     # Optional golden vectors for PHP/other consumers; stdout stays concise by default.
