@@ -47,7 +47,7 @@ final class AF_ACS_EntityService
     {
         if(!in_array($kind,['character','pet','npc','monster'],true))throw new RuntimeException('ACS_ENTITY_KIND_INVALID');
     }
-    private function prepare(string $sid,array $input): array
+    private function prepare(string $sid,array $input,bool $write=false): array
     {
         $kind=(string)($input['kind']??'');$this->kind($kind);$this->access($sid,$kind,true);
         $key=(string)($input['source_key']??'');
@@ -85,6 +85,16 @@ final class AF_ACS_EntityService
             'numeric_policy'=>'binary64-half_up-v1','engine_version'=>'acs-registration-1','source_snapshot'=>$dto,
             'pinned_abilities'=>$definitions,'initial_resources'=>['hp'=>['current'=>$current,'maximum'=>$hpMax,'source'=>($dto['resources']['hp']['current']??null)===null?'explicit_registration_input':'owner_contract']],
             'equipment_policy'=>'already_included_do_not_reapply'];
+        if ($isCharacter) {
+            require_once __DIR__.'/../Infrastructure/Adapters/EquipmentAdapter.php';
+            require_once __DIR__.'/../../../advancedinventory/modules/InventoryRead.php';
+            global $db;
+            $this->repository->assertReadConnection($db);
+            $reader=new AF_ADVINV_InventoryRead($db);
+            $actor=(int)$this->access->uid();
+            if ($write) $reader->fence($actor,$actor);
+            $snapshot['equipment_snapshot']=(new AF_ACS_EquipmentAdapter())->prepare($dto,$reader->read($actor,$actor),$sid,$actor);
+        }
         AF_ACS_Repository::json($snapshot);
         $name=trim((string)($input['name']??''));if($name==='')$name=$isCharacter?'Персонаж · лист #'.$key:'Бестиарий · '.$key;
         if(mb_strlen($name)>191)throw new RuntimeException('ACS_INVALID_TEXT');
@@ -114,6 +124,6 @@ final class AF_ACS_EntityService
         $request=['schema_version'=>1,'actor_uid'=>$actor,'session_id'=>$sid,'expected_version'=>AF_ACS_Repository::integer($input['expected_version']??null),'kind'=>$kind,'source_key'=>(string)($input['source_key']??''),'name'=>(string)($input['name']??''),'initial_hp'=>(string)($input['initial_hp']??''),'reason'=>$reason];
         return $this->repository->command('session:'.$actor.':'.$key,'entity.register',$request,
             function($session)use($sid,$kind){$this->access($sid,$kind,true);},
-            function($session)use($sid,$input){return $this->repository->register($session,$this->prepare($sid,$input));});
+            function($session)use($sid,$input){return $this->repository->register($session,$this->prepare($sid,$input,true));});
     }
 }
