@@ -168,11 +168,14 @@ final class AF_ADVINV_WriterBoundary
     {
         if (!in_array($uid,self::$transactions[spl_object_id($this->link)]??[],true)) throw new RuntimeException('INV_WRITER_BOUNDARY_REQUIRED');
     }
-    public function loadout(int $uid, string $slot, callable $work): mixed
+    public function loadout(int $uid, string|array $slot, callable $work): mixed
     {
         return $this->run([$uid],function () use ($uid,$slot,$work) {
-            $rows=$this->rows('SELECT item_id FROM '.$this->table('equipped').' WHERE uid=? AND equip_slot=?',[$uid,$slot]);
-            foreach ($rows as $row) { $this->item($uid,(int)$row['item_id']); $this->free((int)$row['item_id']); }
+            $ids=[];foreach ((array)$slot as $code) {
+                foreach ($this->rows('SELECT item_id FROM '.$this->table('equipped').' WHERE uid=? AND equip_slot=?',[$uid,$code]) as $row) $ids[]=(int)$row['item_id'];
+            }
+            $ids=array_unique($ids);sort($ids,SORT_NUMERIC);
+            foreach ($ids as $id) { $this->item($uid,$id);$this->free($id); }
             $result=$work();$this->touch($uid);return $result;
         });
     }
@@ -205,6 +208,7 @@ final class AF_ADVINV_WriterBoundary
             return ['ok'=>true,'sold_qty'=>$qty,'sold_minor'=>$sale['sell_total_minor'],'sold_major'=>$sale['sell_total_major'],'item_qty_left'=>(int)$item['qty']-$qty,'currency'=>$sale['currency'],'currency_symbol'=>$sale['currency_symbol']];
         });
     }
+    public function insertId(): int { return $this->link->insert_id; }
     public function table(string $name): string { return '`'.$this->prefix.'af_advinv_'.$name.'`'; }
     public function rows(string $sql, array $params=[]): array { return $this->statement($sql,$params)['rows']; }
     public function query(string $sql, array $params=[]): int { return $this->statement($sql,$params)['affected']; }
@@ -212,7 +216,7 @@ final class AF_ADVINV_WriterBoundary
     {
         $stmt=$this->link->prepare($sql);if (!$stmt) throw new RuntimeException('INV_DATABASE_ERROR');
         try {
-            if ($params) { $values=array_map(static fn($v)=>(string)$v,$params); if (!$stmt->bind_param(str_repeat('s',count($values)),...$values)) throw new RuntimeException('INV_DATABASE_ERROR'); }
+            if ($params) { $values=array_map(static fn($v)=>$v===null?null:(string)$v,$params); if (!$stmt->bind_param(str_repeat('s',count($values)),...$values)) throw new RuntimeException('INV_DATABASE_ERROR'); }
             if (!$stmt->execute()) throw new RuntimeException('INV_DATABASE_ERROR');
             $result=$stmt->get_result();return ['rows'=>$result?$result->fetch_all(MYSQLI_ASSOC):[],'affected'=>$stmt->affected_rows];
         } finally { $stmt->close(); }

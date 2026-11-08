@@ -3200,6 +3200,7 @@ function af_advinv_add_item_locked(int $uid, array $item): int
 
     $where = "uid={$uid} AND entity='" . $db->escape_string($entity) . "' AND subtype='" . $db->escape_string($subtype) . "' AND kb_type='" . $db->escape_string($kbType) . "' AND kb_key='" . $db->escape_string($kbKey) . "' AND MD5(COALESCE(meta_json,''))='" . $db->escape_string($metaHash) . "'";
     if (af_advinv_reservation_writers_enabled()) {
+        foreach (['entity'=>$entity,'subtype'=>$subtype,'kb_type'=>$kbType,'kb_key'=>$kbKey] as $field=>$value) $where .= ' AND BINARY '.$field."=BINARY '".$db->escape_string($value)."'";
         $where .= " AND BINARY COALESCE(meta_json,'')=BINARY '".$db->escape_string((string)$metaJson)."' AND NOT EXISTS (SELECT 1 FROM ".TABLE_PREFIX."af_advinv_reservations r WHERE r.item_id=".TABLE_PREFIX.AF_ADVINV_TABLE_ITEMS.".id AND r.status='active')";
     }
     $row = $db->fetch_array($db->simple_select(AF_ADVINV_TABLE_ITEMS, 'id,qty', $where, ['limit' => 1,'order_by'=>'id','order_dir'=>'ASC']));

@@ -191,6 +191,8 @@ Editors/save/read/normalizers должны сохранять primary key, direc
 
 У экспортёра экипировки есть вызов с `per_page`, но reader ожидает `perPage`. Поэтому нельзя полагаться на получение всех 500 вещей таким экспортом; адаптер должен явно пагинировать реальный reader и проверять total. Сам экспорт не гарантирует атомарности всего комплекта. remove_item может удалить строку при запрошенном количестве больше остатка; не является безопасным боевым списанием. Нет подтверждённого глобального reserve/consume/release/transfer с ключом ACS. Вызов обычного endpoint equip не подтверждает соблюдение боевых AP/custody.
 
+> **ACS-6.1.3A/B — writers и transfer/grant implemented in focused fixtures; combat BLOCKED.** [Матрица writers, shared lock order, paid Shop delivery и owner receipts](../design/acs/ACS_6_1_3_IMPLEMENTATION.md). Unsafe maintenance/cosmetic callbacks закрыты явно; production schema/ACS composition/installed acceptance не заменяются локальными checks.
+
 > **ACS-6.1.2 — internal engine tested, production integration BLOCKED.** [Owner reserve/consume/release/lookup и точные границы](../design/acs/ACS_6_1_2_IMPLEMENTATION.md) реализованы в AdvancedInventory, ACS adapter добавлен без production factory. Legacy writers и combat coordinator не подключены, боевой расход остаётся BLOCKED.
 
 > **ACS-6.1.1 — CONTRACT PREPARED, runtime BLOCKED.** [Owner protocol v1](ACS_INVENTORY_OWNER_PROTOCOL.md), [request schema](ACS_INVENTORY_OWNER_REQUEST.schema.json) и [полный writer audit](../design/acs/ACS_6_1_1_IMPLEMENTATION.md) уточняют этот проект. Owner-wide guard/version сериализует в том числе новые stacks; SQL proposal проверен отдельно, но не установлен. Ни один существующий writer не объявлен reservation-safe; боевой расход остаётся BLOCKED.

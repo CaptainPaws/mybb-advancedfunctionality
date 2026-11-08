@@ -46,6 +46,14 @@ final class AF_ADVINV_OwnerProtocol
         return hash('sha256', self::canonical($request));
     }
 
+    public function transfer(array $request): array { return $this->propertyOperation('transfer',$request); }
+    public function grant(array $request): array { return $this->propertyOperation('grant',$request); }
+    private function propertyOperation(string $operation, array $request): array
+    {
+        $this->validate($operation,$request);
+        require_once __DIR__.'/PropertyOperations.php';
+        return (new AF_ADVINV_PropertyOperations($this->db,$this->access))->execute($operation,$request);
+    }
     public function reserve(array $request): array { return $this->execute('reserve', $request); }
     public function consume(array $request): array { return $this->execute('consume', $request); }
     public function release(array $request): array { return $this->execute('release', $request); }
@@ -210,6 +218,7 @@ final class AF_ADVINV_OwnerProtocol
         }
     }
 
+    public function validateCommand(string $operation,array $request): void { $this->validate($operation,$request); }
     private function validate(string $operation, array $r): void
     {
         self::fields($r, ['schema_version','operation','operation_key','actor','scope','payload_hash','payload']);
@@ -226,17 +235,34 @@ final class AF_ADVINV_OwnerProtocol
             'consume'=>['reservation_id','qty','expected_version'],
             'release'=>['reservation_id','reason'],
             'lookup'=>['target_operation_key'],
+            'transfer'=>['item_id','qty','from_uid','to_uid','expected_versions'],
+            'grant'=>['recipient_uid','normalized_item','provenance'],
         };
         self::fields($r['payload'], $fields);
         foreach ($r['payload'] as $key=>$value) {
-            if (in_array($key, ['owner_uid','item_id'], true)) self::positive($value, 4294967295);
+            if (in_array($key, ['owner_uid','item_id','from_uid','to_uid','recipient_uid'], true)) self::positive($value, 4294967295);
             elseif ($key === 'qty') self::positive($value, 2147483647);
+            elseif ($key==='expected_versions') {
+                self::fields($value,['from','to']);foreach ($value as $v) self::positive($v,self::MAX_VERSION);
+            } elseif ($key==='normalized_item') {
+                self::fields($value,['qty','definition_ref','snapshot_json','entity','subtype']);
+                self::positive($value['qty'],2147483647);self::text($value['snapshot_json'],49152);
+                self::text($value['entity'],32);self::text($value['subtype'],32);
+                self::fields($value['definition_ref'],['type','key','version','hash']);
+                foreach (['type','key','version'] as $f) self::text($value['definition_ref'][$f],$f==='type'?32:($f==='key'?64:191));
+                if (!is_string($value['definition_ref']['hash']) || !preg_match('/\A[a-f0-9]{64}\z/D',$value['definition_ref']['hash'])) throw new InvalidArgumentException('INV_INVALID_DEFINITION');
+            } elseif ($key==='provenance') {
+                self::fields($value,['system','source_key']);
+                if (!in_array($value['system'],['acs','shop','inventory'],true)) throw new InvalidArgumentException('INV_INVALID_PROVENANCE');
+                self::text($value['source_key'],191);
+            }
             elseif (str_starts_with($key, 'expected_')) self::positive($value, self::MAX_VERSION);
             elseif ($key === 'reservation_id') {
                 if (!is_string($value) || !preg_match('/\A[1-9][0-9]{0,19}\z/D', $value) || (strlen($value) === 20 && strcmp($value, '18446744073709551615') > 0)) throw new InvalidArgumentException('INV_INVALID_RESERVATION');
             } elseif ($key === 'target_operation_key') self::key($value);
             else self::text($value, $key === 'reason' ? 512 : 191);
         }
+        if ($operation==='grant' && $r['payload']['provenance']['system']!==$r['scope']['system']) throw new InvalidArgumentException('INV_INVALID_PROVENANCE');
         if ($operation === 'reserve' && $r['payload']['session_id'] !== $r['scope']['context_key']) throw new InvalidArgumentException('INV_INVALID_SCOPE');
         if (!is_string($r['payload_hash']) || !preg_match('/\A[a-f0-9]{64}\z/D', $r['payload_hash']) || !hash_equals(self::payloadHash($r), $r['payload_hash'])) throw new InvalidArgumentException('INV_PAYLOAD_HASH_MISMATCH');
     }
@@ -304,6 +330,7 @@ final class AF_ADVINV_OwnerProtocol
         catch (mysqli_sql_exception $error) { throw new RuntimeException('INV_AMBIENT_TRANSACTION'); }
     }
 
+    public function assertExternalBoundary(): void { $this->boundary(); }
     public function assertStorage(): void { $this->schema(); }
 
     private function schema(): void

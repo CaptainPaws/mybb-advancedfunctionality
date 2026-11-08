@@ -8,6 +8,17 @@ final class AF_ADVINV_OwnerSchema
     {
         if (!preg_match('/\A[A-Za-z0-9_]{0,30}\z/D', $prefix)) throw new InvalidArgumentException('INV_INVALID_PREFIX');
         return [
+            "CREATE TABLE `{$prefix}af_advinv_grant_sources` (
+                source_system VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+                source_key VARBINARY(191) NOT NULL,
+                recipient_uid INT UNSIGNED NOT NULL,
+                operation_key VARCHAR(191) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+                payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+                result_json LONGTEXT NOT NULL,
+                result_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+                PRIMARY KEY(source_system,source_key), UNIQUE KEY source_operation(operation_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
             <<<SQL
 CREATE TABLE `{$prefix}af_advinv_owner_state` (
     uid INT UNSIGNED NOT NULL,

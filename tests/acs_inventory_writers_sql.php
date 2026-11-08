@@ -10,8 +10,12 @@ final class InventoryFixtureDatabase
     public mysqli $read_link;
     public function __construct(public mysqli $write_link) { $this->read_link=$write_link; }
     public function table_exists($table): bool { return (bool)$this->query("SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='t_".$this->escape_string($table)."'")->num_rows; }
+    public function field_exists($field,$table): bool { return (bool)$this->query("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='t_".$this->escape_string($table)."' AND COLUMN_NAME='".$this->escape_string($field)."'")->num_rows; }
+    public function affected_rows(): int { return $this->write_link->affected_rows; }
+    public function insert_id(): int { return $this->write_link->insert_id; }
+    public function num_rows($r): int { return $r->num_rows; }
     public function escape_string($s): string { return $this->write_link->real_escape_string((string)$s); }
-    public function query($sql) { return $this->write_link->query($sql); }
+    public function query($sql) { try { return $this->write_link->query($sql); } catch (mysqli_sql_exception $e) { fwrite(STDERR,'Fixture SQL error: '.$e->getMessage().PHP_EOL);throw $e; } }
     public function write_query($sql) { return $this->query($sql); }
     public function fetch_array($r) { return $r->fetch_assoc(); }
     public function fetch_field($r,$field) { return $r->fetch_assoc()[$field]??null; }
@@ -30,6 +34,8 @@ final class InventoryFixtureDatabase
     }
     public function delete_query($table,$where) { return $this->query('DELETE FROM t_'.$table.' WHERE '.$where); }
 }
+if (defined('ACS_INV_WRITER_LIBRARY')) return;
+
 $database = 'acs613a_fixture_'.bin2hex(random_bytes(8));
 $admin = connectFixture();
 $admin->query('CREATE DATABASE `'.$database.'` CHARACTER SET utf8mb4');
@@ -64,6 +70,8 @@ try {
     $denied(fn()=>$writer->unbind(10,'support_1',0,true));
     $native->query("UPDATE t_af_advinv_items SET subtype='consumable' WHERE id=22");
     $denied(fn()=>$writer->bind(10,22,'support_1',true));
+    $native->query("INSERT INTO t_af_advinv_equipped VALUES(10,'weapon_mainhand',21,1),(10,'weapon_offhand',22,1)");
+    $denied(fn()=>$writer->loadout(10,['weapon_mainhand','weapon_offhand'],static fn()=>null));
     check(scalar($native,'SELECT qty FROM t_af_advinv_items WHERE id=21')===$before,'reserved quantity preserved');
     check(!af_inv_remove_item(10,22,2) && scalar($native,'SELECT qty FROM t_af_advinv_items WHERE id=22')==='1','over request no deletion');
     fails(fn()=>af_advinv_normalize_customization_items_in_db(),'INV_MAINTENANCE_REQUIRES_OFFLINE_PROTOCOL');
