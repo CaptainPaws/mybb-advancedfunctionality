@@ -1,6 +1,8 @@
 # IC-INV-1 v1 — owner-side protocol (ACS-6.1.1)
 
-Статус: **CONTRACT PREPARED / runtime BLOCKED**. Это уточнение IC-INV §6 и Architecture §5.5, а не готовый API. Аудит и условия допуска: [ACS-6.1.1](../design/acs/ACS_6_1_1_IMPLEMENTATION.md). Наличие схемы payload или SQL fixture не разрешает боевой расход. Старые writers не заменены и ещё обходят предлагаемую защиту.
+Статус: **внутренний owner engine реализован в ACS-6.1.2 / production integration BLOCKED**. [Реализация, поддерживаемые item kinds и проверки](../design/acs/ACS_6_1_2_IMPLEMENTATION.md). Штатный ACS gateway закрыт до перевода legacy writers; новых HTTP routes и автоматической установки схемы нет.
+
+Исходный статус ACS-6.1.1: **CONTRACT PREPARED / runtime BLOCKED**. Это уточнение IC-INV §6 и Architecture §5.5, а не готовый API. Аудит и условия допуска: [ACS-6.1.1](../design/acs/ACS_6_1_1_IMPLEMENTATION.md). Наличие схемы payload или SQL fixture не разрешает боевой расход. Старые writers не заменены и ещё обходят предлагаемую защиту.
 
 ## Authority и формат
 
