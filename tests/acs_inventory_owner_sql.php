@@ -50,7 +50,9 @@ final class FaultConnection extends mysqli
 function connectFixture(?string $database = null, bool $fault = false): mysqli
 {
     $class = $fault ? FaultConnection::class : mysqli::class;
-    $db = new $class('127.0.0.1', 'root', '', $database, 3306);
+    $socket=getenv('ACS_INV_FIXTURE_SOCKET')?:null;
+    if ($socket!==null && (!str_starts_with($socket,'/tmp/acs222-socket/') || !file_exists($socket))) throw new RuntimeException('Disposable socket required');
+    $db = $socket===null?new $class('127.0.0.1', 'root', '', $database, 3306):new $class('localhost','root','',$database,0,$socket);
     $db->set_charset('utf8mb4');
     return $db;
 }

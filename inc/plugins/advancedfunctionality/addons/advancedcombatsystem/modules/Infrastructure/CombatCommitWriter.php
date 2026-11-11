@@ -2,6 +2,7 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SubmissionStore.php';
 require_once __DIR__.'/CombatCommitPersistence.php';
+require_once __DIR__.'/ItemCommitPersistence.php';
 require_once __DIR__.'/StatusPersistence.php';
 require_once __DIR__.'/ReactionPersistence.php';
 require_once __DIR__.'/BarrierPersistence.php';
@@ -11,7 +12,7 @@ require_once __DIR__.'/../Application/BuilderService.php';
 /** The only producer of terminal, persistent Resolver results. Never calls a native post writer. */
 final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 {
-    use AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
+    use AF_ACS_ItemCommitPersistence, AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
     private AF_ACS_SubmissionStore $submissions;
     private AF_ACS_EncounterRepository $preparation;
     private AF_ACS_SessionAccess $access;
@@ -99,6 +100,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         if(isset($result->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',self::json(['schema_version'=>1,'boundaries'=>$result->serverPlan()['entity_end_boundaries']]));
         if(array_filter($result->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',self::json(['schema_version'=>1,'instances'=>$result->serverState()['status_instances']]));
         if(($reactionHash=AF_ACS_Resolver::reactionHash($result,$prepared['context']))!==null)$summary['reaction_hash']=$reactionHash;
+        if (isset($result->serverPlan()['item_state'])) $summary['item_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'items'=>$result->serverPlan()['item_state']]));
         $dependency=hash('sha256',self::json(['schema_version'=>1,'dependencies'=>$dependencies]));
         $simulation=hash('sha256',self::json(['schema_version'=>1,'actions'=>$frozen['actions'],'tape'=>$frozen['tape'],'summary'=>$summary]));
         $confirmation=hash('sha256',"acs-confirm-v1\n".$dependency."\n".$simulation);
@@ -189,6 +191,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             $result=AF_ACS_Resolver::resolve($prepared['context'],$ordered,$frozen['tape'],'seal');
             $controls=$this->controls($current,$frozen,$prepared,$result);$controls['fence_hash']=$fingerprint;
             $current=$this->phase($current,'committing',['schema_version'=>1,'pid'=>$current['pid'],'controls'=>array_diff_key($controls,['summary'=>true])]);
+            $controls['owner_receipts']=$this->commitItems($current,$frozen,$result,$prepared);
             $changes=$this->project($current,$f,$turn,$result,$frozen);
             return $this->finish($current,$f,$result,$controls,$changes,$fid);
         });
@@ -207,7 +210,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             $data=json_decode($boundary['result_json'],true,64,JSON_THROW_ON_ERROR);if(in_array($data['entity_turn_id']??null,$turnIds,true)||isset($data['round_id'])&&(string)$data['round_id']===(string)(self::indexed($f['turns'])[$row['turn_id']]['round_id']??''))$boundaryHistory[]=['boundary_key'=>$boundary['operation_key'],'result'=>$data];
         }
         $payload=self::json(['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,
-            'persistent'=>true,'submission_id'=>$row['submission_id'],'boundary_history'=>$boundaryHistory,'summary'=>$controls['summary'],'plan'=>$resolved->serverPlan(),
+            'persistent'=>true,'submission_id'=>$row['submission_id'],'owner_receipts'=>$controls['owner_receipts']??[],'boundary_history'=>$boundaryHistory,'summary'=>$controls['summary'],'plan'=>$resolved->serverPlan(),
             'dependency_fence_hash'=>$controls['fence_hash'],'initial'=>$resolved->serverInitial(),'final'=>$resolved->serverState(),'changes'=>$changes]);$resultHash=hash('sha256',$payload);
         $visibility=self::json(['schema_version'=>1,'scope'=>'combat_participants']);
         $this->sql('INSERT INTO '.$this->table('event_details').' (event_id,schema_version,numeric_policy,payload_json,visibility_json,content_hash) VALUES (?,1,?,?,?,?)',
@@ -228,7 +231,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         $receipt=['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'rng_version'=>'uniform53-v1','status'=>'COMMITTED','submission_id'=>$row['submission_id'],'session_id'=>$row['session_id'],
             'turn_id'=>$row['turn_id'],'pid'=>$row['pid'],'fid'=>$fid,'post_link_id'=>$link,'event_id'=>$event,'state_version'=>$row['state_version'],
             'result_hash'=>$resultHash,'dependency_hash'=>$controls['dependency_hash'],'simulation_hash'=>$controls['simulation_hash'],
-            'confirmation_hash'=>$controls['confirmation_hash'],'outbox_key'=>$messageKey];$json=self::json($receipt);
+            'confirmation_hash'=>$controls['confirmation_hash'],'owner_receipts'=>$controls['owner_receipts']??[],'outbox_key'=>$messageKey];$json=self::json($receipt);
         $this->sql('INSERT INTO '.$this->table('combat_receipts').' (submission_id,turn_id,pid,request_hash,sealed_hash,receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?)',
             [$row['submission_id'],$row['turn_id'],$row['pid'],$row['request_hash'],hash('sha256',$row['sealed_json']),hash('sha256',$json),$json,$now]);
         $this->sql('UPDATE '.$this->table('submissions').' SET result_json=? WHERE submission_id=?',[$json,$row['submission_id']]);

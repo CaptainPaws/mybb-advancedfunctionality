@@ -13,10 +13,15 @@ final class AF_ACS_CombatCard
         if ($card['details']===null) {return $html.'<p>Подробности ограничены правилами видимости сессии.</p></aside>';}
         $html.='<ol>';
         foreach($card['details'] as $step){
-            $outcome=['hit'=>'попадание','crit'=>'критическое попадание','miss'=>'промах','multiple'=>'несколько целей'][$step['outcome']]??'исход недоступен';
+            $outcome=['hit'=>'попадание','crit'=>'критическое попадание','miss'=>'промах','multiple'=>'несколько целей','used'=>'действие с предметом выполнено'][$step['outcome']]??'исход недоступен';
             $html.='<li><p><strong>'.self::esc($step['actor_name']).' → '.self::esc($step['target_name']).'</strong> · '.self::esc($outcome).'</p>';
             $costs=[];foreach($step['costs'] as $c)$costs[]=self::esc($c['amount']).' '.($c['kind']==='ap'?'AP':'ресурса');
             $html.='<p>Стоимость: '.implode(', ',$costs).'. Урон: '.self::esc($step['damage']).'.</p>';
+            if ($step['outcome']==='used') {
+                $item=$step['item']??[];$operation=($item['operation']??'')==='consume'?'Использование':'Смена оружия';
+                $html.='<p>'.self::esc($operation).' · предмет #'.self::esc($item['item_id']??'—').' · '.self::esc($item['qty']??'—').' шт. Подтверждено сервером.</p></li>';
+                continue; // Deterministic use does not claim an applied hit/crit check.
+            }
             $r=$step['rolls']??[];$p=$step['probabilities']??[];
             $html.='<details><summary>Броски и защита</summary><p>Попадание: '.self::esc($r['hit']['u']??'—').'; критическое попадание: '.self::esc($r['crit']['u']??'—').(empty($r['crit_used'])?' (резерв)':'').'.</p>';
             $html.='<p>Вероятность попадания: '.self::esc($p['P_hit']??'—').'%; критического попадания при попадании: '.self::esc($p['P_crit']??'—').'%.</p>';

@@ -38,7 +38,7 @@ final class AF_ACS_CombatCardQuery extends AF_ACS_Repository
                 $details=[];$statusRows=json_decode($records[$id]['card_statuses']??'null',true,64,JSON_THROW_ON_ERROR)??[];
                 $history=json_decode($records[$id]['card_boundaries']??'null',true,64,JSON_THROW_ON_ERROR)??[];
                 foreach($summary['actions'] as $i=>$step){
-                    $entry=array_intersect_key($step,array_flip(['actor_id','target_id','ability_key','outcome','rolls','probabilities','costs','damage']));
+                    $entry=array_intersect_key($step,array_flip(['actor_id','target_id','ability_key','outcome','rolls','probabilities','costs','damage','item']));
                     foreach(['actor_id','target_id'] as $k){$entry[$k]=self::integer($entry[$k]??null);$names[$row['session_id']][$entry[$k]]=true;}
                     $entry['components']=[];$entry['mechanics']=[];
                     foreach($actions[$i]['strikes']??[$actions[$i]] as $strike){

@@ -2,7 +2,7 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/OwnerAccess.php';
 
-/** Internal standalone owner engine. No bootstrap/route; legacy writer integration is still required. */
+/** Inventory-owned quantity engine. Standalone APIs and explicit provisional participation; no bootstrap/route. */
 final class AF_ADVINV_OwnerProtocol
 {
     private mysqli $db;
@@ -76,7 +76,32 @@ final class AF_ADVINV_OwnerProtocol
         }
     }
 
-    private function execute(string $operation, array $r): array
+    /** Internal same-connection InnoDB participant. Result is provisional until caller COMMIT.
+     * Never starts, commits or rolls back caller work. No remote/multi-database support.
+     */
+    public function participate(string $operation,array $request): AF_ADVINV_ProvisionalOwnerResult
+    {
+        if (!in_array($operation,['reserve','consume','release'],true)) throw new InvalidArgumentException('INV_INVALID_OPERATION');
+        $this->requireTransaction();
+        return new AF_ADVINV_ProvisionalOwnerResult($this->execute($operation,$request,true));
+    }
+    public function lookupParticipant(array $request): array
+    {
+        $this->requireTransaction();$this->validate('lookup',$request);$this->identity($request);$this->schema();
+        $row=$this->one('SELECT * FROM '.$this->table('external_operations').' WHERE operation_key=?',[$request['payload']['target_operation_key']]);
+        $this->authorize($request,$row?(int)$row['owner_uid']:$this->access->uid(),false);
+        if (!$row) return ['status'=>'not_found','operation_key'=>$request['payload']['target_operation_key']];
+        $this->samePrincipal($row,$request);return $this->receipt($row);
+    }
+    private function requireTransaction(): void
+    {
+        if ($this->running || $this->db->character_set_name()!=='utf8mb4' || (int)$this->one('SELECT @@session.autocommit AS ac')['ac']!==1) throw new RuntimeException('INV_OWNER_TRANSACTION_REQUIRED');
+        try { $this->sql('SET TRANSACTION ISOLATION LEVEL READ COMMITTED'); }
+        catch (mysqli_sql_exception $e) { if ((int)$e->getCode()===1568) return;throw $e; }
+        throw new RuntimeException('INV_OWNER_TRANSACTION_REQUIRED');
+    }
+
+    private function execute(string $operation, array $r,bool $joined=false): array
     {
         $this->validate($operation, $r);
         $this->identity($r);
@@ -84,7 +109,7 @@ final class AF_ADVINV_OwnerProtocol
         $committing = false;
         $entered = false;
         try {
-            $this->boundary(); // Must precede discovery, BEGIN or rollback of any kind.
+            if (!$joined) $this->boundary(); // Standalone never touches caller tx.
             $this->schema();
             $p = $r['payload'];
             $hint = $this->one('SELECT owner_uid,item_id FROM '.$this->table('external_operations').' WHERE operation_key=?', [$r['operation_key']]);
@@ -95,8 +120,10 @@ final class AF_ADVINV_OwnerProtocol
             if (!$this->one('SELECT uid FROM `'.$this->prefix.'users` WHERE uid=?', [$owner])) throw new RuntimeException('INV_OWNER_UNAVAILABLE');
             $this->running = true;
             $entered = true;
-            if (!$this->db->begin_transaction()) throw new RuntimeException('INV_BEGIN_FAILED');
-            $begun = true;
+            if (!$joined) {
+                if (!$this->db->begin_transaction()) throw new RuntimeException('INV_BEGIN_FAILED');
+                $begun = true;
+            }
             $this->sql('INSERT INTO '.$this->table('owner_state').' (uid,inventory_version) VALUES (?,1) ON DUPLICATE KEY UPDATE uid=uid', [$owner]);
             $state = $this->one('SELECT inventory_version FROM '.$this->table('owner_state').' WHERE uid=? FOR UPDATE', [$owner]);
             $before = (int)$state['inventory_version'];
@@ -109,7 +136,7 @@ final class AF_ADVINV_OwnerProtocol
                 $this->samePrincipal($prior, $r);
                 if (!hash_equals($prior['payload_hash'], $r['payload_hash']) || $prior['intent_json'] !== self::canonical($r)) throw new RuntimeException('INV_IDEMPOTENCY_CONFLICT');
                 $result = $this->receipt($prior);
-                if (!$this->db->rollback()) return $this->unknown($r['operation_key']); // No mutation on replay.
+                if (!$joined && !$this->db->rollback()) return $this->unknown($r['operation_key']); // No mutation on replay.
                 $begun = false;
                 return $result;
             }
@@ -136,7 +163,7 @@ final class AF_ADVINV_OwnerProtocol
             $changed = false;
             if ($operation === 'reserve') {
                 if (!$item || (int)$item['uid'] !== $owner) $code = 'ITEM_NOT_OWNED';
-                elseif ($item['entity'] !== 'equipment' || !in_array($item['subtype'], ['consumable','ammo'], true) || $item['kb_type'] === 'appearance') $code = 'ITEM_KIND_UNSUPPORTED';
+                elseif ($item['entity'] !== 'equipment' || !in_array($item['subtype'], ['consumable','ammo','weapon'], true) || $item['kb_type'] === 'appearance' || ($item['subtype']==='weapon' && ($item['kb_type']!=='arpg_item' || $qty!==1))) $code = 'ITEM_KIND_UNSUPPORTED';
                 elseif ($before !== $p['expected_inventory_version']) $code = 'VERSION_CONFLICT';
                 elseif ($qty > (int)$item['qty'] - $reserved) $code = 'INSUFFICIENT_AVAILABLE';
                 elseif ($before >= self::MAX_VERSION) $code = 'VERSION_EXHAUSTED';
@@ -187,11 +214,13 @@ final class AF_ADVINV_OwnerProtocol
             $result = ['schema_version'=>1,'operation_key'=>$r['operation_key'],'operation_type'=>$operation,'payload_hash'=>$r['payload_hash'],'actor_uid'=>$r['actor']['uid'],'scope'=>$r['scope'],'status'=>$status,'code'=>$code,'external_ref'=>$reservation ? (string)$reservation['id'] : null,'item_id'=>$itemId,'qty'=>$qty,'version'=>$reservation ? (int)$reservation['reservation_version'] : $before,'inventory_versions'=>[['uid'=>$owner,'before'=>$before,'after'=>$before + ($changed ? 1 : 0)]],'reservation'=>$reservation ? ['id'=>(string)$reservation['id'],'remaining_qty'=>(int)$reservation['remaining_qty'],'version'=>(int)$reservation['reservation_version'],'status'=>$reservation['status']] : null];
             $result['result_hash'] = hash('sha256', self::canonical($result));
             $this->sql('INSERT INTO '.$this->table('external_operations').' (operation_key,payload_hash,operation_type,actor_uid,context_system,context_key,owner_uid,item_id,status,external_ref,intent_json,result_json,result_hash,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [$r['operation_key'],$r['payload_hash'],$operation,$r['actor']['uid'],$r['scope']['system'],$r['scope']['context_key'],$owner,$itemId,$status,$result['external_ref'],self::canonical($r),self::canonical($result),$result['result_hash'],time(),time()]);
+            if ($joined) return $result;
             $committing = true;
             if (!$this->db->commit()) return $this->unknown($r['operation_key']);
             $begun = false;
             return $result;
         } catch (mysqli_sql_exception $error) {
+            if ($joined) throw $error; // Outer participant owns the entire rollback.
             if ($committing) return $this->unknown($r['operation_key']); // Never infer rollback after COMMIT dispatch.
             if ($begun) {
                 try { if (!$this->db->rollback()) return $this->unknown($r['operation_key']); }
@@ -395,4 +424,12 @@ final class AF_ADVINV_OwnerProtocol
     {
         if (!is_string($value) || trim($value) === '' || strlen($value) > $max || str_contains($value, "\0") || !preg_match('//u', $value)) throw new InvalidArgumentException('INV_INVALID_TEXT');
     }
+}
+
+/** A participant cannot publish a durable success before the outer owner transaction commits. */
+final class AF_ADVINV_ProvisionalOwnerResult implements JsonSerializable
+{
+    public function __construct(private readonly array $receipt) {}
+    public function serverReceipt(): array {return $this->receipt;}
+    public function jsonSerialize(): never {throw new RuntimeException('INV_RECEIPT_NOT_DURABLE_YET');}
 }

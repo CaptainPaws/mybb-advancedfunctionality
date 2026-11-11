@@ -1,6 +1,12 @@
 # IC-INV-1 v1 — owner-side protocol (ACS-6.1.1)
 
-Статус: **owner APIs и reservation-aware writers реализованы в ACS-6.1.3A/B / combat integration BLOCKED**. [Writer/Shop/transfer/grant и точные ограничения](../design/acs/ACS_6_1_3_IMPLEMENTATION.md). [Реализация, поддерживаемые item kinds и проверки](../design/acs/ACS_6_1_2_IMPLEMENTATION.md). Штатный ACS gateway требует явной server composition и combat recovery; новых HTTP routes и автоматической установки схемы нет.
+Статус: **owner APIs/writers ACS-6.1.3A/B и ограниченная same-writer combat integration ACS-6.2.2 реализованы; production acceptance BLOCKED**. [Writer/Shop/transfer/grant и точные ограничения](../design/acs/ACS_6_1_3_IMPLEMENTATION.md). [Реализация, поддерживаемые item kinds и проверки](../design/acs/ACS_6_1_2_IMPLEMENTATION.md). Штатный ACS gateway требует явной server composition и combat recovery; новых HTTP routes и автоматической установки схемы нет.
+
+## Дополнение ACS-6.2.2 — доказанная same-writer participation
+
+**IMPLEMENTED, узкий профиль; production acceptance BLOCKED.** [ACS-6.2.2 implementation](../design/acs/ACS_6_2_2_IMPLEMENTATION.md) определяет отдельный `participate(reserve|consume|release)` для существующей ACS InnoDB transaction на том же mysqli writer и подтверждённой owner schema. Owner возвращает **provisional** object, не durable receipt до outer COMMIT; не делает BEGIN/COMMIT/ROLLBACK caller work. Внешний результат выдаётся после общего фактического commit Inventory + ACS. MyBB native post остаётся независимым R2 участником; remote owner/другой handle не поддержаны. Это не общий MyBB+ACS transaction protocol.
+
+Standalone APIs/lookup сохраняют прежние semantics. Новый final ACS policy требует own owner, session/controller и отдельный persisted spending grant; view/GM/client flags не дают расхода. Reserve допускает также weapon/arpg_item qty=1, **consume оружия запрещён**. Полный owner guard/version/fingerprint recheck внутри commit закрывает подготовительный gap. Durable reserve в seal не расходует qty; поздний ACS rollback откатывает owner change/receipt. Unknown acknowledgement разрешается существующим ACS terminal lookup с owner receipts; повторного consume нет. Остальной текст ниже сохраняет исходные проектные/исторические ограничения; где он говорит «joinable не реализован», применяется только описанное здесь узкое исключение.
 
 Исходный статус ACS-6.1.1: **CONTRACT PREPARED / runtime BLOCKED**. Это уточнение IC-INV §6 и Architecture §5.5, а не готовый API. Аудит и условия допуска: [ACS-6.1.1](../design/acs/ACS_6_1_1_IMPLEMENTATION.md). Наличие схемы payload или SQL fixture не разрешает боевой расход. Старые writers не заменены и ещё обходят предлагаемую защиту.
 

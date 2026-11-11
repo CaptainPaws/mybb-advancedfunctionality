@@ -203,6 +203,11 @@ function af_advancedcombatsystem_xmlhttp(): void
                 default=>$encounters->command(substr($op,10),$input),
             };
         }
+        elseif($op==='item_equip') {
+            require_once __DIR__.'/modules/Application/ItemActionService.php';
+            $input=[];foreach(['session_id','entity_id','ability_key','expected_version','operation_key'] as $field)$input[$field]=$mybb->get_input($field);
+            $data=(new AF_ACS_ItemActionService(new AF_ACS_EncounterRepository($db),new AF_ACS_SessionAccess))->equipFree($input);
+        }
         elseif(in_array($op,['entity_list','entity_snapshot','entity_register','entity_validate'],true)) {
             $entities=af_advancedcombatsystem_entities();$sid=$mybb->get_input('session_id');
             $input=[];foreach(['session_id','expected_version','operation_key','reason','kind','source_key','name','initial_hp'] as $field)$input[$field]=$mybb->get_input($field);

@@ -176,6 +176,8 @@ Editors/save/read/normalizers должны сохранять primary key, direc
 
 ## 6. IC-INV — AdvancedInventory
 
+**ACS-6.2.2 IMPLEMENTED (bounded combat binding).** Equip/swap mainhand flat-bonus weapon и self HP on_use consumable проходят прежний Resolver/Seal/Publish/Recovery. Critical owner reserve/consume/release участвуют только в доказанной same-writer InnoDB boundary с provisional result до outer COMMIT; native MyBB post остаётся отдельным R2 процессом. Отдельный spending grant обязателен, production flag не включён. Pass/spatial/custody/remote owner и неподдержанные определения возвращают UNSUPPORTED. [Точный scope, proof и fixtures](../design/acs/ACS_6_2_2_IMPLEMENTATION.md), [IC-INV-1 extension](ACS_INVENTORY_OWNER_PROTOCOL.md#дополнение-acs-622--доказанная-same-writer-participation).
+
 **ACS-6.2.1 IMPLEMENTED (initial equipment read only).** Серверный `AF_ADVINV_InventoryRead` читает все страницы `af_inv_get_items(perPage=100)` со стабильным ID order/current writer reads, проверяет completeness и owner version; raw result не сериализуется клиенту. Character registration фиксирует отдельные pinned item snapshots и `af_acs_equipment` (migration 013), сохраняя CS totals и `already_included_do_not_reapply`. Owner guard удерживается до завершения registration transaction; committed retry не пересобирает комплект. UI equipment export не считается этим контрактом. Temporary/disabled layers, equip actions и combat consumption остаются BLOCKED. Подробности и проверки: [ACS_6_2_1_IMPLEMENTATION.md](../design/acs/ACS_6_2_1_IMPLEMENTATION.md).
 
 **EXISTING.** `advancedinventory/advancedinventory.php`, процедурные API; таблицы `af_advinv_items`, `af_advinv_equipped`, `af_advinv_support_slots` с TABLE_PREFIX.
