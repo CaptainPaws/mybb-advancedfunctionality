@@ -193,7 +193,7 @@ function af_advancedcombatsystem_xmlhttp(): void
         }
         elseif(str_starts_with($op,'encounter_')) {
             $encounters=af_advancedcombatsystem_encounters();$sid=$mybb->get_input('session_id');$eid=$mybb->get_input('encounter_id');
-            $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid'] as $field)$input[$field]=$mybb->get_input($field);
+            $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid','mode','uids','assignment_version'] as $field)$input[$field]=$mybb->get_input($field);
             $data=match($op) {
                 'encounter_list'=>$encounters->list($sid,$mybb->get_input('after')?:'0'),
                 'encounter_get'=>$encounters->view($sid,$eid),

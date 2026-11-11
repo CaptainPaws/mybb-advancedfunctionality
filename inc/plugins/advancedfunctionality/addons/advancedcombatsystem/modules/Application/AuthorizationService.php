@@ -31,8 +31,9 @@ final class AF_ACS_AuthorizationService
             'encounter.deadline.manage' => ['scope'=>'session','policy'=>'OWNER_GM_CONFIRM_REASON'],
             'turn.skip' => ['scope'=>'session','policy'=>'OWNER_GM_BOUNDARIES_OBLIGATIONS'],
             'round.advance' => ['scope'=>'session','policy'=>'OWNER_GM_ROSTER_CLOSED'],
+            'npc.controller.assign' => ['scope'=>'entity','policy'=>'NATIVE_THREAD_AND_OWNER_GM_NPC_ONLY'],
             'encounter.manage' => ['scope'=>'session','policy'=>'NATIVE_THREAD_AND_OWNER_GM'],
-            'entity.control' => ['scope' => 'entity', 'policy' => 'RESERVED_DENY'],
+            'entity.control' => ['scope' => 'entity', 'policy' => 'CURRENT_ENTITY_ASSIGNMENT'],
             'entity.consume' => ['scope' => 'entity', 'policy' => 'RESERVED_DENY'],
             'confirmed.correct' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
             'rewards.adjust' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
@@ -42,6 +43,56 @@ final class AF_ACS_AuthorizationService
             'session.reopen' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
             'admin.recover' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
         ];
+    }
+
+    /** A single generation describes the whole assignment, never one budget per UID.
+     * NULL UID is the gm_pool marker, or an explicitly unassigned exclusive/shared NPC.
+     * Caller supplies current persisted rows; no request role or administrative bypass.
+     */
+    public static function assignment(array $rows): array
+    {
+        if (!$rows || count($rows)>100) throw new RuntimeException('ACS_CONTROL_INVALID');
+        $first=$rows[0];$uids=[];
+        if (!in_array($first['mode'],['exclusive','shared','gm_pool'],true)) throw new RuntimeException('ACS_CONTROL_INVALID');
+        foreach ($rows as $row) {
+            foreach (['session_id','entity_id','mode','assignment_version'] as $key) {
+                if ((string)$row[$key] !== (string)$first[$key]) throw new RuntimeException('ACS_CONTROL_INVALID');
+            }
+            if ($row['status']!=='active' || (int)$row['valid_from']>time()
+                || $row['valid_until']!==null && (int)$row['valid_until']<=time()) throw new RuntimeException('ACS_CONTROL_INVALID');
+            $uid=$row['controller_uid']===null?null:(string)$row['controller_uid'];
+            if (in_array($uid,$uids,true)) throw new RuntimeException('ACS_CONTROL_INVALID');
+            $uids[]=$uid;
+        }
+        if (($first['mode']!=='shared' && count($rows)!==1)
+            || in_array(null,$uids,true) && count($rows)!==1
+            || $first['mode']==='gm_pool' && $uids!==[null]) throw new RuntimeException('ACS_CONTROL_INVALID');
+        return ['mode'=>$first['mode'],'assignment_version'=>(string)$first['assignment_version'],'uids'=>array_values(array_filter($uids,static fn($u)=>$u!==null))];
+    }
+
+    public static function sessionGm(array $session,array $roles,string $uid): bool
+    {
+        foreach ($roles as $role) {
+            if ((string)$role['uid']!==$uid || $role['expires_at']!==null && (int)$role['expires_at']<=time()) continue;
+            if ($role['role']==='gm' || $role['role']==='owner' && (string)$session['owner_uid']===$uid) return true;
+        }
+        return false;
+    }
+
+    /** Native thread access is checked by the service before this entity-specific grant. */
+    public static function controller(array $entity,array $rows,array $session,array $roles,string $uid): ?array
+    {
+        try {$set=self::assignment($rows);} catch (RuntimeException) {return null;}
+        if ((string)$entity['session_id']!==(string)$session['id'] || (string)$rows[0]['session_id']!==(string)$session['id']
+            || (string)$rows[0]['entity_id']!==(string)($entity['id']??$entity['entity_id'])) return null;
+        $owned=in_array($entity['kind'],['character','pet'],true);
+        if ($owned) {
+            if ($entity['owner_uid']===null || (string)$entity['owner_uid']!==$uid || $set['mode']!=='exclusive') return null;
+        } elseif (!in_array($entity['kind'],['npc','monster'],true) || $entity['owner_uid']!==null || !self::sessionGm($session,$roles,$uid)) return null;
+        foreach ($rows as $row) {
+            if ((string)$row['controller_uid']===$uid || !$owned && $set['mode']==='gm_pool') return $row;
+        }
+        return null;
     }
 
     /** Retains native MyBB super-admin access ONLY for existing ACP facilities. */

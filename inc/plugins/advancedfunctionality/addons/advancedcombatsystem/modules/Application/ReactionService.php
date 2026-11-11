@@ -8,14 +8,14 @@ final class AF_ACS_ReactionService
     public function __construct(private AF_ACS_EncounterRepository $repo,private AF_ACS_SessionAccess $access){}
     private function source(string $sid,string $eid,string $id,bool $write):array
     {
-        $view=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);$encounter=$this->repo->encounter($sid,$eid);$entity=$this->repo->entity($sid,$id);$c=$this->repo->controllers($sid,$id);$permissions=json_decode($c[0]['permissions_json']??'{}',true);
-        if(!$view['can_register_own']||!$encounter||!$entity||count($c)!==1||$c[0]['controller_uid']!==$this->access->uid()||$entity['owner_uid']!==null&&$entity['owner_uid']!==$this->access->uid()||($permissions['combat_operations_enabled']??false)!==true)throw new RuntimeException('ACS_REACTION_ACCESS_DENIED');
+        $view=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);$encounter=$this->repo->encounter($sid,$eid);$entity=$this->repo->entity($sid,$id);$c=$this->repo->controllerFor($sid,$id,$this->access->uid());$permissions=json_decode($c['permissions_json']??'{}',true);
+        if(!$view['can_register_own']||!$encounter||!$entity||!$c||($permissions['combat_operations_enabled']??false)!==true)throw new RuntimeException('ACS_REACTION_ACCESS_DENIED');
         $round=$this->repo->currentRound($encounter);$individual=null;
         if($round)foreach($this->repo->allRoundTurns($round['id']) as $turn)foreach($this->repo->individualTurns([$turn['id']]) as $i)if($i['entity_id']===$id)$individual=$i;
         if(!$round||$round['status']!=='open'||!$individual)throw new RuntimeException('ACS_REACTION_ROUND_UNAVAILABLE');
         if($write&&($encounter['status']!=='active'||$entity['life_state']!=='active'||!$this->repo->reactionParticipant($sid,$eid,$id)))throw new RuntimeException('ACS_REACTION_SOURCE_UNAVAILABLE');
         if(!in_array((string)$individual['reaction_used'],['0','1'],true))throw new RuntimeException('ACS_REACTION_LIMIT_INVALID');
-        return [$view['session'],$encounter,$entity,$c[0],$individual];
+        $c['controller_uid']=$this->access->uid();return [$view['session'],$encounter,$entity,$c,$individual];
     }
     public function view(string $sid,string $eid,string $entity):array
     {
@@ -29,8 +29,8 @@ final class AF_ACS_ReactionService
         $view=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);$members=$this->repo->participants($eid,'0',201);$byId=array_column($members,null,'entity_id');$side=$byId[$source]['side_id']??null;$allies=[];
         foreach($this->repo->allRelations($eid) as $rel)if($rel['relationship']==='allied'){$allies[$rel['side_a'].':'.$rel['side_b']]=true;$allies[$rel['side_b'].':'.$rel['side_a']]=true;}
         $valid=[];foreach($members as $member){if($member['participation']!=='engaged'||$side===null||$member['side_id']===null||($member['side_id']!==$side&&!isset($allies[$side.':'.$member['side_id']])))continue;
-            $visibility=json_decode($member['visibility_json'],true);$controllers=$this->repo->controllers($sid,$member['entity_id']);
-            if(($visibility!==['schema_version'=>1,'scope'=>'gm'])||!$view['can_manage']&&($controllers[0]['controller_uid']??null)!==$this->access->uid())continue;$valid[]=$member['entity_id'];
+            $visibility=json_decode($member['visibility_json'],true);$controller=$this->repo->controllerFor($sid,$member['entity_id'],$this->access->uid());
+            if(($visibility!==['schema_version'=>1,'scope'=>'gm'])||!$view['can_manage']&&!$controller)continue;$valid[]=$member['entity_id'];
         }
         if($selection==='all_allies'){if($requested||!$view['can_manage'])throw new RuntimeException('ACS_REACTION_TARGETS_INVALID');$requested=$valid;usort($requested,static fn($a,$b)=>strlen($a)<=>strlen($b)?:strcmp($a,$b));}
         if(!$requested||count(array_unique($requested))!==count($requested)||array_diff($requested,$valid)||$selection==='single_ally'&&(count($requested)!==1||$requested[0]===$source))throw new RuntimeException('ACS_REACTION_TARGETS_INVALID');

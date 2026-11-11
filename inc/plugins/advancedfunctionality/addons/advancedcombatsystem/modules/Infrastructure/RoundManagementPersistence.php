@@ -32,10 +32,13 @@ trait AF_ACS_RoundManagementPersistence
         try {
             $drafts=$this->futureTable('drafts');$sealed=$this->futureTable('sealed_actions');$submissions=$this->futureTable('submissions');
             $scope='encounter_id=?'.($turn===null?'':' AND turn_id=?');$args=$turn===null?[$eid]:[$eid,$turn];
+            $parallel=$readOnlyPreview && $turn!==null && $this->parallelNpcPlans($sid,$eid,$turn);
             $otherDraft=$sealedDraft===null?'':' AND id<>'.self::integer($sealedDraft);
-            if($drafts && $this->sql('SELECT id FROM '.$drafts.' WHERE '.$scope.$otherDraft." AND status NOT IN ('published','cancelled')".($readOnlyPreview?" AND (status<>'draft' OR confirmation_hash IS NOT NULL OR pid IS NOT NULL)":"")." LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
+            if(!$parallel && $drafts && $this->sql('SELECT id FROM '.$drafts.' WHERE '.$scope.$otherDraft." AND status NOT IN ('published','cancelled')".($readOnlyPreview?" AND (status<>'draft' OR confirmation_hash IS NOT NULL OR pid IS NOT NULL)":"")." LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
             if($sealed && !$drafts)throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
-            if($sealed && $this->sql('SELECT a.id FROM '.$sealed.' a JOIN '.$drafts.' d ON d.id=a.draft_id WHERE d.encounter_id=?'.($turn===null?'':' AND d.turn_id=?')." AND a.status NOT IN ('published','cancelled','consumed')".($sealedDraft===null?'':' AND d.id<>'.self::integer($sealedDraft))." LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
+            if(!$parallel && $sealed && $this->sql('SELECT a.id FROM '.$sealed.' a JOIN '.$drafts.' d ON d.id=a.draft_id WHERE d.encounter_id=?'.($turn===null?'':' AND d.turn_id=?')." AND a.status NOT IN ('published','cancelled','consumed')".($sealedDraft===null?'':' AND d.id<>'.self::integer($sealedDraft))." LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
+            // Speculation cannot hide another plan's owner-managed item reservation.
+            if($parallel && $sealed && $this->sql('SELECT a.id FROM '.$sealed.' a JOIN '.$drafts.' d ON d.id=a.draft_id WHERE d.encounter_id=? AND d.turn_id=?'.($sealedDraft===null?'':' AND d.id<>'.self::integer($sealedDraft))." AND a.status='sealed' AND JSON_UNQUOTE(JSON_EXTRACT(a.payload_json,'$.action.ability_key')) LIKE 'item:%' LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
             // A read-only sealed calculation may inspect its own frozen, claimed submission only.
             $ownSubmission=$readOnlyPreview && $sealedDraft!==null ? ' AND NOT (draft_id='.self::integer($sealedDraft).' AND active_turn_id IS NOT NULL AND active_turn_id=turn_id)' : '';
             if($submissions && $this->sql('SELECT submission_id FROM '.$submissions.' WHERE '.$scope." AND status NOT IN ('published','committed','rejected','cancelled')".$ownSubmission.' LIMIT 1',$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');

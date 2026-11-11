@@ -23,8 +23,8 @@ final class AF_ACS_ClockService
         $roster=json_decode($turn['roster_json'],true,32,JSON_THROW_ON_ERROR);$member=null;
         foreach($roster['members']??[] as $candidate)if((string)$candidate['entity_id']===$entityId)$member=$candidate;
         $entity=$this->repository->entity($sid,AF_ACS_Repository::integer($entityId));
-        $controllers=$this->repository->controllers($sid,$entityId);
-        if(!$member || !$entity || $entity['control_group_id']!==$turn['control_group_id'] || count($controllers)!==1 || $controllers[0]['controller_uid']!==$this->access->uid() || $entity['owner_uid']!==null && $entity['owner_uid']!==$this->access->uid())throw new RuntimeException('ACS_AP_ACCESS_DENIED');
+        $controller=$this->repository->controllerFor($sid,$entityId,$this->access->uid());
+        if(!$member || !$entity || $entity['control_group_id']!==$turn['control_group_id'] || !$controller)throw new RuntimeException('ACS_AP_ACCESS_DENIED');
         $individual=null;foreach($this->repository->individualTurns([$turnId]) as $candidate)if($candidate['entity_id']===$entityId)$individual=$candidate;
         $ready=$individual&&$individual['start_done']==='1'&&$individual['end_done']==='0'&&$this->repository->boundary(AF_ACS_Clock::entityStart($individual['id']),$sid)&&$entity['life_state']==='active'&&AF_ACS_Effects::ordinaryActionAllowed(['status_instances'=>$this->repository->statusProjection($sid)['instances']],$entityId);
         $budget=(int)AF_ACS_Repository::integer((string)$turn['ap_budget'],'2147483647',true);$spent=(int)AF_ACS_Repository::integer((string)$turn['ap_spent'],'2147483647',true);$commit=(int)AF_ACS_Repository::integer((string)$turn['pre_round_ap_commitment'],'2147483647',true);
@@ -53,8 +53,8 @@ final class AF_ACS_ClockService
         $v=(new AF_ACS_SessionService($this->repository,$this->access))->view($sid);$e=$this->repository->entity($sid,$source);
         if(!$e)throw new RuntimeException('ACS_UPKEEP_ACCESS_DENIED');
         if(!$v['can_manage']){
-            $c=$this->repository->controllers($sid,$source);
-            if(!$v['can_register_own']||count($c)!==1||$c[0]['controller_uid']!==$this->access->uid()||$e['owner_uid']!==null&&$e['owner_uid']!==$this->access->uid())throw new RuntimeException('ACS_UPKEEP_ACCESS_DENIED');
+            $c=$this->repository->controllerFor($sid,$source,$this->access->uid());
+            if(!$v['can_register_own']||!$c)throw new RuntimeException('ACS_UPKEEP_ACCESS_DENIED');
         }return $v;
     }
     public function sustained(string $sid,string $eid):array

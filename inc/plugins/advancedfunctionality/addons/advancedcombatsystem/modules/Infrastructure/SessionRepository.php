@@ -19,7 +19,7 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
     }
     public function roles(string $id, string $uid): array
     {
-        return $this->sql('SELECT role FROM '.$this->table('session_roles').' WHERE session_id=? AND uid=? AND (expires_at IS NULL OR expires_at>?)', [self::integer($id),self::integer($uid,'4294967295'),time()])['rows'];
+        return $this->sql('SELECT uid,role,expires_at FROM '.$this->table('session_roles').' WHERE session_id=? AND uid=? AND (expires_at IS NULL OR expires_at>?)', [self::integer($id),self::integer($uid,'4294967295'),time()])['rows'];
     }
     public function members(string $id): array
     {

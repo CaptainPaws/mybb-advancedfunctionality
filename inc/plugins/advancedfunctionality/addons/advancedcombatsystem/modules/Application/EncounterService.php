@@ -68,13 +68,16 @@ final class AF_ACS_EncounterService
         if($owned && ($entity['owner_uid']===null || $entity['group_owner']!==$entity['owner_uid'] || $entity['group_kind']!=='player'))throw new RuntimeException('ACS_CONTROL_INVALID');
         if(!$owned && ($entity['owner_uid']!==null || $entity['group_owner']!==null || $entity['group_kind']!=='independent'))throw new RuntimeException('ACS_CONTROL_INVALID');
         $controllers=$this->repository->controllers($sid,$id);
-        if(count($controllers)!==1 || $controllers[0]['mode']!=='exclusive' || $controllers[0]['controller_uid']===null)throw new RuntimeException('ACS_CONTROL_INVALID');
-        $controller=$controllers[0]['controller_uid'];
-        if($owned && $controller!==$entity['owner_uid'])throw new RuntimeException('ACS_CONTROL_INVALID');
+        $set=AF_ACS_AuthorizationService::assignment($controllers);
+        if($owned && ($set['mode']!=='exclusive' || $set['uids']!==[$entity['owner_uid']]))throw new RuntimeException('ACS_CONTROL_INVALID');
         if($checkController) {
-        $this->access->user($controller);$this->access->thread((string)$this->repository->session($sid)['tid'],$controller);
-        $roles=array_column($this->repository->roles($sid,$controller),'role');
-        if(!array_intersect($roles,$owned?['owner','gm','assistant_gm','player']:['owner','gm']))throw new RuntimeException('ACS_CONTROL_INVALID');
+            if(!$set['uids'] && $set['mode']!=='gm_pool')throw new RuntimeException('ACS_CONTROL_INVALID');
+            $session=$this->repository->session($sid);
+            foreach($set['uids'] as $controller){
+                $this->access->user($controller);$this->access->thread($session['tid'],$controller);
+                $roles=$this->repository->roles($sid,$controller);
+                if($owned ? !array_intersect(array_column($roles,'role'),['owner','gm','assistant_gm','player']) : !AF_ACS_AuthorizationService::sessionGm($session,$roles,$controller))throw new RuntimeException('ACS_CONTROL_INVALID');
+            }
         }
         if(!hash_equals($entity['content_hash'],hash('sha256',$entity['payload_json'])))throw new RuntimeException('ACS_SNAPSHOT_HASH_MISMATCH');
         $snapshot=json_decode($entity['payload_json'],true,64,JSON_THROW_ON_ERROR);
@@ -184,7 +187,7 @@ final class AF_ACS_EncounterService
     public function command(string $op,array $input): array
     {
         $this->access->csrf();$sid=AF_ACS_Repository::integer($input['session_id']??null);
-        if(!in_array($op,['create','side_create','relation_set','participant_add','participant_side','controller_assign','round_start'],true))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
+        if(!in_array($op,['create','side_create','relation_set','participant_add','participant_side','controller_assign','controller_set','round_start'],true))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
         $key=(string)($input['operation_key']??'');if(!preg_match('/\A[a-z0-9][a-z0-9_.-]{15,95}\z/D',$key))throw new RuntimeException('ACS_OPERATION_KEY_REQUIRED');
         $request=['schema_version'=>1,'session_id'=>$sid,'actor_uid'=>$this->access->uid(),'expected_version'=>AF_ACS_Repository::integer($input['expected_version']??null),'reason'=>self::text($input['reason']??null,1000)];
         if(isset($input['tid']) && $input['tid']!=='')$request['tid']=AF_ACS_Repository::integer($input['tid'],'4294967295');
@@ -192,9 +195,18 @@ final class AF_ACS_EncounterService
         else {
             $request['encounter_id']=AF_ACS_Repository::integer($input['encounter_id']??null);
             $request['encounter_version']=AF_ACS_Repository::integer($input['encounter_version']??null,'18446744073709551614');
-            foreach(match($op){'relation_set'=>['side_a','side_b'],'participant_add','participant_side'=>['entity_id','side_id'],'controller_assign'=>['entity_id','uid'],default=>[]} as $field)$request[$field]=AF_ACS_Repository::integer($input[$field]??null,$field==='uid'?'4294967295':'18446744073709551615');
+            foreach(match($op){'relation_set'=>['side_a','side_b'],'participant_add','participant_side'=>['entity_id','side_id'],'controller_assign'=>['entity_id','uid'],'controller_set'=>['entity_id'],default=>[]} as $field)$request[$field]=AF_ACS_Repository::integer($input[$field]??null,$field==='uid'?'4294967295':'18446744073709551615');
             if($op==='side_create')$request['name']=self::text($input['name']??null,191);
             if($op==='relation_set'){$relation=(string)($input['relationship']??'');if(!in_array($relation,['allied','neutral','hostile'],true)||$request['side_a']===$request['side_b'])throw new RuntimeException('ACS_RELATION_INVALID');$request['relationship']=$relation;}
+        }
+        if($op==='controller_set') {
+            $request['assignment_version']=AF_ACS_Repository::integer($input['assignment_version']??null,'18446744073709551614');
+            $request['mode']=(string)($input['mode']??'');$uids=$input['uids']??[];
+            if(is_string($uids))$uids=trim($uids)===''?[]:explode(',',trim($uids));
+            if(!in_array($request['mode'],['exclusive','shared','gm_pool'],true)||!is_array($uids)||!array_is_list($uids)||count($uids)>100)throw new RuntimeException('ACS_CONTROL_INVALID');
+            $request['uids']=array_map(static fn($u)=>AF_ACS_Repository::integer(is_string($u)?trim($u):$u,'4294967295'),$uids);
+            if(count(array_unique($request['uids']))!==count($request['uids']) || $request['mode']==='exclusive' && count($uids)>1 || $request['mode']==='gm_pool' && $uids)throw new RuntimeException('ACS_CONTROL_INVALID');
+            sort($request['uids'],SORT_STRING);
         }
         return $this->repository->command('session:'.$request['actor_uid'].':'.$key,'encounter.'.$op,$request,
             function($session)use($sid,$request){$this->authorize($sid,true,$request['tid']??null);},
@@ -203,7 +215,7 @@ final class AF_ACS_EncounterService
                 $encounter=$this->repository->encounter($sid,$request['encounter_id'],true);
                 if(!$encounter)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
                 if($op==='round_start' && ($encounter['status']!=='preparation' || $this->repository->firstRound($encounter['id'])))throw new RuntimeException('ACS_FIRST_ROUND_EXISTS');
-                if($encounter['status']!=='preparation' && !($encounter['status']==='active' && $op==='participant_add'))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
+                if($encounter['status']!=='preparation' && !($encounter['status']==='active' && $op==='participant_add') && !(in_array($encounter['status'],['active','paused'],true) && $op==='controller_set'))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
                 if($encounter['encounter_version']!==$request['encounter_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');
                 if($op==='round_start') {
                     $ready=$this->readiness($sid,$encounter['id']);
@@ -214,16 +226,21 @@ final class AF_ACS_EncounterService
                 if($op==='relation_set'){$this->side($encounter['id'],$request['side_a']);$this->side($encounter['id'],$request['side_b']);}
                 $change=$request;
                 if(isset($entity)){$change['_snapshot_id']=$entity['template_snapshot_id'];$change['_group_id']=$entity['control_group_id'];}
-                if($op==='controller_assign') {
+                if(in_array($op,['controller_assign','controller_set'],true)) {
                     $entity=$this->entity($sid,$request['entity_id'],$encounter['id'],false);
                     if($entity['owner_uid']!==null || !in_array($entity['kind'],['npc','monster'],true) || !$this->repository->participantExists($encounter['id'],$entity['id']))throw new RuntimeException('ACS_CONTROL_INVALID');
-                    $roles=array_column($this->repository->roles($sid,$request['uid']),'role');
-                    if(!array_intersect($roles,['owner','gm']))throw new RuntimeException('ACS_CONTROL_INVALID');
-                    $this->access->user($request['uid']);$this->access->thread($session['tid'],$request['uid']);
+                    // Assignment management is distinct from permission to act. It is NPC-only,
+                    // requires a persisted session GM, and never grants a critical/admin bypass.
+                    if(!AF_ACS_AuthorizationService::sessionGm($session,$this->repository->roles($sid,$request['actor_uid']),$request['actor_uid']))throw new RuntimeException('ACS_GM_REQUIRED');
+                    $change['mode']=$op==='controller_assign'?'exclusive':$request['mode'];
+                    $change['uids']=$op==='controller_assign'?[$request['uid']]:$request['uids'];
+                    foreach($change['uids'] as $uid){
+                        if(!AF_ACS_AuthorizationService::sessionGm($session,$this->repository->roles($sid,$uid),$uid))throw new RuntimeException('ACS_CONTROL_INVALID');
+                        $this->access->user($uid);$this->access->thread($session['tid'],$uid);
+                    }
                     $old=AF_ACS_Repository::integer($entity['_controller']['assignment_version'],'18446744073709551614');
+                    if($op==='controller_set' && $request['assignment_version']!==$old)throw new RuntimeException('ACS_VERSION_CONFLICT');
                     $change['_previous_assignment_version']=$old;
-                    $change['_assignment_id']=$entity['_controller']['id'];
-                    $change['_previous_controller_uid']=$entity['_controller']['controller_uid'];
                 }
                 return $this->repository->change($session,$encounter,$op,$change);
             });
