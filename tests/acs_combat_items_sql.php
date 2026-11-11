@@ -60,6 +60,7 @@ try {
   snapshot_assert($link->query("SELECT item_id FROM t_af_advinv_equipped WHERE equip_slot='weapon_mainhand'")->fetch_row()[0]==20,'Free equip changed permanent binding');
   echo "ACS free equipment: 0 AP, idempotent CAS, pinned delta once and permanent binding separation passed\n";return;
  }
+ if (isset($GLOBALS['acsCustodyFixture']) && ($argv[2]??'')==='adopt') (new AF_ACS_ItemActionService($repo,$access))->equipFree(['session_id'=>$sid,'entity_id'=>$actor,'expected_version'=>$repo->session($sid)['session_version'],'ability_key'=>'item:swap:21','operation_key'=>'custody_adopt_fixture1']);
  // Seed one pending group turn; tests exercise real Builder/Seal/Writer, not a second combat simulator.
  $e=$repo->itemEntity($sid,$actor);$group=$e['control_group_id'];
  itemInsert($link,'af_acs_encounters',['id'=>1,'session_id'=>$sid,'status'=>'active','encounter_version'=>1,'round_number'=>1,'visibility'=>'gm','config_snapshot_id'=>$e['template_snapshot_id'],'config_json'=>'{"schema_version":1}','created_at'=>time()]);
@@ -70,6 +71,7 @@ try {
  itemInsert($link,'af_acs_turns',['id'=>1,'round_id'=>1,'control_group_id'=>$group,'status'=>'pending','ap_budget'=>3,'ap_spent'=>0,'seal_quota_spent'=>0,'pre_round_ap_commitment'=>0,'turn_version'=>1,'roster_json'=>AF_ACS_Repository::json($roster)]);
  itemInsert($link,'af_acs_entity_turns',['id'=>1,'turn_id'=>1,'entity_id'=>$actor,'start_done'=>1,'end_done'=>0,'reaction_used'=>0,'entity_turn_version'=>1]);
  $boundary=AF_ACS_Clock::entityStart('1');itemInsert($link,'af_acs_operations',['operation_key'=>$boundary,'session_id'=>$sid,'encounter_id'=>1,'kind'=>'clock.entity_start','payload_hash'=>hash('sha256','fixture'),'status'=>'committed','operation_version'=>1,'request_json'=>'{"schema_version":1}','result_json'=>AF_ACS_Repository::json(['schema_version'=>1,'entity_turn_id'=>'1','boundary_key'=>$boundary]),'updated_at'=>time()]);
+ if (isset($GLOBALS['acsCustodyFixture'])) {($GLOBALS['acsCustodyFixture'])(get_defined_vars());return;}
  $builder=new AF_ACS_BuilderService($repo,$access);$scope=$builder->context($sid,'1','1');
  $actions=[['actor_id'=>$actor,'ability_key'=>'item:swap:21','targets'=>[$actor],'parameters'=>[]],['actor_id'=>$actor,'ability_key'=>'item:consume:22','targets'=>[$actor],'parameters'=>[]]];
  if (($argv[2]??'')==='shortage') {
