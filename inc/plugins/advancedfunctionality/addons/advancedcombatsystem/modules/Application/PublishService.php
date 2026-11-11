@@ -52,7 +52,11 @@ final class AF_ACS_PublishService
         $session=$this->preparation->session($draft['session_id'])??throw new RuntimeException('ACS_SESSION_UNAVAILABLE');
         $this->access->draftThread($session['tid']);
         if (!$this->preparation->roles($draft['session_id'],$uid)) { throw new RuntimeException('ACS_COMBAT_PERMISSION_DENIED'); }
-        $row=$this->store->issue(['schema_version'=>1,'author_uid'=>$uid]+$request,static function(array $current) use ($draft,$uid): void {
+        $row=$this->store->issue(['schema_version'=>1,'author_uid'=>$uid]+$request,function(array $current) use ($draft,$uid): void {
+            if($current['status']==='sealed')foreach(json_decode($current['mechanics_json'],true,32,JSON_THROW_ON_ERROR)['actions'] as $action){
+                $category=AF_ACS_ItemActionService::isItem($action['ability_key'])?(str_starts_with($action['ability_key'],'item:consume:')?'item_consume':'equipment_change'):'ordinary';
+                if(!$this->preparation->controllerFor($current['session_id'],$action['actor_id'],$uid,$category))throw new RuntimeException('ACS_COMBAT_CONTROL_DENIED');
+            }
             if ($current['author_uid']!==$uid || $current['session_id']!==$draft['session_id'] || $current['turn_id']!==$draft['turn_id']) {
                 throw new RuntimeException('ACS_COMBAT_PERMISSION_DENIED');
             }

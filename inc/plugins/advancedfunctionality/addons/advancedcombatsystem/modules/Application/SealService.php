@@ -78,7 +78,7 @@ final class AF_ACS_SealService
         return $this->repo->sealCommand($request,function($d)use($op){
             $this->draft($d['id']);$s=$this->scope($d);if($s['encounter_status']!=='active'||$s['turn']['status']!=='pending')throw new RuntimeException('ACS_SEAL_TURN_UNAVAILABLE');
             if($op!=='cancel_tail') {
-                if (array_filter($this->actions($d),fn($a)=>AF_ACS_ItemActionService::isItem($a['ability_key']))) {global $db;$uid=(int)$this->access->uid();(new AF_ADVINV_InventoryRead($db))->fence($uid,$uid);}
+                foreach($this->actions($d) as $a)if(AF_ACS_ItemActionService::isItem($a['ability_key'])){global $db;$uid=(int)$this->access->uid();$owner=(int)$this->repo->entity($d['session_id'],$a['actor_id'])['owner_uid'];$category=$owner===$uid?'ordinary':(str_starts_with($a['ability_key'],'item:consume:')?'item_consume':'equipment_change');AF_ACS_ItemActionService::reader($db,$uid,$d['session_id'],$a['actor_id'],$category)->fence($owner,$uid);}
                 $this->prepare($d,$this->actions($d));
             }
         },function($d,$operation)use($op,$request){

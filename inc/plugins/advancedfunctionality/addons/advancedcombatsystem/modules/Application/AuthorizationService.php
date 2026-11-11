@@ -31,6 +31,8 @@ final class AF_ACS_AuthorizationService
             'encounter.deadline.manage' => ['scope'=>'session','policy'=>'OWNER_GM_CONFIRM_REASON'],
             'turn.skip' => ['scope'=>'session','policy'=>'OWNER_GM_BOUNDARIES_OBLIGATIONS'],
             'round.advance' => ['scope'=>'session','policy'=>'OWNER_GM_ROSTER_CLOSED'],
+            'delegation.grant'=>['scope'=>'entity','policy'=>'OWNER_CONSENT_OR_EXPLICIT_REPLACEMENT'],
+            'delegation.revoke'=>['scope'=>'entity','policy'=>'OWNER_DELEGATE_OR_EXPLICIT_REPLACEMENT'],
             'npc.controller.assign' => ['scope'=>'entity','policy'=>'NATIVE_THREAD_AND_OWNER_GM_NPC_ONLY'],
             'encounter.manage' => ['scope'=>'session','policy'=>'NATIVE_THREAD_AND_OWNER_GM'],
             'entity.control' => ['scope' => 'entity', 'policy' => 'CURRENT_ENTITY_ASSIGNMENT'],
@@ -80,19 +82,48 @@ final class AF_ACS_AuthorizationService
     }
 
     /** Native thread access is checked by the service before this entity-specific grant. */
-    public static function controller(array $entity,array $rows,array $session,array $roles,string $uid): ?array
+    public static function controller(array $entity,array $rows,array $session,array $roles,string $uid,array $delegations=[],string $category='ordinary'): ?array
     {
         try {$set=self::assignment($rows);} catch (RuntimeException) {return null;}
         if ((string)$entity['session_id']!==(string)$session['id'] || (string)$rows[0]['session_id']!==(string)$session['id']
             || (string)$rows[0]['entity_id']!==(string)($entity['id']??$entity['entity_id'])) return null;
         $owned=in_array($entity['kind'],['character','pet'],true);
         if ($owned) {
-            if ($entity['owner_uid']===null || (string)$entity['owner_uid']!==$uid || $set['mode']!=='exclusive') return null;
+            if ($entity['owner_uid']===null || $set['mode']!=='exclusive' || $set['uids']!==[(string)$entity['owner_uid']]) return null;
+            if((string)$entity['owner_uid']!==$uid)return self::delegatedController($entity,$rows[0],$session,$roles,$uid,$delegations,$category);
         } elseif (!in_array($entity['kind'],['npc','monster'],true) || $entity['owner_uid']!==null || !self::sessionGm($session,$roles,$uid)) return null;
         foreach ($rows as $row) {
             if ((string)$row['controller_uid']===$uid || !$owned && $set['mode']==='gm_pool') return $row;
         }
         return null;
+    }
+
+    public const DELEGATION_ACTIONS=['ordinary','item_consume','equipment_change','escape','surrender'];
+
+    /** Persisted consent is independent of controller_uid; grants never change ownership. */
+    private static function delegatedController(array $entity,array $controller,array $session,array $roles,string $uid,array $grants,string $category): ?array
+    {
+        if(!in_array($category,self::DELEGATION_ACTIONS,true))return null;
+        $member=false;foreach($roles as $role)if((string)$role['uid']===$uid && ($role['expires_at']===null || (int)$role['expires_at']>time()) && in_array($role['role'],['owner','gm','assistant_gm','player'],true))$member=true;
+        if(!$member)return null;
+        foreach($grants as $grant){
+            if((string)$grant['session_id']!==(string)$session['id'] || (string)$grant['owner_uid']!==(string)$entity['owner_uid'] || (string)$grant['delegate_uid']!==$uid || $grant['status']!=='active' || $grant['valid_until']!==null && (int)$grant['valid_until']<=time())continue;
+            try{$scope=json_decode($grant['scope_json'],true,32,JSON_THROW_ON_ERROR);}catch(Throwable){continue;}
+            if(($scope['schema_version']??null)!==1 || ($scope['scope']??null)!=='session' || !isset($scope['valid_from']) || (int)$scope['valid_from']>time()
+                || !is_array($scope['entity_ids']??null) || !array_is_list($scope['entity_ids']) || !is_array($scope['permitted_actions']??null) || !array_is_list($scope['permitted_actions']) || !in_array($category,$scope['permitted_actions'],true) || array_diff($scope['permitted_actions'],self::DELEGATION_ACTIONS))continue;
+            if(!in_array('ordinary',$scope['permitted_actions'],true) || (($scope['control_group_id']??null)!==null)===(bool)$scope['entity_ids'])continue;
+            $exact=in_array((string)$entity['id'],$scope['entity_ids']??[],true);
+            $group=($scope['control_group_id']??null)!==null && (string)$entity['control_group_id']===$scope['control_group_id'];
+            if(!$exact&&!$group)continue;
+            $controller['delegation_id']=(string)$grant['id'];$controller['delegation_version']=(string)$grant['delegation_version'];
+            $controller['delegation_category']=$category;return $controller;
+        }
+        return null;
+    }
+
+    public static function controlProof(array $grant): string
+    {
+        return ($grant['delegation_id']??'owner').':'.($grant['delegation_version']??'0').':'.$grant['assignment_version'];
     }
 
     /** Retains native MyBB super-admin access ONLY for existing ACP facilities. */

@@ -38,11 +38,14 @@ final class AF_ACS_QueryService
     public function select(string $sid,string $eid):array
     {
         if(!af_is_addon_enabled('knowledgebase'))self::fail('preview_dependency_unavailable');
-        $view=(new AF_ACS_EncounterService($this->repo,$this->access))->view($sid,$eid);
+        $sessionView=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);
+        $encounter=$this->repo->encounter($sid,$eid);if(!$encounter)self::fail('preview_target_forbidden');
+        $view=['session'=>$sessionView['session'],'encounter'=>$encounter];$gm=$sessionView['can_manage'];
         if($view['session']['status']!=='active'||$view['encounter']['status']!=='active')self::fail('preview_encounter_not_active');
         $members=$this->repo->participants($eid,'0',201);if(count($members)>100)self::fail('preview_pagination_required');$actors=[];$targets=[];
         foreach($members as $m){if($m['participation']!=='engaged')continue;
-            $visibility=json_decode($m['visibility_json'],true,16,JSON_THROW_ON_ERROR);if($visibility!==['schema_version'=>1,'scope'=>'gm'])continue;
+            $visibility=json_decode($m['visibility_json'],true,16,JSON_THROW_ON_ERROR);$own=$this->repo->controllerFor($sid,$m['entity_id'],$this->access->uid())!==null;
+            if(!$own && !($gm&&$visibility===['schema_version'=>1,'scope'=>'gm']) && $visibility!==['schema_version'=>1,'scope'=>'participants'])continue;
             $targets[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$m['name'],'side_id'=>$m['side_id']];
             if($this->repo->controllerFor($sid,$m['entity_id'],$this->access->uid())!==null)$actors[$m['entity_id']]=$targets[$m['entity_id']];
         }
@@ -60,7 +63,7 @@ final class AF_ACS_QueryService
         $sources=[$actor=>$this->source($sid,$actor),$target=>$this->source($sid,$target)];if($sources[$actor]['row']['life_state']!=='active')self::fail('preview_actor_unavailable');$turns=[];$groups=[];$reactionTurns=[];$reactionKinds=[];$versions=['session_version'=>$view['session']['session_version'],'encounter_version'=>$view['encounter']['encounter_version'],'round_version'=>(string)$round['round_version']];
         if($barriers['pools']||array_filter($reactions['entries'],static fn($e)=>isset($e['spec']['selection']))){
             $needed=[];foreach($barriers['pools'] as $pool)array_push($needed,$pool['source_entity_id'],...$pool['targets']);foreach($reactions['entries'] as $reaction)array_push($needed,$reaction['entity_id'],...$reaction['protected_targets']);
-            foreach($selection['members'] as $m){$id=$m['entity_id'];if(isset($sources[$id])||!in_array($id,$needed,true))continue;if(json_decode($m['visibility_json'],true)!==['schema_version'=>1,'scope'=>'gm'])continue;$sources[$id]=$this->source($sid,$id);}
+            foreach($selection['members'] as $m){$id=$m['entity_id'];if(isset($sources[$id])||!in_array($id,$needed,true))continue;if(!isset($selection['targets'][$id]))continue;$sources[$id]=$this->source($sid,$id);}
         }
         foreach($this->repo->allRoundTurns($round['id']) as $turn){
             foreach($sources as $id=>$source){$id=(string)$id;if($source['row']['control_group_id']!==$turn['control_group_id'])continue;
@@ -89,7 +92,8 @@ final class AF_ACS_QueryService
         if(!isset($turns[$actor],$turns[$target])||$turns[$actor]['status']!=='pending'||!$turns[$actor]['started'])self::fail('preview_turn_unavailable');
         if(!(new AF_ACS_EncounterService($this->repo,$this->access))->clock()->available($sid,$turns[$actor]['id'],$actor)['actions_ready'])self::fail('ACS_STATUS_ACTION_NOT_READY');
         $this->repo->assertNoObligations($sid,$eid,$turns[$actor]['id'],true,$sealedDraft);
-        $versions['actor_controller_version']=$this->repo->controllerFor($sid,$actor,$this->access->uid())['assignment_version']??throw new RuntimeException('ACS_CONTROL_INVALID');
+        $control=$this->repo->controllerFor($sid,$actor,$this->access->uid())??throw new RuntimeException('ACS_CONTROL_INVALID');
+        $versions['actor_controller_version']=$control['assignment_version'];$versions['actor_control_proof']=AF_ACS_AuthorizationService::controlProof($control);
         $versions['custody_state_hash']=hash('sha256',serialize($this->repo->custodyRows($sid)));$versions['reaction_registry_hash']=$reactions['fingerprint'];$versions['barrier_state_hash']=$barriers['fingerprint'];$protectionProof=[];foreach($sources as $id=>$source)$protectionProof[$id]=[$source['row']['state_version'],$source['row']['content_hash'],$source['resources']['fingerprint']];$versions['protection_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'sources'=>$protectionProof,'turns'=>$reactionTurns,'groups'=>$groups]));
         $statusProjection=$this->repo->statusProjection($sid);foreach($this->repo->statusRows($sid) as $effect)if(($effect['scope']??null)==='combat'&&$effect['status']==='active'&&(string)$effect['encounter_id']!==$eid&&(json_decode($effect['payload_json'],true,64,JSON_THROW_ON_ERROR)['kind']??null)==='barrier')self::fail('ACS_COMBAT_RESET_REQUIRED');$versions['status_state_hash']=$statusProjection['fingerprint'];
         foreach($statusProjection['instances'] as $instance)if($instance['status']==='active'&&$instance['spec']['scope']==='combat'&&$instance['encounter_id']!==$eid)self::fail('ACS_COMBAT_RESET_REQUIRED');
@@ -134,7 +138,7 @@ final class AF_ACS_QueryService
             $own=$this->repo->controllerFor($sid,$m['entity_id'],$this->access->uid())!==null;
             if($own)$actors[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$m['name'],'group_id'=>$m['control_group_id'],'side_id'=>$m['side_id']];
             $visibility=json_decode($m['visibility_json'],true,16,JSON_THROW_ON_ERROR);
-            if($gm&&$visibility===['schema_version'=>1,'scope'=>'gm'])$targets[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$m['name'],'side_id'=>$m['side_id']];
+            if($gm&&$visibility===['schema_version'=>1,'scope'=>'gm'] || $visibility===['schema_version'=>1,'scope'=>'participants'])$targets[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$m['name'],'side_id'=>$m['side_id']];
         }
         return ['session'=>$view['session'],'encounter'=>$encounter,'round'=>$round,'actors'=>$actors,'targets'=>$targets,'gm'=>$gm];
     }

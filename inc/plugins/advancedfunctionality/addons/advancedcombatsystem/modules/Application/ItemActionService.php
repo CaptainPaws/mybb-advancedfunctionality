@@ -14,12 +14,13 @@ final class AF_ACS_ItemActionService
     public function catalog(string $sid,string $actor): array
     {
         global $db;
-        $entity=$this->repo->itemEntity($sid,$actor);$uid=(int)$this->access->uid();
-        if ((int)$entity['owner_uid']!==$uid || $entity['kind']!=='character') return [];
+        $entity=$this->repo->itemEntity($sid,$actor);$actorUid=(int)$this->access->uid();$uid=(int)($entity['owner_uid']??0);
+        if ($uid<1 || $entity['kind']!=='character') return [];
+        $category=$actorUid===$uid?'ordinary':($this->repo->controllerFor($sid,$actor,(string)$actorUid,'item_consume')?'item_consume':'equipment_change');
         $registration=json_decode($entity['payload_json'],true,64,JSON_THROW_ON_ERROR);
         if (!isset($registration['equipment_snapshot'])) return [];
-        (new AF_ACS_CombatInventoryAccess($db instanceof mysqli?$db:$db->write_link,$uid))->verifySelection($uid,$sid,$actor);
-        $this->repo->assertReadConnection($db);$this->inventory=(new AF_ADVINV_InventoryRead($db))->read($uid,$uid)->serverData();
+        (new AF_ACS_CombatInventoryAccess($db instanceof mysqli?$db:$db->write_link,$actorUid))->verifySelection($uid,$sid,$actor,$category);
+        $this->repo->assertReadConnection($db);$this->inventory=self::reader($db,$actorUid,$sid,$actor,$category)->read($uid,$actorUid)->serverData();
         $hasWeapon=false;foreach ($this->repo->itemEquipment($sid,$actor) as $slot) if ($slot['slot_key']==='weapon_mainhand'&&$slot['status']==='active') $hasWeapon=true;
         $choices=[];
         foreach ($this->inventory['items'] as $item) {
@@ -48,10 +49,19 @@ final class AF_ACS_ItemActionService
     }
 
     public static function isItem(string $key): bool {return str_starts_with($key,'item:');}
-    public static function request(string $operation,string $key,string $sid,string $entity,int $uid,array $payload): array
+    public static function request(string $operation,string $key,string $sid,string $entity,int $uid,array $payload,string $category='ordinary'): array
     {
-        $r=['schema_version'=>1,'operation'=>$operation,'operation_key'=>$key,'actor'=>['uid'=>$uid,'authorization_ref'=>'acs-item:'.$sid.':'.$entity],'scope'=>['system'=>'acs','context_key'=>$sid],'payload'=>$payload];
+        $r=['schema_version'=>1,'operation'=>$operation,'operation_key'=>$key,'actor'=>['uid'=>$uid,'authorization_ref'=>'acs-item:'.$sid.':'.$entity.($category==='ordinary'?'':':'.$category)],'scope'=>['system'=>'acs','context_key'=>$sid],'payload'=>$payload];
         $r['payload_hash']=AF_ADVINV_OwnerProtocol::payloadHash($r);return $r;
+    }
+    public static function reader(object $db,int $actor,string $sid,string $entity,string $category): AF_ADVINV_InventoryRead
+    {
+        $link=$db instanceof mysqli?$db:$db->write_link;
+        return new AF_ADVINV_InventoryRead($db,new AF_ACS_CombatInventoryAccess($link,$actor,[$sid,$entity,$category]));
+    }
+    public static function itemCategory(array $spec,int $actor): string
+    {
+        return (int)($spec['owner_uid']??$actor)===$actor?'ordinary':(($spec['operation']??'swap')==='consume'?'item_consume':'equipment_change');
     }
     public function prepare(string $sid,string $actor,string $key,?string $draft=null,int $index=0): array
     {
@@ -61,13 +71,14 @@ final class AF_ACS_ItemActionService
         foreach (['af_kb_arpg_acs_source','af_inv_get_items','af_inv_candidate_slots_for_item'] as $helper) if (!function_exists($helper)) throw new RuntimeException('ACS_INVENTORY_UNAVAILABLE');
         if (!preg_match('/\Aitem:(consume|equip|swap|pass):([1-9][0-9]{0,9})\z/D',$key,$m)) throw new RuntimeException('ACS_ITEM_ACTION_UNSUPPORTED');
         if ($m[1]==='pass') throw new RuntimeException('ACS_ITEM_PASS_SPATIAL_UNSUPPORTED');
-        $entity=$this->repo->itemEntity($sid,$actor);$uid=(int)$this->access->uid();
-        if ((int)$entity['owner_uid']!==$uid || $entity['kind']!=='character' || !hash_equals($entity['content_hash'],hash('sha256',$entity['payload_json']))) throw new RuntimeException('ACS_ITEM_SOURCE_UNAVAILABLE');
-        (new AF_ACS_CombatInventoryAccess($db instanceof mysqli?$db:$db->write_link,$uid))->verifySelection($uid,$sid,$actor);
+        $entity=$this->repo->itemEntity($sid,$actor);$actorUid=(int)$this->access->uid();$uid=(int)($entity['owner_uid']??0);
+        if ($uid<1 || $entity['kind']!=='character' || !hash_equals($entity['content_hash'],hash('sha256',$entity['payload_json']))) throw new RuntimeException('ACS_ITEM_SOURCE_UNAVAILABLE');
+        $category=$actorUid===$uid?'ordinary':($m[1]==='consume'?'item_consume':'equipment_change');
+        (new AF_ACS_CombatInventoryAccess($db instanceof mysqli?$db:$db->write_link,$actorUid))->verifySelection($uid,$sid,$actor,$category);
         $registration=json_decode($entity['payload_json'],true,64,JSON_THROW_ON_ERROR);$cs=$registration['source_snapshot'];$bundle=$registration['equipment_snapshot']??null;
         if (!is_array($bundle)) throw new RuntimeException('ACS_ITEM_PROVENANCE_REQUIRED');
         AF_ACS_Equipment::baseline($bundle,$cs);
-        $this->repo->assertReadConnection($db);$read=$this->inventory??=(new AF_ADVINV_InventoryRead($db))->read($uid,$uid)->serverData();
+        $this->repo->assertReadConnection($db);$read=$this->inventory??=self::reader($db,$actorUid,$sid,$actor,$category)->read($uid,$actorUid)->serverData();
         $id=(int)$m[2];$item=null;foreach ($read['items'] as $row) if ((int)$row['id']===$id) $item=$row;
         if (!$item || $item['entity']!=='equipment' || $item['kb_type']!=='arpg_item' || !empty(af_advinv_resolve_appearance_item($item)['is_visual_item'])) throw new RuntimeException('ACS_ITEM_INSUFFICIENT_QTY');
         $this->repo->assertInventorySettled($sid,[(string)$id]);
@@ -144,7 +155,7 @@ final class AF_ACS_ItemActionService
         }
         $dto=['definition_version'=>$definition['version'],'source_definition'=>$rules,'item_action'=>$spec];
         return ['ability'=>['supported'=>true,'source_ref'=>$pin,'costs'=>[['kind'=>'ap','amount'=>1]],'item_action'=>true], 'definition'=>$dto,'spec'=>$spec,'virtual'=>$virtual,'stats'=>$stats,
-            'versions'=>['inventory_version'=>$read['inventory_version'],'item_fingerprint'=>$fingerprint,'equipment_versions'=>$versions,'reservation_hash'=>$binding?hash('sha256',AF_ADVINV_OwnerProtocol::canonical($binding)):null]];
+            'versions'=>['control_proof'=>AF_ACS_AuthorizationService::controlProof($this->repo->controllerFor($sid,$actor,(string)$actorUid,$category)??throw new RuntimeException('ACS_DELEGATION_ACTION_DENIED')),'inventory_version'=>$read['inventory_version'],'item_fingerprint'=>$fingerprint,'equipment_versions'=>$versions,'reservation_hash'=>$binding?hash('sha256',AF_ADVINV_OwnerProtocol::canonical($binding)):null]];
     }
     public function equipFree(array $input): array
     {
@@ -163,7 +174,7 @@ final class AF_ACS_ItemActionService
                 $spec['reservation']=$this->reserve($spec,$sid,$actor,'acs:item:free:'.$actor.':'.$key);
                 $saved=$this->repo->freeItemEquipment($session,$actor,$spec);
                 if (isset($spec['outgoing_reservation'])) {
-                    $r=self::request('release','acs:item:free:'.$actor.':'.$key.':release',$sid,$actor,(int)$this->access->uid(),['reservation_id'=>$spec['outgoing_reservation']['reservation']['id'],'reason'=>'free_loadout_replaced']);
+                    $r=self::request('release','acs:item:free:'.$actor.':'.$key.':release',$sid,$actor,(int)$this->access->uid(),['reservation_id'=>$spec['outgoing_reservation']['reservation']['id'],'reason'=>'free_loadout_replaced'],self::itemCategory($spec,(int)$this->access->uid()));
                     if (AF_ACS_InventoryAdapter::forCombat($db,(int)$this->access->uid())->participate('release',$r)->serverReceipt()['status']!=='released') throw new RuntimeException('ACS_ITEM_RELEASE_REJECTED');
                 }
                 return $saved;
@@ -183,7 +194,7 @@ final class AF_ACS_ItemActionService
         if (!$keepOutgoing && isset($spec['outgoing_reservation'])) $requests[]=$spec['outgoing_reservation'];
         $actor=(string)$seal['actor_entity_id'];$adapter=AF_ACS_InventoryAdapter::forCombat($db,(int)$this->access->uid());
         foreach ($requests as $reserve) {
-            $request=self::request('release','acs:item:cancel:'.$seal['id'].':'.$reserve['reservation']['id'],$draft['session_id'],$actor,(int)$this->access->uid(),['reservation_id'=>$reserve['reservation']['id'],'reason'=>'author_cancel_tail']);
+            $request=self::request('release','acs:item:cancel:'.$seal['id'].':'.$reserve['reservation']['id'],$draft['session_id'],$actor,(int)$this->access->uid(),['reservation_id'=>$reserve['reservation']['id'],'reason'=>'author_cancel_tail'],self::itemCategory($spec,(int)$this->access->uid()));
             $r=$adapter->participate('release',$request)->serverReceipt();
             if ($r['status']!=='released') throw new RuntimeException('ACS_ITEM_RELEASE_REJECTED');
         }
@@ -191,14 +202,15 @@ final class AF_ACS_ItemActionService
     public function reserve(array $spec,string $sid,string $actor,string $key): array
     {
         global $db;
-        $reader=new AF_ADVINV_InventoryRead($db);$uid=(int)$this->access->uid();$reader->fence($uid,$uid);
+        $uid=(int)$this->access->uid();$owner=(int)$this->repo->entity($sid,$actor)['owner_uid'];$category=$uid===$owner?'ordinary':(($spec['operation']??'swap')==='consume'?'item_consume':'equipment_change');
+        $reader=self::reader($db,$uid,$sid,$actor,$category);$reader->fence($owner,$uid);
         $adapter=AF_ACS_InventoryAdapter::forCombat($db,$uid);
-        $known=$adapter->lookupParticipant(self::request('lookup',$key.':lookup',$sid,$actor,$uid,['target_operation_key'=>$key]));
+        $known=$adapter->lookupParticipant(self::request('lookup',$key.':lookup',$sid,$actor,$uid,['target_operation_key'=>$key],$category));
         if ($known['status']!=='not_found') {
             if ($known['status']!=='prepared' || $known['item_id']!==$spec['item_id'] || $known['qty']!==1) throw new RuntimeException('ACS_ITEM_RESERVATION_REQUIRED');
             return $known;
         }
-        $request=self::request('reserve',$key,$sid,$actor,$uid,['owner_uid'=>$uid,'item_id'=>$spec['item_id'],'qty'=>1,'session_id'=>$sid,'expected_inventory_version'=>$reader->version($uid,$uid)]);
+        $request=self::request('reserve',$key,$sid,$actor,$uid,['owner_uid'=>$owner,'item_id'=>$spec['item_id'],'qty'=>1,'session_id'=>$sid,'expected_inventory_version'=>$reader->version($owner,$uid)],$category);
         $result=AF_ACS_InventoryAdapter::forCombat($db,$uid)->participate('reserve',$request)->serverReceipt();
         if ($result['status']!=='prepared') throw new RuntimeException('ACS_ITEM_RESERVATION_REJECTED');
         return $result;

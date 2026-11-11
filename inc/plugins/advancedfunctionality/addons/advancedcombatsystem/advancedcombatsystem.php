@@ -115,6 +115,13 @@ function af_advancedcombatsystem_uninstall(string $confirmation = ''): bool
     });
 }
 
+function af_advancedcombatsystem_delegations(): AF_ACS_DelegationService
+{
+    global $db;
+    require_once __DIR__.'/modules/Application/DelegationService.php';
+    return new AF_ACS_DelegationService(new AF_ACS_EncounterRepository($db),new AF_ACS_SessionAccess);
+}
+
 function af_advancedcombatsystem_sessions(): AF_ACS_SessionService
 {
     global $db;
@@ -191,9 +198,17 @@ function af_advancedcombatsystem_xmlhttp(): void
                 default=>$clock->command(substr($op,6),$input),
             };
         }
+        elseif(str_starts_with($op,'delegation_')) {
+            $delegations=af_advancedcombatsystem_delegations();$sid=$mybb->get_input('session_id');
+            if($op==='delegation_list')$data=$delegations->view($sid,$mybb->get_input('after')?:'0');
+            else{
+                $input=[];foreach(['session_id','expected_version','operation_key','reason','owner_uid','delegate_uid','entity_ids','control_group_id','permitted_actions','valid_from','valid_until','duration_seconds','delegation_id','delegation_version'] as $field)if(array_key_exists($field,$_POST))$input[$field]=in_array($field,['entity_ids','permitted_actions'],true)?$_POST[$field]:$mybb->get_input($field);
+                $data=$delegations->command(substr($op,11),$input);
+            }
+        }
         elseif(str_starts_with($op,'encounter_')) {
             $encounters=af_advancedcombatsystem_encounters();$sid=$mybb->get_input('session_id');$eid=$mybb->get_input('encounter_id');
-            $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid','mode','uids','assignment_version'] as $field)$input[$field]=$mybb->get_input($field);
+            $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid','mode','uids','assignment_version','visibility_scope','participant_version'] as $field)$input[$field]=$mybb->get_input($field);
             $data=match($op) {
                 'encounter_list'=>$encounters->list($sid,$mybb->get_input('after')?:'0'),
                 'encounter_get'=>$encounters->view($sid,$eid),

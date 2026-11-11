@@ -32,7 +32,7 @@ trait AF_ACS_RoundManagementPersistence
         try {
             $drafts=$this->futureTable('drafts');$sealed=$this->futureTable('sealed_actions');$submissions=$this->futureTable('submissions');
             $scope='encounter_id=?'.($turn===null?'':' AND turn_id=?');$args=$turn===null?[$eid]:[$eid,$turn];
-            $parallel=$readOnlyPreview && $turn!==null && $this->parallelNpcPlans($sid,$eid,$turn);
+            $parallel=$readOnlyPreview && $turn!==null && $this->parallelControlPlans($sid,$eid,$turn);
             $otherDraft=$sealedDraft===null?'':' AND id<>'.self::integer($sealedDraft);
             if(!$parallel && $drafts && $this->sql('SELECT id FROM '.$drafts.' WHERE '.$scope.$otherDraft." AND status NOT IN ('published','cancelled')".($readOnlyPreview?" AND (status<>'draft' OR confirmation_hash IS NOT NULL OR pid IS NOT NULL)":"")." LIMIT 1",$args)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
             if($sealed && !$drafts)throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
