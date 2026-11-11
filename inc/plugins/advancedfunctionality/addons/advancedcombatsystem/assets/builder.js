@@ -45,8 +45,8 @@
     function actionForm(chosen) {
       const a = chosen?.actor_id || field('actor').value;
       options(field('actor'), ctx.actors, a);
-      options(field('ability'), actor(a)?.choices || [], chosen?.ability_key || field('ability').value, 'Выберите способность');
-      options(field('target'), ctx.targets.filter(t => t.actors.includes(a)), chosen?.targets?.[0] || field('target').value, 'Выберите разрешённую цель');
+      options(field('ability'), (actor(a)?.choices || []).filter(c => !c.sealed_only), chosen?.ability_key || field('ability').value, 'Выберите способность или предмет');
+      options(field('target'), ctx.targets.filter(t => t.actors.includes(a) && (!!t.item_only === !!(actor(a)?.choices || []).find(c => c.key === field('ability').value)?.item_action)), chosen?.targets?.[0] || field('target').value, 'Выберите разрешённую цель');
       info();
     }
     function info() {
@@ -162,7 +162,7 @@
       });
       if (sealView.summary) {
         box.append(node('h4', sealView.summary.label));
-        sealView.summary.actions.forEach(a => box.append(node('p', (actor(a.actor_id)?.name || 'Существо') + ': ' + ({hit:'попадание',crit:'критическое попадание',miss:'промах'}[a.outcome]) + ', урон ' + a.damage + ', P_hit=' + a.probabilities.P_hit + '%, P_crit=' + a.probabilities.P_crit + '%.')));
+        sealView.summary.actions.forEach(a => box.append(node('p', a.item ? ('Предмет #' + a.item.item_id + ' · ' + (a.item.operation === 'consume' ? 'использование' : 'смена оружия') + ' · 1 AP, ' + a.item.qty + ' шт.') : ((actor(a.actor_id)?.name || 'Существо') + ': ' + ({hit:'попадание',crit:'критическое попадание',miss:'промах',used:'действие с предметом'}[a.outcome] || a.outcome) + ', урон ' + a.damage + ', P_hit=' + a.probabilities.P_hit + '%, P_crit=' + a.probabilities.P_crit + '%.'))));
         box.append(node('p', sealView.confirmed ? 'Сводка подтверждена. Общая публикация выключена; тестовая отправка доступна только разрешённому пользователю.' : 'Сводка требует явного подтверждения. Реальные HP/AP не изменены.'));
       }
       overview();
@@ -202,7 +202,7 @@
     function renderPreview(dto) {
       part('preview').replaceChildren(node('p', dto.label + '. Сценарий: ' + ({ hit: 'попадания без крита', crit: 'критические попадания', miss: 'промахи' }[dto.scenario])));
       const list = node('ol'); dto.actions.forEach((a, i) => {
-        const li = node('li'), p = a.probabilities; li.append(node('p', 'Действие ' + (i + 1) + ': P попадания ' + p.P_hit + '%, P крита при попадании ' + p.P_crit + '%. Условный урон: ' + a.damage + '.'));
+        const li = node('li'), p = a.probabilities; if (a.item) li.append(node('p', 'Предмет #' + a.item.item_id + ': ' + (a.item.operation === 'consume' ? 'использовать' : 'сменить оружие') + ', ' + a.item.qty + ' шт., 1 AP. Эффект не зависит от сценария попадания.')); else li.append(node('p', 'Действие ' + (i + 1) + ': P попадания ' + p.P_hit + '%, P крита при попадании ' + p.P_crit + '%. Условный урон: ' + a.damage + '.'));
         a.components.forEach(c => li.append(node('p', 'Компонент ' + (c.source_index + 1) + ': ' + ({ physical: 'физический', elemental: 'стихийный', true: 'истинный' }[c.damage_type] || 'урон') + ', защита ' + c.effective_defense + ', после защиты ' + c.post_defense + ', распределено ' + c.allocated + '.')));
         li.append(node('p', 'Стоимость: ' + a.costs.map(c => c.amount + ' ' + (c.kind === 'ap' ? 'AP' : 'ресурса')).join(', '))); list.append(li);
       }); part('preview').append(list, node('h4', 'Виртуальное состояние — не сохранено'));
@@ -218,7 +218,8 @@
     root.addEventListener('change', async event => {
       try {
         if (event.target === field('actor')) actionForm({ actor_id: field('actor').value, ability_key: '', targets: [] });
-        else if (event.target === field('ability') || event.target === field('target')) info();
+        else if (event.target === field('ability')) actionForm();
+        else if (event.target === field('target')) info();
         else if (event.target === field('scenario')) { invalidate(); }
         else if (event.target === field('group')) {
           const turn = field('group').value;

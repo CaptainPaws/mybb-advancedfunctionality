@@ -76,6 +76,11 @@ trait AF_ACS_SealPersistence
         });
     }
     private bool $sealWriting=false;
+    public function sealItemSnapshot(array $draft,array $definition): string
+    {
+        if (!$this->sealWriting) throw new RuntimeException('ACS_COMMAND_REQUIRED');
+        return $this->insertSnapshot($draft['session_id'],['source_system'=>'advancedinventory','source_key'=>(string)$definition['item_action']['item_id'],'contract_id'=>'ic-acs.item-action.v1','contract_version'=>'1'],['schema_version'=>1,'numeric_policy'=>AF_ACS_Numeric::POLICY,'engine_version'=>'acs-items-1','definition'=>$definition]);
+    }
     public function appendSeal(array $draft,array $action,array $definition,array $pin,int $cost,string $key,int $historyIndex,array $tape):string
     {
         if(!$this->sealWriting)throw new RuntimeException('ACS_COMMAND_REQUIRED');

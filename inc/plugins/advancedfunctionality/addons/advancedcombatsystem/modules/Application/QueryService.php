@@ -48,13 +48,13 @@ final class AF_ACS_QueryService
         }
         return ['view'=>$view,'actors'=>$actors,'targets'=>$targets,'members'=>$members];
     }
-    public function inspect(string $sid,string $eid,string $actor,string $target,?string $sealedDraft=null):array
+    public function inspect(string $sid,string $eid,string $actor,string $target,?string $sealedDraft=null,bool $itemSelf=false):array
     {
         $selection=$this->select($sid,$eid);$this->repo->assertPreviewStorage();$view=$selection['view'];
-        if(!isset($selection['actors'][$actor])||!isset($selection['targets'][$target])||$actor===$target)self::fail('preview_target_forbidden');
+        if(!isset($selection['actors'][$actor])||!isset($selection['targets'][$target])||$actor===$target&&!$itemSelf)self::fail('preview_target_forbidden');
         $sideA=$selection['actors'][$actor]['side_id'];$sideB=$selection['targets'][$target]['side_id'];$hostile=false;
         foreach($this->repo->allRelations($eid) as $r)if(($r['side_a']===$sideA&&$r['side_b']===$sideB||$r['side_a']===$sideB&&$r['side_b']===$sideA)&&$r['relationship']==='hostile')$hostile=true;
-        if(!$hostile)self::fail('preview_target_forbidden');
+        if(!$hostile&&!($itemSelf&&$actor===$target))self::fail('preview_target_forbidden');
         $round=$this->repo->currentRound($view['encounter']);if(!$round||$round['status']!=='open')self::fail('preview_turn_unavailable');
         $reactions=$this->repo->reactionProjection($sid,$eid);$barriers=$this->repo->barrierProjection($sid,$eid);
         $sources=[$actor=>$this->source($sid,$actor),$target=>$this->source($sid,$target)];if($sources[$actor]['row']['life_state']!=='active')self::fail('preview_actor_unavailable');$turns=[];$groups=[];$reactionTurns=[];$reactionKinds=[];$versions=['session_version'=>$view['session']['session_version'],'encounter_version'=>$view['encounter']['encounter_version'],'round_version'=>(string)$round['round_version']];
@@ -81,6 +81,7 @@ final class AF_ACS_QueryService
                 if(!in_array($id,[$actor,$target],true))continue;
                 foreach(['entity_version','state_version','content_hash'] as $f)$versions[$id===$actor?'actor_'.$f:'target_'.$f]=$source['row'][$f];
                 $versions[$id===$actor?'actor_resources_hash':'target_resources_hash']=$source['resources']['fingerprint'];
+                if (isset($source['registration']['equipment_snapshot'])) $versions[$id===$actor?'actor_equipment_hash':'target_equipment_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'rows'=>array_map(fn($r)=>array_intersect_key($r,array_flip(['id','slot_key','inventory_item_id','item_snapshot_id','equipment_version','status','content_hash'])),$this->repo->itemEquipment($sid,$id))]));
                 $versions[$id===$actor?'actor_turn_version':'target_turn_version']=$turn['turn_version'];
                 $versions[$id===$actor?'actor_entity_turn_version':'target_entity_turn_version']=$individual['entity_turn_version'];
             }
@@ -98,6 +99,7 @@ final class AF_ACS_QueryService
         }
         $state=['status_instances'=>$statusProjection['instances'],'next_status_order'=>$statusProjection['next_order'],'schema_version'=>1,'entities'=>[],'groups'=>$groups,'barriers'=>$barriers['pools'],'next_barrier_order'=>$barriers['next_order']];$stats=[];$defenses=[];$statusImmunities=[];$catalog=null;
         foreach($sources as $id=>$source){$id=(string)$id;$row=$source['row'];$s=$source['source'];$stat=$s['characteristics']??null;if(!is_array($stat))self::fail('preview_stats_missing');
+            require_once __DIR__.'/ItemActionService.php';$stat=AF_ACS_ItemActionService::loadoutStats($this->repo,$sid,$id,$source['registration'],$stat);
             foreach(['accuracy','speed','crit_rate','crit_dmg','def'] as $name)AF_ACS_Numeric::number($stat[$name]??null);$stats[$id]=$stat;
             $statusImmunities[$id]=$s['data']['definition']['immunities']??[];
             $ref=['key'=>'entity-'.$id,'version'=>'registration-1','fingerprint'=>'sha256:'.$row['content_hash']];
