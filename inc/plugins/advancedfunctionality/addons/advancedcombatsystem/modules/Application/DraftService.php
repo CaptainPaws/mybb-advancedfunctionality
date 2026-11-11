@@ -21,9 +21,9 @@ final class AF_ACS_DraftService
         if(!is_string($fp)||!hash_equals($fp,hash('sha256',AF_ACS_Repository::json($roster))))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
         $actors=[];
         foreach($roster['members']??[] as $member){
-            $id=AF_ACS_Repository::integer($member['entity_id']??null);$e=$this->repo->entity($sid,$id);$c=$this->repo->controllers($sid,$id);
-            if(!$e||$e['control_group_id']!==$turn['control_group_id']||count($c)!==1||$c[0]['controller_uid']!==$uid||$e['owner_uid']!==null&&$e['owner_uid']!==$uid)continue;
-            $actors[$id]=['entity_version'=>(string)$e['entity_version'],'state_version'=>(string)$e['state_version'],'snapshot_id'=>(string)$e['template_snapshot_id'],'snapshot_hash'=>$e['content_hash'],'controller_version'=>$c[0]['assignment_version']];
+            $id=AF_ACS_Repository::integer($member['entity_id']??null);$e=$this->repo->entity($sid,$id);$c=$this->repo->controllerFor($sid,$id,$uid);
+            if(!$e||$e['control_group_id']!==$turn['control_group_id']||!$c)continue;
+            $actors[$id]=['entity_version'=>(string)$e['entity_version'],'state_version'=>(string)$e['state_version'],'snapshot_id'=>(string)$e['template_snapshot_id'],'snapshot_hash'=>$e['content_hash'],'controller_version'=>$c['assignment_version']];
         }
         if(!$actors)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
         if($write&&!$editable)throw new RuntimeException('ACS_DRAFT_TURN_UNAVAILABLE');

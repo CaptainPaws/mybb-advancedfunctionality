@@ -65,7 +65,7 @@ final class AF_ACS_EntityRepository extends AF_ACS_SessionRepository
         $scope=$ownerUid===null?'':' AND e.owner_uid=?';
         $parameters=[self::integer($sessionId),self::integer($after,zero:true)];
         if($ownerUid!==null)$parameters[]=self::integer($ownerUid,'4294967295');
-        $rows=$this->sql('SELECT e.id,e.kind,e.name,e.owner_uid,e.sheet_id,e.control_group_id,e.template_snapshot_id,e.entity_version,s.life_state,c.controller_uid FROM '.$this->table('entities').' e JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id JOIN '.$this->table('controllers')." c ON c.entity_id=e.id AND c.status='active' WHERE e.session_id=? AND e.id>? ".$scope." ORDER BY e.id LIMIT 100",$parameters)['rows'];
+        $rows=$this->sql('SELECT e.id,e.kind,e.name,e.owner_uid,e.sheet_id,e.control_group_id,e.template_snapshot_id,e.entity_version,s.life_state,c.controller_uid FROM '.$this->table('entities').' e JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id JOIN '.$this->table('controllers')." c ON c.id=(SELECT MIN(c1.id) FROM ".$this->table('controllers')." c1 WHERE c1.entity_id=e.id AND c1.session_id=e.session_id AND c1.status='active' AND (c1.valid_until IS NULL OR c1.valid_until>UNIX_TIMESTAMP())) WHERE e.session_id=? AND e.id>? ".$scope." ORDER BY e.id LIMIT 100",$parameters)['rows'];
         foreach($rows as &$row)foreach(['id','owner_uid','sheet_id','control_group_id','template_snapshot_id','entity_version','controller_uid'] as $key)if($row[$key]!==null)$row[$key]=(string)$row[$key];
         return $rows;
     }

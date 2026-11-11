@@ -76,9 +76,8 @@ trait AF_ACS_CombatCommitPersistence
             $e=$entities[$id]??null;
             $controllers=array_filter($f['controllers'],static fn($c)=>(string)$c['entity_id']===$id && $c['status']==='active'
                 && ($c['valid_until']===null || (int)$c['valid_until']>$now));
-            $c=$controllers?array_values($controllers)[0]:null;
-            if (!$e || (string)$e['control_group_id']!==(string)$turn['control_group_id'] || ($e['owner_uid']!==null && (string)$e['owner_uid']!==$uid)
-                || count($controllers)!==1 || (string)$c['controller_uid']!==$uid || $c['mode']!=='exclusive' || (int)$c['valid_from']>$now) {
+            $c=$e?AF_ACS_AuthorizationService::controller($e,array_values($controllers),$session,array_values($roles),$uid):null;
+            if (!$e || (string)$e['control_group_id']!==(string)$turn['control_group_id'] || !$c) {
                 throw new RuntimeException('ACS_COMBAT_CONTROL_DENIED');
             }
             if (json_decode($states[$id]['layers_json'],true)!==['schema_version'=>1,'layers'=>[]]) { throw new RuntimeException('ACS_COMBAT_EFFECT_WRITER_UNSUPPORTED'); }
@@ -113,6 +112,29 @@ trait AF_ACS_CombatCommitPersistence
             if((int)$old['reaction_used']!==0||$slot['used']!==1)throw new RuntimeException('ACS_REACTION_LIMIT_CONFLICT');self::integer((string)$old['entity_turn_version'],'18446744073709551614');
             if($this->sql('UPDATE '.$this->table('entity_turns').' SET reaction_used=1,entity_turn_version=entity_turn_version+1 WHERE id=? AND entity_turn_version=? AND reaction_used=0',[$slot['id'],$old['entity_turn_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');$versions[$slot['id']]=(string)((int)$old['entity_turn_version']+1);
         }return $versions;
+    }
+    /** Retire competing NPC plans in the same terminal transaction; retain prose, payloads and quota.
+     * Item reservations need their owner protocol, so such competing plans remain a hard barrier.
+     */
+    private function retireNpcPlans(array $row,array $facts,array $turn): array
+    {
+        $entities=self::indexed($facts['entities']);$roster=json_decode($turn['roster_json'],true,32,JSON_THROW_ON_ERROR);
+        foreach($roster['members'] as $member){$e=$entities[$member['entity_id']]??null;
+            if(!$e || $e['owner_uid']!==null || !in_array($e['kind'],['npc','monster'],true))return [];
+        }
+        $drafts=$this->sql('SELECT id,draft_version FROM '.$this->table('drafts')." WHERE encounter_id=? AND turn_id=? AND id<>? AND pid IS NULL AND status IN ('draft','sealed') ORDER BY id FOR UPDATE",[$row['encounter_id'],$row['turn_id'],$row['draft_id']])['rows'];
+        $retired=[];
+        foreach($drafts as $draft){
+            $seals=$this->sql('SELECT id,payload_json FROM '.$this->table('sealed_actions')." WHERE draft_id=? AND status='sealed' ORDER BY id FOR UPDATE",[$draft['id']])['rows'];
+            foreach($seals as $seal){$p=json_decode($seal['payload_json'],true,64,JSON_THROW_ON_ERROR);
+                if(str_starts_with($p['action']['ability_key']??'','item:'))throw new RuntimeException('ACS_COMBAT_PARALLEL_ITEM_PLAN_BLOCKED');
+            }
+            self::integer((string)$draft['draft_version'],'18446744073709551614');
+            if($this->sql('UPDATE '.$this->table('drafts')." SET status='cancelled',confirmation_hash=NULL,draft_version=draft_version+1,updated_at=? WHERE id=? AND draft_version=? AND pid IS NULL",[time(),$draft['id'],$draft['draft_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
+            $this->sql('UPDATE '.$this->table('sealed_actions')." SET status='cancelled' WHERE draft_id=? AND status='sealed'",[$draft['id']]);
+            $retired[]=(string)$draft['id'];
+        }
+        return $retired;
     }
     private function project(array $row, array $f, array $turn, AF_ACS_ResolverResult $result,array $frozen): array
     {
@@ -172,6 +194,7 @@ trait AF_ACS_CombatCommitPersistence
         $snapshotIds=[];foreach($frozen['seals'] as $i=>$seal)$snapshotIds[$i]=$seal['payload']['definition_snapshot_id'];
         $statuses=$this->persistStatusInstances($row['session_id'],$before['status_instances']??[],$after['status_instances']??[],$snapshotIds);
         $barriers=$this->persistBarriers($row['session_id'],$row['encounter_id'],$before['barriers'],$after['barriers'],$result->serverPlan()['reaction_updates']??[]);
-        return ['entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers];
+        $retired=$this->retireNpcPlans($row,$f,$turn);
+        return ['entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers]+($retired?['superseded_npc_drafts'=>$retired]:[]);
     }
 }

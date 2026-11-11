@@ -44,7 +44,7 @@ final class AF_ACS_QueryService
         foreach($members as $m){if($m['participation']!=='engaged')continue;
             $visibility=json_decode($m['visibility_json'],true,16,JSON_THROW_ON_ERROR);if($visibility!==['schema_version'=>1,'scope'=>'gm'])continue;
             $targets[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$m['name'],'side_id'=>$m['side_id']];
-            if($m['controller_uid']===$this->access->uid()&&($m['owner_uid']===null||$m['owner_uid']===$this->access->uid()))$actors[$m['entity_id']]=$targets[$m['entity_id']];
+            if($this->repo->controllerFor($sid,$m['entity_id'],$this->access->uid())!==null)$actors[$m['entity_id']]=$targets[$m['entity_id']];
         }
         return ['view'=>$view,'actors'=>$actors,'targets'=>$targets,'members'=>$members];
     }
@@ -89,6 +89,7 @@ final class AF_ACS_QueryService
         if(!isset($turns[$actor],$turns[$target])||$turns[$actor]['status']!=='pending'||!$turns[$actor]['started'])self::fail('preview_turn_unavailable');
         if(!(new AF_ACS_EncounterService($this->repo,$this->access))->clock()->available($sid,$turns[$actor]['id'],$actor)['actions_ready'])self::fail('ACS_STATUS_ACTION_NOT_READY');
         $this->repo->assertNoObligations($sid,$eid,$turns[$actor]['id'],true,$sealedDraft);
+        $versions['actor_controller_version']=$this->repo->controllerFor($sid,$actor,$this->access->uid())['assignment_version']??throw new RuntimeException('ACS_CONTROL_INVALID');
         $versions['custody_state_hash']=hash('sha256',serialize($this->repo->custodyRows($sid)));$versions['reaction_registry_hash']=$reactions['fingerprint'];$versions['barrier_state_hash']=$barriers['fingerprint'];$protectionProof=[];foreach($sources as $id=>$source)$protectionProof[$id]=[$source['row']['state_version'],$source['row']['content_hash'],$source['resources']['fingerprint']];$versions['protection_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'sources'=>$protectionProof,'turns'=>$reactionTurns,'groups'=>$groups]));
         $statusProjection=$this->repo->statusProjection($sid);foreach($this->repo->statusRows($sid) as $effect)if(($effect['scope']??null)==='combat'&&$effect['status']==='active'&&(string)$effect['encounter_id']!==$eid&&(json_decode($effect['payload_json'],true,64,JSON_THROW_ON_ERROR)['kind']??null)==='barrier')self::fail('ACS_COMBAT_RESET_REQUIRED');$versions['status_state_hash']=$statusProjection['fingerprint'];
         foreach($statusProjection['instances'] as $instance)if($instance['status']==='active'&&$instance['spec']['scope']==='combat'&&$instance['encounter_id']!==$eid)self::fail('ACS_COMBAT_RESET_REQUIRED');
@@ -130,8 +131,7 @@ final class AF_ACS_QueryService
         $actors=[];$targets=[];$members=$this->repo->participants($eid,'0',201);
         if(count($members)>100)self::fail('preview_scope_unavailable');
         foreach($members as $m){if($m['participation']!=='engaged')continue;
-            $own=$m['controller_uid']===$this->access->uid()&&($m['owner_uid']===null||$m['owner_uid']===$this->access->uid());
-            if($own&&count($this->repo->controllers($sid,$m['entity_id']))!==1)$own=false;
+            $own=$this->repo->controllerFor($sid,$m['entity_id'],$this->access->uid())!==null;
             if($own)$actors[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$m['name'],'group_id'=>$m['control_group_id'],'side_id'=>$m['side_id']];
             $visibility=json_decode($m['visibility_json'],true,16,JSON_THROW_ON_ERROR);
             if($gm&&$visibility===['schema_version'=>1,'scope'=>'gm'])$targets[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$m['name'],'side_id'=>$m['side_id']];

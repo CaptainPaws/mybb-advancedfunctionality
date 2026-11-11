@@ -1,6 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SessionRepository.php';
+require_once __DIR__.'/../Application/AuthorizationService.php';
 require_once __DIR__.'/ClockPersistence.php';
 require_once __DIR__.'/DraftPersistence.php';
 require_once __DIR__.'/SealPersistence.php';
@@ -64,7 +65,8 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     public function participants(string $id,string $after='0',int $limit=100): array
     {
         if(!in_array($limit,[100,201],true))throw new RuntimeException('ACS_QUERY_LIMIT');
-        return array_map(fn($r)=>$this->ids($r,['id','encounter_id','entity_id','side_id','participant_version','control_group_id','owner_uid','sheet_id','controller_uid','assignment_version']),$this->sql('SELECT p.*,e.name,e.kind,e.control_group_id,e.owner_uid,e.sheet_id,c.controller_uid,c.assignment_version FROM '.$this->table('participants').' p JOIN '.$this->table('entities').' e ON e.id=p.entity_id LEFT JOIN '.$this->table('controllers')." c ON c.entity_id=e.id AND c.session_id=e.session_id AND c.status='active' AND (c.valid_until IS NULL OR c.valid_until>?) WHERE p.encounter_id=? AND p.id>? ORDER BY p.id LIMIT ".$limit,[time(),$id,self::integer($after,zero:true)])['rows']);
+        $rows=array_map(fn($r)=>$this->ids($r,['id','session_id','encounter_id','entity_id','side_id','participant_version','control_group_id','owner_uid','sheet_id','controller_uid','assignment_version']),$this->sql('SELECT p.*,e.session_id,e.name,e.kind,e.control_group_id,e.owner_uid,e.sheet_id,c.controller_uid,c.assignment_version FROM '.$this->table('participants').' p JOIN '.$this->table('entities').' e ON e.id=p.entity_id LEFT JOIN '.$this->table('controllers')." c ON c.entity_id=e.id AND c.session_id=e.session_id AND c.id=(SELECT MIN(c1.id) FROM ".$this->table('controllers')." c1 WHERE c1.entity_id=e.id AND c1.session_id=e.session_id AND c1.status='active' AND (c1.valid_until IS NULL OR c1.valid_until>?)) WHERE p.encounter_id=? AND p.id>? ORDER BY p.id LIMIT ".$limit,[time(),$id,self::integer($after,zero:true)])['rows']);
+        foreach($rows as &$row){$c=$this->controllers((string)$row['session_id'],$row['entity_id']);$set=AF_ACS_AuthorizationService::assignment($c);$row['controller_mode']=$set['mode'];$row['controller_uids']=$set['uids'];}unset($row);return $rows;
     }
     public function entity(string $sid,string $id): ?array
     {
@@ -74,6 +76,25 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     public function controllers(string $sid,string $entity): array
     {
         return array_map(fn($r)=>$this->ids($r,['id','entity_id','controller_uid','assignment_version']),$this->sql('SELECT * FROM '.$this->table('controllers').' WHERE session_id=? AND entity_id=? AND status=? AND (valid_until IS NULL OR valid_until>?) ORDER BY id',[$sid,$entity,'active',time()])['rows']);
+    }
+    public function controllerFor(string $sid,string $entity,string $uid): ?array
+    {
+        $e=$this->entity($sid,$entity);$s=$this->session($sid);
+        return $e&&$s?AF_ACS_AuthorizationService::controller($e,$this->controllers($sid,$entity),$s,$this->roles($sid,$uid),$uid):null;
+    }
+    /** Only NPC speculative plans may coexist or become stale after reassignment. Claims stay exclusive. */
+    public function parallelNpcPlans(string $sid,string $eid,string $turnId): bool
+    {
+        $turn=$this->clockTurn($sid,$turnId);
+        if(!$turn || $turn['encounter_id']!==$eid)return false;
+        $roster=json_decode($turn['roster_json'],true,32,JSON_THROW_ON_ERROR);
+        if(empty($roster['members']))return false;
+        $uid=(string)(int)($GLOBALS['mybb']->user['uid']??0);
+        foreach($roster['members'] as $member){
+            $entity=$this->entity($sid,$member['entity_id']);$grant=$this->controllerFor($sid,$member['entity_id'],$uid);
+            if(!$entity || $entity['owner_uid']!==null || !in_array($entity['kind'],['npc','monster'],true) || !$grant)return false;
+        }
+        return true;
     }
     public function occupied(string $id,string $except): bool
     {
@@ -126,10 +147,18 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
             if(!$row)throw new RuntimeException('ACS_PARTICIPANT_UNAVAILABLE');self::integer($row['participant_version'],'18446744073709551614');
             $result['previous_side_id']=$row['side_id']===null?null:(string)$row['side_id'];
             $this->sql('UPDATE '.$this->table('participants').' SET side_id=?,participant_version=participant_version+1 WHERE encounter_id=? AND entity_id=?',[$request['side_id'],$id,$request['entity_id']]);
-        } elseif($op==='controller_assign') {
-            if($this->sql('UPDATE '.$this->table('controllers').' SET status=?,valid_until=? WHERE id=? AND assignment_version=? AND status=?',['superseded',time(),$request['_assignment_id'],$request['_previous_assignment_version'],'active'])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
-            $this->sql('INSERT INTO '.$this->table('controllers').' (session_id,entity_id,controller_uid,mode,status,assignment_version,valid_from,valid_until,permissions_json) VALUES (?,?,?,?,?,CAST(? AS UNSIGNED)+1,?,NULL,?)',[$session['id'],$request['entity_id'],$request['uid'],'exclusive','active',$request['_previous_assignment_version'],time(),self::json(['schema_version'=>1,'scope'=>'preparation','combat_operations_enabled'=>false])]);
-            $result=['previous_controller_uid'=>$request['_previous_controller_uid'],'controller_uid'=>$request['uid'],'assignment_version'=>$this->controllers($session['id'],$request['entity_id'])[0]['assignment_version']];
+        } elseif(in_array($op,['controller_assign','controller_set'],true)) {
+            $rows=$this->controllers($session['id'],$request['entity_id']);
+            $set=AF_ACS_AuthorizationService::assignment($rows);
+            if($set['assignment_version']!==$request['_previous_assignment_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');
+            $enabled=true;foreach($rows as $row){$permission=json_decode($row['permissions_json'],true,16,JSON_THROW_ON_ERROR);$enabled=$enabled&&($permission['combat_operations_enabled']??false)===true;
+                if($this->sql('UPDATE '.$this->table('controllers').' SET status=?,valid_until=? WHERE id=? AND assignment_version=? AND status=?',['superseded',time(),$row['id'],$set['assignment_version'],'active'])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
+            }
+            // Preserve the existing combat gate; assigning a controller cannot enable publication.
+            $permission=['schema_version'=>1,'scope'=>'session_assignment','combat_operations_enabled'=>$enabled];
+            foreach($request['uids']?:[null] as $uid)$this->sql('INSERT INTO '.$this->table('controllers').' (session_id,entity_id,controller_uid,mode,status,assignment_version,valid_from,valid_until,permissions_json) VALUES (?,?,?,?,?,CAST(? AS UNSIGNED)+1,?,NULL,?)',[$session['id'],$request['entity_id'],$uid,$request['mode'],'active',$set['assignment_version'],time(),self::json($permission)]);
+            $result=['entity_id'=>$request['entity_id'],'previous_mode'=>$set['mode'],'previous_controller_uids'=>$set['uids'],'previous_assignment_version'=>$set['assignment_version'],'mode'=>$request['mode'],'controller_uids'=>$request['uids'],'assignment_version'=>$this->controllers($session['id'],$request['entity_id'])[0]['assignment_version']];
+            if($op==='controller_assign')$result+=['previous_controller_uid'=>$set['uids'][0]??null,'controller_uid'=>$request['uids'][0]??null];
         }
         self::integer($encounter['encounter_version'],'18446744073709551614');self::integer($encounter['next_event_sequence'],'18446744073709551614');
         if($this->sql('UPDATE '.$this->table('encounters').' SET encounter_version=encounter_version+1,next_event_sequence=next_event_sequence+1 WHERE session_id=? AND id=? AND encounter_version=?',[$session['id'],$id,$encounter['encounter_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
@@ -141,7 +170,7 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     /** Snapshot input read under the existing session/encounter command lock. */
     public function rosterSources(string $sid,string $eid): array
     {
-        $rows=$this->sql('SELECT p.id AS participant_id,p.entity_id,p.side_id,p.participant_version,e.name,e.kind,e.owner_uid,e.control_group_id,e.entity_version,e.template_snapshot_id,g.group_version,g.config_json AS group_config,s.life_state,s.state_version,s.layers_json,x.content_hash,c.controller_uid,c.assignment_version FROM '.$this->table('participants').' p JOIN '.$this->table('entities').' e ON e.id=p.entity_id AND e.session_id=? JOIN '.$this->table('control_groups').' g ON g.id=e.control_group_id AND g.session_id=e.session_id JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id JOIN '.$this->table('snapshots').' x ON x.id=e.template_snapshot_id AND x.session_id=e.session_id JOIN '.$this->table('controllers')." c ON c.entity_id=e.id AND c.session_id=e.session_id AND c.status='active' AND (c.valid_until IS NULL OR c.valid_until>?) WHERE p.encounter_id=? AND p.participation='engaged' ORDER BY e.control_group_id,e.id",[$sid,time(),$eid])['rows'];
+        $rows=$this->sql('SELECT p.id AS participant_id,p.entity_id,p.side_id,p.participant_version,e.name,e.kind,e.owner_uid,e.control_group_id,e.entity_version,e.template_snapshot_id,g.group_version,g.config_json AS group_config,s.life_state,s.state_version,s.layers_json,x.content_hash,c.controller_uid,c.assignment_version FROM '.$this->table('participants').' p JOIN '.$this->table('entities').' e ON e.id=p.entity_id AND e.session_id=? JOIN '.$this->table('control_groups').' g ON g.id=e.control_group_id AND g.session_id=e.session_id JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id JOIN '.$this->table('snapshots').' x ON x.id=e.template_snapshot_id AND x.session_id=e.session_id JOIN '.$this->table('controllers')." c ON c.entity_id=e.id AND c.session_id=e.session_id AND c.id=(SELECT MIN(c1.id) FROM ".$this->table('controllers')." c1 WHERE c1.entity_id=e.id AND c1.session_id=e.session_id AND c1.status='active' AND (c1.valid_until IS NULL OR c1.valid_until>?)) WHERE p.encounter_id=? AND p.participation='engaged' ORDER BY e.control_group_id,e.id",[$sid,time(),$eid])['rows'];
         foreach($rows as &$row)foreach(['participant_id','entity_id','side_id','participant_version','owner_uid','control_group_id','entity_version','template_snapshot_id','group_version','state_version','controller_uid','assignment_version'] as $field)if($row[$field]!==null)$row[$field]=(string)$row[$field];unset($row);
         return $rows;
     }

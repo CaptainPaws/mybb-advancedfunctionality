@@ -37,7 +37,7 @@ final class AF_ACS_EncountersPage
             try {
                 // The posted session may not redirect a command to another thread/scope.
                 if($mybb->get_input('session_id')!==$sid || $mybb->get_input('tid')!==$tid)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
-                $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid','round_id','entity_turn_id','control_group_id','confirm_full','confirm','deadline_mode','seconds','turn_id','turn_version','effect_order'] as $field)$input[$field]=$mybb->get_input($field);
+                $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid','mode','uids','assignment_version','round_id','entity_turn_id','control_group_id','confirm_full','confirm','deadline_mode','seconds','turn_id','turn_version','effect_order'] as $field)$input[$field]=$mybb->get_input($field);
                 $op=$mybb->get_input('acs_encounter_op');
                 if($op==='readiness') {
                     (new AF_ACS_SessionAccess)->csrf();$eid=$input['encounter_id'];$readiness=$service->readiness($sid,$eid);
@@ -93,7 +93,7 @@ final class AF_ACS_EncountersPage
                 }
             } elseif($tab==='participants') {
                 echo '<table><tr><th>Существо</th><th>Группа</th><th>Сторона</th><th>Управляющий</th><th>Участие</th></tr>';$sides=array_column($view['sides'],'name','id');
-                foreach($view['participants'] as $p)echo '<tr><td>#'.self::esc($p['entity_id']).' '.self::esc($p['name']).'</td><td>#'.self::esc($p['control_group_id']).'</td><td>'.self::esc($sides[$p['side_id']]??($p['side_id']===null?'Не назначена':'Сторона #'.$p['side_id'])).'</td><td>UID '.self::esc($p['controller_uid']??'—').'</td><td>Зарегистрирован</td></tr>';echo '</table>';
+                foreach($view['participants'] as $p)echo '<tr><td>#'.self::esc($p['entity_id']).' '.self::esc($p['name']).'</td><td>#'.self::esc($p['control_group_id']).'</td><td>'.self::esc($sides[$p['side_id']]??($p['side_id']===null?'Не назначена':'Сторона #'.$p['side_id'])).'</td><td>'.self::esc($p['controller_mode']).' · '.self::esc(implode(', ',$p['controller_uids'])?:'—').'</td><td>Зарегистрирован</td></tr>';echo '</table>';
                 if(count($view['participants'])===100)echo '<a href="'.self::esc($url.'&participant_after='.end($view['participants'])['id']).'">Следующие участники</a>';
                 echo '<p>Группа управления независима от стороны. Питомец сохраняет группу владельца; самостоятельные монстры имеют отдельные будущие ходы.</p>';
             } elseif($tab==='events') {
@@ -122,18 +122,25 @@ final class AF_ACS_EncountersPage
                         if($op==='participant_add' && count($candidates)===100)echo '<a href="'.self::esc($url.'&candidate_after='.end($candidates)['id']).'">Следующие существа</a>';
                     }
                 }
-                self::form($url,'controller_assign',$session,$encounter);echo '<h3>Назначить управляющего NPC / монстра</h3><p>Только исключительное управление при подготовке. Собственность, ресурсы и группа не меняются; shared/gm_pool и делегирование относятся к этапу 7.</p><select name="entity_id" required>';
-                foreach($view['participants'] as $p)if($p['owner_uid']===null && in_array($p['kind'],['npc','monster'],true))echo '<option value="'.self::esc($p['entity_id']).'">'.self::esc($p['name']).'</option>';echo '</select><select name="uid" required>';
-                foreach($view['controllers'] as $master)echo '<option value="'.self::esc($master['uid']).'">UID '.self::esc($master['uid']).' · '.($master['role']==='owner'?'Владелец сессии':'Мастер').'</option>';echo '</select>';self::submit('Назначить управляющего');
                 if(count($view['sides'])===100)echo '<a href="'.self::esc($url.'&side_after='.end($view['sides'])['id']).'">Следующие стороны</a>';
                 if(count($view['relationships'])===100)echo '<a href="'.self::esc($url.'&relation_after='.end($view['relationships'])['id']).'">Следующие отношения сторон</a>';
                 self::form($url,'readiness',$session,$encounter);echo '<button type="submit">Проверить готовность</button></form><p>Первый раунд запускается на вкладке «Раунды». Засада, пауза и завершение пока недоступны.</p>';
+            }
+            if($tab==='management' && $session['status']==='active' && in_array($encounter['status'],['preparation','active','paused'],true)) {
+                echo '<h3>Управление NPC / монстрами</h3><p>Измените полный список UID через запятую, чтобы назначить или снять управляющих. Пустой список снимает всех; gm_pool использует текущих мастеров этой сессии. Ресурсы и ход сохраняются.</p><p>Мастера сессии: '.self::esc(implode(', ',array_column($view['controllers'],'uid'))).'</p>';
+                foreach($view['participants'] as $p) {
+                    if($p['owner_uid']!==null || !in_array($p['kind'],['npc','monster'],true))continue;
+                    self::form($url,'controller_set',$session,$encounter);
+                    echo '<h4>#'.self::esc($p['entity_id']).' '.self::esc($p['name']).'</h4><input type="hidden" name="entity_id" value="'.self::esc($p['entity_id']).'"><input type="hidden" name="assignment_version" value="'.self::esc($p['assignment_version']).'"><label>Режим <select name="mode">';
+                    foreach(['exclusive','shared','gm_pool'] as $mode)echo '<option value="'.$mode.'"'.($p['controller_mode']===$mode?' selected':'').'>'.$mode.'</option>';
+                    echo '</select></label><label>UID управляющих <input name="uids" value="'.self::esc(implode(',',$p['controller_uids'])).'" maxlength="1099"></label><p>Exclusive: один UID; shared: несколько UID; gm_pool: оставьте UID пустым.</p>';self::submit('Сохранить управление');
+                }
             }
             if($tab==='management') {require_once __DIR__.'/Clock.php';AF_ACS_ClockPage::rest($view,$url,$service->clock());}
             echo '</section>';return ob_get_clean();
         } catch(Throwable $error) {ob_end_clean();throw $error;}
     }
     private static function state(string $state): string {return ['preparation'=>'Подготовка','active'=>'Активно','ambush_ready'=>'Засада подготовлена','paused'=>'Пауза','completed'=>'Завершено'][$state]??'Состояние недоступно';}
-    private static function event(string $event): string {return ['encounter.pause'=>'Пауза','encounter.resume'=>'Возобновление','encounter.gm_skip'=>'Ручной пропуск','encounter.gm_forfeit'=>'Закрытие выбывшей группы','encounter.deadline_set'=>'Настройка дедлайнов','encounter.extend_deadline'=>'Продление дедлайна','encounter.deadline_process'=>'Обработка дедлайна','encounter.round_next'=>'Следующий раунд','encounter.round_start'=>'Запущен первый раунд','encounter.create'=>'Создано столкновение','encounter.side_create'=>'Добавлена сторона','encounter.relation_set'=>'Изменены отношения сторон','encounter.participant_add'=>'Добавлен участник','encounter.participant_side'=>'Изменена сторона участника','encounter.controller_assign'=>'Назначен управляющий'][$event]??'Подтверждённое событие';}
+    private static function event(string $event): string {return ['encounter.pause'=>'Пауза','encounter.resume'=>'Возобновление','encounter.gm_skip'=>'Ручной пропуск','encounter.gm_forfeit'=>'Закрытие выбывшей группы','encounter.deadline_set'=>'Настройка дедлайнов','encounter.extend_deadline'=>'Продление дедлайна','encounter.deadline_process'=>'Обработка дедлайна','encounter.round_next'=>'Следующий раунд','encounter.round_start'=>'Запущен первый раунд','encounter.create'=>'Создано столкновение','encounter.side_create'=>'Добавлена сторона','encounter.relation_set'=>'Изменены отношения сторон','encounter.participant_add'=>'Добавлен участник','encounter.participant_side'=>'Изменена сторона участника','encounter.controller_set'=>'Изменён режим / список управляющих','encounter.controller_assign'=>'Назначен управляющий'][$event]??'Подтверждённое событие';}
     private static function issue(string $code): string {return ['cooldown_source_unavailable'=>'Кулдаун не имеет подтверждённого источника/версии.','round_boundary_contract_unavailable'=>'Активные слои или настройки AP требуют ещё не подключённого обработчика границ.','participants_missing'=>'Добавьте хотя бы одного участника.','side_relationship_missing'=>'Явно задайте отношения используемых сторон.','ACS_CONTROL_INVALID'=>'Проверьте владельца, управляющего и группу существа.','ACS_SIDE_UNAVAILABLE'=>'Участнику нужна допустимая сторона.','ACS_ENTITY_UNAVAILABLE'=>'Существо недоступно либо занято другим столкновением.','ACS_SNAPSHOT_HASH_MISMATCH'=>'Нарушена целостность сохранённого снимка.','ACS_SNAPSHOT_INVALID'=>'Сохранённый снимок несовместим или неполон.','ACS_DEPENDENCY_UNAVAILABLE'=>'Обязательная зависимость отключена.','preparation_required'=>'Нужны активная сессия и состояние подготовки.','config_snapshot_invalid'=>'Снимок конфигурации не прошёл проверку.'][$code]??'Участник не прошёл серверную проверку.';}
 }
