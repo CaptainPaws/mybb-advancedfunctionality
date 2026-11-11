@@ -93,6 +93,20 @@ final class AF_ADVINV_OwnerProtocol
         if (!$row) return ['status'=>'not_found','operation_key'=>$request['payload']['target_operation_key']];
         $this->samePrincipal($row,$request);return $this->receipt($row);
     }
+    /** Authorized current reservation proof for an explicit custody coordinator, not operation replay. */
+    public function reservationEvidence(string $id,int $owner,array $scope,string $authorizationRef): array
+    {
+        $this->requireTransaction();$this->schema();
+        if (!function_exists('af_is_addon_enabled') || !af_is_addon_enabled('advancedinventory')) throw new RuntimeException('INV_DEPENDENCY_UNAVAILABLE');
+        if (!preg_match('/\A[1-9][0-9]{0,18}\z/D',$id)) throw new RuntimeException('INV_RESERVATION_CHANGED');
+        $this->access->authorize('lookup',$owner,$scope,$authorizationRef,false);
+        $row=$this->one('SELECT * FROM '.$this->table('reservations').' WHERE id=? FOR UPDATE',[$id]);
+        if (!$row || (int)$row['owner_uid']!==$owner || $row['context_system']!==$scope['system'] || $row['context_key']!==$scope['context_key'] || $row['status']!=='active') throw new RuntimeException('INV_RESERVATION_CHANGED');
+        $this->confirmed($row);
+        $origin=$this->one('SELECT * FROM '.$this->table('external_operations').' WHERE operation_key=?',[$row['operation_key']]);
+        return ['reservation'=>['id'=>(string)$row['id'],'item_id'=>(int)$row['item_id'],'remaining_qty'=>(int)$row['remaining_qty'],'version'=>(int)$row['reservation_version']],'receipt'=>$this->receipt($origin)];
+    }
+
     private function requireTransaction(): void
     {
         if ($this->running || $this->db->character_set_name()!=='utf8mb4' || (int)$this->one('SELECT @@session.autocommit AS ac')['ac']!==1) throw new RuntimeException('INV_OWNER_TRANSACTION_REQUIRED');
@@ -163,7 +177,7 @@ final class AF_ADVINV_OwnerProtocol
             $changed = false;
             if ($operation === 'reserve') {
                 if (!$item || (int)$item['uid'] !== $owner) $code = 'ITEM_NOT_OWNED';
-                elseif ($item['entity'] !== 'equipment' || !in_array($item['subtype'], ['consumable','ammo','weapon'], true) || $item['kb_type'] === 'appearance' || ($item['subtype']==='weapon' && ($item['kb_type']!=='arpg_item' || $qty!==1))) $code = 'ITEM_KIND_UNSUPPORTED';
+                elseif ($item['entity'] !== 'equipment' || !in_array($item['subtype'], ['consumable','ammo','weapon','armor','gear','artifact'], true) || $item['kb_type'] === 'appearance' || (in_array($item['subtype'],['weapon','armor','gear','artifact'],true) && ($item['kb_type']!=='arpg_item' || $qty!==1))) $code = 'ITEM_KIND_UNSUPPORTED';
                 elseif ($before !== $p['expected_inventory_version']) $code = 'VERSION_CONFLICT';
                 elseif ($qty > (int)$item['qty'] - $reserved) $code = 'INSUFFICIENT_AVAILABLE';
                 elseif ($before >= self::MAX_VERSION) $code = 'VERSION_EXHAUSTED';

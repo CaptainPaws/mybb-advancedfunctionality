@@ -20,7 +20,7 @@ final class AF_ACS_ItemActionService
         if (!isset($registration['equipment_snapshot'])) return [];
         (new AF_ACS_CombatInventoryAccess($db instanceof mysqli?$db:$db->write_link,$uid))->verifySelection($uid,$sid,$actor);
         $this->repo->assertReadConnection($db);$this->inventory=(new AF_ADVINV_InventoryRead($db))->read($uid,$uid)->serverData();
-        $hasWeapon=false;foreach ($this->repo->itemEquipment($sid,$actor) as $slot) if ($slot['slot_key']==='weapon_mainhand') $hasWeapon=true;
+        $hasWeapon=false;foreach ($this->repo->itemEquipment($sid,$actor) as $slot) if ($slot['slot_key']==='weapon_mainhand'&&$slot['status']==='active') $hasWeapon=true;
         $choices=[];
         foreach ($this->inventory['items'] as $item) {
             if (!in_array($item['subtype'],['weapon','consumable'],true) || $item['entity']!=='equipment' || $item['kb_type']!=='arpg_item') continue;
@@ -32,23 +32,9 @@ final class AF_ACS_ItemActionService
     }
     public static function loadoutStats(AF_ACS_EncounterRepository $repo,string $sid,string $actor,array $registration,array $stats): array
     {
-        $bundle=$registration['equipment_snapshot']??null;
-        if (!is_array($bundle)) return $stats; // Historical registrations have no active item actions.
-        $cs=$registration['source_snapshot'];AF_ACS_Equipment::baseline($bundle,$cs);
-        $old=[];$new=[];$changed=false;
-        foreach ($repo->itemEquipment($sid,$actor) as $row) if ($row['slot_key']==='weapon_mainhand' && isset(json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR)['item'])) $changed=true;
-        if (!$changed) return $stats;
-        foreach ($bundle['records'] as $record) if ($record['slot']==='weapon_mainhand') $old=AF_ACS_Items::bonuses($record['mechanical_properties']);
-        foreach ($repo->itemEquipment($sid,$actor) as $row) if ($row['slot_key']==='weapon_mainhand') {
-            if (!hash_equals($row['content_hash'],hash('sha256',$row['payload_json']))) throw new RuntimeException('ACS_ITEM_PROVENANCE_REQUIRED');
-            $payload=json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR);
-            if (isset($payload['item']) && ((int)$row['inventory_item_id']!==$payload['item']['item_id'] || $row['slot_key']!==$payload['item']['slot'] || $payload['item']['owner_uid']!==$cs['identity']['owner_uid'])) throw new RuntimeException('ACS_ITEM_PROVENANCE_REQUIRED');
-            if (isset($payload['item'])) {$new=$payload['item']['bonuses'];$activeSnapshot=(string)$row['item_snapshot_id'];$activeSpec=$payload['item'];$changed=true;} else $new=$old;
-        }
-        if (!$changed) return $stats;
-        foreach ($cs['source_breakdown'] as $trace) if (in_array($trace['stat_key']??null,array_unique([...array_keys($old),...array_keys($new)]),true) && isset($trace['before'],$trace['after']) && (($trace['operation']??null)!=='flat' || abs(($trace['after']-$trace['before'])-$trace['value'])>1e-9)) throw new RuntimeException('ACS_ITEM_MODIFIER_PROVENANCE_BLOCKED');
-        return AF_ACS_Items::rebase($stats,$old,$new,$activeSnapshot,['fingerprint'=>AF_ACS_Equipment::fingerprint(['baseline'=>$cs['fingerprint'],'active'=>$activeSpec])])[0];
+        return AF_ACS_Custody::stats($registration,$repo->itemEquipment($sid,$actor),$repo->custodyRows($sid),$actor,$stats);
     }
+
     public static function isItem(string $key): bool {return str_starts_with($key,'item:');}
     public static function request(string $operation,string $key,string $sid,string $entity,int $uid,array $payload): array
     {
@@ -72,6 +58,9 @@ final class AF_ACS_ItemActionService
         $this->repo->assertReadConnection($db);$read=$this->inventory??=(new AF_ADVINV_InventoryRead($db))->read($uid,$uid)->serverData();
         $id=(int)$m[2];$item=null;foreach ($read['items'] as $row) if ((int)$row['id']===$id) $item=$row;
         if (!$item || $item['entity']!=='equipment' || $item['kb_type']!=='arpg_item' || !empty(af_advinv_resolve_appearance_item($item)['is_visual_item'])) throw new RuntimeException('ACS_ITEM_INSUFFICIENT_QTY');
+        $held=AF_ACS_Custody::held($this->repo->custodyRows($sid));
+        if (isset($held[(string)$item['id']])) throw new RuntimeException('ACS_CUSTODY_ITEM_UNAVAILABLE');
+        if ($m[1]!=='consume') foreach ($held as $row) if ((string)$row['active_user_entity_id']===$actor&&AF_ACS_Custody::payload($row)['item']['slot']==='weapon_mainhand') throw new RuntimeException('ACS_CUSTODY_SLOT_CONFLICT');
         if ($m[1]==='consume' && $item['subtype']!=='consumable') throw new RuntimeException('ACS_ITEM_EFFECT_UNSUPPORTED');
         if ($m[1]!=='consume' && $item['subtype']!=='weapon') throw new RuntimeException('ACS_ITEM_EQUIP_DENIED');
         $issues=[];$reads=[];$definition=af_cs_snapshot_definition('arpg_item',$item['kb_key'],$reads,$issues);
@@ -100,9 +89,10 @@ final class AF_ACS_ItemActionService
         }
         if ($available<0) throw new RuntimeException('ACS_ITEM_INSUFFICIENT_QTY');
         $virtual=['items'=>[$id=>['fingerprint'=>$fingerprint,'available'=>$available+$own]],'equipment'=>[$actor=>[]]];$versions=[];$initial=[];$current=[];$outgoing=null;$oldReservation=null;
-        foreach ($bundle['records'] as $record) if ($record['slot']==='weapon_mainhand') $initial=AF_ACS_Items::bonuses($record['mechanical_properties']);
         foreach ($this->repo->itemEquipment($sid,$actor) as $equipment) {
-            if ($equipment['status']!=='active' || !hash_equals($equipment['content_hash'],hash('sha256',$equipment['payload_json']))) throw new RuntimeException('ACS_ITEM_PROVENANCE_REQUIRED');
+            if (!hash_equals($equipment['content_hash'],hash('sha256',$equipment['payload_json']))) throw new RuntimeException('ACS_ITEM_PROVENANCE_REQUIRED');
+            $versions[$equipment['slot_key']]=(int)$equipment['equipment_version'];
+            if ($equipment['status']!=='active') continue;
             $record=json_decode($equipment['payload_json'],true,64,JSON_THROW_ON_ERROR);$spec=$record['item']??null;
             $bonuses=$equipment['slot_key']==='weapon_mainhand'?($spec['bonuses']??AF_ACS_Items::bonuses($record['mechanical_properties']??[])):[];
             $virtual['equipment'][$actor][$equipment['slot_key']]=['item_id'=>(int)$equipment['inventory_item_id'],'bonuses'=>$bonuses];
@@ -114,10 +104,7 @@ final class AF_ACS_ItemActionService
             }
             if ($equipment['slot_key']==='weapon_mainhand') {$current=$bonuses;$outgoing=(int)$equipment['inventory_item_id'];$oldReservation=$spec['reservation']??null;}
         }
-        // Linear deltas are valid only when every source affecting these stats has proved flat inclusion.
-        $stats=$cs['characteristics'];$changed=array_unique([...array_keys($initial),...array_keys($current)]);
-        foreach ($cs['source_breakdown'] as $trace) if (in_array($trace['stat_key']??null,$changed,true) && isset($trace['before'],$trace['after']) && (($trace['operation']??null)!=='flat' || abs(($trace['after']-$trace['before'])-$trace['value'])>1e-9)) throw new RuntimeException('ACS_ITEM_MODIFIER_PROVENANCE_BLOCKED');
-        [$stats]=AF_ACS_Items::rebase($stats,$initial,$current,(string)$entity['template_snapshot_id'],['fingerprint'=>$cs['fingerprint']]);
+        $stats=self::loadoutStats($this->repo,$sid,$actor,$registration,$cs['characteristics']);
         $spec=['schema_version'=>1,'operation'=>$m[1],'item_id'=>$id,'owner_uid'=>$uid,'qty'=>1,'item_fingerprint'=>$fingerprint,'pin'=>$pin,'subtype'=>$item['subtype'],'slot'=>'weapon_mainhand','equipment_version'=>$versions['weapon_mainhand']??0,'snapshot_id'=>(string)($pinnedSpec['snapshot_id']??$definition['entry']['id']),'bonuses'=>[],'effects'=>[],'reservation'=>$binding];
         if ($m[1]==='consume') {
             $use=$rules['item']['on_use']??null;

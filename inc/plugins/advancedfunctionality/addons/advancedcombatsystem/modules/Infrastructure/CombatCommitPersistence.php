@@ -24,6 +24,7 @@ trait AF_ACS_CombatCommitPersistence
             $f[$name]=$this->sql('SELECT * FROM '.$this->table($name).' WHERE encounter_id=? ORDER BY id'.$suffix,[$eid])['rows'];
         }
         $f['equipment']=$this->sql('SELECT e.*,s.content_hash,SHA2(s.payload_json,256) AS actual_hash FROM '.$this->table('equipment').' e JOIN '.$this->table('snapshots').' s ON s.id=e.item_snapshot_id WHERE e.session_id=? ORDER BY e.id'.$suffix,[$sid])['rows'];
+        $f['custody']=$this->sql('SELECT * FROM '.$this->table('custody').' WHERE session_id=? ORDER BY id'.$suffix,[$sid])['rows'];
         $f['effects']=$this->statusRows($sid,$lock);$f['reactions']=$this->reactionRows($sid,$eid,$lock);$f['barriers']=$this->barrierRows($sid,$eid,$lock);
         $f['barrier_targets']=$this->sql('SELECT t.* FROM '.$this->table('barrier_targets').' t JOIN '.$this->table('barrier_pools').' p ON p.id=t.pool_id JOIN '.$this->table('effects').' e ON e.id=p.effect_id WHERE e.session_id=? AND e.encounter_id=? ORDER BY t.pool_id,t.entity_id'.$suffix,[$sid,$eid])['rows'];
         $f['reaction_rolls']=$this->sql('SELECT * FROM '.$this->table('rolls')." WHERE session_id=? AND sealed_action_id IS NULL AND check_kind='reaction' ORDER BY id".$suffix,[$sid])['rows'];
