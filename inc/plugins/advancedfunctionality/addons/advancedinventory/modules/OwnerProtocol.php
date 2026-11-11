@@ -107,6 +107,32 @@ final class AF_ADVINV_OwnerProtocol
         return ['reservation'=>['id'=>(string)$row['id'],'item_id'=>(int)$row['item_id'],'remaining_qty'=>(int)$row['remaining_qty'],'version'=>(int)$row['reservation_version']],'receipt'=>$this->receipt($origin)];
     }
 
+    /** Current reservation state, including terminal release; no guard creation, release or cleanup. */
+    public function contextReservation(array $scope,string $authorizationRef,string $id): array
+    {
+        $this->boundary();$this->schema();$this->access->uid();
+        if (!function_exists('af_is_addon_enabled') || !af_is_addon_enabled('advancedinventory')) throw new RuntimeException('INV_DEPENDENCY_UNAVAILABLE');
+        if (!preg_match('/\A[1-9][0-9]{0,18}\z/D',$id)) throw new InvalidArgumentException('INV_INVALID_RESERVATION');
+        $row=$this->one('SELECT * FROM '.$this->table('reservations').' WHERE id=?',[$id]);
+        if (!$row || $row['context_system']!==($scope['system']??null) || $row['context_key']!==($scope['context_key']??null)) throw new RuntimeException('INV_RESERVATION_CHANGED');
+        $this->access->authorize('lookup',(int)$row['owner_uid'],$scope,$authorizationRef,false);$this->confirmed($row);
+        return ['reservation_id'=>(string)$row['id'],'owner_uid'=>(string)$row['owner_uid'],'item_id'=>(string)$row['item_id'],'remaining_qty'=>(int)$row['remaining_qty'],'reservation_version'=>(string)$row['reservation_version'],'status'=>$row['status'],'operation_key'=>$row['operation_key']];
+    }
+    /** Read-only scoped obligations; authorization is checked for every owner, including foreign GM custody. */
+    public function contextReservations(array $scope,string $authorizationRef,string $after='0'): array
+    {
+        $this->boundary();$this->schema();$this->access->uid();
+        if (!function_exists('af_is_addon_enabled') || !af_is_addon_enabled('advancedinventory')) throw new RuntimeException('INV_DEPENDENCY_UNAVAILABLE');
+        if (array_keys($scope)!==['system','context_key'] || $scope['system']!=='acs' || !is_string($scope['context_key']) || !preg_match('/\A[1-9][0-9]*\z/D',$scope['context_key']) || !preg_match('/\A(?:0|[1-9][0-9]{0,18})\z/D',$after)) throw new InvalidArgumentException('INV_INVALID_SCOPE');
+        $rows=$this->sql('SELECT * FROM '.$this->table('reservations')." WHERE context_system=? AND context_key=? AND status='active' AND id>? ORDER BY id LIMIT 101",[$scope['system'],$scope['context_key'],$after])['rows'];
+        $more=count($rows)>100;if ($more) array_pop($rows);$out=[];
+        foreach ($rows as $row) {
+            $this->access->authorize('lookup',(int)$row['owner_uid'],$scope,$authorizationRef,false);$this->confirmed($row);
+            $out[]=['reservation_id'=>(string)$row['id'],'owner_uid'=>(string)$row['owner_uid'],'item_id'=>(string)$row['item_id'],'remaining_qty'=>(int)$row['remaining_qty'],'reservation_version'=>(string)$row['reservation_version'],'status'=>$row['status'],'operation_key'=>$row['operation_key']];
+        }
+        return ['items'=>$out,'next_after'=>$more?(string)end($rows)['id']:null];
+    }
+
     private function requireTransaction(): void
     {
         if ($this->running || $this->db->character_set_name()!=='utf8mb4' || (int)$this->one('SELECT @@session.autocommit AS ac')['ac']!==1) throw new RuntimeException('INV_OWNER_TRANSACTION_REQUIRED');
@@ -261,6 +287,12 @@ final class AF_ADVINV_OwnerProtocol
         }
     }
 
+    /** Read-only preflight for a standalone property intent; actual owner API rechecks under its locks. */
+    public function authorizePropertyCommand(string $operation,array $request): void
+    {
+        if (!in_array($operation,['transfer','grant'],true)) throw new RuntimeException('INV_OPERATION_UNSUPPORTED');
+        $this->boundary();$this->validate($operation,$request);$this->authorize($request,$operation==='transfer'?$request['payload']['from_uid']:$request['payload']['recipient_uid'],true);
+    }
     public function validateCommand(string $operation,array $request): void { $this->validate($operation,$request); }
     private function validate(string $operation, array $r): void
     {

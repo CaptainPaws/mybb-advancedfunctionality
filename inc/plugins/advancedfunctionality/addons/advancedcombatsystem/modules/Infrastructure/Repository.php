@@ -99,6 +99,31 @@ class AF_ACS_Repository
         }
     }
 
+    /** Item actions are fenced per session; unrelated non-item mechanics do not acquire an Inventory dependency. */
+    public function assertInventorySettled(string $sid,?array $items=null): void
+    {
+        if ($items===[]) return;
+        $filter='';$args=$items===null?[$sid]:[];
+        if ($items!==null) {$filter=" AND JSON_UNQUOTE(JSON_EXTRACT(request_json,'$.payload.item_id')) IN (".implode(',',array_fill(0,count($items),'?')).')';array_push($args,...$items);}
+        if ($this->sql('SELECT operation_key FROM '.$this->table('operations')." WHERE external_system='advancedinventory' ".($items===null?' AND session_id=?':'')." AND status IN ('prepared','recovery_required')".$filter.' LIMIT 1',$args)['rows']) throw new RuntimeException('ACS_INVENTORY_RECOVERY_REQUIRED');
+    }
+
+    /** A new owner-verified pin after a partial transfer is valid; an older kit is not. */
+    public function assertInventoryEquipment(string $sid,array $pins): void
+    {
+        $ids=array_map('strval',array_keys($pins));$this->assertInventorySettled($sid,$ids);if (!$ids) return;
+        require_once __DIR__.'/../Domain/InventoryReceipt.php';
+        $rows=$this->sql('SELECT request_json,payload_hash,result_json FROM '.$this->table('operations')." WHERE external_system='advancedinventory' AND kind='inventory.transfer' AND status='committed' AND JSON_UNQUOTE(JSON_EXTRACT(request_json,'$.payload.item_id')) IN (".implode(',',array_fill(0,count($ids),'?')).') ORDER BY operation_key',$ids)['rows'];
+        foreach ($rows as $row) {
+            if (!hash_equals($row['payload_hash'],hash('sha256',$row['request_json']))) throw new RuntimeException('ACS_INVENTORY_OPERATION_INTEGRITY');
+            $intent=json_decode($row['request_json'],true,64,JSON_THROW_ON_ERROR);$receipt=json_decode($row['result_json'],true,64,JSON_THROW_ON_ERROR)['owner_receipt']??[];AF_ACS_InventoryReceipt::verify($intent,$receipt);
+            if ($receipt['status']!=='committed') throw new RuntimeException('ACS_INVENTORY_OPERATION_INTEGRITY');
+            $pin=$pins[(string)$intent['payload']['item_id']];$after=null;
+            foreach ($receipt['inventory_versions'] as $version) if ($version['uid']===$intent['payload']['from_uid']) $after=$version['after'];
+            if ($after===null || (string)$pin['owner_uid']!==(string)$intent['payload']['from_uid'] || (int)$pin['inventory_version']<$after) throw new RuntimeException('ACS_ITEM_DEPENDENCY_CONFLICT');
+        }
+    }
+
     /** Exact decimal IDs/versions; callers never pass floats or overflowing ints. */
     public static function integer(mixed $value, string $maximum = '18446744073709551615', bool $zero = false): string
     {

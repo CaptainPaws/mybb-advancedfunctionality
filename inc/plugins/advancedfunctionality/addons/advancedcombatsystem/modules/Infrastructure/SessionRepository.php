@@ -61,6 +61,15 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
         $this->commandWrite();
         $this->sql('UPDATE '.$this->table('sessions').' SET owner_uid=? WHERE id=?',[$uid,$id]);
     }
+    /** Lifecycle never deletes or releases obligations, reservations, events, drafts or tape. */
+    public function lifecycle(array $session,string $operation): array
+    {
+        $this->commandWrite();
+        if ($operation==='close'&&$session['status']!=='active' || $operation==='archive'&&!in_array($session['status'],['active','closed'],true)) throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
+        $status=$operation==='close'?'closed':'archived';
+        $this->sql('UPDATE '.$this->table('sessions').' SET status=? WHERE id=?',[$status,$session['id']]);
+        $session['_command_result']=['status'=>$status,'obligations_preserved'=>true];return $session;
+    }
     /** Internal command boundary; callers supply authorization, never client callbacks. */
     public function command(string $key, string $kind, array $request, callable $authorize, callable $apply): array
     {
@@ -76,7 +85,7 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
                 if($old['status']!=='committed')throw new RuntimeException('ACS_RECOVERY_REQUIRED');
                 return json_decode($old['result_json'],true,512,JSON_THROW_ON_ERROR);
             }
-            if ($session) { $this->assertNoPendingPublication((string)$session['id']); }
+            if ($session && !in_array($kind,['session.close','session.archive'],true)) { $this->assertNoPendingPublication((string)$session['id']); }
             $recent=$this->sql('SELECT COUNT(*) AS n FROM '.$this->table('operations').' WHERE operation_key LIKE ? AND updated_at>?',['session:'.$request['actor_uid'].':%',time()-60])['rows'][0]['n'];
             if((int)$recent>=20)throw new RuntimeException('ACS_RATE_LIMIT');
             if($session && (string)$session['session_version']!==$request['expected_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');

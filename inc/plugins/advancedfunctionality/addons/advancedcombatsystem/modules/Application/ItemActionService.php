@@ -32,7 +32,19 @@ final class AF_ACS_ItemActionService
     }
     public static function loadoutStats(AF_ACS_EncounterRepository $repo,string $sid,string $actor,array $registration,array $stats): array
     {
-        return AF_ACS_Custody::stats($registration,$repo->itemEquipment($sid,$actor),$repo->custodyRows($sid),$actor,$stats);
+        $equipment=$repo->itemEquipment($sid,$actor);$custody=$repo->custodyRows($sid);$pins=[];
+        foreach ($equipment as $row) if ($row['status']==='active') {
+            if (!hash_equals($row['content_hash'],hash('sha256',$row['payload_json']))) throw new RuntimeException('ACS_ITEM_PROVENANCE_REQUIRED');
+            $p=json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR);$owner=$p['item']['owner_uid']??$p['owner_uid'];$version=$p['inventory_version']??0;
+            foreach ($p['item']['reservation']['inventory_versions']??[] as $v) if ($v['uid']===$owner) $version=$v['after'];
+            $pins[(string)$row['inventory_item_id']]=['owner_uid'=>$owner,'inventory_version'=>AF_ACS_Repository::integer($version,'9007199254740991',true)];
+        }
+        foreach ($custody as $row) if ($row['status']==='held'&&(string)$row['active_user_entity_id']===$actor) {
+            $p=AF_ACS_Custody::payload($row);$version=0;foreach ($p['reservation']['inventory_versions'] as $v) if ($v['uid']===$p['owner_uid']) $version=$v['after'];
+            $pins[(string)$row['inventory_item_id']]=['owner_uid'=>$p['owner_uid'],'inventory_version'=>AF_ACS_Repository::integer($version,'9007199254740991',true)];
+        }
+        $repo->assertInventoryEquipment($sid,$pins);
+        return AF_ACS_Custody::stats($registration,$equipment,$custody,$actor,$stats);
     }
 
     public static function isItem(string $key): bool {return str_starts_with($key,'item:');}
@@ -43,7 +55,7 @@ final class AF_ACS_ItemActionService
     }
     public function prepare(string $sid,string $actor,string $key,?string $draft=null,int $index=0): array
     {
-        global $db;
+        global $db;$this->repo->assertInventorySettled($sid);
         foreach (['advancedcombatsystem','advancedinventory','knowledgebase','charactersheets'] as $addon) if (!function_exists('af_is_addon_enabled') || !af_is_addon_enabled($addon)) throw new RuntimeException('ACS_INVENTORY_UNAVAILABLE');
         require_once __DIR__.'/../../../charactersheets/modules/combat_snapshot.php'; // Read-only definition helpers, never rebuild a sheet.
         foreach (['af_kb_arpg_acs_source','af_inv_get_items','af_inv_candidate_slots_for_item'] as $helper) if (!function_exists($helper)) throw new RuntimeException('ACS_INVENTORY_UNAVAILABLE');
@@ -58,6 +70,7 @@ final class AF_ACS_ItemActionService
         $this->repo->assertReadConnection($db);$read=$this->inventory??=(new AF_ADVINV_InventoryRead($db))->read($uid,$uid)->serverData();
         $id=(int)$m[2];$item=null;foreach ($read['items'] as $row) if ((int)$row['id']===$id) $item=$row;
         if (!$item || $item['entity']!=='equipment' || $item['kb_type']!=='arpg_item' || !empty(af_advinv_resolve_appearance_item($item)['is_visual_item'])) throw new RuntimeException('ACS_ITEM_INSUFFICIENT_QTY');
+        $this->repo->assertInventorySettled($sid,[(string)$id]);
         $held=AF_ACS_Custody::held($this->repo->custodyRows($sid));
         if (isset($held[(string)$item['id']])) throw new RuntimeException('ACS_CUSTODY_ITEM_UNAVAILABLE');
         if ($m[1]!=='consume') foreach ($held as $row) if ((string)$row['active_user_entity_id']===$actor&&AF_ACS_Custody::payload($row)['item']['slot']==='weapon_mainhand') throw new RuntimeException('ACS_CUSTODY_SLOT_CONFLICT');

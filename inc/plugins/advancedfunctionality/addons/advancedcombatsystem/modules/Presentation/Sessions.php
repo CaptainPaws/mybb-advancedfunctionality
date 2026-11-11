@@ -57,7 +57,8 @@ final class AF_ACS_SessionsPage
                 if($view['can_manage'])echo '<p><a href="'.($admin?'../':'').'showthread.php?tid='.self::esc($session['tid']).'&amp;acs_session='.self::esc($session['id']).'">Открыть панель GM в связанной теме</a></p>';
                 require_once __DIR__.'/Entities.php';
                 AF_ACS_EntitiesPage::render((string)$session['id'],$view,$url);
-                echo '<p>Закрытие, архив и reopen пока недоступны: проверки обязательств будут реализованы на этапе 10.</p>';
+                foreach(['close'=>'Закрыть с сохранением обязательств','archive'=>'Архивировать с сохранением обязательств'] as $operation=>$label) if(!empty($view['can_'.$operation])) {self::form($url,$operation,['session_id'=>$sid,'expected_version'=>$session['session_version']]);echo '<label>Причина <input name="reason" maxlength="1000" required></label><button type="submit">'.self::esc($label).'</button></form>';}
+                echo '<p>Закрытие и архивирование сохраняют custody, резервы, pending операции и историю; автоматического возврата, наград или финализации нет. Reopen пока недоступен.</p>';
             } catch(Throwable $error) {echo '<p>Сессия недоступна.</p>';}
         }
         $list=$service->list($mybb->get_input('after')?:'0');
