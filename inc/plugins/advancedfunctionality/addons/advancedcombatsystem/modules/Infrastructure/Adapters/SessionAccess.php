@@ -53,6 +53,22 @@ class AF_ACS_SessionAccess
             || (!empty($permissions['canonlyreplyownthreads'])&&(string)($thread['uid']??'')!==$this->uid())
             || (!empty($thread['closed'])&&!is_moderator($fid,'canpostclosedthreads')))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
     }
+    /** Only native explicit admin permission or a persisted owner-approved quest rule. */
+    public function delegationReplacement(array $session,string $owner,array $ids,?string $group,array $actions): ?array
+    {
+        global $mybb;
+        if(defined('IN_ADMINCP') && IN_ADMINCP && !empty($mybb->usergroup['cancp'])
+            && in_array($mybb->admin['permissions']['advancedfunctionality']['acs_delegation_override']??null,[1,'1',true],true))return ['kind'=>'native_admin','permission'=>'acs_delegation_override','actor_uid'=>$this->uid()];
+        $config=json_decode($session['config_json'],true,32,JSON_THROW_ON_ERROR);
+        foreach($config['delegation_replacement_rules']??[] as $rule){
+            if(($rule['schema_version']??null)!==1 || (string)($rule['approved_by_uid']??'')!==$owner || !is_string($rule['rule_id']??null)
+                || !preg_match('/\A[a-z0-9_.:-]{1,96}\z/D',$rule['rule_id']) || (int)($rule['valid_from']??PHP_INT_MAX)>time() || (int)($rule['valid_until']??0)<=time()
+                || !is_array($rule['permitted_actions']??null) || array_diff($actions,$rule['permitted_actions']))continue;
+            if($group!==null ? ($rule['control_group_id']??null)!==$group : !is_array($rule['entity_ids']??null)||array_diff($ids,$rule['entity_ids']))continue;
+            return ['kind'=>'quest_rule','rule_id'=>$rule['rule_id'],'approved_by_uid'=>$owner,'valid_until'=>(string)$rule['valid_until']];
+        }
+        return null;
+    }
     public function defaults(): array
     {
         global $mybb;

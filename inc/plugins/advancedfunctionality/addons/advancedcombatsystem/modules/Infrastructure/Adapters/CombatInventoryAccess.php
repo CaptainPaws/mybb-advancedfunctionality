@@ -1,11 +1,14 @@
 <?php
 if (!defined('IN_MYBB')) {die('No direct access');}
 require_once __DIR__.'/../../../../advancedinventory/modules/OwnerProtocol.php';
+require_once __DIR__.'/../EncounterRepository.php';
 
-/** Server composition, own-property only. Never acquires ACS locks from an owner callback. */
+/** Owner-side IC-INV-1 composition. Current consent AND the owner's spending gate are required.
+ * Reads only: no owner→ACS lock inversion, native callbacks, transfer or grant authority.
+ */
 final class AF_ACS_CombatInventoryAccess implements AF_ADVINV_OwnerAccess
 {
-    public function __construct(private mysqli $db,private int $actor) {}
+    public function __construct(private mysqli $db,private int $actor,private ?array $readContext=null) {}
     public function uid(): int
     {
         global $mybb;
@@ -13,21 +16,31 @@ final class AF_ACS_CombatInventoryAccess implements AF_ADVINV_OwnerAccess
         return $this->actor;
     }
     public function authorize(string $operation,int $ownerUid,array $scope,string $ref,bool $mutation): void
-    {$this->decision($operation,$ownerUid,$scope,$ref,$mutation,true);}
-    /** Read-only current grant check, also valid for GET preview/status. Never authorizes a mutation. */
-    public function verifySelection(int $ownerUid,string $sid,string $entity): void
-    {$this->decision('reserve',$ownerUid,['system'=>'acs','context_key'=>$sid],'acs-item:'.$sid.':'.$entity,true,false);}
+    {
+        if($this->readContext!==null && $operation==='lookup' && !$mutation && $scope===['system'=>'inventory','context_key'=>'owner:'.$ownerUid] && $ref==='inventory-owner-v1'){
+            [$sid,$entity,$category]=$this->readContext;$this->verifySelection($ownerUid,$sid,$entity,$category);return;
+        }
+        $this->decision($operation,$ownerUid,$scope,$ref,$mutation,true);
+    }
+    public function verifySelection(int $ownerUid,string $sid,string $entity,string $category='ordinary'): void
+    {
+        $this->decision('reserve',$ownerUid,['system'=>'acs','context_key'=>$sid],'acs-item:'.$sid.':'.$entity.($category==='ordinary'?'':':'.$category),true,false);
+    }
     private function decision(string $operation,int $ownerUid,array $scope,string $ref,bool $mutation,bool $checkPost): void
     {
-        global $mybb;
-        if ($ownerUid!==$this->uid() || ($scope['system']??null)!=='acs' || !preg_match('/\Aacs-item:([1-9][0-9]*):([1-9][0-9]*)\z/D',$ref,$m) || $scope['context_key']!==$m[1] || !in_array($operation,['lookup','reserve','consume','release'],true)) throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
-        // Current READ COMMITTED reads only: no owner→ACS lock inversion, no native callbacks.
-        $sql='SELECT e.owner_uid,s.status,st.life_state,c.permissions_json,c.mode,c.valid_from,c.valid_until,c.controller_uid FROM `'.TABLE_PREFIX.'af_acs_entities` e JOIN `'.TABLE_PREFIX.'af_acs_sessions` s ON s.id=e.session_id JOIN `'.TABLE_PREFIX.'af_acs_entity_states` st ON st.entity_id=e.id LEFT JOIN `'.TABLE_PREFIX."af_acs_controllers` c ON c.entity_id=e.id AND c.status='active' WHERE e.session_id=? AND e.id=? AND EXISTS (SELECT 1 FROM `".TABLE_PREFIX.'af_acs_session_roles` r WHERE r.session_id=s.id AND r.uid=? AND (r.expires_at IS NULL OR r.expires_at>?))';
-        $stmt=$this->db->prepare($sql);$now=time();$stmt->bind_param('ssss',$m[1],$m[2],$ownerUid,$now);$stmt->execute();$rows=$stmt->get_result()->fetch_all(MYSQLI_ASSOC);$stmt->close();
-        if (count($rows)!==1 || (int)$rows[0]['owner_uid']!==$ownerUid) throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
-        if (!$mutation) return;
-        $row=$rows[0];$grant=json_decode($row['permissions_json']??'{}',true,16,JSON_THROW_ON_ERROR);
-        if ($checkPost && ($mybb->request_method??'')!=='post' || $row['status']!=='active' || $row['mode']!=='exclusive' || (int)$row['controller_uid']!==$ownerUid || (int)$row['valid_from']>$now || $row['valid_until']!==null && (int)$row['valid_until']<=$now
-            || ($grant['schema_version']??null)!==1 || ($grant['combat_operations_enabled']??null)!==true || ($grant['inventory_spending_enabled']??null)!==true || $operation!=='release' && $row['life_state']!=='active') throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
+        global $mybb;$uid=$this->uid();
+        if (($scope['system']??null)!=='acs' || !preg_match('/\Aacs-item:([1-9][0-9]*):([1-9][0-9]*)(?::(item_consume|equipment_change))?\z/D',$ref,$m) || $scope['context_key']!==$m[1] || !in_array($operation,['lookup','reserve','consume','release'],true)) throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
+        $repo=new AF_ACS_EncounterRepository($this->db);$entity=$repo->entity($m[1],$m[2]);$session=$repo->session($m[1]);
+        // IC-INV-1 uses the authenticated actor as the owner placeholder for a missing lookup.
+        // Existing receipts still pass samePrincipal(actor/context) in OwnerProtocol.
+        if($entity && $operation==='lookup' && !$mutation && $ownerUid===$uid && isset($m[3]))$ownerUid=(int)$entity['owner_uid'];
+        if(!$entity || !$session || $entity['kind']!=='character' || (int)$entity['owner_uid']!==$ownerUid || !$repo->roles($m[1],(string)$uid) || !$repo->roles($m[1],(string)$ownerUid))throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
+        $category=$m[3]??'ordinary';
+        if($ownerUid!==$uid && ($category==='ordinary' || $operation==='consume' && $category!=='item_consume' || !$repo->controllerFor($m[1],$m[2],(string)$uid,$category)))throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
+        if(!$mutation)return;
+        // The grant does not replace the owner's independent inventory_spending_enabled permission.
+        $controller=$repo->controllerFor($m[1],$m[2],(string)$ownerUid);$permission=json_decode($controller['permissions_json']??'{}',true,16,JSON_THROW_ON_ERROR);
+        if($checkPost && ($mybb->request_method??'')!=='post' || $session['status']!=='active' || !$controller
+            || ($permission['schema_version']??null)!==1 || ($permission['combat_operations_enabled']??null)!==true || ($permission['inventory_spending_enabled']??null)!==true || $operation!=='release' && $entity['life_state']!=='active')throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
     }
 }

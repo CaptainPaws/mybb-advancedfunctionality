@@ -22,7 +22,10 @@ final class AF_ACS_SessionsPage
             try {
                 $input=[];foreach(['operation_key','reason','tid','owner_uid','session_id','expected_version','uid','role','kind','source_key','name','initial_hp'] as $key)$input[$key]=$mybb->get_input($key);
                 $op=$mybb->get_input('op');
-                if($op==='entity_validate') {
+                if(str_starts_with($op,'delegation_')){
+                    $delegationInput=[];foreach(['session_id','expected_version','operation_key','reason','owner_uid','delegate_uid','entity_ids','control_group_id','permitted_actions','valid_from','valid_until','duration_seconds','delegation_id','delegation_version'] as $field)if(array_key_exists($field,$_POST))$delegationInput[$field]=in_array($field,['entity_ids','permitted_actions'],true)?$_POST[$field]:$mybb->get_input($field);
+                    af_advancedcombatsystem_delegations()->command(substr($op,11),$delegationInput);echo '<p>Делегирование обновлено.</p>';
+                }elseif($op==='entity_validate') {
                     $validation=af_advancedcombatsystem_entities()->validate($input['session_id'],$input);
                     if(!$validation['ready'])throw new AF_ACS_RegistrationBlocked($validation['diagnostics']);
                     echo '<p>Источник проверен и готов к регистрации. При добавлении он будет проверен повторно.</p>';
@@ -57,6 +60,7 @@ final class AF_ACS_SessionsPage
                 if($view['can_manage'])echo '<p><a href="'.($admin?'../':'').'showthread.php?tid='.self::esc($session['tid']).'&amp;acs_session='.self::esc($session['id']).'">Открыть панель GM в связанной теме</a></p>';
                 require_once __DIR__.'/Entities.php';
                 AF_ACS_EntitiesPage::render((string)$session['id'],$view,$url);
+                require_once __DIR__.'/Delegations.php';AF_ACS_DelegationsPage::render((string)$session['id'],$url);
                 foreach(['close'=>'Закрыть с сохранением обязательств','archive'=>'Архивировать с сохранением обязательств'] as $operation=>$label) if(!empty($view['can_'.$operation])) {self::form($url,$operation,['session_id'=>$sid,'expected_version'=>$session['session_version']]);echo '<label>Причина <input name="reason" maxlength="1000" required></label><button type="submit">'.self::esc($label).'</button></form>';}
                 echo '<p>Закрытие и архивирование сохраняют custody, резервы, pending операции и историю; автоматического возврата, наград или финализации нет. Reopen пока недоступен.</p>';
             } catch(Throwable $error) {echo '<p>Сессия недоступна.</p>';}

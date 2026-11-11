@@ -16,14 +16,13 @@ final class AF_ACS_DraftService
         $encounter=$this->repo->encounter($sid,$eid);$turn=$this->repo->clockTurn($sid,$turnId);
         if(!$encounter||!$turn||$turn['encounter_id']!==$eid)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
         $editable=$view['session']['status']==='active'&&in_array($encounter['status'],['active','paused'],true)&&$turn['round_status']==='open'&&$turn['round_number']===$turn['current_round']&&$turn['status']==='pending';
-        if($turn['owner_uid']!==null&&$turn['owner_uid']!==$uid)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
         $roster=json_decode($turn['roster_json'],true,32,JSON_THROW_ON_ERROR);$fp=$roster['fingerprint']??null;unset($roster['fingerprint']);
         if(!is_string($fp)||!hash_equals($fp,hash('sha256',AF_ACS_Repository::json($roster))))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
         $actors=[];
         foreach($roster['members']??[] as $member){
             $id=AF_ACS_Repository::integer($member['entity_id']??null);$e=$this->repo->entity($sid,$id);$c=$this->repo->controllerFor($sid,$id,$uid);
             if(!$e||$e['control_group_id']!==$turn['control_group_id']||!$c)continue;
-            $actors[$id]=['entity_version'=>(string)$e['entity_version'],'state_version'=>(string)$e['state_version'],'snapshot_id'=>(string)$e['template_snapshot_id'],'snapshot_hash'=>$e['content_hash'],'controller_version'=>$c['assignment_version']];
+            $actors[$id]=['entity_version'=>(string)$e['entity_version'],'state_version'=>(string)$e['state_version'],'snapshot_id'=>(string)$e['template_snapshot_id'],'snapshot_hash'=>$e['content_hash'],'controller_version'=>$c['assignment_version'],'control_proof'=>AF_ACS_AuthorizationService::controlProof($c)];
         }
         if(!$actors)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
         if($write&&!$editable)throw new RuntimeException('ACS_DRAFT_TURN_UNAVAILABLE');

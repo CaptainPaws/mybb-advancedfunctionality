@@ -55,7 +55,7 @@ final class AF_ACS_BuilderService
             $t=$this->repo->clockTurn($sid,$turn['id']);$roster=json_decode($t['roster_json'],true,32,JSON_THROW_ON_ERROR);$fp=$roster['fingerprint']??null;unset($roster['fingerprint']);
             if(!is_string($fp)||!hash_equals($fp,hash('sha256',AF_ACS_Repository::json($roster))))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
             $memberIds=array_column($roster['members']??[],'entity_id');$members=array_values(array_filter($members,static fn($a)=>in_array($a['id'],$memberIds,true)));
-            if(!$members||$t['owner_uid']!==null&&$t['owner_uid']!==$this->access->uid())continue;
+            if(!$members)continue;
             $ap=AF_ACS_Clock::availableAP((int)$t['ap_budget'],(int)$t['ap_spent'],(int)$t['pre_round_ap_commitment']);
             $turns[]=['id'=>$t['id'],'group_id'=>$t['control_group_id'],'status'=>$t['status'],'members'=>$members,'ap'=>$ap,'maximum_ap'=>(int)$t['ap_budget']];
             $versions[$t['id']]=[$t['turn_version'],$fp];
@@ -101,6 +101,8 @@ final class AF_ACS_BuilderService
             if(!is_array($action)||array_diff(array_keys($action),['actor_id','ability_key','targets','parameters'])||!is_string($action['ability_key']??null)||!is_array($action['targets']??null)||!array_is_list($action['targets'])||!$action['targets']||count($action['targets'])>100||count(array_unique($action['targets']))!==count($action['targets']))throw new RuntimeException('builder_input_invalid');
             if(($action['parameters']??[])!==[])throw new RuntimeException('builder_parameters_unsupported');
             $actor=AF_ACS_Repository::integer($action['actor_id']??null);
+            $category=$isItem?(str_starts_with($action['ability_key'],'item:consume:')?'item_consume':'equipment_change'):'ordinary';
+            if(!$this->repo->controllerFor($sid,$actor,$this->access->uid(),$category))throw new RuntimeException('ACS_DELEGATION_ACTION_DENIED');
             if ($isItem) {
                 if (str_starts_with($action['ability_key'],'item:pass:')) throw new RuntimeException('ACS_ITEM_PASS_SPATIAL_UNSUPPORTED');
                 if (!in_array($actor,array_column($scope['actors'],'id'),true) || $action['targets']!==[$actor]) throw new RuntimeException('ACS_ITEM_TARGET_UNSUPPORTED');

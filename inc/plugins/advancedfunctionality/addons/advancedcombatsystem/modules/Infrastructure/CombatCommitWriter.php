@@ -191,6 +191,8 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             $result=AF_ACS_Resolver::resolve($prepared['context'],$ordered,$frozen['tape'],'seal');
             $controls=$this->controls($current,$frozen,$prepared,$result);$controls['fence_hash']=$fingerprint;
             $current=$this->phase($current,'committing',['schema_version'=>1,'pid'=>$current['pid'],'controls'=>array_diff_key($controls,['summary'=>true])]);
+            // Time expiry can advance while resolving even though assignment/revoke rows are locked.
+            $this->authorizeFacts($current,$f,$frozen['actions']);
             $controls['owner_receipts']=$this->commitItems($current,$frozen,$result,$prepared);
             $changes=$this->project($current,$f,$turn,$result,$frozen);
             return $this->finish($current,$f,$result,$controls,$changes,$fid);
