@@ -76,7 +76,7 @@ final class AF_ACS_CustodyService
         try {return $this->repo->command('session:'.$this->access->uid().':'.$key,'custody.'.$operation,$r,
             fn()=>$this->authority($sid,false),function($session)use($r,$key,$sid,$operation) {
                 if ($operation!=='return'&&$session['status']!=='active') throw new RuntimeException('ACS_CUSTODY_SESSION_UNAVAILABLE');
-                $this->repo->custodyNoPending($sid);$this->repo->custodyRows($sid,true);
+                $this->repo->assertInventorySettled($sid);$this->repo->assertInventorySettled($sid,[$r['inventory_item_id']]);$this->repo->custodyNoPending($sid);$this->repo->custodyRows($sid,true);
                 $before=$this->repo->custodyItem($sid,$r['inventory_item_id']);
                 if ((string)($before['custody_version']??0)!==$r['expected_custody_version']) throw new RuntimeException('ACS_CUSTODY_VERSION_CONFLICT');
                 if ($before) AF_ACS_Custody::payload($before);

@@ -27,6 +27,31 @@ final class AF_ACS_RecoveryPage
             }
             $view=$service->inspect($id);
         }
+        require_once __DIR__.'/../Infrastructure/InventoryObligationsQuery.php';
+        require_once __DIR__.'/InventoryObligations.php';
+        $inventoryQuery=new AF_ACS_InventoryObligationsQuery($db);$inventoryNotice='';$lookupKey='';
+        // Same GM/native context was checked above; mutations additionally check CSRF/CAS in services.
+        if ($mybb->request_method==='post' && $mybb->get_input('inventory_action')!=='') {
+            $lookupKey=$mybb->get_input('operation_key');
+            try {
+                if ($mybb->get_input('session_id')!==$sid || $mybb->get_input('tid')!==$page['tid']) throw new RuntimeException('ACS_RECOVERY_PERMISSION_DENIED');
+                if ($mybb->get_input('inventory_action')==='recover') {
+                    require_once __DIR__.'/../Application/RecoveryService.php';
+                    $out=(new AF_ACS_RecoveryService($db,$access))->recoverInventory($sid,$lookupKey,$mybb->get_input('expected_operation_version'));
+                    $inventoryNotice='<p role="status">Исход операции: '.self::esc($out['status']).'. Lookup: '.self::esc($out['lookup_state']??'подтверждён').'.</p>';
+                } else {
+                    require_once __DIR__.'/../Application/CustodyService.php';$custody=new AF_ACS_CustodyService($db,$access);
+                    if ($mybb->get_input('inventory_action')==='custody_lookup') {
+                        $access->csrf();$out=$custody->lookup($sid,$lookupKey);
+                    } elseif ($mybb->get_input('inventory_action')==='custody') {
+                        $input=[];foreach(['session_id','expected_version','expected_custody_version','operation_key','reason','inventory_item_id','owner_entity_id','custodian_entity_id'] as $field)$input[$field]=$mybb->get_input($field);
+                        $out=$custody->command($mybb->get_input('custody_operation'),$input);
+                    } else throw new RuntimeException('ACS_CUSTODY_INPUT_INVALID');
+                    $inventoryNotice='<p role="status">Прежний ключ '.self::esc($lookupKey).' · состояние: '.self::esc($out['status']).'.</p>';
+                }
+            } catch (Throwable $error) {$inventoryNotice='<p role="alert">Исход не подтверждён. Обновите состояние; при неизвестном ответе проверьте прежний ключ '.self::esc($lookupKey).' через lookup. Не отправляйте новую операцию.</p>';}
+        }
+        $inventoryPage=$inventoryQuery->page($sid,$access,$mybb->get_input('custody_after')?:'0',$mybb->get_input('inventory_after'),$mybb->get_input('reservation_after')?:'0');
         $html='<section class="af-acs-recovery"><h2>ACS · Восстановление публикаций</h2>'.$notice.'<p><a href="showthread.php?tid='.self::esc($page['tid']).'">Вернуться в тему</a></p>';
         $html.='<p>Сообщения MyBB и боевая история не исправляются этой страницей. Неизвестный PID нельзя подтвердить по совпадению автора, текста или времени.</p><ul>';
         foreach($page['items'] as $r)$html.='<li><a href="'.self::esc(self::url($sid,$r['submission_id'])).'">Отправка '.self::esc(substr($r['submission_id'],0,8)).'</a> · '.self::esc($r['status']).' · последняя фаза '.self::esc($r['last_phase']).' · PID '.self::esc($r['pid']??'не подтверждён').'</li>';
@@ -50,6 +75,6 @@ final class AF_ACS_RecoveryPage
                 $html.='</select></label><label>Причина <textarea name="reason" rows="3" maxlength="1024" required data-af-ae-skip="1"></textarea></label><button type="submit">Записать решение</button></form><p>Подтверждение известного поста не применяет бой: автор проходит отдельную проверку writer. Ввести новый PID или изменить броски здесь нельзя.</p>';
             }else{$html.='<p>Терминальная история не редактируется. Исправления механики требуют отдельного подтверждённого события.</p>';}
         }
-        return $html.'</section>';
+        return $html.AF_ACS_InventoryObligations::render($inventoryPage,$mybb->post_code,$inventoryNotice,$lookupKey).'</section>';
     }
 }

@@ -28,7 +28,7 @@ trait AF_ACS_RoundManagementPersistence
     }
     public function assertNoObligations(string $sid,string $eid,?string $turn=null,bool $readOnlyPreview=false,?string $sealedDraft=null): void
     {
-        if($this->sql('SELECT operation_key FROM '.$this->table('operations')." WHERE session_id=? AND (encounter_id=? OR encounter_id IS NULL) AND status IN ('prepared','recovery_required') LIMIT 1",[$sid,$eid])['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
+        if($this->sql('SELECT operation_key FROM '.$this->table('operations')." WHERE session_id=? AND (encounter_id=? OR encounter_id IS NULL) AND status IN ('prepared','recovery_required')".($readOnlyPreview?" AND (external_system IS NULL OR external_system<>'advancedinventory')":'')." LIMIT 1",[$sid,$eid])['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
         try {
             $drafts=$this->futureTable('drafts');$sealed=$this->futureTable('sealed_actions');$submissions=$this->futureTable('submissions');
             $scope='encounter_id=?'.($turn===null?'':' AND turn_id=?');$args=$turn===null?[$eid]:[$eid,$turn];

@@ -17,6 +17,13 @@ final class AF_ACS_InventoryAdapter
         $owner=new AF_ADVINV_OwnerProtocol($link,new AF_ACS_CombatInventoryAccess($link,$actor));
         $owner->assertStorage();return new self($owner);
     }
+    public static function forRecovery(object $database,array $intent): self
+    {
+        if (!af_is_addon_enabled('advancedinventory')) throw new RuntimeException('ACS_INVENTORY_UNAVAILABLE');
+        require_once __DIR__.'/InventoryRecoveryAccess.php';$link=$database instanceof mysqli?$database:($database->write_link??null);
+        if (!$link instanceof mysqli || isset($database->read_link)&&$database->read_link!==$link) throw new RuntimeException('ACS_AUTHORITATIVE_CONNECTION_REQUIRED');
+        return new self(new AF_ADVINV_OwnerProtocol($link,new AF_ACS_InventoryRecoveryAccess($link,$intent)));
+    }
     /** Only internal same-writer InnoDB participation, never a remote API fallback. */
     public function participate(string $operation,array $request): AF_ADVINV_ProvisionalOwnerResult
     {
@@ -29,6 +36,11 @@ final class AF_ACS_InventoryAdapter
         return $this->owner->lookupParticipant($request);
     }
 
+    public function validateCommand(string $operation,array $request): void
+    {
+        if (!$this->owner instanceof AF_ADVINV_OwnerProtocol || !af_is_addon_enabled('advancedinventory')) throw new RuntimeException('ACS_INVENTORY_UNAVAILABLE');
+        $this->owner->assertStorage();$this->owner->authorizePropertyCommand($operation,$request);
+    }
     public function transfer(array $request): array { return $this->call('transfer',$request); }
     public function grant(array $request): array { return $this->call('grant',$request); }
     public function reserve(array $request): array { return $this->call('reserve', $request); }

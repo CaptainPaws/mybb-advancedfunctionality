@@ -260,6 +260,8 @@
 - 6.2: Пагинируемый read/snapshot equipment, AP actions equip/swap/consume/pass; source provenance предотвращает двойные бонусы. Расход с combat commit, не с preview.
 - 6.3: Custody и временное использование без смены uid, один активный пользователь в сессии; parallel-session isolation и сохранение обязательств при close. Recovery неизвестного external результата.
 
+**ACS-6.3.2 implemented в локальном ограниченном scope:** scoped global-item barriers, durable standalone transfer/grant intent + lookup-only acknowledgement, GM obligations panel и сохраняющие close/archive. [Проверки/ограничения/ручная приёмка](ACS_6_3_2_IMPLEMENTATION.md). Ledger 014; installed acceptance и production property grants не включены. Это не accepted всего этапа 6 и не переход к этапу 7.
+
 **Ожидаемый результат:** Предмет расходуется/передаётся один раз; боевой комплект и владение согласованы, незавершённые резервации восстанавливаются.
 
 **Критерии готовности:**

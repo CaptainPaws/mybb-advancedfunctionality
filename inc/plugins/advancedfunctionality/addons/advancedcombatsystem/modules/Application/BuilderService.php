@@ -12,6 +12,8 @@ final class AF_ACS_BuilderService
     {
         $code=$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage();
         return match($code){
+            'ACS_INVENTORY_RECOVERY_REQUIRED'=>'Предметная операция ожидает lookup прежнего исхода. Черновик и sealed tape сохранены; не создавайте новый ключ.',
+            'ACS_CUSTODY_ITEM_UNAVAILABLE','ACS_CUSTODY_SLOT_CONFLICT'=>'Предмет или слот недоступен из-за сессионного custody.',
             'ACS_ITEM_PASS_SPATIAL_UNSUPPORTED'=>'UNSUPPORTED: передача требует утверждённых правил дистанции и пользования предметом.',
             'ACS_ITEM_EQUIP_DENIED','ACS_ITEM_EQUIP_CONFLICT'=>'Этот предмет или слот нельзя изменить обычным боевым действием. Броня и неподтверждённые аксессуары недоступны.',
             'ACS_ITEM_DEPENDENCY_CONFLICT','ACS_ITEM_INSUFFICIENT_QTY','ACS_ITEM_RESERVATION_REQUIRED','ACS_ITEM_RESERVATION_REJECTED'=>'Недостаточно свободного количества или резерв предмета изменился.',

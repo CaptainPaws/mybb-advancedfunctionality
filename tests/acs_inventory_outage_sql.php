@@ -1,0 +1,46 @@
+<?php
+/** Real Inventory-stage setup plus ordinary pinned ability; no obsolete read-only DB stand-in. */
+$GLOBALS['acsCustodyFixture']=static function(array $fixture):void {
+ extract($fixture);global $db,$mybb;
+ require_once AF_ADDONS.'advancedcombatsystem/modules/Infrastructure/Adapters/KnowledgeBaseAdapter.php';
+ require_once AF_ADDONS.'advancedcombatsystem/modules/Infrastructure/OperationStore.php';
+ require_once AF_ADDONS.'advancedcombatsystem/modules/Application/RecoveryService.php';
+ $ability=af_kb_default_type_profile_payload_arpg('arpg_ability');$ability=array_replace($ability,['schema'=>AF_KB_ARPG_RULES_SCHEMA,'type_profile'=>'ability','version'=>'1.0','type'=>'active','slot'=>'active','damage_type'=>'physical','targeting'=>'single_enemy','cooldown_unit'=>'own_turn','duration_unit'=>'own_turn','max_charges'=>0,'magic_direction_ref'=>$direction,'effects'=>[['kind'=>'damage','damage_type'=>'physical','value'=>10]]]);
+ itemInsert($link,'af_kb_entries',snapshot_entry(950,'arpg_ability','outage-attack',$ability));
+ $monster=af_kb_default_type_profile_payload_arpg('arpg_bestiary');$monster['family']=$monster['archetype']=$monster['faction']='fixture';$monster['combat_stats']['hp']=100;$monster['combat_stats']['accuracy']=20;$monster['combat_stats']['status_resist']=0;$monster['resists']=$res;$monster['magic_direction_ref']=$direction;
+ $monster['ability_keys']=[];
+ $envelope=af_kb_arpg_envelope_defaults('arpg_bestiary');$envelope['rules']=$monster;$errors=[];$json=af_kb_validate_rules_json_by_type_arpg('arpg_bestiary',json_encode($envelope),$errors);snapshot_assert(!$errors,'Monster fixture');
+ itemInsert($link,'af_kb_entries',['id'=>80,'type'=>'arpg_bestiary','key'=>'outage-monster','active'=>1,'data_json'=>$json,'meta_json'=>'{}']);
+ $npc=$entityService->register(['session_id'=>$sid,'expected_version'=>$repo->session($sid)['session_version'],'kind'=>'monster','source_key'=>'outage-monster','initial_hp'=>'100','operation_key'=>'outage_actor_fixture','reason'=>'Ordinary combat']);$source=$npc['entity_id'];$entity=$repo->itemEntity($sid,$source);
+ $link->query("UPDATE t_af_acs_controllers SET permissions_json='{\"schema_version\":1,\"combat_operations_enabled\":true}' WHERE entity_id=".$source);
+ itemInsert($link,'af_acs_sides',['id'=>2,'encounter_id'=>1,'name'=>'NPC','side_version'=>1,'policy_json'=>'{"schema_version":1}']);
+ itemInsert($link,'af_acs_side_relationships',['encounter_id'=>1,'side_a'=>1,'side_b'=>2,'relationship'=>'hostile','relation_version'=>1]);
+ itemInsert($link,'af_acs_participants',['encounter_id'=>1,'entity_id'=>$source,'side_id'=>2,'participation'=>'engaged','registered_sequence'=>2,'participant_version'=>1,'visibility_json'=>'{"schema_version":1,"scope":"gm"}']);
+ $roster=['schema_version'=>1,'group_version'=>'1','members'=>[['entity_id'=>$source,'template_snapshot_id'=>(string)$entity['template_snapshot_id'],'content_hash'=>$entity['content_hash']]]];$roster['fingerprint']=hash('sha256',AF_ACS_Repository::json($roster));
+ itemInsert($link,'af_acs_turns',['id'=>2,'round_id'=>1,'control_group_id'=>$entity['control_group_id'],'status'=>'pending','ap_budget'=>3,'ap_spent'=>0,'seal_quota_spent'=>0,'pre_round_ap_commitment'=>0,'turn_version'=>1,'roster_json'=>AF_ACS_Repository::json($roster)]);
+ itemInsert($link,'af_acs_entity_turns',['id'=>2,'turn_id'=>2,'entity_id'=>$source,'start_done'=>1,'end_done'=>0,'reaction_used'=>0,'entity_turn_version'=>1]);
+ $boundary=AF_ACS_Clock::entityStart('2');itemInsert($link,'af_acs_operations',['operation_key'=>$boundary,'session_id'=>$sid,'encounter_id'=>1,'kind'=>'clock.entity_start','payload_hash'=>hash('sha256','fixture'),'status'=>'committed','operation_version'=>1,'request_json'=>'{"schema_version":1}','result_json'=>AF_ACS_Repository::json(['schema_version'=>1,'entity_turn_id'=>'2','boundary_key'=>$boundary]),'updated_at'=>time()]);
+ // Existing pending unrelated owner obligation must not globally disable non-item mechanics.
+ $intent=['schema_version'=>1,'operation'=>'grant','operation_key'=>'acs:outage:pending','actor'=>['uid'=>7,'authorization_ref'=>'fixture-only'],'scope'=>['system'=>'acs','context_key'=>$sid],'payload'=>['recipient_uid'=>7]];$intent['payload_hash']=AF_ADVINV_OwnerProtocol::payloadHash($intent);
+ (new AF_ACS_OperationStore($db))->inventoryRegister($sid,$intent,fn()=>null);
+ // Explicit prepared source fixture: owner-normalized ability/direct grant, before capturing invariants.
+ $dto=(new AF_ACS_KnowledgeBaseAdapter)->readDefinition('arpg_ability','outage-attack',7);snapshot_assert($dto['ready'],'Ability source blocked');$errors=[];$direct=af_kb_arpg_acs_reference('arpg_ability','outage-attack','fixture',$errors);snapshot_assert(!$errors&&$direct['resolved'],'Ability grant blocked');
+ $original=$repo->itemEntity($sid,$actor);$payload=json_decode($original['payload_json'],true,64,JSON_THROW_ON_ERROR);$payload['pinned_abilities']['outage-attack']=$dto;$payload['source_snapshot']['abilities'][]=['definition'=>['references'=>['ability_kb_key'=>$direct]]];
+ $encoded=AF_ACS_Repository::json($payload);$content=hash('sha256',$encoded);$st=$link->prepare('UPDATE t_af_acs_snapshots SET payload_json=?,content_hash=? WHERE id=?');$st->bind_param('sss',$encoded,$content,$original['template_snapshot_id']);$st->execute();
+ $turn=$repo->clockTurn($sid,'1');$roster=json_decode($turn['roster_json'],true);$roster['members'][0]['content_hash']=$content;unset($roster['fingerprint']);$roster['fingerprint']=hash('sha256',AF_ACS_Repository::json($roster));$encoded=AF_ACS_Repository::json($roster);$st=$link->prepare('UPDATE t_af_acs_turns SET roster_json=? WHERE id=1');$st->bind_param('s',$encoded);$st->execute();
+ $GLOBALS['disabled']=['advancedinventory'];$builder=new AF_ACS_BuilderService($repo,$access);$scope=$builder->context($sid,'1','1');
+ $catalog=(new AF_ACS_QueryService($repo,$access))->builderCatalog($sid,$actor);snapshot_assert(!empty($catalog[0]['supported']),'Ability unsupported '.json_encode($catalog));
+ $actions=[['actor_id'=>$actor,'ability_key'=>'outage-attack','targets'=>[$source],'parameters'=>[]]];
+ $preview=$builder->preview(['session_id'=>$sid,'encounter_id'=>'1','turn_id'=>'1','scope_token'=>$scope['scope_token'],'actions'=>$actions,'scenario'=>'hit']);snapshot_assert(isset($preview['virtual_entities']),'Ordinary preview blocked');
+ $drafts=new AF_ACS_DraftService($repo,$access);$draft=$drafts->save(['session_id'=>$sid,'encounter_id'=>'1','turn_id'=>'1','expected_draft_version'=>'0','operation_key'=>'outage_draft_fixture','actions'=>$actions,'prose'=>'Retain ordinary prose']);
+ $seal=new AF_ACS_SealService($repo,$access,new AF_ACS_RandomSource(static fn()=>0));$sealed=$seal->command('seal',['draft_id'=>$draft['draft_id'],'expected_draft_version'=>$draft['draft_version'],'operation_key'=>'outage_seal_fixture']);snapshot_assert(!$sealed['blocked'],'Outage seal blocked '.json_encode($sealed));
+ $confirmed=$seal->command('confirm',['draft_id'=>$draft['draft_id'],'expected_draft_version'=>$sealed['draft_version'],'operation_key'=>'outage_confirm_fixture','confirmation_hash'=>$sealed['confirmation_hash']]);
+ $store=new AF_ACS_SubmissionStore($db);$r=$store->issue(['schema_version'=>1,'draft_id'=>$draft['draft_id'],'author_uid'=>'7','expected_draft_version'=>$confirmed['draft_version'],'confirmation_hash'=>$confirmed['confirmation_hash']],fn()=>null);$id=$r['submission_id'];$r=$store->validating($id,$r['state_version'],fn()=>null);
+ $writer=new AF_ACS_CombatCommitWriter($db,$access);$p=$writer->validatePublication($id,$r['state_version']);$r=$store->posting($id,$r['state_version'],array_intersect_key($p,array_flip(['dependency_hash','simulation_hash','confirmation_hash'])),fn()=>null);$r=$store->confirmPost($id,$r['state_version'],'501',fn()=>null,'2');
+ $capture=static function()use($link):array {$out=[];foreach(['entity_states','resources','turns','entity_turns','effects','reactions','drafts','sealed_actions','rolls','combat_receipts','combat_results','outbox'] as $table)$out[$table]=$link->query('SELECT * FROM t_af_acs_'.$table.' ORDER BY 1')->fetch_all(MYSQLI_ASSOC);return $out;};$before=$capture();
+ $link->query("CREATE TRIGGER outage_late BEFORE INSERT ON t_af_acs_outbox FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='late failure'");itemFail(fn()=>$writer->commit($id,$r['state_version']),'ACS_DATABASE_ERROR');$link->query('DROP TRIGGER outage_late');snapshot_assert($capture()===$before,'Outage late failure changed projections/draft/tape');
+ $receipt=$writer->commit($id,$r['state_version']);$after=$capture();$recovery=new AF_ACS_RecoveryService($db,$access);$known=$recovery->recover($id,'1');snapshot_assert($known['mechanics_confirmed']&&$writer->commit($id,$r['state_version'])===$receipt&&$capture()===$after,'Duplicate publication changed state');
+ $GLOBALS['disabled']=[];snapshot_assert($recovery->inspect($id)['receipt']===$known['receipt']&&$capture()===$after,'Inventory return rewrote history');
+ echo "ACS Inventory outage: unrelated pending owner operation, ordinary preview/seal/commit, late rollback, duplicate publication/recovery and retained draft/tape/HP/AP/status/reaction projections passed\n";
+};
+require __DIR__.'/acs_combat_items_sql.php';

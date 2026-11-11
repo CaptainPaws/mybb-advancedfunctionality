@@ -116,4 +116,14 @@ final class AF_ACS_RecoveryService
         $this->store->resolveRecovery($id,$expectedStateVersion,$strategy,$reason);
         return $this->inspect($id);
     }
+    /** Independent owner acknowledgement recovery; never resumes a combat submission by itself. */
+    public function inspectInventory(string $sid,string $key): array
+    {
+        require_once __DIR__.'/InventoryOperationService.php';return (new AF_ACS_InventoryOperationService($this->database,$this->access))->inspect($sid,$key);
+    }
+    public function recoverInventory(string $sid,string $key,string $expectedVersion): array
+    {
+        require_once __DIR__.'/InventoryOperationService.php';return (new AF_ACS_InventoryOperationService($this->database,$this->access))->recover($sid,$key,$expectedVersion);
+    }
+
 }
