@@ -5,6 +5,12 @@ require_once __DIR__.'/../Domain/Environment.php';
 /** Object projection on the existing spawn identity. Writes require the parent ACS transaction. */
 trait AF_ACS_ObjectPersistence
 {
+    public function objectDefinitionSnapshot(string $sid,string $id):array
+    {
+        $row=$this->sql('SELECT s.payload_json,s.content_hash FROM '.$this->table('entities').' e JOIN '.$this->table('snapshots').' s ON s.id=e.template_snapshot_id AND s.session_id=e.session_id WHERE e.session_id=? AND e.id=? AND e.kind=?',[$sid,$id,'object'])['rows'][0]??null;
+        if(!$row||!hash_equals($row['content_hash'],hash('sha256',$row['payload_json'])))throw new RuntimeException('ACS_SNAPSHOT_HASH_MISMATCH');
+        return json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR)['source_snapshot'];
+    }
     public function objectProjection(string $sid,string $eid):array
     {
         $out=[];

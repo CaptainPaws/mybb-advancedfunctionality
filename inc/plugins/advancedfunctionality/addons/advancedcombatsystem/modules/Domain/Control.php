@@ -16,6 +16,7 @@ final class AF_ACS_Control
     }
     public static function allowed(array $p,string $relationship,string $kind):bool
     {
+        if(($p['kind']??null)==='object_only')return $kind==='object';
         if(!in_array($kind,['character','pet','npc','monster','summon'],true))return false;
         $relationship=$relationship==='ally'?'allied':$relationship;
         return match($p['kind']){'hostile_only'=>$relationship==='hostile','allied_only'=>in_array($relationship,['allied','self'],true),'self_only'=>$relationship==='self','any_entity'=>true,

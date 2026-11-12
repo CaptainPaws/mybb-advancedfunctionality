@@ -799,3 +799,67 @@ whitelisted details, reason и operation_key. POST/CSRF, native/session GM right
 subject/audience scope проверяются сервером. Аудит и CAS атомарны, повтор ключа
 идемпотентен. Смена аудитории — отдельная tuple-запись с собственным CAS; прежнее
 знание не удаляется неявно. Изменения не обновляют mechanical stealth/AP/ходы.
+
+### ACS-8.2.1: typed object interaction subset
+
+`ic-acs.object-template.v2` категории `interactive` может содержать optional
+`interactions` с schema `ic-acs.object-interactions.v1`. Это данные общего
+интерпретатора ACS, не callbacks. Неизвестные поля и неподдержанные последствия
+возвращают UNSUPPORTED. Старые templates сохраняют прежнюю семантику.
+
+Обязательные поля descriptor:
+
+| Поле | Контракт |
+|---|---|
+| states / initial_state | 1–32 уникальных KB-токена и один из них |
+| progress | null либо `{initial, cap, decay_per_round}`; целые, cap 1–1000000, остальные 0..cap |
+| actions | 1–16 явно определённых взаимодействий |
+
+Каждое action содержит все поля:
+`key`, `label`, `kind` (`disarm`, `unlock`, `activate`, `repair`, `interact`),
+`actor_kinds` (character/pet/npc/monster/summon), `required_abilities` (прямые доступные
+закреплённые способности), `minimum_stats` (минимумы именованных характеристик),
+`allowed_states`, `costs`, `tool`, `check`, `outcomes`, `retry`.
+Kind не выбирает PHP-handler и не добавляет последствий. Label — публичная
+подпись для identified audience. Скрытые сведения в неё не помещаются.
+
+Costs — один положительный `{kind:ap, amount}` и optional положительные
+`{kind:resource, resource, amount}` без повторов ресурсов. Tool — null либо
+`{mode:requires|consumes, kb_key, qty:1}`. В этом subset инструмент — реальный
+неvisual `equipment/arpg_item` собственного character; custody/reservations
+учитываются. Requires не резервирует и не расходует предмет. Consumes использует
+same-writer IC-INV-1 reserve/consume только для поддержанных owner protocol
+subtypes consumable/ammo; `on_use` предмета не выполняется.
+
+Check содержит `formula` — полный fingerprint-verified snapshot
+`af_kb.arpg.formula.v1` — и `bindings`. Output unit `interaction_score`, type
+number, rounding none; min/max обязательны. Входы имеют тип number и связываются
+с `roll` (сохранённый uniform53 u), `progress` либо `stat:<key>`. При отсутствии
+roll binding никакой универсальный шанс не добавляется. Preview не вычисляет
+исход; seal фиксирует существующий tape; commit использует тот же tape.
+
+Outcomes — 1–4 непересекающихся смежных диапазона `[from,to)`, последний включает
+to; вместе покрывают объявленные min/max формулы. Порядок — по from. Каждый
+kind (`critical_success`, `success`, `partial_success`, `failure`) встречается
+не более одного раза и существует только при явном описании. Все поля outcome
+обязательны: `kind/from/to/state/activation/progress/repair/effects`. State —
+один из states; activation — null/active/inactive. Progress — null либо
+`{operation:add|set,value}`; add допускает отрицательный вклад, set=0 — явный
+reset. Результат ограничивается 0..cap. Repair — целое 0..1000000, положительное
+значение требует объявленной durability; максимум берётся только из template.
+Терминальные объекты не ремонтируются и не активируются.
+
+Effects — 0–8 `{kind:heal_actor,amount}` либо
+`{kind:damage_actor,amount,damage_type:physical|true}`. Положительное целое
+amount проходит существующий Damage/Effects; последствия не вызывают новый
+processor. Статусы, стихийные эффекты, чужие/пространственные цели, произвольные
+trigger callbacks не входят в этот subset и блокируются целиком.
+
+Retry — `{scope:actor|object,limit:1..1000,terminal_outcomes:[...]}`. Сервер
+сохраняет число подтверждённых попыток и terminal flag. Каждый вклад привязан к
+`sealed-action:<id>` и combat event, actor и action key. Новая HTTP-отправка не
+создаёт новый вклад. Cooldown по времени/раундам не подставляется вместо явно
+описанного лимита; такой расширенный контракт пока UNSUPPORTED. Положительный
+`decay_per_round` применяется только существующим round_end Clock boundary,
+защищённым last_boundary, в этом subset только для duration.unit=round;
+положительный round decay с own_turn lifetime — UNSUPPORTED, 0 означает отсутствие decay.

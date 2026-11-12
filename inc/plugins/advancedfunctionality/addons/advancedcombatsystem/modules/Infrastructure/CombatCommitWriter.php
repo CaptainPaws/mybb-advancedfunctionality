@@ -3,6 +3,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SubmissionStore.php';
 require_once __DIR__.'/CombatCommitPersistence.php';
 require_once __DIR__.'/ItemCommitPersistence.php';
+require_once __DIR__.'/InteractionToolPersistence.php';
 require_once __DIR__.'/StatusPersistence.php';
 require_once __DIR__.'/ReactionPersistence.php';
 require_once __DIR__.'/BarrierPersistence.php';
@@ -12,7 +13,7 @@ require_once __DIR__.'/../Application/BuilderService.php';
 /** The only producer of terminal, persistent Resolver results. Never calls a native post writer. */
 final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 {
-    use AF_ACS_ItemCommitPersistence, AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
+    use AF_ACS_InteractionToolPersistence, AF_ACS_ItemCommitPersistence, AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
     private AF_ACS_SubmissionStore $submissions;
     private AF_ACS_EncounterRepository $preparation;
     private AF_ACS_SessionAccess $access;
@@ -200,7 +201,8 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             $current=$this->phase($current,'committing',['schema_version'=>1,'pid'=>$current['pid'],'controls'=>array_diff_key($controls,['summary'=>true])]);
             // Time expiry can advance while resolving even though assignment/revoke rows are locked.
             $this->authorizeFacts($current,$f,$frozen['actions']);
-            $controls['owner_receipts']=$this->commitItems($current,$frozen,$result,$prepared);
+            $toolInventory=$this->interactionToolInventory($current,$result);
+            $controls['owner_receipts']=array_merge($this->commitItems($current,$frozen,$result,$prepared),$this->commitInteractionTools($current,$frozen,$result,$prepared,$toolInventory));
             $changes=$this->project($current,$f,$turn,$result,$frozen);
             return $this->finish($current,$f,$result,$controls,$changes,$fid,$prepared);
         });
