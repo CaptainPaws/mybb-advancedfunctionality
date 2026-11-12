@@ -1,6 +1,7 @@
 <?php
 
 if (!defined('IN_MYBB')) { die('No direct access'); }
+require_once __DIR__.'/../Domain/Control.php';
 
 enum AF_ACS_Role: string
 {
@@ -87,6 +88,17 @@ final class AF_ACS_AuthorizationService
         try {$set=self::assignment($rows);} catch (RuntimeException) {return null;}
         if ((string)$entity['session_id']!==(string)$session['id'] || (string)$rows[0]['session_id']!==(string)$session['id']
             || (string)$rows[0]['entity_id']!==(string)($entity['id']??$entity['entity_id'])) return null;
+        $overlay=AF_ACS_Control::overlay($context['control_effects']??[],(string)($entity['id']??$entity['entity_id']),$context['encounter_id']??null);
+        if($overlay!==null){
+            if($category!=='ordinary'||$overlay['control_overlay']['controller_uid']!==$uid)return null;
+            $member=false;foreach($roles as $role)if((string)$role['uid']===$uid&&($role['expires_at']===null||(int)$role['expires_at']>time())&&in_array($role['role'],['owner','gm','assistant_gm','player'],true))$member=true;
+            if(!$member)return null;
+            if(!self::sessionGm($session,$roles,$uid)&&(string)($entity['owner_uid']??'')!==$uid&&($context['visible_entities'][(string)$entity['id']]??null)!=='participants')return null;
+            $grant=$rows[0];$enabled=true;foreach($rows as $base)$enabled=$enabled&&(json_decode($base['permissions_json'],true)['combat_operations_enabled']??false)===true;
+            if(!$enabled)return null;
+            $grant['permissions_json']=json_encode(['schema_version'=>1,'combat_operations_enabled'=>$enabled],JSON_THROW_ON_ERROR);
+            $grant['control_overlay']=['effect_id'=>$overlay['id'],'version'=>$overlay['version'],'base_assignment_version'=>$overlay['control_overlay']['base_assignment_version'],'ability_keys'=>$overlay['spec']['mechanical_parameters']['control_effect']['ability_keys']];return $grant;
+        }
         if($entity['kind']==='summon'){
             if($category!=='ordinary'||$entity['owner_uid']!==null)return null;
             $d=json_decode($entity['definition_json'],true,64,JSON_THROW_ON_ERROR);$v=$d['lifecycle']??null;
@@ -140,6 +152,7 @@ final class AF_ACS_AuthorizationService
 
     public static function controlProof(array $grant): string
     {
+        if(isset($grant['control_overlay']))return 'overlay:'.$grant['control_overlay']['effect_id'].':'.$grant['control_overlay']['version'].':base:'.$grant['assignment_version'].':applied:'.$grant['control_overlay']['base_assignment_version'];
         return ($grant['delegation_id']??'owner').':'.($grant['delegation_version']??'0').':'.$grant['assignment_version'].(isset($grant['source_control_proof'])?':source:'.$grant['source_control_proof']:'');
     }
 

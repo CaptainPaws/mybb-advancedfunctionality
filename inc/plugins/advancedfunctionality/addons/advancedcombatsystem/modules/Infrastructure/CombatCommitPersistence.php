@@ -65,6 +65,8 @@ trait AF_ACS_CombatCommitPersistence
         }
         $roles=array_filter($f['session_roles'],static fn($r)=>(string)$r['uid']===$uid && ($r['expires_at']===null || (int)$r['expires_at']>$now));
         if (!array_intersect(array_column($roles,'role'),['owner','gm','assistant_gm','player'])) { throw new RuntimeException('ACS_COMBAT_PERMISSION_DENIED'); }
+        $visibleEntities=[];foreach($f['participants'] as $participant)if($participant['participation']==='engaged')$visibleEntities[(string)$participant['entity_id']]=json_decode($participant['visibility_json'],true)['scope']??null;
+        $controlEffects=[];foreach($f['effects'] as $effect){$instance=json_decode($effect['payload_json'],true,64,JSON_THROW_ON_ERROR)['instance']??null;if($instance&&$instance['encounter_id']===$row['encounter_id'])$controlEffects[]=$instance;}
         $entities=self::indexed($f['entities']);$states=self::indexed($f['entity_states'],'entity_id');$grants=[];$roster=json_decode($turn['roster_json'],true,32,JSON_THROW_ON_ERROR);
         $fp=$roster['fingerprint']??'';unset($roster['fingerprint']);
         if (!hash_equals($fp,hash('sha256',self::json($roster)))) { throw new RuntimeException('ACS_ROSTER_INVALID'); }
@@ -76,7 +78,7 @@ trait AF_ACS_CombatCommitPersistence
             $e=$entities[$id]??null;
             $controllers=array_filter($f['controllers'],static fn($c)=>(string)$c['entity_id']===$id && $c['status']==='active'
                 && ($c['valid_until']===null || (int)$c['valid_until']>$now));
-            $c=$e?AF_ACS_AuthorizationService::controller($e,array_values($controllers),$session,array_values($roles),$uid,$f['delegations'],'ordinary',['entities'=>$entities,'controllers'=>$f['controllers']]):null;
+            $c=$e?AF_ACS_AuthorizationService::controller($e,array_values($controllers),$session,array_values($roles),$uid,$f['delegations'],'ordinary',['entities'=>$entities,'controllers'=>$f['controllers'],'control_effects'=>$controlEffects,'visible_entities'=>$visibleEntities,'encounter_id'=>$row['encounter_id']]):null;
             if (!$e || (string)$e['control_group_id']!==(string)$turn['control_group_id']) {
                 throw new RuntimeException('ACS_COMBAT_CONTROL_DENIED');
             }
@@ -87,7 +89,7 @@ trait AF_ACS_CombatCommitPersistence
             || ($grants[$a['actor_id']]['schema_version']??null)!==1 || ($grants[$a['actor_id']]['combat_operations_enabled']??false)!==true) { throw new RuntimeException('ACS_COMBAT_CONTROL_DENIED'); } }
         foreach($actions as $action){$id=$action['actor_id'];$category=str_starts_with($action['ability_key'],'item:')?(str_starts_with($action['ability_key'],'item:consume:')?'item_consume':'equipment_change'):'ordinary';
             $controllers=array_values(array_filter($f['controllers'],static fn($c)=>(string)$c['entity_id']===$id && $c['status']==='active' && ($c['valid_until']===null || (int)$c['valid_until']>time())));
-            if(!AF_ACS_AuthorizationService::controller($entities[$id],$controllers,$session,array_values($roles),$uid,$f['delegations'],$category,['entities'=>$entities,'controllers'=>$f['controllers']]))throw new RuntimeException('ACS_COMBAT_CONTROL_DENIED');
+            $actionGrant=AF_ACS_AuthorizationService::controller($entities[$id],$controllers,$session,array_values($roles),$uid,$f['delegations'],$category,['entities'=>$entities,'controllers'=>$f['controllers'],'control_effects'=>$controlEffects,'visible_entities'=>$visibleEntities,'encounter_id'=>$row['encounter_id']]);if(!$actionGrant)throw new RuntimeException('ACS_COMBAT_CONTROL_DENIED');AF_ACS_Control::action($actionGrant,$action['ability_key']);
         }
         foreach ($f['snapshots'] as $s) { if (!hash_equals($s['content_hash'],$s['actual_hash'])) { throw new RuntimeException('ACS_SNAPSHOT_HASH_MISMATCH'); } }
         return $turn;

@@ -51,6 +51,13 @@ final class AF_ACS_EncounterService
         $this->authorize($sid);if(!$this->repository->encounter($sid,$eid))throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
         return $this->repository->events($sid,$eid,$after);
     }
+    public function controlOverlays(string $sid,string $eid):array
+    {
+        $this->authorize($sid);if(!$this->repository->encounter($sid,$eid))throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');$out=[];
+        foreach($this->repository->statusProjection($sid)['instances'] as $row)if($row['status']==='active'&&$row['encounter_id']===$eid&&isset($row['spec']['mechanical_parameters']['control_effect'])){
+            AF_ACS_Control::overlay([$row],$row['target_entity_id'],$eid);$out[]=['effect_id'=>$row['id'],'entity_id'=>$row['target_entity_id'],'controller_uid'=>$row['control_overlay']['controller_uid'],'remaining_duration'=>$row['remaining_duration'],'unit'=>$row['duration_unit'],'version'=>$row['version']];
+        }return $out;
+    }
     public function candidates(string $sid,string $after='0'): array
     {
         $this->authorize($sid);return $this->repository->candidatesForEncounter($sid,$after);
@@ -192,7 +199,7 @@ final class AF_ACS_EncounterService
     public function command(string $op,array $input): array
     {
         $this->access->csrf();$sid=AF_ACS_Repository::integer($input['session_id']??null);
-        if(!in_array($op,['create','side_create','relation_set','participant_add','participant_side','participant_visibility','controller_assign','controller_set','round_start','partial_withdraw','rejoin_encounter'],true))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
+        if(!in_array($op,['create','side_create','relation_set','participant_add','participant_side','participant_visibility','controller_assign','controller_set','round_start','partial_withdraw','rejoin_encounter','side_change'],true))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
         $key=(string)($input['operation_key']??'');if(!preg_match('/\A[a-z0-9][a-z0-9_.-]{15,95}\z/D',$key))throw new RuntimeException('ACS_OPERATION_KEY_REQUIRED');
         $request=['schema_version'=>1,'session_id'=>$sid,'actor_uid'=>$this->access->uid(),'expected_version'=>AF_ACS_Repository::integer($input['expected_version']??null),'reason'=>self::text($input['reason']??null,1000)];
         if(isset($input['tid']) && $input['tid']!=='')$request['tid']=AF_ACS_Repository::integer($input['tid'],'4294967295');
@@ -205,10 +212,12 @@ final class AF_ACS_EncounterService
         else {
             $request['encounter_id']=AF_ACS_Repository::integer($input['encounter_id']??null);
             $request['encounter_version']=AF_ACS_Repository::integer($input['encounter_version']??null,'18446744073709551614');
-            foreach(match($op){'relation_set'=>['side_a','side_b'],'participant_add','participant_side'=>['entity_id','side_id'],'controller_assign'=>['entity_id','uid'],'controller_set','participant_visibility','partial_withdraw','rejoin_encounter'=>['entity_id'],default=>[]} as $field)$request[$field]=AF_ACS_Repository::integer($input[$field]??null,$field==='uid'?'4294967295':'18446744073709551615');
+            foreach(match($op){'relation_set'=>['side_a','side_b'],'participant_add','participant_side','side_change'=>['entity_id','side_id'],'controller_assign'=>['entity_id','uid'],'controller_set','participant_visibility','partial_withdraw','rejoin_encounter'=>['entity_id'],default=>[]} as $field)$request[$field]=AF_ACS_Repository::integer($input[$field]??null,$field==='uid'?'4294967295':'18446744073709551615');
             if($op==='side_create')$request['name']=self::text($input['name']??null,191);
             if($op==='relation_set'){$relation=(string)($input['relationship']??'');if(!in_array($relation,['allied','neutral','hostile'],true)||$request['side_a']===$request['side_b'])throw new RuntimeException('ACS_RELATION_INVALID');$request['relationship']=$relation;}
         }
+        if($op==='side_change'){$request['participant_version']=AF_ACS_Repository::integer($input['participant_version']??null,'18446744073709551614');$request['event_identity']='session:'.$request['actor_uid'].':'.$key;}
+        if($op==='relation_set'&&isset($input['relation_version'])&&$input['relation_version']!=='')$request['relation_version']=AF_ACS_Repository::integer($input['relation_version'],'18446744073709551614',true);
         if(in_array($op,['partial_withdraw','rejoin_encounter'],true))$request['participant_version']=AF_ACS_Repository::integer($input['participant_version']??null,'18446744073709551614');
         if($op==='participant_visibility'){
             $request['visibility_scope']=(string)($input['visibility_scope']??'');$request['participant_version']=AF_ACS_Repository::integer($input['participant_version']??null,'18446744073709551614');
@@ -230,7 +239,7 @@ final class AF_ACS_EncounterService
                 $encounter=$this->repository->encounter($sid,$request['encounter_id'],true);
                 if(!$encounter)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
                 if($op==='round_start' && ($encounter['status']!=='preparation' || $this->repository->firstRound($encounter['id'])))throw new RuntimeException('ACS_FIRST_ROUND_EXISTS');
-                if($encounter['status']!=='preparation' && !($encounter['status']==='active' && $op==='participant_add') && !(in_array($encounter['status'],['active','paused'],true) && in_array($op,['controller_set','participant_visibility','partial_withdraw','rejoin_encounter'],true)))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
+                if($encounter['status']!=='preparation' && !($encounter['status']==='active' && $op==='participant_add') && !(in_array($encounter['status'],['active','paused'],true) && in_array($op,['controller_set','participant_visibility','partial_withdraw','rejoin_encounter','side_change','relation_set'],true)))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
                 if($encounter['encounter_version']!==$request['encounter_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');
                 if($op==='round_start') {
                     $ready=$this->readiness($sid,$encounter['id']);
@@ -238,6 +247,8 @@ final class AF_ACS_EncounterService
                     return $this->repository->openFirstRound($session,$encounter,$this->repository->rosterSources($sid,$encounter['id']),$request['actor_uid']);
                 }
                 if(in_array($op,['participant_add','participant_side'],true)){$this->side($encounter['id'],$request['side_id']);$entity=$this->entity($sid,$request['entity_id'],$encounter['id']);}
+                if($op==='side_change'){if(!in_array($encounter['status'],['active','paused'],true))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');$this->side($encounter['id'],$request['side_id']);if(!$this->repository->participantExists($encounter['id'],$request['entity_id']))throw new RuntimeException('ACS_PARTICIPANT_UNAVAILABLE');}
+                if($op==='relation_set'&&$encounter['status']!=='preparation'&&!isset($request['relation_version']))throw new RuntimeException('ACS_VERSION_CONFLICT');
                 if($op==='relation_set'){$this->side($encounter['id'],$request['side_a']);$this->side($encounter['id'],$request['side_b']);}
                 $change=$request;
                 if(isset($entity)){$change['_snapshot_id']=$entity['template_snapshot_id'];$change['_group_id']=$entity['control_group_id'];}

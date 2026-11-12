@@ -33,7 +33,7 @@ final class AF_ACS_SealService
             if($row['status']==='sealed'){$active[]=$row;$actions[]=$payload['action'];$tape[]=$t;}
         }
         $result=['schema_version'=>1,'draft_id'=>$draft['id'],'draft_version'=>$draft['draft_version'],'active_count'=>count($active),'history'=>$history,'quota_used'=>$this->repo->sealQuota($draft['turn_id']),'quota_budget'=>null,'summary'=>null,'confirmed'=>false,'confirmation_hash'=>null,'confirmable'=>false,'changed'=>false,'blocked'=>false,'publication_enabled'=>false,'persistent_combat_state'=>false];
-        try{$scope=$this->scope($draft);$result['quota_budget']=$scope['turn']['ap'];if(!$active)return $result;
+        try{$scope=$this->scope($draft);$result['quota_budget']=$scope['turn']['ap'];$allActions=$this->actions($draft);$result['friendly_fire']=$allActions?$this->prepare($draft,$allActions)['friendly_fire']:AF_ACS_Control::friendlyFire([],[]);$result['friendly_fire']['acknowledged']=!$result['friendly_fire']['required']||(json_decode($draft['dependency_json'],true)['seal']['friendly_fire_confirmation']??null)===$result['friendly_fire']['confirmation_hash'];if(!$active)return $result;
             if(array_slice($this->actions($draft),0,count($actions))!==$actions)throw new RuntimeException('ACS_SEAL_IMMUTABLE');
             $p=$this->prepare($draft,$actions);$dependencies=[];
             foreach($active as $i=>$row){$payload=$this->repo->sealPayload($row);$a=$payload['action'];
@@ -58,23 +58,26 @@ final class AF_ACS_SealService
             if(!empty($resolved->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($resolved->serverState()['summons']));
             if(array_filter($resolved->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'instances'=>$resolved->serverState()['status_instances']]));
             if(($reactionHash=AF_ACS_Resolver::reactionHash($resolved,$p['context']))!==null)$summary['reaction_hash']=$reactionHash;
+            if(($controlHash=AF_ACS_Control::stateHash($resolved->serverState()['status_instances']??[]))!==null)$summary['control_effects_hash']=$controlHash;
+            $summary['friendly_fire_hash']=$p['friendly_fire']['confirmation_hash'];
             $mechanical=$summary;unset($mechanical['label']);
             $simulationHash=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'actions'=>$actions,'tape'=>$tape,'summary'=>$mechanical]));
             $confirmation=hash('sha256','acs-confirm-v1'."\n".$dependencyHash."\n".$simulationHash);
             $old=json_decode($draft['dependency_json'],true,32,JSON_THROW_ON_ERROR)['seal']??[];
             $result['summary']=$summary;$result['dependency_hash']=$dependencyHash;$result['simulation_hash']=$simulationHash;$result['confirmation_hash']=$confirmation;
             $result['changed']=isset($old['simulation_hash'])&&($old['simulation_hash']!==$simulationHash||($old['dependency_hash']??null)!==$dependencyHash);
-            $result['confirmable']=count($actions)===count($this->actions($draft));$result['confirmed']=$result['confirmable']&&$draft['confirmation_hash']!==null&&hash_equals($draft['confirmation_hash'],$confirmation);
+            $result['confirmable']=count($actions)===count($this->actions($draft));$result['confirmed']=$result['confirmable']&&$draft['confirmation_hash']!==null&&hash_equals($draft['confirmation_hash'],$confirmation)&&(!$p['friendly_fire']['required']||($old['friendly_fire_confirmation']??null)===$p['friendly_fire']['confirmation_hash']);
         }catch(Throwable $e){$result['blocked']=true;$result['reason']=AF_ACS_BuilderService::message($e);}
         return $result;
     }
     public function command(string $op,array $input):array
     {
         $this->access->csrf();
-        if(!in_array($op,['seal','cancel_tail','confirm','prepare_reactions'],true)||array_diff(array_keys($input),['draft_id','expected_draft_version','operation_key','confirmation_hash']))throw new RuntimeException('ACS_SEAL_INPUT_INVALID');
+        if(!in_array($op,['seal','cancel_tail','confirm','prepare_reactions'],true)||array_diff(array_keys($input),['draft_id','expected_draft_version','operation_key','confirmation_hash','friendly_fire_confirmation']))throw new RuntimeException('ACS_SEAL_INPUT_INVALID');
         $draft=$this->draft(AF_ACS_Repository::integer($input['draft_id']??null));
         $key=$input['operation_key']??null;if(!is_string($key)||!preg_match('/\A[a-z0-9][a-z0-9_.-]{15,95}\z/D',$key))throw new RuntimeException('ACS_OPERATION_KEY_REQUIRED');
         $request=['schema_version'=>1,'op'=>$op,'author_uid'=>$this->access->uid(),'session_id'=>$draft['session_id'],'draft_id'=>$draft['id'],'expected_draft_version'=>AF_ACS_Repository::integer($input['expected_draft_version']??null,'18446744073709551614'),'operation_key'=>$key];
+        if(isset($input['friendly_fire_confirmation'])&&$input['friendly_fire_confirmation']!==''){$ff=$input['friendly_fire_confirmation'];if(!is_string($ff)||!preg_match('/\A[a-f0-9]{64}\z/D',$ff))throw new RuntimeException('ACS_SEAL_INPUT_INVALID');$request['friendly_fire_confirmation']=$ff;}
         if($op==='cancel_tail')$request['reason']='author_cancel_tail';
         if($op==='confirm'){$h=$input['confirmation_hash']??null;if(!is_string($h)||!preg_match('/\A[a-f0-9]{64}\z/D',$h))throw new RuntimeException('ACS_SEAL_INPUT_INVALID');$request['confirmation_hash']=$h;}
         return $this->repo->sealCommand($request,function($d)use($op){
@@ -84,6 +87,10 @@ final class AF_ACS_SealService
                 $this->prepare($d,$this->actions($d));
             }
         },function($d,$operation)use($op,$request){
+            $actions=$this->actions($d);$ffAck=null;if(in_array($op,['seal','confirm'],true)){
+                $ff=$this->prepare($d,$actions)['friendly_fire'];$oldAck=json_decode($d['dependency_json'],true)['seal']['friendly_fire_confirmation']??null;
+                $ffAck=$request['friendly_fire_confirmation']??$oldAck;if($ff['required']&&$ffAck!==$ff['confirmation_hash'])throw new RuntimeException('ACS_FRIENDLY_FIRE_CONFIRMATION_REQUIRED');
+            }
             $actions=$this->actions($d);$active=$this->repo->sealRows($d['id'],true);
             if($op==='seal'){
                 if(count($actions)<=count($active))throw new RuntimeException('ACS_SEAL_NOTHING_TO_APPEND');
@@ -130,6 +137,7 @@ final class AF_ACS_SealService
                 $confirmation=$view['confirmation_hash'];
             }
             $hashes=array_intersect_key($view,array_flip(['dependency_hash','simulation_hash']));
+            if($ffAck!==null)$hashes['friendly_fire_confirmation']=$ffAck;
             $saved=$this->repo->projectSeal($d,$actions,$hashes,$confirmation);
             $view['draft_version']=$saved['draft_version'];$view['confirmed']=$confirmation!==null;
             return $view;

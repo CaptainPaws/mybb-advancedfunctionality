@@ -82,13 +82,17 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     public function controllerFor(string $sid,string $entity,string $uid,string $category='ordinary'): ?array
     {
         $e=$this->entity($sid,$entity);$s=$this->session($sid);
-        return $e&&$s?AF_ACS_AuthorizationService::controller($e,$this->controllers($sid,$entity),$s,$this->roles($sid,$uid),$uid,$this->delegationRows($sid,$uid),$category,$this->summonControlContext($sid,$e)):null;
+        return $e&&$s?AF_ACS_AuthorizationService::controller($e,$this->controllers($sid,$entity),$s,$this->roles($sid,$uid),$uid,$this->delegationRows($sid,$uid),$category,$this->controlContext($sid,$e)):null;
     }
-    private function summonControlContext(string $sid,array $e):array
+    public function controlContext(string $sid,array $e):array
     {
-        if($e['kind']!=='summon')return [];
-        $source=$this->entity($sid,(string)$e['source_entity_id']);if(!$source)return [];
-        return ['entities'=>[(string)$source['id']=>$source],'controllers'=>$this->controllers($sid,(string)$source['id'])];
+        $visible=[];$effects=[];foreach($this->statusProjection($sid)['instances'] as $effect){
+            if($effect['target_entity_id']!==(string)$e['id']||!isset($effect['spec']['mechanical_parameters']['control_effect']))continue;
+            $enc=$this->encounter($sid,$effect['encounter_id']);if($enc&&in_array($enc['status'],['active','paused'],true)&&$this->reactionParticipant($sid,$effect['encounter_id'],(string)$e['id'])){$effects[]=$effect;$p=$this->sql('SELECT visibility_json FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=?',[$effect['encounter_id'],(string)$e['id']])['rows'][0]??null;$visible[(string)$e['id']]=$p?json_decode($p['visibility_json'],true)['scope']??null:null;}
+        }
+        $context=['control_effects'=>$effects,'visible_entities'=>$visible];if($e['kind']!=='summon')return $context;
+        $source=$this->entity($sid,(string)$e['source_entity_id']);if(!$source)return $context;
+        return $context+['entities'=>[(string)$source['id']=>$source],'controllers'=>$this->controllers($sid,(string)$source['id'])];
     }
     /** NPC plans and explicitly delegated group plans may coexist. Publication claims stay exclusive. */
     public function parallelControlPlans(string $sid,string $eid,string $turnId): bool
@@ -150,17 +154,20 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
             $a=$request['side_a'];$b=$request['side_b'];
             if(strlen($a)>strlen($b) || (strlen($a)===strlen($b) && strcmp($a,$b)>0))[$a,$b]=[$b,$a];
             $old=$this->sql('SELECT id,relation_version,relationship FROM '.$this->table('side_relationships').' WHERE encounter_id=? AND side_a=? AND side_b=? FOR UPDATE',[$id,$a,$b])['rows'][0]??null;
-            $result['previous_relationship']=$old['relationship']??null;
+            if(isset($request['relation_version'])&&(string)($old['relation_version']??'0')!==$request['relation_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');
+            $result['previous_relationship']=$old['relationship']??null;$result['relationship']=$request['relationship'];$result['scope']=['session_id'=>$session['id'],'encounter_id'=>$id];$result['source']=['kind'=>'gm_decision','actor_uid'=>$request['actor_uid']];$result['previous_relation_version']=(string)($old['relation_version']??'0');
             if($old){self::integer($old['relation_version'],'18446744073709551614');$this->sql('UPDATE '.$this->table('side_relationships').' SET relationship=?,relation_version=relation_version+1 WHERE id=?',[$request['relationship'],$old['id']]);}
             else $this->sql('INSERT INTO '.$this->table('side_relationships').' (encounter_id,side_a,side_b,relationship,relation_version) VALUES (?,?,?,?,1)',[$id,$a,$b,$request['relationship']]);
+            $result['relation_version']=(string)$this->sql('SELECT relation_version FROM '.$this->table('side_relationships').' WHERE encounter_id=? AND side_a=? AND side_b=?',[$id,$a,$b])['rows'][0]['relation_version'];
         } elseif($op==='participant_add') {
             if($this->sql('SELECT id FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=?',[$id,$request['entity_id']])['rows'])throw new RuntimeException('ACS_PARTICIPANT_EXISTS');
             $result['participant_id']=$this->sql('INSERT INTO '.$this->table('participants').' (encounter_id,entity_id,side_id,participation,registered_sequence,participant_version,visibility_json) VALUES (?,?,?,?,?,1,?)',[$id,$request['entity_id'],$request['side_id'],'engaged',$encounter['next_event_sequence'],self::json(['schema_version'=>1,'scope'=>'gm'])])['id'];
-        } elseif($op==='participant_side') {
-            $row=$this->sql('SELECT participant_version,side_id FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=? FOR UPDATE',[$id,$request['entity_id']])['rows'][0]??null;
-            if(!$row)throw new RuntimeException('ACS_PARTICIPANT_UNAVAILABLE');self::integer($row['participant_version'],'18446744073709551614');
-            $result['previous_side_id']=$row['side_id']===null?null:(string)$row['side_id'];
+        } elseif(in_array($op,['participant_side','side_change'],true)) {
+            $row=$this->sql('SELECT participant_version,side_id,participation FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=? FOR UPDATE',[$id,$request['entity_id']])['rows'][0]??null;
+            if(!$row)throw new RuntimeException('ACS_PARTICIPANT_UNAVAILABLE');if($op==='side_change'&&$row['participation']!=='engaged')throw new RuntimeException('ACS_PARTICIPANT_UNAVAILABLE');if($op==='side_change'&&(string)$row['participant_version']!==$request['participant_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');self::integer($row['participant_version'],'18446744073709551614');
+            $result['previous_side_id']=$row['side_id']===null?null:(string)$row['side_id'];$result+=['entity_id'=>$request['entity_id'],'side_id'=>$request['side_id'],'previous_participant_version'=>(string)$row['participant_version'],'source'=>['kind'=>'gm_decision','actor_uid'=>$request['actor_uid']],'scope'=>['session_id'=>$session['id'],'encounter_id'=>$id],'event_identity'=>$request['event_identity']??null];
             $this->sql('UPDATE '.$this->table('participants').' SET side_id=?,participant_version=participant_version+1 WHERE encounter_id=? AND entity_id=?',[$request['side_id'],$id,$request['entity_id']]);
+            $result['participant_version']=(string)$this->sql('SELECT participant_version FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=?',[$id,$request['entity_id']])['rows'][0]['participant_version'];
         } elseif(in_array($op,['partial_withdraw','rejoin_encounter'],true)) {
             $config=$this->configSnapshot($session['id'],$encounter['config_snapshot_id']);
             if(!$config||!hash_equals($config['content_hash'],hash('sha256',$config['payload_json'])))throw new RuntimeException('ACS_SNAPSHOT_HASH_MISMATCH');
