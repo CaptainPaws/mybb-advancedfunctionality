@@ -1,0 +1,53 @@
+<?php
+/** Real KB/status pins + Builder/Seal/Writer on the existing disposable stage-6/7 fixture. */
+$GLOBALS['acsBehaviorFixture']=static function(array $fixture):void {
+    extract($fixture);global $mybb,$db;
+    $defs=[];$abilities=[];$rowId=980;
+    $contract=static fn(array $rules)=>['schema'=>'ic-acs.behavior-constraint.v1','priority'=>10,'scope'=>['ordinary','reaction'],
+        'compatibility'=>['group'=>'behavior','mode'=>'exclusive'],'on_no_legal_target'=>'block','rules'=>$rules];
+    foreach(['taunt'=>[['kind'=>'target_priority','target'=>'source']],'fear'=>[['kind'=>'target_exclusion','target'=>'source']],
+        'compulsion'=>[['kind'=>'action_restriction','mode'=>'allow','actions'=>['ordinary'],'ability_keys'=>['open-strike']]]] as $key=>$rules){
+        $def=$status;unset($def['mechanical_parameters']['control_effect']);$def['key']=$key.'-status';$def['mechanical_parameters']['behavior_constraint']=$contract($rules);$defs[$key]=$def;
+        itemInsert($link,'af_kb_entries',snapshot_entry(++$rowId,'arpg_mechanics',$key.'-status',['schema'=>AF_KB_ARPG_RULES_SCHEMA,'service_kind'=>'status_def','entries'=>[$def]]));
+        $a=$ability;$a['effects']=[['kind'=>'status','status_key'=>$key.'-status','base_chance'=>100,'polarity'=>'negative','trigger'=>'on_hit']];
+        itemInsert($link,'af_kb_entries',snapshot_entry(++$rowId,'arpg_ability',$key.'-cast',$a));$abilities[$key.'-cast']=$kb->readDefinition('arpg_ability',$key.'-cast',7);snapshot_assert($abilities[$key.'-cast']['ready'],'Behavior KB normalization failed');
+    }
+    $a=af_kb_default_type_profile_payload_arpg('arpg_ability');$a=array_replace($a,['schema'=>AF_KB_ARPG_RULES_SCHEMA,'version'=>'1','targeting'=>'self','duration_unit'=>'own_turn','cooldown_unit'=>'own_turn','max_charges'=>0,'costs'=>[],'effects'=>[['kind'=>'heal','value'=>3,'can_crit'=>false]]]);
+    itemInsert($link,'af_kb_entries',snapshot_entry(++$rowId,'arpg_ability','behavior-reaction',$a));$abilities['behavior-reaction']=$kb->readDefinition('arpg_ability','behavior-reaction',7);snapshot_assert($abilities['behavior-reaction']['ready'],'Reaction KB fixture');
+    $trigger=['schema'=>'af_kb.arpg.mechanic.v1','key'=>'behavior-trigger','version'=>'1','event'=>'after_damage','priority'=>0,'condition_ref'=>null,'effect_ref'=>['type'=>'arpg_ability','key'=>'behavior-reaction','effect_index'=>0],'limits'=>['per_round'=>1],'formula_refs'=>[]];
+    itemInsert($link,'af_kb_entries',snapshot_entry(++$rowId,'arpg_mechanics','behavior-trigger',['schema'=>AF_KB_ARPG_RULES_SCHEMA,'service_kind'=>'trigger_template','entries'=>[$trigger]]));
+    foreach([$actor,$target] as $id){$e=$repo->entity($sid,$id);$p=json_decode($e['payload_json'],true,64,JSON_THROW_ON_ERROR);
+        foreach($abilities as $key=>$dto){$p['pinned_abilities'][$key]=$dto;$issues=[];$ref=af_kb_arpg_acs_reference('arpg_ability',$key,'fixture',$issues);$profile=['references'=>['ability_kb_key'=>$ref],'parameters'=>[]];if($id===$actor)$p['source_snapshot']['abilities'][]=['definition'=>$profile];else $p['source_snapshot']['data']['ability_keys'][]=['ability'=>$profile];}
+        $encoded=AF_ACS_Repository::json($p);$hash=hash('sha256',$encoded);$st=$link->prepare('UPDATE t_af_acs_snapshots SET payload_json=?,content_hash=? WHERE id=?');$st->bind_param('sss',$encoded,$hash,$e['template_snapshot_id']);$st->execute();
+        $turnId=$id===$actor?'1':'2';$roster=json_decode($repo->clockTurn($sid,$turnId)['roster_json'],true);$roster['members'][0]['content_hash']=$hash;unset($roster['fingerprint']);$roster['fingerprint']=hash('sha256',AF_ACS_Repository::json($roster));$encoded=AF_ACS_Repository::json($roster);$st=$link->prepare('UPDATE t_af_acs_turns SET roster_json=? WHERE id=?');$st->bind_param('ss',$encoded,$turnId);$st->execute();
+    }
+    $baseline=$capture();$reset=static function()use($link,$baseline,$mybb):void {foreach($baseline as $t=>$rows){$link->query('DELETE FROM t_af_acs_'.$t);foreach($rows as $row)itemInsert($link,'af_acs_'.$t,$row);}$mybb->user['uid']=7;$mybb->input=['my_post_key'=>'token'];$link->query('UPDATE t_posts SET uid=7 WHERE pid=501');$link->query('DELETE FROM t_posts WHERE pid<>501');};
+    $cast=static function(string $key)use($save,$actions,$sealCall,$confirm,$issue,$writer,$target,$actor):array {$d=$save($actions($key.'-cast',$target,$actor),'2');$v=$confirm($sealCall('seal',$d));$r=$issue($v,502);return $writer->commit($r['submission_id'],$r['state_version']);};
+    require_once AF_ADDONS.'advancedcombatsystem/modules/Application/ReactionService.php';$reactions=new AF_ACS_ReactionService($repo,$access);
+    $register=static function()use($reactions,$repo,$sid,$actor,&$seq):array{return $reactions->command('register',['session_id'=>$sid,'encounter_id'=>'1','entity_id'=>$actor,'trigger_key'=>'behavior-trigger','expected_version'=>$repo->session($sid)['session_version'],'encounter_version'=>$repo->encounter($sid,'1')['encounter_version'],'operation_key'=>'behavior_reaction_fixture_'.++$seq,'reason'=>'Explicit behavior reaction fixture']);};
+    $register();$reset();
+    // Applying a typed status uses existing real commit. No base side/controller/budget reset.
+    $before=$capture(['controllers','participants','control_groups']);$cast('taunt');$projection=$repo->statusProjection($sid);$instance=array_values($projection['instances'])[0];
+    snapshot_assert($instance['source_entity_id']===$target&&$instance['target_entity_id']===$actor&&$instance['spec']['mechanical_parameters']['behavior_constraint']==$contract([['kind'=>'target_priority','target'=>'source']]),'Pinned behavior definition/source changed');
+    snapshot_assert($capture(['controllers','participants','control_groups'])===$before&&(int)$repo->clockTurn($sid,'1')['ap_spent']===0,'Behavior changed assignment/side/AP');
+    $ctx=$builder->context($sid,'1','1');$choice=array_values(array_filter($ctx['actors'][0]['choices'],fn($c)=>$c['key']==='open-strike'))[0];snapshot_assert($choice['legal_targets']===[$target],'Taunt target priority absent from selector');
+    itemFail(fn()=>$preview($actions('open-strike',$actor,$actor)),'ACS_BEHAVIOR_TARGET_BLOCKED');$preview($actions('delegate-attack'));
+    // Hidden source must not appear as a disabled option or identity in reason data.
+    $participant=array_values(array_filter($repo->participants('1'),fn($p)=>$p['entity_id']===$target))[0];$command('participant_visibility',['entity_id'=>$target,'participant_version'=>$participant['participant_version'],'visibility_scope'=>'gm']);
+    $delegations->command('grant',['session_id'=>$sid,'expected_version'=>$repo->session($sid)['session_version'],'owner_uid'=>'7','delegate_uid'=>'8','entity_ids'=>[$actor],'permitted_actions'=>['ordinary'],'duration_seconds'=>'3600','operation_key'=>'behavior_hidden_delegation','reason'=>'Behavior viewer fixture']);$mybb->user['uid']=8;
+    $ctx=$builder->context($sid,'1','1');snapshot_assert(!$ctx['targets'],'Hidden forced target leaked');foreach($ctx['actors'][0]['choices'] as $c)if($c['key']==='open-strike')snapshot_assert(!$c['supported']&&$c['legal_targets']===[]&&$c['behavior_status']==='BLOCKED','Hidden lock failed safely');
+    $reset();$cast('fear');$ctx=$builder->context($sid,'1','1');$choice=array_values(array_filter($ctx['actors'][0]['choices'],fn($c)=>$c['key']==='delegate-attack'))[0];snapshot_assert(!$choice['supported']&&$choice['behavior_status']==='BLOCKED','Fear empty target set not structured');
+    $before=$capture();$beforeDraws=$draws;itemFail(fn()=>$preview($actions('delegate-attack')),'ACS_BEHAVIOR_NO_LEGAL_TARGET');$d=$save($actions('delegate-attack'));$before=$capture();itemFail(fn()=>$sealCall('seal',$d),'ACS_BEHAVIOR_NO_LEGAL_TARGET');snapshot_assert($capture()===$before&&$draws===$beforeDraws,'Blocked action consumed RNG/quota or mutated mechanics');$view=$seal->status($d['draft_id']);snapshot_assert($view['blocked']&&$view['behavior']['status']==='BLOCKED','Seal no-target status missing');
+    $reset();$cast('compulsion');$before=$capture();itemFail(fn()=>$register(),'ACS_BEHAVIOR_ACTION_BLOCKED');snapshot_assert($capture()===$before,'Denied reaction registration wrote registry/resources');itemFail(fn()=>$preview($actions('delegate-attack')),'ACS_BEHAVIOR_ACTION_BLOCKED');$preview($actions('open-strike'));
+    // A status applied after seal invalidates the action without a replacement roll.
+    $reset();$d=$save($actions('delegate-attack'));$v=$confirm($sealCall('seal',$d));$tape=$capture(['sealed_actions','rolls']);$cast('fear');$view=$seal->status($d['draft_id']);snapshot_assert(!$view['confirmed']&&$view['blocked'],'New status retained sealed confirmation');
+    $retained=$capture(['sealed_actions','rolls']);foreach($tape as $table=>$rows)foreach($rows as $row)snapshot_assert(in_array($row,$retained[$table],true),'Status application rewrote old rolls/targets');
+    // The existing session barrier permits one unresolved publication. Change a legal dependency
+    // through an already authorized GM command, rather than weakening that barrier for a second post.
+    $reset();$cast('taunt');$d=$save($actions('delegate-attack'));$v=$confirm($sealCall('seal',$d));$r=$issue($v);$participant=array_values(array_filter($repo->participants('1'),fn($p)=>$p['entity_id']===$target))[0];
+    $command('side_change',['entity_id'=>$target,'side_id'=>'1','participant_version'=>$participant['participant_version']]);$tape=$capture(['sealed_actions','rolls']);$before=$capture();itemFail(fn()=>$writer->commit($r['submission_id'],$r['state_version']),'ACS_BEHAVIOR_NO_LEGAL_TARGET');snapshot_assert($capture()===$before&&$capture(['sealed_actions','rolls'])===$tape,'Stale commit changed targets/rolls/resources');
+    $view=$seal->status($d['draft_id']);snapshot_assert(!$view['confirmed']&&$view['blocked'],'State change retained sealed confirmation');
+    $reset();$cast('taunt');$d=$save($actions('delegate-attack'));$v=$confirm($sealCall('seal',$d));$r=$issue($v);$receipt=$writer->commit($r['submission_id'],$r['state_version']);$instances=$repo->statusProjection($sid)['instances'];snapshot_assert(count($instances)===1&&array_values($instances)[0]['status']==='removed'&&(int)$repo->clockTurn($sid,'1')['ap_spent']===1,'Boundary did not expire behavior or reset AP');$before=$capture();snapshot_assert($writer->commit($r['submission_id'],$r['state_version'])===$receipt&&$capture()===$before,'Duplicate boundary/commit changed expired constraint');
+    echo "ACS behavior SQL: pinned KB/status commit, server selector/manual target/visibility, no legal target before RNG/quota, compulsion, stale frozen commit and retained tape passed\n";
+};
+require __DIR__.'/acs_side_control_sql.php';

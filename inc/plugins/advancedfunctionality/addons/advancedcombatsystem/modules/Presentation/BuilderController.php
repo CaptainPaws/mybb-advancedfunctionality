@@ -54,7 +54,7 @@ final class AF_ACS_BuilderController
                 $input['actions']=json_decode($raw,true,32,JSON_THROW_ON_ERROR);$data=$service->preview($input);
             }
             $response=['ok'=>true,'data'=>$data];
-        }catch(Throwable $e){http_response_code(422);$response=['ok'=>false,'error'=>['code'=>'builder_unavailable','message'=>AF_ACS_BuilderService::message($e)]];}
+        }catch(Throwable $e){http_response_code(422);$code=str_starts_with($e->getMessage(),'ACS_BEHAVIOR_')?$e->getMessage():'builder_unavailable';$response=['ok'=>false,'error'=>['code'=>$code,'message'=>AF_ACS_BuilderService::message($e)]];if(str_starts_with($code,'ACS_BEHAVIOR_'))$response['error']['status']=$code==='ACS_BEHAVIOR_UNSUPPORTED'?'UNSUPPORTED':'BLOCKED';}
         echo json_encode($response,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE);exit;
     }
     /** The ATF provider calls this only after explicit acs_builder navigation and native topic checks. */

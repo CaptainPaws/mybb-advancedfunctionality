@@ -4,6 +4,7 @@ require_once __DIR__.'/Damage.php';
 require_once __DIR__.'/CausalGraph.php';
 require_once __DIR__.'/Spawn.php';
 require_once __DIR__.'/Control.php';
+require_once __DIR__.'/Behavior.php';
 
 /** A single action on a detached virtual state. No globals, time, RNG, SQL or user callbacks. */
 final class AF_ACS_Effects
@@ -272,6 +273,10 @@ final class AF_ACS_Effects
         if(array_key_exists('blocks_ordinary_actions',$spec['mechanical_parameters'])&&!is_bool($spec['mechanical_parameters']['blocks_ordinary_actions']))self::fail('status_control_contract_invalid');
         if(($spec['mechanical_parameters']['blocks_ordinary_actions']??false)===true&&($spec['duration']['unit']!=='target_turn'||(!empty($spec['periodic'])&&($spec['duration_event']??null)!=='on_turn_end')))self::fail('status_control_timing_unsupported');
         if(isset($spec['periodic'])&&!in_array($spec['duration_event']??null,$spec['duration']['unit']==='round'?['on_round_end']:['on_turn_start','on_turn_end'],true))self::fail('status_tick_decrement_unsupported');
+        if(array_key_exists('behavior_constraint',$spec['mechanical_parameters'])){
+            AF_ACS_Behavior::spec($spec['mechanical_parameters']['behavior_constraint']);
+            if($spec['scope']!=='combat'||$spec['source_scope']!=='source'||$spec['duration']['value']<1||isset($spec['mechanical_parameters']['control_effect'])||!empty($spec['periodic'])||isset($spec['upkeep']))self::fail('ACS_BEHAVIOR_UNSUPPORTED');
+        }
         if(isset($spec['mechanical_parameters']['control_effect'])){
             AF_ACS_Control::spec($spec['mechanical_parameters']['control_effect']);
             if($spec['scope']!=='combat'||$spec['repeat_rule']!=='independent'||$spec['source_scope']!=='source'||$spec['duration']['value']<1||!in_array($spec['duration']['unit'],['target_turn','round'],true)||isset($spec['upkeep'])||!empty($spec['periodic'])||!empty($spec['mechanical_parameters']['blocks_ordinary_actions']))self::fail('ACS_CONTROL_EFFECT_UNSUPPORTED');

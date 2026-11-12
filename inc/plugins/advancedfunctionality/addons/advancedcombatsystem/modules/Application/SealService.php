@@ -67,7 +67,7 @@ final class AF_ACS_SealService
             $result['summary']=$summary;$result['dependency_hash']=$dependencyHash;$result['simulation_hash']=$simulationHash;$result['confirmation_hash']=$confirmation;
             $result['changed']=isset($old['simulation_hash'])&&($old['simulation_hash']!==$simulationHash||($old['dependency_hash']??null)!==$dependencyHash);
             $result['confirmable']=count($actions)===count($this->actions($draft));$result['confirmed']=$result['confirmable']&&$draft['confirmation_hash']!==null&&hash_equals($draft['confirmation_hash'],$confirmation)&&(!$p['friendly_fire']['required']||($old['friendly_fire_confirmation']??null)===$p['friendly_fire']['confirmation_hash']);
-        }catch(Throwable $e){$result['blocked']=true;$result['reason']=AF_ACS_BuilderService::message($e);}
+        }catch(Throwable $e){$result['blocked']=true;$result['reason']=AF_ACS_BuilderService::message($e);if(str_starts_with($e->getMessage(),'ACS_BEHAVIOR_'))$result['behavior']=['status'=>$e->getMessage()==='ACS_BEHAVIOR_UNSUPPORTED'?'UNSUPPORTED':'BLOCKED','code'=>$e->getMessage()];}
         return $result;
     }
     public function command(string $op,array $input):array
