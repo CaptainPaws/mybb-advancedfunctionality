@@ -126,10 +126,7 @@ final class AF_ACS_Spawn
         if(array_diff(array_keys($d),['schema','type_profile','version','revision','service_kind','entries']) || ($d['service_kind']??null)!=='combat_template' || count($d['entries']??[])!==1)self::fail('ACS_SPAWN_OBJECT_INVALID');
         $entry=$d['entries'][0];self::fields($entry,['schema','key','version','phases','limits','formula_refs','object_definition']);
         if($entry['schema']!=='af_kb.arpg.mechanic.v1' || $entry['phases']!==[] || $entry['limits']!==[] || $entry['formula_refs']!==[])self::fail('ACS_SPAWN_OBJECT_INVALID');
-        $o=$entry['object_definition'];self::fields($o,['schema','name','properties']);self::fields($o['properties'],['description','tags']);
-        if($o['schema']!=='ic-acs.object-template.v1' || !is_string($o['name']) || trim($o['name'])==='' || mb_strlen($o['name'])>191 || !is_string($o['properties']['description']) || strlen($o['properties']['description'])>4096
-            || !is_array($o['properties']['tags']) || !array_is_list($o['properties']['tags']) || count($o['properties']['tags'])>32)self::fail('ACS_SPAWN_OBJECT_INVALID');
-        foreach($o['properties']['tags'] as $tag)if(!is_string($tag)||!preg_match('/\A[a-z][a-z0-9_-]{0,63}\z/D',$tag))self::fail('ACS_SPAWN_OBJECT_INVALID');
+        $o=$entry['object_definition'];if(($o['schema']??null)==='ic-acs.object-template.v1'){self::fields($o,['schema','name','properties']);self::fields($o['properties'],['description','tags']);}require_once __DIR__.'/Environment.php';AF_ACS_Environment::definition($o);
         return ['hp'=>null,'stats'=>null,'properties'=>$o];
     }
     public static function compile(array $dto): array

@@ -71,10 +71,10 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
         $session['_command_result']=['status'=>$status,'obligations_preserved'=>true];return $session;
     }
     /** Internal command boundary; callers supply authorization, never client callbacks. */
-    public function command(string $key, string $kind, array $request, callable $authorize, callable $apply): array
+    public function command(string $key, string $kind, array $request, callable $authorize, callable $apply, ?callable $afterEvent=null): array
     {
         $key=self::key($key);$kind=self::key($kind,64);$json=self::json($request);$hash=hash('sha256',$json);
-        return $this->transactions->run(function () use($key,$kind,$request,$json,$hash,$authorize,$apply) {
+        return $this->transactions->run(function () use($key,$kind,$request,$json,$hash,$authorize,$apply,$afterEvent) {
             $this->writable();
             $old=$this->sql('SELECT * FROM '.$this->table('operations').' WHERE operation_key=? FOR UPDATE',[$key])['rows'][0]??null;
             $id=$old ? (string)$old['session_id'] : ($request['session_id']??null);
@@ -96,6 +96,7 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
             $sequence=self::integer($session['next_sequence'],'18446744073709551614');
             $this->sql('INSERT INTO '.$this->table('operations').' (operation_key,session_id,encounter_id,kind,payload_hash,status,operation_version,request_json,result_json,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',[$key,$id,$session['_command_result']['encounter_id']??null,$kind,$hash,'prepared',1,$json,self::json(['schema_version'=>1]),time()]);
             $event=$this->sql('INSERT INTO '.$this->table('events').' (session_id,session_sequence,encounter_id,event_sequence,operation_key,event_type,actor_uid,engine_version,created_at) VALUES (?,?,?,?,?,?,?,?,?)',[$id,$sequence,$session['_command_result']['encounter_id']??null,$session['_command_result']['encounter_sequence']??null,$key,$kind,$request['actor_uid'],str_starts_with($kind,'encounter.')?'acs-encounters-1':($kind==='entity.register'?'acs-registration-1':'acs-sessions-1'),time()])['id'];
+            if($afterEvent!==null)$session=$afterEvent($session,$event);
             $details=self::json(['schema_version'=>1,'numeric_policy'=>'binary64-half_up-v1','request'=>$request,'before_version'=>$version,'result'=>$session['_command_result']??[],'snapshot_refs'=>isset($session['_command_result']['snapshot_id'])?[$session['_command_result']['snapshot_id']]:[]]);
             $visibility=self::json(['schema_version'=>1,'scope'=>str_starts_with($kind,'encounter.')?'encounter_management':'session_management']);
             $this->sql('INSERT INTO '.$this->table('event_details').' (event_id,schema_version,numeric_policy,payload_json,visibility_json,content_hash) VALUES (?,?,?,?,?,?)',[$event,1,'binary64-half_up-v1',$details,$visibility,hash('sha256',$details."\n".$visibility)]);

@@ -17,6 +17,10 @@ final class AF_ACS_EncounterService
         if($write && $session['status']!=='active')throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
         return $session;
     }
+    public function environment(): AF_ACS_EnvironmentService
+    {
+        require_once __DIR__.'/EnvironmentService.php';return new AF_ACS_EnvironmentService($this->repository,$this->access);
+    }
     public function delegations(): AF_ACS_DelegationService
     {
         require_once __DIR__.'/DelegationService.php';return new AF_ACS_DelegationService($this->repository,$this->access);

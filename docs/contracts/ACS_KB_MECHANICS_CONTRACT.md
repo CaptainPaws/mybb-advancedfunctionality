@@ -550,3 +550,92 @@ pins и audit принадлежат Status/Clock. Нельзя совмести
 входят в существующее confirmation/fact fence; старые samples/цели сохраняются.
 Prepared actions ещё не исполняются: scope=prepared и принудительный побег не
 эмулируются; будущий исполнитель обязан вызвать тот же gate при срабатывании.
+
+## ACS-8.1.1 consumer binding: environment instances
+
+Это opt-in расширение ACS consumer, а не изменение B1 normalization или
+разрешение исполнять любой прочитанный JSON. Предыдущие ограничения 7.2.1/7.2.2
+на object lifecycle заменяются только перечисленным здесь subset. Wrapper
+`arpg_mechanics / service_mechanics / combat_template`, spawn descriptor,
+registration-time template pin, fingerprint/version и source policies сохраняются.
+`ic-acs.object-template.v1` остаётся совместимым passive marker без механических
+эффектов, durability или GM operations; получает object state и срок из spawn.
+Неизвестные поля `properties` по-прежнему запрещены.
+
+Новый `object_definition`:
+
+```json
+{
+  "schema": "ic-acs.object-template.v2",
+  "name": "Знамя",
+  "properties": {"description": "Источник восстановления", "tags": ["banner"]},
+  "mechanics": {
+    "categories": ["passive", "triggered", "interactive", "destructible"],
+    "initial_status": "active",
+    "durability": {"maximum": 12, "damage_types": ["physical"]},
+    "passive": [{"key": "renew", "event": "source_turn_start", "effect": {"kind": "heal", "target": "source", "amount": 2}}],
+    "triggers": [{"key": "bless", "event": "source_turn_end", "once": true, "effect": {"kind": "heal", "target": "source", "amount": 7}}],
+    "gm_operations": ["create", "activate", "deactivate", "damage"]
+  }
+}
+```
+
+Все шесть полей mechanics обязательны. Categories — непустой уникальный subset
+passive/triggered/interactive/destructible, в любой комбинации. Initial status —
+active/inactive. Durability — null без destructible, иначе строго maximum
+(положительный integer не выше 2^53−1) и непустой уникальный damage_types из
+physical/elemental/true. Это уже конечный фиксированный урон прочности: DEF/RES,
+HP живого существа, crit или universal durability не подставляются.
+
+Passive/triggers — списки до 16 записей каждый; key уникален между обоими
+списками и соответствует `[a-z][a-z0-9_-]{0,63}`. Требуется соответствующая
+category. Event — строго source_turn_start/source_turn_end, совпадающий с
+существующим Clock entity_start/entity_end **исходного source_entity_id**.
+Эффекты исполняются только пока объект active и источник существует и не dead.
+Heal разрешён только на source, amount — положительный точный integer.
+Дополнительный triggered effect:
+
+```json
+{"kind": "damage_object", "target": "self", "amount": 1, "damage_type": "physical"}
+```
+
+Он требует destructible и явно разрешённый damage_type, уменьшает собственную
+прочность через Effects; при нуле сохраняется terminal destroyed. Последующие
+эффекты объекта не запускаются. Это позволяет выразить фиксированный расход
+прочности механизма при срабатывании без произвольного callback.
+
+Triggers требуют `once=true`: один раз за жизнь экземпляра, включая запрет
+повтора на том же causal event. Passive здесь — автоматический периодический
+источник фиксированного эффекта на явно названной границе, один раз на boundary;
+не постоянный stat modifier и не spatial aura. Отдельных rolls нет: это fixed
+causal subset без вероятности/выбора цели. Random triggers и прочие эффекты —
+UNSUPPORTED, без получения новых samples или обхода существующей random tape.
+CausalGraph проверяет ограниченный root→effect граф глубиной 2; дочерние heal/
+self-damage не являются новыми object causal events.
+
+Срок берётся только из immutable spawn.duration: round — round_end encounter,
+own_turn — entity_end исходного source. Inactive тоже расходует срок. Истечение
+переводит в terminal expired, не удаляя entity/snapshot/spawn event. Нет upkeep,
+переноса source clock или автоматического воскресения destroyed/expired.
+Повтор boundary использует прежний parent receipt и сохранённые stamps.
+
+GM operations — уникальный subset create/activate/deactivate/damage. Activation/
+deactivation требуют interactive; damage требует destructible. Create разрешает
+GM выбрать только уже retained object spawn ability зарегистрированного engaged
+source в этом encounter; весь ability должен создавать только objects. Свежий
+KB lookup, JSON definition из клиента и GM override шаблона запрещены. Сохраняются
+обычные per_source/per_encounter limits; terminal objects не освобождают лимит.
+
+Backend API: `EncounterService::environment()->command($operation, $input)`.
+Обязательны session_id, encounter_id, expected_version (session),
+expected_encounter_version, expected_object_version, operation_key, reason.
+Для create: expected_object_version=0, source_entity_id, ability_key. Для других:
+entity_id; для damage дополнительно amount и damage_type. Неизвестные поля
+отклоняются. POST/CSRF, native thread access и текущая session GM/owner role
+проверяются до операции и повторно под session lock. Общий unresolved-publication
+barrier сохранён. Команда не создаёт MyBB post и не является боевым действием
+игрока или бесплатной выдачей ему AP.
+
+Ordinary object targeting/interaction checks, progress, tools, awareness, cover,
+spatial/zone predicates, arbitrary on_destroy/rewards, callbacks и random object
+triggers не включены в этот binding. Их определения возвращают UNSUPPORTED.

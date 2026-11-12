@@ -64,6 +64,7 @@ final class AF_ACS_QueryService
 
         $round=$this->repo->currentRound($view['encounter']);if(!$round||$round['status']!=='open')self::fail('preview_turn_unavailable');
         $reactions=$this->repo->reactionProjection($sid,$eid);$barriers=$this->repo->barrierProjection($sid,$eid);
+        $objects=$this->repo->objectProjection($sid,$eid);
         $summons=$this->repo->summonProjection($sid,$eid);
         $sources=[$actor=>$this->source($sid,$actor),$target=>$this->source($sid,$target)];if($sources[$actor]['row']['life_state']!=='active')self::fail('preview_actor_unavailable');$turns=[];$groups=[];$reactionTurns=[];$reactionKinds=[];$versions=['session_version'=>$view['session']['session_version'],'encounter_version'=>$view['encounter']['encounter_version'],'round_version'=>(string)$round['round_version']];
         if($barriers['pools']||array_filter($reactions['entries'],static fn($e)=>isset($e['spec']['selection']))){
@@ -71,6 +72,10 @@ final class AF_ACS_QueryService
             foreach($selection['members'] as $m){$id=$m['entity_id'];if(isset($sources[$id])||!in_array($id,$needed,true))continue;$sources[$id]=$this->source($sid,$id);}
         }
         foreach($summons as $summon)if($summon['status']==='active'&&(isset($sources[$summon['source_entity_id']])||isset($sources[$summon['entity_id']])))foreach([$summon['entity_id'],$summon['source_entity_id']] as $needed)if(!isset($sources[$needed]))$sources[$needed]=$this->source($sid,$needed);
+        foreach($objects as $object)if($object['status']==='active'&&!isset($sources[$object['source_entity_id']])){
+            $m=AF_ACS_Environment::definition($object['definition']);$row=$this->repo->entity($sid,$object['source_entity_id']);
+            if(($m['passive']||$m['triggers'])&&$row&&$row['control_group_id']===$sources[$actor]['row']['control_group_id'])$sources[$object['source_entity_id']]=$this->source($sid,$object['source_entity_id']);
+        }
         foreach($this->repo->allRoundTurns($round['id']) as $turn){
             foreach($sources as $id=>$source){$id=(string)$id;if($source['row']['control_group_id']!==$turn['control_group_id'])continue;
                 $r=json_decode($turn['roster_json'],true,32,JSON_THROW_ON_ERROR);$fp=$r['fingerprint']??null;unset($r['fingerprint']);
@@ -105,6 +110,7 @@ final class AF_ACS_QueryService
         foreach($statusProjection['instances'] as $instance)if($instance['status']==='active'&&$instance['spec']['scope']==='combat'&&$instance['encounter_id']!==$eid)self::fail('ACS_COMBAT_RESET_REQUIRED');
         $endBoundaries=[];
         foreach($this->repo->individualTurns([$turns[$actor]['id']]) as $individual){
+            if($individual['start_done']!=='1'&&AF_ACS_Clock::hasObjectStartWork($objects,$individual['entity_id']))self::fail('ACS_STATUS_START_REQUIRED');
             if($individual['start_done']!=='1'&&AF_ACS_Clock::hasSummonStartWork($summons,$individual['entity_id']))self::fail('ACS_STATUS_START_REQUIRED');
             if($individual['start_done']!=='1'&&AF_ACS_Clock::hasStartWork($statusProjection['instances'],$individual['entity_id'],$sid,$eid))self::fail('ACS_STATUS_START_REQUIRED');
             $endBoundaries[]=['phase'=>'entity_end','id'=>$individual['id'],'entity_id'=>$individual['entity_id'],'session_id'=>$sid,'encounter_id'=>$eid,'encounter_status'=>'active'];
@@ -113,7 +119,8 @@ final class AF_ACS_QueryService
         $versions['actor_side_id']=$sideA;$versions['target_side_id']=$sideB;$membership=array_column($selection['members'],null,'entity_id');
         $versions['actor_participant_version']=$membership[$actor]['participant_version'];$versions['target_participant_version']=$membership[$target]['participant_version'];
         $versions['summon_state_hash']=hash('sha256',serialize($summons));
-        $state=['summons'=>$summons,'status_instances'=>$statusProjection['instances'],'next_status_order'=>$statusProjection['next_order'],'schema_version'=>1,'entities'=>[],'groups'=>$groups,'barriers'=>$barriers['pools'],'next_barrier_order'=>$barriers['next_order']];$stats=[];$defenses=[];$statusImmunities=[];$catalog=null;
+        $versions['object_state_hash']=hash('sha256',serialize($objects));
+        $state=['objects'=>$objects,'summons'=>$summons,'status_instances'=>$statusProjection['instances'],'next_status_order'=>$statusProjection['next_order'],'schema_version'=>1,'entities'=>[],'groups'=>$groups,'barriers'=>$barriers['pools'],'next_barrier_order'=>$barriers['next_order']];$stats=[];$defenses=[];$statusImmunities=[];$catalog=null;
         foreach($sources as $id=>$source){$id=(string)$id;$row=$source['row'];$s=$source['source'];$stat=$s['characteristics']??null;if(!is_array($stat))self::fail('preview_stats_missing');
             require_once __DIR__.'/ItemActionService.php';$stat=AF_ACS_ItemActionService::loadoutStats($this->repo,$sid,$id,$source['registration'],$stat);
             foreach(['accuracy','speed','crit_rate','crit_dmg','def'] as $name)AF_ACS_Numeric::number($stat[$name]??null);$stats[$id]=$stat;
