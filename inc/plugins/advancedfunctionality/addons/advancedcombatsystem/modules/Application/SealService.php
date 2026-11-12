@@ -30,7 +30,7 @@ final class AF_ACS_SealService
         $all=$this->repo->sealRows($draft['id']);$history=[];$active=[];$actions=[];$tape=[];
         foreach($all as $row){$payload=$this->repo->sealPayload($row);$t=$this->repo->sealTape((string)$row['id']);
             if(!hash_equals($payload['tape_hash']??'',hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'tape'=>$t]))))throw new RuntimeException('ACS_SEAL_TAPE_INVALID');
-            $known=true;foreach($payload['action']['targets'] as $target)if($audience->knowledge('entity',$target,$payload['action']['actor_id'])['level']!=='identified')$known=false;
+            $known=true;foreach($payload['action']['targets'] as $target)if($audience->knowledge(str_starts_with($payload['action']['ability_key'],'object:')?'object':'entity',$target,$payload['action']['actor_id'])['level']!=='identified')$known=false;
             if($known)$history[]=['id'=>(string)$row['id'],'history_index'=>(int)$row['action_index'],'status'=>$row['status'],'ap_cost'=>(int)$row['ap_cost'],'action'=>$payload['action'],'rolls'=>$t];
             if($row['status']==='sealed'){$active[]=$row;$actions[]=$payload['action'];$tape[]=$t;}
         }
@@ -103,13 +103,13 @@ final class AF_ACS_SealService
                 foreach($active as $i=>$row){$old=$this->repo->sealPayload($row);if(($actions[$i]??null)!==$old['action'])throw new RuntimeException('ACS_SEAL_IMMUTABLE');$a=$old['action'];if($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['source_ref']!==$old['pin'])throw new RuntimeException('ACS_SEAL_PIN_CHANGED');$this->repo->verifySealDefinition($d['session_id'],$row,$old);}
                 $used=$this->repo->sealQuota($d['turn_id']);$cost=0;$costs=[];
                 foreach(array_slice($actions,count($active)) as $a){$c=$p['context']['abilities'][$a['actor_id']][$a['ability_key']]['costs']??null;
-                    if(!is_array($c)||count($c)!==1||$c[0]['kind']!=='ap'||!is_int($c[0]['amount'])||$c[0]['amount']<=0)throw new RuntimeException('ACS_SEAL_ZERO_AP_UNSUPPORTED');$cost+=$c[0]['amount'];$costs[]=$c[0]['amount'];}
+                    $ap=is_array($c)?array_values(array_filter($c,static fn($cost)=>$cost['kind']==='ap')):[];if(count($ap)!==1||(!AF_ACS_ObjectInteraction::isAction($a['ability_key'])&&count($c)!==1)||!is_int($ap[0]['amount'])||$ap[0]['amount']<=0)throw new RuntimeException('ACS_SEAL_ZERO_AP_UNSUPPORTED');$cost+=$ap[0]['amount'];$costs[]=$ap[0]['amount'];}
                 if($used+$cost>$p['scope']['turn']['ap'])throw new RuntimeException('ACS_SEAL_QUOTA_EXHAUSTED');
                 $history=$this->repo->sealRows($d['id']);if(count($history)+count($actions)-count($active)>200)throw new RuntimeException('ACS_SEAL_HISTORY_LIMIT');$next=$history?(int)end($history)['action_index']+1:0;
                 $query=new AF_ACS_QueryService($this->repo,$this->access);$definitions=[];$statusIndexes=[];
                 foreach(array_slice($actions,count($active)) as $a){
                     $position=count($active)+count($definitions);$definitions[]=$p['definitions'][$position]??$query->sealDefinition($d['session_id'],$a['actor_id'],$a['ability_key']);
-                    $indexes=[];foreach($a['targets'] as $target)$indexes[$target]=AF_ACS_Resolver::statusRollIndexes($p['context'],$a['actor_id'],$target,$p['context']['abilities'][$a['actor_id']][$a['ability_key']]);$statusIndexes[]=count($a['targets'])===1?array_values($indexes)[0]:$indexes;
+                    $indexes=[];foreach($a['targets'] as $target)$indexes[$target]=AF_ACS_ObjectInteraction::isAction($a['ability_key'])?[]:AF_ACS_Resolver::statusRollIndexes($p['context'],$a['actor_id'],$target,$p['context']['abilities'][$a['actor_id']][$a['ability_key']]);$statusIndexes[]=count($a['targets'])===1?array_values($indexes)[0]:$indexes;
                 }
                 $items=new AF_ACS_ItemActionService($this->repo,$this->access);$protected=[];
                 foreach ($definitions as $i=>&$definition) if (isset($definition['item_action'])) {
@@ -124,6 +124,7 @@ final class AF_ACS_SealService
                     $spec['snapshot_id']=$this->repo->sealItemSnapshot($d,$definition);
                     unset($spec);
                 }unset($definition);
+                foreach($definitions as $i=>&$definition)if(($definition['object_interaction']['tool']['mode']??null)==='consumes'){$tool=&$definition['object_interaction']['tool'];$tool['reservation']=$items->reserve($tool,$d['session_id'],$actions[count($active)+$i]['actor_id'],'acs:tool:reserve:'.$d['id'].':'.($next+$i));unset($tool);}unset($definition);
                 // Everything above is deterministic preflight. Once drawn, all tape/quota persists even if simulation is blocked.
                 foreach(array_slice($actions,count($active)) as $i=>$a){
                     $ability=$p['context']['abilities'][$a['actor_id']][$a['ability_key']];
@@ -131,7 +132,7 @@ final class AF_ACS_SealService
                 }
             }elseif($op==='cancel_tail'){
                 if(!$active)throw new RuntimeException('ACS_SEAL_NOTHING_TO_CANCEL');$last=end($active);$this->repo->cancelSeal((string)$last['id']);
-                (new AF_ACS_ItemActionService($this->repo,$this->access))->cancel($d,$last,count($active)===1);array_splice($actions,count($active)-1,1);
+                (new AF_ACS_ItemActionService($this->repo,$this->access))->cancel($d,$last,count($active)===1);(new AF_ACS_ObjectInteractionService($this->repo,$this->access))->cancel($d,$last);array_splice($actions,count($active)-1,1);
                 $d['mechanics_json']=AF_ACS_Repository::json(['schema_version'=>1,'actions'=>$actions]);
             }
             if($op==='prepare_reactions')$p=$this->prepare($d,$actions);

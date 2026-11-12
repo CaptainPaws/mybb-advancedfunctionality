@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__.'/Numeric.php';
 require_once __DIR__.'/Control.php';
 require_once __DIR__.'/CausalGraph.php';
+require_once __DIR__.'/ObjectInteraction.php';
 
 /** Detached object projection. No clock, callbacks, SQL, live KB or random sampling. */
 final class AF_ACS_Environment
@@ -14,6 +15,7 @@ final class AF_ACS_Environment
     {if(!is_int($n)||$n<$minimum||$n>9007199254740991)self::fail('ACS_OBJECT_VALUE_INVALID');return $n;}
     public static function definition(array $o):array
     {
+        $interactions=AF_ACS_ObjectInteraction::definition($o['interactions']??null);unset($o['interactions']);
         require_once __DIR__.'/Awareness.php';AF_ACS_Awareness::perception($o['perception']??null);unset($o['perception']);
         if(($o['schema']??null)==='ic-acs.object-template.v1'){
             self::fields($o,['schema','name','properties']);$mechanics=['categories'=>['passive'],'initial_status'=>'active','durability'=>null,'passive'=>[],'triggers'=>[],'gm_operations'=>[]];
@@ -34,6 +36,8 @@ final class AF_ACS_Environment
         }elseif($mechanics['durability']!==null)self::fail();
         if(array_diff($mechanics['gm_operations'],['create','activate','deactivate','damage'])||count(array_unique($mechanics['gm_operations']))!==count($mechanics['gm_operations']))self::fail();
         if(array_intersect($mechanics['gm_operations'],['activate','deactivate'])&&!in_array('interactive',$c,true)||in_array('damage',$mechanics['gm_operations'],true)&&!in_array('destructible',$c,true))self::fail();
+        if($interactions!==null&&(($o['schema']??null)!=='ic-acs.object-template.v2'||!in_array('interactive',$c,true)))self::fail();
+        foreach($interactions['actions']??[] as $action)foreach($action['outcomes'] as $outcome)if($outcome['repair']>0&&$mechanics['durability']===null)self::fail();
         $keys=[];
         foreach(['passive','triggers'] as $kind)foreach($mechanics[$kind] as $entry){
             if(!is_array($entry))self::fail();self::fields($entry,$kind==='triggers'?['key','event','once','effect']:['key','event','effect']);
@@ -73,9 +77,10 @@ final class AF_ACS_Environment
     public static function initial(string $entity,string $encounter,string $source,array $definition,array $duration):array
     {
         $m=self::definition($definition);
+        if(($definition['interactions']['progress']['decay_per_round']??0)>0&&($duration['unit']??null)!=='round')self::fail('ACS_INTERACTION_UNSUPPORTED');
         if(!in_array($duration['unit']??null,['round','own_turn'],true))self::fail();self::integer($duration['value']??null,1);
         return ['schema_version'=>1,'entity_id'=>$entity,'encounter_id'=>$encounter,'source_entity_id'=>$source,'definition'=>$definition,'status'=>$m['initial_status'],'object_version'=>1,
-            'durability'=>$m['durability']['maximum']??null,'interaction'=>['schema_version'=>1,'activation'=>$m['initial_status']],'remaining'=>$duration['value'],'unit'=>$duration['unit'],
+            'durability'=>$m['durability']['maximum']??null,'interaction'=>['schema_version'=>1,'activation'=>$m['initial_status']]+(isset($definition['interactions'])?['typed'=>AF_ACS_ObjectInteraction::initial($definition['interactions'])]:[]),'remaining'=>$duration['value'],'unit'=>$duration['unit'],
             'last_boundary'=>null,'fired'=>[],'passive_boundaries'=>[]];
     }
     public static function instance(array $v):void
@@ -84,7 +89,8 @@ final class AF_ACS_Environment
         foreach(['entity_id','encounter_id','source_entity_id'] as $key)if(!is_string($v[$key])||!preg_match('/\A[1-9][0-9]{0,19}\z/D',$v[$key]))self::fail('ACS_OBJECT_IDENTITY_INVALID');
         if($v['schema_version']!==1)self::fail();
         $m=self::definition($v['definition']);self::integer($v['object_version'],1);self::integer($v['remaining']);
-        if(!in_array($v['status'],['active','inactive','expired','destroyed'],true)||!in_array($v['unit'],['round','own_turn'],true)||!in_array($v['interaction'],[['schema_version'=>1,'activation'=>'active'],['schema_version'=>1,'activation'=>'inactive']],true))self::fail('ACS_OBJECT_STATE_INVALID');
+        if(!in_array($v['status'],['active','inactive','expired','destroyed'],true)||!in_array($v['unit'],['round','own_turn'],true)||!in_array(array_diff_key($v['interaction'],['typed'=>true]),[['schema_version'=>1,'activation'=>'active'],['schema_version'=>1,'activation'=>'inactive']],true))self::fail('ACS_OBJECT_STATE_INVALID');
+        if(isset($v['definition']['interactions']))AF_ACS_ObjectInteraction::validate($v['interaction']['typed']??[],$v['definition']['interactions']);elseif(isset($v['interaction']['typed']))self::fail();
         if($m['durability']===null?$v['durability']!==null:(!is_int($v['durability'])||$v['durability']<0||$v['durability']>$m['durability']['maximum']))self::fail('ACS_OBJECT_STATE_INVALID');
         if(($v['status']==='destroyed')!==($v['durability']===0)||($v['status']==='expired'&&$v['remaining']!==0)||($v['remaining']===0&&!in_array($v['status'],['expired','destroyed'],true)))self::fail('ACS_OBJECT_STATE_INVALID');
         if(!is_array($v['fired'])||!is_array($v['passive_boundaries']))self::fail('ACS_OBJECT_STATE_INVALID');
@@ -128,7 +134,7 @@ final class AF_ACS_Environment
                 $v[$field][$entry['key']]=$key;$events[]=['type'=>$kind==='triggers'?'object.triggered':'object.passive','entity_id'=>(string)$id,'cause_id'=>$cause,'source_event'=>$key,'effects'=>$r->serverTrace()];
             }
             $eligible=$v['unit']==='round'?$boundary['phase']==='round_end':($boundary['phase']==='entity_end'&&($boundary['entity_id']??null)===$v['source_entity_id']);
-            if($v['status']!=='destroyed'&&$eligible&&$v['last_boundary']!==$key){$v['last_boundary']=$key;$v['remaining']=max(0,$v['remaining']-1);if($v['remaining']===0)$v['status']='expired';}
+            if($v['status']!=='destroyed'&&$eligible&&$v['last_boundary']!==$key){$v['last_boundary']=$key;$v['remaining']=max(0,$v['remaining']-1);if($v['unit']==='round'&&isset($v['interaction']['typed'])&&($decay=$v['definition']['interactions']['progress']['decay_per_round']??0)>0)$v['interaction']['typed']['progress']=max(0,$v['interaction']['typed']['progress']-$decay);if($v['remaining']===0)$v['status']='expired';}
             if($v!==$before){$v['object_version']=$before['object_version']+1;$state['objects'][$id]=$v;$events[]=['type'=>'object.boundary','entity_id'=>(string)$id,'before'=>$before,'after'=>$v];}
         }
         return $state;

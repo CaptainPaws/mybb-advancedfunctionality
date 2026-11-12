@@ -128,6 +128,7 @@ final class AF_ACS_Spawn
         $entry=$d['entries'][0];self::fields($entry,['schema','key','version','phases','limits','formula_refs','object_definition']);
         if($entry['schema']!=='af_kb.arpg.mechanic.v1' || $entry['phases']!==[] || $entry['limits']!==[] || $entry['formula_refs']!==[])self::fail('ACS_SPAWN_OBJECT_INVALID');
         $o=$entry['object_definition'];if(($o['schema']??null)==='ic-acs.object-template.v1'){self::fields($o,['schema','name','properties']);self::fields($o['properties'],['description','tags']);}require_once __DIR__.'/Environment.php';AF_ACS_Environment::definition($o);
+        if(($o['interactions']['progress']['decay_per_round']??0)>0&&$s['duration']['unit']!=='round')self::fail('ACS_INTERACTION_UNSUPPORTED');
         return ['hp'=>null,'stats'=>null,'properties'=>$o];
     }
     public static function compile(array $dto): array
