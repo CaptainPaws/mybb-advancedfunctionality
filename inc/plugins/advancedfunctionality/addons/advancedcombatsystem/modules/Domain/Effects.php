@@ -4,6 +4,7 @@ require_once __DIR__.'/Damage.php';
 require_once __DIR__.'/CausalGraph.php';
 require_once __DIR__.'/Spawn.php';
 require_once __DIR__.'/Environment.php';
+require_once __DIR__.'/Awareness.php';
 require_once __DIR__.'/Control.php';
 require_once __DIR__.'/Behavior.php';
 
@@ -273,6 +274,8 @@ final class AF_ACS_Effects
         if(!is_array($spec['mechanical_parameters']??null))self::fail('status_mechanics_invalid');
         if(array_key_exists('blocks_ordinary_actions',$spec['mechanical_parameters'])&&!is_bool($spec['mechanical_parameters']['blocks_ordinary_actions']))self::fail('status_control_contract_invalid');
         if(($spec['mechanical_parameters']['blocks_ordinary_actions']??false)===true&&($spec['duration']['unit']!=='target_turn'||(!empty($spec['periodic'])&&($spec['duration_event']??null)!=='on_turn_end')))self::fail('status_control_timing_unsupported');
+        if(array_intersect(array_keys($spec['mechanical_parameters']),['invisible','hidden','concealed','reveal_on_action']))self::fail('ACS_AWARENESS_UNSUPPORTED');
+        if(isset($spec['mechanical_parameters']['stealth'])){AF_ACS_Awareness::stealth($spec['mechanical_parameters']['stealth']);if($spec['scope']!=='combat')self::fail('ACS_AWARENESS_UNSUPPORTED');}
         if(isset($spec['periodic'])&&!in_array($spec['duration_event']??null,$spec['duration']['unit']==='round'?['on_round_end']:['on_turn_start','on_turn_end'],true))self::fail('status_tick_decrement_unsupported');
         if(array_key_exists('behavior_constraint',$spec['mechanical_parameters'])){
             AF_ACS_Behavior::spec($spec['mechanical_parameters']['behavior_constraint']);
@@ -510,7 +513,7 @@ final class AF_ACS_Effects
     }
     private static function state(array $state): array
     {
-        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons','objects']);
+        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons','objects','awareness','awareness_attempts','perception_subjects']);
         if(($state['schema_version']??null)!==1)self::fail('effects_schema_invalid');
         foreach(['entities','groups','barriers'] as $field)if(!is_array($state[$field]??null))self::fail('effects_schema_invalid');
         foreach($state['groups'] as $id=>$group){self::id($id);if(!is_array($group))self::fail('effects_schema_invalid');self::fields($group,['ap','version']);self::resource($group['ap']??null);if(self::integer($group['version']??null)<1)self::fail('effects_version_invalid');}
@@ -532,6 +535,9 @@ final class AF_ACS_Effects
         }
         foreach($state['summons']??[] as $id=>$summon){AF_ACS_Spawn::instance($summon);if((string)$id!==$summon['entity_id'])self::fail('ACS_SUMMON_IDENTITY_INVALID');}
         foreach($state['objects']??[] as $id=>$object){AF_ACS_Environment::instance($object);if((string)$id!==$object['entity_id'])self::fail('ACS_OBJECT_IDENTITY_INVALID');}
+        foreach($state['awareness']??[] as $key=>$row){AF_ACS_Awareness::row($row);if($key!==AF_ACS_Awareness::key($row['subject_kind'],$row['subject_id'],$row['audience_kind'],$row['audience_id']))self::fail('ACS_AWARENESS_UNSUPPORTED');}
+        foreach($state['awareness_attempts']??[] as $key=>$check)AF_ACS_Awareness::attempt($key,$check);
+        foreach($state['perception_subjects']??[] as $subject)AF_ACS_Awareness::perception($subject['perception']);
         $next=self::integer($state['next_barrier_order']??null);
         foreach($state['barriers'] as $id=>$p){self::poolId($id);if(!is_array($p))self::fail('effects_barrier_invalid');self::pool($p,$state['entities']);if($p['applied_order']>=$next)self::fail('effects_barrier_order_invalid');}
         try{$json=json_encode($state,JSON_THROW_ON_ERROR|JSON_PRESERVE_ZERO_FRACTION);$copy=json_decode($json,true,64,JSON_THROW_ON_ERROR);}

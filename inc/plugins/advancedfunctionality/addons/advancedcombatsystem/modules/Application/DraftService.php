@@ -1,6 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SessionService.php';
+require_once __DIR__.'/AudienceService.php';
 require_once __DIR__.'/../Infrastructure/EncounterRepository.php';
 
 /** Unsealed plans are untrusted draft data, never execution authorization or calculated outcomes. */
@@ -47,7 +48,8 @@ final class AF_ACS_DraftService
         $mechanics=AF_ACS_Repository::json(['schema_version'=>1,'actions'=>$actions]);if(strlen($mechanics)>65536)throw new RuntimeException('ACS_DRAFT_INPUT_INVALID');
         return $this->repo->saveDraft($request,$mechanics,$prose,function()use($request,$actions){
             $context=$this->context($request['session_id'],$request['encounter_id'],$request['turn_id'],true);
-            foreach($actions as $a)if(!isset($context['actors'][$a['actor_id']]))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
+            $audience=new AF_ACS_AudienceService($this->repo,$this->access,$request['session_id'],$request['encounter_id']);
+            foreach($actions as $a){if(!isset($context['actors'][$a['actor_id']]))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');foreach($a['targets'] as $target)if($audience->knowledge('entity',$target,$a['actor_id'])['level']!=='identified')throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');}
             return $context['dependencies'];
         });
     }
@@ -56,7 +58,8 @@ final class AF_ACS_DraftService
         $row=$this->repo->draft(AF_ACS_Repository::integer($id),$this->access->uid());if(!$row)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
         $context=$this->context($row['session_id'],$row['encounter_id'],$row['turn_id'],false);
         $mechanics=json_decode($row['mechanics_json'],true,32,JSON_THROW_ON_ERROR);$dependencies=json_decode($row['dependency_json'],true,32,JSON_THROW_ON_ERROR);
-        foreach($mechanics['actions']??[] as $a)if(!isset($context['actors'][$a['actor_id']]))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
+        $audience=new AF_ACS_AudienceService($this->repo,$this->access,$row['session_id'],$row['encounter_id']);
+        foreach($mechanics['actions']??[] as $a){if(!isset($context['actors'][$a['actor_id']]))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');foreach($a['targets'] as $target)if($audience->knowledge('entity',$target,$a['actor_id'])['level']!=='identified')throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');}
         $sealMeta=$dependencies['seal']??null;unset($dependencies['seal']);$prefix=[];
         foreach($this->repo->sealRows($row['id'],true) as $sealed)$prefix[]=['id'=>(string)$sealed['id'],'action'=>$this->repo->sealPayload($sealed)['action']];
         return ['schema_version'=>1,'draft_id'=>$row['id'],'draft_version'=>$row['draft_version'],'session_id'=>$row['session_id'],'encounter_id'=>$row['encounter_id'],'turn_id'=>$row['turn_id'],'author_uid'=>$row['author_uid'],'status'=>$row['status'],'prose'=>$row['prose'],'actions'=>$mechanics['actions'],'dependencies'=>$dependencies,'dependency_changed'=>$dependencies!==$context['dependencies'],'sealed_prefix'=>$prefix,'seal_meta'=>$sealMeta,'editable'=>$context['editable']&&in_array($row['status'],['draft','sealed'],true)&&$row['pid']===null,'saved_at'=>$row['updated_at'],'validated_for_execution'=>false];

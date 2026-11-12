@@ -1,6 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/../Infrastructure/CombatCommitWriter.php';
+require_once __DIR__.'/AudienceService.php';
 
 /** Server-only recovery commands. Never loads/calls Gateway or creates a MyBB post. */
 final class AF_ACS_RecoveryService
@@ -32,6 +33,7 @@ final class AF_ACS_RecoveryService
 
     private function projection(array $row, bool $gm, ?array $receipt): array
     {
+        if($receipt!==null)$receipt=(new AF_ACS_AudienceService($this->preparation,$this->access,$row['session_id'],$row['encounter_id']))->receipt($receipt);
         $post=$this->store->recoveryPost($row['submission_id']);
         $result=['schema_version'=>1,'submission_id'=>$row['submission_id'],'status'=>$receipt?'COMMITTED':strtoupper($row['status']),
             'last_phase'=>$row['last_phase'],'state_version'=>$row['state_version'],'pid'=>$row['pid'],

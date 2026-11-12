@@ -1,6 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/../Infrastructure/CombatCommitWriter.php';
+require_once __DIR__.'/AudienceService.php';
 require_once __DIR__.'/../Infrastructure/Adapters/MybbPostGateway.php';
 
 /** Server API only. The future native entry binding must own the entire reply request. */
@@ -66,6 +67,7 @@ final class AF_ACS_PublishService
 
     private function projection(array $row, ?array $receipt = null, string $code = '', array $errors = []): array
     {
+        if($receipt!==null)$receipt=(new AF_ACS_AudienceService($this->preparation,$this->access,$row['session_id'],$row['encounter_id']))->receipt($receipt);
         return ['schema_version'=>1,'submission_id'=>$row['submission_id'],'status'=>$receipt?'COMMITTED':strtoupper($row['status']),
             'state_version'=>$row['state_version'],'pid'=>$row['pid'],'mechanics_confirmed'=>$receipt!==null,
             'receipt'=>$receipt,'code'=>$code,'validation_errors'=>$errors];

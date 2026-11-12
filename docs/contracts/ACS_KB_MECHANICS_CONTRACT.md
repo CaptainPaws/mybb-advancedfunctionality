@@ -639,3 +639,163 @@ barrier сохранён. Команда не создаёт MyBB post и не �
 Ordinary object targeting/interaction checks, progress, tools, awareness, cover,
 spatial/zone predicates, arbitrary on_destroy/rewards, callbacks и random object
 triggers не включены в этот binding. Их определения возвращают UNSUPPORTED.
+
+## ACS-8.1.2 consumer binding: awareness, detection и stealth
+
+Awareness — отдельный encounter ledger, не object status и не status effect.
+Ключ: encounter + subject_kind(entity|object) + subject_id(existing entity_id) +
+audience_kind(actor|control_group|side|encounter) + audience_id. Для encounter
+используется ID самого encounter. Отсутствие записи означает unknown;
+материализованная unknown допустима для коррекции. Уровни: unknown, suspected,
+detected, identified. Изменения защищены awareness_version и parent transaction.
+Прямое управление собственной identity является отдельным разрешением знать её;
+оно не означает знания всех объектов группы. Temporary control не наследует
+приватное знание всей source group.
+
+### Perception и разрешённое раскрытие
+
+Optional `perception` у object-template.v2 либо pinned bestiary definition:
+
+```json
+{
+  "schema": "ic-acs.perception.v1",
+  "tags": ["trap"],
+  "stealth": {"schema": "ic-acs.stealth.v1", "states": ["hidden"], "targeting": "forbid"},
+  "disclosure": {
+    "suspected": {"hint": "Есть признаки механизма"},
+    "detected": {"hint": "Обнаружен механизм"},
+    "identified": {"hint": "Известный механизм", "name": "Ловушка"}
+  },
+  "passive": null
+}
+```
+
+Все пять полей perception обязательны. Tags — до 16 уникальных tokens
+`[a-z][a-z0-9_-]{0,63}`. Stealth — null либо точный descriptor выше, states —
+непустой unique subset invisible/hidden/concealed; targeting — forbid/identified.
+Эти состояния не являются уровнями knowledge. Forbid запрещает обычный выбор
+цели даже при identified/GM knowledge; identified сохраняет требования к знанию,
+авторизации и общей target policy. Self-действия управляемой identity сохраняются.
+
+Disclosure имеет ровно три уровня. Допустим только hint, а на identified ещё
+name; UTF-8 strings до 191 символа без NUL. Нет description/raw snapshot, KB ref,
+GM reason или произвольного JSON. Suspected/detected DTO не содержит subject_id,
+subject_kind или name. Identified разрешает стабильную identity; name выдаётся
+только из разрешённых details, иначе используется нейтральная подпись.
+
+Optional фиксированный passive check:
+
+```json
+{"event": "source_turn_end", "once": true, "level": "suspected", "audience": "control_group"}
+```
+
+Audience необязателен, default control_group. Только source_turn_end исходного
+source объекта (для существа — самого subject), только один раз за instance.
+Фиксированный результат не требует RNG. Срабатывание связано с реальным
+entity_turn:<id>:end и отдельным durable awareness.check receipt. Не исполняется
+по GET. Пассивная проверка знания не зависит от active/destroyed объекта: это
+явно разрешённое обнаружение subject по событию, в том числе исторического следа.
+Random passive, spatial/area/zone predicates и arbitrary callbacks UNSUPPORTED.
+
+### Активный поиск и передача сведений
+
+Active self ability, positive action_cost, effects=[]; отдельный opt-in field:
+
+```json
+{
+  "schema": "ic-acs.awareness-action.v1",
+  "operation": "search",
+  "subject_kind": "object",
+  "tag": "trap",
+  "level": "identified",
+  "chance": 65,
+  "audience": "control_group"
+}
+```
+
+Все поля обязательны кроме audience (default control_group). Operation —
+search/share. Chance — integer 0..100, у share строго 100. Subject_kind —
+entity/object; tag — точный KB token. Это encounter-wide tag scope без геометрии:
+участвуют только subjects с собственным pinned perception/disclosure и этим
+тегом. Нет client subject IDs, скрытых entries в selector или списка найденных
+целей в preview/seal. Стоимость — AP исполнителя в существующей группе.
+Смешанные damage/status/spawn effects, upkeep, dynamic costs/formulas и неизвестные
+механические поля этого action закрыты.
+
+Search — **одна** проверка на весь объявленный tag scope, независимо от числа
+или отсутствия subjects. Preview не выбирает success и не вызывает RNG. В Seal
+существующий uniform53 hit slot этой самостоятельной search action используется
+как detection sample; crit slot сохраняется неиспользованным. Это не повторное
+использование hit другой атаки. Success: `100*u < chance`. Parent causal key —
+sealed-action:<sealed_action_id>, существующие rolls/check_kind=hit/roll_index=0.
+Commit/reconfirmation используют прежний tape. No-match и failed search имеют
+тот же публичный shape. Новая попытка требует новой разрешённой sealed action,
+AP и квоты; retry прежней publication возвращает receipt.
+
+Share — самостоятельное разрешённое действие с AP cost; источник должен уже
+знать subject на передаваемом уровне. Передаются только имеющиеся у источника
+разрешённые details, с отсечением name ниже identified. Private KB disclosure
+не дополняет сведения отправителя. Actor/group/side вычисляются сервером по
+текущей identity, а не UID/маске/произвольному audience ID из клиента. Литературный
+текст knowledge не меняет. Actor/side/group/awareness dependencies входят в
+существующий confirmation/fact fence. Изменение knowledge требует reconfirm,
+не новых samples и не автоматической подмены целей.
+
+### Явное массовое воздействие на скрытые объекты
+
+Отдельный self action с positive action_cost, effects=[] и полем:
+
+```json
+{"hidden_mass_effect": {"schema": "ic-acs.hidden-object-mass.v1", "tag": "trap", "amount": 2, "damage_type": "physical"}}
+```
+
+Не совмещается с awareness_action или другими effects. Это fixed final durability
+pulse по всем object subjects encounter с данным perception tag, нетерминальным
+состоянием и явно допускающим данный damage_type destructible definition.
+Порядок — стабильный entity_id. Нет geometry/zone lookup, stat/RES fallback,
+неявной прочности или выбора recipient ID в клиенте. Пустой eligible scope тоже
+расходует AP и имеет тот же публичный shape. Standard sealed samples сохраняются
+неиспользованными; нового causal RNG нет. Unknown recipients не попадают в
+выбранные action targets, counts, summary или receipt. Изменяется durability,
+но не knowledge; отдельно объявленный passive detection на parent boundary
+остаётся самостоятельным причинным событием. Обычный targeting=forbid не
+является запретом этой явно разрешённой KB mass policy. Creature mass selectors
+и spatial area effects остаются UNSUPPORTED.
+
+### Скрытность существ
+
+Typed status_def.mechanical_parameters.stealth использует тот же
+ic-acs.stealth.v1 descriptor. Только combat status; его наложение, срок, снятие,
+версии и pinned source принадлежат существующим Status/Effects/Clock. Detection
+не удаляет статус. Пересечение нескольких forbid слоёв остаётся запрещающим.
+Неподписанные boolean invisible/hidden/concealed/reveal_on_action не получают
+семантики по имени; unsupported. Штрафы/бонусы, reveal_on_action и пространственные
+проверки в этом binding не реализованы.
+
+### Авторизация и выдача
+
+AudienceService применяется до селекторов, choices/legal_targets, object/knowledge
+notices и HTML/JSON. Native session membership и прежний participant visibility
+ceiling остаются отдельными gates: visibility=participants само по себе больше
+не создаёт знание, а visibility=gm не открывается одной записью identified.
+Действительные owner/base/delegate grants дают знание управляемой identity;
+аудитории остальных subjects проверяются по отдельным ledger rows. Unknown не
+попадает в notices/totals/disabled target choices. Draft restore с отозванным
+знанием отказывает безопасно, не меняя сохранённые actions/prose/tape.
+
+Combat cards сохраняют прежний GM-only detail gate. Public Publish/Recovery
+receipts фильтруют неизвестные spawns и не выдают snapshot IDs/hashes известным
+player spawns; immutable stored receipt/result/hash не переписываются. Игроку
+не возвращаются hidden-state summary hash fields. Журнал/GM diagnostics остаются
+под GM gate; Outbox не содержит нового knowledge/subject payload. Новых notification,
+export или statistics consumers нет; будущие consumers обязаны применить эту же
+policy до формирования DTO. Public request cache карточек разделён по viewer,
+session/encounter, native admin flag, ролям, assignments/delegations, audience и
+awareness generations; истечение прав учитывается. Общего GM/player DTO cache нет.
+
+GM backend `EncounterService::awareness()->set()` принимает точный tuple,
+expected session/encounter/awareness versions (0 для отсутствующей строки), level,
+whitelisted details, reason и operation_key. POST/CSRF, native/session GM rights,
+subject/audience scope проверяются сервером. Аудит и CAS атомарны, повтор ключа
+идемпотентен. Смена аудитории — отдельная tuple-запись с собственным CAS; прежнее
+знание не удаляется неявно. Изменения не обновляют mechanical stealth/AP/ходы.

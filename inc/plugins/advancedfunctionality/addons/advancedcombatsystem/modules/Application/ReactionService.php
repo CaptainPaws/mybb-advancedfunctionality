@@ -28,9 +28,11 @@ final class AF_ACS_ReactionService
         $selection=$spec['selection']??'self';if($selection==='self'){if($requested)throw new RuntimeException('ACS_REACTION_TARGETS_INVALID');return [];}
         $view=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);$members=$this->repo->participants($eid,'0',201);$byId=array_column($members,null,'entity_id');$side=$byId[$source]['side_id']??null;$allies=[];
         foreach($this->repo->allRelations($eid) as $rel)if($rel['relationship']==='allied'){$allies[$rel['side_a'].':'.$rel['side_b']]=true;$allies[$rel['side_b'].':'.$rel['side_a']]=true;}
+        require_once __DIR__.'/AudienceService.php';$audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);
         $valid=[];foreach($members as $member){if($member['participation']!=='engaged'||$side===null||$member['side_id']===null||($member['side_id']!==$side&&!isset($allies[$side.':'.$member['side_id']])))continue;
             $visibility=json_decode($member['visibility_json'],true);$controller=$this->repo->controllerFor($sid,$member['entity_id'],$this->access->uid());
-            if(($visibility!==['schema_version'=>1,'scope'=>'gm'])||!$view['can_manage']&&!$controller)continue;$valid[]=$member['entity_id'];
+            if(!$audience->canTarget($member['entity_id'],$source))continue;
+            $valid[]=$member['entity_id'];
         }
         if($selection==='all_allies'){if($requested||!$view['can_manage'])throw new RuntimeException('ACS_REACTION_TARGETS_INVALID');$requested=$valid;usort($requested,static fn($a,$b)=>strlen($a)<=>strlen($b)?:strcmp($a,$b));}
         if(!$requested||count(array_unique($requested))!==count($requested)||array_diff($requested,$valid)||$selection==='single_ally'&&(count($requested)!==1||$requested[0]===$source))throw new RuntimeException('ACS_REACTION_TARGETS_INVALID');

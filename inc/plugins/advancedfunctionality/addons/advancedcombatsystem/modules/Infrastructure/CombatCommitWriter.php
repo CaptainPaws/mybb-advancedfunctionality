@@ -99,6 +99,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             'rng_version'=>'uniform53-v1','actions'=>$steps,'virtual_entities'=>$entities,'virtual_groups'=>$result->serverState()['groups']];
         $summary=array_replace($summary,AF_ACS_BuilderService::visibleState($result->serverState(),$prepared['scope']));
         if(isset($result->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',self::json(['schema_version'=>1,'boundaries'=>$result->serverPlan()['entity_end_boundaries']]));
+        $summary['awareness_hash']=hash('sha256',serialize([$result->serverState()['awareness'],$result->serverState()['awareness_attempts']]));
         if(!empty($result->serverState()['objects']))$summary['object_state_hash']=hash('sha256',serialize($result->serverState()['objects']));
         if(!empty($result->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($result->serverState()['summons']));
         if(array_filter($result->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',self::json(['schema_version'=>1,'instances'=>$result->serverState()['status_instances']]));
