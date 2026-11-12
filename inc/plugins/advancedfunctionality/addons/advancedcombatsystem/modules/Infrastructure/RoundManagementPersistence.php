@@ -142,9 +142,10 @@ trait AF_ACS_RoundManagementPersistence
         }
         if(!$count || $encounter['status']!=='active' || $oldRound['status']!=='open' || (string)$oldRound['round_number']!==$encounter['round_number'])throw new RuntimeException('ACS_ROUND_STATE_CONFLICT');
         $endStatuses=$this->processStatusBoundary($session,$encounter,'round_end',$oldRound['id'],$actor,null,$entityIds);
+        $this->admitSummons($session['id'],$encounter['id'],true);
         $n=(int)self::integer((string)$oldRound['round_number'],'2147483646')+1;self::integer((string)$oldRound['round_version'],'18446744073709551614');
         if($this->sql('UPDATE '.$this->table('rounds').' SET status=?,closed_at=?,round_version=round_version+1 WHERE id=? AND round_version=?',['closed',$now,$oldRound['id'],$oldRound['round_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
-        $session=$this->openRoundProjection($session,$encounter,$sources,$actor,$n,false,$now);$new=$this->currentRound($this->encounter($session['id'],$encounter['id']));
+        $session=$this->openRoundProjection($session,$encounter,$this->rosterSources($session['id'],$encounter['id']),$actor,$n,false,$now);$new=$this->currentRound($this->encounter($session['id'],$encounter['id']));
         $boundaryContext=$encounter;$boundaryContext['status']='active';$boundaryContext['round_number']=(string)$n;
         foreach($this->allRoundTurns($new['id']) as $turn)foreach($this->individualTurns([$turn['id']]) as $individual) {
             $row=$this->clockEntityTurn($session['id'],$individual['id']);$this->processEntityStart($session,$boundaryContext,$row,$actor);

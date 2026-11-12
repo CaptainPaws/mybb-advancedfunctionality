@@ -152,6 +152,12 @@ final class AF_ACS_BuilderService
         if ($itemSpecs) {$context['item_specs']=$itemSpecs;$context['item_state']=$itemVirtual;}
         return ['context'=>$context,'ordered'=>$ordered,'prepared'=>$prepared,'scope'=>$scope,'definitions'=>$definitions];
     }
+    public static function visibleState(array $state,array $scope):array
+    {
+        $visible=array_unique([...array_column($scope['actors'],'id'),...array_column($scope['targets'],'id')]);$groups=[];$entities=[];
+        foreach($state['entities'] as $id=>$e)if(in_array((string)$id,$visible,true)){$groups[$e['group_id']]=true;$entities[]=['entity_id'=>(string)$id,'hp'=>$e['hp'],'max_hp'=>$e['max_hp'],'life_state'=>$e['life_state']];}
+        return ['virtual_entities'=>$entities,'virtual_groups'=>array_intersect_key($state['groups'],$groups)];
+    }
     public function preview(array $input):array
     {
         $this->access->csrf();$p=$this->prepare($input);$context=$p['context'];$ordered=$p['ordered'];$prepared=$p['prepared'];$scope=$p['scope'];
@@ -161,7 +167,6 @@ final class AF_ACS_BuilderService
         if($this->context($sid,$eid,$turn)['scope_token']!==$scope['scope_token'])throw new RuntimeException('builder_version_conflict');
         foreach($result->serverPlan()['actions'] as $p)$rows[]=['actor_id'=>$p['actor_id'],'target_id'=>$p['targets'][0],'costs'=>$p['costs'],'probabilities'=>$p['probabilities'],'components'=>$p['allocation']['components'],'damage'=>$p['allocation']['integer_budget']]+AF_ACS_Resolver::targetSummary($p);
         // GM-only numeric scope; no raw KB definitions, formula AST or private source snapshots.
-        $states=[];foreach($result->serverState()['entities'] as $id=>$state)$states[]=['entity_id'=>(string)$id,'hp'=>$state['hp'],'max_hp'=>$state['max_hp'],'life_state'=>$state['life_state']];
-        return ['conditional'=>true,'label'=>'Условный сценарий — не результат броска','scenario'=>$input['scenario'],'persistent'=>false,'actions'=>$rows,'virtual_entities'=>$states,'virtual_groups'=>$result->serverState()['groups'],'scope_token'=>$scope['scope_token']];
+        return ['conditional'=>true,'label'=>'Условный сценарий — не результат броска','scenario'=>$input['scenario'],'persistent'=>false,'actions'=>$rows,'scope_token'=>$scope['scope_token']]+self::visibleState($result->serverState(),$scope);
     }
 }

@@ -76,7 +76,7 @@ trait AF_ACS_CombatCommitPersistence
             $e=$entities[$id]??null;
             $controllers=array_filter($f['controllers'],static fn($c)=>(string)$c['entity_id']===$id && $c['status']==='active'
                 && ($c['valid_until']===null || (int)$c['valid_until']>$now));
-            $c=$e?AF_ACS_AuthorizationService::controller($e,array_values($controllers),$session,array_values($roles),$uid,$f['delegations']):null;
+            $c=$e?AF_ACS_AuthorizationService::controller($e,array_values($controllers),$session,array_values($roles),$uid,$f['delegations'],'ordinary',['entities'=>$entities,'controllers'=>$f['controllers']]):null;
             if (!$e || (string)$e['control_group_id']!==(string)$turn['control_group_id']) {
                 throw new RuntimeException('ACS_COMBAT_CONTROL_DENIED');
             }
@@ -87,7 +87,7 @@ trait AF_ACS_CombatCommitPersistence
             || ($grants[$a['actor_id']]['schema_version']??null)!==1 || ($grants[$a['actor_id']]['combat_operations_enabled']??false)!==true) { throw new RuntimeException('ACS_COMBAT_CONTROL_DENIED'); } }
         foreach($actions as $action){$id=$action['actor_id'];$category=str_starts_with($action['ability_key'],'item:')?(str_starts_with($action['ability_key'],'item:consume:')?'item_consume':'equipment_change'):'ordinary';
             $controllers=array_values(array_filter($f['controllers'],static fn($c)=>(string)$c['entity_id']===$id && $c['status']==='active' && ($c['valid_until']===null || (int)$c['valid_until']>time())));
-            if(!AF_ACS_AuthorizationService::controller($entities[$id],$controllers,$session,array_values($roles),$uid,$f['delegations'],$category))throw new RuntimeException('ACS_COMBAT_CONTROL_DENIED');
+            if(!AF_ACS_AuthorizationService::controller($entities[$id],$controllers,$session,array_values($roles),$uid,$f['delegations'],$category,['entities'=>$entities,'controllers'=>$f['controllers']]))throw new RuntimeException('ACS_COMBAT_CONTROL_DENIED');
         }
         foreach ($f['snapshots'] as $s) { if (!hash_equals($s['content_hash'],$s['actual_hash'])) { throw new RuntimeException('ACS_SNAPSHOT_HASH_MISMATCH'); } }
         return $turn;
@@ -180,6 +180,7 @@ trait AF_ACS_CombatCommitPersistence
             $startMissing=(string)$individual['start_done']==='0';
             if ($startMissing) {
                 $instances=[];foreach($f['effects'] as $effect){$payload=json_decode($effect['payload_json'],true,64,JSON_THROW_ON_ERROR);if(($payload['kind']??null)==='barrier')continue;$instances[]=$payload['instance'];}
+                if(AF_ACS_Clock::hasSummonStartWork($before['summons']??[],(string)$individual['entity_id']))throw new RuntimeException('ACS_STATUS_START_REQUIRED');
                 if(AF_ACS_Clock::hasStartWork($instances,(string)$individual['entity_id'],$row['session_id'],$row['encounter_id']))throw new RuntimeException('ACS_STATUS_START_REQUIRED');
                 foreach ($f['cooldowns'] as $cd) { if ((string)$cd['entity_id']===(string)$individual['entity_id']) { throw new RuntimeException('ACS_CLOCK_DEPENDENCY_BLOCKED'); } }
                 if (isset($boundaries[$start])) { throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE'); }
@@ -199,8 +200,9 @@ trait AF_ACS_CombatCommitPersistence
         $snapshotIds=[];foreach($frozen['seals'] as $i=>$seal)$snapshotIds[$i]=$seal['payload']['definition_snapshot_id'];
         $statuses=$this->persistStatusInstances($row['session_id'],$before['status_instances']??[],$after['status_instances']??[],$snapshotIds);
         $barriers=$this->persistBarriers($row['session_id'],$row['encounter_id'],$before['barriers'],$after['barriers'],$result->serverPlan()['reaction_updates']??[]);
+        $summons=$this->persistSummons($row['session_id'],$row['encounter_id'],$before['summons']??[],$after['summons']??[],$row['author_uid']);
         $retired=$this->retireCompetingPlans($row,$f,$turn);
         $retirementKey=self::indexed($f['control_groups'])[$group]['owner_uid']===null?'superseded_npc_drafts':'superseded_delegated_drafts';
-        return ['entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers]+($retired?[$retirementKey=>$retired]:[]);
+        return ['summons'=>$summons,'entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers]+($retired?[$retirementKey=>$retired]:[]);
     }
 }

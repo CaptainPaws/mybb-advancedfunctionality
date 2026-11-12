@@ -6,6 +6,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 final class AF_ACS_TransactionManager
 {
     private bool $locked = false;
+    private static ?WeakMap $ownedTransactions = null;
     private static ?WeakMap $settingsScopes = null;
 
     public function __construct(private mysqli $connection, private string $lockName) {}
@@ -121,10 +122,14 @@ final class AF_ACS_TransactionManager
         } catch (mysqli_sql_exception $error) { throw new RuntimeException('ACS_EXTERNAL_BOUNDARY_HELD'); }
     }
 
+    public function assertInternalBoundary():void
+    {if(!isset(self::$ownedTransactions[$this->connection]))throw new RuntimeException('ACS_TRANSACTION_REQUIRED');}
+
     public function run(callable $callback): mixed
     {
         return $this->exclusive(function () use ($callback) {
             if (!$this->connection->begin_transaction()) { throw new RuntimeException('ACS_TRANSACTION_ERROR'); }
+            self::$ownedTransactions??=new WeakMap;self::$ownedTransactions[$this->connection]=true;
             try {
                 $result = $callback();
                 if (!$this->connection->commit()) { throw new RuntimeException('ACS_COMMIT_UNKNOWN'); }
@@ -132,7 +137,7 @@ final class AF_ACS_TransactionManager
             } catch (Throwable $error) {
                 if (!$this->connection->rollback()) { throw new RuntimeException('ACS_ROLLBACK_UNKNOWN'); }
                 throw $error;
-            }
+            } finally {unset(self::$ownedTransactions[$this->connection]);}
         });
     }
 }

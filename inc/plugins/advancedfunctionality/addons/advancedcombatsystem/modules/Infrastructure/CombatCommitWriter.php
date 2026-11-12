@@ -98,7 +98,9 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         foreach ($result->serverState()['entities'] as $id=>$e) { $entities[]=['entity_id'=>(string)$id,'hp'=>$e['hp'],'max_hp'=>$e['max_hp'],'life_state'=>$e['life_state']]; }
         $summary=['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,
             'rng_version'=>'uniform53-v1','actions'=>$steps,'virtual_entities'=>$entities,'virtual_groups'=>$result->serverState()['groups']];
+        $summary=array_replace($summary,AF_ACS_BuilderService::visibleState($result->serverState(),$prepared['scope']));
         if(isset($result->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',self::json(['schema_version'=>1,'boundaries'=>$result->serverPlan()['entity_end_boundaries']]));
+        if(!empty($result->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($result->serverState()['summons']));
         if(array_filter($result->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',self::json(['schema_version'=>1,'instances'=>$result->serverState()['status_instances']]));
         if(($reactionHash=AF_ACS_Resolver::reactionHash($result,$prepared['context']))!==null)$summary['reaction_hash']=$reactionHash;
         if (isset($result->serverPlan()['item_state'])) $summary['item_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'items'=>$result->serverPlan()['item_state']]));
@@ -208,7 +210,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         $event=$this->sql('INSERT INTO '.$this->table('events').' (session_id,session_sequence,encounter_id,event_sequence,operation_key,event_type,source_entity_id,actor_uid,submission_id,engine_version,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
             [$row['session_id'],$session['next_sequence'],$row['encounter_id'],$encounter['next_event_sequence'],$operation,'combat.resolved',$controls['summary']['actions'][0]['actor_id'],$row['author_uid'],$row['submission_id'],AF_ACS_Resolver::VERSION,$now])['id'];
         $spawns=$this->commitSpawns($row,$event,$prepared,$resolved->serverPlan());
-        if($spawns)$changes['spawns']=$spawns;
+        if($spawns){$changes['spawns']=$spawns;$changes['summon_admissions']=$this->preparation->admitSummons($row['session_id'],$row['encounter_id']);}
         $boundaryHistory=[];$turnIds=[];
         foreach($f['individuals'] as $individual)if((string)$individual['turn_id']===$row['turn_id'])$turnIds[]=(string)$individual['id'];
         foreach($f['boundaries'] as $boundary){if($boundary['status']!=='committed'||!in_array($boundary['kind'],['clock.entity_start','clock.ap_refresh'],true))continue;

@@ -2,10 +2,12 @@
 
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/TransactionManager.php';
+require_once __DIR__.'/SummonPersistence.php';
 
 /** Internal persistence API. No endpoint; authorization belongs to callers. */
 class AF_ACS_Repository
 {
+    use AF_ACS_SummonPersistence;
     protected mysqli $connection;
     protected AF_ACS_TransactionManager $transactions;
     protected string $prefix;
@@ -187,7 +189,8 @@ class AF_ACS_Repository
     {
         $counts=[];
         foreach($this->sql('SELECT source_entity_id,definition_json FROM '.$this->table('entities').' WHERE session_id=? AND spawn_key LIKE ?', [self::integer($sid),'spawn:%'])['rows'] as $row){
-            $d=json_decode($row['definition_json'],true,64,JSON_THROW_ON_ERROR)['spawn']??throw new RuntimeException('ACS_SPAWN_IDENTITY_INVALID');
+            $definition=json_decode($row['definition_json'],true,64,JSON_THROW_ON_ERROR);if(($definition['lifecycle']['status']??null)==='despawned')continue;
+            $d=$definition['spawn']??throw new RuntimeException('ACS_SPAWN_IDENTITY_INVALID');
             if($d['encounter_id']!==$encounter)continue;
             $key=$d['spec']['template']['type'].':'.$d['spec']['template']['key'];
             foreach(['source:'.$row['source_entity_id'].':'.$key,'encounter:'.$key] as $k)$counts[$k]=($counts[$k]??0)+1;

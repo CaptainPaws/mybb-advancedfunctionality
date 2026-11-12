@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/Damage.php';
 require_once __DIR__.'/CausalGraph.php';
+require_once __DIR__.'/Spawn.php';
 
 /** A single action on a detached virtual state. No globals, time, RNG, SQL or user callbacks. */
 final class AF_ACS_Effects
@@ -100,6 +101,7 @@ final class AF_ACS_Effects
     /** Called after every atomic effect, before later healing can hide an incapacitation. */
     private static function interruptSustained(array &$state,array &$events,string $cause):void
     {
+        AF_ACS_Spawn::interrupt($state,$events);
         foreach($state['status_instances']??[] as $id=>$row){
             if($row['status']!=='active'||!isset($row['spec']['upkeep']))continue;$policy=$row['spec']['upkeep'];$source=$row['source_entity_id'];$reason=null;
             if(isset($state['entities'][$source])&&$state['entities'][$source]['life_state']!=='active'&&!$policy['autonomous'])$reason='source_inactive';
@@ -248,6 +250,7 @@ final class AF_ACS_Effects
     }
     public static function ordinaryActionAllowed(array $state,string $entity):bool
     {
+        if(isset($state['summons'][$entity])&&($state['summons'][$entity]['status']!=='active'||$state['summons'][$entity]['pending_independent']))return false;
         foreach($state['status_instances']??[] as $row)if($row['status']==='active'&&$row['target_entity_id']===$entity&&($row['spec']['mechanical_parameters']['blocks_ordinary_actions']??false)===true)return false;
         return true;
     }
@@ -491,7 +494,7 @@ final class AF_ACS_Effects
     }
     private static function state(array $state): array
     {
-        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order']);
+        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons']);
         if(($state['schema_version']??null)!==1)self::fail('effects_schema_invalid');
         foreach(['entities','groups','barriers'] as $field)if(!is_array($state[$field]??null))self::fail('effects_schema_invalid');
         foreach($state['groups'] as $id=>$group){self::id($id);if(!is_array($group))self::fail('effects_schema_invalid');self::fields($group,['ap','version']);self::resource($group['ap']??null);if(self::integer($group['version']??null)<1)self::fail('effects_version_invalid');}
@@ -511,6 +514,7 @@ final class AF_ACS_Effects
             $orders=[];foreach($state['status_instances'] as $id=>$row){if(!is_array($row))self::fail('status_state_invalid');self::statusInstance((string)$id,$row);
                 if($row['applied_order']>=$state['next_status_order']||isset($orders[$row['applied_order']]))self::fail('status_order_invalid');$orders[$row['applied_order']]=true;}
         }
+        foreach($state['summons']??[] as $id=>$summon){AF_ACS_Spawn::instance($summon);if((string)$id!==$summon['entity_id'])self::fail('ACS_SUMMON_IDENTITY_INVALID');}
         $next=self::integer($state['next_barrier_order']??null);
         foreach($state['barriers'] as $id=>$p){self::poolId($id);if(!is_array($p))self::fail('effects_barrier_invalid');self::pool($p,$state['entities']);if($p['applied_order']>=$next)self::fail('effects_barrier_order_invalid');}
         try{$json=json_encode($state,JSON_THROW_ON_ERROR|JSON_PRESERVE_ZERO_FRACTION);$copy=json_decode($json,true,64,JSON_THROW_ON_ERROR);}

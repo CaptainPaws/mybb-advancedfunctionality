@@ -69,6 +69,7 @@ final class AF_ACS_RoundManagementService
                 if($op==='round_next') {
                     if($e['status']!=='active')throw new RuntimeException('ACS_ROUND_STATE_CONFLICT');$round=$this->repository->currentRound($e);
                     if(!$round || $round['id']!==$request['round_id'])throw new RuntimeException('ACS_ROUND_STATE_CONFLICT');
+                    $this->repository->admitSummons($sid,$eid,true);
                     $ready=(new AF_ACS_EncounterService($this->repository,$this->access))->readiness($sid,$eid,true);
                     if(!$ready['preparation_ready'])throw new RuntimeException('ACS_ROSTER_BLOCKED');
                     return $this->repository->nextRound($s,$e,$round,$this->repository->rosterSources($sid,$eid),$request['actor_uid'],$now);
