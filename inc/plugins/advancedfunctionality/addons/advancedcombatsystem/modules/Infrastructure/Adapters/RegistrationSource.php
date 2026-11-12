@@ -63,6 +63,7 @@ class AF_ACS_RegistrationSource
                     $seen[$key]=$hash;
                     $dto=(new AF_ACS_KnowledgeBaseAdapter)->readDefinition('arpg_ability',$key,$actor);
                     if(empty($dto['ready']) || ($dto['definition_version']['fingerprint']??null)!==$hash)throw new RuntimeException('ACS_DEFINITION_VERSION_CONFLICT');
+                    $dto=(new AF_ACS_KnowledgeBaseAdapter)->pinSpawnTemplates($dto,$actor);
                     $definitions[$key]=$dto;$queue[]=$dto;
                 }
             }
