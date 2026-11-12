@@ -52,9 +52,10 @@
     function info() {
       const choices = actor(field('actor').value)?.choices || [];
       const a = choices.find(x => x.key === field('ability').value);
-      part('action-info').textContent = a?.supported ? 'Стоимость: ' + a.ap_cost + ' AP из общего бюджета группы.' : (!choices.length ? (actor(field('actor').value)?.catalog_notice || 'Нет поддержанных закреплённых способностей. Обычная атака без утверждённого определения не подставляется.') : (a?.reason || 'Выберите поддержанную способность. Недоступные определения показаны с причиной.'));
+      const performer = actor(field('actor').value);
+      part('action-info').textContent = performer?.supported === false ? performer.reason : a?.supported ? 'Стоимость: ' + a.ap_cost + ' AP из общего бюджета группы.' : (!choices.length ? (actor(field('actor').value)?.catalog_notice || 'Нет поддержанных закреплённых способностей. Обычная атака без утверждённого определения не подставляется.') : (a?.reason || 'Выберите поддержанную способность. Недоступные определения показаны с причиной.'));
       if (!ctx.targets.length) part('action-info').textContent += ' Нет разрешённых целей в текущей области видимости. Мастерские данные не открываются игроку автоматически.';
-      command('add').disabled = loading || (!!model.pending || !!model.sealPending) || !editable || !a?.supported || !field('target').value;
+      command('add').disabled = loading || (!!model.pending || !!model.sealPending) || !editable || performer?.supported === false || !a?.supported || !field('target').value;
     }
     function queue() {
       part('queue').replaceChildren(); let sum = 0, known = true;
@@ -79,6 +80,15 @@
       part('overview').replaceChildren(); const line = node('div'); line.className = 'acs-summary';
       ['Раунд: ' + ctx.round, 'Группа: ' + ctx.turn.group_id, 'AP: ' + ctx.turn.ap + ' / ' + ctx.turn.maximum_ap, 'Ход: ' + (statuses[ctx.turn.status] || 'Недоступен'), ctx.encounter_status === 'paused' ? 'Столкновение на паузе' : 'Столкновение активно', 'Черновик: ' + (model.id ? '#' + model.id + ', версия ' + model.version : 'новый') + (model.dirty ? ' — не сохранён' : '')].forEach(t => line.append(node('span', t)));
       part('overview').append(line, node('p', 'Участники группы: ' + ctx.turn.members.map(m => m.name).join(', ')));
+      const details = part('group-details');
+      if (details) {
+        details.replaceChildren();
+        const controls = {assignment:'назначение',source:'права источника',delegation:'делегирование',temporary_control:'временный контроль',unavailable:'нет актуального разрешения'};
+        ctx.actors.forEach(a => details.append(node('p', a.name + ' · ' + (controls[a.control?.via] || 'управление') + (a.supported === false ? ' · ' + a.reason : ''))));
+        const units = {round:'границ раунда',own_turn:'собственных ходов',target_turn:'ходов цели'};
+        (ctx.summons || []).forEach(s => details.append(node('p', 'Призыв: ' + s.name + ' · остаток: ' + s.remaining + ' ' + (units[s.duration_unit] || '') + (s.status === 'pending_independent' ? ' · переход к независимому управлению в следующем раунде' : s.admission === 'next_round' ? ' · обычные действия со следующего roster' : ' · в текущем roster группы'))));
+        if (ctx.can_manage) { const link = node('a','Управление столкновением'); link.href = 'showthread.php?tid=' + encodeURIComponent(ctx.tid) + '&acs_session=' + encodeURIComponent(ctx.session_id) + '&acs_encounter=' + encodeURIComponent(ctx.encounter_id) + '&acs_tab=management'; details.append(link); }
+      }
       options(field('group'), ctx.turns.map(t => ({ id: t.id, label: 'Группа ' + t.group_id + ' — ' + t.members.map(m => m.name).join(', ') + ' (' + (statuses[t.status] || t.status) + ')' })), ctx.turn.id, 'Выберите группу');
       field('group').disabled = loading || (!!model.pending || !!model.sealPending);
       field('prose').disabled = loading || (!!model.pending || !!model.sealPending) || !editable;
