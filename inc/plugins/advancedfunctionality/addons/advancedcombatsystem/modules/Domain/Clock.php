@@ -22,6 +22,10 @@ final class AF_ACS_Clock
     public static function entityStart(string $entityTurnId): string {return 'entity_turn:'.self::id($entityTurnId).':start';}
     public static function entityEnd(string $entityTurnId): string {return 'entity_turn:'.self::id($entityTurnId).':end';}
     public static function roundEnd(string $roundId):string{return 'round:'.self::id($roundId).':next';}
+    public static function hasObjectStartWork(array $objects,string $entity):bool
+    {
+        foreach($objects as $v)if($v['status']==='active'&&$v['source_entity_id']===$entity){$m=AF_ACS_Environment::definition($v['definition']);foreach(['passive','triggers'] as $kind)foreach($m[$kind] as $entry)if($entry['event']==='source_turn_start'&&($kind!=='triggers'||!isset($v['fired'][$entry['key']])))return true;}return false;
+    }
     public static function hasSummonStartWork(array $summons,string $entity):bool
     {foreach($summons as $v)if($v['status']==='active'&&$v['source_entity_id']===$entity&&$v['upkeep']!==null)return true;return false;}
     public static function hasStartWork(array $instances,string $entity,string $sid,string $eid):bool
@@ -87,6 +91,7 @@ final class AF_ACS_Clock
             if(!$eligible)continue;$pool['duration']['value']=max(0,$pool['duration']['value']-1);$pool['last_duration_boundary']=$key;$pool['version']=AF_ACS_Numeric::integer($pool['version']+1,1,9007199254740991);if($pool['duration']['value']===0)$pool['status']='expired';$events[]=['type'=>'barrier_duration','pool_id'=>(string)$id,'remaining_duration'=>$pool['duration']['value'],'status'=>$pool['status']];
         }unset($pool);
         $state=AF_ACS_Spawn::boundary($state,$boundary,$key,$events);
+        $state=AF_ACS_Environment::boundary($state,$boundary,$key,$events);
         return new AF_ACS_EffectsResult($state,['engine_version'=>self::VERSION,'boundary_key'=>$key,'events'=>$events,'signals'=>$signals,'tick_keys'=>$tickKeys,'persistent'=>false],$initial);
     }
     /** This is a state graph, never authorization or permission to skip boundaries/publication. */

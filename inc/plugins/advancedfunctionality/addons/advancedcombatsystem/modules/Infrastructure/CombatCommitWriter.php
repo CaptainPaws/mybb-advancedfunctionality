@@ -3,7 +3,6 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SubmissionStore.php';
 require_once __DIR__.'/CombatCommitPersistence.php';
 require_once __DIR__.'/ItemCommitPersistence.php';
-require_once __DIR__.'/SpawnPersistence.php';
 require_once __DIR__.'/StatusPersistence.php';
 require_once __DIR__.'/ReactionPersistence.php';
 require_once __DIR__.'/BarrierPersistence.php';
@@ -13,7 +12,7 @@ require_once __DIR__.'/../Application/BuilderService.php';
 /** The only producer of terminal, persistent Resolver results. Never calls a native post writer. */
 final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 {
-    use AF_ACS_SpawnPersistence, AF_ACS_ItemCommitPersistence, AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
+    use AF_ACS_ItemCommitPersistence, AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
     private AF_ACS_SubmissionStore $submissions;
     private AF_ACS_EncounterRepository $preparation;
     private AF_ACS_SessionAccess $access;
@@ -100,6 +99,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             'rng_version'=>'uniform53-v1','actions'=>$steps,'virtual_entities'=>$entities,'virtual_groups'=>$result->serverState()['groups']];
         $summary=array_replace($summary,AF_ACS_BuilderService::visibleState($result->serverState(),$prepared['scope']));
         if(isset($result->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',self::json(['schema_version'=>1,'boundaries'=>$result->serverPlan()['entity_end_boundaries']]));
+        if(!empty($result->serverState()['objects']))$summary['object_state_hash']=hash('sha256',serialize($result->serverState()['objects']));
         if(!empty($result->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($result->serverState()['summons']));
         if(array_filter($result->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',self::json(['schema_version'=>1,'instances'=>$result->serverState()['status_instances']]));
         if(($reactionHash=AF_ACS_Resolver::reactionHash($result,$prepared['context']))!==null)$summary['reaction_hash']=$reactionHash;

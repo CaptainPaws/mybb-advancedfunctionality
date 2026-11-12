@@ -27,6 +27,7 @@ trait AF_ACS_CombatCommitPersistence
         $f['custody']=$this->sql('SELECT * FROM '.$this->table('custody').' WHERE session_id=? ORDER BY id'.$suffix,[$sid])['rows'];
         $f['inventory_operations']=$this->sql('SELECT operation_key,status,operation_version,payload_hash,SHA2(request_json,256) AS actual_hash,SHA2(result_json,256) AS result_hash FROM '.$this->table('operations')." WHERE external_system='advancedinventory' AND ((session_id=? AND status IN ('prepared','recovery_required')) OR ((status IN ('prepared','recovery_required') OR (kind='inventory.transfer' AND status='committed')) AND JSON_UNQUOTE(JSON_EXTRACT(request_json,'$.payload.item_id')) IN (SELECT CAST(inventory_item_id AS CHAR) FROM ".$this->table('equipment')." WHERE session_id=? UNION SELECT CAST(inventory_item_id AS CHAR) FROM ".$this->table('custody')." WHERE session_id=? AND status='held'))) ORDER BY operation_key".$suffix,[$sid,$sid,$sid])['rows'];
         $f['effects']=$this->statusRows($sid,$lock);$f['reactions']=$this->reactionRows($sid,$eid,$lock);$f['barriers']=$this->barrierRows($sid,$eid,$lock);
+        $f['objects']=$this->sql('SELECT o.* FROM '.$this->table('objects').' o JOIN '.$this->table('entities').' e ON e.id=o.entity_id WHERE e.session_id=? AND o.encounter_id=? ORDER BY o.entity_id'.$suffix,[$sid,$eid])['rows'];
         $f['barrier_targets']=$this->sql('SELECT t.* FROM '.$this->table('barrier_targets').' t JOIN '.$this->table('barrier_pools').' p ON p.id=t.pool_id JOIN '.$this->table('effects').' e ON e.id=p.effect_id WHERE e.session_id=? AND e.encounter_id=? ORDER BY t.pool_id,t.entity_id'.$suffix,[$sid,$eid])['rows'];
         $f['reaction_rolls']=$this->sql('SELECT * FROM '.$this->table('rolls')." WHERE session_id=? AND sealed_action_id IS NULL AND check_kind='reaction' ORDER BY id".$suffix,[$sid])['rows'];
         $f['reaction_snapshots']=$this->sql('SELECT s.id,s.content_hash,SHA2(s.payload_json,256) AS actual_hash FROM '.$this->table('snapshots').' s JOIN '.$this->table('reactions').' r ON r.definition_snapshot_id=s.id WHERE s.session_id=? AND r.encounter_id=? ORDER BY s.id'.$suffix,[$sid,$eid])['rows'];
@@ -182,6 +183,7 @@ trait AF_ACS_CombatCommitPersistence
             $startMissing=(string)$individual['start_done']==='0';
             if ($startMissing) {
                 $instances=[];foreach($f['effects'] as $effect){$payload=json_decode($effect['payload_json'],true,64,JSON_THROW_ON_ERROR);if(($payload['kind']??null)==='barrier')continue;$instances[]=$payload['instance'];}
+                if(AF_ACS_Clock::hasObjectStartWork($before['objects']??[],(string)$individual['entity_id']))throw new RuntimeException('ACS_STATUS_START_REQUIRED');
                 if(AF_ACS_Clock::hasSummonStartWork($before['summons']??[],(string)$individual['entity_id']))throw new RuntimeException('ACS_STATUS_START_REQUIRED');
                 if(AF_ACS_Clock::hasStartWork($instances,(string)$individual['entity_id'],$row['session_id'],$row['encounter_id']))throw new RuntimeException('ACS_STATUS_START_REQUIRED');
                 foreach ($f['cooldowns'] as $cd) { if ((string)$cd['entity_id']===(string)$individual['entity_id']) { throw new RuntimeException('ACS_CLOCK_DEPENDENCY_BLOCKED'); } }
@@ -205,6 +207,7 @@ trait AF_ACS_CombatCommitPersistence
         $summons=$this->persistSummons($row['session_id'],$row['encounter_id'],$before['summons']??[],$after['summons']??[],$row['author_uid']);
         $retired=$this->retireCompetingPlans($row,$f,$turn);
         $retirementKey=self::indexed($f['control_groups'])[$group]['owner_uid']===null?'superseded_npc_drafts':'superseded_delegated_drafts';
-        return ['summons'=>$summons,'entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers]+($retired?[$retirementKey=>$retired]:[]);
+        $objects=$this->persistObjects($row['session_id'],$row['encounter_id'],$before['objects']??[],$after['objects']??[]);
+        return ['objects'=>$objects,'summons'=>$summons,'entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers]+($retired?[$retirementKey=>$retired]:[]);
     }
 }

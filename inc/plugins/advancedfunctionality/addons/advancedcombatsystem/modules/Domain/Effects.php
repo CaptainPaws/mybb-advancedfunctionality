@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__.'/Damage.php';
 require_once __DIR__.'/CausalGraph.php';
 require_once __DIR__.'/Spawn.php';
+require_once __DIR__.'/Environment.php';
 require_once __DIR__.'/Control.php';
 require_once __DIR__.'/Behavior.php';
 
@@ -509,7 +510,7 @@ final class AF_ACS_Effects
     }
     private static function state(array $state): array
     {
-        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons']);
+        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons','objects']);
         if(($state['schema_version']??null)!==1)self::fail('effects_schema_invalid');
         foreach(['entities','groups','barriers'] as $field)if(!is_array($state[$field]??null))self::fail('effects_schema_invalid');
         foreach($state['groups'] as $id=>$group){self::id($id);if(!is_array($group))self::fail('effects_schema_invalid');self::fields($group,['ap','version']);self::resource($group['ap']??null);if(self::integer($group['version']??null)<1)self::fail('effects_version_invalid');}
@@ -530,6 +531,7 @@ final class AF_ACS_Effects
                 if($row['applied_order']>=$state['next_status_order']||isset($orders[$row['applied_order']]))self::fail('status_order_invalid');$orders[$row['applied_order']]=true;}
         }
         foreach($state['summons']??[] as $id=>$summon){AF_ACS_Spawn::instance($summon);if((string)$id!==$summon['entity_id'])self::fail('ACS_SUMMON_IDENTITY_INVALID');}
+        foreach($state['objects']??[] as $id=>$object){AF_ACS_Environment::instance($object);if((string)$id!==$object['entity_id'])self::fail('ACS_OBJECT_IDENTITY_INVALID');}
         $next=self::integer($state['next_barrier_order']??null);
         foreach($state['barriers'] as $id=>$p){self::poolId($id);if(!is_array($p))self::fail('effects_barrier_invalid');self::pool($p,$state['entities']);if($p['applied_order']>=$next)self::fail('effects_barrier_order_invalid');}
         try{$json=json_encode($state,JSON_THROW_ON_ERROR|JSON_PRESERVE_ZERO_FRACTION);$copy=json_decode($json,true,64,JSON_THROW_ON_ERROR);}
@@ -595,7 +597,17 @@ final class AF_ACS_Effects
         self::interruptSustained($v,$events,'action_cost');
         foreach($action['effects'] as $op){
             if(!is_array($op)||!is_string($op['kind']??null))self::fail('effects_operation_invalid');$kind=$op['kind'];
-            if($kind==='status_upkeep'){self::upkeep($v,$op,$events,$signals);}
+            if($kind==='object_damage'){
+                self::fields($op,['kind','entity_id','expected_version','amount','damage_type']);$id=self::id($op['entity_id']??null);
+                if(!isset($v['objects'][$id]))self::fail('ACS_OBJECT_UNAVAILABLE');$old=$v['objects'][$id];
+                $v['objects'][$id]=AF_ACS_Environment::damage($old,$op['expected_version'],$op['amount'],$op['damage_type']);
+                $events[]=['type'=>'object.damage','entity_id'=>$id,'before'=>$old,'after'=>$v['objects'][$id]];
+            }elseif($kind==='object_operation'){
+                self::fields($op,['kind','entity_id','operation','expected_version','amount','damage_type']);$id=self::id($op['entity_id']??null);
+                if(!isset($v['objects'][$id]))self::fail('ACS_OBJECT_UNAVAILABLE');
+                $old=$v['objects'][$id];$v['objects'][$id]=AF_ACS_Environment::operation($old,$op['operation'],$op['expected_version'],$op['amount']??null,$op['damage_type']??null);
+                $events[]=['type'=>'object.'.$op['operation'],'entity_id'=>$id,'before'=>$old,'after'=>$v['objects'][$id]];
+            }elseif($kind==='status_upkeep'){self::upkeep($v,$op,$events,$signals);}
             elseif(in_array($kind,['status_apply','status_remove','status_combat_end','status_duration_boundary'],true)){
                 self::statusOperation($v,$op,$events);
             }elseif($kind==='damage'){

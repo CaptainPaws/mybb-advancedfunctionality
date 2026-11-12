@@ -2,6 +2,7 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SessionRepository.php';
 require_once __DIR__.'/DelegationPersistence.php';
+require_once __DIR__.'/ObjectCommands.php';
 require_once __DIR__.'/../Application/AuthorizationService.php';
 require_once __DIR__.'/ClockPersistence.php';
 require_once __DIR__.'/DraftPersistence.php';
@@ -16,7 +17,7 @@ require_once __DIR__.'/CustodyPersistence.php';
 /** Prepared, scoped SQL. All mutators require the existing audited command transaction. */
 final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
 {
-    use AF_ACS_DelegationPersistence;
+    use AF_ACS_DelegationPersistence, AF_ACS_ObjectCommands;
     use AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
     use AF_ACS_ClockPersistence, AF_ACS_ItemPersistence, AF_ACS_CustodyPersistence;
     use AF_ACS_DraftPersistence;
