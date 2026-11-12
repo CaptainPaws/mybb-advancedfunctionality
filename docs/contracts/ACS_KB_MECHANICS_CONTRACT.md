@@ -469,3 +469,84 @@ reward/CS editing, reaction registration или upkeep ordering. Builder выд�
 только разрешённые keys с нейтральными labels, без private ability descriptions.
 Права, уже существующие независимо от overlay (например GM management),
 проверяются своими прежними policy, а не приобретаются через control_effect.
+
+## ACS-7.3.2 — behavior_constraint binding
+
+Опциональный typed `status_def.mechanical_parameters.behavior_constraint` исполняется
+как ограничение допустимых действий/целей существующего status instance. Название,
+`type`, локализованный label или ключ taunt/fear/compulsion не определяют правило.
+Отсутствие descriptor сохраняет прежнее поведение; неизвестный descriptor не
+превращается в разрешение. Новый registry/engine/таймер не создаётся.
+
+```json
+{
+  "schema": "ic-acs.behavior-constraint.v1",
+  "priority": 10,
+  "scope": ["ordinary", "reaction"],
+  "compatibility": {"group": "attention", "mode": "exclusive"},
+  "on_no_legal_target": "block",
+  "rules": [{"kind": "target_priority", "target": "source"}]
+}
+```
+
+Все шесть полей обязательны; лишние поля отвергаются. `priority` — int32,
+`scope` — непустой unique list ordinary/reaction (максимум 64); ordinary включает
+обычные способности, item_consume, equipment_change и spawn, **без выдачи прав**.
+`rules` — 1..16 правил. Target selectors только `source` (source entity этого
+экземпляра) и `self` (affected entity); произвольные UID, entity IDs, локализованные
+имена, spatial predicates и forced_flee не поддерживаются.
+
+| kind | Точные поля | Поведение |
+|---|---|---|
+| target_lock | kind, target | Допустима только указанная цель |
+| target_priority | kind, target | Если указанная цель допустима, выбирать нужно её; иначе применяется объявленная fallback policy |
+| target_exclusion | kind, target | Исключить указанную цель |
+| action_restriction | kind, mode, actions, ability_keys | mode=allow/deny; проверка категории и точного ключа способности |
+
+Для `action_restriction.actions` — непустой unique list из ordinary, reaction,
+item_consume, equipment_change, spawn; `ability_keys` — unique list 0..64 точных
+ключей (0 означает все ключи **только перечисленных категорий**). Match — категория
+в actions AND (список ключей пуст OR ключ присутствует). allow запрещает всё, что
+не match; deny запрещает match. Это только сужение существующих grant, не право
+применить незакреплённую способность, потратить чужой предмет или передать имущество.
+Например compulsion может объявить allow ordinary + конкретные ability_keys;
+fear — target_exclusion source; taunt — target_priority source. Возможны другие
+имена и комбинации тех же примитивов, без нового кода по имени статуса.
+
+`compatibility.group` — точный KB key до 64 символов; mode=exclusive/combine.
+Для одной группы все активные применимые экземпляры должны объявить одинаковый
+mode: несовпадение даёт UNSUPPORTED, а не угаданный приоритет. В exclusive берётся
+один экземпляр: **больший priority**, затем **меньший applied_order**, затем
+стабильное строковое instance ID. В combine используются все экземпляры в том же
+порядке. Разные группы пересекаются, также в этом порядке; внутри экземпляра
+правила выполняются по индексу KB. Никаких случайных tie-break или повторной очереди.
+
+Сначала строится полный **серверный видимый** набор целей с текущей relationship
+policy способности; он не равен переданным клиентом targets. source/self должны
+входить в этот набор и быть active для lock/priority. Нельзя открыть hidden source
+или заменить фиксированную цель при seal/commit. `on_no_legal_target`:
+
+- block: недоступный lock/priority или пустое пересечение блокируют действие;
+- ignore_rule: только неосуществимое target-правило пропускается; exclusion,
+  оставляющий пустой набор, также пропускается. Предыдущий разрешённый набор
+  сохраняется, новый противник не выбирается. Action restriction не отменяется.
+
+Если итоговых целей меньше pinned target_count.min, действие BLOCKED. Неизвестный
+fallback/selector/compatibility — UNSUPPORTED. Public результат содержит только
+READY/BLOCKED/UNSUPPORTED, безопасный code/reason и разрешённые **видимые** ID,
+без effect/source identity, скрытых участников или definitions.
+
+Descriptor поддержан только для combat status, source_scope=source, duration>0
+в существующих own_turn/target_turn/round. Срок, decrement, refresh/stack/removal,
+pins и audit принадлежат Status/Clock. Нельзя совместить descriptor в одном spec
+с control_effect, periodic или upkeep; это UNSUPPORTED. Отдельные совместимые
+экземпляры могут сосуществовать. Refresh сохраняет прежний pinned spec/силу по
+5.1.2, а не обновляет правило из latest KB.
+
+Проверки: Builder catalog/target IDs, prepare/preview/seal, текущий Resolver
+перед каждым действием, регистрация и исполнение реакции. Redirect eligibility
+также сужается, но behavior сам не исполняет intercept или перенос атаки. При
+блокировке реакции costs/slot не тратятся. Status и candidate-universe dependencies
+входят в существующее confirmation/fact fence; старые samples/цели сохраняются.
+Prepared actions ещё не исполняются: scope=prepared и принудительный побег не
+эмулируются; будущий исполнитель обязан вызвать тот же gate при срабатывании.

@@ -147,6 +147,11 @@ final class AF_ACS_Resolver
             if(!$slot)$reason='source_turn_unavailable';elseif(!($row['enabled']??false))$reason='controller_unavailable';
             elseif(!isset($state['entities'][$source])||$state['entities'][$source]['life_state']!=='active')$reason='source_inactive';
             elseif($slot['used']!==0)$reason='limit_used';elseif(in_array($phase,['after_hit','after_damage'],true)&&!$hit)$reason='hit_required';
+            if($reason===null){$behaviorCandidates=$context['behavior_targets'][$source]??[];if(!array_key_exists($source,$context['behavior_targets']??[]))foreach($protected as $id)$behaviorCandidates[$id]=['kind'=>$context['reaction_kinds'][$id]??'npc','relationship'=>$context['relationships'][$source][$id]??($source===$id?'self':'ally')];
+                foreach($behaviorCandidates as $id=>&$candidate)if(isset($state['entities'][$id]))$candidate['active']=$state['entities'][$id]['life_state']==='active';unset($candidate);
+                $b=AF_ACS_Behavior::evaluate($state['status_instances']??[],$source,$spec['ability_ref']['key'],'reaction',$behaviorCandidates,['kind'=>'allied_only'],$context['status_scope']??[]);
+                if($b['status']!=='READY'||array_diff($protected,$b['legal_targets']))$reason=$b['code']??'ACS_BEHAVIOR_TARGET_BLOCKED';
+            }
             if($reason===null&&$kind==='intercept'){
                 if(!$singleTarget)$reason='single_target_required';elseif($redirected)$reason='redirect_already_used';
                 elseif($source===$attacker||$source===$target||!in_array($source,$context['redirect_targets'][$attacker]??[],true)||($context['relationships'][$source][$target]??null)!=='ally')$reason='redirect_target_ineligible';
@@ -188,7 +193,7 @@ final class AF_ACS_Resolver
     }
     public static function resolve(array $context,array $orderedActions,array $fixedRandomTape=[],string $mode='preview'): AF_ACS_ResolverResult
     {
-        if(array_diff(array_keys($context),['schema_version','state','stats','defenses','element_catalog','turns','encounter_status','abilities','allowed_targets','modifier_stages','source_snapshots','penetration','reflections','relationships','status_immunities','status_scope','entity_end_boundaries','reactions','reaction_turns','reaction_kinds','reaction_causes','reaction_rolls','redirect_targets','item_specs','item_state','spawn_counts','spawn_sources','control_context']))self::fail('resolver_context_unsupported');
+        if(array_diff(array_keys($context),['schema_version','state','stats','defenses','element_catalog','turns','encounter_status','abilities','allowed_targets','modifier_stages','source_snapshots','penetration','reflections','relationships','status_immunities','status_scope','entity_end_boundaries','reactions','reaction_turns','reaction_kinds','reaction_causes','reaction_rolls','redirect_targets','item_specs','item_state','spawn_counts','spawn_sources','control_context','behavior_targets']))self::fail('resolver_context_unsupported');
         if(!in_array($mode,['preview','seal'],true))self::fail('resolver_mode_unsupported');
         if($mode==='preview'&&$fixedRandomTape!==[])self::fail('preview_random_tape_forbidden');
         if($mode==='seal'&&(!array_is_list($fixedRandomTape)||count($fixedRandomTape)!==count($orderedActions)||!$fixedRandomTape))self::fail('resolver_tape_invalid');
@@ -201,6 +206,10 @@ final class AF_ACS_Resolver
             $turn=$context['turns'][$actor]??null;$ability=$context['abilities'][$actor][$key]??null;
             if(!is_array($ability)||!is_array($turn)||($turn['status']??null)!=='pending'||($turn['started']??null)!==true||($turn['group_id']??null)!==($state['entities'][$actor]['group_id']??null))self::fail('resolver_turn_or_source_invalid');
             if(!AF_ACS_Effects::ordinaryActionAllowed($state,$actor))self::fail('ACS_STATUS_CONTROL_BLOCKED');
+            $behaviorCandidates=$context['behavior_targets'][$actor]??[];
+            if(!array_key_exists($actor,$context['behavior_targets']??[]))foreach($context['allowed_targets'][$actor]??[] as $id)$behaviorCandidates[$id]=['relationship'=>$context['relationships'][$actor][$id]??'hostile','kind'=>$context['reaction_kinds'][$id]??'npc'];
+            foreach($behaviorCandidates as $id=>&$candidate)if(isset($state['entities'][$id]))$candidate['active']=$state['entities'][$id]['life_state']==='active';unset($candidate);
+            AF_ACS_Behavior::check($state['status_instances']??[],$actor,$key,isset($context['item_specs'][$i])?($context['item_specs'][$i]['operation']==='consume'?'item_consume':'equipment_change'):(isset($ability['spawns'])?'spawn':'ordinary'),$targets,$behaviorCandidates,$ability['target_policy']??['kind'=>isset($ability['spawns'])||isset($context['item_specs'][$i])?'self_only':'any_entity'],($context['status_scope']??[])+['minimum_targets'=>$ability['target_count']['min']??1]);
             if (isset($context['item_specs'][$i])) {
                 $spec=$context['item_specs'][$i];
                 if (($ability['item_action']??null)!==true || $ability['source_ref']!==$spec['pin'] || !is_array($itemState)) self::fail('ACS_ITEM_DEPENDENCY_CONFLICT');
@@ -232,7 +241,12 @@ final class AF_ACS_Resolver
                     'probabilities'=>['P_hit'=>100,'P_crit'=>0,'crit_rate'=>0,'can_crit'=>false],'allocation'=>['integer_budget'=>0,'components'=>[]],'spawns'=>$intents,'effects_trace'=>$trace];
                 continue;
             }
-            if(isset($ability['target_policy']))$context['redirect_targets'][$actor]=array_values(array_filter($redirectCandidates[$actor]??[],static fn($id)=>AF_ACS_Control::allowed($ability['target_policy'],$context['relationships'][$actor][$id]??'', $context['reaction_kinds'][$id]??'')));
+            $context['redirect_targets'][$actor]=$redirectCandidates[$actor]??[];
+            if(AF_ACS_Behavior::constrained($state['status_instances']??[],$actor,'ordinary',$context['status_scope']??[])){
+                $behaviorResult=AF_ACS_Behavior::evaluate($state['status_instances']??[],$actor,$key,'ordinary',$behaviorCandidates,$ability['target_policy']??['kind'=>'any_entity'],$context['status_scope']??[]);
+                $context['redirect_targets'][$actor]=array_values(array_intersect($redirectCandidates[$actor]??[],$behaviorResult['legal_targets']));
+            }
+            if(isset($ability['target_policy']))$context['redirect_targets'][$actor]=array_values(array_filter($context['redirect_targets'][$actor],static fn($id)=>AF_ACS_Control::allowed($ability['target_policy'],$context['relationships'][$actor][$id]??'', $context['reaction_kinds'][$id]??'')));
             $singleTarget=count($targets)===1&&($ability['targeting']??'single_target')!=='multiple';$strikePlans=[];$redirected=false;foreach($targets as $strikeIndex=>$originalTarget){
             $target=(string)$originalTarget;if(isset($ability['target_policy'])&&!AF_ACS_Control::allowed($ability['target_policy'],$context['relationships'][$actor][$target]??'', $context['reaction_kinds'][$target]??''))self::fail('ACS_TARGET_POLICY_DENIED');if(!isset($state['entities'][$target])||!in_array($target,$context['allowed_targets'][$actor]??[],true))self::fail('resolver_target_forbidden');
             if(is_array($ability)&&array_diff(array_keys($ability),['supported','source_ref','components','costs','hit_policy','lifesteal','hp_cost_policy','statuses','removals','targeting','target_count','target_policy']))self::fail('resolver_ability_unsupported');

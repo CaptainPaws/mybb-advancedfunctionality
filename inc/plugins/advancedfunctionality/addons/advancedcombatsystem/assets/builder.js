@@ -46,13 +46,13 @@
       const a = chosen?.actor_id || field('actor').value;
       options(field('actor'), ctx.actors, a);
       options(field('ability'), (actor(a)?.choices || []).filter(c => !c.sealed_only), chosen?.ability_key || field('ability').value, 'Выберите способность или предмет');
-      options(field('target'), ctx.targets.filter(t => { const c = (actor(a)?.choices || []).find(c => c.key === field('ability').value), p = c?.target_policy || {kind:c?.item_action || c?.spawn_action ? 'self_only':'hostile_only'}, rel = t.relationships?.[a]; return t.actors.includes(a) && (p.kind === 'any_entity' || p.kind === 'self_only' && t.id === a || p.kind === 'hostile_only' && rel === 'hostile' || p.kind === 'allied_only' && ['self','allied'].includes(rel) || p.kind === 'custom' && p.relationships.includes(rel) && p.entity_kinds.includes(t.kind)); }), chosen?.targets?.[0] || field('target').value, 'Выберите разрешённую цель');
+      options(field('target'), ctx.targets.filter(t => { const c = (actor(a)?.choices || []).find(c => c.key === field('ability').value), p = c?.target_policy || {kind:c?.item_action || c?.spawn_action ? 'self_only':'hostile_only'}, rel = t.relationships?.[a]; return t.actors.includes(a) && (!c?.legal_targets || c.legal_targets.includes(t.id)) && (p.kind === 'any_entity' || p.kind === 'self_only' && t.id === a || p.kind === 'hostile_only' && rel === 'hostile' || p.kind === 'allied_only' && ['self','allied'].includes(rel) || p.kind === 'custom' && p.relationships.includes(rel) && p.entity_kinds.includes(t.kind)); }), chosen?.targets?.[0] || field('target').value, 'Выберите разрешённую цель');
       info();
     }
     function info() {
       const choices = actor(field('actor').value)?.choices || [];
       const a = choices.find(x => x.key === field('ability').value);
-      part('action-info').textContent = a?.supported ? 'Стоимость: ' + a.ap_cost + ' AP из общего бюджета группы.' : (!choices.length ? (actor(field('actor').value)?.catalog_notice || 'Нет поддержанных закреплённых способностей. Обычная атака без утверждённого определения не подставляется.') : 'Выберите поддержанную способность. Недоступные определения показаны с причиной.');
+      part('action-info').textContent = a?.supported ? 'Стоимость: ' + a.ap_cost + ' AP из общего бюджета группы.' : (!choices.length ? (actor(field('actor').value)?.catalog_notice || 'Нет поддержанных закреплённых способностей. Обычная атака без утверждённого определения не подставляется.') : (a?.reason || 'Выберите поддержанную способность. Недоступные определения показаны с причиной.'));
       if (!ctx.targets.length) part('action-info').textContent += ' Нет разрешённых целей в текущей области видимости. Мастерские данные не открываются игроку автоматически.';
       command('add').disabled = loading || (!!model.pending || !!model.sealPending) || !editable || !a?.supported || !field('target').value;
     }
@@ -183,7 +183,7 @@
         await api(routes[pending.command], pending.body, true); model.sealPending = null; localSave(); saving = false;
         await restore(true); status('Операция seal сохранена. Реальное боевое состояние не изменено.',false);
       } catch(e) {
-        if (['ACS_FRIENDLY_FIRE_CONFIRMATION_REQUIRED','ACS_SEAL_UNSUPPORTED','ACS_SEAL_IMMUTABLE','ACS_SEAL_SUMMARY_CHANGED','ACS_SEAL_QUOTA_EXHAUSTED','ACS_DRAFT_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SEAL_TURN_UNAVAILABLE'].includes(e.code)) {
+        if (['ACS_BEHAVIOR_UNSUPPORTED','ACS_BEHAVIOR_ACTION_BLOCKED','ACS_BEHAVIOR_TARGET_BLOCKED','ACS_BEHAVIOR_NO_LEGAL_TARGET','ACS_FRIENDLY_FIRE_CONFIRMATION_REQUIRED','ACS_SEAL_UNSUPPORTED','ACS_SEAL_IMMUTABLE','ACS_SEAL_SUMMARY_CHANGED','ACS_SEAL_QUOTA_EXHAUSTED','ACS_DRAFT_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SEAL_TURN_UNAVAILABLE'].includes(e.code)) {
           model.sealPending = null; localSave(); await refreshSeal();
         }
         status(e.message + (model.sealPending ? ' Повторите ту же кнопку: ключ и запрос сохранены.' : ' Обновите черновик и проверьте сводку.'),true);

@@ -33,6 +33,10 @@ final class AF_ACS_BuilderService
             'preview_target_forbidden','ACS_DRAFT_UNAVAILABLE','ACS_GM_REQUIRED','ACS_SESSION_UNAVAILABLE'=>'Нет разрешённого доступа к выбранной группе или цели.',
             'builder_input_invalid'=>'Некорректная последовательность действий.',
             'ACS_FRIENDLY_FIRE_CONFIRMATION_REQUIRED'=>'Перед seal подтвердите предупреждение об уроне союзнику.',
+            'ACS_BEHAVIOR_ACTION_BLOCKED'=>'Активное ограничение поведения запрещает это действие.',
+            'ACS_BEHAVIOR_TARGET_BLOCKED'=>'Активное ограничение поведения запрещает выбранную цель.',
+            'ACS_BEHAVIOR_NO_LEGAL_TARGET'=>'Для действия нет допустимой цели. Автоматическая замена не выполняется.',
+            'ACS_BEHAVIOR_UNSUPPORTED'=>'KB behavior constraint или его совместимость не поддерживаются; действие заблокировано.',
             'ACS_TARGET_POLICY_DENIED'=>'Выбранная цель не разрешена текущей KB target policy.',
             'ACS_SEAL_SUMMARY_CHANGED'=>'Зависимости изменились. Проверьте пересчитанную сводку на прежних бросках и подтвердите её заново.',
             'ACS_SEAL_PIN_CHANGED','ACS_SEAL_VERSION_UNSUPPORTED'=>'Закреплённое определение или версия движка не совпадает. Броски сохранены; новый roll не выполняется.',
@@ -83,8 +87,16 @@ final class AF_ACS_BuilderService
             $actors[]=['id'=>$actor['id'],'name'=>$actor['name'],'choices'=>$choices,'catalog_notice'=>$notice];
         }
         $targets=[];$relations=[];foreach($this->repo->allRelations($eid) as $r){$relations[$r['side_a']][$r['side_b']]=$r['relationship'];$relations[$r['side_b']][$r['side_a']]=$r['relationship'];}
+        $behavior=$this->repo->statusProjection($sid)['instances'];$world=['session_id'=>$sid,'encounter_id'=>$eid];
+        foreach($actors as &$a){$rels=[];$member=$scope['actors'][$a['id']];foreach($scope['targets'] as $t)$rels[$a['id']][$t['id']]=$a['id']===$t['id']?'self':($member['side_id']===$t['side_id']?'allied':($relations[$member['side_id']][$t['side_id']]??'neutral'));
+            $candidates=AF_ACS_QueryService::behaviorCandidates($scope['targets'],$a['id'],$rels);
+            foreach($a['choices'] as &$choice){if(($choice['supported']??false)!==true)continue;$category=!empty($choice['item_action'])?(str_starts_with($choice['key'],'item:consume:')?'item_consume':'equipment_change'):(!empty($choice['spawn_action'])?'spawn':'ordinary');
+                $r=AF_ACS_Behavior::evaluate($behavior,$a['id'],$choice['key'],$category,$candidates,$choice['target_policy']??['kind'=>$category==='ordinary'?'hostile_only':'self_only'],$world+['minimum_targets'=>$choice['target_count']['min']??1]);
+                $choice['legal_targets']=$r['legal_targets'];$choice['behavior_status']=$r['status'];if($r['status']!=='READY'){$choice['supported']=false;$choice['reason']=self::message(new RuntimeException($r['code']));}
+            }unset($choice);
+        }unset($a);
         foreach($scope['targets'] as $target){$rels=[];foreach($chosen['members'] as $member)$rels[$member['id']]=$member['id']===$target['id']?'self':($member['side_id']===$target['side_id']?'allied':($relations[$member['side_id']][$target['side_id']]??'neutral'));
-            $allowed=[];foreach($actors as $a)foreach($a['choices'] as $choice){if(($choice['supported']??false)!==true)continue;$policy=$choice['target_policy']??['kind'=>(!empty($choice['item_action'])||!empty($choice['spawn_action']))?'self_only':'hostile_only'];if(AF_ACS_Control::allowed($policy,$rels[$a['id']],$target['kind'])){$allowed[]=$a['id'];break;}}
+            $allowed=[];foreach($actors as $a)foreach($a['choices'] as $choice){if(($choice['supported']??false)!==true)continue;$policy=$choice['target_policy']??['kind'=>(!empty($choice['item_action'])||!empty($choice['spawn_action']))?'self_only':'hostile_only'];if(in_array($target['id'],$choice['legal_targets']??[],true)&&AF_ACS_Control::allowed($policy,$rels[$a['id']],$target['kind'])){$allowed[]=$a['id'];break;}}
             if($allowed)$targets[]=['id'=>$target['id'],'name'=>$target['name'],'kind'=>$target['kind'],'actors'=>$allowed,'relationships'=>array_intersect_key($rels,array_fill_keys($allowed,true))];
         }
         $token=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'session'=>$scope['session']['session_version'],'encounter'=>$scope['encounter']['encounter_version'],'round'=>$scope['round']['round_version'],'turns'=>$versions,'selected'=>$selected]));
@@ -98,6 +110,7 @@ final class AF_ACS_BuilderService
         $scope=$this->context($sid,$eid,$turn);
         if(!is_string($input['scope_token']??null)||!hash_equals($scope['scope_token'],$input['scope_token']))throw new RuntimeException('builder_version_conflict');
         $q=new AF_ACS_QueryService($this->repo,$this->access);$prepared=[];$ordered=[];$context=null;$definitions=[];$itemSpecs=[];$itemAbilities=[];$itemVirtual=['items'=>[],'equipment'=>[]];$warnings=[];
+        $rawScope=$q->builderScope($sid,$eid);$behavior=$this->repo->statusProjection($sid)['instances'];$pairs=[];foreach($this->repo->allRelations($eid) as $r){$pairs[$r['side_a']][$r['side_b']]=$r['relationship'];$pairs[$r['side_b']][$r['side_a']]=$r['relationship'];}
         foreach($input['actions'] as $actionIndex=>$action){
             $isSpawn=false;$isItem=AF_ACS_ItemActionService::isItem((string)($action['ability_key']??''));$item=null;
             if(!is_array($action)||array_diff(array_keys($action),['actor_id','ability_key','targets','parameters'])||!is_string($action['ability_key']??null)||!is_array($action['targets']??null)||!array_is_list($action['targets'])||!$action['targets']||count($action['targets'])>100||count(array_unique($action['targets']))!==count($action['targets']))throw new RuntimeException('builder_input_invalid');
@@ -116,6 +129,10 @@ final class AF_ACS_BuilderService
             }
             if(!$isItem){$dto=$q->sealDefinition($sid,$actor,$action['ability_key']);$isSpawn=AF_ACS_Spawn::hasAbility($dto);}
             if($isSpawn && $action['targets']!==[$actor])throw new RuntimeException('ACS_SPAWN_TARGET_UNSUPPORTED');
+            $behaviorPolicy=$isItem?['kind'=>'self_only']:AF_ACS_Control::targetPolicy($dto['data']['definition']);
+            $relationMap=[];$side=$rawScope['actors'][$actor]['side_id']??null;
+            foreach($rawScope['targets'] as $t)$relationMap[$actor][$t['id']]=$actor===$t['id']?'self':($side===$t['side_id']?'allied':($pairs[$side][$t['side_id']]??'neutral'));
+            AF_ACS_Behavior::check($behavior,$actor,$action['ability_key'],$isSpawn?'spawn':$category,$action['targets'],AF_ACS_QueryService::behaviorCandidates($rawScope['targets'],$actor,$relationMap),$behaviorPolicy,['session_id'=>$sid,'encounter_id'=>$eid,'minimum_targets'=>$isItem?1:($dto['data']['definition']['target_count']['min']??1)]);
             $targetVersions=[];$orderedTargets=[];foreach($action['targets'] as $id){$target=AF_ACS_Repository::integer($id);$orderedTargets[]=$target;
             if(!in_array($actor,array_column($scope['actors'],'id'),true))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
             $visible=($isItem||$isSpawn)&&$target===$actor;foreach($scope['targets'] as $t)if($t['id']===$target&&in_array($actor,$t['actors'],true))$visible=true;
@@ -147,7 +164,7 @@ final class AF_ACS_BuilderService
             foreach($p['context']['abilities'][$actor][$action['ability_key']]['components']??[] as $component)if($component['damage_type']==='elemental'&&!empty($p['context']['stats'][$actor]['element_damage_bonus']))throw new RuntimeException('preview_element_bonus_contract_unavailable');
             if(($p['choices'][$action['ability_key']]['supported']??false)!==true)throw new RuntimeException('builder_parameters_unsupported');
             if($context===null)$context=$p['context'];else foreach(['entities','groups'] as $f)$context['state'][$f]=array_replace($context['state'][$f],$p['context']['state'][$f]);
-            foreach(['stats','defenses','turns','abilities','status_immunities','reaction_turns','reaction_kinds'] as $f)$context[$f]=array_replace($context[$f],$p['context'][$f]);
+            foreach(['stats','defenses','turns','abilities','status_immunities','reaction_turns','reaction_kinds','behavior_targets'] as $f)$context[$f]=array_replace($context[$f],$p['context'][$f]);
             foreach($p['context']['relationships'] as $id=>$rels)$context['relationships'][$id]=array_replace($context['relationships'][$id]??[],$rels);
             foreach($p['context']['redirect_targets'] as $id=>$ids)$context['redirect_targets'][$id]=array_values(array_unique([...($context['redirect_targets'][$id]??[]),...$ids]));
             $context['allowed_targets'][$actor]=array_values(array_unique([...($context['allowed_targets'][$actor]??[]),$target]));
