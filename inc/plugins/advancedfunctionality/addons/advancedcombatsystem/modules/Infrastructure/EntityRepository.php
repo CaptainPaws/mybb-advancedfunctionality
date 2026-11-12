@@ -28,7 +28,7 @@ final class AF_ACS_EntityRepository extends AF_ACS_SessionRepository
         $snapshot=$this->insertSnapshot($sid,$registration['source'],$registration['snapshot']);
         $definition=['schema_version'=>1,'registration_version'=>'acs-registration-1','source'=>$registration['source'],
             'source_fingerprint'=>$registration['source_fingerprint'],'participation'=>null];
-        $id=$this->sql('INSERT INTO '.$this->table('entities').' (session_id,control_group_id,kind,owner_uid,sheet_id,template_snapshot_id,source_entity_id,spawn_key,name,entity_version,definition_json) VALUES (?,?,?,?,?,?,NULL,?,?,?,?)',[$sid,$group,$kind,$owner,$sheet,$snapshot,$spawn,self::text($registration['name'],191),1,self::json($definition)])['id'];
+        $id=$this->insertEntityIdentity(['session_id'=>$sid,'control_group_id'=>$group,'kind'=>$kind,'owner_uid'=>$owner,'sheet_id'=>$sheet,'template_snapshot_id'=>$snapshot,'source_entity_id'=>null,'spawn_key'=>$spawn,'name'=>$registration['name'],'definition'=>$definition]);
         if (isset($registration['snapshot']['equipment_snapshot'])) {
             $this->initializeEquipment($sid,(string)$id,'1',$registration['snapshot']['equipment_snapshot'],$registration['snapshot']['source_snapshot']);
         }

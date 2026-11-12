@@ -3,6 +3,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SubmissionStore.php';
 require_once __DIR__.'/CombatCommitPersistence.php';
 require_once __DIR__.'/ItemCommitPersistence.php';
+require_once __DIR__.'/SpawnPersistence.php';
 require_once __DIR__.'/StatusPersistence.php';
 require_once __DIR__.'/ReactionPersistence.php';
 require_once __DIR__.'/BarrierPersistence.php';
@@ -12,7 +13,7 @@ require_once __DIR__.'/../Application/BuilderService.php';
 /** The only producer of terminal, persistent Resolver results. Never calls a native post writer. */
 final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 {
-    use AF_ACS_ItemCommitPersistence, AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
+    use AF_ACS_SpawnPersistence, AF_ACS_ItemCommitPersistence, AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
     private AF_ACS_SubmissionStore $submissions;
     private AF_ACS_EncounterRepository $preparation;
     private AF_ACS_SessionAccess $access;
@@ -195,17 +196,19 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             $this->authorizeFacts($current,$f,$frozen['actions']);
             $controls['owner_receipts']=$this->commitItems($current,$frozen,$result,$prepared);
             $changes=$this->project($current,$f,$turn,$result,$frozen);
-            return $this->finish($current,$f,$result,$controls,$changes,$fid);
+            return $this->finish($current,$f,$result,$controls,$changes,$fid,$prepared);
         });
     }
 
-    private function finish(array $row, array $f, AF_ACS_ResolverResult $resolved, array $controls, array $changes, string $fid): array
+    private function finish(array $row, array $f, AF_ACS_ResolverResult $resolved, array $controls, array $changes, string $fid,array $prepared): array
     {
         $session=$f['session'][0];$encounter=$f['encounter'][0];$operation='combat:'.$row['submission_id'];$now=time();
         self::integer((string)$session['session_version'],'18446744073709551614');self::integer((string)$session['next_sequence'],'18446744073709551614');
         self::integer((string)$encounter['encounter_version'],'18446744073709551614');self::integer((string)$encounter['next_event_sequence'],'18446744073709551614');
         $event=$this->sql('INSERT INTO '.$this->table('events').' (session_id,session_sequence,encounter_id,event_sequence,operation_key,event_type,source_entity_id,actor_uid,submission_id,engine_version,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
             [$row['session_id'],$session['next_sequence'],$row['encounter_id'],$encounter['next_event_sequence'],$operation,'combat.resolved',$controls['summary']['actions'][0]['actor_id'],$row['author_uid'],$row['submission_id'],AF_ACS_Resolver::VERSION,$now])['id'];
+        $spawns=$this->commitSpawns($row,$event,$prepared,$resolved->serverPlan());
+        if($spawns)$changes['spawns']=$spawns;
         $boundaryHistory=[];$turnIds=[];
         foreach($f['individuals'] as $individual)if((string)$individual['turn_id']===$row['turn_id'])$turnIds[]=(string)$individual['id'];
         foreach($f['boundaries'] as $boundary){if($boundary['status']!=='committed'||!in_array($boundary['kind'],['clock.entity_start','clock.ap_refresh'],true))continue;
@@ -233,7 +236,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         $receipt=['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'rng_version'=>'uniform53-v1','status'=>'COMMITTED','submission_id'=>$row['submission_id'],'session_id'=>$row['session_id'],
             'turn_id'=>$row['turn_id'],'pid'=>$row['pid'],'fid'=>$fid,'post_link_id'=>$link,'event_id'=>$event,'state_version'=>$row['state_version'],
             'result_hash'=>$resultHash,'dependency_hash'=>$controls['dependency_hash'],'simulation_hash'=>$controls['simulation_hash'],
-            'confirmation_hash'=>$controls['confirmation_hash'],'owner_receipts'=>$controls['owner_receipts']??[],'outbox_key'=>$messageKey];$json=self::json($receipt);
+            'confirmation_hash'=>$controls['confirmation_hash'],'owner_receipts'=>$controls['owner_receipts']??[],'outbox_key'=>$messageKey];if($spawns)$receipt['spawns']=$spawns;$json=self::json($receipt);
         $this->sql('INSERT INTO '.$this->table('combat_receipts').' (submission_id,turn_id,pid,request_hash,sealed_hash,receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?)',
             [$row['submission_id'],$row['turn_id'],$row['pid'],$row['request_hash'],hash('sha256',$row['sealed_json']),hash('sha256',$json),$json,$now]);
         $this->sql('UPDATE '.$this->table('submissions').' SET result_json=? WHERE submission_id=?',[$json,$row['submission_id']]);

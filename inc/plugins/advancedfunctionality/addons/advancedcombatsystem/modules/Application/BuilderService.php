@@ -4,7 +4,10 @@ require_once __DIR__.'/QueryService.php';
 require_once __DIR__.'/DraftService.php';
 require_once __DIR__.'/ItemActionService.php';
 
+require_once __DIR__.'/../Domain/Spawn.php';
+
 /** Explicit UI queries and a single ordered virtual simulation. No mechanics commands. */
+
 final class AF_ACS_BuilderService
 {
     public function __construct(private AF_ACS_EncounterRepository $repo,private AF_ACS_SessionAccess $access){}
@@ -97,7 +100,7 @@ final class AF_ACS_BuilderService
         if(!is_string($input['scope_token']??null)||!hash_equals($scope['scope_token'],$input['scope_token']))throw new RuntimeException('builder_version_conflict');
         $q=new AF_ACS_QueryService($this->repo,$this->access);$prepared=[];$ordered=[];$context=null;$definitions=[];$itemSpecs=[];$itemAbilities=[];$itemVirtual=['items'=>[],'equipment'=>[]];
         foreach($input['actions'] as $actionIndex=>$action){
-            $isItem=AF_ACS_ItemActionService::isItem((string)($action['ability_key']??''));$item=null;
+            $isSpawn=false;$isItem=AF_ACS_ItemActionService::isItem((string)($action['ability_key']??''));$item=null;
             if(!is_array($action)||array_diff(array_keys($action),['actor_id','ability_key','targets','parameters'])||!is_string($action['ability_key']??null)||!is_array($action['targets']??null)||!array_is_list($action['targets'])||!$action['targets']||count($action['targets'])>100||count(array_unique($action['targets']))!==count($action['targets']))throw new RuntimeException('builder_input_invalid');
             if(($action['parameters']??[])!==[])throw new RuntimeException('builder_parameters_unsupported');
             $actor=AF_ACS_Repository::integer($action['actor_id']??null);
@@ -112,11 +115,21 @@ final class AF_ACS_BuilderService
                 $itemVirtual['items']=array_replace($itemVirtual['items'],$item['virtual']['items']);
                 $itemVirtual['equipment']=array_replace($itemVirtual['equipment'],$item['virtual']['equipment']);
             }
+            if(!$isItem){$dto=$q->sealDefinition($sid,$actor,$action['ability_key']);$isSpawn=AF_ACS_Spawn::hasAbility($dto);}
+            if($isSpawn && $action['targets']!==[$actor])throw new RuntimeException('ACS_SPAWN_TARGET_UNSUPPORTED');
             $targetVersions=[];$orderedTargets=[];foreach($action['targets'] as $id){$target=AF_ACS_Repository::integer($id);$orderedTargets[]=$target;
             if(!in_array($actor,array_column($scope['actors'],'id'),true))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
-            $visible=$isItem&&$target===$actor;foreach($scope['targets'] as $t)if($t['id']===$target&&in_array($actor,$t['actors'],true))$visible=true;
+            $visible=($isItem||$isSpawn)&&$target===$actor;foreach($scope['targets'] as $t)if($t['id']===$target&&in_array($actor,$t['actors'],true))$visible=true;
             if(!$visible)throw new RuntimeException('preview_target_forbidden');
-            $p=$q->inspect($sid,$eid,$actor,$target,$sealedDraft,$isItem);
+            $p=$q->inspect($sid,$eid,$actor,$target,$sealedDraft,$isItem||$isSpawn);
+            if($isSpawn){
+                $counts=$this->repo->spawnCounts($sid,$eid);$p['versions']['spawn_counts_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'counts'=>$counts]));
+                $p['context']['spawn_counts']=$counts;
+                $entity=$this->repo->entity($sid,$actor);$participant=null;
+                foreach($this->repo->participants($eid,'0',201) as $member)if($member['entity_id']===$actor)$participant=$member;
+                if(!$participant)throw new RuntimeException('ACS_SPAWN_SCOPE_INVALID');
+                $p['context']['spawn_sources'][$actor]=['kind'=>$entity['kind'],'control_group_id'=>$entity['control_group_id'],'side_id'=>$participant['side_id']];
+            }
             if ($item) {
                 $p['context']['abilities'][$actor][$action['ability_key']]=$item['ability'];
                 $p['choices'][$action['ability_key']]=['supported'=>true];
@@ -130,6 +143,7 @@ final class AF_ACS_BuilderService
             foreach($p['context']['relationships'] as $id=>$rels)$context['relationships'][$id]=array_replace($context['relationships'][$id]??[],$rels);
             foreach($p['context']['redirect_targets'] as $id=>$ids)$context['redirect_targets'][$id]=array_values(array_unique([...($context['redirect_targets'][$id]??[]),...$ids]));
             $context['allowed_targets'][$actor]=array_values(array_unique([...($context['allowed_targets'][$actor]??[]),$target]));
+            if($isSpawn){$context['spawn_counts']=$p['context']['spawn_counts'];$context['spawn_sources'][$actor]=$p['context']['spawn_sources'][$actor];}
             $targetVersions[]=$p['versions'];}
             $versions=$targetVersions[0];if(count($orderedTargets)>1)$versions['selected_targets_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'versions'=>$targetVersions]));
             $ordered[]=['actor_id'=>$actor,'ability_key'=>$action['ability_key'],'targets'=>$orderedTargets,'scenario'=>$input['scenario']];$prepared[]=[$actor,$orderedTargets[0],$versions];

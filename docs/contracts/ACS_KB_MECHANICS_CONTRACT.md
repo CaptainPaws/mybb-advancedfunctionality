@@ -192,3 +192,101 @@ Typed ссылки читаются через lookup/source selector B1; formul
 - Пассивные дочерние причины задаются retained `passive_effects` ссылками `{kind: control, control_type: passive, effect_ref: {type: arpg_ability, key, effect_index}}`. Поддержанный узкий child: self-targeting ability с одним literal heal/damage компонентом `target=self|attacker`, без цены, crit и дополнительных overrides. Все ссылки pinned; trigger обязан явно задать `limits.max_depth` и `limits.per_cause=1`. Цикл, отсутствующая ссылка и превышение заданной KB глубины блокируют механический результат целиком. Нового глобального игрового лимита глубины нет. Дочернее исполнение не вызывает очередь активных реакций.
 
 Это описание поддержанного ACS consumer binding, а не разрешение выводить цену, вероятность, выбор целей или глубину из декоративного текста. Неизвестные schema/overrides блокируются; произвольные формулы, chained active reactions и автоматическое исполнение неподдержанных passive kinds отсутствуют. Внешний UI KB может не иметь редактора всех этих явных полей; наличие сохранённого typed definition обязательно.
+
+## ACS-7.2.1 consumer binding: создание существа/объекта
+
+Это opt-in consumer существующего B1 `effects[].kind=summon`, а не изменение
+KB normalizer или разрешение исполнять любой `supported` DTO. ACS принимает
+только отдельную active/self способность с явным положительным целым
+`action_cost` (AP), без урона, статусов, cooldown, upkeep и других механических
+эффектов. `effects[].target=self`; каждый summon содержит **полный** объект
+`spawn` следующей формы (fingerprint в примере нужно заменить настоящим):
+
+```json
+{
+  "schema": "ic-acs.spawn.v1",
+  "kind": "spawn_entity",
+  "template": {
+    "type": "arpg_bestiary",
+    "key": "wolf",
+    "version": "1.0",
+    "fingerprint": "sha256:<64 lowercase hex characters>"
+  },
+  "count": 1,
+  "scope": "encounter",
+  "group": "source",
+  "controller": "source",
+  "side": "source",
+  "zone_policy": "unplaced",
+  "duration": {"value": 3, "unit": "round"},
+  "limits": {"per_source": 3, "per_encounter": 5},
+  "conditions": ["source_active"],
+  "upkeep": [],
+  "on_spawn_effect": [],
+  "despawn": "lifetime_end"
+}
+```
+
+Все ключи обязательны, неизвестные ключи запрещены. `count` — 1..100;
+лимиты — 1..10000, не меньше count. До 16 эффектов и 128 экземпляров на commit,
+с существующим ограничением сериализованного ACS payload. Лимиты считают
+созданные идентичности одного type/key в encounter (включая прежние версии
+шаблона); expiry не освобождает лимит автоматически. `duration.value` —
+1..2147483647, unit — round/own_turn. Lifetime и его исходный turn сохраняются
+как данные создания; roster admission и продвижение lifetime здесь не выполняются.
+
+Для entity разрешены пары group/controller `source/source` и
+`independent/gm_pool`; вторая пара — только для исходного npc/monster.
+Первая сохраняет текущую группу источника и копирует базовое назначение
+контроллеров, без предметных/административных grants и без превращения
+делегата в владельца. Независимая группа помечается next_round_pending.
+Ни один вариант не создаёт turn, EntityTurn, AP или seal quota в этом этапе.
+Существа до ACS-7.2.2 имеют admission=pending_roster и закрытые combat operations.
+
+Шаблон существа — точный доступный `arpg_bestiary` IC-KB.read.v1 с указанными
+version/fingerprint и проверенными характеристиками/17 сопротивлениями.
+HP берётся из pinned combat_stats. Непустые loot, модификаторы, equipment,
+дополнительные resources, conditions, grants, passive effects, triggers и
+weaknesses не исполняются и блокируют этот consumer. Ability refs шаблона
+закрепляются существующим registration-time обходом графа, без автоматической
+выдачи этих способностей источнику. Никакие CS/Inventory owner records не создаются.
+
+Для `spawn_object`: template.type=arpg_mechanics, group/controller=none/none.
+Это явный service_mechanics/combat_template wrapper со schema
+`af_kb.arpg.rules.v1`, version и ровно одной entries-строкой:
+
+```json
+{
+  "schema": "af_kb.arpg.mechanic.v1",
+  "key": "banner",
+  "version": "1.0",
+  "phases": [],
+  "limits": [],
+  "formula_refs": [],
+  "object_definition": {
+    "schema": "ic-acs.object-template.v1",
+    "name": "Знамя",
+    "properties": {"description": "Пассивный объект", "tags": ["banner"]}
+  }
+}
+```
+
+Object name — непустая строка до 191 символа; description — до 4096 байт;
+tags — до 32 токенов `[a-z][a-z0-9_-]{0,63}`. Другие свойства запрещены.
+Объект не имеет state/resources/controllers/group/participant/turn и не
+является запасным bestiary NPC. Он существует в общем реестре entities
+как passive_object; этот этап не добавляет его в UI боевых целей.
+
+Единственная zone policy — unplaced, zone_id=NULL. Spatial-поля, неизвестные
+шаблоны, неполный legacy summon, условия появления кроме source_active,
+upkeep/on_spawn_effect и иные capabilities завершаются отказом, без координат
+или правил, выведенных из имени.
+
+Шаблоны читаются и закрепляются при исходной регистрации способности.
+Preview/Seal работают только с этим графом и создают intent, без SQL spawn.
+Commit не читает живую KB. Порядок intent — action/effect/ordinal; плоский
+spawn_index начинается с 0 внутри source_event_id существующего
+combat.resolved. Durable key `spawn:<source_event_id>:<spawn_index>` защищён
+существующим UNIQUE entities.spawn_once. Result/event details и terminal
+receipt содержат созданные ID/snapshot hashes. Повтор commit возвращает
+тот же receipt; отдельного spawn endpoint или MyBB post нет.

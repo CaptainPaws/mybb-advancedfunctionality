@@ -142,7 +142,7 @@ final class AF_ACS_KnowledgeBaseAdapter
     {
         try {
             if (!$this->available($actorUid)) return $this->failure('access_denied');
-            if (!in_array($type,['character','arpg_bestiary','arpg_ability','arpg_element'],true)
+            if (!in_array($type,['character','arpg_bestiary','arpg_ability','arpg_element','arpg_mechanics'],true)
                 || !preg_match(AF_KB_KEY_PATTERN,$key)) return $this->failure('unsupported_entry_type');
             if ($abilityIndex !== null && $type !== 'character') return $this->failure('unexpected_ability_index');
             $sourceKey = $key;
@@ -229,6 +229,19 @@ final class AF_ACS_KnowledgeBaseAdapter
                 'ready'=>$ready,'readiness_scope'=>$type === 'character' ? 'definition_inputs_not_calculated_snapshot' : 'selected_definition','executable'=>false,'persistent'=>false,'source'=>$dto['source'],'definition_version'=>$dto['definition_version'],
                 'data'=>$dto['normalized'],'diagnostics'=>$issues,'capabilities'=>$capabilities];
         } catch (Throwable $error) { return $this->failure('source_read_failed'); }
+    }
+
+    /** Registration-time pinning only. Commit/seal must never acquire a live spawn template. */
+    public function pinSpawnTemplates(array $ability,int $actor): array
+    {
+        require_once __DIR__.'/../../Domain/Spawn.php';
+        foreach($ability['data']['ability_profile']['effects']??[] as $effect){
+            if(($effect['parameters']['effect_type']??null)!=='summon')continue;
+            $s=AF_ACS_Spawn::descriptor($effect['parameters']['spawn']??[]);
+            $template=$this->readDefinition($s['template']['type'],$s['template']['key'],$actor);
+            AF_ACS_Spawn::template($s,$template);$ability['spawn_templates'][$effect['source_index']]=$template;
+        }
+        return $ability;
     }
 
     /** Explicit owner-authorized acquisition of an exact formula; evaluation uses this retained copy only. */

@@ -175,6 +175,26 @@ class AF_ACS_Repository
     }
 
 
+    /** Existing identity registry; callers own the audited transaction. */
+    protected function insertEntityIdentity(array $e): string
+    {
+        return $this->sql('INSERT INTO '.$this->table('entities').' (session_id,control_group_id,kind,owner_uid,sheet_id,template_snapshot_id,source_entity_id,spawn_key,name,entity_version,definition_json) VALUES (?,?,?,?,?,?,?,?,?,1,?)',
+            [$e['session_id'],$e['control_group_id'],$e['kind'],$e['owner_uid'],$e['sheet_id'],$e['template_snapshot_id'],$e['source_entity_id'],$e['spawn_key'],self::text($e['name'],191),self::json($e['definition'])])['id'];
+    }
+
+    /** Conservative creation counts: lifetime expiry/admission is not inferred here. */
+    public function spawnCounts(string $sid,string $encounter): array
+    {
+        $counts=[];
+        foreach($this->sql('SELECT source_entity_id,definition_json FROM '.$this->table('entities').' WHERE session_id=? AND spawn_key LIKE ?', [self::integer($sid),'spawn:%'])['rows'] as $row){
+            $d=json_decode($row['definition_json'],true,64,JSON_THROW_ON_ERROR)['spawn']??throw new RuntimeException('ACS_SPAWN_IDENTITY_INVALID');
+            if($d['encounter_id']!==$encounter)continue;
+            $key=$d['spec']['template']['type'].':'.$d['spec']['template']['key'];
+            foreach(['source:'.$row['source_entity_id'].':'.$key,'encounter:'.$key] as $k)$counts[$k]=($counts[$k]??0)+1;
+        }
+        ksort($counts);return $counts;
+    }
+
     /** Caller must own the session transaction; insert-only, no historical mutator. */
     protected function insertSnapshot(string $sessionId, array $source, array $payload): string
     {
