@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/Numeric.php';
 
-/** Opt-in consumer of B1 summon effects. No SQL, clocks, KB reads or live identities. */
+/** Opt-in consumer of B1 summon effects. Pure spawn/lifecycle rules. No SQL, live KB reads or wall clock. */
 final class AF_ACS_Spawn
 {
     public const SCHEMA='ic-acs.spawn.v1';
@@ -13,6 +13,7 @@ final class AF_ACS_Spawn
     }
     public static function descriptor(array $s): array
     {
+        $policy=$s['lifecycle']??null;unset($s['lifecycle']);
         self::fields($s,['schema','kind','template','count','scope','group','controller','side','zone_policy','duration','limits','conditions','upkeep','on_spawn_effect','despawn']);
         if($s['schema']!==self::SCHEMA || !in_array($s['kind'],['spawn_entity','spawn_object'],true) || $s['scope']!=='encounter')self::fail('ACS_SPAWN_SCHEMA_UNSUPPORTED');
         $object=$s['kind']==='spawn_object';self::fields($s['template'],['type','key','version','fingerprint']);
@@ -25,8 +26,82 @@ final class AF_ACS_Spawn
         if(!is_int($s['duration']['value']) || $s['duration']['value']<1 || $s['duration']['value']>2147483647 || !in_array($s['duration']['unit'],['own_turn','round'],true))self::fail('ACS_SPAWN_LIFETIME_UNSUPPORTED');
         self::fields($s['limits'],['per_source','per_encounter']);
         foreach($s['limits'] as $limit)if(!is_int($limit)||$limit<1||$limit>10000||$limit<$s['count'])self::fail('ACS_SPAWN_LIMIT_INVALID');
-        if($s['conditions']!==['source_active'] || $s['upkeep']!==[] || $s['on_spawn_effect']!==[] || $s['despawn']!=='lifetime_end')self::fail('ACS_SPAWN_CAPABILITY_UNSUPPORTED');
+        if($s['conditions']!==['source_active'] || $s['on_spawn_effect']!==[] || $s['despawn']!=='lifetime_end')self::fail('ACS_SPAWN_CAPABILITY_UNSUPPORTED');
+        if($object&&($s['upkeep']!==[]||$policy!==null))self::fail('ACS_SPAWN_CAPABILITY_UNSUPPORTED');
+        if($s['upkeep']){require_once __DIR__.'/Effects.php';AF_ACS_Effects::upkeepSpec($s['upkeep']);}
+        if($policy!==null){self::policy($policy);$s['lifecycle']=$policy;}
         return $s;
+    }
+    public static function policy(?array $p): array
+    {
+        $p??=['admission'=>'next_round','source_inactive'=>'persist','disappear_on'=>['self_dead']];
+        self::fields($p,['admission','source_inactive','disappear_on']);
+        if(!in_array($p['admission'],['current_round','next_round'],true)||!in_array($p['source_inactive'],['persist','despawn','independent'],true)
+            ||!is_array($p['disappear_on'])||!array_is_list($p['disappear_on'])||array_diff($p['disappear_on'],['self_dead','encounter_end'])||count(array_unique($p['disappear_on']))!==count($p['disappear_on']))self::fail('ACS_SUMMON_POLICY_UNSUPPORTED');
+        return $p;
+    }
+    public static function initial(string $id,string $source,string $encounter,array $spec,int $version=1): array
+    {
+        return ['entity_id'=>$id,'source_entity_id'=>$source,'encounter_id'=>$encounter,'status'=>'active','remaining'=>$spec['duration']['value'],'unit'=>$spec['duration']['unit'],
+            'policy'=>self::policy($spec['lifecycle']??null),'upkeep'=>$spec['upkeep']?AF_ACS_Effects::upkeepSpec($spec['upkeep']):null,'last_duration_boundary'=>null,'last_upkeep'=>null,
+            'independent'=>$spec['group']==='independent','pending_independent'=>false,'reason'=>null,'version'=>$version];
+    }
+    public static function instance(array $v):void
+    {
+        self::fields($v,['entity_id','source_entity_id','encounter_id','status','remaining','unit','policy','upkeep','last_duration_boundary','last_upkeep','independent','pending_independent','reason','version']);
+        foreach(['entity_id','source_entity_id','encounter_id'] as $k)if(!is_string($v[$k])||!preg_match('/\A[1-9][0-9]{0,19}\z/D',$v[$k]))self::fail('ACS_SUMMON_IDENTITY_INVALID');
+        if(!in_array($v['status'],['active','despawned'],true)||!is_int($v['remaining'])||$v['remaining']<0||!in_array($v['unit'],['round','own_turn'],true)||!is_bool($v['independent'])||!is_bool($v['pending_independent'])||!is_int($v['version'])||$v['version']<1)self::fail('ACS_SUMMON_STATE_INVALID');
+        self::policy($v['policy']);
+        if($v['version']>9007199254740991||$v['status']==='active'&&$v['remaining']===0||$v['pending_independent']&&!$v['independent'])self::fail('ACS_SUMMON_STATE_INVALID');
+        if($v['last_duration_boundary']!==null&&(!is_string($v['last_duration_boundary'])||!preg_match($v['unit']==='round'?'/\Around:[1-9][0-9]*:next\z/D':'/\Aentity_turn:[1-9][0-9]*:end\z/D',$v['last_duration_boundary'])))self::fail('ACS_SUMMON_STATE_INVALID');
+        if($v['last_upkeep']!==null){$u=$v['last_upkeep'];self::fields($u,['boundary_key','paid','reason','costs']);if(!is_bool($u['paid'])||!is_string($u['boundary_key'])||!preg_match('/\Aentity_turn:[1-9][0-9]*:start\z/D',$u['boundary_key'])||$u['costs']!==($v['upkeep']['costs']??null))self::fail('ACS_SUMMON_STATE_INVALID');}
+    }
+    private static function stop(array &$v,string $reason):void {$v['status']='despawned';$v['pending_independent']=false;$v['reason']=$reason;++$v['version'];}
+    /** Every atomic Effects operation rechecks irreversible source/self conditions. */
+    public static function interrupt(array &$state,array &$events):void
+    {
+        foreach($state['summons']??[] as $id=>$v){if($v['status']!=='active')continue;$before=$v;
+            if(($state['entities'][$id]['life_state']??null)==='dead'&&in_array('self_dead',$v['policy']['disappear_on'],true))self::stop($v,'self_dead');
+            elseif(isset($state['entities'][$v['source_entity_id']])&&$state['entities'][$v['source_entity_id']]['life_state']!=='active'&&!$v['independent']){
+                if($v['policy']['source_inactive']==='despawn')self::stop($v,'source_inactive');
+                elseif($v['policy']['source_inactive']==='independent'){$v['independent']=true;$v['pending_independent']=true;$v['reason']='source_inactive';++$v['version'];}
+            }
+            if($v!==$before){$state['summons'][$id]=$v;$events[]=['type'=>$v['status']==='despawned'?'summon.despawned':'summon.independent','entity_id'=>(string)$id,'status'=>$v['status'],'reason'=>$v['reason']];}
+        }
+        foreach($state['status_instances']??[] as $id=>$row)if($row['status']==='active'&&(($state['summons'][$row['target_entity_id']]['status']??null)==='despawned'||(($state['summons'][$row['source_entity_id']]['status']??null)==='despawned'&&(isset($row['spec']['upkeep'])||$row['duration_unit']==='own_turn')))){
+            $row['status']='removed';$row['stacks']=0;++$row['version'];$state['status_instances'][$id]=$row;
+        }
+        foreach($state['barriers'] as $id=>$pool)if($pool['status']==='active'){
+            $allGone=$pool['targets']&&!array_filter($pool['targets'],static fn($target)=>($state['summons'][$target]['status']??null)!=='despawned');
+            if(($state['summons'][$pool['source_entity_id']]['status']??null)==='despawned'||$allGone){$pool['status']='expired';++$pool['version'];$state['barriers'][$id]=$pool;}
+        }
+    }
+    /** Called only by the existing Clock after mandatory ticks and status upkeep. */
+    public static function boundary(array $state,array $boundary,string $key,array &$events):array
+    {
+        foreach(array_keys($state['summons']??[]) as $id){$v=$state['summons'][$id];if($v['status']!=='active'||$v['encounter_id']!==$boundary['encounter_id'])continue;
+            $eligible=$v['unit']==='round'?$boundary['phase']==='round_end':($boundary['phase']==='entity_end'&&($boundary['entity_id']??null)===(string)$id);
+            if($eligible&&$v['last_duration_boundary']!==$key){$v['remaining']=max(0,$v['remaining']-1);$v['last_duration_boundary']=$key;++$v['version'];if(!$v['remaining'])self::stop($v,'lifetime_end');$state['summons'][$id]=$v;$events[]=['type'=>$v['status']==='despawned'?'summon.despawned':'summon.duration','entity_id'=>(string)$id,'remaining'=>$v['remaining'],'reason'=>$v['reason']];}
+            if($v['status']==='active'&&$v['upkeep']!==null&&$boundary['phase']==='entity_start'&&($boundary['entity_id']??null)===$v['source_entity_id']&&($v['last_upkeep']['boundary_key']??null)!==$key){
+                $reason=null;$costs=$v['upkeep']['costs'];
+                try{$paid=AF_ACS_Effects::simulate($state,['actor_id'=>$v['source_entity_id'],'costs'=>$costs,'effects'=>[]]);$state=$paid->serverState();$events[]=['type'=>'summon_upkeep_costs','trace'=>$paid->serverTrace()];}
+                catch(AF_ACS_FormulaError $e){if(!in_array($e->diagnosticCode,['effects_cost_unaffordable','effects_resource_invalid','effects_actor_unavailable'],true))throw $e;$reason=$e->diagnosticCode;}
+                $v=$state['summons'][$id];if($reason!==null)self::stop($v,'upkeep_shortage');$v['last_upkeep']=['boundary_key'=>$key,'paid'=>$reason===null,'reason'=>$reason,'costs'=>$costs];++$v['version'];$state['summons'][$id]=$v;$events[]=['type'=>$reason===null?'summon.upkeep':'summon.despawned','entity_id'=>(string)$id,'payment'=>$v['last_upkeep']];
+            }
+        }
+        self::interrupt($state,$events);return $state;
+    }
+    public static function presencePolicy(array $dto):array
+    {
+        $d=$dto['data']['definition']??[];$e=$d['entries'][0]??[];$p=$e['presence_policy']??[];
+        if(($dto['ready']??null)!==true||($dto['contract_id']??null)!=='IC-KB.read.v1'||($dto['source']['type']??null)!=='arpg_mechanics'||($d['service_kind']??null)!=='combat_template'||count($d['entries']??[])!==1)self::fail('ACS_PRESENCE_POLICY_UNSUPPORTED');
+        self::fields($e,['schema','key','version','phases','limits','formula_refs','presence_policy']);self::fields($p,['schema','partial_withdraw','rejoin','requires_active']);
+        if($e['schema']!=='af_kb.arpg.mechanic.v1'||$e['phases']!==[]||$e['limits']!==[]||$e['formula_refs']!==[]||($p['schema']!=='ic-acs.presence.v1'||$p['partial_withdraw']!==true||$p['rejoin']!==true||$p['requires_active']!==true))self::fail('ACS_PRESENCE_POLICY_UNSUPPORTED');
+        return $p;
+    }
+    public static function encounterEnd(array $summons,string $eid):array
+    {
+        foreach($summons as &$v)if($v['encounter_id']===$eid&&$v['status']==='active'&&in_array('encounter_end',$v['policy']['disappear_on'],true))self::stop($v,'encounter_end');unset($v);return $summons;
     }
     public static function hasAbility(array $dto): bool
     {
@@ -76,6 +151,7 @@ final class AF_ACS_Spawn
     }
     public static function plan(array $ability,string $actor,int $index,array $source,array &$counts): array
     {
+        if(($source['kind']??null)==='summon')self::fail('ACS_SPAWN_CONTROL_UNSUPPORTED');
         if(empty($source['side_id']) || empty($source['control_group_id']))self::fail('ACS_SPAWN_SCOPE_INVALID');
         $out=[];
         foreach($ability['spawns'] as $binding){$s=self::descriptor($binding['spec']);self::template($s,$binding['template']);

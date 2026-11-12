@@ -25,8 +25,9 @@ final class AF_ACS_ClockService
         $entity=$this->repository->entity($sid,AF_ACS_Repository::integer($entityId));
         $controller=$this->repository->controllerFor($sid,$entityId,$this->access->uid());
         if(!$member || !$entity || $entity['control_group_id']!==$turn['control_group_id'] || !$controller)throw new RuntimeException('ACS_AP_ACCESS_DENIED');
+        $summons=$this->repository->summonProjection($sid,$turn['encounter_id']);if($entity['kind']==='summon'&&!isset($summons[$entityId]))throw new RuntimeException('ACS_AP_ACCESS_DENIED');
         $individual=null;foreach($this->repository->individualTurns([$turnId]) as $candidate)if($candidate['entity_id']===$entityId)$individual=$candidate;
-        $ready=$individual&&$individual['start_done']==='1'&&$individual['end_done']==='0'&&$this->repository->boundary(AF_ACS_Clock::entityStart($individual['id']),$sid)&&$entity['life_state']==='active'&&AF_ACS_Effects::ordinaryActionAllowed(['status_instances'=>$this->repository->statusProjection($sid)['instances']],$entityId);
+        $ready=$individual&&$individual['start_done']==='1'&&$individual['end_done']==='0'&&$this->repository->boundary(AF_ACS_Clock::entityStart($individual['id']),$sid)&&$entity['life_state']==='active'&&AF_ACS_Effects::ordinaryActionAllowed(['summons'=>$summons,'status_instances'=>$this->repository->statusProjection($sid)['instances']],$entityId);
         $budget=(int)AF_ACS_Repository::integer((string)$turn['ap_budget'],'2147483647',true);$spent=(int)AF_ACS_Repository::integer((string)$turn['ap_spent'],'2147483647',true);$commit=(int)AF_ACS_Repository::integer((string)$turn['pre_round_ap_commitment'],'2147483647',true);
         $remaining=AF_ACS_Clock::availableAP($budget,$spent,$commit);
         return ['turn_id'=>$turnId,'turn_version'=>$turn['turn_version'],'control_group_id'=>$turn['control_group_id'],'maximum'=>$budget,'available'=>$remaining,'affordable'=>$ready&&$cost<=$remaining,'actions_ready'=>$ready];

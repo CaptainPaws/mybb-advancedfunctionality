@@ -24,10 +24,16 @@ final class AF_ACS_Damage
         if (($catalog['contract_id']??null)==='IC-ACS.retained-element-registry.v1') {
             if(!is_string($catalog['registration_json']??null)||!is_string($catalog['content_hash']??null)||!hash_equals($catalog['content_hash'],hash('sha256',$catalog['registration_json'])))self::fail('damage_element_contract_unavailable');
             try{$p=json_decode($catalog['registration_json'],true,64,JSON_THROW_ON_ERROR);}catch(JsonException $e){self::fail('damage_element_contract_unavailable');}
-            $s=$p['source_snapshot']??[];
+            $s=$p['source_snapshot']??[];$spawn=($p['contract_id']??null)==='ic-acs.spawn-snapshot.v1';
+            if($spawn){
+                require_once __DIR__.'/Spawn.php';
+                $projection=AF_ACS_Spawn::template($p['spawn']['spec']??[],$s);
+                if(($p['spawn']['spec']['kind']??null)!=='spawn_entity'||($p['combat_stats']??null)!==$projection['stats'])self::fail('damage_element_contract_unavailable');
+                $s['resistances']=$s['data']['element_resistances']??null;
+            }
             $cs=($s['contract_id']??null)==='IC-CS.combat-preparation.v1'&&($s['element_registry_version']??null)==='primary-elements-17-v1'&&($s['element_alias_policy']??null)==='wind-air-v1';
             $kb=($s['contract_id']??null)==='IC-KB.read.v1'&&($s['definition_version']['schema']??null)==='af_kb.arpg.rules.v1'&&($s['capabilities']['canonical_elements_17']['readiness']??null)==='READY'&&($s['capabilities']['legacy_element_aliases']['readiness']??null)==='READY';
-            if(($p['contract_id']??null)!=='IC-ACS.entity-registration.v1'||($p['schema_version']??null)!==1||($s['schema_version']??null)!==1||($p['numeric_policy']??null)!==AF_ACS_Numeric::POLICY||($s['ready']??null)!==true
+            if((($p['contract_id']??null)!=='IC-ACS.entity-registration.v1'&&!$spawn)||($p['schema_version']??null)!==1||($s['schema_version']??null)!==1||($p['numeric_policy']??null)!==AF_ACS_Numeric::POLICY||($s['ready']??null)!==true
                 ||(!$cs&&!$kb)
                 ||!is_array($s['resistances']??null)||count($s['resistances'])!==17)self::fail('damage_element_contract_unavailable');
             $elements=[];foreach($s['resistances'] as $key=>$row){

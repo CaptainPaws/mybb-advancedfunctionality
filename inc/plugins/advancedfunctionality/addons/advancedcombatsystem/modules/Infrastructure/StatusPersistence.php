@@ -23,7 +23,8 @@ trait AF_ACS_StatusPersistence
         $this->commandWrite();require_once __DIR__.'/../Domain/Clock.php';
         if($session['status']!=='active'||$encounter['status']!=='active')throw new RuntimeException('ACS_STATUS_CLOCK_PAUSED');
         $this->statusRows($session['id'],true);$projection=$this->statusProjection($session['id']);$barriers=$this->barrierProjection($session['id'],$encounter['id']);
-        $state=['schema_version'=>1,'entities'=>[],'groups'=>[],'barriers'=>$barriers['pools'],'next_barrier_order'=>$barriers['next_order'],'status_instances'=>$projection['instances'],'next_status_order'=>$projection['next_order']];
+        $summons=$this->summonProjection($session['id'],$encounter['id']);
+        $state=['summons'=>$summons,'schema_version'=>1,'entities'=>[],'groups'=>[],'barriers'=>$barriers['pools'],'next_barrier_order'=>$barriers['next_order'],'status_instances'=>$projection['instances'],'next_status_order'=>$projection['next_order']];
         $defenses=[];$catalog=['by_target'=>[]];$resources=[];$needed=[];$groupTurns=[];
         foreach($barriers['pools'] as $pool)foreach(array_unique([$pool['source_entity_id'],...$pool['targets']]) as $poolEntity)$needed[$poolEntity]=true;
         foreach($projection['instances'] as $effect)if($effect['status']==='active'&&isset($effect['spec']['upkeep'])&&($effect['spec']['scope']!=='combat'||$effect['encounter_id']===$encounter['id']))$needed[$effect['source_entity_id']]=true;
@@ -32,10 +33,11 @@ trait AF_ACS_StatusPersistence
             $round=$effect['duration_unit']==='round';
             if($round?($phase==='round_start'&&in_array($effect['target_entity_id'],$entities,true)):($phase==='entity_start'&&($effect['duration_unit']==='own_turn'?$effect['source_entity_id']:$effect['target_entity_id'])===$entity))$needed[$effect['target_entity_id']]=true;
         }
+        foreach($summons as $summon)if($summon['status']==='active')foreach([$summon['entity_id'],$summon['source_entity_id']] as $target)$needed[$target]=true;
         if($needed)$this->assertPreviewStorage();
         foreach(array_keys($needed) as $target){$target=(string)$target;$row=$this->entity($session['id'],$target);
             if(!$row||!hash_equals($row['content_hash'],hash('sha256',$row['payload_json']))||json_decode($row['layers_json'],true)!==['schema_version'=>1,'layers'=>[]])throw new RuntimeException('ACS_STATUS_TARGET_UNSUPPORTED');
-            $source=json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR)['source_snapshot']??[];$stats=json_decode($row['stats_json'],true,32,JSON_THROW_ON_ERROR);
+            $source=self::registrationView(json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR))['source_snapshot']??[];$stats=json_decode($row['stats_json'],true,32,JSON_THROW_ON_ERROR);
             if(($source['ready']??null)!==true||$stats!==['schema_version'=>1,'values'=>$source['characteristics']??null])throw new RuntimeException('ACS_STATUS_TARGET_UNSUPPORTED');
             $hp=(int)self::integer($row['hp'],'9007199254740991',true);$max=(int)self::integer($row['hp_max'],'9007199254740991',true);$gid=$row['control_group_id'];
             if(!isset($state['groups'][$gid])){
@@ -80,7 +82,8 @@ trait AF_ACS_StatusPersistence
             $this->recordBoundary($key,'clock.status_tick',$session['id'],$encounter['id'],$actor,['parent_boundary'=>$trace['boundary_key']],['parent_boundary'=>$trace['boundary_key'],'trace'=>$trace]);
         }
         $poolChanges=$this->persistBarriers($session['id'],$encounter['id'],$state['barriers'],$after['barriers'],[]);
-        return ['trace'=>$trace,'entities'=>$changes,'groups'=>$groupChanges,'statuses'=>$statuses,'barriers'=>$poolChanges];
+        $summonChanges=$this->persistSummons($session['id'],$encounter['id'],$state['summons'],$after['summons'],$actor);
+        return ['summons'=>$summonChanges,'trace'=>$trace,'entities'=>$changes,'groups'=>$groupChanges,'statuses'=>$statuses,'barriers'=>$poolChanges];
     }
     /** Server-persisted source priority; expected session/encounter CAS is owned by command(). */
     public function setUpkeepOrder(array $session,array $encounter,array $individual,array $ids):array

@@ -290,3 +290,93 @@ combat.resolved. Durable key `spawn:<source_event_id>:<spawn_index>` защищ�
 существующим UNIQUE entities.spawn_once. Result/event details и terminal
 receipt содержат созданные ID/snapshot hashes. Повтор commit возвращает
 тот же receipt; отдельного spawn endpoint или MyBB post нет.
+
+## ACS-7.2.2 consumer extension: roster и lifecycle
+
+Расширение действует поверх `ic-acs.spawn.v1` выше. Старые pinned DTO не
+перечитываются из KB. У `spawn_entity` теперь разрешён необязательный объект
+`lifecycle` с **точным** набором полей:
+
+```json
+{
+  "admission": "current_round",
+  "source_inactive": "despawn",
+  "disappear_on": ["self_dead", "encounter_end"]
+}
+```
+
+- admission: current_round / next_round. Без поля — next_round. Current round
+  возможен только у source-group с уже существующим pending turn; изменяется
+  только append roster/EntityTurn с CAS и аудитом before/after. Нет нового turn,
+  AP, seal quota или deadline. Обычный publish закрывает групповой turn до
+  создания identity: появление в таком commit не открывает ход повторно.
+- source_inactive: persist / despawn / independent; отсутствие — persist.
+  Inactive означает существующий life_state != active, не уход участника из
+  боя. Effects проверяет условие после каждой атомарной операции, до следующего
+  лечения. Independent прекращает обычную доступность до следующего roster;
+  group/GM-pool назначаются при следующем round admission, без постоянного owner.
+- disappear_on: уникальный список из self_dead / encounter_end. По умолчанию
+  только self_dead. Ноль HP остаётся incapacitated, а не выдуманной смертью.
+  Encounter end выполняется существующим combat_reset boundary.
+
+Duration round уменьшается на round_end соответствующего encounter, включая
+раунд создания. Duration own_turn — на end **самого призыва**, после его
+roster admission. Это не счётчик страниц или литературных сообщений. Stamp
+последней границы и её существующий durable receipt исключают повтор.
+
+`spawn.upkeep` принимает те же явные B3 sustain costs, что ACS-5.2.2:
+
+```json
+[
+  {"kind":"resource","resource_key":"hp","value":5,"timing":"sustain","period":{"value":1,"unit":"own_turn"}},
+  {"kind":"resource","resource_key":"ep","value":3,"timing":"sustain","period":{"value":1,"unit":"own_turn"}}
+]
+```
+
+Плательщик — исходный source_entity, anchor — его EntityTurn start, после
+mandatory ticks и существующего status upkeep. Несколько призывов платят в
+стабильном entity-ID порядке. Используются только существующие integer combat
+balances; `ap` — тот же остаток общей группы, HP не может упасть до нуля от
+поддержания. Нет implicit AP, новых EP или Inventory/item costs. Оплата одного
+призыва атомарна: недостаток любого ресурса не списывает остальные и завершает
+этот призыв. Ранние успешные оплаты не возвращаются. Last payment привязан к
+boundary key. Смена на independent не меняет исходного плательщика upkeep.
+
+Active count освобождается только после зафиксированного despawn. Source/key
+и история сохраняются, независимость не обходит maximum count. На objects
+это расширение не распространяется: lifecycle/upkeep объекта по-прежнему
+UNSUPPORTED; Stage 8 не имитируется. Recursive summoning, произвольные
+условия/скрипты, пространственные правила и on_spawn_effect остаются закрыты.
+
+### Pinned presence rule для partial withdrawal/rejoin
+
+GM-команды `partial_withdraw` / `rejoin_encounter` работают только при явном
+правиле, закреплённом в config snapshot данного столкновения. При `create`
+необязательный backend-параметр `presence_template` выбирает owner-authorized
+arpg_mechanics/combat_template IC-KB DTO. В нём ровно одна B3 entries-строка
+с schema/key/version, пустыми phases/limits/formula_refs и полем:
+
+```json
+{
+  "presence_policy": {
+    "schema": "ic-acs.presence.v1",
+    "partial_withdraw": true,
+    "rejoin": true,
+    "requires_active": true
+  }
+}
+```
+
+Впоследствии используется этот pinned DTO, без live KB read. Это узкое правило
+того же encounter и active entity, без дистанции, побега, наград, defeat или
+смены стороны. Обе команды требуют session/encounter/participant CAS, reason,
+POST/CSRF, operation key и существующую GM/native авторизацию. Меняется только
+participation указанной identity; питомцы/остальные призывы не удаляются.
+Возвращение не добавляет отсутствующего участника в текущий frozen roster,
+не открывает terminal turn и не меняет AP, seal attempts, reaction/cooldowns
+или ресурсы. Неизвестное либо отсутствующее правило блокирует команду.
+
+Terminal despawn завершает состояния на самом существе, его source-bound
+upkeep/own_turn и emitter barrier pools; target_turn/round эффекты на других
+целях продолжают свои закреплённые сроки. Общий shield постоянного источника
+не исчезает из-за удаления одного summon-target. История и ресурсы сохраняются.

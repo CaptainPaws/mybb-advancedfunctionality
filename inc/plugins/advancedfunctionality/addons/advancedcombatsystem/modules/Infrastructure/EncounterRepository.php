@@ -68,7 +68,7 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     {
         if(!in_array($limit,[100,201],true))throw new RuntimeException('ACS_QUERY_LIMIT');
         $rows=array_map(fn($r)=>$this->ids($r,['id','session_id','encounter_id','entity_id','side_id','participant_version','control_group_id','owner_uid','sheet_id','controller_uid','assignment_version']),$this->sql('SELECT p.*,e.session_id,e.name,e.kind,e.control_group_id,e.owner_uid,e.sheet_id,c.controller_uid,c.assignment_version FROM '.$this->table('participants').' p JOIN '.$this->table('entities').' e ON e.id=p.entity_id LEFT JOIN '.$this->table('controllers')." c ON c.entity_id=e.id AND c.session_id=e.session_id AND c.id=(SELECT MIN(c1.id) FROM ".$this->table('controllers')." c1 WHERE c1.entity_id=e.id AND c1.session_id=e.session_id AND c1.status='active' AND (c1.valid_until IS NULL OR c1.valid_until>?)) WHERE p.encounter_id=? AND p.id>? ORDER BY p.id LIMIT ".$limit,[time(),$id,self::integer($after,zero:true)])['rows']);
-        foreach($rows as &$row){$c=$this->controllers((string)$row['session_id'],$row['entity_id']);$set=AF_ACS_AuthorizationService::assignment($c);$row['controller_mode']=$set['mode'];$row['controller_uids']=$set['uids'];}unset($row);return $rows;
+        foreach($rows as &$row){$c=$this->controllers((string)$row['session_id'],$row['entity_id']);$set=$c?AF_ACS_AuthorizationService::assignment($c):($row['participation']==='despawned'?['mode'=>null,'uids'=>[]]:throw new RuntimeException('ACS_CONTROL_INVALID'));$row['controller_mode']=$set['mode'];$row['controller_uids']=$set['uids'];}unset($row);return $rows;
     }
     public function entity(string $sid,string $id): ?array
     {
@@ -82,7 +82,13 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     public function controllerFor(string $sid,string $entity,string $uid,string $category='ordinary'): ?array
     {
         $e=$this->entity($sid,$entity);$s=$this->session($sid);
-        return $e&&$s?AF_ACS_AuthorizationService::controller($e,$this->controllers($sid,$entity),$s,$this->roles($sid,$uid),$uid,$this->delegationRows($sid,$uid),$category):null;
+        return $e&&$s?AF_ACS_AuthorizationService::controller($e,$this->controllers($sid,$entity),$s,$this->roles($sid,$uid),$uid,$this->delegationRows($sid,$uid),$category,$this->summonControlContext($sid,$e)):null;
+    }
+    private function summonControlContext(string $sid,array $e):array
+    {
+        if($e['kind']!=='summon')return [];
+        $source=$this->entity($sid,(string)$e['source_entity_id']);if(!$source)return [];
+        return ['entities'=>[(string)$source['id']=>$source],'controllers'=>$this->controllers($sid,(string)$source['id'])];
     }
     /** NPC plans and explicitly delegated group plans may coexist. Publication claims stay exclusive. */
     public function parallelControlPlans(string $sid,string $eid,string $turnId): bool
@@ -155,6 +161,19 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
             if(!$row)throw new RuntimeException('ACS_PARTICIPANT_UNAVAILABLE');self::integer($row['participant_version'],'18446744073709551614');
             $result['previous_side_id']=$row['side_id']===null?null:(string)$row['side_id'];
             $this->sql('UPDATE '.$this->table('participants').' SET side_id=?,participant_version=participant_version+1 WHERE encounter_id=? AND entity_id=?',[$request['side_id'],$id,$request['entity_id']]);
+        } elseif(in_array($op,['partial_withdraw','rejoin_encounter'],true)) {
+            $config=$this->configSnapshot($session['id'],$encounter['config_snapshot_id']);
+            if(!$config||!hash_equals($config['content_hash'],hash('sha256',$config['payload_json'])))throw new RuntimeException('ACS_SNAPSHOT_HASH_MISMATCH');
+            $pinned=json_decode($config['payload_json'],true,64,JSON_THROW_ON_ERROR)['config']??null;
+            if($pinned!==json_decode($encounter['config_json'],true,64,JSON_THROW_ON_ERROR))throw new RuntimeException('ACS_SNAPSHOT_INVALID');
+            AF_ACS_Spawn::presencePolicy($pinned['presence_policy']??[]);
+            $entity=$this->entity($session['id'],$request['entity_id']);$participant=$this->sql('SELECT * FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=? FOR UPDATE',[$id,$request['entity_id']])['rows'][0]??null;
+            $rejoin=$op==='rejoin_encounter';
+            if(!$entity||!$participant||!in_array($entity['kind'],['character','pet','npc','monster','summon'],true)||$entity['life_state']!=='active'||$participant['participation']!==($rejoin?'withdrawn':'engaged'))throw new RuntimeException('ACS_PRESENCE_STATE_CONFLICT');
+            if($entity['kind']==='summon'&&($this->summonProjection($session['id'],$id)[$entity['id']]['status']??null)!=='active')throw new RuntimeException('ACS_PRESENCE_STATE_CONFLICT');
+            $this->assertNoObligations($session['id'],$id);
+            if($this->sql('UPDATE '.$this->table('participants').' SET participation=?,participant_version=participant_version+1 WHERE id=? AND participant_version=?',[$rejoin?'engaged':'withdrawn',$participant['id'],$request['participant_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
+            $result=['entity_id'=>$entity['id'],'participation'=>$rejoin?'engaged':'withdrawn','policy_snapshot_id'=>$encounter['config_snapshot_id'],'policy_source'=>$pinned['presence_policy']['source'],'policy_version'=>$pinned['presence_policy']['definition_version']];
         } elseif($op==='participant_visibility') {
             $row=$this->sql('SELECT participant_version,visibility_json FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=? FOR UPDATE',[$id,$request['entity_id']])['rows'][0]??null;
             if(!$row || (string)$row['participant_version']!==$request['participant_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');

@@ -82,11 +82,28 @@ final class AF_ACS_AuthorizationService
     }
 
     /** Native thread access is checked by the service before this entity-specific grant. */
-    public static function controller(array $entity,array $rows,array $session,array $roles,string $uid,array $delegations=[],string $category='ordinary'): ?array
+    public static function controller(array $entity,array $rows,array $session,array $roles,string $uid,array $delegations=[],string $category='ordinary',array $context=[]): ?array
     {
         try {$set=self::assignment($rows);} catch (RuntimeException) {return null;}
         if ((string)$entity['session_id']!==(string)$session['id'] || (string)$rows[0]['session_id']!==(string)$session['id']
             || (string)$rows[0]['entity_id']!==(string)($entity['id']??$entity['entity_id'])) return null;
+        if($entity['kind']==='summon'){
+            if($category!=='ordinary'||$entity['owner_uid']!==null)return null;
+            $d=json_decode($entity['definition_json'],true,64,JSON_THROW_ON_ERROR);$v=$d['lifecycle']??null;
+            if(($v['status']??'active')!=='active'||!empty($v['pending_independent']))return null;
+            if(($v['independent']??($d['spawn']['spec']['group']==='independent'))===true){$entity['kind']='monster';}
+            else{
+                $id=(string)$entity['source_entity_id'];$source=$context['entities'][$id]??null;if(!$source||$source['kind']==='summon'||(string)$source['control_group_id']!==(string)$entity['control_group_id'])return null;
+                $sourceRows=array_values(array_filter($context['controllers']??[],static fn($c)=>(string)$c['entity_id']===$id&&$c['status']==='active'&&($c['valid_until']===null||(int)$c['valid_until']>time())));
+                $proof=self::controller($source,$sourceRows,$session,$roles,$uid,[],$category);$grant=$rows[0];
+                if(!$proof && in_array($source['kind'],['character','pet'],true)){
+                    $borrow=$entity;$borrow['owner_uid']=$source['owner_uid'];$borrow['kind']='pet';
+                    $proof=self::delegatedController($borrow,$grant,$session,$roles,$uid,$delegations,$category);
+                }
+                if(!$proof || (json_decode($proof['permissions_json'],true)['combat_operations_enabled']??false)!==true)return null;
+                $grant['source_control_proof']=self::controlProof($proof);return $grant;
+            }
+        }
         $owned=in_array($entity['kind'],['character','pet'],true);
         if ($owned) {
             if ($entity['owner_uid']===null || $set['mode']!=='exclusive' || $set['uids']!==[(string)$entity['owner_uid']]) return null;
@@ -123,7 +140,7 @@ final class AF_ACS_AuthorizationService
 
     public static function controlProof(array $grant): string
     {
-        return ($grant['delegation_id']??'owner').':'.($grant['delegation_version']??'0').':'.$grant['assignment_version'];
+        return ($grant['delegation_id']??'owner').':'.($grant['delegation_version']??'0').':'.$grant['assignment_version'].(isset($grant['source_control_proof'])?':source:'.$grant['source_control_proof']:'');
     }
 
     /** Retains native MyBB super-admin access ONLY for existing ACP facilities. */

@@ -21,7 +21,7 @@ trait AF_ACS_SpawnPersistence
             if($this->sql('SELECT id FROM '.$this->table('entities').' WHERE spawn_key=? FOR UPDATE',[$key])['rows'])throw new RuntimeException('ACS_SPAWN_DUPLICATE_IDENTITY');
             $group=$object?null:$source['control_group_id'];
             if($s['group']==='independent')$group=$this->sql('INSERT INTO '.$this->table('control_groups').' (session_id,owner_uid,kind,group_version,config_json) VALUES (?,NULL,?,1,?)',
-                [$row['session_id'],'independent',self::json(['schema_version'=>1,'admission'=>'next_round_pending','source_event_id'=>$event])])['id'];
+                [$row['session_id'],'independent',self::json(['schema_version'=>1])])['id'];
             $spawn=['source_event_id'=>$event,'spawn_index'=>$index,'encounter_id'=>$row['encounter_id'],'source_entity_id'=>$actor,'side_id'=>$source['side_id'],'zone_id'=>null,
                 'spec'=>$s,'admission'=>$object?'passive_object':'pending_roster','created_round_turn_id'=>$row['turn_id']];
             $snapshotPayload=['schema_version'=>1,'numeric_policy'=>AF_ACS_Numeric::POLICY,'engine_version'=>AF_ACS_Resolver::VERSION,'contract_id'=>'ic-acs.spawn-snapshot.v1',
@@ -52,7 +52,7 @@ trait AF_ACS_SpawnPersistence
                     $this->sql('SELECT * FROM '.$this->table('controllers').' WHERE session_id=? AND entity_id=? AND status=? AND valid_from<=? AND (valid_until IS NULL OR valid_until>?) ORDER BY id',[$row['session_id'],$actor,'active',time(),time()])['rows'];
                 if(!$controllers)throw new RuntimeException('ACS_SPAWN_CONTROL_UNSUPPORTED');
                 foreach($controllers as $controller)$this->sql('INSERT INTO '.$this->table('controllers').' (session_id,entity_id,controller_uid,mode,status,assignment_version,valid_from,valid_until,permissions_json) VALUES (?,?,?,?,?,1,?,?,?)',
-                    [$row['session_id'],$id,$controller['controller_uid'],$controller['mode'],'active',$controller['valid_from'],$controller['valid_until'],self::json(['schema_version'=>1,'scope'=>'spawn_assignment','combat_operations_enabled'=>false,'source_entity_id'=>$actor])]);
+                    [$row['session_id'],$id,$controller['controller_uid'],$controller['mode'],'active',$controller['valid_from'],$controller['valid_until'],self::json(['schema_version'=>1,'scope'=>'spawn_assignment','combat_operations_enabled'=>true,'source_entity_id'=>$actor])]);
             }
             $out[]=['entity_id'=>$id,'source_event_id'=>$event,'spawn_index'=>$index,'spawn_key'=>$key,'snapshot_id'=>$snapshot,'snapshot_hash'=>hash('sha256',self::json($snapshotPayload)),'kind'=>$s['kind'],'control_group_id'=>$group];
         }
