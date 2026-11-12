@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/Numeric.php';
+require_once __DIR__.'/Control.php';
 require_once __DIR__.'/CausalGraph.php';
 
 /** Detached object projection. No clock, callbacks, SQL, live KB or random sampling. */
@@ -13,6 +14,7 @@ final class AF_ACS_Environment
     {if(!is_int($n)||$n<$minimum||$n>9007199254740991)self::fail('ACS_OBJECT_VALUE_INVALID');return $n;}
     public static function definition(array $o):array
     {
+        require_once __DIR__.'/Awareness.php';AF_ACS_Awareness::perception($o['perception']??null);unset($o['perception']);
         if(($o['schema']??null)==='ic-acs.object-template.v1'){
             self::fields($o,['schema','name','properties']);$mechanics=['categories'=>['passive'],'initial_status'=>'active','durability'=>null,'passive'=>[],'triggers'=>[],'gm_operations'=>[]];
         }else{
@@ -48,6 +50,25 @@ final class AF_ACS_Environment
             self::integer($effect['amount'],1);
         }
         return $mechanics;
+    }
+    public static function hasMassAbility(array $dto):bool {return array_key_exists('hidden_mass_effect',$dto['data']['definition']??[]);}
+    /** Explicit non-spatial object pulse. Hidden recipients are server-selected and never become action targets. */
+    public static function compileMass(array $dto):array
+    {
+        $d=$dto['data']['definition'];$m=$d['hidden_mass_effect'];self::fields($m,['schema','tag','amount','damage_type']);
+        if($m['schema']!=='ic-acs.hidden-object-mass.v1'||!is_string($m['tag'])||!preg_match('/\A[a-z][a-z0-9_-]{0,63}\z/D',$m['tag'])||!in_array($m['damage_type'],['physical','elemental','true'],true))self::fail();self::integer($m['amount'],1);
+        $metadata=['schema','type_profile','version','revision','name','title','description','notes','icon_url','icon_class','sortorder','active','type','subtype','slot','damage_type','targeting','cooldown_unit','duration_unit','level_cap','magic_direction_ref','damage_element','element','target_policy','action_cost','hidden_mass_effect'];
+        $empty=['range','cast_time','cooldown','cooldown_value','duration','duration_value','max_charges','resources','effects','modifiers','base_stats','triggers','conditions','stacking','upgrade_requirements','cost_value','cost_resource','costs','formula_profile','formula_ref','formula_refs','target_count','application_conditions','application_mode','summon','usage_limits','timing','math_modifiers','passive_effects','reflection','lifesteal','grants','immunities','can_crit','auto_hit','damage_value','heal_value','shield_value'];
+        if(array_diff(array_keys($d),[...$metadata,...$empty])||($d['type']??null)!=='active'||($d['targeting']??null)!=='self'||AF_ACS_Control::targetPolicy($d)!==['kind'=>'self_only']||!is_int($d['action_cost']??null)||$d['action_cost']<1||$d['action_cost']>2147483647||($dto['ready']??null)!==true||!is_string($dto['definition_version']['declared_version']??null)||$dto['definition_version']['declared_version']==='')self::fail();foreach($empty as $key)if(!empty($d[$key]))self::fail();
+        return ['supported'=>true,'source_ref'=>['key'=>$dto['source']['key'],'version'=>$dto['definition_version']['declared_version'],'fingerprint'=>$dto['definition_version']['fingerprint']],'target_policy'=>['kind'=>'self_only'],'components'=>[],'costs'=>[['kind'=>'ap','amount'=>$d['action_cost']]],'targeting'=>'self','hidden_mass_effect'=>$m];
+    }
+    public static function mass(array $state,array $spec):array
+    {
+        $effects=[];foreach($state['perception_subjects']??[] as $subject){if($subject['kind']!=='object'||!in_array($spec['tag'],$subject['perception']['tags']??[],true))continue;$v=$state['objects'][$subject['id']];$m=self::definition($v['definition']);
+            if(in_array($v['status'],['expired','destroyed'],true)||!in_array($spec['damage_type'],$m['durability']['damage_types']??[],true))continue;
+            $effects[]=['kind'=>'object_damage','entity_id'=>$subject['id'],'expected_version'=>$v['object_version'],'amount'=>$spec['amount'],'damage_type'=>$spec['damage_type']];
+        }
+        return AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>$effects])->serverState();
     }
     public static function initial(string $entity,string $encounter,string $source,array $definition,array $duration):array
     {

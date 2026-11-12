@@ -25,7 +25,7 @@ trait AF_ACS_StatusPersistence
         $this->statusRows($session['id'],true);$projection=$this->statusProjection($session['id']);$barriers=$this->barrierProjection($session['id'],$encounter['id']);
         $summons=$this->summonProjection($session['id'],$encounter['id']);
         $objects=$this->objectProjection($session['id'],$encounter['id']);
-        $state=['objects'=>$objects,'summons'=>$summons,'schema_version'=>1,'entities'=>[],'groups'=>[],'barriers'=>$barriers['pools'],'next_barrier_order'=>$barriers['next_order'],'status_instances'=>$projection['instances'],'next_status_order'=>$projection['next_order']];
+        $state=['awareness'=>$this->awarenessProjection($session['id'],$encounter['id']),'awareness_attempts'=>$this->awarenessAttempts($session['id'],$encounter['id']),'perception_subjects'=>$this->perceptionSubjects($session['id'],$encounter['id']),'objects'=>$objects,'summons'=>$summons,'schema_version'=>1,'entities'=>[],'groups'=>[],'barriers'=>$barriers['pools'],'next_barrier_order'=>$barriers['next_order'],'status_instances'=>$projection['instances'],'next_status_order'=>$projection['next_order']];
         $defenses=[];$catalog=['by_target'=>[]];$resources=[];$needed=[];$groupTurns=[];
         foreach($barriers['pools'] as $pool)foreach(array_unique([$pool['source_entity_id'],...$pool['targets']]) as $poolEntity)$needed[$poolEntity]=true;
         foreach($projection['instances'] as $effect)if($effect['status']==='active'&&isset($effect['spec']['upkeep'])&&($effect['spec']['scope']!=='combat'||$effect['encounter_id']===$encounter['id']))$needed[$effect['source_entity_id']]=true;
@@ -86,7 +86,8 @@ trait AF_ACS_StatusPersistence
         $poolChanges=$this->persistBarriers($session['id'],$encounter['id'],$state['barriers'],$after['barriers'],[]);
         $summonChanges=$this->persistSummons($session['id'],$encounter['id'],$state['summons'],$after['summons'],$actor);
         $objectChanges=$this->persistObjects($session['id'],$encounter['id'],$state['objects'],$after['objects']);
-        return ['objects'=>$objectChanges,'summons'=>$summonChanges,'trace'=>$trace,'entities'=>$changes,'groups'=>$groupChanges,'statuses'=>$statuses,'barriers'=>$poolChanges];
+        $knowledgeChanges=$this->persistAwareness($session['id'],$encounter['id'],$state['awareness'],$after['awareness'],$state['awareness_attempts'],$after['awareness_attempts']);
+        return ['awareness'=>$knowledgeChanges,'objects'=>$objectChanges,'summons'=>$summonChanges,'trace'=>$trace,'entities'=>$changes,'groups'=>$groupChanges,'statuses'=>$statuses,'barriers'=>$poolChanges];
     }
     /** Server-persisted source priority; expected session/encounter CAS is owned by command(). */
     public function setUpkeepOrder(array $session,array $encounter,array $individual,array $ids):array

@@ -17,6 +17,8 @@ final class AF_ACS_EncounterService
         if($write && $session['status']!=='active')throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
         return $session;
     }
+    public function awareness(): AF_ACS_AwarenessService
+    {require_once __DIR__.'/AwarenessService.php';return new AF_ACS_AwarenessService($this->repository,$this->access);}
     public function environment(): AF_ACS_EnvironmentService
     {
         require_once __DIR__.'/EnvironmentService.php';return new AF_ACS_EnvironmentService($this->repository,$this->access);

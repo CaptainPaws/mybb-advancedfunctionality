@@ -115,9 +115,10 @@ final class AF_ACS_Spawn
             || ($dto['definition_version']['declared_version']??null)!==$ref['version'] || ($dto['definition_version']['fingerprint']??null)!==$ref['fingerprint'])self::fail('ACS_SPAWN_TEMPLATE_INVALID');
         $d=$dto['data']['definition'];
         if($s['kind']==='spawn_entity'){
-            $allowed=['schema','type_profile','version','revision','name','title','description','notes','icon_url','icon_class','family','archetype','faction','rank','threat_tier','level','combat_stats','resists','resistances','weaknesses','ability_keys','loot','magic_direction_ref','damage_element','modifiers','math_modifiers','equipment','base_stats','permanent_modifiers','resources','conditions','grants','passive_effects','triggers','immunities'];
+            $allowed=['schema','type_profile','version','revision','name','title','description','notes','icon_url','icon_class','family','archetype','faction','rank','threat_tier','level','combat_stats','resists','resistances','weaknesses','ability_keys','loot','magic_direction_ref','damage_element','modifiers','math_modifiers','equipment','base_stats','permanent_modifiers','resources','conditions','grants','passive_effects','triggers','immunities','perception'];
             if(array_diff(array_keys($d),$allowed))self::fail('ACS_SPAWN_TEMPLATE_FIELDS_UNSUPPORTED');
             foreach(['loot','modifiers','math_modifiers','equipment','base_stats','permanent_modifiers','resources','conditions','grants','passive_effects','triggers','weaknesses'] as $f)if(!empty($d[$f]))self::fail('ACS_SPAWN_TEMPLATE_FIELDS_UNSUPPORTED');
+            require_once __DIR__.'/Awareness.php';AF_ACS_Awareness::perception($d['perception']??null);
             $hp=AF_ACS_Numeric::number($dto['data']['combat_stats']['hp']??null);
             if($hp<1 || $hp>9007199254740991 || floor((float)$hp)!=(float)$hp)self::fail('ACS_SPAWN_TEMPLATE_INVALID');
             return ['hp'=>(int)$hp,'stats'=>$dto['data']['combat_stats'],'properties'=>null];

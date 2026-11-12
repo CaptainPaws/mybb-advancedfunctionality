@@ -4,11 +4,21 @@ require_once __DIR__.'/Repository.php';
 require_once __DIR__.'/TerminalReceiptPersistence.php';
 require_once __DIR__.'/Adapters/SessionAccess.php';
 require_once __DIR__.'/../Domain/Publication.php';
+require_once __DIR__.'/../Application/AudienceService.php';
 
 /** Batched, immutable result projection. No snapshots, Builder, Resolver or mechanical writers. */
 final class AF_ACS_CombatCardQuery extends AF_ACS_Repository
 {
     use AF_ACS_TerminalReceiptPersistence;
+    /** Opaque request-cache partition; freshly checked native rights and current authorization/knowledge generations. */
+    public function audienceCacheKey(string $tid,AF_ACS_SessionAccess $access):string
+    {
+        $access->thread($tid);$uid=$access->uid();$sidRows=$this->sql('SELECT s.id,s.session_version,e.id AS encounter_id,e.encounter_version,a.id AS awareness_id,a.awareness_version,a.audience_kind,a.audience_id FROM '.$this->table('sessions').' s LEFT JOIN '.$this->table('encounters').' e ON e.session_id=s.id LEFT JOIN '.$this->table('awareness').' a ON a.encounter_id=e.id WHERE s.tid=? ORDER BY s.id,e.id,a.id',[$tid])['rows'];
+        $roles=$this->sql('SELECT r.* FROM '.$this->table('session_roles').' r JOIN '.$this->table('sessions').' s ON s.id=r.session_id WHERE s.tid=? AND r.uid=? ORDER BY r.id',[$tid,$uid])['rows'];
+        $controllers=$this->sql('SELECT c.* FROM '.$this->table('controllers').' c JOIN '.$this->table('sessions').' s ON s.id=c.session_id WHERE s.tid=? ORDER BY c.id',[$tid])['rows'];
+        $delegations=$this->sql('SELECT d.* FROM '.$this->table('delegations').' d JOIN '.$this->table('sessions').' s ON s.id=d.session_id WHERE s.tid=? AND d.delegate_uid=? ORDER BY d.id',[$tid,$uid])['rows'];
+        return hash('sha256',serialize([$uid,$tid,$access->administrator(),time(),$sidRows,$roles,$controllers,$delegations]));
+    }
     public function forPosts(string $tid, array $pids, ?AF_ACS_SessionAccess $access = null): array
     {
         $this->transactions->assertExternalBoundary();$access??=new AF_ACS_SessionAccess;$uid=$access->uid();
@@ -17,8 +27,9 @@ final class AF_ACS_CombatCardQuery extends AF_ACS_Repository
         if (!$ids) { return []; }if(count($ids)>100){throw new RuntimeException('ACS_CARD_PAGE_LIMIT');}
         $role='SELECT 1 FROM '.$this->table('session_roles').' r WHERE r.session_id=s.session_id AND r.uid=? AND (r.expires_at IS NULL OR r.expires_at>?)';
         $rows=$this->sql('SELECT s.*,p.visible AS native_visible,EXISTS('.$role." AND r.role IN ('owner','gm')) AS detailed FROM ".$this->table('submissions').' s JOIN `'.$this->prefix.'posts` p ON p.pid=s.pid WHERE s.tid=? AND p.tid=s.tid AND p.uid=s.author_uid AND p.fid=? AND s.pid IN ('.implode(',',array_fill(0,count($ids),'?')).') AND EXISTS('.$role.')',array_merge([$uid,time(),$tid,$fid],$ids,[$uid,time()]))['rows'];
-        $allowed=[];$needDetails=false;
+        $allowed=[];$needDetails=false;$scopes=[];$repo=new AF_ACS_EncounterRepository($this->connection);
         foreach($rows as $row){
+            $scope=$scopes[(string)$row['session_id']]??=(new AF_ACS_SessionService($repo,$access))->view((string)$row['session_id']);$row['detailed']=$scope['can_manage'];
             if((string)$row['native_visible']!=='1' && (string)$row['author_uid']!==$uid && !(bool)$row['detailed'])continue;
             foreach(['pid','tid','turn_id','author_uid','session_id','state_version'] as $k)$row[$k]=(string)$row[$k];
             $allowed[$row['submission_id']]=$row;$needDetails=$needDetails||(bool)$row['detailed'];

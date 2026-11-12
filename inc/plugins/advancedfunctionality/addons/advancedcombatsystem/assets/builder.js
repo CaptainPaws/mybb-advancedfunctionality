@@ -42,7 +42,22 @@
     }
     const actor = id => ctx.actors.find(a => a.id === id);
     const ability = action => (actor(action.actor_id)?.choices || []).find(a => a.key === action.ability_key);
+    function knowledge() {
+      const container = part('knowledge'); if (!container) return;
+      container.replaceChildren();
+      const labels = {suspected:'Есть признаки', detected:'Обнаружено', identified:'Опознано'};
+      (ctx.known_subjects || []).forEach(entry => {
+        const details = entry.details || {};
+        container.append(node('p', (labels[entry.level] || 'Известный объект') + ': ' + (details.name || details.hint || 'Доступные сведения ограничены.')));
+        if (ctx.can_manage && entry.gm_only) {
+          const block = node('details'); block.append(node('summary', 'Осведомлённость · GM'));
+          (entry.awareness || []).forEach(row => block.append(node('p', row.audience_kind + ' #' + row.audience_id + ': ' + row.level + ' · v' + row.awareness_version)));
+          container.append(block);
+        }
+      });
+    }
     function actionForm(chosen) {
+      knowledge();
       const a = chosen?.actor_id || field('actor').value;
       options(field('actor'), ctx.actors, a);
       options(field('ability'), (actor(a)?.choices || []).filter(c => !c.sealed_only), chosen?.ability_key || field('ability').value, 'Выберите способность или предмет');
@@ -172,7 +187,7 @@
       });
       if (sealView.summary) {
         box.append(node('h4', sealView.summary.label));
-        sealView.summary.actions.forEach(a => box.append(node('p', a.item ? ('Предмет #' + a.item.item_id + ' · ' + (a.item.operation === 'consume' ? 'использование' : 'смена оружия') + ' · 1 AP, ' + a.item.qty + ' шт.') : ((actor(a.actor_id)?.name || 'Существо') + ': ' + ({hit:'попадание',crit:'критическое попадание',miss:'промах',used:'действие с предметом'}[a.outcome] || a.outcome) + ', урон ' + a.damage + ', P_hit=' + a.probabilities.P_hit + '%, P_crit=' + a.probabilities.P_crit + '%.'))));
+        sealView.summary.actions.forEach(a => { if (['search','share','environment'].includes(a.outcome)) { box.append(node('p', (actor(a.actor_id)?.name || 'Существо') + ': ' + (a.outcome === 'search' ? 'Поиск' : (a.outcome === 'share' ? 'Передача сведений' : 'Воздействие на окружение')) + '. Сведения изменятся после подтверждённой публикации.')); return; } box.append(node('p', a.item ? ('Предмет #' + a.item.item_id + ' · ' + (a.item.operation === 'consume' ? 'использование' : 'смена оружия') + ' · 1 AP, ' + a.item.qty + ' шт.') : ((actor(a.actor_id)?.name || 'Существо') + ': ' + ({hit:'попадание',crit:'критическое попадание',miss:'промах',used:'действие с предметом'}[a.outcome] || a.outcome) + ', урон ' + a.damage + ', P_hit=' + a.probabilities.P_hit + '%, P_crit=' + a.probabilities.P_crit + '%.'))); });
         box.append(node('p', sealView.confirmed ? 'Сводка подтверждена. Общая публикация выключена; тестовая отправка доступна только разрешённому пользователю.' : 'Сводка требует явного подтверждения. Реальные HP/AP не изменены.'));
       }
       if (sealView?.friendly_fire?.required) box.append(node('p','Предупреждение: выбрана атака союзника. Урон не уменьшается автоматически.'));
@@ -214,7 +229,7 @@
     function renderPreview(dto) {
       part('preview').replaceChildren(node('p', dto.label + '. Сценарий: ' + ({ hit: 'попадания без крита', crit: 'критические попадания', miss: 'промахи' }[dto.scenario])));
       const list = node('ol'); dto.actions.forEach((a, i) => {
-        const li = node('li'), p = a.probabilities; if (a.item) li.append(node('p', 'Предмет #' + a.item.item_id + ': ' + (a.item.operation === 'consume' ? 'использовать' : 'сменить оружие') + ', ' + a.item.qty + ' шт., 1 AP. Эффект не зависит от сценария попадания.')); else li.append(node('p', 'Действие ' + (i + 1) + ': P попадания ' + p.P_hit + '%, P крита при попадании ' + p.P_crit + '%. Условный урон: ' + a.damage + '.'));
+        const li = node('li'), p = a.probabilities; if (a.operation) li.append(node('p', a.operation === 'search' ? 'Поиск: вероятность обнаружения ' + p.P_hit + '%. Бросок будет запечатан отдельно.' : (a.operation === 'share' ? 'Передача известных сведений разрешённой аудитории.' : 'Воздействие на окружение по правилам действия.'))); else if (a.item) li.append(node('p', 'Предмет #' + a.item.item_id + ': ' + (a.item.operation === 'consume' ? 'использовать' : 'сменить оружие') + ', ' + a.item.qty + ' шт., 1 AP. Эффект не зависит от сценария попадания.')); else li.append(node('p', 'Действие ' + (i + 1) + ': P попадания ' + p.P_hit + '%, P крита при попадании ' + p.P_crit + '%. Условный урон: ' + a.damage + '.'));
         a.components.forEach(c => li.append(node('p', 'Компонент ' + (c.source_index + 1) + ': ' + ({ physical: 'физический', elemental: 'стихийный', true: 'истинный' }[c.damage_type] || 'урон') + ', защита ' + c.effective_defense + ', после защиты ' + c.post_defense + ', распределено ' + c.allocated + '.')));
         li.append(node('p', 'Стоимость: ' + a.costs.map(c => c.amount + ' ' + (c.kind === 'ap' ? 'AP' : 'ресурса')).join(', '))); list.append(li);
       }); part('preview').append(list, node('h4', 'Виртуальное состояние — не сохранено'));

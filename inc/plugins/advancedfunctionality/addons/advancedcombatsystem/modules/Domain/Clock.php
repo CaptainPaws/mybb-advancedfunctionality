@@ -92,6 +92,7 @@ final class AF_ACS_Clock
         }unset($pool);
         $state=AF_ACS_Spawn::boundary($state,$boundary,$key,$events);
         $state=AF_ACS_Environment::boundary($state,$boundary,$key,$events);
+        $state=AF_ACS_Awareness::boundary($state,$boundary,$key,$events);
         return new AF_ACS_EffectsResult($state,['engine_version'=>self::VERSION,'boundary_key'=>$key,'events'=>$events,'signals'=>$signals,'tick_keys'=>$tickKeys,'persistent'=>false],$initial);
     }
     /** This is a state graph, never authorization or permission to skip boundaries/publication. */

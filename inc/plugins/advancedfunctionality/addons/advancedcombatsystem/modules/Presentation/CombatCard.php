@@ -13,10 +13,11 @@ final class AF_ACS_CombatCard
         if ($card['details']===null) {return $html.'<p>Подробности ограничены правилами видимости сессии.</p></aside>';}
         $html.='<ol>';
         foreach($card['details'] as $step){
-            $outcome=['hit'=>'попадание','crit'=>'критическое попадание','miss'=>'промах','multiple'=>'несколько целей','used'=>'действие с предметом выполнено'][$step['outcome']]??'исход недоступен';
+            $outcome=['hit'=>'попадание','crit'=>'критическое попадание','miss'=>'промах','multiple'=>'несколько целей','used'=>'действие с предметом выполнено','search'=>'поиск выполнен','share'=>'передача сведений выполнена','environment'=>'воздействие на окружение выполнено'][$step['outcome']]??'исход недоступен';
             $html.='<li><p><strong>'.self::esc($step['actor_name']).' → '.self::esc($step['target_name']).'</strong> · '.self::esc($outcome).'</p>';
             $costs=[];foreach($step['costs'] as $c)$costs[]=self::esc($c['amount']).' '.($c['kind']==='ap'?'AP':'ресурса');
-            $html.='<p>Стоимость: '.implode(', ',$costs).'. Урон: '.self::esc($step['damage']).'.</p>';
+            $special=in_array($step['outcome'],['search','share','environment'],true);$html.='<p>Стоимость: '.implode(', ',$costs).'.'.($special?'':' Урон: '.self::esc($step['damage']).'.').'</p>';
+            if($special){$html.=$step['outcome']==='environment'?'<p>Воздействие на окружение применено.</p></li>':'<p>Доступные сведения обновляются по правилам аудитории.</p></li>';continue;}
             if ($step['outcome']==='used') {
                 $item=$step['item']??[];$operation=($item['operation']??'')==='consume'?'Использование':'Смена оружия';
                 $html.='<p>'.self::esc($operation).' · предмет #'.self::esc($item['item_id']??'—').' · '.self::esc($item['qty']??'—').' шт. Подтверждено сервером.</p></li>';

@@ -26,10 +26,12 @@ final class AF_ACS_SealService
     public function status(string $id):array{return $this->view($this->draft(AF_ACS_Repository::integer($id)));}
     private function view(array $draft):array
     {
+        $audience=new AF_ACS_AudienceService($this->repo,$this->access,$draft['session_id'],$draft['encounter_id']);
         $all=$this->repo->sealRows($draft['id']);$history=[];$active=[];$actions=[];$tape=[];
         foreach($all as $row){$payload=$this->repo->sealPayload($row);$t=$this->repo->sealTape((string)$row['id']);
             if(!hash_equals($payload['tape_hash']??'',hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'tape'=>$t]))))throw new RuntimeException('ACS_SEAL_TAPE_INVALID');
-            $history[]=['id'=>(string)$row['id'],'history_index'=>(int)$row['action_index'],'status'=>$row['status'],'ap_cost'=>(int)$row['ap_cost'],'action'=>$payload['action'],'rolls'=>$t];
+            $known=true;foreach($payload['action']['targets'] as $target)if($audience->knowledge('entity',$target,$payload['action']['actor_id'])['level']!=='identified')$known=false;
+            if($known)$history[]=['id'=>(string)$row['id'],'history_index'=>(int)$row['action_index'],'status'=>$row['status'],'ap_cost'=>(int)$row['ap_cost'],'action'=>$payload['action'],'rolls'=>$t];
             if($row['status']==='sealed'){$active[]=$row;$actions[]=$payload['action'];$tape[]=$t;}
         }
         $result=['schema_version'=>1,'draft_id'=>$draft['id'],'draft_version'=>$draft['draft_version'],'active_count'=>count($active),'history'=>$history,'quota_used'=>$this->repo->sealQuota($draft['turn_id']),'quota_budget'=>null,'summary'=>null,'confirmed'=>false,'confirmation_hash'=>null,'confirmable'=>false,'changed'=>false,'blocked'=>false,'publication_enabled'=>false,'persistent_combat_state'=>false];
@@ -52,20 +54,22 @@ final class AF_ACS_SealService
             $entities=[];foreach($resolved->serverState()['entities'] as $id=>$e)$entities[]=['entity_id'=>(string)$id,'hp'=>$e['hp'],'max_hp'=>$e['max_hp'],'life_state'=>$e['life_state']];
             $summary=['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'rng_version'=>'uniform53-v1','label'=>'Запечатанные серверные результаты — ещё не опубликованы','actions'=>$rows,'virtual_entities'=>$entities,'virtual_groups'=>$resolved->serverState()['groups']];
             $summary=array_replace($summary,AF_ACS_BuilderService::visibleState($resolved->serverState(),$p['scope']));
-            if (isset($resolved->serverPlan()['item_state'])) $summary['item_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'items'=>$resolved->serverPlan()['item_state']]));
             $dependencyHash=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'dependencies'=>$dependencies]));
             if(isset($resolved->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'boundaries'=>$resolved->serverPlan()['entity_end_boundaries']]));
+            $summary['awareness_hash']=hash('sha256',serialize([$resolved->serverState()['awareness'],$resolved->serverState()['awareness_attempts']]));
             if(!empty($resolved->serverState()['objects']))$summary['object_state_hash']=hash('sha256',serialize($resolved->serverState()['objects']));
             if(!empty($resolved->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($resolved->serverState()['summons']));
             if(array_filter($resolved->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'instances'=>$resolved->serverState()['status_instances']]));
             if(($reactionHash=AF_ACS_Resolver::reactionHash($resolved,$p['context']))!==null)$summary['reaction_hash']=$reactionHash;
+            // Preserve the same summary field order as CombatCommitWriter.
+            if (isset($resolved->serverPlan()['item_state'])) $summary['item_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'items'=>$resolved->serverPlan()['item_state']]));
             if(($controlHash=AF_ACS_Control::stateHash($resolved->serverState()['status_instances']??[]))!==null)$summary['control_effects_hash']=$controlHash;
             $summary['friendly_fire_hash']=$p['friendly_fire']['confirmation_hash'];
             $mechanical=$summary;unset($mechanical['label']);
             $simulationHash=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'actions'=>$actions,'tape'=>$tape,'summary'=>$mechanical]));
             $confirmation=hash('sha256','acs-confirm-v1'."\n".$dependencyHash."\n".$simulationHash);
             $old=json_decode($draft['dependency_json'],true,32,JSON_THROW_ON_ERROR)['seal']??[];
-            $result['summary']=$summary;$result['dependency_hash']=$dependencyHash;$result['simulation_hash']=$simulationHash;$result['confirmation_hash']=$confirmation;
+            $publicSummary=$summary;if(!$p['scope']['can_manage'])foreach(array_keys($publicSummary) as $field)if(str_ends_with($field,'_hash'))unset($publicSummary[$field]);$result['summary']=$publicSummary;$result['dependency_hash']=$dependencyHash;$result['simulation_hash']=$simulationHash;$result['confirmation_hash']=$confirmation;
             $result['changed']=isset($old['simulation_hash'])&&($old['simulation_hash']!==$simulationHash||($old['dependency_hash']??null)!==$dependencyHash);
             $result['confirmable']=count($actions)===count($this->actions($draft));$result['confirmed']=$result['confirmable']&&$draft['confirmation_hash']!==null&&hash_equals($draft['confirmation_hash'],$confirmation)&&(!$p['friendly_fire']['required']||($old['friendly_fire_confirmation']??null)===$p['friendly_fire']['confirmation_hash']);
         }catch(Throwable $e){$result['blocked']=true;$result['reason']=AF_ACS_BuilderService::message($e);if(str_starts_with($e->getMessage(),'ACS_BEHAVIOR_'))$result['behavior']=['status'=>$e->getMessage()==='ACS_BEHAVIOR_UNSUPPORTED'?'UNSUPPORTED':'BLOCKED','code'=>$e->getMessage()];}

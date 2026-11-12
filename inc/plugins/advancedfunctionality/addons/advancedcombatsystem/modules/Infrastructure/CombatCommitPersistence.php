@@ -27,6 +27,8 @@ trait AF_ACS_CombatCommitPersistence
         $f['custody']=$this->sql('SELECT * FROM '.$this->table('custody').' WHERE session_id=? ORDER BY id'.$suffix,[$sid])['rows'];
         $f['inventory_operations']=$this->sql('SELECT operation_key,status,operation_version,payload_hash,SHA2(request_json,256) AS actual_hash,SHA2(result_json,256) AS result_hash FROM '.$this->table('operations')." WHERE external_system='advancedinventory' AND ((session_id=? AND status IN ('prepared','recovery_required')) OR ((status IN ('prepared','recovery_required') OR (kind='inventory.transfer' AND status='committed')) AND JSON_UNQUOTE(JSON_EXTRACT(request_json,'$.payload.item_id')) IN (SELECT CAST(inventory_item_id AS CHAR) FROM ".$this->table('equipment')." WHERE session_id=? UNION SELECT CAST(inventory_item_id AS CHAR) FROM ".$this->table('custody')." WHERE session_id=? AND status='held'))) ORDER BY operation_key".$suffix,[$sid,$sid,$sid])['rows'];
         $f['effects']=$this->statusRows($sid,$lock);$f['reactions']=$this->reactionRows($sid,$eid,$lock);$f['barriers']=$this->barrierRows($sid,$eid,$lock);
+        $f['awareness']=$this->sql('SELECT * FROM '.$this->table('awareness').' WHERE encounter_id=? ORDER BY id'.$suffix,[$eid])['rows'];
+        $f['awareness_attempts']=$this->sql('SELECT operation_key,result_json FROM '.$this->table('operations').' WHERE session_id=? AND encounter_id=? AND kind=? ORDER BY operation_key'.$suffix,[$sid,$eid,'awareness.check'])['rows'];
         $f['objects']=$this->sql('SELECT o.* FROM '.$this->table('objects').' o JOIN '.$this->table('entities').' e ON e.id=o.entity_id WHERE e.session_id=? AND o.encounter_id=? ORDER BY o.entity_id'.$suffix,[$sid,$eid])['rows'];
         $f['barrier_targets']=$this->sql('SELECT t.* FROM '.$this->table('barrier_targets').' t JOIN '.$this->table('barrier_pools').' p ON p.id=t.pool_id JOIN '.$this->table('effects').' e ON e.id=p.effect_id WHERE e.session_id=? AND e.encounter_id=? ORDER BY t.pool_id,t.entity_id'.$suffix,[$sid,$eid])['rows'];
         $f['reaction_rolls']=$this->sql('SELECT * FROM '.$this->table('rolls')." WHERE session_id=? AND sealed_action_id IS NULL AND check_kind='reaction' ORDER BY id".$suffix,[$sid])['rows'];
@@ -208,6 +210,7 @@ trait AF_ACS_CombatCommitPersistence
         $retired=$this->retireCompetingPlans($row,$f,$turn);
         $retirementKey=self::indexed($f['control_groups'])[$group]['owner_uid']===null?'superseded_npc_drafts':'superseded_delegated_drafts';
         $objects=$this->persistObjects($row['session_id'],$row['encounter_id'],$before['objects']??[],$after['objects']??[]);
-        return ['objects'=>$objects,'summons'=>$summons,'entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers]+($retired?[$retirementKey=>$retired]:[]);
+        $awareness=$this->persistAwareness($row['session_id'],$row['encounter_id'],$before['awareness']??[],$after['awareness']??[],$before['awareness_attempts']??[],$after['awareness_attempts']??[]);
+        return ['awareness'=>$awareness,'objects'=>$objects,'summons'=>$summons,'entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers]+($retired?[$retirementKey=>$retired]:[]);
     }
 }

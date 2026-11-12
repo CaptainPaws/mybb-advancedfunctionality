@@ -64,8 +64,8 @@ function af_advancedcombatsystem_combat_card(array $context): string
         $ids=array_values(array_filter($ids,static fn($id)=>preg_match('/\A[1-9][0-9]{0,9}\z/D',$id)));
         $ids[]=$pid;$ids=array_values(array_unique($ids));sort($ids,SORT_STRING);
         $chunk=intdiv((int)array_search($pid,$ids,true),100);$ids=array_slice($ids,$chunk*100,100);
-        static $cache=[];$key=(string)$mybb->user['uid'].':'.$tid.':'.implode(',',$ids);
-        if(!isset($cache[$key]))$cache[$key]=(new AF_ACS_CombatCardQuery($db))->forPosts($tid,$ids);
+        static $cache=[];$query=new AF_ACS_CombatCardQuery($db);$key=$query->audienceCacheKey($tid,new AF_ACS_SessionAccess).':'.implode(',',$ids);
+        if(!isset($cache[$key]))$cache[$key]=$query->forPosts($tid,$ids);
         if(!isset($cache[$key][$pid]))return '';
         $html=AF_ACS_CombatCard::render($cache[$key][$pid]);
         return af_advancedcombatsystem_presentation_css('has_acs_card').$html;
