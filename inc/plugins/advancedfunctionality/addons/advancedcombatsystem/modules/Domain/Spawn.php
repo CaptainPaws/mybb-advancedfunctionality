@@ -135,9 +135,10 @@ final class AF_ACS_Spawn
     public static function compile(array $dto): array
     {
         $d=$dto['data']['definition'];
-        $fields=['schema','type_profile','version','revision','name','title','description','notes','icon_url','icon_class','sortorder','active','type','subtype','slot','damage_type','targeting','range','cast_time','cooldown','cooldown_value','cooldown_unit','duration','duration_value','duration_unit','max_charges','level_cap','resources','effects','modifiers','base_stats','triggers','conditions','stacking','upgrade_requirements','action_cost','cost_value','cost_resource','costs','formula_profile','formula_ref','formula_refs','target_count','application_conditions','application_mode','summon','usage_limits','timing','math_modifiers','passive_effects','reflection','lifesteal','grants','immunities','magic_direction_ref','damage_element','element','can_crit','auto_hit','damage_value','heal_value','shield_value'];
+        $fields=['target_policy','schema','type_profile','version','revision','name','title','description','notes','icon_url','icon_class','sortorder','active','type','subtype','slot','damage_type','targeting','range','cast_time','cooldown','cooldown_value','cooldown_unit','duration','duration_value','duration_unit','max_charges','level_cap','resources','effects','modifiers','base_stats','triggers','conditions','stacking','upgrade_requirements','action_cost','cost_value','cost_resource','costs','formula_profile','formula_ref','formula_refs','target_count','application_conditions','application_mode','summon','usage_limits','timing','math_modifiers','passive_effects','reflection','lifesteal','grants','immunities','magic_direction_ref','damage_element','element','can_crit','auto_hit','damage_value','heal_value','shield_value'];
         if(array_diff(array_keys($d),$fields) || ($d['type']??null)!=='active' || ($d['targeting']??null)!=='self')self::fail('ACS_SPAWN_ABILITY_UNSUPPORTED');
         foreach(['range','cast_time','cooldown','cooldown_value','duration','duration_value','max_charges','resources','cost_value','cost_resource','costs','modifiers','base_stats','triggers','conditions','stacking','upgrade_requirements','formula_profile','formula_ref','formula_refs','target_count','application_conditions','application_mode','summon','usage_limits','timing','math_modifiers','passive_effects','reflection','lifesteal','grants','immunities','damage_value','heal_value','shield_value','auto_hit','can_crit'] as $f)if(!empty($d[$f]))self::fail('ACS_SPAWN_ABILITY_UNSUPPORTED');
+        require_once __DIR__.'/Control.php';if(AF_ACS_Control::targetPolicy($d)['kind']!=='self_only')self::fail('ACS_SPAWN_TARGET_UNSUPPORTED');
         $cost=$d['action_cost']??null;if(!is_int($cost)||$cost<1||$cost>2147483647)self::fail('ACS_SPAWN_COST_UNSUPPORTED');
         $spawns=[];
         foreach($dto['data']['ability_profile']['effects']??[] as $effect){
@@ -147,7 +148,7 @@ final class AF_ACS_Spawn
         }
         if(!$spawns || count($spawns)>16)self::fail('ACS_SPAWN_EFFECT_UNSUPPORTED');
         return ['supported'=>true,'source_ref'=>['key'=>$dto['source']['key'],'version'=>$dto['definition_version']['declared_version'],'fingerprint'=>$dto['definition_version']['fingerprint']],
-            'components'=>[],'costs'=>[['kind'=>'ap','amount'=>$cost]],'targeting'=>'self','spawns'=>$spawns];
+            'target_policy'=>['kind'=>'self_only'],'components'=>[],'costs'=>[['kind'=>'ap','amount'=>$cost]],'targeting'=>'self','spawns'=>$spawns];
     }
     public static function plan(array $ability,string $actor,int $index,array $source,array &$counts): array
     {

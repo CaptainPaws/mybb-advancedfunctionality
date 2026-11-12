@@ -380,3 +380,92 @@ Terminal despawn завершает состояния на самом суще�
 upkeep/own_turn и emitter barrier pools; target_turn/round эффекты на других
 целях продолжают свои закреплённые сроки. Общий shield постоянного источника
 не исчезает из-за удаления одного summon-target. История и ресурсы сохраняются.
+
+## ACS-7.3.1 consumer binding: target policy и control_effect
+
+Три независимые проекции: encounter participant.side_id/side_relationships,
+base controllers.assignment_version и временные effects instances. Ни один
+control_effect не записывает owner UID, базовые controllers или CharacterSheets.
+
+### Target policy
+
+Необязательный `rules.target_policy` способности — строка hostile_only,
+allied_only, self_only, any_entity либо объект с полем kind. Custom имеет
+точно такую форму:
+
+```json
+{
+  "kind": "custom",
+  "relationships": ["neutral", "hostile"],
+  "entity_kinds": ["npc", "monster", "summon"]
+}
+```
+
+Relationships — непустой уникальный список из self/allied/neutral/hostile;
+entity_kinds — из character/pet/npc/monster/summon. Не-custom объект содержит
+только kind. Неизвестные условия/ключи, scripting/spatial predicates не
+исполняются. Any_entity означает доступные combat identities этого consumer,
+без Stage-8 object interactions и без автоматического обнаружения скрытых целей.
+Allied_only включает self; исключение self выражается custom relationships.
+
+Без поля legacy single_enemy/multiple остаётся hostile_only; self spawn
+остаётся self_only. `targeting` сохраняет существующую поддерживаемую структуру
+single_enemy/multiple, а отношение определяется target_policy. Self spawn
+не может получить расширенную policy. Status polarity, immunity и chance
+проверяются отдельно: target_policy не является bypass этих правил.
+
+Сервер строит только видимые и допустимые selector entries. Отношения берутся
+из текущих сторон/таблицы relationships, не из постоянной faction. Resolver
+повторно проверяет выбранные цели и eligible redirects; не заменяет сохранённые
+цели при обновлении отношений. Relation/participant/assignment generations,
+status/control proof и текущие protection dependencies связаны с Seal.
+
+Direct damage, pinned periodic damage по союзнику/self и возможный видимый
+allied intercept дают friendly_fire warning до Seal. Предупреждение не содержит
+скрытых identity/definition данных. Seal/confirm принимают отдельный
+`friendly_fire_confirmation` — opaque текущий server hash, не bool от клиента.
+Без подтверждения новые rolls/quota не выделяются. ACK хранится в существующем
+draft seal metadata. При изменении риска нужны свежий ACK и обычное reconfirm
+с прежней tape. Урон союзникам не получает автоматического множителя.
+
+### Control overlay
+
+Opt-in KB status_def `mechanical_parameters.control_effect`:
+
+```json
+{
+  "schema": "ic-acs.control-effect.v1",
+  "controller": "caster",
+  "priority": 10,
+  "permitted_actions": ["ordinary"],
+  "ability_keys": ["basic-hit"]
+}
+```
+
+Ключи точные. Priority — целое -2147483647..2147483647, ability_keys —
+1..64 уникальных KB keys. Это ограничение уже существующих способностей цели,
+а не выдача новых. Status обязан иметь scope=combat, repeat_rule=independent,
+source_scope=source, положительную duration target_turn/round. Periodic,
+upkeep и blocks_ordinary_actions в этом control status не допускаются;
+behavior constraints/charm из ACS-7.3.2 не угадываются по названию.
+
+Применение проходит прежние status chance/resistance/immunity и механический
+commit. Runtime control_overlay содержит authenticated caster UID и
+base_assignment_version на момент применения. UID нельзя передать в draft или
+вывести из permanent owner UID: при делегированном cast это действующий автор.
+При нескольких слоях побеждает больший priority, затем более поздний applied_order.
+
+Authorization читает активные pinned effects поверх **текущей** базовой
+assignment generation. Overlay временно исключает обычные base/delegate
+боевые действия для этой identity, но не меняет ownership и не переносится
+автоматически на питомцев/призывов. Expiry/cleanse/dispel снимают только слой;
+нижний слой либо актуальная базовая запись становятся эффективными без записи
+старого значения в controllers. Новое законное назначение остаётся на месте.
+
+Доступ требует текущей playable session membership, native topic rights,
+combat gate и visibility. Overlay не открывает GM-hidden identity игроку,
+не даёт полный snapshot, Inventory consume/equip/transfer/grant, GM management,
+reward/CS editing, reaction registration или upkeep ordering. Builder выдаёт
+только разрешённые keys с нейтральными labels, без private ability descriptions.
+Права, уже существующие независимо от overlay (например GM management),
+проверяются своими прежними policy, а не приобретаются через control_effect.

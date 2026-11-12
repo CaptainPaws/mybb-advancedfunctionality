@@ -104,11 +104,14 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         if(array_filter($result->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',self::json(['schema_version'=>1,'instances'=>$result->serverState()['status_instances']]));
         if(($reactionHash=AF_ACS_Resolver::reactionHash($result,$prepared['context']))!==null)$summary['reaction_hash']=$reactionHash;
         if (isset($result->serverPlan()['item_state'])) $summary['item_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'items'=>$result->serverPlan()['item_state']]));
+        if(($controlHash=AF_ACS_Control::stateHash($result->serverState()['status_instances']??[]))!==null)$summary['control_effects_hash']=$controlHash;
+        $summary['friendly_fire_hash']=$prepared['friendly_fire']['confirmation_hash'];
         $dependency=hash('sha256',self::json(['schema_version'=>1,'dependencies'=>$dependencies]));
         $simulation=hash('sha256',self::json(['schema_version'=>1,'actions'=>$frozen['actions'],'tape'=>$frozen['tape'],'summary'=>$summary]));
         $confirmation=hash('sha256',"acs-confirm-v1\n".$dependency."\n".$simulation);
         $saved=json_decode($frozen['snapshot']['dependency_json'],true,32,JSON_THROW_ON_ERROR)['seal']??[];
         $evidence=json_decode($row['evidence_json'],true,32,JSON_THROW_ON_ERROR);
+        if($prepared['friendly_fire']['required']&&($saved['friendly_fire_confirmation']??null)!==$prepared['friendly_fire']['confirmation_hash'])throw new RuntimeException('ACS_FRIENDLY_FIRE_CONFIRMATION_REQUIRED');
         if (!hash_equals($saved['dependency_hash']??'',$dependency) || !hash_equals($saved['simulation_hash']??'',$simulation)
             || !hash_equals($frozen['snapshot']['confirmation_hash'],$confirmation)
             || ($requirePost && (($evidence['pid']??null)!==$row['pid'] || ($evidence['visible']??null)!=='1'))) { throw new RuntimeException('ACS_COMBAT_CONFIRMATION_CONFLICT'); }

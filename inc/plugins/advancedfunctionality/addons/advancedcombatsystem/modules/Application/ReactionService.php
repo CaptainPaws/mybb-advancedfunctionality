@@ -9,7 +9,7 @@ final class AF_ACS_ReactionService
     private function source(string $sid,string $eid,string $id,bool $write):array
     {
         $view=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);$encounter=$this->repo->encounter($sid,$eid);$entity=$this->repo->entity($sid,$id);$c=$this->repo->controllerFor($sid,$id,$this->access->uid());$permissions=json_decode($c['permissions_json']??'{}',true);
-        if(!$view['can_register_own']||!$encounter||!$entity||!$c||($permissions['combat_operations_enabled']??false)!==true)throw new RuntimeException('ACS_REACTION_ACCESS_DENIED');
+        if(!$view['can_register_own']||!$encounter||!$entity||!$c||isset($c['control_overlay'])||($permissions['combat_operations_enabled']??false)!==true)throw new RuntimeException('ACS_REACTION_ACCESS_DENIED');
         $round=$this->repo->currentRound($encounter);$individual=null;
         if($round)foreach($this->repo->allRoundTurns($round['id']) as $turn)foreach($this->repo->individualTurns([$turn['id']]) as $i)if($i['entity_id']===$id)$individual=$i;
         if(!$round||$round['status']!=='open'||!$individual)throw new RuntimeException('ACS_REACTION_ROUND_UNAVAILABLE');

@@ -46,7 +46,7 @@
       const a = chosen?.actor_id || field('actor').value;
       options(field('actor'), ctx.actors, a);
       options(field('ability'), (actor(a)?.choices || []).filter(c => !c.sealed_only), chosen?.ability_key || field('ability').value, 'Выберите способность или предмет');
-      options(field('target'), ctx.targets.filter(t => t.actors.includes(a) && (!!t.item_only === !!(actor(a)?.choices || []).find(c => c.key === field('ability').value)?.item_action)), chosen?.targets?.[0] || field('target').value, 'Выберите разрешённую цель');
+      options(field('target'), ctx.targets.filter(t => { const c = (actor(a)?.choices || []).find(c => c.key === field('ability').value), p = c?.target_policy || {kind:c?.item_action || c?.spawn_action ? 'self_only':'hostile_only'}, rel = t.relationships?.[a]; return t.actors.includes(a) && (p.kind === 'any_entity' || p.kind === 'self_only' && t.id === a || p.kind === 'hostile_only' && rel === 'hostile' || p.kind === 'allied_only' && ['self','allied'].includes(rel) || p.kind === 'custom' && p.relationships.includes(rel) && p.entity_kinds.includes(t.kind)); }), chosen?.targets?.[0] || field('target').value, 'Выберите разрешённую цель');
       info();
     }
     function info() {
@@ -165,6 +165,7 @@
         sealView.summary.actions.forEach(a => box.append(node('p', a.item ? ('Предмет #' + a.item.item_id + ' · ' + (a.item.operation === 'consume' ? 'использование' : 'смена оружия') + ' · 1 AP, ' + a.item.qty + ' шт.') : ((actor(a.actor_id)?.name || 'Существо') + ': ' + ({hit:'попадание',crit:'критическое попадание',miss:'промах',used:'действие с предметом'}[a.outcome] || a.outcome) + ', урон ' + a.damage + ', P_hit=' + a.probabilities.P_hit + '%, P_crit=' + a.probabilities.P_crit + '%.'))));
         box.append(node('p', sealView.confirmed ? 'Сводка подтверждена. Общая публикация выключена; тестовая отправка доступна только разрешённому пользователю.' : 'Сводка требует явного подтверждения. Реальные HP/AP не изменены.'));
       }
+      if (sealView?.friendly_fire?.required) box.append(node('p','Предупреждение: выбрана атака союзника. Урон не уменьшается автоматически.'));
       overview();
     }
     async function sealCommand(commandName) {
@@ -173,6 +174,7 @@
       if (!model.sealPending) {
         if (commandName === 'cancel-seal' && !window.confirm('Отменить последнее запечатанное действие? История и броски сохранятся, квота не вернётся.')) return;
         const body = {draft_id:model.id,expected_draft_version:model.version,operation_key:crypto.randomUUID().replace(/-/g,'')};
+        if (['seal','confirm-seal'].includes(commandName) && sealView?.friendly_fire?.required && !sealView.friendly_fire.acknowledged) { if (!window.confirm('Выбраны союзники для нанесения урона. Подтвердить дружественный огонь без снижения урона?')) return; body.friendly_fire_confirmation = sealView.friendly_fire.confirmation_hash; }
         if (commandName === 'confirm-seal') body.confirmation_hash = sealView.confirmation_hash;
         model.sealPending = {command:commandName,body};
       }
@@ -181,7 +183,7 @@
         await api(routes[pending.command], pending.body, true); model.sealPending = null; localSave(); saving = false;
         await restore(true); status('Операция seal сохранена. Реальное боевое состояние не изменено.',false);
       } catch(e) {
-        if (['ACS_SEAL_IMMUTABLE','ACS_SEAL_SUMMARY_CHANGED','ACS_SEAL_QUOTA_EXHAUSTED','ACS_DRAFT_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SEAL_TURN_UNAVAILABLE'].includes(e.code)) {
+        if (['ACS_FRIENDLY_FIRE_CONFIRMATION_REQUIRED','ACS_SEAL_UNSUPPORTED','ACS_SEAL_IMMUTABLE','ACS_SEAL_SUMMARY_CHANGED','ACS_SEAL_QUOTA_EXHAUSTED','ACS_DRAFT_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SEAL_TURN_UNAVAILABLE'].includes(e.code)) {
           model.sealPending = null; localSave(); await refreshSeal();
         }
         status(e.message + (model.sealPending ? ' Повторите ту же кнопку: ключ и запрос сохранены.' : ' Обновите черновик и проверьте сводку.'),true);

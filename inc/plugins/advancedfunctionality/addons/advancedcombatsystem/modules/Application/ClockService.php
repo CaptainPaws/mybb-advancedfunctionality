@@ -55,7 +55,7 @@ final class AF_ACS_ClockService
         if(!$e)throw new RuntimeException('ACS_UPKEEP_ACCESS_DENIED');
         if(!$v['can_manage']){
             $c=$this->repository->controllerFor($sid,$source,$this->access->uid());
-            if(!$v['can_register_own']||!$c)throw new RuntimeException('ACS_UPKEEP_ACCESS_DENIED');
+            if(!$v['can_register_own']||!$c||isset($c['control_overlay']))throw new RuntimeException('ACS_UPKEEP_ACCESS_DENIED');
         }return $v;
     }
     public function sustained(string $sid,string $eid):array

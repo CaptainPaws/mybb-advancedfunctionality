@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__.'/Damage.php';
 require_once __DIR__.'/CausalGraph.php';
 require_once __DIR__.'/Spawn.php';
+require_once __DIR__.'/Control.php';
 
 /** A single action on a detached virtual state. No globals, time, RNG, SQL or user callbacks. */
 final class AF_ACS_Effects
@@ -271,6 +272,10 @@ final class AF_ACS_Effects
         if(array_key_exists('blocks_ordinary_actions',$spec['mechanical_parameters'])&&!is_bool($spec['mechanical_parameters']['blocks_ordinary_actions']))self::fail('status_control_contract_invalid');
         if(($spec['mechanical_parameters']['blocks_ordinary_actions']??false)===true&&($spec['duration']['unit']!=='target_turn'||(!empty($spec['periodic'])&&($spec['duration_event']??null)!=='on_turn_end')))self::fail('status_control_timing_unsupported');
         if(isset($spec['periodic'])&&!in_array($spec['duration_event']??null,$spec['duration']['unit']==='round'?['on_round_end']:['on_turn_start','on_turn_end'],true))self::fail('status_tick_decrement_unsupported');
+        if(isset($spec['mechanical_parameters']['control_effect'])){
+            AF_ACS_Control::spec($spec['mechanical_parameters']['control_effect']);
+            if($spec['scope']!=='combat'||$spec['repeat_rule']!=='independent'||$spec['source_scope']!=='source'||$spec['duration']['value']<1||!in_array($spec['duration']['unit'],['target_turn','round'],true)||isset($spec['upkeep'])||!empty($spec['periodic'])||!empty($spec['mechanical_parameters']['blocks_ordinary_actions']))self::fail('ACS_CONTROL_EFFECT_UNSUPPORTED');
+        }
         if(isset($spec['upkeep'])){
             $u=$spec['upkeep'];if(!is_array($u))self::fail('upkeep_policy_invalid');self::fields($u,['costs','autonomous','hp_allow_zero','interrupt_on_status_keys']);
             if(!is_array($u['costs']??null)||!array_is_list($u['costs']))self::fail('upkeep_policy_invalid');
@@ -282,7 +287,7 @@ final class AF_ACS_Effects
     }
     private static function statusInstance(string $id,array $row):void
     {
-        self::fields($row,['schema_version','id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','stacks','remaining_duration','duration_unit','applied_order','version','status','origin_action_index','last_tick_boundary','last_duration_boundary','upkeep_priority','last_upkeep','termination']);
+        self::fields($row,['schema_version','id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','stacks','remaining_duration','duration_unit','applied_order','version','status','origin_action_index','last_tick_boundary','last_duration_boundary','upkeep_priority','last_upkeep','termination','control_overlay']);
         if(($row['schema_version']??null)!==1||($row['id']??null)!==$id||(!preg_match('/\Anew:[1-9][0-9]*\z/D',$id)&&self::id($id)!==$id))self::fail('status_instance_identity_invalid');
         foreach(['session_id','encounter_id','source_entity_id','target_entity_id'] as $field)self::id($row[$field]??null);
         if(!is_array($row['spec']??null))self::fail('status_instance_schema_unsupported');self::statusSpec($row['spec']);
@@ -296,6 +301,10 @@ final class AF_ACS_Effects
             if(!is_bool($u['paid']??null)||!preg_match('/\Aentity_turn:[1-9][0-9]{0,19}:start\z/D',$u['boundary_key']??'')||($u['costs']??null)!==($row['spec']['upkeep']['costs']??null)||!in_array($u['reason']??null,[null,'effects_cost_unaffordable','effects_resource_invalid'],true)||$u['paid']!==($u['reason']===null))self::fail('upkeep_result_invalid');
         }
         if(isset($row['termination'])){self::fields($row['termination'],['reason','causal_event']);if($row['status']!=='removed'||!in_array($row['termination']['reason']??null,['source_inactive','kb_control','effects_cost_unaffordable','effects_resource_invalid'],true)||!is_string($row['termination']['causal_event']??null))self::fail('upkeep_result_invalid');}
+        if(isset($row['spec']['mechanical_parameters']['control_effect'])){
+            $c=$row['control_overlay']??null;if(!is_array($c)||array_diff(array_keys($c),['controller_uid','base_assignment_version'])||count($c)!==2)self::fail('ACS_CONTROL_EFFECT_CONTEXT_REQUIRED');
+            self::id($c['controller_uid']??null);self::id($c['base_assignment_version']??null);
+        }elseif(isset($row['control_overlay']))self::fail('ACS_CONTROL_EFFECT_UNSUPPORTED');
         self::ref($row['status_definition_ref']??null);$ref=$row['effect_definition_ref']??null;
         if(!is_array($ref)||!in_array($ref['type']??null,['arpg_ability','arpg_item','arpg_bestiary'],true))self::fail('status_definition_missing');
         self::fields($ref,['type','key','version','fingerprint','effect_index']);self::ref(array_intersect_key($ref,array_flip(['key','version','fingerprint'])));
@@ -320,7 +329,7 @@ final class AF_ACS_Effects
         if(!isset($state['status_instances'],$state['next_status_order']))self::fail('status_state_missing');
         $kind=$op['kind'];
         if($kind==='status_apply'){
-            self::fields($op,['kind','session_id','encounter_id','source','target','spec','effect_definition_ref','status_definition_ref','action_index']);
+            self::fields($op,['kind','session_id','encounter_id','source','target','spec','effect_definition_ref','status_definition_ref','action_index','control_context']);
             self::statusSpec($op['spec']);self::id($op['session_id']);self::id($op['encounter_id']);self::integer($op['action_index']);self::ref($op['status_definition_ref']);
             $ref=$op['effect_definition_ref'];self::fields($ref,['type','key','version','fingerprint','effect_index']);
             if(!in_array($ref['type']??null,['arpg_ability','arpg_item','arpg_bestiary'],true))self::fail('status_definition_missing');
@@ -347,6 +356,7 @@ final class AF_ACS_Effects
                 $row=['schema_version'=>1,'id'=>$id,'session_id'=>$op['session_id'],'encounter_id'=>$op['encounter_id'],'source_entity_id'=>$source,'target_entity_id'=>$target,
                     'spec'=>$spec,'effect_definition_ref'=>$op['effect_definition_ref'],'status_definition_ref'=>$op['status_definition_ref'],'stacks'=>$spec['stack_per_apply'],
                     'remaining_duration'=>$spec['duration']['value'],'duration_unit'=>$spec['duration']['unit'],'applied_order'=>$order,'version'=>1,'status'=>'active','origin_action_index'=>$op['action_index']];
+                if(isset($spec['mechanical_parameters']['control_effect']))$row['control_overlay']=$op['control_context']??throw new DomainException('ACS_CONTROL_EFFECT_CONTEXT_REQUIRED');
                 self::statusInstance($id,$row);$state['status_instances'][$id]=$row;$state['next_status_order']=self::integer($order+1);$events[]=['type'=>'status_created','id'=>$id];
             }
         }elseif($kind==='status_remove'){
