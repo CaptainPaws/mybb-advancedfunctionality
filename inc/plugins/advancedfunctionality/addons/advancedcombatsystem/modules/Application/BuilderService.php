@@ -5,6 +5,7 @@ require_once __DIR__.'/DraftService.php';
 require_once __DIR__.'/ItemActionService.php';
 require_once __DIR__.'/ObjectInteractionService.php';
 require_once __DIR__.'/SpatialService.php';
+require_once __DIR__.'/CoverService.php';
 
 require_once __DIR__.'/../Domain/Spawn.php';
 
@@ -17,6 +18,9 @@ final class AF_ACS_BuilderService
     {
         $code=$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage();
         return match($code){
+            'ACS_COVER_BLOCKED'=>'Цель или действие сейчас недоступны.',
+            'ACS_COVER_UNSUPPORTED'=>'UNSUPPORTED: контракт окружения недоступен.',
+            'ACS_COVER_VERSION_CONFLICT'=>'Зависимости окружения изменились. Броски сохранены.',
             'ACS_SPATIAL_UNSUPPORTED'=>'UNSUPPORTED: пространственный контракт или capability недоступны.',
             'ACS_SPATIAL_TARGET_BLOCKED','ACS_SPATIAL_CONTACT_BLOCKED'=>'Цель или переход сейчас недоступны.',
             'ACS_SPATIAL_VERSION_CONFLICT'=>'Пространственные зависимости изменились. Броски сохранены.',
@@ -95,6 +99,7 @@ final class AF_ACS_BuilderService
             try{$choices=$q->builderCatalog($sid,$actor['id']);$notice='';}catch(Throwable $e){$choices=[];$notice=self::message($e);}
             foreach($choices as &$c){if(!$c['supported'])$c['reason']=self::message(new RuntimeException($c['reason']??'preview_ability_unsupported'));}unset($c);
             try {if(!isset($this->repo->controllerFor($sid,$actor['id'],$this->access->uid())['control_overlay']))$choices=array_merge($choices,(new AF_ACS_ItemActionService($this->repo,$this->access))->catalog($sid,$actor['id']));} catch (Throwable $e) {$notice=$notice?:self::message($e);}
+            $choices=array_merge($choices,(new AF_ACS_CoverService($this->repo,$this->access))->catalog($sid,$eid,$actor['id']));
             $choices=array_merge($choices,(new AF_ACS_SpatialService($this->repo,$this->access))->catalog($sid,$eid,$actor['id']));
             $choices=array_merge($choices,(new AF_ACS_ObjectInteractionService($this->repo,$this->access))->catalog($sid,$eid,$actor['id'],$draft));
             foreach ($retained[$actor['id']]??[] as $choice) if (!in_array($choice['key'],array_column($choices,'key'),true)) $choices[]=$choice;
@@ -128,7 +133,7 @@ final class AF_ACS_BuilderService
             $v=$summons[$id];$summonRows[]=['entity_id'=>$id,'name'=>$member['name'],'status'=>$v['pending_independent']?'pending_independent':$v['status'],'remaining'=>$v['remaining'],'duration_unit'=>$v['unit'],'admission'=>isset($individuals[$id])?'current_roster':'next_round'];
         }
         $token=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'session'=>$scope['session']['session_version'],'encounter'=>$scope['encounter']['encounter_version'],'round'=>$scope['round']['round_version'],'turns'=>$versions,'selected'=>$selected,'audience'=>$scope['audience_stamp']]));
-        return ['session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>(string)$scope['round']['round_number'],'encounter_status'=>$scope['encounter']['status'],'turns'=>$turns,'turn'=>$chosen,'actors'=>$actors,'targets'=>$targets,'spatial'=>(new AF_ACS_SpatialService($this->repo,$this->access))->view($sid,$eid),'known_subjects'=>$scope['known_subjects'],'objectives'=>(new AF_ACS_CooperationService($this->repo,$this->access))->progress($sid,$eid,array_column($actors,'id')),'summons'=>$summonRows,'can_manage'=>$scope['gm'],'scope_token'=>$token,'draft_id'=>$draft,'preview_scope'=>$scope['gm']?'gm':'own_draft_only','publication_enabled'=>false];
+        return ['session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>(string)$scope['round']['round_number'],'encounter_status'=>$scope['encounter']['status'],'turns'=>$turns,'turn'=>$chosen,'actors'=>$actors,'targets'=>$targets,'cover'=>(new AF_ACS_CoverService($this->repo,$this->access))->view($sid,$eid,array_column($actors,'id')),'spatial'=>(new AF_ACS_SpatialService($this->repo,$this->access))->view($sid,$eid),'known_subjects'=>$scope['known_subjects'],'objectives'=>(new AF_ACS_CooperationService($this->repo,$this->access))->progress($sid,$eid,array_column($actors,'id')),'summons'=>$summonRows,'can_manage'=>$scope['gm'],'scope_token'=>$token,'draft_id'=>$draft,'preview_scope'=>$scope['gm']?'gm':'own_draft_only','publication_enabled'=>false];
     }
     public function prepare(array $input,?string $sealedDraft=null):array
     {
@@ -140,7 +145,7 @@ final class AF_ACS_BuilderService
         $q=new AF_ACS_QueryService($this->repo,$this->access);$prepared=[];$ordered=[];$context=null;$definitions=[];$itemSpecs=[];$itemAbilities=[];$objectAbilities=[];$objectBehavior=[];$spatialAbilities=[];$itemVirtual=['items'=>[],'equipment'=>[]];$warnings=[];
         $rawScope=$q->builderScope($sid,$eid);$behavior=$this->repo->statusProjection($sid)['instances'];$pairs=[];foreach($this->repo->allRelations($eid) as $r){$pairs[$r['side_a']][$r['side_b']]=$r['relationship'];$pairs[$r['side_b']][$r['side_a']]=$r['relationship'];}
         foreach($input['actions'] as $actionIndex=>$action){
-            $spatial=null;$isSpatial=str_starts_with((string)($action['ability_key']??''),'spatial:');$object=null;$isObject=AF_ACS_ObjectInteraction::isAction((string)($action['ability_key']??''));$isSelfAction=false;$isSpawn=false;$isItem=AF_ACS_ItemActionService::isItem((string)($action['ability_key']??''));$item=null;
+            $spatial=null;$isCover=str_starts_with((string)($action['ability_key']??''),'cover:');$isSpatial=$isCover||str_starts_with((string)($action['ability_key']??''),'spatial:');$object=null;$isObject=AF_ACS_ObjectInteraction::isAction((string)($action['ability_key']??''));$isSelfAction=false;$isSpawn=false;$isItem=AF_ACS_ItemActionService::isItem((string)($action['ability_key']??''));$item=null;
             if(!is_array($action)||array_diff(array_keys($action),['actor_id','ability_key','targets','parameters'])||!is_string($action['ability_key']??null)||!is_array($action['targets']??null)||!array_is_list($action['targets'])||!$action['targets']||count($action['targets'])>100||count(array_unique($action['targets']))!==count($action['targets']))throw new RuntimeException('builder_input_invalid');
             if(($action['parameters']??[])!==[])throw new RuntimeException('builder_parameters_unsupported');
             $actor=AF_ACS_Repository::integer($action['actor_id']??null);
@@ -155,7 +160,7 @@ final class AF_ACS_BuilderService
                 $itemVirtual['items']=array_replace($itemVirtual['items'],$item['virtual']['items']);
                 $itemVirtual['equipment']=array_replace($itemVirtual['equipment'],$item['virtual']['equipment']);
             }
-            if($isSpatial){$spatial=(new AF_ACS_SpatialService($this->repo,$this->access))->prepare($sid,$eid,$actor,$action['ability_key'],$action['targets'],$sealedDraft);$definitions[$actionIndex]=$spatial['definition'];$spatialAbilities[$actor][$action['ability_key']]=$spatial['ability'];}
+            if($isSpatial){$spatial=($isCover?new AF_ACS_CoverService($this->repo,$this->access):new AF_ACS_SpatialService($this->repo,$this->access))->prepare($sid,$eid,$actor,$action['ability_key'],$action['targets'],$sealedDraft);$definitions[$actionIndex]=$spatial['definition'];$spatialAbilities[$actor][$action['ability_key']]=$spatial['ability'];}
             if($isObject){$object=(new AF_ACS_ObjectInteractionService($this->repo,$this->access))->prepare($sid,$eid,$actor,$action['ability_key'],$sealedDraft,$actionIndex);if($action['targets']!==[$object['definition']['object_interaction']['entity_id']])throw new RuntimeException('preview_target_forbidden');$definitions[$actionIndex]=$object['definition'];$objectAbilities[$actor][$action['ability_key']]=$object['inspection']['context']['abilities'][$actor][$action['ability_key']];$objectBehavior[$actor][$action['targets'][0]]=['kind'=>'object','relationship'=>'neutral','active'=>true];}
             if(!$isItem&&!$isObject&&!$isSpatial){$dto=$q->sealDefinition($sid,$actor,$action['ability_key']);$isSpawn=AF_ACS_Spawn::hasAbility($dto);$isSelfAction=AF_ACS_Awareness::hasAbility($dto)||AF_ACS_Environment::hasMassAbility($dto);}
             if(($isSpawn||$isSelfAction) && $action['targets']!==[$actor])throw new RuntimeException('ACS_SPAWN_TARGET_UNSUPPORTED');
@@ -166,7 +171,7 @@ final class AF_ACS_BuilderService
             AF_ACS_Behavior::check($behavior,$actor,$action['ability_key'],$isSpawn?'spawn':$category,$action['targets'],$behaviorCandidates,$behaviorPolicy,['session_id'=>$sid,'encounter_id'=>$eid,'minimum_targets'=>($isItem||$isObject||$isSpatial)?1:($dto['data']['definition']['target_count']['min']??1)]);
             $targetVersions=[];$orderedTargets=[];foreach($action['targets'] as $id){$target=AF_ACS_Repository::integer($id);$orderedTargets[]=$target;
             if(!in_array($actor,array_column($scope['actors'],'id'),true))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
-            $visible=($isItem||$isSpawn||$isSelfAction)&&$target===$actor;foreach($scope['targets'] as $t)if($t['id']===$target&&in_array($actor,$t['actors'],true))$visible=true;
+            $visible=($isItem||$isSpawn||$isSelfAction||$isCover)&&$target===$actor;foreach($scope['targets'] as $t)if($t['id']===$target&&in_array($actor,$t['actors'],true))$visible=true;
             if(!$visible)throw new RuntimeException('preview_target_forbidden');
             $p=$isSpatial?$spatial['inspection']:($isObject?$object['inspection']:$q->inspect($sid,$eid,$actor,$target,$sealedDraft,true));
             $compiled=$p['context']['abilities'][$actor][$action['ability_key']]??null;

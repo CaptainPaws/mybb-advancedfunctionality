@@ -514,7 +514,7 @@ final class AF_ACS_Effects
     }
     private static function state(array $state): array
     {
-        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons','objects','objectives','spatial','awareness','awareness_attempts','perception_subjects']);
+        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons','objects','objectives','spatial','cover','awareness','awareness_attempts','perception_subjects']);
         if(($state['schema_version']??null)!==1)self::fail('effects_schema_invalid');
         foreach(['entities','groups','barriers'] as $field)if(!is_array($state[$field]??null))self::fail('effects_schema_invalid');
         foreach($state['groups'] as $id=>$group){self::id($id);if(!is_array($group))self::fail('effects_schema_invalid');self::fields($group,['ap','version']);self::resource($group['ap']??null);if(self::integer($group['version']??null)<1)self::fail('effects_version_invalid');}
@@ -610,11 +610,13 @@ final class AF_ACS_Effects
                 self::fields($op,['kind','entity_id','expected_version','amount','damage_type']);$id=self::id($op['entity_id']??null);
                 if(!isset($v['objects'][$id]))self::fail('ACS_OBJECT_UNAVAILABLE');$old=$v['objects'][$id];
                 $v['objects'][$id]=AF_ACS_Environment::damage($old,$op['expected_version'],$op['amount'],$op['damage_type']);
+                if($v['objects'][$id]['status']==='destroyed'&&$old['status']!=='destroyed')AF_ACS_Cover::destroyed($v,$id);
                 $events[]=['type'=>'object.damage','entity_id'=>$id,'before'=>$old,'after'=>$v['objects'][$id]];
             }elseif($kind==='object_operation'){
                 self::fields($op,['kind','entity_id','operation','expected_version','amount','damage_type']);$id=self::id($op['entity_id']??null);
                 if(!isset($v['objects'][$id]))self::fail('ACS_OBJECT_UNAVAILABLE');
                 $old=$v['objects'][$id];$v['objects'][$id]=AF_ACS_Environment::operation($old,$op['operation'],$op['expected_version'],$op['amount']??null,$op['damage_type']??null);
+                if($v['objects'][$id]['status']==='destroyed'&&$old['status']!=='destroyed')AF_ACS_Cover::destroyed($v,$id);
                 $events[]=['type'=>'object.'.$op['operation'],'entity_id'=>$id,'before'=>$old,'after'=>$v['objects'][$id]];
             }elseif($kind==='status_upkeep'){self::upkeep($v,$op,$events,$signals);}
             elseif(in_array($kind,['status_apply','status_remove','status_combat_end','status_duration_boundary'],true)){

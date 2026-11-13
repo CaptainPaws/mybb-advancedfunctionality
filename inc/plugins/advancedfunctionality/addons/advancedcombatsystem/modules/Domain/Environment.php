@@ -5,6 +5,7 @@ require_once __DIR__.'/Control.php';
 require_once __DIR__.'/CausalGraph.php';
 require_once __DIR__.'/ObjectInteraction.php';
 require_once __DIR__.'/Cooperation.php';
+require_once __DIR__.'/Cover.php';
 
 /** Detached object projection. No clock, callbacks, SQL, live KB or random sampling. */
 final class AF_ACS_Environment
@@ -16,6 +17,7 @@ final class AF_ACS_Environment
     {if(!is_int($n)||$n<$minimum||$n>9007199254740991)self::fail('ACS_OBJECT_VALUE_INVALID');return $n;}
     public static function definition(array $o):array
     {
+        $cover=AF_ACS_Cover::definition($o['cover']??null);$obstacle=AF_ACS_Cover::obstacle($o['obstacle']??null);unset($o['cover'],$o['obstacle']);
         $cooperation=AF_ACS_Cooperation::definition($o['cooperation']??null);unset($o['cooperation']);
         $interactions=AF_ACS_ObjectInteraction::definition($o['interactions']??null);unset($o['interactions']);
         require_once __DIR__.'/Awareness.php';AF_ACS_Awareness::perception($o['perception']??null);unset($o['perception']);
@@ -38,6 +40,7 @@ final class AF_ACS_Environment
         }elseif($mechanics['durability']!==null)self::fail();
         if(array_diff($mechanics['gm_operations'],['create','activate','deactivate','damage'])||count(array_unique($mechanics['gm_operations']))!==count($mechanics['gm_operations']))self::fail();
         if(array_intersect($mechanics['gm_operations'],['activate','deactivate'])&&!in_array('interactive',$c,true)||in_array('damage',$mechanics['gm_operations'],true)&&!in_array('destructible',$c,true))self::fail();
+        if(($cover!==null||$obstacle!==null)&&(($o['schema']??null)!=='ic-acs.object-template.v2'||!in_array('passive',$c,true)))self::fail('ACS_COVER_UNSUPPORTED');
         if($cooperation!==null&&(($o['schema']??null)!=='ic-acs.object-template.v2'||!in_array('interactive',$c,true)))self::fail('ACS_COOPERATION_UNSUPPORTED');
         if($cooperation!==null)foreach($interactions['actions']??[] as $action)if(str_starts_with($action['key'],'coop-'))self::fail('ACS_COOPERATION_UNSUPPORTED');
         if($interactions!==null&&(($o['schema']??null)!=='ic-acs.object-template.v2'||!in_array('interactive',$c,true)))self::fail();
@@ -65,15 +68,16 @@ final class AF_ACS_Environment
     {
         $d=$dto['data']['definition'];$m=$d['hidden_mass_effect'];self::fields($m,['schema','tag','amount','damage_type']);
         if($m['schema']!=='ic-acs.hidden-object-mass.v1'||!is_string($m['tag'])||!preg_match('/\A[a-z][a-z0-9_-]{0,63}\z/D',$m['tag'])||!in_array($m['damage_type'],['physical','elemental','true'],true))self::fail();self::integer($m['amount'],1);
-        $metadata=['schema','type_profile','version','revision','name','title','description','notes','icon_url','icon_class','sortorder','active','type','subtype','slot','damage_type','targeting','cooldown_unit','duration_unit','level_cap','magic_direction_ref','damage_element','element','target_policy','action_cost','hidden_mass_effect'];
+        $metadata=['schema','type_profile','version','revision','name','title','description','notes','icon_url','icon_class','sortorder','active','type','subtype','slot','damage_type','targeting','cooldown_unit','duration_unit','level_cap','magic_direction_ref','damage_element','element','target_policy','action_cost','hidden_mass_effect','environment_policy'];
         $empty=['range','cast_time','cooldown','cooldown_value','duration','duration_value','max_charges','resources','effects','modifiers','base_stats','triggers','conditions','stacking','upgrade_requirements','cost_value','cost_resource','costs','formula_profile','formula_ref','formula_refs','target_count','application_conditions','application_mode','summon','usage_limits','timing','math_modifiers','passive_effects','reflection','lifesteal','grants','immunities','can_crit','auto_hit','damage_value','heal_value','shield_value'];
         if(array_diff(array_keys($d),[...$metadata,...$empty])||($d['type']??null)!=='active'||($d['targeting']??null)!=='self'||AF_ACS_Control::targetPolicy($d)!==['kind'=>'self_only']||!is_int($d['action_cost']??null)||$d['action_cost']<1||$d['action_cost']>2147483647||($dto['ready']??null)!==true||!is_string($dto['definition_version']['declared_version']??null)||$dto['definition_version']['declared_version']==='')self::fail();foreach($empty as $key)if(!empty($d[$key]))self::fail();
-        return ['supported'=>true,'source_ref'=>['key'=>$dto['source']['key'],'version'=>$dto['definition_version']['declared_version'],'fingerprint'=>$dto['definition_version']['fingerprint']],'target_policy'=>['kind'=>'self_only'],'components'=>[],'costs'=>[['kind'=>'ap','amount'=>$d['action_cost']]],'targeting'=>'self','hidden_mass_effect'=>$m];
+        return ['supported'=>true,'source_ref'=>['key'=>$dto['source']['key'],'version'=>$dto['definition_version']['declared_version'],'fingerprint'=>$dto['definition_version']['fingerprint']],'target_policy'=>['kind'=>'self_only'],'components'=>[],'costs'=>[['kind'=>'ap','amount'=>$d['action_cost']]],'environment_policy'=>AF_ACS_Cover::policy($d['environment_policy']??null),'targeting'=>'self','hidden_mass_effect'=>$m];
     }
-    public static function mass(array $state,array $spec):array
+    public static function mass(array $state,array $spec,?string $actor=null,array $ability=[]):array
     {
         $effects=[];foreach($state['perception_subjects']??[] as $subject){if($subject['kind']!=='object'||!in_array($spec['tag'],$subject['perception']['tags']??[],true))continue;$v=$state['objects'][$subject['id']];$m=self::definition($v['definition']);
             if(in_array($v['status'],['expired','destroyed'],true)||!in_array($spec['damage_type'],$m['durability']['damage_types']??[],true))continue;
+            if($actor!==null&&isset($ability['environment_policy'])){$p=$ability['environment_policy'];if($p['affects_zone']!==null){$s=&$state['spatial'];$zone=AF_ACS_Spatial::position($s,$subject['id']);$destination=AF_ACS_Spatial::destination($s,$p['affects_zone']);unset($s);if($zone!==$destination)continue;}AF_ACS_Cover::check($state,$actor,$subject['id'],$ability);}AF_ACS_Cover::read($state,'object:'.$subject['id']);
             $effects[]=['kind'=>'object_damage','entity_id'=>$subject['id'],'expected_version'=>$v['object_version'],'amount'=>$spec['amount'],'damage_type'=>$spec['damage_type']];
         }
         return AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>$effects])->serverState();

@@ -8,10 +8,11 @@ trait AF_ACS_ObjectCommands
     {
         $this->commandWrite();$objects=$this->objectProjection($session['id'],$encounter['id']);$id=$r['entity_id'];
         if(!isset($objects[$id]))throw new RuntimeException('ACS_OBJECT_UNAVAILABLE');
-        $state=['schema_version'=>1,'entities'=>[],'groups'=>[],'barriers'=>[],'next_barrier_order'=>1,'objects'=>$objects];
+        $state=['schema_version'=>1,'entities'=>[],'groups'=>[],'barriers'=>[],'next_barrier_order'=>1,'objects'=>$objects,'spatial'=>$this->spatialProjection($session['id'],$encounter['id']),'cover'=>AF_ACS_Cover::initial($this->coverProjection($session['id'],$encounter['id']),$objects)];
         $result=AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>[['kind'=>'object_operation','entity_id'=>$id,'operation'=>$r['operation'],'expected_version'=>(int)$r['expected_object_version'],'amount'=>$r['amount'],'damage_type'=>$r['damage_type']]]]);
+        $coverChanges=$this->persistCover($session['id'],$encounter['id'],$state,$result->serverState());$spatialChanges=$this->persistSpatial($session['id'],$encounter['id'],$state['spatial'],$result->serverState()['spatial']);
         $changes=$this->persistObjects($session['id'],$encounter['id'],$objects,$result->serverState()['objects']);
-        $session=$this->change($session,$encounter,'environment_change',[]);$session['_command_result']+=['objects'=>$changes,'trace'=>$result->serverTrace(),'reason'=>$r['reason']];return $session;
+        $session=$this->change($session,$encounter,'environment_change',[]);$session['_command_result']+=['cover'=>$coverChanges,'spatial'=>$spatialChanges,'objects'=>$changes,'trace'=>$result->serverTrace(),'reason'=>$r['reason']];return $session;
     }
     /** Source and ability must be retained server pins; never accept a client JSON definition. */
     public function objectCreationPlan(string $sid,string $eid,string $source,string $abilityKey):array
