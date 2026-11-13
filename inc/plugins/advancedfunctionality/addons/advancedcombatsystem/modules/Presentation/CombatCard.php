@@ -13,7 +13,7 @@ final class AF_ACS_CombatCard
         if ($card['details']===null) {return $html.'<p>Подробности ограничены правилами видимости сессии.</p></aside>';}
         $html.='<ol>';
         foreach($card['details'] as $step){
-            $outcome=['success'=>'успех взаимодействия','critical_success'=>'критический успех взаимодействия','partial_success'=>'частичный успех взаимодействия','failure'=>'провал взаимодействия','hit'=>'попадание','crit'=>'критическое попадание','miss'=>'промах','multiple'=>'несколько целей','used'=>'действие с предметом выполнено','search'=>'поиск выполнен','share'=>'передача сведений выполнена','environment'=>'воздействие на окружение выполнено'][$step['outcome']]??'исход недоступен';
+            $outcome=['assisted'=>'помощь применена','success'=>'успех взаимодействия','critical_success'=>'критический успех взаимодействия','partial_success'=>'частичный успех взаимодействия','failure'=>'провал взаимодействия','hit'=>'попадание','crit'=>'критическое попадание','miss'=>'промах','multiple'=>'несколько целей','used'=>'действие с предметом выполнено','search'=>'поиск выполнен','share'=>'передача сведений выполнена','environment'=>'воздействие на окружение выполнено'][$step['outcome']]??'исход недоступен';
             $html.='<li><p><strong>'.self::esc($step['actor_name']).' → '.self::esc($step['target_name']).'</strong> · '.self::esc($outcome).'</p>';
             $costs=[];foreach($step['costs'] as $c)$costs[]=self::esc($c['amount']).' '.($c['kind']==='ap'?'AP':'ресурса');
             $special=in_array($step['outcome'],['search','share','environment'],true);$html.='<p>Стоимость: '.implode(', ',$costs).'.'.($special?'':' Урон: '.self::esc($step['damage']).'.').'</p>';
@@ -23,6 +23,7 @@ final class AF_ACS_CombatCard
                 $html.='<p>'.self::esc($operation).' · предмет #'.self::esc($item['item_id']??'—').' · '.self::esc($item['qty']??'—').' шт. Подтверждено сервером.</p></li>';
                 continue; // Deterministic use does not claim an applied hit/crit check.
             }
+            if(isset($step['cooperation'])){$html.='<p>Совместная задача: '.self::esc($step['cooperation']['progress']).' / '.self::esc($step['cooperation']['cap']).(!empty($step['cooperation']['completed'])?' · завершена':'').'.</p></li>';continue;}
             if(isset($step['interaction'])){$html.='<p>Объект #'.self::esc($step['interaction']['entity_id']).' · '.self::esc($step['interaction']['key']).($step['interaction']['progress']===null?'':' · прогресс '.self::esc($step['interaction']['progress'])).'.</p></li>';continue;}
             $r=$step['rolls']??[];$p=$step['probabilities']??[];
             $html.='<details><summary>Броски и защита</summary><p>Попадание: '.self::esc($r['hit']['u']??'—').'; критическое попадание: '.self::esc($r['crit']['u']??'—').(empty($r['crit_used'])?' (резерв)':'').'.</p>';

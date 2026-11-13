@@ -91,6 +91,7 @@ final class AF_ACS_Clock
             if(!$eligible)continue;$pool['duration']['value']=max(0,$pool['duration']['value']-1);$pool['last_duration_boundary']=$key;$pool['version']=AF_ACS_Numeric::integer($pool['version']+1,1,9007199254740991);if($pool['duration']['value']===0)$pool['status']='expired';$events[]=['type'=>'barrier_duration','pool_id'=>(string)$id,'remaining_duration'=>$pool['duration']['value'],'status'=>$pool['status']];
         }unset($pool);
         $state=AF_ACS_Spawn::boundary($state,$boundary,$key,$events);
+        $state=AF_ACS_Cooperation::boundary($state,$boundary,$key,$events);
         $state=AF_ACS_Environment::boundary($state,$boundary,$key,$events);
         $state=AF_ACS_Awareness::boundary($state,$boundary,$key,$events);
         return new AF_ACS_EffectsResult($state,['engine_version'=>self::VERSION,'boundary_key'=>$key,'events'=>$events,'signals'=>$signals,'tick_keys'=>$tickKeys,'persistent'=>false],$initial);

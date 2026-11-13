@@ -1,6 +1,7 @@
 <?php
 if(!defined('IN_MYBB')){die('No direct access');}
 require_once __DIR__.'/ItemActionService.php';
+require_once __DIR__.'/CooperationService.php';
 require_once __DIR__.'/../Domain/ObjectInteraction.php';
 
 /** Server selected object actions and owner tools; preview performs reads only. */
@@ -10,7 +11,7 @@ final class AF_ACS_ObjectInteractionService
     public function catalog(string $sid,string $eid,string $actor,?string $draft=null):array
     {
         $audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);$out=[];
-        $objects=array_filter($this->repo->objectProjection($sid,$eid),static fn($v)=>!empty($v['definition']['interactions'])&&$audience->knowledge('object',$v['entity_id'],$actor)['level']==='identified');
+        $objects=array_filter($this->repo->objectProjection($sid,$eid),static fn($v)=>(!empty($v['definition']['interactions'])||!empty($v['definition']['cooperation']))&&$audience->knowledge('object',$v['entity_id'],$actor)['level']==='identified');
         if(!$objects)return [];
         try{$inspection=(new AF_ACS_QueryService($this->repo,$this->access))->inspect($sid,$eid,$actor,$actor,$draft,true);}catch(Throwable $e){return [];}
         foreach($objects as $id=>$v){$id=(string)$id;$knowledge=$audience->knowledge('object',$id,$actor);if($knowledge['level']!=='identified')continue;$label=$knowledge['details']['name']??('Известный объект #'.$id);
@@ -18,13 +19,13 @@ final class AF_ACS_ObjectInteractionService
                 $index=-1;if($draft)foreach($this->repo->sealRows($draft,true) as $position=>$seal){$wire=$this->repo->sealPayload($seal)['action'];if($wire['actor_id']===$actor&&$wire['ability_key']===$key){$index=$position;break;}}
                 try{AF_ACS_ObjectInteraction::eligible($v,$a,$actor,$inspection['context']['reaction_kinds'][$actor],AF_ACS_Resolver::interactionActorStats($inspection['context'],$actor),$inspection['context']['abilities'][$actor]);if($a['tool']!==null)$this->tool($sid,$actor,$a['tool'],$draft,$index);}catch(Throwable $e){$choice['supported']=false;$choice['reason']=AF_ACS_BuilderService::message($e);}$out[]=$choice;
             }
-        }return $out;
+        }return array_merge($out,(new AF_ACS_CooperationService($this->repo,$this->access))->catalog($sid,$eid,$actor,$inspection));
     }
     public function prepare(string $sid,string $eid,string $actor,string $key,?string $draft=null,int $index=0):array
     {
         [$id,$actionKey]=AF_ACS_ObjectInteraction::selection($key);$audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);
         if($audience->knowledge('object',$id,$actor)['level']!=='identified')throw new RuntimeException('preview_target_forbidden');
-        $v=$this->repo->objectProjection($sid,$eid)[$id]??throw new RuntimeException('preview_target_forbidden');$a=AF_ACS_ObjectInteraction::action($v,$actionKey);
+        $v=$this->repo->objectProjection($sid,$eid)[$id]??throw new RuntimeException('preview_target_forbidden');if(isset($v['definition']['cooperation'])&&str_starts_with($actionKey,'coop-'))return (new AF_ACS_CooperationService($this->repo,$this->access))->prepare($sid,$eid,$actor,$key,$draft);$a=AF_ACS_ObjectInteraction::action($v,$actionKey);
         $p=(new AF_ACS_QueryService($this->repo,$this->access))->inspect($sid,$eid,$actor,$actor,$draft,true);$entity=$this->repo->entity($sid,$actor);
         AF_ACS_ObjectInteraction::eligible($v,$a,$actor,$entity['kind'],AF_ACS_Resolver::interactionActorStats($p['context'],$actor),$p['context']['abilities'][$actor]);
         $dto=$this->repo->objectDefinitionSnapshot($sid,$id);$pin=['key'=>$dto['source']['key'],'version'=>$dto['definition_version']['declared_version'],'fingerprint'=>$dto['definition_version']['fingerprint']];

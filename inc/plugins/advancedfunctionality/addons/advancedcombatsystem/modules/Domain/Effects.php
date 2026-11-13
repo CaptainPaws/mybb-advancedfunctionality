@@ -513,7 +513,7 @@ final class AF_ACS_Effects
     }
     private static function state(array $state): array
     {
-        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons','objects','awareness','awareness_attempts','perception_subjects']);
+        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons','objects','objectives','awareness','awareness_attempts','perception_subjects']);
         if(($state['schema_version']??null)!==1)self::fail('effects_schema_invalid');
         foreach(['entities','groups','barriers'] as $field)if(!is_array($state[$field]??null))self::fail('effects_schema_invalid');
         foreach($state['groups'] as $id=>$group){self::id($id);if(!is_array($group))self::fail('effects_schema_invalid');self::fields($group,['ap','version']);self::resource($group['ap']??null);if(self::integer($group['version']??null)<1)self::fail('effects_version_invalid');}
@@ -535,6 +535,7 @@ final class AF_ACS_Effects
         }
         foreach($state['summons']??[] as $id=>$summon){AF_ACS_Spawn::instance($summon);if((string)$id!==$summon['entity_id'])self::fail('ACS_SUMMON_IDENTITY_INVALID');}
         foreach($state['objects']??[] as $id=>$object){AF_ACS_Environment::instance($object);if((string)$id!==$object['entity_id'])self::fail('ACS_OBJECT_IDENTITY_INVALID');}
+        foreach($state['objectives']??[] as $id=>$v){AF_ACS_Cooperation::instance($v);if((string)$id!==$v['entity_id'])self::fail('ACS_OBJECTIVE_STATE_INVALID');}
         foreach($state['awareness']??[] as $key=>$row){AF_ACS_Awareness::row($row);if($key!==AF_ACS_Awareness::key($row['subject_kind'],$row['subject_id'],$row['audience_kind'],$row['audience_id']))self::fail('ACS_AWARENESS_UNSUPPORTED');}
         foreach($state['awareness_attempts']??[] as $key=>$check)AF_ACS_Awareness::attempt($key,$check);
         foreach($state['perception_subjects']??[] as $subject)AF_ACS_Awareness::perception($subject['perception']);
