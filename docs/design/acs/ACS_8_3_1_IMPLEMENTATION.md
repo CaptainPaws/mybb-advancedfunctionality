@@ -11,6 +11,7 @@ Domain/Spatial.php — чистая типизированная часть су
 без второго processor, RNG, координат и pathfinding. Полная грамматика
 добавлена в ACS_KB_MECHANICS_CONTRACT.md, раздел ACS-8.3.1 spatial subset.
 Карта опциональна: прежние действия без spatial range работают без карты.
+Legacy KB range=0/"0" сохраняет значение «не задано».
 Single-zone template явно задаёт implicit default zone, но не engagement.
 В zones mode GM назначает позиции; чтение не создаёт строки.
 

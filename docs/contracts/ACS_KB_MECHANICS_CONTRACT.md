@@ -971,6 +971,7 @@ line_of_effect boolean, optional positive ap_cost (default 1). Максимум 
 Ability `spatial_range` содержит ровно schema=ic-acs.range.v1,
 distances (непустой список engaged/near/medium/far), line_of_effect boolean.
 При включённой карте пустой range использует явный legacy_range карты.
+Legacy range=0/"0" означает незаданную дальность.
 Без карты прежний пустой range сохраняет прежнее поведение; явный spatial
 range без capability возвращает UNSUPPORTED. LoE требует включённой capability
 и разрешения конкретной зоны/связи. Awareness проверяется отдельно до range.

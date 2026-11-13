@@ -24,7 +24,7 @@ final class AF_ACS_Spatial
     }
     public static function range(mixed $r):?array
     {
-        if($r===null||$r===''||$r===[])return null;
+        if(in_array($r,[null,'',[],0,'0',false],true))return null;
         if(!is_array($r))self::fail();self::fields($r,['schema','distances','line_of_effect']);if($r['schema']!=='ic-acs.range.v1'||!is_array($r['distances'])||!array_is_list($r['distances'])||!$r['distances']||array_diff($r['distances'],self::DISTANCES)||in_array('unreachable',$r['distances'],true)||!is_bool($r['line_of_effect']))self::fail();return $r;
     }
     public static function empty():array {return ['schema_version'=>1,'pin'=>null,'zones'=>[],'connections'=>[],'positions'=>[],'engagements'=>[],'reads'=>[]];}
