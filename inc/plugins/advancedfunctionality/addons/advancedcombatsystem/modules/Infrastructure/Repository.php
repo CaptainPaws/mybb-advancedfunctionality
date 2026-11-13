@@ -41,7 +41,7 @@ class AF_ACS_Repository
 
     protected function table(string $name): string
     {
-        if (!in_array($name, ['schema_migrations', 'sessions', 'session_roles', 'snapshots', 'operations', 'events', 'event_details', 'diagnostics', 'control_groups', 'entities', 'entity_states', 'resources', 'controllers', 'encounters', 'sides', 'side_relationships', 'participants', 'rounds', 'turns', 'entity_turns', 'cooldowns', 'drafts', 'sealed_actions', 'rolls', 'submissions', 'publication_audit', 'post_links', 'combat_results', 'combat_receipts', 'outbox', 'effects', 'reactions', 'barrier_pools', 'barrier_targets', 'equipment', 'custody', 'delegations', 'objects', 'awareness', 'objectives', 'contributions', 'cover_assignments', 'zones', 'zone_connections', 'positions', 'engagements'], true)) {
+        if (!in_array($name, ['prepared_actions', 'prepared_executions', 'schema_migrations', 'sessions', 'session_roles', 'snapshots', 'operations', 'events', 'event_details', 'diagnostics', 'control_groups', 'entities', 'entity_states', 'resources', 'controllers', 'encounters', 'sides', 'side_relationships', 'participants', 'rounds', 'turns', 'entity_turns', 'cooldowns', 'drafts', 'sealed_actions', 'rolls', 'submissions', 'publication_audit', 'post_links', 'combat_results', 'combat_receipts', 'outbox', 'effects', 'reactions', 'barrier_pools', 'barrier_targets', 'equipment', 'custody', 'delegations', 'objects', 'awareness', 'objectives', 'contributions', 'cover_assignments', 'zones', 'zone_connections', 'positions', 'engagements'], true)) {
             throw new RuntimeException('ACS_UNKNOWN_TABLE');
         }
         return '`'.$this->prefix.'af_acs_'.$name.'`';
@@ -82,7 +82,7 @@ class AF_ACS_Repository
         $rows = $this->sql('SELECT version,status,step,checksum FROM '.$this->table('schema_migrations'))['rows'];
         $known = [];
         $names = [];
-        foreach (['001_foundation','002_entities','003_encounters','004_round_roster','005_clock_resources','006_drafts','007_sealed_actions','008_publication_journal','009_combat_commit','010_status_instances','011_reaction_registry','012_barrier_pools','013_equipment','014_custody','015_delegations','016_environment_objects','017_awareness','018_cooperation','019_spatial','020_cover'] as $version) {
+        foreach (['001_foundation','002_entities','003_encounters','004_round_roster','005_clock_resources','006_drafts','007_sealed_actions','008_publication_journal','009_combat_commit','010_status_instances','011_reaction_registry','012_barrier_pools','013_equipment','014_custody','015_delegations','016_environment_objects','017_awareness','018_cooperation','019_spatial','020_cover','021_prepared_actions'] as $version) {
             $file = __DIR__.'/../../migrations/'.$version.'.php';
             $migration = require $file;
             $known[$version] = ['checksum'=>hash_file('sha256',$file),'steps'=>count($migration['tables'])];

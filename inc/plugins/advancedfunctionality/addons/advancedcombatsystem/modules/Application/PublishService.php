@@ -50,6 +50,7 @@ final class AF_ACS_PublishService
         if (array_diff(array_keys($request),['draft_id','expected_draft_version','confirmation_hash'])) { throw new InvalidArgumentException('ACS_SUBMISSION_INPUT_INVALID'); }
         $uid=$this->access->uid();
         $draft=$this->preparation->draft(AF_ACS_Repository::integer($request['draft_id']??null),$uid)??throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
+        foreach($this->preparation->sealRows($draft['id'],true) as $seal)if(($this->preparation->sealPayload($seal)['deferred']??false)===true)throw new RuntimeException('ACS_PREPARED_UNSUPPORTED');
         $session=$this->preparation->session($draft['session_id'])??throw new RuntimeException('ACS_SESSION_UNAVAILABLE');
         $this->access->draftThread($session['tid']);
         if (!$this->preparation->roles($draft['session_id'],$uid)) { throw new RuntimeException('ACS_COMBAT_PERMISSION_DENIED'); }

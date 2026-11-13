@@ -77,7 +77,7 @@ trait AF_ACS_ReactionPersistence
     public function prepareReactionRolls(array $draft,array $context,AF_ACS_RandomSource $random):void
     {
         if(empty($this->sealWriting))throw new RuntimeException('ACS_COMMAND_REQUIRED');
-        foreach($this->sealRows($draft['id'],true) as $seal){$targets=$this->sealPayload($seal)['action']['targets'];foreach(self::candidateReactions($context['reactions']??[],$targets) as $entry){
+        foreach($this->sealRows($draft['id'],true) as $seal){if(($this->sealPayload($seal)['deferred']??false)===true)continue;$targets=$this->sealPayload($seal)['action']['targets'];foreach(self::candidateReactions($context['reactions']??[],$targets) as $entry){
             if($entry['status']!=='active'||!$entry['enabled']||$entry['spec']['probability']>=100)continue;$key=self::reactionRollKey($entry['id'],(string)$seal['id'],$entry['phase']);
             if($this->sql('SELECT id FROM '.$this->table('rolls').' WHERE session_id=? AND causal_key=? AND check_kind=? AND roll_index=0',[$draft['session_id'],$key,'reaction'])['rows'])continue;
             $sample=$random->reaction();$this->sql('INSERT INTO '.$this->table('rolls').' (session_id,sealed_action_id,causal_key,check_kind,roll_index,rng_version,value_json,created_at) VALUES (?,NULL,?,?,0,?,?,?)',[$draft['session_id'],$key,'reaction','uniform53-v1',self::json(['schema_version'=>1]+$sample),time()]);

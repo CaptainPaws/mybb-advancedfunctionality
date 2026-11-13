@@ -206,6 +206,7 @@ final class AF_ACS_QueryService
             try{foreach($grant['_profiles']??[] as $inline)$this->inline($inline,$dto['data']['definition']);$abilities[$key]=$this->ability($dto);$choices[$key]=['key'=>$key,'supported'=>true,'label'=>is_string($dto['data']['definition']['name']??null)&&$dto['data']['definition']['name']!==''?mb_substr($dto['data']['definition']['name'],0,191):'Способность '.$key,'target_policy'=>$abilities[$key]['target_policy']??['kind'=>'self_only'],'ap_cost'=>$abilities[$key]['costs'][0]['amount']]+(isset($abilities[$key]['target_count'])?['target_count'=>$abilities[$key]['target_count']]:[])+(isset($abilities[$key]['spawns'])?['spawn_action'=>true,'target'=>'self']:[])+(isset($abilities[$key]['awareness_action'])?['awareness_action'=>true,'label'=>$abilities[$key]['awareness_action']['operation']==='search'?'Поиск':'Передача сведений','target'=>'self']:[]);}
             catch(DomainException $e){$choices[$key]=['key'=>$key,'supported'=>false,'label'=>$key,'reason'=>$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage()];}
         }
+        foreach($abilities as $key=>$ability)if(isset($ability['prepared_action'])){$choices[$key]['label']='Подготовить действие · '.$choices[$key]['label'];$choices[$key]['prepared_action']=$ability['prepared_action'];}
         if(isset($controlGrant['control_overlay']))foreach($choices as &$choice)$choice['label']='Разрешённое боевое действие';unset($choice);
         return [$abilities,$choices];
     }
@@ -235,6 +236,11 @@ final class AF_ACS_QueryService
     private function ability(array $dto):array
     {
         require_once __DIR__.'/../Domain/Spawn.php';
+        require_once __DIR__.'/../Domain/PreparedAction.php';
+        if(isset($dto['data']['definition']['prepared_action'])) {
+            $contract=$dto['data']['definition']['prepared_action'];unset($dto['data']['definition']['prepared_action']);
+            return AF_ACS_PreparedAction::compile($this->ability($dto),$contract);
+        }
         if(isset($dto['data']['definition']['spatial_effect']))return AF_ACS_Spatial::compileEffect($dto);
         if(AF_ACS_Environment::hasMassAbility($dto))return AF_ACS_Environment::compileMass($dto);
         if(AF_ACS_Awareness::hasAbility($dto))return AF_ACS_Awareness::compile($dto);
