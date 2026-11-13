@@ -23,10 +23,17 @@ final class AF_ACS_AudienceService
     }
     public function knowledge(string $kind,string $id,?string $actor=null):array
     {
-        if($this->gm||$kind==='entity'&&isset($this->actors[$id]))return ['level'=>'identified','details'=>[],'version'=>0];
+        if($kind==='prepared_action'&&!isset($this->subjects['prepared_action:'.$id]))return ['level'=>'unknown','details'=>[],'version'=>0];
+        if($this->gm||$kind==='prepared_action'&&$this->managesPrepared($id)||$kind==='entity'&&isset($this->actors[$id]))return ['level'=>'identified','details'=>[],'version'=>0];
         if($kind==='entity'&&($this->permissions[$id]??null)!=='participants')return ['level'=>'unknown','details'=>[],'version'=>0];
         $audiences=$actor!==null&&isset($this->temporaryActors[$actor])?['actor'=>[$actor],'encounter'=>[$this->eid]]:($actor!==null?(isset($this->actors[$actor])?AF_ACS_Awareness::audiences($this->actors[$actor]):[]):$this->audiences);
         return AF_ACS_Awareness::known($this->rows,$kind,$id,$audiences);
+    }
+    /** Combat delegation alone does not disclose somebody else's hidden commitment. */
+    public function managesPrepared(string $id):bool
+    {
+        $s=$this->subjects['prepared_action:'.$id]??null;
+        return $this->gm||$s!==null&&in_array($this->access->uid(),[$s['owner_uid'],$s['originating_uid']],true);
     }
     public function canTarget(string $id,?string $actor=null):bool
     {
@@ -55,5 +62,5 @@ final class AF_ACS_AudienceService
         }return $receipt;
     }
     public function stamp():string
-    {return hash('sha256',serialize([$this->access->uid(),$this->eid,$this->gm,$this->audiences,$this->actors,$this->temporaryActors,$this->permissions,$this->rows,$this->statuses]));}
+    {return hash('sha256',serialize([$this->access->uid(),$this->eid,$this->gm,$this->audiences,$this->actors,$this->temporaryActors,$this->permissions,$this->rows,$this->statuses,$this->subjects]));}
 }

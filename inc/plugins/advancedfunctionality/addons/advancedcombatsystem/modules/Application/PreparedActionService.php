@@ -53,7 +53,14 @@ final class AF_ACS_PreparedActionService
         foreach(array_diff($fields,['operation_key']) as $k)$r[$k]=AF_ACS_Repository::integer($r[$k]);
         if(!is_string($r['operation_key'])||!preg_match('/\A[a-z0-9][a-z0-9_.-]{15,63}\z/D',$r['operation_key']))throw new RuntimeException('ACS_OPERATION_KEY_REQUIRED');
         $r=['schema_version'=>1,'actor_uid'=>$this->access->uid()]+$r;
-        $authorize=function()use($r,$recover){$this->view($r['session_id'],$r['encounter_id'],$r['entity_id']);if($recover&&(string)$this->repo->entity($r['session_id'],$r['entity_id'])['owner_uid']!==$this->access->uid())throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');};$authorize();
+        $authorize=function()use($r,$recover){
+            $this->view($r['session_id'],$r['encounter_id'],$r['entity_id']);$candidate=null;
+            foreach($this->repo->preparedRows($r['session_id'],$r['encounter_id'],$r['entity_id']) as $row)if($row['id']===$r['prepared_action_id'])$candidate=$row;
+            if(!$candidate)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
+            $hidden=isset(json_decode($candidate['contract_json'],true)['hidden']);$audience=new AF_ACS_AudienceService($this->repo,$this->access,$r['session_id'],$r['encounter_id']);
+            if($hidden?!$audience->managesPrepared($candidate['id']):!$this->repo->controllerFor($r['session_id'],$r['entity_id'],$this->access->uid()))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
+            if($recover&&(string)$this->repo->entity($r['session_id'],$r['entity_id'])['owner_uid']!==$this->access->uid())throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
+        };$authorize();
         return $this->repo->command('session:'.$this->access->uid().($recover?':prepared-release:':':prepared-cancel:').$r['operation_key'],$recover?'encounter.prepared_release':'encounter.prepared_cancel',$r,$authorize,
             fn($s)=>$recover?$this->repo->recoverPreparedItems($s,$this->repo->encounter($r['session_id'],$r['encounter_id'],true),$r['entity_id'],$r['prepared_action_id'],$r['prepared_version']):$this->repo->cancelPrepared($s,$this->repo->encounter($r['session_id'],$r['encounter_id'],true),$r['prepared_action_id'],$r['prepared_version'],$r['entity_id'],$r['operation_key']));
     }
@@ -61,7 +68,11 @@ final class AF_ACS_PreparedActionService
     public function view(string $sid,string $eid,string $entity): array
     {
         $session=$this->repo->session($sid)??throw new RuntimeException('ACS_SESSION_UNAVAILABLE');$this->access->draftThread($session['tid']);
-        if(!$this->repo->roles($sid,$this->access->uid())||!$this->repo->controllerFor($sid,$entity,$this->access->uid()))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
-        $out=[];foreach($this->repo->preparedRows($sid,$eid,$entity) as $row)$out[]=['prepared_action_id'=>(string)$row['id'],'entity_id'=>$entity,'can_release'=>$row['cost_state']==='recovery_required'&&(string)$row['owner_uid']===$this->access->uid(),'status'=>$row['status'],'prepared_version'=>(string)$row['prepared_version'],'cost_state'=>$row['cost_state'],'duration'=>$row['expires_boundary']];return $out;
+        $scope=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);$controller=$this->repo->controllerFor($sid,$entity,$this->access->uid());$rows=$this->repo->preparedRows($sid,$eid,$entity);
+        if(!$this->repo->roles($sid,$this->access->uid())||!$controller&&(!$scope['can_manage']||!array_filter($rows,static fn($r)=>isset(json_decode($r['contract_json'],true)['hidden']))))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
+        $audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);$out=[];
+        foreach($rows as $row){$hidden=isset(json_decode($row['contract_json'],true)['hidden']);if($hidden?!$audience->managesPrepared($row['id']):!$controller)continue;
+            $out[]=['prepared_action_id'=>(string)$row['id'],'entity_id'=>$entity,'can_release'=>$row['cost_state']==='recovery_required'&&(string)$row['owner_uid']===$this->access->uid(),'status'=>$row['status'],'prepared_version'=>(string)$row['prepared_version'],'cost_state'=>$row['cost_state'],'duration'=>$row['expires_boundary']];
+        }return $out;
     }
 }

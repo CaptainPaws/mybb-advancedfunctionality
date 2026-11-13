@@ -1,5 +1,6 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
+require_once __DIR__.'/Awareness.php';
 
 /** Typed data only. No KB expressions, callbacks, selectors or trigger execution. */
 final class AF_ACS_PreparedAction
@@ -8,7 +9,7 @@ final class AF_ACS_PreparedAction
     private static function fail(): never { throw new DomainException('ACS_PREPARED_UNSUPPORTED'); }
     public static function contract(mixed $value): array
     {
-        if (!is_array($value) || array_diff(array_keys($value),['schema','trigger','target','duration','ap_cost','additional_costs','requires_active','execution'])
+        if (!is_array($value) || array_diff(array_keys($value),['schema','trigger','target','duration','ap_cost','additional_costs','requires_active','execution','hidden'])
             || ($value['schema']??null)!=='ic-acs.prepared.v1'
             || (!is_array($value['trigger']??null)||array_diff(array_keys($value['trigger']),['kind','subject'])||($value['trigger']['kind']??null)!=='on_targeted'||($value['trigger']['subject']??null)!=='source')
             || ($value['target']??null)!==['kind'=>'fixed']
@@ -30,9 +31,23 @@ final class AF_ACS_PreparedAction
             }elseif(array_diff(array_keys($cost),['kind','key','amount','timing'])||in_array($cost['key'],['hp','ap'],true))self::fail();
         }
         unset($cost);
+        $hidden=array_key_exists('hidden',$value)?['hidden'=>self::hidden($value['hidden'])]:[];
         $execution=isset($value['execution'])?['execution'=>self::execution($value['execution'])]:[];
-        return $execution+['schema'=>'ic-acs.prepared.v1','trigger'=>['kind'=>'on_targeted','subject'=>'source'],'target'=>$value['target'],
+        return $hidden+$execution+['schema'=>'ic-acs.prepared.v1','trigger'=>['kind'=>'on_targeted','subject'=>'source'],'target'=>$value['target'],
             'duration'=>'until_next_turn','requires_active'=>true,'ap_cost'=>$value['ap_cost'],'additional_costs'=>$costs];
+    }
+    public static function hidden(mixed $h):array
+    {
+        if(!is_array($h)||array_diff(array_keys($h),['schema','source_stealth','perception','on_detected','reveal_on_trigger'])||count($h)!==5||($h['schema']??null)!=='ic-acs.hidden-prepared.v1'||!is_array($h['source_stealth']??null)||!array_is_list($h['source_stealth'])||array_diff($h['source_stealth'],['hidden','concealed','invisible'])||count(array_unique($h['source_stealth']))!==count($h['source_stealth'])||($h['on_detected']??null)!=='retain')self::fail();
+        $p=AF_ACS_Awareness::perception($h['perception']??null);if($p===null||$p['stealth']!==null||$p['passive']!==null)self::fail();
+        $reveal=$h['reveal_on_trigger'];if($reveal!==null&&(!is_array($reveal)||array_diff(array_keys($reveal),['relative_to','audience','level','reveal_source'])||count($reveal)!==4||!in_array($reveal['relative_to']??null,['source','trigger_actor'],true)||!in_array($reveal['audience']??null,['actor','control_group','side','encounter'],true)||!in_array($reveal['level']??null,['suspected','detected','identified'],true)||($reveal['reveal_source']??null)!==false))self::fail();
+        return $h;
+    }
+    public static function concealment(array $contract,array $state,string $actor):void
+    {
+        if(!isset($contract['hidden']))return;$h=self::hidden($contract['hidden']);$available=$state['perception_subjects']['entity:'.$actor]['perception']['stealth']['states']??[];
+        foreach($state['status_instances']??[] as $row)if($row['status']==='active'&&$row['target_entity_id']===$actor){$stealth=$row['spec']['mechanical_parameters']['stealth']??null;if($stealth!==null){AF_ACS_Awareness::stealth($stealth);array_push($available,...$stealth['states']);}}
+        if(array_diff($h['source_stealth'],$available))throw new RuntimeException('ACS_PREPARED_CONCEALMENT_REQUIRED');
     }
     public static function execution(mixed $e):array
     {

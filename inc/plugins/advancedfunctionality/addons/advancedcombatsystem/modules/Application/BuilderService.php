@@ -206,6 +206,7 @@ final class AF_ACS_BuilderService
             }
             foreach($p['context']['abilities'][$actor][$action['ability_key']]['components']??[] as $component)if($component['damage_type']==='elemental'&&!empty($p['context']['stats'][$actor]['element_damage_bonus']))throw new RuntimeException('preview_element_bonus_contract_unavailable');
             if(isset($p['context']['abilities'][$actor][$action['ability_key']]['prepared_action'])){
+                AF_ACS_PreparedAction::concealment($p['context']['abilities'][$actor][$action['ability_key']]['prepared_action'],$p['context']['state'],$actor);
                 $bindings=(new AF_ACS_PreparedItemService($this->repo,$this->access))->bindings($sid,$actor,$p['context']['abilities'][$actor][$action['ability_key']]['prepared_action'],$action['parameters']??[],$sealedDraft,$actionIndex);
                 if($bindings){$definitions[$actionIndex]=$dto;$definitions[$actionIndex]['prepared_items']=$bindings;$p['versions']['prepared_items']=$bindings;}
             }
