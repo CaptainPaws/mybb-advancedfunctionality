@@ -17,15 +17,19 @@ final class AF_ACS_PreparedAction
             || !is_int($value['ap_cost']??null) || $value['ap_cost']<1 || $value['ap_cost']>1000000) self::fail();
         $costs=array_key_exists('additional_costs',$value)?$value['additional_costs']:[];
         if (!is_array($costs) || !array_is_list($costs) || count($costs)>16) self::fail();
-        foreach ($costs as $cost) {
-            if (!is_array($cost) || array_diff(array_keys($cost),['kind','key','amount','timing'])
+        foreach ($costs as &$cost) {
+            if (!is_array($cost) || array_diff(array_keys($cost),['kind','key','amount','timing','definition','selection'])
                 || !in_array($cost['kind']??null,['resource','item'],true)
                 || !is_string($cost['key']??null) || !preg_match('/\A[a-z][a-z0-9_.-]{0,63}\z/D',$cost['key'])
                 || !is_int($cost['amount']??null) || $cost['amount']<1 || $cost['amount']>1000000
                 || !in_array($cost['timing']??null,['on_prepare','on_trigger'],true)) self::fail();
-            // Item costs require a proven retained owner reservation; no implicit spending grant.
-            if ($cost['kind']==='item' || in_array($cost['key'],['hp','ap'],true)) self::fail();
+            if($cost['kind']==='item') {
+                $pin=$cost['definition']??null;
+                if(($cost['selection']??null)!=='explicit'||!is_array($pin)||array_diff(array_keys($pin),['type','key','version','fingerprint'])||($pin['type']??null)!=='arpg_item'||!is_string($pin['key']??null)||!preg_match('/\A[a-z0-9][a-z0-9_.-]{0,95}\z/D',$pin['key'])||!is_string($pin['version']??null)||$pin['version']===''||!is_string($pin['fingerprint']??null)||!preg_match('/\Asha256:[a-f0-9]{64}\z/D',$pin['fingerprint']))self::fail();
+                $cost['definition']=['type'=>$pin['type'],'key'=>$pin['key'],'version'=>$pin['version'],'fingerprint'=>$pin['fingerprint']];
+            }elseif(array_diff(array_keys($cost),['kind','key','amount','timing'])||in_array($cost['key'],['hp','ap'],true))self::fail();
         }
+        unset($cost);
         return ['schema'=>'ic-acs.prepared.v1','trigger'=>['kind'=>'on_targeted','subject'=>'source'],'target'=>$value['target'],
             'duration'=>'until_next_turn','requires_active'=>true,'ap_cost'=>$value['ap_cost'],'additional_costs'=>$costs];
     }
@@ -34,7 +38,7 @@ final class AF_ACS_PreparedAction
         if (($ability['targeting']??'single_target')!=='single_target' || empty($ability['components'])
             || !empty($ability['statuses']) || !empty($ability['removals'])) self::fail();
         $contract=self::contract($contract);$ability['costs']=[['kind'=>'ap','amount'=>$contract['ap_cost']]];
-        foreach($contract['additional_costs'] as $cost)if($cost['timing']==='on_prepare')$ability['costs'][]=['kind'=>'resource','resource'=>$cost['key'],'amount'=>$cost['amount']];
+        foreach($contract['additional_costs'] as $cost)if($cost['kind']==='resource'&&$cost['timing']==='on_prepare')$ability['costs'][]=['kind'=>'resource','resource'=>$cost['key'],'amount'=>$cost['amount']];
         return $ability+['prepared_action'=>$contract];
     }
     public static function terminal(string $state): bool { return in_array($state,['expired','cancelled','executed'],true); }

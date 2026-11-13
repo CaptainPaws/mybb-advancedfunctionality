@@ -6,6 +6,7 @@ require_once __DIR__.'/ItemActionService.php';
 require_once __DIR__.'/ObjectInteractionService.php';
 require_once __DIR__.'/SpatialService.php';
 require_once __DIR__.'/CoverService.php';
+require_once __DIR__.'/PreparedItemService.php';
 
 require_once __DIR__.'/../Domain/Spawn.php';
 
@@ -98,7 +99,7 @@ final class AF_ACS_BuilderService
         }
         foreach($chosen['members'] as $actor){
             try{$choices=$q->builderCatalog($sid,$actor['id']);$notice='';}catch(Throwable $e){$choices=[];$notice=self::message($e);}
-            foreach($choices as &$c){if(!$c['supported'])$c['reason']=self::message(new RuntimeException($c['reason']??'preview_ability_unsupported'));}unset($c);
+            foreach($choices as &$c){if(isset($c['prepared_action']))try{$c['prepared_item_costs']=(new AF_ACS_PreparedItemService($this->repo,$this->access))->catalog($sid,$actor['id'],$c['prepared_action']);}catch(Throwable $e){$c['supported']=false;$c['reason']=$e->getMessage();}if(!$c['supported'])$c['reason']=self::message(new RuntimeException($c['reason']??'preview_ability_unsupported'));}unset($c);
             try {if(!isset($this->repo->controllerFor($sid,$actor['id'],$this->access->uid())['control_overlay']))$choices=array_merge($choices,(new AF_ACS_ItemActionService($this->repo,$this->access))->catalog($sid,$actor['id']));} catch (Throwable $e) {$notice=$notice?:self::message($e);}
             $choices=array_merge($choices,(new AF_ACS_CoverService($this->repo,$this->access))->catalog($sid,$eid,$actor['id']));
             $choices=array_merge($choices,(new AF_ACS_SpatialService($this->repo,$this->access))->catalog($sid,$eid,$actor['id']));
@@ -152,7 +153,7 @@ final class AF_ACS_BuilderService
         foreach($input['actions'] as $actionIndex=>$action){
             $spatial=null;$isCover=str_starts_with((string)($action['ability_key']??''),'cover:');$isSpatial=$isCover||str_starts_with((string)($action['ability_key']??''),'spatial:');$object=null;$isObject=AF_ACS_ObjectInteraction::isAction((string)($action['ability_key']??''));$isSelfAction=false;$isSpawn=false;$isItem=AF_ACS_ItemActionService::isItem((string)($action['ability_key']??''));$item=null;
             if(!is_array($action)||array_diff(array_keys($action),['actor_id','ability_key','targets','parameters'])||!is_string($action['ability_key']??null)||!is_array($action['targets']??null)||!array_is_list($action['targets'])||!$action['targets']||count($action['targets'])>100||count(array_unique($action['targets']))!==count($action['targets']))throw new RuntimeException('builder_input_invalid');
-            if(($action['parameters']??[])!==[])throw new RuntimeException('builder_parameters_unsupported');
+            if(($action['parameters']??[])!==[]&&array_keys($action['parameters'])!==['prepared_items'])throw new RuntimeException('builder_parameters_unsupported');
             $actor=AF_ACS_Repository::integer($action['actor_id']??null);
             $category=$isItem?(str_starts_with($action['ability_key'],'item:consume:')?'item_consume':'equipment_change'):'ordinary';
             $grant=$this->repo->controllerFor($sid,$actor,$this->access->uid(),$category);AF_ACS_Control::action($grant,$action['ability_key']);if(!$grant)throw new RuntimeException('ACS_DELEGATION_ACTION_DENIED');
@@ -168,6 +169,7 @@ final class AF_ACS_BuilderService
             if($isSpatial){$spatial=($isCover?new AF_ACS_CoverService($this->repo,$this->access):new AF_ACS_SpatialService($this->repo,$this->access))->prepare($sid,$eid,$actor,$action['ability_key'],$action['targets'],$sealedDraft);$definitions[$actionIndex]=$spatial['definition'];$spatialAbilities[$actor][$action['ability_key']]=$spatial['ability'];}
             if($isObject){$object=(new AF_ACS_ObjectInteractionService($this->repo,$this->access))->prepare($sid,$eid,$actor,$action['ability_key'],$sealedDraft,$actionIndex);if($action['targets']!==[$object['definition']['object_interaction']['entity_id']])throw new RuntimeException('preview_target_forbidden');$definitions[$actionIndex]=$object['definition'];$objectAbilities[$actor][$action['ability_key']]=$object['inspection']['context']['abilities'][$actor][$action['ability_key']];$actionAbilities[$actionIndex]=$objectAbilities[$actor][$action['ability_key']];$objectBehavior[$actor][$action['targets'][0]]=['kind'=>'object','relationship'=>'neutral','active'=>true];}
             if(!$isItem&&!$isObject&&!$isSpatial){$dto=$q->sealDefinition($sid,$actor,$action['ability_key']);$isSpawn=AF_ACS_Spawn::hasAbility($dto);$isSelfAction=AF_ACS_Awareness::hasAbility($dto)||AF_ACS_Environment::hasMassAbility($dto);}
+            if(($isItem||$isObject||$isSpatial||!isset($dto['data']['definition']['prepared_action']))&&($action['parameters']??[])!==[])throw new RuntimeException('builder_parameters_unsupported');
             if(($isSpawn||$isSelfAction) && $action['targets']!==[$actor])throw new RuntimeException('ACS_SPAWN_TARGET_UNSUPPORTED');
             $behaviorPolicy=$isSpatial?$spatial['ability']['target_policy']:($isObject?['kind'=>'object_only']:($isItem?['kind'=>'self_only']:AF_ACS_Control::targetPolicy($dto['data']['definition'])));
             $relationMap=[];$side=$rawScope['actors'][$actor]['side_id']??null;
@@ -203,6 +205,10 @@ final class AF_ACS_BuilderService
                 $p['context']['stats'][$actor]=$item['stats'];
             }
             foreach($p['context']['abilities'][$actor][$action['ability_key']]['components']??[] as $component)if($component['damage_type']==='elemental'&&!empty($p['context']['stats'][$actor]['element_damage_bonus']))throw new RuntimeException('preview_element_bonus_contract_unavailable');
+            if(isset($p['context']['abilities'][$actor][$action['ability_key']]['prepared_action'])){
+                $bindings=(new AF_ACS_PreparedItemService($this->repo,$this->access))->bindings($sid,$actor,$p['context']['abilities'][$actor][$action['ability_key']]['prepared_action'],$action['parameters']??[],$sealedDraft,$actionIndex);
+                if($bindings){$definitions[$actionIndex]=$dto;$definitions[$actionIndex]['prepared_items']=$bindings;$p['versions']['prepared_items']=$bindings;}
+            }
             if(($p['choices'][$action['ability_key']]['supported']??false)!==true)throw new RuntimeException('builder_parameters_unsupported');
             if($context===null)$context=$p['context'];else foreach(['entities','groups'] as $f)$context['state'][$f]=array_replace($context['state'][$f],$p['context']['state'][$f]);
             foreach(['stats','defenses','turns','abilities','status_immunities','reaction_turns','reaction_kinds','behavior_targets','perception_actors'] as $f)$context[$f]=array_replace($context[$f],$p['context'][$f]);

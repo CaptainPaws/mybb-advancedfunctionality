@@ -14,6 +14,7 @@ require_once __DIR__.'/BarrierPersistence.php';
 require_once __DIR__.'/ItemPersistence.php';
 require_once __DIR__.'/CustodyPersistence.php';
 require_once __DIR__.'/PreparedActionPersistence.php';
+require_once __DIR__.'/PreparedItemPersistence.php';
 
 /** Prepared, scoped SQL. All mutators require the existing audited command transaction. */
 final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
@@ -22,7 +23,7 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     use AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
     use AF_ACS_ClockPersistence, AF_ACS_ItemPersistence, AF_ACS_CustodyPersistence;
     use AF_ACS_DraftPersistence;
-    use AF_ACS_SealPersistence, AF_ACS_PreparedActionPersistence;
+    use AF_ACS_SealPersistence, AF_ACS_PreparedActionPersistence, AF_ACS_PreparedItemPersistence;
     use AF_ACS_RoundManagementPersistence;
     private function ids(array $row,array $fields): array
     {
