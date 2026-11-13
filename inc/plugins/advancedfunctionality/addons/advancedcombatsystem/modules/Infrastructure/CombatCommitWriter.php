@@ -212,24 +212,26 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             $prepared['context']=$this->preparation->reactionContext($prepared['context'],$frozen['seals']);
             $result=AF_ACS_Resolver::resolve($prepared['context'],$ordered,$frozen['tape'],'seal');
             $controls=$this->controls($current,$frozen,$prepared,$result);$controls['fence_hash']=$fingerprint;
+            $phase=$this->preparedPhase($current,$frozen,$prepared['context']);
+            if($phase?->hasParticipants()){$result=AF_ACS_Resolver::resolve($prepared['context'],$ordered,$frozen['tape'],'seal',$phase);$phase->traces();}
             $current=$this->phase($current,'committing',['schema_version'=>1,'pid'=>$current['pid'],'controls'=>array_diff_key($controls,['summary'=>true])]);
             // Time expiry can advance while resolving even though assignment/revoke rows are locked.
             $this->authorizeFacts($current,$f,$frozen['actions']);
             $toolInventory=$this->interactionToolInventory($current,$result);
             $controls['owner_receipts']=array_merge($this->commitItems($current,$frozen,$result,$prepared),$this->commitInteractionTools($current,$frozen,$result,$prepared,$toolInventory));
             $changes=$this->project($current,$f,$turn,$result,$frozen);
-            return $this->finish($current,$f,$result,$controls,$changes,$fid,$prepared);
+            return $this->finish($current,$f,$result,$controls,$changes,$fid,$prepared,$phase);
         });
     }
 
-    private function finish(array $row, array $f, AF_ACS_ResolverResult $resolved, array $controls, array $changes, string $fid,array $prepared): array
+    private function finish(array $row, array $f, AF_ACS_ResolverResult $resolved, array $controls, array $changes, string $fid,array $prepared,?AF_ACS_PreparedPhase $phase=null): array
     {
         $session=$f['session'][0];$encounter=$f['encounter'][0];$operation='combat:'.$row['submission_id'];$now=time();
         self::integer((string)$session['session_version'],'18446744073709551614');self::integer((string)$session['next_sequence'],'18446744073709551614');
         self::integer((string)$encounter['encounter_version'],'18446744073709551614');self::integer((string)$encounter['next_event_sequence'],'18446744073709551614');
         $event=$this->sql('INSERT INTO '.$this->table('events').' (session_id,session_sequence,encounter_id,event_sequence,operation_key,event_type,source_entity_id,actor_uid,submission_id,engine_version,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
             [$row['session_id'],$session['next_sequence'],$row['encounter_id'],$encounter['next_event_sequence'],$operation,'combat.resolved',$controls['summary']['actions'][0]['actor_id'],$row['author_uid'],$row['submission_id'],AF_ACS_Resolver::VERSION,$now])['id'];
-        $preparedExecutions=$this->executePreparedCausal($row,$resolved,$event);if($preparedExecutions)$changes['prepared_executions']=$preparedExecutions;
+        $preparedExecutions=$this->finishPreparedPhases($phase,$event);if($preparedExecutions)$changes['prepared_executions']=$preparedExecutions;
         $changes['objectives']=$this->persistObjectives($row['session_id'],$row['encounter_id'],$resolved->serverInitial()['objectives']??[],$resolved->serverState()['objectives']??[],$event);
         $spawns=$this->commitSpawns($row,$event,$prepared,$resolved->serverPlan());
         if($spawns){$changes['spawns']=$spawns;$changes['summon_admissions']=$this->preparation->admitSummons($row['session_id'],$row['encounter_id']);}
@@ -238,9 +240,17 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         foreach($f['boundaries'] as $boundary){if($boundary['status']!=='committed'||!in_array($boundary['kind'],['clock.entity_start','clock.ap_refresh'],true))continue;
             $data=json_decode($boundary['result_json'],true,64,JSON_THROW_ON_ERROR);if(in_array($data['entity_turn_id']??null,$turnIds,true)||isset($data['round_id'])&&(string)$data['round_id']===(string)(self::indexed($f['turns'])[$row['turn_id']]['round_id']??''))$boundaryHistory[]=['boundary_key'=>$boundary['operation_key'],'result'=>$data];
         }
-        $finalState=$resolved->serverState();foreach($preparedExecutions as $execution)if($execution['outcome']==='executed'){foreach(['entities','groups'] as $field)$finalState[$field]=array_replace($finalState[$field],$execution['final_state'][$field]);foreach(['status_instances','barriers','summons','next_status_order','next_barrier_order'] as $field)if(isset($execution['final_state'][$field]))$finalState[$field]=$execution['final_state'][$field];}
+        $finalState=$resolved->serverState();$summary=$controls['summary'];
+        if($preparedExecutions){
+            // Confirmation proves the frozen primary plan; the applied card must describe the causal result.
+            foreach($resolved->serverPlan()['actions'] as $i=>$step)$summary['actions'][$i]=array_replace($summary['actions'][$i],
+                ['outcome'=>$step['scenario'],'rolls'=>$step['rolls'],'probabilities'=>$step['probabilities'],'costs'=>$step['costs'],'damage'=>$step['allocation']['integer_budget']]+AF_ACS_Resolver::targetSummary($step));
+            $summary['virtual_entities']=[];foreach($finalState['entities'] as $id=>$entity)$summary['virtual_entities'][]=['entity_id'=>(string)$id,'hp'=>$entity['hp'],'max_hp'=>$entity['max_hp'],'life_state'=>$entity['life_state']];
+            $summary['virtual_groups']=$finalState['groups'];$summary=array_replace($summary,AF_ACS_BuilderService::visibleState($finalState,$prepared['scope']));
+            foreach(array_keys($summary) as $key)if(str_ends_with($key,'_hash'))unset($summary[$key]);
+        }
         $payload=self::json(['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,
-            'persistent'=>true,'submission_id'=>$row['submission_id'],'owner_receipts'=>$controls['owner_receipts']??[],'boundary_history'=>$boundaryHistory,'summary'=>$controls['summary'],'plan'=>$resolved->serverPlan(),
+            'persistent'=>true,'submission_id'=>$row['submission_id'],'owner_receipts'=>$controls['owner_receipts']??[],'boundary_history'=>$boundaryHistory,'summary'=>$summary,'confirmation_summary'=>$controls['summary'],'plan'=>$resolved->serverPlan(),
             'dependency_fence_hash'=>$controls['fence_hash'],'initial'=>$resolved->serverInitial(),'final'=>$finalState,'changes'=>$changes]);$resultHash=hash('sha256',$payload);
         $visibility=self::json(['schema_version'=>1,'scope'=>'combat_participants']);
         $this->sql('INSERT INTO '.$this->table('event_details').' (event_id,schema_version,numeric_policy,payload_json,visibility_json,content_hash) VALUES (?,1,?,?,?,?)',

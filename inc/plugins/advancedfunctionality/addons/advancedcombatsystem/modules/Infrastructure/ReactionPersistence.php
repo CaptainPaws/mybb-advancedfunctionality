@@ -28,8 +28,11 @@ trait AF_ACS_ReactionPersistence
             $protected=$c['protected_targets']??[$row['entity_id']];$selection=$spec['selection']??'self';
             if(!is_array($protected)||!array_is_list($protected)||!$protected||count($protected)>100||count(array_unique($protected))!==count($protected)||$selection==='self'&&$protected!==[$row['entity_id']]||$selection==='single_ally'&&(count($protected)!==1||$protected[0]===$row['entity_id']))throw new RuntimeException('ACS_REACTION_SCHEMA_INVALID');
             foreach($protected as $target){self::integer($target);if(!$this->reactionParticipant($sid,$eid,$target))$enabled=false;}
+            $registered=$this->sql('SELECT e.session_sequence,d.payload_json,d.visibility_json,d.content_hash FROM '.$this->table('events').' e JOIN '.$this->table('event_details')." d ON d.event_id=e.id WHERE e.session_id=? AND e.encounter_id=? AND e.event_type='encounter.reaction_register' AND JSON_UNQUOTE(JSON_EXTRACT(d.payload_json,'$.result.reaction_id'))=?",[$sid,$eid,$row['id']])['rows'];
+            if(count($registered)>1)throw new RuntimeException('ACS_REACTION_PIN_INVALID');
+            $causalOrder=null;if($registered){$event=$registered[0];if(!hash_equals($event['content_hash'],hash('sha256',$event['payload_json']."\n".$event['visibility_json'])))throw new RuntimeException('ACS_REACTION_PIN_INVALID');$causalOrder=self::integer((string)$event['session_sequence']);}
             $entries[$row['id']]=['id'=>$row['id'],'entity_id'=>$row['entity_id'],'encounter_id'=>$eid,'phase'=>$row['phase'],'priority'=>$spec['priority'],'registered_order'=>(int)$row['registered_order'],
-                'status'=>$row['status'],'reaction_version'=>(int)$row['reaction_version'],'spec'=>$spec,'enabled'=>(bool)$enabled,'last_execution'=>$c['last_execution']??null,'protected_targets'=>$c['protected_targets']??[$row['entity_id']]];
+                'causal_order'=>$causalOrder,'status'=>$row['status'],'reaction_version'=>(int)$row['reaction_version'],'spec'=>$spec,'enabled'=>(bool)$enabled,'last_execution'=>$c['last_execution']??null,'protected_targets'=>$c['protected_targets']??[$row['entity_id']]];
             hash_update($fingerprint,self::json(['schema_version'=>1,'row'=>$row,'entry'=>$entries[$row['id']]]));
         }
         return ['entries'=>$entries,'fingerprint'=>hash_final($fingerprint)];

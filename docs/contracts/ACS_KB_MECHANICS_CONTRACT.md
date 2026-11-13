@@ -1219,3 +1219,64 @@ owner principal item execution блокируется; read-only source principa
 выдаёт право расходовать чужое имущество. Неизвестный/orphan consume сохраняет
 parent recovery barrier, без повторного consume и освобождения неизвестного
 расхода. On_prepare costs и prepaid AP повторно не оплачиваются.
+
+## ACS-9.1.2A — phase interleaving extension
+
+Этот consumer расширяет фазовые ограничения предыдущего раздела, не переписывая
+исторические contracts/seals. Schema `ic-acs.prepared-execution.v1`, event_kind
+`combat.primary`, fixed sealed target, priority, on_unavailable и explicit limits
+сохраняются. Поддержаны:
+
+| execution.phase | requires_hit | Точка выполнения |
+|---|---|---|
+| on_targeted | false | После on_cast, до before_hit и hit |
+| before_hit | false | До проверки hit с прежними samples |
+| after_hit | boolean | После hit/on_hit, до damage |
+| after_damage | boolean | После damage/on_damage, до reflection/lifesteal |
+
+Для early phases requires_hit=true UNSUPPORTED: результат будущего hit не
+используется как условие до своей фазы. В late phases true требует успешного
+hit по текущему subject; false допускает и miss. Неизвестные phase/event kinds,
+recursive emission, дополнительные selectors/callbacks остаются UNSUPPORTED.
+
+Prepared и active reactions объединены в существующей фазовой очереди Resolver.
+Фазы не переставляются priority. Внутри: меньший KB priority, immutable
+registration session event sequence, decimal stable ID; при полном совпадении
+из разных реестров — стабильный kind discriminator. Prepared использует свой
+source registration event. Для реакции causal_order читается из существующего
+encounter.reaction_register event/result, с проверкой content hash; её прежний
+локальный registered_order не подменяется и не перезаписывается. Отсутствующее
+доказательство cross-registry registration order блокирует causal resolution.
+Приоритеты KB и ordinary reaction budget не меняются.
+
+Несколько primary actions и multiple targets обходятся в исходном sealed order.
+Каждый action/target/phase имеет отдельный durable trigger event; после первого
+executed commitment последующие причины записываются skipped/unavailable.
+Прежний after_damage operation key сохранён для recovery уже armed 9.1.2;
+остальные фазы добавляют phase к ключу. До механики сервер сохраняет все нужные
+hit/crit causal checks. Для committed parent lookup предшествует arm/RNG.
+
+Child Resolver получает текущий общий virtual state. Следующая реакция, цель,
+primary action и EntityTurn-end boundary видят его HP/resources/barriers/status
+changes. Дополнительной SQL-проекции child нет: итог пишет прежний CombatCommit
+writer одним CAS/transaction. Owner participation остаётся same-writer;
+child savepoint не освобождает неизвестный расход. Непойманная integrity/causal
+ошибка откатывает parent целиком, сохраняя ранее durable causal tape.
+
+Existing passive effects исполняются в прежних разрешённых точках реакции;
+reflection затем lifesteal — после after_damage. Они не становятся новыми
+prepared trigger kinds. Prepared chains/active reactions от child по-прежнему
+явно запрещены emission contract. Новые Inventory grants не выдаются. Неизвестный
+runtime owner outcome сохраняет R2 recovery barrier. Если virtual control overlay
+изменился относительно проверенной owner/controller projection, текущая ветка
+возвращает UNSUPPORTED вместо исполнения со старыми полномочиями.
+
+Frozen primary confirmation проверяется прежним способом до causal resolution.
+В immutable результате confirmation_summary хранит исходное доказательство,
+summary/plan/final описывают фактически применённое interleaving. Internal prepared
+phase markers не выдаются карточкой за обычные активные реакции; hidden prepared
+contracts не добавлены в player DTO.
+
+Legacy prepared contracts без execution descriptor сохраняют diagnostic
+UNSUPPORTED без механики, implicit phase, нового RNG или implicit cancellation;
+это не блокирует исходный primary strike.
