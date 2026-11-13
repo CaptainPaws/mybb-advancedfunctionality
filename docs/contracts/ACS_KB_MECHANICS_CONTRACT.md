@@ -997,3 +997,80 @@ key. Изменения пишутся в прежний ACS journal. Combat mov
 только existing atomic R2 commit. Read dependencies включают только реально
 прочитанные позиции, зоны, directed edges и контакты, включая отсутствие
 строки. Изменение посторонней связи не требует нового confirmation.
+
+## ACS-8.3.2 cover and obstacle subset
+
+Optional `cover` и `obstacle` — только в object-template.v2 с category passive.
+Они используют прежний object entity/snapshot/version, не отдельный barrier HP.
+
+`cover` содержит ровно:
+
+```json
+{"schema":"ic-acs.cover.v1","category":"partial","capacity":2,
+ "occupy_ap":1,"leave_ap":1,"speed_bonus":10,"def_bonus":20,
+ "res_bonuses":{},"blocks_line_of_effect":false,"same_zone":true,
+ "on_move":"leave","on_destroy":"remove"}
+```
+
+Category — partial/substantial/complete, без встроенных процентов/формул.
+Capacity и AP — positive integers <=1000000; bonus — nonnegative integer
+<=1000000. RES keys должны существовать в retained elemental resistance
+context фактической цели, иначе UNSUPPORTED. Speed добавляется после прежних
+stat modifiers, DEF/RES передаются в прежний Damage; immunities, penetration,
+rounding, barriers и HP не заменяются. True damage сохраняет прежние правила.
+blocks_line_of_effect задаётся независимо от category и bonuses.
+
+Один объект может иметь несколько active assignments до capacity; у существа
+не больше одного действующего cover (автоматического stacking нет). Занятие
+требует active object и одной явно определённой зоны. Same-zone не создаёт
+assignment автоматически. Назначение хранит полный pinned cover policy,
+assignment_version и existing entity IDs. Добровольные wire действия
+`cover:enter:<cover entity_id>` / `cover:leave:<cover entity_id>` имеют
+`targets=[actor]`, parameters=[], стоимость по KB, отдельный seal. Перемещение
+защищаемого прекращает assignment; GM relocation тоже журналирует прекращение.
+Укрытие с inactive/expired/destroyed object или вне текущей зоны цели не даёт
+бонус. Destruction снимает active assignments один раз; history не удаляется.
+
+`obstacle` содержит schema=ic-acs.obstacle.v1 и edges (1..64), каждый:
+from/to — разные zone keys, blocks_movement и blocks_line_of_effect boolean,
+on_destroy=null либо `{status:open|blocked,line_of_effect:boolean}`. Binding
+направленный, только внутри encounter карты; никаких координат или поиска
+пути. Active obstacle — самостоятельный gate, а не автоматически назначенное
+укрытие. При отсутствии spatial capability такой контракт UNSUPPORTED.
+On_destroy изменяет существующую точную connection с увеличением версии;
+неизвестная зона/connection блокирует всю операцию. Другие blockers того же
+edge продолжают действовать. Terminal damage повторно не запускает последствия.
+
+Ordinary/multiple abilities и прежний hidden_mass_effect могут явно задавать:
+
+```json
+{"environment_policy":{"schema":"ic-acs.environment-target.v1",
+ "ignores_cover":false,"requires_line_of_effect":true,
+ "affects_zone":null,"penetrates_obstacles":false}}
+```
+
+affects_zone — null либо точный zone key. Для explicit multiple проверяет
+выбранные цели, не раскрывает и не выбирает скрытых существ автоматически.
+Hidden-object mass серверно выбирает tag scope прежнего perception contract,
+ограничивает его заданной зоной и проверяет LoE/blockers каждого объекта.
+Игнорирование cover отключает bonus, но не blocks_line_of_effect/преграды.
+Penetration разрешает object blockers, но не отменяет awareness/target policy,
+range, базовую capability/LoE зоны или связи. Отсутствующий descriptor означает
+ignores_cover=false, requires_line_of_effect=false, affects_zone=null,
+penetrates_obstacles=false; ранее заданный spatial_range.line_of_effect также
+остаётся самостоятельным gate. Неизвестные поля/направления не исполняются.
+
+Intercept использует собственные position, cover policy, defenses и barrier
+pools; same hit/crit samples пересчитываются для resolved target. Недоступный
+по range/obstacle/cover interceptor пропускается до расхода реакции. Cover
+исходной цели не переносится. Публичный DTO не содержит hidden assignment,
+policy, obstacle identity или причин отказа; GM detail gate карточки сохранён.
+
+Dependency set включает relevant target assignments, capacity при занятии,
+object versions и directed blocker set, включая отсутствие записи. Не связанные
+cover/obstacle objects исключены из прежнего глобального object hash, их
+реальные чтения/изменения входят в scoped cover hash и SQL fence. Прежние
+non-cover object dependencies сохранены. Изменение relevant assignment/wall
+требует reconfirm на прежней tape; target не переназначается. GM correction
+требует native/session GM, POST/CSRF, CAS, reason, operation key и existing
+encounter.cover_assignment audit; произвольный policy JSON не принимается.

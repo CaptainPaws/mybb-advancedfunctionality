@@ -14,7 +14,7 @@ require_once __DIR__.'/../Application/BuilderService.php';
 final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 {
     use AF_ACS_InteractionToolPersistence, AF_ACS_ItemCommitPersistence, AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
-    private array $spatialKeys=[];
+    private array $spatialKeys=[],$coverKeys=[];
     private AF_ACS_SubmissionStore $submissions;
     private AF_ACS_EncounterRepository $preparation;
     private AF_ACS_SessionAccess $access;
@@ -102,9 +102,10 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         $summary=array_replace($summary,AF_ACS_BuilderService::visibleState($result->serverState(),$prepared['scope']));
         if(isset($result->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',self::json(['schema_version'=>1,'boundaries'=>$result->serverPlan()['entity_end_boundaries']]));
         if(($spatialHash=AF_ACS_Spatial::summary($result->serverInitial()['spatial']??AF_ACS_Spatial::empty(),$result->serverState()['spatial']??AF_ACS_Spatial::empty()))!==null)$summary['spatial_hash']=$spatialHash;
+        if(($coverHash=AF_ACS_Cover::summary($result->serverInitial(),$result->serverState()))!==null)$summary['cover_hash']=$coverHash;
         $summary['awareness_hash']=hash('sha256',serialize([$result->serverState()['awareness'],$result->serverState()['awareness_attempts']]));
         if(!empty($result->serverState()['objectives']))$summary['objective_state_hash']=hash('sha256',serialize($result->serverState()['objectives']));
-        if(!empty($result->serverState()['objects']))$summary['object_state_hash']=hash('sha256',serialize($result->serverState()['objects']));
+        if(!empty(AF_ACS_Cover::legacyObjects($result->serverState()['objects'])))$summary['object_state_hash']=hash('sha256',serialize(AF_ACS_Cover::legacyObjects($result->serverState()['objects'])));
         if(!empty($result->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($result->serverState()['summons']));
         if(array_filter($result->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',self::json(['schema_version'=>1,'instances'=>$result->serverState()['status_instances']]));
         if(($reactionHash=AF_ACS_Resolver::reactionHash($result,$prepared['context']))!==null)$summary['reaction_hash']=$reactionHash;
@@ -137,7 +138,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             throw new RuntimeException('ACS_VERSION_CONFLICT');
         }
         $this->access->draftThread($row['tid']);
-        $this->spatialKeys=[];$before=$this->facts($row);$frozen=$this->frozen($row);
+        $this->spatialKeys=[];$this->coverKeys=[];$before=$this->facts($row);$frozen=$this->frozen($row);
         $this->authorizeFacts($row,$before,$frozen['actions']);
         $builder=new AF_ACS_BuilderService($this->preparation,$this->access);
         $scope=$builder->context($row['session_id'],$row['encounter_id'],$row['turn_id']);
@@ -158,7 +159,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
     private function bindSpatial(array &$facts,array $row,AF_ACS_ResolverResult $resolved):void
     {
         $reads=$resolved->serverState()['spatial']['reads']??[];$this->spatialKeys=array_keys($reads);$actual=$this->spatialDependencies($row['session_id'],$row['encounter_id'],$this->spatialKeys);
-        if($actual!==$reads)throw new RuntimeException('ACS_SPATIAL_VERSION_CONFLICT');$facts['spatial']=$actual;
+        if($actual!==$reads)throw new RuntimeException('ACS_SPATIAL_VERSION_CONFLICT');$facts['spatial']=$actual;$coverReads=$resolved->serverState()['cover']['reads']??[];$this->coverKeys=array_keys($coverReads);$coverActual=$this->coverDependencies($row['session_id'],$row['encounter_id'],$this->coverKeys);if($coverReads!==$coverActual)throw new RuntimeException('ACS_COVER_VERSION_CONFLICT');$facts['cover']=$coverActual;
     }
     private function phase(array $row, string $to, array $evidence): array
     {
@@ -181,11 +182,11 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         if ($row['status']!=='post_confirmed' || $row['pid']===null || $row['state_version']!==$version) { throw new RuntimeException('ACS_COMBAT_POST_NOT_CONFIRMED'); }
         $this->access->draftThread($row['tid']);
         $topic=$this->access->thread($row['tid']);$fid=self::integer((string)($topic['fid']??''),'4294967295');
-        $this->spatialKeys=[];$before=$this->facts($row);$frozen=$this->frozen($row);
+        $this->spatialKeys=[];$this->coverKeys=[];$before=$this->facts($row);$frozen=$this->frozen($row);
         $builder=new AF_ACS_BuilderService($this->preparation,$this->access);$scope=$builder->context($row['session_id'],$row['encounter_id'],$row['turn_id']);
         $prepared=$builder->prepare(['session_id'=>$row['session_id'],'encounter_id'=>$row['encounter_id'],'turn_id'=>$row['turn_id'],
             'scope_token'=>$scope['scope_token'],'actions'=>$frozen['actions'],'scenario'=>'hit'],$row['draft_id']);
-        if(($prepared['context']['state']['spatial']['pin']??null)!==null){$spatialOrdered=$prepared['ordered'];foreach($spatialOrdered as &$a)unset($a['scenario']);unset($a);$spatialContext=$this->preparation->reactionContext($prepared['context'],$frozen['seals']);$spatialResolved=AF_ACS_Resolver::resolve($spatialContext,$spatialOrdered,$frozen['tape'],'seal');$this->bindSpatial($before,$row,$spatialResolved);}
+        if(($prepared['context']['state']['spatial']['pin']??null)!==null||AF_ACS_Cover::legacyObjects($prepared['context']['state']['objects'])!==$prepared['context']['state']['objects']){$spatialOrdered=$prepared['ordered'];foreach($spatialOrdered as &$a)unset($a['scenario']);unset($a);$spatialContext=$this->preparation->reactionContext($prepared['context'],$frozen['seals']);$spatialResolved=AF_ACS_Resolver::resolve($spatialContext,$spatialOrdered,$frozen['tape'],'seal');$this->bindSpatial($before,$row,$spatialResolved);}
         $fingerprint=self::factsHash($before);
         if (!hash_equals($fingerprint,self::factsHash($this->facts($row)))) { throw new RuntimeException('ACS_COMBAT_DEPENDENCY_CONFLICT'); }
         return $this->transactions->run(function () use ($row,$version,$fid,$topic,$fingerprint,$frozen,$prepared): array {

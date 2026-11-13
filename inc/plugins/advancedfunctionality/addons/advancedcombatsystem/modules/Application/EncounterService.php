@@ -17,6 +17,8 @@ final class AF_ACS_EncounterService
         if($write && $session['status']!=='active')throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
         return $session;
     }
+    public function cover():AF_ACS_CoverService
+    {require_once __DIR__.'/CoverService.php';return new AF_ACS_CoverService($this->repository,$this->access);}
     public function spatial(): AF_ACS_SpatialService
     {require_once __DIR__.'/SpatialService.php';return new AF_ACS_SpatialService($this->repository,$this->access);}
     public function awareness(): AF_ACS_AwarenessService

@@ -39,6 +39,7 @@ trait AF_ACS_CombatCommitPersistence
         $f['rolls']=$this->sql('SELECT x.* FROM '.$this->table('rolls').' x JOIN '.$this->table('sealed_actions').' a ON a.id=x.sealed_action_id WHERE a.draft_id=? ORDER BY x.id'.$suffix,[$draft])['rows'];
         $f['snapshots']=$this->sql('SELECT id,content_hash,SHA2(payload_json,256) AS actual_hash FROM '.$this->table('snapshots').' WHERE session_id=? AND (id IN (SELECT template_snapshot_id FROM '.$this->table('entities').' WHERE session_id=?) OR id IN (SELECT definition_snapshot_id FROM '.$this->table('sealed_actions').' WHERE draft_id=?) OR id IN (SELECT definition_snapshot_id FROM '.$this->table('effects').' WHERE session_id=?)) ORDER BY id'.$suffix,[$sid,$sid,$draft,$sid])['rows'];
         $f['boundaries']=$this->sql('SELECT operation_key,kind,status,payload_hash,result_json FROM '.$this->table('operations')." WHERE session_id=? AND (kind LIKE 'clock.%' OR kind='round.turn_closed' OR status<>'committed') ORDER BY operation_key".$suffix,[$sid])['rows'];
+        $f['cover']=$this->coverDependencies($sid,$eid,$this->coverKeys,$lock);
         $f['spatial']=$this->spatialDependencies($sid,$eid,$this->spatialKeys,$lock);
         return $f;
     }
@@ -213,8 +214,9 @@ trait AF_ACS_CombatCommitPersistence
         $retired=$this->retireCompetingPlans($row,$f,$turn);
         $retirementKey=self::indexed($f['control_groups'])[$group]['owner_uid']===null?'superseded_npc_drafts':'superseded_delegated_drafts';
         $spatial=$this->persistSpatial($row['session_id'],$row['encounter_id'],$before['spatial']??AF_ACS_Spatial::empty(),$after['spatial']??AF_ACS_Spatial::empty());
+        $cover=$this->persistCover($row['session_id'],$row['encounter_id'],$before,$after);
         $objects=$this->persistObjects($row['session_id'],$row['encounter_id'],$before['objects']??[],$after['objects']??[]);
         $awareness=$this->persistAwareness($row['session_id'],$row['encounter_id'],$before['awareness']??[],$after['awareness']??[],$before['awareness_attempts']??[],$after['awareness_attempts']??[]);
-        return ['spatial'=>$spatial,'awareness'=>$awareness,'objects'=>$objects,'summons'=>$summons,'entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers]+($retired?[$retirementKey=>$retired]:[]);
+        return ['cover'=>$cover,'spatial'=>$spatial,'awareness'=>$awareness,'objects'=>$objects,'summons'=>$summons,'entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers]+($retired?[$retirementKey=>$retired]:[]);
     }
 }

@@ -34,6 +34,7 @@ trait AF_ACS_SpatialPersistence
             if(!$old)$this->sql('INSERT INTO '.$this->table('positions').' (entity_id,encounter_id,zone_id,position_version,policy_json) VALUES (?,?,?,?,?)',[(string)$id,$eid,$v['zone_id'],$v['version'],self::json(['schema_version'=>1,'visibility'=>$v['visibility']])]);
             elseif($this->sql('UPDATE '.$this->table('positions').' SET zone_id=?,position_version=?,policy_json=? WHERE entity_id=? AND encounter_id=? AND position_version=?',[$v['zone_id'],$v['version'],self::json(['schema_version'=>1,'visibility'=>$v['visibility']]),(string)$id,$eid,$old['version']])['affected']!==1)throw new RuntimeException('ACS_SPATIAL_VERSION_CONFLICT');
         }
+        foreach($delta['connections']??[] as $key=>$change){$v=$change['after'];$old=$change['before'];if(!$old||$v['version']<=$old['version']||$this->sql('UPDATE '.$this->table('zone_connections').' SET status=?,connection_version=?,policy_json=? WHERE id=? AND connection_version=?',[$v['status'],$v['version'],self::json(['schema_version'=>1,'range'=>$v['range'],'ap_cost'=>$v['ap_cost'],'line_of_effect'=>$v['line_of_effect']]),$old['id'],$old['version']])['affected']!==1)throw new RuntimeException('ACS_SPATIAL_VERSION_CONFLICT');}
         foreach($delta['engagements']??[] as $key=>$change){$v=$change['after'];$old=$change['before'];if($v['version']<=($old['version']??0))throw new RuntimeException('ACS_SPATIAL_VERSION_CONFLICT');
             if(!$old)$this->sql('INSERT INTO '.$this->table('engagements').' (encounter_id,entity_a,entity_b,engagement_version,status) VALUES (?,?,?,?,?)',[$eid,$v['a'],$v['b'],$v['version'],$v['status']]);
             elseif($this->sql('UPDATE '.$this->table('engagements').' SET status=?,engagement_version=? WHERE encounter_id=? AND entity_a=? AND entity_b=? AND engagement_version=?',[$v['status'],$v['version'],$eid,$v['a'],$v['b'],$old['version']])['affected']!==1)throw new RuntimeException('ACS_SPATIAL_VERSION_CONFLICT');
@@ -41,7 +42,7 @@ trait AF_ACS_SpatialPersistence
     }
     public function spatialCommand(array $session,array $enc,array $r,?array $pin):array
     {
-        $this->commandWrite();$sid=$session['id'];$eid=$enc['id'];$s=$this->spatialProjection($sid,$eid);$before=$s;$op=$r['operation'];
+        $this->commandWrite();$sid=$session['id'];$eid=$enc['id'];$s=$this->spatialProjection($sid,$eid);$before=$s;$op=$r['operation'];$coverChanges=[];
         if($op==='configure'){
             if($s['pin']!==null||$pin===null)throw new RuntimeException('ACS_SPATIAL_VERSION_CONFLICT');$d=AF_ACS_Spatial::definition($pin);$ids=[];
             foreach($d['zones'] as $z)$ids[$z['key']]=$this->sql('INSERT INTO '.$this->table('zones').' (encounter_id,zone_key,zone_version,name,policy_json) VALUES (?,?,1,?,?)',[$eid,$z['key'],$z['name'],self::json(['schema_version'=>1,'visibility'=>$z['visibility'],'line_of_effect'=>$z['line_of_effect']])])['id'];
@@ -56,9 +57,10 @@ trait AF_ACS_SpatialPersistence
                 $old=$s['positions'][$r['entity_id']]??null;if(($old['version']??0)!==$r['expected_spatial_version'])throw new RuntimeException('ACS_SPATIAL_VERSION_CONFLICT');$s['reads']['positions:'.$r['entity_id']]=$old;$s['reads']['zones:'.$r['zone_id']]=$s['zones'][$r['zone_id']];
                 // Administrative relocation also terminates contacts, without attacks or target AP.
                 $copy=$before;$relocating=AF_ACS_Spatial::position($copy,$r['entity_id'])!==$r['zone_id'];foreach($s['engagements'] as $key=>$e)if($relocating&&$e['status']==='active'&&in_array($r['entity_id'],[$e['a'],$e['b']],true)){$s['reads']['engagements:'.$key]=$e;$s['engagements'][$key]['status']='inactive';++$s['engagements'][$key]['version'];}
+                if($relocating){$objects=$this->objectProjection($sid,$eid);$coverBefore=['objects'=>$objects,'cover'=>AF_ACS_Cover::initial($this->coverProjection($sid,$eid),$objects)];$coverAfter=$coverBefore;AF_ACS_Cover::moved($coverAfter,$r['entity_id']);$coverChanges=$this->persistCover($sid,$eid,$coverBefore,$coverAfter);}
                 $s['positions'][$r['entity_id']]=['entity_id'=>$r['entity_id'],'zone_id'=>$r['zone_id'],'version'=>($old['version']??0)+1,'visibility'=>$r['visibility']];$this->persistSpatial($sid,$eid,$before,$s);
             }elseif($op==='engagement'){$key=AF_ACS_Spatial::pair($r['entity_id'],$r['target_id']);if(($s['engagements'][$key]['version']??0)!==$r['expected_spatial_version'])throw new RuntimeException('ACS_SPATIAL_VERSION_CONFLICT');foreach([$r['entity_id'],$r['target_id']] as $entity)if(!$this->participantExists($eid,$entity))throw new RuntimeException('ACS_SPATIAL_TARGET_BLOCKED');AF_ACS_Spatial::contact($s,$r['entity_id'],$r['target_id'],$r['status']==='active');$this->persistSpatial($sid,$eid,$before,$s);}
         }
-        $session=$this->change($session,$enc,'spatial_change',[]);$session['_command_result']['spatial']=['operation'=>$op,'before'=>$before,'after'=>$this->spatialProjection($sid,$eid),'reason'=>$r['reason']];return $session;
+        $session=$this->change($session,$enc,'spatial_change',[]);$session['_command_result']['cover']=$coverChanges;$session['_command_result']['spatial']=['operation'=>$op,'before'=>$before,'after'=>$this->spatialProjection($sid,$eid),'reason'=>$r['reason']];return $session;
     }
 }

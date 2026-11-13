@@ -57,9 +57,10 @@ final class AF_ACS_SealService
             $dependencyHash=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'dependencies'=>$dependencies]));
             if(isset($resolved->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'boundaries'=>$resolved->serverPlan()['entity_end_boundaries']]));
             if(($spatialHash=AF_ACS_Spatial::summary($resolved->serverInitial()['spatial']??AF_ACS_Spatial::empty(),$resolved->serverState()['spatial']??AF_ACS_Spatial::empty()))!==null)$summary['spatial_hash']=$spatialHash;
+        if(($coverHash=AF_ACS_Cover::summary($resolved->serverInitial(),$resolved->serverState()))!==null)$summary['cover_hash']=$coverHash;
         $summary['awareness_hash']=hash('sha256',serialize([$resolved->serverState()['awareness'],$resolved->serverState()['awareness_attempts']]));
             if(!empty($resolved->serverState()['objectives']))$summary['objective_state_hash']=hash('sha256',serialize($resolved->serverState()['objectives']));
-        if(!empty($resolved->serverState()['objects']))$summary['object_state_hash']=hash('sha256',serialize($resolved->serverState()['objects']));
+        if(!empty(AF_ACS_Cover::legacyObjects($resolved->serverState()['objects'])))$summary['object_state_hash']=hash('sha256',serialize(AF_ACS_Cover::legacyObjects($resolved->serverState()['objects'])));
             if(!empty($resolved->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($resolved->serverState()['summons']));
             if(array_filter($resolved->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'instances'=>$resolved->serverState()['status_instances']]));
             if(($reactionHash=AF_ACS_Resolver::reactionHash($resolved,$p['context']))!==null)$summary['reaction_hash']=$reactionHash;
@@ -111,7 +112,7 @@ final class AF_ACS_SealService
                 $query=new AF_ACS_QueryService($this->repo,$this->access);$definitions=[];$statusIndexes=[];
                 foreach(array_slice($actions,count($active)) as $a){
                     $position=count($active)+count($definitions);$definitions[]=$p['definitions'][$position]??$query->sealDefinition($d['session_id'],$a['actor_id'],$a['ability_key']);
-                    $indexes=[];foreach($a['targets'] as $target)$indexes[$target]=(AF_ACS_ObjectInteraction::isAction($a['ability_key'])||str_starts_with($a['ability_key'],'spatial:')||isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['spatial_effect']))?[]:AF_ACS_Resolver::statusRollIndexes($p['context'],$a['actor_id'],$target,$p['context']['abilities'][$a['actor_id']][$a['ability_key']]);$statusIndexes[]=count($a['targets'])===1?array_values($indexes)[0]:$indexes;
+                    $indexes=[];foreach($a['targets'] as $target)$indexes[$target]=(AF_ACS_ObjectInteraction::isAction($a['ability_key'])||str_starts_with($a['ability_key'],'spatial:')||str_starts_with($a['ability_key'],'cover:')||isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['spatial_effect']))?[]:AF_ACS_Resolver::statusRollIndexes($p['context'],$a['actor_id'],$target,$p['context']['abilities'][$a['actor_id']][$a['ability_key']]);$statusIndexes[]=count($a['targets'])===1?array_values($indexes)[0]:$indexes;
                 }
                 $items=new AF_ACS_ItemActionService($this->repo,$this->access);$protected=[];
                 foreach ($definitions as $i=>&$definition) if (isset($definition['item_action'])) {

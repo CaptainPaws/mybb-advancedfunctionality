@@ -78,7 +78,7 @@ final class AF_ACS_Spatial
         foreach($s['zones'] as $id=>$z)if($z['key']===$key){self::read($s,'zones',(string)$id);return (string)$id;}self::fail();
     }
     public static function delta(array $before,array $after):array
-    {$out=[];foreach(['positions','engagements'] as $type)foreach($after[$type] as $key=>$row)if(($before[$type][$key]??null)!==$row)$out[$type][$key]=['before'=>$before[$type][$key]??null,'after'=>$row];return $out;}
+    {$out=[];foreach(['positions','engagements','connections'] as $type)foreach($after[$type] as $key=>$row)if(($before[$type][$key]??null)!==$row)$out[$type][$key]=['before'=>$before[$type][$key]??null,'after'=>$row];return $out;}
     public static function summary(array $before,array $after):?string
     {if(!$after['reads'])return null;return hash('sha256',serialize(['reads'=>$after['reads'],'changes'=>self::delta($before,$after)]));}
     public static function compileEffect(array $dto):array

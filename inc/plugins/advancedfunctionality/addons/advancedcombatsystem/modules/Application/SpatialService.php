@@ -19,7 +19,7 @@ final class AF_ACS_SpatialService
     }
     public function canReadAction(string $sid,string $eid,array $action):bool
     {
-        $gm=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'];if($gm)return true;$s=$this->repo->spatialProjection($sid,$eid);$actor=$action['actor_id'];
+        $gm=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'];if($gm)return true;$s=$this->repo->spatialProjection($sid,$eid);$actor=$action['actor_id'];if(preg_match('/\Acover:(enter|leave):([1-9][0-9]*)\z/D',$action['ability_key'],$cover)){require_once __DIR__.'/CoverService.php';return (new AF_ACS_CoverService($this->repo,$this->access))->canRead($sid,$eid,$actor,$cover[2]);}
         if(preg_match('/\Aspatial:move:([1-9][0-9]*)\z/D',$action['ability_key'],$m))return $s['pin']!==null&&AF_ACS_Spatial::disclosed($s,$actor,false)&&($s['zones'][$m[1]]['visibility']??null)==='public';
         foreach($action['targets'] as $target)if($target!==$actor&&(!AF_ACS_Spatial::disclosed($s,$actor,false)||!AF_ACS_Spatial::disclosed($s,$target,false)))return false;return true;
     }
