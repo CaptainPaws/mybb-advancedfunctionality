@@ -7,9 +7,10 @@ require_once __DIR__.'/../Infrastructure/EncounterRepository.php';
 final class AF_ACS_AudienceService
 {
     private array $rows,$subjects,$statuses,$permissions=[],$temporaryActors=[],$actors=[],$audiences=['actor'=>[],'control_group'=>[],'side'=>[],'encounter'=>[]];
-    private bool $gm;
+    private bool $gm;private array $spatial;
     public function __construct(private AF_ACS_EncounterRepository $repo,private AF_ACS_SessionAccess $access,string $sid,private string $eid)
     {
+        $this->spatial=$repo->spatialProjection($sid,$eid);
         $view=(new AF_ACS_SessionService($repo,$access))->view($sid);$this->gm=$view['can_manage'];
         $this->rows=$repo->awarenessProjection($sid,$eid);$this->subjects=$repo->perceptionSubjects($sid,$eid);$this->statuses=$repo->statusProjection($sid)['instances'];$this->audiences['encounter']=[$eid];
         foreach($repo->participants($eid,'0',201) as $m)if($m['participation']==='engaged'){
@@ -30,6 +31,8 @@ final class AF_ACS_AudienceService
     public function canTarget(string $id,?string $actor=null):bool
     {
         if($id===$actor&&($this->gm||isset($this->actors[$id])))return true;
+        if($actor!==null&&$actor!==$id&&!AF_ACS_Spatial::disclosed($this->spatial,$actor,$this->gm))return false;
+        if(!AF_ACS_Spatial::disclosed($this->spatial,$id,$this->gm))return false;
         $known=$this->knowledge('entity',$id,$actor);$base=$this->subjects['entity:'.$id]['perception']['stealth']??null;
         return AF_ACS_Awareness::targetable($known['level'],$base,$this->statuses,$id);
     }

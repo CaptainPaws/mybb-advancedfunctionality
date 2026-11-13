@@ -948,3 +948,52 @@ status/version. Unknown/suspected/detected и GM-only задачи отсутс�
 assist definitions и raw snapshots не входят в player DTO. Draft restore также
 проверяет текущую видимость задачи и recipient; старый draft не даёт право
 читать отозванные сведения. Общего публичного cache этого DTO нет.
+
+## ACS-8.3.1 spatial subset
+
+Опциональный `arpg_mechanics/combat_template` содержит ровно одну entry с
+пустыми phases/limits/formula_refs и `spatial_definition`. Descriptor
+`schema=ic-acs.spatial.v1` задаёт mode=single_zone|zones, default_zone
+(единственный zone key для single_zone, null для zones), zones, connections,
+legacy_range, leave_engagement=allow|block, engage_ap, leave_ap,
+line_of_effect (boolean capability).
+
+Zone: key, name, visibility=public|gm, line_of_effect boolean. Connection:
+from/to zone keys, status=open|blocked, range=near|medium|far,
+line_of_effect boolean, optional positive ap_cost (default 1). Максимум 64 зоны
+и 512 уникальных направленных связей. Переход только по одной открытой связи;
+транзитивный поиск пути отсутствует. В одной зоне distance=near, либо engaged
+при явном активном контакте пары. Между зонами используется range прямой
+открытой связи; отсутствие связи означает unreachable. Обратная связь не
+подразумевается. Не назначенная позиция в zones блокирует пространственные
+действия; single_zone допускает implicit default без записи на чтении.
+
+Ability `spatial_range` содержит ровно schema=ic-acs.range.v1,
+distances (непустой список engaged/near/medium/far), line_of_effect boolean.
+При включённой карте пустой range использует явный legacy_range карты.
+Legacy range=0/"0" означает незаданную дальность.
+Без карты прежний пустой range сохраняет прежнее поведение; явный spatial
+range без capability возвращает UNSUPPORTED. LoE требует включённой capability
+и разрешения конкретной зоны/связи. Awareness проверяется отдельно до range.
+
+Voluntary wire: spatial:move:<zone_id>, targets=[actor];
+spatial:engage:<entity_id> и spatial:leave:<entity_id>, targets=[entity].
+parameters=[]; AP вычисляет сервер по виртуальному состоянию. Contact требует
+одной зоны и явного перехода; самостоятельной opportunity attack нет.
+
+Зарегистрированная active single_enemy ability может содержать
+`spatial_effect={schema:ic-acs.forced-movement.v1,kind:forced_move|teleport,
+destination:<zone key>,break_engagements:true}` и явную target_policy.
+Это deterministic on-cast effect через прежний Resolver; источник оплачивает
+AP ability, цель не оплачивает AP. forced_move требует прямой открытой связи,
+teleport — явного существующего destination. Произвольные направления,
+условные on_hit movement, callback, координаты и эмуляция неизвестных spatial
+predicates не поддерживаются. Неизвестные поля блокируются.
+
+GM configure сохраняет полный KB pin в immutable ACS snapshot; команды
+position/connection/zone/engagement требуют native/session GM, POST+CSRF,
+версии session/encounter и соответствующего spatial row, reason и operation
+key. Изменения пишутся в прежний ACS journal. Combat movement фиксируется
+только existing atomic R2 commit. Read dependencies включают только реально
+прочитанные позиции, зоны, directed edges и контакты, включая отсутствие
+строки. Изменение посторонней связи не требует нового confirmation.
