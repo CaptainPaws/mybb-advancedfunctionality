@@ -1074,3 +1074,28 @@ non-cover object dependencies сохранены. Изменение relevant as
 требует reconfirm на прежней tape; target не переназначается. GM correction
 требует native/session GM, POST/CSRF, CAS, reason, operation key и existing
 encounter.cover_assignment audit; произвольный policy JSON не принимается.
+
+## ACS-8.3.3 integration bindings
+
+Новых KB schemas/formulas/default bonuses нет. Object interaction и cooperative
+operations проходят существующий spatial range, затем тот же object obstacle/
+LoE gate Resolver. Assist дополнительно проверяет actual recipient: текущего
+активного известного союзника, его range/LoE/stealth. Доступность самой задачи
+не разрешает помощь недоступному recipient. Публичный progress и draft restore
+используют ту же awareness/position policy, что catalog/prepare.
+
+Привязка object action хранится сервером по action index, включая уникальную
+consumes-tool reservation. Повтор одного ability key не заменяет reservation
+предыдущего sealed action. Клиентский action shape/parameters не расширен.
+
+Spatial configure сохраняет новый immutable encounter config snapshot вместе
+с отдельным KB map snapshot. Для уже существующего base-only config snapshot
+8.3.1 readiness допускает только две spatial extension fields после полной
+проверки отдельного immutable spatial pin; остальные config fields по-прежнему
+должны точно совпадать. Чтение не переписывает snapshots или конфигурацию.
+
+Spawn identity остаётся source_event_id + spawn_index / existing entity_id.
+После commit и обычного admission/position/awareness checks этот же объект
+доступен поддержанным interactions/objectives/cover. Не вводятся provisional
+client entity IDs, ссылки на ещё неизвестный future spawn или автоматическое
+раскрытие цели в той же незавершённой публикации. R2 и Inventory gates прежние.
