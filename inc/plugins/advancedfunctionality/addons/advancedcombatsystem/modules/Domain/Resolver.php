@@ -182,7 +182,7 @@ final class AF_ACS_Resolver
     }
     public static function targetSummary(array $step):array
     {
-        $out=[];if(isset($step['object_interaction']))$out['interaction']=array_intersect_key($step['object_interaction'],array_flip(['entity_id','key','outcome','progress']));if(in_array($step['scenario'],['search','share','environment'],true))$out['operation']=$step['scenario'];if (isset($step['item_action'])) $out['item']=array_intersect_key($step['item_action'],array_flip(['operation','item_id','qty']));
+        $out=[];if(isset($step['cooperation']))$out['cooperation']=$step['cooperation'];if(isset($step['object_interaction']))$out['interaction']=array_intersect_key($step['object_interaction'],array_flip(['entity_id','key','outcome','progress']));if(in_array($step['scenario'],['search','share','environment'],true))$out['operation']=$step['scenario'];if (isset($step['item_action'])) $out['item']=array_intersect_key($step['item_action'],array_flip(['operation','item_id','qty']));
         if(isset($step['spawns']))$out['spawn_hash']=hash('sha256',serialize($step['spawns']));
         foreach(['original_target','resolved_target'] as $k)if(isset($step[$k]))$out[$k]=$step[$k];
         if(isset($step['strikes']))foreach($step['strikes'] as $strike)$out['strikes'][]=array_intersect_key($strike,array_flip(['original_target','resolved_target','scenario','rolls','probabilities']))+['damage'=>$strike['allocation']['integer_budget']];return $out;
@@ -228,6 +228,22 @@ final class AF_ACS_Resolver
                 $plans[]=['action_index'=>$i,'actor_id'=>$actor,'targets'=>$targets,'scenario'=>'used','rolls'=>$rolls,'ability_ref'=>$ability['source_ref'],'costs'=>$r['costs'],
                     'probabilities'=>['P_hit'=>100,'P_crit'=>0,'crit_rate'=>0,'can_crit'=>false],'allocation'=>['integer_budget'=>0,'components'=>[]],'item_action'=>$spec,'modifier_trace'=>$r['modifier_trace'],'effects_trace'=>[$r['trace']]];
                 continue;
+            }
+            if(isset($ability['cooperative_action'])){
+                $binding=$ability['cooperative_action'];$id=$binding['entity_id'];$selection=$binding['selection'];
+                if($targets!==[$id]||!in_array($id,$context['allowed_targets'][$actor]??[],true))self::fail('resolver_target_forbidden');
+                $v=$state['objectives'][$id]??throw new DomainException('ACS_OBJECTIVE_BLOCKED');if($v['id']!==$binding['objective_id'])self::fail('ACS_OBJECTIVE_BLOCKED');
+                $modifierTrace=[];$actorStats=self::stats($context,$actor,$modifierTrace);AF_ACS_Cooperation::eligible($v,$state['objects'][$id],$actor,$context['reaction_kinds'][$actor],$actorStats,$context['abilities'][$actor],$selection);
+                if($selection['operation']==='assist'&&($state['entities'][$selection['recipient']]['life_state']??null)!=='active')self::fail('ACS_OBJECTIVE_BLOCKED');
+                $trace=[];$state=self::apply($state,[],$actor,$ability['costs'],$trace);$rolls=null;$outcome=null;$completed=false;
+                if($mode==='seal'){
+                    $t=$fixedRandomTape[$i];if(array_keys($t)!==['rng_version','hit','crit']||$t['rng_version']!=='uniform53-v1')self::fail('resolver_tape_invalid');AF_ACS_Effects::statusSample($t['hit']);AF_ACS_Effects::statusSample($t['crit']);$spec=$v['definition']['action'];$rolls=$t+['hit_used'=>$selection['operation']!=='assist'&&in_array('roll',$spec['check']['bindings'],true),'crit_used'=>false];$score=null;
+                    if($selection['operation']!=='assist'){$dynamic=[];foreach($spec['check']['bindings'] as $name=>$bindingValue)$dynamic[$name]=match($bindingValue){'roll'=>$t['hit']['u'],'progress'=>$v['progress'],'assist'=>AF_ACS_Cooperation::assistance($v,$actor),default=>$actorStats[substr($bindingValue,5)]??throw new DomainException('ACS_OBJECTIVE_BLOCKED')};$f=$spec['check']['formula'];$formulaTrace=[];$score=(float)self::formula(['formula'=>$f,'pin'=>array_intersect_key($f,array_flip(['key','version','fingerprint']))],$dynamic,'interaction_score',false,$formulaTrace);}
+                    $cause=$context['reaction_causes'][$i]??throw new DomainException('ACS_INTERACTION_CAUSE_REQUIRED');$r=AF_ACS_Cooperation::apply($v,$actor,$selection,$cause,$score);$state['objectives'][$id]=$r['objective'];$outcome=$r['outcome'];$completed=$r['objective']['completion_cause']===$cause;
+                    $nodes=[$cause=>['children'=>[]]];foreach($r['completion'] as $effectIndex=>$effect){$child=$cause.':completion:'.$effectIndex;$nodes[$cause]['children'][]=$child;$nodes[$child]=['children'=>[]];if($effect['kind']==='heal_finisher')$state=self::apply($state,[['kind'=>'heal','entity_id'=>$actor,'amount'=>$effect['amount']]],null,[],$trace);else{$object=$state['objects'][$id];if(in_array($object['status'],['expired','destroyed'],true))self::fail('ACS_OBJECTIVE_BLOCKED');if($object['status']!==$effect['status']){$object['status']=$object['interaction']['activation']=$effect['status'];++$object['object_version'];AF_ACS_Environment::instance($object);$state['objects'][$id]=$object;}}}AF_ACS_CausalGraph::order($nodes,[$cause],2);
+                }
+                $plans[]=['action_index'=>$i,'actor_id'=>$actor,'targets'=>$targets,'scenario'=>$outcome??'cooperation_preview','rolls'=>$rolls,'ability_ref'=>$ability['source_ref'],'costs'=>$ability['costs'],'probabilities'=>['P_hit'=>null,'P_crit'=>null,'crit_rate'=>null,'can_crit'=>false],'allocation'=>['integer_budget'=>0,'components'=>[]],'effects_trace'=>$trace,
+                    'cooperation'=>['entity_id'=>$id,'operation'=>$selection['operation'],'outcome'=>$outcome,'progress'=>$mode==='seal'?$state['objectives'][$id]['progress']:null,'cap'=>$v['definition']['cap'],'completed'=>$completed]];continue;
             }
             if(isset($ability['object_interaction'])){
                 $binding=$ability['object_interaction'];$id=$binding['entity_id'];if($targets!==[$id]||!in_array($id,$context['allowed_targets'][$actor]??[],true))self::fail('resolver_target_forbidden');

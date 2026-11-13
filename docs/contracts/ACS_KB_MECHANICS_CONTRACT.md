@@ -863,3 +863,88 @@ Retry — `{scope:actor|object,limit:1..1000,terminal_outcomes:[...]}`. Серв
 `decay_per_round` применяется только существующим round_end Clock boundary,
 защищённым last_boundary, в этом subset только для duration.unit=round;
 положительный round decay с own_turn lifetime — UNSUPPORTED, 0 означает отсутствие decay.
+
+### ACS-8.2.2: sequential cooperation subset
+
+Interactive `ic-acs.object-template.v2` может содержать `cooperation` с schema
+`ic-acs.cooperation.v1`. На один object entity приходится одна задача; её KB
+pin — исходный immutable object template snapshot. Неизвестные поля/условия и
+неподдержанные политики блокируют контракт. Литературный текст не читается как
+механическое действие.
+
+Обязательные поля:
+
+| Поле | Семантика |
+|---|---|
+| kind | `cooperative_check` или `cooperative_objective` |
+| label / visibility | Подпись до 96 символов; `known` (только identified object audience) либо `gm` |
+| cap | Явная целая цель 1..1000000; начальный прогресс 0 |
+| object_statuses | Непустой список разрешённых active/inactive |
+| object_changed | `reconfirm` — актуальное состояние и прежний tape; `block` — запрещать действие при любом отличии от creation object_version |
+| contributor_inactive | Только `retain`: подтверждённый вклад/помощь сохраняются; новая попытка требует активного исполнителя |
+| action | Typed action из 8.2.1 с уточнениями ниже |
+| assist | null либо typed effect, описанный ниже |
+| completion | Явный список 0..8 разрешённых последствий достижения cap |
+
+Action использует actor_kinds, required_abilities, minimum_stats, AP/resource
+costs, check/Formula snapshot, outcomes и retry из 8.2.1. Синтетические
+allowed_states/state равны `open`; tool=null, activation=null, repair=0,
+outcome effects=[]; progress=null либо `{operation:add,value:<неотрицательное
+целое до cap>}`. Это состояние задачи, не подмена interaction state объекта.
+Вклад ограничивается оставшимся cap. Retry scope/limit/terminal_outcomes
+применяются к подтверждённым check/contribute records; assist не подменяет
+попытку проверки. Условия числа/профессий участников, negative/reset/decay
+общего прогресса, spatial predicates и arbitrary callbacks не поддержаны.
+
+Check bindings дополнительно допускают `assist`: сумма действующей помощи
+конкретному исполнителю этой задачи. Формула явно определяет, как использовать
+её вместе с roll/progress/stat inputs. Универсального бонуса к результату,
+успеху, атаке или урону нет. Если assist определён, binding должен присутствовать;
+при отсутствии помощи input равен 0. Остальные исходы/пороги и проверка pin
+остаются контрактом 8.2.1. Числовой score, outcome и фактический вклад сохраняются.
+
+Assist содержит `ap_cost` (положительное целое), `value` (1..1000000),
+`duration_rounds` (1..1000), `allow_self` (boolean). Optional `uses` — 1..1000,
+по умолчанию 1; `stacking` — reject/replace/sum, по умолчанию reject;
+`max_stacks` — 1..8, по умолчанию 1, значение больше 1 допустимо только для sum.
+Идентичность помощи — один pinned effect definition задачи и recipient,
+независимо от helper. Reject не складывает и не обновляет срок. Replace явно
+замещает активную помощь, сохраняя её историю. Sum ограничен max_stacks.
+Каждая использованная активная помощь теряет одно использование при check;
+завершение задачи прекращает оставшуюся scoped помощь, сохраняя её историю.
+Использованный/истёкший эффект не даёт бонуса следующей попытке.
+
+Это отдельный effect instance со source, recipient, pinned definition, duration,
+remaining uses, stacking policy и cause. Recipient — активный известный союзник,
+доступный существующей target policy; контроль над ним не передаётся помощнику.
+Duration уменьшается только existing Clock round_end, не GET/Builder. Source
+incapacitation не отменяет подтверждённую помощь при объявленной retain policy.
+Помощь за пределами этой задачи, ordinary attack modifiers, предметные расходы
+и новые status handlers не добавляются.
+
+Completion допускает `{kind:object_activation,status:active|inactive}` и
+`{kind:heal_finisher,amount:<положительное целое>}`. Применение идёт через общий
+Resolver/Effects, одним подтверждённым событием. Loot/Balance/EXP, произвольные
+статусы и межпостовые распределённые транзакции не выводятся из завершения.
+
+Wire: `object:<entity_id>:coop-check`, `...:coop-contribute` либо
+`...:coop-assist-<recipient_entity_id>`, targets=[object entity_id], parameters=[].
+Префикс coop- зарезервирован только у templates с cooperation. Прежние object
+interactions без этого descriptor не меняют смысл.
+
+Durable contribution key — `objective:<objective_id>:sealed-action:<id>`;
+source_event_id — реальный `combat.resolved` journal event. Каждое sealed action
+имеет отдельный tape/cause, в том числе внутри одного group post. Общая задача
+CAS-защищена objective_version; contributions имеют global UNIQUE. Completion
+содержит completion_cause и completed_event_id. Повтор submission/recovery
+возвращает старый terminal receipt и не выполняет завершение заново. Sequence
+успешных commit определяет порядок вкладов. Смена зависимостей до freeze
+требует reconfirm на прежних rolls; frozen конфликт остаётся в прежнем R2
+quarantine/recovery protocol. Подтверждённые чужие вклады не переписываются.
+
+Public progress DTO содержит только разрешённые identity/label/progress/cap/
+status/version. Unknown/suspected/detected и GM-only задачи отсутствуют целиком,
+включая choices, disabled choices и aggregate totals. Contributors, conditions,
+assist definitions и raw snapshots не входят в player DTO. Draft restore также
+проверяет текущую видимость задачи и recipient; старый draft не даёт право
+читать отозванные сведения. Общего публичного cache этого DTO нет.

@@ -101,6 +101,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         $summary=array_replace($summary,AF_ACS_BuilderService::visibleState($result->serverState(),$prepared['scope']));
         if(isset($result->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',self::json(['schema_version'=>1,'boundaries'=>$result->serverPlan()['entity_end_boundaries']]));
         $summary['awareness_hash']=hash('sha256',serialize([$result->serverState()['awareness'],$result->serverState()['awareness_attempts']]));
+        if(!empty($result->serverState()['objectives']))$summary['objective_state_hash']=hash('sha256',serialize($result->serverState()['objectives']));
         if(!empty($result->serverState()['objects']))$summary['object_state_hash']=hash('sha256',serialize($result->serverState()['objects']));
         if(!empty($result->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($result->serverState()['summons']));
         if(array_filter($result->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',self::json(['schema_version'=>1,'instances'=>$result->serverState()['status_instances']]));
@@ -215,6 +216,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         self::integer((string)$encounter['encounter_version'],'18446744073709551614');self::integer((string)$encounter['next_event_sequence'],'18446744073709551614');
         $event=$this->sql('INSERT INTO '.$this->table('events').' (session_id,session_sequence,encounter_id,event_sequence,operation_key,event_type,source_entity_id,actor_uid,submission_id,engine_version,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
             [$row['session_id'],$session['next_sequence'],$row['encounter_id'],$encounter['next_event_sequence'],$operation,'combat.resolved',$controls['summary']['actions'][0]['actor_id'],$row['author_uid'],$row['submission_id'],AF_ACS_Resolver::VERSION,$now])['id'];
+        $changes['objectives']=$this->persistObjectives($row['session_id'],$row['encounter_id'],$resolved->serverInitial()['objectives']??[],$resolved->serverState()['objectives']??[],$event);
         $spawns=$this->commitSpawns($row,$event,$prepared,$resolved->serverPlan());
         if($spawns){$changes['spawns']=$spawns;$changes['summon_admissions']=$this->preparation->admitSummons($row['session_id'],$row['encounter_id']);}
         $boundaryHistory=[];$turnIds=[];

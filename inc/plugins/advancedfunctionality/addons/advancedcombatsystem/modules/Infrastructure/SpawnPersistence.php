@@ -43,7 +43,7 @@ trait AF_ACS_SpawnPersistence
             if(!is_string($name)||trim($name)==='')$name=$s['template']['key'];
             $id=$this->insertEntityIdentity(['session_id'=>$row['session_id'],'control_group_id'=>$group,'kind'=>$object?'object':'summon','owner_uid'=>null,'sheet_id'=>null,
                 'template_snapshot_id'=>$snapshot,'source_entity_id'=>$actor,'spawn_key'=>$key,'name'=>$name,'definition'=>['schema_version'=>1,'spawn'=>$spawn]]);
-            if($object)$this->insertObject(AF_ACS_Environment::initial($id,$row['encounter_id'],$actor,$projection['properties'],$s['duration']));
+            if($object){$instance=AF_ACS_Environment::initial($id,$row['encounter_id'],$actor,$projection['properties'],$s['duration']);$this->insertObject($instance);$this->insertObjective($instance,$snapshot);}
             if(!$object){
                 $hp=$projection['hp'];$this->sql('INSERT INTO '.$this->table('entity_states').' (entity_id,life_state,hp,hp_max,state_version,stats_json,layers_json) VALUES (?,?,?,?,1,?,?)',
                     [$id,'active',$hp,$hp,self::json(['schema_version'=>1,'values'=>$projection['stats']]),self::json(['schema_version'=>1,'layers'=>[]])]);

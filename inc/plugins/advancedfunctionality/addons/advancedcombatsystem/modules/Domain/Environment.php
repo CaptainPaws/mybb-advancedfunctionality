@@ -4,6 +4,7 @@ require_once __DIR__.'/Numeric.php';
 require_once __DIR__.'/Control.php';
 require_once __DIR__.'/CausalGraph.php';
 require_once __DIR__.'/ObjectInteraction.php';
+require_once __DIR__.'/Cooperation.php';
 
 /** Detached object projection. No clock, callbacks, SQL, live KB or random sampling. */
 final class AF_ACS_Environment
@@ -15,6 +16,7 @@ final class AF_ACS_Environment
     {if(!is_int($n)||$n<$minimum||$n>9007199254740991)self::fail('ACS_OBJECT_VALUE_INVALID');return $n;}
     public static function definition(array $o):array
     {
+        $cooperation=AF_ACS_Cooperation::definition($o['cooperation']??null);unset($o['cooperation']);
         $interactions=AF_ACS_ObjectInteraction::definition($o['interactions']??null);unset($o['interactions']);
         require_once __DIR__.'/Awareness.php';AF_ACS_Awareness::perception($o['perception']??null);unset($o['perception']);
         if(($o['schema']??null)==='ic-acs.object-template.v1'){
@@ -36,6 +38,8 @@ final class AF_ACS_Environment
         }elseif($mechanics['durability']!==null)self::fail();
         if(array_diff($mechanics['gm_operations'],['create','activate','deactivate','damage'])||count(array_unique($mechanics['gm_operations']))!==count($mechanics['gm_operations']))self::fail();
         if(array_intersect($mechanics['gm_operations'],['activate','deactivate'])&&!in_array('interactive',$c,true)||in_array('damage',$mechanics['gm_operations'],true)&&!in_array('destructible',$c,true))self::fail();
+        if($cooperation!==null&&(($o['schema']??null)!=='ic-acs.object-template.v2'||!in_array('interactive',$c,true)))self::fail('ACS_COOPERATION_UNSUPPORTED');
+        if($cooperation!==null)foreach($interactions['actions']??[] as $action)if(str_starts_with($action['key'],'coop-'))self::fail('ACS_COOPERATION_UNSUPPORTED');
         if($interactions!==null&&(($o['schema']??null)!=='ic-acs.object-template.v2'||!in_array('interactive',$c,true)))self::fail();
         foreach($interactions['actions']??[] as $action)foreach($action['outcomes'] as $outcome)if($outcome['repair']>0&&$mechanics['durability']===null)self::fail();
         $keys=[];

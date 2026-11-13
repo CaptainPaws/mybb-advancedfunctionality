@@ -16,6 +16,9 @@ final class AF_ACS_BuilderService
     {
         $code=$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage();
         return match($code){
+            'ACS_COOPERATION_UNSUPPORTED'=>'UNSUPPORTED: контракт совместной задачи не поддерживается.',
+            'ACS_OBJECTIVE_BLOCKED','ACS_OBJECTIVE_VERSION_CONFLICT'=>'Условия или версия общей задачи изменились. Подтверждённые вклады сохранены.',
+            'ACS_ASSIST_STACK_BLOCKED'=>'Идентичная помощь уже действует или достигнут лимит KB.',
             'ACS_INTERACTION_UNSUPPORTED'=>'UNSUPPORTED: KB-контракт взаимодействия пока не поддерживается.',
             'ACS_INTERACTION_BLOCKED'=>'Условия взаимодействия не выполнены.',
             'ACS_INTERACTION_RETRY_DENIED'=>'KB запрещает следующую попытку взаимодействия.',
@@ -120,7 +123,7 @@ final class AF_ACS_BuilderService
             $v=$summons[$id];$summonRows[]=['entity_id'=>$id,'name'=>$member['name'],'status'=>$v['pending_independent']?'pending_independent':$v['status'],'remaining'=>$v['remaining'],'duration_unit'=>$v['unit'],'admission'=>isset($individuals[$id])?'current_roster':'next_round'];
         }
         $token=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'session'=>$scope['session']['session_version'],'encounter'=>$scope['encounter']['encounter_version'],'round'=>$scope['round']['round_version'],'turns'=>$versions,'selected'=>$selected,'audience'=>$scope['audience_stamp']]));
-        return ['session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>(string)$scope['round']['round_number'],'encounter_status'=>$scope['encounter']['status'],'turns'=>$turns,'turn'=>$chosen,'actors'=>$actors,'targets'=>$targets,'known_subjects'=>$scope['known_subjects'],'summons'=>$summonRows,'can_manage'=>$scope['gm'],'scope_token'=>$token,'draft_id'=>$draft,'preview_scope'=>$scope['gm']?'gm':'own_draft_only','publication_enabled'=>false];
+        return ['session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>(string)$scope['round']['round_number'],'encounter_status'=>$scope['encounter']['status'],'turns'=>$turns,'turn'=>$chosen,'actors'=>$actors,'targets'=>$targets,'known_subjects'=>$scope['known_subjects'],'objectives'=>(new AF_ACS_CooperationService($this->repo,$this->access))->progress($sid,$eid,array_column($actors,'id')),'summons'=>$summonRows,'can_manage'=>$scope['gm'],'scope_token'=>$token,'draft_id'=>$draft,'preview_scope'=>$scope['gm']?'gm':'own_draft_only','publication_enabled'=>false];
     }
     public function prepare(array $input,?string $sealedDraft=null):array
     {

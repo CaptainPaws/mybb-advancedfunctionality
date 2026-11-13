@@ -5,13 +5,13 @@ require_once __DIR__.'/../Infrastructure/Repository.php';
 
 final class AF_ACS_Migrations extends AF_ACS_Repository
 {
-    public const VERSION = '017_awareness';
+    public const VERSION = '018_cooperation';
 
     /** Explicit ordered registry; never execute a filename supplied by a client. */
     private function registry(): array
     {
         $registry = [];
-        foreach (['001_foundation','002_entities','003_encounters','004_round_roster','005_clock_resources','006_drafts','007_sealed_actions','008_publication_journal','009_combat_commit','010_status_instances','011_reaction_registry','012_barrier_pools','013_equipment','014_custody','015_delegations','016_environment_objects','017_awareness'] as $version) {
+        foreach (['001_foundation','002_entities','003_encounters','004_round_roster','005_clock_resources','006_drafts','007_sealed_actions','008_publication_journal','009_combat_commit','010_status_instances','011_reaction_registry','012_barrier_pools','013_equipment','014_custody','015_delegations','016_environment_objects','017_awareness','018_cooperation'] as $version) {
             $file = __DIR__.'/../../migrations/'.$version.'.php';
             $migration = require $file;
             $migration['checksum'] = hash_file('sha256', $file);

@@ -57,7 +57,8 @@ final class AF_ACS_SealService
             $dependencyHash=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'dependencies'=>$dependencies]));
             if(isset($resolved->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'boundaries'=>$resolved->serverPlan()['entity_end_boundaries']]));
             $summary['awareness_hash']=hash('sha256',serialize([$resolved->serverState()['awareness'],$resolved->serverState()['awareness_attempts']]));
-            if(!empty($resolved->serverState()['objects']))$summary['object_state_hash']=hash('sha256',serialize($resolved->serverState()['objects']));
+            if(!empty($resolved->serverState()['objectives']))$summary['objective_state_hash']=hash('sha256',serialize($resolved->serverState()['objectives']));
+        if(!empty($resolved->serverState()['objects']))$summary['object_state_hash']=hash('sha256',serialize($resolved->serverState()['objects']));
             if(!empty($resolved->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($resolved->serverState()['summons']));
             if(array_filter($resolved->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'instances'=>$resolved->serverState()['status_instances']]));
             if(($reactionHash=AF_ACS_Resolver::reactionHash($resolved,$p['context']))!==null)$summary['reaction_hash']=$reactionHash;
