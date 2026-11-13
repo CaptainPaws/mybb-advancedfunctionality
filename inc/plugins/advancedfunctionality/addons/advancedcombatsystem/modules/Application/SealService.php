@@ -91,6 +91,7 @@ final class AF_ACS_SealService
         return $this->repo->sealCommand($request,function($d)use($op){
             $this->draft($d['id']);$s=$this->scope($d);if($s['encounter_status']!=='active'||$s['turn']['status']!=='pending')throw new RuntimeException('ACS_SEAL_TURN_UNAVAILABLE');
             if($op!=='cancel_tail') {
+                foreach($this->actions($d) as $a)if(isset($a['parameters']['prepared_items'])){global $db;$uid=(int)$this->access->uid();$owner=(int)$this->repo->entity($d['session_id'],$a['actor_id'])['owner_uid'];if($owner!==$uid)throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');AF_ACS_ItemActionService::reader($db,$uid,$d['session_id'],$a['actor_id'],'ordinary')->fence($owner,$uid);}
                 foreach($this->actions($d) as $a)if(AF_ACS_ItemActionService::isItem($a['ability_key'])){global $db;$uid=(int)$this->access->uid();$owner=(int)$this->repo->entity($d['session_id'],$a['actor_id'])['owner_uid'];$category=$owner===$uid?'ordinary':(str_starts_with($a['ability_key'],'item:consume:')?'item_consume':'equipment_change');AF_ACS_ItemActionService::reader($db,$uid,$d['session_id'],$a['actor_id'],$category)->fence($owner,$uid);}
                 $this->prepare($d,$this->actions($d));
             }
@@ -128,13 +129,14 @@ final class AF_ACS_SealService
                     unset($spec);
                 }unset($definition);
                 foreach($definitions as $i=>&$definition)if(($definition['object_interaction']['tool']['mode']??null)==='consumes'){$tool=&$definition['object_interaction']['tool'];$tool['reservation']=$items->reserve($tool,$d['session_id'],$actions[count($active)+$i]['actor_id'],'acs:tool:reserve:'.$d['id'].':'.($next+$i));unset($tool);}unset($definition);
+                foreach($definitions as $i=>&$definition)if(!empty($definition['prepared_items']))$definition['prepared_items']=(new AF_ACS_PreparedItemService($this->repo,$this->access))->reserve($d,$actions[count($active)+$i],$definition['prepared_items'],'acs:prepared:reserve:'.$d['id'].':'.($next+$i));unset($definition);
                 // Everything above is deterministic preflight. Once drawn, all tape/quota persists even if simulation is blocked.
                 foreach(array_slice($actions,count($active)) as $i=>$a){
                     $ability=$p['context']['abilities'][$a['actor_id']][$a['ability_key']];
                     $this->repo->appendSeal($d,$a,$definitions[$i],$ability['source_ref'],$costs[$i],$operation,$next+$i,isset($ability['prepared_action'])?AF_ACS_PreparedAction::TAPE:($this->random??new AF_ACS_RandomSource)->action($statusIndexes[$i]));
                 }
             }elseif($op==='cancel_tail'){
-                if(!$active)throw new RuntimeException('ACS_SEAL_NOTHING_TO_CANCEL');$last=end($active);$this->repo->cancelSeal((string)$last['id']);
+                if(!$active)throw new RuntimeException('ACS_SEAL_NOTHING_TO_CANCEL');$last=end($active);$this->repo->cancelSeal((string)$last['id']);(new AF_ACS_PreparedItemService($this->repo,$this->access))->cancelSeal($d,$last);
                 (new AF_ACS_ItemActionService($this->repo,$this->access))->cancel($d,$last,count($active)===1);(new AF_ACS_ObjectInteractionService($this->repo,$this->access))->cancel($d,$last);array_splice($actions,count($active)-1,1);
                 $d['mechanics_json']=AF_ACS_Repository::json(['schema_version'=>1,'actions'=>$actions]);
             }

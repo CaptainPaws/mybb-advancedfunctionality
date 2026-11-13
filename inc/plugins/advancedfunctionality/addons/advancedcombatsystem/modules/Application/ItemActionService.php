@@ -202,15 +202,16 @@ final class AF_ACS_ItemActionService
     public function reserve(array $spec,string $sid,string $actor,string $key): array
     {
         global $db;
+        $qty=$spec['qty']??1;if(!is_int($qty)||$qty<1||$qty>2147483647)throw new RuntimeException('ACS_ITEM_INSUFFICIENT_QTY');
         $uid=(int)$this->access->uid();$owner=(int)$this->repo->entity($sid,$actor)['owner_uid'];$category=$uid===$owner?'ordinary':(($spec['operation']??'swap')==='consume'?'item_consume':'equipment_change');
         $reader=self::reader($db,$uid,$sid,$actor,$category);$reader->fence($owner,$uid);
         $adapter=AF_ACS_InventoryAdapter::forCombat($db,$uid);
         $known=$adapter->lookupParticipant(self::request('lookup',$key.':lookup',$sid,$actor,$uid,['target_operation_key'=>$key],$category));
         if ($known['status']!=='not_found') {
-            if ($known['status']!=='prepared' || $known['item_id']!==$spec['item_id'] || $known['qty']!==1) throw new RuntimeException('ACS_ITEM_RESERVATION_REQUIRED');
+            if ($known['status']!=='prepared' || $known['item_id']!==$spec['item_id'] || $known['qty']!==$qty) throw new RuntimeException('ACS_ITEM_RESERVATION_REQUIRED');
             return $known;
         }
-        $request=self::request('reserve',$key,$sid,$actor,$uid,['owner_uid'=>$owner,'item_id'=>$spec['item_id'],'qty'=>1,'session_id'=>$sid,'expected_inventory_version'=>$reader->version($owner,$uid)],$category);
+        $request=self::request('reserve',$key,$sid,$actor,$uid,['owner_uid'=>$owner,'item_id'=>$spec['item_id'],'qty'=>$qty,'session_id'=>$sid,'expected_inventory_version'=>$reader->version($owner,$uid)],$category);
         $result=AF_ACS_InventoryAdapter::forCombat($db,$uid)->participate('reserve',$request)->serverReceipt();
         if ($result['status']!=='prepared') throw new RuntimeException('ACS_ITEM_RESERVATION_REJECTED');
         return $result;

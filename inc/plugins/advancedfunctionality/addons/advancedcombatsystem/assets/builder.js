@@ -66,12 +66,17 @@
       options(field('ability'), (actor(a)?.choices || []).filter(c => !c.sealed_only), chosen?.ability_key || field('ability').value, 'Выберите способность, предмет или взаимодействие');
       options(field('target'), ctx.targets.filter(t => { const c = (actor(a)?.choices || []).find(c => c.key === field('ability').value), p = c?.target_policy || {kind:c?.item_action || c?.spawn_action ? 'self_only':'hostile_only'}, rel = t.relationships?.[a]; return t.actors.includes(a) && (!c?.legal_targets || c.legal_targets.includes(t.id)) && (p.kind === 'object_only' && t.kind === 'object' || p.kind === 'any_entity' || p.kind === 'self_only' && t.id === a || p.kind === 'hostile_only' && rel === 'hostile' || p.kind === 'allied_only' && ['self','allied'].includes(rel) || p.kind === 'custom' && p.relationships.includes(rel) && p.entity_kinds.includes(t.kind)); }), chosen?.targets?.[0] || field('target').value, 'Выберите разрешённую цель');
       info();
+      if (chosen?.parameters?.prepared_items) chosen.parameters.prepared_items.forEach(s => { const select = root.querySelector('[data-prepared-cost="' + s.cost_index + '"]'); if (select) select.value = s.inventory_item_id; });
     }
     function info() {
       const choices = actor(field('actor').value)?.choices || [];
       const a = choices.find(x => x.key === field('ability').value);
       const performer = actor(field('actor').value);
       part('action-info').textContent = performer?.supported === false ? performer.reason : a?.supported ? 'Стоимость: ' + a.ap_cost + ' AP из общего бюджета группы.' : (!choices.length ? (actor(field('actor').value)?.catalog_notice || 'Нет поддержанных закреплённых способностей. Обычная атака без утверждённого определения не подставляется.') : (a?.reason || 'Выберите поддержанную способность. Недоступные определения показаны с причиной.'));
+      const params = part('parameters'), previous = {}; params.querySelectorAll('[data-prepared-cost]').forEach(s => { previous[s.dataset.preparedCost] = s.value; });
+      params.replaceChildren();
+      (a?.prepared_item_costs || []).forEach(c => { const label = node('label', c.key + ' · ' + c.qty + ' шт. · ' + c.timing); const select = node('select'); select.dataset.preparedCost = String(c.cost_index); options(select, c.options.map(o => ({id:o.inventory_item_id,label:o.label})), previous[c.cost_index] || '', 'Выберите конкретный предмет'); select.disabled = !editable || loading || !!model.sealPending; label.append(select); params.append(label); });
+      if (!(a?.prepared_item_costs || []).length) params.textContent = 'Параметры способности закреплены сервером.';
       if (a?.prepared_action) part('action-info').textContent += ' Условие: исполнитель выбран целью действия. Срок: до следующего собственного хода.';
       if (a?.supported && a.object_interaction) part('action-info').textContent += ' ' + (a.costs || []).filter(c => c.kind === 'resource').map(c => c.amount + ' ' + c.resource).join(', ');
       if (!ctx.targets.length) part('action-info').textContent += ' Нет разрешённых целей в текущей области видимости. Мастерские данные не открываются игроку автоматически.';
@@ -84,7 +89,9 @@
         li.append(node('p', (actor(a.actor_id)?.name || 'Недоступное существо') + ' → ' + (ab?.label || 'Недоступная способность') + ' → ' + (target?.name || 'Цель недоступна')));
         li.append(node('p', ab?.supported ? 'Стоимость: ' + ab.ap_cost + ' AP' : 'Предпросмотр заблокирован: источник способности недоступен.'));
         if (ab?.supported) sum += ab.ap_cost; else known = false;
-        const params = a.parameters && Object.keys(a.parameters).length;
+        const itemParameters = a.parameters?.prepared_items;
+        if (itemParameters) itemParameters.forEach(s => li.append(node('p', 'Стоимость #' + s.cost_index + ' · предмет #' + s.inventory_item_id)));
+        const params = a.parameters && Object.keys(a.parameters).length && !itemParameters;
         if (i < model.sealedCount) li.append(node('p', 'Запечатано: способность, цель и порядок неизменны.'));
         if (params) li.append(node('p', 'Сохранены параметры, для которых пока нет интерфейса. Они не удалены; предпросмотр заблокирован.'));
         [['edit', 'Изменить'], ['up', 'Выше'], ['down', 'Ниже'], ['remove', 'Удалить'], ...(params ? [['clear-parameters', 'Сбросить неподдерживаемые параметры']] : [])].forEach(([cmd, label]) => {
@@ -107,7 +114,10 @@
         ctx.actors.forEach(a => details.append(node('p', a.name + ' · ' + (controls[a.control?.via] || 'управление') + (a.supported === false ? ' · ' + a.reason : ''))));
         const units = {round:'границ раунда',own_turn:'собственных ходов',target_turn:'ходов цели'};
         (ctx.summons || []).forEach(s => details.append(node('p', 'Призыв: ' + s.name + ' · остаток: ' + s.remaining + ' ' + (units[s.duration_unit] || '') + (s.status === 'pending_independent' ? ' · переход к независимому управлению в следующем раунде' : s.admission === 'next_round' ? ' · обычные действия со следующего roster' : ' · в текущем roster группы'))));
-        (ctx.prepared_actions || []).forEach(p => details.append(node('p', 'Подготовка #' + p.prepared_action_id + ' · ' + p.status + ' · ' + p.cost_state + ' · до следующего собственного хода')));
+        (ctx.prepared_actions || []).forEach(p => {
+          details.append(node('p', 'Подготовка #' + p.prepared_action_id + ' · ' + p.status + ' · ' + p.cost_state + ' · до следующего собственного хода'));
+          if (p.can_release || model.sealPending?.command === 'release-prepared' && model.sealPending.body.prepared_action_id === p.prepared_action_id) { const button = node('button','Проверить и освободить неиспользованный резерв'); button.type = 'button'; button.dataset.command = 'release-prepared'; button.dataset.preparedId = p.prepared_action_id; button.disabled = loading || saving || !!model.pending || !!model.sealPending && (model.sealPending.command !== 'release-prepared' || model.sealPending.body.prepared_action_id !== p.prepared_action_id); details.append(button); }
+        });
         if (ctx.can_manage) { const link = node('a','Управление столкновением'); link.href = 'showthread.php?tid=' + encodeURIComponent(ctx.tid) + '&acs_session=' + encodeURIComponent(ctx.session_id) + '&acs_encounter=' + encodeURIComponent(ctx.encounter_id) + '&acs_tab=management'; details.append(link); }
       }
       options(field('group'), ctx.turns.map(t => ({ id: t.id, label: 'Группа ' + t.group_id + ' — ' + t.members.map(m => m.name).join(', ') + ' (' + (statuses[t.status] || t.status) + ')' })), ctx.turn.id, 'Выберите группу');
@@ -201,12 +211,12 @@
       if (sealView?.friendly_fire?.required) box.append(node('p','Предупреждение: выбрана атака союзника. Урон не уменьшается автоматически.'));
       overview();
     }
-    async function sealCommand(commandName) {
-      const routes = {'publish-prepared':'prepared_publish',seal:'seal','cancel-seal':'seal_cancel_tail','confirm-seal':'seal_confirm'};
-      if (!model.id || model.dirty) throw new Error('Сначала сохраните черновик.');
+    async function sealCommand(commandName, preparedRecord) {
+      const routes = {'release-prepared':'prepared_release','publish-prepared':'prepared_publish',seal:'seal','cancel-seal':'seal_cancel_tail','confirm-seal':'seal_confirm'};
+      if (commandName !== 'release-prepared' && (!model.id || model.dirty)) throw new Error('Сначала сохраните черновик.');
       if (!model.sealPending) {
         if (commandName === 'cancel-seal' && !window.confirm('Отменить последнее запечатанное действие? История и броски сохранятся, квота не вернётся.')) return;
-        const body = {draft_id:model.id,expected_draft_version:model.version,operation_key:crypto.randomUUID().replace(/-/g,'')};
+        const body = commandName === 'release-prepared' ? {session_id:ctx.session_id,encounter_id:ctx.encounter_id,entity_id:preparedRecord.entity_id,prepared_action_id:preparedRecord.prepared_action_id,prepared_version:preparedRecord.prepared_version,expected_version:ctx.session_version,operation_key:crypto.randomUUID().replace(/-/g,'')} : {draft_id:model.id,expected_draft_version:model.version,operation_key:crypto.randomUUID().replace(/-/g,'')};
         if (['seal','confirm-seal'].includes(commandName) && sealView?.friendly_fire?.required && !sealView.friendly_fire.acknowledged) { if (!window.confirm('Выбраны союзники для нанесения урона. Подтвердить дружественный огонь без снижения урона?')) return; body.friendly_fire_confirmation = sealView.friendly_fire.confirmation_hash; }
         if (commandName === 'publish-prepared') body.expected_version = ctx.session_version;
         if (commandName === 'confirm-seal') body.confirmation_hash = sealView.confirmation_hash;
@@ -214,13 +224,14 @@
       }
       const pending = copy(model.sealPending); saving = true; localSave(); overview();
       try {
-        await api(routes[pending.command], pending.body, true);
+        const operationResult = await api(routes[pending.command], pending.body, true);
+        if (pending.command === 'release-prepared') { model.sealPending = null; localSave(); await refresh(); status(operationResult.cost_state === 'settled' ? 'Неиспользованный резерв освобождён. AP и оплаченные стоимости сохранены.' : 'Резерв сохраняется: release не подтверждён, требуется восстановление прав или Inventory.', operationResult.cost_state !== 'settled'); return; }
         if (pending.command === 'publish-prepared') { model.sealPending = null; model.dirty = false; localSave(); await refresh(); status('Подготовка оплачена и зарегистрирована. Ход группы закрыт; новый пост не создан.', false); return; }
         model.sealPending = null; localSave(); saving = false;
         await restore(true); status('Операция seal сохранена. Реальное боевое состояние не изменено.',false);
       } catch(e) {
         if (['ACS_PREPARED_UNSUPPORTED','ACS_BEHAVIOR_UNSUPPORTED','ACS_BEHAVIOR_ACTION_BLOCKED','ACS_BEHAVIOR_TARGET_BLOCKED','ACS_BEHAVIOR_NO_LEGAL_TARGET','ACS_FRIENDLY_FIRE_CONFIRMATION_REQUIRED','ACS_SEAL_UNSUPPORTED','ACS_SEAL_IMMUTABLE','ACS_SEAL_SUMMARY_CHANGED','ACS_SEAL_QUOTA_EXHAUSTED','ACS_DRAFT_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SEAL_TURN_UNAVAILABLE'].includes(e.code)) {
-          model.sealPending = null; localSave(); if (pending.command === 'publish-prepared') await refresh(); await refreshSeal();
+          model.sealPending = null; localSave(); if (['publish-prepared','release-prepared'].includes(pending.command)) await refresh(); await refreshSeal();
         }
         status(e.message + (model.sealPending ? ' Повторите ту же кнопку: ключ и запрос сохранены.' : ' Обновите черновик и проверьте сводку.'),true);
       } finally { saving = false; overview(); }
@@ -273,6 +284,7 @@
       try {
         if (cmd === 'add') {
           const a = { actor_id: field('actor').value, ability_key: field('ability').value, targets: [field('target').value], parameters: editing === null ? [] : copy(model.actions[editing].parameters || []) };
+          if ((ability(a)?.prepared_item_costs || []).length) { a.parameters = {prepared_items:Array.from(part('parameters').querySelectorAll('[data-prepared-cost]')).map(s => ({cost_index:Number(s.dataset.preparedCost),inventory_item_id:s.value}))}; if (a.parameters.prepared_items.some(s => !s.inventory_item_id)) throw new Error('Выберите предмет для каждой стоимости.'); }
           if (!ability(a)?.supported || !ctx.targets.some(t => t.id === a.targets[0] && t.actors.includes(a.actor_id))) throw new Error('Выберите разрешённые существо, способность и цель.');
           if (editing === null) model.add(a); else model.update(editing, a); editing = null; invalidate(); overview(); status('Последовательность изменена. Сохраните черновик.', false);
         } else if (cmd === 'remove' || cmd === 'up' || cmd === 'down') { if (cmd === 'remove') model.remove(index); else model.move(index, cmd === 'up' ? -1 : 1); editing = null; invalidate(); overview(); }
@@ -283,6 +295,7 @@
         else if (cmd === 'restore') await restore(false);
         else if (cmd === 'refresh') { await refresh(); invalidate(); status('Сведения обновлены. Локальные действия и текст сохранены.', false); }
         else if (cmd === 'preview') await preview();
+        else if (cmd === 'release-prepared') await sealCommand(cmd, (ctx.prepared_actions || []).find(p => p.prepared_action_id === button.dataset.preparedId));
         else if (['seal','cancel-seal','confirm-seal','publish-prepared'].includes(cmd)) await sealCommand(cmd);
         else if (cmd === 'seal-refresh') await refreshSeal();
         else if (cmd === 'compose' || cmd === 'compose-quick') {

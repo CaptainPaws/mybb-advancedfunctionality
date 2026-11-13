@@ -25,6 +25,7 @@ final class AF_ACS_InventoryObligations
         $html.='<h4>Активные глобальные резервы этой сессии</h4><ul>';
         foreach($page['reservations'] as $r)$html.='<li>#'.self::esc($r['reservation_id']).' · предмет #'.self::esc($r['item_id']).' · собственник UID '.self::esc($r['owner_uid']).' · '.self::esc($r['status']).' · остаток '.self::esc($r['remaining_qty']).'</li>';
         if (!$page['reservations'])$html.='<li>'.($page['inventory']==='available'?'На этой странице активных резервов нет.':'Список резервов недоступен; отсутствие обязательств не подтверждено.').'</li>';$html.='</ul><h4>Операции Inventory</h4><ul>';
+        foreach($page['prepared_releases']??[] as $p)$html.='<li>Prepared #'.self::esc($p['prepared_action_id']).' · cost #'.self::esc($p['cost_index']).' · recovery_required. Резерв сохранён; release подтверждает владелец через prepared_release.</li>';
         foreach($page['operations'] as $op) {
             $html.='<li>'.self::esc($op['kind']).' · предмет #'.self::esc($op['item_id']??'после подтверждения').' · собственник/получатель UID '.self::esc($op['owner_uid']).' · '.self::esc($op['operation_key']).' · UID '.self::esc($op['actor_uid']).' · '.self::esc($op['status']);
             if($op['can_lookup'])$html.='<form method="post" action="'.self::esc($url).'">'.self::hidden($base+['inventory_action'=>'recover','operation_key'=>$op['operation_key'],'expected_operation_version'=>$op['operation_version']]).'<button type="submit">Проверить прежний исход (lookup)</button></form>';

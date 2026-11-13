@@ -1099,3 +1099,59 @@ Spawn identity остаётся source_event_id + spawn_index / existing entity_
 доступен поддержанным interactions/objectives/cover. Не вводятся provisional
 client entity IDs, ссылки на ещё неизвестный future spawn или автоматическое
 раскрытие цели в той же незавершённой публикации. R2 и Inventory gates прежние.
+
+## ACS-9.1.1B prepared item cost binding
+
+`ic-acs.prepared.v1.additional_costs` допускает следующий явный item subset:
+
+```json
+{"kind":"item","key":"trigger-ammo","amount":1,"timing":"on_trigger",
+ "selection":"explicit",
+ "definition":{"type":"arpg_item","key":"iron-arrow","version":"1.0",
+ "fingerprint":"sha256:<64 lowercase hex digits>"}}
+```
+
+key — логическая идентичность cost, definition — точный KB item pin. Поддержаны
+только owner-normalized equipment consumable/ammo, без Appearance. Предмет
+используется как стоимость; его on_use не исполняется. Неизвестные kinds,
+selection, timing, поля и неполный pin — UNSUPPORTED. amount — целое 1..1000000.
+Resource descriptor не получает дополнительных item fields.
+
+Wire action сохраняет прежние actor/ability/targets и параметры
+`{"prepared_items":[{"cost_index":2,"inventory_item_id":"22"}]}`.
+Индекс относится ко всему additional_costs, включая resource entries. Ровно
+один выбранный Inventory ID на каждый item cost; повтор cost index и лишние
+поля запрещены. Один и тот же stack допустим для нескольких costs только при
+достаточном суммарном свободном количестве. Автоматического выбора замены нет.
+
+Сервер проверяет authenticated source owner, действующее управление, native/
+session permission, независимый owner spending grant, scope, custody, live KB
+pin, item fingerprint, owner version и глобальные reservations. В этой версии
+чужие предметы, в том числе по одному лишь controller/delegation/GM праву,
+не поддержаны. Каталог содержит только разрешённые собственные экземпляры.
+
+Seal закрепляет по каждому cost index логический key, item definition pin,
+конкретный item_id, owner_uid, qty, timing, fingerprint, immutable item definition
+payload, inventory_version и
+полный исходный reserve_receipt с reservation id/version/operation identity.
+Разные costs имеют независимые reservations даже на одном stack. Весь набор
+сохраняет итоговую post-reserve owner version. Нужные позиции входят в seal
+confirmation dependencies. Смена owner version/KB/grant не заменяет binding;
+сохраняются draft/seal/tape и безопасный конфликт.
+
+При prepared publication on_prepare consume фиксируется existing owner
+participant в той же ACS transaction; on_trigger остаётся reserved/pending.
+Prepared contract содержит исходные bindings, consume receipts и owner version
+после собственной оплаты. Internal preparedTriggerItems принимает только
+active/paid запись, проверяет immutable contract/seal и возвращает исходные
+bindings плюс prepared_inventory_version. Это handoff для ACS-9.1.2, без выбора
+другого ID, нового reserve, trigger dispatch или consume.
+
+Cancel/expiry освобождает только on_trigger остатки. Release использует прежний
+owner protocol и stable `acs:prepared:release:<prepared_id>:<cost_index>`.
+Нет полномочий или подтверждённого release — сохранены reservation,
+prepared cost_state=recovery_required и scoped prepared.release obligation в
+существующем operations journal. GET и retry terminal command не повторяют
+release. Явный owner POST prepared_release сначала делает lookup того же ключа;
+только доказанный not_found допускает тот же release внутри same-writer
+transaction. Оплаченные AP/resources/consumed qty не возвращаются.
