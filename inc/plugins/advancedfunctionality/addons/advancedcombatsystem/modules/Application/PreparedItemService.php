@@ -91,6 +91,29 @@ final class AF_ACS_PreparedItemService
         }
         return ['bindings'=>$saved,'receipts'=>$receipts,'inventory_version'=>$this->read($draft['session_id'],$a['actor_id'],true)['inventory_version']];
     }
+    public function consumeTrigger(array $row,string $triggerEvent):array
+    {
+        global $db;$bindings=$this->repo->preparedTriggerItems($row);if(!$bindings)return [];
+        $contract=json_decode($row['contract_json'],true,64,JSON_THROW_ON_ERROR);$actor=$row['entity_id'];$sid=$row['session_id'];
+        $read=$this->read($sid,$actor,true);
+        $adapter=AF_ACS_InventoryAdapter::forCombat($db,(int)$this->access->uid());$receipts=[];
+        foreach($bindings as $b){$key='acs:prepared:trigger-consume:'.$row['id'].':'.$triggerEvent.':'.$b['cost_index'];$lookup=AF_ACS_ItemActionService::request('lookup',$key.':preflight',$sid,$actor,(int)$this->access->uid(),['target_operation_key'=>$key]);if($adapter->lookupParticipant($lookup)['status']!=='not_found')throw new RuntimeException('ACS_ITEM_OWNER_RESULT_ORPHAN');}
+        if($read['inventory_version']!==$contract['item_inventory_version'])throw new RuntimeException('ACS_ITEM_DEPENDENCY_CONFLICT');
+        foreach($bindings as $b){
+            if($b['owner_uid']!==(int)$this->access->uid())throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
+            $cost=$contract['additional_costs'][$b['cost_index']];$item=null;foreach($read['items'] as $i)if((int)$i['id']===$b['item_id'])$item=$i;
+            if(!$item||$this->item($item,$cost)['item_fingerprint']!==$b['item_fingerprint'])throw new RuntimeException('ACS_ITEM_DEPENDENCY_CONFLICT');
+            $reserve=$b['reserve_receipt'];$ref=$reserve['reservation'];$valid=false;foreach($read['reservations'] as $r)if((string)$r['id']===$ref['id']&&(int)$r['item_id']===$b['item_id']&&(int)$r['owner_uid']===$b['owner_uid']&&$r['context_system']==='acs'&&$r['context_key']===$sid&&(int)$r['remaining_qty']===$b['qty']&&(int)$r['reservation_version']===$ref['version'])$valid=true;
+            if(!$valid)throw new RuntimeException('ACS_ITEM_RESERVATION_REQUIRED');
+            $key='acs:prepared:trigger-consume:'.$row['id'].':'.$triggerEvent.':'.$b['cost_index'];
+            $lookup=AF_ACS_ItemActionService::request('lookup',$key.':lookup',$sid,$actor,(int)$this->access->uid(),['target_operation_key'=>$reserve['operation_key']]);
+            if(AF_ADVINV_OwnerProtocol::canonical($adapter->lookupParticipant($lookup))!==AF_ADVINV_OwnerProtocol::canonical($reserve))throw new RuntimeException('ACS_ITEM_RESERVATION_REQUIRED');
+            $lookup['payload']['target_operation_key']=$key;$lookup['payload_hash']=AF_ADVINV_OwnerProtocol::payloadHash($lookup);
+            if($adapter->lookupParticipant($lookup)['status']!=='not_found')throw new RuntimeException('ACS_ITEM_OWNER_RESULT_ORPHAN');
+            $request=AF_ACS_ItemActionService::request('consume',$key,$sid,$actor,(int)$this->access->uid(),['reservation_id'=>$ref['id'],'qty'=>$b['qty'],'expected_version'=>$ref['version']]);
+            $receipt=$adapter->participate('consume',$request)->serverReceipt();if($receipt['status']!=='committed')throw new RuntimeException('ACS_ITEM_CONSUME_REJECTED');$receipts[]=$receipt;
+        }return $receipts;
+    }
     public function cancelSeal(array $draft,array $seal):void
     {
         global $db;$saved=$this->repo->itemSealDefinition($draft['session_id'],$seal)['prepared_items']??[];if(!$saved)return;

@@ -6,6 +6,10 @@ require_once __DIR__.'/Repository.php';
 class AF_ACS_SessionRepository extends AF_ACS_Repository
 {
     private bool $inCommand = false;
+    protected function internalCommand(callable $apply):mixed
+    {
+        $this->transactions->assertInternalBoundary();$old=$this->inCommand;$this->inCommand=true;try{return $apply();}finally{$this->inCommand=$old;}
+    }
     protected function commandWrite(): void {if(!$this->inCommand)throw new RuntimeException('ACS_COMMAND_REQUIRED');}
     private function sessionRow(array $row): array
     {

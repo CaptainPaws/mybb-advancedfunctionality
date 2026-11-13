@@ -39,6 +39,8 @@ trait AF_ACS_CombatCommitPersistence
         $f['rolls']=$this->sql('SELECT x.* FROM '.$this->table('rolls').' x JOIN '.$this->table('sealed_actions').' a ON a.id=x.sealed_action_id WHERE a.draft_id=? ORDER BY x.id'.$suffix,[$draft])['rows'];
         $f['snapshots']=$this->sql('SELECT id,content_hash,SHA2(payload_json,256) AS actual_hash FROM '.$this->table('snapshots').' WHERE session_id=? AND (id IN (SELECT template_snapshot_id FROM '.$this->table('entities').' WHERE session_id=?) OR id IN (SELECT definition_snapshot_id FROM '.$this->table('sealed_actions').' WHERE draft_id=?) OR id IN (SELECT definition_snapshot_id FROM '.$this->table('effects').' WHERE session_id=?)) ORDER BY id'.$suffix,[$sid,$sid,$draft,$sid])['rows'];
         $f['boundaries']=$this->sql('SELECT operation_key,kind,status,payload_hash,result_json FROM '.$this->table('operations')." WHERE session_id=? AND (kind LIKE 'clock.%' OR kind='round.turn_closed' OR status<>'committed') ORDER BY operation_key".$suffix,[$sid])['rows'];
+        $f['prepared']=$this->sql('SELECT * FROM '.$this->table('prepared_actions').' WHERE session_id=? AND encounter_id=? ORDER BY id'.$suffix,[$sid,$eid])['rows'];
+        $f['prepared_executions']=$this->sql('SELECT x.* FROM '.$this->table('prepared_executions').' x JOIN '.$this->table('prepared_actions').' p ON p.id=x.prepared_action_id WHERE p.session_id=? AND p.encounter_id=? ORDER BY x.id'.$suffix,[$sid,$eid])['rows'];
         $f['cover']=$this->coverDependencies($sid,$eid,$this->coverKeys,$lock);
         $f['spatial']=$this->spatialDependencies($sid,$eid,$this->spatialKeys,$lock);
         return $f;
@@ -150,7 +152,7 @@ trait AF_ACS_CombatCommitPersistence
         }
         return $retired;
     }
-    private function project(array $row, array $f, array $turn, AF_ACS_ResolverResult $result,array $frozen): array
+    private function projectEntityDeltas(array $f,AF_ACS_ResolverResult $result):array
     {
         $before=$result->serverInitial();$after=$result->serverState();$changes=[];
         $states=self::indexed($f['entity_states'],'entity_id');$resources=[];
@@ -176,6 +178,11 @@ trait AF_ACS_CombatCommitPersistence
                 if($this->sql('UPDATE '.$this->table('resources').' SET current_value=?,resource_version=resource_version+1 WHERE id=? AND resource_version=?',[$balance['current'],$stored['id'],$stored['resource_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');}
             $changes[]=['entity_id'=>$id,'before'=>$old,'after'=>$value];
         }
+        return $changes;
+    }
+    private function project(array $row, array $f, array $turn, AF_ACS_ResolverResult $result,array $frozen): array
+    {
+        $before=$result->serverInitial();$after=$result->serverState();$changes=$this->projectEntityDeltas($f,$result);
         $group=(string)$turn['control_group_id'];$ap=$before['groups'][$group]['ap']['current']-$after['groups'][$group]['ap']['current'];
         if ($ap<0 || $ap>AF_ACS_Clock::availableAP((int)$turn['ap_budget'],(int)$turn['ap_spent'],(int)$turn['pre_round_ap_commitment'])) { throw new RuntimeException('ACS_AP_STATE_INVALID'); }
         foreach ($after['groups'] as $id=>$state) { if ((string)$id!==$group && $state!==$before['groups'][$id]) { throw new RuntimeException('ACS_COMBAT_GROUP_WRITER_UNSUPPORTED'); } }

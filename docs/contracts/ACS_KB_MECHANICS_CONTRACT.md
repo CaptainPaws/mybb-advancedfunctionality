@@ -1155,3 +1155,67 @@ prepared cost_state=recovery_required и scoped prepared.release obligation в
 release. Явный owner POST prepared_release сначала делает lookup того же ключа;
 только доказанный not_found допускает тот же release внутри same-writer
 transaction. Оплаченные AP/resources/consumed qty не возвращаются.
+
+## ACS-9.1.2 prepared trigger execution subset
+
+Регистрация 9.1.1/9.1.1B сохраняется. Для автоматического исполнения требуется
+дополнительное pinned поле prepared_action.execution:
+
+```json
+{"schema":"ic-acs.prepared-execution.v1","event_kind":"combat.primary",
+ "phase":"after_damage","priority":100,"requires_hit":true,
+ "on_unavailable":"retain","emit_prepared":false,"emit_active_reactions":false,
+ "limits":{"max_depth":2,"per_cause":1}}
+```
+
+Поддержан primary single-target strike с одним action в публикации, без
+interleaving с EntityTurn-end work или derived reflection/lifesteal. Trigger
+on_targeted/source дополнительно требует фактического hit/crit по source;
+перенаправленный на другое существо удар этому условию не соответствует.
+Фиксированная цель исполнения остаётся выбранной при первоначальном seal.
+Priority — явное целое; prepared queue сортируется по priority, source event
+registration order и стабильному prepared ID. В текущем subset при наличии
+active after_damage reactions требуется строго более поздний priority: иной
+порядок возвращает ACS_PREPARED_PHASE_ORDER_UNSUPPORTED. Другие фазы,
+multi-action/multi-target interleaving и derived event kinds не исполняются
+под видом after_damage.
+
+on_unavailable=retain сохраняет active commitment после skipped execution;
+cancel прекращает его с сохранением paid history и освобождением только unused
+reservations по 9.1.1B. Unsupported capability не превращается в implicit cancel.
+requires_active=true сохраняется. Неизвестные execution fields/policies и
+отсутствующий execution descriptor — UNSUPPORTED. Старые pinned contracts
+не переписываются и не получают новой механики по умолчанию.
+
+emit_prepared=false и emit_active_reactions=false — явные условия поддержанного
+subset, а не скрытый новый глобальный depth limit. Для root→prepared cause
+используется CausalGraph с указанными KB max_depth/per_cause. Recursive child
+chains, активные реакции от такого child и дополнительные emitted prepared
+causes здесь UNSUPPORTED; неизвестный callback/selector не запускается.
+
+Causal identity — prepared_action_id + trigger_event_id. При первой подтверждённой
+попытке commit существующей frozen publication сервер сохраняет metadata-only
+prepared.trigger_sealed event и armed execution/rolls. Event включает исходный
+submission/sealed action/hash/target и mechanics_confirmed=false. Этот causal
+seal существует до применения HP/AP и сохраняется при позднем rollback.
+Его operation key стабилен для submission/sealed action/subject; UNIQUE таблиц
+prepared_executions и rolls защищают повтор. Ни клиент, ни GET, preview,
+SealService confirmation или recovery lookup не предоставляют samples.
+
+Механический commit повторно проверяет prepared version/hash/status, originating
+controller/delegation/native membership, source/group, ability pin, behavior,
+awareness, range/cover/LoE и ресурсы. Read-only originating-principal context не
+меняет authenticated MyBB UID и не является Inventory spending permission.
+Исполнение проходит тот же Resolver/Effects без AP cost и EntityTurn-end work,
+с неизменными сохранёнными hit/crit samples. В executions и parent event result
+сохраняются source/trigger/parent provenance, проверка, costs/receipts, deltas,
+causal trace и terminal state. Повтор committed parent читает прежний receipt.
+
+on_trigger item consume использует только исходные 9.1.1B bindings и reservation
+IDs; новый reserve не создаётся. Применяются current owner version/pin/fingerprint,
+исходный reserve receipt и stable consume key по prepared/trigger/cost index.
+Stage-6 same-writer owner participation сохраняется. При отличающемся runtime
+owner principal item execution блокируется; read-only source principal не
+выдаёт право расходовать чужое имущество. Неизвестный/orphan consume сохраняет
+parent recovery barrier, без повторного consume и освобождения неизвестного
+расхода. On_prepare costs и prepaid AP повторно не оплачиваются.
