@@ -91,10 +91,39 @@ final class AF_ACS_PreparedItemService
         }
         return ['bindings'=>$saved,'receipts'=>$receipts,'inventory_version'=>$this->read($draft['session_id'],$a['actor_id'],true)['inventory_version']];
     }
+    public function bindOwnerObligations(array $row):array
+    {
+        global $db;$p=json_decode($row['contract_json'],true,64,JSON_THROW_ON_ERROR);$permits=[];
+        $pending=$this->repo->preparedTriggerItems($row);if(!$pending)return [];
+        $adapter=AF_ACS_InventoryAdapter::forCombat($db,(int)$this->access->uid());
+        foreach($pending as $b)$permits[$b['cost_index']]=$adapter->bindPreparedReservation([
+            'schema'=>'prepared_reserved_consume.v1','owner_uid'=>$b['owner_uid'],'originating_uid'=>(int)$this->access->uid(),'session_id'=>$row['session_id'],'encounter_id'=>$row['encounter_id'],'entity_id'=>$row['entity_id'],'prepared_action_id'=>$row['id'],'source_sealed_action_id'=>$row['source_sealed_action_id'],
+            'cost_index'=>$b['cost_index'],'cost_key'=>$b['cost_key'],'qty'=>$b['qty'],'definition'=>$b['definition'],'ability_pin'=>$p['ability_pin'],'item_id'=>$b['item_id'],'item_fingerprint'=>$b['item_fingerprint'],'inventory_version'=>$p['item_inventory_version'],
+            'reservation_id'=>$b['reserve_receipt']['reservation']['id'],'reservation_version'=>$b['reserve_receipt']['reservation']['version'],'reserve_receipt'=>$b['reserve_receipt'],'obligation_hash'=>$row['contract_hash']]);
+        return $permits;
+    }
+    private function consumeOwnerObligations(array $row,string $triggerEvent,array $bindings,array $contract):array
+    {
+        global $db;$adapter=AF_ACS_InventoryAdapter::forCombat($db,(int)$this->access->uid());$intents=[];$receipts=[];
+        foreach($bindings as $b){
+            $key='acs:prepared:trigger-consume:'.$row['id'].':'.$triggerEvent.':'.$b['cost_index'];$r=AF_ACS_ItemActionService::request('consume',$key,$row['session_id'],$row['entity_id'],(int)$this->access->uid(),['reservation_id'=>$b['reserve_receipt']['reservation']['id'],'qty'=>$b['qty'],'expected_version'=>$b['reserve_receipt']['reservation']['version']]);
+            $r['actor']['authorization_ref']='acs-prepared:'.$row['id'].':'.$triggerEvent.':'.$b['cost_index'];$r['payload_hash']=AF_ADVINV_OwnerProtocol::payloadHash($r);$intents[]=$r;
+            if($adapter->lookupPreparedConsume($r)['status']!=='not_found')throw new RuntimeException('ACS_ITEM_OWNER_RESULT_ORPHAN');
+        }
+        foreach($bindings as $i=>$b){
+            $this->repo->assertInventorySettled($row['session_id'],[(string)$b['item_id']]);$e=$adapter->preparedConsumptionEvidence($intents[$i]);$permit=$contract['owner_obligations'][$b['cost_index']]??null;$item=$e['item'];foreach(['id','uid'] as $field)$item[$field]=(string)$item[$field];
+            if(!$permit||$permit['binding_hash']!==$e['binding_hash']||$e['inventory_version']!==$contract['item_inventory_version']||$this->item($item,$contract['additional_costs'][$b['cost_index']])['item_fingerprint']!==$b['item_fingerprint'])throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
+        }
+        // Preflight all independent reservations before the first owner mutation.
+        foreach($intents as $r){$receipt=$adapter->participatePreparedConsume($r,$receipts)->serverReceipt();if($receipt['status']!=='committed')throw new RuntimeException('INV_PREPARED_OUTCOME_INTEGRITY');$receipts[]=$receipt;}
+        return $receipts;
+    }
     public function consumeTrigger(array $row,string $triggerEvent):array
     {
         global $db;$bindings=$this->repo->preparedTriggerItems($row);if(!$bindings)return [];
-        $contract=json_decode($row['contract_json'],true,64,JSON_THROW_ON_ERROR);$actor=$row['entity_id'];$sid=$row['session_id'];
+        $contract=json_decode($row['contract_json'],true,64,JSON_THROW_ON_ERROR);
+        if(isset($contract['owner_obligations']))return $this->consumeOwnerObligations($row,$triggerEvent,$bindings,$contract);
+        $actor=$row['entity_id'];$sid=$row['session_id'];
         $read=$this->read($sid,$actor,true);
         $adapter=AF_ACS_InventoryAdapter::forCombat($db,(int)$this->access->uid());$receipts=[];
         foreach($bindings as $b){$key='acs:prepared:trigger-consume:'.$row['id'].':'.$triggerEvent.':'.$b['cost_index'];$lookup=AF_ACS_ItemActionService::request('lookup',$key.':preflight',$sid,$actor,(int)$this->access->uid(),['target_operation_key'=>$key]);if($adapter->lookupParticipant($lookup)['status']!=='not_found')throw new RuntimeException('ACS_ITEM_OWNER_RESULT_ORPHAN');}

@@ -65,6 +65,8 @@ CREATE TABLE `{$prefix}af_advinv_reservations` (
     context_key VARCHAR(191) COLLATE utf8mb4_bin NOT NULL,
     status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     reservation_version BIGINT UNSIGNED NOT NULL,
+    prepared_binding_json LONGTEXT NULL,
+    prepared_binding_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
     created_at BIGINT UNSIGNED NOT NULL,
     updated_at BIGINT UNSIGNED NOT NULL,
     PRIMARY KEY (id),
@@ -78,4 +80,16 @@ CREATE TABLE `{$prefix}af_advinv_reservations` (
 SQL,
         ];
     }
+    /** Explicit operator upgrade, resumable by column; never invoked by a request/activation. */
+    public static function upgradePrepared(mysqli $db,string $prefix):void
+    {
+        if(!preg_match('/\A[A-Za-z0-9_]{0,30}\z/D',$prefix))throw new InvalidArgumentException('INV_INVALID_PREFIX');
+        require_once __DIR__.'/OwnerProtocol.php';(new AF_ADVINV_OwnerProtocol($db))->assertExternalBoundary();
+        $table=$prefix.'af_advinv_reservations';
+        foreach(['prepared_binding_json'=>'LONGTEXT NULL','prepared_binding_hash'=>'CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL'] as $name=>$definition){
+            $s=$db->prepare('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?');$s->bind_param('ss',$table,$name);$s->execute();$exists=$s->get_result()->fetch_assoc();$s->close();
+            if(!$exists)$db->query('ALTER TABLE `'.$table.'` ADD COLUMN `'.$name.'` '.$definition);
+        }
+    }
+
 }

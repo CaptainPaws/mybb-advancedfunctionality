@@ -29,6 +29,9 @@ trait AF_ACS_PreparedActionPersistence
         $json=self::json($fixed);
         $id=$this->sql('INSERT INTO '.$this->table('prepared_actions').' (session_id,encounter_id,entity_id,control_group_id,owner_uid,source_sealed_action_id,source_entity_turn_id,status,prepared_version,expires_boundary,cost_state,contract_hash,contract_json) VALUES (?,?,?,?,?,?,?,?,1,?,?,?,?)',
             [$session['id'],$encounter['id'],$entity['id'],$turn['control_group_id'],$entity['owner_uid'],$seal['id'],$individual['id'],'active','until_next_turn','paid',hash('sha256',$json),$json])['id'];
+        $preparedRow=null;foreach($this->preparedRows($session['id'],$encounter['id'],$entity['id']) as $r)if($r['id']===$id)$preparedRow=$r;
+        $permits=(new AF_ACS_PreparedItemService($this,new AF_ACS_SessionAccess))->bindOwnerObligations($preparedRow);
+        if($permits){$fixed['owner_obligations']=$permits;$json=self::json($fixed);$this->sql('UPDATE '.$this->table('prepared_actions').' SET contract_json=?,contract_hash=? WHERE id=?',[$json,hash('sha256',$json),$id]);}
         if ($this->sql('UPDATE '.$this->table('turns').' SET ap_spent=ap_spent+?,turn_version=turn_version+1 WHERE id=? AND turn_version=? AND status=?',[$cost,$turn['id'],$turn['turn_version'],'pending'])['affected']!==1) throw new RuntimeException('ACS_VERSION_CONFLICT');
         foreach($contract['additional_costs'] as $extra)if($extra['kind']==='resource'&&$extra['timing']==='on_prepare') {
             $resource=null;foreach($this->entityResources($entity['id']) as $r)if($r['resource_key']===$extra['key'])$resource=$r;

@@ -36,3 +36,10 @@ final class AF_ADVINV_MybbOwnerAccess implements AF_ADVINV_OwnerAccess
         }
     }
 }
+
+/** Narrow server composition; ordinary authorize() retains its authenticated actor policy. */
+interface AF_ADVINV_PreparedOwnerPolicy extends AF_ADVINV_OwnerAccess
+{
+    public function preparedGrantGeneration(array $binding):string;
+    public function authorizePreparedObligation(array $binding,array $intent,bool $history):void;
+}

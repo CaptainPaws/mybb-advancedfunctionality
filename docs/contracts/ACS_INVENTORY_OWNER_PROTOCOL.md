@@ -65,3 +65,82 @@ Deadlock/lock timeout — rollback **всей** tx и ограниченный r
 [SQL proposal fixture](fixtures/ACS_INVENTORY_OWNER_PROPOSAL.sql) создаёт только owner tables и воспроизводимую базовую Inventory таблицу на disposable DB. Она не зарегистрирована в install/activate/ACS migrations. Это проверяемый эскиз, **не production migration**: runtime protocol ещё не доказан writers/locks/fault injection. FK на удаляемый item намеренно отсутствует; terminal receipts/reservations переживают его удаление. Active logical FK проверяет owner под locks.
 
 Допуск требует: миграционный план actual installed schema/engines; полный перевод всех перечисленных writers; authoritative read/write connection, atomic receipt, races двух sessions и reserve-vs-sell/delete/grant/transfer, partial consume/release/replay/hash conflict, rollback/unknown-COMMIT lookup; запрет reset/uninstall при обязательствах; отдельный протокол ACS commit/owner acknowledgement. До этого IC-INV executable operations, боевой расход, loot grant, equipment и custody остаются **BLOCKED**. Схема сама этот статус не снимает.
+
+## ACS-9.1.2B — prepared_reserved_consume.v1 (internal same-writer)
+
+Это узкое расширение existing OwnerProtocol, не обычный delegate/GM consume и не
+публичный bearer token. Ordinary reserve/consume/release/lookup сохраняют прежний
+AF_ADVINV_OwnerAccess и authenticated request actor.
+
+### Issuance и durable binding
+
+При confirmed prepared publication сам authenticated owner, с действующим
+independent inventory_spending_enabled, POST/CSRF и owner/controller/session
+rights, вызывает internal bindPreparedReservation. В существующую owner
+reservation записываются immutable prepared_binding_json + SHA256. Привязаны:
+owner/originating UID, session/encounter/entity/prepared/seal IDs, cost index/key,
+qty/item ID/fingerprint, KB definition и ability pin, owner inventory version,
+reservation version, исходный reserve receipt, hash prepared contract до receipt
+и owner-computed item digest. grant_generation — hash live owner controller ID,
+assignment_version/permissions и действующих session roles с role_version/expiry.
+Резерв не создаётся заново, owned_qty не меняется. Один reservation имеет одну
+неперезаписываемую obligation. Owner receipt/hash сохраняется в prepared contract
+в той же ACS transaction. При rollback issuance исчезает вместе с подготовкой.
+
+OwnerProtocol требует AF_ADVINV_PreparedOwnerPolicy. Текущая композиция
+AF_ACS_CombatInventoryAccess каждый раз читает реальный owner grant из SQL;
+старый receipt не является текущим разрешением. Disable spending, controller
+reassignment/revocation, role expiry/revision или смена grant generation запрещают
+будущий consume. Owner-only issuance исключает выдачу такого разрешения обычным
+боевым делегатом или GM. Возврат старых прав из receipt и automatic refresh старой
+obligation не допускаются; новая generation требует новой подготовки.
+
+### Trigger authority и mutation
+
+Internal lookupPreparedConsume / preparedConsumptionEvidence /
+participatePreparedConsume принимают только server-created exact consume intent:
+acs:prepared:trigger-consume:PREPARED:TRIGGER:COST_INDEX,
+authorization_ref=acs-prepared:PREPARED:TRIGGER:COST_INDEX.
+Никакой HTTP route для этих envelopes или capability не добавлен.
+
+Owner engine проверяет собственный binding/receipt/hash и exact reservation,
+qty, item owner/kind/digest/version. Owner policy дополнительно проверяет SQL
+prepared contract/cost/pins, original owner event, active execution/version,
+real trigger event/hash и его frozen parent seal/targets, authenticated parent
+author и membership. Current owner grant/generation перечитывается под прежним
+owner guard, в том числе непосредственно перед mutation. Extra owner/item/grant
+fields, другой cost/session/item/reservation/qty/key не разрешены.
+
+Current UID остаётся автором trigger publication. OwnerProtocol сохраняет этот
+UID в consume receipt. Только после проверок owner engine открывает private
+scope **ровно одного** validated intent, вызывает существующий participate
+consume и закрывает scope в finally. OwnerAccess object и uid() не заменяются.
+Private scope недоступен адаптеру/HTTP, не допускает другой envelope или
+standalone COMMIT. Нет universal privileged consume, global MyBB UID mutation,
+new grant для trigger actor, прямого UPDATE qty из ACS или remove_item fallback.
+
+Для нескольких item costs сначала проверяются все bindings. Owner version
+между собственными consume допускает только цепочку фактических проверенных
+owner receipts того же prepared/trigger/actor с непрерывными before→after.
+Посторонняя Inventory mutation не маскируется таким продвижением версии.
+
+### Recovery, expiry и schema
+
+Read-only exact historical lookup разрешён тому же authenticated trigger author
+при membership и подтверждённом stored intent, включая parent recovery_required;
+он не выдаёт новые spending rights и не требует восстановления старого grant.
+Successful receipt не отменяется последующим revoke. Owner receipt без ACS
+terminal result — recovery barrier, не основание повторить механику/consume.
+Binding/reservation/schema/outcome integrity failures откатывают весь parent.
+Known revoked/expired/version-conflict применяют только прежнюю KB skip policy,
+с сохранением unused reservation. Release остаётся прежним 9.1.1B owner protocol.
+
+Необходимы две nullable колонки существующей af_advinv_reservations:
+prepared_binding_json LONGTEXT и prepared_binding_hash CHAR(64) ascii_bin.
+OwnerSchema::statements включает их для новой disposable установки.
+OwnerSchema::upgradePrepared(mysqli, prefix) — явный operator-only DDL helper,
+resumable по каждой колонке; не вызывается request/activation и отвергает ambient
+transaction до DDL. Нет новых tables/ledger, ACS migrations 001–021 не меняются.
+До отдельного owner schema upgrade новая предметная подготовка fail closed;
+обычные owner операции не требуют этих колонок. Legacy obligations не получают
+новые права автоматически. Installed acceptance остаётся NOT_VERIFIED.

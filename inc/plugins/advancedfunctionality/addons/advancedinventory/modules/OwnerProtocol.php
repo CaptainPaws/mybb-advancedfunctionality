@@ -1,10 +1,12 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/OwnerAccess.php';
+require_once __DIR__.'/PreparedReservation.php';
 
 /** Inventory-owned quantity engine. Standalone APIs and explicit provisional participation; no bootstrap/route. */
 final class AF_ADVINV_OwnerProtocol
 {
+    use AF_ADVINV_PreparedReservation;
     private mysqli $db;
     private string $prefix;
     private AF_ADVINV_OwnerAccess $access;
@@ -143,6 +145,7 @@ final class AF_ADVINV_OwnerProtocol
 
     private function execute(string $operation, array $r,bool $joined=false): array
     {
+        if($this->preparedConsumeIntent!==null&&!$joined)throw new RuntimeException('INV_OWNER_TRANSACTION_REQUIRED');
         $this->validate($operation, $r);
         $this->identity($r);
         $begun = false;
@@ -344,6 +347,7 @@ final class AF_ADVINV_OwnerProtocol
 
     private function identity(array $r): void
     {
+        if($this->preparedConsumeIntent!==null&&self::canonical($r)!==self::canonical($this->preparedConsumeIntent))throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
         if ($this->access->uid() !== $r['actor']['uid']) throw new RuntimeException('INV_ACCESS_DENIED');
         if (!function_exists('af_is_addon_enabled') || !af_is_addon_enabled('advancedinventory')) throw new RuntimeException('INV_DEPENDENCY_UNAVAILABLE');
     }
@@ -351,6 +355,7 @@ final class AF_ADVINV_OwnerProtocol
     private function authorize(array $r, int $owner, bool $mutation): void
     {
         $this->identity($r);
+        if($this->preparedConsumeIntent!==null){$this->authorizePreparedConsumption($r,$owner,$mutation);return;}
         $this->access->authorize($r['operation'], $owner, ['system'=>$r['scope']['system'],'context_key'=>$r['scope']['context_key']], $r['actor']['authorization_ref'], $mutation);
     }
 
