@@ -182,7 +182,7 @@ final class AF_ACS_Resolver
     }
     public static function targetSummary(array $step):array
     {
-        $out=[];if(isset($step['cooperation']))$out['cooperation']=$step['cooperation'];if(isset($step['object_interaction']))$out['interaction']=array_intersect_key($step['object_interaction'],array_flip(['entity_id','key','outcome','progress']));if(in_array($step['scenario'],['search','share','environment'],true))$out['operation']=$step['scenario'];if (isset($step['item_action'])) $out['item']=array_intersect_key($step['item_action'],array_flip(['operation','item_id','qty']));
+        $out=[];if(isset($step['spatial']))$out['spatial']=$step['spatial'];if(isset($step['cooperation']))$out['cooperation']=$step['cooperation'];if(isset($step['object_interaction']))$out['interaction']=array_intersect_key($step['object_interaction'],array_flip(['entity_id','key','outcome','progress']));if(in_array($step['scenario'],['search','share','environment'],true))$out['operation']=$step['scenario'];if (isset($step['item_action'])) $out['item']=array_intersect_key($step['item_action'],array_flip(['operation','item_id','qty']));
         if(isset($step['spawns']))$out['spawn_hash']=hash('sha256',serialize($step['spawns']));
         foreach(['original_target','resolved_target'] as $k)if(isset($step[$k]))$out[$k]=$step[$k];
         if(isset($step['strikes']))foreach($step['strikes'] as $strike)$out['strikes'][]=array_intersect_key($strike,array_flip(['original_target','resolved_target','scenario','rolls','probabilities']))+['damage'=>$strike['allocation']['integer_budget']];return $out;
@@ -212,6 +212,21 @@ final class AF_ACS_Resolver
             if(!array_key_exists($actor,$context['behavior_targets']??[]))foreach($context['allowed_targets'][$actor]??[] as $id)$behaviorCandidates[$id]=['relationship'=>$context['relationships'][$actor][$id]??'hostile','kind'=>$context['reaction_kinds'][$id]??'npc'];
             foreach($behaviorCandidates as $id=>&$candidate)if(isset($state['entities'][$id]))$candidate['active']=$state['entities'][$id]['life_state']==='active';unset($candidate);
             AF_ACS_Behavior::check($state['status_instances']??[],$actor,$key,isset($context['item_specs'][$i])?($context['item_specs'][$i]['operation']==='consume'?'item_consume':'equipment_change'):(isset($ability['spawns'])?'spawn':'ordinary'),$targets,$behaviorCandidates,$ability['target_policy']??['kind'=>isset($ability['spawns'])||isset($context['item_specs'][$i])?'self_only':'any_entity'],($context['status_scope']??[])+['minimum_targets'=>$ability['target_count']['min']??1]);
+            if(!isset($ability['spatial_action'])&&isset($state['spatial']))foreach($targets as $rangeTarget)AF_ACS_Spatial::check($state['spatial'],$actor,$rangeTarget,$ability['range']??null);
+            if(isset($ability['spatial_action'])||isset($ability['spatial_effect'])){
+                foreach($targets as $spatialTarget)if($spatialTarget!==$actor&&!AF_ACS_Awareness::targetable('identified',$state['perception_subjects']['entity:'.$spatialTarget]['perception']['stealth']??null,$state['status_instances']??[],$spatialTarget))self::fail('resolver_target_forbidden');
+                $s=&$state['spatial'];$op=$ability['spatial_action']??$ability['spatial_effect'];$kind=$op['kind'];$mover=$actor;
+                if(isset($ability['spatial_action'])){
+                    if($kind==='move'){if($targets!==[$actor])self::fail('resolver_target_forbidden');$cost=AF_ACS_Spatial::move($s,$actor,$op['id']);}
+                    else{if($targets!==[$op['id']]||($state['entities'][$op['id']]['life_state']??null)!=='active')self::fail('resolver_target_forbidden');$cost=AF_ACS_Spatial::contact($s,$actor,$op['id'],$kind==='engage');}
+                    $costs=[['kind'=>'ap','amount'=>$cost]];
+                }else{
+                    if(count($targets)!==1||($state['entities'][$targets[0]]['life_state']??null)!=='active')self::fail('resolver_target_forbidden');$mover=$targets[0];$destination=AF_ACS_Spatial::destination($s,$op['destination']);AF_ACS_Spatial::move($s,$mover,$destination,true,$kind==='teleport');$costs=$ability['costs'];
+                }unset($s);
+                $rolls=null;if($mode==='seal'){$t=$fixedRandomTape[$i];if(array_keys($t)!==['rng_version','hit','crit']||$t['rng_version']!=='uniform53-v1')self::fail('resolver_tape_invalid');AF_ACS_Effects::statusSample($t['hit']);AF_ACS_Effects::statusSample($t['crit']);$rolls=$t+['hit_used'=>false,'crit_used'=>false];}
+                $trace=[];$state=self::apply($state,[],$actor,$costs,$trace);
+                $plans[]=['action_index'=>$i,'actor_id'=>$actor,'targets'=>$targets,'scenario'=>'spatial','rolls'=>$rolls,'ability_ref'=>$ability['source_ref'],'costs'=>$costs,'probabilities'=>['P_hit'=>null,'P_crit'=>null,'crit_rate'=>null,'can_crit'=>false],'allocation'=>['integer_budget'=>0,'components'=>[]],'effects_trace'=>$trace,'spatial'=>['operation'=>$kind,'entity_id'=>$mover]];continue;
+            }
             if (isset($context['item_specs'][$i])) {
                 $spec=$context['item_specs'][$i];
                 if (($ability['item_action']??null)!==true || $ability['source_ref']!==$spec['pin'] || !is_array($itemState)) self::fail('ACS_ITEM_DEPENDENCY_CONFLICT');
@@ -297,7 +312,7 @@ final class AF_ACS_Resolver
             if(isset($ability['target_policy']))$context['redirect_targets'][$actor]=array_values(array_filter($context['redirect_targets'][$actor],static fn($id)=>AF_ACS_Control::allowed($ability['target_policy'],$context['relationships'][$actor][$id]??'', $context['reaction_kinds'][$id]??'')));
             $singleTarget=count($targets)===1&&($ability['targeting']??'single_target')!=='multiple';$strikePlans=[];$redirected=false;foreach($targets as $strikeIndex=>$originalTarget){
             $target=(string)$originalTarget;if($target!==$actor&&!AF_ACS_Awareness::targetable('identified',$state['perception_subjects']['entity:'.$target]['perception']['stealth']??null,$state['status_instances']??[],$target))self::fail('resolver_target_forbidden');if(isset($ability['target_policy'])&&!AF_ACS_Control::allowed($ability['target_policy'],$context['relationships'][$actor][$target]??'', $context['reaction_kinds'][$target]??''))self::fail('ACS_TARGET_POLICY_DENIED');if(!isset($state['entities'][$target])||!in_array($target,$context['allowed_targets'][$actor]??[],true))self::fail('resolver_target_forbidden');
-            if(is_array($ability)&&array_diff(array_keys($ability),['supported','source_ref','components','costs','hit_policy','lifesteal','hp_cost_policy','statuses','removals','targeting','target_count','target_policy']))self::fail('resolver_ability_unsupported');
+            if(is_array($ability)&&array_diff(array_keys($ability),['supported','source_ref','components','costs','hit_policy','lifesteal','hp_cost_policy','statuses','removals','targeting','target_count','target_policy','range']))self::fail('resolver_ability_unsupported');
             if(($ability['supported']??null)!==true||!is_array($ability['source_ref']??null))self::fail('resolver_capability_blocked');
             if(count($targets)>1&&($ability['targeting']??null)!=='multiple'||($ability['targeting']??null)==='multiple'&&(count($targets)<($ability['target_count']['min']??1)||count($targets)>($ability['target_count']['max']??1)))self::fail('resolver_target_count_invalid');
             self::ref($ability['source_ref']);
@@ -341,6 +356,7 @@ final class AF_ACS_Resolver
             if($hasReactions){$reactionTrace=[...self::reactions($context,'on_targeted',$i,$target,false,0,$mode,$state,$slots,$reactionUpdates,$actor,$targets,$singleTarget,$redirected,$visited),...self::reactions($context,'before_hit',$i,$target,false,0,$mode,$state,$slots,$reactionUpdates,$actor,$targets,$singleTarget,$redirected,$visited)];}
             if($target!==$actor&&!AF_ACS_Awareness::targetable('identified',$state['perception_subjects']['entity:'.$target]['perception']['stealth']??null,$state['status_instances']??[],$target))self::fail('resolver_target_forbidden');
             if($target!==(string)$originalTarget){
+                if(isset($state['spatial']))AF_ACS_Spatial::check($state['spatial'],$actor,$target,$ability['range']??null);
                 $s=self::stats($context,$target,$modifierTrace);$prob=$parts?AF_ACS_HitCrit::strike($a['accuracy'],$s['speed'],$a['crit_rate'],$a['crit_dmg'],$rawParts,null,$ability['hit_policy']??null)->serverData():AF_ACS_HitCrit::hit($a['accuracy'],$s['speed'],$ability['hit_policy']??null)+['crit_rate'=>0,'can_crit'=>false];
                 if($mode==='seal'){$hit=100*$t['hit']['u']<$prob['P_hit'];$crit=$hit&&$prob['can_crit']&&100*$t['crit']['u']<$prob['crit_rate'];$scenario=$hit?($crit?'crit':'hit'):'miss';$rollTrace=['rng_version'=>$t['rng_version'],'hit'=>$t['hit'],'crit'=>$t['crit'],'hit_success'=>$hit,'crit_success'=>$crit,'crit_used'=>$hit&&$prob['can_crit']];}
                 $critical=$scenario==='miss'||!$parts?null:AF_ACS_HitCrit::strike($a['accuracy'],$s['speed'],$a['crit_rate'],$a['crit_dmg'],$rawParts,$scenario==='crit',$ability['hit_policy']??null)->serverData();

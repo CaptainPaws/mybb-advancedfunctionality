@@ -44,7 +44,7 @@ final class AF_ACS_EncountersPage
                     $notice='<p>'.($readiness['preparation_ready']?'Подготовка проверена.':'Подготовка содержит блокировки.').' Для запуска первого раунда откройте вкладку «Раунды».</p>';
                     foreach($readiness['diagnostics'] as $issue)$notice.='<p>'.self::esc(self::issue($issue['code'])).(isset($issue['entity_id'])?' · существо #'.self::esc($issue['entity_id']):'').'</p>';
                 } else {
-                    $result=str_starts_with($op,'manage_')?$service->rounds()->command(substr($op,7),$input):(str_starts_with($op,'clock_')?$service->clock()->command(substr($op,6),$input):$service->command($op,$input));$eid=$result['encounter_id']??$eid;$notice='<p>Изменение сохранено.</p>';
+                    if(str_starts_with($op,'spatial_')){$spatialOp=substr($op,8);$extra=match($spatialOp){'configure'=>['kb_key'],'connection'=>['from','to','status'],'position'=>['entity_id','zone_id','visibility'],'zone'=>['zone_id','visibility'],'engagement'=>['entity_id','target_id','status'],default=>throw new RuntimeException('ACS_SPATIAL_UNSUPPORTED')};$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','expected_spatial_version','operation_key','reason',...$extra] as $field)$r[$field]=$mybb->get_input($field);$result=$service->spatial()->command($spatialOp,$r);}else $result=str_starts_with($op,'manage_')?$service->rounds()->command(substr($op,7),$input):(str_starts_with($op,'clock_')?$service->clock()->command(substr($op,6),$input):$service->command($op,$input));$eid=$result['encounter_id']??$eid;$notice='<p>Изменение сохранено.</p>';
                     $session=$service->context($sid,$tid);$list=$service->list($sid,tid:$tid);
                 }
             } catch(Throwable $error) {
@@ -150,6 +150,7 @@ final class AF_ACS_EncountersPage
                 }
             }
             if($tab==='management'){require_once __DIR__.'/Delegations.php';AF_ACS_DelegationsPage::render($sid,'misc.php?action=acs_sessions',$service->delegations());}
+            if($tab==='management'&&in_array($encounter['status'],['active','paused'],true)){require_once __DIR__.'/Spatial.php';AF_ACS_SpatialPage::render($view,$url,$service->spatial());}
             if($tab==='management') {require_once __DIR__.'/Clock.php';AF_ACS_ClockPage::rest($view,$url,$service->clock());}
             echo '</section>';return ob_get_clean();
         } catch(Throwable $error) {ob_end_clean();throw $error;}

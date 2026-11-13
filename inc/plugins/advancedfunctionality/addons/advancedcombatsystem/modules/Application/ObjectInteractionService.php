@@ -10,8 +10,8 @@ final class AF_ACS_ObjectInteractionService
     public function __construct(private AF_ACS_EncounterRepository $repo,private AF_ACS_SessionAccess $access){}
     public function catalog(string $sid,string $eid,string $actor,?string $draft=null):array
     {
-        $audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);$out=[];
-        $objects=array_filter($this->repo->objectProjection($sid,$eid),static fn($v)=>(!empty($v['definition']['interactions'])||!empty($v['definition']['cooperation']))&&$audience->knowledge('object',$v['entity_id'],$actor)['level']==='identified');
+        $audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);$spatial=$this->repo->spatialProjection($sid,$eid);$gm=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'];$out=[];
+        $objects=array_filter($this->repo->objectProjection($sid,$eid),static fn($v)=>(!empty($v['definition']['interactions'])||!empty($v['definition']['cooperation']))&&$audience->knowledge('object',$v['entity_id'],$actor)['level']==='identified'&&AF_ACS_Spatial::disclosed($spatial,$v['entity_id'],$gm)&&AF_ACS_Spatial::disclosed($spatial,$actor,$gm));
         if(!$objects)return [];
         try{$inspection=(new AF_ACS_QueryService($this->repo,$this->access))->inspect($sid,$eid,$actor,$actor,$draft,true);}catch(Throwable $e){return [];}
         foreach($objects as $id=>$v){$id=(string)$id;$knowledge=$audience->knowledge('object',$id,$actor);if($knowledge['level']!=='identified')continue;$label=$knowledge['details']['name']??('Известный объект #'.$id);
@@ -24,7 +24,7 @@ final class AF_ACS_ObjectInteractionService
     public function prepare(string $sid,string $eid,string $actor,string $key,?string $draft=null,int $index=0):array
     {
         [$id,$actionKey]=AF_ACS_ObjectInteraction::selection($key);$audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);
-        if($audience->knowledge('object',$id,$actor)['level']!=='identified')throw new RuntimeException('preview_target_forbidden');
+        $spatial=$this->repo->spatialProjection($sid,$eid);$gm=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'];if(!AF_ACS_Spatial::disclosed($spatial,$id,$gm)||!AF_ACS_Spatial::disclosed($spatial,$actor,$gm)||$audience->knowledge('object',$id,$actor)['level']!=='identified')throw new RuntimeException('preview_target_forbidden');
         $v=$this->repo->objectProjection($sid,$eid)[$id]??throw new RuntimeException('preview_target_forbidden');if(isset($v['definition']['cooperation'])&&str_starts_with($actionKey,'coop-'))return (new AF_ACS_CooperationService($this->repo,$this->access))->prepare($sid,$eid,$actor,$key,$draft);$a=AF_ACS_ObjectInteraction::action($v,$actionKey);
         $p=(new AF_ACS_QueryService($this->repo,$this->access))->inspect($sid,$eid,$actor,$actor,$draft,true);$entity=$this->repo->entity($sid,$actor);
         AF_ACS_ObjectInteraction::eligible($v,$a,$actor,$entity['kind'],AF_ACS_Resolver::interactionActorStats($p['context'],$actor),$p['context']['abilities'][$actor]);

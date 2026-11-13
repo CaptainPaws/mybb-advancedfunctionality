@@ -56,7 +56,8 @@ final class AF_ACS_SealService
             $summary=array_replace($summary,AF_ACS_BuilderService::visibleState($resolved->serverState(),$p['scope']));
             $dependencyHash=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'dependencies'=>$dependencies]));
             if(isset($resolved->serverPlan()['entity_end_boundaries']))$summary['status_end_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'boundaries'=>$resolved->serverPlan()['entity_end_boundaries']]));
-            $summary['awareness_hash']=hash('sha256',serialize([$resolved->serverState()['awareness'],$resolved->serverState()['awareness_attempts']]));
+            if(($spatialHash=AF_ACS_Spatial::summary($resolved->serverInitial()['spatial']??AF_ACS_Spatial::empty(),$resolved->serverState()['spatial']??AF_ACS_Spatial::empty()))!==null)$summary['spatial_hash']=$spatialHash;
+        $summary['awareness_hash']=hash('sha256',serialize([$resolved->serverState()['awareness'],$resolved->serverState()['awareness_attempts']]));
             if(!empty($resolved->serverState()['objectives']))$summary['objective_state_hash']=hash('sha256',serialize($resolved->serverState()['objectives']));
         if(!empty($resolved->serverState()['objects']))$summary['object_state_hash']=hash('sha256',serialize($resolved->serverState()['objects']));
             if(!empty($resolved->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($resolved->serverState()['summons']));
@@ -103,14 +104,14 @@ final class AF_ACS_SealService
                 $p=$this->prepare($d,$actions);
                 foreach($active as $i=>$row){$old=$this->repo->sealPayload($row);if(($actions[$i]??null)!==$old['action'])throw new RuntimeException('ACS_SEAL_IMMUTABLE');$a=$old['action'];if($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['source_ref']!==$old['pin'])throw new RuntimeException('ACS_SEAL_PIN_CHANGED');$this->repo->verifySealDefinition($d['session_id'],$row,$old);}
                 $used=$this->repo->sealQuota($d['turn_id']);$cost=0;$costs=[];
-                foreach(array_slice($actions,count($active)) as $a){$c=$p['context']['abilities'][$a['actor_id']][$a['ability_key']]['costs']??null;
+                foreach(array_slice($actions,count($active)) as $offset=>$a){$c=$p['action_costs'][count($active)+$offset]??($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['costs']??null);
                     $ap=is_array($c)?array_values(array_filter($c,static fn($cost)=>$cost['kind']==='ap')):[];if(count($ap)!==1||(!AF_ACS_ObjectInteraction::isAction($a['ability_key'])&&count($c)!==1)||!is_int($ap[0]['amount'])||$ap[0]['amount']<=0)throw new RuntimeException('ACS_SEAL_ZERO_AP_UNSUPPORTED');$cost+=$ap[0]['amount'];$costs[]=$ap[0]['amount'];}
                 if($used+$cost>$p['scope']['turn']['ap'])throw new RuntimeException('ACS_SEAL_QUOTA_EXHAUSTED');
                 $history=$this->repo->sealRows($d['id']);if(count($history)+count($actions)-count($active)>200)throw new RuntimeException('ACS_SEAL_HISTORY_LIMIT');$next=$history?(int)end($history)['action_index']+1:0;
                 $query=new AF_ACS_QueryService($this->repo,$this->access);$definitions=[];$statusIndexes=[];
                 foreach(array_slice($actions,count($active)) as $a){
                     $position=count($active)+count($definitions);$definitions[]=$p['definitions'][$position]??$query->sealDefinition($d['session_id'],$a['actor_id'],$a['ability_key']);
-                    $indexes=[];foreach($a['targets'] as $target)$indexes[$target]=AF_ACS_ObjectInteraction::isAction($a['ability_key'])?[]:AF_ACS_Resolver::statusRollIndexes($p['context'],$a['actor_id'],$target,$p['context']['abilities'][$a['actor_id']][$a['ability_key']]);$statusIndexes[]=count($a['targets'])===1?array_values($indexes)[0]:$indexes;
+                    $indexes=[];foreach($a['targets'] as $target)$indexes[$target]=(AF_ACS_ObjectInteraction::isAction($a['ability_key'])||str_starts_with($a['ability_key'],'spatial:')||isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['spatial_effect']))?[]:AF_ACS_Resolver::statusRollIndexes($p['context'],$a['actor_id'],$target,$p['context']['abilities'][$a['actor_id']][$a['ability_key']]);$statusIndexes[]=count($a['targets'])===1?array_values($indexes)[0]:$indexes;
                 }
                 $items=new AF_ACS_ItemActionService($this->repo,$this->access);$protected=[];
                 foreach ($definitions as $i=>&$definition) if (isset($definition['item_action'])) {
