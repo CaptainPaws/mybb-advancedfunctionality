@@ -59,7 +59,7 @@ final class AF_ACS_QueryService
     {
         $out=[];foreach($targets as $t)$out[$t['id']]=['kind'=>$t['kind'],'active'=>$t['active']??true,'relationship'=>$relationships[$actor][$t['id']]??'neutral'];return $out;
     }
-    public function inspect(string $sid,string $eid,string $actor,string $target,?string $sealedDraft=null,bool $itemSelf=false):array
+    public function inspect(string $sid,string $eid,string $actor,string $target,?string $sealedDraft=null,bool $itemSelf=false,bool $causal=false):array
     {
         $selection=$this->select($sid,$eid);$this->repo->assertPreviewStorage();$view=$selection['view'];
         if(!isset($selection['actors'][$actor])||!isset($selection['targets'][$target])||empty($selection['target_access'][$actor][$target]))self::fail('preview_target_forbidden');
@@ -104,16 +104,16 @@ final class AF_ACS_QueryService
                 $versions[$id===$actor?'actor_entity_turn_version':'target_entity_turn_version']=$individual['entity_turn_version'];
             }
         }
-        if(!isset($turns[$actor],$turns[$target])||$turns[$actor]['status']!=='pending'||!$turns[$actor]['started'])self::fail('preview_turn_unavailable');
-        if(!(new AF_ACS_EncounterService($this->repo,$this->access))->clock()->available($sid,$turns[$actor]['id'],$actor)['actions_ready'])self::fail('ACS_STATUS_ACTION_NOT_READY');
-        $this->repo->assertNoObligations($sid,$eid,$turns[$actor]['id'],true,$sealedDraft);
+        if(!isset($turns[$actor],$turns[$target])||!$causal&&($turns[$actor]['status']!=='pending'||!$turns[$actor]['started']))self::fail('preview_turn_unavailable');
+        if(!$causal&&!(new AF_ACS_EncounterService($this->repo,$this->access))->clock()->available($sid,$turns[$actor]['id'],$actor)['actions_ready'])self::fail('ACS_STATUS_ACTION_NOT_READY');
+        if(!$causal)$this->repo->assertNoObligations($sid,$eid,$turns[$actor]['id'],true,$sealedDraft);
         $control=$this->repo->controllerFor($sid,$actor,$this->access->uid())??throw new RuntimeException('ACS_CONTROL_INVALID');
         $versions['actor_controller_version']=$control['assignment_version'];$versions['actor_control_proof']=AF_ACS_AuthorizationService::controlProof($control);
         $versions['custody_state_hash']=hash('sha256',serialize($this->repo->custodyRows($sid)));$versions['reaction_registry_hash']=$reactions['fingerprint'];$versions['barrier_state_hash']=$barriers['fingerprint'];$protectionProof=[];foreach($sources as $id=>$source)$protectionProof[$id]=[$source['row']['state_version'],$source['row']['content_hash'],$source['resources']['fingerprint']];$versions['protection_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'sources'=>$protectionProof,'turns'=>$reactionTurns,'groups'=>$groups]));
         $statusProjection=$this->repo->statusProjection($sid);foreach($this->repo->statusRows($sid) as $effect)if(($effect['scope']??null)==='combat'&&$effect['status']==='active'&&(string)$effect['encounter_id']!==$eid&&(json_decode($effect['payload_json'],true,64,JSON_THROW_ON_ERROR)['kind']??null)==='barrier')self::fail('ACS_COMBAT_RESET_REQUIRED');$versions['status_state_hash']=$statusProjection['fingerprint'];
         foreach($statusProjection['instances'] as $instance)if($instance['status']==='active'&&$instance['spec']['scope']==='combat'&&$instance['encounter_id']!==$eid)self::fail('ACS_COMBAT_RESET_REQUIRED');
         $endBoundaries=[];
-        foreach($this->repo->individualTurns([$turns[$actor]['id']]) as $individual){
+        foreach($causal?[]:$this->repo->individualTurns([$turns[$actor]['id']]) as $individual){
             if($individual['start_done']!=='1'&&AF_ACS_Clock::hasObjectStartWork($objects,$individual['entity_id']))self::fail('ACS_STATUS_START_REQUIRED');
             if($individual['start_done']!=='1'&&AF_ACS_Clock::hasSummonStartWork($summons,$individual['entity_id']))self::fail('ACS_STATUS_START_REQUIRED');
             if($individual['start_done']!=='1'&&AF_ACS_Clock::hasStartWork($statusProjection['instances'],$individual['entity_id'],$sid,$eid))self::fail('ACS_STATUS_START_REQUIRED');

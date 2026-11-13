@@ -9,6 +9,10 @@ trait AF_ACS_PreparedItemPersistence
         $sql=match($phase){'start'=>'SAVEPOINT prepared_release_cost','rollback'=>'ROLLBACK TO SAVEPOINT prepared_release_cost','release'=>'RELEASE SAVEPOINT prepared_release_cost'};
         try{if(!$this->connection->query($sql))throw new RuntimeException('ACS_DATABASE_ERROR');}catch(mysqli_sql_exception $e){throw new RuntimeException('ACS_DATABASE_ERROR',(int)$e->getCode());}
     }
+    public function settlePreparedItemsInCombat(array $row):array
+    {
+        return $this->internalCommand(function()use($row){foreach($this->preparedRows($row['session_id'],$row['encounter_id'],$row['entity_id']) as $stored)if($stored['id']===$row['id']&&in_array($stored['status'],['expired','cancelled'],true))return $this->settlePreparedItems($stored);throw new RuntimeException('ACS_VERSION_CONFLICT');});
+    }
     public function preparedTriggerItems(array $row):array
     {
         if($row['status']!=='active'||$row['cost_state']!=='paid')throw new RuntimeException('ACS_PREPARED_UNSUPPORTED');

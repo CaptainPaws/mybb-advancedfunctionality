@@ -8,12 +8,13 @@ require_once __DIR__.'/StatusPersistence.php';
 require_once __DIR__.'/ReactionPersistence.php';
 require_once __DIR__.'/BarrierPersistence.php';
 require_once __DIR__.'/TerminalReceiptPersistence.php';
+require_once __DIR__.'/PreparedExecutionPersistence.php';
 require_once __DIR__.'/../Application/BuilderService.php';
 
 /** The only producer of terminal, persistent Resolver results. Never calls a native post writer. */
 final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 {
-    use AF_ACS_InteractionToolPersistence, AF_ACS_ItemCommitPersistence, AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
+    use AF_ACS_PreparedExecutionPersistence, AF_ACS_InteractionToolPersistence, AF_ACS_ItemCommitPersistence, AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
     private array $spatialKeys=[],$coverKeys=[];
     private AF_ACS_SubmissionStore $submissions;
     private AF_ACS_EncounterRepository $preparation;
@@ -182,7 +183,8 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         if ($row['status']!=='post_confirmed' || $row['pid']===null || $row['state_version']!==$version) { throw new RuntimeException('ACS_COMBAT_POST_NOT_CONFIRMED'); }
         $this->access->draftThread($row['tid']);
         $topic=$this->access->thread($row['tid']);$fid=self::integer((string)($topic['fid']??''),'4294967295');
-        $this->spatialKeys=[];$this->coverKeys=[];$before=$this->facts($row);$frozen=$this->frozen($row);
+        $frozen=$this->frozen($row);$this->armPreparedCausal($row,$frozen);$row=$this->own($id);if($old=$this->terminal($row))return $old;
+        $this->spatialKeys=[];$this->coverKeys=[];$before=$this->facts($row);
         $builder=new AF_ACS_BuilderService($this->preparation,$this->access);$scope=$builder->context($row['session_id'],$row['encounter_id'],$row['turn_id']);
         $prepared=$builder->prepare(['session_id'=>$row['session_id'],'encounter_id'=>$row['encounter_id'],'turn_id'=>$row['turn_id'],
             'scope_token'=>$scope['scope_token'],'actions'=>$frozen['actions'],'scenario'=>'hit'],$row['draft_id']);
@@ -227,6 +229,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         self::integer((string)$encounter['encounter_version'],'18446744073709551614');self::integer((string)$encounter['next_event_sequence'],'18446744073709551614');
         $event=$this->sql('INSERT INTO '.$this->table('events').' (session_id,session_sequence,encounter_id,event_sequence,operation_key,event_type,source_entity_id,actor_uid,submission_id,engine_version,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
             [$row['session_id'],$session['next_sequence'],$row['encounter_id'],$encounter['next_event_sequence'],$operation,'combat.resolved',$controls['summary']['actions'][0]['actor_id'],$row['author_uid'],$row['submission_id'],AF_ACS_Resolver::VERSION,$now])['id'];
+        $preparedExecutions=$this->executePreparedCausal($row,$resolved,$event);if($preparedExecutions)$changes['prepared_executions']=$preparedExecutions;
         $changes['objectives']=$this->persistObjectives($row['session_id'],$row['encounter_id'],$resolved->serverInitial()['objectives']??[],$resolved->serverState()['objectives']??[],$event);
         $spawns=$this->commitSpawns($row,$event,$prepared,$resolved->serverPlan());
         if($spawns){$changes['spawns']=$spawns;$changes['summon_admissions']=$this->preparation->admitSummons($row['session_id'],$row['encounter_id']);}
@@ -235,9 +238,10 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         foreach($f['boundaries'] as $boundary){if($boundary['status']!=='committed'||!in_array($boundary['kind'],['clock.entity_start','clock.ap_refresh'],true))continue;
             $data=json_decode($boundary['result_json'],true,64,JSON_THROW_ON_ERROR);if(in_array($data['entity_turn_id']??null,$turnIds,true)||isset($data['round_id'])&&(string)$data['round_id']===(string)(self::indexed($f['turns'])[$row['turn_id']]['round_id']??''))$boundaryHistory[]=['boundary_key'=>$boundary['operation_key'],'result'=>$data];
         }
+        $finalState=$resolved->serverState();foreach($preparedExecutions as $execution)if($execution['outcome']==='executed'){foreach(['entities','groups'] as $field)$finalState[$field]=array_replace($finalState[$field],$execution['final_state'][$field]);foreach(['status_instances','barriers','summons','next_status_order','next_barrier_order'] as $field)if(isset($execution['final_state'][$field]))$finalState[$field]=$execution['final_state'][$field];}
         $payload=self::json(['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,
             'persistent'=>true,'submission_id'=>$row['submission_id'],'owner_receipts'=>$controls['owner_receipts']??[],'boundary_history'=>$boundaryHistory,'summary'=>$controls['summary'],'plan'=>$resolved->serverPlan(),
-            'dependency_fence_hash'=>$controls['fence_hash'],'initial'=>$resolved->serverInitial(),'final'=>$resolved->serverState(),'changes'=>$changes]);$resultHash=hash('sha256',$payload);
+            'dependency_fence_hash'=>$controls['fence_hash'],'initial'=>$resolved->serverInitial(),'final'=>$finalState,'changes'=>$changes]);$resultHash=hash('sha256',$payload);
         $visibility=self::json(['schema_version'=>1,'scope'=>'combat_participants']);
         $this->sql('INSERT INTO '.$this->table('event_details').' (event_id,schema_version,numeric_policy,payload_json,visibility_json,content_hash) VALUES (?,1,?,?,?,?)',
             [$event,AF_ACS_Numeric::POLICY,$payload,$visibility,hash('sha256',$payload."\n".$visibility)]);

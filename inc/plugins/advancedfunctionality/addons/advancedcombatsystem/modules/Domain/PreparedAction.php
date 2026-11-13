@@ -8,7 +8,7 @@ final class AF_ACS_PreparedAction
     private static function fail(): never { throw new DomainException('ACS_PREPARED_UNSUPPORTED'); }
     public static function contract(mixed $value): array
     {
-        if (!is_array($value) || array_diff(array_keys($value),['schema','trigger','target','duration','ap_cost','additional_costs','requires_active'])
+        if (!is_array($value) || array_diff(array_keys($value),['schema','trigger','target','duration','ap_cost','additional_costs','requires_active','execution'])
             || ($value['schema']??null)!=='ic-acs.prepared.v1'
             || (!is_array($value['trigger']??null)||array_diff(array_keys($value['trigger']),['kind','subject'])||($value['trigger']['kind']??null)!=='on_targeted'||($value['trigger']['subject']??null)!=='source')
             || ($value['target']??null)!==['kind'=>'fixed']
@@ -30,8 +30,15 @@ final class AF_ACS_PreparedAction
             }elseif(array_diff(array_keys($cost),['kind','key','amount','timing'])||in_array($cost['key'],['hp','ap'],true))self::fail();
         }
         unset($cost);
-        return ['schema'=>'ic-acs.prepared.v1','trigger'=>['kind'=>'on_targeted','subject'=>'source'],'target'=>$value['target'],
+        $execution=isset($value['execution'])?['execution'=>self::execution($value['execution'])]:[];
+        return $execution+['schema'=>'ic-acs.prepared.v1','trigger'=>['kind'=>'on_targeted','subject'=>'source'],'target'=>$value['target'],
             'duration'=>'until_next_turn','requires_active'=>true,'ap_cost'=>$value['ap_cost'],'additional_costs'=>$costs];
+    }
+    public static function execution(mixed $e):array
+    {
+        $fields=['schema','event_kind','phase','priority','requires_hit','on_unavailable','emit_prepared','emit_active_reactions','limits'];
+        if(!is_array($e)||array_diff(array_keys($e),$fields)||array_diff($fields,array_keys($e))||$e['schema']!=='ic-acs.prepared-execution.v1'||$e['event_kind']!=='combat.primary'||$e['phase']!=='after_damage'||!is_int($e['priority'])||$e['priority'] < -1000000||$e['priority']>1000000||$e['requires_hit']!==true||!in_array($e['on_unavailable'],['retain','cancel'],true)||$e['emit_prepared']!==false||$e['emit_active_reactions']!==false||!is_array($e['limits'])||array_diff(array_keys($e['limits']),['max_depth','per_cause'])||!is_int($e['limits']['max_depth']??null)||$e['limits']['max_depth']<2||($e['limits']['per_cause']??null)!==1)self::fail();
+        return $e;
     }
     public static function compile(array $ability,mixed $contract): array
     {
