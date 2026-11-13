@@ -72,6 +72,7 @@
       const a = choices.find(x => x.key === field('ability').value);
       const performer = actor(field('actor').value);
       part('action-info').textContent = performer?.supported === false ? performer.reason : a?.supported ? 'Стоимость: ' + a.ap_cost + ' AP из общего бюджета группы.' : (!choices.length ? (actor(field('actor').value)?.catalog_notice || 'Нет поддержанных закреплённых способностей. Обычная атака без утверждённого определения не подставляется.') : (a?.reason || 'Выберите поддержанную способность. Недоступные определения показаны с причиной.'));
+      if (a?.prepared_action) part('action-info').textContent += ' Условие: исполнитель выбран целью действия. Срок: до следующего собственного хода.';
       if (a?.supported && a.object_interaction) part('action-info').textContent += ' ' + (a.costs || []).filter(c => c.kind === 'resource').map(c => c.amount + ' ' + c.resource).join(', ');
       if (!ctx.targets.length) part('action-info').textContent += ' Нет разрешённых целей в текущей области видимости. Мастерские данные не открываются игроку автоматически.';
       command('add').disabled = loading || (!!model.pending || !!model.sealPending) || !editable || performer?.supported === false || !a?.supported || !field('target').value;
@@ -106,6 +107,7 @@
         ctx.actors.forEach(a => details.append(node('p', a.name + ' · ' + (controls[a.control?.via] || 'управление') + (a.supported === false ? ' · ' + a.reason : ''))));
         const units = {round:'границ раунда',own_turn:'собственных ходов',target_turn:'ходов цели'};
         (ctx.summons || []).forEach(s => details.append(node('p', 'Призыв: ' + s.name + ' · остаток: ' + s.remaining + ' ' + (units[s.duration_unit] || '') + (s.status === 'pending_independent' ? ' · переход к независимому управлению в следующем раунде' : s.admission === 'next_round' ? ' · обычные действия со следующего roster' : ' · в текущем roster группы'))));
+        (ctx.prepared_actions || []).forEach(p => details.append(node('p', 'Подготовка #' + p.prepared_action_id + ' · ' + p.status + ' · ' + p.cost_state + ' · до следующего собственного хода')));
         if (ctx.can_manage) { const link = node('a','Управление столкновением'); link.href = 'showthread.php?tid=' + encodeURIComponent(ctx.tid) + '&acs_session=' + encodeURIComponent(ctx.session_id) + '&acs_encounter=' + encodeURIComponent(ctx.encounter_id) + '&acs_tab=management'; details.append(link); }
       }
       options(field('group'), ctx.turns.map(t => ({ id: t.id, label: 'Группа ' + t.group_id + ' — ' + t.members.map(m => m.name).join(', ') + ' (' + (statuses[t.status] || t.status) + ')' })), ctx.turn.id, 'Выберите группу');
@@ -124,10 +126,11 @@
       const newCost = model.actions.slice(model.sealedCount).reduce((n, a) => n + (ability(a)?.ap_cost || 0), 0);
       command('seal').disabled = locked || !ctx.targets.length || model.actions.length <= model.sealedCount || newCost > remaining;
       command('cancel-seal').disabled = locked || !model.sealedCount;
+      command('publish-prepared').disabled = locked || !sealView?.confirmed || !sealView?.summary?.actions?.[0]?.prepared_action;
       command('confirm-seal').disabled = locked || model.actions.length !== model.sealedCount || !sealView?.confirmable || sealView?.blocked || sealView?.confirmed;
       command('seal-refresh').disabled = loading || saving || !model.id;
       ['compose','compose-quick'].forEach(c => { const b = command(c); if (b) b.disabled = !config.test_publication_allowed || locked || !sealView?.confirmed; });
-      if (model.sealPending) ['seal','cancel-seal','confirm-seal'].forEach(c => { command(c).disabled = c !== model.sealPending.command || loading || saving; });
+      if (model.sealPending) ['seal','cancel-seal','confirm-seal','publish-prepared'].forEach(c => { command(c).disabled = c !== model.sealPending.command || loading || saving; });
     }
     async function loadUpkeep() {
       const data = await api('clock_sustained', { session_id: ctx.session_id, encounter_id: ctx.encounter_id }, false);
@@ -187,33 +190,37 @@
       if (sealView.changed) box.append(node('p', 'Зависимости изменились. Сводка пересчитана на прежних значениях; требуется новое подтверждение.'));
       if (sealView.blocked) box.append(node('p', sealView.reason || 'Сводка заблокирована. Броски сохранены.'));
       sealView.history.forEach(h => {
+        if (h.rolls.deferred) { box.append(node('p', 'Подготовка #' + h.id + ': ' + h.status + ', ' + h.ap_cost + ' AP. Будущие проверки ещё не выполнялись.')); return; }
         box.append(node('p', 'Попытка #' + h.id + ': ' + (h.status === 'cancelled' ? 'отменена' : 'запечатана') + ', квота ' + h.ap_cost + ' AP; hit u=' + h.rolls.hit.u + ', crit u=' + h.rolls.crit.u + ' (резерв, если проверка не использована).'));
       });
       if (sealView.summary) {
         box.append(node('h4', sealView.summary.label));
-        sealView.summary.actions.forEach(a => { if (a.cover) { box.append(node('p', a.cover.operation === 'enter' ? 'Занятие укрытия после публикации.' : 'Выход из укрытия после публикации.')); return; } if (a.spatial) { box.append(node('p', ({move:'Перемещение',engage:'Вступление в контакт',leave:'Выход из контакта',forced_move:'Принудительное перемещение',teleport:'Телепортация'}[a.spatial.operation] || 'Пространственное действие') + '. Позиция изменится после боевой публикации.')); return; } if (a.cooperation) { box.append(node('p', (a.cooperation.operation === 'assist' ? 'Помощь применена' : 'Подтверждённый вклад') + ': ' + a.cooperation.progress + ' / ' + a.cooperation.cap + (a.cooperation.completed ? ' · общая задача завершена' : '') + '. До публикации состояние не изменено.')); return; } if (a.interaction) { box.append(node('p', 'Взаимодействие: ' + ({success:'успех',critical_success:'критический успех',partial_success:'частичный успех',failure:'провал'}[a.interaction.outcome] || 'ожидает проверки') + (a.interaction.progress === null ? '' : ', прогресс ' + a.interaction.progress) + '. Изменения применятся после подтверждённой публикации.')); return; } if (['search','share','environment'].includes(a.outcome)) { box.append(node('p', (actor(a.actor_id)?.name || 'Существо') + ': ' + (a.outcome === 'search' ? 'Поиск' : (a.outcome === 'share' ? 'Передача сведений' : 'Воздействие на окружение')) + '. Сведения изменятся после подтверждённой публикации.')); return; } box.append(node('p', a.item ? ('Предмет #' + a.item.item_id + ' · ' + (a.item.operation === 'consume' ? 'использование' : 'смена оружия') + ' · 1 AP, ' + a.item.qty + ' шт.') : ((actor(a.actor_id)?.name || 'Существо') + ': ' + ({hit:'попадание',crit:'критическое попадание',miss:'промах',used:'действие с предметом'}[a.outcome] || a.outcome) + ', урон ' + a.damage + ', P_hit=' + a.probabilities.P_hit + '%, P_crit=' + a.probabilities.P_crit + '%.'))); });
+        sealView.summary.actions.forEach(a => { if (a.prepared_action) { box.append(node('p', 'При выборе исполнителя целью действия · ' + a.prepared_action.ap_cost + ' AP · до начала следующего собственного хода.')); return; } if (a.cover) { box.append(node('p', a.cover.operation === 'enter' ? 'Занятие укрытия после публикации.' : 'Выход из укрытия после публикации.')); return; } if (a.spatial) { box.append(node('p', ({move:'Перемещение',engage:'Вступление в контакт',leave:'Выход из контакта',forced_move:'Принудительное перемещение',teleport:'Телепортация'}[a.spatial.operation] || 'Пространственное действие') + '. Позиция изменится после боевой публикации.')); return; } if (a.cooperation) { box.append(node('p', (a.cooperation.operation === 'assist' ? 'Помощь применена' : 'Подтверждённый вклад') + ': ' + a.cooperation.progress + ' / ' + a.cooperation.cap + (a.cooperation.completed ? ' · общая задача завершена' : '') + '. До публикации состояние не изменено.')); return; } if (a.interaction) { box.append(node('p', 'Взаимодействие: ' + ({success:'успех',critical_success:'критический успех',partial_success:'частичный успех',failure:'провал'}[a.interaction.outcome] || 'ожидает проверки') + (a.interaction.progress === null ? '' : ', прогресс ' + a.interaction.progress) + '. Изменения применятся после подтверждённой публикации.')); return; } if (['search','share','environment'].includes(a.outcome)) { box.append(node('p', (actor(a.actor_id)?.name || 'Существо') + ': ' + (a.outcome === 'search' ? 'Поиск' : (a.outcome === 'share' ? 'Передача сведений' : 'Воздействие на окружение')) + '. Сведения изменятся после подтверждённой публикации.')); return; } box.append(node('p', a.item ? ('Предмет #' + a.item.item_id + ' · ' + (a.item.operation === 'consume' ? 'использование' : 'смена оружия') + ' · 1 AP, ' + a.item.qty + ' шт.') : ((actor(a.actor_id)?.name || 'Существо') + ': ' + ({hit:'попадание',crit:'критическое попадание',miss:'промах',used:'действие с предметом'}[a.outcome] || a.outcome) + ', урон ' + a.damage + ', P_hit=' + a.probabilities.P_hit + '%, P_crit=' + a.probabilities.P_crit + '%.'))); });
         box.append(node('p', sealView.confirmed ? 'Сводка подтверждена. Общая публикация выключена; тестовая отправка доступна только разрешённому пользователю.' : 'Сводка требует явного подтверждения. Реальные HP/AP не изменены.'));
       }
       if (sealView?.friendly_fire?.required) box.append(node('p','Предупреждение: выбрана атака союзника. Урон не уменьшается автоматически.'));
       overview();
     }
     async function sealCommand(commandName) {
-      const routes = {seal:'seal','cancel-seal':'seal_cancel_tail','confirm-seal':'seal_confirm'};
+      const routes = {'publish-prepared':'prepared_publish',seal:'seal','cancel-seal':'seal_cancel_tail','confirm-seal':'seal_confirm'};
       if (!model.id || model.dirty) throw new Error('Сначала сохраните черновик.');
       if (!model.sealPending) {
         if (commandName === 'cancel-seal' && !window.confirm('Отменить последнее запечатанное действие? История и броски сохранятся, квота не вернётся.')) return;
         const body = {draft_id:model.id,expected_draft_version:model.version,operation_key:crypto.randomUUID().replace(/-/g,'')};
         if (['seal','confirm-seal'].includes(commandName) && sealView?.friendly_fire?.required && !sealView.friendly_fire.acknowledged) { if (!window.confirm('Выбраны союзники для нанесения урона. Подтвердить дружественный огонь без снижения урона?')) return; body.friendly_fire_confirmation = sealView.friendly_fire.confirmation_hash; }
+        if (commandName === 'publish-prepared') body.expected_version = ctx.session_version;
         if (commandName === 'confirm-seal') body.confirmation_hash = sealView.confirmation_hash;
         model.sealPending = {command:commandName,body};
       }
       const pending = copy(model.sealPending); saving = true; localSave(); overview();
       try {
-        await api(routes[pending.command], pending.body, true); model.sealPending = null; localSave(); saving = false;
+        await api(routes[pending.command], pending.body, true);
+        if (pending.command === 'publish-prepared') { model.sealPending = null; model.dirty = false; localSave(); await refresh(); status('Подготовка оплачена и зарегистрирована. Ход группы закрыт; новый пост не создан.', false); return; }
+        model.sealPending = null; localSave(); saving = false;
         await restore(true); status('Операция seal сохранена. Реальное боевое состояние не изменено.',false);
       } catch(e) {
-        if (['ACS_BEHAVIOR_UNSUPPORTED','ACS_BEHAVIOR_ACTION_BLOCKED','ACS_BEHAVIOR_TARGET_BLOCKED','ACS_BEHAVIOR_NO_LEGAL_TARGET','ACS_FRIENDLY_FIRE_CONFIRMATION_REQUIRED','ACS_SEAL_UNSUPPORTED','ACS_SEAL_IMMUTABLE','ACS_SEAL_SUMMARY_CHANGED','ACS_SEAL_QUOTA_EXHAUSTED','ACS_DRAFT_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SEAL_TURN_UNAVAILABLE'].includes(e.code)) {
-          model.sealPending = null; localSave(); await refreshSeal();
+        if (['ACS_PREPARED_UNSUPPORTED','ACS_BEHAVIOR_UNSUPPORTED','ACS_BEHAVIOR_ACTION_BLOCKED','ACS_BEHAVIOR_TARGET_BLOCKED','ACS_BEHAVIOR_NO_LEGAL_TARGET','ACS_FRIENDLY_FIRE_CONFIRMATION_REQUIRED','ACS_SEAL_UNSUPPORTED','ACS_SEAL_IMMUTABLE','ACS_SEAL_SUMMARY_CHANGED','ACS_SEAL_QUOTA_EXHAUSTED','ACS_DRAFT_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SEAL_TURN_UNAVAILABLE'].includes(e.code)) {
+          model.sealPending = null; localSave(); if (pending.command === 'publish-prepared') await refresh(); await refreshSeal();
         }
         status(e.message + (model.sealPending ? ' Повторите ту же кнопку: ключ и запрос сохранены.' : ' Обновите черновик и проверьте сводку.'),true);
       } finally { saving = false; overview(); }
@@ -276,7 +283,7 @@
         else if (cmd === 'restore') await restore(false);
         else if (cmd === 'refresh') { await refresh(); invalidate(); status('Сведения обновлены. Локальные действия и текст сохранены.', false); }
         else if (cmd === 'preview') await preview();
-        else if (['seal','cancel-seal','confirm-seal'].includes(cmd)) await sealCommand(cmd);
+        else if (['seal','cancel-seal','confirm-seal','publish-prepared'].includes(cmd)) await sealCommand(cmd);
         else if (cmd === 'seal-refresh') await refreshSeal();
         else if (cmd === 'compose' || cmd === 'compose-quick') {
           if (!config.test_publication_allowed || model.dirty || model.pending || model.sealPending || !sealView?.confirmed) throw new Error('Сначала сохраните и подтвердите сводку.');

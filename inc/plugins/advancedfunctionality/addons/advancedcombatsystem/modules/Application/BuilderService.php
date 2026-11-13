@@ -18,6 +18,7 @@ final class AF_ACS_BuilderService
     {
         $code=$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage();
         return match($code){
+            'ACS_PREPARED_UNSUPPORTED'=>'UNSUPPORTED: контракт подготовки пока не поддерживается.',
             'ACS_COVER_BLOCKED'=>'Цель или действие сейчас недоступны.',
             'ACS_COVER_UNSUPPORTED'=>'UNSUPPORTED: контракт окружения недоступен.',
             'ACS_COVER_VERSION_CONFLICT'=>'Зависимости окружения изменились. Броски сохранены.',
@@ -133,7 +134,11 @@ final class AF_ACS_BuilderService
             $v=$summons[$id];$summonRows[]=['entity_id'=>$id,'name'=>$member['name'],'status'=>$v['pending_independent']?'pending_independent':$v['status'],'remaining'=>$v['remaining'],'duration_unit'=>$v['unit'],'admission'=>isset($individuals[$id])?'current_roster':'next_round'];
         }
         $token=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'session'=>$scope['session']['session_version'],'encounter'=>$scope['encounter']['encounter_version'],'round'=>$scope['round']['round_version'],'turns'=>$versions,'selected'=>$selected,'audience'=>$scope['audience_stamp']]));
-        return ['session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>(string)$scope['round']['round_number'],'encounter_status'=>$scope['encounter']['status'],'turns'=>$turns,'turn'=>$chosen,'actors'=>$actors,'targets'=>$targets,'cover'=>(new AF_ACS_CoverService($this->repo,$this->access))->view($sid,$eid,array_column($actors,'id')),'spatial'=>(new AF_ACS_SpatialService($this->repo,$this->access))->view($sid,$eid),'known_subjects'=>$scope['known_subjects'],'objectives'=>(new AF_ACS_CooperationService($this->repo,$this->access))->progress($sid,$eid,array_column($actors,'id')),'summons'=>$summonRows,'can_manage'=>$scope['gm'],'scope_token'=>$token,'draft_id'=>$draft,'preview_scope'=>$scope['gm']?'gm':'own_draft_only','publication_enabled'=>false];
+        return ['session_version'=>$scope['session']['session_version'],'session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>(string)$scope['round']['round_number'],'encounter_status'=>$scope['encounter']['status'],'turns'=>$turns,'turn'=>$chosen,'actors'=>$actors,'targets'=>$targets,'cover'=>(new AF_ACS_CoverService($this->repo,$this->access))->view($sid,$eid,array_column($actors,'id')),'spatial'=>(new AF_ACS_SpatialService($this->repo,$this->access))->view($sid,$eid),'known_subjects'=>$scope['known_subjects'],'objectives'=>(new AF_ACS_CooperationService($this->repo,$this->access))->progress($sid,$eid,array_column($actors,'id')),'prepared_actions'=>$this->preparedView($sid,$eid,$actors),'summons'=>$summonRows,'can_manage'=>$scope['gm'],'scope_token'=>$token,'draft_id'=>$draft,'preview_scope'=>$scope['gm']?'gm':'own_draft_only','publication_enabled'=>false];
+    }
+    private function preparedView(string $sid,string $eid,array $actors):array
+    {
+        require_once __DIR__.'/PreparedActionService.php';$service=new AF_ACS_PreparedActionService($this->repo,$this->access);$out=[];foreach($actors as $a)if($this->repo->controllerFor($sid,$a['id'],$this->access->uid()))$out=array_merge($out,$service->view($sid,$eid,$a['id']));return $out;
     }
     public function prepare(array $input,?string $sealedDraft=null):array
     {
@@ -177,7 +182,7 @@ final class AF_ACS_BuilderService
             $compiled=$p['context']['abilities'][$actor][$action['ability_key']]??null;
             $policy=$compiled['target_policy']??['kind'=>($isItem||$isSpawn||$isSelfAction)?'self_only':'hostile_only'];$relationship=$p['context']['relationships'][$actor][$target]??'';
             if(!AF_ACS_Control::allowed($policy,$relationship,$p['context']['reaction_kinds'][$target]??''))throw new RuntimeException('ACS_TARGET_POLICY_DENIED');
-            $damaging=!empty($compiled['components']);foreach($compiled['statuses']??[] as $status)foreach($status['instance']['periodic']??[] as $tick)if($tick['kind']==='damage')$damaging=true;
+            $damaging=!isset($compiled['prepared_action'])&&!empty($compiled['components']);foreach($compiled['statuses']??[] as $status)foreach($status['instance']['periodic']??[] as $tick)if($tick['kind']==='damage')$damaging=true;
             if($damaging&&in_array($relationship,['ally','self'],true))$warnings[]=['action_index'=>$actionIndex,'target_id'=>$target,'message'=>'Урон союзнику или себе: требуется явное подтверждение.'];
             if($damaging&&!in_array($relationship,['ally','self'],true))foreach($p['context']['reactions']??[] as $reaction){
                 $redirect=$reaction['entity_id'];$redirectRelationship=$p['context']['relationships'][$actor][$redirect]??'';

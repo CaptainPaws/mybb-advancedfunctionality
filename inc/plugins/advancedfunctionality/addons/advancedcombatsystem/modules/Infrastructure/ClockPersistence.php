@@ -62,6 +62,7 @@ trait AF_ACS_ClockPersistence
     {
         $this->commandWrite();$key=AF_ACS_Clock::entityStart($individual['id']);$changed=[];
         if((string)$individual['start_done']!=='0' || (string)$individual['end_done']!=='0')throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE');
+        $expiredPrepared=$this->expirePrepared($session,$encounter,$individual,$key);
         $statuses=$this->processStatusBoundary($session,$encounter,'entity_start',$individual['id'],$actor,$individual['entity_id']);
         foreach($this->allCooldowns($session['id'],$individual['entity_id']) as $cooldown) {
             $source=$this->cooldownSource($session['id'],$cooldown);
@@ -75,8 +76,8 @@ trait AF_ACS_ClockPersistence
         }
         self::integer($individual['entity_turn_version'],'18446744073709551614');
         if($this->sql('UPDATE '.$this->table('entity_turns').' SET start_done=1,entity_turn_version=entity_turn_version+1 WHERE id=? AND entity_turn_version=? AND start_done=0',[$individual['id'],$individual['entity_turn_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
-        $this->recordBoundary($key,'clock.entity_start',$session['id'],$encounter['id'],$actor,['entity_turn_id'=>$individual['id']],['entity_turn_id'=>$individual['id'],'cooldowns'=>$changed,'statuses'=>$statuses,'parent_encounter_sequence'=>$encounter['next_event_sequence']]);
-        return ['boundary_key'=>$key,'entity_turn_id'=>$individual['id'],'cooldowns'=>$changed,'statuses'=>$statuses];
+        $this->recordBoundary($key,'clock.entity_start',$session['id'],$encounter['id'],$actor,['entity_turn_id'=>$individual['id']],['entity_turn_id'=>$individual['id'],'cooldowns'=>$changed,'statuses'=>$statuses,'expired_prepared'=>$expiredPrepared,'parent_encounter_sequence'=>$encounter['next_event_sequence']]);
+        return ['boundary_key'=>$key,'entity_turn_id'=>$individual['id'],'cooldowns'=>$changed,'statuses'=>$statuses,'expired_prepared'=>$expiredPrepared];
     }
     public function processEntityEnd(array $session,array $encounter,array $individual,string $actor):array
     {

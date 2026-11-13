@@ -106,7 +106,7 @@ final class AF_ACS_SealService
                 foreach($active as $i=>$row){$old=$this->repo->sealPayload($row);if(($actions[$i]??null)!==$old['action'])throw new RuntimeException('ACS_SEAL_IMMUTABLE');$a=$old['action'];if($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['source_ref']!==$old['pin'])throw new RuntimeException('ACS_SEAL_PIN_CHANGED');$this->repo->verifySealDefinition($d['session_id'],$row,$old);}
                 $used=$this->repo->sealQuota($d['turn_id']);$cost=0;$costs=[];
                 foreach(array_slice($actions,count($active)) as $offset=>$a){$c=$p['action_costs'][count($active)+$offset]??($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['costs']??null);
-                    $ap=is_array($c)?array_values(array_filter($c,static fn($cost)=>$cost['kind']==='ap')):[];if(count($ap)!==1||(!AF_ACS_ObjectInteraction::isAction($a['ability_key'])&&count($c)!==1)||!is_int($ap[0]['amount'])||$ap[0]['amount']<=0)throw new RuntimeException('ACS_SEAL_ZERO_AP_UNSUPPORTED');$cost+=$ap[0]['amount'];$costs[]=$ap[0]['amount'];}
+                    $ap=is_array($c)?array_values(array_filter($c,static fn($cost)=>$cost['kind']==='ap')):[];if(count($ap)!==1||(!AF_ACS_ObjectInteraction::isAction($a['ability_key'])&&!isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['prepared_action'])&&count($c)!==1)||!is_int($ap[0]['amount'])||$ap[0]['amount']<=0)throw new RuntimeException('ACS_SEAL_ZERO_AP_UNSUPPORTED');$cost+=$ap[0]['amount'];$costs[]=$ap[0]['amount'];}
                 if($used+$cost>$p['scope']['turn']['ap'])throw new RuntimeException('ACS_SEAL_QUOTA_EXHAUSTED');
                 $history=$this->repo->sealRows($d['id']);if(count($history)+count($actions)-count($active)>200)throw new RuntimeException('ACS_SEAL_HISTORY_LIMIT');$next=$history?(int)end($history)['action_index']+1:0;
                 $query=new AF_ACS_QueryService($this->repo,$this->access);$definitions=[];$statusIndexes=[];
@@ -131,7 +131,7 @@ final class AF_ACS_SealService
                 // Everything above is deterministic preflight. Once drawn, all tape/quota persists even if simulation is blocked.
                 foreach(array_slice($actions,count($active)) as $i=>$a){
                     $ability=$p['context']['abilities'][$a['actor_id']][$a['ability_key']];
-                    $this->repo->appendSeal($d,$a,$definitions[$i],$ability['source_ref'],$costs[$i],$operation,$next+$i,($this->random??new AF_ACS_RandomSource)->action($statusIndexes[$i]));
+                    $this->repo->appendSeal($d,$a,$definitions[$i],$ability['source_ref'],$costs[$i],$operation,$next+$i,isset($ability['prepared_action'])?AF_ACS_PreparedAction::TAPE:($this->random??new AF_ACS_RandomSource)->action($statusIndexes[$i]));
                 }
             }elseif($op==='cancel_tail'){
                 if(!$active)throw new RuntimeException('ACS_SEAL_NOTHING_TO_CANCEL');$last=end($active);$this->repo->cancelSeal((string)$last['id']);
