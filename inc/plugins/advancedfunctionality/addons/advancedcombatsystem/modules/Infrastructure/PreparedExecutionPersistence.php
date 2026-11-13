@@ -134,7 +134,7 @@ trait AF_ACS_PreparedExecutionPersistence
         if(!hash_equals($candidate['contract_hash'],hash('sha256',$candidate['contract_json']))||$candidate['operation_key']!=='prepared:'.$candidate['id'].':trigger:'.$candidate['trigger_event_id']||$candidate['status']!=='armed')throw new RuntimeException('ACS_SEAL_TAPE_INVALID');
         $live=$this->sql('SELECT status,prepared_version FROM '.$this->table('prepared_actions').' WHERE id=?',[$candidate['id']])['rows'][0];
         $candidate['prepared_status']=$live['status'];$candidate['prepared_version']=(string)$live['prepared_version'];
-        $reason=$entry['admission'];$result=null;$receipts=[];$deltas=[];$graph=[];$finalState=null;$next=$state;
+        $reason=$entry['admission'];$result=null;$receipts=[];$deltas=[];$graph=[];$finalState=null;$next=$state;$reveal=null;
         if($reason===null&&($live['status']!=='active'||(string)$live['prepared_version']!==$armed['prepared_version']))$reason='preparation_unavailable';
         if($reason===null&&$event['resolved_target']!==$candidate['entity_id'])$reason='trigger_subject_changed';
         if($reason===null&&$policy['requires_hit']&&!$event['hit_success'])$reason='hit_required';
@@ -156,9 +156,9 @@ trait AF_ACS_PreparedExecutionPersistence
                 $candidate['status']=$candidate['prepared_status'];$receipts=(new AF_ACS_PreparedItemService($this->preparation,$this->access))->consumeTrigger($candidate,$armed['trigger_event_id']);
                 // Re-read time-sensitive authorization after owner participation too.
                 $this->causalInspection($candidate,$parent);
-                $result=$resolved->serverPlan();$next=$resolved->serverState();$finalState=$next;
+                $result=$resolved->serverPlan();$next=$resolved->serverState();$reveal=$this->revealPrepared($candidate,$event,$next);$finalState=$next;
                 foreach($next['entities'] as $id=>$entity)if($entity!==$state['entities'][$id])$deltas['entities'][(string)$id]=['before'=>$state['entities'][$id],'after'=>$entity];
-            }catch(Throwable $e){$this->causalSavepoint('rollback');$reason=$this->causalCondition($e);$receipts=[];$deltas=[];$next=$state;}
+            }catch(Throwable $e){$this->causalSavepoint('rollback');$reason=$this->causalCondition($e);$receipts=[];$deltas=[];$next=$state;$reveal=null;}
             $this->causalSavepoint('release');
         }
         $outcome=$reason===null?'executed':'skipped';
@@ -169,8 +169,16 @@ trait AF_ACS_PreparedExecutionPersistence
         }
         $facts=$this->sql('SELECT prepared_version,cost_state FROM '.$this->table('prepared_actions').' WHERE id=?',[$candidate['id']])['rows'][0];
         $trace=$armed+['execution_id'=>$candidate['execution_id'],'phase_event'=>$event,'terminal_prepared_version'=>(string)$facts['prepared_version'],'terminal_cost_state'=>$facts['cost_state'],
-            'outcome'=>$outcome,'reason'=>$reason,'costs'=>$result['actions'][0]['costs']??[],'owner_receipts'=>$receipts,'mechanical_deltas'=>$deltas,'causal_trace'=>$graph,'resolver_plan'=>$result,'final_state'=>$finalState,'terminal_state'=>$terminal];
+            'outcome'=>$outcome,'reason'=>$reason,'reveal'=>$reveal,'costs'=>$result['actions'][0]['costs']??[],'owner_receipts'=>$receipts,'mechanical_deltas'=>$deltas,'causal_trace'=>$graph,'resolver_plan'=>$result,'final_state'=>$finalState,'terminal_state'=>$terminal];
         return ['state'=>$next,'trace'=>$trace];
+    }
+    private function revealPrepared(array $candidate,array $event,array &$state):?array
+    {
+        $contract=json_decode($candidate['contract_json'],true,64,JSON_THROW_ON_ERROR);$policy=$contract['hidden']['reveal_on_trigger']??null;if($policy===null)return null;
+        AF_ACS_PreparedAction::hidden($contract['hidden']);$subject=$state['perception_subjects']['prepared_action:'.$candidate['id']]??throw new RuntimeException('ACS_CAUSAL_PREPARED_SUBJECT_MISSING');
+        $actorId=$policy['relative_to']==='source'?$candidate['entity_id']:$event['attacker'];$actor=$state['perception_subjects']['entity:'.$actorId]['source']??throw new RuntimeException('ACS_CAUSAL_PREPARED_AUDIENCE_MISSING');
+        AF_ACS_Awareness::disclose($state,$subject,$actor,$policy['audience'],$policy['level'],$subject['perception']['disclosure'][$policy['level']]);
+        return ['subject_kind'=>'prepared_action','subject_id'=>$candidate['id'],'audience_kind'=>$policy['audience'],'audience_id'=>AF_ACS_Awareness::audiences($actor)[$policy['audience']][0],'level'=>$policy['level'],'source_identity_revealed'=>false];
     }
     private function finishPreparedPhases(?AF_ACS_PreparedPhase $phase,string $parentEvent):array
     {

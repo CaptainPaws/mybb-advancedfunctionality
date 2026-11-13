@@ -15,8 +15,9 @@ $GLOBALS['acsPreparedExecutionFixture']=static function(array $fixture):void {
     $roster2=['schema_version'=>1,'group_version'=>'1','members'=>[['entity_id'=>$npc,'template_snapshot_id'=>$npcEntity['template_snapshot_id'],'content_hash'=>$npcEntity['content_hash']]]];$roster2['fingerprint']=hash('sha256',AF_ACS_Repository::json($roster2));
     itemInsert($link,'af_acs_turns',['id'=>2,'round_id'=>1,'control_group_id'=>$group2,'status'=>'pending','ap_budget'=>3,'ap_spent'=>0,'seal_quota_spent'=>0,'pre_round_ap_commitment'=>0,'turn_version'=>1,'roster_json'=>AF_ACS_Repository::json($roster2)]);itemInsert($link,'af_acs_entity_turns',['id'=>2,'turn_id'=>2,'entity_id'=>$npc,'start_done'=>1,'end_done'=>0,'reaction_used'=>0,'entity_turn_version'=>1]);
     $boundary=AF_ACS_Clock::entityStart('2');itemInsert($link,'af_acs_operations',['operation_key'=>$boundary,'session_id'=>$sid,'encounter_id'=>1,'kind'=>'clock.entity_start','payload_hash'=>hash('sha256','fixture'),'status'=>'committed','operation_version'=>1,'request_json'=>'{"schema_version":1}','result_json'=>AF_ACS_Repository::json(['schema_version'=>1,'entity_turn_id'=>'2','boundary_key'=>$boundary]),'updated_at'=>time()]);
-    if(isset($GLOBALS['acsPreparedPhaseBeforeParent']))($GLOBALS['acsPreparedPhaseBeforeParent'])(get_defined_vars());
+    if(isset($GLOBALS['acsPreparedPhaseBeforeParent'])&&($GLOBALS['acsPreparedPhaseBeforeParent'])(get_defined_vars())===false)return;
     $ordinary=[['actor_id'=>$npc,'ability_key'=>'causal-hit','targets'=>[$actor],'parameters'=>[]]];
+    if(isset($GLOBALS['acsPreparedParentPrefix']))$ordinary=[...$GLOBALS['acsPreparedParentPrefix'],...$ordinary];
     if(($argv[2]??'')==='multiple')$ordinary[]=$ordinary[0];
     if(($argv[2]??'')==='multitarget')$ordinary[0]['targets']=[$actor,$npc];
     $d=$drafts->save(['session_id'=>$sid,'encounter_id'=>'1','turn_id'=>'2','expected_draft_version'=>'0','operation_key'=>'causal_parent_draft001','actions'=>$ordinary,'prose'=>'Existing fixture native post only']);

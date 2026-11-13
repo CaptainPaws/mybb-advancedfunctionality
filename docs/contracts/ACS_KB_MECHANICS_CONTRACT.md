@@ -1303,3 +1303,63 @@ positive qty и exact pinned definition. Legacy preparations без owner bindin
 сохраняют прежний same-actor consume; cross-author consumption для них BLOCKED.
 Generic prepared chains, другой item selection и foreign-owner issuance остаются
 UNSUPPORTED. Все четыре фазы ACS-9.1.2A используют один и тот же narrow contract.
+
+## ACS-9.2.1 — hidden prepared mode / independent action awareness
+
+Optional prepared_action.hidden — pinned server permission, не client flag:
+
+```json
+{"schema":"ic-acs.hidden-prepared.v1","source_stealth":[],
+ "perception":{"schema":"ic-acs.perception.v1","tags":["ambush"],
+   "stealth":null,"passive":null,
+   "disclosure":{"suspected":{"hint":"Есть признаки засады"},
+                 "detected":{"hint":"Обнаружена подготовка"},
+                 "identified":{"name":"Опознанная засада"}}},
+ "on_detected":"retain",
+ "reveal_on_trigger":{"relative_to":"source","audience":"encounter",
+                      "level":"detected","reveal_source":false}}
+```
+
+source_stealth — явный список необходимых invisible/hidden/concealed состояний
+на подготовке. Пустой список явно допускает скрыто подготовиться видимому
+исполнителю. Проверяются retained base perception и active status stealth;
+нет новой универсальной формулы/бесплатного броска. Неизвестные проверки,
+random-on-prepare/формулы/автономные selectors и on_detected=cancel UNSUPPORTED.
+В этом subset perception.stealth/passive должны быть null: состояние существа
+не подменяется скрытым режимом действия. Условия перепроверяются до seal и
+при confirmed prepared registration через прежний Builder/Resolver.
+
+Логический subject имеет kind=prepared_action и собственный prepared ID;
+entity/object knowledge не переносится на него и обратно. Сохраняются
+существующие awareness levels, audience tuple и CAS. Для active self search/share
+awareness_action.subject_kind может быть prepared_action; нужны прежние direct
+KB grant, positive AP и pinned tag/chance. Проверка использует существующий
+sealed hit sample для всего tag scope, без hidden IDs/counts в запросе;
+causal attempt key включает prepared_action. Новые события получают отдельный
+sealed cause; replay/GET не делают RNG. Terminal history не ищется как active
+подготовка. on_detected=retain не меняет prepared version/status, costs или tape.
+
+reveal_on_trigger=null не раскрывает действие. Иначе relative_to=source либо
+trigger_actor выбирает **серверный** actor/group/side/encounter audience;
+level=suspected/detected/identified. Успешно допущенное execution раскрывает
+только данный prepared subject в той же combat transaction. source identity
+не раскрывается: reveal_source=true пока UNSUPPORTED. Остальные скрытые actions
+не раскрываются даже при общем tag. Trace сохраняет subject и actual audience.
+
+AudienceService возвращает unknown subjects нулём entries без IDs/counts;
+suspected/detected — только approved hint; identified — prepared ID/KB details,
+без source entity/owner/ability/item references. Owner/creator management access
+не является групповым awareness grant. Контролирующий делегат не получает
+скрытую подготовку другого автора автоматически. Для share нужны фактические
+actor/group knowledge rows; implicit management access их не создаёт.
+
+GM с существующими session/native management rights может читать/cancel hidden
+commitment с audit/CAS, но не получает source execution или owner item rights.
+Unused item release без owner authority остаётся recovery obligation по 9.1.1B.
+Обычные prepared contracts сохраняют прежние controller read/cancel gates.
+
+UI использует существующие ability selector, prepared state и knowledge notices;
+нового редактора, AmbushResolver, player raw event/export/notification consumer
+нет. Prepared source/contract/rolls остаются в management-only journal; current
+UID/native/role/awareness partitions существующих caches сохранены.
+Литературный текст MyBB не редактируется. Pre-round ambush start — ACS-9.2.2.

@@ -225,7 +225,7 @@ final class AF_ACS_Resolver
             if(!isset($ability['cover_action'])&&!isset($ability['spatial_action'])&&isset($state['spatial']))foreach($targets as $rangeTarget)AF_ACS_Spatial::check($state['spatial'],$actor,$rangeTarget,$ability['range']??null);
             if(isset($ability['prepared_action'])){
                 require_once __DIR__.'/PreparedAction.php';
-                $contract=AF_ACS_PreparedAction::contract($ability['prepared_action']);
+                $contract=AF_ACS_PreparedAction::contract($ability['prepared_action']);AF_ACS_PreparedAction::concealment($contract,$state,$actor);
                 if(($ability['costs'][0]??null)!==['kind'=>'ap','amount'=>$contract['ap_cost']])self::fail('ACS_PREPARED_UNSUPPORTED');
                 if(count($orderedActions)!==1||count($targets)!==1||!isset($state['entities'][$targets[0]])||!in_array($targets[0],$context['allowed_targets'][$actor]??[],true))self::fail('ACS_PREPARED_UNSUPPORTED');
                 $target=$targets[0];if($target!==$actor&&!AF_ACS_Awareness::targetable('identified',$state['perception_subjects']['entity:'.$target]['perception']['stealth']??null,$state['status_instances']??[],$target))self::fail('resolver_target_forbidden');

@@ -36,14 +36,14 @@ final class AF_ACS_Awareness
     public static function row(array $v):void
     {
         self::fields($v,['schema_version','encounter_id','subject_kind','subject_id','audience_kind','audience_id','level','awareness_version','details']);
-        if($v['schema_version']!==1||!in_array($v['subject_kind'],['entity','object'],true)||!in_array($v['audience_kind'],['actor','control_group','side','encounter'],true)||!isset(self::LEVELS[$v['level']])||!is_int($v['awareness_version'])||$v['awareness_version']<1||$v['awareness_version']>9007199254740991)self::fail();
+        if($v['schema_version']!==1||!in_array($v['subject_kind'],['entity','object','prepared_action'],true)||!in_array($v['audience_kind'],['actor','control_group','side','encounter'],true)||!isset(self::LEVELS[$v['level']])||!is_int($v['awareness_version'])||$v['awareness_version']<1||$v['awareness_version']>9007199254740991)self::fail();
         foreach(['encounter_id','subject_id','audience_id'] as $key)if(!is_string($v[$key])||!preg_match('/\A[1-9][0-9]{0,19}\z/D',$v[$key]))self::fail();
         if($v['audience_kind']==='encounter'&&$v['audience_id']!==$v['encounter_id'])self::fail();self::details($v['details'],$v['level']);
     }
     public static function attempt(string $key,array $check):void
     {
         self::fields($check,['cause','actor_id','subject_kind','subject_id','success','operation']);
-        if(!is_bool($check['success'])||!in_array($check['subject_kind'],['entity','object'],true)||!in_array($check['operation'],['search','share','passive'],true))self::fail();
+        if(!is_bool($check['success'])||!in_array($check['subject_kind'],['entity','object','prepared_action'],true)||!in_array($check['operation'],['search','share','passive'],true))self::fail();
         foreach(['actor_id','subject_id'] as $field)if(!is_string($check[$field])||!preg_match('/\A[1-9][0-9]{0,19}\z/D',$check[$field]))self::fail();
         if($check['operation']==='passive'){
             if(!preg_match('/\Aentity_turn:[1-9][0-9]*:end\z/D',$check['cause'])||$key!=='passive:'.$check['subject_kind'].':'.$check['subject_id'])self::fail();
@@ -72,7 +72,7 @@ final class AF_ACS_Awareness
     {
         $d=$dto['data']['definition'];$spec=$d['awareness_action']??[];$audience=$spec['audience']??'control_group';unset($spec['audience']);
         self::fields($spec,['schema','operation','tag','subject_kind','level','chance']);
-        if($spec['schema']!=='ic-acs.awareness-action.v1'||!in_array($spec['operation'],['search','share'],true)||!in_array($spec['subject_kind'],['object','entity'],true)||!is_string($spec['tag'])||!preg_match('/\A[a-z][a-z0-9_-]{0,63}\z/D',$spec['tag'])||!in_array($spec['level'],['suspected','detected','identified'],true)||!is_int($spec['chance'])||$spec['chance']<0||$spec['chance']>100||!in_array($audience,['actor','control_group','side','encounter'],true)||$spec['operation']==='share'&&$spec['chance']!==100)self::fail();
+        if($spec['schema']!=='ic-acs.awareness-action.v1'||!in_array($spec['operation'],['search','share'],true)||!in_array($spec['subject_kind'],['object','entity','prepared_action'],true)||!is_string($spec['tag'])||!preg_match('/\A[a-z][a-z0-9_-]{0,63}\z/D',$spec['tag'])||!in_array($spec['level'],['suspected','detected','identified'],true)||!is_int($spec['chance'])||$spec['chance']<0||$spec['chance']>100||!in_array($audience,['actor','control_group','side','encounter'],true)||$spec['operation']==='share'&&$spec['chance']!==100)self::fail();
         $metadata=['schema','type_profile','version','revision','name','title','description','notes','icon_url','icon_class','sortorder','active','type','subtype','slot','damage_type','targeting','cooldown_unit','duration_unit','level_cap','magic_direction_ref','damage_element','element','target_policy','action_cost','awareness_action'];
         $empty=['range','cast_time','cooldown','cooldown_value','duration','duration_value','max_charges','resources','effects','modifiers','base_stats','triggers','conditions','stacking','upgrade_requirements','cost_value','cost_resource','costs','formula_profile','formula_ref','formula_refs','target_count','application_conditions','application_mode','summon','usage_limits','timing','math_modifiers','passive_effects','reflection','lifesteal','grants','immunities','can_crit','auto_hit','damage_value','heal_value','shield_value'];
         if(array_diff(array_keys($d),[...$metadata,...$empty])||($d['type']??null)!=='active'||($d['targeting']??null)!=='self'||AF_ACS_Control::targetPolicy($d)!==['kind'=>'self_only']||!is_int($d['action_cost']??null)||$d['action_cost']<1||$d['action_cost']>2147483647)self::fail();
@@ -91,7 +91,7 @@ final class AF_ACS_Awareness
     public static function action(array $state,array $subjects,array $actor,array $spec,string $cause,?array $sample,string $mode):array
     {
         $success=null;if($mode==='seal'){AF_ACS_Effects::statusSample($sample);$success=$spec['operation']==='share'||100*$sample['u']<$spec['chance'];}
-        foreach($subjects as $subject){$p=$subject['perception'];if($p===null||$subject['kind']!==$spec['subject_kind']||!in_array($spec['tag'],$p['tags'],true))continue;
+        foreach($subjects as $subject){if($subject['kind']==='prepared_action'&&empty($subject['active']))continue;$p=$subject['perception'];if($p===null||$subject['kind']!==$spec['subject_kind']||!in_array($spec['tag'],$p['tags'],true))continue;
             $attempt=$cause.':'.$subject['kind'].':'.$subject['id'];if(isset($state['awareness_attempts'][$attempt])||$mode!=='seal')continue;
             $details=$p['disclosure'][$spec['level']];$eligible=true;if($spec['operation']==='share'){$known=self::known($state['awareness'],$subject['kind'],$subject['id'],self::audiences($actor));$eligible=self::LEVELS[$known['level']]>=self::LEVELS[$spec['level']];$details=array_intersect_key($known['details'],array_fill_keys($spec['level']==='identified'?['hint','name']:['hint'],true));}
             if($success&&$eligible)self::disclose($state,$subject,$actor,$spec['audience'],$spec['level'],$details);

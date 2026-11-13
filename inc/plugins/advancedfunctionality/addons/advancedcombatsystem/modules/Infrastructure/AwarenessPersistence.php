@@ -21,13 +21,18 @@ trait AF_ACS_AwarenessPersistence
     /** Only immutable pinned perception contracts are used; no current/live KB acquisition. */
     public function perceptionSubjects(string $sid,string $eid):array
     {
-        $objects=$this->objectProjection($sid,$eid);$rows=$this->sql('SELECT e.id,e.kind,e.source_entity_id,e.control_group_id,s.payload_json,s.content_hash,p.side_id FROM '.$this->table('entities').' e JOIN '.$this->table('snapshots').' s ON s.id=e.template_snapshot_id AND s.session_id=e.session_id LEFT JOIN '.$this->table('participants').' p ON p.entity_id=e.id AND p.encounter_id=? WHERE e.session_id=? ORDER BY e.id',[$eid,$sid])['rows'];
+        $objects=$this->objectProjection($sid,$eid);$rows=$this->sql('SELECT e.id,e.kind,e.source_entity_id,e.control_group_id,s.payload_json,s.content_hash,p.side_id,p.participation FROM '.$this->table('entities').' e JOIN '.$this->table('snapshots').' s ON s.id=e.template_snapshot_id AND s.session_id=e.session_id LEFT JOIN '.$this->table('participants').' p ON p.entity_id=e.id AND p.encounter_id=? WHERE e.session_id=? ORDER BY e.id',[$eid,$sid])['rows'];
         $byId=[];foreach($rows as $row)$byId[(string)$row['id']]=$row;$out=[];
         foreach($rows as $row){$id=(string)$row['id'];$object=$row['kind']==='object';if($object?!isset($objects[$id]):$row['side_id']===null)continue;
             if(!hash_equals($row['content_hash'],hash('sha256',$row['payload_json'])))throw new RuntimeException('ACS_SNAPSHOT_HASH_MISMATCH');$p=json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR);
             $definition=$object?$objects[$id]['definition']:($p['source_snapshot']['data']['definition']??[]);$perception=AF_ACS_Awareness::perception($definition['perception']??null);
             $source=$byId[$object?(string)$row['source_entity_id']:$id]??null;if(!$source||$source['control_group_id']===null||$source['side_id']===null)continue;
             $out[($object?'object':'entity').':'.$id]=['kind'=>$object?'object':'entity','id'=>$id,'perception'=>$perception,'source'=>['entity_id'=>(string)$source['id'],'group_id'=>(string)$source['control_group_id'],'side_id'=>(string)$source['side_id'],'encounter_id'=>$eid]];
+        }
+        foreach($this->sql('SELECT p.*,e.actor_uid AS originating_uid FROM '.$this->table('prepared_actions').' p LEFT JOIN '.$this->table('events').' e ON e.id=p.source_event_id WHERE p.session_id=? AND p.encounter_id=? ORDER BY p.id',[$sid,$eid])['rows'] as $row){
+            if(!hash_equals($row['contract_hash'],hash('sha256',$row['contract_json'])))throw new RuntimeException('ACS_SEAL_PIN_CHANGED');$contract=json_decode($row['contract_json'],true,64,JSON_THROW_ON_ERROR);if(!isset($contract['hidden']))continue;
+            require_once __DIR__.'/../Domain/PreparedAction.php';$h=AF_ACS_PreparedAction::hidden($contract['hidden']);$source=$byId[(string)$row['entity_id']]??null;if(!$source||$source['side_id']===null)continue;
+            $id=(string)$row['id'];$out['prepared_action:'.$id]=['kind'=>'prepared_action','id'=>$id,'active'=>$row['status']==='active'&&$source['participation']==='engaged','perception'=>$h['perception'],'owner_uid'=>$row['owner_uid']===null?null:(string)$row['owner_uid'],'originating_uid'=>$row['originating_uid']===null?null:(string)$row['originating_uid'],'source'=>['entity_id'=>(string)$source['id'],'group_id'=>(string)$source['control_group_id'],'side_id'=>(string)$source['side_id'],'encounter_id'=>$eid]];
         }return $out;
     }
     protected function persistAwareness(string $sid,string $eid,array $before,array $after,array $beforeAttempts=[],array $afterAttempts=[]):array

@@ -15,6 +15,7 @@ $GLOBALS['acsCustodyFixture']=static function(array $fixture):void {
     $link->query('UPDATE t_af_advinv_items SET qty=3 WHERE id=22');$extra=$link->query('SELECT * FROM t_af_advinv_items WHERE id=22')->fetch_assoc();$extra['id']=23;$extra['qty']=1;itemInsert($link,'af_advinv_items',$extra);
     if(!empty($GLOBALS['acsPreparedOwnerMultiple'])){$contract['additional_costs'][]=['kind'=>'item','key'=>'trigger-second','amount'=>1,'timing'=>'on_trigger','definition'=>$pin,'selection'=>'explicit'];$second=$extra;$second['id']=24;itemInsert($link,'af_advinv_items',$second);}
     if(isset($GLOBALS['acsPreparedExecutionFixture']))$contract['execution']=['schema'=>'ic-acs.prepared-execution.v1','event_kind'=>'combat.primary','phase'=>'after_damage','priority'=>100,'requires_hit'=>true,'on_unavailable'=>'retain','emit_prepared'=>false,'emit_active_reactions'=>false,'limits'=>['max_depth'=>2,'per_cause'=>1]];
+    if(isset($GLOBALS['acsPreparedHiddenContract']))$contract['hidden']=$GLOBALS['acsPreparedHiddenContract'];
     if(!empty($GLOBALS['acsPreparedExecutionLegacy']))unset($contract['execution']);
     if(isset($GLOBALS['acsPreparedExecutionPhase'])&&empty($GLOBALS['acsPreparedExecutionLegacy'])){$contract['execution']['phase']=$GLOBALS['acsPreparedExecutionPhase'];$contract['execution']['requires_hit']=in_array($contract['execution']['phase'],['after_hit','after_damage'],true);}
     if(isset($GLOBALS['acsPreparedExecutionConditions'])&&($argv[2]??'')==='cancel')$contract['execution']['on_unavailable']='cancel';
