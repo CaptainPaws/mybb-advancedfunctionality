@@ -125,7 +125,7 @@ trait AF_ACS_PreparedExecutionPersistence
         $code=$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage();
         if((!$e instanceof RuntimeException&&!$e instanceof DomainException)||$e instanceof mysqli_sql_exception
             ||in_array($code,['ACS_DATABASE_ERROR','ACS_ITEM_OWNER_RESULT_ORPHAN','ACS_SEAL_TAPE_INVALID','ACS_SEAL_PIN_CHANGED','ACS_SNAPSHOT_HASH_MISMATCH'],true)
-            ||str_starts_with($code,'ACS_CAUSAL_'))throw $e;
+            ||str_starts_with($code,'ACS_CAUSAL_')||str_starts_with($code,'INV_PREPARED_')&&!in_array($code,['INV_PREPARED_REVOKED','INV_PREPARED_EXPIRED','INV_PREPARED_VERSION_CONFLICT'],true))throw $e;
         return preg_match('/\A(?:ACS_[A-Z_]+|[a-z][a-z0-9_]+|INV_[A-Z_]+)\z/D',$code)?$code:'ACS_PREPARED_CONDITION_FAILED';
     }
     private function executePreparedAtPhase(array $parent,array $entry,array $event,array $state):array

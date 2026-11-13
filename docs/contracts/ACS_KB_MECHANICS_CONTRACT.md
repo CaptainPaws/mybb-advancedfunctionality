@@ -1280,3 +1280,26 @@ contracts не добавлены в player DTO.
 Legacy prepared contracts без execution descriptor сохраняют diagnostic
 UNSUPPORTED без механики, implicit phase, нового RNG или implicit cancellation;
 это не блокирует исходный primary strike.
+
+## ACS-9.1.2B — owner-authorized trigger item cost
+
+Для новых owner-issued preparations с on_trigger consumable/ammo cost fixed
+binding дополняется owner_obligations[cost_index] — receipt/hash существующей
+owner reservation, связанный с prepared ID, original owner, cost, pins и grant
+generation. Он выдаётся в confirmed registration transaction, не клиентом.
+Точный internal authorization/revocation contract:
+[IC-INV-1 prepared_reserved_consume.v1](ACS_INVENTORY_OWNER_PROTOCOL.md#acs-912b--prepared_reserved_consumev1-internal-same-writer).
+
+Иной runtime author trigger не получает обычных Inventory прав. Consume проходит
+OwnerProtocol::participate с прежней reservation и stable prepared/trigger/cost
+operation key после live owner-policy decision. AP/on_prepare повторно не
+оплачиваются. Unknown owner outcome, изменённая reservation/ownership/binding
+не маскируются обычным skip; parent сохраняет rollback/recovery barrier.
+Revoked generation не восстанавливается из старого reserve receipt. Known deny
+использует лишь ранее pinned retain/cancel policy; release остаётся owner-only.
+
+Subset KB не расширен: только уже разрешённые item kinds, explicit selection,
+positive qty и exact pinned definition. Legacy preparations без owner binding
+сохраняют прежний same-actor consume; cross-author consumption для них BLOCKED.
+Generic prepared chains, другой item selection и foreign-owner issuance остаются
+UNSUPPORTED. Все четыре фазы ACS-9.1.2A используют один и тот же narrow contract.

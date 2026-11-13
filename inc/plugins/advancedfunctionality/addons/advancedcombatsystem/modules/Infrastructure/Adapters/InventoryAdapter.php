@@ -1,7 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 
-/** Default binding stays closed. forCombat explicitly composes the same-writer own-property policy.
+/** Default binding stays closed. forCombat composes the same-writer spending policy and exact owner-issued obligations.
  * Never creates schema, writes Inventory SQL, or calls remove_item. No remote commit support.
  */
 final class AF_ACS_InventoryAdapter
@@ -34,6 +34,16 @@ final class AF_ACS_InventoryAdapter
     {
         if (!$this->owner instanceof AF_ADVINV_OwnerProtocol || !af_is_addon_enabled('advancedinventory')) throw new RuntimeException('ACS_INVENTORY_UNAVAILABLE');
         return $this->owner->lookupParticipant($request);
+    }
+
+    /** Internal, fixed obligation APIs; no HTTP capability or generic privileged consume. */
+    public function bindPreparedReservation(array $binding):array { return $this->preparedOwner()->bindPreparedReservation($binding); }
+    public function lookupPreparedConsume(array $intent):array { return $this->preparedOwner()->lookupPreparedConsume($intent); }
+    public function preparedConsumptionEvidence(array $intent):array { return $this->preparedOwner()->preparedConsumptionEvidence($intent); }
+    public function participatePreparedConsume(array $intent,array $priorReceipts=[]):AF_ADVINV_ProvisionalOwnerResult { return $this->preparedOwner()->participatePreparedConsume($intent,$priorReceipts); }
+    private function preparedOwner():AF_ADVINV_OwnerProtocol
+    {
+        if(!$this->owner instanceof AF_ADVINV_OwnerProtocol||!af_is_addon_enabled('advancedinventory'))throw new RuntimeException('ACS_INVENTORY_UNAVAILABLE');return $this->owner;
     }
 
     public function validateCommand(string $operation,array $request): void
