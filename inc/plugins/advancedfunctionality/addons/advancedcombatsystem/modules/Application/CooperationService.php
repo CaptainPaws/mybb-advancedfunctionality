@@ -6,15 +6,15 @@ require_once __DIR__.'/../Domain/Cooperation.php';
 final class AF_ACS_CooperationService
 {
     public function __construct(private AF_ACS_EncounterRepository $repo,private AF_ACS_SessionAccess $access){}
-    private function visible(array $v,AF_ACS_AudienceService $audience,string $actor,bool $gm):bool
-    {return ($gm||$v['definition']['visibility']==='known')&&$audience->knowledge('object',$v['entity_id'],$actor)['level']==='identified';}
+    private function visible(array $v,AF_ACS_AudienceService $audience,string $actor,bool $gm,array $spatial):bool
+    {return ($gm||$v['definition']['visibility']==='known')&&$audience->knowledge('object',$v['entity_id'],$actor)['level']==='identified'&&AF_ACS_Spatial::disclosed($spatial,$v['entity_id'],$gm)&&AF_ACS_Spatial::disclosed($spatial,$actor,$gm);}
     public function canReadAction(string $sid,string $eid,array $action):bool
     {
         if(!preg_match('/\Aobject:([1-9][0-9]*):coop-(.+)\z/D',$action['ability_key']??'',$m))return true;
         $v=$this->repo->objectiveProjection($sid,$eid)[$m[1]]??null;if($v===null)return true;
-        $gm=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'];$audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);
-        if(!$this->visible($v,$audience,$action['actor_id'],$gm))return false;
-        if(preg_match('/\Aassist-([1-9][0-9]*)\z/D',$m[2],$recipient)&&$audience->knowledge('entity',$recipient[1],$action['actor_id'])['level']!=='identified')return false;
+        $gm=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'];$audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);$spatial=$this->repo->spatialProjection($sid,$eid);
+        if(!$this->visible($v,$audience,$action['actor_id'],$gm,$spatial))return false;
+        if(preg_match('/\Aassist-([1-9][0-9]*)\z/D',$m[2],$recipient)&&!isset($this->recipients($sid,$eid,$action['actor_id'])[$recipient[1]]))return false;
         return true;
     }
     private function recipients(string $sid,string $eid,string $actor):array
@@ -26,8 +26,8 @@ final class AF_ACS_CooperationService
     }
     public function catalog(string $sid,string $eid,string $actor,array $inspection):array
     {
-        $gm=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'];$audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);$objects=$this->repo->objectProjection($sid,$eid);$out=[];$recipients=null;$spatial=$this->repo->spatialProjection($sid,$eid);
-        foreach($this->repo->objectiveProjection($sid,$eid) as $id=>$v){if(!$this->visible($v,$audience,$actor,$gm)||!AF_ACS_Spatial::disclosed($spatial,$actor,$gm)||!AF_ACS_Spatial::disclosed($spatial,(string)$id,$gm))continue;$d=$v['definition'];$key=$d['kind']==='cooperative_check'?'coop-check':'coop-contribute';$selections=[$key=>['operation'=>$d['kind'],'recipient'=>null]];
+        $gm=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'];$audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);$spatial=$this->repo->spatialProjection($sid,$eid);$objects=$this->repo->objectProjection($sid,$eid);$out=[];$recipients=null;
+        foreach($this->repo->objectiveProjection($sid,$eid) as $id=>$v){if(!$this->visible($v,$audience,$actor,$gm,$spatial))continue;$d=$v['definition'];$key=$d['kind']==='cooperative_check'?'coop-check':'coop-contribute';$selections=[$key=>['operation'=>$d['kind'],'recipient'=>null]];
             if($d['assist']!==null){$recipients??=$this->recipients($sid,$eid,$actor);foreach($recipients as $recipient)$selections['coop-assist-'.$recipient['id']]=['operation'=>'assist','recipient'=>$recipient['id']];}
             foreach($selections as $key=>$selection){$costs=$selection['operation']==='assist'?[['kind'=>'ap','amount'=>$d['assist']['ap_cost']]]:$d['action']['costs'];$label=match($selection['operation']){'assist'=>'Помощь · '.($recipients[$selection['recipient']]['name']??'Участник'),'cooperative_check'=>'Совместная проверка',default=>'Внести вклад'};
                 $choice=['key'=>'object:'.$id.':'.$key,'label'=>$label.' · '.$d['label'],'object_label'=>$audience->knowledge('object',(string)$id,$actor)['details']['name']??'Известный объект #'.$id,'category'=>'cooperation','object_interaction'=>true,'object_id'=>(string)$id,'costs'=>$costs,'supported'=>true,'target_policy'=>['kind'=>'object_only'],'legal_targets'=>[(string)$id],'ap_cost'=>array_values(array_filter($costs,static fn($c)=>$c['kind']==='ap'))[0]['amount']];
@@ -38,8 +38,8 @@ final class AF_ACS_CooperationService
     public function prepare(string $sid,string $eid,string $actor,string $key,?string $draft):array
     {
         [$id,$actionKey]=AF_ACS_ObjectInteraction::selection($key);$selection=AF_ACS_Cooperation::selection($actionKey)??throw new RuntimeException('ACS_COOPERATION_UNSUPPORTED');
-        $gm=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'];$audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);
-        $v=$this->repo->objectiveProjection($sid,$eid)[$id]??throw new RuntimeException('preview_target_forbidden');if(!$this->visible($v,$audience,$actor,$gm))throw new RuntimeException('preview_target_forbidden');
+        $gm=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'];$audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);$spatial=$this->repo->spatialProjection($sid,$eid);
+        $v=$this->repo->objectiveProjection($sid,$eid)[$id]??throw new RuntimeException('preview_target_forbidden');if(!$this->visible($v,$audience,$actor,$gm,$spatial))throw new RuntimeException('preview_target_forbidden');
         $recipient=$selection['recipient'];if($recipient!==null&&!isset($this->recipients($sid,$eid,$actor)[$recipient]))throw new RuntimeException('preview_target_forbidden');
         $p=(new AF_ACS_QueryService($this->repo,$this->access))->inspect($sid,$eid,$actor,$recipient??$actor,$draft,true);$object=$p['context']['state']['objects'][$id];
         AF_ACS_Cooperation::eligible($v,$object,$actor,$p['context']['reaction_kinds'][$actor],AF_ACS_Resolver::interactionActorStats($p['context'],$actor),$p['context']['abilities'][$actor],$selection);
@@ -52,8 +52,8 @@ final class AF_ACS_CooperationService
     }
     public function progress(string $sid,string $eid,array $actors):array
     {
-        $gm=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'];$audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);$out=[];
-        foreach($this->repo->objectiveProjection($sid,$eid) as $v){$known=false;foreach($actors as $actor)if($this->visible($v,$audience,$actor,$gm))$known=true;if(!$known)continue;
+        $gm=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'];$audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);$spatial=$this->repo->spatialProjection($sid,$eid);$out=[];
+        foreach($this->repo->objectiveProjection($sid,$eid) as $v){$known=false;foreach($actors as $actor)if($this->visible($v,$audience,$actor,$gm,$spatial))$known=true;if(!$known)continue;
             $dto=['objective_id'=>$v['id'],'entity_id'=>$v['entity_id'],'label'=>$v['definition']['label'],'kind'=>$v['definition']['kind'],'status'=>$v['status'],'progress'=>$v['progress'],'cap'=>$v['definition']['cap'],'objective_version'=>$v['objective_version']];
             if($gm)$dto['gm_details']=['conditions'=>$v['definition'],'contributions'=>$v['records'],'assists'=>$v['assists']];$out[]=$dto;
         }return $out;

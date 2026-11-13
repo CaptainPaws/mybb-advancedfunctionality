@@ -142,7 +142,7 @@ final class AF_ACS_BuilderService
         $sid=AF_ACS_Repository::integer($input['session_id']??null);$eid=AF_ACS_Repository::integer($input['encounter_id']??null);$turn=AF_ACS_Repository::integer($input['turn_id']??null);
         $scope=$this->context($sid,$eid,$turn);
         if(!is_string($input['scope_token']??null)||!hash_equals($scope['scope_token'],$input['scope_token']))throw new RuntimeException('builder_version_conflict');
-        $q=new AF_ACS_QueryService($this->repo,$this->access);$prepared=[];$ordered=[];$context=null;$definitions=[];$itemSpecs=[];$itemAbilities=[];$objectAbilities=[];$objectBehavior=[];$spatialAbilities=[];$itemVirtual=['items'=>[],'equipment'=>[]];$warnings=[];
+        $q=new AF_ACS_QueryService($this->repo,$this->access);$prepared=[];$ordered=[];$context=null;$definitions=[];$itemSpecs=[];$itemAbilities=[];$objectAbilities=[];$actionAbilities=[];$objectBehavior=[];$spatialAbilities=[];$itemVirtual=['items'=>[],'equipment'=>[]];$warnings=[];
         $rawScope=$q->builderScope($sid,$eid);$behavior=$this->repo->statusProjection($sid)['instances'];$pairs=[];foreach($this->repo->allRelations($eid) as $r){$pairs[$r['side_a']][$r['side_b']]=$r['relationship'];$pairs[$r['side_b']][$r['side_a']]=$r['relationship'];}
         foreach($input['actions'] as $actionIndex=>$action){
             $spatial=null;$isCover=str_starts_with((string)($action['ability_key']??''),'cover:');$isSpatial=$isCover||str_starts_with((string)($action['ability_key']??''),'spatial:');$object=null;$isObject=AF_ACS_ObjectInteraction::isAction((string)($action['ability_key']??''));$isSelfAction=false;$isSpawn=false;$isItem=AF_ACS_ItemActionService::isItem((string)($action['ability_key']??''));$item=null;
@@ -161,7 +161,7 @@ final class AF_ACS_BuilderService
                 $itemVirtual['equipment']=array_replace($itemVirtual['equipment'],$item['virtual']['equipment']);
             }
             if($isSpatial){$spatial=($isCover?new AF_ACS_CoverService($this->repo,$this->access):new AF_ACS_SpatialService($this->repo,$this->access))->prepare($sid,$eid,$actor,$action['ability_key'],$action['targets'],$sealedDraft);$definitions[$actionIndex]=$spatial['definition'];$spatialAbilities[$actor][$action['ability_key']]=$spatial['ability'];}
-            if($isObject){$object=(new AF_ACS_ObjectInteractionService($this->repo,$this->access))->prepare($sid,$eid,$actor,$action['ability_key'],$sealedDraft,$actionIndex);if($action['targets']!==[$object['definition']['object_interaction']['entity_id']])throw new RuntimeException('preview_target_forbidden');$definitions[$actionIndex]=$object['definition'];$objectAbilities[$actor][$action['ability_key']]=$object['inspection']['context']['abilities'][$actor][$action['ability_key']];$objectBehavior[$actor][$action['targets'][0]]=['kind'=>'object','relationship'=>'neutral','active'=>true];}
+            if($isObject){$object=(new AF_ACS_ObjectInteractionService($this->repo,$this->access))->prepare($sid,$eid,$actor,$action['ability_key'],$sealedDraft,$actionIndex);if($action['targets']!==[$object['definition']['object_interaction']['entity_id']])throw new RuntimeException('preview_target_forbidden');$definitions[$actionIndex]=$object['definition'];$objectAbilities[$actor][$action['ability_key']]=$object['inspection']['context']['abilities'][$actor][$action['ability_key']];$actionAbilities[$actionIndex]=$objectAbilities[$actor][$action['ability_key']];$objectBehavior[$actor][$action['targets'][0]]=['kind'=>'object','relationship'=>'neutral','active'=>true];}
             if(!$isItem&&!$isObject&&!$isSpatial){$dto=$q->sealDefinition($sid,$actor,$action['ability_key']);$isSpawn=AF_ACS_Spawn::hasAbility($dto);$isSelfAction=AF_ACS_Awareness::hasAbility($dto)||AF_ACS_Environment::hasMassAbility($dto);}
             if(($isSpawn||$isSelfAction) && $action['targets']!==[$actor])throw new RuntimeException('ACS_SPAWN_TARGET_UNSUPPORTED');
             $behaviorPolicy=$isSpatial?$spatial['ability']['target_policy']:($isObject?['kind'=>'object_only']:($isItem?['kind'=>'self_only']:AF_ACS_Control::targetPolicy($dto['data']['definition'])));
@@ -210,6 +210,8 @@ final class AF_ACS_BuilderService
             $versions=$targetVersions[0];if(count($orderedTargets)>1)$versions['selected_targets_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'versions'=>$targetVersions]));
             $ordered[]=['actor_id'=>$actor,'ability_key'=>$action['ability_key'],'targets'=>$orderedTargets,'scenario'=>$input['scenario']];$prepared[]=[$actor,$orderedTargets[0],$versions];
         }
+        // Repeated object keys can have different sealed owner reservations at each action index.
+        $context['action_abilities']=$actionAbilities;
         foreach($spatialAbilities as $actor=>$abilities)$context['abilities'][$actor]=array_replace($context['abilities'][$actor]??[],$abilities);
         foreach($objectAbilities as $actor=>$abilities){$context['abilities'][$actor]=array_replace($context['abilities'][$actor]??[],$abilities);$context['behavior_targets'][$actor]=array_replace($context['behavior_targets'][$actor]??[],$objectBehavior[$actor]);}
         foreach ($itemAbilities as $actor=>$abilities) $context['abilities'][$actor]=array_replace($context['abilities'][$actor]??[],$abilities);

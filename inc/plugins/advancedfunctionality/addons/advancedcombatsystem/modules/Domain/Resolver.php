@@ -196,7 +196,7 @@ final class AF_ACS_Resolver
     }
     public static function resolve(array $context,array $orderedActions,array $fixedRandomTape=[],string $mode='preview'): AF_ACS_ResolverResult
     {
-        if(array_diff(array_keys($context),['schema_version','state','stats','defenses','element_catalog','turns','encounter_status','abilities','allowed_targets','modifier_stages','source_snapshots','penetration','reflections','relationships','status_immunities','status_scope','entity_end_boundaries','reactions','reaction_turns','reaction_kinds','reaction_causes','reaction_rolls','redirect_targets','item_specs','item_state','spawn_counts','spawn_sources','control_context','behavior_targets','perception_actors']))self::fail('resolver_context_unsupported');
+        if(array_diff(array_keys($context),['schema_version','state','stats','defenses','element_catalog','turns','encounter_status','abilities','allowed_targets','modifier_stages','source_snapshots','penetration','reflections','relationships','status_immunities','status_scope','entity_end_boundaries','reactions','reaction_turns','reaction_kinds','reaction_causes','reaction_rolls','redirect_targets','item_specs','item_state','spawn_counts','spawn_sources','control_context','behavior_targets','perception_actors','action_abilities']))self::fail('resolver_context_unsupported');
         if(!in_array($mode,['preview','seal'],true))self::fail('resolver_mode_unsupported');
         if($mode==='preview'&&$fixedRandomTape!==[])self::fail('preview_random_tape_forbidden');
         if($mode==='seal'&&(!array_is_list($fixedRandomTape)||count($fixedRandomTape)!==count($orderedActions)||!$fixedRandomTape))self::fail('resolver_tape_invalid');
@@ -206,7 +206,7 @@ final class AF_ACS_Resolver
             if(!is_array($action)||array_diff(array_keys($action),['actor_id','ability_key','targets','scenario']))self::fail('resolver_action_invalid');
             $actor=(string)($action['actor_id']??'');$key=$action['ability_key']??null;$targets=$action['targets']??null;$scenario=$action['scenario']??null;
             if(!is_string($key)||!is_array($targets)||!array_is_list($targets)||!$targets||count(array_unique($targets))!==count($targets)||($mode==='preview'&&!in_array($scenario,['hit','crit','miss'],true))||($mode==='seal'&&array_key_exists('scenario',$action)))self::fail('resolver_action_unsupported');
-            $turn=$context['turns'][$actor]??null;$ability=$context['abilities'][$actor][$key]??null;
+            $turn=$context['turns'][$actor]??null;$ability=$context['action_abilities'][$i]??($context['abilities'][$actor][$key]??null);
             if(!is_array($ability)||!is_array($turn)||($turn['status']??null)!=='pending'||($turn['started']??null)!==true||($turn['group_id']??null)!==($state['entities'][$actor]['group_id']??null))self::fail('resolver_turn_or_source_invalid');
             if(!AF_ACS_Effects::ordinaryActionAllowed($state,$actor))self::fail('ACS_STATUS_CONTROL_BLOCKED');
             $behaviorCandidates=$context['behavior_targets'][$actor]??[];
@@ -227,6 +227,7 @@ final class AF_ACS_Resolver
                     else{if($targets!==[$op['id']]||($state['entities'][$op['id']]['life_state']??null)!=='active')self::fail('resolver_target_forbidden');$cost=AF_ACS_Spatial::contact($s,$actor,$op['id'],$kind==='engage');}
                     $costs=[['kind'=>'ap','amount'=>$cost]];
                 }else{
+                    AF_ACS_Cover::check($state,$actor,$targets[0],$ability);
                     if(count($targets)!==1||($state['entities'][$targets[0]]['life_state']??null)!=='active')self::fail('resolver_target_forbidden');$mover=$targets[0];$destination=AF_ACS_Spatial::destination($s,$op['destination']);$sourceZone=AF_ACS_Spatial::position($s,$mover);if($kind!=='teleport'&&$sourceZone!==null)AF_ACS_Cover::edge($state,$sourceZone,$destination,true);AF_ACS_Spatial::move($s,$mover,$destination,true,$kind==='teleport');AF_ACS_Cover::moved($state,$mover);$costs=$ability['costs'];
                 }unset($s);
                 $rolls=null;if($mode==='seal'){$t=$fixedRandomTape[$i];if(array_keys($t)!==['rng_version','hit','crit']||$t['rng_version']!=='uniform53-v1')self::fail('resolver_tape_invalid');AF_ACS_Effects::statusSample($t['hit']);AF_ACS_Effects::statusSample($t['crit']);$rolls=$t+['hit_used'=>false,'crit_used'=>false];}
@@ -250,12 +251,14 @@ final class AF_ACS_Resolver
                     'probabilities'=>['P_hit'=>100,'P_crit'=>0,'crit_rate'=>0,'can_crit'=>false],'allocation'=>['integer_budget'=>0,'components'=>[]],'item_action'=>$spec,'modifier_trace'=>$r['modifier_trace'],'effects_trace'=>[$r['trace']]];
                 continue;
             }
+            if(isset($ability['cooperative_action'])||isset($ability['object_interaction']))foreach($targets as $environmentTarget)AF_ACS_Cover::check($state,$actor,$environmentTarget,$ability);
             if(isset($ability['cooperative_action'])){
                 $binding=$ability['cooperative_action'];$id=$binding['entity_id'];$selection=$binding['selection'];
                 if($targets!==[$id]||!in_array($id,$context['allowed_targets'][$actor]??[],true))self::fail('resolver_target_forbidden');
                 $v=$state['objectives'][$id]??throw new DomainException('ACS_OBJECTIVE_BLOCKED');if($v['id']!==$binding['objective_id'])self::fail('ACS_OBJECTIVE_BLOCKED');
                 $modifierTrace=[];$actorStats=self::stats($context,$actor,$modifierTrace);AF_ACS_Cooperation::eligible($v,$state['objects'][$id],$actor,$context['reaction_kinds'][$actor],$actorStats,$context['abilities'][$actor],$selection);
                 if($selection['operation']==='assist'&&($state['entities'][$selection['recipient']]['life_state']??null)!=='active')self::fail('ACS_OBJECTIVE_BLOCKED');
+                if($selection['operation']==='assist'){$recipient=$selection['recipient'];if(!in_array($context['relationships'][$actor][$recipient]??null,['self','ally','allied'],true)||!AF_ACS_Awareness::targetable('identified',$state['perception_subjects']['entity:'.$recipient]['perception']['stealth']??null,$state['status_instances']??[],$recipient))self::fail('ACS_OBJECTIVE_BLOCKED');if(isset($state['spatial']))AF_ACS_Spatial::check($state['spatial'],$actor,$recipient,$ability['range']??null);AF_ACS_Cover::check($state,$actor,$recipient,$ability);}
                 $trace=[];$state=self::apply($state,[],$actor,$ability['costs'],$trace);$rolls=null;$outcome=null;$completed=false;
                 if($mode==='seal'){
                     $t=$fixedRandomTape[$i];if(array_keys($t)!==['rng_version','hit','crit']||$t['rng_version']!=='uniform53-v1')self::fail('resolver_tape_invalid');AF_ACS_Effects::statusSample($t['hit']);AF_ACS_Effects::statusSample($t['crit']);$spec=$v['definition']['action'];$rolls=$t+['hit_used'=>$selection['operation']!=='assist'&&in_array('roll',$spec['check']['bindings'],true),'crit_used'=>false];$score=null;

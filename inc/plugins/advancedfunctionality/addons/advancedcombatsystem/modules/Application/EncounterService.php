@@ -129,7 +129,14 @@ final class AF_ACS_EncounterService
             if(!$config || !hash_equals($config['content_hash'],hash('sha256',$config['payload_json'])))throw new RuntimeException('Invalid config');
             $pinned=json_decode($config['payload_json'],true,32,JSON_THROW_ON_ERROR);
             $current=json_decode($encounter['config_json'],true,32,JSON_THROW_ON_ERROR);
-            if(($pinned['schema_version']??null)!==1 || ($pinned['config']??null)!==$current
+            $comparison=$current;
+            if(isset($current['spatial'])){
+                // Stage 8.3.1 stored an independently pinned spatial extension beside the base config.
+                // Validate that immutable pin before accepting the old base-only snapshot, without writes.
+                $this->repository->spatialProjection($sid,$eid);
+                if(!array_key_exists('spatial',$pinned['config']??[]))unset($comparison['spatial'],$comparison['spatial_snapshot_id']);
+            }
+            if(($pinned['schema_version']??null)!==1 || ($pinned['config']??null)!==$comparison
                 || ($current['schema_version']??null)!==1 || ($current['defaults_version']??null)!=='acs-preparation-1' || ($current['visibility']??null)!==$encounter['visibility']
                 || $encounter['visibility']!=='hidden')throw new RuntimeException('Invalid config');
         } catch(Throwable $error) {$issues[]=['code'=>'config_snapshot_invalid'];}
