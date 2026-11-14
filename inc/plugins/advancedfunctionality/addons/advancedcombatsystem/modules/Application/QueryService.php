@@ -197,7 +197,23 @@ final class AF_ACS_QueryService
     /** Internal pinned owner data, only after the coordinator has prepared/authorized selectors. */
     public function sealDefinition(string $sid,string $actor,string $key):array
     {
-        $source=$this->source($sid,$actor);return $source['registration']['pinned_abilities'][$key]??throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
+        $source=$this->source($sid,$actor);if(preg_match('/\Agranted:([1-9][0-9]*)\z/D',$key,$m)){$row=$this->repo->statusProjection($sid)['instances'][$m[1]]??null;if(!$row||$row['target_entity_id']!==$actor)self::fail('ACS_SEAL_PIN_CHANGED');AF_ACS_AbilityOperations::grantedAbility($row);return $row['grant']['binding']['definition']+['temporary_grant'=>$row];}return $source['registration']['pinned_abilities'][$key]??throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
+    }
+    /** Internal selection binding, after Builder has admitted both selectors. Never a public lookup. */
+    public function bindCopy(string $sid,string $eid,string $actor,string $target,array $ability,array $context):array
+    {
+        $op=$ability['effect_operation'];if($op['kind']!=='copy_ability')return $ability;
+        $audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);if($audience->knowledge('entity',$target,$actor)['level']!=='identified')self::fail('ACS_COPY_SOURCE_HIDDEN');
+        $s=$this->source($sid,$target);$key=$op['ability_key'];$direct=$this->grants($s['source'])[$key]??null;$dto=$s['registration']['pinned_abilities'][$key]??null;
+        if(!$direct||!is_array($dto)||($dto['definition_version']['fingerprint']??null)!==$direct['fingerprint'])self::fail('ACS_COPY_SOURCE_UNAVAILABLE');
+        foreach(['revision','declared_version'] as $field)if(($dto['definition_version'][$field]??null)!==($direct['definition_version'][$field]??null))self::fail('ACS_COPY_SOURCE_UNAVAILABLE');
+        $overlay=AF_ACS_Control::overlay($context['state']['status_instances'],$target,$eid);if($overlay!==null&&!in_array($key,$overlay['spec']['mechanical_parameters']['control_effect']['ability_keys'],true))self::fail('ACS_COPY_SOURCE_UNAVAILABLE');
+        $export=AF_ACS_AbilityOperations::export($dto['data']['definition']['copy_policy']??null);if(!in_array($op['stat_policy']['mode'],$export['stat_policies'],true))self::fail('ACS_EFFECT_OPERATION_UNSUPPORTED');
+        foreach($direct['_profiles']??[] as $inline)$this->inline($inline,$dto['data']['definition']);$a=self::compileAbility($dto);
+        if(array_intersect(array_keys($a),['statuses','removals','spawns','prepared_action','effect_operation','awareness_action','spatial_effect','hidden_mass_effect','granted_use'])||empty($a['components'])||isset($a['target_count'])||!AF_ACS_FormLayers::ability($context['state']['status_instances'],$target,$key,$a['form_requirement']??null))self::fail('ACS_EFFECT_OPERATION_UNSUPPORTED');
+        if(($context['state']['entities'][$target]['life_state']??null)!=='active')self::fail('ACS_COPY_SOURCE_UNAVAILABLE');
+        unset($a['hit_policy']);
+        $ability['copy_binding']=['source_entity_id'=>$target,'recipient_entity_id'=>$actor,'definition'=>$dto,'ability'=>$a,'stats'=>AF_ACS_Resolver::interactionActorStats($context,$target)];return $ability;
     }
     /** Cached dependencies are not grants. Registration requires an exact direct owner ability ref. */
     public function reactionGrant(string $sid,string $entity,array $pin):void
@@ -221,9 +237,10 @@ final class AF_ACS_QueryService
             if(!is_array($dto)||($dto['definition_version']['fingerprint']??null)!==$grant['fingerprint'])self::fail('preview_ability_pin_mismatch');
             foreach(['revision','declared_version'] as $field)if(($dto['definition_version'][$field]??null)!==($grant['definition_version'][$field]??null))self::fail('preview_ability_pin_mismatch');
             if(isset($controlGrant['control_overlay'])&&!in_array($key,$controlGrant['control_overlay']['ability_keys'],true))continue;
-            try{foreach($grant['_profiles']??[] as $inline)$this->inline($inline,$dto['data']['definition']);$abilities[$key]=$this->ability($dto);if(!AF_ACS_FormLayers::ability($formInstances,(string)$source['row']['id'],$key,$abilities[$key]['form_requirement']??null)){unset($abilities[$key]);continue;}$choices[$key]=['key'=>$key,'supported'=>true,'label'=>is_string($dto['data']['definition']['name']??null)&&$dto['data']['definition']['name']!==''?mb_substr($dto['data']['definition']['name'],0,191):'Способность '.$key,'target_policy'=>$abilities[$key]['target_policy']??['kind'=>'self_only'],'ap_cost'=>$abilities[$key]['costs'][0]['amount']]+(isset($abilities[$key]['target_count'])?['target_count'=>$abilities[$key]['target_count']]:[])+(isset($abilities[$key]['spawns'])?['spawn_action'=>true,'target'=>'self']:[])+(isset($abilities[$key]['awareness_action'])?['awareness_action'=>true,'label'=>$abilities[$key]['awareness_action']['operation']==='search'?'Поиск':'Передача сведений','target'=>'self']:[]);}
+            try{foreach($grant['_profiles']??[] as $inline)$this->inline($inline,$dto['data']['definition']);$abilities[$key]=self::compileAbility($dto);if(!AF_ACS_FormLayers::ability($formInstances,(string)$source['row']['id'],$key,$abilities[$key]['form_requirement']??null)){unset($abilities[$key]);continue;}$choices[$key]=['key'=>$key,'supported'=>true,'label'=>is_string($dto['data']['definition']['name']??null)&&$dto['data']['definition']['name']!==''?mb_substr($dto['data']['definition']['name'],0,191):'Способность '.$key,'target_policy'=>$abilities[$key]['target_policy']??['kind'=>'self_only'],'ap_cost'=>$abilities[$key]['costs'][0]['amount']]+(isset($abilities[$key]['target_count'])?['target_count'=>$abilities[$key]['target_count']]:[])+(isset($abilities[$key]['spawns'])?['spawn_action'=>true,'target'=>'self']:[])+(isset($abilities[$key]['awareness_action'])?['awareness_action'=>true,'label'=>$abilities[$key]['awareness_action']['operation']==='search'?'Поиск':'Передача сведений','target'=>'self']:[]);}
             catch(DomainException $e){$choices[$key]=['key'=>$key,'supported'=>false,'label'=>$key,'reason'=>$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage()];}
         }
+        if(!isset($controlGrant['control_overlay']))foreach($formInstances as $row)if(isset($row['grant'])&&$row['target_entity_id']===(string)$source['row']['id']&&$row['status']==='active'&&$row['grant']['remaining_uses']>0){$key='granted:'.$row['id'];$a=AF_ACS_AbilityOperations::grantedAbility($row);if(!AF_ACS_FormLayers::ability($formInstances,(string)$source['row']['id'],$a['source_ref']['key'],$a['form_requirement']??null))continue;$abilities[$key]=$a;$choices[$key]=['key'=>$key,'supported'=>true,'label'=>'Временная способность · '.$a['source_ref']['key'],'target_policy'=>$a['target_policy'],'ap_cost'=>$a['costs'][0]['amount']];}
         foreach($abilities as $key=>$ability)if(isset($ability['prepared_action'])){$choices[$key]['label']=(isset($ability['prepared_action']['hidden'])?'Скрыто подготовить действие · ':'Подготовить действие · ').$choices[$key]['label'];$choices[$key]['prepared_action']=$ability['prepared_action'];}
         if(isset($controlGrant['control_overlay']))foreach($choices as &$choice)$choice['label']='Разрешённое боевое действие';unset($choice);
         return [$abilities,$choices];
@@ -251,14 +268,17 @@ final class AF_ACS_QueryService
             if(!array_key_exists($field,$definition)||$definition[$field]!==$value)self::fail('preview_inline_override_unsupported');
         }
     }
-    private function ability(array $dto):array
+    public static function compileAbility(array $dto):array
     {
         require_once __DIR__.'/../Domain/Spawn.php';
         require_once __DIR__.'/../Domain/PreparedAction.php';
-        if(array_key_exists('form_requirement',$dto['data']['definition'])){$requirement=AF_ACS_FormLayers::requirement($dto['data']['definition']['form_requirement']);unset($dto['data']['definition']['form_requirement']);return $this->ability($dto)+['form_requirement'=>$requirement];}
+        if(isset($dto['temporary_grant']))return AF_ACS_AbilityOperations::grantedAbility($dto['temporary_grant']);
+        if(isset($dto['data']['definition']['copy_policy'])){AF_ACS_AbilityOperations::export($dto['data']['definition']['copy_policy']);unset($dto['data']['definition']['copy_policy']);return self::compileAbility($dto);}
+        if(isset($dto['data']['definition']['effect_operation']))return AF_ACS_AbilityOperations::compile($dto);
+        if(array_key_exists('form_requirement',$dto['data']['definition'])){$requirement=AF_ACS_FormLayers::requirement($dto['data']['definition']['form_requirement']);unset($dto['data']['definition']['form_requirement']);return self::compileAbility($dto)+['form_requirement'=>$requirement];}
         if(isset($dto['data']['definition']['prepared_action'])) {
             $contract=$dto['data']['definition']['prepared_action'];unset($dto['data']['definition']['prepared_action']);
-            return AF_ACS_PreparedAction::compile($this->ability($dto),$contract);
+            return AF_ACS_PreparedAction::compile(self::compileAbility($dto),$contract);
         }
         if(isset($dto['data']['definition']['spatial_effect']))return AF_ACS_Spatial::compileEffect($dto);
         if(AF_ACS_Environment::hasMassAbility($dto))return AF_ACS_Environment::compileMass($dto);
@@ -326,6 +346,7 @@ final class AF_ACS_QueryService
         $sid=AF_ACS_Repository::integer($input['session_id']??null);$eid=AF_ACS_Repository::integer($input['encounter_id']??null);$actor=AF_ACS_Repository::integer($input['actor_id']??null);$target=AF_ACS_Repository::integer($input['target_id']??null);
         if(!(new AF_ACS_SessionService($this->repo,$this->access))->view($sid)['can_manage'])self::fail('preview_target_forbidden');
         $p=$this->inspect($sid,$eid,$actor,$target);$expected=$input['versions']??null;if(!is_array($expected))self::fail('preview_version_conflict');$current=$p['versions'];ksort($expected);ksort($current);if($expected!==$current)self::fail('preview_version_conflict');
+        if(isset($p['context']['abilities'][$actor][$input['ability_key']]['effect_operation']))$p['context']['abilities'][$actor][$input['ability_key']]=$this->bindCopy($sid,$eid,$actor,$target,$p['context']['abilities'][$actor][$input['ability_key']],$p['context']);
         foreach($p['context']['abilities'][$actor][$input['ability_key']]['components']??[] as $component)if($component['damage_type']==='elemental'&& !empty($p['context']['stats'][$actor]['element_damage_bonus']))self::fail('preview_element_bonus_contract_unavailable');
         $result=AF_ACS_Resolver::resolve($p['context'],[['actor_id'=>$actor,'ability_key'=>$input['ability_key']??null,'targets'=>[$target],'scenario'=>$input['scenario']??null]]);
         // Readback: no cross-request result is returned for a concurrently changed state/permission.
