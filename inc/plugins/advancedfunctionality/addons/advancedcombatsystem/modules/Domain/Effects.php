@@ -9,6 +9,7 @@ require_once __DIR__.'/Awareness.php';
 require_once __DIR__.'/Control.php';
 require_once __DIR__.'/Behavior.php';
 require_once __DIR__.'/FormLayers.php';
+require_once __DIR__.'/AbilityOperations.php';
 
 /** A single action on a detached virtual state. No globals, time, RNG, SQL or user callbacks. */
 final class AF_ACS_Effects
@@ -291,6 +292,8 @@ final class AF_ACS_Effects
             AF_ACS_FormLayers::spec($spec['mechanical_parameters']['transform']);
             if($spec['scope']!=='combat'||$spec['repeat_rule']!=='independent'||$spec['source_scope']!=='source'||$spec['duration']['value']<1||count($spec['mechanical_parameters'])!==1||isset($spec['upkeep'])||!empty($spec['periodic']))self::fail('ACS_FORM_UNSUPPORTED');
         }
+        if(isset($spec['mechanical_parameters']['transferable']))AF_ACS_AbilityOperations::transferable($spec['mechanical_parameters']['transferable']);
+        if(isset($spec['mechanical_parameters']['granted_ability'])){if(AF_ACS_AbilityOperations::grantSpec($spec['mechanical_parameters']['granted_ability'])!==$spec)self::fail('ACS_EFFECT_OPERATION_UNSUPPORTED');}
         if(isset($spec['upkeep'])){
             $u=$spec['upkeep'];if(!is_array($u))self::fail('upkeep_policy_invalid');self::fields($u,['costs','autonomous','hp_allow_zero','interrupt_on_status_keys']);
             if(!is_array($u['costs']??null)||!array_is_list($u['costs']))self::fail('upkeep_policy_invalid');
@@ -302,7 +305,7 @@ final class AF_ACS_Effects
     }
     private static function statusInstance(string $id,array $row):void
     {
-        self::fields($row,['schema_version','id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','stacks','remaining_duration','duration_unit','applied_order','version','status','origin_action_index','last_tick_boundary','last_duration_boundary','upkeep_priority','last_upkeep','termination','control_overlay','form_base_max_hp']);
+        self::fields($row,['schema_version','id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','stacks','remaining_duration','duration_unit','applied_order','version','status','origin_action_index','last_tick_boundary','last_duration_boundary','upkeep_priority','last_upkeep','termination','control_overlay','form_base_max_hp','grant','transfer']);
         if(($row['schema_version']??null)!==1||($row['id']??null)!==$id||(!preg_match('/\Anew:[1-9][0-9]*\z/D',$id)&&self::id($id)!==$id))self::fail('status_instance_identity_invalid');
         foreach(['session_id','encounter_id','source_entity_id','target_entity_id'] as $field)self::id($row[$field]??null);
         if(!is_array($row['spec']??null))self::fail('status_instance_schema_unsupported');self::statusSpec($row['spec']);
@@ -321,6 +324,9 @@ final class AF_ACS_Effects
             $c=$row['control_overlay']??null;if(!is_array($c)||array_diff(array_keys($c),['controller_uid','base_assignment_version'])||count($c)!==2)self::fail('ACS_CONTROL_EFFECT_CONTEXT_REQUIRED');
             self::id($c['controller_uid']??null);self::id($c['base_assignment_version']??null);
         }elseif(isset($row['control_overlay']))self::fail('ACS_CONTROL_EFFECT_UNSUPPORTED');
+        if(isset($row['grant']))AF_ACS_AbilityOperations::grant($row);
+        if(isset($row['spec']['mechanical_parameters']['granted_ability'])&&!isset($row['grant']))self::fail('ACS_COPY_BINDING_REQUIRED');
+        if(isset($row['transfer'])){ $t=$row['transfer'];self::fields($t,['parent_effect_id','parent_version','previous_target','action_index','cause','origin_event_id','producer_snapshot_id']);self::id($t['parent_effect_id']);self::integer($t['parent_version']);self::id($t['previous_target']);self::integer($t['action_index']);}
         self::ref($row['status_definition_ref']??null);$ref=$row['effect_definition_ref']??null;
         if(!is_array($ref)||!in_array($ref['type']??null,['arpg_ability','arpg_item','arpg_bestiary'],true))self::fail('status_definition_missing');
         self::fields($ref,['type','key','version','fingerprint','effect_index']);self::ref(array_intersect_key($ref,array_flip(['key','version','fingerprint'])));
@@ -633,6 +639,7 @@ final class AF_ACS_Effects
                 if($v['objects'][$id]['status']==='destroyed'&&$old['status']!=='destroyed')AF_ACS_Cover::destroyed($v,$id);
                 $events[]=['type'=>'object.'.$op['operation'],'entity_id'=>$id,'before'=>$old,'after'=>$v['objects'][$id]];
             }elseif($kind==='status_upkeep'){self::upkeep($v,$op,$events,$signals);}
+            elseif($kind==='effect_operation'){AF_ACS_AbilityOperations::execute($v,$op,$events);}
             elseif(in_array($kind,['status_apply','status_remove','status_combat_end','status_duration_boundary'],true)){
                 self::statusOperation($v,$op,$events);
             }elseif($kind==='damage'){

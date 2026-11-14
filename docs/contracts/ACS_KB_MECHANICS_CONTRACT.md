@@ -1586,3 +1586,89 @@ check the current form. Losing the required form does not select another ability
 or reroll a saved tape; existing prepared retain/cancel policy applies. Unknown
 form integrity/projection errors abort the parent rather than masquerading as a
 normal skipped trigger. General granted-ability transfer is outside this subset.
+
+### ACS-9.3.2: typed copy / transfer / dispel subset (A1.86)
+
+An active, single_enemy KB ability may specify `effect_operation` instead of
+ordinary effects. Its effects/resources/cooldown and other unsupported mechanics
+must be empty; action_cost is a positive integer. Existing target_policy,
+spatial_range/range and environment_policy still apply. Descriptors are server
+pins, never client parameters. Unknown fields/kinds fail UNSUPPORTED.
+
+```json
+{
+  "schema": "ic-acs.effect-operation.v1",
+  "kind": "copy_ability",
+  "ability_key": "exported-strike",
+  "duration": {"value": 3, "unit": "target_turn"},
+  "uses": 2,
+  "stat_policy": {"mode": "source_snapshot", "values": []},
+  "use_costs": [
+    {"kind": "ap", "amount": 1},
+    {"kind": "resource", "resource": "ep", "amount": 1}
+  ]
+}
+```
+
+The source must currently have that exact direct, available, pinned ability and
+be identified. The source ability explicitly opts in with
+`copy_policy={"schema":"ic-acs.copy-policy.v1","visibility":"identified_entity","stat_policies":["caster_stats","source_snapshot","custom"]}`.
+Entity awareness alone does not export every ability. The copied subset is a
+single-target ordinary damage ability, including existing supported formula/hit
+policies and optional form_requirement, without status/removal/prepared/spawn/
+other special operations or a grant-of-a-grant. No key-only KB lookup qualifies.
+Copy preserves the original DTO/pin and captures its current resolved source stats.
+If a preceding same-publication change invalidates that captured projection,
+resolution fails closed; it does not silently capture different parameters.
+
+Duration is positive target_turn or round; uses is integer 1..100. caster_stats
+uses current recipient parameters, source_snapshot uses retained source parameters.
+Custom supports only explicit finite nonnegative literal accuracy, speed,
+crit_rate, crit_dmg and def values, with all five keys present. No expression or
+callback binding is supported. Non-custom values must be an empty array.
+Use costs contain exactly one positive AP entry first, plus distinct positive
+integer existing resources; item/HP costs, free uses and automatic discounts are
+UNSUPPORTED. Costs are KB policies of the copy, not supplied by the client.
+
+The grant is an existing combat-scoped effect instance, with retained binding,
+remaining_uses, append-only sealed-action use identities, granted_version and
+origin combat event. It appears only as an authorized temporary `granted:<id>`
+option. Clock expiry/combat reset removes availability while retaining history.
+Use rechecks current control, form, behavior, range, target, resources and version;
+form/behavior checks use the original ability key rather than its temporary alias.
+There is no permanent CharacterSheets grant or extra turn/AP refresh.
+
+```json
+{
+  "schema": "ic-acs.effect-operation.v1",
+  "kind": "steal_effect",
+  "effect_keys": ["transferable-buff"],
+  "removal": {
+    "kind": "dispel", "categories": ["buff"],
+    "limit": 1, "remove_stacks": null, "chance": 100
+  }
+}
+```
+
+`dispel_effect` uses the same descriptor with a different kind. Selection reuses
+Effects::removalCandidates (current scope/polarity/removability/category, FIFO
+applied order, stable identity), further restricted to exact KB effect_keys.
+No client instance ID, arbitrary selection order or probability formula is allowed.
+The eligible status explicitly opts in through
+`mechanical_parameters.transferable={"schema":"ic-acs.effect-transfer.v1","visibility":"identified_entity","sustained":"deny","max_transfers":1}`.
+This v1 subset supports independent combat round effects, including existing
+pinned periodic damage/healing, with no other mechanical parameters or upkeep.
+Unidentified targets and unexported/hidden effects fail closed. Missing eligible
+instances use the existing empty-selection outcome; an ineligible selected
+instance is an integrity/unsupported failure, not a fake successful removal.
+
+Steal closes the old row and inserts a linked child using parent_effect_id in the
+same combat transaction. It retains the original definition_snapshot_id, caster,
+stacks, literal remaining duration, duration unit, periodic pins and processed
+boundaries, and separately pins the steal producer/cause/event. It never runs
+on_apply or old ticks. Subsequent Clock boundaries use the unchanged tick engine.
+Only one transfer is supported; a transferred instance may still be explicitly
+dispelled. Sustained transfer/reassignment, target_turn/own_turn transfer,
+control/behavior/form/granted layers, barrier transfer, recursive copying,
+probabilistic/mass selection and reflect/absorb operations are UNSUPPORTED here.
+Legacy cleanse/dispel behavior is unchanged.

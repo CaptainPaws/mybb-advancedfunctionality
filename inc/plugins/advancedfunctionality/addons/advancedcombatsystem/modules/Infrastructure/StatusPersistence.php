@@ -126,10 +126,25 @@ trait AF_ACS_StatusPersistence
             foreach(['id','session_id','encounter_id','source_entity_id','target_entity_id'] as $field)if(($instance[$field]??null)!==(string)$row[$field])throw new RuntimeException('ACS_STATUS_PROJECTION_INVALID');
             foreach(['stacks','remaining_duration','applied_order'] as $field)if(($instance[$field]??null)!==(int)self::integer((string)$row[$field],'9007199254740991',true))throw new RuntimeException('ACS_STATUS_PROJECTION_INVALID');
             if(($instance['version']??null)!==(int)self::integer((string)$row['effect_version'],'9007199254740991')||$instance['duration_unit']!==$row['duration_unit']||$instance['status']!==$row['status']
-                ||($instance['spec']['scope']??null)!==$row['scope']||($instance['spec']['effect_key']??null)!==$row['effect_key']||$row['parent_effect_id']!==null)throw new RuntimeException('ACS_STATUS_PROJECTION_INVALID');
+                ||($instance['spec']['scope']??null)!==$row['scope']||($instance['spec']['effect_key']??null)!==$row['effect_key']||($instance['transfer']['parent_effect_id']??null)!==($row['parent_effect_id']===null?null:(string)$row['parent_effect_id']))throw new RuntimeException('ACS_STATUS_PROJECTION_INVALID');
             $snapshot=$this->sql('SELECT payload_json,content_hash FROM '.$this->table('snapshots').' WHERE id=? AND session_id=?',[$row['definition_snapshot_id'],$sid])['rows'][0]??null;
             if(!$snapshot||!hash_equals($snapshot['content_hash'],hash('sha256',$snapshot['payload_json'])))throw new RuntimeException('ACS_STATUS_PIN_INVALID');
             $dto=json_decode($snapshot['payload_json'],true,64,JSON_THROW_ON_ERROR)['definition']??[];$effect=null;
+            if(isset($instance['grant'])){
+                $g=AF_ACS_AbilityOperations::grant($instance);$op=AF_ACS_AbilityOperations::descriptor($dto['data']['definition']['effect_operation']??null);$compiled=AF_ACS_AbilityOperations::compile($dto);$ref=['type'=>'arpg_ability']+$compiled['source_ref']+['effect_index'=>0];
+                if($op['kind']!=='copy_ability'||AF_ACS_AbilityOperations::grantSpec($op)!==$instance['spec']||($dto['copy_binding']??null)!==$g['binding']||$ref!==$instance['effect_definition_ref']||$compiled['source_ref']!==$instance['status_definition_ref'])throw new RuntimeException('ACS_STATUS_PIN_INVALID');
+                require_once __DIR__.'/../Application/QueryService.php';$copied=$g['binding']['definition'];$export=AF_ACS_AbilityOperations::export($copied['data']['definition']['copy_policy']??null);$expected=AF_ACS_QueryService::compileAbility($copied);unset($expected['hit_policy']);if($expected!==$g['binding']['ability']||!in_array($op['stat_policy']['mode'],$export['stat_policies'],true))throw new RuntimeException('ACS_STATUS_PIN_INVALID');
+                $this->verifyEffectOperationOrigin($sid,$instance['encounter_id'],$g['cause'],$g['origin_event_id'],$row['definition_snapshot_id'],$instance['target_entity_id'],$g['binding']['source_entity_id']);$instances[$id]=$instance;continue;
+            }
+            if(isset($instance['transfer'])){
+                $t=$instance['transfer'];$parent=$this->sql('SELECT * FROM '.$this->table('effects').' WHERE id=? AND session_id=?',[$t['parent_effect_id'],$sid])['rows'][0]??null;
+                if(!$parent||$parent['status']!=='removed'||(int)$parent['effect_version']!==$t['parent_version']+1||$parent['definition_snapshot_id']!==$row['definition_snapshot_id'])throw new RuntimeException('ACS_EFFECT_TRANSFER_CONFLICT');
+                $old=json_decode($parent['payload_json'],true,64,JSON_THROW_ON_ERROR)['instance'];if($old['target_entity_id']!==$t['previous_target']||isset($old['transfer']))throw new RuntimeException('ACS_EFFECT_TRANSFER_CONFLICT');
+                foreach(['spec','effect_definition_ref','status_definition_ref','source_entity_id','origin_action_index','duration_unit'] as $k)if($old[$k]!==$instance[$k])throw new RuntimeException('ACS_EFFECT_TRANSFER_CONFLICT');
+                $producer=$this->sql('SELECT payload_json,content_hash FROM '.$this->table('snapshots').' WHERE id=? AND session_id=?',[$t['producer_snapshot_id'],$sid])['rows'][0]??null;if(!$producer||!hash_equals($producer['content_hash'],hash('sha256',$producer['payload_json'])))throw new RuntimeException('ACS_STATUS_PIN_INVALID');$definition=json_decode($producer['payload_json'],true,64,JSON_THROW_ON_ERROR)['definition'];$transfer=AF_ACS_AbilityOperations::compile($definition)['effect_operation'];if($transfer['kind']!=='steal_effect'||!in_array($instance['spec']['effect_key'],$transfer['effect_keys'],true))throw new RuntimeException('ACS_EFFECT_TRANSFER_CONFLICT');
+                $this->verifyEffectOperationOrigin($sid,$instance['encounter_id'],$t['cause'],$t['origin_event_id'],$t['producer_snapshot_id'],$instance['target_entity_id'],$t['previous_target']);
+            }
+
             foreach($dto['data']['ability_profile']['effects']??[] as $candidate)if(($candidate['source_index']??null)===$instance['effect_definition_ref']['effect_index'])$effect=$candidate;
             if($effect===null)throw new RuntimeException('ACS_STATUS_PIN_INVALID');
             $status=$effect['references']['status_key']??[];
@@ -143,6 +158,21 @@ trait AF_ACS_StatusPersistence
         foreach(array_unique(array_column($instances,'target_entity_id')) as $target)AF_ACS_FormLayers::active($instances,$target);
         foreach(array_keys($barrierEncounters) as $encounter)$this->barrierProjection($sid,(string)$encounter);
         return ['instances'=>$instances,'next_order'=>$next,'fingerprint'=>hash('sha256',self::json(['schema_version'=>1,'rows'=>$rows]))];
+    }
+    private function verifyEffectOperationOrigin(string $sid,string $eid,string $cause,mixed $event,mixed $snapshot,string $actor,string $target):void
+    {
+        if(!is_int($snapshot)&&!is_string($snapshot))throw new RuntimeException('ACS_EFFECT_PROVENANCE_INVALID');$snapshot=self::integer((string)$snapshot);
+        if(!preg_match('/\Asealed-action:([1-9][0-9]*)\z/D',$cause,$m)||!is_string($event))throw new RuntimeException('ACS_EFFECT_PROVENANCE_INVALID');
+        $proof=$this->sql('SELECT a.payload_json,a.sealed_hash FROM '.$this->table('events').' e JOIN '.$this->table('submissions').' s ON s.submission_id=e.submission_id JOIN '.$this->table('sealed_actions').' a ON a.draft_id=s.draft_id WHERE e.id=? AND e.session_id=? AND e.encounter_id=? AND e.event_type=? AND a.id=? AND a.definition_snapshot_id=? AND a.actor_entity_id=?',[$event,$sid,$eid,'combat.resolved',$m[1],$snapshot,$actor])['rows'];if(count($proof)!==1||!hash_equals($proof[0]['sealed_hash'],hash('sha256',$proof[0]['payload_json'])))throw new RuntimeException('ACS_EFFECT_PROVENANCE_INVALID');$action=json_decode($proof[0]['payload_json'],true,64,JSON_THROW_ON_ERROR)['action'];if(($action['actor_id']??null)!==$actor||($action['targets']??null)!==[$target])throw new RuntimeException('ACS_EFFECT_PROVENANCE_INVALID');
+    }
+    /** Same combat transaction, after its immutable parent event exists, before terminal receipt. */
+    protected function linkEffectOperations(string $sid,string $event):array
+    {
+        $linked=[];
+        foreach($this->statusRows($sid,true) as $sqlRow){$p=json_decode($sqlRow['payload_json'],true,64,JSON_THROW_ON_ERROR);$i=$p['instance']??null;if(!$i)continue;$field=isset($i['grant'])?'grant':(isset($i['transfer'])?'transfer':null);if($field===null||$i[$field]['origin_event_id']!==null)continue;
+            $i[$field]['origin_event_id']=$event;$snapshot=$field==='grant'?$sqlRow['definition_snapshot_id']:$i['transfer']['producer_snapshot_id'];$this->verifyEffectOperationOrigin($sid,$i['encounter_id'],$i[$field]['cause'],$event,(string)$snapshot,$i['target_entity_id'],$field==='grant'?$i['grant']['binding']['source_entity_id']:$i['transfer']['previous_target']);$p['instance']=$i;$linked[(string)$sqlRow['id']]=$i;
+            if($this->sql('UPDATE '.$this->table('effects').' SET payload_json=? WHERE id=? AND effect_version=?',[self::json($p),$sqlRow['id'],$sqlRow['effect_version']])['affected']!==1)throw new RuntimeException('ACS_STATUS_VERSION_CONFLICT');
+        }return $linked;
     }
     /** Existing combat-reset command only, after persisted encounter completion. */
     protected function expireCombatStatuses(array $session,array $encounter):array
@@ -168,12 +198,22 @@ trait AF_ACS_StatusPersistence
             if(($instance['session_id']??null)!==$sid)throw new RuntimeException('ACS_STATUS_SCOPE_INVALID');
             if($old===null){
                 if(!preg_match('/\Anew:[1-9][0-9]*\z/D',$virtualId))throw new RuntimeException('ACS_STATUS_ID_INVALID');
-                $snapshot=$snapshotIds[$instance['origin_action_index']]??null;if($snapshot===null)throw new RuntimeException('ACS_STATUS_PIN_INVALID');
-                $id=$this->sql('INSERT INTO '.$this->table('effects').' (session_id,encounter_id,source_entity_id,target_entity_id,definition_snapshot_id,effect_key,scope,status,stacks,remaining_duration,duration_unit,applied_order,effect_version,parent_effect_id,payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?)',
-                    [$sid,$instance['encounter_id'],$instance['source_entity_id'],$instance['target_entity_id'],$snapshot,$instance['spec']['effect_key'],$instance['spec']['scope'],$instance['status'],$instance['stacks'],$instance['remaining_duration'],$instance['duration_unit'],$instance['applied_order'],$instance['version'],self::json(['schema_version'=>1,'instance'=>$instance])])['id'];
+                $snapshot=$snapshotIds[$instance['transfer']['action_index']??$instance['origin_action_index']]??null;if($snapshot===null)throw new RuntimeException('ACS_STATUS_PIN_INVALID');
+                $parentId=null;
+                if(isset($instance['transfer'])){
+                    $t=$instance['transfer'];$parentId=self::integer($t['parent_effect_id']);$parent=$before[$parentId]??null;$closed=$after[$parentId]??null;
+                    if(!$parent||!$closed||$parent['status']!=='active'||$closed['status']!=='removed'||$closed['stacks']!==0||$closed['version']!==$parent['version']+1||$t['parent_version']!==$parent['version'])throw new RuntimeException('ACS_EFFECT_TRANSFER_CONFLICT');
+                    $copy=$instance;foreach(['id','target_entity_id','applied_order','version','transfer'] as $k)unset($copy[$k]);$original=$parent;foreach(['id','target_entity_id','applied_order','version'] as $k)unset($original[$k]);if($copy!==$original)throw new RuntimeException('ACS_EFFECT_TRANSFER_CONFLICT');
+                    $producer=$snapshotIds[$t['action_index']]??null;if($producer===null)throw new RuntimeException('ACS_STATUS_PIN_INVALID');$instance['transfer']['producer_snapshot_id']=(string)$producer;
+                    $parentSql=$this->sql('SELECT definition_snapshot_id FROM '.$this->table('effects').' WHERE id=? AND session_id=?',[$parentId,$sid])['rows'][0]??null;if(!$parentSql)throw new RuntimeException('ACS_EFFECT_TRANSFER_CONFLICT');$snapshot=$parentSql['definition_snapshot_id'];
+                }
+                $id=$this->sql('INSERT INTO '.$this->table('effects').' (session_id,encounter_id,source_entity_id,target_entity_id,definition_snapshot_id,effect_key,scope,status,stacks,remaining_duration,duration_unit,applied_order,effect_version,parent_effect_id,payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                    [$sid,$instance['encounter_id'],$instance['source_entity_id'],$instance['target_entity_id'],$snapshot,$instance['spec']['effect_key'],$instance['spec']['scope'],$instance['status'],$instance['stacks'],$instance['remaining_duration'],$instance['duration_unit'],$instance['applied_order'],$instance['version'],$parentId,self::json(['schema_version'=>1,'instance'=>$instance])])['id'];
                 $instance['id']=$id;$mapping[$virtualId]=$id;
                 if($this->sql('UPDATE '.$this->table('effects').' SET payload_json=? WHERE id=? AND session_id=? AND effect_version=?',[self::json(['schema_version'=>1,'instance'=>$instance]),$id,$sid,$instance['version']])['affected']!==1)throw new RuntimeException('ACS_STATUS_VERSION_CONFLICT');
             }else{
+                if(isset($old['grant'])){AF_ACS_AbilityOperations::grant($instance);foreach(['binding','cause','origin_event_id'] as $k)if($old['grant'][$k]!==$instance['grant'][$k])throw new RuntimeException('ACS_STATUS_IMMUTABLE');if($instance['grant']['remaining_uses']>$old['grant']['remaining_uses']||array_slice($instance['grant']['uses'],0,count($old['grant']['uses']))!==$old['grant']['uses'])throw new RuntimeException('ACS_GRANTED_VERSION_CONFLICT');}
+                if(($old['transfer']??null)!==($instance['transfer']??null))throw new RuntimeException('ACS_STATUS_IMMUTABLE');
                 if(isset($old['form_base_max_hp'])&&$old['form_base_max_hp']!==($instance['form_base_max_hp']??null))throw new RuntimeException('ACS_FORM_BASE_CONFLICT');
                 $id=self::integer($virtualId);$immutable=['id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','applied_order','duration_unit','origin_action_index'];
                 foreach($immutable as $field)if($old[$field]!==$instance[$field])throw new RuntimeException('ACS_STATUS_IMMUTABLE');

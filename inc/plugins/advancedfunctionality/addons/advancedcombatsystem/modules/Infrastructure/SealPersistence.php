@@ -48,6 +48,11 @@ trait AF_ACS_SealPersistence
         if(($p['schema_version']??null)!==1||($p['engine_version']??null)!==AF_ACS_Resolver::VERSION||($p['numeric_policy']??null)!==AF_ACS_Numeric::POLICY||($p['rng_version']??null)!=='uniform53-v1')throw new RuntimeException('ACS_SEAL_VERSION_UNSUPPORTED');
         if((string)$row['actor_entity_id']!==($p['action']['actor_id']??null)||(int)$row['ap_cost']!==($p['ap_cost']??null)||(int)$row['action_index']!==($p['history_index']??null))throw new RuntimeException('ACS_SEAL_HASH_INVALID');return $p;
     }
+    public function retainedSealDefinition(string $sid,array $seal):array
+    {
+        $s=$this->sql('SELECT payload_json,content_hash FROM '.$this->table('snapshots').' WHERE session_id=? AND id=?',[$sid,$seal['definition_snapshot_id']])['rows'][0]??null;
+        if(!$s||!hash_equals($s['content_hash'],hash('sha256',$s['payload_json'])))throw new RuntimeException('ACS_SEAL_PIN_CHANGED');return json_decode($s['payload_json'],true,64,JSON_THROW_ON_ERROR)['definition'];
+    }
     public function verifySealDefinition(string $sid,array $row,array $payload):void
     {
         $s=$this->sql('SELECT payload_json,content_hash FROM '.$this->table('snapshots').' WHERE session_id=? AND id=?',[$sid,$row['definition_snapshot_id']])['rows'][0]??null;

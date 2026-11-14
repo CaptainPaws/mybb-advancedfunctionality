@@ -108,7 +108,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         if(!empty($result->serverState()['objectives']))$summary['objective_state_hash']=hash('sha256',serialize($result->serverState()['objectives']));
         if(!empty(AF_ACS_Cover::legacyObjects($result->serverState()['objects'])))$summary['object_state_hash']=hash('sha256',serialize(AF_ACS_Cover::legacyObjects($result->serverState()['objects'])));
         if(!empty($result->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($result->serverState()['summons']));
-        if(array_filter($result->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])))$summary['sustained_state_hash']=hash('sha256',self::json(['schema_version'=>1,'instances'=>$result->serverState()['status_instances']]));
+        if(array_filter($result->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])||isset($r['grant'])||isset($r['transfer'])))$summary['sustained_state_hash']=hash('sha256',self::json(['schema_version'=>1,'instances'=>$result->serverState()['status_instances']]));
         if(($reactionHash=AF_ACS_Resolver::reactionHash($result,$prepared['context']))!==null)$summary['reaction_hash']=$reactionHash;
         if (isset($result->serverPlan()['item_state'])) $summary['item_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'items'=>$result->serverPlan()['item_state']]));
         if(($controlHash=AF_ACS_Control::stateHash($result->serverState()['status_instances']??[]))!==null)$summary['control_effects_hash']=$controlHash;
@@ -231,6 +231,8 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         self::integer((string)$encounter['encounter_version'],'18446744073709551614');self::integer((string)$encounter['next_event_sequence'],'18446744073709551614');
         $event=$this->sql('INSERT INTO '.$this->table('events').' (session_id,session_sequence,encounter_id,event_sequence,operation_key,event_type,source_entity_id,actor_uid,submission_id,engine_version,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
             [$row['session_id'],$session['next_sequence'],$row['encounter_id'],$encounter['next_event_sequence'],$operation,'combat.resolved',$controls['summary']['actions'][0]['actor_id'],$row['author_uid'],$row['submission_id'],AF_ACS_Resolver::VERSION,$now])['id'];
+        $linkedOperations=$this->linkEffectOperations($row['session_id'],$event);
+        foreach($changes['statuses']['changes'] as &$change)if(isset($linkedOperations[$change['id']]))$change['after']=$linkedOperations[$change['id']];unset($change);
         $preparedExecutions=$this->finishPreparedPhases($phase,$event);if($preparedExecutions)$changes['prepared_executions']=$preparedExecutions;
         $changes['objectives']=$this->persistObjectives($row['session_id'],$row['encounter_id'],$resolved->serverInitial()['objectives']??[],$resolved->serverState()['objectives']??[],$event);
         $spawns=$this->commitSpawns($row,$event,$prepared,$resolved->serverPlan());
@@ -240,7 +242,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         foreach($f['boundaries'] as $boundary){if($boundary['status']!=='committed'||!in_array($boundary['kind'],['clock.entity_start','clock.ap_refresh'],true))continue;
             $data=json_decode($boundary['result_json'],true,64,JSON_THROW_ON_ERROR);if(in_array($data['entity_turn_id']??null,$turnIds,true)||isset($data['round_id'])&&(string)$data['round_id']===(string)(self::indexed($f['turns'])[$row['turn_id']]['round_id']??''))$boundaryHistory[]=['boundary_key'=>$boundary['operation_key'],'result'=>$data];
         }
-        $finalState=$resolved->serverState();$summary=$controls['summary'];
+        $finalState=$resolved->serverState();foreach($changes['statuses']['changes'] as $change)if(isset($linkedOperations[$change['id']])){$field=isset($change['after']['grant'])?'grant':'transfer';$finalState['status_instances'][$change['virtual_id']][$field]=$change['after'][$field];}$summary=$controls['summary'];
         if($preparedExecutions){
             // Confirmation proves the frozen primary plan; the applied card must describe the causal result.
             foreach($resolved->serverPlan()['actions'] as $i=>$step)$summary['actions'][$i]=array_replace($summary['actions'][$i],
