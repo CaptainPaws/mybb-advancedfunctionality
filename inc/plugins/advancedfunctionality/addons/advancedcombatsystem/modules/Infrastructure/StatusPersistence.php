@@ -28,6 +28,7 @@ trait AF_ACS_StatusPersistence
         $state=['spatial'=>$this->spatialProjection($session['id'],$encounter['id']),'cover'=>AF_ACS_Cover::initial($this->coverProjection($session['id'],$encounter['id']),$objects),'objectives'=>$this->objectiveProjection($session['id'],$encounter['id']),'awareness'=>$this->awarenessProjection($session['id'],$encounter['id']),'awareness_attempts'=>$this->awarenessAttempts($session['id'],$encounter['id']),'perception_subjects'=>$this->perceptionSubjects($session['id'],$encounter['id']),'objects'=>$objects,'summons'=>$summons,'schema_version'=>1,'entities'=>[],'groups'=>[],'barriers'=>$barriers['pools'],'next_barrier_order'=>$barriers['next_order'],'status_instances'=>$projection['instances'],'next_status_order'=>$projection['next_order']];
         $defenses=[];$catalog=['by_target'=>[]];$resources=[];$needed=[];$groupTurns=[];
         foreach($barriers['pools'] as $pool)foreach(array_unique([$pool['source_entity_id'],...$pool['targets']]) as $poolEntity)$needed[$poolEntity]=true;
+        foreach($projection['instances'] as $effect)if($effect['status']==='active'&&$effect['encounter_id']===$encounter['id']&&isset($effect['spec']['mechanical_parameters']['transform']))$needed[$effect['target_entity_id']]=true;
         foreach($projection['instances'] as $effect)if($effect['status']==='active'&&isset($effect['spec']['upkeep'])&&($effect['spec']['scope']!=='combat'||$effect['encounter_id']===$encounter['id']))$needed[$effect['source_entity_id']]=true;
         if(in_array($phase,['entity_start','round_start'],true))foreach($projection['instances'] as $effect){
             if($effect['status']!=='active'||empty($effect['spec']['periodic'])||($effect['spec']['scope']==='combat'&&$effect['encounter_id']!==$encounter['id']))continue;
@@ -55,7 +56,10 @@ trait AF_ACS_StatusPersistence
             $res=[];foreach($source['resistances']??[] as $key=>$r)$res[$key]=['scope'=>'elemental','unit'=>'RES','value'=>$r['value']];
             foreach(['weaknesses','math_modifiers'] as $field)if(!empty($source['data']['definition'][$field]))throw new RuntimeException('ACS_STATUS_TARGET_UNSUPPORTED');
             foreach($source['data']['definition']['immunities']??[] as $scope)if(!is_array($scope)||!in_array($scope['scope']??null,['status_key','status_type'],true)||!is_string($scope['key']??null))throw new RuntimeException('ACS_STATUS_TARGET_UNSUPPORTED');
-            $defenses[$target]=['def'=>$source['characteristics']['def']??null,'resistances'=>$res,'immunities'=>[],'vulnerabilities'=>[]];
+            $registration=self::registrationView(json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR));require_once __DIR__.'/../Application/ItemActionService.php';
+            try{$state['form_equipment'][$target]=AF_ACS_Equipment::formContributions($registration,$this->itemEquipment($session['id'],$target),$this->custodyRows($session['id']),$target);}catch(Throwable){$state['form_equipment'][$target]=null;}
+            $formStats=AF_ACS_FormLayers::stats(AF_ACS_ItemActionService::loadoutStats($this,$session['id'],$target,$registration,$source['characteristics']),$projection['instances'],$target,$state['form_equipment'][$target]);
+            $defenses[$target]=['def'=>$formStats['def']??null,'resistances'=>$res,'immunities'=>[],'vulnerabilities'=>[]];
             $catalog['by_target'][$target]=AF_ACS_Damage::retainedCatalog($row['payload_json'],$row['content_hash']);
         }
         $result=AF_ACS_Clock::advance($state,['phase'=>$phase,'id'=>$id,'session_id'=>$session['id'],'encounter_id'=>$encounter['id'],
@@ -63,11 +67,11 @@ trait AF_ACS_StatusPersistence
         $after=$result->serverState();$changes=[];
         foreach($after['entities'] as $target=>$e){$old=$state['entities'][$target];if($old===$e)continue;$r=$resources[$target]['hp'];
             self::integer((string)$r['resource_version'],'18446744073709551614');
-            if($this->sql('UPDATE '.$this->table('entity_states').' SET hp=?,life_state=?,state_version=? WHERE entity_id=? AND state_version=?',[$e['hp'],$e['life_state'],$e['version'],(string)$target,$old['version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
+            if($this->sql('UPDATE '.$this->table('entity_states').' SET hp=?,hp_max=?,life_state=?,state_version=? WHERE entity_id=? AND state_version=?',[$e['hp'],$e['max_hp'],$e['life_state'],$e['version'],(string)$target,$old['version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
             foreach($resources[$target] as $key=>$resource){
-                $beforeValue=$key==='hp'?$old['hp']:$old['resources'][$key]['current'];$value=$key==='hp'?$e['hp']:$e['resources'][$key]['current'];if($beforeValue===$value)continue;
+                $beforeValue=$key==='hp'?$old['hp']:$old['resources'][$key]['current'];$value=$key==='hp'?$e['hp']:$e['resources'][$key]['current'];$maximum=$key==='hp'?$e['max_hp']:$e['resources'][$key]['maximum'];if($beforeValue===$value&&(int)$resource['maximum_value']===$maximum)continue;
                 self::integer((string)$resource['resource_version'],'18446744073709551614');
-                if($this->sql('UPDATE '.$this->table('resources').' SET current_value=?,resource_version=resource_version+1 WHERE id=? AND resource_version=?',[$value,$resource['id'],$resource['resource_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
+                if($this->sql('UPDATE '.$this->table('resources').' SET current_value=?,maximum_value=?,resource_version=resource_version+1 WHERE id=? AND resource_version=?',[$value,$maximum,$resource['id'],$resource['resource_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
             }
             $changes[]=['entity_id'=>(string)$target,'before'=>$old,'after'=>$e];
         }
@@ -136,6 +140,7 @@ trait AF_ACS_StatusPersistence
                 ||$expectedRef!==$instance['effect_definition_ref']||$expectedStatus!==$instance['status_definition_ref'])throw new RuntimeException('ACS_STATUS_PIN_INVALID');
             $instances[$id]=$instance;$next=max($next,$instance['applied_order']+1);
         }
+        foreach(array_unique(array_column($instances,'target_entity_id')) as $target)AF_ACS_FormLayers::active($instances,$target);
         foreach(array_keys($barrierEncounters) as $encounter)$this->barrierProjection($sid,(string)$encounter);
         return ['instances'=>$instances,'next_order'=>$next,'fingerprint'=>hash('sha256',self::json(['schema_version'=>1,'rows'=>$rows]))];
     }
@@ -147,13 +152,16 @@ trait AF_ACS_StatusPersistence
         $this->statusRows($session['id'],true);$projection=$this->statusProjection($session['id']);
         $state=['schema_version'=>1,'entities'=>[],'groups'=>[],'barriers'=>[],'next_barrier_order'=>0,
             'status_instances'=>$projection['instances'],'next_status_order'=>$projection['next_order']];
+        $resources=[];foreach($projection['instances'] as $form)if($form['status']==='active'&&$form['encounter_id']===$encounter['id']&&isset($form['spec']['mechanical_parameters']['transform'])){$id=$form['target_entity_id'];$row=$this->entity($session['id'],$id);$loaded=$this->statusResources($id,$row);$resources[$id]=$loaded['rows']['hp'];$state['groups'][$row['control_group_id']]=['ap'=>['current'=>0,'maximum'=>0],'version'=>1];$state['entities'][$id]=['hp'=>(int)$row['hp'],'max_hp'=>(int)$row['hp_max'],'life_state'=>$row['life_state'],'recovery_blocked'=>false,'group_id'=>$row['control_group_id'],'resources'=>$loaded['values'],'source_ref'=>['key'=>'entity-'.$id,'version'=>'registration-1','fingerprint'=>'sha256:'.$row['content_hash']],'version'=>(int)$row['state_version']];$registration=self::registrationView(json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR));try{$state['form_equipment'][$id]=AF_ACS_Equipment::formContributions($registration,$this->itemEquipment($session['id'],$id),$this->custodyRows($session['id']),$id);}catch(Throwable){$state['form_equipment'][$id]=null;}}
         $result=AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>[['kind'=>'status_combat_end','encounter_id'=>$encounter['id']]]]);
+        foreach($result->serverState()['entities'] as $id=>$value){$old=$state['entities'][$id];if($old===$value)continue;$hp=$resources[$id];if($this->sql('UPDATE '.$this->table('entity_states').' SET hp=?,hp_max=?,life_state=?,state_version=? WHERE entity_id=? AND state_version=?',[$value['hp'],$value['max_hp'],$value['life_state'],$value['version'],(string)$id,$old['version']])['affected']!==1||$this->sql('UPDATE '.$this->table('resources').' SET current_value=?,maximum_value=?,resource_version=resource_version+1 WHERE id=? AND resource_version=?',[$value['hp'],$value['max_hp'],$hp['id'],$hp['resource_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');}
         return $this->persistStatusInstances($session['id'],$state['status_instances'],$result->serverState()['status_instances'],[]);
     }
     /** Caller owns the existing ACS lock/transaction and event journal. Never starts or commits a transaction. */
     protected function persistStatusInstances(string $sid,array $before,array $after,array $snapshotIds):array
     {
         require_once __DIR__.'/../Domain/Effects.php';$mapping=[];$changed=[];
+        foreach(array_unique(array_column($after,'target_entity_id')) as $target)AF_ACS_FormLayers::active($after,$target);
         if(array_diff_key($before,$after))throw new RuntimeException('ACS_STATUS_HISTORY_REQUIRED');
         foreach($after as $virtualId=>$instance){
             $virtualId=(string)$virtualId;$old=$before[$virtualId]??null;if($old===$instance)continue;
@@ -166,6 +174,7 @@ trait AF_ACS_StatusPersistence
                 $instance['id']=$id;$mapping[$virtualId]=$id;
                 if($this->sql('UPDATE '.$this->table('effects').' SET payload_json=? WHERE id=? AND session_id=? AND effect_version=?',[self::json(['schema_version'=>1,'instance'=>$instance]),$id,$sid,$instance['version']])['affected']!==1)throw new RuntimeException('ACS_STATUS_VERSION_CONFLICT');
             }else{
+                if(isset($old['form_base_max_hp'])&&$old['form_base_max_hp']!==($instance['form_base_max_hp']??null))throw new RuntimeException('ACS_FORM_BASE_CONFLICT');
                 $id=self::integer($virtualId);$immutable=['id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','applied_order','duration_unit','origin_action_index'];
                 foreach($immutable as $field)if($old[$field]!==$instance[$field])throw new RuntimeException('ACS_STATUS_IMMUTABLE');
                 if($instance['version']<=$old['version'])throw new RuntimeException('ACS_STATUS_VERSION_CONFLICT');

@@ -95,7 +95,7 @@ trait AF_ACS_PreparedExecutionPersistence
             if($inspection){
                 // QueryService already authenticated all retained definitions. Add only missing entities/groups;
                 // existing virtual values will subsequently be supplied by the one Resolver pipeline.
-                foreach(['entities','groups'] as $field)$context['state'][$field]+=$inspection['context']['state'][$field];
+                foreach(['entities','groups','form_equipment'] as $field)$context['state'][$field]=($context['state'][$field]??[])+($inspection['context']['state'][$field]??[]);
             }
             $entries[]=['queue_kind'=>'prepared','id'=>$candidate['id'],'priority'=>$policy['priority'],'registered_order'=>$armed['registered_order'],
                 'identity'=>$armed['identity'],'phase'=>$policy['phase'],'action_index'=>$armed['action_index'],'subject'=>$candidate['entity_id'],

@@ -1499,3 +1499,90 @@ of one preparation retain independent reservations/receipts; existing owner
 version fencing applies. Orphan/unknown owner outcomes retain recovery_required;
 lookup is required and no automatic consume retry/release/refund occurs. Legacy
 or cross-owner contracts without this issuance proof remain BLOCKED.
+
+## ACS-9.3.1 — temporary transform layer
+
+The supported `transform` is typed `mechanical_parameters.transform` on a pinned
+status definition, delivered through the existing ability status component.
+It is not a new entity, an Appearance assignment or executable KB callback.
+Example descriptor (all fields required; unknown fields are UNSUPPORTED):
+
+```json
+{
+  "schema": "ic-acs.transform.v1",
+  "key": "wolf",
+  "slot": "primary_form",
+  "mode": "hybrid",
+  "compatible_with": ["aura", "fur"],
+  "overrides": {"max_hp": 60, "accuracy": 30},
+  "modifiers": {"accuracy": 2},
+  "equipment": {"policy": "retain", "slots": []},
+  "statuses": {"default": "persist", "rules": []},
+  "abilities": {"policy": "retain", "keys": []}
+}
+```
+
+Status scope is combat, repeat_rule=independent, source_scope=source, positive
+duration in existing target_turn/own_turn/round units, no periodic/upkeep or other
+mechanical parameters on the transform instance. The supported casting ability
+has one on_cast status, self_only target policy, no damage/removal components.
+Its existing KB AP cost and ordinary turn admission apply. Return uses a permitted
+on_cast dispel ability with its own KB cost, or normal Clock expiry/reset. A new
+primary does not automatically replace an old primary. Hit/damage-phase form
+removal is blocked until its mechanical interleaving contract is supported.
+
+Modes: modifier has only additive stat-point `modifiers`; override has only
+`overrides`; hybrid sets the declared base values then adds modifiers. Supported
+keys are max_hp, accuracy, speed, crit_rate, crit_dmg, def. Max HP overrides are
+positive integers; max HP deltas are integers. Separate HP pools, resource maxima,
+resistance templates and unknown modes/stat operations remain UNSUPPORTED.
+
+Only one primary_form may be active. form_modifier allows additive modifiers
+and cosmetic_form has no numerical changes; both retain equipment/status/ability
+policies. Each coexisting pair must explicitly name the other's key in
+compatible_with. No name-based priority or automatic replacement exists. Numeric
+projection uses the existing Modifiers engine and stable status applied_order.
+All ACS status writers use the existing session lock and effect CAS; projection
+also rejects a conflicting stored primary set rather than repairing it on read.
+
+The status instance retains immutable form_base_max_hp from the first active
+form. Effective max is recalculated from this base and current compatible forms;
+current HP is min(previous absolute HP, new max). No proportional heal, revival,
+resource/AP/quota/reaction/cooldown reset or turn creation occurs. Conflicting
+standalone set_max_hp while a form is active is blocked. Effect history and pins
+remain in the existing effects table and combat/Clock journal; no CS/KB base write.
+
+Equipment policy is a projection of the **current ACS loadout**, after existing
+Stage-6 owner/provenance checks. For overridden stats the proven equipment
+contribution is separated from the base and added once after the form layer.
+retain leaves all permitted contributions; suppress uses slots such as
+`[{"slot":"weapon_mainhand","factor":0}]`; adapt explicitly scales those current
+slot contributions, e.g. factor=0.5. Unmentioned slots retain factor 1; an empty
+slot contributes zero. Factors are finite [0,100]; suppress requires integer 0.
+Only proven Stage-6 flat bonuses qualify. Borrowed custody kits or unprovable
+non-flat provenance fail closed for affected policies. No physical equip/remove,
+owner/grant change, reserve/release or quantity write is performed. Virtual
+same-publication equip/swap under suppress/adapt is currently blocked; end-of-form
+projection uses current rows, never an unconditional saved old kit.
+
+Status rules name exact effect_key values, for example:
+`{"effect_key":"poison","policy":"suppress","periodic_factor":1}`.
+The default is persist. Suppress excludes supported action-blocking/periodic
+mechanics while retaining instance identity, duration and processed boundaries.
+Remove terminates the selected instance without reinstatement on return.
+Recalculate requires periodic effects and an explicit finite [0,100]
+periodic_factor; it scales future pinned ticks only (heal integer half_up, damage
+through existing Damage rounding). It does not reapply the status or replay past
+ticks. Other rules require periodic_factor=1. Non-persist rules for control,
+behavior, stealth, upkeep, another form or untyped parameters are UNSUPPORTED.
+Only the primary form may define non-default status/ability/equipment policies.
+
+Abilities may use `form_requirement`:
+`{"schema":"ic-acs.form-requirement.v1","primary_forms":["wolf"]}`.
+Only existing server-pinned direct KB grants qualify; this requirement does not
+mint a new grant. A primary may further restrict keys using abilities.policy=
+restrict and an explicit keys list. Query/Resolver and prepared trigger admission
+check the current form. Losing the required form does not select another ability
+or reroll a saved tape; existing prepared retain/cancel policy applies. Unknown
+form integrity/projection errors abort the parent rather than masquerading as a
+normal skipped trigger. General granted-ability transfer is outside this subset.

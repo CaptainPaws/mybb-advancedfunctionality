@@ -8,6 +8,7 @@ require_once __DIR__.'/Environment.php';
 require_once __DIR__.'/Awareness.php';
 require_once __DIR__.'/Control.php';
 require_once __DIR__.'/Behavior.php';
+require_once __DIR__.'/FormLayers.php';
 
 /** A single action on a detached virtual state. No globals, time, RNG, SQL or user callbacks. */
 final class AF_ACS_Effects
@@ -256,7 +257,7 @@ final class AF_ACS_Effects
     public static function ordinaryActionAllowed(array $state,string $entity):bool
     {
         if(isset($state['summons'][$entity])&&($state['summons'][$entity]['status']!=='active'||$state['summons'][$entity]['pending_independent']))return false;
-        foreach($state['status_instances']??[] as $row)if($row['status']==='active'&&$row['target_entity_id']===$entity&&($row['spec']['mechanical_parameters']['blocks_ordinary_actions']??false)===true)return false;
+        foreach($state['status_instances']??[] as $row)if($row['status']==='active'&&$row['target_entity_id']===$entity&&AF_ACS_FormLayers::enabled($state['status_instances'],$row)&&($row['spec']['mechanical_parameters']['blocks_ordinary_actions']??false)===true)return false;
         return true;
     }
     /** Closed prepared lifecycle contract; duration is stored, never advanced here. */
@@ -286,6 +287,10 @@ final class AF_ACS_Effects
             AF_ACS_Control::spec($spec['mechanical_parameters']['control_effect']);
             if($spec['scope']!=='combat'||$spec['repeat_rule']!=='independent'||$spec['source_scope']!=='source'||$spec['duration']['value']<1||!in_array($spec['duration']['unit'],['target_turn','round'],true)||isset($spec['upkeep'])||!empty($spec['periodic'])||!empty($spec['mechanical_parameters']['blocks_ordinary_actions']))self::fail('ACS_CONTROL_EFFECT_UNSUPPORTED');
         }
+        if(array_key_exists('transform',$spec['mechanical_parameters'])){
+            AF_ACS_FormLayers::spec($spec['mechanical_parameters']['transform']);
+            if($spec['scope']!=='combat'||$spec['repeat_rule']!=='independent'||$spec['source_scope']!=='source'||$spec['duration']['value']<1||count($spec['mechanical_parameters'])!==1||isset($spec['upkeep'])||!empty($spec['periodic']))self::fail('ACS_FORM_UNSUPPORTED');
+        }
         if(isset($spec['upkeep'])){
             $u=$spec['upkeep'];if(!is_array($u))self::fail('upkeep_policy_invalid');self::fields($u,['costs','autonomous','hp_allow_zero','interrupt_on_status_keys']);
             if(!is_array($u['costs']??null)||!array_is_list($u['costs']))self::fail('upkeep_policy_invalid');
@@ -297,7 +302,7 @@ final class AF_ACS_Effects
     }
     private static function statusInstance(string $id,array $row):void
     {
-        self::fields($row,['schema_version','id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','stacks','remaining_duration','duration_unit','applied_order','version','status','origin_action_index','last_tick_boundary','last_duration_boundary','upkeep_priority','last_upkeep','termination','control_overlay']);
+        self::fields($row,['schema_version','id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','stacks','remaining_duration','duration_unit','applied_order','version','status','origin_action_index','last_tick_boundary','last_duration_boundary','upkeep_priority','last_upkeep','termination','control_overlay','form_base_max_hp']);
         if(($row['schema_version']??null)!==1||($row['id']??null)!==$id||(!preg_match('/\Anew:[1-9][0-9]*\z/D',$id)&&self::id($id)!==$id))self::fail('status_instance_identity_invalid');
         foreach(['session_id','encounter_id','source_entity_id','target_entity_id'] as $field)self::id($row[$field]??null);
         if(!is_array($row['spec']??null))self::fail('status_instance_schema_unsupported');self::statusSpec($row['spec']);
@@ -305,6 +310,7 @@ final class AF_ACS_Effects
         foreach(['last_tick_boundary','last_duration_boundary'] as $field)if(array_key_exists($field,$row)){
             if(!is_string($row[$field])||!preg_match('/\A(?:entity_turn|round):([1-9][0-9]{0,19}):(?:start|end|ap_refresh|next)\z/D',$row[$field],$match))self::fail('status_boundary_invalid');self::id($match[1]);
         }
+        if(isset($row['form_base_max_hp'])){AF_ACS_Numeric::integer($row['form_base_max_hp'],1,9007199254740991);if(!isset($row['spec']['mechanical_parameters']['transform']))self::fail('ACS_FORM_BASE_CONFLICT');}
         if(isset($row['upkeep_priority']))AF_ACS_Numeric::integer($row['upkeep_priority'],1,2147483647);
         if(isset($row['last_upkeep'])){
             $u=$row['last_upkeep'];if(!is_array($u))self::fail('upkeep_result_invalid');self::fields($u,['boundary_key','paid','reason','costs']);
@@ -334,10 +340,20 @@ final class AF_ACS_Effects
         if($policy['remove_stacks']!==null)AF_ACS_Numeric::integer($policy['remove_stacks'],1,2147483647);
         $chance=AF_ACS_Numeric::number($policy['chance']??null);if($chance<0||$chance>100)self::fail('status_removal_policy_invalid');
     }
+    /** Shared selection for phase admission and execution; no callbacks or new removal policy. */
+    public static function removalCandidates(array $state,string $target,string $sid,string $eid,array $policy):array
+    {
+        $eligible=[];foreach($state['status_instances'] as $id=>$row)if($row['status']==='active'&&$row['target_entity_id']===$target&&$row['session_id']===$sid&&($row['spec']['scope']!=='combat'||$row['encounter_id']===$eid)
+                &&$row['spec']['polarity']===($policy['kind']==='cleanse'?'negative':'positive')&&$row['spec'][$policy['kind']==='cleanse'?'cleansable':'dispellable']
+                &&(!$policy['categories']||in_array($row['spec']['category'],$policy['categories'],true)))$eligible[]=(string)$id;
+        usort($eligible,static fn($a,$b)=>$state['status_instances'][$a]['applied_order']<=>$state['status_instances'][$b]['applied_order']?:strcmp($a,$b));
+        if($policy['limit']!==null)$eligible=array_slice($eligible,0,$policy['limit']);
+        return $eligible;
+    }
     private static function statusOperation(array &$state,array $op,array &$events):void
     {
         if(!isset($state['status_instances'],$state['next_status_order']))self::fail('status_state_missing');
-        $kind=$op['kind'];
+        $before=$state;$kind=$op['kind'];
         if($kind==='status_apply'){
             self::fields($op,['kind','session_id','encounter_id','source','target','spec','effect_definition_ref','status_definition_ref','action_index','control_context']);
             self::statusSpec($op['spec']);self::id($op['session_id']);self::id($op['encounter_id']);self::integer($op['action_index']);self::ref($op['status_definition_ref']);
@@ -372,11 +388,7 @@ final class AF_ACS_Effects
         }elseif($kind==='status_remove'){
             self::fields($op,['kind','target','session_id','encounter_id','policy','roll']);self::id($op['session_id']??null);self::id($op['encounter_id']??null);self::removalSpec($op['policy']);$policy=$op['policy'];$target=self::id($op['target']);
             if(!isset($state['entities'][$target]))self::fail('status_entity_unavailable');
-            $eligible=[];foreach($state['status_instances'] as $id=>$row)if($row['status']==='active'&&$row['target_entity_id']===$target&&$row['session_id']===$op['session_id']&&($row['spec']['scope']!=='combat'||$row['encounter_id']===$op['encounter_id'])
-                &&$row['spec']['polarity']===($policy['kind']==='cleanse'?'negative':'positive')&&$row['spec'][$policy['kind']==='cleanse'?'cleansable':'dispellable']
-                &&(!$policy['categories']||in_array($row['spec']['category'],$policy['categories'],true)))$eligible[]=(string)$id;
-            usort($eligible,static fn($a,$b)=>$state['status_instances'][$a]['applied_order']<=>$state['status_instances'][$b]['applied_order']?:strcmp($a,$b));
-            if($policy['limit']!==null)$eligible=array_slice($eligible,0,$policy['limit']);
+            $eligible=self::removalCandidates($state,$target,$op['session_id'],$op['encounter_id'],$policy);
             $success=true;if($policy['chance']<100){self::statusSample($op['roll']??null);$success=AF_ACS_Numeric::operation('multiply',100,$op['roll']['u'])<$policy['chance'];}
             $events[]=['type'=>'status_removal_check','kind'=>$policy['kind'],'success'=>$success,'selected'=>$eligible];
             if($success)foreach($eligible as $id){$row=&$state['status_instances'][$id];$row['stacks']=$policy['remove_stacks']===null?0:max(0,$row['stacks']-$policy['remove_stacks']);if(!$row['stacks'])$row['status']='removed';self::bump($row);$events[]=['type'=>'status_removed','id'=>$id,'stacks'=>$row['stacks']];unset($row);}
@@ -398,6 +410,7 @@ final class AF_ACS_Effects
                 $row['stacks']=0;$row['status']='removed';self::bump($row);$events[]=['type'=>'status_combat_ended','id'=>(string)$id];
             }unset($row);
         }else self::fail('status_operation_unsupported');
+        AF_ACS_FormLayers::transition($before,$state,$events);
     }
     /** S1.1–S1.3: applicability only. Never creates an instance or executes status payloads. */
     public static function status(array $definition,array $event,?array $roll=null,string $mode='preview'): AF_ACS_StatusEvaluation
@@ -514,7 +527,7 @@ final class AF_ACS_Effects
     }
     private static function state(array $state): array
     {
-        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons','objects','objectives','spatial','cover','awareness','awareness_attempts','perception_subjects']);
+        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons','objects','objectives','spatial','cover','awareness','awareness_attempts','perception_subjects','form_equipment']);
         if(($state['schema_version']??null)!==1)self::fail('effects_schema_invalid');
         foreach(['entities','groups','barriers'] as $field)if(!is_array($state[$field]??null))self::fail('effects_schema_invalid');
         foreach($state['groups'] as $id=>$group){self::id($id);if(!is_array($group))self::fail('effects_schema_invalid');self::fields($group,['ap','version']);self::resource($group['ap']??null);if(self::integer($group['version']??null)<1)self::fail('effects_version_invalid');}
@@ -531,9 +544,10 @@ final class AF_ACS_Effects
         }
         if(array_key_exists('status_instances',$state)||array_key_exists('next_status_order',$state)){
             if(!is_array($state['status_instances']??null)||self::integer($state['next_status_order']??null)<1)self::fail('status_state_invalid');
-            $orders=[];foreach($state['status_instances'] as $id=>$row){if(!is_array($row))self::fail('status_state_invalid');self::statusInstance((string)$id,$row);
+            $formTargets=[];$orders=[];foreach($state['status_instances'] as $id=>$row){if(!is_array($row))self::fail('status_state_invalid');self::statusInstance((string)$id,$row);if(isset($row['spec']['mechanical_parameters']['transform'])){if(!isset($row['form_base_max_hp']))self::fail('ACS_FORM_BASE_CONFLICT');$formTargets[$row['target_entity_id']]=true;}
                 if($row['applied_order']>=$state['next_status_order']||isset($orders[$row['applied_order']]))self::fail('status_order_invalid');$orders[$row['applied_order']]=true;}
         }
+        foreach(array_keys($formTargets??[]) as $target)AF_ACS_FormLayers::active($state['status_instances'],(string)$target);
         foreach($state['summons']??[] as $id=>$summon){AF_ACS_Spawn::instance($summon);if((string)$id!==$summon['entity_id'])self::fail('ACS_SUMMON_IDENTITY_INVALID');}
         foreach($state['objects']??[] as $id=>$object){AF_ACS_Environment::instance($object);if((string)$id!==$object['entity_id'])self::fail('ACS_OBJECT_IDENTITY_INVALID');}
         if(isset($state['spatial']))AF_ACS_Spatial::instance($state['spatial']);
@@ -650,6 +664,7 @@ final class AF_ACS_Effects
                     if($e['life_state']==='dead')self::fail('effects_dead_heal_forbidden');$recovery=min($amount,$e['max_hp']-$e['hp']);self::hp($e,$e['hp']+$recovery,$id,$signals);
                     $events[]=['type'=>'heal','entity_id'=>$id,'calculated'=>$amount,'effective_recovery'=>$recovery,'overheal'=>$amount-$recovery];
                 } else {
+                    if(AF_ACS_FormLayers::active($v['status_instances']??[],$id))self::fail('ACS_FORM_HP_CONFLICT');
                     $old=$e['max_hp'];$e['max_hp']=$amount;$hpVersion=$e['version'];self::hp($e,min($e['hp'],$amount),$id,$signals);if($old!==$amount&&$hpVersion===$e['version'])self::bump($e);
                     $events[]=['type'=>'max_hp_changed','entity_id'=>$id,'before'=>$old,'after'=>$amount,'current_hp'=>$e['hp']];
                 }unset($e);
