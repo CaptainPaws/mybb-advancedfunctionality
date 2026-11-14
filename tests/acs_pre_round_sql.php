@@ -12,7 +12,7 @@ $GLOBALS['acsPreparedExecutionConditions']=static function(array $fixture):void 
     $link->query("DELETE FROM t_af_acs_operations WHERE kind='clock.entity_start'");
     $extraDefinitions=[];$extraRefs=[];
     foreach([['pre-round-one',1],['pre-round-three',3],['ordinary-only-prepare',1]] as $i=>[$key,$ap]){
-        $a=$ability;$a['prepared_action']['ap_cost']=$ap;$a['prepared_action']['additional_costs']=[];if($key==='ordinary-only-prepare')unset($a['prepared_action']['pre_round']);
+        $a=$ability;if(!empty($GLOBALS['acsPreparedStartSecondNoReveal'])&&$key==='pre-round-one')$a['prepared_action']['hidden']['reveal_on_trigger']=null;$a['prepared_action']['ap_cost']=$ap;$a['prepared_action']['additional_costs']=[];if($key==='ordinary-only-prepare'){unset($a['prepared_action']['pre_round'],$a['prepared_action']['start_execution']);$a['prepared_action']['trigger']=['kind'=>'on_targeted','subject'=>'source'];}
         itemInsert($link,'af_kb_entries',snapshot_entry(980+$i,'arpg_ability',$key,$a));$issues=[];$ref=af_kb_arpg_acs_reference('arpg_ability',$key,'fixture',$issues);snapshot_assert(!$issues,'Extra ability pin');$extraRefs[$key]=$ref;$extraDefinitions+=(new AF_ACS_RegistrationSource)->definitions(['references'=>[$ref]],7);
     }
     $original=$repo->entity($sid,$actor);$payload=json_decode($original['payload_json'],true);$payload['pinned_abilities']+=$extraDefinitions;foreach($extraRefs as $ref)$payload['source_snapshot']['abilities'][]=['definition'=>['references'=>['ability_kb_key'=>$ref]]];
@@ -31,8 +31,8 @@ $GLOBALS['acsPreparedExecutionConditions']=static function(array $fixture):void 
     $side=$change('side_create',['name'=>'Start roster']);foreach([$actor,$petId,$npcId] as $id)$change('participant_add',['entity_id'=>$id,'side_id'=>$side['side_id']]);
     $link->query('UPDATE t_af_acs_operations SET updated_at=0');
     $base=$captureAll();$seq=0;
-    $sealPlan=static function(string $source,string $key,array $parameters=[])use($builder,$drafts,$seal,$sid,$eid,&$seq):array{
-        $actions=[['actor_id'=>$source,'ability_key'=>$key,'targets'=>[$source],'parameters'=>$parameters]];
+    $sealPlan=static function(string $source,string $key,array $parameters=[],?string $fixedTarget=null)use($builder,$drafts,$seal,$sid,$eid,&$seq):array{
+        $actions=[['actor_id'=>$source,'ability_key'=>$key,'targets'=>[$fixedTarget??$source],'parameters'=>$parameters]];
         $scope=$builder->context($sid,$eid,'0');$builder->preview(['session_id'=>$sid,'encounter_id'=>$eid,'turn_id'=>'0','scope_token'=>$scope['scope_token'],'actions'=>$actions,'scenario'=>'hit']);
         $d=$drafts->save(['session_id'=>$sid,'encounter_id'=>$eid,'turn_id'=>'0','actions'=>$actions,'prose'=>'No mechanical post','expected_draft_version'=>'0','operation_key'=>'preround_fixture_draft_'.++$seq]);
         $r=['draft_id'=>$d['draft_id'],'expected_draft_version'=>$d['draft_version'],'operation_key'=>'preround_fixture_seal_'.++$seq];$v=$seal->command('seal',$r);snapshot_assert(!$v['blocked'],'Pre-round seal '.json_encode($v));snapshot_assert($seal->command('seal',$r)===$v,'Seal repeated reserve');
@@ -41,6 +41,7 @@ $GLOBALS['acsPreparedExecutionConditions']=static function(array $fixture):void 
     $publishRequest=static function(array $v)use($repo,$sid,&$seq):array{return ['draft_id'=>$v['draft_id'],'expected_draft_version'=>$v['draft_version'],'expected_version'=>$repo->session($sid)['session_version'],'operation_key'=>'preround_fixture_publish_'.++$seq];};
     $cancel=static function(array $p,string $source)use($service,$repo,$sid,$eid,&$seq){return $service->cancel(['session_id'=>$sid,'encounter_id'=>$eid,'entity_id'=>$source,'prepared_action_id'=>$p['prepared_action_id'],'prepared_version'=>'1','expected_version'=>$repo->session($sid)['session_version'],'operation_key'=>'preround_fixture_cancel_'.++$seq]);};
     $ambush=new AF_ACS_AmbushStartService($repo,$access);$ambushRequest=static function()use($repo,$sid,$eid,&$seq):array{return ['session_id'=>$sid,'encounter_id'=>$eid,'expected_version'=>$repo->session($sid)['session_version'],'encounter_version'=>$repo->encounter($sid,$eid)['encounter_version'],'reason'=>'Start fixture','operation_key'=>'preround_fixture_start_'.++$seq];};
+    if(isset($GLOBALS['acsPreparedStartFixture'])){($GLOBALS['acsPreparedStartFixture'])(get_defined_vars());return;}
     itemFail(fn()=>$sealPlan($actor,'ordinary-only-prepare'),'ACS_PREPARED_UNSUPPORTED');
     $v=$sealPlan($actor,'paid-preparation',['prepared_items'=>[['cost_index'=>2,'inventory_item_id'=>'22'],['cost_index'=>3,'inventory_item_id'=>'23']]]);
     $sealed=$captureAll();snapshot_assert(!$sealed['rounds']&&!$sealed['turns']&&!$sealed['entity_turns']&&!$sealed['pre_round_commitments'],'Seal created round/payment');snapshot_assert($sealed['rolls']===$base['rolls']&&$sealed['native_posts']===$base['native_posts']&&$link->query('SELECT qty FROM t_af_advinv_items WHERE id=22')->fetch_row()[0]==='3'&&(float)$link->query("SELECT current_value FROM t_af_acs_resources WHERE entity_id=".$actor." AND resource_key='ep'")->fetch_row()[0]===5.0,'Seal paid preparation resources/items or sampled');

@@ -19,6 +19,7 @@ trait AF_ACS_PreparedActionPersistence
         $individual=null;foreach($preRound?[]:$this->individualTurns([$turn['id']]) as $row)if($row['entity_id']===$action['actor_id'])$individual=$row;
         if (!$preRound&&(!$individual || $individual['start_done']!=='1' || $individual['end_done']!=='0' || $entity['control_group_id']!==$turn['control_group_id'])) throw new RuntimeException('ACS_SEAL_TURN_UNAVAILABLE');
         $contract=AF_ACS_PreparedAction::contract($ability['prepared_action']);$cost=$contract['ap_cost'];
+        if(isset($contract['start_execution'])&&!$preRound)throw new RuntimeException('ACS_PREPARED_UNSUPPORTED');
         if($preRound&&(($contract['pre_round']['allowed']??false)!==true||!isset($this->preRoundMembers($session['id'],$encounter['id'])[$entity['id']])))throw new RuntimeException('ACS_PREPARED_UNSUPPORTED');
         $group=$entity['control_group_id'];
         if ($seal['status']!=='sealed' || (int)$seal['ap_cost']!==$cost || $payload['pin']!==$ability['source_ref'] || $this->sealTape((string)$seal['id'])!==AF_ACS_PreparedAction::TAPE) throw new RuntimeException('ACS_SEAL_PIN_CHANGED');

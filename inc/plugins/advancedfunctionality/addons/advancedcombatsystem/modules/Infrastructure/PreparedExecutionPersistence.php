@@ -3,10 +3,14 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/../Application/PreparedExecutionAccess.php';
 require_once __DIR__.'/../Domain/CausalGraph.php';
 require_once __DIR__.'/RandomSource.php';
+require_once __DIR__.'/PreparedExecutionSupport.php';
 
 /** Durable causal seal first, mechanical execution only in the existing combat transaction. */
 trait AF_ACS_PreparedExecutionPersistence
 {
+    use AF_ACS_PreparedExecutionSupport;
+    private function preparedRepository():AF_ACS_EncounterRepository {return $this->preparation;}
+    private function preparedAccess():AF_ACS_SessionAccess {return $this->access;}
     private function preparedTriggerKey(array $parent,array $seal,array $row):string
     {
         $contract=json_decode($row['contract_json'],true,64,JSON_THROW_ON_ERROR);$phase=$contract['execution']['phase']??'unsupported';
@@ -61,26 +65,7 @@ trait AF_ACS_PreparedExecutionPersistence
         foreach($rows as &$r){$r['armed']=json_decode($r['result_json'],true,64,JSON_THROW_ON_ERROR);$r['execution_id']=(string)$r['id'];$r['id']=(string)$r['prepared_action_id'];foreach(['session_id','encounter_id','entity_id','source_sealed_action_id','source_entity_turn_id','source_event_id','prepared_version'] as $f)$r[$f]=(string)$r[$f];}unset($r);
         usort($rows,static fn($a,$b)=>($a['armed']['policy']['priority']??0)<=>($b['armed']['policy']['priority']??0)?:(strlen($a['armed']['registered_order'])<=>strlen($b['armed']['registered_order'])?:strcmp($a['armed']['registered_order'],$b['armed']['registered_order']))?:(strlen($a['id'])<=>strlen($b['id'])?:strcmp($a['id'],$b['id'])));return $rows;
     }
-    private function causalInspection(array $candidate,array $parent):array
-    {
-        $uid=$candidate['armed']['originating_uid'];$sid=$candidate['session_id'];$actor=$candidate['entity_id'];$p=json_decode($candidate['contract_json'],true,64,JSON_THROW_ON_ERROR);
-        $origin=$this->sql('SELECT actor_uid FROM '.$this->table('events').' WHERE id=? AND session_id=? AND encounter_id=? AND event_type=?',[$candidate['source_event_id'],$sid,$candidate['encounter_id'],'encounter.prepared_register'])['rows'][0]??null;if(!$origin||(string)$origin['actor_uid']!==$uid||$candidate['source_event_id']!==$candidate['armed']['source_event_id'])throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
-        $seal=$this->sql('SELECT * FROM '.$this->table('sealed_actions').' WHERE id=?',[$candidate['source_sealed_action_id']])['rows'][0]??throw new RuntimeException('ACS_SEAL_PIN_CHANGED');$source=$this->preparation->sealPayload($seal);$this->preparation->verifySealDefinition($sid,$seal,$source);
-        if($seal['sealed_hash']!==$p['source_sealed_hash']||(string)$seal['definition_snapshot_id']!==$p['definition_snapshot_id']||$source['action']['actor_id']!==$actor||$source['action']['ability_key']!==$p['ability_pin']['key']||$source['action']['targets']!==[$p['target_entity_id']])throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
-        $entity=$this->preparation->entity($sid,$actor);if(!$entity||$entity['control_group_id']!==(string)$candidate['control_group_id'])throw new RuntimeException('ACS_CONTROL_INVALID');
-        $readAccess=new AF_ACS_PreparedExecutionAccess($this->access,$uid);$readAccess->draftThread($this->preparation->session($sid)['tid']);
-        if(!$this->preparation->roles($sid,$uid)||!($grant=$this->preparation->controllerFor($sid,$actor,$uid)))throw new RuntimeException('ACS_CONTROL_INVALID');
-        $key=$p['ability_pin']['key'];AF_ACS_Control::action($grant,$key);
-        $q=new AF_ACS_QueryService($this->preparation,$readAccess);$inspection=$q->inspect($sid,$candidate['encounter_id'],$actor,$p['target_entity_id'],null,false,true);
-        $ability=$inspection['context']['abilities'][$actor][$key]??throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
-        if($ability['source_ref']!==$p['ability_pin']||($ability['prepared_action']['execution']??null)!==$candidate['armed']['policy'])throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
-        unset($ability['prepared_action']);$ability['costs']=[];
-        foreach($p['additional_costs'] as $cost)if($cost['kind']==='resource'&&$cost['timing']==='on_trigger')$ability['costs'][]=['kind'=>'resource','resource'=>$cost['key'],'amount'=>$cost['amount']];
-        $context=$inspection['context'];$context['abilities']=[$actor=>[$key=>$ability]];$context['reactions']=[];$context['entity_end_boundaries']=[];
-        $context['prepared_execution']=['actor_id'=>$actor,'ability_key'=>$key,'targets'=>[$p['target_entity_id']],'policy'=>$candidate['armed']['policy']];
-        $ordered=[['actor_id'=>$actor,'ability_key'=>$key,'targets'=>[$p['target_entity_id']]]];
-        return ['context'=>$context,'ordered'=>$ordered,'contract'=>$p];
-    }
+
     /** Expand the existing virtual state before resolving; no second projection or battle store. */
     private function preparedPhase(array $parent,array $frozen,array &$context):?AF_ACS_PreparedPhase
     {
@@ -120,14 +105,7 @@ trait AF_ACS_PreparedExecutionPersistence
         return new AF_ACS_PreparedPhase($entries,function(array $entry,array $event,array $state)use($parent):array{return $this->executePreparedAtPhase($parent,$entry,$event,$state);},$diagnostics);
     }
     /** Integrity/unknown outcomes abort the entire parent transaction, never a mechanical skip. */
-    private function causalCondition(Throwable $e):string
-    {
-        $code=$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage();
-        if((!$e instanceof RuntimeException&&!$e instanceof DomainException)||$e instanceof mysqli_sql_exception
-            ||in_array($code,['ACS_DATABASE_ERROR','ACS_ITEM_OWNER_RESULT_ORPHAN','ACS_SEAL_TAPE_INVALID','ACS_SEAL_PIN_CHANGED','ACS_SNAPSHOT_HASH_MISMATCH'],true)
-            ||str_starts_with($code,'ACS_CAUSAL_')||str_starts_with($code,'INV_PREPARED_')&&!in_array($code,['INV_PREPARED_REVOKED','INV_PREPARED_EXPIRED','INV_PREPARED_VERSION_CONFLICT'],true))throw $e;
-        return preg_match('/\A(?:ACS_[A-Z_]+|[a-z][a-z0-9_]+|INV_[A-Z_]+)\z/D',$code)?$code:'ACS_PREPARED_CONDITION_FAILED';
-    }
+
     private function executePreparedAtPhase(array $parent,array $entry,array $event,array $state):array
     {
         $candidate=$entry['candidate'];$armed=$candidate['armed'];$policy=$armed['policy'];
@@ -172,14 +150,7 @@ trait AF_ACS_PreparedExecutionPersistence
             'outcome'=>$outcome,'reason'=>$reason,'reveal'=>$reveal,'costs'=>$result['actions'][0]['costs']??[],'owner_receipts'=>$receipts,'mechanical_deltas'=>$deltas,'causal_trace'=>$graph,'resolver_plan'=>$result,'final_state'=>$finalState,'terminal_state'=>$terminal];
         return ['state'=>$next,'trace'=>$trace];
     }
-    private function revealPrepared(array $candidate,array $event,array &$state):?array
-    {
-        $contract=json_decode($candidate['contract_json'],true,64,JSON_THROW_ON_ERROR);$policy=$contract['hidden']['reveal_on_trigger']??null;if($policy===null)return null;
-        AF_ACS_PreparedAction::hidden($contract['hidden']);$subject=$state['perception_subjects']['prepared_action:'.$candidate['id']]??throw new RuntimeException('ACS_CAUSAL_PREPARED_SUBJECT_MISSING');
-        $actorId=$policy['relative_to']==='source'?$candidate['entity_id']:$event['attacker'];$actor=$state['perception_subjects']['entity:'.$actorId]['source']??throw new RuntimeException('ACS_CAUSAL_PREPARED_AUDIENCE_MISSING');
-        AF_ACS_Awareness::disclose($state,$subject,$actor,$policy['audience'],$policy['level'],$subject['perception']['disclosure'][$policy['level']]);
-        return ['subject_kind'=>'prepared_action','subject_id'=>$candidate['id'],'audience_kind'=>$policy['audience'],'audience_id'=>AF_ACS_Awareness::audiences($actor)[$policy['audience']][0],'level'=>$policy['level'],'source_identity_revealed'=>false];
-    }
+
     private function finishPreparedPhases(?AF_ACS_PreparedPhase $phase,string $parentEvent):array
     {
         $trace=$phase?->traces()??[];
@@ -187,9 +158,5 @@ trait AF_ACS_PreparedExecutionPersistence
             if($this->sql('UPDATE '.$this->table('prepared_executions').' SET status=?,result_json=? WHERE id=? AND status=?',[$execution['outcome'],self::json($execution),$execution['execution_id'],'armed'])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
         }unset($execution);return $trace;
     }
-    private function causalSavepoint(string $phase):void
-    {
-        $query=match($phase){'start'=>'SAVEPOINT prepared_causal','rollback'=>'ROLLBACK TO SAVEPOINT prepared_causal','release'=>'RELEASE SAVEPOINT prepared_causal'};
-        try{if(!$this->connection->query($query))throw new RuntimeException('ACS_DATABASE_ERROR');}catch(mysqli_sql_exception $e){throw new RuntimeException('ACS_DATABASE_ERROR',(int)$e->getCode());}
-    }
+
 }

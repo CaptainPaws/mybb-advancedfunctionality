@@ -9,9 +9,9 @@ final class AF_ACS_PreparedAction
     private static function fail(): never { throw new DomainException('ACS_PREPARED_UNSUPPORTED'); }
     public static function contract(mixed $value): array
     {
-        if (!is_array($value) || array_diff(array_keys($value),['schema','trigger','target','duration','ap_cost','additional_costs','requires_active','execution','hidden','pre_round'])
+        if (!is_array($value) || array_diff(array_keys($value),['schema','trigger','target','duration','ap_cost','additional_costs','requires_active','execution','hidden','pre_round','start_execution'])
             || ($value['schema']??null)!=='ic-acs.prepared.v1'
-            || (!is_array($value['trigger']??null)||array_diff(array_keys($value['trigger']),['kind','subject'])||($value['trigger']['kind']??null)!=='on_targeted'||($value['trigger']['subject']??null)!=='source')
+            || (!is_array($value['trigger']??null)||array_diff(array_keys($value['trigger']),['kind','subject'])||($value['trigger']['kind']??null)!==(isset($value['start_execution'])?'encounter_start':'on_targeted')||($value['trigger']['subject']??null)!==(isset($value['start_execution'])?'encounter':'source'))
             || ($value['target']??null)!==['kind'=>'fixed']
             || (array_key_exists('duration',$value)&&$value['duration']!=='until_next_turn')
             || (array_key_exists('requires_active',$value)&&$value['requires_active']!==true)
@@ -34,8 +34,10 @@ final class AF_ACS_PreparedAction
         if(array_key_exists('pre_round',$value)&&(!is_array($value['pre_round'])||count($value['pre_round'])!==2||array_diff(array_keys($value['pre_round']),['schema','allowed'])||($value['pre_round']['schema']??null)!=='ic-acs.pre-round-preparation.v1'||($value['pre_round']['allowed']??null)!==true))self::fail();
         $preRound=isset($value['pre_round'])?['pre_round'=>['schema'=>'ic-acs.pre-round-preparation.v1','allowed'=>true]]:[];
         $hidden=array_key_exists('hidden',$value)?['hidden'=>self::hidden($value['hidden'])]:[];
+        $start=array_key_exists('start_execution',$value)?['start_execution'=>self::startExecution($value['start_execution'])]:[];
+        if($start&&(!$preRound||array_key_exists('execution',$value)||isset($hidden['hidden']['reveal_on_trigger'])&&$hidden['hidden']['reveal_on_trigger']['relative_to']!=='source'))self::fail();
         $execution=isset($value['execution'])?['execution'=>self::execution($value['execution'])]:[];
-        return $preRound+$hidden+$execution+['schema'=>'ic-acs.prepared.v1','trigger'=>['kind'=>'on_targeted','subject'=>'source'],'target'=>$value['target'],
+        return $start+$preRound+$hidden+$execution+['schema'=>'ic-acs.prepared.v1','trigger'=>isset($value['start_execution'])?['kind'=>'encounter_start','subject'=>'encounter']:['kind'=>'on_targeted','subject'=>'source'],'target'=>$value['target'],
             'duration'=>'until_next_turn','requires_active'=>true,'ap_cost'=>$value['ap_cost'],'additional_costs'=>$costs];
     }
     public static function hidden(mixed $h):array
@@ -51,6 +53,13 @@ final class AF_ACS_PreparedAction
         foreach($state['status_instances']??[] as $row)if($row['status']==='active'&&$row['target_entity_id']===$actor){$stealth=$row['spec']['mechanical_parameters']['stealth']??null;if($stealth!==null){AF_ACS_Awareness::stealth($stealth);array_push($available,...$stealth['states']);}}
         if(array_diff($h['source_stealth'],$available))throw new RuntimeException('ACS_PREPARED_CONCEALMENT_REQUIRED');
     }
+    public static function startExecution(mixed $p):array
+    {
+        $fields=['schema','event_kind','stage','priority','on_unavailable','emit_prepared','emit_active_reactions','limits'];
+        if(!is_array($p)||count($p)!==count($fields)||array_diff(array_keys($p),$fields)||($p['schema']??null)!=='ic-acs.prepared-start.v1'||($p['event_kind']??null)!=='encounter.start'||($p['stage']??null)!=='ambush_resolution'||!is_int($p['priority']??null)||$p['priority'] < -1000000||$p['priority']>1000000||$p['on_unavailable']!=='block'||$p['emit_prepared']!==false||$p['emit_active_reactions']!==false||!is_array($p['limits'])||count($p['limits'])!==2||array_diff(array_keys($p['limits']),['max_depth','per_cause'])||!is_int($p['limits']['max_depth']??null)||$p['limits']['max_depth']<2||($p['limits']['per_cause']??null)!==1)self::fail();
+        return $p;
+    }
+    public static function executionPolicy(mixed $p):array {return ($p['schema']??null)==='ic-acs.prepared-start.v1'?self::startExecution($p):self::execution($p);}
     public static function execution(mixed $e):array
     {
         $fields=['schema','event_kind','phase','priority','requires_hit','on_unavailable','emit_prepared','emit_active_reactions','limits'];
