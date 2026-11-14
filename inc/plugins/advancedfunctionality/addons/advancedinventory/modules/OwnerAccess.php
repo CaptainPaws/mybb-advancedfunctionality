@@ -43,3 +43,10 @@ interface AF_ADVINV_PreparedOwnerPolicy extends AF_ADVINV_OwnerAccess
     public function preparedGrantGeneration(array $binding):string;
     public function authorizePreparedObligation(array $binding,array $intent,bool $history):void;
 }
+
+/** Separate issuer/trigger authority for an exact encounter-start obligation. */
+interface AF_ADVINV_PreparedStartOwnerPolicy extends AF_ADVINV_PreparedOwnerPolicy
+{
+    public function authorizePreparedStartIssuance(array $binding):void;
+    public function authorizePreparedStartObligation(array $binding,array $intent,bool $history):void;
+}

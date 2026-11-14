@@ -6,7 +6,7 @@ require_once __DIR__.'/../EncounterRepository.php';
 /** Owner-side IC-INV-1 composition. Current consent AND the owner's spending gate are required.
  * Reads only: no owner→ACS lock inversion, native callbacks, transfer or grant authority.
  */
-final class AF_ACS_CombatInventoryAccess implements AF_ADVINV_PreparedOwnerPolicy
+final class AF_ACS_CombatInventoryAccess implements AF_ADVINV_PreparedStartOwnerPolicy
 {
     public function __construct(private mysqli $db,private int $actor,private ?array $readContext=null) {}
     public function uid(): int
@@ -75,4 +75,45 @@ final class AF_ACS_CombatInventoryAccess implements AF_ADVINV_PreparedOwnerPolic
         if(!$history&&($row['status']!=='active'||$row['cost_state']!=='paid'))throw new RuntimeException('INV_PREPARED_EXPIRED');
     }
 
+    public function authorizePreparedStartIssuance(array $b):void
+    {
+        $repo=new AF_ACS_EncounterRepository($this->db);$row=null;
+        foreach($repo->preparedRows($b['session_id'],$b['encounter_id'],$b['entity_id']) as $r)if($r['id']===$b['prepared_action_id'])$row=$r;
+        $enc=$repo->preRoundEncounter($b['session_id'],$b['encounter_id']);
+        if(!$row||$b['owner_uid']!==$this->uid()||$b['originating_uid']!==$this->uid()||(int)$row['owner_uid']!==$b['owner_uid']||$row['source_entity_turn_id']!=='0'||$row['status']!=='active'||!hash_equals($row['contract_hash'],$b['obligation_hash'])||!hash_equals($row['contract_hash'],hash('sha256',$row['contract_json']))||$row['source_sealed_action_id']!==$b['source_sealed_action_id'])throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
+        $c=json_decode($row['contract_json'],true,64,JSON_THROW_ON_ERROR);AF_ACS_PreparedAction::startExecution($c['start_execution']??null);
+        if(($c['pre_round_scope']['encounter_id']??null)!==$enc['id']||($c['pre_round']['allowed']??false)!==true)throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
+        $seal=$repo->sealRows((string)($this->startSealDraft($b['source_sealed_action_id'])));$found=null;foreach($seal as $s)if((string)$s['id']===$b['source_sealed_action_id'])$found=$s;
+        if(!$found||$found['status']!=='sealed')throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');$payload=$repo->sealPayload($found);$repo->verifySealDefinition($b['session_id'],$found,$payload);
+        if($payload['action']['actor_id']!==$b['entity_id']||$payload['pin']!==$c['ability_pin']||$payload['action']['targets']!==[$c['target_entity_id']]||AF_ADVINV_OwnerProtocol::canonical($b['ability_pin'])!==AF_ADVINV_OwnerProtocol::canonical($c['ability_pin']))throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
+        $cost=$c['additional_costs'][$b['cost_index']]??[];$match=null;foreach($c['item_bindings']??[] as $m)if($m['cost_index']===$b['cost_index'])$match=$m;
+        if(!$match||($cost['kind']??null)!=='item'||$cost['timing']!=='on_trigger'||$cost['amount']!==$b['qty']||$cost['key']!==$b['cost_key']||$match['item_id']!==$b['item_id']||$match['owner_uid']!==$b['owner_uid']||$match['qty']!==$b['qty']||$match['item_fingerprint']!==$b['item_fingerprint']||AF_ADVINV_OwnerProtocol::canonical($cost['definition'])!==AF_ADVINV_OwnerProtocol::canonical($b['definition'])||AF_ADVINV_OwnerProtocol::canonical($match['reserve_receipt'])!==AF_ADVINV_OwnerProtocol::canonical($b['reserve_receipt']))throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
+    }
+    private function startSealDraft(string $seal):string
+    {
+        $s=$this->db->prepare('SELECT d.id,d.author_uid,d.turn_id,d.status,d.confirmation_hash,d.pid FROM `'.TABLE_PREFIX.'af_acs_drafts` d JOIN `'.TABLE_PREFIX.'af_acs_sealed_actions` a ON a.draft_id=d.id WHERE a.id=?');$s->bind_param('s',$seal);$s->execute();$d=$s->get_result()->fetch_assoc();$s->close();
+        if(!$d||(int)$d['author_uid']!==$this->uid()||(string)$d['turn_id']!=='0'||$d['status']!=='sealed'||$d['confirmation_hash']===null||$d['pid']!==null)throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');return (string)$d['id'];
+    }
+    public function authorizePreparedStartObligation(array $b,array $intent,bool $history):void
+    {
+        global $mybb;$uid=$this->uid();
+        if(($mybb->request_method??'')!=='post'||!function_exists('verify_post_check')||!verify_post_check($mybb->get_input('my_post_key'),true)||$intent['actor']['uid']!==$uid||!preg_match('/\Aacs-prepared-start:([1-9][0-9]*):([1-9][0-9]*):([0-9]+)\z/D',$intent['actor']['authorization_ref'],$m))throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
+        $repo=new AF_ACS_EncounterRepository($this->db);$session=$repo->session($b['session_id']);$enc=$repo->encounter($b['session_id'],$b['encounter_id']);
+        if(!$session||!$enc||$session['status']!=='active'||!AF_ACS_AuthorizationService::sessionGm($session,$repo->roles($session['id'],(string)$uid),(string)$uid))throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
+        // Native scene access is checked by the authenticated start command; this owner guard
+        // independently checks live issuer roles and owner consent using SQL only (no owner→native callbacks).
+        $one=function(string $sql,array $args):?array{$s=$this->db->prepare($sql);$s->bind_param(str_repeat('s',count($args)),...$args);$s->execute();$r=$s->get_result()->fetch_assoc();$s->close();return $r;};$prefix=TABLE_PREFIX.'af_acs_';
+        $p=$one('SELECT p.*,e.actor_uid AS originating_uid,e.source_entity_id AS registered_source,e.event_type AS registered_kind FROM `'.$prefix.'prepared_actions` p JOIN `'.$prefix.'events` e ON e.id=p.source_event_id WHERE p.id=? AND p.session_id=? AND p.encounter_id=?',[$m[1],$b['session_id'],$b['encounter_id']]);
+        $x=$one('SELECT x.*,e.operation_key AS trigger_key,e.event_type,e.actor_uid,e.submission_id,d.payload_json,d.visibility_json,d.content_hash FROM `'.$prefix.'prepared_executions` x JOIN `'.$prefix.'events` e ON e.id=x.trigger_event_id JOIN `'.$prefix.'event_details` d ON d.event_id=e.id WHERE x.prepared_action_id=? AND x.trigger_event_id=? AND e.session_id=? AND e.encounter_id=?',[$m[1],$m[2],$b['session_id'],$b['encounter_id']]);
+        $start=$enc['start_operation_id']===null?null:$one('SELECT * FROM `'.$prefix.'operations` WHERE operation_key=? AND session_id=? AND encounter_id=?',[$enc['start_operation_id'],$b['session_id'],$b['encounter_id']]);
+        if(!$p||!$x||!$start||$start['kind']!=='encounter.start_intent'||!in_array($start['status'],$history?['prepared','committed','recovery_required']:['prepared'],true)||!in_array($enc['status'],$history?['ambush_ready','active']:['ambush_ready'],true)||(int)$x['actor_uid']!==$uid||$x['event_type']!=='encounter.start_sealed'||$x['submission_id']!==null||$x['trigger_key']!==$enc['start_operation_id'].':causal'||!in_array($x['status'],$history?['armed','executed']:['armed'],true))throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
+        if(!hash_equals($x['content_hash'],hash('sha256',$x['payload_json']."\n".$x['visibility_json']))||!hash_equals($p['contract_hash'],hash('sha256',$p['contract_json'])))throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
+        $request=json_decode($start['request_json'],true,64,JSON_THROW_ON_ERROR);$outcome=json_decode($start['result_json'],true,64,JSON_THROW_ON_ERROR);$event=json_decode($x['payload_json'],true,64,JSON_THROW_ON_ERROR);$armed=json_decode($x['result_json'],true,64,JSON_THROW_ON_ERROR);$c=json_decode($p['contract_json'],true,64,JSON_THROW_ON_ERROR);$permit=$c['owner_obligations'][$b['cost_index']]??null;unset($c['owner_obligations']);
+        $manifest=$outcome['causal_seal']['entries']??[];$entry=null;foreach($manifest as $a)if($a['prepared_action_id']===$b['prepared_action_id'])$entry=$a;
+        if(!$entry||$event['entries']!==$manifest||($event['event_kind']??null)!=='encounter.start'||($event['phase']??null)!=='causal_seal'||($event['mechanics_confirmed']??null)!==false||($event['start_operation_id']??null)!==$enc['start_operation_id']||$request['actor_uid']!==(string)$uid||$request['start_operation_id']!==$enc['start_operation_id']||!hash_equals($start['payload_hash'],hash('sha256',$start['request_json']))||!$permit||$b['schema']!=='prepared_reserved_start_consume.v1'||$p['registered_kind']!=='encounter.prepared_register'||(string)$p['registered_source']!==$b['entity_id']||(int)$p['originating_uid']!==$b['originating_uid']||(int)$p['owner_uid']!==$b['owner_uid']||(string)$p['source_entity_turn_id']!=='0'||(string)$p['entity_id']!==$b['entity_id']||(string)$p['source_sealed_action_id']!==$b['source_sealed_action_id']||$m[1]!==$b['prepared_action_id']||$m[3]!==((string)$b['cost_index'])||!hash_equals($b['obligation_hash'],hash('sha256',AF_ACS_Repository::json($c)))||!hash_equals($permit['binding_hash'],hash('sha256',AF_ADVINV_OwnerProtocol::canonical($b))))throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
+        AF_ACS_PreparedAction::startExecution($c['start_execution']??null);
+        $cost=$c['additional_costs'][$b['cost_index']]??[];$binding=null;foreach($c['item_bindings']??[] as $candidate)if($candidate['cost_index']===$b['cost_index'])$binding=$candidate;
+        if(!$binding||$cost['kind']!=='item'||$cost['timing']!=='on_trigger'||$cost['key']!==$b['cost_key']||$cost['amount']!==$b['qty']||$binding['item_id']!==$b['item_id']||$binding['qty']!==$b['qty']||$binding['item_fingerprint']!==$b['item_fingerprint']||AF_ADVINV_OwnerProtocol::canonical($binding['reserve_receipt'])!==AF_ADVINV_OwnerProtocol::canonical($b['reserve_receipt'])||AF_ADVINV_OwnerProtocol::canonical($cost['definition'])!==AF_ADVINV_OwnerProtocol::canonical($b['definition'])||AF_ADVINV_OwnerProtocol::canonical($c['ability_pin'])!==AF_ADVINV_OwnerProtocol::canonical($b['ability_pin'])||$intent['operation_key']!=='acs:prepared:trigger-consume:'.$m[1].':'.$m[2].':'.$m[3]||AF_ADVINV_OwnerProtocol::canonical($intent['payload'])!==AF_ADVINV_OwnerProtocol::canonical(['reservation_id'=>$b['reservation_id'],'qty'=>$b['qty'],'expected_version'=>$b['reservation_version']])||$armed['identity']!==$x['operation_key']||$armed['trigger_event_id']!==$m[2]||$armed['prepared_action_id']!==$b['prepared_action_id']||$armed['prepared_source_sealed_action_id']!==$b['source_sealed_action_id']||$armed['source_event_id']!==(string)$p['source_event_id']||$armed['start_operation_id']!==$enc['start_operation_id']||$entry['identity']!==$armed['identity']||$entry['contract_hash']!==$armed['contract_hash']||$entry['policy']!==$c['start_execution'])throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
+        if(!$history&&($p['status']!=='active'||$p['cost_state']!=='paid'||(string)$p['prepared_version']!==$armed['prepared_version']||$p['contract_hash']!==$armed['contract_hash']))throw new RuntimeException('INV_PREPARED_EXPIRED');
+    }
 }

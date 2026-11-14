@@ -1415,3 +1415,87 @@ with active prepared actions remains BLOCKED, including the ordinary round_start
 path; empty starts retain the existing behavior. Terminal/cancelled preparations
 still carry their paid AP into the first round. No encounter-start execution,
 rolls, item trigger consume or reveal policy is introduced by this extension.
+
+
+## ACS-9.2.2B — explicit encounter-start prepared execution
+
+Start admission is a separate pinned `prepared_action` contract. It requires the
+existing `pre_round` opt-in and replaces the registration trigger with
+`{"kind":"encounter_start","subject":"encounter"}`. It must not also contain
+ordinary `execution`. Add the exact descriptor:
+
+```json
+"start_execution": {
+  "schema": "ic-acs.prepared-start.v1",
+  "event_kind": "encounter.start",
+  "stage": "ambush_resolution",
+  "priority": 100,
+  "on_unavailable": "block",
+  "emit_prepared": false,
+  "emit_active_reactions": false,
+  "limits": {"max_depth": 2, "per_cause": 1}
+}
+```
+
+Priority is an explicit integer in [-1000000, 1000000]; max_depth is an explicit
+integer >= 2. Unknown fields/variants are UNSUPPORTED. Absence does not upgrade
+an existing combat.primary preparation to encounter.start. Start-only abilities
+cannot register through an ordinary active-round turn. Existing single sealed
+fixed target, pinned damage components, resources/items and until_next_turn
+contracts apply. No direct prepared status/removal ability, retargeting, startup
+active-reaction registry or recursive/derived prepared chain is admitted.
+
+The server orders complete start actions by priority, registration event order,
+then prepared ID (decimal BIGINT comparison without float conversion). Each runs
+through the existing Resolver phases against the preceding action's virtual
+state. This is not a new reaction phase or generic interleaving across actions.
+Explicit emission flags deny child prepared/active reactions; CausalGraph checks
+the root/sibling graph against the declared depth. Any unavailable mandatory
+action or integrity error blocks the entire mechanical start. There is no silent
+phase fallback, skip, universal surprise modifier or free reaction/AP budget.
+
+The real start intent owns one management-only `encounter.start_sealed` event,
+whose typed event_kind is encounter.start. It is a causal seal with
+mechanics_confirmed=false, not confirmed damage. The manifest pins start ID,
+prepared/version/contract/source seal/source event, originating principal, target,
+ability definition, dependency hash, stable order and the existing server
+hit/crit samples. Execution identity remains prepared_action_id + trigger_event_id.
+Durable retries reuse the same manifest and rolls. Source seals/deferred tape are
+never rewritten. Mechanical state, terminal executions, owner receipts, final
+start event/outcome and first ordinary roster commit together after this seal.
+
+For hidden start actions reveal_on_trigger may be null or explicitly relative_to
+source with the existing approved audience/level and reveal_source=false.
+trigger_actor is UNSUPPORTED at start: the GM issuer is not a creature. Reveal
+changes only this prepared subject; creature identity and other preparations are
+not implicitly disclosed. Existing audience filtering remains authoritative.
+
+### Owner-authorized start consumption
+
+On-trigger consumable/ammo costs retain the existing exact reservation and use a
+separate internal owner binding schema `prepared_reserved_start_consume.v1`.
+The ordinary publication capability `prepared_reserved_consume.v1` is unchanged.
+Issuance requires the authenticated original owner, current spending permission,
+confirmed authored pre-round source seal/draft, exact cost/item/qty/definition,
+reserve receipt and typed start opt-in. The reservation stores the immutable
+binding/hash and live grant generation in the existing owner ledger. It consents
+only to the encounter's unique future start; the start ID does not yet exist.
+
+Consumption additionally requires the exact durable start intent, its current
+persisted GM issuer, real start-sealed event and manifest, matching armed prepared
+execution, source provenance, start_operation_id, fixed cost index, payload and
+operation key. Internal authorization_ref is
+`acs-prepared-start:PREPARED:TRIGGER_EVENT:COST_INDEX`; operation key remains
+`acs:prepared:trigger-consume:PREPARED:TRIGGER_EVENT:COST_INDEX`. Neither is a
+client capability or bearer token. Owner-side policy checks these SQL proofs and
+current original-owner grant generation/ownership/reservation/item versions.
+Revocation blocks future consume; historical successful receipt lookup does not
+restore spending rights. No GM/delegate/pet ownership grant is inferred.
+
+OwnerProtocol::participate uses the same authoritative mysqli writer and outer
+InnoDB transaction. No independent owner COMMIT, new reserve on trigger, native
+UID substitution or direct quantity update from ACS is permitted. Multiple costs
+of one preparation retain independent reservations/receipts; existing owner
+version fencing applies. Orphan/unknown owner outcomes retain recovery_required;
+lookup is required and no automatic consume retry/release/refund occurs. Legacy
+or cross-owner contracts without this issuance proof remain BLOCKED.

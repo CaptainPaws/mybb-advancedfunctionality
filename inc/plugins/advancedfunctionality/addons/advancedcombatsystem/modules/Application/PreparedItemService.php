@@ -97,7 +97,7 @@ final class AF_ACS_PreparedItemService
         $pending=$this->repo->preparedTriggerItems($row);if(!$pending)return [];
         $adapter=AF_ACS_InventoryAdapter::forCombat($db,(int)$this->access->uid());
         foreach($pending as $b)$permits[$b['cost_index']]=$adapter->bindPreparedReservation([
-            'schema'=>'prepared_reserved_consume.v1','owner_uid'=>$b['owner_uid'],'originating_uid'=>(int)$this->access->uid(),'session_id'=>$row['session_id'],'encounter_id'=>$row['encounter_id'],'entity_id'=>$row['entity_id'],'prepared_action_id'=>$row['id'],'source_sealed_action_id'=>$row['source_sealed_action_id'],
+            'schema'=>isset($p['start_execution'])?'prepared_reserved_start_consume.v1':'prepared_reserved_consume.v1','owner_uid'=>$b['owner_uid'],'originating_uid'=>(int)$this->access->uid(),'session_id'=>$row['session_id'],'encounter_id'=>$row['encounter_id'],'entity_id'=>$row['entity_id'],'prepared_action_id'=>$row['id'],'source_sealed_action_id'=>$row['source_sealed_action_id'],
             'cost_index'=>$b['cost_index'],'cost_key'=>$b['cost_key'],'qty'=>$b['qty'],'definition'=>$b['definition'],'ability_pin'=>$p['ability_pin'],'item_id'=>$b['item_id'],'item_fingerprint'=>$b['item_fingerprint'],'inventory_version'=>$p['item_inventory_version'],
             'reservation_id'=>$b['reserve_receipt']['reservation']['id'],'reservation_version'=>$b['reserve_receipt']['reservation']['version'],'reserve_receipt'=>$b['reserve_receipt'],'obligation_hash'=>$row['contract_hash']]);
         return $permits;
@@ -107,7 +107,7 @@ final class AF_ACS_PreparedItemService
         global $db;$adapter=AF_ACS_InventoryAdapter::forCombat($db,(int)$this->access->uid());$intents=[];$receipts=[];
         foreach($bindings as $b){
             $key='acs:prepared:trigger-consume:'.$row['id'].':'.$triggerEvent.':'.$b['cost_index'];$r=AF_ACS_ItemActionService::request('consume',$key,$row['session_id'],$row['entity_id'],(int)$this->access->uid(),['reservation_id'=>$b['reserve_receipt']['reservation']['id'],'qty'=>$b['qty'],'expected_version'=>$b['reserve_receipt']['reservation']['version']]);
-            $r['actor']['authorization_ref']='acs-prepared:'.$row['id'].':'.$triggerEvent.':'.$b['cost_index'];$r['payload_hash']=AF_ADVINV_OwnerProtocol::payloadHash($r);$intents[]=$r;
+            $r['actor']['authorization_ref']=(isset($contract['start_execution'])?'acs-prepared-start:':'acs-prepared:').$row['id'].':'.$triggerEvent.':'.$b['cost_index'];$r['payload_hash']=AF_ADVINV_OwnerProtocol::payloadHash($r);$intents[]=$r;
             if($adapter->lookupPreparedConsume($r)['status']!=='not_found')throw new RuntimeException('ACS_ITEM_OWNER_RESULT_ORPHAN');
         }
         foreach($bindings as $i=>$b){
@@ -120,7 +120,7 @@ final class AF_ACS_PreparedItemService
     }
     public function consumeTrigger(array $row,string $triggerEvent):array
     {
-        global $db;$bindings=$this->repo->preparedTriggerItems($row);if(!$bindings)return [];
+        global $db;$this->repo->assertReadConnection($db);$bindings=$this->repo->preparedTriggerItems($row);if(!$bindings)return [];
         $contract=json_decode($row['contract_json'],true,64,JSON_THROW_ON_ERROR);
         if(isset($contract['owner_obligations']))return $this->consumeOwnerObligations($row,$triggerEvent,$bindings,$contract);
         $actor=$row['entity_id'];$sid=$row['session_id'];

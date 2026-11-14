@@ -36,13 +36,13 @@ final class AF_ACS_QueryService
         $resources=$this->repo->statusResources($id,$e);
         return ['row'=>$e,'registration'=>$p,'source'=>$s,'resources'=>$resources];
     }
-    public function select(string $sid,string $eid):array
+    public function select(string $sid,string $eid,bool $encounterStart=false):array
     {
         if(!af_is_addon_enabled('knowledgebase'))self::fail('preview_dependency_unavailable');
         $sessionView=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);
         $encounter=$this->repo->encounter($sid,$eid);if(!$encounter)self::fail('preview_target_forbidden');
         $view=['session'=>$sessionView['session'],'encounter'=>$encounter];$gm=$sessionView['can_manage'];
-        if($view['session']['status']!=='active'||!in_array($view['encounter']['status'],['active','preparation'],true))self::fail('preview_encounter_not_active');
+        if($view['session']['status']!=='active'||!in_array($view['encounter']['status'],$encounterStart?['ambush_ready']:['active','preparation'],true))self::fail('preview_encounter_not_active');
         $audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);
         $members=$this->repo->participants($eid,'0',201);$actors=[];$targets=[];$summonScope=$this->repo->summonProjection($sid,$eid);
         foreach($members as $m){if($m['participation']!=='engaged')continue;if($m['kind']==='summon'&&($summonScope[$m['entity_id']]['status']??null)!=='active')continue;
@@ -59,14 +59,15 @@ final class AF_ACS_QueryService
     {
         $out=[];foreach($targets as $t)$out[$t['id']]=['kind'=>$t['kind'],'active'=>$t['active']??true,'relationship'=>$relationships[$actor][$t['id']]??'neutral'];return $out;
     }
-    public function inspect(string $sid,string $eid,string $actor,string $target,?string $sealedDraft=null,bool $itemSelf=false,bool $causal=false):array
+    public function inspect(string $sid,string $eid,string $actor,string $target,?string $sealedDraft=null,bool $itemSelf=false,bool $causal=false,bool $encounterStart=false):array
     {
-        $selection=$this->select($sid,$eid);$this->repo->assertPreviewStorage();$view=$selection['view'];
+        $selection=$this->select($sid,$eid,$encounterStart);$this->repo->assertPreviewStorage();$view=$selection['view'];
         if(!isset($selection['actors'][$actor])||!isset($selection['targets'][$target])||empty($selection['target_access'][$actor][$target]))self::fail('preview_target_forbidden');
         $sideA=$selection['actors'][$actor]['side_id'];$sideB=$selection['targets'][$target]['side_id'];$hostile=false;
         foreach($this->repo->allRelations($eid) as $r)if(($r['side_a']===$sideA&&$r['side_b']===$sideB||$r['side_a']===$sideB&&$r['side_b']===$sideA)&&$r['relationship']==='hostile')$hostile=true;
 
-        $preRound=$view['encounter']['status']==='preparation';if($preRound)$this->repo->preRoundEncounter($sid,$eid);
+        $preRound=$view['encounter']['status']==='preparation'||$encounterStart;if($preRound&&!$encounterStart)$this->repo->preRoundEncounter($sid,$eid);
+        if($encounterStart&&(!$causal||$view['encounter']['start_operation_id']===null||$view['encounter']['round_number']!=='0'))self::fail('ACS_AMBUSH_EXECUTION_BLOCKED');
         $round=$this->repo->currentRound($view['encounter']);if(!$preRound&&(!$round||$round['status']!=='open'))self::fail('preview_turn_unavailable');
         $reactions=$this->repo->reactionProjection($sid,$eid);$barriers=$this->repo->barrierProjection($sid,$eid);
         $objects=$this->repo->objectProjection($sid,$eid);
@@ -106,7 +107,7 @@ final class AF_ACS_QueryService
             }
         }
         if($preRound){
-            $members=$this->repo->preRoundMembers($sid,$eid);$commitments=$this->repo->preRoundCommitments($sid,$eid);
+            $members=$encounterStart?array_column($selection['members'],null,'entity_id'):$this->repo->preRoundMembers($sid,$eid);$commitments=$this->repo->preRoundCommitments($sid,$eid);
             foreach($sources as $id=>$source){
                 if(!isset($members[$id]))self::fail('preview_target_forbidden');$row=$source['row'];$g=$row['control_group_id'];$budget=$this->repo->preRoundBudget($sid,$g);
                 $groups[$g]=['ap'=>['current'=>AF_ACS_Clock::availableAP($budget,0,$commitments['totals'][$g]??0),'maximum'=>$budget],'version'=>1];
@@ -168,7 +169,7 @@ final class AF_ACS_QueryService
         $perceptionActors=[];foreach($sources as $id=>$source)if(isset($members[$id]))$perceptionActors[$id]=['entity_id'=>(string)$id,'group_id'=>$source['row']['control_group_id'],'side_id'=>$members[$id]['side_id'],'encounter_id'=>$eid];
         [$abilities,$choices]=$this->pinnedAbilities($sources[$actor]);
         return ['selection'=>$selection,'versions'=>$versions,'choices'=>$choices,'context'=>['perception_actors'=>$perceptionActors,'behavior_targets'=>$behaviorTargets,'control_context'=>$controlContext,'schema_version'=>1,'state'=>$state,'stats'=>$stats,'defenses'=>$defenses,'element_catalog'=>$catalog,'turns'=>$turns,
-            'encounter_status'=>$preRound?'preparation':'active','pre_round'=>$preRound,'abilities'=>[$actor=>$abilities],'allowed_targets'=>[$actor=>[$target]],'relationships'=>$relationships,'status_immunities'=>$statusImmunities,'status_scope'=>['session_id'=>$sid,'encounter_id'=>$eid],'entity_end_boundaries'=>$endBoundaries,'reactions'=>$reactions['entries'],'reaction_turns'=>$reactionTurns,'reaction_kinds'=>$reactionKinds,'redirect_targets'=>$redirectTargets]];
+            'encounter_status'=>$encounterStart?'ambush_ready':($preRound?'preparation':'active'),'pre_round'=>$preRound&&!$encounterStart,'start_execution'=>$encounterStart,'abilities'=>[$actor=>$abilities],'allowed_targets'=>[$actor=>[$target]],'relationships'=>$relationships,'status_immunities'=>$statusImmunities,'status_scope'=>['session_id'=>$sid,'encounter_id'=>$eid],'entity_end_boundaries'=>$endBoundaries,'reactions'=>$reactions['entries'],'reaction_turns'=>$reactionTurns,'reaction_kinds'=>$reactionKinds,'redirect_targets'=>$redirectTargets]];
     }
     /** Own controls may be listed without exposing GM-only targets or their counts. */
     public function builderScope(string $sid,string $eid):array

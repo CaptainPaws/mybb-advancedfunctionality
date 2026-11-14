@@ -11,7 +11,7 @@ require_once __DIR__.'/TerminalReceiptPersistence.php';
 require_once __DIR__.'/PreparedExecutionPersistence.php';
 require_once __DIR__.'/../Application/BuilderService.php';
 
-/** The only producer of terminal, persistent Resolver results. Never calls a native post writer. */
+/** Transactional combat-publication writer. Never calls a native post writer. */
 final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 {
     use AF_ACS_PreparedExecutionPersistence, AF_ACS_InteractionToolPersistence, AF_ACS_ItemCommitPersistence, AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;

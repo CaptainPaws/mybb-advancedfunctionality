@@ -27,9 +27,10 @@ trait AF_ADVINV_PreparedReservation
         $this->preparedStorage();
         global $mybb;if(($mybb->request_method??'')!=='post'||!function_exists('verify_post_check')||!verify_post_check($mybb->get_input('my_post_key'),true))throw new RuntimeException('INV_CSRF_REQUIRED');
         self::fields($b,['schema','owner_uid','originating_uid','session_id','encounter_id','entity_id','prepared_action_id','source_sealed_action_id','cost_index','cost_key','qty','definition','ability_pin','item_id','item_fingerprint','inventory_version','reservation_id','reservation_version','reserve_receipt','obligation_hash']);
-        if($b['schema']!=='prepared_reserved_consume.v1'||$b['owner_uid']!==$this->access->uid()||$b['originating_uid']!==$b['owner_uid']||!is_int($b['cost_index'])||$b['cost_index']<0||$b['cost_index']>15)throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
+        if(!in_array($b['schema'],['prepared_reserved_consume.v1','prepared_reserved_start_consume.v1'],true)||$b['owner_uid']!==$this->access->uid()||$b['originating_uid']!==$b['owner_uid']||!is_int($b['cost_index'])||$b['cost_index']<0||$b['cost_index']>15)throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
         foreach(['owner_uid','originating_uid','item_id','qty','inventory_version','reservation_version'] as $k)self::positive($b[$k],self::MAX_VERSION);
         foreach(['session_id','encounter_id','entity_id','prepared_action_id','source_sealed_action_id','reservation_id'] as $k)if(!is_string($b[$k])||!preg_match('/\A[1-9][0-9]{0,19}\z/D',$b[$k]))throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
+        if($b['schema']==='prepared_reserved_start_consume.v1'){if(!$this->access instanceof AF_ADVINV_PreparedStartOwnerPolicy)throw new RuntimeException('INV_PREPARED_POLICY_REQUIRED');$this->access->authorizePreparedStartIssuance($b);}
         $this->access->authorize('consume',$b['owner_uid'],['system'=>'acs','context_key'=>$b['session_id']],'acs-item:'.$b['session_id'].':'.$b['entity_id'],true);
         if(!$this->one('SELECT uid FROM `'.$this->prefix.'users` WHERE uid=?',[$b['owner_uid']]))throw new RuntimeException('INV_OWNER_UNAVAILABLE');
         $owner=$this->one('SELECT inventory_version FROM '.$this->table('owner_state').' WHERE uid=? FOR UPDATE',[$b['owner_uid']]);
@@ -44,7 +45,7 @@ trait AF_ADVINV_PreparedReservation
         if(($r['prepared_binding_json']===null)!==($r['prepared_binding_hash']===null))throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
         if($r['prepared_binding_json']!==null&&($r['prepared_binding_json']!==$json||$r['prepared_binding_hash']!==$hash))throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
         if($r['prepared_binding_json']===null)$this->sql('UPDATE '.$this->table('reservations').' SET prepared_binding_json=?,prepared_binding_hash=? WHERE id=? AND prepared_binding_json IS NULL',[$json,$hash,$r['id']]);
-        return ['schema'=>'prepared_reserved_consume.v1','reservation_id'=>(string)$r['id'],'prepared_action_id'=>$b['prepared_action_id'],'cost_index'=>$b['cost_index'],'owner_uid'=>$b['owner_uid'],'originating_uid'=>$b['originating_uid'],'binding_hash'=>$hash,'grant_generation'=>$b['grant_generation'],'state'=>'active'];
+        return ['schema'=>$b['schema'],'reservation_id'=>(string)$r['id'],'prepared_action_id'=>$b['prepared_action_id'],'cost_index'=>$b['cost_index'],'owner_uid'=>$b['owner_uid'],'originating_uid'=>$b['originating_uid'],'binding_hash'=>$hash,'grant_generation'=>$b['grant_generation'],'state'=>'active'];
     }
     private function preparedContext(array $intent,bool $history,array $priorReceipts=[]):array
     {
@@ -55,9 +56,10 @@ trait AF_ADVINV_PreparedReservation
         $r=$this->one('SELECT * FROM '.$this->table('reservations').' WHERE id=? FOR UPDATE',[$intent['payload']['reservation_id']]);
         if(!$owner||!$r||$r['prepared_binding_json']===null||!hash_equals((string)$r['prepared_binding_hash'],hash('sha256',$r['prepared_binding_json'])))throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
         $b=json_decode($r['prepared_binding_json'],true,24,JSON_THROW_ON_ERROR);$this->confirmed($r);
-        if(($b['schema']??null)!=='prepared_reserved_consume.v1'||$b['reservation_id']!==(string)$r['id']||$b['owner_uid']!==(int)$r['owner_uid']||$b['item_id']!==(int)$r['item_id']||$b['session_id']!==$r['context_key']||$r['context_system']!=='acs'||self::canonical($intent['scope'])!==self::canonical(['system'=>'acs','context_key'=>$b['session_id']])||self::canonical($intent['payload'])!==self::canonical(['reservation_id'=>$b['reservation_id'],'qty'=>$b['qty'],'expected_version'=>$b['reservation_version']]))throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
-        if(!preg_match('/\Aacs-prepared:([1-9][0-9]*):([1-9][0-9]*):([0-9]+)\z/D',$intent['actor']['authorization_ref'],$m)||$m[1]!==$b['prepared_action_id']||(int)$m[3]!==$b['cost_index']||$intent['operation_key']!=='acs:prepared:trigger-consume:'.$m[1].':'.$m[2].':'.$m[3])throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
-        $this->access->authorizePreparedObligation($b,$intent,$history);
+        if(!in_array($b['schema']??null,['prepared_reserved_consume.v1','prepared_reserved_start_consume.v1'],true)||$b['reservation_id']!==(string)$r['id']||$b['owner_uid']!==(int)$r['owner_uid']||$b['item_id']!==(int)$r['item_id']||$b['session_id']!==$r['context_key']||$r['context_system']!=='acs'||self::canonical($intent['scope'])!==self::canonical(['system'=>'acs','context_key'=>$b['session_id']])||self::canonical($intent['payload'])!==self::canonical(['reservation_id'=>$b['reservation_id'],'qty'=>$b['qty'],'expected_version'=>$b['reservation_version']]))throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
+        $start=$b['schema']==='prepared_reserved_start_consume.v1';
+        if(!preg_match('/\A'.($start?'acs-prepared-start':'acs-prepared').':([1-9][0-9]*):([1-9][0-9]*):([0-9]+)\z/D',$intent['actor']['authorization_ref'],$m)||$m[1]!==$b['prepared_action_id']||(int)$m[3]!==$b['cost_index']||$intent['operation_key']!=='acs:prepared:trigger-consume:'.$m[1].':'.$m[2].':'.$m[3])throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
+        if($start){if(!$this->access instanceof AF_ADVINV_PreparedStartOwnerPolicy)throw new RuntimeException('INV_PREPARED_POLICY_REQUIRED');$this->access->authorizePreparedStartObligation($b,$intent,$history);}else $this->access->authorizePreparedObligation($b,$intent,$history);
         if(!$history){
             if(!hash_equals($b['grant_generation'],$this->access->preparedGrantGeneration($b)))throw new RuntimeException('INV_PREPARED_REVOKED');
             if($r['status']!=='active'||(int)$r['remaining_qty']!==$b['qty']||(int)$r['reservation_version']!==$b['reservation_version'])throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
@@ -98,7 +100,7 @@ trait AF_ADVINV_PreparedReservation
     {
         $b=$this->preparedConsumeBinding;
         if(!$b||!$this->access instanceof AF_ADVINV_PreparedOwnerPolicy||$intent['operation']!=='consume'||!$mutation||$owner!==$b['owner_uid']||self::canonical($intent)!==self::canonical($this->preparedConsumeIntent))throw new RuntimeException('INV_PREPARED_BINDING_INTEGRITY');
-        $this->access->authorizePreparedObligation($b,$intent,false);
+        if($b['schema']==='prepared_reserved_start_consume.v1'){if(!$this->access instanceof AF_ADVINV_PreparedStartOwnerPolicy)throw new RuntimeException('INV_PREPARED_POLICY_REQUIRED');$this->access->authorizePreparedStartObligation($b,$intent,false);}else $this->access->authorizePreparedObligation($b,$intent,false);
         if(!hash_equals($b['grant_generation'],$this->access->preparedGrantGeneration($b)))throw new RuntimeException('INV_PREPARED_REVOKED');
     }
 

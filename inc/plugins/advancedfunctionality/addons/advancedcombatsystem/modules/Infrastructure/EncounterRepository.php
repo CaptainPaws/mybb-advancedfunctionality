@@ -17,6 +17,7 @@ require_once __DIR__.'/PreparedActionPersistence.php';
 require_once __DIR__.'/PreparedItemPersistence.php';
 require_once __DIR__.'/AmbushStartPersistence.php';
 require_once __DIR__.'/PreRoundPersistence.php';
+require_once __DIR__.'/PreparedStartPersistence.php';
 
 /** Prepared, scoped SQL. All mutators require the existing audited command transaction. */
 final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
@@ -26,7 +27,7 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     use AF_ACS_ClockPersistence, AF_ACS_ItemPersistence, AF_ACS_CustodyPersistence;
     use AF_ACS_DraftPersistence;
     use AF_ACS_SealPersistence, AF_ACS_PreparedActionPersistence, AF_ACS_PreparedItemPersistence;
-    use AF_ACS_RoundManagementPersistence, AF_ACS_AmbushStartPersistence, AF_ACS_PreRoundPersistence;
+    use AF_ACS_RoundManagementPersistence, AF_ACS_AmbushStartPersistence, AF_ACS_PreRoundPersistence, AF_ACS_PreparedStartPersistence;
     private function ids(array $row,array $fields): array
     {
         foreach($fields as $field)if(isset($row[$field]))$row[$field]=(string)$row[$field];return $row;
