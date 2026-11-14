@@ -118,12 +118,12 @@ final class AF_ACS_EncounterService
         if((float)$entity['hp']>(float)$entity['hp_max'])throw new RuntimeException('ACS_HP_RANGE');
         $entity['_controller']=$controllers[0];return $entity;
     }
-    public function readiness(string $sid,string $eid,bool $forNext=false): array
+    public function readiness(string $sid,string $eid,bool $forNext=false,bool $ambushStart=false): array
     {
         $session=$this->authorize($sid);$encounter=$this->repository->encounter($sid,$eid);
         if(!$encounter)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
         $issues=[];
-        if($session['status']!=='active' || $encounter['status']!==($forNext?'active':'preparation'))$issues[]=['code'=>'preparation_required'];
+        if($session['status']!=='active' || $encounter['status']!==($forNext?'active':($ambushStart?'ambush_ready':'preparation')))$issues[]=['code'=>'preparation_required'];
         $config=$this->repository->configSnapshot($sid,$encounter['config_snapshot_id']);
         try {
             if(!$config || !hash_equals($config['content_hash'],hash('sha256',$config['payload_json'])))throw new RuntimeException('Invalid config');

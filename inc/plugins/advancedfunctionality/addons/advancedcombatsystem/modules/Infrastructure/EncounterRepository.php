@@ -15,6 +15,7 @@ require_once __DIR__.'/ItemPersistence.php';
 require_once __DIR__.'/CustodyPersistence.php';
 require_once __DIR__.'/PreparedActionPersistence.php';
 require_once __DIR__.'/PreparedItemPersistence.php';
+require_once __DIR__.'/AmbushStartPersistence.php';
 
 /** Prepared, scoped SQL. All mutators require the existing audited command transaction. */
 final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
@@ -24,7 +25,7 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     use AF_ACS_ClockPersistence, AF_ACS_ItemPersistence, AF_ACS_CustodyPersistence;
     use AF_ACS_DraftPersistence;
     use AF_ACS_SealPersistence, AF_ACS_PreparedActionPersistence, AF_ACS_PreparedItemPersistence;
-    use AF_ACS_RoundManagementPersistence;
+    use AF_ACS_RoundManagementPersistence, AF_ACS_AmbushStartPersistence;
     private function ids(array $row,array $fields): array
     {
         foreach($fields as $field)if(isset($row[$field]))$row[$field]=(string)$row[$field];return $row;
@@ -233,10 +234,10 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
         $placeholders=implode(',',array_fill(0,count($turnIds),'?'));
         return array_map(fn($r)=>$this->ids($r,['id','turn_id','entity_id','entity_turn_version','start_done','end_done','reaction_used']),$this->sql('SELECT * FROM '.$this->table('entity_turns').' WHERE turn_id IN ('.$placeholders.') ORDER BY turn_id,entity_id',$turnIds)['rows']);
     }
-    public function openFirstRound(array $session,array $encounter,array $sources,string $actor): array
+    public function openFirstRound(array $session,array $encounter,array $sources,string $actor,?string $startOperation=null): array
     {
         $this->commandWrite();
-        if($encounter['status']!=='preparation' || $encounter['round_number']!=='0' || $encounter['start_operation_id']!==null || $this->firstRound($encounter['id']))throw new RuntimeException('ACS_FIRST_ROUND_EXISTS');
+        if(($startOperation===null?($encounter['status']!=='preparation'||$encounter['start_operation_id']!==null):($encounter['status']!=='ambush_ready'||$encounter['start_operation_id']!==$startOperation)) || $encounter['round_number']!=='0' || $this->firstRound($encounter['id']))throw new RuntimeException('ACS_FIRST_ROUND_EXISTS');
         return $this->openRoundProjection($session,$encounter,$sources,$actor,1,true);
     }
     private function openRoundProjection(array $session,array $encounter,array $sources,string $actor,int $number,bool $first,?int $openedAt=null): array
@@ -259,7 +260,7 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
             foreach($members as $member)$this->sql('INSERT INTO '.$this->table('entity_turns').' (turn_id,entity_id,start_done,end_done,reaction_used,entity_turn_version) VALUES (?,?,0,0,0,1)',[$turn,$member['entity_id']]);
         }
         self::integer($encounter['next_event_sequence'],'18446744073709551614');
-        if($this->sql('UPDATE '.$this->table('encounters').' SET status=?,round_number=?,start_operation_id=?,encounter_version=encounter_version+1,next_event_sequence=next_event_sequence+1 WHERE session_id=? AND id=? AND encounter_version=? AND status=?', ['active',$number,$first?'encounter:'.$encounter['id'].':first-round':$encounter['start_operation_id'],$session['id'],$encounter['id'],$encounter['encounter_version'],$first?'preparation':'active'])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
+        if($this->sql('UPDATE '.$this->table('encounters').' SET status=?,round_number=?,start_operation_id=?,encounter_version=encounter_version+1,next_event_sequence=next_event_sequence+1 WHERE session_id=? AND id=? AND encounter_version=? AND status=?', ['active',$number,$first?($encounter['start_operation_id']??'encounter:'.$encounter['id'].':first-round'):$encounter['start_operation_id'],$session['id'],$encounter['id'],$encounter['encounter_version'],$first?$encounter['status']:'active'])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
         $this->initializeRoundAP($session['id'],$encounter['id'],$round,$actor,$encounter['next_event_sequence']);
         $this->initializeDeadlines($round,$encounter,$openedAt);
         $session['_command_result']=['encounter_id'=>$encounter['id'],'encounter_version'=>$this->encounter($session['id'],$encounter['id'])['encounter_version'],
