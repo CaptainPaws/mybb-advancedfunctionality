@@ -35,6 +35,7 @@ $GLOBALS['acsPreparedExecutionConditions']=static function(array $fixture):void 
         $actions=[['actor_id'=>$source,'ability_key'=>$key,'targets'=>[$fixedTarget??$source],'parameters'=>$parameters]];
         $scope=$builder->context($sid,$eid,'0');$builder->preview(['session_id'=>$sid,'encounter_id'=>$eid,'turn_id'=>'0','scope_token'=>$scope['scope_token'],'actions'=>$actions,'scenario'=>'hit']);
         $d=$drafts->save(['session_id'=>$sid,'encounter_id'=>$eid,'turn_id'=>'0','actions'=>$actions,'prose'=>'No mechanical post','expected_draft_version'=>'0','operation_key'=>'preround_fixture_draft_'.++$seq]);
+        snapshot_assert($builder->context($sid,$eid,'0')['draft_id']===$d['draft_id'],'Pre-round UI lost authored draft discovery');
         $r=['draft_id'=>$d['draft_id'],'expected_draft_version'=>$d['draft_version'],'operation_key'=>'preround_fixture_seal_'.++$seq];$v=$seal->command('seal',$r);snapshot_assert(!$v['blocked'],'Pre-round seal '.json_encode($v));snapshot_assert($seal->command('seal',$r)===$v,'Seal repeated reserve');
         return $seal->command('confirm',['draft_id'=>$d['draft_id'],'expected_draft_version'=>$v['draft_version'],'operation_key'=>'preround_fixture_confirm_'.++$seq,'confirmation_hash'=>$v['confirmation_hash']]);
     };

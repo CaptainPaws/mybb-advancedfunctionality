@@ -68,11 +68,12 @@ final class AF_ACS_EncountersPage
             elseif($tab==='overview') {
                 $config=json_decode($encounter['config_json'],true);echo '<h3>'.self::esc($config['title']).'</h3><p>'.self::esc(self::state($encounter['status'])).' · версия '.self::esc($encounter['encounter_version']).'</p><p>Завершение столкновения и закрытие сессии — отдельные операции будущих этапов.</p>';
             } elseif($tab==='rounds') {
+                if(in_array($encounter['status'],['preparation','ambush_ready'],true)||$encounter['start_operation_id']!==null){require_once __DIR__.'/Ambush.php';echo AF_ACS_AmbushPage::render($sid,$eid,$tid);}
                 $roundView=$service->roundView($sid,$eid,$mybb->get_input('turn_after')?:'0');
                 if($roundView['round']===null) {
                     echo '<p>Первый раунд не запущен.</p>';
                     if($session['status']==='active' && $encounter['status']==='preparation') {
-                        self::form($url,'round_start',$session,$encounter);self::submit('Запустить первый раунд');
+                        self::form($url,'round_start',$session,$encounter);self::submit('Начать обычное столкновение без засады');
                         echo '<p>Перед запуском сервер повторно проверит готовность и зафиксирует roster. Порядок действий групп свободный.</p>';
                     }
                 } else {
@@ -124,7 +125,7 @@ final class AF_ACS_EncountersPage
                 }
                 if(count($view['sides'])===100)echo '<a href="'.self::esc($url.'&side_after='.end($view['sides'])['id']).'">Следующие стороны</a>';
                 if(count($view['relationships'])===100)echo '<a href="'.self::esc($url.'&relation_after='.end($view['relationships'])['id']).'">Следующие отношения сторон</a>';
-                self::form($url,'readiness',$session,$encounter);echo '<button type="submit">Проверить готовность</button></form><p>Первый раунд запускается на вкладке «Раунды». Засада, пауза и завершение пока недоступны.</p>';
+                self::form($url,'readiness',$session,$encounter);echo '<button type="submit">Проверить готовность</button></form><p>Подготовка и запуск засады доступны на вкладке «Раунды».</p>';
             }
             if($tab==='management' && $session['status']==='active' && in_array($encounter['status'],['active','paused'],true)){
                 echo '<h3>Стороны и отношения</h3><p>Изменение не объединяет группы и не восстанавливает AP, ресурсы или ход.</p>';
