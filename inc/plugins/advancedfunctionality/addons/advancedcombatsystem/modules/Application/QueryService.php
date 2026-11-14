@@ -166,6 +166,7 @@ final class AF_ACS_QueryService
             $behaviorTargets[$aId]=self::behaviorCandidates($selection['targets'],$aId,$rels);
         }
         $versions['behavior_candidates_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'candidates'=>$behaviorTargets]));
+        foreach($sources as $id=>$source)try{$state['form_equipment'][$id]=AF_ACS_Equipment::formContributions($source['registration'],$this->repo->itemEquipment($sid,(string)$id),$this->repo->custodyRows($sid),(string)$id);}catch(Throwable){$state['form_equipment'][$id]=null;}
         $perceptionActors=[];foreach($sources as $id=>$source)if(isset($members[$id]))$perceptionActors[$id]=['entity_id'=>(string)$id,'group_id'=>$source['row']['control_group_id'],'side_id'=>$members[$id]['side_id'],'encounter_id'=>$eid];
         [$abilities,$choices]=$this->pinnedAbilities($sources[$actor]);
         return ['selection'=>$selection,'versions'=>$versions,'choices'=>$choices,'context'=>['perception_actors'=>$perceptionActors,'behavior_targets'=>$behaviorTargets,'control_context'=>$controlContext,'schema_version'=>1,'state'=>$state,'stats'=>$stats,'defenses'=>$defenses,'element_catalog'=>$catalog,'turns'=>$turns,
@@ -214,13 +215,13 @@ final class AF_ACS_QueryService
     {
         $abilities=[];$choices=[];
         $controlGrant=$this->repo->controllerFor((string)$source['row']['session_id'],(string)$source['row']['id'],$this->access->uid());
-        $grants=$this->grants($source['source']);
+        $formInstances=$this->repo->statusProjection((string)$source['row']['session_id'])['instances'];$grants=$this->grants($source['source']);
         foreach($grants as $key=>$grant){
             $dto=$source['registration']['pinned_abilities'][$key]??null;
             if(!is_array($dto)||($dto['definition_version']['fingerprint']??null)!==$grant['fingerprint'])self::fail('preview_ability_pin_mismatch');
             foreach(['revision','declared_version'] as $field)if(($dto['definition_version'][$field]??null)!==($grant['definition_version'][$field]??null))self::fail('preview_ability_pin_mismatch');
             if(isset($controlGrant['control_overlay'])&&!in_array($key,$controlGrant['control_overlay']['ability_keys'],true))continue;
-            try{foreach($grant['_profiles']??[] as $inline)$this->inline($inline,$dto['data']['definition']);$abilities[$key]=$this->ability($dto);$choices[$key]=['key'=>$key,'supported'=>true,'label'=>is_string($dto['data']['definition']['name']??null)&&$dto['data']['definition']['name']!==''?mb_substr($dto['data']['definition']['name'],0,191):'Способность '.$key,'target_policy'=>$abilities[$key]['target_policy']??['kind'=>'self_only'],'ap_cost'=>$abilities[$key]['costs'][0]['amount']]+(isset($abilities[$key]['target_count'])?['target_count'=>$abilities[$key]['target_count']]:[])+(isset($abilities[$key]['spawns'])?['spawn_action'=>true,'target'=>'self']:[])+(isset($abilities[$key]['awareness_action'])?['awareness_action'=>true,'label'=>$abilities[$key]['awareness_action']['operation']==='search'?'Поиск':'Передача сведений','target'=>'self']:[]);}
+            try{foreach($grant['_profiles']??[] as $inline)$this->inline($inline,$dto['data']['definition']);$abilities[$key]=$this->ability($dto);if(!AF_ACS_FormLayers::ability($formInstances,(string)$source['row']['id'],$key,$abilities[$key]['form_requirement']??null)){unset($abilities[$key]);continue;}$choices[$key]=['key'=>$key,'supported'=>true,'label'=>is_string($dto['data']['definition']['name']??null)&&$dto['data']['definition']['name']!==''?mb_substr($dto['data']['definition']['name'],0,191):'Способность '.$key,'target_policy'=>$abilities[$key]['target_policy']??['kind'=>'self_only'],'ap_cost'=>$abilities[$key]['costs'][0]['amount']]+(isset($abilities[$key]['target_count'])?['target_count'=>$abilities[$key]['target_count']]:[])+(isset($abilities[$key]['spawns'])?['spawn_action'=>true,'target'=>'self']:[])+(isset($abilities[$key]['awareness_action'])?['awareness_action'=>true,'label'=>$abilities[$key]['awareness_action']['operation']==='search'?'Поиск':'Передача сведений','target'=>'self']:[]);}
             catch(DomainException $e){$choices[$key]=['key'=>$key,'supported'=>false,'label'=>$key,'reason'=>$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage()];}
         }
         foreach($abilities as $key=>$ability)if(isset($ability['prepared_action'])){$choices[$key]['label']=(isset($ability['prepared_action']['hidden'])?'Скрыто подготовить действие · ':'Подготовить действие · ').$choices[$key]['label'];$choices[$key]['prepared_action']=$ability['prepared_action'];}
@@ -254,6 +255,7 @@ final class AF_ACS_QueryService
     {
         require_once __DIR__.'/../Domain/Spawn.php';
         require_once __DIR__.'/../Domain/PreparedAction.php';
+        if(array_key_exists('form_requirement',$dto['data']['definition'])){$requirement=AF_ACS_FormLayers::requirement($dto['data']['definition']['form_requirement']);unset($dto['data']['definition']['form_requirement']);return $this->ability($dto)+['form_requirement'=>$requirement];}
         if(isset($dto['data']['definition']['prepared_action'])) {
             $contract=$dto['data']['definition']['prepared_action'];unset($dto['data']['definition']['prepared_action']);
             return AF_ACS_PreparedAction::compile($this->ability($dto),$contract);
@@ -309,6 +311,7 @@ final class AF_ACS_QueryService
             if($type==='elemental'){$explicit=$effect['parameters']['damage_element']??null;if(!is_string($explicit)||!is_string($element))self::fail('damage_element_missing');}
             $parts[]=['source_index'=>$effect['source_index'],'kb_effect_index'=>$effect['source_index'],'damage_type'=>$type,'damage_element'=>$type==='elemental'?$element:null]+$value;
         }
+        foreach($statuses as $status)if(isset($status['instance']['mechanical_parameters']['transform'])&&($status['trigger']!=='on_cast'||count($statuses)!==1||$parts||$removals||AF_ACS_Control::targetPolicy($d)!==['kind'=>'self_only']))self::fail('ACS_FORM_TIMING_UNSUPPORTED');
         if(!empty($d['costs'])&&!$statuses)self::fail('upkeep_status_binding_missing');
         if(!$parts&&!$statuses&&!$removals)self::fail('preview_damage_value_missing');
         if(!is_string($dto['definition_version']['declared_version']??null))self::fail('preview_source_version_unavailable');

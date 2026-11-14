@@ -4,6 +4,17 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 /** Initial retained equipment evidence. No equip action, stat arithmetic or live owner reads. */
 final class AF_ACS_Equipment
 {
+    /** Exact current ACS flat-bonus kit, without changing physical Inventory or reservations. */
+    public static function formContributions(array $registration,array $rows,array $custody,string $actor):array
+    {
+        require_once __DIR__.'/Custody.php';$bundle=$registration['equipment_snapshot']??null;$kit=[];$ids=[];
+        if($bundle!==null){self::baseline($bundle,$registration['source_snapshot']);foreach($bundle['records'] as $record)if($record['baseline_included']){$kit[$record['slot']]=AF_ACS_Items::bonuses($record['mechanical_properties']);$ids[(string)$record['inventory_item_id']]=$record['slot'];}}
+        elseif($rows)throw new RuntimeException('ACS_FORM_EQUIPMENT_UNPROVEN');
+        foreach($rows as $row){$slot=$row['slot_key'];if($row['status']==='active')$kit[$slot]=AF_ACS_Custody::bonuses($row);else unset($kit[$slot]);$ids[(string)$row['inventory_item_id']]=$slot;}
+        foreach(AF_ACS_Custody::held($custody) as $item=>$row){if((string)$row['active_user_entity_id']===$actor)throw new RuntimeException('ACS_FORM_EQUIPMENT_UNPROVEN');if(isset($ids[$item]))unset($kit[$ids[$item]]);}
+        foreach($registration['source_snapshot']['source_breakdown']??[] as $trace)if(($trace['source_type']??null)==='equipment'&&(($trace['operation']??null)!=='flat'||!isset($trace['before'],$trace['after'],$trace['value'])||abs($trace['after']-$trace['before']-$trace['value'])>1e-9))throw new RuntimeException('ACS_FORM_EQUIPMENT_UNPROVEN');
+        return $kit;
+    }
     public static function fingerprint(array $payload): string
     {
         return af_kb_arpg_acs_fingerprint($payload);

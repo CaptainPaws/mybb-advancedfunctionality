@@ -10,6 +10,7 @@ trait AF_ACS_PreparedExecutionSupport
         $origin=$this->sql('SELECT actor_uid FROM '.$this->table('events').' WHERE id=? AND session_id=? AND encounter_id=? AND event_type=?',[$candidate['source_event_id'],$sid,$candidate['encounter_id'],'encounter.prepared_register'])['rows'][0]??null;if(!$origin||(string)$origin['actor_uid']!==$uid||$candidate['source_event_id']!==$candidate['armed']['source_event_id'])throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
         $seal=$this->sql('SELECT * FROM '.$this->table('sealed_actions').' WHERE id=?',[$candidate['source_sealed_action_id']])['rows'][0]??throw new RuntimeException('ACS_SEAL_PIN_CHANGED');$source=$this->preparedRepository()->sealPayload($seal);$this->preparedRepository()->verifySealDefinition($sid,$seal,$source);
         if($seal['sealed_hash']!==$p['source_sealed_hash']||(string)$seal['definition_snapshot_id']!==$p['definition_snapshot_id']||$source['action']['actor_id']!==$actor||$source['action']['ability_key']!==$p['ability_pin']['key']||$source['action']['targets']!==[$p['target_entity_id']])throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
+        if(!AF_ACS_FormLayers::ability($this->preparedRepository()->statusProjection($sid)['instances'],$actor,$p['ability_pin']['key'],json_decode($this->sql('SELECT payload_json FROM '.$this->table('snapshots').' WHERE id=? AND session_id=?',[$seal['definition_snapshot_id'],$sid])['rows'][0]['payload_json'],true,64,JSON_THROW_ON_ERROR)['definition']['data']['definition']['form_requirement']??null))throw new RuntimeException('ACS_FORM_ABILITY_UNAVAILABLE');
         $entity=$this->preparedRepository()->entity($sid,$actor);if(!$entity||$entity['control_group_id']!==(string)$candidate['control_group_id'])throw new RuntimeException('ACS_CONTROL_INVALID');
         $readAccess=new AF_ACS_PreparedExecutionAccess($this->preparedAccess(),$uid);$readAccess->draftThread($this->preparedRepository()->session($sid)['tid']);
         if(!$this->preparedRepository()->roles($sid,$uid)||!($grant=$this->preparedRepository()->controllerFor($sid,$actor,$uid)))throw new RuntimeException('ACS_CONTROL_INVALID');
@@ -30,6 +31,7 @@ trait AF_ACS_PreparedExecutionSupport
         $code=$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage();
         if((!$e instanceof RuntimeException&&!$e instanceof DomainException)||$e instanceof mysqli_sql_exception
             ||in_array($code,['ACS_DATABASE_ERROR','ACS_ITEM_OWNER_RESULT_ORPHAN','ACS_SEAL_TAPE_INVALID','ACS_SEAL_PIN_CHANGED','ACS_SNAPSHOT_HASH_MISMATCH'],true)
+            ||str_starts_with($code,'ACS_FORM_')&&$code!=='ACS_FORM_ABILITY_UNAVAILABLE'
             ||str_starts_with($code,'ACS_CAUSAL_')||str_starts_with($code,'INV_PREPARED_')&&!in_array($code,['INV_PREPARED_REVOKED','INV_PREPARED_EXPIRED','INV_PREPARED_VERSION_CONFLICT'],true))throw $e;
         return preg_match('/\A(?:ACS_[A-Z_]+|[a-z][a-z0-9_]+|INV_[A-Z_]+)\z/D',$code)?$code:'ACS_PREPARED_CONDITION_FAILED';
     }

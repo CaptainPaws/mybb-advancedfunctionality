@@ -75,6 +75,7 @@ final class AF_ACS_Resolver
                 $gate=$event['cast_success']&&match($phase){'on_cast'=>true,'on_hit'=>$event['hit_success'],'on_damage'=>$event['hp_loss']>0};
                 $evaluation=['effect_definition_ref'=>$definition['effect_definition_ref'],'source'=>$event['source'],'target'=>$event['target'],'trigger'=>$phase,
                     'supported'=>true,'policy'=>$definition['policy'],'roll_ref'=>$event['roll_ref'],'success'=>$gate?null:false,'instance_events'=>[]];
+                if($gate&&AF_ACS_FormLayers::active($state['status_instances']??[],$event['target']))foreach(AF_ACS_Effects::removalCandidates($state,$event['target'],$scope['session_id'],$scope['encounter_id'],$definition['policy']) as $id)if(isset($state['status_instances'][$id]['spec']['mechanical_parameters']['transform'])&&($phase!=='on_cast'||!empty($ability['components'])||!empty($ability['statuses'])))self::fail('ACS_FORM_TIMING_UNSUPPORTED');
                 if($gate&&($mode==='seal'||$definition['policy']['chance']==100)){
                     $r=AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>[['kind'=>'status_remove','target'=>$event['target'],'session_id'=>$scope['session_id']??null,'encounter_id'=>$scope['encounter_id']??null,'policy'=>$definition['policy'],'roll'=>$samples[$index]??null]]]);
                     $state=$r->serverState();$evaluation['instance_events']=$r->serverTrace()['events'];$evaluation['success']=$evaluation['instance_events'][0]['success'];
@@ -116,11 +117,12 @@ final class AF_ACS_Resolver
         $stats=$context['stats'][$id]??null;if(!is_array($stats))self::fail('resolver_stats_missing');
         foreach($context['modifier_stages'][$id]??[] as $stat=>$stages)foreach($stages as $stage){
             $r=AF_ACS_Modifiers::stage($stats[$stat]??null,$stat,$stage['phase'],$stage['sources'],$stage['policy'],$context['source_snapshots'][$id]??null);$stats[$stat]=$r->serverResult()->clamped;$trace[]=$r->serverTrace();
-        }return $stats;
+        }return AF_ACS_FormLayers::stats($stats,$context['state']['status_instances']??[],$id,$context['state']['form_equipment'][$id]??null);
     }
     private static function damage(array $components,string $target,array $context,?array $penetration=null): AF_ACS_DamageResult
     {
         if(!isset($context['defenses'][$target]))self::fail('resolver_defense_missing');
+        if(AF_ACS_FormLayers::active($context['state']['status_instances']??[],$target)){$base=$context['stats'][$target]??throw new DomainException('ACS_FORM_STAT_INVALID');$stats=AF_ACS_FormLayers::stats($base,$context['state']['status_instances'],$target,$context['state']['form_equipment'][$target]??null);$context['defenses'][$target]['def']=AF_ACS_Numeric::operation('add',$context['defenses'][$target]['def'],$stats['def']-$base['def']);}
         return AF_ACS_Damage::calculate($components,$context['defenses'][$target],$penetration??($context['penetration']??[]),$context['element_catalog']);
     }
     private static function apply(array $state,array $effects,?string $actor,array $costs,array &$trace,?array $hpCostPolicy=null): array
@@ -214,6 +216,7 @@ final class AF_ACS_Resolver
         if(($context['schema_version']??null)!==1||($context['encounter_status']??null)!==($start?'ambush_ready':($preRound?'preparation':'active'))||!array_is_list($orderedActions)||!$orderedActions)self::fail('resolver_context_invalid');
         $checked=AF_ACS_Effects::simulate($context['state'],['costs'=>[],'effects'=>[]]);$state=$checked->serverState();$initial=$checked->serverDependencies();$initialTrace=$checked->serverTrace();$redirectCandidates=$context['redirect_targets']??[];$plans=[];$spawnCounts=$context['spawn_counts']??[];$spawnPlan=[];$itemState=$context['item_state']??null;$slots=$context['reaction_turns']??[];$reactionUpdates=[];$visited=[];
         foreach($orderedActions as $i=>$action){
+            $context['state']=$state;
             if(!is_array($action)||array_diff(array_keys($action),['actor_id','ability_key','targets','scenario']))self::fail('resolver_action_invalid');
             $actor=(string)($action['actor_id']??'');$key=$action['ability_key']??null;$targets=$action['targets']??null;$scenario=$action['scenario']??null;
             if(!is_string($key)||!is_array($targets)||!array_is_list($targets)||!$targets||count(array_unique($targets))!==count($targets)||($mode==='preview'&&!in_array($scenario,['hit','crit','miss'],true))||($mode==='seal'&&array_key_exists('scenario',$action)))self::fail('resolver_action_unsupported');
@@ -221,6 +224,7 @@ final class AF_ACS_Resolver
             $causal=$context['prepared_execution']??null;if($causal!==null){AF_ACS_PreparedAction::executionPolicy($causal['policy']??null);if($mode!=='seal'||$causal['actor_id']!==$actor||$causal['ability_key']!==$key||$causal['targets']!==$targets||count($orderedActions)!==1||!empty($context['reactions'])||!empty($context['entity_end_boundaries'])||array_filter($ability['costs']??[],static fn($c)=>$c['kind']==='ap'))self::fail('ACS_PREPARED_UNSUPPORTED');}
             if(!is_array($ability)||!is_array($turn)||(!$preRound&&$causal===null&&(($turn['status']??null)!=='pending'||($turn['started']??null)!==true))||($turn['group_id']??null)!==($state['entities'][$actor]['group_id']??null))self::fail('resolver_turn_or_source_invalid');
             if($preRound&&(!isset($ability['prepared_action']['pre_round'])||$ability['prepared_action']['pre_round']!==['schema'=>'ic-acs.pre-round-preparation.v1','allowed'=>true]))self::fail('ACS_PREPARED_UNSUPPORTED');
+            if(is_array($ability)&&!AF_ACS_FormLayers::ability($state['status_instances']??[],$actor,$key,$ability['form_requirement']??null))self::fail('ACS_FORM_ABILITY_UNAVAILABLE');
             if(!AF_ACS_Effects::ordinaryActionAllowed($state,$actor))self::fail('ACS_STATUS_CONTROL_BLOCKED');
             $behaviorCandidates=$context['behavior_targets'][$actor]??[];
             if(!array_key_exists($actor,$context['behavior_targets']??[]))foreach($context['allowed_targets'][$actor]??[] as $id)$behaviorCandidates[$id]=['relationship'=>$context['relationships'][$actor][$id]??'hostile','kind'=>$context['reaction_kinds'][$id]??'npc'];
@@ -271,6 +275,7 @@ final class AF_ACS_Resolver
                     AF_ACS_Effects::statusSample($t['hit']);AF_ACS_Effects::statusSample($t['crit']);
                     $rolls=$t+['hit_used'=>false,'crit_used'=>false];
                 }
+                if($spec['operation']!=='consume')foreach(AF_ACS_FormLayers::active($state['status_instances']??[],$actor) as $form)if($form['spec']['mechanical_parameters']['transform']['equipment']['policy']!=='retain')self::fail('ACS_FORM_EQUIPMENT_CHANGE_UNSUPPORTED');
                 $r=AF_ACS_Items::apply($spec,$actor,$targets,$state,$context['stats'],$itemState);
                 $state=$r['state'];$context['stats']=$r['stats'];$itemState=$r['virtual'];
                 $context['defenses'][$actor]['def']=$context['stats'][$actor]['def'];
@@ -347,8 +352,8 @@ final class AF_ACS_Resolver
             }
             if(isset($ability['target_policy']))$context['redirect_targets'][$actor]=array_values(array_filter($context['redirect_targets'][$actor],static fn($id)=>AF_ACS_Control::allowed($ability['target_policy'],$context['relationships'][$actor][$id]??'', $context['reaction_kinds'][$id]??'')));
             $singleTarget=count($targets)===1&&($ability['targeting']??'single_target')!=='multiple';$strikePlans=[];$redirected=false;foreach($targets as $strikeIndex=>$originalTarget){
-            $target=(string)$originalTarget;if($target!==$actor&&!AF_ACS_Awareness::targetable('identified',$state['perception_subjects']['entity:'.$target]['perception']['stealth']??null,$state['status_instances']??[],$target))self::fail('resolver_target_forbidden');if(isset($ability['target_policy'])&&!AF_ACS_Control::allowed($ability['target_policy'],$context['relationships'][$actor][$target]??'', $context['reaction_kinds'][$target]??''))self::fail('ACS_TARGET_POLICY_DENIED');if(!isset($state['entities'][$target])||!in_array($target,$context['allowed_targets'][$actor]??[],true))self::fail('resolver_target_forbidden');
-            if(is_array($ability)&&array_diff(array_keys($ability),['supported','source_ref','components','costs','hit_policy','lifesteal','hp_cost_policy','statuses','removals','targeting','target_count','target_policy','range','environment_policy']))self::fail('resolver_ability_unsupported');
+            $context['state']=$state;$target=(string)$originalTarget;if($target!==$actor&&!AF_ACS_Awareness::targetable('identified',$state['perception_subjects']['entity:'.$target]['perception']['stealth']??null,$state['status_instances']??[],$target))self::fail('resolver_target_forbidden');if(isset($ability['target_policy'])&&!AF_ACS_Control::allowed($ability['target_policy'],$context['relationships'][$actor][$target]??'', $context['reaction_kinds'][$target]??''))self::fail('ACS_TARGET_POLICY_DENIED');if(!isset($state['entities'][$target])||!in_array($target,$context['allowed_targets'][$actor]??[],true))self::fail('resolver_target_forbidden');
+            if(is_array($ability)&&array_diff(array_keys($ability),['supported','source_ref','components','costs','hit_policy','lifesteal','hp_cost_policy','statuses','removals','targeting','target_count','target_policy','range','environment_policy','form_requirement']))self::fail('resolver_ability_unsupported');
             if(($ability['supported']??null)!==true||!is_array($ability['source_ref']??null))self::fail('resolver_capability_blocked');
             if(count($targets)>1&&($ability['targeting']??null)!=='multiple'||($ability['targeting']??null)==='multiple'&&(count($targets)<($ability['target_count']['min']??1)||count($targets)>($ability['target_count']['max']??1)))self::fail('resolver_target_count_invalid');
             self::ref($ability['source_ref']);
@@ -389,6 +394,7 @@ final class AF_ACS_Resolver
             $state=self::apply($state,$deferred?[]:$effects,$strikeIndex===0?$actor:null,$strikeIndex===0?$ability['costs']:[],$details,$ability['hp_cost_policy']??null);
             $event=self::statusEvent($context,$actor,$target,$a,$s);
             $statusResults=self::statuses($ability,'on_cast',$event,$statusSamples,$mode,$i,$state,(($context['status_scope']??[])+($context['control_context']??[])));
+            $context['state']=$state;if(AF_ACS_FormLayers::active($state['status_instances']??[],$actor)){$formTrace=[];self::stats($context,$actor,$formTrace);}
             if($hasReactions){$reactionTrace=[...self::reactions($reactionContext,'on_targeted',$i,$target,false,0,$mode,$state,$slots,$reactionUpdates,$actor,$targets,$singleTarget,$redirected,$visited,$preparedPhase,(string)$originalTarget),...self::reactions($reactionContext,'before_hit',$i,$target,false,0,$mode,$state,$slots,$reactionUpdates,$actor,$targets,$singleTarget,$redirected,$visited,$preparedPhase,(string)$originalTarget)];}
             if($target!==$actor&&!AF_ACS_Awareness::targetable('identified',$state['perception_subjects']['entity:'.$target]['perception']['stealth']??null,$state['status_instances']??[],$target))self::fail('resolver_target_forbidden');
             if($target!==(string)$originalTarget||$preparedPhase!==null){

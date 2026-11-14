@@ -58,13 +58,14 @@ final class AF_ACS_Clock
             if($periodic&&!$start&&($row['last_tick_boundary']??null)!==($round?self::apRefresh($boundary['id']):self::entityStart($boundary['id'])))$decrement=false;
             if(!$doTick&&!$decrement)continue;
             $steps=[];
-            if($doTick&&$row['remaining_duration']>0){
+            $formPolicy=AF_ACS_FormLayers::statusPolicy($state['status_instances'],$row);
+            if($doTick&&$row['remaining_duration']>0&&$formPolicy['policy']!=='suppress'){
                 foreach($row['spec']['periodic'] as $tick){
                     $target=$row['target_entity_id'];if(!isset($state['entities'][$target]))throw new RuntimeException('ACS_STATUS_TARGET_MISSING');
                     if($state['entities'][$target]['life_state']==='dead'){$steps[]=['type'=>'tick_skipped','reason'=>'dead','entity_id'=>$target];continue;}
-                    if($tick['kind']==='heal')$op=['kind'=>'heal','entity_id'=>$target,'amount'=>$tick['value']];
+                    if($tick['kind']==='heal')$op=['kind'=>'heal','entity_id'=>$target,'amount'=>AF_ACS_Numeric::terminal(AF_ACS_Numeric::operation('multiply',$tick['value'],$formPolicy['periodic_factor']))->clamped];
                     elseif($tick['kind']==='damage'){
-                        $value=$tick['value'];$allocation=AF_ACS_Damage::calculate([['source_index'=>0,'damage_type'=>$tick['damage_type'],'damage_element'=>$tick['damage_element'],'raw'=>$value,'after_crit'=>$value]],$defenses[$target]??[],[],isset($catalog['by_target'])?($catalog['by_target'][$target]??throw new RuntimeException('ACS_STATUS_CATALOG_MISSING')):$catalog);
+                        $value=AF_ACS_Numeric::operation('multiply',$tick['value'],$formPolicy['periodic_factor']);$allocation=AF_ACS_Damage::calculate([['source_index'=>0,'damage_type'=>$tick['damage_type'],'damage_element'=>$tick['damage_element'],'raw'=>$value,'after_crit'=>$value]],$defenses[$target]??[],[],isset($catalog['by_target'])?($catalog['by_target'][$target]??throw new RuntimeException('ACS_STATUS_CATALOG_MISSING')):$catalog);
                         $op=['kind'=>'damage','targets'=>[['entity_id'=>$target,'allocation'=>$allocation]]];
                     }else throw new RuntimeException('ACS_STATUS_TICK_UNSUPPORTED');
                     $r=AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>[$op]]);$state=$r->serverState();$steps[]=['effect_ref'=>$tick['effect_ref'],'source_ref'=>$tick['source_ref'],'effects'=>$r->serverTrace()];$signals=[...$signals,...$r->serverTrace()['signals']];
