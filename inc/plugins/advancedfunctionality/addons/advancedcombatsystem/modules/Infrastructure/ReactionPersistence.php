@@ -12,7 +12,7 @@ trait AF_ACS_ReactionPersistence
     {
         return $this->sql('SELECT r.* FROM '.$this->table('reactions').' r JOIN '.$this->table('encounters').' e ON e.id=r.encounter_id WHERE e.session_id=? AND e.id=? ORDER BY r.registered_order,r.id'.($lock?' FOR UPDATE':''),[$sid,$eid])['rows'];
     }
-    public function reactionProjection(string $sid,string $eid):array
+    public function reactionProjection(string $sid,string $eid,bool $authorize=true):array
     {
         require_once __DIR__.'/../Domain/Effects.php';$rows=$this->reactionRows($sid,$eid);$entries=[];$fingerprint=hash_init('sha256');
         foreach($rows as $row){$c=json_decode($row['config_json'],true,64,JSON_THROW_ON_ERROR);
@@ -22,7 +22,7 @@ trait AF_ACS_ReactionPersistence
             if(($payload['schema_version']??null)!==1||($payload['engine_version']??null)!==AF_ACS_Effects::VERSION||($payload['numeric_policy']??null)!==AF_ACS_Numeric::POLICY||($c['schema_version']??null)!==1||($c['spec']??null)!==$spec||$row['phase']!==$spec['phase']||(int)$row['priority']!==$spec['priority']||!in_array($row['status'],['active','cancelled'],true))throw new RuntimeException('ACS_REACTION_SCHEMA_INVALID');
             foreach(['id','entity_id','encounter_id','definition_snapshot_id','registered_order','reaction_version'] as $field)$row[$field]=self::integer((string)$row[$field]);
             self::integer($row['registered_order'],'9007199254740991');self::integer($row['reaction_version'],'9007199254740991');
-            $entity=$this->entity($sid,$row['entity_id']);$controller=$entity&&isset($c['controller_uid'])?AF_ACS_AuthorizationService::controller($entity??[], $this->controllers($sid,$row['entity_id']),$this->session($sid),$this->roles($sid,(string)$c['controller_uid']),(string)$c['controller_uid'],$this->delegationRows($sid,(string)$c['controller_uid']),'ordinary',$this->controlContext($sid,$entity)):null;$permission=json_decode($controller['permissions_json']??'{}',true);
+            $entity=$this->entity($sid,$row['entity_id']);$controller=$authorize&&$entity&&isset($c['controller_uid'])?AF_ACS_AuthorizationService::controller($entity??[], $this->controllers($sid,$row['entity_id']),$this->session($sid),$this->roles($sid,(string)$c['controller_uid']),(string)$c['controller_uid'],$this->delegationRows($sid,(string)$c['controller_uid']),'ordinary',$this->controlContext($sid,$entity)):null;$permission=json_decode($controller['permissions_json']??'{}',true);
             $enabled=$entity&&$controller&&!isset($controller['control_overlay'])&&($c['assignment_version']??null)===$controller['assignment_version']&&($c['control_proof']??AF_ACS_AuthorizationService::controlProof($controller))===AF_ACS_AuthorizationService::controlProof($controller)
                 &&($permission['combat_operations_enabled']??false)===true&&($c['template_snapshot_id']??null)===$entity['template_snapshot_id']&&($c['content_hash']??null)===$entity['content_hash']&&$this->reactionParticipant($sid,$eid,$row['entity_id']);
             $protected=$c['protected_targets']??[$row['entity_id']];$selection=$spec['selection']??'self';
@@ -74,16 +74,25 @@ trait AF_ACS_ReactionPersistence
                 $v=json_decode($row['value_json'],true,8,JSON_THROW_ON_ERROR);if(($v['schema_version']??null)!==1||array_diff(array_keys($v),['schema_version','sample_n','u']))throw new RuntimeException('ACS_REACTION_ROLL_INVALID');
                 $sample=['sample_n'=>$v['sample_n']??null,'u'=>$v['u']??null];AF_ACS_Effects::statusSample($sample);$context['reaction_rolls'][$key]=['id'=>(string)$row['id'],'sample'=>$sample];
             }
+        }$actions=[];foreach($seals as $d){$p=$d['payload']??$this->sealPayload($d);$actions[]=['id'=>(string)$d['id'],'action'=>$p['action']];}$context['effect_response_rolls']=[];
+        foreach(AF_ACS_EffectResponses::requests($context,$actions) as $key=>$edge){$r=$this->sql('SELECT * FROM '.$this->table('rolls').' WHERE session_id=? AND causal_key=? AND check_kind=? AND roll_index=0',[$context['status_scope']['session_id'],$key,'reaction'])['rows'][0]??null;if(!$r)continue;
+            if($r['sealed_action_id']!==null||$r['rng_version']!=='uniform53-v1')throw new RuntimeException('ACS_EFFECT_RESPONSE_ROLL_INVALID');$v=json_decode($r['value_json'],true,8,JSON_THROW_ON_ERROR);if(($v['schema_version']??null)!==1||array_diff(array_keys($v),['schema_version','sample_n','u']))throw new RuntimeException('ACS_EFFECT_RESPONSE_ROLL_INVALID');$sample=['sample_n'=>$v['sample_n']??null,'u'=>$v['u']??null];AF_ACS_Effects::statusSample($sample);$context['effect_response_rolls'][$key]=['id'=>(string)$r['id'],'sample'=>$sample];
         }return $context;
     }
-    /** Only an explicit seal command may reserve a new prepared causal check. */
+    /** Only an explicit seal command may reserve new server causal checks. */
     public function prepareReactionRolls(array $draft,array $context,AF_ACS_RandomSource $random):void
     {
         if(empty($this->sealWriting))throw new RuntimeException('ACS_COMMAND_REQUIRED');
+        $actions=[];foreach($this->sealRows($draft['id'],true) as $row)if($row['status']==='sealed'&&empty($this->sealPayload($row)['deferred']))$actions[]=['id'=>(string)$row['id'],'action'=>$this->sealPayload($row)['action']];
+        $responseRequests=AF_ACS_EffectResponses::requests($context,$actions);
         foreach($this->sealRows($draft['id'],true) as $seal){if(($this->sealPayload($seal)['deferred']??false)===true)continue;$targets=$this->sealPayload($seal)['action']['targets'];foreach(self::candidateReactions($context['reactions']??[],$targets) as $entry){
             if($entry['status']!=='active'||!$entry['enabled']||$entry['spec']['probability']>=100)continue;$key=self::reactionRollKey($entry['id'],(string)$seal['id'],$entry['phase']);
             if($this->sql('SELECT id FROM '.$this->table('rolls').' WHERE session_id=? AND causal_key=? AND check_kind=? AND roll_index=0',[$draft['session_id'],$key,'reaction'])['rows'])continue;
             $sample=$random->reaction();$this->sql('INSERT INTO '.$this->table('rolls').' (session_id,sealed_action_id,causal_key,check_kind,roll_index,rng_version,value_json,created_at) VALUES (?,NULL,?,?,0,?,?,?)',[$draft['session_id'],$key,'reaction','uniform53-v1',self::json(['schema_version'=>1]+$sample),time()]);
         }}
+        foreach($responseRequests as $key=>$edge){
+            if($this->sql('SELECT id FROM '.$this->table('rolls').' WHERE session_id=? AND causal_key=? AND check_kind=? AND roll_index=0',[$draft['session_id'],$key,'reaction'])['rows'])continue;
+            $sample=$random->reaction();$this->sql('INSERT INTO '.$this->table('rolls').' (session_id,sealed_action_id,causal_key,check_kind,roll_index,rng_version,value_json,created_at) VALUES (?,NULL,?,?,0,?,?,?)',[$draft['session_id'],$key,'reaction','uniform53-v1',self::json(['schema_version'=>1]+$sample),time()]);
+        }
     }
 }

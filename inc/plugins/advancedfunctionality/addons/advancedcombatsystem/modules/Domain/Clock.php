@@ -42,6 +42,7 @@ final class AF_ACS_Clock
         $key=match($phase){'entity_start'=>self::entityStart($boundary['id']),'entity_end'=>self::entityEnd($boundary['id']),
             'round_start'=>self::apRefresh($boundary['id']),'round_end'=>self::roundEnd($boundary['id']),default=>throw new RuntimeException('ACS_STATUS_BOUNDARY_INVALID')};
         self::id($boundary['session_id']);self::id($boundary['encounter_id']);
+        if(AF_ACS_EffectResponses::has($state))$state['effect_response_scope']=['session_id'=>$boundary['session_id'],'encounter_id'=>$boundary['encounter_id']];
         $initial=$state;$checked=AF_ACS_Effects::simulate($state,['costs'=>[],'effects'=>[]]);$state=$checked->serverState();$events=$checked->serverTrace()['events'];$signals=$checked->serverTrace()['signals'];$tickKeys=[];
         $queue=array_keys($state['status_instances']??[]);
         usort($queue,static fn($a,$b)=>$state['status_instances'][$a]['applied_order']<=>$state['status_instances'][$b]['applied_order']?:strlen((string)$a)<=>strlen((string)$b)?:strcmp((string)$a,(string)$b));

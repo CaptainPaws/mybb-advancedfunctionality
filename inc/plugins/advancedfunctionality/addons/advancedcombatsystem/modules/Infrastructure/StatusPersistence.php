@@ -52,7 +52,7 @@ trait AF_ACS_StatusPersistence
             }
             $state['entities'][$target]=['hp'=>$hp,'max_hp'=>$max,'life_state'=>$row['life_state'],'recovery_blocked'=>false,'group_id'=>$gid,'resources'=>[],
                 'source_ref'=>['key'=>'entity-'.$target,'version'=>'registration-1','fingerprint'=>'sha256:'.$row['content_hash']],'version'=>(int)self::integer($row['state_version'],'9007199254740991')];
-            $loaded=$this->statusResources($target,$row);$resources[$target]=$loaded['rows'];$state['entities'][$target]['resources']=$loaded['values'];
+            $loaded=$this->statusResources($target,$row);$resources[$target]=$loaded['rows'];if($defs=AF_ACS_EffectResponses::resourceDefinitions($loaded['rows']))$state['effect_response_resources'][$target]=$defs;$state['entities'][$target]['resources']=$loaded['values'];
             $res=[];foreach($source['resistances']??[] as $key=>$r)$res[$key]=['scope'=>'elemental','unit'=>'RES','value'=>$r['value']];
             foreach(['weaknesses','math_modifiers'] as $field)if(!empty($source['data']['definition'][$field]))throw new RuntimeException('ACS_STATUS_TARGET_UNSUPPORTED');
             foreach($source['data']['definition']['immunities']??[] as $scope)if(!is_array($scope)||!in_array($scope['scope']??null,['status_key','status_type'],true)||!is_string($scope['key']??null))throw new RuntimeException('ACS_STATUS_TARGET_UNSUPPORTED');
@@ -147,6 +147,7 @@ trait AF_ACS_StatusPersistence
 
             foreach($dto['data']['ability_profile']['effects']??[] as $candidate)if(($candidate['source_index']??null)===$instance['effect_definition_ref']['effect_index'])$effect=$candidate;
             if($effect===null)throw new RuntimeException('ACS_STATUS_PIN_INVALID');
+            if(array_intersect(array_keys($instance['spec']['mechanical_parameters']),['reflect_effect','absorb_effect'])&&(!array_key_exists('response_requirement',$instance)||$instance['response_requirement']!==($dto['data']['definition']['form_requirement']??null)))throw new RuntimeException('ACS_STATUS_PIN_INVALID');
             $status=$effect['references']['status_key']??[];
             $expectedRef=['type'=>$dto['source']['type']??null,'key'=>$dto['source']['key']??null,'version'=>$dto['definition_version']['declared_version']??null,
                 'fingerprint'=>$dto['definition_version']['fingerprint']??null,'effect_index'=>$effect['source_index']];
@@ -214,6 +215,7 @@ trait AF_ACS_StatusPersistence
             }else{
                 if(isset($old['grant'])){AF_ACS_AbilityOperations::grant($instance);foreach(['binding','cause','origin_event_id'] as $k)if($old['grant'][$k]!==$instance['grant'][$k])throw new RuntimeException('ACS_STATUS_IMMUTABLE');if($instance['grant']['remaining_uses']>$old['grant']['remaining_uses']||array_slice($instance['grant']['uses'],0,count($old['grant']['uses']))!==$old['grant']['uses'])throw new RuntimeException('ACS_GRANTED_VERSION_CONFLICT');}
                 if(($old['transfer']??null)!==($instance['transfer']??null))throw new RuntimeException('ACS_STATUS_IMMUTABLE');
+                if(($old['response_requirement']??null)!==($instance['response_requirement']??null))throw new RuntimeException('ACS_STATUS_IMMUTABLE');
                 if(isset($old['form_base_max_hp'])&&$old['form_base_max_hp']!==($instance['form_base_max_hp']??null))throw new RuntimeException('ACS_FORM_BASE_CONFLICT');
                 $id=self::integer($virtualId);$immutable=['id','session_id','encounter_id','source_entity_id','target_entity_id','spec','effect_definition_ref','status_definition_ref','applied_order','duration_unit','origin_action_index'];
                 foreach($immutable as $field)if($old[$field]!==$instance[$field])throw new RuntimeException('ACS_STATUS_IMMUTABLE');
