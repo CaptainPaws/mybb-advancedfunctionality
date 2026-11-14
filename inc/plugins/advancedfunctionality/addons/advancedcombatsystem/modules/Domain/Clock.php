@@ -104,7 +104,7 @@ final class AF_ACS_Clock
     public static function closed(AF_ACS_TurnState $state): bool {return $state!==AF_ACS_TurnState::Pending;}
     public static function availableAP(int $budget,int $spent,int $commitment=0): int
     {
-        if($budget<0 || $spent<0 || $spent>$budget || $commitment!==0)throw new RuntimeException('ACS_AP_STATE_INVALID');return $budget-$spent;
+        if($budget<0 || $spent<0 || $commitment<0 || $commitment>$budget || $spent>$budget-$commitment)throw new RuntimeException('ACS_AP_STATE_INVALID');return $budget-$commitment-$spent;
     }
     /** A1.7 + N1: exact integer quarter, one terminal half_up, then resource clamp. */
     public static function restHP(int $current,int $maximum,bool $full): int

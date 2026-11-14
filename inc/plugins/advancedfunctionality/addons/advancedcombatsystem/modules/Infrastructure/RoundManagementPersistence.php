@@ -26,9 +26,17 @@ trait AF_ACS_RoundManagementPersistence
         if(!in_array($name,['drafts','sealed_actions','submissions','effects'],true))throw new RuntimeException('ACS_UNKNOWN_TABLE');
         return $this->sql('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?',[$this->prefix.'af_acs_'.$name])['rows']?'`'.$this->prefix.'af_acs_'.$name.'`':null;
     }
-    public function assertNoObligations(string $sid,string $eid,?string $turn=null,bool $readOnlyPreview=false,?string $sealedDraft=null): void
+    public function assertNoObligations(string $sid,string $eid,?string $turn=null,bool $readOnlyPreview=false,?string $sealedDraft=null,?string $startIntent=null): void
     {
-        if($this->sql('SELECT operation_key FROM '.$this->table('operations')." WHERE session_id=? AND (encounter_id=? OR encounter_id IS NULL) AND status IN ('prepared','recovery_required')".($readOnlyPreview?" AND (external_system IS NULL OR external_system<>'advancedinventory')":'')." LIMIT 1",[$sid,$eid])['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
+        $exclude='';$operationArgs=[$sid,$eid];
+        if($startIntent!==null){
+            $this->commandWrite();
+            $encounter=$this->encounter($sid,$eid);
+            $intent=$this->sql('SELECT kind,status FROM '.$this->table('operations').' WHERE operation_key=? AND session_id=? AND encounter_id=?',[$startIntent,$sid,$eid])['rows'][0]??null;
+            if(!$intent||$intent['kind']!=='encounter.start_intent'||$intent['status']!=='prepared'||($encounter['start_operation_id']??null)!==$startIntent||$encounter['status']!=='ambush_ready')throw new RuntimeException('ACS_RECOVERY_REQUIRED');
+            $exclude=' AND operation_key<>?';$operationArgs[]=$startIntent;
+        }
+        if($this->sql('SELECT operation_key FROM '.$this->table('operations')." WHERE session_id=? AND (encounter_id=? OR encounter_id IS NULL) AND status IN ('prepared','recovery_required')".$exclude.($readOnlyPreview?" AND (external_system IS NULL OR external_system<>'advancedinventory')":'')." LIMIT 1",$operationArgs)['rows'])throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
         try {
             $drafts=$this->futureTable('drafts');$sealed=$this->futureTable('sealed_actions');$submissions=$this->futureTable('submissions');
             $scope='encounter_id=?'.($turn===null?'':' AND turn_id=?');$args=$turn===null?[$eid]:[$eid,$turn];
