@@ -63,6 +63,23 @@ trait AF_ACS_AmbushStartPersistence
         $this->sql('UPDATE '.$this->table('operations').' SET result_json=? WHERE operation_key=?',[self::json($session['_command_result']),$key]);
         return $session;
     }
+    /** Read-only proof of the existing command terminal event, not merely a metadata intent. */
+    public function ambushStartConfirmed(string $sid,string $eid):bool
+    {
+        $enc=$this->encounter($sid,$eid);if(($enc['start_operation_id']??null)===null)return false;
+        $intent=$this->sql('SELECT * FROM '.$this->table('operations').' WHERE operation_key=? AND session_id=? AND encounter_id=?',[$enc['start_operation_id'],$sid,$eid])['rows'][0]??null;
+        if(!$intent||$intent['kind']!=='encounter.start_intent'||$intent['status']!=='committed'||!hash_equals($intent['payload_hash'],hash('sha256',$intent['request_json'])))return false;
+        $request=json_decode($intent['request_json'],true,64,JSON_THROW_ON_ERROR);$start=json_decode($intent['result_json'],true,64,JSON_THROW_ON_ERROR);
+        $prefix='ambush:'.$sid.':';if(!str_starts_with($enc['start_operation_id'],$prefix)||($request['start_operation_id']??null)!==$enc['start_operation_id'])return false;
+        $key='session:'.self::integer($request['actor_uid']).':ambush-start:'.substr($enc['start_operation_id'],strlen($prefix));
+        $row=$this->sql('SELECT o.status,o.kind,o.payload_hash,o.result_json,e.id AS event_id,e.actor_uid,d.payload_json,d.visibility_json,d.content_hash FROM '.$this->table('operations').' o JOIN '.$this->table('events').' e ON e.operation_key=o.operation_key AND e.session_id=o.session_id AND e.encounter_id=o.encounter_id JOIN '.$this->table('event_details').' d ON d.event_id=e.id WHERE o.operation_key=? AND o.session_id=? AND o.encounter_id=? AND e.event_type=?',[$key,$sid,$eid,'encounter.ambush_start'])['rows'][0]??null;
+        if(!$row||$row['status']!=='committed'||$row['kind']!=='encounter.ambush_start'||$row['payload_hash']!==$intent['payload_hash']||(string)$row['actor_uid']!==$request['actor_uid']||!hash_equals($row['content_hash'],hash('sha256',$row['payload_json']."\n".$row['visibility_json'])))return false;
+        $result=json_decode($row['result_json'],true,64,JSON_THROW_ON_ERROR);$event=json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR);
+        return ($result['mechanics_confirmed']??false)===true&&($start['mechanics_confirmed']??false)===true&&($event['request']??null)===$request
+            &&($event['result']['mechanics_confirmed']??false)===true&&($result['start_operation_id']??null)===$enc['start_operation_id']
+            &&($result['round_id']??null)===($start['round_id']??null)&&($event['result']['round_id']??null)===$result['round_id']
+            &&($result['event_id']??null)===(string)$row['event_id'];
+    }
     public function ambushStartState(string $sid,string $eid): array
     {
         $encounter=$this->encounter($sid,$eid)??throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');

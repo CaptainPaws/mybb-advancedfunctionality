@@ -152,7 +152,7 @@ final class AF_ACS_BuilderService
         if(!$actors)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
         $targets=[];foreach($scope['targets'] as $t)$targets[]=$t+['actors'=>$t['known_to']];
         $token=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'mode'=>'pre_round','session'=>$scope['session']['session_version'],'encounter'=>$scope['encounter']['encounter_version'],'audience'=>$scope['audience_stamp'],'actors'=>$actors]));
-        return ['mode'=>'pre_round','session_version'=>$scope['session']['session_version'],'session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>null,'encounter_status'=>'preparation','turn'=>['id'=>'0','status'=>'preparation','ap'=>3,'maximum_ap'=>3],'turns'=>[],'actors'=>$actors,'targets'=>$targets,'can_manage'=>$scope['gm'],'scope_token'=>$token,'publication_enabled'=>false,'prepared_actions'=>$this->preparedView($sid,$eid,$actors)];
+        return ['draft_id'=>$this->repo->builderDraft($sid,'0',$this->access->uid(),$eid),'mode'=>'pre_round','session_version'=>$scope['session']['session_version'],'session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>null,'encounter_status'=>'preparation','turn'=>['id'=>'0','status'=>'preparation','ap'=>3,'maximum_ap'=>3],'turns'=>[],'actors'=>$actors,'targets'=>$targets,'can_manage'=>$scope['gm'],'scope_token'=>$token,'publication_enabled'=>false,'prepared_actions'=>$this->preparedView($sid,$eid,$actors)];
     }
     private function preparedView(string $sid,string $eid,array $actors):array
     {

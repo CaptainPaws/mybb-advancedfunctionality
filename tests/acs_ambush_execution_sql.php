@@ -16,7 +16,7 @@ $GLOBALS['acsPreparedStartFixture']=static function(array $fixture):void {
     $before=$captureAll();$p=$repo->preparedRows($sid,$eid,$actor)[0];$c=json_decode($p['contract_json'],true);snapshot_assert($c['owner_obligations'][3]['schema']==='prepared_reserved_start_consume.v1'&&count($repo->preparedTriggerItems($p))===2,'No narrow owner start consent/two bindings');
     itemInsert($link,'users',['uid'=>9]);itemInsert($link,'af_acs_session_roles',['session_id'=>$sid,'uid'=>9,'role'=>'observer','permissions_json'=>'{"schema_version":1}','role_version'=>1,'expires_at'=>null]);
     itemInsert($link,'users',['uid'=>8]);itemInsert($link,'af_acs_session_roles',['session_id'=>$sid,'uid'=>8,'role'=>'gm','permissions_json'=>'{"schema_version":1}','role_version'=>1,'expires_at'=>null]);
-    $mybb->user['uid']=$case==='same' ? 7 : 8;$ambush=new AF_ACS_AmbushStartService($repo,$access,$random);$ambush->command('ready',$ambushRequest());
+    $mybb->user['uid']=$case==='same' ? 7 : 8;$ambush=new AF_ACS_AmbushStartService($repo,$access,$random);if(isset($GLOBALS['acsAmbushApiFixture'])){($GLOBALS['acsAmbushApiFixture'])(get_defined_vars());return;}$ambush->command('ready',$ambushRequest());
     snapshot_assert($case==='same'||$repo->controllerFor($sid,$actor,'8')===null,'GM received body control');
     $requestActor=$mybb->user['uid'];$mybb->user['uid']=9;$observer=new AF_ACS_AudienceService($repo,$access,$sid,$eid);snapshot_assert($observer->knowledge('prepared_action',$paid['prepared_action_id'])['level']==='unknown','Hidden start disclosed before trigger');$mybb->user['uid']=$requestActor;
     $r=$ambushRequest();$hp=(int)$repo->entity($sid,$npcId)['hp'];$readyState=$captureAll();
