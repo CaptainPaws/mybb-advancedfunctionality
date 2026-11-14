@@ -9,7 +9,7 @@ final class AF_ACS_PreparedAction
     private static function fail(): never { throw new DomainException('ACS_PREPARED_UNSUPPORTED'); }
     public static function contract(mixed $value): array
     {
-        if (!is_array($value) || array_diff(array_keys($value),['schema','trigger','target','duration','ap_cost','additional_costs','requires_active','execution','hidden'])
+        if (!is_array($value) || array_diff(array_keys($value),['schema','trigger','target','duration','ap_cost','additional_costs','requires_active','execution','hidden','pre_round'])
             || ($value['schema']??null)!=='ic-acs.prepared.v1'
             || (!is_array($value['trigger']??null)||array_diff(array_keys($value['trigger']),['kind','subject'])||($value['trigger']['kind']??null)!=='on_targeted'||($value['trigger']['subject']??null)!=='source')
             || ($value['target']??null)!==['kind'=>'fixed']
@@ -31,9 +31,11 @@ final class AF_ACS_PreparedAction
             }elseif(array_diff(array_keys($cost),['kind','key','amount','timing'])||in_array($cost['key'],['hp','ap'],true))self::fail();
         }
         unset($cost);
+        if(array_key_exists('pre_round',$value)&&(!is_array($value['pre_round'])||count($value['pre_round'])!==2||array_diff(array_keys($value['pre_round']),['schema','allowed'])||($value['pre_round']['schema']??null)!=='ic-acs.pre-round-preparation.v1'||($value['pre_round']['allowed']??null)!==true))self::fail();
+        $preRound=isset($value['pre_round'])?['pre_round'=>['schema'=>'ic-acs.pre-round-preparation.v1','allowed'=>true]]:[];
         $hidden=array_key_exists('hidden',$value)?['hidden'=>self::hidden($value['hidden'])]:[];
         $execution=isset($value['execution'])?['execution'=>self::execution($value['execution'])]:[];
-        return $hidden+$execution+['schema'=>'ic-acs.prepared.v1','trigger'=>['kind'=>'on_targeted','subject'=>'source'],'target'=>$value['target'],
+        return $preRound+$hidden+$execution+['schema'=>'ic-acs.prepared.v1','trigger'=>['kind'=>'on_targeted','subject'=>'source'],'target'=>$value['target'],
             'duration'=>'until_next_turn','requires_active'=>true,'ap_cost'=>$value['ap_cost'],'additional_costs'=>$costs];
     }
     public static function hidden(mixed $h):array

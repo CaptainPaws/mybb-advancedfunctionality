@@ -171,11 +171,16 @@ trait AF_ACS_ClockPersistence
         if($old=$this->boundary($key,$sid))return $old;
         $round=$this->clockRound($sid,$roundId);
         if(!$round || (string)$round['encounter_id']!==$eid || $round['status']!=='open')throw new RuntimeException('ACS_CLOCK_BOUNDARY_STATE');
+        $confirmed=(string)$round['round_number']==='1'?$this->preRoundCommitments($sid,$eid):['rows'=>[],'totals'=>[]];
+        foreach($confirmed['rows'] as $c)if((string)$c['applied_round_id']!==$roundId)throw new RuntimeException('ACS_PRE_ROUND_INTEGRITY');
         $after='0';$count=0;$entityIds=[];
         do {
             $turns=$this->roundTurns($roundId,$after);
             foreach($turns as $turn) {
-                if($turn['status']!=='pending' || $turn['ap_budget']!=='0' || $turn['ap_spent']!=='0' || $turn['seal_quota_spent']!=='0' || $turn['pre_round_ap_commitment']!=='0')throw new RuntimeException('ACS_AP_STATE_INVALID');
+                if($turn['status']!=='pending' || $turn['ap_budget']!=='0' || $turn['ap_spent']!=='0' || $turn['seal_quota_spent']!=='0')throw new RuntimeException('ACS_AP_STATE_INVALID');
+                $commitment=(int)$turn['pre_round_ap_commitment'];if($commitment!==($confirmed['totals'][$turn['control_group_id']]??0))throw new RuntimeException('ACS_PRE_ROUND_INTEGRITY');AF_ACS_Clock::availableAP(3,0,$commitment);
+                $roster=json_decode($turn['roster_json'],true,32,JSON_THROW_ON_ERROR);
+                if(($roster['pre_round_ap_commitment']??0)!==$commitment||$commitment>0&&(string)$round['round_number']!=='1')throw new RuntimeException('ACS_AP_STATE_INVALID');
                 $group=$this->clockGroup($sid,$turn['control_group_id']);
                 if(!$group || json_decode($group['config_json'],true)!==['schema_version'=>1])throw new RuntimeException('ACS_CLOCK_DEPENDENCY_BLOCKED');
                 foreach($this->individualTurns([$turn['id']]) as $individual) {
@@ -191,7 +196,7 @@ trait AF_ACS_ClockPersistence
         }while(count($turns)===100);
         if(!$count)throw new RuntimeException('ACS_ROSTER_INVALID');
         $statuses=$this->processStatusBoundary($this->session($sid),$this->encounter($sid,$eid),'round_start',$roundId,$actor,null,$entityIds);
-        $this->recordBoundary($key,'clock.ap_refresh',$sid,$eid,$actor,['round_id'=>$roundId],['round_id'=>$roundId,'initial_budget'=>3,'turn_count'=>(string)$count,'statuses'=>$statuses,'parent_encounter_sequence'=>$sequence]);
+        $this->recordBoundary($key,'clock.ap_refresh',$sid,$eid,$actor,['round_id'=>$roundId],['round_id'=>$roundId,'initial_budget'=>3,'pre_round_ap_commitments'=>$confirmed['totals'],'turn_count'=>(string)$count,'statuses'=>$statuses,'parent_encounter_sequence'=>$sequence]);
         return $this->boundary($key,$sid);
     }
     /** A pre-005 roster already initialized AP: acknowledge its confirmed event, never refill. */

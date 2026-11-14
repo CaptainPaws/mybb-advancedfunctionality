@@ -9,9 +9,9 @@ trait AF_ACS_DraftPersistence
         $row=$this->sql('SELECT id FROM '.$this->table('encounters')." WHERE session_id=? AND status IN ('active','paused') ORDER BY id DESC LIMIT 1",[$sid])['rows'][0]??null;
         return $row?(string)$row['id']:null;
     }
-    public function builderDraft(string $sid,string $turn,string $uid):?string
+    public function builderDraft(string $sid,string $turn,string $uid,?string $eid=null):?string
     {
-        $row=$this->sql('SELECT d.id FROM '.$this->table('drafts').' d JOIN '.$this->table('encounters')." e ON e.id=d.encounter_id WHERE e.session_id=? AND d.turn_id=? AND d.author_uid=? AND d.status IN ('draft','sealed','publishing') ORDER BY d.id DESC LIMIT 1",[$sid,$turn,$uid])['rows'][0]??null;
+        $row=$this->sql('SELECT d.id FROM '.$this->table('drafts').' d JOIN '.$this->table('encounters')." e ON e.id=d.encounter_id WHERE e.session_id=? AND (? IS NULL OR d.encounter_id=?) AND d.turn_id=? AND d.author_uid=? AND d.status IN ('draft','sealed','publishing') ORDER BY d.id DESC LIMIT 1",[$sid,$eid,$eid,$turn,$uid])['rows'][0]??null;
         return $row?(string)$row['id']:null;
     }
     public function draft(string $id,string $uid): ?array
@@ -40,7 +40,7 @@ trait AF_ACS_DraftPersistence
             $draftId=$request['draft_id'];$version=$request['expected_draft_version'];$now=time();
             if($draftId===null){
                 if($version!=='0')throw new RuntimeException('ACS_DRAFT_VERSION_CONFLICT');
-                if($this->sql('SELECT id FROM '.$this->table('drafts')." WHERE turn_id=? AND author_uid=? AND status IN ('draft','sealed','publishing') LIMIT 1 FOR UPDATE",[$request['turn_id'],$request['author_uid']])['rows'])throw new RuntimeException('ACS_DRAFT_ALREADY_EXISTS');
+                if($this->sql('SELECT id FROM '.$this->table('drafts')." WHERE encounter_id=? AND turn_id=? AND author_uid=? AND status IN ('draft','sealed','publishing') LIMIT 1 FOR UPDATE",[$request['encounter_id'],$request['turn_id'],$request['author_uid']])['rows'])throw new RuntimeException('ACS_DRAFT_ALREADY_EXISTS');
                 $draftId=$this->sql('INSERT INTO '.$this->table('drafts').' (encounter_id,turn_id,author_uid,status,draft_version,mechanics_json,prose,dependency_json,confirmation_hash,pid,updated_at) VALUES (?,?,?,?,1,?,?,?,NULL,NULL,?)',[$request['encounter_id'],$request['turn_id'],$request['author_uid'],'draft',$mechanics,$prose,self::json($dependencies),$now])['id'];
             }else{
                 $row=$this->draft($draftId,$request['author_uid']);

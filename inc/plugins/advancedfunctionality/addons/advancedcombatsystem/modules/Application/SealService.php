@@ -19,7 +19,7 @@ final class AF_ACS_SealService
     private function prepare(array $draft,array $actions):array
     {
         $scope=$this->scope($draft);
-        if($scope['encounter_status']!=='active'||$scope['turn']['status']!=='pending')throw new RuntimeException('ACS_SEAL_TURN_UNAVAILABLE');
+        if(!(($scope['encounter_status']==='active'&&$scope['turn']['status']==='pending')||(($scope['mode']??null)==='pre_round'&&$scope['encounter_status']==='preparation')))throw new RuntimeException('ACS_SEAL_TURN_UNAVAILABLE');
         return (new AF_ACS_BuilderService($this->repo,$this->access))->prepare(['session_id'=>$draft['session_id'],'encounter_id'=>$draft['encounter_id'],'turn_id'=>$draft['turn_id'],'scope_token'=>$scope['scope_token'],'actions'=>$actions,'scenario'=>'hit'],$draft['id']);
     }
     private function actions(array $draft):array{return json_decode($draft['mechanics_json'],true,32,JSON_THROW_ON_ERROR)['actions'];}
@@ -34,7 +34,7 @@ final class AF_ACS_SealService
             if($known)$history[]=['id'=>(string)$row['id'],'history_index'=>(int)$row['action_index'],'status'=>$row['status'],'ap_cost'=>(int)$row['ap_cost'],'action'=>$payload['action'],'rolls'=>$t];
             if($row['status']==='sealed'){$active[]=$row;$actions[]=$payload['action'];$tape[]=$t;}
         }
-        $result=['schema_version'=>1,'draft_id'=>$draft['id'],'draft_version'=>$draft['draft_version'],'active_count'=>count($active),'history'=>$history,'quota_used'=>$this->repo->sealQuota($draft['turn_id']),'quota_budget'=>null,'summary'=>null,'confirmed'=>false,'confirmation_hash'=>null,'confirmable'=>false,'changed'=>false,'blocked'=>false,'publication_enabled'=>false,'persistent_combat_state'=>false];
+        $result=['schema_version'=>1,'draft_id'=>$draft['id'],'draft_version'=>$draft['draft_version'],'active_count'=>count($active),'history'=>$history,'quota_used'=>$draft['turn_id']==='0'?$this->repo->preRoundQuota($draft):$this->repo->sealQuota($draft['turn_id']),'quota_budget'=>null,'summary'=>null,'confirmed'=>false,'confirmation_hash'=>null,'confirmable'=>false,'changed'=>false,'blocked'=>false,'publication_enabled'=>false,'persistent_combat_state'=>false];
         try{$scope=$this->scope($draft);$result['quota_budget']=$scope['turn']['ap'];$allActions=$this->actions($draft);$result['friendly_fire']=$allActions?$this->prepare($draft,$allActions)['friendly_fire']:AF_ACS_Control::friendlyFire([],[]);$result['friendly_fire']['acknowledged']=!$result['friendly_fire']['required']||(json_decode($draft['dependency_json'],true)['seal']['friendly_fire_confirmation']??null)===$result['friendly_fire']['confirmation_hash'];if(!$active)return $result;
             if(array_slice($this->actions($draft),0,count($actions))!==$actions)throw new RuntimeException('ACS_SEAL_IMMUTABLE');
             $p=$this->prepare($draft,$actions);$dependencies=[];
@@ -89,7 +89,7 @@ final class AF_ACS_SealService
         if($op==='cancel_tail')$request['reason']='author_cancel_tail';
         if($op==='confirm'){$h=$input['confirmation_hash']??null;if(!is_string($h)||!preg_match('/\A[a-f0-9]{64}\z/D',$h))throw new RuntimeException('ACS_SEAL_INPUT_INVALID');$request['confirmation_hash']=$h;}
         return $this->repo->sealCommand($request,function($d)use($op){
-            $this->draft($d['id']);$s=$this->scope($d);if($s['encounter_status']!=='active'||$s['turn']['status']!=='pending')throw new RuntimeException('ACS_SEAL_TURN_UNAVAILABLE');
+            $this->draft($d['id']);$s=$this->scope($d);if(!(($s['encounter_status']==='active'&&$s['turn']['status']==='pending')||(($s['mode']??null)==='pre_round'&&$s['encounter_status']==='preparation')))throw new RuntimeException('ACS_SEAL_TURN_UNAVAILABLE');
             if($op!=='cancel_tail') {
                 foreach($this->actions($d) as $a)if(isset($a['parameters']['prepared_items'])){global $db;$uid=(int)$this->access->uid();$owner=(int)$this->repo->entity($d['session_id'],$a['actor_id'])['owner_uid'];if($owner!==$uid)throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');AF_ACS_ItemActionService::reader($db,$uid,$d['session_id'],$a['actor_id'],'ordinary')->fence($owner,$uid);}
                 foreach($this->actions($d) as $a)if(AF_ACS_ItemActionService::isItem($a['ability_key'])){global $db;$uid=(int)$this->access->uid();$owner=(int)$this->repo->entity($d['session_id'],$a['actor_id'])['owner_uid'];$category=$owner===$uid?'ordinary':(str_starts_with($a['ability_key'],'item:consume:')?'item_consume':'equipment_change');AF_ACS_ItemActionService::reader($db,$uid,$d['session_id'],$a['actor_id'],$category)->fence($owner,$uid);}
@@ -105,7 +105,7 @@ final class AF_ACS_SealService
                 if(count($actions)<=count($active))throw new RuntimeException('ACS_SEAL_NOTHING_TO_APPEND');
                 $p=$this->prepare($d,$actions);
                 foreach($active as $i=>$row){$old=$this->repo->sealPayload($row);if(($actions[$i]??null)!==$old['action'])throw new RuntimeException('ACS_SEAL_IMMUTABLE');$a=$old['action'];if($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['source_ref']!==$old['pin'])throw new RuntimeException('ACS_SEAL_PIN_CHANGED');$this->repo->verifySealDefinition($d['session_id'],$row,$old);}
-                $used=$this->repo->sealQuota($d['turn_id']);$cost=0;$costs=[];
+                $used=$d['turn_id']==='0'?$this->repo->preRoundQuota($d):$this->repo->sealQuota($d['turn_id']);$cost=0;$costs=[];
                 foreach(array_slice($actions,count($active)) as $offset=>$a){$c=$p['action_costs'][count($active)+$offset]??($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['costs']??null);
                     $ap=is_array($c)?array_values(array_filter($c,static fn($cost)=>$cost['kind']==='ap')):[];if(count($ap)!==1||(!AF_ACS_ObjectInteraction::isAction($a['ability_key'])&&!isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['prepared_action'])&&count($c)!==1)||!is_int($ap[0]['amount'])||$ap[0]['amount']<=0)throw new RuntimeException('ACS_SEAL_ZERO_AP_UNSUPPORTED');$cost+=$ap[0]['amount'];$costs[]=$ap[0]['amount'];}
                 if($used+$cost>$p['scope']['turn']['ap'])throw new RuntimeException('ACS_SEAL_QUOTA_EXHAUSTED');

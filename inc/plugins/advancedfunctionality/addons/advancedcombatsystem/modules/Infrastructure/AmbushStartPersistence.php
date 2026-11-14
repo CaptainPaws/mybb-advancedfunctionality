@@ -12,10 +12,12 @@ trait AF_ACS_AmbushStartPersistence
     public function markAmbushReady(array $session,array $encounter): array
     {
         $this->commandWrite();$this->assertNoObligations($session['id'],$encounter['id']);
-        $this->assertAmbushExecutionSupported($session['id'],$encounter['id']);
+        $commitments=$this->preRoundCommitments($session['id'],$encounter['id']);$confirmed=array_column($commitments['rows'],'prepared_action_id');
+        $pending=$this->sql('SELECT id,cost_state FROM '.$this->table('prepared_actions')." WHERE session_id=? AND encounter_id=? AND (status='active' OR cost_state='recovery_required')",[$session['id'],$encounter['id']])['rows'];
+        foreach($pending as $row)if($row['cost_state']==='recovery_required'||!in_array((string)$row['id'],array_map('strval',$confirmed),true))throw new RuntimeException('ACS_AMBUSH_EXECUTION_BLOCKED');
         if($encounter['status']!=='preparation'||$encounter['round_number']!=='0'||$encounter['start_operation_id']!==null||$this->firstRound($encounter['id']))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
         if($this->sql('UPDATE '.$this->table('encounters')." SET status='ambush_ready',encounter_version=encounter_version+1,next_event_sequence=next_event_sequence+1 WHERE id=? AND session_id=? AND encounter_version=? AND status='preparation'",[$encounter['id'],$session['id'],$encounter['encounter_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
-        $session['_command_result']=['encounter_id'=>$encounter['id'],'encounter_version'=>$this->encounter($session['id'],$encounter['id'])['encounter_version'],'encounter_sequence'=>$encounter['next_event_sequence'],'status'=>'ambush_ready','start_execution'=>'empty_only'];return $session;
+        $session['_command_result']=['encounter_id'=>$encounter['id'],'encounter_version'=>$this->encounter($session['id'],$encounter['id'])['encounter_version'],'encounter_sequence'=>$encounter['next_event_sequence'],'status'=>'ambush_ready','start_execution'=>$pending?'blocked_until_9_2_2B':'empty_only','pre_round_ap_commitments'=>$commitments['totals']];return $session;
     }
     /** Separate metadata commit survives a later mechanical rollback. No AP, RNG or clocks. */
     public function armAmbushStart(array $request,callable $authorize): array
@@ -50,9 +52,11 @@ trait AF_ACS_AmbushStartPersistence
         $this->assertNoObligations($session['id'],$encounter['id'],null,false,null,$key);
         $session=$this->openFirstRound($session,$encounter,$sources,$request['actor_uid'],$key);
         $result=&$session['_command_result'];
-        $result+=['schema_version'=>1,'start_operation_id'=>$key,'status'=>'active','mechanics_confirmed'=>true,'stages'=>['encounter_start','ambush_resolution','active'],'prepared_executions'=>[], 'pre_round_ap_commitments'=>[], 'post_created'=>false];
+        $result+=['schema_version'=>1,'start_operation_id'=>$key,'status'=>'active','mechanics_confirmed'=>true,'stages'=>['encounter_start','ambush_resolution','active'],'prepared_executions'=>[], 'pre_round_ap_commitments'=>$this->preRoundCommitments($session['id'],$encounter['id'])['totals'], 'post_created'=>false];
         // No prepared executions are silently discarded: the supported start has none.
         $this->sql('UPDATE '.$this->table('operations')." SET status='committed',operation_version=operation_version+1,result_json=?,updated_at=? WHERE operation_key=? AND status='prepared'",[self::json($result),time(),$key]);
+        $session=$this->closeFirstRoundExhausted($session,$request['actor_uid']);
+        $this->sql('UPDATE '.$this->table('operations').' SET result_json=? WHERE operation_key=?',[self::json($session['_command_result']),$key]);
         return $session;
     }
     public function ambushStartState(string $sid,string $eid): array
