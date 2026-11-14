@@ -16,7 +16,17 @@ final class AF_ACS_DraftService
         if($write)$this->access->draftThread($view['session']['tid']);
         $roles=array_column($this->repo->roles($sid,$uid),'role');
         if(!array_intersect($roles,['owner','gm','assistant_gm','player']))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
-        $encounter=$this->repo->encounter($sid,$eid);$turn=$this->repo->clockTurn($sid,$turnId);
+        $encounter=$this->repo->encounter($sid,$eid);
+        if($turnId==='0'){
+            $editable=$encounter&&$view['session']['status']==='active'&&$encounter['status']==='preparation'&&$encounter['round_number']==='0'&&$encounter['start_operation_id']===null&&!$this->repo->firstRound($eid);
+            if($write&&!$editable)throw new RuntimeException('ACS_DRAFT_TURN_UNAVAILABLE');
+            if(!$encounter)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
+            $members=$editable?$this->repo->preRoundMembers($sid,$eid):$this->repo->participants($eid,'0',201);$actors=[];
+            foreach($members as $member){$id=$member['entity_id'];$e=$this->repo->entity($sid,$id);$c=$this->repo->controllerFor($sid,$id,$uid,'ordinary');if(!$c)continue;$actors[$id]=['entity_version'=>$e['entity_version'],'state_version'=>$e['state_version'],'snapshot_id'=>$e['template_snapshot_id'],'snapshot_hash'=>$e['content_hash'],'control_proof'=>AF_ACS_AuthorizationService::controlProof($c)];}
+            if(!$actors)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
+            return ['editable'=>$editable,'actors'=>$actors,'dependencies'=>['schema_version'=>1,'scope'=>'pre_round','session_version'=>$view['session']['session_version'],'encounter_version'=>$encounter['encounter_version'],'entities'=>$actors]];
+        }
+        $turn=$this->repo->clockTurn($sid,$turnId);
         if(!$encounter||!$turn||$turn['encounter_id']!==$eid)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
         $editable=$view['session']['status']==='active'&&in_array($encounter['status'],['active','paused'],true)&&$turn['round_status']==='open'&&$turn['round_number']===$turn['current_round']&&$turn['status']==='pending';
         $roster=json_decode($turn['roster_json'],true,32,JSON_THROW_ON_ERROR);$fp=$roster['fingerprint']??null;unset($roster['fingerprint']);
@@ -36,7 +46,7 @@ final class AF_ACS_DraftService
         $this->access->csrf();
         if(array_diff(array_keys($input),['session_id','encounter_id','turn_id','draft_id','expected_draft_version','operation_key','prose','actions']))throw new RuntimeException('ACS_DRAFT_INPUT_INVALID');
         $request=['schema_version'=>1,'author_uid'=>$this->access->uid()];
-        foreach(['session_id','encounter_id','turn_id'] as $f)$request[$f]=AF_ACS_Repository::integer($input[$f]??null);
+        foreach(['session_id','encounter_id','turn_id'] as $f)$request[$f]=AF_ACS_Repository::integer($input[$f]??null,zero:$f==='turn_id');
         $request['draft_id']=($input['draft_id']??'')===''?null:AF_ACS_Repository::integer($input['draft_id']);
         $request['expected_draft_version']=AF_ACS_Repository::integer($input['expected_draft_version']??null,'18446744073709551614',true);
         $key=$input['operation_key']??null;
@@ -50,6 +60,10 @@ final class AF_ACS_DraftService
         $mechanics=AF_ACS_Repository::json(['schema_version'=>1,'actions'=>$actions]);if(strlen($mechanics)>65536)throw new RuntimeException('ACS_DRAFT_INPUT_INVALID');
         return $this->repo->saveDraft($request,$mechanics,$prose,function()use($request,$actions){
             $context=$this->context($request['session_id'],$request['encounter_id'],$request['turn_id'],true);
+            if($request['turn_id']==='0'){
+                require_once __DIR__.'/BuilderService.php';$builder=new AF_ACS_BuilderService($this->repo,$this->access);$scope=$builder->context($request['session_id'],$request['encounter_id'],'0');
+                $builder->prepare(['session_id'=>$request['session_id'],'encounter_id'=>$request['encounter_id'],'turn_id'=>'0','scope_token'=>$scope['scope_token'],'actions'=>$actions,'scenario'=>'hit'],$request['draft_id']);
+            }
             $audience=new AF_ACS_AudienceService($this->repo,$this->access,$request['session_id'],$request['encounter_id']);
             foreach($actions as $a){if(!(new AF_ACS_SpatialService($this->repo,$this->access))->canReadAction($request['session_id'],$request['encounter_id'],$a))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');if(!(new AF_ACS_CooperationService($this->repo,$this->access))->canReadAction($request['session_id'],$request['encounter_id'],$a))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');if(!isset($context['actors'][$a['actor_id']]))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');foreach($a['targets'] as $target)if($audience->knowledge(str_starts_with($a['ability_key'],'object:')?'object':'entity',$target,$a['actor_id'])['level']!=='identified')throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');}
             return $context['dependencies'];

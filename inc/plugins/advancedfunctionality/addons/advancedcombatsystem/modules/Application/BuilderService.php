@@ -75,7 +75,7 @@ final class AF_ACS_BuilderService
     public function context(string $sid,string $eid,?string $selected=null):array
     {
         $sid=AF_ACS_Repository::integer($sid);$eid=AF_ACS_Repository::integer($eid);$q=new AF_ACS_QueryService($this->repo,$this->access);$scope=$q->builderScope($sid,$eid);
-        $this->access->draftThread($scope['session']['tid']);$turns=[];$actors=[];$versions=[];
+        $this->access->draftThread($scope['session']['tid']);if($scope['pre_round'])return $this->preRoundContext($scope,$selected);$turns=[];$actors=[];$versions=[];
         foreach($this->repo->allRoundTurns($scope['round']['id']) as $turn){
             $members=[];foreach($scope['actors'] as $actor)if($actor['group_id']===$turn['control_group_id'])$members[]=$actor;
             if(!$members)continue;
@@ -137,6 +137,23 @@ final class AF_ACS_BuilderService
         $token=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'session'=>$scope['session']['session_version'],'encounter'=>$scope['encounter']['encounter_version'],'round'=>$scope['round']['round_version'],'turns'=>$versions,'selected'=>$selected,'audience'=>$scope['audience_stamp']]));
         return ['session_version'=>$scope['session']['session_version'],'session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>(string)$scope['round']['round_number'],'encounter_status'=>$scope['encounter']['status'],'turns'=>$turns,'turn'=>$chosen,'actors'=>$actors,'targets'=>$targets,'cover'=>(new AF_ACS_CoverService($this->repo,$this->access))->view($sid,$eid,array_column($actors,'id')),'spatial'=>(new AF_ACS_SpatialService($this->repo,$this->access))->view($sid,$eid),'known_subjects'=>$scope['known_subjects'],'objectives'=>(new AF_ACS_CooperationService($this->repo,$this->access))->progress($sid,$eid,array_column($actors,'id')),'prepared_actions'=>$this->preparedView($sid,$eid,$actors),'summons'=>$summonRows,'can_manage'=>$scope['gm'],'scope_token'=>$token,'draft_id'=>$draft,'preview_scope'=>$scope['gm']?'gm':'own_draft_only','publication_enabled'=>false];
     }
+    /** Planning admission only: the zero scope key is not a persisted turn identity. */
+    private function preRoundContext(array $scope,?string $selected):array
+    {
+        if($selected!==null&&$selected!==''&&$selected!=='0')throw new RuntimeException('ACS_PRE_ROUND_UNAVAILABLE');
+        $sid=$scope['session']['id'];$eid=$scope['encounter']['id'];$this->repo->preRoundMembers($sid,$eid);
+        $q=new AF_ACS_QueryService($this->repo,$this->access);$actors=[];$paid=$this->repo->preRoundCommitments($sid,$eid)['totals'];
+        foreach($scope['actors'] as $actor){
+            $choices=array_values(array_filter($q->builderCatalog($sid,$actor['id']),static fn($c)=>($c['prepared_action']['pre_round']??null)===['schema'=>'ic-acs.pre-round-preparation.v1','allowed'=>true]));
+            foreach($choices as &$c)try{$c['prepared_item_costs']=(new AF_ACS_PreparedItemService($this->repo,$this->access))->catalog($sid,$actor['id'],$c['prepared_action']);}catch(Throwable $e){$c['supported']=false;$c['reason']=self::message($e);}unset($c);
+            $commitment=$paid[$actor['group_id']]??0;
+            $actors[]=$actor+['choices'=>$choices,'supported'=>$actor['active'],'catalog_notice'=>'','pre_round_ap_commitment'=>$commitment,'available_ap'=>AF_ACS_Clock::availableAP(3,0,$commitment),'maximum_ap'=>3];
+        }
+        if(!$actors)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
+        $targets=[];foreach($scope['targets'] as $t)$targets[]=$t+['actors'=>$t['known_to']];
+        $token=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'mode'=>'pre_round','session'=>$scope['session']['session_version'],'encounter'=>$scope['encounter']['encounter_version'],'audience'=>$scope['audience_stamp'],'actors'=>$actors]));
+        return ['mode'=>'pre_round','session_version'=>$scope['session']['session_version'],'session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>null,'encounter_status'=>'preparation','turn'=>['id'=>'0','status'=>'preparation','ap'=>3,'maximum_ap'=>3],'turns'=>[],'actors'=>$actors,'targets'=>$targets,'can_manage'=>$scope['gm'],'scope_token'=>$token,'publication_enabled'=>false,'prepared_actions'=>$this->preparedView($sid,$eid,$actors)];
+    }
     private function preparedView(string $sid,string $eid,array $actors):array
     {
         require_once __DIR__.'/PreparedActionService.php';$service=new AF_ACS_PreparedActionService($this->repo,$this->access);$out=[];foreach($actors as $a)if($this->repo->controllerFor($sid,$a['id'],$this->access->uid()))$out=array_merge($out,$service->view($sid,$eid,$a['id']));return $out;
@@ -145,8 +162,9 @@ final class AF_ACS_BuilderService
     {
 
         if(array_diff(array_keys($input),['session_id','encounter_id','turn_id','scope_token','actions','scenario'])||!is_array($input['actions']??null)||!array_is_list($input['actions'])||!count($input['actions'])||count($input['actions'])>20||!in_array($input['scenario']??null,['hit','crit','miss'],true))throw new RuntimeException('builder_input_invalid');
-        $sid=AF_ACS_Repository::integer($input['session_id']??null);$eid=AF_ACS_Repository::integer($input['encounter_id']??null);$turn=AF_ACS_Repository::integer($input['turn_id']??null);
+        $sid=AF_ACS_Repository::integer($input['session_id']??null);$eid=AF_ACS_Repository::integer($input['encounter_id']??null);$turn=AF_ACS_Repository::integer($input['turn_id']??null,zero:true);
         $scope=$this->context($sid,$eid,$turn);
+        if(($scope['mode']??null)==='pre_round'&&count($input['actions'])!==1)throw new RuntimeException('ACS_PREPARED_UNSUPPORTED');
         if(!is_string($input['scope_token']??null)||!hash_equals($scope['scope_token'],$input['scope_token']))throw new RuntimeException('builder_version_conflict');
         $q=new AF_ACS_QueryService($this->repo,$this->access);$prepared=[];$ordered=[];$context=null;$definitions=[];$itemSpecs=[];$itemAbilities=[];$objectAbilities=[];$actionAbilities=[];$objectBehavior=[];$spatialAbilities=[];$itemVirtual=['items'=>[],'equipment'=>[]];$warnings=[];
         $rawScope=$q->builderScope($sid,$eid);$behavior=$this->repo->statusProjection($sid)['instances'];$pairs=[];foreach($this->repo->allRelations($eid) as $r){$pairs[$r['side_a']][$r['side_b']]=$r['relationship'];$pairs[$r['side_b']][$r['side_a']]=$r['relationship'];}
@@ -169,6 +187,7 @@ final class AF_ACS_BuilderService
             if($isSpatial){$spatial=($isCover?new AF_ACS_CoverService($this->repo,$this->access):new AF_ACS_SpatialService($this->repo,$this->access))->prepare($sid,$eid,$actor,$action['ability_key'],$action['targets'],$sealedDraft);$definitions[$actionIndex]=$spatial['definition'];$spatialAbilities[$actor][$action['ability_key']]=$spatial['ability'];}
             if($isObject){$object=(new AF_ACS_ObjectInteractionService($this->repo,$this->access))->prepare($sid,$eid,$actor,$action['ability_key'],$sealedDraft,$actionIndex);if($action['targets']!==[$object['definition']['object_interaction']['entity_id']])throw new RuntimeException('preview_target_forbidden');$definitions[$actionIndex]=$object['definition'];$objectAbilities[$actor][$action['ability_key']]=$object['inspection']['context']['abilities'][$actor][$action['ability_key']];$actionAbilities[$actionIndex]=$objectAbilities[$actor][$action['ability_key']];$objectBehavior[$actor][$action['targets'][0]]=['kind'=>'object','relationship'=>'neutral','active'=>true];}
             if(!$isItem&&!$isObject&&!$isSpatial){$dto=$q->sealDefinition($sid,$actor,$action['ability_key']);$isSpawn=AF_ACS_Spawn::hasAbility($dto);$isSelfAction=AF_ACS_Awareness::hasAbility($dto)||AF_ACS_Environment::hasMassAbility($dto);}
+            if(($scope['mode']??null)==='pre_round'&&($isItem||$isObject||$isSpatial||(AF_ACS_PreparedAction::contract($dto['data']['definition']['prepared_action']??null)['pre_round']['allowed']??false)!==true))throw new RuntimeException('ACS_PREPARED_UNSUPPORTED');
             if(($isItem||$isObject||$isSpatial||!isset($dto['data']['definition']['prepared_action']))&&($action['parameters']??[])!==[])throw new RuntimeException('builder_parameters_unsupported');
             if(($isSpawn||$isSelfAction) && $action['targets']!==[$actor])throw new RuntimeException('ACS_SPAWN_TARGET_UNSUPPORTED');
             $behaviorPolicy=$isSpatial?$spatial['ability']['target_policy']:($isObject?['kind'=>'object_only']:($isItem?['kind'=>'self_only']:AF_ACS_Control::targetPolicy($dto['data']['definition'])));

@@ -1363,3 +1363,55 @@ UI использует существующие ability selector, prepared stat
 нет. Prepared source/contract/rolls остаются в management-only journal; current
 UID/native/role/awareness partitions существующих caches сохранены.
 Литературный текст MyBB не редактируется. Pre-round ambush start — ACS-9.2.2.
+
+## ACS-9.2.2A — pre-round preparation admission
+
+Existing `prepared_action` may opt in through a pinned descriptor:
+
+```json
+"pre_round": {
+  "schema": "ic-acs.pre-round-preparation.v1",
+  "allowed": true
+}
+```
+
+Absence denies pre-round admission. Unknown fields, false/null permissions and
+unsupported variants are UNSUPPORTED. This authorizes the existing cost-only
+prepared registration before the first round; it grants no ordinary turn, new
+Inventory permission, start trigger or surprise modifier. Existing single fixed
+target, trigger, concealment, duration and on_prepare/on_trigger contracts apply.
+Only the existing default integer first budget of 3 and plain group/layer
+contracts are supported; unimplemented AP overrides remain blocked.
+
+Builder derives `mode=pre_round` from active session + encounter preparation,
+engaged membership, current source control and the immutable ability opt-in.
+There must be no first round or start intent. The existing non-null legacy
+`drafts.turn_id`/`prepared_actions.source_entity_turn_id` columns use **0 as the
+explicit absence sentinel** in this mode. There is no turn/EntityTurn row with
+that identity, no start/end invocation, virtual clock, staging round or AP pool.
+The immutable prepared payload carries `pre_round_scope` with its encounter;
+ordinary turn paths continue to require a positive existing turn identity.
+One source/ability/target is sealed per preparation. Deferred tape contains no
+future hit/crit samples. Seal quota is scoped to encounter + source group and,
+as before, cancelled sealed attempts do not restore seal quota.
+
+Confirmed registration atomically pays allowed on_prepare resources/items,
+retains on_trigger reservations/owner receipts, registers the prepared action
+and creates one `pre_round_commitments` row. It binds source/group, prepared ID,
+seal, paid AP, KB pin, publication operation and source event. UNIQUE identities
+prevent repeated accounting; session lock serializes the group cap. Cancellation
+and expiry do not refund confirmed AP commitments or paid preparation costs.
+
+First-round projection verifies journal/seal provenance, freezes the actual sum
+in ordinary roster + turns.pre_round_ap_commitment, and stamps applied_round_id
+in the same ACS transaction. AP refresh sets the normal budget exactly once;
+available AP is budget − commitment − spent. An exhausted group is closed as
+passed by existing RoundManagement/Clock start/end processing, with durable
+boundary receipts, not fabricated resolved state. Later rounds do not reapply
+first-round commitments.
+
+`ready` accepts correctly paid pre-round contracts. Until ACS-9.2.2B, every start
+with active prepared actions remains BLOCKED, including the ordinary round_start
+path; empty starts retain the existing behavior. Terminal/cancelled preparations
+still carry their paid AP into the first round. No encounter-start execution,
+rolls, item trigger consume or reveal policy is introduced by this extension.

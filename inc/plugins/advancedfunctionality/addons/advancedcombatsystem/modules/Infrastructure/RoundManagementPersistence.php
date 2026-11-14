@@ -117,9 +117,10 @@ trait AF_ACS_RoundManagementPersistence
         if($this->sql('UPDATE '.$this->table('turns').' SET '.$column.'=?,turn_version=turn_version+1 WHERE id=? AND turn_version=?',[$next,$turn['id'],$turn['turn_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
         $session=$this->change($session,$encounter,'round_management',[]);$session['_command_result']+=['turn_id'=>$turn['id'],'before'=>(string)$old,'after'=>(string)$next];return $session;
     }
-    public function closeTurn(array $session,array $encounter,array $turn,string $state,string $actor): array
+    public function closeTurn(array $session,array $encounter,array $turn,string $state,string $actor,bool $preRoundExhausted=false): array
     {
         $this->commandWrite();if($encounter['status']!=='active' || $turn['status']!=='pending' || !in_array($state,['passed','forfeited'],true))throw new RuntimeException('ACS_ROUND_STATE_CONFLICT');
+        if($preRoundExhausted&&($encounter['round_number']!=='1'||(int)$turn['ap_budget']!==3||(int)$turn['ap_spent']!==0||(int)$turn['ap_budget']!==(int)$turn['pre_round_ap_commitment']||$state!=='passed'))throw new RuntimeException('ACS_AP_STATE_INVALID');
         $this->assertNoObligations($session['id'],$encounter['id'],$turn['id']);$rows=$this->checkTurnBoundaries($session['id'],$turn);
         if($state==='forfeited')foreach($rows as $individual) {
             $p=$this->sql('SELECT participation FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=?',[$encounter['id'],$individual['entity_id']])['rows'][0]??null;
@@ -137,7 +138,7 @@ trait AF_ACS_RoundManagementPersistence
         $turn=$this->clockTurn($session['id'],$turn['id']); // start upkeep may spend shared AP and advance its CAS version
         self::integer($turn['turn_version'],'18446744073709551614');
         if($this->sql('UPDATE '.$this->table('turns').' SET status=?,deadline_at=NULL,remaining_deadline_seconds=NULL,turn_version=turn_version+1 WHERE id=? AND turn_version=? AND status=?',[$state,$turn['id'],$turn['turn_version'],'pending'])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
-        $key='turn:'.$turn['id'].':closed';$session=$this->change($session,$encounter,'round_management',[]);
+        $key='turn:'.$turn['id'].':closed';if(!$preRoundExhausted)$session=$this->change($session,$encounter,'round_management',[]);
         $result=$session['_command_result']+['turn_id'=>$turn['id'],'status'=>$state,'boundary_key'=>$key,'individual_boundaries'=>$boundaries];
         $this->recordBoundary($key,'round.turn_closed',$session['id'],$encounter['id'],$actor,['turn_id'=>$turn['id']],$result);$session['_command_result']=$result;return $session;
     }

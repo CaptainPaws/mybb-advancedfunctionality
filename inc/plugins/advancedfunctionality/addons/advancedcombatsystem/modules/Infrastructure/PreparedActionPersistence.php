@@ -11,28 +11,33 @@ trait AF_ACS_PreparedActionPersistence
     public function registerPrepared(array $session,array $encounter,array $draft,array $seal,array $ability,array $dependencies): array
     {
         $this->commandWrite();
-        $turn=$this->clockTurn($session['id'],$draft['turn_id']);
-        if (!$turn || $turn['status']!=='pending' || $turn['encounter_id']!==$encounter['id'] || $encounter['status']!=='active') throw new RuntimeException('ACS_SEAL_TURN_UNAVAILABLE');
-        $this->assertNoObligations($session['id'],$encounter['id'],$turn['id'],false,$draft['id']);
+        $preRound=$draft['turn_id']==='0';if($preRound)$this->preRoundEncounter($session['id'],$encounter['id']);
+        $turn=$preRound?null:$this->clockTurn($session['id'],$draft['turn_id']);
+        if (!$preRound&&(!$turn || $turn['status']!=='pending' || $turn['encounter_id']!==$encounter['id'] || $encounter['status']!=='active')) throw new RuntimeException('ACS_SEAL_TURN_UNAVAILABLE');
+        $this->assertNoObligations($session['id'],$encounter['id'],$draft['turn_id'],false,$draft['id']);
         $payload=$this->sealPayload($seal);$action=$payload['action'];$entity=$this->entity($session['id'],$action['actor_id']);
-        $individual=null;foreach($this->individualTurns([$turn['id']]) as $row)if($row['entity_id']===$action['actor_id'])$individual=$row;
-        if (!$individual || $individual['start_done']!=='1' || $individual['end_done']!=='0' || $entity['control_group_id']!==$turn['control_group_id']) throw new RuntimeException('ACS_SEAL_TURN_UNAVAILABLE');
+        $individual=null;foreach($preRound?[]:$this->individualTurns([$turn['id']]) as $row)if($row['entity_id']===$action['actor_id'])$individual=$row;
+        if (!$preRound&&(!$individual || $individual['start_done']!=='1' || $individual['end_done']!=='0' || $entity['control_group_id']!==$turn['control_group_id'])) throw new RuntimeException('ACS_SEAL_TURN_UNAVAILABLE');
         $contract=AF_ACS_PreparedAction::contract($ability['prepared_action']);$cost=$contract['ap_cost'];
+        if($preRound&&(($contract['pre_round']['allowed']??false)!==true||!isset($this->preRoundMembers($session['id'],$encounter['id'])[$entity['id']])))throw new RuntimeException('ACS_PREPARED_UNSUPPORTED');
+        $group=$entity['control_group_id'];
         if ($seal['status']!=='sealed' || (int)$seal['ap_cost']!==$cost || $payload['pin']!==$ability['source_ref'] || $this->sealTape((string)$seal['id'])!==AF_ACS_PreparedAction::TAPE) throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
         $this->verifySealDefinition($session['id'],$seal,$payload);
-        if (AF_ACS_Clock::availableAP((int)$turn['ap_budget'],(int)$turn['ap_spent'],(int)$turn['pre_round_ap_commitment'])<$cost) throw new RuntimeException('effects_cost_unaffordable');
+        if (($preRound?AF_ACS_Clock::availableAP($this->preRoundBudget($session['id'],$group),0,$this->preRoundCommitments($session['id'],$encounter['id'])['totals'][$group]??0):AF_ACS_Clock::availableAP((int)$turn['ap_budget'],(int)$turn['ap_spent'],(int)$turn['pre_round_ap_commitment']))<$cost) throw new RuntimeException('effects_cost_unaffordable');
         require_once __DIR__.'/../Application/PreparedItemService.php';
         $itemResult=(new AF_ACS_PreparedItemService($this,new AF_ACS_SessionAccess))->consume($draft,$seal);
         $fixed=['schema_version'=>1]+$contract+['ability_pin'=>$payload['pin'],'definition_snapshot_id'=>(string)$seal['definition_snapshot_id'],'target_policy'=>$ability['target_policy'],'target_entity_id'=>$action['targets'][0],
             'item_inventory_version'=>$itemResult['inventory_version'],'item_bindings'=>$itemResult['bindings'],'owner_receipts'=>$itemResult['receipts'],'dependency_references'=>$dependencies,'source_sealed_hash'=>$seal['sealed_hash'],'paid_costs'=>[['kind'=>'ap','amount'=>$cost,'timing'=>'on_prepare','state'=>'paid']],
             'additional_cost_states'=>array_map(static fn($c)=>$c+['state'=>$c['timing']==='on_prepare'?'paid':'pending'],$contract['additional_costs'])];
+        if($preRound)$fixed['pre_round_scope']=['schema'=>'ic-acs.pre-round-scope.v1','encounter_id'=>$encounter['id']];
         $json=self::json($fixed);
         $id=$this->sql('INSERT INTO '.$this->table('prepared_actions').' (session_id,encounter_id,entity_id,control_group_id,owner_uid,source_sealed_action_id,source_entity_turn_id,status,prepared_version,expires_boundary,cost_state,contract_hash,contract_json) VALUES (?,?,?,?,?,?,?,?,1,?,?,?,?)',
-            [$session['id'],$encounter['id'],$entity['id'],$turn['control_group_id'],$entity['owner_uid'],$seal['id'],$individual['id'],'active','until_next_turn','paid',hash('sha256',$json),$json])['id'];
+            [$session['id'],$encounter['id'],$entity['id'],$group,$entity['owner_uid'],$seal['id'],$preRound?'0':$individual['id'],'active','until_next_turn','paid',hash('sha256',$json),$json])['id'];
+        if($preRound)$this->addPreRoundCommitment($session,$encounter,$entity,$seal,$id,$cost,$payload['pin']);
         $preparedRow=null;foreach($this->preparedRows($session['id'],$encounter['id'],$entity['id']) as $r)if($r['id']===$id)$preparedRow=$r;
         $permits=(new AF_ACS_PreparedItemService($this,new AF_ACS_SessionAccess))->bindOwnerObligations($preparedRow);
         if($permits){$fixed['owner_obligations']=$permits;$json=self::json($fixed);$this->sql('UPDATE '.$this->table('prepared_actions').' SET contract_json=?,contract_hash=? WHERE id=?',[$json,hash('sha256',$json),$id]);}
-        if ($this->sql('UPDATE '.$this->table('turns').' SET ap_spent=ap_spent+?,turn_version=turn_version+1 WHERE id=? AND turn_version=? AND status=?',[$cost,$turn['id'],$turn['turn_version'],'pending'])['affected']!==1) throw new RuntimeException('ACS_VERSION_CONFLICT');
+        if (!$preRound&&$this->sql('UPDATE '.$this->table('turns').' SET ap_spent=ap_spent+?,turn_version=turn_version+1 WHERE id=? AND turn_version=? AND status=?',[$cost,$turn['id'],$turn['turn_version'],'pending'])['affected']!==1) throw new RuntimeException('ACS_VERSION_CONFLICT');
         foreach($contract['additional_costs'] as $extra)if($extra['kind']==='resource'&&$extra['timing']==='on_prepare') {
             $resource=null;foreach($this->entityResources($entity['id']) as $r)if($r['resource_key']===$extra['key'])$resource=$r;
             if(!$resource || (float)$resource['current_value']<$extra['amount'])throw new RuntimeException('effects_cost_unaffordable');
@@ -40,23 +45,27 @@ trait AF_ACS_PreparedActionPersistence
             if($this->sql('UPDATE '.$this->table('resources').' SET current_value=current_value-?,resource_version=resource_version+1 WHERE id=? AND resource_version=? AND current_value>=?',[$extra['amount'],$resource['id'],$resource['resource_version'],$extra['amount']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
             if($this->sql('UPDATE '.$this->table('entity_states').' SET state_version=state_version+1 WHERE entity_id=?',[$entity['id']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
         }
-        // Existing EntityTurn end mechanics for every member of the shared group.
-        foreach($this->checkTurnBoundaries($session['id'],$turn) as $row) {
-            if ($row['start_done']==='0') $this->processEntityStart($session,$encounter,$row,$draft['author_uid']);
-            $this->processEntityEnd($session,$encounter,$this->clockEntityTurn($session['id'],$row['id']),$draft['author_uid']);
+        // Existing EntityTurn end mechanics only for an actual ordinary turn.
+        if(!$preRound){
+            foreach($this->checkTurnBoundaries($session['id'],$turn) as $row) {
+                if ($row['start_done']==='0') $this->processEntityStart($session,$encounter,$row,$draft['author_uid']);
+                $this->processEntityEnd($session,$encounter,$this->clockEntityTurn($session['id'],$row['id']),$draft['author_uid']);
+            }
+            $turn=$this->clockTurn($session['id'],$turn['id']);
+            if ($this->sql('UPDATE '.$this->table('turns')." SET status='resolved',turn_version=turn_version+1,deadline_at=NULL,remaining_deadline_seconds=NULL WHERE id=? AND turn_version=? AND status='pending'",[$turn['id'],$turn['turn_version']])['affected']!==1) throw new RuntimeException('ACS_VERSION_CONFLICT');
         }
-        $turn=$this->clockTurn($session['id'],$turn['id']);
-        if ($this->sql('UPDATE '.$this->table('turns')." SET status='resolved',turn_version=turn_version+1,deadline_at=NULL,remaining_deadline_seconds=NULL WHERE id=? AND turn_version=? AND status='pending'",[$turn['id'],$turn['turn_version']])['affected']!==1) throw new RuntimeException('ACS_VERSION_CONFLICT');
         if ($this->sql('UPDATE '.$this->table('drafts')." SET status='published',draft_version=draft_version+1,updated_at=? WHERE id=? AND draft_version=? AND status='sealed' AND pid IS NULL",[time(),$draft['id'],$draft['draft_version']])['affected']!==1) throw new RuntimeException('ACS_DRAFT_VERSION_CONFLICT');
         if ($this->sql('UPDATE '.$this->table('sealed_actions')." SET status='published' WHERE id=? AND status='sealed'",[$seal['id']])['affected']!==1) throw new RuntimeException('ACS_DRAFT_VERSION_CONFLICT');
         $session=$this->change($session,$encounter,'prepared',[]);
-        $session['_command_result']+=['prepared_action_id'=>$id,'prepared_version'=>'1','status'=>'active','cost_state'=>'paid','turn_id'=>$turn['id'],'source_entity_id'=>$entity['id'],'post_created'=>false,'owner_receipts'=>$itemResult['receipts']];
+        $session['_command_result']+=['prepared_action_id'=>$id,'prepared_version'=>'1','status'=>'active','cost_state'=>'paid','turn_id'=>$draft['turn_id'],'mode'=>$preRound?'pre_round':'ordinary','source_entity_id'=>$entity['id'],'post_created'=>false,'owner_receipts'=>$itemResult['receipts']];
         return $session;
     }
     public function linkPreparedEvent(array $session,string $event): array
     {
         $id=$session['_command_result']['prepared_action_id'];
         if ($this->sql('UPDATE '.$this->table('prepared_actions').' SET source_event_id=? WHERE id=? AND source_event_id IS NULL',[$event,$id])['affected']!==1) throw new RuntimeException('ACS_VERSION_CONFLICT');
+        $operation=$this->sql('SELECT operation_key FROM '.$this->table('events').' WHERE id=?',[$event])['rows'][0]['operation_key'];
+        $this->sql('UPDATE '.$this->table('pre_round_commitments').' SET source_event_id=?,operation_key=? WHERE prepared_action_id=? AND source_event_id IS NULL',[$event,$operation,$id]);
         $this->sql('UPDATE '.$this->table('events').' SET source_entity_id=? WHERE id=?',[$session['_command_result']['source_entity_id'],$event]);return $session;
     }
     public function cancelPrepared(array $session,array $encounter,string $id,string $version,string $entity,string $reason):array
