@@ -235,6 +235,7 @@ final class AF_ACS_BuilderService
             }
             if(($p['choices'][$action['ability_key']]['supported']??false)!==true)throw new RuntimeException('builder_parameters_unsupported');
             if($context===null)$context=$p['context'];else foreach(['entities','groups'] as $f)$context['state'][$f]=array_replace($context['state'][$f],$p['context']['state'][$f]);
+            if(isset($p['context']['state']['effect_response_resources']))$context['state']['effect_response_resources']=array_replace($context['state']['effect_response_resources']??[],$p['context']['state']['effect_response_resources']);
             foreach(['stats','defenses','turns','abilities','status_immunities','reaction_turns','reaction_kinds','behavior_targets','perception_actors'] as $f)$context[$f]=array_replace($context[$f],$p['context'][$f]);
             foreach($p['context']['relationships'] as $id=>$rels)$context['relationships'][$id]=array_replace($context['relationships'][$id]??[],$rels);
             foreach($p['context']['redirect_targets'] as $id=>$ids)$context['redirect_targets'][$id]=array_values(array_unique([...($context['redirect_targets'][$id]??[]),...$ids]));

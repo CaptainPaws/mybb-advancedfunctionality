@@ -109,6 +109,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         if(!empty(AF_ACS_Cover::legacyObjects($result->serverState()['objects'])))$summary['object_state_hash']=hash('sha256',serialize(AF_ACS_Cover::legacyObjects($result->serverState()['objects'])));
         if(!empty($result->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($result->serverState()['summons']));
         if(array_filter($result->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])||isset($r['grant'])||isset($r['transfer'])))$summary['sustained_state_hash']=hash('sha256',self::json(['schema_version'=>1,'instances'=>$result->serverState()['status_instances']]));
+        if(AF_ACS_EffectResponses::has($result->serverInitial()))$summary['effect_response_state_hash']=hash('sha256',serialize([$result->serverState()['status_instances'],array_map(static fn($e)=>$e['resources'],$result->serverState()['entities'])]));
         if(($reactionHash=AF_ACS_Resolver::reactionHash($result,$prepared['context']))!==null)$summary['reaction_hash']=$reactionHash;
         if (isset($result->serverPlan()['item_state'])) $summary['item_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'items'=>$result->serverPlan()['item_state']]));
         if(($controlHash=AF_ACS_Control::stateHash($result->serverState()['status_instances']??[]))!==null)$summary['control_effects_hash']=$controlHash;
@@ -251,8 +252,9 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
             $summary['virtual_groups']=$finalState['groups'];$summary=array_replace($summary,AF_ACS_BuilderService::visibleState($finalState,$prepared['scope']));
             foreach(array_keys($summary) as $key)if(str_ends_with($key,'_hash'))unset($summary[$key]);
         }
+        $journalPlan=$resolved->serverPlan();foreach($journalPlan['actions'] as &$step){foreach($step['effect_responses']??[] as $i=>$response)$step['effect_responses'][$i]['parent_event_id']=$event;foreach($step['strikes']??[] as $j=>$strike)foreach($strike['effect_responses']??[] as $i=>$response)$step['strikes'][$j]['effect_responses'][$i]['parent_event_id']=$event;}unset($step);
         $payload=self::json(['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,
-            'persistent'=>true,'submission_id'=>$row['submission_id'],'owner_receipts'=>$controls['owner_receipts']??[],'boundary_history'=>$boundaryHistory,'summary'=>$summary,'confirmation_summary'=>$controls['summary'],'plan'=>$resolved->serverPlan(),
+            'persistent'=>true,'submission_id'=>$row['submission_id'],'owner_receipts'=>$controls['owner_receipts']??[],'boundary_history'=>$boundaryHistory,'summary'=>$summary,'confirmation_summary'=>$controls['summary'],'plan'=>$journalPlan,
             'dependency_fence_hash'=>$controls['fence_hash'],'initial'=>$resolved->serverInitial(),'final'=>$finalState,'changes'=>$changes]);$resultHash=hash('sha256',$payload);
         $visibility=self::json(['schema_version'=>1,'scope'=>'combat_participants']);
         $this->sql('INSERT INTO '.$this->table('event_details').' (event_id,schema_version,numeric_policy,payload_json,visibility_json,content_hash) VALUES (?,1,?,?,?,?)',

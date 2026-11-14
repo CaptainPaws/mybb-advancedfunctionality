@@ -63,7 +63,8 @@ final class AF_ACS_SealService
         if(!empty(AF_ACS_Cover::legacyObjects($resolved->serverState()['objects'])))$summary['object_state_hash']=hash('sha256',serialize(AF_ACS_Cover::legacyObjects($resolved->serverState()['objects'])));
             if(!empty($resolved->serverState()['summons']))$summary['summon_state_hash']=hash('sha256',serialize($resolved->serverState()['summons']));
             if(array_filter($resolved->serverState()['status_instances']??[],static fn($r)=>isset($r['spec']['upkeep'])||isset($r['grant'])||isset($r['transfer'])))$summary['sustained_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'instances'=>$resolved->serverState()['status_instances']]));
-            if(($reactionHash=AF_ACS_Resolver::reactionHash($resolved,$p['context']))!==null)$summary['reaction_hash']=$reactionHash;
+            if(AF_ACS_EffectResponses::has($resolved->serverInitial()))$summary['effect_response_state_hash']=hash('sha256',serialize([$resolved->serverState()['status_instances'],array_map(static fn($e)=>$e['resources'],$resolved->serverState()['entities'])]));
+        if(($reactionHash=AF_ACS_Resolver::reactionHash($resolved,$p['context']))!==null)$summary['reaction_hash']=$reactionHash;
             // Preserve the same summary field order as CombatCommitWriter.
             if (isset($resolved->serverPlan()['item_state'])) $summary['item_state_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'items'=>$resolved->serverPlan()['item_state']]));
             if(($controlHash=AF_ACS_Control::stateHash($resolved->serverState()['status_instances']??[]))!==null)$summary['control_effects_hash']=$controlHash;
@@ -105,6 +106,7 @@ final class AF_ACS_SealService
                 if(count($actions)<=count($active))throw new RuntimeException('ACS_SEAL_NOTHING_TO_APPEND');
                 $p=$this->prepare($d,$actions);
                 foreach($active as $i=>$row){$old=$this->repo->sealPayload($row);if(($actions[$i]??null)!==$old['action'])throw new RuntimeException('ACS_SEAL_IMMUTABLE');$a=$old['action'];if($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['source_ref']!==$old['pin'])throw new RuntimeException('ACS_SEAL_PIN_CHANGED');$this->repo->verifySealDefinition($d['session_id'],$row,$old);}
+                AF_ACS_EffectResponses::requests($p['context'],array_map(static fn($i,$a)=>['id'=>'preflight-'.$i,'action'=>$a],array_keys($actions),$actions));
                 $used=$d['turn_id']==='0'?$this->repo->preRoundQuota($d):$this->repo->sealQuota($d['turn_id']);$cost=0;$costs=[];
                 foreach(array_slice($actions,count($active)) as $offset=>$a){$c=$p['action_costs'][count($active)+$offset]??($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['costs']??null);
                     $ap=is_array($c)?array_values(array_filter($c,static fn($cost)=>$cost['kind']==='ap')):[];if(count($ap)!==1||(!AF_ACS_ObjectInteraction::isAction($a['ability_key'])&&!isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['prepared_action'])&&!isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['granted_use'])&&count($c)!==1)||!is_int($ap[0]['amount'])||$ap[0]['amount']<=0)throw new RuntimeException('ACS_SEAL_ZERO_AP_UNSUPPORTED');$cost+=$ap[0]['amount'];$costs[]=$ap[0]['amount'];}

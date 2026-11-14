@@ -1672,3 +1672,132 @@ dispelled. Sustained transfer/reassignment, target_turn/own_turn transfer,
 control/behavior/form/granted layers, barrier transfer, recursive copying,
 probabilistic/mass selection and reflect/absorb operations are UNSUPPORTED here.
 Legacy cleanse/dispel behavior is unchanged.
+
+### ACS-9.3.3: typed passive reflect_effect / absorb_effect (A1.86)
+
+These descriptors are mechanical parameters of an ordinary pinned combat status,
+not arbitrary callbacks or a second `effect_operation` dispatcher. A supported
+ability applies one on_cast self_only status, without mixed damage/removal.
+The status is independent/source scoped, with a positive existing Clock duration,
+no periodic/upkeep or other mechanical parameters. Source and recipient must be
+the same entity. Creation uses ordinary control, AP, seal and status persistence.
+Ongoing responses do not grant Inventory access or another action/reaction slot.
+
+A reflect status contains `mechanical_parameters.reflect_effect`:
+
+```json
+{
+  "schema": "ic-acs.reflect-effect.v1",
+  "event_kind": "combat.primary",
+  "phase": "after_damage",
+  "selection": "first",
+  "priority": 0,
+  "basis": "reflect_hp_loss",
+  "factor": 0.5,
+  "damage_type": "physical",
+  "damage_element": null,
+  "requires_active": true,
+  "chance": 50,
+  "target_policy": {"kind": "any_entity"},
+  "range": null,
+  "environment_policy": {
+    "schema": "ic-acs.environment-target.v1",
+    "ignores_cover": false,
+    "requires_line_of_effect": false,
+    "affects_zone": null,
+    "penetrates_obstacles": false
+  },
+  "chain": null
+}
+```
+
+The root event is an ordinary primary strike, including its actual resolved
+intercept recipient. After the existing after_damage active/prepared queue,
+reflection runs before legacy lifesteal (A1.25–A1.26). The first matching active
+status is selected by explicit priority, application order and decimal ID.
+Availability/target/awareness/form/control/behavior/geometry are rechecked; an
+unavailable selected response stops that branch, without consuming reaction_used.
+The descriptor does not turn Clock ticks, environment damage, prepared execution
+or encounter-start attacks into ordinary primary events. Other issuers require
+an explicit additional contract and are outside v1.
+
+Supported bases are reflect_absorbed (actual pool + authorized resource absorption),
+reflect_hp_loss and reflect_incoming (the original post-defense integer budget).
+A nonnegative finite literal factor feeds the existing Damage calculation, with
+ordinary DEF/RES, immunities, rounding and recipient absorption. The original ability's optional form_requirement is retained on the status,
+verified against its immutable definition and rechecked with current form/control
+restrictions for either response kind. The child's
+physical/elemental/true type is explicit; elemental requires a canonical key.
+There is no child hit/crit, original reroll, on_hit, ordinary lifesteal, AP or
+attacker resource payment. Chance is an optional independent integer-percent
+check, not a second hit. Zero and 100 need no sample.
+
+Unmapped encounters require range=null and requires_line_of_effect=false; they
+have no declared map geometry to bypass. In a mapped encounter the response must
+have an existing typed range and requires_line_of_effect=true. Obstacle penetration
+and affects_zone are UNSUPPORTED. Existing cover/LoE checks apply from reflector
+to recipient; ignoring cover bonuses does not bypass complete cover or a wall.
+No awareness disclosure is implicit. Unidentified/hidden recipients do not become
+selectable through the incoming attacker's knowledge or GM HTTP identity.
+
+Default chain=null neither emits another reflection nor receives reflected damage.
+An explicit chain may use
+`{"max_depth":3,"per_cause":1,"receive":false,"emit":true}` on its root,
+and receive=true/emit=false on a leaf. max_depth includes the primary root and
+is a positive typed integer >=2, not a new global game limit. Each selected
+instance has one identity within that primary cause; cycles/revisits and exceeded
+explicit limits fail closed through CausalGraph. A finite root→response→leaf
+chain is supported; arbitrary recursive callback graphs are not.
+
+Causal identity binds sealed action + original target + resolved target + status
+instance. The explicit seal/prepare_reactions command conservatively reserves
+potential chain checks with the existing RandomSource and unique rolls ledger
+(check_kind=reaction). Original hit/crit are unchanged. Preview, confirmation,
+commit and recovery never generate samples. Missing checks block execution;
+explicit preparation may add only missing identities. New virtual reflect statuses
+created earlier in the same publication have no durable instance identity and
+are UNSUPPORTED until a later publication. The journal stores causal parent,
+source/targets, pinned definition, policy, roll receipt, allocation and effects,
+plus the actual parent combat event ID at commit. Public summaries expose hashes,
+not hidden response contracts or source identities.
+
+An absorb status contains `mechanical_parameters.absorb_effect`:
+
+```json
+{
+  "schema": "ic-acs.absorb-effect.v1",
+  "mode": "resource",
+  "stage": "after_barriers_before_hp",
+  "priority": 0,
+  "absorbs": ["physical", "elemental"],
+  "resource": "ep",
+  "definition_hash": "sha256:<hash of the retained resource definition_json>",
+  "conversion": {"resource_per_damage": 1, "rounding": "half_up"},
+  "limit": 7,
+  "requires_active": true
+}
+```
+
+Resource mode consumes one existing integer combat resource per absorbed damage
+point, capped by explicit limit, available resource and the remaining component.
+It runs strictly after the existing unified BarrierPools queue and before HP.
+Multiple resource policies use priority/application/ID and the same decreasing
+remaining budget; already absorbed damage is never presented again. True damage
+is not eligible. Payment reuses Effects::payCosts/Numeric, existing entity/resource
+versions and combat CAS; no resource row or external owner grant is created.
+The named row must belong to that entity, be integer, and have a retained
+schema_version=1/source definition with integer current/maximum/is_integer=true,
+matching the current maximum and exact KB definition_hash. Existing untyped rows
+such as {schema_version:1} fail RESOURCE_UNPROVEN. This does not enable general
+extra-resource registration, which retains its existing owner-contract gate.
+
+Barrier mode uses mode=barrier, stage=existing_barrier_queue and null resource,
+definition_hash, conversion and limit. It references the real existing queue and
+audits its actual absorption once per component (additional_absorption=0); it
+does not create a phantom pool, reorder pools or absorb the same amount again.
+Pool creation/restoration still uses its approved existing protocol.
+Resource creation/gain, fractional/custom conversions, HP/AP/Inventory conversion,
+remote-owner spending and new barrier kinds are UNSUPPORTED. Active/passive
+reactions, Clock and ordinary prepared/item pipelines otherwise retain their
+existing contracts. Mixing legacy reflection rules with a typed response for the
+same incoming event is unsupported rather than assigned an invented priority.

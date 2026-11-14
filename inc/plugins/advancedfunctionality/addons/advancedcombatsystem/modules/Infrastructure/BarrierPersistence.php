@@ -12,7 +12,9 @@ trait AF_ACS_BarrierPersistence
     public function barrierProjection(string $sid,string $eid):array
     {
         require_once __DIR__.'/../Domain/Effects.php';$rows=$this->barrierRows($sid,$eid);$pools=[];$next=1;$proof=hash_init('sha256');
-        $reactions=$this->reactionProjection($sid,$eid)['entries'];
+        // A retained pool proves its immutable origin; it does not request a fresh activation grant.
+        // Full controller authorization would recurse through controlContext -> statusProjection -> this projection.
+        $reactions=$this->reactionProjection($sid,$eid,false)['entries'];
         $orphans=$this->sql('SELECT e.id FROM '.$this->table('effects').' e LEFT JOIN '.$this->table('barrier_pools')." p ON p.effect_id=e.id WHERE e.session_id=? AND e.encounter_id=? AND JSON_UNQUOTE(JSON_EXTRACT(e.payload_json,'$.kind'))='barrier' AND p.id IS NULL",[$sid,$eid])['rows'];if($orphans)throw new RuntimeException('ACS_BARRIER_PROJECTION_INVALID');
         foreach($rows as $r){$data=json_decode($r['payload_json'],true,64,JSON_THROW_ON_ERROR);$p=$data['pool']??[];$id=self::integer((string)$r['id']);$reaction=$reactions[$data['origin_reaction_id']??'']??null;
             $required=['source_entity_id','source_ref','scope','scope_key','targets','strength','maximum_strength','barrier_priority','applied_order','status','version','absorbs','duration'];if(!is_array($p)||array_diff($required,array_keys($p))||array_diff(array_keys($p),[...$required,'last_duration_boundary'])||!is_array($p['duration']??null)||array_keys($p['duration'])!==['value','unit'])throw new RuntimeException('ACS_BARRIER_SCHEMA_INVALID');

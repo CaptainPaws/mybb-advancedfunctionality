@@ -150,6 +150,7 @@ final class AF_ACS_QueryService
             $ref=['key'=>'entity-'.$id,'version'=>'registration-1','fingerprint'=>'sha256:'.$row['content_hash']];
             if(!isset($state['groups'][$row['control_group_id']]))$state['groups'][$row['control_group_id']]=['ap'=>['current'=>0,'maximum'=>0],'version'=>1];
             $state['entities'][$id]=['hp'=>self::int($row['hp']),'max_hp'=>self::int($row['hp_max']),'life_state'=>$row['life_state'],'recovery_blocked'=>false,'group_id'=>$row['control_group_id'],'resources'=>$source['resources']['values'],'source_ref'=>$ref,'version'=>self::int($row['state_version'])];
+            if($responseDefs=AF_ACS_EffectResponses::resourceDefinitions($source['resources']['rows']))$state['effect_response_resources'][$id]=$responseDefs;
             $res=[];foreach($s['resistances']??[] as $key=>$r)$res[$key]=['scope'=>'elemental','unit'=>'RES','value'=>$r['value']];
             $defenses[$id]=['def'=>$stat['def'],'resistances'=>$res,'immunities'=>[],'vulnerabilities'=>[]];
             if(($s['element_registry_version']??null)==='primary-elements-17-v1'||($s['capabilities']['canonical_elements_17']['readiness']??null)==='READY')$catalog=AF_ACS_Damage::retainedCatalog($row['payload_json'],$row['content_hash']);
@@ -331,7 +332,7 @@ final class AF_ACS_QueryService
             if($type==='elemental'){$explicit=$effect['parameters']['damage_element']??null;if(!is_string($explicit)||!is_string($element))self::fail('damage_element_missing');}
             $parts[]=['source_index'=>$effect['source_index'],'kb_effect_index'=>$effect['source_index'],'damage_type'=>$type,'damage_element'=>$type==='elemental'?$element:null]+$value;
         }
-        foreach($statuses as $status)if(isset($status['instance']['mechanical_parameters']['transform'])&&($status['trigger']!=='on_cast'||count($statuses)!==1||$parts||$removals||AF_ACS_Control::targetPolicy($d)!==['kind'=>'self_only']))self::fail('ACS_FORM_TIMING_UNSUPPORTED');
+        foreach($statuses as $status)if(array_intersect(array_keys($status['instance']['mechanical_parameters']),['transform','reflect_effect','absorb_effect'])&&($status['trigger']!=='on_cast'||count($statuses)!==1||$parts||$removals||AF_ACS_Control::targetPolicy($d)!==['kind'=>'self_only']))self::fail(isset($status['instance']['mechanical_parameters']['transform'])?'ACS_FORM_TIMING_UNSUPPORTED':'ACS_EFFECT_RESPONSE_UNSUPPORTED');
         if(!empty($d['costs'])&&!$statuses)self::fail('upkeep_status_binding_missing');
         if(!$parts&&!$statuses&&!$removals)self::fail('preview_damage_value_missing');
         if(!is_string($dto['definition_version']['declared_version']??null))self::fail('preview_source_version_unavailable');
