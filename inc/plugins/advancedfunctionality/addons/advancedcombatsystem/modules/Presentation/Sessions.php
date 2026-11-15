@@ -42,7 +42,7 @@ final class AF_ACS_SessionsPage
         }
         if($sid!=='') {
             try {
-                $view=$service->view($sid);$session=$view['session'];
+                $view=$service->view($sid,true);$session=$view['session'];
                 echo '<h2>Сессия #'.self::esc($session['id']).'</h2><p>Тема: <a href="'.($admin?'../':'').'showthread.php?tid='.self::esc($session['tid']).'">#'.self::esc($session['tid']).'</a> · Владелец UID '.self::esc($session['owner_uid']).' · '.self::esc($session['status']).' · Версия '.self::esc($session['session_version']).'</p>';
                 echo '<ul>';foreach($view['members'] as $member)echo '<li>UID '.self::esc($member['uid']).' — '.self::esc(self::roles()[$member['role']]??$member['role']).'</li>';echo '</ul>';
                 if($view['can_manage']) {
@@ -61,8 +61,11 @@ final class AF_ACS_SessionsPage
                 require_once __DIR__.'/Entities.php';
                 AF_ACS_EntitiesPage::render((string)$session['id'],$view,$url);
                 require_once __DIR__.'/Delegations.php';AF_ACS_DelegationsPage::render((string)$session['id'],$url);
-                foreach(['close'=>'Закрыть с сохранением обязательств','archive'=>'Архивировать с сохранением обязательств'] as $operation=>$label) if(!empty($view['can_'.$operation])) {self::form($url,$operation,['session_id'=>$sid,'expected_version'=>$session['session_version']]);echo '<label>Причина <input name="reason" maxlength="1000" required></label><button type="submit">'.self::esc($label).'</button></form>';}
-                echo '<p>Закрытие и архивирование сохраняют custody, резервы, pending операции и историю; автоматического возврата, наград или финализации нет. Reopen пока недоступен.</p>';
+                if($view['can_audit']) {
+                    echo '<p>Обязательства: ';foreach(['confirmed_completed'=>'подтверждены','pending'=>'ожидают','recovery_required'=>'требуют восстановления','explicitly_blocked'=>'блокируют закрытие'] as $state=>$label)echo self::esc($label).' — '.count($view['outstanding_obligations'][$state]).' · ';echo '</p><p><a href="'.($admin?'../':'').'misc.php?action=acs_recovery&amp;session_id='.self::esc($sid).'">Восстановление обязательств</a></p>';
+                }
+                foreach(['request_close'=>'Подготовить закрытие','close'=>'Закрыть с сохранением обязательств','reopen_session'=>'Переоткрыть сессию','archive'=>'Архивировать с сохранением обязательств'] as $operation=>$label) if(!empty($view['can_'.($operation==='reopen_session'?'reopen':$operation)])) {self::form($url,$operation,['session_id'=>$sid,'expected_version'=>$session['session_version']]);echo '<label>Причина <input name="reason" maxlength="1000" required></label><button type="submit">'.self::esc($label).'</button></form>';}
+                echo '<p>Закрытие и архивирование сохраняют custody, резервы, pending операции и историю; автоматического возврата, наград или финализации нет. Переоткрытие сохраняет ресурсы и не возобновляет завершённые столкновения.</p>';
             } catch(Throwable $error) {echo '<p>Сессия недоступна.</p>';}
         }
         $list=$service->list($mybb->get_input('after')?:'0');

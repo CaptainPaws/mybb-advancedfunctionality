@@ -40,7 +40,8 @@ final class AF_ACS_CombatInventoryAccess implements AF_ADVINV_PreparedStartOwner
         if(!$mutation)return;
         // The grant does not replace the owner's independent inventory_spending_enabled permission.
         $controller=$repo->controllerFor($m[1],$m[2],(string)$ownerUid);$permission=json_decode($controller['permissions_json']??'{}',true,16,JSON_THROW_ON_ERROR);
-        if($checkPost && ($mybb->request_method??'')!=='post' || $session['status']!=='active' || !$controller
+        // Terminal unused reserves may be released in the separate recovery scope, even in archive.
+        if($checkPost && ($mybb->request_method??'')!=='post' || ($session['status']!=='active' && $operation!=='release') || !$controller
             || ($permission['schema_version']??null)!==1 || ($permission['combat_operations_enabled']??null)!==true || ($permission['inventory_spending_enabled']??null)!==true || $operation!=='release' && $entity['life_state']!=='active')throw new RuntimeException('INV_SPENDING_NOT_AUTHORIZED');
     }
     /** Owner's independent live grant; never evaluates the trigger actor as that owner. */

@@ -11,7 +11,7 @@ final class AF_ACS_AudienceService
     public function __construct(private AF_ACS_EncounterRepository $repo,private AF_ACS_SessionAccess $access,string $sid,private string $eid)
     {
         $this->spatial=$repo->spatialProjection($sid,$eid);
-        $view=(new AF_ACS_SessionService($repo,$access))->view($sid);$this->gm=$view['can_manage'];
+        $view=(new AF_ACS_SessionService($repo,$access))->view($sid);$this->gm=$view['can_manage']||$view['can_audit'];
         $this->rows=$repo->awarenessProjection($sid,$eid);$this->subjects=$repo->perceptionSubjects($sid,$eid);$this->statuses=$repo->statusProjection($sid)['instances'];$this->audiences['encounter']=[$eid];
         $participationConfigured=isset(json_decode($repo->encounter($sid,$eid)['config_json'],true)['participation_policy']);
         foreach($repo->participants($eid,'0',201) as $m)if($m['participation']==='engaged'||$participationConfigured&&in_array($m['participation'],['surrendered','captured'],true)){

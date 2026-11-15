@@ -68,6 +68,9 @@ $GLOBALS['acsCustodyFixture']=static function(array $fixture):void {
  snapshot_assert(str_contains($html,'recovery_required')&&str_contains($html,'lookup')&&!str_contains($html,$meta),'Panel hides pending state or leaks raw Inventory');
  snapshot_assert($link->query('SELECT COUNT(*) FROM t_af_acs_events')->fetch_row()[0]===$before,'GET panel wrote state');$mybb->request_method='post';
  $sessions=new AF_ACS_SessionService($repo,$access);$close=['session_id'=>$sid,'expected_version'=>$repo->session($sid)['session_version'],'operation_key'=>'inventory_close_6321','reason'=>'Preserve pending obligations'];
+ // Lifecycle gate: this owner-only fixture has no running combat to finish.
+ $link->query("UPDATE t_af_acs_encounters SET status='preparation',round_number=0 WHERE session_id=".$sid);
+ $pending=$sessions->command('request_close',$close);$close['expected_version']=$pending['session_version'];$close['operation_key']='inventory_close_pending632';
  $closed=$sessions->command('close',$close);snapshot_assert($closed['status']==='closed'&&$sessions->command('close',$close)===$closed,'Close/replay failed');
  $archive=$close;$archive['expected_version']=$closed['session_version'];$archive['operation_key']='inventory_archive632';$sessions->command('archive',$archive);
  $migrations->run();$migrations->assertInstalled();snapshot_assert($operations->get($absent['operation_key'])['status']==='recovery_required'&&$operations->get($grant['operation_key'])['status']==='committed','Archive/reactivation erased operations');

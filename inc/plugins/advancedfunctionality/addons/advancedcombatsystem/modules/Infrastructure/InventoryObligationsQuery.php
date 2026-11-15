@@ -1,6 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) {die('No direct access');}
 require_once __DIR__.'/RecoveryQueueQuery.php';
+require_once __DIR__.'/SessionObligationsQuery.php';
 require_once __DIR__.'/EncounterRepository.php';
 require_once __DIR__.'/Adapters/CustodyInventoryAccess.php';
 require_once __DIR__.'/../Domain/InventoryReceipt.php';
@@ -41,6 +42,6 @@ final class AF_ACS_InventoryObligationsQuery extends AF_ACS_Repository
             $operations[]=['owner_uid'=>(string)($intent['payload']['from_uid']??$intent['payload']['owner_uid']??$intent['payload']['recipient_uid']??''),'item_id'=>isset($intent['payload']['item_id'])?(string)$intent['payload']['item_id']:(isset($receipt['item_id'])?(string)$receipt['item_id']:null),'operation_key'=>$op['operation_key'],'kind'=>$op['kind'],'status'=>$op['status'],'operation_version'=>(string)$op['operation_version'],'payload_hash'=>$intent['payload_hash'],'actor_uid'=>(string)$intent['actor']['uid'],'can_lookup'=>(string)$intent['actor']['uid']===$access->uid()&&in_array($op['status'],['prepared','recovery_required'],true)];
         }
         $preparedReleases=$this->sql('SELECT operation_key,status,operation_version,request_json FROM '.$this->table('operations')." WHERE session_id=? AND kind='prepared.release' AND status='recovery_required' ORDER BY operation_key LIMIT 100",[$sid])['rows'];$prepared=[];foreach($preparedReleases as $op){$p=json_decode($op['request_json'],true,64,JSON_THROW_ON_ERROR);$prepared[]=['prepared_action_id'=>$p['prepared_action_id'],'cost_index'=>$p['cost_index'],'operation_key'=>$op['operation_key'],'status'=>$op['status']];}
-        return $context+['prepared_releases'=>$prepared]+['session_status'=>$session['status'],'session_version'=>(string)$session['session_version'],'inventory'=>$inventory,'items'=>$items,'operations'=>$operations,'reservations'=>$reservations['items'],'next_after'=>$more?(string)end($rows)['id']:null,'next_operation_after'=>$opMore?end($ops)['operation_key']:null,'next_reservation_after'=>$reservations['next_after'],'can_confiscate'=>$session['status']==='active'&&$inventory==='available'&&!$pending&&!$publication&&!$sealed];
+        return $context+['lifecycle_obligations'=>(new AF_ACS_SessionObligationsQuery($this->connection))->inspect($sid),'prepared_releases'=>$prepared]+['session_status'=>$session['status'],'session_version'=>(string)$session['session_version'],'inventory'=>$inventory,'items'=>$items,'operations'=>$operations,'reservations'=>$reservations['items'],'next_after'=>$more?(string)end($rows)['id']:null,'next_operation_after'=>$opMore?end($ops)['operation_key']:null,'next_reservation_after'=>$reservations['next_after'],'can_confiscate'=>$session['status']==='active'&&$inventory==='available'&&!$pending&&!$publication&&!$sealed];
     }
 }

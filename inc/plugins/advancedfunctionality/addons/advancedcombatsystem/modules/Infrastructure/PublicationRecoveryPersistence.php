@@ -89,6 +89,7 @@ trait AF_ACS_PublicationRecoveryPersistence
                 $e['proof']='native_dispatch_not_started';
                 return ['rejected','gm_recovery_reject_unsent',$e,null];
             }
+            if($this->session($r['session_id'])['status']!=='active')throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
             $post=$this->knownPostState($r);
             if (!in_array($post['state'],['confirmed','moderation_pending'],true)) { throw new RuntimeException('ACS_RECOVERY_POST_NOT_PROVEN'); }
             $e+=['pid'=>$post['pid'],'fid'=>$post['fid'],'visible'=>$post['visible'],'proof'=>'durable_native_confirmation'];
