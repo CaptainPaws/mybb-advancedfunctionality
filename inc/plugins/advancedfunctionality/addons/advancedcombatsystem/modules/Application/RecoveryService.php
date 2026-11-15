@@ -137,4 +137,9 @@ final class AF_ACS_RecoveryService
         require_once __DIR__.'/InventoryOperationService.php';return (new AF_ACS_InventoryOperationService($this->database,$this->access))->recover($sid,$key,$expectedVersion);
     }
 
+    public function inspectReward(string $sid,string $id):array
+    {require_once __DIR__.'/RewardService.php';return (new AF_ACS_RewardService($this->database,$this->access))->inspect($sid,$id);}
+    public function recoverReward(string $sid,string $id,string $expectedOperationVersion):array
+    {require_once __DIR__.'/RewardService.php';return (new AF_ACS_RewardService($this->database,$this->access))->recover($sid,$id,$expectedOperationVersion);}
+
 }

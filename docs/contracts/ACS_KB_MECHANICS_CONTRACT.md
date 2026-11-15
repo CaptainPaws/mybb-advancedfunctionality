@@ -2162,3 +2162,53 @@ Close/archive не удаляют claims/reservations. Allocation остаётс
 не запускается. Future issuer error не является разрешением reset winner/version.
 Выдача в AdvancedInventory, claims UI этапа 11 и issue recovery executor сюда
 не входят.
+
+## ACS-10.3.2 — Opt-in non-item reward source v1
+
+Consumer schema `ic-acs.reward-source.v1` is carried in a single
+`arpg_mechanics/combat_template` entry as `reward_source` (same envelope as the
+opt-in loot source, but not combined with `loot_source`). Configure it before
+encounter start; the complete authorized definition/version is snapshotted.
+There is no implicit monster EXP table or reward amount derived from HP/Luck.
+
+Required fields:
+
+- `schema`, `reward_type`: `experience`, `currency`, or blocked `permanent_sync`;
+- `mode`: `each`, `split_equal`, `manual`; `amount_minor`: positive JSON integer,
+  maximum 9007199254740991. EXP and credits use owner scale 100, with no second
+  conversion. `each` is per recipient; the other two modes specify the total;
+- `remainder_policy`: `recipient_key_order` for split_equal, otherwise null.
+  Eligible keys sort lexicographically; quotient/remainder use integer arithmetic.
+  The first remainder keys get one extra minor unit. Zero shares create no credit;
+- `outcomes`: explicit nonempty selection of victory/draw/inconclusive;
+- `eligibility`: side=`winner`/`all`, nonempty `life_states` and `participation`
+  selections using the existing distinct life/participation enums;
+- `subject`: `control_group` with `entity_kinds=[]` is the base participation mode.
+  An explicit `subject=entity` with a nonempty `entity_kinds` selection of
+  character/npc/monster/pet/summon authorizes individual entity awards;
+- `permanent_sync`: null for Balance rewards. The blocked CS profile carries
+  `{owner:"charactersheets", kb_definition:<key>, change:<object>}`, mode each,
+  amount_minor=1 as an obligation marker, never money or an applied change.
+  No target owner version or successful sync receipt is fabricated.
+
+Eligibility uses the confirmed resolution's frozen pre-completion facts, including
+control-group owner UID, group membership, side, life state and participation.
+Base groups exclude pets/summons/derived entities; explicit entity awards use that
+entity's frozen group owner as payout UID. Unowned groups/entities have no Balance
+recipient. Neither current controllers nor a later owner/group change can redirect
+an existing reward. Contribution formulas, new currencies, arbitrary event grants,
+permanent effects and unsupported owner adapters are not inferred.
+
+`reward_distribute` takes an empty `allocations` list for each/split_equal, or a
+list of `{recipient_key,amount_minor}` for manual. Manual recipients must belong
+to the frozen eligible set; keys are unique and positive allocations sum exactly
+to the pinned total. A subset of eligible recipients may be selected manually.
+An unmet outcome condition/empty eligible set can produce a durable empty plan;
+it does not create a fictitious issued reward.
+
+Source identity is encounter + confirmed outcome + pinned KB source key;
+reward/recipient/type and owner operation identities are permanent. Distribution
+is a separate audited GM command; repeated outcome confirmation cannot create a
+second plan or change an allocation. Issuance and recovery use exact IC-BALANCE
+owner credit/lookup, not message reward hooks. No CharacterSheets permanent write
+is supported without a durable authorized owner API.
