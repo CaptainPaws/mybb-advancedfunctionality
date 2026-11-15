@@ -5,6 +5,7 @@ require_once __DIR__.'/TerminalReceiptPersistence.php';
 require_once __DIR__.'/Adapters/SessionAccess.php';
 require_once __DIR__.'/../Domain/Publication.php';
 require_once __DIR__.'/../Application/AudienceService.php';
+require_once __DIR__.'/../Application/EffectSummary.php';
 
 /** Batched, immutable result projection. No snapshots, Builder, Resolver or mechanical writers. */
 final class AF_ACS_CombatCardQuery extends AF_ACS_Repository
@@ -48,6 +49,7 @@ final class AF_ACS_CombatCardQuery extends AF_ACS_Repository
                 if(($summary['schema_version']??null)!==1 || !is_array($summary['actions']??null) || !is_array($actions) || count($summary['actions'])!==count($actions))throw new RuntimeException('ACS_CARD_RESULT_INVALID');
                 $details=[];$statusRows=json_decode($records[$id]['card_statuses']??'null',true,64,JSON_THROW_ON_ERROR)??[];
                 $history=json_decode($records[$id]['card_boundaries']??'null',true,64,JSON_THROW_ON_ERROR)??[];
+                $prepared=json_decode($records[$id]['card_prepared']??'null',true,64,JSON_THROW_ON_ERROR)??[];$statusMap=json_decode($records[$id]['card_status_map']??'null',true,64,JSON_THROW_ON_ERROR)??[];
                 foreach($summary['actions'] as $i=>$step){
                     $entry=array_intersect_key($step,array_flip(['actor_id','target_id','ability_key','outcome','rolls','probabilities','costs','damage','item','interaction','cooperation','spatial','cover']));
                     foreach(['actor_id','target_id'] as $k){$entry[$k]=self::integer($entry[$k]??null);$names[$row['session_id']][$entry[$k]]=true;}
@@ -63,6 +65,7 @@ final class AF_ACS_CombatCardQuery extends AF_ACS_Repository
                         if(($event['type']??null)==='upkeep_result')$entry['mechanics'][]=['type'=>'upkeep']+array_intersect_key($event,array_flip(['id','source_entity_id','paid','reason','costs','boundary_key']));
                         elseif(isset($event['effect_id']))$entry['mechanics'][]=['type'=>'tick','effect_id'=>$event['effect_id'],'tick_count'=>count($event['ticks']??[]),'boundary_key'=>$boundary['boundary_key']];
                     }
+                    $entry['mechanics']=[...$entry['mechanics'],...AF_ACS_EffectSummary::mechanics($actions[$i],$statusRows,$prepared,$statusMap)];
                     $details[]=$entry;
                 }
                 $card['details']=$details;$card['result_hash']=$receipt['result_hash'];
