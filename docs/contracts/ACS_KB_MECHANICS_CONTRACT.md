@@ -2094,3 +2094,71 @@ Pool generation хранит outcome/source/pins, eligibility, rolls, generated 
 event refs и result hash. `loot_status` — разрешённое GM чтение также после
 close/archive. Unallocated pool остаётся pending obligation; allocation/claims,
 победитель, Inventory grant, валюты и EXP не входят в ACS-10.2.1.
+
+## ACS-10.2.2 — Loot allocation policy, v1
+
+ACS-10.2.1 source contract допускает одно новое **необязательное** поле
+`loot_source.allocation`. Оно закрепляется вместе с table graph до боя; generation
+result, entries.result_json и прежние item snapshots после генерации не меняются.
+Отсутствие поля сохраняет default `gm_assign`, `allow_pass=false`,
+`visibility=gm_only`, `winner_visibility=gm_only`. Старые pools не получают
+самостоятельное распределение автоматически.
+
+```json
+{
+  "schema": "ic-acs.loot-allocation.v1",
+  "mode": "need_greed",
+  "allow_pass": true,
+  "visibility": "eligible",
+  "winner_visibility": "eligible"
+}
+```
+
+Все пять полей policy обязательны, неизвестные запрещены. `mode` — gm_assign,
+free_claim либо need_greed. Self-service modes требуют visibility=eligible.
+`allow_pass` допускается true только в need_greed. `visibility` — gm_only/eligible;
+`winner_visibility` — gm_only/eligible/recipient. Recipient означает текущего
+читателя с UID зарезервированного получателя. GM с native/session правами читает
+полную запись. Quest использует явно закреплённую KB policy своего encounter
+source; runtime client mode/visibility overrides не принимаются.
+
+Распределяется целый generated entry с его qty, без разделения stack. Eligibility
+берётся из generation snapshot, а не текущего списка участников. Получатель —
+eligible control_group с известным frozen owner UID, совпадающим с текущим owner
+этой же группы сессии. Неопределённый/сменившийся owner требует отдельного
+урегулирования, не назначения нового человека по transient controller. Pet,
+summon, delegate, overlay и новый участник не создают дополнительного claim.
+
+Self-service claim делает только сам frozen/current owner eligible group,
+имеющий актуальную session role owner/gm/assistant_gm/player и native thread
+access. Наличие боевого управления группой не заменяет это право. GM assign
+выбирает eligible group, а recipient_uid всегда определяет сервер.
+
+- gm_assign: GM закрывает entry с выбранным допустимым получателем.
+- free_claim: первый подтверждённый group claim атомарно закрывает entry;
+  конкурирующий запрос не создаёт второго победителя.
+- need_greed: пока entry generated, одна изменяемая row на entry/group; need
+  выше greed, pass не участвует. GM закрывает текущий набор заявок. Если top
+  claimant один, RNG нет. При нескольких — одна uniform53-v1 жеребьёвка по
+  отсортированным числовым control_group IDs, `index=floor(u*count)`.
+
+Claims требуют expected_claim_version (0 при создании), закрытие —
+expected_allocation_version; команды также используют session CAS. При закрытии
+allocation_version увеличивается, claims.closed_at фиксируется. Causal key roll:
+`loot-allocation:<loot_entry_id>:<closed_allocation_version>`, check_kind
+`loot.need_greed.tie`. Claim edits после закрытия запрещены; replay старой команды
+не является новым edit. Нет Luck, нового броска после ACK loss или выдачи.
+
+Winner, recipient UID, закрытая версия, priority contenders, roll ref/sample,
+claims snapshot и event ref сохраняются в immutable command/event receipt.
+Entry переходит в awaiting_issue, не issued. Пустой/all-pass набор закрывается
+как allocation_closed с null recipient и остаётся outstanding obligation.
+Обычный повтор close/assign не переоткрывает заявки и не меняет победителя.
+Переназначение/reallocation требует отдельного разрешённого correction action;
+такого действия ACS-10.2.2 не добавляет.
+
+Close/archive не удаляют claims/reservations. Allocation остаётся отдельным
+разрешённым recovery scope после закрытия/архива; completed encounter при этом
+не запускается. Future issuer error не является разрешением reset winner/version.
+Выдача в AdvancedInventory, claims UI этапа 11 и issue recovery executor сюда
+не входят.
