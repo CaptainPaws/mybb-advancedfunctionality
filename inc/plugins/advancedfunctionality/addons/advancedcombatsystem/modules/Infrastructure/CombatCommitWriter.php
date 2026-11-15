@@ -9,11 +9,13 @@ require_once __DIR__.'/ReactionPersistence.php';
 require_once __DIR__.'/BarrierPersistence.php';
 require_once __DIR__.'/TerminalReceiptPersistence.php';
 require_once __DIR__.'/PreparedExecutionPersistence.php';
+require_once __DIR__.'/EndConditionPersistence.php';
 require_once __DIR__.'/../Application/BuilderService.php';
 
 /** Transactional combat-publication writer. Never calls a native post writer. */
 final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
 {
+    use AF_ACS_EndConditionPersistence;
     use AF_ACS_PreparedExecutionPersistence, AF_ACS_InteractionToolPersistence, AF_ACS_ItemCommitPersistence, AF_ACS_CombatCommitPersistence, AF_ACS_TerminalReceiptPersistence, AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
     private array $spatialKeys=[],$coverKeys=[];
     private AF_ACS_SubmissionStore $submissions;
@@ -283,6 +285,7 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         $outbox=self::json(['schema_version'=>1,'submission_id'=>$row['submission_id'],'event_id'=>$event,'result_hash'=>$resultHash,'pid'=>$row['pid']]);
         $this->sql('INSERT INTO '.$this->table('outbox').' (message_key,submission_id,kind,payload_hash,payload_json,status,attempts,available_at,created_at) VALUES (?,?,?,?,?,?,0,?,?)',
             [$messageKey,$row['submission_id'],'combat.committed',hash('sha256',$outbox),$outbox,'pending',$now,$now]);
+        $this->checkEndConditions($row['session_id'],$row['encounter_id'],$event,$row['author_uid']);
         return $receipt;
     }
 }
