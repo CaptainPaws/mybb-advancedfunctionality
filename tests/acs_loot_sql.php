@@ -22,6 +22,7 @@ $GLOBALS['acsEndFixture']=static function(array $f):void {
     itemInsert($link,'af_acs_side_relationships',['encounter_id'=>1,'side_a'=>1,'side_b'=>2,'relationship'=>'hostile','relation_version'=>1]);$link->query('UPDATE t_af_acs_participants SET side_id=2 WHERE entity_id='.$victim);
     $link->query("UPDATE t_af_acs_encounters SET status='preparation',round_number=0 WHERE id=1");
     $encounters->command('end_conditions_set',$request('loot_end_policy01')+['end_conditions'=>['schema'=>AF_ACS_EndCondition::SCHEMA,'conditions'=>['last_active_side','no_active_sides'],'allow_continuation'=>true,'mutual_outcomes'=>['draw']]]);
+    if(isset($GLOBALS['acsLootParticipantsFixture']))($GLOBALS['acsLootParticipantsFixture'])(get_defined_vars());
     $definitions=[];$pins=[];
     foreach(['guaranteed','independent_roll','weighted_pool'] as $index=>$mode){
         $kind=['monster','encounter','kb'][$index];$key='loot-'.$mode;
@@ -29,6 +30,7 @@ $GLOBALS['acsEndFixture']=static function(array $f):void {
             'conditions'=>['outcomes'=>['victory'],'source_life_states'=>$kind==='monster'?['incapacitated']:[],'source_participation'=>$kind==='monster'?['engaged']:[],'source_side'=>$kind==='monster'?'loser':'any'],
             'eligibility'=>['side'=>'winner','life_states'=>['active','incapacitated','dead'],'participation'=>['engaged','surrendered','escaped','withdrawn','captured']],
             'entries'=>[['key'=>'gem-a','item'=>$ref,'qty'=>2,'chance'=>$mode==='independent_roll'?50:100,'weight'=>$mode==='weighted_pool'?1:0],['key'=>'gem-b','item'=>$ref,'qty'=>1,'chance'=>$mode==='independent_roll'?25:100,'weight'=>$mode==='weighted_pool'?3:0]]];
+        if(isset($GLOBALS['acsLootDefinitionFixture']))$definition=($GLOBALS['acsLootDefinitionFixture'])($definition,$mode);
         $rules=['schema'=>AF_KB_ARPG_RULES_SCHEMA,'type_profile'=>'service_mechanics','version'=>'1','service_kind'=>'combat_template','entries'=>[['schema'=>'af_kb.arpg.mechanic.v1','key'=>$key,'version'=>'1','phases'=>[],'limits'=>[],'formula_refs'=>[],'loot_source'=>$definition]]];
         itemInsert($link,'af_kb_entries',snapshot_entry(1900+$index,'arpg_mechanics',$key,$rules));$definitions[$mode]=$definition;
         $r=$request('loot_configure_'.$mode)+['source_kind'=>$kind,'source_entity_id'=>$kind==='monster'?$victim:'','kb_key'=>$key];$configured=$loot->command('loot_configure',$r);$pins[$mode]=$configured['definition_snapshot_id'];
@@ -49,7 +51,7 @@ $GLOBALS['acsEndFixture']=static function(array $f):void {
     // Unrelated current Luck cannot modify pinned loot chances.
     $stats=$link->query('SELECT stats_json FROM t_af_acs_entity_states WHERE entity_id='.$actor)->fetch_row()[0];$s=json_decode($stats,true);$s['values']['luck']=999999;$json=json_encode($s);$st=$link->prepare('UPDATE t_af_acs_entity_states SET stats_json=? WHERE entity_id=?');$st->bind_param('ss',$json,$actor);$st->execute();
     $frozen=$link->query("SELECT candidate_json FROM t_af_acs_encounter_resolutions WHERE status='confirmed'")->fetch_row()[0];$frozen=json_decode($frozen,true)['loot_eligibility'];
-    $group=$repo->entity($sid,$actor)['control_group_id'];$eligible=AF_ACS_Rewards::eligibility($definitions['independent_roll'],$frozen,$outcome['outcome']);snapshot_assert(count($eligible)===1&&$eligible[0]['control_group_id']===$group,'Eligibility requires damage/duplicates');
+    $group=$repo->entity($sid,$actor)['control_group_id'];$eligible=AF_ACS_Rewards::eligibility($definitions['independent_roll'],$frozen,$outcome['outcome']);snapshot_assert(count($eligible)===($GLOBALS['acsLootExpectedGroups']??1)&&$eligible[0]['control_group_id']===$group,'Eligibility requires damage/duplicates');
     foreach(['pet','summon'] as $kind){$pet=$frozen[0];$pet['entity_id']='999'.$kind;$pet['control_group_id']='999';$pet['kind']=$kind;$pet['source_entity_id']=$actor;$frozen[]=$pet;}
     snapshot_assert(AF_ACS_Rewards::eligibility($definitions['independent_roll'],$frozen,$outcome['outcome'])===$eligible,'Pet/summon added base share');
     $sessions=new AF_ACS_SessionService($repo,$access);$sr=static fn($key)=>['session_id'=>$sid,'expected_version'=>$repo->session($sid)['session_version'],'operation_key'=>$key,'reason'=>'Loot lifecycle fixture'];
@@ -92,6 +94,7 @@ $result=$loot->command('loot_generate',$r);$receipts[$mode]=$result;$pool=$resul
     $done=$captureAll();snapshot_assert($encounters->command('outcome_confirm',$confirm)===$confirmed&&$captureAll()===$done,'Repeated outcome generated more loot');
     foreach(['inv_items','inv_owner_state','inv_reservations','inv_external_operations','combat_results','combat_receipts','sealed_actions','entity_states','resources','turns','entity_turns','cooldowns'] as $table)snapshot_assert($done[$table]===$mechanical[$table],'Loot mutated '.$table);
     $retainedRolls=array_column($done['rolls'],null,'id');foreach($mechanical['rolls'] as $roll)snapshot_assert(($retainedRolls[$roll['id']]??null)===$roll,'Loot rewrote combat roll history');
+    if(isset($GLOBALS['acsLootAllocationFixture'])){($GLOBALS['acsLootAllocationFixture'])(get_defined_vars());return;}
     $summary=$sessions->view($sid,true)['outstanding_obligations'];snapshot_assert(count(array_filter($summary['pending'],fn($r)=>$r['source']==='loot_pool'))===3&&!$summary['explicitly_blocked'],'Pools lost lifecycle scope');
     $sessions->command('request_close',$sr('loot_pending_close01'));$sessions->command('close',$sr('loot_session_close01'));$sessions->command('reopen_session',$sr('loot_session_reopen01'));
     $snap=$captureAll();snapshot_assert($loot->command('loot_generate',$request('loot_after_reopen01')+['source_key'=>'encounter'])===$receipts['independent_roll']&&$captureAll()===$snap&&$drawsLoot===6,'Reopen regenerated');

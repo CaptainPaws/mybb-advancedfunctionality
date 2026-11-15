@@ -62,7 +62,7 @@ final class AF_ACS_EncountersPage
                 if($session['status']==='active') {self::form($base,'create',$session);echo '<h3>Новое столкновение</h3><label>Название <input name="name" maxlength="191" required></label><p>Настройки подготовки будут закреплены отдельным снимком. Пока панель и сведения доступны только мастерам.</p>';self::submit('Создать столкновение');}
                 echo '</section>';return ob_get_clean();
             }
-            $view=$service->view($sid,$eid,$tid,$mybb->get_input('participant_after')?:'0',$mybb->get_input('side_after')?:'0',$mybb->get_input('relation_after')?:'0');$encounter=$view['encounter'];$url=$base.'&acs_encounter='.$eid.'&acs_tab='.$tab;
+            $view=$service->view($sid,$eid,$tid,$mybb->get_input('participant_after')?:'0',$mybb->get_input('side_after')?:'0',$mybb->get_input('relation_after')?:'0');$encounter=$view['encounter'];echo '<p><a href="misc.php?action=acs_loot&amp;session_id='.self::esc($sid).'&amp;encounter_id='.self::esc($eid).'">Распределение добычи</a></p>';$url=$base.'&acs_encounter='.$eid.'&acs_tab='.$tab;
             echo '<nav aria-label="Панель GM">';foreach($tabs as $key=>$name)echo '<a href="'.self::esc($base.'&acs_encounter='.$eid.'&acs_tab='.$key).'"'.($tab===$key?' aria-current="page"':'').'>'.self::esc($name).'</a> ';echo '</nav>';
             if($tab==='preview'){require_once __DIR__.'/BuilderController.php';AF_ACS_BuilderController::render($sid,$eid,$tid);}
             elseif($tab==='overview') {

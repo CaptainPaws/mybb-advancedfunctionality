@@ -28,6 +28,7 @@ function af_advancedcombatsystem_init(): string
             require_once __DIR__.'/modules/Presentation/ThreadComponents.php';
             $plugins->add_hook('global_end','af_advancedcombatsystem_register_thread_component');
         }
+        if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_loot')$plugins->add_hook('misc_start','af_advancedcombatsystem_loot_page');
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_recovery')$plugins->add_hook('misc_start','af_advancedcombatsystem_recovery_page');
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_sessions')$plugins->add_hook('misc_start','af_advancedcombatsystem_sessions_page');
     }
@@ -167,6 +168,7 @@ function af_advancedcombatsystem_session_settings(): void
 function af_advancedcombatsystem_xmlhttp(): void
 {
     global $mybb;
+    if(in_array($mybb->get_input('op'),['loot_allocation_view','loot_gm_assign','loot_free_claim','loot_claim','loot_allocation_close'],true)){require_once __DIR__.'/modules/Presentation/LootAllocationController.php';AF_ACS_LootAllocationController::dispatch();}
     if(in_array($mybb->get_input('op'),['loot_status','loot_configure','loot_generate'],true)){require_once __DIR__.'/modules/Presentation/LootController.php';AF_ACS_LootController::dispatch();}
     if(in_array($mybb->get_input('op'),['outcome_status','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release','rejoin_encounter'],true)){require_once __DIR__.'/modules/Presentation/EndConditionController.php';AF_ACS_EndConditionController::dispatch();}
     if(in_array($mybb->get_input('op'),['ambush_status','ambush_ready','ambush_start'],true)){require_once __DIR__.'/modules/Presentation/AmbushController.php';AF_ACS_AmbushController::dispatch();}
@@ -332,4 +334,15 @@ function af_advancedcombatsystem_recovery_page(): void
     catch(Throwable $error){http_response_code(403);$body='<p>Восстановление недоступно. Нужны текущие права мастера этой сессии и доступ к теме.</p>';}
     header('Cache-Control: private, no-store');
     output_page('<html><head><title>ACS · Восстановление</title>'.$headerinclude.af_advancedcombatsystem_presentation_css('has_acs_recovery').'</head><body>'.$header.'<main>'.$body.'</main>'.$footer.'</body></html>');exit;
+}
+
+/** Explicit loot navigation only; normal thread requests do not load the allocation stack. */
+function af_advancedcombatsystem_loot_page():void
+{
+    global $mybb,$header,$headerinclude,$footer;
+    require_once __DIR__.'/modules/Presentation/LootAllocationPage.php';
+    try{$body=AF_ACS_LootAllocationPage::render($mybb->get_input('session_id'),$mybb->get_input('encounter_id'));}
+    catch(Throwable){http_response_code(403);$body='<p>Добыча недоступна. Проверьте текущие права сессии и доступ к теме.</p>';}
+    header('Cache-Control: private, no-store');
+    output_page('<html><head><title>ACS · Распределение добычи</title>'.$headerinclude.'</head><body>'.$header.'<main>'.$body.'</main>'.$footer.'</body></html>');exit;
 }

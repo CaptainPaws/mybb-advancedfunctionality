@@ -30,6 +30,7 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
         while($row=$rows->fetch_assoc()) {
             $id=htmlspecialchars_uni((string)$row['id']);
             $links[]='<a href="misc.php?action=acs_sessions&amp;session_id='.$id.'">Сессия ACS #'.$id.'</a>';
+            $links[]='<a href="misc.php?action=acs_loot&amp;session_id='.$id.'">Добыча ACS</a>';
             $links[]='<a href="showthread.php?tid='.$tid.'&amp;acs_builder='.$id.'">Подготовить ход ACS</a>';
             if($builder===(string)$row['id']) {
                 require_once __DIR__.'/BuilderController.php';

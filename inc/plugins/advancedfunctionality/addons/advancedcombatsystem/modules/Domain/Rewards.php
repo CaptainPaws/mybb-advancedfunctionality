@@ -11,7 +11,8 @@ final class AF_ACS_Rewards
     {if(!is_array($v)||!array_is_list($v)||!$v||count($v)!==count(array_unique($v))||array_diff($v,$allowed))throw new RuntimeException('ACS_LOOT_UNSUPPORTED');}
     public static function definition(array $d):array
     {
-        self::fields($d,['schema','source_kind','mode','draws','replacement','luck_modifier','conditions','eligibility','entries']);
+        if(array_key_exists('allocation',$d))self::allocationPolicy($d['allocation']);
+        self::fields(array_diff_key($d,['allocation'=>1]),['schema','source_kind','mode','draws','replacement','luck_modifier','conditions','eligibility','entries']);
         if($d['schema']!==self::SCHEMA||!in_array($d['source_kind'],['monster','encounter','kb'],true)||!in_array($d['mode'],['guaranteed','independent_roll','weighted_pool'],true)||$d['luck_modifier']!==null||!is_int($d['draws'])||$d['draws']<0||$d['draws']>128||!is_bool($d['replacement']))throw new RuntimeException('ACS_LOOT_UNSUPPORTED');
         self::fields($d['conditions'],['outcomes','source_life_states','source_participation','source_side']);
         self::choices($d['conditions']['outcomes'],['victory','draw','inconclusive']);
@@ -35,6 +36,24 @@ final class AF_ACS_Rewards
         }
         if($d['mode']==='weighted_pool'?($d['draws']<1||!$d['replacement']&&$d['draws']>count($d['entries'])):($d['draws']!==0||$d['replacement']))throw new RuntimeException('ACS_LOOT_UNSUPPORTED');
         return $d;
+    }
+    public static function allocationPolicy(?array $p=null):array
+    {
+        $p??=['schema'=>'ic-acs.loot-allocation.v1','mode'=>'gm_assign','allow_pass'=>false,'visibility'=>'gm_only','winner_visibility'=>'gm_only'];
+        self::fields($p,['schema','mode','allow_pass','visibility','winner_visibility']);
+        if($p['schema']!=='ic-acs.loot-allocation.v1'||!in_array($p['mode'],['gm_assign','free_claim','need_greed'],true)||!is_bool($p['allow_pass'])||$p['mode']!=='need_greed'&&$p['allow_pass']||!in_array($p['visibility'],['gm_only','eligible'],true)||!in_array($p['winner_visibility'],['gm_only','eligible','recipient'],true)||$p['mode']!=='gm_assign'&&$p['visibility']!=='eligible')throw new RuntimeException('ACS_LOOT_ALLOCATION_UNSUPPORTED');
+        return $p;
+    }
+    /** One uniform lottery among the highest-priority claims, ordered by stable group identity. */
+    public static function contenders(array $claims):array
+    {
+        $need=[];$greed=[];foreach($claims as $c){if(!in_array($c['claim'],['need','greed','pass'],true))throw new RuntimeException('ACS_LOOT_ALLOCATION_INVALID');if($c['claim']==='need')$need[]=(string)$c['control_group_id'];elseif($c['claim']==='greed')$greed[]=(string)$c['control_group_id'];}
+        $ids=$need?:$greed;usort($ids,static fn($a,$b)=>strlen($a)<=>strlen($b)?:strcmp($a,$b));return $ids;
+    }
+    public static function lottery(array $ids,array $sample):string
+    {
+        if(count($ids)<2||!is_int($sample['sample_n']??null)||$sample['sample_n']<0||$sample['sample_n']>9007199254740991||($sample['u']??null)!==$sample['sample_n']/9007199254740992.0)throw new RuntimeException('ACS_LOOT_TAPE_INVALID');
+        return $ids[(int)floor($sample['u']*count($ids))];
     }
     /** Frozen group facts at the mechanical end boundary, never current controller/HP reads. */
     public static function eligibility(array $d,array $facts,array $outcome):array
