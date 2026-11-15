@@ -144,3 +144,70 @@ transaction до DDL. Нет новых tables/ledger, ACS migrations 001–021 
 До отдельного owner schema upgrade новая предметная подготовка fail closed;
 обычные owner операции не требуют этих колонок. Legacy obligations не получают
 новые права автоматически. Installed acceptance остаётся NOT_VERIFIED.
+
+## ACS-10.2.3 — Exact loot issuer grant
+
+IMPLEMENTED, ограниченный owner profile consumable/ammo; installed acceptance
+остаётся NOT_VERIFIED. Никакой общей ACS + Inventory + MyBB transaction нет.
+
+Default Inventory owner policy по-прежнему запрещает grant. Новая code-only
+`AF_ADVINV_ExactPropertyAccess` добавляет проверку **фактического полного envelope**.
+OwnerProtocol вызывает её для grant preflight/lookup; PropertyOperations — до
+transaction и повторно под owner guard. Прежние policy implementations не получают
+новых grants. ACS policy `AF_ACS_LootGrantAccess` разрешает только один сохранённый
+intent конкретного generated entry/closed allocation, не произвольный предмет GM.
+
+Issue operation identity: `acs:loot:issue:<entry_id>:<allocation_version>`.
+Authorization ref: `acs-loot-issue:<encounter_id>:<entry_id>:<allocation_version>`.
+Provenance: `{system:acs, source_key:loot-entry:<entry_id>}` — не зависит от нового
+client key, recipient или будущей correction version. Owner grant_sources
+независимо запрещает повторную успешную выдачу provenance под другой key/UID.
+
+В существующей ACS transaction сохраняются issue_operation_key entry, status
+pending_issue, canonical owner envelope в operations с external_system/ref,
+owner payload_hash и отдельный full-envelope hash в immutable preparation event.
+Есть UNIQUE issue_operation_key в существующих loot_entries. Новой схемы/ledger нет.
+
+Сервер проверяет confirmed outcome, generation hash/rolls/item pin, closed allocation
+receipt/claims/lottery, immutable winner/qty/source и original issuer. Нормализация
+owner payload использует существующий KB normalizer и точные сохранённые
+meta_json bytes, только при совпадении semantic fingerprint/version с item pin.
+Поддержан meta wrapper только `{rules: ...}` с тем же fingerprint: неизвестная
+внешняя metadata не добавляется к pinned loot. Definition ref owner сохраняет
+существующую форму `version=sha256:SHA256(meta_json)`, а не подменяет KB declared
+version; обе связи остаются в ACS pin/intent. Действуют прежние owner 64 KiB bounds.
+
+Grant v1 остаётся consumable/ammo, entity=equipment. Weapon/другие kinds, изменённая
+KB definition, неподтверждённая metadata, отсутствующая KB/owner schema не получают
+fallback через af_inv_add_item/Shop/прямой Inventory SQL. Причины:
+ACS_LOOT_GRANT_KIND_UNSUPPORTED, ACS_LOOT_OWNER_DEFINITION_CHANGED,
+ACS_LOOT_OWNER_METADATA_UNSUPPORTED, ACS_LOOT_KB_UNAVAILABLE либо owner schema code.
+До допустимого intent сохраняется awaiting_issue; после prepare — pending_issue.
+
+После ACS intent COMMIT InventoryOperationService атомарно CAS-ит prepared →
+recovery_required **до** единственного dispatch. Owner grant выполняет собственную
+transaction и возвращает durable receipt либо неизвестный результат. Перед owner
+call проверяется отсутствие ACS locks/ambient transaction. Under owner guard ACS
+policy делает только non-locking proof/role reads, без ACS lock acquisition или
+native hooks; native access проверяется до owner boundary. Из Inventory не
+вызываются ACS mutations.
+
+Receipt подтверждает key/hash, actor/scope, provenance, qty, фактический item ID
+и изменение inventory version именно winner UID. Generic Inventory acknowledgement
+и отдельный loot entry acknowledgement имеют собственные ACS CAS/audit commits.
+Только после обоих entry становится issued. Если второй commit не прошёл,
+committed owner acknowledgement сохраняется, entry остаётся pending до reconcile.
+Отказ owner — issue_rejected, тот же winner/key, без автоматического нового grant.
+
+Повтор/неизвестный ACK использует прежний intent и owner lookup. not_found и
+unavailable не считаются rejection/выдачей и не запускают повторный dispatch.
+Prepared intent без dispatch marker может безопасно выполнить свой первый grant
+после восстановления зависимости. Отдельный replay нового client key не меняет
+owner key/recipient/qty. Recovery-only adapter не имеет grant permission.
+
+Операции требуют POST/CSRF, текущего native/session GM и первоначального issuer UID.
+Другой GM может читать audit, но не impersonate issuer или перевыпустить key.
+Closed/archived session допускает этот scoped obligation write без возобновления
+боя; current owner protocol такой grant не запрещает. Revoked issuer/native rights
+или недоступный owner оставляют barrier с прежними source/winner/rolls. Реальная
+передача прав recovery и proven-absence resend требуют отдельного контракта.

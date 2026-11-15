@@ -22,11 +22,12 @@ require_once __DIR__.'/EndConditionPersistence.php';
 require_once __DIR__.'/ParticipationPersistence.php';
 require_once __DIR__.'/LootPersistence.php';
 require_once __DIR__.'/LootAllocationPersistence.php';
+require_once __DIR__.'/LootIssuePersistence.php';
 
 /** Prepared, scoped SQL. All mutators require the existing audited command transaction. */
 final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
 {
-    use AF_ACS_LootPersistence, AF_ACS_LootAllocationPersistence;
+    use AF_ACS_LootPersistence, AF_ACS_LootAllocationPersistence, AF_ACS_LootIssuePersistence;
     use AF_ACS_EndConditionPersistence, AF_ACS_ParticipationPersistence;
     use AF_ACS_DelegationPersistence, AF_ACS_ObjectCommands;
     use AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;

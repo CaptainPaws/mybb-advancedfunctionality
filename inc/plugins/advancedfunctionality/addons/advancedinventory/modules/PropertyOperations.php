@@ -19,6 +19,7 @@ final class AF_ADVINV_PropertyOperations
         $owners=$operation==='transfer'?[$owner,$p['to_uid']]:[$owner];
         $authorize=function () use ($operation,$owner,$r) {
             if ($this->access->uid()!==$r['actor']['uid']) throw new RuntimeException('INV_ACCESS_DENIED');
+            if($this->access instanceof AF_ADVINV_ExactPropertyAccess)$this->access->authorizePropertyIntent($r);
             $this->access->authorize($operation,$owner,['system'=>$r['scope']['system'],'context_key'=>$r['scope']['context_key']],$r['actor']['authorization_ref'],true);
         };
         $authorize();

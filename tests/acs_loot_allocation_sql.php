@@ -85,6 +85,7 @@ $GLOBALS['acsLootAllocationFixture']=static function(array $f):void {
     $pending=$sessions->view($sid,true)['outstanding_obligations'];snapshot_assert(count(array_filter($pending['pending'],fn($o)=>$o['source']==='loot_pool'))===3,'Awaiting issue disappeared');
     snapshot_assert((int)$link->query('SELECT COUNT(*) FROM t_af_acs_loot_claims WHERE loot_entry_id='.$ng1.' AND control_group_id='.$groups['7'])->fetch_row()[0]===1,'Group/pet claim multiplied');
     $migrations->run();snapshot_assert($captureAll()===$snap,'Activation/migration lost reservation');
+    if(isset($GLOBALS['acsLootIssueFixture'])){($GLOBALS['acsLootIssueFixture'])(get_defined_vars());return;}
     echo "ACS loot allocation SQL: GM assign, free claim race, need/greed priority+edit+pass, single sealed tie, ACK/replay, wrong/late groups, redacted DTO/HTML, rollback, awaiting-issue preservation and archive scope passed\n";
 };
 require __DIR__.'/acs_loot_sql.php';

@@ -17,9 +17,18 @@ final class AF_ACS_InventoryAdapter
         $owner=new AF_ADVINV_OwnerProtocol($link,new AF_ACS_CombatInventoryAccess($link,$actor));
         $owner->assertStorage();return new self($owner);
     }
-    public static function forRecovery(object $database,array $intent): self
+    public static function forLootIssue(object $database,string $sid,string $eid,string $entry,AF_ACS_SessionAccess $access,bool $allowGrant=true):self
+    {
+        if(!af_is_addon_enabled('advancedinventory'))throw new RuntimeException('ACS_INVENTORY_UNAVAILABLE');
+        require_once __DIR__.'/LootGrantAccess.php';$link=$database instanceof mysqli?$database:($database->write_link??null);
+        if(!$link instanceof mysqli||isset($database->read_link)&&$database->read_link!==$link)throw new RuntimeException('ACS_AUTHORITATIVE_CONNECTION_REQUIRED');
+        (new AF_ACS_EncounterRepository($link))->lootIssueExternalBoundary();
+        $owner=new AF_ADVINV_OwnerProtocol($link,new AF_ACS_LootGrantAccess($link,$sid,$eid,$entry,$allowGrant,$access));$owner->assertStorage();return new self($owner);
+    }
+    public static function forRecovery(object $database,array $intent,?AF_ACS_SessionAccess $access=null): self
     {
         if (!af_is_addon_enabled('advancedinventory')) throw new RuntimeException('ACS_INVENTORY_UNAVAILABLE');
+        if(preg_match('/\Aacs-loot-issue:([1-9][0-9]*):([1-9][0-9]*):([1-9][0-9]*)\z/D',$intent['actor']['authorization_ref']??'',$m))return self::forLootIssue($database,$intent['scope']['context_key'],$m[1],$m[2],$access??new AF_ACS_SessionAccess,false);
         require_once __DIR__.'/InventoryRecoveryAccess.php';$link=$database instanceof mysqli?$database:($database->write_link??null);
         if (!$link instanceof mysqli || isset($database->read_link)&&$database->read_link!==$link) throw new RuntimeException('ACS_AUTHORITATIVE_CONNECTION_REQUIRED');
         return new self(new AF_ADVINV_OwnerProtocol($link,new AF_ACS_InventoryRecoveryAccess($link,$intent)));
