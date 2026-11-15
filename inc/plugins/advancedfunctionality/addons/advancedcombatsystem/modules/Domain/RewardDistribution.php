@@ -63,7 +63,7 @@ final class AF_ACS_RewardDistribution
     {return match($type){'experience'=>'exp','currency'=>'credits',default=>throw new RuntimeException('ACS_PERMANENT_SYNC_BLOCKED')};}
     public static function authority(array $payload,string $id,string $issuer):array
     {
-        return ['scope'=>'acs.reward','source_ref'=>'acs-reward:'.$id,'uid'=>$payload['recipient']['uid'],'kind'=>self::kind($payload['reward_type']),'amount_minor'=>$payload['recipient']['amount_minor'],'authority_ref'=>'acs-reward:'.$id.':'.$payload['definition_hash'],'confirmation_ref'=>$payload['outcome_id'],'issuer_ref'=>'acs:reward-issuer:'.$issuer];
+        return ['scope'=>'acs.reward','source_ref'=>'acs-reward:'.$id,'uid'=>$payload['recipient']['uid'],'kind'=>self::kind($payload['reward_type']),'amount_minor'=>$payload['recipient']['amount_minor'],'authority_ref'=>'acs-reward:'.$id.':'.$payload['definition_hash'],'confirmation_ref'=>$payload['confirmation_ref']??$payload['outcome_id'],'issuer_ref'=>'acs:reward-issuer:'.$issuer];
     }
     public static function receipt(array $intent,array $authority,array $r):void
     {

@@ -13,6 +13,9 @@ final class AF_ACS_RewardService
         $this->repo=new AF_ACS_EncounterRepository($database);$this->operations=new AF_ACS_OperationStore($database);
         $this->balance=$balance??new AF_ACS_BalanceAdapter($database,$access);
     }
+    /** Code-only earning boundary; never accepts a client amount/recipient. */
+    public static function recordAchievementObligation(AF_ACS_EncounterRepository $repo,array $session,string $contribution,int $ordinal):string
+    {return $repo->recordAchievementReward($session,$contribution,$ordinal);}
     private function authorize(string $sid,bool $native=true):array
     {
         if(!af_is_addon_enabled('advancedcombatsystem')||!empty($GLOBALS['af_acs_deactivated']))throw new RuntimeException('ACS_DISABLED');

@@ -108,6 +108,13 @@ final class AF_ACS_KnowledgeBaseAdapter
         if(empty($dto['ready'])||($d['service_kind']??null)!=='combat_template'||count($d['entries']??[])!==1||array_diff(array_keys($d),['schema','type_profile','version','service_kind','entries'])||array_diff(array_keys($e),['schema','key','version','phases','limits','formula_refs','reward_source'])||($e['schema']??null)!=='af_kb.arpg.mechanic.v1'||($e['key']??null)!==$key||!is_string($e['version']??null)||!empty($e['phases'])||!empty($e['limits'])||!empty($e['formula_refs']))throw new RuntimeException('ACS_REWARD_DEFINITION_UNAVAILABLE');
         return ['schema_version'=>1,'table'=>$dto,'definition'=>AF_ACS_RewardDistribution::definition($e['reward_source']??[])];
     }
+    public function achievementDefinition(string $key,int $actor):array
+    {
+        require_once __DIR__.'/../../Domain/Achievements.php';
+        $dto=$this->readDefinition('arpg_mechanics',$key,$actor);$d=$dto['data']['definition']??[];$e=$d['entries'][0]??[];
+        if(empty($dto['ready'])||($d['service_kind']??null)!=='combat_template'||count($d['entries']??[])!==1||array_diff(array_keys($d),['schema','type_profile','version','service_kind','entries'])||array_diff(array_keys($e),['schema','key','version','phases','limits','formula_refs','achievement'])||($e['schema']??null)!=='af_kb.arpg.mechanic.v1'||($e['key']??null)!==$key||!is_string($e['version']??null)||!is_string($dto['definition_version']['declared_version']??null)||!empty($e['phases'])||!empty($e['limits'])||!empty($e['formula_refs']))throw new RuntimeException('ACS_ACHIEVEMENT_DEFINITION_UNAVAILABLE');
+        return ['schema_version'=>1,'table'=>$dto,'definition'=>AF_ACS_Achievements::definition($e['achievement']??[])];
+    }
     private function available(int $actorUid): bool
     {
         global $mybb;

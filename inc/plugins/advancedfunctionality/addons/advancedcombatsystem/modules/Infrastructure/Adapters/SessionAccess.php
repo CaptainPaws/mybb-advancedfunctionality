@@ -43,6 +43,12 @@ class AF_ACS_SessionAccess
         }
         return $thread;
     }
+    /** A separate native moderation right, in addition to persisted session GM. */
+    public function correctionThread(string $tid):void
+    {
+        $thread=$this->thread($tid);
+        if(!is_moderator((int)$thread['fid'],'caneditposts',(int)$this->uid()))throw new RuntimeException('ACS_CORRECTION_PERMISSION_REQUIRED');
+    }
     /** Preparing a combat reply does not bypass native posting restrictions. */
     public function draftThread(string $tid): void
     {

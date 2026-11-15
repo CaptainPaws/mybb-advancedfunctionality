@@ -2212,3 +2212,64 @@ is a separate audited GM command; repeated outcome confirmation cannot create a
 second plan or change an allocation. Issuance and recovery use exact IC-BALANCE
 owner credit/lookup, not message reward hooks. No CharacterSheets permanent write
 is supported without a durable authorized owner API.
+
+## ACS-10.3.3 — Confirmed-count achievements and derived correction review v1
+
+An opt-in `achievement` object is carried by one authorized
+`arpg_mechanics/combat_template` entry (empty phases/limits/formula_refs).
+The whole graph and declared version are pinned before encounter start.
+`ic-acs.achievement.v1` supports these exact fields:
+
+- `achievement_key`: stable lowercase identity, independent of KB entry/version;
+- `name`, `mode`: one_time/progressive/repeatable; positive integer `threshold`
+  <=1000000 (one_time requires 1);
+- `timing`: on_confirmed_event or on_encounter_completed;
+- `subject`: actor/owner/control_group, omitted defaults to control_group;
+- `visibility`: visible/hidden_until_unlocked/gm_only;
+- `identity_policy`: pinned or compatible_carry;
+- `condition`: `{kind:"confirmed_count", selection, entity_kinds, outcomes}`.
+  Combat timing requires selection=primary_actors, outcomes=[], and counts one
+  confirmed combat.resolved event per subject. Completion timing requires
+  selection=registered_participants and explicit victory/draw/inconclusive outcomes;
+  it accepts only the verified terminal encounter.outcome_confirm event.
+  entity_kinds explicitly selects character/npc/monster/pet/summon;
+- `reward`: null or `{reward_type:"experience"|"currency",amount_minor:<positive int>}`.
+  Balance scale is 100, with the ACS-10.3.2 exact minor-unit owner contract.
+
+Other predicates, formulas, secondary-child triggers, property/Inventory awards
+and permanent writes have no inferred implementation. Evaluation is an explicit
+idempotent server command over retained confirmed facts; no preview/seal hook
+awards progress, and no outbox consumer is added here.
+
+Frozen actor/group-owner facts come from the same combat commit. Completed-source
+facts use the existing pending-resolution freeze. Actor means ACS entity identity;
+owner means frozen account UID; group means existing control_group identity.
+Owners/groups dedupe all qualifying actors, including several pets, within a source.
+Unowned/invalid account recipients are not converted to arbitrary accounts.
+A changed subject owner cannot silently redirect existing progress/rewards.
+
+Each subject/source contributes at most once across all versions. Progressive
+awards once at threshold; repeatable awards each newly reached threshold ordinal.
+Historical earned ordinals never decrease, including after correction review.
+Rewards use achievement+subject+ordinal+type identities, not definition version.
+A different pin requires explicit `achievement_migrate`: compatible_carry,
+identical normalized semantics (including threshold, visibility, subject and reward),
+CAS, reason, native moderation + session GM and an audit event. Old pins/contributions
+remain valid. Incompatible definitions or recipient changes require a separate
+identity policy; they are blocked, never reset implicitly.
+
+Correction profile `ic-acs.correction-review.v1` requires exactly:
+`disposition=exclude|include`, `recipient_contract=acs.derived-review.v1`, and
+`compensation=none|balance|advancedinventory|charactersheets`.
+It appends a per-source aggregate/outcome review revision; it does not rewrite
+physical combat state or the confirmed winner receipt. The review aggregate is
+included_event_count plus the source plan's primary_allocated_damage (not HP loss
+or reflected/absorbed damage), with the original outcome retained and an explicit
+inclusion flag. Subsequent statistics consumers must apply this review explicitly.
+
+The original event/rolls and achievement contribution rows stay immutable.
+Derived review_count is recomputed; historical earned identities and issued/pending
+reward obligations survive. A separate `achievement_review` acknowledges the
+review without an award, deletion or owner mutation. External compensation has no
+approved clawback API in the installed contracts and remains BLOCKED with a reason;
+requesting it never calls debit/transfer/delete or generates a replacement loot roll.

@@ -425,3 +425,30 @@ source identity, expected version, result and lookup. `af_charactersheets_grant_
 returns false; ordinary EXP callbacks/JSON mutators do not supply this contract.
 Permanent sync is BLOCKED with its pinned request retained. Balance EXP rewards
 never invoke that callback, update build_json or recalculate active ACS snapshots.
+
+### ACS-10.3.3 implementation note — achievement earning and corrections
+
+Achievement awards are exact retained sources for the existing RewardService.
+The Balance provider verifies the immutable achievement contribution, source
+combat/outcome receipt, pinned definition, earned ordinal and exact reward payload.
+Current native/session GM permission remains required for issue/lookup. Stable
+reward identity excludes KB version; review exclusions do not invalidate an already
+earned award or silently cancel its outstanding obligation.
+
+Achievement DTOs apply visibility on the server before the row limit; ordinary
+viewers receive only their permitted visible/unlocked progress, no hidden totals,
+raw progress IDs, definitions, source refs, audit or reward counts. Global subject
+progress also requires current membership/native access in every contributing
+session; a GM view requires GM rights across those sessions. Ordinary reads are
+bounded to 100 visible rows and do not accept numeric ID pagination, preventing
+hidden allocation-count inference. No profile provider or global counter is wired. Earning, definition migration,
+review/correction and their terminal replays also enforce the cross-session GM
+boundary before exposing historical progress in a command receipt.
+
+Administrative correction additionally requires native forum `caneditposts` and
+session GM. The supported receiving capability is the internal
+`acs.derived-review.v1`, which can revise derived inclusion/aggregate review only.
+Balance credit is not a compensation/debit API; Inventory property operations are
+not an approved automatic clawback contract; CS still lacks a durable sync API.
+All requested external compensation remains explicitly blocked. No direct owner
+SQL, MyBB post edit, EXP reduction or Inventory deletion is performed.
