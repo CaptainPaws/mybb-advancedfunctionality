@@ -168,6 +168,7 @@ function af_advancedcombatsystem_session_settings(): void
 function af_advancedcombatsystem_xmlhttp(): void
 {
     global $mybb;
+    if(in_array($mybb->get_input('op'),['loot_issue','loot_issue_status','loot_issue_recover'],true)){require_once __DIR__.'/modules/Presentation/LootIssueController.php';AF_ACS_LootIssueController::dispatch();}
     if(in_array($mybb->get_input('op'),['loot_allocation_view','loot_gm_assign','loot_free_claim','loot_claim','loot_allocation_close'],true)){require_once __DIR__.'/modules/Presentation/LootAllocationController.php';AF_ACS_LootAllocationController::dispatch();}
     if(in_array($mybb->get_input('op'),['loot_status','loot_configure','loot_generate'],true)){require_once __DIR__.'/modules/Presentation/LootController.php';AF_ACS_LootController::dispatch();}
     if(in_array($mybb->get_input('op'),['outcome_status','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release','rejoin_encounter'],true)){require_once __DIR__.'/modules/Presentation/EndConditionController.php';AF_ACS_EndConditionController::dispatch();}

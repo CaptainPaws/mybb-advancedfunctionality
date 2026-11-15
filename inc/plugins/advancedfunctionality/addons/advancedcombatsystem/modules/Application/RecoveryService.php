@@ -130,6 +130,8 @@ final class AF_ACS_RecoveryService
         require_once __DIR__.'/PreparedActionService.php';
         return (new AF_ACS_PreparedActionService($this->preparation,$this->access))->cancel($request,true);
     }
+    public function recoverLoot(string $sid,string $eid,string $entry,string $expectedVersion):array
+    {require_once __DIR__.'/LootIssueService.php';return (new AF_ACS_LootIssueService($this->database,$this->access))->recover($sid,$eid,$entry,$expectedVersion);}
     public function recoverInventory(string $sid,string $key,string $expectedVersion): array
     {
         require_once __DIR__.'/InventoryOperationService.php';return (new AF_ACS_InventoryOperationService($this->database,$this->access))->recover($sid,$key,$expectedVersion);

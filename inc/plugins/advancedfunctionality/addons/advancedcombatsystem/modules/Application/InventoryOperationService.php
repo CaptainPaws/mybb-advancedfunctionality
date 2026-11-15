@@ -24,19 +24,25 @@ final class AF_ACS_InventoryOperationService
         if ($native) $this->access->thread($s['tid']);return $s;
     }
     private function owner(?array $intent=null): AF_ACS_InventoryAdapter
-    {return $this->adapter??($intent===null?AF_ACS_InventoryAdapter::forCombat($this->database,(int)$this->access->uid()):AF_ACS_InventoryAdapter::forRecovery($this->database,$intent));}
+    {return $this->adapter??($intent===null?AF_ACS_InventoryAdapter::forCombat($this->database,(int)$this->access->uid()):AF_ACS_InventoryAdapter::forRecovery($this->database,$intent,$this->access));}
     private function row(string $sid,string $key): array
     {
         $this->authority($sid);$row=$this->store->get($key)??throw new RuntimeException('ACS_OPERATION_NOT_FOUND');
         if ($row['session_id']!==$sid || $row['external_system']!=='advancedinventory' || $row['external_ref']!==$key || !hash_equals($row['payload_hash'],hash('sha256',$row['request_json']))) throw new RuntimeException('ACS_INVENTORY_OPERATION_INTEGRITY');
         $intent=json_decode($row['request_json'],true,64,JSON_THROW_ON_ERROR);$this->authority($sid,$intent['actor']['uid']);
+        if(str_starts_with($intent['actor']['authorization_ref']??'','acs-loot-issue:')){$s=$this->sessions->session($sid);if(!AF_ACS_AuthorizationService::sessionGm($s,$this->sessions->roles($sid,$this->access->uid()),$this->access->uid()))throw new RuntimeException('ACS_GM_REQUIRED');}
         if ($row['kind']!=='inventory.'.$intent['operation'] || $intent['operation_key']!==$key || AF_ADVINV_OwnerProtocol::canonical($intent['scope'])!==AF_ADVINV_OwnerProtocol::canonical(['system'=>'acs','context_key'=>$sid]) || !in_array($intent['operation'],['reserve','consume','release','transfer','grant'],true) || !hash_equals($intent['payload_hash'],AF_ADVINV_OwnerProtocol::payloadHash($intent))) throw new RuntimeException('ACS_INVENTORY_OPERATION_INTEGRITY');
         return [$row,$intent];
+    }
+    private function verifyReceipt(array $intent,array $receipt):void
+    {
+        AF_ACS_InventoryReceipt::verify($intent,$receipt);
+        if(str_starts_with($intent['actor']['authorization_ref']??'','acs-loot-issue:')){require_once __DIR__.'/../Domain/LootIssue.php';AF_ACS_LootIssue::receipt($intent,$receipt);}
     }
     private function projection(array $row): array
     {
         if (in_array($row['status'],['committed','rejected','released'],true)) {
-            $result=json_decode($row['result_json'],true,64,JSON_THROW_ON_ERROR);$intent=json_decode($row['request_json'],true,64,JSON_THROW_ON_ERROR);AF_ACS_InventoryReceipt::verify($intent,$result['owner_receipt']??[]);
+            $result=json_decode($row['result_json'],true,64,JSON_THROW_ON_ERROR);$intent=json_decode($row['request_json'],true,64,JSON_THROW_ON_ERROR);$this->verifyReceipt($intent,$result['owner_receipt']??[]);
             if (AF_ACS_InventoryReceipt::status($result['owner_receipt'])!==$row['status']) throw new RuntimeException('ACS_INVENTORY_OPERATION_INTEGRITY');
         }
         return ['operation_key'=>$row['operation_key'],'payload_hash'=>json_decode($row['request_json'],true,64,JSON_THROW_ON_ERROR)['payload_hash'],'status'=>$row['status'],'operation_version'=>$row['operation_version'],'external_ref'=>$row['external_ref'],'result'=>json_decode($row['result_json'],true,64,JSON_THROW_ON_ERROR)];
@@ -57,7 +63,7 @@ final class AF_ACS_InventoryOperationService
         try {$receipt=$owner->{$intent['operation']}($intent);}
         catch (Throwable $error) {return $this->projection($row);}
         if (!in_array($receipt['status']??null,['prepared','committed','released','rejected'],true)) return $this->projection($row);
-        AF_ACS_InventoryReceipt::verify($intent,$receipt);
+        $this->verifyReceipt($intent,$receipt);
         return $this->projection($this->store->inventoryTransition($row['operation_key'],$row['operation_version'],AF_ACS_InventoryReceipt::status($receipt),['schema_version'=>1,'owner_receipt'=>$receipt],$authorize));
     }
     /** Lookup only, including a proven not_found. No retry, consume, transfer, grant or release here. */
@@ -69,7 +75,7 @@ final class AF_ACS_InventoryOperationService
         $lookup=['schema_version'=>1,'operation'=>'lookup','operation_key'=>'acs:recovery:'.hash('sha256',$key),'actor'=>$intent['actor'],'scope'=>$intent['scope'],'payload'=>['target_operation_key'=>$intent['operation_key']]];$lookup['payload_hash']=AF_ADVINV_OwnerProtocol::payloadHash($lookup);
         try {$receipt=$this->owner($intent)->lookup($lookup);} catch (Throwable $error) {return $this->projection($row)+['lookup_state'=>'unavailable'];}
         if (!in_array($receipt['status']??null,['prepared','committed','released','rejected'],true)) return $this->projection($row)+['lookup_state'=>$receipt['status']??'unavailable'];
-        AF_ACS_InventoryReceipt::verify($intent,$receipt);
+        $this->verifyReceipt($intent,$receipt);
         $saved=$this->store->inventoryTransition($key,$row['operation_version'],AF_ACS_InventoryReceipt::status($receipt),['schema_version'=>1,'owner_receipt'=>$receipt],fn()=> $this->authority($sid,$intent['actor']['uid'],false));
         return $this->projection($saved);
     }

@@ -355,6 +355,7 @@ final class AF_ADVINV_OwnerProtocol
     private function authorize(array $r, int $owner, bool $mutation): void
     {
         $this->identity($r);
+        if($this->access instanceof AF_ADVINV_ExactPropertyAccess && in_array($r['operation'],['grant','lookup'],true))$this->access->authorizePropertyIntent($r);
         if($this->preparedConsumeIntent!==null){$this->authorizePreparedConsumption($r,$owner,$mutation);return;}
         $this->access->authorize($r['operation'], $owner, ['system'=>$r['scope']['system'],'context_key'=>$r['scope']['context_key']], $r['actor']['authorization_ref'], $mutation);
     }

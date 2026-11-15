@@ -9,6 +9,12 @@ interface AF_ADVINV_OwnerAccess
     public function authorize(string $operation, int $ownerUid, array $scope, string $authorizationRef, bool $mutation): void;
 }
 
+/** Optional narrow server contract: validate the actual full envelope, including under owner guard. */
+interface AF_ADVINV_ExactPropertyAccess extends AF_ADVINV_OwnerAccess
+{
+    public function authorizePropertyIntent(array $request): void;
+}
+
 /** Owner-only Inventory commands. ACS delegation requires a separately proved policy. */
 final class AF_ADVINV_MybbOwnerAccess implements AF_ADVINV_OwnerAccess
 {

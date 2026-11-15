@@ -68,6 +68,19 @@ final class AF_ACS_OperationStore extends AF_ACS_Repository
             $this->inventoryAudit($session,$key,'prepared','1',$intent['actor']['uid'],['payload_hash'=>$intent['payload_hash']]);return $this->get($key);
         });
     }
+    /** Only the typed loot preparer, already holding the ACS session transaction, may use this boundary. */
+    public function inventoryRegisterLoot(array $session,array $intent):array
+    {
+        $this->transactions->assertInternalBoundary();$this->writable();
+        if(($intent['operation']??null)!=='grant'||!preg_match('/\Aacs-loot-issue:([1-9][0-9]*):([1-9][0-9]*):([1-9][0-9]*)\z/D',$intent['actor']['authorization_ref']??'',$m))throw new RuntimeException('ACS_LOOT_ISSUE_INVALID');
+        require_once __DIR__.'/EncounterRepository.php';$repo=new AF_ACS_EncounterRepository($this->connection);
+        $facts=$repo->lootIssueFacts($session['id'],$m[1],$m[2]);
+        if($facts['entry']['allocation_version']!==$m[3]||$facts['entry']['issue_operation_key']!==$intent['operation_key'])throw new RuntimeException('ACS_LOOT_ISSUE_INVALID');
+        AF_ACS_LootIssue::binding($facts,$intent);
+        $key=self::key($intent['operation_key']);$json=AF_ADVINV_OwnerProtocol::canonical($intent);$old=$this->get($key);
+        if($old){if($old['session_id']!==$session['id']||$old['kind']!=='inventory.grant'||$old['external_system']!=='advancedinventory'||$old['request_json']!==$json)throw new RuntimeException('ACS_OPERATION_KEY_CONFLICT');return $old;}
+        $this->sql('INSERT INTO '.$this->table('operations').' (operation_key,session_id,kind,external_system,external_ref,payload_hash,status,operation_version,request_json,result_json,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',[$key,$session['id'],'inventory.grant','advancedinventory',$key,hash('sha256',$json),'prepared',1,$json,self::json(['schema_version'=>1]),time()]);return $this->get($key);
+    }
     /** Before external dispatch persist ambiguity; never reclaim this phase for blind execution. */
     public function inventoryTransition(string $key,string $expected,string $status,array $result,callable $authorize): array
     {
@@ -80,6 +93,7 @@ final class AF_ACS_OperationStore extends AF_ACS_Repository
             if ($status!=='recovery_required') {
                 require_once __DIR__.'/../Domain/InventoryReceipt.php';
                 AF_ACS_InventoryReceipt::verify(json_decode($row['request_json'],true,64,JSON_THROW_ON_ERROR),$result['owner_receipt']??[]);
+                $intent=json_decode($row['request_json'],true,64,JSON_THROW_ON_ERROR);if(str_starts_with($intent['actor']['authorization_ref']??'','acs-loot-issue:')){require_once __DIR__.'/../Domain/LootIssue.php';AF_ACS_LootIssue::receipt($intent,$result['owner_receipt']);}
                 if (AF_ACS_InventoryReceipt::status($result['owner_receipt'])!==$status) throw new RuntimeException('ACS_INVENTORY_OPERATION_INTEGRITY');
             }
             if ($this->sql('UPDATE '.$this->table('operations').' SET status=?,operation_version=operation_version+1,result_json=?,updated_at=? WHERE operation_key=? AND operation_version=?',[$status,self::json($result),time(),$key,$expected])['affected']!==1) throw new RuntimeException('ACS_VERSION_CONFLICT');
