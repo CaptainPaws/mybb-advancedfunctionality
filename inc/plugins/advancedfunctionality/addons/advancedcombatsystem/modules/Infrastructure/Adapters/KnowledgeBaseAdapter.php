@@ -100,6 +100,14 @@ final class AF_ACS_KnowledgeBaseAdapter
         }
         return ['schema_version'=>1,'table'=>$dto,'definition'=>$definition,'items'=>$items];
     }
+    /** Exact opt-in reward mechanics, acquired and pinned before encounter start. */
+    public function rewardDefinition(string $key,int $actor):array
+    {
+        require_once __DIR__.'/../../Domain/RewardDistribution.php';
+        $dto=$this->readDefinition('arpg_mechanics',$key,$actor);$d=$dto['data']['definition']??[];$e=$d['entries'][0]??[];
+        if(empty($dto['ready'])||($d['service_kind']??null)!=='combat_template'||count($d['entries']??[])!==1||array_diff(array_keys($d),['schema','type_profile','version','service_kind','entries'])||array_diff(array_keys($e),['schema','key','version','phases','limits','formula_refs','reward_source'])||($e['schema']??null)!=='af_kb.arpg.mechanic.v1'||($e['key']??null)!==$key||!is_string($e['version']??null)||!empty($e['phases'])||!empty($e['limits'])||!empty($e['formula_refs']))throw new RuntimeException('ACS_REWARD_DEFINITION_UNAVAILABLE');
+        return ['schema_version'=>1,'table'=>$dto,'definition'=>AF_ACS_RewardDistribution::definition($e['reward_source']??[])];
+    }
     private function available(int $actorUid): bool
     {
         global $mybb;

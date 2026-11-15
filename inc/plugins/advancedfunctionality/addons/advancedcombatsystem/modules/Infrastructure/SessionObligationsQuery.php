@@ -49,9 +49,13 @@ class AF_ACS_SessionObligationsQuery extends AF_ACS_Repository
             $state=in_array($r['status'],['expired','cancelled'],true)&&hash_equals($r['contract_hash'],hash('sha256',$r['contract_json']))?'recovery_required':'explicitly_blocked';
             $add($state,'prepared_cost',(string)$r['id'],$state==='recovery_required'?'prepared.release':null);
         });
-        $scan('operation','SELECT operation_key,kind,status,external_system,external_ref,request_json,payload_hash FROM '.$this->table('operations')." WHERE session_id=? AND status NOT IN ('committed','rejected','released') LIMIT 201",static function($r)use($add,$sid){
+        $scan('operation','SELECT operation_key,kind,status,external_system,external_ref,request_json,payload_hash FROM '.$this->table('operations')." WHERE session_id=? AND status NOT IN ('committed','rejected','released') LIMIT 201",function($r)use($add,$sid){
             $scope=$r['external_system']==='advancedinventory'?'inventory.lookup':($r['kind']==='prepared.release'?'prepared.release':null);
             if(!hash_equals($r['payload_hash'],hash('sha256',$r['request_json'])))$scope=null;
+            if($r['external_system']==='balance'&&$r['kind']==='balance.credit'&&hash_equals($r['payload_hash'],hash('sha256',$r['request_json'])))try{
+                require_once __DIR__.'/EncounterRepository.php';$env=json_decode($r['request_json'],true,64,JSON_THROW_ON_ERROR);$proof=(new AF_ACS_EncounterRepository($this->connection))->rewardIntentEvidence($sid,$env['reward_id']);
+                if($proof['operation']['operation_key']!==$r['operation_key']||$r['external_ref']!==$r['operation_key']||$proof['status']!==$r['status'])throw new RuntimeException('ACS_REWARD_INTEGRITY');$scope='reward.balance_lookup';
+            }catch(Throwable){$scope=null;}
             if($scope==='inventory.lookup')try{
                 $intent=json_decode($r['request_json'],true,64,JSON_THROW_ON_ERROR);
                 if(($intent['scope']??null)!==['context_key'=>$sid,'system'=>'acs'] && ($intent['scope']??null)!==['system'=>'acs','context_key'=>$sid])throw new RuntimeException('ACS_INVENTORY_OPERATION_INTEGRITY');
@@ -65,6 +69,19 @@ class AF_ACS_SessionObligationsQuery extends AF_ACS_Repository
             foreach($sources as $identity=>$pin)if(!$this->sql('SELECT id FROM '.$this->table('loot_pools').' WHERE session_id=? AND encounter_id=? AND source_key=?',[$sid,$r['id'],$identity])['rows'])$add('explicitly_blocked','loot_generation',(string)$r['id'].':'.$identity);
         });
         $scan('loot_pool','SELECT id FROM '.$this->table('loot_pools')." WHERE session_id=? AND status IN ('open','awaiting_issue','allocation_closed') ORDER BY id LIMIT 201",static fn($r)=>$add('pending','loot_pool',(string)$r['id'],'loot.allocation'));
+        // A pinned reward source needs one immutable distribution receipt, even if empty.
+        $scan('reward_distribution','SELECT e.id,e.config_json FROM '.$this->table('encounters')." e WHERE e.session_id=? AND e.status='completed' AND JSON_LENGTH(JSON_EXTRACT(e.config_json,'$.reward_sources'))>0 LIMIT 201",function($r)use($sid,$add){
+            foreach(json_decode($r['config_json'],true,64,JSON_THROW_ON_ERROR)['reward_sources'] as $key=>$pin){
+                $found=$this->sql('SELECT operation_key FROM '.$this->table('operations')." WHERE session_id=? AND encounter_id=? AND kind='reward.distribute' AND status='committed' AND JSON_UNQUOTE(JSON_EXTRACT(result_json,'$.reward_plan.kb_key'))=?",[$sid,$r['id'],$key])['rows'];
+                if(count($found)!==1)$add('explicitly_blocked','reward_distribution',(string)$r['id'].':'.$key);
+            }
+        });
+        $scan('reward','SELECT id,status FROM '.$this->table('rewards')." WHERE session_id=? AND status<>'issued' ORDER BY id LIMIT 201",function($r)use($sid,$add){
+            try{require_once __DIR__.'/EncounterRepository.php';(new AF_ACS_EncounterRepository($this->connection))->rewardEvidence($sid,(string)$r['id']);}
+            catch(Throwable){$add('explicitly_blocked','reward',(string)$r['id']);return;}
+            $add(match($r['status']){'pending','prepared'=>'pending','recovery_required'=>'recovery_required',default=>'explicitly_blocked'},'reward',(string)$r['id'],match($r['status']){'pending','prepared'=>'reward.balance_issue','recovery_required'=>'reward.balance_lookup',default=>null});
+        });
+        $n=$this->sql('SELECT COUNT(*) AS n FROM '.$this->table('rewards')." WHERE session_id=? AND status='issued'",[$sid])['rows'][0]['n'];if((int)$n>0)$add('confirmed_completed','reward','records:'.$n);
         foreach($this->additionalSources() as $source){
             if(!$source instanceof AF_ACS_SessionObligationSource)throw new RuntimeException('ACS_OBLIGATION_SOURCE_INVALID');
             $rows=$source->inspectSession($sid);$scope=$source->recoveryScope();

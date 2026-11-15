@@ -25,7 +25,7 @@ trait AF_ACS_EndConditionPersistence
         $relations=$this->sql('SELECT side_a,side_b,relationship,relation_version FROM '.$this->table('side_relationships').' WHERE encounter_id=? ORDER BY id FOR UPDATE',[$encounter['id']])['rows'];
         $config=json_decode($encounter['config_json'],true);$departed=isset($config['participation_policy']);if($departed)AF_ACS_Participation::policy($config['participation_policy']);
         $candidate=AF_ACS_EndCondition::evaluate($policy,$participants,$relations,$departed);
-        if($candidate!==null&&!empty($config['loot_sources']))$candidate['loot_eligibility']=$this->freezeLootEligibility($encounter);
+        if($candidate!==null&&(!empty($config['loot_sources'])||!empty($config['reward_sources'])))$candidate['loot_eligibility']=$this->freezeLootEligibility($encounter);
         return $candidate===null?null:['schema_version'=>1]+$candidate+['participants'=>$participants,'relationships'=>$relations,'policy'=>$policy];
     }
     /** Only after the complete Resolver projection, causal children and linked spawn persistence. */

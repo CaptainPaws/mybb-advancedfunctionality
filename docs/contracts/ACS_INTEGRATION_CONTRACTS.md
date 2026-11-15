@@ -400,3 +400,28 @@ Frontend API большинства аддонов процедурные; пе�
 | advancedcharacters | 1.0.0 |
 | advancedjsbandle | 1.0.3 |
 | advancedpostcounter | 1.0.0 |
+
+### ACS-10.3.2 implementation note — IC-BALANCE reward issuer
+
+The historical audit/proposals above remain historical. Balance now supplies the
+owner credit/lookup gateway documented in ACS-10.3.1. ACS-10.3.2 composes it with
+`AF_ACS_BalanceRewardAuthority`: verified confirmed outcome, pre-battle pinned KB
+rule, frozen recipient, immutable distribution event and exact durable issuing
+intent. Current native thread access and session GM permissions are required;
+GM/account ownership alone is insufficient. No arbitrary UID/kind/amount API is
+exposed. A currently permitted session GM may reconcile another issuer's retained
+intent without changing its original issuer/source identity.
+
+`af_acs_rewards` is an obligation/allocation projection, not a Balance ledger.
+The existing OperationStore retains external intents and owner receipts. Owner
+credit occurs after the ACS dispatch barrier commits; acknowledgement is a later
+ACS CAS transaction. Unknown outcome permits lookup of the original key only.
+Pending obligations remain available after close/archive through scoped issue or
+lookup commands. Receipt validation binds the exact recipient/amount/source,
+authority hash, owner version and result hash.
+
+CharacterSheets still has no approved durable permanent-sync API with an exact
+source identity, expected version, result and lookup. `af_charactersheets_grant_exp`
+returns false; ordinary EXP callbacks/JSON mutators do not supply this contract.
+Permanent sync is BLOCKED with its pinned request retained. Balance EXP rewards
+never invoke that callback, update build_json or recalculate active ACS snapshots.

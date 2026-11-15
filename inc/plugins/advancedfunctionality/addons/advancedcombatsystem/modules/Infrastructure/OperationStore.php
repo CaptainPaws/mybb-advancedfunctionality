@@ -2,9 +2,11 @@
 
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/Repository.php';
+require_once __DIR__.'/RewardOperations.php';
 
 final class AF_ACS_OperationStore extends AF_ACS_Repository
 {
+    use AF_ACS_RewardOperations;
     /** Register/lookup only. This API never executes an external side effect. */
     public function register(string $key, string $sessionId, string $kind, array $request): array
     {
