@@ -7,6 +7,7 @@ require_once __DIR__.'/ObjectInteractionService.php';
 require_once __DIR__.'/SpatialService.php';
 require_once __DIR__.'/CoverService.php';
 require_once __DIR__.'/PreparedItemService.php';
+require_once __DIR__.'/EffectSummary.php';
 
 require_once __DIR__.'/../Domain/Spawn.php';
 
@@ -113,7 +114,8 @@ final class AF_ACS_BuilderService
             $candidates=AF_ACS_QueryService::behaviorCandidates(array_filter($scope['targets'],static fn($t)=>in_array($a['id'],$t['known_to']??[],true)),$a['id'],$rels);
             foreach($a['choices'] as &$choice){if(($choice['supported']??false)!==true)continue;$category=!empty($choice['item_action'])?(str_starts_with($choice['key'],'item:consume:')?'item_consume':'equipment_change'):(!empty($choice['spawn_action'])?'spawn':'ordinary');
                 $choiceCandidates=!empty($choice['object_interaction'])?[$choice['object_id']=>['kind'=>'object','relationship'=>'neutral','active'=>true]]:$candidates;
-                $r=AF_ACS_Behavior::evaluate($behavior,$a['id'],$choice['key'],$category,$choiceCandidates,$choice['target_policy']??['kind'=>$category==='ordinary'?'hostile_only':'self_only'],$world+['minimum_targets'=>$choice['target_count']['min']??1]);
+                $mechanicalKey=preg_match('/\Agranted:([1-9][0-9]*)\z/D',$choice['key'],$g)?($behavior[$g[1]]['grant']['binding']['ability']['source_ref']['key']??$choice['key']):$choice['key'];
+                $r=AF_ACS_Behavior::evaluate($behavior,$a['id'],$mechanicalKey,$category,$choiceCandidates,$choice['target_policy']??['kind'=>$category==='ordinary'?'hostile_only':'self_only'],$world+['minimum_targets'=>$choice['target_count']['min']??1]);
                 $choice['legal_targets']=$r['legal_targets'];$choice['behavior_status']=$r['status'];if($r['status']!=='READY'){$choice['supported']=false;$choice['reason']=self::message(new RuntimeException($r['code']));}
             }unset($choice);
         }unset($a);
@@ -129,6 +131,7 @@ final class AF_ACS_BuilderService
             $ready=$grant!==null&&$scope['encounter']['status']==='active'&&$chosen['status']==='pending'&&($member['active']??false)&&$individual&&$individual['start_done']==='1'&&$individual['end_done']==='0'&&AF_ACS_Effects::ordinaryActionAllowed(['summons'=>$summons,'status_instances'=>$behavior],$a['id']);
             $a['kind']=$member['kind'];$a['supported']=(bool)$ready;$a['availability']=$scope['encounter']['status']==='paused'?'encounter_paused':($ready?'ready':($grant===null?'permission_changed':($chosen['status']!=='pending'?'turn_closed':(!($member['active']??false)?'entity_inactive':(($individual['start_done']??'0')!=='1'?'start_required':'status_blocked')))));
             $a['reason']=match($a['availability']){'ready'=>'','encounter_paused'=>'Столкновение приостановлено.','permission_changed'=>'Разрешение управления изменилось. Обновите панель.','turn_closed'=>'Групповой ход закрыт. Новый ход не создаётся.','entity_inactive'=>'Существо не может выполнять обычное действие.','start_required'=>'Не выполнена граница начала индивидуального хода.',default=>'Обычные действия существа ограничены текущим состоянием.'};
+            $a['advanced_state']=AF_ACS_EffectSummary::actor($behavior,$a['id'],$eid,array_column(array_filter($a['choices'],static fn($c)=>!empty($c['supported'])),'key'));
             $a['control']=$grant?['mode'=>$grant['mode'],'via'=>isset($grant['control_overlay'])?'temporary_control':(isset($grant['delegation_id'])?'delegation':(isset($grant['source_control_proof'])?'source':'assignment')),'assignment_version'=>(string)$grant['assignment_version']]+(isset($grant['delegation_version'])?['delegation_version'=>(string)$grant['delegation_version']]:[]):['via'=>'unavailable'];
         }unset($a);
         foreach($scope['actors'] as $id=>$member){$id=(string)$id;if($member['group_id']!==$chosen['group_id']||$member['kind']!=='summon'||!isset($summons[$id]))continue;
@@ -142,17 +145,17 @@ final class AF_ACS_BuilderService
     {
         if($selected!==null&&$selected!==''&&$selected!=='0')throw new RuntimeException('ACS_PRE_ROUND_UNAVAILABLE');
         $sid=$scope['session']['id'];$eid=$scope['encounter']['id'];$this->repo->preRoundMembers($sid,$eid);
-        $q=new AF_ACS_QueryService($this->repo,$this->access);$actors=[];$paid=$this->repo->preRoundCommitments($sid,$eid)['totals'];
+        $q=new AF_ACS_QueryService($this->repo,$this->access);$actors=[];$instances=$this->repo->statusProjection($sid)['instances'];$paid=$this->repo->preRoundCommitments($sid,$eid)['totals'];
         foreach($scope['actors'] as $actor){
             $choices=array_values(array_filter($q->builderCatalog($sid,$actor['id']),static fn($c)=>($c['prepared_action']['pre_round']??null)===['schema'=>'ic-acs.pre-round-preparation.v1','allowed'=>true]));
             foreach($choices as &$c)try{$c['prepared_item_costs']=(new AF_ACS_PreparedItemService($this->repo,$this->access))->catalog($sid,$actor['id'],$c['prepared_action']);}catch(Throwable $e){$c['supported']=false;$c['reason']=self::message($e);}unset($c);
-            $commitment=$paid[$actor['group_id']]??0;
-            $actors[]=$actor+['choices'=>$choices,'supported'=>$actor['active'],'catalog_notice'=>'','pre_round_ap_commitment'=>$commitment,'available_ap'=>AF_ACS_Clock::availableAP(3,0,$commitment),'maximum_ap'=>3];
+            $commitment=$paid[$actor['group_id']]??0;$budget=$this->repo->preRoundBudget($sid,$actor['group_id']);
+            $actors[]=$actor+['choices'=>$choices,'supported'=>$actor['active'],'catalog_notice'=>'','pre_round_ap_commitment'=>$commitment,'available_ap'=>AF_ACS_Clock::availableAP($budget,0,$commitment),'maximum_ap'=>$budget,'advanced_state'=>AF_ACS_EffectSummary::actor($instances,$actor['id'],$eid,array_column(array_filter($choices,static fn($c)=>!empty($c['supported'])),'key'))];
         }
         if(!$actors)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
         $targets=[];foreach($scope['targets'] as $t)$targets[]=$t+['actors'=>$t['known_to']];
         $token=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'mode'=>'pre_round','session'=>$scope['session']['session_version'],'encounter'=>$scope['encounter']['encounter_version'],'audience'=>$scope['audience_stamp'],'actors'=>$actors]));
-        return ['draft_id'=>$this->repo->builderDraft($sid,'0',$this->access->uid(),$eid),'mode'=>'pre_round','session_version'=>$scope['session']['session_version'],'session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>null,'encounter_status'=>'preparation','turn'=>['id'=>'0','status'=>'preparation','ap'=>3,'maximum_ap'=>3],'turns'=>[],'actors'=>$actors,'targets'=>$targets,'can_manage'=>$scope['gm'],'scope_token'=>$token,'publication_enabled'=>false,'prepared_actions'=>$this->preparedView($sid,$eid,$actors)];
+        return ['draft_id'=>$this->repo->builderDraft($sid,'0',$this->access->uid(),$eid),'mode'=>'pre_round','session_version'=>$scope['session']['session_version'],'session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>null,'encounter_status'=>'preparation','turn'=>['id'=>'0','status'=>'preparation','ap'=>$actors[0]['maximum_ap'],'maximum_ap'=>$actors[0]['maximum_ap']],'turns'=>[],'actors'=>$actors,'targets'=>$targets,'can_manage'=>$scope['gm'],'scope_token'=>$token,'publication_enabled'=>false,'prepared_actions'=>$this->preparedView($sid,$eid,$actors)];
     }
     private function preparedView(string $sid,string $eid,array $actors):array
     {

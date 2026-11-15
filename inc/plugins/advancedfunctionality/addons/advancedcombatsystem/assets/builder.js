@@ -52,6 +52,13 @@
       const labels = {suspected:'Есть признаки', detected:'Обнаружено', identified:'Опознано'};
       (ctx.cover || []).filter(c => c.status === 'active').forEach(c => container.append(node('p', 'Известное укрытие: ' + c.category)));
       const zoneNames = new Map((ctx.spatial?.zones || []).map(z => [z.id,z.name])); (ctx.spatial?.positions || []).forEach(p => container.append(node('p', (ctx.actors.find(a => a.id === p.entity_id)?.name || ctx.targets.find(t => t.id === p.entity_id)?.name || 'Известный участник') + ': ' + (zoneNames.get(p.zone_id) || 'Позиция не назначена'))));
+      const slots = {primary_form:'Основная форма', form_modifier:'Модификатор формы', cosmetic_form:'Косметическая форма'};
+      (ctx.actors || []).forEach(a => {
+        const state = a.advanced_state || {};
+        (state.forms || []).forEach(f => container.append(node('p', a.name + ': ' + (slots[f.slot] || 'Форма') + ' · ' + f.mode + ' · срок ' + f.remaining + ' ' + f.unit)));
+        (state.granted_abilities || []).forEach(g => container.append(node('p', a.name + ': временная способность · применений ' + g.remaining_uses + ' · срок ' + g.remaining + ' ' + g.unit)));
+        (state.effects || []).forEach(e => container.append(node('p', a.name + ': ' + (e.kind === 'reflect_effect' ? 'Отражение' : 'Поглощение') + ' · срок ' + e.remaining + ' ' + e.unit)));
+      });
       (ctx.objectives || []).forEach(o => container.append(node('p', o.label + ': ' + o.progress + ' / ' + o.cap + (o.status === 'completed' ? ' · завершена' : ''))));
       (ctx.known_subjects || []).forEach(entry => {
         const details = entry.details || {};

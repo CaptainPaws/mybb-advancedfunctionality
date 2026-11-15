@@ -13,7 +13,7 @@ final class AF_ACS_CombatCard
         if ($card['details']===null) {return $html.'<p>Подробности ограничены правилами видимости сессии.</p></aside>';}
         $html.='<ol>';
         foreach($card['details'] as $step){
-            $outcome=['cover'=>'назначение укрытия выполнено','spatial'=>'пространственное действие выполнено','assisted'=>'помощь применена','success'=>'успех взаимодействия','critical_success'=>'критический успех взаимодействия','partial_success'=>'частичный успех взаимодействия','failure'=>'провал взаимодействия','hit'=>'попадание','crit'=>'критическое попадание','miss'=>'промах','multiple'=>'несколько целей','used'=>'действие с предметом выполнено','search'=>'поиск выполнен','share'=>'передача сведений выполнена','environment'=>'воздействие на окружение выполнено'][$step['outcome']]??'исход недоступен';
+            $outcome=['copy_ability'=>'временная способность получена','steal_effect'=>'перенос эффекта подтверждён','dispel_effect'=>'рассеивание подтверждено','cover'=>'назначение укрытия выполнено','spatial'=>'пространственное действие выполнено','assisted'=>'помощь применена','success'=>'успех взаимодействия','critical_success'=>'критический успех взаимодействия','partial_success'=>'частичный успех взаимодействия','failure'=>'провал взаимодействия','hit'=>'попадание','crit'=>'критическое попадание','miss'=>'промах','multiple'=>'несколько целей','used'=>'действие с предметом выполнено','search'=>'поиск выполнен','share'=>'передача сведений выполнена','environment'=>'воздействие на окружение выполнено'][$step['outcome']]??'исход недоступен';
             $html.='<li><p><strong>'.self::esc($step['actor_name']).' → '.self::esc($step['target_name']).'</strong> · '.self::esc($outcome).'</p>';
             $costs=[];foreach($step['costs'] as $c)$costs[]=self::esc($c['amount']).' '.($c['kind']==='ap'?'AP':'ресурса');
             $special=in_array($step['outcome'],['search','share','environment'],true);$html.='<p>Стоимость: '.implode(', ',$costs).'.'.($special?'':' Урон: '.self::esc($step['damage']).'.').'</p>';
@@ -27,15 +27,22 @@ final class AF_ACS_CombatCard
             if(isset($step['cooperation'])){$html.='<p>Совместная задача: '.self::esc($step['cooperation']['progress']).' / '.self::esc($step['cooperation']['cap']).(!empty($step['cooperation']['completed'])?' · завершена':'').'.</p></li>';continue;}
             if(isset($step['interaction'])){$html.='<p>Объект #'.self::esc($step['interaction']['entity_id']).' · '.self::esc($step['interaction']['key']).($step['interaction']['progress']===null?'':' · прогресс '.self::esc($step['interaction']['progress'])).'.</p></li>';continue;}
             $r=$step['rolls']??[];$p=$step['probabilities']??[];
-            $html.='<details><summary>Броски и защита</summary><p>Попадание: '.self::esc($r['hit']['u']??'—').'; критическое попадание: '.self::esc($r['crit']['u']??'—').(empty($r['crit_used'])?' (резерв)':'').'.</p>';
+            if($step['components']){$html.='<details><summary>Броски и защита</summary><p>Попадание: '.self::esc($r['hit']['u']??'—').'; критическое попадание: '.self::esc($r['crit']['u']??'—').(empty($r['crit_used'])?' (резерв)':'').'.</p>';
             $html.='<p>Вероятность попадания: '.self::esc($p['P_hit']??'—').'%; критического попадания при попадании: '.self::esc($p['P_crit']??'—').'%.</p>';
             foreach($step['components'] as $i=>$c){
                 $type=['physical'=>'физический','elemental'=>'стихийный','true'=>'истинный'][$c['damage_type']]??'компонент';
                 $html.='<p>Компонент '.($i+1).' · '.$type.': до защиты '.self::esc($c['after_crit']??'—').', эффективная защита '.self::esc($c['effective_defense']??'—').', после защиты '.self::esc($c['post_defense']??'—').', распределённый урон '.self::esc($c['allocated']??'—').'.</p>';
             }
-            $html.='</details>';
+            $html.='</details>';}
+
             foreach($step['mechanics']??[] as $event){
                 $text=match($event['type']){
+                    'form'=>'Форма: '.$event['slot'].' · '.$event['mode'].' · '.$event['status'].' · срок '.$event['remaining'].' '.$event['unit'],
+                    'granted_ability'=>'Временная способность: '.$event['status'].' · применений '.$event['remaining_uses'].' · срок '.$event['remaining'].' '.$event['unit'],
+                    'effect_transfer'=>'Перенос эффекта '.$event['previous_effect_id'].' → '.$event['effect_id'].' · '.$event['status'],
+                    'reflect_effect'=>'Отражение: '.($event['executed']?'исполнено, урон '.$event['damage']:'не исполнено'),
+                    'absorb_effect'=>'Поглощение: '.$event['amount'].' · '.($event['mode']==='barrier'?'барьер':'ресурс'),
+                    'prepared_result'=>'Подготовленное действие: '.$event['outcome'].' · '.$event['phase'].' · '.$event['terminal_state'],
                     'target'=>'Цель: '.$event['original_target'].' → '.$event['resolved_target'].'; '.$event['outcome'].'; урон '.$event['damage'].'; hit '.($event['rolls']['hit']['u']??'—').'; crit '.($event['rolls']['crit']['u']??'—'),
                     'reaction'=>'Реакция '.$event['id'].' · '.$event['phase'].': '.($event['executed']?'исполнена':'пропущена: '.($event['reason']??'—')).(isset($event['redirect_success'])?'; перехват '.($event['redirect_success']?'успешен':'неуспешен'):''),
                     'status'=>'Статус '.$event['effect_key'].' · '.$event['status'].'; стаки '.$event['stacks'].'; срок '.$event['remaining_duration'].' '.$event['duration_unit'],
