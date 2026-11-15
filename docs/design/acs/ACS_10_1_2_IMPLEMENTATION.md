@@ -138,7 +138,7 @@ PID в SQL harness заранее известен, новый MyBB post/Gateway
 |---|---|
 | surrender 0 AP/no roll | реальный Draft/Seal/commit, RNG callback запрещает вызов, AP не меняется |
 | escape success/failure | samples 0/max, success escaped/failure engaged, оба платят ровно 1 AP |
-| 0/0 и fastest capable | чистый Domain fixture: 60%, fastest из двух, incap/surrender исключены |
+| 0/0 и fastest capable | чистый Domain fixture: 60%, fastest из двух, incap/surrender исключены; same-zone pursuit/LoE и отказ при неизвестной позиции |
 | no pursuer | SQL automatic escape без RNG, pet остаётся engaged |
 | group partial | два реальных members общей группы, разные retained tapes, 1 общий AP |
 | incapacitated не эвакуируется | selected incapacitated pet остаётся engaged/incapacitated |

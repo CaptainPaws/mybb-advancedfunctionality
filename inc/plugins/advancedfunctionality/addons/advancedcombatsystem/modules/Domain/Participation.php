@@ -42,7 +42,7 @@ final class AF_ACS_Participation
         foreach($state['participants'] as $id=>$p){$id=(string)$id;
             if($id===$runner||$p['participation']!=='engaged'||($state['entities'][$id]['life_state']??null)!=='active'
                 ||($context['relationships'][$runner][$id]??null)!=='hostile'||!AF_ACS_Effects::ordinaryActionAllowed($state,$id))continue;
-            if($policy['spatial']==='same_zone'&&AF_ACS_Spatial::position($state['spatial'],$id)!==AF_ACS_Spatial::position($state['spatial'],$runner))continue;
+            if($policy['spatial']==='same_zone'){$zone=AF_ACS_Spatial::position($state['spatial'],$id);if($zone===null)throw new DomainException('ACS_PARTICIPATION_SPATIAL_UNSUPPORTED');if($zone!==AF_ACS_Spatial::position($state['spatial'],$runner))continue;}
             try{AF_ACS_Behavior::check($state['status_instances']??[],$id,'participation:pursuit','ordinary',[$runner],$context['behavior_targets'][$id]??[],['kind'=>'any_entity'],$context['status_scope']);}
             catch(AF_ACS_FormulaError $e){if(in_array($e->diagnosticCode,['ACS_BEHAVIOR_ACTION_BLOCKED','ACS_BEHAVIOR_NO_LEGAL_TARGET','ACS_BEHAVIOR_TARGET_BLOCKED'],true))continue;throw $e;}
             if(empty($context['participation_visible'][$id]))throw new DomainException('ACS_PARTICIPATION_UNAVAILABLE');
