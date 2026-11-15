@@ -1,6 +1,8 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 
+require_once __DIR__.'/modules/RewardCredit.php';
+
 const AF_BALANCE_TABLE = 'af_balance';
 const AF_BALANCE_TX_TABLE = 'af_balance_tx';
 const AF_BALANCE_POST_REWARDS_TABLE = 'af_post_rewards';
@@ -788,13 +790,43 @@ function af_balance_pre_output_page(string &$page): void
     );
 }
 
+/** No schema writes here. Partial/unsafe owner upgrades fail closed. */
+function af_balance_owner_enabled(): bool
+{
+    global $db;
+    if (!isset($db->write_link) || !$db->write_link instanceof mysqli) {
+        if ($db->field_exists('owner_version', AF_BALANCE_TABLE) || $db->table_exists('af_balance_external_operations')) throw new RuntimeException('BALANCE_AUTHORITATIVE_MYSQLI_REQUIRED');
+        return false;
+    }
+    $owner = new AF_BALANCE_RewardCredit($db->write_link);
+    return $owner->installed();
+}
+
+/** An atomic native delta shares the permanent row lock with reward credit,
+ * including when called inside an existing Shop transaction. No nested COMMIT.
+ * Existing native logging, rounding, clamps and EXP callbacks remain at callers. */
+function af_balance_owner_delta(int $uid, string $kind, int $scaled, bool $clamp): array
+{
+    global $db;
+    if (!in_array($kind, ['exp','credits','ability_tokens'], true) || $uid < 1) throw new InvalidArgumentException('BALANCE_INVALID_DELTA');
+    (new AF_BALANCE_RewardCredit($db->write_link))->assertStorage();
+    $table = TABLE_PREFIX.AF_BALANCE_TABLE;
+    $db->write_query("INSERT INTO `$table` (uid,updated_at) VALUES ($uid,".TIME_NOW.") ON DUPLICATE KEY UPDATE uid=uid");
+    $expression = '(@af_balance_old := `'.$kind.'`)+('.$scaled.')';
+    if ($clamp) $expression = 'GREATEST(0,'.$expression.')';
+    $db->write_query("UPDATE `$table` SET `$kind`=(@af_balance_new := $expression),owner_version=owner_version+1,updated_at=".TIME_NOW." WHERE uid=$uid");
+    $r=$db->fetch_array($db->write_query('SELECT @af_balance_old AS old_value,@af_balance_new AS new_value'));
+    return [(int)$r['old_value'],(int)$r['new_value']];
+}
+
 function af_balance_get(int $uid): array
 {
     global $db;
     if ($uid <= 0) return ['uid'=>0,'exp'=>0,'credits'=>0,'ability_tokens'=>0];
     $row = $db->fetch_array($db->simple_select(AF_BALANCE_TABLE, '*', 'uid='.(int)$uid, ['limit'=>1]));
     if (!$row) {
-        $db->insert_query(AF_BALANCE_TABLE, ['uid'=>$uid, 'exp'=>0, 'credits'=>0, 'ability_tokens'=>0, 'updated_at'=>TIME_NOW]);
+        // Idempotent zero-row creation also cooperates with the owner gateway.
+        $db->write_query('INSERT INTO '.TABLE_PREFIX.AF_BALANCE_TABLE.' (uid,updated_at) VALUES ('.$uid.','.TIME_NOW.') ON DUPLICATE KEY UPDATE uid=uid');
         return ['uid'=>$uid,'exp'=>0,'credits'=>0,'ability_tokens'=>0];
     }
     return ['uid'=>$uid,'exp'=>(int)$row['exp'],'credits'=>(int)$row['credits'],'ability_tokens'=>(int)($row['ability_tokens'] ?? 0)];
@@ -844,16 +876,20 @@ function af_balance_apply_scaled_delta(int $uid, string $kind, int $scaled, arra
         return af_balance_get($uid);
     }
 
-    $bal = af_balance_get($uid);
-    $old = (int)$bal[$kind];
-    $new = $old + $scaled;
+    if (af_balance_owner_enabled()) {
+        [$old,$new] = af_balance_owner_delta($uid, $kind, $scaled, empty($mybb->settings['af_balance_'.$kind.'_allow_balance_negative']));
+    } else {
+        $bal = af_balance_get($uid);
+        $old = (int)$bal[$kind];
+        $new = $old + $scaled;
 
-    // баланс в минус — только если allow_balance_negative=1
-    if ($new < 0 && empty($mybb->settings['af_balance_'.$kind.'_allow_balance_negative'])) {
-        $new = 0;
+        // баланс в минус — только если allow_balance_negative=1
+        if ($new < 0 && empty($mybb->settings['af_balance_'.$kind.'_allow_balance_negative'])) {
+            $new = 0;
+        }
+
+        $db->update_query(AF_BALANCE_TABLE, [$kind => $new, 'updated_at' => TIME_NOW], 'uid=' . $uid);
     }
-
-    $db->update_query(AF_BALANCE_TABLE, [$kind => $new, 'updated_at' => TIME_NOW], 'uid=' . $uid);
 
     if (!empty($mybb->settings['af_balance_tx_enable']) && $db->table_exists(AF_BALANCE_TX_TABLE)) {
         $reason = substr((string)($meta['reason'] ?? ''), 0, 64);
@@ -1584,6 +1620,7 @@ function af_balance_migrate_credits_scale(): void
         return;
     }
 
+    if (af_balance_owner_enabled()) throw new RuntimeException('BALANCE_LEGACY_SCALE_MIGRATION_BLOCKED');
     if ($db->table_exists(AF_BALANCE_TABLE)) {
         $db->write_query('UPDATE ' . TABLE_PREFIX . AF_BALANCE_TABLE . ' SET credits=credits*' . AF_BALANCE_CREDITS_SCALE);
     }
@@ -1759,25 +1796,30 @@ function af_balance_handle_manage_adjust(): void
         exit;
     }
 
-    // Берём текущий баланс
-    $bal = af_balance_get($uid);
-    $old = (int)($bal[$kind] ?? 0);
+    if (af_balance_owner_enabled()) {
+        [$old,$new] = af_balance_owner_delta($uid, $kind, $op === 'sub' ? -$scaledAbs : $scaledAbs, true);
+        $delta = $new-$old;
+    } else {
+        // Берём текущий баланс
+        $bal = af_balance_get($uid);
+        $old = (int)($bal[$kind] ?? 0);
 
-    // Списание: НИКОГДА не уводим в минус на этой странице управления
-    $delta = ($op === 'sub') ? -$scaledAbs : $scaledAbs;
+        // Списание: НИКОГДА не уводим в минус на этой странице управления
+        $delta = ($op === 'sub') ? -$scaledAbs : $scaledAbs;
 
-    // Если списываем больше, чем есть — зажимаем до нуля (или можно ошибку; ты просила "исправь", делаю безопасно)
-    $new = $old + $delta;
-    if ($new < 0) {
-        $delta = -$old; // списываем ровно то, что есть
-        $new = 0;
+        // Если списываем больше, чем есть — зажимаем до нуля (или можно ошибку; ты просила "исправь", делаю безопасно)
+        $new = $old + $delta;
+        if ($new < 0) {
+            $delta = -$old; // списываем ровно то, что есть
+            $new = 0;
+        }
+
+        // Обновляем баланс
+        $db->update_query(AF_BALANCE_TABLE, [
+            $kind => $new,
+            'updated_at' => TIME_NOW,
+        ], 'uid=' . (int)$uid);
     }
-
-    // Обновляем баланс
-    $db->update_query(AF_BALANCE_TABLE, [
-        $kind => $new,
-        'updated_at' => TIME_NOW,
-    ], 'uid=' . (int)$uid);
 
     // Лог транзакций (если включён)
     if (!empty($mybb->settings['af_balance_tx_enable']) && $db->table_exists(AF_BALANCE_TX_TABLE)) {
@@ -1923,6 +1965,7 @@ function af_balance_member_profile_end(): void
 function af_balance_migrate_from_charactersheets(): void
 {
     global $db;
+    if (af_balance_owner_enabled()) return; // Legacy import must precede explicit owner upgrade.
     if (!$db->table_exists('af_cs_sheets') || !$db->table_exists(AF_BALANCE_TABLE)) return;
     $q = $db->simple_select('af_cs_sheets', 'uid, progress_json', 'uid IS NOT NULL AND uid>0');
     while ($row = $db->fetch_array($q)) {
