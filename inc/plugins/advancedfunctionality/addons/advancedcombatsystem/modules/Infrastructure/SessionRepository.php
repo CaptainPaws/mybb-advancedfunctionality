@@ -1,6 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/Repository.php';
+require_once __DIR__.'/SessionObligationsQuery.php';
 
 /** Session projection and append-only audit share one existing ACS transaction. */
 class AF_ACS_SessionRepository extends AF_ACS_Repository
@@ -65,14 +66,26 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
         $this->commandWrite();
         $this->sql('UPDATE '.$this->table('sessions').' SET owner_uid=? WHERE id=?',[$uid,$id]);
     }
-    /** Lifecycle never deletes or releases obligations, reservations, events, drafts or tape. */
+    /** Code-owned extension factory. Providers cannot come from an HTTP request. */
+    protected function obligationsQuery(): AF_ACS_SessionObligationsQuery
+    {
+        return new AF_ACS_SessionObligationsQuery($this->connection);
+    }
+    public function obligations(string $sid): array { return $this->obligationsQuery()->inspect($sid); }
+    /** The existing command transaction owns the session lock, CAS, receipt and event. */
     public function lifecycle(array $session,string $operation): array
     {
         $this->commandWrite();
-        if ($operation==='close'&&$session['status']!=='active' || $operation==='archive'&&!in_array($session['status'],['active','closed'],true)) throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
-        $status=$operation==='close'?'closed':'archived';
-        $this->sql('UPDATE '.$this->table('sessions').' SET status=? WHERE id=?',[$status,$session['id']]);
-        $session['_command_result']=['status'=>$status,'obligations_preserved'=>true];return $session;
+        [$before,$after]=match($operation){
+            'request_close'=>['active','pending_close'], 'close'=>['pending_close','closed'],
+            'reopen'=>['closed','active'], 'archive'=>['closed','archived'],
+            default=>throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED')
+        };
+        if($session['status']!==$before)throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
+        $obligations=$this->obligations($session['id']);
+        if($operation!=='reopen' && $obligations['explicitly_blocked'])throw new RuntimeException('ACS_SESSION_OBLIGATIONS_BLOCKED');
+        if($this->sql('UPDATE '.$this->table('sessions').' SET status=? WHERE id=? AND status=? AND session_version=?',[$after,$session['id'],$before,$session['session_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
+        $session['_command_result']=['status'=>$after,'previous_status'=>$before,'obligations_preserved'=>true,'outstanding_obligations'=>$obligations];return $session;
     }
     /** Internal command boundary; callers supply authorization, never client callbacks. */
     public function command(string $key, string $kind, array $request, callable $authorize, callable $apply, ?callable $afterEvent=null): array
@@ -89,7 +102,7 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
                 if($old['status']!=='committed')throw new RuntimeException('ACS_RECOVERY_REQUIRED');
                 return json_decode($old['result_json'],true,512,JSON_THROW_ON_ERROR);
             }
-            if ($session && !in_array($kind,['session.close','session.archive','delegation.revoke','encounter.side_change','encounter.relation_set','encounter.controller_set'],true)) { $this->assertNoPendingPublication((string)$session['id']); }
+            if ($session && !in_array($kind,['session.request_close','session.close','session.reopen','session.archive','delegation.revoke','encounter.side_change','encounter.relation_set','encounter.controller_set'],true)) { $this->assertNoPendingPublication((string)$session['id']); }
             $recent=$this->sql('SELECT COUNT(*) AS n FROM '.$this->table('operations').' WHERE operation_key LIKE ? AND updated_at>?',['session:'.$request['actor_uid'].':%',time()-60])['rows'][0]['n'];
             if((int)$recent>=20)throw new RuntimeException('ACS_RATE_LIMIT');
             if($session && (string)$session['session_version']!==$request['expected_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');

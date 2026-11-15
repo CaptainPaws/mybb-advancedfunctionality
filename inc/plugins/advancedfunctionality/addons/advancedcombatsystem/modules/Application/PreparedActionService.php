@@ -67,9 +67,9 @@ final class AF_ACS_PreparedActionService
     /** Explicit source scope: even GM has no automatic access by known prepared ID. */
     public function view(string $sid,string $eid,string $entity): array
     {
-        $session=$this->repo->session($sid)??throw new RuntimeException('ACS_SESSION_UNAVAILABLE');$this->access->draftThread($session['tid']);
+        $session=$this->repo->session($sid)??throw new RuntimeException('ACS_SESSION_UNAVAILABLE');$this->access->thread($session['tid']);
         $scope=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);$controller=$this->repo->controllerFor($sid,$entity,$this->access->uid());$rows=$this->repo->preparedRows($sid,$eid,$entity);
-        if(!$this->repo->roles($sid,$this->access->uid())||!$controller&&(!$scope['can_manage']||!array_filter($rows,static fn($r)=>isset(json_decode($r['contract_json'],true)['hidden']))))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
+        if(!$this->repo->roles($sid,$this->access->uid())||!$controller&&(!$scope['can_audit']||!array_filter($rows,static fn($r)=>isset(json_decode($r['contract_json'],true)['hidden']))))throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
         $audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);$out=[];
         foreach($rows as $row){$hidden=isset(json_decode($row['contract_json'],true)['hidden']);if($hidden?!$audience->managesPrepared($row['id']):!$controller)continue;
             $out[]=['prepared_action_id'=>(string)$row['id'],'entity_id'=>$entity,'can_release'=>$row['cost_state']==='recovery_required'&&(string)$row['owner_uid']===$this->access->uid(),'status'=>$row['status'],'prepared_version'=>(string)$row['prepared_version'],'cost_state'=>$row['cost_state'],'duration'=>$row['expires_boundary']];

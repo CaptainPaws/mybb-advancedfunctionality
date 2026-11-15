@@ -43,7 +43,7 @@ final class AF_ACS_AuthorizationService
             'persistent.modify' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
             'control.transfer' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
             'session.owner.transfer' => ['scope'=>'critical','policy'=>'AF_ACP_INDEX_SESSION_ONLY'],
-            'session.reopen' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
+            'session.reopen' => ['scope' => 'critical', 'policy' => 'NATIVE_SESSION_GM_CLOSED'],
             'admin.recover' => ['scope' => 'critical', 'policy' => 'RESERVED_DENY'],
         ];
     }
@@ -180,6 +180,10 @@ final class AF_ACS_AuthorizationService
         }
         if($permission==='session.owner.transfer' && $sessionId!==null && $sessionId!=='') {
             $allowed=$this->afAdministrator();return ['allowed'=>$allowed,'reason'=>$allowed?null:'ACS_ADMIN_PERMISSION_REQUIRED'];
+        }
+        if($permission==='session.reopen' && $sessionId!==null && function_exists('af_advancedcombatsystem_sessions')) {
+            try{$allowed=af_advancedcombatsystem_sessions()->view($sessionId)['can_reopen'];return ['allowed'=>$allowed,'reason'=>$allowed?null:'ACS_SESSION_UNAVAILABLE'];}
+            catch(Throwable){return ['allowed'=>false,'reason'=>'ACS_SESSION_UNAVAILABLE'];}
         }
         if ($entry['scope'] === 'critical') { return ['allowed' => false, 'reason' => 'ACS_CRITICAL_OPERATION_NOT_IMPLEMENTED']; }
         if ($sessionId === null || $sessionId === '') { return ['allowed' => false, 'reason' => 'ACS_SESSION_CONTEXT_REQUIRED']; }

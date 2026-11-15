@@ -38,7 +38,7 @@ final class AF_ACS_RecoveryService
         $result=['schema_version'=>1,'submission_id'=>$row['submission_id'],'status'=>$receipt?'COMMITTED':strtoupper($row['status']),
             'last_phase'=>$row['last_phase'],'state_version'=>$row['state_version'],'pid'=>$row['pid'],
             'mechanics_confirmed'=>$receipt!==null,'receipt'=>$receipt,'post'=>$post,
-            'requires_master'=>$row['status']==='recovery_required','can_resume_as_author'=>$row['status']==='post_confirmed' && $post['state']==='confirmed' && $row['author_uid']===$this->access->uid(),
+            'requires_master'=>$row['status']==='recovery_required','can_resume_as_author'=>$this->preparation->session($row['session_id'])['status']==='active' && $row['status']==='post_confirmed' && $post['state']==='confirmed' && $row['author_uid']===$this->access->uid(),
             'available_commands'=>[]];
         if ($gm) {
             $result['context']=array_intersect_key($row,array_flip(['session_id','encounter_id','turn_id','draft_id','author_uid','tid','request_hash']));
@@ -54,7 +54,7 @@ final class AF_ACS_RecoveryService
             $result['candidates']=array_values($result['candidates']);
             if ($row['status']==='recovery_required') {
                 $result['available_commands'][]='hold';
-                if (in_array($post['state'],['confirmed','moderation_pending'],true)) { $result['available_commands'][]='resume_known_post'; }
+                if ($this->preparation->session($row['session_id'])['status']==='active' && in_array($post['state'],['confirmed','moderation_pending'],true)) { $result['available_commands'][]='resume_known_post'; }
                 if ($row['pid']===null && in_array($row['last_phase'],['registered','validating'],true)) { $result['available_commands'][]='reject_unsent'; }
             }
         }
@@ -77,6 +77,7 @@ final class AF_ACS_RecoveryService
     {
         $this->access->csrf();[$row,$gm,$uid]=$this->context($id);
         if ($receipt=$this->writer->receiptForRecovery($id)) { return $this->inspect($id); }
+        if($this->preparation->session($row['session_id'])['status']!=='active')return $this->inspect($id);
         if ($row['state_version']!==AF_ACS_Repository::integer($expectedStateVersion)) { throw new RuntimeException('ACS_VERSION_CONFLICT'); }
         if (in_array($row['status'],['rejected','registered','validating','recovery_required'],true)) { return $this->inspect($id); }
         $post=$this->store->recoveryPost($id);
