@@ -21,7 +21,7 @@ trait AF_ACS_PreparedExecutionPersistence
     private function armPreparedCausal(array $parent,array $frozen):void
     {
         $candidates=$this->sql('SELECT id,entity_id,contract_json FROM '.$this->table('prepared_actions')." WHERE session_id=? AND encounter_id=? AND status='active'",[$parent['session_id'],$parent['encounter_id']])['rows'];$needs=false;
-        foreach($frozen['seals'] as $seal)foreach($candidates as $candidate)if(in_array((string)$candidate['entity_id'],$seal['payload']['action']['targets'],true)){
+        foreach($frozen['seals'] as $seal)foreach($candidates as $candidate)if(!str_starts_with($seal['payload']['action']['ability_key'],'participation:')&&in_array((string)$candidate['entity_id'],$seal['payload']['action']['targets'],true)){
             $key=$this->preparedTriggerKey($parent,$seal,$candidate);
             if(!$this->sql('SELECT x.id FROM '.$this->table('prepared_executions').' x JOIN '.$this->table('events').' e ON e.id=x.trigger_event_id WHERE x.prepared_action_id=? AND e.operation_key=?',[$candidate['id'],$key])['rows'])$needs=true;
         }
@@ -33,7 +33,7 @@ trait AF_ACS_PreparedExecutionPersistence
             $enc=$this->preparation->encounter($parent['session_id'],$parent['encounter_id'],true);
             $rows=$this->sql('SELECT p.*,e.actor_uid AS originating_uid,e.session_sequence AS registered_order FROM '.$this->table('prepared_actions').' p JOIN '.$this->table('events')." e ON e.id=p.source_event_id WHERE p.session_id=? AND p.encounter_id=? AND p.status='active' ORDER BY p.id FOR UPDATE",[$parent['session_id'],$parent['encounter_id']])['rows'];
             foreach($frozen['seals'] as $index=>$seal)foreach($rows as $row){
-                if(!in_array((string)$row['entity_id'],$seal['payload']['action']['targets'],true))continue;
+                if(str_starts_with($seal['payload']['action']['ability_key'],'participation:')||!in_array((string)$row['entity_id'],$seal['payload']['action']['targets'],true))continue;
                 if(!hash_equals($row['contract_hash'],hash('sha256',$row['contract_json'])))throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
                 $contract=json_decode($row['contract_json'],true,64,JSON_THROW_ON_ERROR);$policy=null;$blocked=null;
                 try{$policy=AF_ACS_PreparedAction::execution($contract['execution']??null);}catch(DomainException $e){$blocked='ACS_PREPARED_UNSUPPORTED';}

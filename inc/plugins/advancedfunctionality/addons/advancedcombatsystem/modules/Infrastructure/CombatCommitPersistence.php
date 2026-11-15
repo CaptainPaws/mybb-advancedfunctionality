@@ -63,6 +63,9 @@ trait AF_ACS_CombatCommitPersistence
 
     private function authorizeFacts(array $row, array $f, array $actions): array
     {
+        // A group withdrawal needs a current ordinary grant for each selected body, including
+        // expiration rechecks after owner participation; group ownership is not an implicit grant.
+        $authorizedActions=$actions;foreach($actions as $a)if($a['ability_key']==='participation:group_withdrawal')foreach($a['targets'] as $id)if($id!==$a['actor_id'])$authorizedActions[]=array_replace($a,['actor_id'=>$id]);$actions=$authorizedActions;
         // No polymorphic access callbacks under the transaction: authenticated request identity only.
         $uid=(string)(int)($GLOBALS['mybb']->user['uid']??0);$now=time();
         if (isset($GLOBALS['mybb']->usergroup['canview']) && !$GLOBALS['mybb']->usergroup['canview']) { throw new RuntimeException('ACS_COMBAT_PERMISSION_DENIED'); }
@@ -160,6 +163,7 @@ trait AF_ACS_CombatCommitPersistence
         $group=(string)$turn['control_group_id'];$ap=$before['groups'][$group]['ap']['current']-$after['groups'][$group]['ap']['current'];
         if ($ap<0 || $ap>AF_ACS_Clock::availableAP((int)$turn['ap_budget'],(int)$turn['ap_spent'],(int)$turn['pre_round_ap_commitment'])) { throw new RuntimeException('ACS_AP_STATE_INVALID'); }
         foreach ($after['groups'] as $id=>$state) { if ((string)$id!==$group && $state!==$before['groups'][$id]) { throw new RuntimeException('ACS_COMBAT_GROUP_WRITER_UNSUPPORTED'); } }
+        $participation=$this->persistParticipation($before['participants']??[],$after['participants']??[],$row['encounter_id']);
         $reactionVersions=$this->projectReactions($f,$result);
         $boundaries=self::indexed($f['boundaries'],'operation_key');$closed=[];
         foreach ($f['individuals'] as $individual) {
@@ -198,6 +202,6 @@ trait AF_ACS_CombatCommitPersistence
         $cover=$this->persistCover($row['session_id'],$row['encounter_id'],$before,$after);
         $objects=$this->persistObjects($row['session_id'],$row['encounter_id'],$before['objects']??[],$after['objects']??[]);
         $awareness=$this->persistAwareness($row['session_id'],$row['encounter_id'],$before['awareness']??[],$after['awareness']??[],$before['awareness_attempts']??[],$after['awareness_attempts']??[]);
-        return ['cover'=>$cover,'spatial'=>$spatial,'awareness'=>$awareness,'objects'=>$objects,'summons'=>$summons,'entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers]+($retired?[$retirementKey=>$retired]:[]);
+        return ['participation'=>$participation,'cover'=>$cover,'spatial'=>$spatial,'awareness'=>$awareness,'objects'=>$objects,'summons'=>$summons,'entities'=>$changes,'ap_spent'=>$ap,'entity_turns_closed'=>$closed,'statuses'=>$statuses,'barriers'=>$barriers]+($retired?[$retirementKey=>$retired]:[]);
     }
 }

@@ -13,8 +13,10 @@ final class AF_ACS_AudienceService
         $this->spatial=$repo->spatialProjection($sid,$eid);
         $view=(new AF_ACS_SessionService($repo,$access))->view($sid);$this->gm=$view['can_manage'];
         $this->rows=$repo->awarenessProjection($sid,$eid);$this->subjects=$repo->perceptionSubjects($sid,$eid);$this->statuses=$repo->statusProjection($sid)['instances'];$this->audiences['encounter']=[$eid];
-        foreach($repo->participants($eid,'0',201) as $m)if($m['participation']==='engaged'){
+        $participationConfigured=isset(json_decode($repo->encounter($sid,$eid)['config_json'],true)['participation_policy']);
+        foreach($repo->participants($eid,'0',201) as $m)if($m['participation']==='engaged'||$participationConfigured&&in_array($m['participation'],['surrendered','captured'],true)){
             $this->permissions[$m['entity_id']]=json_decode($m['visibility_json'],true,16,JSON_THROW_ON_ERROR)['scope']??null;
+            if($m['participation']!=='engaged')continue;
             $control=$repo->controllerFor($sid,$m['entity_id'],$access->uid());
             if(!$control)continue;
             $actor=['entity_id'=>$m['entity_id'],'group_id'=>$m['control_group_id'],'side_id'=>$m['side_id'],'encounter_id'=>$eid];if(isset($control['control_overlay'])){if(($this->permissions[$m['entity_id']]??null)==='participants'&&AF_ACS_Awareness::known($this->rows,'entity',$m['entity_id'],AF_ACS_Awareness::audiences($actor))['level']==='identified'){$this->actors[$m['entity_id']]=$actor;$this->temporaryActors[$m['entity_id']]=true;$this->audiences['actor'][]=$m['entity_id'];}continue;}$this->actors[$m['entity_id']]=$actor;

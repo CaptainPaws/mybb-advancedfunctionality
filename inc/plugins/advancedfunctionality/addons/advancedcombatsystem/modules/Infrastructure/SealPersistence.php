@@ -12,7 +12,7 @@ trait AF_ACS_SealPersistence
     public function sealTape(string $id):array
     {
         $seal=$this->sql('SELECT payload_json FROM '.$this->table('sealed_actions').' WHERE id=?',[$id])['rows'][0]??null;
-        if($seal&&(json_decode($seal['payload_json'],true,64,JSON_THROW_ON_ERROR)['deferred']??false)===true)return AF_ACS_PreparedAction::TAPE;
+        if($seal&&(($stored=json_decode($seal['payload_json'],true,64,JSON_THROW_ON_ERROR))['deferred']??$stored['no_random']??false)===true)return AF_ACS_PreparedAction::TAPE;
         $rows=$this->sql('SELECT causal_key,check_kind,roll_index,rng_version,value_json FROM '.$this->table('rolls').' WHERE sealed_action_id=? ORDER BY id',[$id])['rows'];return $this->decodeSealChecks($rows,$id);
     }
     private function decodeSealChecks(array $rows,string $id,bool $target=false):array
@@ -60,6 +60,8 @@ trait AF_ACS_SealPersistence
         $d=json_decode($s['payload_json'],true,64,JSON_THROW_ON_ERROR)['definition']??[];
         if(($d['definition_version']['fingerprint']??null)!==$payload['pin']['fingerprint']||($d['definition_version']['declared_version']??null)!==$payload['pin']['version'])throw new RuntimeException('ACS_SEAL_PIN_CHANGED');
     }
+    public function turnSealedActions(string $turn):array
+    {return $this->sql('SELECT a.actor_entity_id,a.payload_json FROM '.$this->table('sealed_actions').' a JOIN '.$this->table('drafts').' d ON d.id=a.draft_id WHERE d.turn_id=?',[$turn])['rows'];}
     public function sealQuota(string $turn):int
     {
         $n=$this->sql('SELECT COALESCE(SUM(a.ap_cost),0) AS n FROM '.$this->table('sealed_actions').' a JOIN '.$this->table('drafts').' d ON d.id=a.draft_id WHERE d.turn_id=?',[$turn])['rows'][0]['n'];return (int)self::integer((string)$n,'2147483647',true);
@@ -93,7 +95,7 @@ trait AF_ACS_SealPersistence
     {
         if(!$this->sealWriting)throw new RuntimeException('ACS_COMMAND_REQUIRED');
         $snapshot=$this->insertSnapshot($draft['session_id'],['source_system'=>'knowledgebase','source_key'=>$action['ability_key'],'contract_id'=>'ic-acs.sealed-definition.v1','contract_version'=>'1'],['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'definition'=>$definition]);
-        $payload=['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'rng_version'=>'uniform53-v1','tape_hash'=>hash('sha256',self::json(['schema_version'=>1,'tape'=>$tape])),'history_index'=>$historyIndex,'ap_cost'=>$cost,'action'=>$action,'pin'=>$pin,'definition_snapshot_id'=>$snapshot];if($tape===AF_ACS_PreparedAction::TAPE)$payload['deferred']=true;$json=self::json($payload);
+        $payload=['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,'rng_version'=>'uniform53-v1','tape_hash'=>hash('sha256',self::json(['schema_version'=>1,'tape'=>$tape])),'history_index'=>$historyIndex,'ap_cost'=>$cost,'action'=>$action,'pin'=>$pin,'definition_snapshot_id'=>$snapshot];if($tape===AF_ACS_PreparedAction::TAPE)$payload[str_starts_with($action['ability_key'],'participation:')?'no_random':'deferred']=true;$json=self::json($payload);
         $id=$this->sql('INSERT INTO '.$this->table('sealed_actions').' (draft_id,action_index,actor_entity_id,definition_snapshot_id,seal_operation_key,ap_cost,zero_ap_limit_key,status,sealed_hash,payload_json,created_at) VALUES (?,?,?,?,?,?,NULL,?,?,?,?)',[$draft['id'],$historyIndex,$action['actor_id'],$snapshot,$key.':action:'.$historyIndex,$cost,'sealed',hash('sha256',$json),$json,time()])['id'];
         if($tape===AF_ACS_PreparedAction::TAPE)return $id;
         $tapes=isset($tape['targets'])?$tape['targets']:[''=>$tape];

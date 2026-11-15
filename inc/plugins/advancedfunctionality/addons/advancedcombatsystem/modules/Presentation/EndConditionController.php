@@ -9,11 +9,12 @@ final class AF_ACS_EndConditionController
     {
         if(!af_is_addon_enabled('advancedcombatsystem')||!empty($GLOBALS['af_acs_deactivated']))throw new RuntimeException('ACS_DISABLED');
         $fields=['session_id','encounter_id'];
-        if($op!=='outcome_status')$fields=[...$fields,'expected_version','encounter_version','reason','operation_key',...match($op){'end_conditions_set'=>['end_conditions'],'outcome_confirm'=>['resolution_id','outcome'],'outcome_continue'=>['resolution_id'],default=>throw new RuntimeException('ACS_END_INPUT_INVALID')}];
+        if($op!=='outcome_status')$fields=[...$fields,'expected_version','encounter_version','reason','operation_key',...match($op){'end_conditions_set'=>['end_conditions'],'participation_set'=>['participation_policy'],'release','rejoin_encounter'=>['entity_id','participant_version'],'outcome_confirm'=>['resolution_id','outcome'],'outcome_continue'=>['resolution_id'],default=>throw new RuntimeException('ACS_END_INPUT_INVALID')}];
         if(array_diff(array_keys($input),$fields)||array_diff($fields,array_keys($input)))throw new RuntimeException('ACS_END_INPUT_INVALID');
         foreach($input as $v)if(!is_string($v))throw new RuntimeException('ACS_END_INPUT_INVALID');
         if($method!==($op==='outcome_status'?'get':'post'))throw new RuntimeException('ACS_POST_REQUIRED');
         if($op==='outcome_status')return $service->resolution($input['session_id'],$input['encounter_id']);
+        if($op==='participation_set')$input['participation_policy']=json_decode($input['participation_policy'],true,16,JSON_THROW_ON_ERROR);
         if($op==='end_conditions_set')$input['end_conditions']=json_decode($input['end_conditions'],true,16,JSON_THROW_ON_ERROR);
         return $service->command($op,$input);
     }
@@ -27,7 +28,7 @@ final class AF_ACS_EndConditionController
             $data=self::handle(new AF_ACS_EncounterService(new AF_ACS_EncounterRepository($db),new AF_ACS_SessionAccess),$mybb->get_input('op'),$input,$mybb->request_method);
             $response=['ok'=>true,'data'=>$data];
         }catch(Throwable $e){
-            $code=in_array($e->getMessage(),['ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_END_INPUT_INVALID','ACS_END_OUTCOME_DENIED','ACS_END_CONTINUATION_DENIED','ACS_END_CONDITION_UNSUPPORTED','ACS_POST_REQUIRED','ACS_CSRF_REQUIRED','ACS_RECOVERY_REQUIRED','ACS_END_STATE_CONFLICT','ACS_ENCOUNTER_TRANSITION_BLOCKED'],true)?$e->getMessage():'ACS_END_UNAVAILABLE';
+            $code=in_array($e->getMessage(),['ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_END_INPUT_INVALID','ACS_END_OUTCOME_DENIED','ACS_END_CONTINUATION_DENIED','ACS_END_CONDITION_UNSUPPORTED','ACS_PARTICIPATION_UNSUPPORTED','ACS_PARTICIPATION_STATE_CONFLICT','ACS_PARTICIPATION_PAID_ACTION_REQUIRED','ACS_PARTICIPATION_SPATIAL_UNSUPPORTED','ACS_PARTICIPATION_OBSTACLE_UNSUPPORTED','ACS_POST_REQUIRED','ACS_CSRF_REQUIRED','ACS_RECOVERY_REQUIRED','ACS_END_STATE_CONFLICT','ACS_ENCOUNTER_TRANSITION_BLOCKED'],true)?$e->getMessage():'ACS_END_UNAVAILABLE';
             http_response_code(in_array($code,['ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_RECOVERY_REQUIRED','ACS_END_STATE_CONFLICT','ACS_ENCOUNTER_TRANSITION_BLOCKED'],true)?409:403);
             $response=['ok'=>false,'error'=>['code'=>$code,'message'=>'Решение не подтверждено. Проверьте сохранённый результат, права и версии.']];
         }
