@@ -5,6 +5,12 @@ require_once __DIR__.'/../Domain/EndCondition.php';
 /** Uses the caller's existing writer transaction and session lock. No owner cleanup. */
 trait AF_ACS_EndConditionPersistence
 {
+    public function freezeLootEligibility(array $encounter):array
+    {
+        $rows=$this->sql('SELECT p.entity_id,p.side_id,p.participation,p.registered_sequence,p.participant_version,s.life_state,s.state_version,e.kind,e.control_group_id,e.source_entity_id,e.template_snapshot_id,g.owner_uid AS group_owner_uid,g.group_version FROM '.$this->table('participants').' p JOIN '.$this->table('entities').' e ON e.id=p.entity_id AND e.session_id=? JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id JOIN '.$this->table('control_groups').' g ON g.id=e.control_group_id AND g.session_id=e.session_id WHERE p.encounter_id=? AND p.registered_sequence<? ORDER BY p.id LIMIT 1001',[$encounter['session_id'],$encounter['id'],$encounter['next_event_sequence']])['rows'];
+        if(count($rows)>1000)throw new RuntimeException('ACS_LOOT_ELIGIBILITY_UNAVAILABLE');
+        foreach($rows as &$r)foreach($r as &$v)if($v!==null)$v=(string)$v;unset($r,$v);return $rows;
+    }
     private function endPolicy(array $encounter): ?array
     {
         $config=json_decode($encounter['config_json'],true,64,JSON_THROW_ON_ERROR);
@@ -19,6 +25,7 @@ trait AF_ACS_EndConditionPersistence
         $relations=$this->sql('SELECT side_a,side_b,relationship,relation_version FROM '.$this->table('side_relationships').' WHERE encounter_id=? ORDER BY id FOR UPDATE',[$encounter['id']])['rows'];
         $config=json_decode($encounter['config_json'],true);$departed=isset($config['participation_policy']);if($departed)AF_ACS_Participation::policy($config['participation_policy']);
         $candidate=AF_ACS_EndCondition::evaluate($policy,$participants,$relations,$departed);
+        if($candidate!==null&&!empty($config['loot_sources']))$candidate['loot_eligibility']=$this->freezeLootEligibility($encounter);
         return $candidate===null?null:['schema_version'=>1]+$candidate+['participants'=>$participants,'relationships'=>$relations,'policy'=>$policy];
     }
     /** Only after the complete Resolver projection, causal children and linked spawn persistence. */

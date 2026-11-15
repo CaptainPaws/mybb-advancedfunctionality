@@ -167,6 +167,7 @@ function af_advancedcombatsystem_session_settings(): void
 function af_advancedcombatsystem_xmlhttp(): void
 {
     global $mybb;
+    if(in_array($mybb->get_input('op'),['loot_status','loot_configure','loot_generate'],true)){require_once __DIR__.'/modules/Presentation/LootController.php';AF_ACS_LootController::dispatch();}
     if(in_array($mybb->get_input('op'),['outcome_status','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release','rejoin_encounter'],true)){require_once __DIR__.'/modules/Presentation/EndConditionController.php';AF_ACS_EndConditionController::dispatch();}
     if(in_array($mybb->get_input('op'),['ambush_status','ambush_ready','ambush_start'],true)){require_once __DIR__.'/modules/Presentation/AmbushController.php';AF_ACS_AmbushController::dispatch();}
     if(in_array($mybb->get_input('op'),['builder_context','builder_preview'],true)){require_once __DIR__.'/modules/Presentation/BuilderController.php';AF_ACS_BuilderController::dispatchBuilder();}

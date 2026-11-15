@@ -82,6 +82,24 @@ final class AF_ACS_KnowledgeBaseAdapter
         if($snapshot['ability']['ref']['fingerprint']!==$ability['definition_version']['fingerprint'])throw new RuntimeException('ACS_REACTION_PIN_CHANGED');
         return ['snapshot'=>$snapshot,'spec'=>AF_ACS_Effects::reactionSpec($snapshot)];
     }
+    /** Opt-in loot table graph. Exact item pins are acquired before battle, never during generation/replay. */
+    public function lootDefinition(string $key,int $actor):array
+    {
+        require_once __DIR__.'/../../Domain/Rewards.php';
+        $dto=$this->readDefinition('arpg_mechanics',$key,$actor);$d=$dto['data']['definition']??[];$entry=$d['entries'][0]??[];
+        if(empty($dto['ready'])||($d['service_kind']??null)!=='combat_template'||count($d['entries']??[])!==1
+            ||array_diff(array_keys($d),['schema','type_profile','version','service_kind','entries'])
+            ||array_diff(array_keys($entry),['schema','key','version','phases','limits','formula_refs','loot_source'])
+            ||($entry['schema']??null)!=='af_kb.arpg.mechanic.v1'||($entry['key']??null)!==$key
+            ||!is_string($entry['version']??null)||!empty($entry['phases'])||!empty($entry['limits'])||!empty($entry['formula_refs']))throw new RuntimeException('ACS_LOOT_DEFINITION_UNAVAILABLE');
+        $definition=AF_ACS_Rewards::definition($entry['loot_source']??[]);$items=[];
+        foreach($definition['entries'] as $e){
+            $ref=$e['item'];$item=$this->readDefinition('arpg_item',$ref['key'],$actor);
+            if(empty($item['ready'])||($item['definition_version']['declared_version']??null)!==$ref['version']||($item['definition_version']['fingerprint']??null)!==$ref['fingerprint'])throw new RuntimeException('ACS_LOOT_ITEM_PIN_INVALID');
+            $items[$e['key']]=$item;
+        }
+        return ['schema_version'=>1,'table'=>$dto,'definition'=>$definition,'items'=>$items];
+    }
     private function available(int $actorUid): bool
     {
         global $mybb;
@@ -142,7 +160,7 @@ final class AF_ACS_KnowledgeBaseAdapter
     {
         try {
             if (!$this->available($actorUid)) return $this->failure('access_denied');
-            if (!in_array($type,['character','arpg_bestiary','arpg_ability','arpg_element','arpg_mechanics'],true)
+            if (!in_array($type,['character','arpg_item','arpg_bestiary','arpg_ability','arpg_element','arpg_mechanics'],true)
                 || !preg_match(AF_KB_KEY_PATTERN,$key)) return $this->failure('unsupported_entry_type');
             if ($abilityIndex !== null && $type !== 'character') return $this->failure('unexpected_ability_index');
             $sourceKey = $key;

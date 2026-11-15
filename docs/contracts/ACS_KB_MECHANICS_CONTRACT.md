@@ -1974,3 +1974,123 @@ subset без participation policy сохраняет прежнюю интер�
 Pending не становится completed автоматически; GM receipt/confirmed identity
 ACS-10.1.1 остаются прежними. Custody/Inventory recovery obligations сохраняются;
 конфискация/возврат — только отдельный Stage 6 CustodyService.
+
+## ACS-10.2.1 — Opt-in immutable loot source, v1
+
+Consumer — отдельный LootService после подтверждённого outcome, не Resolver
+и не AdvancedInventory. Legacy bestiary `loot[]` не определяет weighted pool,
+eligibility или разрешение источника и автоматически не исполняется.
+
+Таблица хранится в существующем `arpg_mechanics` / `combat_template`:
+
+```json
+{
+  "schema": "af_kb.arpg.rules.v1",
+  "type_profile": "service_mechanics",
+  "version": "1",
+  "service_kind": "combat_template",
+  "entries": [{
+    "schema": "af_kb.arpg.mechanic.v1",
+    "key": "example-loot",
+    "version": "1",
+    "phases": [], "limits": [], "formula_refs": [],
+    "loot_source": {
+      "schema": "ic-acs.loot-source.v1",
+      "source_kind": "encounter",
+      "mode": "independent_roll",
+      "draws": 0,
+      "replacement": false,
+      "luck_modifier": null,
+      "conditions": {
+        "outcomes": ["victory"],
+        "source_life_states": [],
+        "source_participation": [],
+        "source_side": "any"
+      },
+      "eligibility": {
+        "side": "winner",
+        "life_states": ["active", "incapacitated", "dead"],
+        "participation": ["engaged", "surrendered", "escaped", "withdrawn", "captured"]
+      },
+      "entries": [{
+        "key": "example-drop",
+        "item": {
+          "type": "arpg_item", "key": "example-item", "version": "1",
+          "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "qty": 1, "chance": 25, "weight": 0
+      }]
+    }
+  }]
+}
+```
+
+Fingerprint в примере — placeholder: требуется фактический fingerprint
+owner-authorized IC-KB.read.v1 definition. Все поля показанной формы обязательны,
+неизвестные поля запрещены. Wrapper содержит ровно одну marked entry; её key
+совпадает с KB key. Непустые phases/limits/formula_refs не исполняются.
+
+`source_kind` — monster, encounter или kb. GM связывает разрешённую таблицу
+с источником в preparation, round_number=0, до sealed start intent. Для monster
+требуется конкретный зарегистрированный monster entity той же сессии/encounter;
+одна идентичность источника на этого monster, независимо от версии таблицы.
+Encounter имеет одну идентичность `encounter`; самостоятельный разрешённый KB
+source — `kb:<table-key>`. До 16 закреплённых источников на encounter. Повторное
+назначение источника не заменяет прежнюю таблицу молча.
+
+Table graph и exact arpg_item refs закрепляются существующим snapshot contract.
+Item version непустая строка, fingerprint — sha256; обе величины должны совпасть
+с owner-authorized definition при закреплении. Генерация и replay не читают
+latest KB. Loot entry — новая добыча с pinned item definition и qty, не existing
+Inventory instance, custody, сессионный трофей или сюжетная награда.
+
+Режимы:
+
+- guaranteed: все entries, chance=100, weight=0, draws=0, replacement=false;
+  случайных проверок нет.
+- independent_roll: одна отдельная uniform53-v1 проверка на entry,
+  `100*u < chance`, chance=0..100, weight=0, draws=0, replacement=false.
+  P=0 не проходит, P=100 проходит. Проверки сохраняются также на границах.
+- weighted_pool: draws=1..128, chance=100, weight=1..1000000 на entry.
+  Cumulative weighted selection в порядке KB entries, интервалы полуоткрытые.
+  replacement явно задаёт возвращение выбранной строки в набор. Без возвращения
+  draws не превышает число entries; после выбора веса пересчитываются по остатку.
+
+Entries — 1..128, уникальные key, фиксированный integer qty=1..1000000.
+Пустая генерация вследствие условий/неудачных independent checks также сохраняет
+terminal generation identity и не перебрасывается. Случайные диапазоны qty,
+вложенные таблицы, формулы, contribution rewards и custom modifiers этим consumer
+не поддержаны и не угадываются. `luck_modifier` в v1 только null; ненулевой
+явный Luck contract требует отдельной поддержанной версии. Глобального Luck нет.
+
+`conditions.outcomes` — непустой уникальный список victory/draw/inconclusive.
+Для monster дополнительно обязательны явные непустые source_life_states из
+active/incapacitated/dead и source_participation из пяти participation states;
+source_side=loser требует подтверждённого winner и hostile relationship с ним.
+Incapacitated не становится dead. Для encounter/kb три source-specific поля
+строго []/[]/any: они не имеют неявной интерпретации.
+
+Eligibility side — winner либо all; life_states и participation — явные непустые
+списки. Группа получает одну базовую eligibility identity при наличии хотя бы
+одного подходящего зарегистрированного базового участника. Pet/summon и spawned
+source-derived entities не создают дополнительную базовую долю; дополнительных
+rolls по числу существ/групп нет. Действие/нанесение урона не является условием.
+
+Факты participant registration, control_group/owner/version, side, participation,
+life state и source identity сохраняются в pending-resolution candidate до GM
+confirmation; поздние текущие roster/control/HP не заменяют эти факты. Для старого
+outcome без такого snapshot generation блокируется, не backfill по текущему миру.
+Ограничение — 1000 frozen participant facts и существующие 256 KiB/depth limits
+сериализации; превышение блокирует commit целиком.
+
+Генерация — отдельная POST/CSRF/GM/native команда `loot_generate` с CAS и
+operation_key. Она требует active session и completed encounter с проверенным
+confirmed outcome. Источники/таблицы после завершения не добавляются. Rolls имеют
+собственные causal keys в существующем ledger, не заменяют combat tape. Один
+pool на outcome/source; duplicate source/key, повтор outcome и session reopen
+не создают новых rolls. Неизвестный ACK восстанавливается lookup прежнего receipt.
+
+Pool generation хранит outcome/source/pins, eligibility, rolls, generated entries,
+event refs и result hash. `loot_status` — разрешённое GM чтение также после
+close/archive. Unallocated pool остаётся pending obligation; allocation/claims,
+победитель, Inventory grant, валюты и EXP не входят в ACS-10.2.1.

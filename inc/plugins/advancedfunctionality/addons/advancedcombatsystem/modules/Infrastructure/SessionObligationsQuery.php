@@ -59,6 +59,12 @@ class AF_ACS_SessionObligationsQuery extends AF_ACS_Repository
             }catch(Throwable){$scope=null;}
             $add($scope===null?'explicitly_blocked':($r['status']==='recovery_required'?'recovery_required':'pending'),'operation',$r['operation_key'],$scope);
         });
+        // A configured, confirmed source must be generated while active, including an empty result.
+        $scan('loot_generation','SELECT e.id,e.config_json FROM '.$this->table('encounters').' e WHERE e.session_id=? AND e.status=\'completed\' AND JSON_LENGTH(JSON_EXTRACT(e.config_json,\'$.loot_sources\'))>(SELECT COUNT(*) FROM '.$this->table('loot_pools').' p WHERE p.encounter_id=e.id) LIMIT 201',function($r)use($add,$sid){
+            $sources=json_decode($r['config_json'],true,64,JSON_THROW_ON_ERROR)['loot_sources']??[];
+            foreach($sources as $identity=>$pin)if(!$this->sql('SELECT id FROM '.$this->table('loot_pools').' WHERE session_id=? AND encounter_id=? AND source_key=?',[$sid,$r['id'],$identity])['rows'])$add('explicitly_blocked','loot_generation',(string)$r['id'].':'.$identity);
+        });
+        $scan('loot_pool','SELECT id FROM '.$this->table('loot_pools')." WHERE session_id=? AND status='open' ORDER BY id LIMIT 201",static fn($r)=>$add('pending','loot_pool',(string)$r['id'],'loot.pool.inspect'));
         foreach($this->additionalSources() as $source){
             if(!$source instanceof AF_ACS_SessionObligationSource)throw new RuntimeException('ACS_OBLIGATION_SOURCE_INVALID');
             $rows=$source->inspectSession($sid);$scope=$source->recoveryScope();

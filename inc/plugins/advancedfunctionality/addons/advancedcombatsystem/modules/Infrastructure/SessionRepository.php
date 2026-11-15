@@ -88,10 +88,10 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
         $session['_command_result']=['status'=>$after,'previous_status'=>$before,'obligations_preserved'=>true,'outstanding_obligations'=>$obligations];return $session;
     }
     /** Internal command boundary; callers supply authorization, never client callbacks. */
-    public function command(string $key, string $kind, array $request, callable $authorize, callable $apply, ?callable $afterEvent=null): array
+    public function command(string $key, string $kind, array $request, callable $authorize, callable $apply, ?callable $afterEvent=null,?callable $existingResult=null): array
     {
         $key=self::key($key);$kind=self::key($kind,64);$json=self::json($request);$hash=hash('sha256',$json);
-        return $this->transactions->run(function () use($key,$kind,$request,$json,$hash,$authorize,$apply,$afterEvent) {
+        return $this->transactions->run(function () use($key,$kind,$request,$json,$hash,$authorize,$apply,$afterEvent,$existingResult) {
             $this->writable();
             $old=$this->sql('SELECT * FROM '.$this->table('operations').' WHERE operation_key=? FOR UPDATE',[$key])['rows'][0]??null;
             $id=$old ? (string)$old['session_id'] : ($request['session_id']??null);
@@ -102,6 +102,8 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
                 if($old['status']!=='committed')throw new RuntimeException('ACS_RECOVERY_REQUIRED');
                 return json_decode($old['result_json'],true,512,JSON_THROW_ON_ERROR);
             }
+            // Source-level replay before CAS/RNG. Only server code may supply this read callback.
+            if($existingResult!==null && ($saved=$existingResult($session))!==null)return $saved;
             if ($session && !in_array($kind,['session.request_close','session.close','session.reopen','session.archive','delegation.revoke','encounter.side_change','encounter.relation_set','encounter.controller_set'],true)) { $this->assertNoPendingPublication((string)$session['id']); }
             $recent=$this->sql('SELECT COUNT(*) AS n FROM '.$this->table('operations').' WHERE operation_key LIKE ? AND updated_at>?',['session:'.$request['actor_uid'].':%',time()-60])['rows'][0]['n'];
             if((int)$recent>=20)throw new RuntimeException('ACS_RATE_LIMIT');
