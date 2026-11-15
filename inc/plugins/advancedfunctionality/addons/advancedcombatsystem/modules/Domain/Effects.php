@@ -11,6 +11,7 @@ require_once __DIR__.'/Behavior.php';
 require_once __DIR__.'/FormLayers.php';
 require_once __DIR__.'/AbilityOperations.php';
 require_once __DIR__.'/EffectResponses.php';
+require_once __DIR__.'/Participation.php';
 
 /** A single action on a detached virtual state. No globals, time, RNG, SQL or user callbacks. */
 final class AF_ACS_Effects
@@ -258,6 +259,7 @@ final class AF_ACS_Effects
     }
     public static function ordinaryActionAllowed(array $state,string $entity):bool
     {
+        if(isset($state['participants'][$entity])&&$state['participants'][$entity]['participation']!=='engaged')return false;
         if(isset($state['summons'][$entity])&&($state['summons'][$entity]['status']!=='active'||$state['summons'][$entity]['pending_independent']))return false;
         foreach($state['status_instances']??[] as $row)if($row['status']==='active'&&$row['target_entity_id']===$entity&&AF_ACS_FormLayers::enabled($state['status_instances'],$row)&&($row['spec']['mechanical_parameters']['blocks_ordinary_actions']??false)===true)return false;
         return true;
@@ -538,9 +540,12 @@ final class AF_ACS_Effects
     }
     private static function state(array $state): array
     {
-        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons','objects','objectives','spatial','cover','awareness','awareness_attempts','perception_subjects','form_equipment','effect_response_scope','effect_response_resources']);
+        self::fields($state,['schema_version','entities','groups','barriers','next_barrier_order','status_instances','next_status_order','summons','objects','objectives','spatial','cover','awareness','awareness_attempts','perception_subjects','form_equipment','effect_response_scope','effect_response_resources','participants']);
         if(($state['schema_version']??null)!==1)self::fail('effects_schema_invalid');
         foreach(['entities','groups','barriers'] as $field)if(!is_array($state[$field]??null))self::fail('effects_schema_invalid');
+        foreach($state['participants']??[] as $id=>$p){
+            if(array_diff(array_keys($p),['participation','version','side_id','group_id'])||!in_array($p['participation']??null,['engaged','surrendered','escaped','withdrawn','captured','despawned'],true)||!is_int($p['version']??null)||$p['version']<1||$p['version']>9007199254740991)self::fail('ACS_PARTICIPATION_STATE_CONFLICT');self::id((string)$id);self::id($p['group_id']);self::id($p['side_id']);
+        }
         foreach($state['groups'] as $id=>$group){self::id($id);if(!is_array($group))self::fail('effects_schema_invalid');self::fields($group,['ap','version']);self::resource($group['ap']??null);if(self::integer($group['version']??null)<1)self::fail('effects_version_invalid');}
         foreach($state['entities'] as $id=>$e){
             self::id($id);if(!is_array($e))self::fail('effects_schema_invalid');
@@ -645,7 +650,11 @@ final class AF_ACS_Effects
         self::interruptSustained($v,$events,'action_cost');
         foreach($action['effects'] as $op){
             if(!is_array($op)||!is_string($op['kind']??null))self::fail('effects_operation_invalid');$kind=$op['kind'];
-            if($kind==='object_damage'){
+            if($kind==='participation'){
+                self::fields($op,['kind','entity_id','from','to']);$id=self::id($op['entity_id']);$old=$v['participants'][$id]??null;
+                if(!$old||$old['participation']!==$op['from']||!($op['from']==='engaged'&&in_array($op['to'],['surrendered','escaped','withdrawn','captured'],true)||$op['from']==='surrendered'&&$op['to']==='captured'))self::fail('ACS_PARTICIPATION_STATE_CONFLICT');
+                $v['participants'][$id]['participation']=$op['to'];++$v['participants'][$id]['version'];$events[]=['type'=>'participation','entity_id'=>$id,'before'=>$old['participation'],'after'=>$op['to']];
+            }elseif($kind==='object_damage'){
                 self::fields($op,['kind','entity_id','expected_version','amount','damage_type']);$id=self::id($op['entity_id']??null);
                 if(!isset($v['objects'][$id]))self::fail('ACS_OBJECT_UNAVAILABLE');$old=$v['objects'][$id];
                 $v['objects'][$id]=AF_ACS_Environment::damage($old,$op['expected_version'],$op['amount'],$op['damage_type']);

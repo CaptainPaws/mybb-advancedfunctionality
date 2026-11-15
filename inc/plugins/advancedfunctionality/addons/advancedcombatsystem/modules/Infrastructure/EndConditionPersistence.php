@@ -17,7 +17,8 @@ trait AF_ACS_EndConditionPersistence
     {
         $participants=$this->sql('SELECT p.entity_id,p.side_id,p.participation,s.life_state,s.state_version,p.participant_version FROM '.$this->table('participants').' p JOIN '.$this->table('entities').' e ON e.id=p.entity_id AND e.session_id=? JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id WHERE p.encounter_id=? ORDER BY p.id FOR UPDATE',[$encounter['session_id'],$encounter['id']])['rows'];
         $relations=$this->sql('SELECT side_a,side_b,relationship,relation_version FROM '.$this->table('side_relationships').' WHERE encounter_id=? ORDER BY id FOR UPDATE',[$encounter['id']])['rows'];
-        $candidate=AF_ACS_EndCondition::evaluate($policy,$participants,$relations);
+        $config=json_decode($encounter['config_json'],true);$departed=isset($config['participation_policy']);if($departed)AF_ACS_Participation::policy($config['participation_policy']);
+        $candidate=AF_ACS_EndCondition::evaluate($policy,$participants,$relations,$departed);
         return $candidate===null?null:['schema_version'=>1]+$candidate+['participants'=>$participants,'relationships'=>$relations,'policy'=>$policy];
     }
     /** Only after the complete Resolver projection, causal children and linked spawn persistence. */

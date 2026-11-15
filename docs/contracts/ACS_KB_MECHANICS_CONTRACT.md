@@ -1871,3 +1871,106 @@ custody и recovery obligations не освобождаются автомати
 null до confirmation, затем проверенные receipt/event и стабильный
 `outcome_id=acs-outcome:<encounter_id>:<confirmation_event_id>`. Этот контракт
 не генерирует loot, EXP, валюту, постоянный sync или outbox consumer.
+
+## ACS-10.1.2: participation actions и возвращение
+
+A1.28–A1.33 расширяют исполнение явной policy **настроек столкновения**.
+Новый encounter contract задаётся session owner/GM через POST `participation_set`
+до старта и закрепляется полным immutable config snapshot. Live KB, текстовое
+описание, client costs/rolls и неподдержанные predicates не становятся правилами.
+Отсутствие policy не добавляет synthetic actions в старое столкновение.
+
+```json
+{
+  "schema": "ic-acs.participation.v1",
+  "spatial": "unmapped",
+  "obstacles": "none",
+  "pursuit": "capable_hostile",
+  "release_to": "surrendered",
+  "rejoin_from": ["surrendered", "escaped", "withdrawn"]
+}
+```
+
+Все шесть полей обязательны, unknown fields/tokens и повторные/пустые
+rejoin_from отклоняются. Spatial: `unmapped` — только encounter без spatial pin,
+явная абстрактная доступность внутри encounter; `same_zone` — только mapped
+encounter, существующие positions, same-zone capture и прежний Spatial/LoE
+contract. Ни один вариант не записывает новые coordinates/zone и не переносит
+существ. Escape в mapped subset рассматривает capable pursuers в той же зоне.
+Любые active environment objects блокируют escape/capture/rejoin как неподдержанную
+ветку препятствий. Геометрия, эвакуация incapacitated, перенос пленника, выход
+через заданное ребро карты, teleport и resisting capture не эмулируются.
+
+Existing Builder/Draft/Seal/Publish/Resolver/Effects принимают synthetic keys:
+
+| ability_key | Выбранные targets | AP / результат |
+|---|---|---|
+| participation:surrender | сам actor | 0, без RNG, engaged → surrendered |
+| participation:escape | сам actor | 1, success → escaped; failure остаётся engaged |
+| participation:group_withdrawal | explicit controlled members того же текущего group roster, включая actor | 1 общий AP, индивидуальные checks; successes → withdrawn |
+| participation:capture | одна видимая доступная цель, кроме actor | 1, surrendered либо incapacitated/engaged → captured |
+
+Source — active engaged actor с текущими native/session/controller grants,
+обычным доступом к действию, start boundary и pending group turn. Для каждого
+выбранного group member проверяются собственные control/delegation/action grants,
+их версии и expiry, в том числе под writer locks перед commit. Incapacitated,
+dead или заблокированный member остаётся на месте; его выбор не даёт эвакуацию.
+Не выбранные питомцы/призывы сохраняют participation, identity, group и общий
+остаток AP. Смешанный post может после выхода персонажа выполнить действие
+оставшегося питомца; ушедший actor больше не выполняет ordinary actions.
+Один post закрывает прежний group turn по существующему контракту.
+
+Escape: самый быстрый из текущих active engaged hostile, способных выполнять
+ordinary action и удовлетворяющих существующим Behavior constraints. Closed
+ordinary turn сам по себе не является incapacitation преследователя. Speed —
+effective stat прежнего Resolver/Form/Equipment path. Для скрытого подходящего
+преследователя, которого caller не вправе видеть, ветка блокируется без выдачи
+его ID/скорости. Неизвестный capability не трактуется как отсутствие преследования.
+
+```text
+P_escape = clamp(60 + 30*(Speed_runner-Speed_pursuer)/(Speed_runner+Speed_pursuer),10,90)%
+Speed_runner=Speed_pursuer=0 → 60%
+нет способных преследователей и препятствий → automatic
+```
+
+Используется retained uniform53 hit check как **escape check**, без hit/crit
+механики удара. Для группы — отдельный tape каждого явно выбранного участника;
+неиспользованный crit/sample не исполняется как дополнительный бросок.
+Preview не делает RNG. Seal хранит результат и quota; failure тоже платит 1 AP.
+Surrender/capture/полностью automatic escape получают `no_random` seal без rolls;
+исторический prepared `deferred` marker не переопределяется. Surrender имеет
+одну zero-AP seal attempt на actor/group turn, включая cancelled history;
+отмена её не восстанавливает. Exact replay возвращает прежний результат.
+Изменение dependencies требует проверки исходного tape, без blind reroll.
+
+Capture не меняет HP/life state, restrained/status definitions, controller,
+Inventory, equipment, custody или целевой Clock. Сопротивляющаяся engaged active
+цель отклоняется: нужен отдельный ещё неподдержанный KB contract. Participation
+операции не являются `combat.primary` атакой: attack-only prepared/reaction/reflect
+checks не создаются для surrender/escape/capture. Обязательные group end boundaries
+и связанные эффекты выполняет прежний Resolver/Clock; end conditions проверяются
+после всего механического commit.
+
+GM release/rejoin используют прежний AF transport и EncounterService:
+POST `release` или `rejoin_encounter`, session_id/encounter_id, expected_version,
+encounter_version, entity_id, participant_version, reason, operation_key,
+my_post_key. Требуются native/session owner/GM; active/paused encounter.
+Release: captured → surrendered, без автоматического rejoin. Rejoin: active life,
+разрешённый rejoin_from, существующий summon lifecycle, pinned spatial policy и
+obligation gates. Нет refill HP/resources/AP/seal quota/reaction_used/cooldowns,
+нового turn/EntityTurn/round или автоматического admission в отсутствующий roster.
+До следующего штатного roster существо без своего EntityTurn действовать не может.
+
+Stage-7 presence.v1 snapshots не переписываются: прежние узкие GM команды
+применяются по старому pin при отсутствии новой policy. При включённой новой
+policy legacy partial_withdraw блокируется, чтобы не обходить paid withdrawal;
+rejoin использует новый contract. Новых default правил старым encounters нет.
+
+При наличии новой participation policy A1.27 учитывает стороны departed
+(surrendered/escaped/withdrawn/captured) участников, но continuing side требует
+**engaged + active**. Despawned не создаёт сторону. Это предотвращает потерю
+проигравшей стороны при выходе её последнего участника. Старый end-condition
+subset без participation policy сохраняет прежнюю интерпретацию pinned v1.
+Pending не становится completed автоматически; GM receipt/confirmed identity
+ACS-10.1.1 остаются прежними. Custody/Inventory recovery obligations сохраняются;
+конфискация/возврат — только отдельный Stage 6 CustodyService.

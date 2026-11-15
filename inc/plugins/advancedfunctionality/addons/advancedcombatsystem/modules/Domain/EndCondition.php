@@ -24,7 +24,7 @@ final class AF_ACS_EndCondition
         return $value;
     }
 
-    public static function evaluate(array $policy, array $participants, array $relations): ?array
+    public static function evaluate(array $policy, array $participants, array $relations, bool $departed=false): ?array
     {
         self::policy($policy);
         $sides=[];
@@ -34,12 +34,12 @@ final class AF_ACS_EndCondition
                 || !in_array($participant['participation'],['engaged','surrendered','escaped','withdrawn','captured','despawned'],true)) {
                 throw new RuntimeException('ACS_END_STATE_INVALID');
             }
-            // v1 evaluates current engaged participants. Participation is independent of life state.
-            if ($participant['participation']!=='engaged') continue;
+            // Departed participants retain their side; only engaged active participants can continue combat.
+            if ($participant['participation']==='despawned' || !$departed && $participant['participation']!=='engaged') continue;
             $side=(string)($participant['side_id']??'');
             if ($side==='') throw new RuntimeException('ACS_END_STATE_INVALID');
             $sides[$side]=true;
-            if ($participant['life_state']==='active') $active[$side]=true;
+            if ($participant['participation']==='engaged' && $participant['life_state']==='active') $active[$side]=true;
         }
         if (count($sides)<2) return null;
 

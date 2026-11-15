@@ -109,13 +109,16 @@ final class AF_ACS_SealService
                 AF_ACS_EffectResponses::requests($p['context'],array_map(static fn($i,$a)=>['id'=>'preflight-'.$i,'action'=>$a],array_keys($actions),$actions));
                 $used=$d['turn_id']==='0'?$this->repo->preRoundQuota($d):$this->repo->sealQuota($d['turn_id']);$cost=0;$costs=[];
                 foreach(array_slice($actions,count($active)) as $offset=>$a){$c=$p['action_costs'][count($active)+$offset]??($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['costs']??null);
-                    $ap=is_array($c)?array_values(array_filter($c,static fn($cost)=>$cost['kind']==='ap')):[];if(count($ap)!==1||(!AF_ACS_ObjectInteraction::isAction($a['ability_key'])&&!isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['prepared_action'])&&!isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['granted_use'])&&count($c)!==1)||!is_int($ap[0]['amount'])||$ap[0]['amount']<=0)throw new RuntimeException('ACS_SEAL_ZERO_AP_UNSUPPORTED');$cost+=$ap[0]['amount'];$costs[]=$ap[0]['amount'];}
+                    $ap=is_array($c)?array_values(array_filter($c,static fn($cost)=>$cost['kind']==='ap')):[];if(count($ap)!==1||(!AF_ACS_ObjectInteraction::isAction($a['ability_key'])&&!isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['prepared_action'])&&!isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['granted_use'])&&count($c)!==1)||!is_int($ap[0]['amount'])||($ap[0]['amount']<0||$ap[0]['amount']===0&&$a['ability_key']!=='participation:surrender'))throw new RuntimeException('ACS_SEAL_ZERO_AP_UNSUPPORTED');$cost+=$ap[0]['amount'];$costs[]=$ap[0]['amount'];}
+                foreach(array_slice($actions,count($active)) as $a)if($a['ability_key']==='participation:surrender'){
+                    foreach($this->repo->turnSealedActions($d['turn_id']) as $past)if((string)$past['actor_entity_id']===$a['actor_id']&&(json_decode($past['payload_json'],true)['action']['ability_key']??null)==='participation:surrender')throw new RuntimeException('ACS_SURRENDER_SEAL_LIMIT');
+                }
                 if($used+$cost>$p['scope']['turn']['ap'])throw new RuntimeException('ACS_SEAL_QUOTA_EXHAUSTED');
                 $history=$this->repo->sealRows($d['id']);if(count($history)+count($actions)-count($active)>200)throw new RuntimeException('ACS_SEAL_HISTORY_LIMIT');$next=$history?(int)end($history)['action_index']+1:0;
                 $query=new AF_ACS_QueryService($this->repo,$this->access);$definitions=[];$statusIndexes=[];
                 foreach(array_slice($actions,count($active)) as $a){
                     $position=count($active)+count($definitions);$definitions[]=$p['definitions'][$position]??$query->sealDefinition($d['session_id'],$a['actor_id'],$a['ability_key']);
-                    $indexes=[];foreach($a['targets'] as $target)$indexes[$target]=(AF_ACS_ObjectInteraction::isAction($a['ability_key'])||str_starts_with($a['ability_key'],'spatial:')||str_starts_with($a['ability_key'],'cover:')||isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['spatial_effect']))?[]:AF_ACS_Resolver::statusRollIndexes($p['context'],$a['actor_id'],$target,$p['context']['abilities'][$a['actor_id']][$a['ability_key']]);$statusIndexes[]=count($a['targets'])===1?array_values($indexes)[0]:$indexes;
+                    $indexes=[];foreach($a['targets'] as $target)$indexes[$target]=(AF_ACS_ObjectInteraction::isAction($a['ability_key'])||str_starts_with($a['ability_key'],'spatial:')||str_starts_with($a['ability_key'],'cover:')||str_starts_with($a['ability_key'],'participation:')||isset($p['context']['abilities'][$a['actor_id']][$a['ability_key']]['spatial_effect']))?[]:AF_ACS_Resolver::statusRollIndexes($p['context'],$a['actor_id'],$target,$p['context']['abilities'][$a['actor_id']][$a['ability_key']]);$statusIndexes[]=count($a['targets'])===1?array_values($indexes)[0]:$indexes;
                 }
                 $items=new AF_ACS_ItemActionService($this->repo,$this->access);$protected=[];
                 foreach ($definitions as $i=>&$definition) if (isset($definition['item_action'])) {
@@ -135,7 +138,7 @@ final class AF_ACS_SealService
                 // Everything above is deterministic preflight. Once drawn, all tape/quota persists even if simulation is blocked.
                 foreach(array_slice($actions,count($active)) as $i=>$a){
                     $ability=$p['context']['abilities'][$a['actor_id']][$a['ability_key']];
-                    $this->repo->appendSeal($d,$a,$definitions[$i],$ability['source_ref'],$costs[$i],$operation,$next+$i,isset($ability['prepared_action'])?AF_ACS_PreparedAction::TAPE:($this->random??new AF_ACS_RandomSource)->action($statusIndexes[$i]));
+                    $this->repo->appendSeal($d,$a,$definitions[$i],$ability['source_ref'],$costs[$i],$operation,$next+$i,(isset($ability['prepared_action'])||($ability['no_random']??false))?AF_ACS_PreparedAction::TAPE:($this->random??new AF_ACS_RandomSource)->action($statusIndexes[$i]));
                 }
             }elseif($op==='cancel_tail'){
                 if(!$active)throw new RuntimeException('ACS_SEAL_NOTHING_TO_CANCEL');$last=end($active);$this->repo->cancelSeal((string)$last['id']);(new AF_ACS_PreparedItemService($this->repo,$this->access))->cancelSeal($d,$last);

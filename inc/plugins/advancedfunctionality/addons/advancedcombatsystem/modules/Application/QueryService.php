@@ -36,7 +36,7 @@ final class AF_ACS_QueryService
         $resources=$this->repo->statusResources($id,$e);
         return ['row'=>$e,'registration'=>$p,'source'=>$s,'resources'=>$resources];
     }
-    public function select(string $sid,string $eid,bool $encounterStart=false):array
+    public function select(string $sid,string $eid,bool $encounterStart=false,bool $participation=false):array
     {
         if(!af_is_addon_enabled('knowledgebase'))self::fail('preview_dependency_unavailable');
         $sessionView=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);
@@ -44,12 +44,12 @@ final class AF_ACS_QueryService
         $view=['session'=>$sessionView['session'],'encounter'=>$encounter];$gm=$sessionView['can_manage'];
         if($view['session']['status']!=='active'||!in_array($view['encounter']['status'],$encounterStart?['ambush_ready']:['active','preparation'],true))self::fail('preview_encounter_not_active');
         $audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);
-        $members=$this->repo->participants($eid,'0',201);$actors=[];$targets=[];$summonScope=$this->repo->summonProjection($sid,$eid);
-        foreach($members as $m){if($m['participation']!=='engaged')continue;if($m['kind']==='summon'&&($summonScope[$m['entity_id']]['status']??null)!=='active')continue;
+        $members=$this->repo->participants($eid,'0',201);if($participation&&count($members)>200)self::fail('ACS_PARTICIPATION_SCOPE_TOO_LARGE');$actors=[];$targets=[];$summonScope=$this->repo->summonProjection($sid,$eid);
+        foreach($members as $m){if($m['participation']!=='engaged'&&!($participation&&in_array($m['participation'],['surrendered','captured'],true)))continue;if($m['kind']==='summon'&&($summonScope[$m['entity_id']]['status']??null)!=='active')continue;
             $control=$this->repo->controllerFor($sid,$m['entity_id'],$this->access->uid());$own=$control!==null;$temporary=isset($control['control_overlay']);
             if($temporary&&$audience->knowledge('entity',$m['entity_id'])['level']!=='identified')continue;
             $entry=['id'=>$m['entity_id'],'name'=>$audience->name($m['entity_id'],$m['name']),'side_id'=>$m['side_id'],'kind'=>$m['kind'],'active'=>($m['life_state']??null)==='active'];
-            if($own)$actors[$m['entity_id']]=$entry;
+            if($own&&$m['participation']==='engaged')$actors[$m['entity_id']]=$entry;
             if($own||$audience->canTarget($m['entity_id']))$targets[$m['entity_id']]=$entry;
         }
         $access=[];foreach($actors as $actor)foreach($targets as $target)if($audience->canTarget($target['id'],$actor['id']))$access[$actor['id']][$target['id']]=true;
@@ -59,9 +59,9 @@ final class AF_ACS_QueryService
     {
         $out=[];foreach($targets as $t)$out[$t['id']]=['kind'=>$t['kind'],'active'=>$t['active']??true,'relationship'=>$relationships[$actor][$t['id']]??'neutral'];return $out;
     }
-    public function inspect(string $sid,string $eid,string $actor,string $target,?string $sealedDraft=null,bool $itemSelf=false,bool $causal=false,bool $encounterStart=false):array
+    public function inspect(string $sid,string $eid,string $actor,string $target,?string $sealedDraft=null,bool $itemSelf=false,bool $causal=false,bool $encounterStart=false,bool $participation=false,bool $pursuit=false):array
     {
-        $selection=$this->select($sid,$eid,$encounterStart);$this->repo->assertPreviewStorage();$view=$selection['view'];
+        $selection=$this->select($sid,$eid,$encounterStart,$participation);$this->repo->assertPreviewStorage();$view=$selection['view'];
         if(!isset($selection['actors'][$actor])||!isset($selection['targets'][$target])||empty($selection['target_access'][$actor][$target]))self::fail('preview_target_forbidden');
         $sideA=$selection['actors'][$actor]['side_id'];$sideB=$selection['targets'][$target]['side_id'];$hostile=false;
         foreach($this->repo->allRelations($eid) as $r)if(($r['side_a']===$sideA&&$r['side_b']===$sideB||$r['side_a']===$sideB&&$r['side_b']===$sideA)&&$r['relationship']==='hostile')$hostile=true;
@@ -77,6 +77,7 @@ final class AF_ACS_QueryService
             $needed=[];foreach($barriers['pools'] as $pool)array_push($needed,$pool['source_entity_id'],...$pool['targets']);foreach($reactions['entries'] as $reaction)array_push($needed,$reaction['entity_id'],...$reaction['protected_targets']);
             foreach($selection['members'] as $m){$id=$m['entity_id'];if(isset($sources[$id])||!in_array($id,$needed,true))continue;$sources[$id]=$this->source($sid,$id);}
         }
+        if($participation)foreach($selection['members'] as $m)if(($pursuit||$m['control_group_id']===$sources[$actor]['row']['control_group_id'])&&$m['participation']!=='despawned'&&!isset($sources[$m['entity_id']]))$sources[$m['entity_id']]=$this->source($sid,$m['entity_id']);
         foreach($summons as $summon)if($summon['status']==='active'&&(isset($sources[$summon['source_entity_id']])||isset($sources[$summon['entity_id']])))foreach([$summon['entity_id'],$summon['source_entity_id']] as $needed)if(!isset($sources[$needed]))$sources[$needed]=$this->source($sid,$needed);
         foreach($objects as $object)if($object['status']==='active'&&!isset($sources[$object['source_entity_id']])){
             $m=AF_ACS_Environment::definition($object['definition']);$row=$this->repo->entity($sid,$object['source_entity_id']);
@@ -87,7 +88,7 @@ final class AF_ACS_QueryService
                 $r=json_decode($turn['roster_json'],true,32,JSON_THROW_ON_ERROR);$fp=$r['fingerprint']??null;unset($r['fingerprint']);
                 if(!is_string($fp)||!hash_equals($fp,hash('sha256',AF_ACS_Repository::json($r))))self::fail('preview_roster_invalid');
                 $member=null;foreach($r['members']??[] as $m)if($m['entity_id']===$id)$member=$m;
-                if(!$member&&!in_array($id,[$actor,$target],true))continue;
+                if(!$member&&(!in_array($id,[$actor,$target],true)||$participation&&$id===$target&&$id!==$actor))continue;
                 if(!$member||$member['content_hash']!==$source['row']['content_hash']||$member['template_snapshot_id']!==$source['row']['template_snapshot_id'])self::fail('preview_roster_invalid');
                 $individual=null;foreach($this->repo->individualTurns([$turn['id']]) as $x)if($x['entity_id']===$id)$individual=$x;
                 if(!$individual){if(in_array($id,[$actor,$target],true))self::fail('preview_turn_unavailable');continue;}
@@ -120,6 +121,7 @@ final class AF_ACS_QueryService
             }
             $versions['pre_round_commitments_hash']=hash('sha256',serialize($commitments));
         }
+        if($participation&&$target!==$actor&&!isset($turns[$target]))$turns[$target]=['group_id'=>$sources[$target]['row']['control_group_id'],'status'=>'resolved','started'=>false];
         if(!isset($turns[$actor],$turns[$target])||!$preRound&&!$causal&&($turns[$actor]['status']!=='pending'||!$turns[$actor]['started']))self::fail('preview_turn_unavailable');
         if(!$preRound&&!$causal&&!(new AF_ACS_EncounterService($this->repo,$this->access))->clock()->available($sid,$turns[$actor]['id'],$actor)['actions_ready'])self::fail('ACS_STATUS_ACTION_NOT_READY');
         if(!$causal)$this->repo->assertNoObligations($sid,$eid,$preRound?'0':$turns[$actor]['id'],true,$sealedDraft);
@@ -153,7 +155,7 @@ final class AF_ACS_QueryService
             if($responseDefs=AF_ACS_EffectResponses::resourceDefinitions($source['resources']['rows']))$state['effect_response_resources'][$id]=$responseDefs;
             $res=[];foreach($s['resistances']??[] as $key=>$r)$res[$key]=['scope'=>'elemental','unit'=>'RES','value'=>$r['value']];
             $defenses[$id]=['def'=>$stat['def'],'resistances'=>$res,'immunities'=>[],'vulnerabilities'=>[]];
-            if(($s['element_registry_version']??null)==='primary-elements-17-v1'||($s['capabilities']['canonical_elements_17']['readiness']??null)==='READY')$catalog=AF_ACS_Damage::retainedCatalog($row['payload_json'],$row['content_hash']);
+            if(in_array($s['contract_id']??null,['IC-CS.combat-preparation.v1','IC-KB.read.v1'],true)&&(($s['element_registry_version']??null)==='primary-elements-17-v1'||($s['capabilities']['canonical_elements_17']['readiness']??null)==='READY'))$catalog=AF_ACS_Damage::retainedCatalog($row['payload_json'],$row['content_hash']);
             foreach($this->repo->allCooldowns($sid,$id) as $cd)if((int)$cd['remaining_turns']>0)self::fail('preview_cooldown_contract_unavailable');
         }
         $relationships=[];$redirectTargets=[];$members=array_column($selection['members'],null,'entity_id');$relations=[];foreach($this->repo->allRelations($eid) as $rel){$relations[$rel['side_a'].':'.$rel['side_b']]=$rel['relationship'];$relations[$rel['side_b'].':'.$rel['side_a']]=$rel['relationship'];}
@@ -169,8 +171,14 @@ final class AF_ACS_QueryService
         $versions['behavior_candidates_hash']=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'candidates'=>$behaviorTargets]));
         foreach($sources as $id=>$source)try{$state['form_equipment'][$id]=AF_ACS_Equipment::formContributions($source['registration'],$this->repo->itemEquipment($sid,(string)$id),$this->repo->custodyRows($sid),(string)$id);}catch(Throwable){$state['form_equipment'][$id]=null;}
         $perceptionActors=[];foreach($sources as $id=>$source)if(isset($members[$id]))$perceptionActors[$id]=['entity_id'=>(string)$id,'group_id'=>$source['row']['control_group_id'],'side_id'=>$members[$id]['side_id'],'encounter_id'=>$eid];
+        $participationVisible=[];
+        if($participation){$participationAudience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);$state['participants']=[];$proof=[];foreach($selection['members'] as $m){$id=$m['entity_id'];if(!isset($sources[$id]))continue;
+            $state['participants'][$id]=['participation'=>$m['participation'],'version'=>self::int($m['participant_version']),'side_id'=>$m['side_id'],'group_id'=>$m['control_group_id']];
+            $participationVisible[$id]=$participationAudience->canTarget($id,$actor);
+            $proof[$id]=[$m['participant_version'],$sources[$id]['row']['entity_version'],$sources[$id]['row']['state_version'],$sources[$id]['row']['content_hash'],$sources[$id]['resources']['fingerprint']];
+        }$versions['participation_dependencies']=hash('sha256',serialize($proof));}
         [$abilities,$choices]=$this->pinnedAbilities($sources[$actor]);
-        return ['selection'=>$selection,'versions'=>$versions,'choices'=>$choices,'context'=>['perception_actors'=>$perceptionActors,'behavior_targets'=>$behaviorTargets,'control_context'=>$controlContext,'schema_version'=>1,'state'=>$state,'stats'=>$stats,'defenses'=>$defenses,'element_catalog'=>$catalog,'turns'=>$turns,
+        return ['selection'=>$selection,'versions'=>$versions,'choices'=>$choices,'context'=>['participation_visible'=>$participationVisible,'perception_actors'=>$perceptionActors,'behavior_targets'=>$behaviorTargets,'control_context'=>$controlContext,'schema_version'=>1,'state'=>$state,'stats'=>$stats,'defenses'=>$defenses,'element_catalog'=>$catalog,'turns'=>$turns,
             'encounter_status'=>$encounterStart?'ambush_ready':($preRound?'preparation':'active'),'pre_round'=>$preRound&&!$encounterStart,'start_execution'=>$encounterStart,'abilities'=>[$actor=>$abilities],'allowed_targets'=>[$actor=>[$target]],'relationships'=>$relationships,'status_immunities'=>$statusImmunities,'status_scope'=>['session_id'=>$sid,'encounter_id'=>$eid],'entity_end_boundaries'=>$endBoundaries,'reactions'=>$reactions['entries'],'reaction_turns'=>$reactionTurns,'reaction_kinds'=>$reactionKinds,'redirect_targets'=>$redirectTargets]];
     }
     /** Own controls may be listed without exposing GM-only targets or their counts. */
@@ -186,10 +194,10 @@ final class AF_ACS_QueryService
         $gm=$this->access->administrator()||in_array('gm',$roles,true)||(in_array('owner',$roles,true)&&$view['session']['owner_uid']===$this->access->uid());
         $audience=new AF_ACS_AudienceService($this->repo,$this->access,$sid,$eid);
         $actors=[];$targets=[];$members=$this->repo->participants($eid,'0',201);$summonScope=$this->repo->summonProjection($sid,$eid);
-        foreach($members as $m){if($m['participation']!=='engaged')continue;if($m['kind']==='summon'&&($summonScope[$m['entity_id']]['status']??null)!=='active')continue;
+        foreach($members as $m){if($m['participation']!=='engaged'&&!(isset(json_decode($encounter['config_json'],true)['participation_policy'])&&in_array($m['participation'],['surrendered','captured'],true)))continue;if($m['kind']==='summon'&&($summonScope[$m['entity_id']]['status']??null)!=='active')continue;
             $control=$this->repo->controllerFor($sid,$m['entity_id'],$this->access->uid());$own=$control!==null;$temporary=isset($control['control_overlay']);
             if($temporary&&$audience->knowledge('entity',$m['entity_id'])['level']!=='identified')continue;
-            if($own)$actors[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$audience->name($m['entity_id'],$m['name']),'group_id'=>$m['control_group_id'],'side_id'=>$m['side_id'],'kind'=>$m['kind'],'active'=>($m['life_state']??null)==='active'];
+            if($own&&$m['participation']==='engaged')$actors[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$audience->name($m['entity_id'],$m['name']),'group_id'=>$m['control_group_id'],'side_id'=>$m['side_id'],'kind'=>$m['kind'],'active'=>($m['life_state']??null)==='active'];
             if($own||$audience->canTarget($m['entity_id']))$targets[$m['entity_id']]=['id'=>$m['entity_id'],'name'=>$audience->name($m['entity_id'],$m['name']),'side_id'=>$m['side_id'],'kind'=>$m['kind'],'active'=>($m['life_state']??null)==='active'];
         }
         foreach($targets as &$target){$target['known_to']=[];foreach($actors as $actor)if($audience->canTarget($target['id'],$actor['id']))$target['known_to'][]=$actor['id'];}unset($target);
