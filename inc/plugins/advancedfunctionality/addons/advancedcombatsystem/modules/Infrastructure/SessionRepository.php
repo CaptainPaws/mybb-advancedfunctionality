@@ -107,6 +107,11 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
             if($this->sql('UPDATE '.$this->table('sessions').' SET session_version=session_version+1,next_sequence=next_sequence+1,updated_at=? WHERE id=? AND session_version=?',[time(),$id,$version])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
             $result=['schema_version'=>1,'session_id'=>$id,'session_version'=>(string)$this->session($id)['session_version'],'event_id'=>$event]+($session['_command_result']??[]);
             $this->sql('UPDATE '.$this->table('operations').' SET status=?,operation_version=operation_version+1,result_json=? WHERE operation_key=?',['committed',self::json($result),$key]);
+            if($kind==='encounter.ambush_start' && $this instanceof AF_ACS_EncounterRepository){
+                $pending=$this->checkEndConditions($id,$result['encounter_id'],$event,$request['actor_uid']);
+                if($pending){$result['pending_resolution']=$pending;$result['status']='pending_resolution';$result['session_version']=$this->session($id)['session_version'];$result['encounter_version']=$this->encounter($id,$result['encounter_id'])['encounter_version'];
+                    $this->sql('UPDATE '.$this->table('operations').' SET result_json=? WHERE operation_key IN (?,?)',[self::json($result),$key,$request['start_operation_id']]);}
+            }
             return $result;
         });
     }

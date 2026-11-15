@@ -1801,3 +1801,73 @@ remote-owner spending and new barrier kinds are UNSUPPORTED. Active/passive
 reactions, Clock and ordinary prepared/item pipelines otherwise retain their
 existing contracts. Mixing legacy reflection rules with a typed response for the
 same incoming event is unsupported rather than assigned an invented priority.
+
+## ACS-10.1.1: typed encounter end conditions
+
+A1.27 consumer поддерживает настройки столкновения `end_conditions` со схемой
+`ic-acs.end-conditions.v1`. Это отдельный узкий encounter contract, не исполнение
+произвольного KB condition_template/predicate, текста или списка combat phases.
+Существующие KB записи автоматически такими правилами не становятся.
+
+```json
+{
+  "schema": "ic-acs.end-conditions.v1",
+  "conditions": ["last_active_side", "no_active_sides"],
+  "allow_continuation": true,
+  "mutual_outcomes": ["draw", "inconclusive"]
+}
+```
+
+Все четыре поля обязательны; неизвестные поля/токены, дубликаты и пустые списки
+отклоняются. Conditions — непустое подмножество двух указанных условий;
+mutual_outcomes — непустое подмножество `draw/inconclusive`. Списки не означают
+приоритет выбора победителя. Policy задаётся session owner/GM до первого старта
+через `end_conditions_set`, сохраняется в полном immutable encounter-config
+snapshot и не меняется во время боя. Отсутствие policy сохраняет прежнее поведение
+без придуманного default end condition. Live KB при завершении не перечитывается.
+
+Subset v1 рассматривает текущих `engaged` участников с отдельным life state.
+Для обоих условий нужны хотя бы две представленные стороны и явная `hostile`
+связь каждой пары. Allied/neutral/missing relationship не даёт выдуманного
+alliance winner. `last_active_side` выполняется, когда ровно одна сторона имеет
+хотя бы одного `active` участника. Сервер предлагает только `victory` этой
+стороны. `no_active_sides` выполняется, когда active нет ни у одной стороны;
+победитель всегда null, GM выбирает только один из закреплённых mutual_outcomes.
+`incapacitated` не превращается в `dead`; HP totals не сравниваются.
+Сдача/побег/захват и произвольные objective/round-limit правила не реализуются
+этим subset и не выводятся из текстового описания.
+
+Проверка выполняется внутри прежней механической транзакции после основного
+Resolver, реакций, prepared executions, reflect/absorb/lifesteal, связанных
+эффектов, boundaries и spawn projection. Preview/seal и GM GET не завершают бой.
+Выполнение условия создаёт отдельное immutable `encounter.pending_resolution`
+событие и versioned переход `active → pending_resolution`. Автоматического
+`completed` нет. Pending блокирует ordinary action/clock/round admission.
+
+Backend transport: `xmlhttp.php?action=af_addon_api&addon=advancedcombatsystem`.
+`outcome_status` — GM-only GET с session_id/encounter_id. POST-команды:
+
+- `end_conditions_set`: session_id, encounter_id, expected_version,
+  encounter_version, reason, operation_key, end_conditions (JSON строка policy);
+- `outcome_confirm`: те же базовые поля, resolution_id и outcome;
+- `outcome_continue`: базовые поля и resolution_id; только при
+  `allow_continuation=true`, без refill, открытия закрытого хода или повторения
+  предыдущей механики.
+
+POST требует `my_post_key`, актуальные native/session GM права, непустую reason,
+обе expected версии и operation_key. Даже native admin без session owner/GM
+не получает полномочия решения. Client winner/roll/HP/cost поля не принимаются.
+GM не может выбрать другой winner: исход проверяется по retained candidate и
+текущему авторитетному состоянию. Неподдержанный исход отклоняется.
+
+Confirmation/continuation — отдельное immutable событие и terminal operation
+receipt, связанное с resolution/pending/trigger/config snapshot. Unique completed
+encounter identity предотвращает второе завершение; replay прежнего запроса
+возвращает прежний receipt, изменённый payload под той же key отклоняется.
+Потеря ответа требует lookup/replay исходной key. Inventory reservations,
+custody и recovery obligations не освобождаются автоматически.
+
+Будущий downstream читает только `EncounterRepository::confirmedOutcome(sid,eid)`:
+null до confirmation, затем проверенные receipt/event и стабильный
+`outcome_id=acs-outcome:<encounter_id>:<confirmation_event_id>`. Этот контракт
+не генерирует loot, EXP, валюту, постоянный sync или outbox consumer.
