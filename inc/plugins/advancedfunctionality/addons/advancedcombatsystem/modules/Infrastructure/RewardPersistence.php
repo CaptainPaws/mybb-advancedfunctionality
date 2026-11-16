@@ -77,13 +77,37 @@ trait AF_ACS_RewardPersistence
     }
     public function rewardEvidence(string $sid,string $id):array
     {
-        $r=$this->rewardRow($sid,$id);$p=$r['payload'];$f=$this->rewardPlanFacts($sid,$r['encounter_id'],$p['kb_key']);
+        $r=$this->rewardRow($sid,$id);$p=$r['payload'];if(($p['source_kind']??null)==='achievement')return $this->achievementRewardEvidence($r);$f=$this->rewardPlanFacts($sid,$r['encounter_id'],$p['kb_key']);
         $saved=$this->rewardCommandReceipt($sid,$r['encounter_id'],'reward.distribute','$.reward_plan.kb_key',$p['kb_key'])??throw new RuntimeException('ACS_REWARD_INTEGRITY');
         $plan=$saved['result']['reward_plan'];$alloc=AF_ACS_RewardDistribution::allocate($f['definition'],$f['eligible'],$saved['request']['allocations']);
         if($plan['eligible']!==$f['eligible']||$plan['allocations']!==$alloc||$p['definition_hash']!==$f['definition_hash']||$p['definition_snapshot_id']!==$f['definition_snapshot_id']||$p['eligibility_hash']!==$f['eligibility_hash']||$p['outcome_id']!==$f['outcome']['outcome_id']||$p['source_event_id']!==$f['outcome']['terminal_event_id']||$p['reward_type']!==$f['definition']['reward_type']||$p['mode']!==$f['definition']['mode'])throw new RuntimeException('ACS_REWARD_INTEGRITY');
         $matched=false;foreach($plan['rewards'] as $entry)if($entry['reward_id']===$id&&$entry['payload']===$p)$matched=true;
         if(!$matched||!in_array($p['recipient'],$alloc,true)||$r['operation_key']!=='acs:reward:'.hash('sha256',$r['reward_key'].':'.$r['recipient_key'].':'.$r['reward_type']))throw new RuntimeException('ACS_REWARD_INTEGRITY');
         return $r;
+    }
+    private function achievementAwardPayload(array $row,array $body,array $pin,int $ordinal):array
+    {
+        $d=$pin['definition'];$reward=$d['reward'];
+        if($reward===null||$ordinal<=$body['before']['awards']||$ordinal>$body['after']['awards'])throw new RuntimeException('ACS_REWARD_INTEGRITY');
+        $key='achievement:'.hash('sha256',$body['achievement_key'].':'.$body['subject_kind'].':'.$body['subject']['subject_key'].':'.$ordinal);
+        return ['schema_version'=>1,'source_kind'=>'achievement','session_id'=>(string)$row['session_id'],'encounter_id'=>(string)$row['encounter_id'],'reward_key'=>$key,'reward_type'=>$reward['reward_type'],'mode'=>'each',
+            'recipient'=>['recipient_key'=>$body['subject']['subject_key'],'uid'=>$body['subject']['recipient_uid'],'control_group_id'=>null,'entity_ids'=>[],'amount_minor'=>$reward['amount_minor']],
+            'achievement_event_id'=>(string)$row['id'],'award_ordinal'=>$ordinal,'source_event_id'=>(string)$row['source_event_id'],'confirmation_ref'=>'acs-achievement:'.$row['id'].':'.$ordinal,'definition_snapshot_id'=>$pin['snapshot_id'],'definition_hash'=>$pin['hash']];
+    }
+    /** Invoked only by RewardService inside the existing audited achievement command. */
+    public function recordAchievementReward(array $session,string $contribution,int $ordinal):string
+    {
+        $this->commandWrite();$row=$this->sql('SELECT * FROM '.$this->table('achievement_events').' WHERE id=? AND session_id=?',[$contribution,$session['id']])['rows'][0]??throw new RuntimeException('ACS_REWARD_INTEGRITY');
+        if(!hash_equals($row['result_hash'],hash('sha256',$row['result_json'])))throw new RuntimeException('ACS_REWARD_INTEGRITY');
+        $body=json_decode($row['result_json'],true,64,JSON_THROW_ON_ERROR);$pin=$this->achievementDefinitionPin($session['id'],(string)$row['definition_snapshot_id'],$body['definition_hash']);
+        $p=$this->achievementAwardPayload($row,$body,$pin,$ordinal);$json=self::json($p);$ownerKey='acs:reward:'.hash('sha256',$p['reward_key'].':'.$p['recipient']['recipient_key'].':'.$p['reward_type']);
+        return $this->sql('INSERT INTO '.$this->table('rewards')." (session_id,encounter_id,reward_key,recipient_key,reward_type,status,reward_version,operation_key,payload_json,payload_hash) VALUES (?,?,?,?,?,'pending',1,?,?,?)",[$session['id'],$p['encounter_id'],$p['reward_key'],$p['recipient']['recipient_key'],$p['reward_type'],$ownerKey,$json,hash('sha256',$json)])['id'];
+    }
+    public function achievementRewardEvidence(array $r):array
+    {
+        $p=$r['payload'];$proof=$this->achievementContribution($r['session_id'],$p['achievement_event_id']);
+        $expected=$this->achievementAwardPayload($proof['row'],$proof['result'],$proof['pin'],$p['award_ordinal']);
+        if(self::json($expected)!==self::json($p)||$r['operation_key']!=='acs:reward:'.hash('sha256',$r['reward_key'].':'.$r['recipient_key'].':'.$r['reward_type']))throw new RuntimeException('ACS_REWARD_INTEGRITY');return $r;
     }
     public function prepareReward(array $s,string $id,string $version,int $ownerVersion,string $issuer):array
     {

@@ -258,7 +258,8 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         $journalPlan=$resolved->serverPlan();foreach($journalPlan['actions'] as &$step){foreach($step['effect_responses']??[] as $i=>$response)$step['effect_responses'][$i]['parent_event_id']=$event;foreach($step['strikes']??[] as $j=>$strike)foreach($strike['effect_responses']??[] as $i=>$response)$step['strikes'][$j]['effect_responses'][$i]['parent_event_id']=$event;}unset($step);
         $payload=self::json(['schema_version'=>1,'engine_version'=>AF_ACS_Resolver::VERSION,'numeric_policy'=>AF_ACS_Numeric::POLICY,
             'persistent'=>true,'submission_id'=>$row['submission_id'],'owner_receipts'=>$controls['owner_receipts']??[],'boundary_history'=>$boundaryHistory,'summary'=>$summary,'confirmation_summary'=>$controls['summary'],'plan'=>$journalPlan,
-            'dependency_fence_hash'=>$controls['fence_hash'],'initial'=>$resolved->serverInitial(),'final'=>$finalState,'changes'=>$changes]);$resultHash=hash('sha256',$payload);
+            'dependency_fence_hash'=>$controls['fence_hash'],'initial'=>$resolved->serverInitial(),'final'=>$finalState,'changes'=>$changes]
+            +(!empty(json_decode($f['encounter'][0]['config_json'],true)['achievement_sources'])?['achievement_context'=>['config_snapshot_id'=>(string)$f['encounter'][0]['config_snapshot_id'],'facts'=>$this->freezeLootEligibility($f['encounter'][0])]]:[]));$resultHash=hash('sha256',$payload);
         $visibility=self::json(['schema_version'=>1,'scope'=>'combat_participants']);
         $this->sql('INSERT INTO '.$this->table('event_details').' (event_id,schema_version,numeric_policy,payload_json,visibility_json,content_hash) VALUES (?,1,?,?,?,?)',
             [$event,AF_ACS_Numeric::POLICY,$payload,$visibility,hash('sha256',$payload."\n".$visibility)]);

@@ -32,6 +32,7 @@ $GLOBALS['acsLootParticipantsFixture']=static function(array $f):void {
         $service->command('reward_configure',$request('reward_configure_'.str_replace('-','_',$key))+['kb_key'=>$kb]);$defs[$kb]=$d;
     }
     $kb=array_key_first($defs);itemFail(fn()=>$service->command('reward_distribute',$request('reward_before_outcome01')+['kb_key'=>$kb,'allocations'=>[]]),'ACS_REWARD_CONFIRMED_OUTCOME_REQUIRED');
+    if(isset($GLOBALS['acsAchievementConfigureFixture']))($GLOBALS['acsAchievementConfigureFixture'])(get_defined_vars());
     $GLOBALS['rewardDefinitions']=$defs;
     $link->query('UPDATE t_af_acs_operations SET updated_at=updated_at-120');
 };
@@ -119,6 +120,7 @@ $GLOBALS['acsLootAllocationFixture']=static function(array $f):void {
         snapshot_assert((int)$link->query("SELECT COUNT(*) FROM t_af_balance_external_operations")->fetch_row()[0]===(int)$link->query("SELECT COUNT(*) FROM t_af_acs_rewards WHERE status='issued'")->fetch_row()[0],'Duplicate/missing owner receipt');
     }
     $after=$captureAll();foreach(['snapshots','entity_states','resources','sealed_actions','rolls','combat_results','combat_receipts','turns','entity_turns','cooldowns','inv_items','inv_owner_state','inv_reservations'] as $table)snapshot_assert($base[$table]===$after[$table],'Rewards changed active/mechanical snapshot or Inventory '.$table);
+    if(isset($GLOBALS['acsAchievementEvaluationFixture']))($GLOBALS['acsAchievementEvaluationFixture'])(get_defined_vars());
     echo 'ACS reward distribution SQL '.(getenv('ACS_REWARD_SYNC_FIXTURE')?'BLOCKED CS sync':'each/split/manual, frozen groups+pet, exact Balance, partial/offline, lost ACK, forged receipt, ACK rollback, closed/archive recovery').' passed'.PHP_EOL;
 };
 require __DIR__.'/acs_loot_sql.php';

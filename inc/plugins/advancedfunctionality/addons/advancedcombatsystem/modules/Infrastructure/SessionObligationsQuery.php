@@ -82,6 +82,11 @@ class AF_ACS_SessionObligationsQuery extends AF_ACS_Repository
             $add(match($r['status']){'pending','prepared'=>'pending','recovery_required'=>'recovery_required',default=>'explicitly_blocked'},'reward',(string)$r['id'],match($r['status']){'pending','prepared'=>'reward.balance_issue','recovery_required'=>'reward.balance_lookup',default=>null});
         });
         $n=$this->sql('SELECT COUNT(*) AS n FROM '.$this->table('rewards')." WHERE session_id=? AND status='issued'",[$sid])['rows'][0]['n'];if((int)$n>0)$add('confirmed_completed','reward','records:'.$n);
+        require_once __DIR__.'/EncounterRepository.php';
+        $achievementRepo=new AF_ACS_EncounterRepository($this->connection);
+        foreach($achievementRepo->achievementObligations($sid) as $a)$add($a['state'],'achievement_source',$a['reference'],$a['scope']);
+        $scan('achievement_review','SELECT p.id FROM '.$this->table('achievement_progress')." p WHERE JSON_UNQUOTE(JSON_EXTRACT(p.progress_json,'$.review_required'))='true' AND EXISTS (SELECT 1 FROM ".$this->table('achievement_events').' a WHERE a.progress_id=p.id AND a.session_id=?) ORDER BY p.id LIMIT 201',static fn($r)=>$add('pending','achievement_review',(string)$r['id'],'achievement.review'));
+        $scan('compensation','SELECT id FROM '.$this->table('correction_reviews')." WHERE session_id=? AND JSON_UNQUOTE(JSON_EXTRACT(result_json,'$.compensation_status'))='blocked' LIMIT 201",static fn($r)=>$add('explicitly_blocked','compensation',(string)$r['id']));
         foreach($this->additionalSources() as $source){
             if(!$source instanceof AF_ACS_SessionObligationSource)throw new RuntimeException('ACS_OBLIGATION_SOURCE_INVALID');
             $rows=$source->inspectSession($sid);$scope=$source->recoveryScope();
