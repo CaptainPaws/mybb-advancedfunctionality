@@ -641,12 +641,13 @@ function af_apui_get_profile_avatars(int $uid, bool $fallbackSecondaryToPrimary 
 function af_apui_render_atf_profile_navigation(array $context): string
 {
     $labels = ['info' => 'Основная информация',
-        'rewards' => 'Ачивки и Подарки', 'timeline' => 'Хронология', 'activity' => 'Активность', 'extra'=>'Дополнительно'];
+        'combat' => 'Боевая статистика', 'rewards' => 'Ачивки и Подарки', 'timeline' => 'Хронология', 'activity' => 'Активность', 'extra'=>'Дополнительно'];
     $items = [];
     $sections = (array)($context['sections'] ?? []);
     $sections['info'] = (string)($sections['info'] ?? '')
         . implode('', (array)($context['native'] ?? []))
         . implode('', (array)($context['providers'] ?? []));
+    if (af_is_addon_enabled('advancedcombatsystem')) $sections['combat'] = 'lazy';
     $sections['extra'] = (string)($GLOBALS['af_apui_profile_extra'] ?? '');
     foreach ($labels as $key => $label) {
         $html = $sections[$key] ?? '';
@@ -1964,7 +1965,7 @@ function af_apui_maybe_serve_lazy_profile_tab(): void
     if ($tab === '') return;
     if (empty($mybb->usergroup['canviewprofiles']) || (isset($mybb->usergroup['canview']) && empty($mybb->usergroup['canview']))) { http_response_code(403); echo 'Профиль недоступен.'; exit; }
 
-    $allowed = ['sheet', 'timeline', 'activity', 'rewards', 'quick'];
+    $allowed = ['sheet', 'timeline', 'activity', 'rewards', 'quick', 'combat'];
     if (!in_array($tab, $allowed, true)) {
         http_response_code(400);
         echo 'Неизвестная вкладка.';
@@ -1994,6 +1995,9 @@ function af_apui_maybe_serve_lazy_profile_tab(): void
             $html = $active === null
                 ? af_apui_build_member_profile_placeholder_tab('Лист персонажа', 'Лист персонажа пока не создан.', '')
                 : af_apui_build_member_profile_sheet_tab($uid, af_apui_get_charactersheet_postbit_payload($uid));
+        } elseif ($tab === 'combat') {
+            require_once AF_APUI_BASE . 'modules/combat_statistics.php';
+            $html = af_apui_render_combat_statistics($uid);
         } elseif ($tab === 'rewards') {
             $html = af_apui_render_profile_rewards_tab($uid);
         } elseif ($tab === 'timeline') {

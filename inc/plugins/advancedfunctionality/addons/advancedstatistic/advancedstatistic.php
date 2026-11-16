@@ -8,6 +8,8 @@ if (!defined('IN_MYBB')) {
     die('Direct initialization of this file is not allowed.');
 }
 
+require_once __DIR__.'/modules/combat_statistics.php';
+
 /* -------------------- Install / Uninstall -------------------- */
 
 function af_advancedstatistic_install(): void

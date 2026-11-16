@@ -286,6 +286,15 @@ IC-EDITOR разделяется по назначению: UI подготов�
 
 ## 13. IC-STATS — AdvancedStatistic
 
+**IMPLEMENTED ACS-10.4.2.** Отдельные publishCompletedAggregate/lookup, verified
+producer outbox/hash, versioned replacement и durable receipts; explicit GM POST
+statistics_sync обрабатывает refresh/delivery pending. IC-PROFILE v1: read-only
+StatisticsService::profile и отдельный APUI lazy combat tab (minimal ATF/APUI shells).
+Visibility/secrecy проверяются до totals/history/filter choices. Подробные API,
+первичная фиксация visibility, bounded limits и installed prerequisites:
+[ACS_10_4_2_IMPLEMENTATION.md](../design/acs/ACS_10_4_2_IMPLEMENTATION.md).
+Исторический audit ниже описывает состояние до реализации consumer.
+
 **EXISTING.** `advancedstatistic/advancedstatistic.php` строит форумную статистику index.php, online/recent threads и данные AdvancedPostCounter; `af_advancedstatistic_get_board_stats(): array`. Combat ingest API не найден. Наличие слова Statistic не означает хранения боевых агрегатов.
 
 **PROPOSED** этап 10: `AF_ACS_StatisticsAdapter::publishCompletedAggregate(operation_key,encounter_id,aggregate_version,visibility,payload)` и consumer в AdvancedStatistic. Payload содержит actual_hp_damage/barrier_absorption/effective_healing/received_damage/hits/crits/reactions/intercepts/statuses/AP/items, entity/control_group без двойного учёта. Только завершённые подтверждённые encounters. correction_event создаёт новую aggregate_version; upsert одной версии идемпотентен. Ошибка consumer остаётся outbox pending, ACS-архив доступен независимо. Нет рейтинга вклада и неявной связи с наградами.
@@ -310,7 +319,7 @@ IC-EDITOR разделяется по назначению: UI подготов�
 | MyBB publish coordinator, form extension | PROPOSED | ACS gateway + scoped Editor/Theme; 4 | атомарный combat_post |
 | Inventory global reservations/idempotent ops | PROPOSED | Inventory writers + ACS adapter; 6 | предметные затраты/custody/prepared items/loot issue |
 | Idempotent balance/permanent sync | PROPOSED | balance/CS/KB gateways; 10 | соответствующие постоянные награды |
-| Combat aggregate consumer/profile tab | PROPOSED | AdvancedStatistic/APUI; 10–11 | представление статистики, не commit боя |
+| Combat aggregate consumer/profile tab | IMPLEMENTED (10.4.2), styling 11 | AdvancedStatistic/APUI | versioned consumer, pending outbox, read-only lazy tab; не commit боя |
 | AAM types, dedupe delivery ack | PROPOSED | AAM + ACS outbox; 11 | уведомления, не commit боя |
 | Общий AF state transport | PROPOSED, необязателен | отдельный транспортный контракт; 11 | не блокирует: fallback A1.88 обязателен |
 
