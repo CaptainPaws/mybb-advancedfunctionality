@@ -29,6 +29,7 @@ function af_advancedcombatsystem_init(): string
             $plugins->add_hook('global_end','af_advancedcombatsystem_register_thread_component');
         }
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_loot')$plugins->add_hook('misc_start','af_advancedcombatsystem_loot_page');
+        if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_archive')$plugins->add_hook('misc_start','af_advancedcombatsystem_archive_page');
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_recovery')$plugins->add_hook('misc_start','af_advancedcombatsystem_recovery_page');
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_sessions')$plugins->add_hook('misc_start','af_advancedcombatsystem_sessions_page');
     }
@@ -161,6 +162,12 @@ function af_advancedcombatsystem_session_settings(): void
     af_ensure_settinggroup('af_acs_sessions','ACS: Сессии','Права создания и значения только для новых сессий.');
     af_ensure_setting('af_acs_sessions','af_acs_session_gm_groups','Группы мастеров ACS','ID групп через запятую. Пусто: создание только через права ACP AF.','text','',1);
     af_ensure_setting('af_acs_sessions','af_acs_default_member_role','Роль новых участников','Значение копируется в конфигурацию новой сессии. Старые сессии не изменяются.',"select\nobserver=Наблюдатель\nplayer=Игрок",'observer',2);
+    global $db;
+    foreach(['af_acs_archive_cursor_key'=>['Ключ курсоров архива','Серверный секрет. Не публиковать; смена инвалидирует прежние курсоры.',bin2hex(random_bytes(32))],
+        'af_acs_archive_export_groups'=>['Расширенный экспорт ACS','Отдельное право: группы через запятую. Также нужны session GM и native доступ. Пусто — запрещено.','']] as $name=>[$title,$description,$default]){
+        $old=$db->fetch_array($db->simple_select('settings','value',"name='".$db->escape_string($name)."'",['limit'=>1]));
+        af_ensure_setting('af_acs_sessions',$name,$title,$description,'text',$old?(string)$old['value']:$default,3);
+    }
     af_rebuild_and_reload_settings();
 }
 
@@ -168,6 +175,7 @@ function af_advancedcombatsystem_session_settings(): void
 function af_advancedcombatsystem_xmlhttp(): void
 {
     global $mybb;
+    if(in_array($mybb->get_input('op'),['archive_events','archive_policy','archive_export','archive_manifest'],true)){require_once __DIR__.'/modules/Presentation/ArchiveController.php';AF_ACS_ArchiveController::dispatch();}
     if(in_array($mybb->get_input('op'),['achievement_status','achievement_configure','achievement_evaluate','achievement_migrate','achievement_review','correction_event','correction_status'],true)){require_once __DIR__.'/modules/Presentation/AchievementController.php';AF_ACS_AchievementController::dispatch();}
     if(in_array($mybb->get_input('op'),['reward_status','reward_configure','reward_distribute','reward_issue','reward_recover'],true)){require_once __DIR__.'/modules/Presentation/RewardController.php';AF_ACS_RewardController::dispatch();}
     if(in_array($mybb->get_input('op'),['loot_issue','loot_issue_status','loot_issue_recover'],true)){require_once __DIR__.'/modules/Presentation/LootIssueController.php';AF_ACS_LootIssueController::dispatch();}
@@ -348,4 +356,16 @@ function af_advancedcombatsystem_loot_page():void
     catch(Throwable){http_response_code(403);$body='<p>Добыча недоступна. Проверьте текущие права сессии и доступ к теме.</p>';}
     header('Cache-Control: private, no-store');
     output_page('<html><head><title>ACS · Распределение добычи</title>'.$headerinclude.'</head><body>'.$header.'<main>'.$body.'</main>'.$footer.'</body></html>');exit;
+}
+
+function af_advancedcombatsystem_archive_page():void
+{
+    global $mybb,$db,$header,$headerinclude,$footer;require_once __DIR__.'/modules/Presentation/ArchivePage.php';
+    try{$service=new AF_ACS_ArchiveService($db,new AF_ACS_SessionAccess);
+        if($mybb->request_method==='post'){$r=$_POST;foreach(['action','my_post_key'] as $k)unset($r[$k]);$service->policy($r);$params=['session_id'=>$r['session_id'],'encounter_id'=>$r['encounter_id']];}
+        else $params=array_map(static fn($v)=>is_string($v)?$v:'',$_GET);
+        $body=AF_ACS_ArchivePage::render($service,$params);
+    }
+    catch(Throwable){http_response_code(403);$body='<p>Архив недоступен. Проверьте права и параметры фильтра.</p>';}
+    header('Cache-Control: private, no-store');output_page('<html><head><title>ACS · Архив</title>'.$headerinclude.'</head><body>'.$header.'<main>'.$body.'</main>'.$footer.'</body></html>');exit;
 }

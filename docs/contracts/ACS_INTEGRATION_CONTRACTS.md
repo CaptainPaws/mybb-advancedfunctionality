@@ -452,3 +452,36 @@ Balance credit is not a compensation/debit API; Inventory property operations ar
 not an approved automatic clawback contract; CS still lacks a durable sync API.
 All requested external compensation remains explicitly blocked. No direct owner
 SQL, MyBB post edit, EXP reduction or Inventory deletion is performed.
+
+### ACS-10.4.1 — immutable archive/query/export
+
+ArchiveQuery is an explicit lazy reader of retained ACS events/details, terminal
+results/receipts, post_links and pinned snapshots. Native posts.message is never
+read or resolved; a deleted native post removes its navigation URL, not the ACS
+result. Current native thread/session membership and original post-link forum
+permissions remain mandatory. A missing native thread fails closed; no public
+archive bypass is inferred from a known encounter/PID.
+
+The default keep_hidden preserves the status-only non-GM disclosure ceiling.
+A completed encounter's separate audited archive policy may reveal partial
+results or the whitelisted full combat projection. Neither reveal mode grants
+session membership or discloses raw owner envelopes, sealed submissions or hidden
+achievement progress. Administrative events stay GM-only. Ordinary exports use
+the member policy projection even for a GM; extended export additionally requires
+the dedicated af_acs_archive_export_groups permission and current session GM.
+
+Archive ordering preserves native event_sequence. Legacy audit companions with
+NULL event_sequence use immutable session_sequence causal order; no old row is
+renumbered. Keyset pages freeze a high-water mark and use encrypted, authenticated,
+viewer/filter/policy-bound cursors. Source policy or role changes invalidate the
+cursor. Exports are bounded pages, with continuation in X-ACS-Next-Cursor rather
+than a hidden whole-journal fetch. JSON/CSV bytes contain only the authorized DTO;
+CSV fields are quoted and formula-like prefixes neutralized.
+
+Extended manifests paginate pinned config/participant snapshots, loot and ordinary
+reward statuses; custody/obligations are explicitly labeled current session
+scopes. Snapshot bundles require access to all original linked forum scopes.
+Achievement-source reward rows/global achievement state are not dumped through
+this general archive; their existing typed permission boundaries remain separate.
+Corrections appear beside their original event with the current derived revision,
+without replacing the source or recalculating through Resolver.
