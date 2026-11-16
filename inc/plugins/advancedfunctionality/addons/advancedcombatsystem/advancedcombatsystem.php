@@ -175,7 +175,7 @@ function af_advancedcombatsystem_session_settings(): void
 function af_advancedcombatsystem_xmlhttp(): void
 {
     global $mybb;
-    if(in_array($mybb->get_input('op'),['statistics_sync','statistics_profile'],true)){require_once __DIR__.'/modules/Presentation/StatisticsController.php';AF_ACS_StatisticsController::dispatch();}
+    if(in_array($mybb->get_input('op'),['statistics_sync','statistics_profile','statistics_status','statistics_recover'],true)){require_once __DIR__.'/modules/Presentation/StatisticsController.php';AF_ACS_StatisticsController::dispatch();}
     if(in_array($mybb->get_input('op'),['archive_events','archive_policy','archive_export','archive_manifest'],true)){require_once __DIR__.'/modules/Presentation/ArchiveController.php';AF_ACS_ArchiveController::dispatch();}
     if(in_array($mybb->get_input('op'),['achievement_status','achievement_configure','achievement_evaluate','achievement_migrate','achievement_review','correction_event','correction_status'],true)){require_once __DIR__.'/modules/Presentation/AchievementController.php';AF_ACS_AchievementController::dispatch();}
     if(in_array($mybb->get_input('op'),['reward_status','reward_configure','reward_distribute','reward_issue','reward_recover'],true)){require_once __DIR__.'/modules/Presentation/RewardController.php';AF_ACS_RewardController::dispatch();}

@@ -286,6 +286,12 @@ IC-EDITOR разделяется по назначению: UI подготов�
 
 ## 13. IC-STATS — AdvancedStatistic
 
+**INTEGRATED ACS-10.4.3.** Producer pending statistics включены в lifecycle
+obligations (`statistics.sync`), `RecoveryService::inspectStatistics/recoverStatistics`
+и GM-only `statistics_status` GET / `statistics_recover` POST. Archived recovery
+сохраняет producer visibility; consumer outage не откатывает бой/owner rewards.
+[Stage 10 integration, owner boundaries и проверенная матрица](../design/acs/ACS_10_4_3_IMPLEMENTATION.md).
+
 **IMPLEMENTED ACS-10.4.2.** Отдельные publishCompletedAggregate/lookup, verified
 producer outbox/hash, versioned replacement и durable receipts; explicit GM POST
 statistics_sync обрабатывает refresh/delivery pending. IC-PROFILE v1: read-only

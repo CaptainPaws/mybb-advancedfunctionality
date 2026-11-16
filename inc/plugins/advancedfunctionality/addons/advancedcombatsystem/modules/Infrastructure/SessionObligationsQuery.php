@@ -87,6 +87,14 @@ class AF_ACS_SessionObligationsQuery extends AF_ACS_Repository
         foreach($achievementRepo->achievementObligations($sid) as $a)$add($a['state'],'achievement_source',$a['reference'],$a['scope']);
         $scan('achievement_review','SELECT p.id FROM '.$this->table('achievement_progress')." p WHERE JSON_UNQUOTE(JSON_EXTRACT(p.progress_json,'$.review_required'))='true' AND EXISTS (SELECT 1 FROM ".$this->table('achievement_events').' a WHERE a.progress_id=p.id AND a.session_id=?) ORDER BY p.id LIMIT 201',static fn($r)=>$add('pending','achievement_review',(string)$r['id'],'achievement.review'));
         $scan('compensation','SELECT id FROM '.$this->table('correction_reviews')." WHERE session_id=? AND JSON_UNQUOTE(JSON_EXTRACT(result_json,'$.compensation_status'))='blocked' LIMIT 201",static fn($r)=>$add('explicitly_blocked','compensation',(string)$r['id']));
+        // Noncritical statistics deliveries survive close/archive, with a real recovery scope.
+        // Read producer outbox only; an unavailable consumer is not a failed combat/reward.
+        $scan('statistics','SELECT o.message_key,o.kind,o.payload_hash,o.payload_json,e.id AS encounter_id FROM '.$this->table('outbox').' o JOIN '.$this->table('encounters')." e ON e.id=JSON_UNQUOTE(JSON_EXTRACT(o.payload_json,'$.encounter_id')) WHERE e.session_id=? AND o.kind IN ('statistics.refresh','statistics.aggregate') AND o.status='pending' ORDER BY o.message_key LIMIT 201",static function($r)use($sid,$add){
+            $valid=hash_equals($r['payload_hash'],hash('sha256',$r['payload_json']));
+            $body=json_decode($r['payload_json'],true,64,JSON_THROW_ON_ERROR);
+            $valid=$valid&&($r['kind']==='statistics.refresh'?($body['session_id']??null):($body['payload']['session_id']??null))===$sid;
+            $add($valid?'pending':'explicitly_blocked','statistics',$r['message_key'],$valid?'statistics.sync':null);
+        });
         foreach($this->additionalSources() as $source){
             if(!$source instanceof AF_ACS_SessionObligationSource)throw new RuntimeException('ACS_OBLIGATION_SOURCE_INVALID');
             $rows=$source->inspectSession($sid);$scope=$source->recoveryScope();

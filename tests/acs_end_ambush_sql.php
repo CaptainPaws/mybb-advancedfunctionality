@@ -14,6 +14,7 @@ $GLOBALS['acsAmbushApiFixture']=static function(array $f):void {
     snapshot_assert($result['prepared_executions'][0]['outcome']==='executed'&&count($result['prepared_executions'][0]['owner_receipts'])===2,'Ambush skipped owner child');
     snapshot_assert($ambush->command('start',$r)===$result&&$captureAll()===$after,'Ambush ending replay changed state');
     snapshot_assert(count($after['rounds'])===1&&$after['native_posts']===$before['native_posts'],'Ambush end created post/round');
+    if(isset($GLOBALS['acsStage10AdvancedFixture']))($GLOBALS['acsStage10AdvancedFixture'])(get_defined_vars());
     echo "ACS end ambush SQL: paid start child/items before pending, one roster, immutable start receipt and replay passed\n";
 };
 require __DIR__.'/acs_ambush_execution_sql.php';
