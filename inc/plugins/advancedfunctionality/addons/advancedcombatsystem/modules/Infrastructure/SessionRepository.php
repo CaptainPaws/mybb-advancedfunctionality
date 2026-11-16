@@ -127,6 +127,12 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
                 if($pending){$result['pending_resolution']=$pending;$result['status']='pending_resolution';$result['session_version']=$this->session($id)['session_version'];$result['encounter_version']=$this->encounter($id,$result['encounter_id'])['encounter_version'];
                     $this->sql('UPDATE '.$this->table('operations').' SET result_json=? WHERE operation_key IN (?,?)',[self::json($result),$key,$request['start_operation_id']]);}
             }
+            // Durable pointer only. Aggregation/consumer failure cannot undo the confirmed outcome.
+            if(in_array($kind,['encounter.outcome_confirm','correction.review'],true)){
+                $eid=$result['encounter_id'];$message=self::json(['schema_version'=>1,'session_id'=>$id,'encounter_id'=>$eid,'source_sequence'=>$sequence]);
+                $this->sql('INSERT INTO '.$this->table('outbox').' (message_key,submission_id,kind,payload_hash,payload_json,status,available_at,created_at) VALUES (?,?,?,?,?,?,?,?)',
+                    ['statistics:refresh:'.$event,'statistics:'.$event,'statistics.refresh',hash('sha256',$message),$message,'pending',time(),time()]);
+            }
             return $result;
         });
     }
