@@ -10,11 +10,28 @@ final class AF_ACS_StatisticsService
     private AF_ACS_EncounterRepository $repo;
     public function __construct(private object $database,private AF_ACS_SessionAccess $access)
     {$this->stats=new AF_ACS_StatisticsRepository($database);$this->repo=new AF_ACS_EncounterRepository($database);}
+    private function authorize(string $sid,string $eid):void
+    {
+        if(!af_is_addon_enabled('advancedcombatsystem')||!empty($GLOBALS['af_acs_deactivated']))throw new RuntimeException('ACS_DISABLED');
+        $s=$this->repo->session($sid)??throw new RuntimeException('ACS_SESSION_UNAVAILABLE');$this->access->thread($s['tid']);
+        if(!AF_ACS_AuthorizationService::sessionGm($s,$this->repo->roles($sid,$this->access->uid()),$this->access->uid()))throw new RuntimeException('ACS_GM_REQUIRED');
+        if(!$this->repo->encounter($sid,$eid))throw new RuntimeException('ACS_STATISTICS_UNAVAILABLE');
+    }
+    public function status(string $sid,string $eid):array
+    {
+        $sid=AF_ACS_Repository::integer($sid);$eid=AF_ACS_Repository::integer($eid);$this->authorize($sid,$eid);
+        return $this->stats->publicationState($sid,$eid);
+    }
+    /** Archived recovery retains the producer's visibility; no client privacy change or new engine. */
+    public function recover(string $sid,string $eid):array
+    {
+        $this->access->csrf();$state=$this->status($sid,$eid);
+        return $this->synchronize($state['session_id'],$state['encounter_id'],$state['visibility']);
+    }
     public function synchronize(string $sid,string $eid,string $visibility):array
     {
         $this->access->csrf();$sid=AF_ACS_Repository::integer($sid);$eid=AF_ACS_Repository::integer($eid);
-        $s=$this->repo->session($sid)??throw new RuntimeException('ACS_SESSION_UNAVAILABLE');$this->access->thread($s['tid']);
-        if(!AF_ACS_AuthorizationService::sessionGm($s,$this->repo->roles($sid,$this->access->uid()),$this->access->uid()))throw new RuntimeException('ACS_GM_REQUIRED');
+        $this->authorize($sid,$eid);
         $result=$this->stats->refresh($sid,$eid,$visibility);$pending=false;
         foreach($this->stats->pending($eid) as $row){
             try{

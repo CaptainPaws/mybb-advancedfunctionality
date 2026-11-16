@@ -18,6 +18,7 @@ $GLOBALS['acsPreparedPhaseAssert']=static function(array $f):void {
     $r=['session_id'=>$sid,'encounter_id'=>'1','expected_version'=>$repo->session($sid)['session_version'],'encounter_version'=>$repo->encounter($sid,'1')['encounter_version'],'operation_key'=>'end_prepared_continue1','reason'=>'Continuation forbidden by pinned rules','resolution_id'=>$pending['resolution_id']];
     itemFail(fn()=>(new AF_ACS_EncounterService($repo,$access))->command('outcome_continue',$r),'ACS_END_CONTINUATION_DENIED');
     snapshot_assert($writer->commit($parent['submission_id'],$parent['state_version'])===$receipt&&$captureAll()===$after,'Prepared final blow repeated');
+    if(isset($GLOBALS['acsStage10AdvancedFixture']))($GLOBALS['acsStage10AdvancedFixture'])(get_defined_vars());
     echo "ACS end prepared SQL: primary plus paid causal child before pending, no second item consume, late rollback, forbidden continuation and fixed replay passed\n";
 };
 require __DIR__.'/acs_prepared_execution_sql.php';

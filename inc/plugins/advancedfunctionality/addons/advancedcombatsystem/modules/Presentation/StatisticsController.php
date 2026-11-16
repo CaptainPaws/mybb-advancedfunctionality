@@ -16,6 +16,10 @@ final class AF_ACS_StatisticsController
                 if($mybb->request_method!=='post')throw new RuntimeException('ACS_POST_REQUIRED');
                 $keys=['session_id','encounter_id','visibility'];if(array_diff(array_keys($r),$keys)||array_diff($keys,array_keys($r)))throw new RuntimeException('ACS_STATISTICS_INPUT_INVALID');
                 $data=$service->synchronize($r['session_id'],$r['encounter_id'],$r['visibility']);
+            }elseif(in_array($op,['statistics_status','statistics_recover'],true)){
+                $keys=['session_id','encounter_id'];if(array_diff(array_keys($r),$keys)||array_diff($keys,array_keys($r)))throw new RuntimeException('ACS_STATISTICS_INPUT_INVALID');
+                if($mybb->request_method!==($op==='statistics_status'?'get':'post'))throw new RuntimeException('ACS_POST_REQUIRED');
+                $data=$op==='statistics_status'?$service->status($r['session_id'],$r['encounter_id']):$service->recover($r['session_id'],$r['encounter_id']);
             }elseif($op==='statistics_profile'){
                 if($mybb->request_method!=='get'||!isset($r['owner_uid'])||empty($mybb->usergroup['canviewprofiles'])||empty($mybb->usergroup['canview']))throw new RuntimeException('ACS_STATISTICS_ACCESS_DENIED');
                 $uid=$r['owner_uid'];unset($r['owner_uid']);$data=$service->profile($uid,$r);

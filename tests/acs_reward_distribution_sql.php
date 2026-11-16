@@ -42,6 +42,7 @@ $GLOBALS['acsLootAllocationFixture']=static function(array $f):void {
     $service=new AF_ACS_RewardService($db,$access);$groups=$GLOBALS['rewardGroups'];$defs=$GLOBALS['rewardDefinitions'];$plans=[];
     $link->query('UPDATE t_af_acs_operations SET updated_at=updated_at-120');
     $requestReward=static fn($key,$kb,$alloc=[])=>['session_id'=>$sid,'encounter_id'=>'1','expected_version'=>$repo->session($sid)['session_version'],'encounter_version'=>$repo->encounter($sid,'1')['encounter_version'],'operation_key'=>$key,'reason'=>'Pinned reward fixture','kb_key'=>$kb,'allocations'=>$alloc];
+    if(isset($GLOBALS['acsStage10LootFixture']))($GLOBALS['acsStage10LootFixture'])(get_defined_vars());
     // Current ownership/participation/KB mutation cannot rewrite already frozen eligibility.
     $link->query('UPDATE t_af_acs_control_groups SET owner_uid=9,group_version=group_version+1 WHERE id='.substr($groups[1],6));
     $link->query("UPDATE t_af_kb_entries SET active=0 WHERE id>=2100");
@@ -120,6 +121,7 @@ $GLOBALS['acsLootAllocationFixture']=static function(array $f):void {
         snapshot_assert((int)$link->query("SELECT COUNT(*) FROM t_af_balance_external_operations")->fetch_row()[0]===(int)$link->query("SELECT COUNT(*) FROM t_af_acs_rewards WHERE status='issued'")->fetch_row()[0],'Duplicate/missing owner receipt');
     }
     $after=$captureAll();foreach(['snapshots','entity_states','resources','sealed_actions','rolls','combat_results','combat_receipts','turns','entity_turns','cooldowns','inv_items','inv_owner_state','inv_reservations'] as $table)snapshot_assert($base[$table]===$after[$table],'Rewards changed active/mechanical snapshot or Inventory '.$table);
+    if(isset($GLOBALS['acsStage10PaidFixture']))($GLOBALS['acsStage10PaidFixture'])(get_defined_vars());
     if(isset($GLOBALS['acsAchievementEvaluationFixture']))($GLOBALS['acsAchievementEvaluationFixture'])(get_defined_vars());
     echo 'ACS reward distribution SQL '.(getenv('ACS_REWARD_SYNC_FIXTURE')?'BLOCKED CS sync':'each/split/manual, frozen groups+pet, exact Balance, partial/offline, lost ACK, forged receipt, ACK rollback, closed/archive recovery').' passed'.PHP_EOL;
 };

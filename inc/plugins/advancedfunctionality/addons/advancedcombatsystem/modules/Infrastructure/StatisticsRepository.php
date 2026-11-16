@@ -75,6 +75,12 @@ final class AF_ACS_StatisticsRepository extends AF_ACS_Repository
             return ['aggregate_version'=>(string)$source,'operation_key'=>$key];
         });
     }
+    public function publicationState(string $sid,string $eid):array
+    {
+        $row=$this->sql('SELECT aggregate_version,visibility FROM '.$this->table('statistics').' WHERE encounter_id=? LIMIT 1',[$eid])['rows'][0]??null;
+        $pending=$this->sql('SELECT kind,COUNT(*) AS n FROM '.$this->table('outbox')." WHERE status='pending' AND kind IN ('statistics.refresh','statistics.aggregate') AND JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.encounter_id'))=? GROUP BY kind",[$eid])['rows'];
+        return ['schema_version'=>1,'session_id'=>$sid,'encounter_id'=>$eid,'aggregate_version'=>$row?(string)$row['aggregate_version']:null,'visibility'=>$row['visibility']??'private','pending'=>$pending];
+    }
     public function pending(string $eid):array
     {return $this->sql('SELECT * FROM '.$this->table('outbox')." WHERE kind='statistics.aggregate' AND status='pending' AND JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.encounter_id'))=? ORDER BY created_at,message_key LIMIT 20",[$eid])['rows'];}
     public function acknowledge(string $key,string $hash):void

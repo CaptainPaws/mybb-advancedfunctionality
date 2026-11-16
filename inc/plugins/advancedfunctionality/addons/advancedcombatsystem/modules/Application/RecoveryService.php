@@ -142,4 +142,9 @@ final class AF_ACS_RecoveryService
     public function recoverReward(string $sid,string $id,string $expectedOperationVersion):array
     {require_once __DIR__.'/RewardService.php';return (new AF_ACS_RewardService($this->database,$this->access))->recover($sid,$id,$expectedOperationVersion);}
 
+    public function inspectStatistics(string $sid,string $eid):array
+    {require_once __DIR__.'/StatisticsService.php';return (new AF_ACS_StatisticsService($this->database,$this->access))->status($sid,$eid);}
+    public function recoverStatistics(string $sid,string $eid):array
+    {require_once __DIR__.'/StatisticsService.php';return (new AF_ACS_StatisticsService($this->database,$this->access))->recover($sid,$eid);}
+
 }

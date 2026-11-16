@@ -79,6 +79,7 @@ $GLOBALS['acsArchiveFixture']=static function(array $f):void {
     $after=$captureAll();foreach(['combat_results','combat_receipts','sealed_actions','rolls','entity_states','resources','snapshots','inv_items','loot_pools','loot_entries','turns','entity_turns','cooldowns'] as $table)snapshot_assert($before[$table]===$after[$table],'Statistics mutated mechanical source '.$table);
     $retained=array_column($link->query('SELECT * FROM t_af_acs_events')->fetch_all(MYSQLI_ASSOC),null,'id');foreach($originalEvents as $e)snapshot_assert($retained[$e['id']]===$e,'Statistics rewrote immutable source');
     $migrationBefore=$fingerprint();$migrations->run();$migrations->run();snapshot_assert($migrationBefore===$fingerprint(),'Migration replay changed populated statistics/receipts/outbox');
+    if(isset($GLOBALS['acsStage10ArchiveFixture']))($GLOBALS['acsStage10ArchiveFixture'])(get_defined_vars());
     echo "ACS statistics SQL: completed/active, two encounters, outbox outage, replay/lost ACK, correction/stale version, hidden/private/public, profile read-only and source immutability passed\n";
 };
 require __DIR__.'/acs_achievements_reviews_sql.php';
