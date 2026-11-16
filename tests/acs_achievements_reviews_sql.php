@@ -97,6 +97,7 @@ $GLOBALS['acsAchievementEvaluationFixture']=static function(array $f):void {
     $oldEvents=array_column($after['events'],null,'id');foreach($stable['events'] as $event)snapshot_assert($oldEvents[$event['id']]===$event,'Original event changed');
     $obligations=$sessions->view($sid,true)['outstanding_obligations'];snapshot_assert(array_filter($obligations['explicitly_blocked'],fn($x)=>$x['source']==='compensation')&&array_filter($obligations['pending'],fn($x)=>$x['source']==='achievement_review'),'Review/blocked compensation obligations disappeared');
     snapshot_assert($repo->session($sid)['status']==='archived','Achievement/correction reopened archived session');$migrations->run();
+    if(isset($GLOBALS['acsArchiveFixture']))($GLOBALS['acsArchiveFixture'])(get_defined_vars());
     echo "ACS achievements/reviews SQL: one_time/progressive/repeatable, confirmed timing, group/pet, hidden DTO, explicit version migration, real reward once, append-only correction/revision, blocked clawback, rollback/replay and archive passed\n";
 };
 require __DIR__.'/acs_reward_distribution_sql.php';

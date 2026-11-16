@@ -43,6 +43,19 @@ class AF_ACS_SessionAccess
         }
         return $thread;
     }
+    public function archiveExtended(string $tid):bool
+    {
+        global $mybb;$this->thread($tid);
+        $allowed=array_filter(array_map('trim',explode(',',(string)($mybb->settings['af_acs_archive_export_groups']??''))),static fn($v)=>preg_match('/\A[1-9][0-9]*\z/D',$v));
+        $groups=explode(',',(string)($mybb->user['additionalgroups']??''));$groups[]=(string)($mybb->user['usergroup']??'');return (bool)array_intersect($allowed,$groups);
+    }
+    /** Original archive forum permission survives native post deletion/move. */
+    public function archiveForum(string $fid,string $tid):void
+    {
+        global $mybb;$uid=$this->uid();$p=forum_permissions((int)$fid,(int)$uid);$forum=get_forum((int)$fid);$thread=$this->thread($tid);
+        if(!$forum||!$thread||empty($p['canview'])||empty($p['canviewthreads'])||!empty($p['canonlyviewownthreads'])&&(string)$thread['uid']!==$uid)throw new RuntimeException('ACS_ARCHIVE_NATIVE_DENIED');
+        foreach(explode(',',(string)($forum['parentlist']??$fid)) as $parent){$f=get_forum((int)$parent);$password=(string)($f['password']??'');if($password!==''&&!hash_equals(md5($uid.$password),(string)($mybb->cookies['forumpass'][(int)$parent]??'')))throw new RuntimeException('ACS_ARCHIVE_NATIVE_DENIED');}
+    }
     /** A separate native moderation right, in addition to persisted session GM. */
     public function correctionThread(string $tid):void
     {
