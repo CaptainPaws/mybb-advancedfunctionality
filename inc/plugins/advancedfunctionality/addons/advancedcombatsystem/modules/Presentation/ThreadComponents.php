@@ -21,17 +21,26 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
         $selected=$builder!==''?$builder:$mybb->get_input('acs_session');
         $filter=$selected!==''?' AND s.id=?':'';
         if($selected!=='' && !preg_match('/\A[1-9][0-9]{0,19}\z/D',$selected))return '';
-        $statement=$link->prepare('SELECT s.id,r.role FROM `'.TABLE_PREFIX.'af_acs_sessions` s JOIN `'.TABLE_PREFIX.'af_acs_session_roles` r ON r.session_id=s.id WHERE s.tid=? AND r.uid=? AND r.role IN (\'owner\',\'gm\',\'assistant_gm\',\'player\') AND (r.expires_at IS NULL OR r.expires_at>?) '.$filter.' ORDER BY s.id LIMIT 10');
+        $statement=$link->prepare('SELECT s.id,r.role FROM `'.TABLE_PREFIX.'af_acs_sessions` s JOIN `'.TABLE_PREFIX.'af_acs_session_roles` r ON r.session_id=s.id WHERE s.tid=? AND r.uid=? AND r.role IN (\'owner\',\'gm\',\'assistant_gm\',\'player\',\'observer\') AND (r.expires_at IS NULL OR r.expires_at>?) '.$filter.' ORDER BY s.id LIMIT 10');
         if(!$statement)return '';
         $now=time();
         if($selected!=='')$statement->bind_param('iiis',$tid,$uid,$now,$selected);else $statement->bind_param('iii',$tid,$uid,$now);
         if(!$statement->execute())return '';
-        $links=[];$rows=$statement->get_result();if(!$rows)return '';
+        $links=[];$panelRendered=false;$rows=$statement->get_result();if(!$rows)return '';
         while($row=$rows->fetch_assoc()) {
             $id=htmlspecialchars_uni((string)$row['id']);
+            if(!$panelRendered) {
+                require_once __DIR__.'/../Infrastructure/ThreadPanelQuery.php';
+                require_once __DIR__.'/ThreadPanel.php';
+                $panel=(new AF_ACS_ThreadPanelQuery($db))->current((string)$row['id'],(string)$tid);
+                if($panel) {
+                    if(!headers_sent())header('Cache-Control: private, no-store');
+                    $links[]=af_advancedcombatsystem_presentation_css('has_acs_panel').AF_ACS_ThreadPanel::render($panel,(string)$tid).af_advancedcombatsystem_panel_script();
+                    $panelRendered=true;
+                }
+            }
             $links[]='<a href="misc.php?action=acs_sessions&amp;session_id='.$id.'">Сессия ACS #'.$id.'</a>';
-            $links[]='<a href="misc.php?action=acs_loot&amp;session_id='.$id.'">Добыча ACS</a>';
-            $links[]='<a href="showthread.php?tid='.$tid.'&amp;acs_builder='.$id.'">Подготовить ход ACS</a>';
+            if(!$panelRendered && in_array($row['role'],['owner','gm','assistant_gm','player'],true))$links[]='<a href="showthread.php?tid='.$tid.'&amp;acs_builder='.$id.'">Открыть конструктор</a>';
             if($builder===(string)$row['id']) {
                 require_once __DIR__.'/BuilderController.php';
                 if(!headers_sent())header('Cache-Control: private, no-store');
@@ -47,7 +56,7 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
                 }
             }
         }
-        return $links?'<aside class="af-acs">'.implode(' · ',$links).'</aside>':'';
+        return $links?'<aside class="af-acs">'.implode(' ',$links).'</aside>':'';
     } catch(Throwable $error) {return isset($selected) && $selected!==''?'<aside class="af-acs">Панель GM недоступна. Проверьте права и версию схемы ACS.</aside>':'';}
     finally {if($statement)$statement->close();}
 }
@@ -77,6 +86,16 @@ function af_advancedcombatsystem_presentation_css(string $fact): string
     global $mybb;
     static $sent=false;
     if($sent||!function_exists('af_frontend_asset_allowed')||!af_frontend_asset_allowed('advancedcombatsystem','presentation',null,[$fact=>true]))return '';
-    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/presentation.css?v=1';
+    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/presentation.css?v=1111';
     return '<link rel="stylesheet" href="'.htmlspecialchars_uni($url).'">';
+}
+
+/** Only a successfully authorized panel may request its enhancement. */
+function af_advancedcombatsystem_panel_script(): string
+{
+    global $mybb;
+    static $sent=false;
+    if($sent||!function_exists('af_frontend_asset_allowed')||!af_frontend_asset_allowed('advancedcombatsystem','thread_panel',null,['has_acs_panel'=>true]))return '';
+    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/thread-panel.js?v=1111';
+    return '<script defer src="'.htmlspecialchars_uni($url).'"></script>';
 }
