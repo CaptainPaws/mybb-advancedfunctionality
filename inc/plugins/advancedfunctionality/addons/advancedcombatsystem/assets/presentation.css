@@ -10,3 +10,5 @@
 .af-acs-panel--floating .af-acs-panel__compact{display:block;position:fixed;top:var(--acs-panel-top);inset-inline:1rem;z-index:20;max-height:25dvh;overflow:auto}
 .af-acs-panel--mobile .af-acs-panel__compact{display:block}.af-acs-panel--mobile .af-acs-panel__details:not([open]){display:none}
 .af-acs-panel--mobile .af-acs-panel__details[open]{position:fixed;top:var(--acs-panel-top);bottom:0;inset-inline:0;z-index:21;overflow:auto;overscroll-behavior:contain;border-radius:0}.af-acs-panel--mobile .af-acs-panel__groups{grid-template-columns:minmax(0,1fr)}
+
+.af-acs-panel__sessions{display:flex;flex-wrap:wrap;align-items:end;gap:.5rem;margin:.75rem 0;max-width:100%}.af-acs-panel__sessions label,.af-acs-panel__sessions select{min-width:0;max-width:100%}.af-acs-panel__sessions select,.af-acs-panel__sessions button{font:inherit;min-height:2.75rem}

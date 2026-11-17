@@ -16,7 +16,8 @@
         details.open = !mobile.matches;
         compact.hidden = false;
         close.hidden = false;
-        panel.querySelector('.af-acs-panel__filters').hidden = false;
+        var filters = panel.querySelector('.af-acs-panel__filters');
+        if (filters) filters.hidden = false;
         panel.classList.add('af-acs-panel--enhanced');
         function geometry() {
             frame = 0;
@@ -53,6 +54,7 @@
         });
         details.addEventListener('toggle', schedule);
         function filter() {
+            if (!side || !group) return;
             var any = false;
             panel.querySelectorAll('[data-group]').forEach(function (node) {
                 node.hidden = !!((side.value && node.dataset.side !== side.value) || (group.value && node.dataset.group !== group.value));
@@ -61,8 +63,8 @@
             panel.querySelector('[data-acs-empty]').hidden = any;
             schedule();
         }
-        side.addEventListener('change', filter);
-        group.addEventListener('change', filter);
+        if (side) side.addEventListener('change', filter);
+        if (group) group.addEventListener('change', filter);
         window.addEventListener('scroll', schedule, {passive: true});
         window.addEventListener('resize', schedule);
         mobile.addEventListener('change', schedule);
