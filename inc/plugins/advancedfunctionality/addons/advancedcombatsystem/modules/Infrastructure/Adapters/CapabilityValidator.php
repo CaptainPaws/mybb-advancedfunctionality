@@ -19,6 +19,12 @@ final class AF_ACS_CapabilityValidator
             'scope'=>$scope,'diagnostics'=>$issues,'reason'=>$ready ? null : ($issues[0]['code'] ?? 'capability_validation_required')];
     }
 
+    /** No selected source is an observation, not corrupt owner data. */
+    public static function notChecked(string $id,string $scope='not_checked',string $reason='SOURCE_NOT_SELECTED'): array
+    {
+        return ['capability'=>$id,'interface_status'=>'EXISTING','readiness'=>'NOT_CHECKED','scope'=>$scope,'diagnostics'=>[],'reason'=>$reason];
+    }
+
     public static function number($value): bool
     {
         return !is_bool($value) && is_numeric($value) && is_finite((float)$value) && (float)$value >= 0;
