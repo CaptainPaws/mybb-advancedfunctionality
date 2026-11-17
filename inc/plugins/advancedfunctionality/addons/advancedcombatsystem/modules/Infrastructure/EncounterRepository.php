@@ -36,11 +36,41 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     use AF_ACS_LootPersistence, AF_ACS_LootAllocationPersistence, AF_ACS_LootIssuePersistence;
     use AF_ACS_EndConditionPersistence, AF_ACS_ParticipationPersistence;
     use AF_ACS_DelegationPersistence, AF_ACS_ObjectCommands;
-    use AF_ACS_StatusPersistence, AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
+    use AF_ACS_StatusPersistence { statusProjection as private uncachedStatusProjection; }
+    use AF_ACS_ReactionPersistence, AF_ACS_BarrierPersistence;
     use AF_ACS_ClockPersistence, AF_ACS_ItemPersistence, AF_ACS_CustodyPersistence;
     use AF_ACS_DraftPersistence;
     use AF_ACS_SealPersistence, AF_ACS_PreparedActionPersistence, AF_ACS_PreparedItemPersistence;
     use AF_ACS_RoundManagementPersistence, AF_ACS_AmbushStartPersistence, AF_ACS_PreRoundPersistence, AF_ACS_PreparedStartPersistence;
+    /** Request-local, read-only panel instance only; command repositories never opt in. */
+    private ?array $threadPanelReads=null;
+    public function cacheThreadPanelReads(string $sid): void
+    {
+        if($this->threadPanelReads!==null)throw new RuntimeException('ACS_PANEL_READ_SCOPE_INVALID');
+        $entities=[];$controllers=[];
+        // These are the exact entity()/controllers() read shapes, acquired once for this session.
+        foreach($this->sql('SELECT e.*,s.life_state,s.hp,s.hp_max,s.state_version,s.stats_json,s.layers_json,g.session_id AS group_session,g.owner_uid AS group_owner,g.kind AS group_kind,x.payload_json,x.content_hash FROM '.$this->table('entities').' e JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id JOIN '.$this->table('control_groups').' g ON g.id=e.control_group_id JOIN '.$this->table('snapshots').' x ON x.id=e.template_snapshot_id AND x.session_id=e.session_id WHERE e.session_id=?',[$sid])['rows'] as $row){
+            $row=$this->ids($row,['id','session_id','control_group_id','owner_uid','group_owner','group_session','template_snapshot_id','entity_version','hp','hp_max','state_version']);$entities[$row['id']]=$row;
+        }
+        foreach($this->sql('SELECT * FROM '.$this->table('controllers').' WHERE session_id=? AND status=? AND (valid_until IS NULL OR valid_until>?) ORDER BY id',[$sid,'active',time()])['rows'] as $row){
+            $row=$this->ids($row,['id','entity_id','controller_uid','assignment_version']);$controllers[$row['entity_id']][]=$row;
+        }
+        $this->threadPanelReads=['sid'=>$sid,'entities'=>$entities,'controllers'=>$controllers,'selects'=>[],'statuses'=>null];
+    }
+    protected function sql(string $sql,array $parameters=[]): array
+    {
+        if($this->threadPanelReads===null)return parent::sql($sql,$parameters);
+        if(!str_starts_with($sql,'SELECT ')||preg_match('/\\b(?:FOR UPDATE|LOCK IN SHARE MODE)\\b/i',$sql))throw new RuntimeException('ACS_PANEL_READ_ONLY');
+        // Same bound values as Repository::statement; no cross-request or shared-user cache.
+        $key=$sql.':'.json_encode(array_map(static fn($v)=>$v===null?null:(string)$v,$parameters),JSON_THROW_ON_ERROR);
+        return $this->threadPanelReads['selects'][$key]??=parent::sql($sql,$parameters);
+    }
+    public function statusProjection(string $sid): array
+    {
+        if($this->threadPanelReads!==null&&$this->threadPanelReads['sid']===$sid)return $this->threadPanelReads['statuses']??=$this->uncachedStatusProjection($sid);
+        return $this->uncachedStatusProjection($sid);
+    }
+
     private function ids(array $row,array $fields): array
     {
         foreach($fields as $field)if(isset($row[$field]))$row[$field]=(string)$row[$field];return $row;
@@ -91,11 +121,13 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     }
     public function entity(string $sid,string $id): ?array
     {
+        if($this->threadPanelReads!==null&&$this->threadPanelReads['sid']===$sid)return $this->threadPanelReads['entities'][$id]??null;
         $row=$this->sql('SELECT e.*,s.life_state,s.hp,s.hp_max,s.state_version,s.stats_json,s.layers_json,g.session_id AS group_session,g.owner_uid AS group_owner,g.kind AS group_kind,x.payload_json,x.content_hash FROM '.$this->table('entities').' e JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id JOIN '.$this->table('control_groups').' g ON g.id=e.control_group_id JOIN '.$this->table('snapshots').' x ON x.id=e.template_snapshot_id AND x.session_id=e.session_id WHERE e.session_id=? AND e.id=?',[$sid,$id])['rows'][0]??null;
         return $row?$this->ids($row,['id','session_id','control_group_id','owner_uid','group_owner','group_session','template_snapshot_id','entity_version','hp','hp_max','state_version']):null;
     }
     public function controllers(string $sid,string $entity): array
     {
+        if($this->threadPanelReads!==null&&$this->threadPanelReads['sid']===$sid)return $this->threadPanelReads['controllers'][$entity]??[];
         return array_map(fn($r)=>$this->ids($r,['id','entity_id','controller_uid','assignment_version']),$this->sql('SELECT * FROM '.$this->table('controllers').' WHERE session_id=? AND entity_id=? AND status=? AND (valid_until IS NULL OR valid_until>?) ORDER BY id',[$sid,$entity,'active',time()])['rows']);
     }
     public function controllerFor(string $sid,string $entity,string $uid,string $category='ordinary'): ?array
