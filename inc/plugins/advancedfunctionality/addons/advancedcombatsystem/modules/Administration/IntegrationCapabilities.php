@@ -12,7 +12,7 @@ final class AF_ACS_IntegrationCapabilities
         if ($base['scope'] === 'not_checked') return $probe;
         $base['scope'] .= ' + '.$probe['scope'];
         $base['diagnostics'] = array_merge($base['diagnostics'],$probe['diagnostics']);
-        if ($probe['readiness'] !== 'READY') { $base['readiness'] = 'BLOCKED'; $base['reason'] = $probe['reason']; }
+        if ($probe['readiness'] === 'BLOCKED' && $base['readiness'] !== 'BLOCKED') { $base['readiness'] = 'BLOCKED'; $base['reason'] = $probe['reason']; }
         return $base;
     }
 
@@ -20,36 +20,48 @@ final class AF_ACS_IntegrationCapabilities
     {
         (new AF_ACS_AuthorizationService)->requirePermission('admin.integrations.view');
         global $mybb;
-        $rows = [];
-        foreach (AF_ACS_CapabilityValidator::IDS as $id) $rows[$id] = AF_ACS_CapabilityValidator::row($id,false,'not_checked',[
-            ['code'=>'required_field_missing','path'=>'selected_source','severity'=>'error']]);
-        if (!function_exists('af_is_addon_enabled') || !af_is_addon_enabled('knowledgebase')) {
-            foreach ($rows as &$row) { $row['reason'] = 'OWNER_DISABLED'; $row['scope'] = 'dependency'; }
-            unset($row); return $rows;
+        $rows=[];
+        foreach(array_merge(AF_ACS_CapabilityValidator::IDS,['kb.definition_reader','kb.combat_snapshot','cs.combat_snapshot']) as $id)$rows[$id]=AF_ACS_CapabilityValidator::notChecked($id);
+        $kbEnabled=function_exists('af_is_addon_enabled')&&af_is_addon_enabled('knowledgebase');
+        $csEnabled=function_exists('af_is_addon_enabled')&&af_is_addon_enabled('charactersheets');
+        $memoryIds=['accuracy_registry','accuracy_roundtrip','legacy_element_aliases','status_resistance_mapping','definition_versioning','explicit_damage_element','magic_direction_hierarchy','element_snapshot_provenance'];
+        if($kbEnabled){
+            try{
+                require_once AF_ADDONS.'knowledgebase/knowledgebase.php';
+                foreach($this->memoryProofs() as $id=>$ready)$rows[$id]=AF_ACS_CapabilityValidator::row($id,$ready,'kb_memory_contract',$ready?[]:[['code'=>'unsupported_rules_schema','path'=>'contract_probe','severity'=>'error']]);
+            }catch(Throwable $error){foreach($memoryIds as $id)$rows[$id]=AF_ACS_CapabilityValidator::row($id,false,'kb_memory_contract',[['code'=>'contract_probe_unavailable','path'=>'contract_probe','severity'=>'error']]);}
+            // The fixed 17-element registry is separate from memory proofs and selected sources.
+            try{
+                $catalog=(new AF_ACS_KnowledgeBaseAdapter)->primaryElements((int)$mybb->user['uid']);
+                $rows['canonical_elements_17']=AF_ACS_CapabilityValidator::row('canonical_elements_17',$catalog['ready'],'primary_catalog',$catalog['diagnostics']);
+                if(in_array('element_version_invalid',array_column($catalog['diagnostics'],'code'),true))$rows['canonical_elements_17']['reason']='element_version_invalid';
+                if(in_array('element_alias_collision',array_column($catalog['diagnostics'],'code'),true))$rows['legacy_element_aliases']=$this->combine($rows['legacy_element_aliases'],AF_ACS_CapabilityValidator::row('legacy_element_aliases',false,'primary_catalog',$catalog['diagnostics']));
+            }catch(Throwable $error){$rows['canonical_elements_17']=AF_ACS_CapabilityValidator::row('canonical_elements_17',false,'primary_catalog',[['code'=>'source_read_failed','path'=>'element_registry','severity'=>'error']]);}
+        }else{
+            foreach([...$memoryIds,'canonical_elements_17'] as $id)$rows[$id]=AF_ACS_CapabilityValidator::row($id,false,'dependency',[['code'=>'OWNER_DISABLED','path'=>'knowledgebase','severity'=>'error']]);
         }
-        try {
-            require_once AF_ADDONS.'knowledgebase/knowledgebase.php';
-            foreach ($this->memoryProofs() as $id=>$ready) $rows[$id] = AF_ACS_CapabilityValidator::row($id,$ready,'kb_memory_contract',
-                $ready ? [] : [['code'=>'unsupported_rules_schema','path'=>'contract_probe','severity'=>'error']]);
-            $catalog = (new AF_ACS_KnowledgeBaseAdapter)->primaryElements((int)$mybb->user['uid']);
-            $rows['canonical_elements_17'] = AF_ACS_CapabilityValidator::row('canonical_elements_17',$catalog['ready'],'primary_catalog',$catalog['diagnostics']);
-            if (in_array('element_alias_collision',array_column($catalog['diagnostics'],'code'),true)) $rows['legacy_element_aliases'] = AF_ACS_CapabilityValidator::row('legacy_element_aliases',false,'primary_catalog',$catalog['diagnostics']);
-            if ((int)($targets['sheet_id'] ?? 0) > 0) {
-                $snapshot = (new AF_ACS_CharacterSheetAdapter)->createSnapshot((int)$targets['sheet_id'],(int)$mybb->user['uid']);
-                foreach (($snapshot['capabilities'] ?? []) as $id=>$row) $rows[$id] = $this->combine($rows[$id],$row);
-                foreach (['character_snapshot','equipment_source_breakdown','snapshot_read_only'] as $id) if (!isset($snapshot['capabilities'][$id])) $rows[$id] = AF_ACS_CapabilityValidator::row($id,false,'selected_character',$snapshot['diagnostics']);
+        $sheet=trim((string)($targets['sheet_id']??''));
+        if($sheet!==''){
+            if(!preg_match('/\A[1-9][0-9]{0,9}\z/D',$sheet)||(float)$sheet>2147483647){
+                $snapshot=['ready'=>false,'diagnostics'=>[['code'=>'invalid_source_id','path'=>'sheet_id','severity'=>'error']]];
+            }elseif(!$csEnabled||!$kbEnabled){
+                $snapshot=['ready'=>false,'diagnostics'=>[['code'=>'OWNER_DISABLED','path'=>!$csEnabled?'charactersheets':'knowledgebase','severity'=>'error']]];
+            }else{
+                // Adapter catches failures and preserves the owner's minimal access-denied response.
+                $snapshot=(new AF_ACS_CharacterSheetAdapter)->createSnapshot((int)$sheet,(int)$mybb->user['uid']);
             }
-            if (!empty($targets['kb_key'])) {
-                $definition = (new AF_ACS_KnowledgeBaseAdapter)->readDefinition((string)($targets['kb_type'] ?? ''),(string)$targets['kb_key'],(int)$mybb->user['uid']);
-                $rows['kb.definition_reader'] = AF_ACS_CapabilityValidator::row('kb.definition_reader',$definition['ready'],'selected_definition',$definition['diagnostics']);
-                foreach (($definition['capabilities'] ?? []) as $id=>$row) $rows[$id] = $this->combine($rows[$id],$row);
-                if (($targets['kb_type'] ?? '') === 'arpg_bestiary') $rows['bestiary_snapshot'] = AF_ACS_CapabilityValidator::row('bestiary_snapshot',$definition['ready'],'selected_definition',$definition['diagnostics']);
-            }
-        } catch (Throwable $error) {
-            foreach ($rows as &$row) { $row['readiness'] = 'BLOCKED'; $row['reason'] = 'source_read_failed'; }
-            unset($row);
+            $rows['cs.combat_snapshot']=AF_ACS_CapabilityValidator::row('cs.combat_snapshot',!empty($snapshot['ready']),'selected_character',$snapshot['diagnostics']??[]);
+            foreach($snapshot['capabilities']??[] as $id=>$row)$rows[$id]=$this->combine($rows[$id],$row);
+            foreach(['character_snapshot','equipment_source_breakdown','snapshot_read_only'] as $id)if(!isset($snapshot['capabilities'][$id]))$rows[$id]=AF_ACS_CapabilityValidator::row($id,false,'selected_character',$snapshot['diagnostics']??[]);
         }
-        return $rows; // No definitions or snapshots in global ACP output.
+        $key=trim((string)($targets['kb_key']??''));
+        if($key!==''){
+            $definition=$kbEnabled?(new AF_ACS_KnowledgeBaseAdapter)->readDefinition((string)($targets['kb_type']??''),$key,(int)$mybb->user['uid']):['ready'=>false,'diagnostics'=>[['code'=>'OWNER_DISABLED','path'=>'knowledgebase','severity'=>'error']]];
+            foreach(['kb.definition_reader','kb.combat_snapshot'] as $id)$rows[$id]=AF_ACS_CapabilityValidator::row($id,!empty($definition['ready']),'selected_definition_read_only',$definition['diagnostics']??[]);
+            foreach($definition['capabilities']??[] as $id=>$row)$rows[$id]=$this->combine($rows[$id],$row);
+            if(($targets['kb_type']??'')==='arpg_bestiary')$rows['bestiary_snapshot']=AF_ACS_CapabilityValidator::row('bestiary_snapshot',!empty($definition['ready']),'selected_definition',$definition['diagnostics']??[]);
+        }
+        return $rows; // No definitions, snapshots, source JSON or receipt payloads in ACP output.
     }
 
     /** Real validation/normalization, no DB save or source mutation. */

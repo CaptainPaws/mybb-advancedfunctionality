@@ -58,6 +58,7 @@ class AF_Admin_Advancedcombatsystem
             $auth->requirePermission('admin.diagnostics.view');
             self::schema($diagnostics->schema());
             self::errors($diagnostics->recentErrors());
+            self::engineVersions();
             require_once __DIR__.'/modules/Administration/EffectsDiagnostics.php';
             AF_ACS_EffectsDiagnostics::render();
             self::integrations($diagnostics);
@@ -70,6 +71,29 @@ class AF_Admin_Advancedcombatsystem
         $table->construct_cell(self::esc(af_is_addon_enabled($meta['id']) ? $lang->af_advancedcombatsystem_enabled : $lang->af_advancedcombatsystem_disabled));
         $table->construct_row();
         $table->output(self::esc($lang->af_advancedcombatsystem_name));
+        echo '<p>'.self::esc($lang->af_advancedcombatsystem_notice).'</p>';
+        self::summary($diagnostics->schema());
+        self::commands();
+    }
+
+    /** Compact general view; detailed ledger belongs only to Diagnostics. */
+    private static function summary(array $state): void
+    {
+        $completed=count(array_filter($state['migrations'],static fn($row)=>$row['status']==='completed'));
+        $table=new Table;
+        $table->construct_header('Проверка');$table->construct_header('Состояние');
+        foreach([
+            'Схема ACS'=>($state['schema_version']??'Не установлена').' / требуется '.($state['required_version']??'Не зарегистрирована'),
+            'Миграции'=>'Завершено: '.$completed.'; записей ledger: '.count($state['migrations']).'. '.($state['ready']?'Проверка целостности: READY.':'Проверка целостности: BLOCKED.'),
+            'Блокирующие ошибки схемы'=>$state['ready']?'Не обнаружены при read-only проверке.':($state['error']??'ACS_SCHEMA_NOT_READY'),
+            'Боевая публикация'=>'BLOCKED / publication_enabled=false. Installed acceptance: NOT_VERIFIED. IC-MYBB-1 и отдельное решение администратора обязательны.',
+        ] as $name=>$value){$table->construct_cell(self::esc($name));$table->construct_cell(self::esc($value));$table->construct_row();}
+        $table->output('Состояние ACS');
+        echo '<p><a href="index.php?module=advancedfunctionality&amp;af_view=advancedcombatsystem&amp;acs_section=diagnostics">Диагностика: ledger, ошибки и версии</a> · <a href="index.php?module=advancedfunctionality&amp;af_view=advancedcombatsystem&amp;acs_section=publication">Совместимость публикации</a></p>';
+    }
+
+    private static function engineVersions(): void
+    {
         require_once __DIR__.'/modules/Domain/Numeric.php';
         echo '<p>Numeric Engine: '.self::esc(AF_ACS_Numeric::POLICY).'</p>';
         require_once __DIR__.'/modules/Domain/Formula.php';
@@ -83,10 +107,7 @@ class AF_Admin_Advancedcombatsystem
         require_once __DIR__.'/modules/Domain/Effects.php';
         echo '<p>Effects: '.self::esc(AF_ACS_Effects::VERSION).'</p>';
         require_once __DIR__.'/modules/Domain/Resolver.php';
-        echo '<p>Resolver preview: '.self::esc(AF_ACS_Resolver::VERSION).'</p>';
-        echo '<p>'.self::esc($lang->af_advancedcombatsystem_notice).'</p>';
-        self::schema($diagnostics->schema());
-        self::commands();
+        echo '<p>Resolver preview/seal/commit: '.self::esc(AF_ACS_Resolver::VERSION).'</p>';
     }
 
     private static function schema(array $state): void
@@ -158,11 +179,11 @@ class AF_Admin_Advancedcombatsystem
         (new AF_ACS_AuthorizationService)->requirePermission('admin.integrations.view');
         echo '<p>'.self::esc($lang->af_advancedcombatsystem_capability_note).'</p>';
         echo '<p>'.self::esc($lang->af_advancedcombatsystem_probe_note).'</p>';
-        $targets = ['sheet_id'=>max(0,(int)$mybb->get_input('acs_probe_sheet_id')),
+        $targets = ['sheet_id'=>trim($mybb->get_input('acs_probe_sheet_id')),
             'kb_type'=>$mybb->get_input('acs_probe_kb_type'),'kb_key'=>$mybb->get_input('acs_probe_kb_key')];
         echo '<form method="get" action="index.php"><input type="hidden" name="module" value="advancedfunctionality">'
-            .'<input type="hidden" name="af_view" value="advancedcombatsystem"><input type="hidden" name="acs_section" value="integrations">'
-            .'<label>'.self::esc($lang->af_advancedcombatsystem_probe_sheet).' <input type="number" min="1" name="acs_probe_sheet_id" value="'.($targets['sheet_id'] ?: '').'"></label> '
+            .'<input type="hidden" name="af_view" value="advancedcombatsystem"><input type="hidden" name="acs_section" value="integrations"><input type="hidden" name="acs_probe" value="1">'
+            .'<label>'.self::esc($lang->af_advancedcombatsystem_probe_sheet).' <input type="number" min="1" name="acs_probe_sheet_id" value="'.self::esc($targets['sheet_id']).'"></label> '
             .'<label>KB type <select name="acs_probe_kb_type">';
         foreach (['arpg_bestiary','arpg_ability','arpg_element','character'] as $type) {
             echo '<option value="'.$type.'"'.($targets['kb_type'] === $type ? ' selected' : '').'>'.$type.'</option>';
@@ -170,17 +191,24 @@ class AF_Admin_Advancedcombatsystem
         echo '</select></label> <label>KB key <input type="text" maxlength="64" name="acs_probe_kb_key" value="'.self::esc($targets['kb_key']).'"></label> '
             .'<button type="submit">'.self::esc($lang->af_advancedcombatsystem_probe_run).'</button></form>';
         $table = new Table;
-        foreach (['contracts', 'owner', 'interfaces', 'readiness', 'stage_action'] as $key) { $label = 'af_advancedcombatsystem_'.$key; $table->construct_header(self::esc($lang->$label)); }
-        foreach ($diagnostics->capabilities(true, $targets) as $row) {
-            $apis = [];
-            foreach ($row['interfaces'] as $name => $evidence) { $apis[] = $name.': '.($evidence['declared'] ? 'yes' : 'no').' / '.($evidence['loaded'] ? 'yes' : 'no').' / '.($evidence['callable_now'] ? 'yes' : 'no'); }
-            $table->construct_cell(self::esc($row['contract_id'].' / '.$row['capability'].' / '.$row['interface_status']));
-            $table->construct_cell(self::esc($row['owner'].' / '.($row['detected'] ? 'yes' : 'no').' / '.($row['enabled'] ? 'yes' : 'no').' / '.($row['version'] ?? 'unknown')).'<br>'.self::esc($row['version_evidence']));
-            $table->construct_cell(implode('<br>', array_map([self::class, 'esc'], $apis)));
-            $details = [];
-            foreach (array_slice($row['diagnostics'] ?? [],0,8) as $issue) $details[] = self::esc(substr($issue['code'].' / '.$issue['path'],0,160));
-            $table->construct_cell(self::esc($row['readiness'].' / '.($row['reason'] ?? '—')).'<br>'.self::esc($row['scope'] ?? 'interface').'<br>'.implode('<br>',$details));
-            $table->construct_cell(self::esc($row['roadmap_stage'].' / '.$row['remediation']));
+        foreach (['Контракт / реализация','Owner / установка','Runtime / API','Источник / область проверки','Installed acceptance / блокировка / действие'] as $label)$table->construct_header(self::esc($label));
+        foreach ($diagnostics->capabilities($mybb->get_input('acs_probe')==='1', $targets) as $row) {
+            $apis=[];
+            foreach($row['interfaces'] as $name=>$evidence)$apis[]=self::esc($name.': объявлен '.($evidence['declared']?'да':'нет').', загружен '.($evidence['loaded']?'да':'нет').', callable '.($evidence['callable_now']?'да':'нет'));
+            $table->construct_cell(self::esc($row['contract_id'].' / '.$row['capability']).'<br>'.self::esc($row['implementation_status']).'<br>'.self::esc($row['implementation_scope']));
+            $table->construct_cell(self::esc($row['owner'].' / файл: '.($row['detected']?'обнаружен':'не обнаружен').' / enabled: '.($row['enabled']?'да':'нет').' / версия: '.($row['version']??'неизвестна')).'<br>'.self::esc('Установка: '.$row['installation_status']).'<br>'.self::esc($row['installation_scope']).'<br>'.self::esc($row['version_evidence']));
+            $table->construct_cell(self::esc($row['runtime_status']).'<br>'.implode('<br>',$apis));
+            $check=$row['data_check'];$details=[];
+            // Bounded explicit metadata, never raw snapshots or exception messages.
+            $issues=$check['diagnostics']??[];
+            usort($issues,static fn($a,$b)=>(($b['code']??'')==='element_version_invalid')<=>(($a['code']??'')==='element_version_invalid'));
+            foreach(array_slice($issues,0,40) as $issue){
+                $parts=[];
+                foreach(['code','path','canonical_key','entry_type','reference','actual_type','observed_revision','expected','recommendation'] as $key)if(isset($issue[$key])&&is_scalar($issue[$key]))$parts[]=$key.': '.substr((string)$issue[$key],0,1000);
+                $details[]=self::esc(implode(' / ',$parts));
+            }
+            $table->construct_cell(self::esc($check['readiness'].' / '.($check['reason']??'—')).'<br>'.self::esc('Область: '.$check['scope']).'<br>'.implode('<br>',$details));
+            $table->construct_cell(self::esc('Installed acceptance: '.$row['installed_acceptance']).'<br>'.self::esc('Уровень: '.$row['verification_level']).'<br>'.self::esc($row['readiness'].' / '.($row['reason']??'—')).'<br>'.self::esc($row['remediation']));
             $table->construct_row();
         }
         $table->output(self::esc($lang->af_advancedcombatsystem_integrations));

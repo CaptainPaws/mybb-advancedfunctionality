@@ -34,7 +34,7 @@ final class AF_ACS_PublicationDiagnostics
         (new AF_ACS_AuthorizationService)->requirePermission('admin.diagnostics.view');
         global $mybb,$db,$plugins;
         $report=['report_version'=>2,'scope'=>'Текущий ACP bootstrap; не трассировка newreply/Quick Edit. Регистрация не доказывает исполнение.',
-            'publication'=>self::row('IC-MYBB-1','BLOCKED','Backend, test editor и карточка Stage 4 R2 реализованы в ограниченном scope. Installed-приёмка не подтверждена; publication_enabled=false. Диагностика не разрешает публикацию.'),'mybb'=>[],'database'=>[],'tables'=>[],'triggers'=>[],'hooks'=>[],'integrations'=>[],'acceptance'=>[],'outbox'=>[]];
+            'publication'=>self::row('IC-MYBB-1','BLOCKED','R2 Gateway/coordinator/recovery, test editor и карточки реализованы в поддерживаемом scope. Installed-приёмка не подтверждена; publication_enabled=false. Диагностика не разрешает публикацию.'),'mybb'=>[],'database'=>[],'tables'=>[],'triggers'=>[],'hooks'=>[],'integrations'=>[],'acceptance'=>[],'outbox'=>[]];
         $v=(string)($mybb->version??'');
         $report['mybb'][]=self::row('MyBB', $v==='1.8.41'?'PASS':'WARNING',preg_match('/\A[0-9.]{1,20}\z/D',$v)?$v:'Версия не распознана');
         $report['mybb'][]=self::row('PHP',PHP_VERSION==='8.5.12'?'PASS':'WARNING',PHP_VERSION);
@@ -93,7 +93,7 @@ final class AF_ACS_PublicationDiagnostics
         usort($report['hooks'],fn($a,$b)=>[$a['hook'],$a['priority'],$a['callback']]<=>[$b['hook'],$b['priority'],$b['callback']]);
         $risks=[
             'advancedappearance'=>['AdvancedAppearance','Маски — косметика; native hooks работают вне ACS tx. Проверить newreply/Quick Edit и неизменность sealed hashes/tape.'],
-            'balance'=>['Balance','Обычные post rewards остаются native. ACS outbox rewards отключены до owner API с durable idempotency key/receipt lookup.'],
+            'balance'=>['Balance','Обычные post rewards остаются native. Отдельный ACS Balance reward issuer с durable key/receipt/lookup реализован; installed owner schema, routing и выдача требуют ручной приёмки.'],
             'charactersheets'=>['CharacterSheets','Проверить обычный Balance→EXP→progress вне ACS tx; повтор ACS delivery без owner receipt запрещён.'],
             'advancedpostcounter'=>['AdvancedPostCounter','Проверить pre-INSERT counters и shutdown rebuild. MyISAM допустим; rollback native side effects не обещается.'],
             'advancedalertsandmentions'=>['AAM','Проверить native mentions/alerts. ACS outbox delivery отключена до доказанного owner receipt; её нельзя дублировать с native alerts.'],
@@ -112,7 +112,9 @@ final class AF_ACS_PublicationDiagnostics
             'installed.presentation'=>'Проверить moderation/delete/move, narrative/edit, masks, AE/ATF/APUI и статус карточки.',
             'administrator.decision'=>'Обязательны сохранённые installed evidence, отсутствие blocking conflicts и отдельное явное решение администратора. Автовключения нет.',
         ] as $name=>$detail) $report['acceptance'][]=self::row($name,'NOT_VERIFIED',$detail);
-        $report['outbox'][]=self::row('ACS combat.committed consumers','BLOCKED','Есть transactional pending outbox; ACS dispatcher/consumers не реализованы. Native MyBB rewards/alerts не заменяются. Owner receipt/idempotency и installed-проверка обязательны до добавления consumers.');
+        $report['outbox'][]=self::row('ACS combat.committed delivery','BLOCKED','Transactional outbox существует; универсальный dispatcher и идемпотентная AAM delivery не реализованы. Native MyBB rewards/alerts не повторять.');
+        $report['outbox'][]=self::row('IC-STATS completed aggregate','NOT_VERIFIED','IMPLEMENTED: отдельные version/hash consumer, durable receipt/lookup, pending statistics и archived recovery. Это не универсальный combat.committed consumer. Installed delivery здесь не проверяется; диагностика очередь не обрабатывает.');
+        $report['outbox'][]=self::row('ACS reward issuer','NOT_VERIFIED','IMPLEMENTED: отдельные Inventory loot issue и Balance credit/lookup с retained receipts. Permanent CS sync и автоматическая compensation остаются BLOCKED без owner contract. Installed выдача не подтверждается этим snapshot.');
         return $report;
     }
     public static function render():void

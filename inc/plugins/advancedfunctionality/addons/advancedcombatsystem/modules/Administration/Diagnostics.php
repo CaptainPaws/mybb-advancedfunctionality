@@ -2,6 +2,7 @@
 
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/../Application/AuthorizationService.php';
+require_once __DIR__.'/../Infrastructure/Adapters/CapabilityValidator.php';
 
 /** Lightweight observations by default; explicit ACP validation uses read-only owner APIs. */
 final class AF_ACS_Diagnostics
@@ -44,83 +45,87 @@ final class AF_ACS_Diagnostics
     public function schema(): array
     {
         (new AF_ACS_AuthorizationService)->requirePermission('admin.diagnostics.view');
-        try { return af_advancedcombatsystem_migrations()->status(); }
-        catch (Throwable $error) { return ['schema_version' => null, 'migrations' => [], 'error' => 'ACS_DATABASE_UNAVAILABLE', 'database' => null]; }
+        try { require_once __DIR__.'/Migrations.php'; $state=af_advancedcombatsystem_migrations()->status(); }
+        catch (Throwable $error) { $state=['schema_version'=>null,'migrations'=>[],'error'=>'ACS_DATABASE_UNAVAILABLE','database'=>null]; }
+        // status() already verifies the entire registered ledger/checksums and exact schema readback.
+        $state['required_version']=class_exists('AF_ACS_Migrations',false)?AF_ACS_Migrations::VERSION:null;
+        $state['ready']=$state['required_version']!==null && $state['error']===null && $state['schema_version']===$state['required_version'];
+        return $state;
     }
 
-    /** Separate evidence (EXISTING/PROPOSED) from safe readiness. */
+    /** Implementation evidence, current bootstrap, data validation and acceptance are independent. */
     public function capabilities(bool $validateData = false, array $targets = []): array
     {
         (new AF_ACS_AuthorizationService)->requirePermission('admin.integrations.view');
-        $addons = [];
-        if (function_exists('af_discover_addons')) {
-            try { foreach (af_discover_addons() as $meta) { $addons[$meta['id']] = $meta; } }
-            catch (Throwable $error) { $addons = []; }
-        }
-        $base = AF_ADDONS;
-        $core = dirname(rtrim(AF_ADDONS, '/')).'.php';
-        $definitions = [
-            'core.facilities' => ['IC-CORE', 'advancedfunctionality', 'EXISTING', '1.3', [$core => ['af_discover_addons', 'af_is_addon_enabled', 'advancedfunctionality_bootstrap_addons', 'af_xmlhttp_call_addon', 'af_xmlhttp_router', 'af_frontend_asset_allowed']], 'CORE_INTERFACE_UNAVAILABLE', 'Restore the AF core and its standard ACP router.'],
-            'core.schema' => ['IC-CORE', 'advancedcombatsystem', 'EXISTING', '1.2', [], 'SCHEMA_NOT_READY', 'Use the explicit install/upgrade command after resolving the reported schema error; retain existing data.'],
-            'kb.definition_reader' => ['IC-KB', 'knowledgebase', 'EXISTING', '2.1', [$base.'knowledgebase/knowledgebase.php' => ['af_kb_arpg_read_definition', 'af_kb_arpg_normalize_entry', 'af_kb_arpg_character_stat_registry', 'af_kb_arpg_math_contract', 'af_kb_arpg_mechanics_contract']], 'DEFINITION_EXECUTABILITY_UNVERIFIED', 'Validate exact definitions/versions and content prerequisites in stage 2.1; presence of a reader is not execution support.'],
-            'kb.combat_snapshot' => ['IC-KB', 'knowledgebase', 'PROPOSED', '2.2', [], 'PINNED_KB_ADAPTER_NOT_IMPLEMENTED', 'Implement IC-KB-1 and validate supported/executable definitions; do not fall back to legacy previews.'],
-            'cs.combat_snapshot' => ['IC-CS', 'charactersheets', 'PROPOSED', '2.2', [$base.'charactersheets/charactersheets.php' => ['af_charactersheets_require_modules'], $base.'charactersheets/modules/calculator.php' => ['cs_build_character_state', 'af_charactersheets_compute_sheet_view']], 'IMMUTABLE_CS_ADAPTER_NOT_IMPLEMENTED', 'Implement a permission-checked immutable snapshot; the current view can synchronize fixed skills.'],
-            'inv.reserve_consume' => ['IC-INV', 'advancedinventory', 'PROPOSED', '6.1', [$base.'advancedinventory/advancedinventory.php' => ['af_inv_get_items', 'af_inv_get_equipped', 'af_advinv_export_charactersheet_equipment_state', 'af_inv_add_item', 'af_inv_remove_item']], 'ACS_INVENTORY_COMPOSITION_REQUIRED', 'Owner reserve/consume/release/transfer/grant/lookup and writer guards are implemented in ACS-6.1.3A/B. Configure a verified server authorization/recovery composition and accept installed schema/writers before enabling combat. Never substitute remove_item.'],
-            'mybb.atomic_publish' => ['IC-MYBB', 'mybb', 'PROPOSED', '4.1', [MYBB_ROOT.'inc/datahandlers/post.php' => ['PostDataHandler::insert_post']], 'INSTALLED_MYBB_PUBLISH_AUDIT_REQUIRED', 'Audit installed MyBB 1.8.41 PostDataHandler and hooks. Stage 4 R2 coordinator/recovery code is present; bounded fixtures do not certify installed acceptance. Existing MyBB table engines do not require conversion.'],
-            'theme.components' => ['IC-THEME', 'adaptivethemeframework', 'EXISTING', '4.1', [$base.'adaptivethemeframework/adaptivethemeframework.php' => ['af_adaptivethemeframework_register_component', 'af_adaptivethemeframework_slots']], 'INSTALLED_ACS_COMPONENT_ACCEPTANCE_REQUIRED', 'ACS thread/card providers use existing Theme slots; verify installed ATF/APUI rendering and permissions. Do not replace templates.'],
-            'editor.combat_form' => ['IC-EDITOR', 'advancededitor', 'PROPOSED', '4.1', [$base.'advancededitor/advancededitor.php' => ['af_advancededitor_init', 'af_advancededitor_misc_start']], 'INSTALLED_EDITOR_FORM_ACCEPTANCE_REQUIRED', 'Test-only native form/Quick Reply binding is implemented; verify installed hooks/editor before administrator enablement. Never create a second SCEditor.'],
-            'aam.delivery' => ['IC-AAM', 'advancedalertsandmentions', 'PROPOSED', '11', [$base.'advancedalertsandmentions/advancedalertsandmentions.php' => ['af_aam_add_alert']], 'IDEMPOTENT_NOTIFICATION_ADAPTER_PENDING', 'Optional: implement outbox delivery acknowledgements in stage 11; absence must not block base ACS.'],
-            'stats.consumer' => ['IC-STATS', 'advancedstatistic', 'PROPOSED', '10', [$base.'advancedstatistic/advancedstatistic.php' => ['af_advancedstatistic_get_board_stats']], 'CONFIRMED_EVENT_CONSUMER_PENDING', 'Optional: implement an idempotent confirmed-event consumer in stage 10; do not derive combat state from statistics.'],
+        $addons=[];
+        if(function_exists('af_discover_addons'))try{foreach(af_discover_addons() as $meta)$addons[$meta['id']]=$meta;}catch(Throwable $error){}
+        $base=AF_ADDONS;$acs=__DIR__.'/../';$adapters=$acs.'Infrastructure/Adapters/';
+        $core=dirname(rtrim(AF_ADDONS,'/')).'.php';
+        // Supported compositions reviewed against the current source, not an API-presence readiness allowlist.
+        $definitions=[
+            'core.facilities'=>['IC-CORE','advancedfunctionality',[$core=>['af_discover_addons','af_is_addon_enabled','advancedfunctionality_bootstrap_addons','af_xmlhttp_call_addon','af_xmlhttp_router','af_frontend_asset_allowed']],[],
+                'Стандартный AF bootstrap и ACP router','CORE_INTERFACE_UNAVAILABLE','Восстановите штатный AF bootstrap и ACP router.'],
+            'core.schema'=>['IC-CORE','advancedcombatsystem',[],[__DIR__.'/Migrations.php'=>['AF_ACS_Migrations::status','AF_ACS_Migrations::assertInstalled']],
+                'MigrationManager: ledger, checksums, таблицы, колонки и индексы','SCHEMA_NOT_READY','Откройте диагностику схемы; исправьте указанную причину и отдельно запустите штатное обновление. Данные сохраняются.'],
+            'kb.definition_reader'=>['IC-KB','knowledgebase',[$base.'knowledgebase/knowledgebase.php'=>['af_kb_arpg_read_definition','af_kb_arpg_normalize_entry']],[$adapters.'KnowledgeBaseAdapter.php'=>['AF_ACS_KnowledgeBaseAdapter::readDefinition']],
+                'Разрешённое определение и versioned references; только поддерживаемые схемы','INSTALLED_KB_ACCEPTANCE_REQUIRED','Выберите один KB key и проверьте источник без записи; ошибки исправляются через владельца KB.'],
+            'kb.combat_snapshot'=>['IC-KB','knowledgebase',[$base.'knowledgebase/knowledgebase.php'=>['af_kb_arpg_read_definition']],[$adapters.'RegistrationSource.php'=>['AF_ACS_RegistrationSource::read','AF_ACS_RegistrationSource::definitions'],$acs.'Infrastructure/SnapshotStore.php'=>['AF_ACS_SnapshotStore::append']],
+                'RegistrationSource и неизменяемые ACS pins, без перезаписи старых снимков','INSTALLED_KB_SNAPSHOT_ACCEPTANCE_REQUIRED','Проверьте выбранное определение, права и закрепление версий при ручной регистрации. Проверка ACP снимок не сохраняет.'],
+            'cs.combat_snapshot'=>['IC-CS','charactersheets',[$base.'charactersheets/charactersheets.php'=>['af_charactersheets_create_combat_snapshot'],$base.'charactersheets/modules/combat_snapshot.php'=>['af_charactersheets_prepare_combat_snapshot']],[$adapters.'CharacterSheetAdapter.php'=>['AF_ACS_CharacterSheetAdapter::createSnapshot']],
+                'Read-only combat preparation, owner identity, equipment provenance','INSTALLED_CS_ACCEPTANCE_REQUIRED','Выберите один ID листа; проверьте разрешённый read-only snapshot и источники экипировки.'],
+            'inv.reserve_consume'=>['IC-INV','advancedinventory',[$base.'advancedinventory/modules/OwnerProtocol.php'=>['AF_ADVINV_OwnerProtocol::reserve','AF_ADVINV_OwnerProtocol::consume','AF_ADVINV_OwnerProtocol::lookup','AF_ADVINV_OwnerProtocol::participate']],[$adapters.'InventoryAdapter.php'=>['AF_ACS_InventoryAdapter::forCombat','AF_ACS_InventoryAdapter::participate'],$adapters.'CombatInventoryAccess.php'=>['AF_ACS_CombatInventoryAccess::authorize']],
+                'Owner reserve/consume/release/lookup; critical costs только same-writer InnoDB','INSTALLED_INVENTORY_ACCEPTANCE_REQUIRED','Владелец проверяет owner schema, writer routing, резервы и отдельный spending grant. ACP не создаёт reserve/consume и не выдаёт authorization.'],
+            'stats.consumer'=>['IC-STATS','advancedstatistic',[$base.'advancedstatistic/modules/combat_statistics.php'=>['af_advancedstatistic_publish_completed_aggregate','af_advancedstatistic_completed_aggregate_receipt']],[$adapters.'StatisticsAdapter.php'=>['AF_ACS_StatisticsAdapter::publishCompletedAggregate','AF_ACS_StatisticsAdapter::lookup'],$acs.'Infrastructure/StatisticsRepository.php'=>['AF_ACS_StatisticsRepository::consume','AF_ACS_StatisticsRepository::receipt']],
+                'Completed aggregate: version/hash, durable receipt и archived recovery','INSTALLED_STATISTICS_ACCEPTANCE_REQUIRED','Проверьте installed completed aggregate и lookup прежней версии на изолированной копии. Диагностика не запускает consumer и не меняет очередь.'],
+            'aam.delivery'=>['IC-AAM','advancedalertsandmentions',[$base.'advancedalertsandmentions/advancedalertsandmentions.php'=>['af_aam_add_alert']],[],
+                'Обычный owner alert существует; ACS idempotent delivery не реализован','IDEMPOTENT_NOTIFICATION_ADAPTER_PENDING','Оставьте ACS delivery отключённой до owner-approved operation key, receipt и lookup. Native alerts не повторять.'],
+            'theme.components'=>['IC-THEME','adaptivethemeframework',[$base.'adaptivethemeframework/adaptivethemeframework.php'=>['af_adaptivethemeframework_register_component','af_adaptivethemeframework_slots']],[$acs.'Presentation/ThreadComponents.php'=>['af_advancedcombatsystem_register_thread_component','af_advancedcombatsystem_combat_card','af_advancedcombatsystem_thread_session_link']],
+                'ACS providers в существующих ATF thread/post slots','INSTALLED_ACS_COMPONENT_ACCEPTANCE_REQUIRED','Вручную проверьте установленную тему, роли, мобильный вид и sticky/meta-line; шаблоны ATF не подменять.'],
+            'editor.combat_form'=>['IC-EDITOR','advancededitor',[$base.'advancededitor/advancededitor.php'=>['af_advancededitor_init','af_advancededitor_misc_start']],[$acs.'Presentation/EditorPublicationController.php'=>['AF_ACS_EditorPublicationController::handle','AF_ACS_EditorPublicationController::decorate']],
+                'Native form/Quick Reply test binding, один редактор, production gate закрыт','INSTALLED_EDITOR_FORM_ACCEPTANCE_REQUIRED','Вручную проверьте newreply/Quick Reply, editor lifecycle и recovery в разрешённом staging scope; второй SCEditor не создавать.'],
+            'mybb.atomic_publish'=>['IC-MYBB','mybb',[MYBB_ROOT.'inc/datahandlers/post.php'=>['PostDataHandler::insert_post']],[$adapters.'MybbPostGateway.php'=>['AF_ACS_MybbPostGateway::publish'],$acs.'Application/PublishService.php'=>['AF_ACS_PublishService::issue']],
+                'R2 native Gateway и отдельный ACS coordinator, без общей MyBB/ACS транзакции','INSTALLED_MYBB_PUBLISH_AUDIT_REQUIRED','Откройте «Публикация»: нужны installed source/hooks/routing, native lifecycle и явное решение администратора по IC-MYBB-1. Диагностика публикацию не разрешает.'],
         ];
-        $state = $this->schema();
-        $rows = [];
-        foreach ($definitions as $id => [$contract, $owner, $interfaceStatus, $stage, $sources, $reason, $action]) {
-            $optional = in_array($id, ['aam.delivery', 'stats.consumer'], true);
-            $meta = $addons[$owner] ?? null;
-            $detected = $owner === 'advancedfunctionality' ? is_file($core) : ($owner === 'mybb' ? is_file(MYBB_ROOT.'inc/datahandlers/post.php') : $meta !== null);
-            $enabled = in_array($owner, ['advancedfunctionality', 'mybb'], true) ? $detected : ($detected && function_exists('af_is_addon_enabled') && af_is_addon_enabled($owner));
-            $observed = $this->interfaces($sources);
-            $version = $meta['version'] ?? null;
-            if ($owner === 'advancedfunctionality' && function_exists('advancedfunctionality_info')) { $version = advancedfunctionality_info()['version'] ?? null; }
-            if ($owner === 'mybb') { $version = $GLOBALS['mybb']->version ?? null; }
-            $ready = false;
-            if ($id === 'core.facilities') {
-                $ready = $enabled && $observed !== [] && !array_filter($observed, fn($api) => !$api['declared'] || !$api['callable_now'])
-                    && class_exists('AF_Admin', false) && method_exists('AF_Admin', 'findAdminController');
-            } elseif ($id === 'core.schema') { $ready = $detected && $state['error'] === null && $state['schema_version'] === '001_foundation'; }
-            $rowReason = $ready ? null : (!$detected ? 'OWNER_NOT_DETECTED' : (!$enabled ? 'OWNER_DISABLED' : $reason));
-            if ($detected && $enabled && $interfaceStatus === 'EXISTING' && array_filter($observed, fn($api) => !$api['declared'])) { $rowReason = 'INTERFACE_MISSING'; }
-            if ($id === 'core.schema' && !$ready) { $rowReason = $state['error'] ?? $reason; }
-            $remediation = $ready ? 'No action required for this capability.' : $action;
-            if (!$ready && $id !== 'core.schema' && !in_array($owner, ['advancedfunctionality', 'mybb'], true)) {
-                if (!$detected) { $remediation = ($optional ? 'Optional: ' : '').'Install/restore owner '.$owner.' through AF. '.$action; }
-                elseif (!$enabled) { $remediation = ($optional ? 'Optional: ' : '').'Enable owner '.$owner.' through AF. '.$action; }
+        $state=$this->schema();$rows=[];
+        foreach($definitions as $id=>[$contract,$owner,$sources,$implementation,$scope,$blocker,$action]){
+            $meta=$addons[$owner]??null;
+            $detected=$owner==='advancedfunctionality'?is_file($core):($owner==='mybb'?is_file(MYBB_ROOT.'inc/datahandlers/post.php'):($owner==='advancedcombatsystem'?is_file(__DIR__.'/../../manifest.php'):($meta!==null||is_file($base.$owner.'/manifest.php'))));
+            $enabled=in_array($owner,['advancedfunctionality','mybb'],true)?$detected:($detected&&function_exists('af_is_addon_enabled')&&af_is_addon_enabled($owner));
+            $ownerApis=$this->interfaces($sources);$codeApis=$this->interfaces($implementation);$observed=$ownerApis+$codeApis;
+            $missingOwner=(bool)array_filter($ownerApis,static fn($api)=>!$api['declared']);
+            $missingCode=(bool)array_filter($codeApis,static fn($api)=>!$api['declared']);
+            $supported=$id!=='aam.delivery';
+            $impl=!$supported?'NOT_IMPLEMENTED':($missingCode?'INCOMPLETE':'IMPLEMENTED');
+            $runtime=!$enabled?'UNAVAILABLE':($missingOwner||$missingCode?'INTERFACE_MISSING':(array_filter($observed,static fn($api)=>!$api['loaded'])?'LAZY_LOADABLE':'LOADED'));
+            $ready=false;$reason=!$detected?'OWNER_NOT_DETECTED':(!$enabled?'OWNER_DISABLED':(!$supported?$blocker:($missingCode?'IMPLEMENTATION_INCOMPLETE':($missingOwner?'INTERFACE_MISSING':$blocker))));
+            if($id==='core.schema'){$ready=$detected&&$state['ready'];$reason=$ready?null:($state['error']??'SCHEMA_NOT_READY');}
+            elseif($id==='core.facilities'){
+                $ready=$enabled&&!$missingOwner&&$observed&&!array_filter($observed,static fn($api)=>!$api['callable_now'])&&class_exists('AF_Admin',false)&&method_exists('AF_Admin','findAdminController');
+                $reason=$ready?null:'CORE_INTERFACE_UNAVAILABLE';
             }
-            $rows[$id] = [
-                'capability' => $id, 'contract_id' => $contract, 'owner' => $owner,
-                'detected' => $detected, 'enabled' => $enabled, 'version' => is_string($version) ? $version : null,
-                'version_evidence' => $owner === 'mybb' ? 'runtime, not deployment certification' : ($meta ? 'manifest' : 'loaded core metadata'),
-                'interface_status' => $interfaceStatus === 'EXISTING' && $observed && array_filter($observed, fn($api) => !$api['declared']) ? 'BLOCKED' : $interfaceStatus,
-                'interfaces' => $observed,
-                'readiness' => $ready ? 'READY' : ($optional ? 'OPTIONAL_UNAVAILABLE' : 'BLOCKED'),
-                'reason' => $rowReason, 'implementation_blocker' => $ready ? null : $reason,
-                'roadmap_stage' => $stage, 'remediation' => $remediation,
+            $blocked=!$detected||!$enabled||!$supported||$missingOwner||$missingCode||in_array($id,['core.schema','core.facilities','mybb.atomic_publish'],true);
+            $version=$meta['version']??null;
+            if($owner==='mybb')$version=$GLOBALS['mybb']->version??null;
+            if($owner==='advancedfunctionality'&&function_exists('advancedfunctionality_info'))$version=advancedfunctionality_info()['version']??null;
+            $data=AF_ACS_CapabilityValidator::notChecked($id,'not_checked',in_array($id,['kb.definition_reader','kb.combat_snapshot','cs.combat_snapshot'],true)?'SOURCE_NOT_SELECTED':'VALIDATION_NOT_REQUESTED');
+            if($id==='core.schema')$data=AF_ACS_CapabilityValidator::row($id,$ready,'schema_integrity_readback',$ready?[]:[['code'=>$reason,'path'=>'schema','severity'=>'error']]);
+            $rows[$id]=[
+                'capability'=>$id,'contract_id'=>$contract,'owner'=>$owner,'detected'=>$detected,'enabled'=>$enabled,'version'=>is_string($version)?$version:null,
+                'version_evidence'=>$owner==='mybb'?'runtime metadata; не installed acceptance':'manifest / текущий bootstrap',
+                'interface_status'=>$impl==='IMPLEMENTED'?'EXISTING':$impl,'implementation_status'=>$impl,'implementation_scope'=>$scope,
+                'interfaces'=>$observed,'runtime_status'=>$runtime,'installation_status'=>$id==='core.schema'?($state['ready']?'VERIFIED':'BLOCKED'):'NOT_VERIFIED',
+                'installation_scope'=>$id==='core.schema'?'MigrationManager full schema readback':'Owner installation/schema не проверялись; detected/enabled не заменяют эту проверку',
+                'installed_acceptance'=>'NOT_VERIFIED','verification_level'=>$id==='core.schema'?'schema_integrity_readback':'source_review / declarations',
+                'readiness'=>$ready?'READY':($blocked?'BLOCKED':'NOT_VERIFIED'),'reason'=>$reason,'scope'=>$scope,'data_check'=>$data,
+                'implementation_blocker'=>$impl==='IMPLEMENTED'?null:($missingCode?'IMPLEMENTATION_INCOMPLETE':$blocker),
+                'roadmap_stage'=>null,'remediation'=>!$detected?'Установите или восстановите owner '.$owner.'. '.$action:(!$enabled?'Включите owner '.$owner.' штатным способом после его проверки. '.$action:($ready?'В указанной области блокировок нет. Installed acceptance публикации проверяется отдельно.':$action)),
             ];
         }
-        require_once __DIR__.'/../Infrastructure/Adapters/CapabilityValidator.php';
-        $checks = [];
-        if ($validateData) {
-            require_once __DIR__.'/IntegrationCapabilities.php';
-            $checks = (new AF_ACS_IntegrationCapabilities)->inspect($targets);
-        }
-        if ($validateData) foreach ($definitions as $id=>$definition) $rows[$id]['interfaces'] = $this->interfaces($definition[4]);
-        if (isset($checks['kb.definition_reader'])) {
-            $rows['kb.definition_reader'] = array_replace($rows['kb.definition_reader'],$checks['kb.definition_reader'],
-                ['implementation_blocker'=>$checks['kb.definition_reader']['reason'],'roadmap_stage'=>'2.1.6',
-                    'remediation'=>'Validation applies only to the selected definition, for read-only preparation. Resolver execution and immutable registration require later gates.']);
-        }
-        $kb = $base.'knowledgebase/'; $cs = $base.'charactersheets/';
-        $capSources = [
+        $checks=[];
+        if($validateData){require_once __DIR__.'/IntegrationCapabilities.php';$checks=(new AF_ACS_IntegrationCapabilities)->inspect($targets);}
+        foreach(['kb.definition_reader','kb.combat_snapshot','cs.combat_snapshot'] as $id)if(isset($checks[$id]))$rows[$id]['data_check']=$checks[$id];
+        $kb=$base.'knowledgebase/';$cs=$base.'charactersheets/';
+        $capSources=[
             'accuracy_registry'=>[$kb.'knowledgebase.php'=>['af_kb_arpg_character_stat_registry']],
             'accuracy_roundtrip'=>[$kb.'knowledgebase.php'=>['af_kb_validate_rules_json_by_type_arpg','af_kb_arpg_normalize_entry']],
             'canonical_elements_17'=>[$kb.'modules/arpg_elements.php'=>['af_kb_arpg_primary_elements','af_kb_arpg_list_primary_elements']],
@@ -135,20 +140,24 @@ final class AF_ACS_Diagnostics
             'snapshot_read_only'=>[$cs.'modules/combat_snapshot.php'=>['af_charactersheets_prepare_combat_snapshot']],
             'definition_versioning'=>[$kb.'knowledgebase.php'=>['af_kb_arpg_acs_fingerprint','af_kb_arpg_normalize_entry']],
         ];
-        foreach (AF_ACS_CapabilityValidator::IDS as $id) {
-            $owner = in_array($id, ['character_snapshot','equipment_source_breakdown','snapshot_read_only'], true) ? 'charactersheets' : 'knowledgebase';
-            $meta = $addons[$owner] ?? null;
-            $check = $checks[$id] ?? AF_ACS_CapabilityValidator::row($id,false,'declarations_only',[]);
-            $detected = $meta !== null;
-            $enabled = $detected && function_exists('af_is_addon_enabled') && af_is_addon_enabled($owner);
-            $observed = $this->interfaces($capSources[$id]);
-            if (array_filter($observed,static fn($api) => !$api['declared'])) { $check['interface_status'] = 'BLOCKED'; $check['readiness'] = 'BLOCKED'; $check['reason'] = 'INTERFACE_MISSING'; }
-            if (!$enabled) { $check['readiness'] = 'BLOCKED'; $check['reason'] = $detected ? 'OWNER_DISABLED' : 'OWNER_NOT_DETECTED'; }
-            $rows[$id] = $check + ['contract_id'=>in_array($id,['canonical_elements_17','magic_direction_hierarchy','legacy_element_aliases','explicit_damage_element','element_snapshot_provenance'],true) ? 'IC-KB-2' : ($owner === 'charactersheets' ? 'IC-CS' : 'IC-KB'),
-                'owner'=>$owner,'detected'=>$detected,'enabled'=>$enabled,'version'=>$meta['version'] ?? null,'version_evidence'=>'manifest / scope: '.$check['scope'],
-                'interfaces'=>$observed,'implementation_blocker'=>$check['reason'],'roadmap_stage'=>'2.1.6',
-                'remediation'=>'Run explicit read-only validation; select at most one sheet/definition. READY applies only to the displayed scope; correct missing data through its owner.'];
+        foreach(AF_ACS_CapabilityValidator::IDS as $id){
+            $owner=in_array($id,['character_snapshot','equipment_source_breakdown','snapshot_read_only'],true)?'cs.combat_snapshot':'kb.definition_reader';
+            $row=$rows[$owner];$row['capability']=$id;$row['interfaces']=$this->interfaces($capSources[$id]);
+            $row['data_check']=$checks[$id]??AF_ACS_CapabilityValidator::notChecked($id,'not_checked',in_array($id,['bestiary_snapshot','character_snapshot','equipment_source_breakdown','snapshot_read_only'],true)?'SOURCE_NOT_SELECTED':'VALIDATION_NOT_REQUESTED');
+            $row['implementation_scope']='Поддерживаемый owner/ACS validation contract: '.$id;
+            $row['runtime_status']=!$row['enabled']?'UNAVAILABLE':(array_filter($row['interfaces'],static fn($api)=>!$api['loaded'])?'LAZY_LOADABLE':'LOADED');
+            $row['remediation']='Нажмите «Проверить без записи». Область результата указана отдельно; ошибки данных исправляются через владельца источника. Installed acceptance остаётся отдельной ручной проверкой.';
+            if(array_filter($row['interfaces'],static fn($api)=>!$api['declared'])){$row['runtime_status']='INTERFACE_MISSING';$row['readiness']='BLOCKED';$row['reason']='INTERFACE_MISSING';}
+            $rows[$id]=$row;
         }
+        // Loading a supported lazy module during a selected probe is evidence, never acceptance.
+        if($validateData)foreach($rows as &$row){foreach($row['interfaces'] as $name=>&$api){$parts=explode('::',$name,2);$api['loaded']=count($parts)===2?class_exists($parts[0],false)&&method_exists($parts[0],$parts[1]):function_exists($name);$api['callable_now']=count($parts)===2?$api['loaded']&&is_callable($parts):$api['loaded'];}unset($api);
+            if(in_array($row['runtime_status'],['LOADED','LAZY_LOADABLE'],true))$row['runtime_status']=array_filter($row['interfaces'],static fn($api)=>!$api['loaded'])?'LAZY_LOADABLE':'LOADED';
+        }unset($row);
+        foreach($rows as &$row){
+            if($row['capability']!=='core.schema'&&$row['data_check']['readiness']!=='NOT_CHECKED')$row['verification_level']='source_review + '.$row['data_check']['scope'];
+            if($row['data_check']['readiness']==='BLOCKED'){$row['readiness']='BLOCKED';$row['reason']=$row['data_check']['reason'];}
+        }unset($row);
         return $rows;
     }
 

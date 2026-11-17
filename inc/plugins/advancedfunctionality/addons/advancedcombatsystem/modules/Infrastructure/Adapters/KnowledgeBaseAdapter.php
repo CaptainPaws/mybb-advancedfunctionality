@@ -317,9 +317,27 @@ final class AF_ACS_KnowledgeBaseAdapter
             if (!$this->available($actorUid)) return $this->failure('access_denied');
             $catalog = af_kb_arpg_list_primary_elements(); $issues = []; $seen = [];
             if (count($catalog) !== 17 || array_keys($catalog) !== array_keys(af_kb_arpg_primary_elements())) AF_ACS_CapabilityValidator::issue($issues,'element_kind_invalid','element_registry');
-            foreach ($catalog as $element) {
-                $issues = array_merge($issues,$element['diagnostics']);
-                if (!$this->references($element,$actorUid,$issues,$seen)) return $this->failure('definition_access_denied');
+            foreach ($catalog as $key=>$element) {
+                $elementIssues=$element['diagnostics'];
+                if (!$this->references($element,$actorUid,$elementIssues,$seen)) return $this->failure('definition_access_denied');
+                foreach($elementIssues as $issue){
+                    // Bounded diagnostic metadata only. Never expose rules or raw version values.
+                    $issue['canonical_key']=(string)$key;
+                    $issue['entry_type']='arpg_element';
+                    if($issue['code']==='element_version_invalid'){
+                        $node=$element['definition']??[];
+                        foreach($element['provenance']??[] as $candidate)if(!is_int($candidate['definition_version']??null)||$candidate['definition_version']<1){$node=$candidate;break;}
+                        $sourceKey=(string)($node['source_key']??$key);
+                        if(!preg_match('/\A[a-z][a-z0-9_-]{0,63}\z/D',$sourceKey))$sourceKey=(string)$key;
+                        $issue['reference']='arpg_element:'.$sourceKey.'.element_revision -> definition_version';
+                        $revision=$node['definition_version']??null;
+                        $issue['actual_type']=get_debug_type($revision);
+                        $issue['observed_revision']=is_int($revision)?(string)$revision:($revision===null?'Отсутствует':'Значение не является JSON integer; raw значение не выводится.');
+                        $issue['expected']='Целое element_revision >= 1; versioned reference с согласованным fingerprint.';
+                        $issue['recommendation']='Проверьте эту запись в редакторе KB и её versioned references. Согласуйте исправление с владельцем KB; не меняйте версии или fingerprint массово. Диагностика данные не исправляет.';
+                    }
+                    $issues[]=$issue;
+                }
             }
             return ['schema_version'=>1,'contract_id'=>'IC-KB-2','ready'=>!array_filter($issues,static fn($i) => $i['severity'] === 'error'),
                 'data'=>$catalog,'diagnostics'=>$issues,'persistent'=>false,'executable'=>false];
