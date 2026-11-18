@@ -17,3 +17,19 @@
 
 .af-acs-gm{max-width:100%;min-width:0;overflow-wrap:anywhere;margin:1rem 0}.af-acs-gm *{box-sizing:border-box;min-width:0}.af-acs-gm nav,.af-acs-gm__steps{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}.af-acs-gm nav a{display:inline-block;padding:.5rem}.af-acs-gm [aria-current]{font-weight:700;text-decoration:underline}.af-acs-gm__steps{padding-inline-start:1.5rem}.af-acs-gm form{max-width:100%;padding:.65rem 0;margin:.5rem 0}.af-acs-gm label{display:block;margin:.4rem 0}.af-acs-gm input,.af-acs-gm select,.af-acs-gm button,.af-acs-gm textarea{font:inherit;max-width:100%}.af-acs-gm input:not([type=checkbox]),.af-acs-gm select,.af-acs-gm button{min-height:2.5rem}.af-acs-gm table{width:100%;table-layout:fixed;border-collapse:collapse}.af-acs-gm th,.af-acs-gm td{padding:.4rem;vertical-align:top;overflow-wrap:anywhere}.af-acs-gm__warning{font-weight:600}.af-acs-gm :focus-visible{outline:2px solid currentColor;outline-offset:2px}@media(max-width:48rem){.af-acs-gm th,.af-acs-gm td{padding:.2rem;font-size:.9em}.af-acs-gm button{white-space:normal}.af-acs-gm nav{gap:.15rem}}
 .af-acs-gm__steps{list-style:none;padding-inline-start:0}
+
+/* Completion uses native navigation and forms; no additional runtime on showthread. */
+.af-acs-completion { min-width: 0; overflow-wrap: anywhere; }
+.af-acs-completion nav { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin-block: 1rem; }
+.af-acs-completion nav [aria-current="page"] { font-weight: bold; text-decoration-thickness: .15em; }
+.af-acs-completion article, .af-acs-completion details { margin-block: .8rem; padding-block: .5rem; border-bottom: 1px solid currentColor; }
+.af-acs-completion form { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; margin-block: .8rem; }
+.af-acs-completion label { display: flex; flex-direction: column; gap: .25rem; min-width: 0; max-width: 100%; }
+.af-acs-completion input, .af-acs-completion select, .af-acs-completion button { box-sizing: border-box; max-width: 100%; }
+.af-acs-completion summary { cursor: pointer; }
+.af-acs-completion :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+@media (max-width: 600px) {
+    .af-acs-completion form { align-items: stretch; flex-direction: column; }
+    .af-acs-completion input:not([type="checkbox"]):not([type="hidden"]), .af-acs-completion select { width: 100%; }
+    .af-acs-completion ul { padding-inline-start: 1.25rem; }
+}

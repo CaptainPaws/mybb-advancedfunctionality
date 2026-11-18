@@ -353,10 +353,11 @@ function af_advancedcombatsystem_loot_page():void
 {
     global $mybb,$header,$headerinclude,$footer;
     require_once __DIR__.'/modules/Presentation/LootAllocationPage.php';
+    require_once __DIR__.'/modules/Presentation/ThreadComponents.php';
     try{$body=AF_ACS_LootAllocationPage::render($mybb->get_input('session_id'),$mybb->get_input('encounter_id'));}
-    catch(Throwable){http_response_code(403);$body='<p>Добыча недоступна. Проверьте текущие права сессии и доступ к теме.</p>';}
+    catch(Throwable $error){$failure=af_advancedcombatsystem_session_failure($error);http_response_code(403);$body='<p>Завершение и награды недоступны. Проверьте текущие права сессии и доступ к теме. error_id='.htmlspecialchars_uni($failure['error_id']).'</p>';}
     header('Cache-Control: private, no-store');
-    output_page('<html><head><title>ACS · Распределение добычи</title>'.$headerinclude.'</head><body>'.$header.'<main>'.$body.'</main>'.$footer.'</body></html>');exit;
+    output_page('<html><head><title>ACS · Завершение и награды</title>'.$headerinclude.af_advancedcombatsystem_presentation_css('has_acs_completion').'</head><body>'.$header.'<main>'.$body.'</main>'.$footer.'</body></html>');exit;
 }
 
 function af_advancedcombatsystem_archive_page():void
