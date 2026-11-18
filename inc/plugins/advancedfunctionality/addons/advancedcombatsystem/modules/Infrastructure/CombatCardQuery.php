@@ -6,6 +6,7 @@ require_once __DIR__.'/Adapters/SessionAccess.php';
 require_once __DIR__.'/../Domain/Publication.php';
 require_once __DIR__.'/../Application/AudienceService.php';
 require_once __DIR__.'/../Application/EffectSummary.php';
+require_once __DIR__.'/CombatCardProjection.php';
 
 /** Batched, immutable result projection. No snapshots, Builder, Resolver or mechanical writers. */
 final class AF_ACS_CombatCardQuery extends AF_ACS_Repository
@@ -27,7 +28,7 @@ final class AF_ACS_CombatCardQuery extends AF_ACS_Repository
         $ids=[];foreach($pids as $id){$ids[]=self::integer($id,'4294967295');} $ids=array_values(array_unique($ids));
         if (!$ids) { return []; }if(count($ids)>100){throw new RuntimeException('ACS_CARD_PAGE_LIMIT');}
         $role='SELECT 1 FROM '.$this->table('session_roles').' r WHERE r.session_id=s.session_id AND r.uid=? AND (r.expires_at IS NULL OR r.expires_at>?)';
-        $rows=$this->sql('SELECT s.*,p.visible AS native_visible,EXISTS('.$role." AND r.role IN ('owner','gm')) AS detailed FROM ".$this->table('submissions').' s JOIN `'.$this->prefix.'posts` p ON p.pid=s.pid WHERE s.tid=? AND p.tid=s.tid AND p.uid=s.author_uid AND p.fid=? AND s.pid IN ('.implode(',',array_fill(0,count($ids),'?')).') AND EXISTS('.$role.')',array_merge([$uid,time(),$tid,$fid],$ids,[$uid,time()]))['rows'];
+        $rows=$this->sql('SELECT s.*,r.round_number AS card_round,p.visible AS native_visible,EXISTS('.$role." AND r.role IN ('owner','gm')) AS detailed FROM ".$this->table('submissions').' s LEFT JOIN '.$this->table('turns').' t ON t.id=s.turn_id LEFT JOIN '.$this->table('rounds').' r ON r.id=t.round_id AND r.encounter_id=s.encounter_id JOIN `'.$this->prefix.'posts` p ON p.pid=s.pid WHERE s.tid=? AND p.tid=s.tid AND p.uid=s.author_uid AND p.fid=? AND s.pid IN ('.implode(',',array_fill(0,count($ids),'?')).') AND EXISTS('.$role.')',array_merge([$uid,time(),$tid,$fid],$ids,[$uid,time()]))['rows'];
         $allowed=[];$needDetails=false;$scopes=[];$repo=new AF_ACS_EncounterRepository($this->connection);
         foreach($rows as $row){
             $scope=$scopes[(string)$row['session_id']]??=(new AF_ACS_SessionService($repo,$access))->view((string)$row['session_id']);$row['detailed']=$scope['can_manage'];
@@ -36,7 +37,7 @@ final class AF_ACS_CombatCardQuery extends AF_ACS_Repository
             $allowed[$row['submission_id']]=$row;$needDetails=$needDetails||(bool)$row['detailed'];
         }
         if(!$allowed)return [];
-        $records=$this->terminalRecords(array_keys($allowed),$needDetails);$out=[];$names=[];
+        $records=$this->terminalRecords(array_keys($allowed),$needDetails);$out=[];
         foreach($allowed as $id=>$row){
             $receipt=$this->verifyTerminalRecord($row,$records[$id]??null);
             if($receipt && (($receipt['session_id']??null)!==$row['session_id'] || ($receipt['turn_id']??null)!==$row['turn_id'] || ($receipt['pid']??null)!==$row['pid'] || ($receipt['fid']??null)!==$fid))throw new RuntimeException('ACS_CARD_LINK_INVALID');
@@ -47,40 +48,44 @@ final class AF_ACS_CombatCardQuery extends AF_ACS_Repository
                 $summary=json_decode($records[$id]['card_summary'],true,64,JSON_THROW_ON_ERROR);
                 $actions=json_decode($records[$id]['card_actions'],true,64,JSON_THROW_ON_ERROR);
                 if(($summary['schema_version']??null)!==1 || !is_array($summary['actions']??null) || !is_array($actions) || count($summary['actions'])!==count($actions))throw new RuntimeException('ACS_CARD_RESULT_INVALID');
-                $details=[];$statusRows=json_decode($records[$id]['card_statuses']??'null',true,64,JSON_THROW_ON_ERROR)??[];
+                $statusRows=json_decode($records[$id]['card_statuses']??'null',true,64,JSON_THROW_ON_ERROR)??[];
                 $history=json_decode($records[$id]['card_boundaries']??'null',true,64,JSON_THROW_ON_ERROR)??[];
-                $prepared=json_decode($records[$id]['card_prepared']??'null',true,64,JSON_THROW_ON_ERROR)??[];$statusMap=json_decode($records[$id]['card_status_map']??'null',true,64,JSON_THROW_ON_ERROR)??[];
-                foreach($summary['actions'] as $i=>$step){
-                    $entry=array_intersect_key($step,array_flip(['actor_id','target_id','ability_key','outcome','rolls','probabilities','costs','damage','item','interaction','cooperation','spatial','cover']));
-                    foreach(['actor_id','target_id'] as $k){$entry[$k]=self::integer($entry[$k]??null);$names[$row['session_id']][$entry[$k]]=true;}
-                    $entry['components']=[];$entry['mechanics']=[];
-                    foreach($actions[$i]['strikes']??[$actions[$i]] as $strike){
-                        foreach($strike['allocation']['components']??[] as $c)$entry['components'][]=array_intersect_key($c,array_flip(['damage_type','element','raw','after_crit','effective_defense','post_defense','allocated','immunity']));
-                        $original=(string)($strike['original_target']??$entry['target_id']);$actual=(string)($strike['resolved_target']??$original);
-                        $entry['mechanics'][]=['type'=>'target','original_target'=>$original,'resolved_target'=>$actual,'outcome'=>$strike['scenario'],'rolls'=>$strike['rolls'],'damage'=>$strike['allocation']['integer_budget']];
-                        foreach($strike['reactions']??[] as $reaction)if(($reaction['queue_kind']??null)!=='prepared')$entry['mechanics'][]=['type'=>'reaction']+array_intersect_key($reaction,array_flip(['id','entity_id','phase','executed','reason','redirect_success','original_target','resolved_target']));
-                    }
-                    foreach($statusRows as $status)if(in_array($status['target_entity_id'],[$entry['actor_id'],...($actions[$i]['targets']??[]),$actual],true))$entry['mechanics'][]=['type'=>'status','effect_key'=>$status['spec']['effect_key'],'target_entity_id'=>$status['target_entity_id'],'stacks'=>$status['stacks'],'remaining_duration'=>$status['remaining_duration'],'duration_unit'=>$status['duration_unit'],'status'=>$status['status']];
-                    if($i===0)foreach($history as $boundary)foreach($boundary['result']['statuses']['trace']['events']??[] as $event){
-                        if(($event['type']??null)==='upkeep_result')$entry['mechanics'][]=['type'=>'upkeep']+array_intersect_key($event,array_flip(['id','source_entity_id','paid','reason','costs','boundary_key']));
-                        elseif(isset($event['effect_id']))$entry['mechanics'][]=['type'=>'tick','effect_id'=>$event['effect_id'],'tick_count'=>count($event['ticks']??[]),'boundary_key'=>$boundary['boundary_key']];
-                    }
-                    $entry['mechanics']=[...$entry['mechanics'],...AF_ACS_EffectSummary::mechanics($actions[$i],$statusRows,$prepared,$statusMap)];
-                    $details[]=$entry;
-                }
+                $prepared=json_decode($records[$id]['card_prepared']??'null',true,64,JSON_THROW_ON_ERROR)??[];
+                $statusMap=json_decode($records[$id]['card_status_map']??'null',true,64,JSON_THROW_ON_ERROR)??[];
+                $details=AF_ACS_CombatCardProjection::actions($summary['actions'],$actions,$statusRows,$prepared,$statusMap);
+                $card['encounter_id']=(string)$row['encounter_id'];
+                $card['round']=$row['card_round']===null?null:(string)$row['card_round'];
+                $card['actors']=array_values(array_unique(array_column($details,'actor_name')));$card['ap']=0;
+                foreach($details as $step)foreach($step['costs'] as $cost)if($cost['kind']==='ap')$card['ap']+=$cost['amount'];
+                $card['boundaries']=[];
+                foreach($history as $boundary){$trace=$boundary['result']['statuses']['trace']??[];$events=AF_ACS_CombatCardProjection::events($trace,$statusRows);if($events)$card['boundaries'][]=['phase'=>'start','events'=>$events];}
+                $end=json_decode($records[$id]['card_end']??'null',true,64,JSON_THROW_ON_ERROR)??[];
+                foreach($end as $trace){$events=AF_ACS_CombatCardProjection::events($trace,$statusRows);if($events)$card['boundaries'][]=['phase'=>'end','events'=>$events];}
+                $initial=json_decode($records[$id]['card_initial_effects']??'null',true,64,JSON_THROW_ON_ERROR)??[];
+                $events=AF_ACS_CombatCardProjection::events($initial,$statusRows);if($events)$card['boundaries'][]=['phase'=>'initial','events'=>$events];
+                $card['spawns']=array_map(static fn($s)=>array_intersect_key($s,array_flip(['entity_id','kind','source_event_id'])),json_decode($records[$id]['card_spawns']??'null',true,64,JSON_THROW_ON_ERROR)??[]);
                 $card['details']=$details;$card['result_hash']=$receipt['result_hash'];
             }
             $out[$row['pid']]=$card;
         }
-        // Names are presentation only, never taken from an Appearance mask or used in result hashes.
+        // Names come only from hash-verified registration events, never current entities or cosmetic masks.
+        $needed=[];foreach($out as $card)if($card['details']!==null)$needed[$card['session_id']]=array_values(array_unique([...($needed[$card['session_id']]??[]),...AF_ACS_CombatCardProjection::identities($card['details'])]));
         $labels=[];
-        if($names){
-            $all=[];foreach($names as $set)$all=array_merge($all,array_keys($set));$all=array_values(array_unique($all));
-            foreach($this->sql('SELECT id,session_id,name FROM '.$this->table('entities').' WHERE id IN ('.implode(',',array_fill(0,count($all),'?')).')',$all)['rows'] as $e)$labels[(string)$e['session_id']][(string)$e['id']]=$e['name'];
+        if($needed){
+            $sessions=array_keys($needed);$entities=[];foreach($needed as $set)$entities=[...$entities,...$set];$entities=array_values(array_unique($entities));
+            if($entities){
+                $sql='SELECT e.session_id,d.payload_json,d.visibility_json,d.content_hash FROM '.$this->table('events').' e JOIN '.$this->table('event_details').' d ON d.event_id=e.id WHERE e.event_type=? AND e.session_id IN ('.implode(',',array_fill(0,count($sessions),'?')).') AND JSON_UNQUOTE(JSON_EXTRACT(d.payload_json,\'$.result.entity_id\')) IN ('.implode(',',array_fill(0,count($entities),'?')).')';
+                foreach($this->sql($sql,['entity.register',...$sessions,...$entities])['rows'] as $record){
+                    if(!hash_equals($record['content_hash'],hash('sha256',$record['payload_json']."\n".$record['visibility_json'])))throw new RuntimeException('ACS_CARD_RESULT_INVALID');
+                    $registration=json_decode($record['payload_json'],true,64,JSON_THROW_ON_ERROR);$entity=(string)($registration['result']['entity_id']??'');$name=trim((string)($registration['request']['name']??''));
+                    if($name!==''&&in_array($entity,$needed[(string)$record['session_id']]??[],true))$labels[(string)$record['session_id']][$entity]=$name;
+                }
+            }
         }
-        foreach($out as &$card)if($card['details']!==null)foreach($card['details'] as &$step){
-            $step['actor_name']=$labels[$card['session_id']][$step['actor_id']]??'Участник';$step['target_name']=$labels[$card['session_id']][$step['target_id']]??'Участник';
-        }unset($step,$card);
+        foreach($out as &$card)if($card['details']!==null){
+            $card['details']=AF_ACS_CombatCardProjection::labels($card['details'],$labels[$card['session_id']]??[]);
+            $card['actors']=array_values(array_unique(array_column($card['details'],'actor_name')));
+        }unset($card);
         return $out;
     }
 }
