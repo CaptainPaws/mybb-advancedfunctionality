@@ -82,6 +82,8 @@ function af_advancedcombatsystem_install(): bool
     return af_advancedcombatsystem_lifecycle('install', static function () {
         af_advancedcombatsystem_migrations()->run();
         af_advancedcombatsystem_session_settings();
+        require_once __DIR__.'/modules/Administration/NotificationTask.php';
+        af_advancedcombatsystem_install_notification_task();
     });
 }
 
@@ -107,6 +109,8 @@ function af_advancedcombatsystem_upgrade(): bool
     return af_advancedcombatsystem_lifecycle('upgrade', static function () {
         af_advancedcombatsystem_migrations()->run();
         af_advancedcombatsystem_session_settings();
+        require_once __DIR__.'/modules/Administration/NotificationTask.php';
+        af_advancedcombatsystem_install_notification_task();
     });
 }
 
@@ -175,6 +179,7 @@ function af_advancedcombatsystem_session_settings(): void
 function af_advancedcombatsystem_xmlhttp(): void
 {
     global $mybb;
+    if(in_array($mybb->get_input('op'),['alerts_status','alerts_retry'],true)){require_once __DIR__.'/modules/Presentation/NotificationController.php';AF_ACS_NotificationController::dispatch();}
     if(in_array($mybb->get_input('op'),['statistics_sync','statistics_profile','statistics_status','statistics_recover'],true)){require_once __DIR__.'/modules/Presentation/StatisticsController.php';AF_ACS_StatisticsController::dispatch();}
     if(in_array($mybb->get_input('op'),['archive_events','archive_policy','archive_export','archive_roster','archive_manifest'],true)){require_once __DIR__.'/modules/Presentation/ArchiveController.php';AF_ACS_ArchiveController::dispatch();}
     if(in_array($mybb->get_input('op'),['achievement_status','achievement_profile','achievement_configure','achievement_evaluate','achievement_migrate','achievement_review','correction_event','correction_status'],true)){require_once __DIR__.'/modules/Presentation/AchievementController.php';AF_ACS_AchievementController::dispatch();}

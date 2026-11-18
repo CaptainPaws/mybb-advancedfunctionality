@@ -127,6 +127,11 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
                 if($pending){$result['pending_resolution']=$pending;$result['status']='pending_resolution';$result['session_version']=$this->session($id)['session_version'];$result['encounter_version']=$this->encounter($id,$result['encounter_id'])['encounter_version'];
                     $this->sql('UPDATE '.$this->table('operations').' SET result_json=? WHERE operation_key IN (?,?)',[self::json($result),$key,$request['start_operation_id']]);}
             }
+            // Noncritical notification source, committed with its existing immutable command event.
+            if(in_array($kind,['encounter.outcome_confirm','encounter.gm_skip','encounter.gm_forfeit','encounter.deadline_process','encounter.pause','encounter.resume','encounter.deadline_set','encounter.extend_deadline','session.close','session.archive','session.reopen','session.set_role','session.remove_member','session.transfer_owner','delegation.grant','delegation.revoke'],true)){
+                $notice=self::json(['session_id'=>$id,'event_id'=>$event]);$noticeKey='alerts:event:'.$event;
+                $this->sql('INSERT INTO '.$this->table('outbox').' (message_key,submission_id,kind,payload_hash,payload_json,status,available_at,created_at) VALUES (?,?,?,?,?,?,?,?)',[$noticeKey,$noticeKey,'alerts.source',hash('sha256',$notice),$notice,'pending',time(),time()]);
+            }
             // Durable pointer only. Aggregation/consumer failure cannot undo the confirmed outcome.
             if(in_array($kind,['encounter.outcome_confirm','correction.review'],true)){
                 $eid=$result['encounter_id'];$message=self::json(['schema_version'=>1,'session_id'=>$id,'encounter_id'=>$eid,'source_sequence'=>$sequence]);

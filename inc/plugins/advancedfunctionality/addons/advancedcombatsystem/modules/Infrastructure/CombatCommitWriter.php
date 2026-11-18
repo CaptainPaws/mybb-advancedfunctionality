@@ -287,6 +287,8 @@ final class AF_ACS_CombatCommitWriter extends AF_ACS_Repository
         $outbox=self::json(['schema_version'=>1,'submission_id'=>$row['submission_id'],'event_id'=>$event,'result_hash'=>$resultHash,'pid'=>$row['pid']]);
         $this->sql('INSERT INTO '.$this->table('outbox').' (message_key,submission_id,kind,payload_hash,payload_json,status,attempts,available_at,created_at) VALUES (?,?,?,?,?,?,0,?,?)',
             [$messageKey,$row['submission_id'],'combat.committed',hash('sha256',$outbox),$outbox,'pending',$now,$now]);
+        $notice=self::json(['session_id'=>$row['session_id'],'event_id'=>$event]);$noticeKey='alerts:event:'.$event;
+        $this->sql('INSERT INTO '.$this->table('outbox').' (message_key,submission_id,kind,payload_hash,payload_json,status,available_at,created_at) VALUES (?,?,?,?,?,?,?,?)',[$noticeKey,$row['submission_id'],'alerts.source',hash('sha256',$notice),$notice,'pending',$now,$now]);
         $this->checkEndConditions($row['session_id'],$row['encounter_id'],$event,$row['author_uid']);
         return $receipt;
     }

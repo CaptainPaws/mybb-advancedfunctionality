@@ -56,6 +56,9 @@ final class AF_ACS_RecoveryPage
         $inventoryPage=$inventoryQuery->page($sid,$access,$mybb->get_input('custody_after')?:'0',$mybb->get_input('inventory_after'),$mybb->get_input('reservation_after')?:'0');
         $html='<section class="af-acs-recovery"><h2>ACS · Восстановление публикаций</h2>'.$notice.'<p><a href="showthread.php?tid='.self::esc($page['tid']).'">Вернуться в тему</a></p>';
         $html.='<p><a href="misc.php?action=acs_loot&amp;session_id='.self::esc($sid).'&amp;completion_tab=recovery">Долги завершения: добыча, Balance, достижения и statistics</a></p>';
+        $html.='<details><summary>Доставка уведомлений ACS → AAM</summary><p>Некритичная отдельная очередь. Повтор проверяет прежние ключи, не повторяет бой.</p><a href="xmlhttp.php?action=af_addon_api&amp;addon=advancedcombatsystem&amp;op=alerts_status&amp;session_id='.self::esc($sid).'">Состояние текущей партии</a><form method="post" action="xmlhttp.php">';
+        foreach(['action'=>'af_addon_api','addon'=>'advancedcombatsystem','op'=>'alerts_retry','session_id'=>$sid,'my_post_key'=>$mybb->post_code] as $key=>$value)$html.='<input type="hidden" name="'.$key.'" value="'.self::esc($value).'">';
+        $html.='<button>Проверить и доставить прежнюю партию</button></form></details>';
         $html.='<p>Сообщения MyBB и боевая история не исправляются этой страницей. Неизвестный PID нельзя подтвердить по совпадению автора, текста или времени.</p><ul>';
         foreach($page['items'] as $r)$html.='<li><a href="'.self::esc(self::url($sid,$r['submission_id'],$base)).'">Отправка '.self::esc(substr($r['submission_id'],0,8)).'</a> · '.self::esc($r['status']).' · последняя фаза '.self::esc($r['last_phase']).' · PID '.self::esc($r['pid']??'не подтверждён').'</li>';
         if(!$page['items'])$html.='<li>Незавершённых отправок нет.</li>';$html.='</ul>';

@@ -88,6 +88,11 @@ function af_aam_format_alert(array $alert): array
         }
     }
 
+    if(str_starts_with((string)$code,'acs_')){
+        require_once __DIR__.'/combat_delivery.php';
+        return af_aam_format_combat_alert($alert,$extra);
+    }
+
     $fromUser = $alert['from_username'] ?? '';
     if ($fromUser === '') {
         $fromUser = af_aam_format_username((int)($alert['from_uid'] ?? 0));
