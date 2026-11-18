@@ -28,7 +28,7 @@ final class AF_ACS_AmbushController
             $candidate=$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage();
             $code=in_array($candidate,['ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_RECOVERY_REQUIRED','ACS_AMBUSH_INPUT_INVALID','ACS_POST_REQUIRED','ACS_CSRF_REQUIRED','ACS_DISABLED','ACS_PREPARED_UNSUPPORTED','ACS_AMBUSH_EXECUTION_BLOCKED','ACS_ROSTER_BLOCKED','ACS_FIRST_ROUND_EXISTS','INV_PREPARED_REVOKED','effects_cost_unaffordable'],true)?$candidate:'ACS_AMBUSH_UNAVAILABLE';
             http_response_code(in_array($code,['ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_RECOVERY_REQUIRED','ACS_FIRST_ROUND_EXISTS'],true)?409:403);
-            $response=['ok'=>false,'error'=>['code'=>$code,'message'=>match($code){
+            $failure=af_advancedcombatsystem_session_failure($e);$response=['ok'=>false,'error'=>['code'=>$code,'error_id'=>$failure['error_id'],'category'=>$failure['category'],'message'=>match($code){
                 'ACS_VERSION_CONFLICT'=>'Версия изменилась. Проверьте результат и обновите панель.',
                 'ACS_RECOVERY_REQUIRED'=>'Исход требует проверки. Не создавайте новый ключ запуска.',
                 'ACS_PREPARED_UNSUPPORTED','ACS_AMBUSH_EXECUTION_BLOCKED'=>'Контракт стартовой подготовки не поддерживается.',

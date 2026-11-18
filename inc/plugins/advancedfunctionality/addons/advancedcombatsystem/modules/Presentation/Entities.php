@@ -4,7 +4,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 final class AF_ACS_EntitiesPage
 {
     private static function esc(mixed $value): string {return htmlspecialchars_uni((string)$value);}
-    public static function render(string $sid,array $view,string $url,?AF_ACS_EntityService $service=null): void
+    public static function render(string $sid,array $view,string $url,?AF_ACS_EntityService $service=null,bool $embedded=false): void
     {
         global $mybb;
         $service??=af_advancedcombatsystem_entities();
@@ -29,7 +29,7 @@ final class AF_ACS_EntitiesPage
         if(empty($choices['items']))echo '<p>Нет доступных источников на этой странице. Для персонажа нужен собственный ARPG-лист; для NPC и монстра — определение бестиария KB.</p>';
         else {
             echo '<form method="post" action="'.self::esc($url).'">';
-            foreach(['session_id'=>$sid,'expected_version'=>$view['session']['session_version'],'kind'=>$kind,'operation_key'=>bin2hex(random_bytes(16)),'my_post_key'=>$mybb->post_code] as $key=>$value)echo '<input type="hidden" name="'.self::esc($key).'" value="'.self::esc($value).'">';
+            foreach(($embedded?['acs_encounter_op'=>'entity_request','tid'=>$view['session']['tid']]:[])+['session_id'=>$sid,'expected_version'=>$view['session']['session_version'],'kind'=>$kind,'operation_key'=>bin2hex(random_bytes(16)),'my_post_key'=>$mybb->post_code] as $key=>$value)echo '<input type="hidden" name="'.self::esc($key).'" value="'.self::esc($value).'">';
             echo '<label>Источник <select name="source_key" required>';
             foreach($choices['items'] as $choice)echo '<option value="'.self::esc($choice['key']).'"'.($choice['key']===$mybb->get_input('source_key')?' selected':'').'>'.self::esc($choice['label']).'</option>';
             echo '</select></label><label>Имя экземпляра <input name="name" maxlength="191" value="'.self::esc($mybb->get_input('name')).'"></label><label>Начальное HP <input name="initial_hp" type="number" min="0" max="9007199254740991" step="1" value="'.self::esc($mybb->get_input('initial_hp')).'"></label><p>Обязательно, если источник не хранит текущее HP. Не выше максимума; постоянное HP персонажа не изменяется.</p><label>Причина регистрации <input name="reason" maxlength="1000" required value="'.self::esc($mybb->get_input('reason')).'"></label><button name="op" value="entity_validate" type="submit">Проверить источник</button> <button name="op" value="entity_register" type="submit">Зарегистрировать</button></form>';

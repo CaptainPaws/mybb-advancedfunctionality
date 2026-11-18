@@ -1,6 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/../Application/SessionService.php';
+require_once __DIR__.'/GmIntent.php';
 
 final class AF_ACS_SessionsPage
 {
@@ -9,6 +10,7 @@ final class AF_ACS_SessionsPage
     {
         global $mybb;
         echo '<form method="post" action="'.self::esc($url).'">';
+        echo AF_ACS_GmIntent::checkbox($operation);
         foreach(['op'=>$operation,'operation_key'=>bin2hex(random_bytes(16)),'my_post_key'=>$mybb->post_code]+$fields as $key=>$value)echo '<input type="hidden" name="'.self::esc($key).'" value="'.self::esc($value).'">';
     }
     public static function render(bool $admin): void
@@ -21,7 +23,7 @@ final class AF_ACS_SessionsPage
         if($mybb->request_method==='post') {
             try {
                 $input=[];foreach(['operation_key','reason','tid','owner_uid','session_id','expected_version','uid','role','kind','source_key','name','initial_hp'] as $key)$input[$key]=$mybb->get_input($key);
-                $op=$mybb->get_input('op');
+                $op=$mybb->get_input('op');AF_ACS_GmIntent::requireConfirmation($op);
                 if(str_starts_with($op,'delegation_')){
                     $delegationInput=[];foreach(['session_id','expected_version','operation_key','reason','owner_uid','delegate_uid','entity_ids','control_group_id','permitted_actions','valid_from','valid_until','duration_seconds','delegation_id','delegation_version'] as $field)if(array_key_exists($field,$_POST))$delegationInput[$field]=in_array($field,['entity_ids','permitted_actions'],true)?$_POST[$field]:$mybb->get_input($field);
                     af_advancedcombatsystem_delegations()->command(substr($op,11),$delegationInput);echo '<p>Делегирование обновлено.</p>';

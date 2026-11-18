@@ -1,5 +1,6 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
+require_once __DIR__.'/GmIntent.php';
 
 final class AF_ACS_RoundManagementPage
 {
@@ -9,6 +10,7 @@ final class AF_ACS_RoundManagementPage
         global $mybb;
         echo '<form method="post" action="'.self::esc($url).'">';
         $fields+=['acs_encounter_op'=>'manage_'.$op,'session_id'=>$view['session']['id'],'tid'=>$view['session']['tid'],'encounter_id'=>$view['encounter']['id'],'expected_version'=>$view['session']['session_version'],'encounter_version'=>$view['encounter']['encounter_version'],'operation_key'=>bin2hex(random_bytes(16)),'my_post_key'=>$mybb->post_code];
+        $consequence=AF_ACS_GmIntent::consequence('manage_'.$op);if($consequence!==null)echo '<p>'.self::esc($consequence).'</p>';
         foreach($fields as $key=>$value)echo '<input type="hidden" name="'.self::esc($key).'" value="'.self::esc($value).'">';
     }
     private static function submit(string $label): void
