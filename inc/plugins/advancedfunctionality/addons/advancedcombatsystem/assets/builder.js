@@ -8,14 +8,14 @@
     update(index, action) { if (index < this.sealedCount) throw new Error('Запечатанное действие неизменно.'); if (!this.actions[index]) throw new Error('Действие не найдено.'); this.changed(); this.actions[index] = copy(action); }
     remove(index) { if (index < this.sealedCount) throw new Error('Отмена seal разрешена только отдельной кнопкой с конца.'); if (!this.actions[index]) return; this.changed(); this.actions.splice(index, 1); }
     move(index, delta) { const to = index + delta; if (index < this.sealedCount || to < this.sealedCount) throw new Error('Запечатанный порядок неизменен.'); if (!this.actions[index] || to < 0 || to >= this.actions.length) return; this.changed(); [this.actions[index], this.actions[to]] = [this.actions[to], this.actions[index]]; }
-    text(value) { if (this.prose !== value) { this.changed(); this.prose = value; } }
+    text(value) { if (this.prose !== value) { this.dirty = true; this.revision++; this.prose = value; } }
     begin(scope, key) {
       if (this.sealPending) throw new Error('Сначала восстановите исход seal.');
       if (this.pending) return copy(this.pending);
       this.pending = { session_id: scope.session_id, encounter_id: scope.encounter_id, turn_id: scope.turn.id, draft_id: this.id, expected_draft_version: this.version, operation_key: key, prose: this.prose, actions: JSON.stringify(this.actions) };
       return copy(this.pending);
     }
-    ack(receipt) { this.id = String(receipt.draft_id); this.version = String(receipt.draft_version); this.pending = null; this.dirty = false; }
+    ack(receipt) { this.id = String(receipt.draft_id); this.version = String(receipt.draft_version); const saved = this.pending; this.pending = null; this.dirty = !saved || this.prose !== saved.prose || JSON.stringify(this.actions) !== saved.actions; }
     restore(dto) { this.actions = copy(dto.actions); this.prose = dto.prose; this.id = String(dto.draft_id); this.version = String(dto.draft_version); this.pending = null; this.sealPending = null; this.sealedCount = (dto.sealed_prefix || []).length; this.dirty = false; this.revision++; }
     preview(scope, scenario) { return { session_id: scope.session_id, encounter_id: scope.encounter_id, turn_id: scope.turn.id, scope_token: scope.scope_token, scenario, actions: JSON.stringify(this.actions) }; }
   }
@@ -32,6 +32,7 @@
     const targetGroup = 'acs-builder-target-' + (++builderInstance);
     const config = JSON.parse(root.querySelector('[data-acs-builder-config]').textContent);
     let ctx = config.context, model = new DraftModel(), editing = null, loading = false, saving = false, previewBusy = false, epoch = 0, sealView = null, editable = canEdit(ctx);
+    let autosaveTimer = null, saveState = 'saved', autosaveBlocked = false, initialized = false, frozen = false, composing = false, serverProse = '', externalProse = null, recoveredSave = false, observedVersion = '';
     let step = 1, pickedTargets = [], lastFormActor = '', lastFormChoice = '', validation = null, validationTimer = null, validationSerial = 0;
     const field = key => root.querySelector('[data-field="' + key + '"]');
     const part = key => root.querySelector('[data-part="' + key + '"]');
@@ -40,8 +41,62 @@
     const status = (text, error) => { part('status').textContent = text; part('status').classList.toggle('acs-error', !!error); };
     const statuses = { pending: 'Ожидает действий', resolved: 'Завершён', passed: 'Пропущен', forfeited: 'Исключён' };
     const storageKey = () => ['acs-draft', ctx.author_uid, ctx.session_id, ctx.encounter_id, ctx.turn.id].join(':');
-    function localSave() { try { if (model.dirty || model.pending || model.sealPending) sessionStorage.setItem(storageKey(), JSON.stringify(model)); else sessionStorage.removeItem(storageKey()); } catch (_) { /* Server save remains usable when browser storage is unavailable. */ } }
-    function invalidate(checkSequence = false) { part('preview').replaceChildren(); epoch++; localSave(); if (checkSequence) validateSequence(); }
+    const backupKey = () => storageKey() + ':prose-v2';
+    const journalKey = () => storageKey() + ':requests-v2';
+    const savedKey = () => storageKey() + ':saved-v2';
+    const lifetime = 24 * 60 * 60 * 1000;
+    try {for(let i=localStorage.length-1;i>=0;i--){const key=localStorage.key(i);if(key?.startsWith('acs-draft:'+ctx.author_uid+':') && key.endsWith(':prose-v2')){const value=JSON.parse(localStorage.getItem(key));if(!value || value.expires<=Date.now() || value.expires>Date.now()+lifetime)localStorage.removeItem(key);}}}catch(_){}
+    function backup() {
+      try { const value = JSON.parse(localStorage.getItem(backupKey())); if (value && typeof value.prose === 'string' && value.expires > Date.now() && value.expires <= Date.now() + lifetime) return value; localStorage.removeItem(backupKey()); } catch (_) {}
+      return null;
+    }
+    function saveStatus() {
+      const labels = {dirty:'Есть несохранённые изменения',saving:'Сохранение…',saved:'Сохранено',error:'Ошибка сохранения',conflict:'Конфликт другой вкладки'};
+      if(part('save-status').textContent!==labels[saveState])part('save-status').textContent = labels[saveState];
+      part('save-status').classList.toggle('acs-error', ['error','conflict'].includes(saveState));
+      const local=backup();command('restore-local').hidden = !local || local.prose === model.prose;
+      root.dispatchEvent(new CustomEvent('acs:builder-state', {bubbles:true}));
+    }
+    function localSave() {
+      // Only prose is a local backup. Exact outstanding request envelopes are retry journals, never tape/results.
+      if (initialized && model.prose !== serverProse) try { localStorage.setItem(backupKey(),JSON.stringify({prose:model.prose,expires:Date.now()+lifetime})); } catch (_) {}
+      try {
+        sessionStorage.removeItem(storageKey()); // retire the old automatic whole-model restore
+        if(model.pending || model.sealPending) sessionStorage.setItem(journalKey(),JSON.stringify({id:model.id,version:model.version,pending:model.pending,sealPending:model.sealPending,expires:Date.now()+lifetime}));
+        else sessionStorage.removeItem(journalKey());
+      } catch (_) {}
+    }
+    function scheduleSave() {
+      clearTimeout(autosaveTimer);
+      if (!initialized || composing || frozen || autosaveBlocked || !editable || model.pending || model.sealPending || !model.dirty) return;
+      saveState = 'dirty'; saveStatus();
+      autosaveTimer = setTimeout(() => { if (!loading && !saving && editing === null && !frozen) save().catch(e => {saveState='error';autosaveBlocked=true;saveStatus();status(e.message,true);}); else scheduleSave(); }, 1200);
+    }
+    function setProse(value) {
+      model.text(String(value).replace(/\r\n?/g,'\n')); field('prose').value=model.prose; localSave();
+      if(model.dirty && !['saving','conflict','error'].includes(saveState))saveState='dirty';
+      saveStatus(); scheduleSave();
+    }
+    const localAvailable=()=>{const value=backup();return !!value && value.prose!==model.prose;};
+    root.acsBuilder = {
+      state: () => ({ready:initialized,dirty:model.dirty,busy:loading||saving,pending:!!(model.pending||model.sealPending),id:model.id,version:model.version,confirmed:!!sealView?.confirmed && model.actions.length===model.sealedCount && !model.dirty,blocked:!!sealView?.blocked,prose:model.prose,saveState,backupAvailable:localAvailable(),session_id:ctx.session_id,turn_id:ctx.turn.id}),
+      describe:action=>({actor:actor(action.actor_id)?.name || 'Исполнитель',ability:ability(action)?.label || 'Действие',targets:(action.targets || []).map(id=>ctx.targets.find(t=>t.id===id)?.name || 'Разрешённая цель')}),
+      prose:setProse,
+      restoreLocal:()=>{if(frozen || loading)return;const value=backup();if(value && window.confirm('Заменить литературный текст локальной копией? Действия и броски не восстанавливаются из браузера.')){setProse(value.prose);if(externalProse)externalProse(value.prose);overview();}},
+      attach: writer => {externalProse=writer;field('prose').closest('label').hidden=true;},
+      save: async () => {if(!initialized || loading || saving || model.sealPending || autosaveBlocked)throw new Error('Сохранение заблокировано. Проверьте прежний запрос или конфликт версий.');if(model.dirty || model.pending)await save();if(model.dirty || model.pending)throw new Error('Черновик не подтверждён сервером.');return root.acsBuilder.state();},
+      freeze: value => {if(frozen===!!value)return;frozen=!!value;clearTimeout(autosaveTimer);overview();if(!frozen)scheduleSave();},
+      restoreText: value => {setProse(value);if(externalProse)externalProse(model.prose);}
+    };
+    function invalidate(checkSequence = false) { if(checkSequence && sealView)sealView.confirmed=false;part('preview').replaceChildren(); epoch++; localSave(); if (model.dirty && !['saving','error','conflict'].includes(saveState))saveState='dirty';saveStatus();scheduleSave(); if (checkSequence) validateSequence(); }
+    window.addEventListener('storage', event => {
+      if(event.key===savedKey() && model.id)try {const other=JSON.parse(event.newValue);if(other.id===model.id && other.version!==model.version){observedVersion=other.version;autosaveBlocked=true;clearTimeout(autosaveTimer);saveState='conflict';saveStatus();status('Другая вкладка сохранила новую версию. Ваш текст сохранён отдельно; восстановите серверный черновик явно.',true);}}catch(_){}
+    });
+    document.addEventListener('visibilitychange',localSave);
+    root.addEventListener('acs:compositionstart',()=>{composing=true;clearTimeout(autosaveTimer);});
+    root.addEventListener('acs:compositionend',()=>{composing=false;scheduleSave();});
+    field('prose').addEventListener('compositionstart',()=>{composing=true;clearTimeout(autosaveTimer);});
+    field('prose').addEventListener('compositionend',()=>{composing=false;scheduleSave();});
     function options(select, rows, chosen, placeholder) {
       select.replaceChildren(); const empty = node('option', placeholder || 'Выберите'); empty.value = ''; select.append(empty);
       rows.forEach(row => { const o = node('option', row.label || row.name); o.value = row.id || row.key; o.disabled = row.supported === false; if (o.disabled && row.reason) o.textContent += ' — ' + row.reason; o.selected = o.value === chosen; if(['objects','cooperation','spatial','cover'].includes(row.category)) { let group = select.querySelector('optgroup[data-category="' + row.category + '"]'); if (!group) { group = node('optgroup'); group.label = row.category === 'cover' ? 'Укрытия' : row.category === 'spatial' ? 'Перемещение и контакт' : (row.category === 'cooperation' ? 'Совместные действия' : 'Взаимодействия с объектами'); group.dataset.category = row.category; select.append(group); } group.append(o); } else select.append(o); });
@@ -261,26 +316,28 @@
       options(field('group'), ctx.turns.map(t => ({ id: t.id, label: 'Группа ' + t.group_id + ' — ' + t.members.map(m => m.name).join(', ') + ' (' + (statuses[t.status] || t.status) + ')' })), ctx.turn.id, 'Выберите группу');
       field('group').closest('label').hidden = planning(ctx);
       command('upkeep-load').hidden = planning(ctx);field('scenario').closest('label').hidden = planning(ctx);
-      field('group').disabled = planning(ctx) || loading || (!!model.pending || !!model.sealPending);
-      field('prose').disabled = loading || (!!model.pending || !!model.sealPending) || !editable;
+      field('group').disabled = frozen || saving || planning(ctx) || loading || (!!model.pending || !!model.sealPending);
+      field('prose').disabled = frozen || !editable;
       field('actor').disabled = field('ability').disabled = field('target').disabled = loading || (!!model.pending || !!model.sealPending) || !editable;
-      command('save').disabled = loading || saving || !!model.sealPending || !editable || editing !== null;
-      command('refresh').disabled = loading;
+      command('save').disabled = frozen || loading || saving || !!model.sealPending || !editable || editing !== null || autosaveBlocked && !model.pending;
+      command('refresh').disabled = frozen || loading || saving;
       command('save').textContent = model.pending ? 'Повторить тот же запрос сохранения' : 'Сохранить черновик';
-      command('restore').disabled = loading;
+      command('restore').disabled = frozen || loading || saving;
       command('cancel-edit').hidden = editing === null;
       command('add').textContent = editing === null ? 'Добавить действие' : 'Применить изменение';
       info(); queue();
-      const locked = loading || saving || !!model.pending || !editable || (!planning(ctx) && ctx.encounter_status !== 'active') || model.dirty || editing !== null;
+      if(frozen) root.querySelectorAll('button[data-command],select,input').forEach(e => {e.disabled=true;});
+      const locked = frozen || autosaveBlocked || loading || saving || !!model.pending || !editable || (!planning(ctx) && ctx.encounter_status !== 'active') || model.dirty || editing !== null;
       const remaining = planning(ctx) ? (sealView ? Math.min(budget(), ctx.turn.maximum_ap - sealView.quota_used) : budget()) : (sealView ? sealView.quota_budget - sealView.quota_used : ctx.turn.ap);
       const newCost = model.actions.slice(model.sealedCount).reduce((n, a) => n + (ability(a)?.ap_cost || 0), 0);
       command('seal').disabled = locked || !ctx.targets.length || model.actions.length <= model.sealedCount || newCost > remaining || (!planning(ctx) && model.sealedCount === 0 && currentValidation()?.state !== 'valid');
       command('cancel-seal').disabled = locked || !model.sealedCount;
       command('publish-prepared').disabled = locked || !sealView?.confirmed || !sealView?.summary?.actions?.[0]?.prepared_action;
       command('confirm-seal').disabled = locked || model.actions.length !== model.sealedCount || !sealView?.confirmable || sealView?.blocked || sealView?.confirmed;
-      command('seal-refresh').disabled = loading || saving || !model.id;
+      command('seal-refresh').disabled = frozen || loading || saving || !model.id;
       ['compose','compose-quick'].forEach(c => { const b = command(c); if (b) b.disabled = planning(ctx) || !config.test_publication_allowed || locked || !sealView?.confirmed; });
-      if (model.sealPending) ['seal','cancel-seal','confirm-seal','publish-prepared'].forEach(c => { command(c).disabled = c !== model.sealPending.command || loading || saving; });
+      command('restore-local').disabled=frozen || loading;
+      if (model.sealPending) ['seal','cancel-seal','confirm-seal','publish-prepared'].forEach(c => { command(c).disabled = c !== model.sealPending.command || frozen || loading || saving; });
     }
     async function loadUpkeep() {
       const data = await api('clock_sustained', { session_id: ctx.session_id, encounter_id: ctx.encounter_id }, false);
@@ -311,14 +368,15 @@
       const response = await fetch(post ? url : url + '&' + values, { method: post ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', ...(post ? { body: values } : {}) });
       let result;
       try { result = await response.json(); } catch (_) { throw new Error('Сервер не подтвердил ответ. Локальные действия и текст сохранены; для неизвестной операции повторяйте прежний запрос.'); }
-      if (!result.ok) { const e = new Error(result.error?.message || 'Запрос не выполнен.'); e.code = result.error?.code; throw e; }
+      if (!result.ok) { const e = new Error((result.error?.message || 'Запрос не выполнен.')+(result.error?.error_id?' · error_id='+result.error.error_id:'')); e.code = result.error?.code; throw e; }
       return result.data;
     }
     async function refresh(turnId) {
       const data = await api('builder_context', { session_id: ctx.session_id, encounter_id: ctx.encounter_id, turn_id: turnId || ctx.turn.id }, false);
       ctx = data; editable = canEdit(data); epoch++; actionForm(); overview();
     }
-    async function restore(automatic) {
+    async function restore(automatic,preserveProse=false) {
+      clearTimeout(autosaveTimer);
       if (!automatic && (model.dirty || model.pending || model.sealPending) && !window.confirm('Восстановить серверную версию? Локальные несохранённые изменения будут заменены.')) return;
       loading = true; overview();
       try {
@@ -326,10 +384,12 @@
       const id = ctx.draft_id || model.id;
       if (!id) { status('Серверный черновик для этой группы пока не найден. Локальные данные сохранены.', false); return; }
       const dto = await api('draft_restore', { draft_id: id }, false);
-      model.restore(dto); editable = !!dto.editable; field('prose').value = model.prose; editing = null; invalidate(); actionForm(); overview();
+      const keptProse=preserveProse && model.prose!==serverProse?model.prose:null;
+      const proseConflict=keptProse!==null && dto.prose!==serverProse && dto.prose!==keptProse;
+      localSave(); model.restore(dto); serverProse=model.prose;if(keptProse!==null)model.text(keptProse);recoveredSave=false;observedVersion='';autosaveBlocked=proseConflict;saveState=proseConflict?'conflict':model.dirty?'dirty':'saved';if(externalProse)externalProse(model.prose); editable = !!dto.editable; field('prose').value = model.prose; editing = null; invalidate(); actionForm(); overview();
       status(dto.dependency_changed ? 'Черновик восстановлен. Зависимости изменились — нужен новый условный предпросмотр.' : 'Черновик восстановлен с сервера.', false);
       await refreshSeal();
-      } finally { loading = false; overview(); validateSequence(); }
+      } finally { loading = false; overview(); saveStatus();validateSequence();scheduleSave(); }
     }
     async function refreshSeal() {
       if (!model.id) return;
@@ -346,15 +406,16 @@
       });
       if (sealView.summary) {
         box.append(node('h4', sealView.summary.label));
-        sealView.summary.actions.forEach(a => { if (a.prepared_action) { box.append(node('p', (a.prepared_action.start_execution ? 'При запуске засады · ' : 'При выборе исполнителя целью действия · ') + a.prepared_action.ap_cost + ' AP · до начала следующего собственного хода.')); return; } if (a.cover) { box.append(node('p', a.cover.operation === 'enter' ? 'Занятие укрытия после публикации.' : 'Выход из укрытия после публикации.')); return; } if (a.spatial) { box.append(node('p', ({move:'Перемещение',engage:'Вступление в контакт',leave:'Выход из контакта',forced_move:'Принудительное перемещение',teleport:'Телепортация'}[a.spatial.operation] || 'Пространственное действие') + '. Позиция изменится после боевой публикации.')); return; } if (a.cooperation) { box.append(node('p', (a.cooperation.operation === 'assist' ? 'Помощь применена' : 'Подтверждённый вклад') + ': ' + a.cooperation.progress + ' / ' + a.cooperation.cap + (a.cooperation.completed ? ' · общая задача завершена' : '') + '. До публикации состояние не изменено.')); return; } if (a.interaction) { box.append(node('p', 'Взаимодействие: ' + ({success:'успех',critical_success:'критический успех',partial_success:'частичный успех',failure:'провал'}[a.interaction.outcome] || 'ожидает проверки') + (a.interaction.progress === null ? '' : ', прогресс ' + a.interaction.progress) + '. Изменения применятся после подтверждённой публикации.')); return; } if (['search','share','environment'].includes(a.outcome)) { box.append(node('p', (actor(a.actor_id)?.name || 'Существо') + ': ' + (a.outcome === 'search' ? 'Поиск' : (a.outcome === 'share' ? 'Передача сведений' : 'Воздействие на окружение')) + '. Сведения изменятся после подтверждённой публикации.')); return; } box.append(node('p', a.item ? ('Предмет #' + a.item.item_id + ' · ' + (a.item.operation === 'consume' ? 'использование' : 'смена оружия') + ' · 1 AP, ' + a.item.qty + ' шт.') : ((actor(a.actor_id)?.name || 'Существо') + ': ' + ({hit:'попадание',crit:'критическое попадание',miss:'промах',used:'действие с предметом'}[a.outcome] || a.outcome) + ', урон ' + a.damage + ', P_hit=' + a.probabilities.P_hit + '%, P_crit=' + a.probabilities.P_crit + '%.'))); });
+        sealView.summary.actions.forEach((a,i) => { const planned=model.actions[i];box.append(node('p',(i+1)+'. '+(actor(a.actor_id)?.name || 'Исполнитель')+' → '+(planned?.targets || []).map(id=>ctx.targets.find(t=>t.id===id)?.name || 'Разрешённая цель').join(', ')+' · '+costText(a.costs))); if (a.prepared_action) { box.append(node('p', (a.prepared_action.start_execution ? 'При запуске засады · ' : 'При выборе исполнителя целью действия · ') + a.prepared_action.ap_cost + ' AP · до начала следующего собственного хода.')); return; } if (a.cover) { box.append(node('p', a.cover.operation === 'enter' ? 'Занятие укрытия после публикации.' : 'Выход из укрытия после публикации.')); return; } if (a.spatial) { box.append(node('p', ({move:'Перемещение',engage:'Вступление в контакт',leave:'Выход из контакта',forced_move:'Принудительное перемещение',teleport:'Телепортация'}[a.spatial.operation] || 'Пространственное действие') + '. Позиция изменится после боевой публикации.')); return; } if (a.cooperation) { box.append(node('p', (a.cooperation.operation === 'assist' ? 'Помощь применена' : 'Подтверждённый вклад') + ': ' + a.cooperation.progress + ' / ' + a.cooperation.cap + (a.cooperation.completed ? ' · общая задача завершена' : '') + '. До публикации состояние не изменено.')); return; } if (a.interaction) { box.append(node('p', 'Взаимодействие: ' + ({success:'успех',critical_success:'критический успех',partial_success:'частичный успех',failure:'провал'}[a.interaction.outcome] || 'ожидает проверки') + (a.interaction.progress === null ? '' : ', прогресс ' + a.interaction.progress) + '. Изменения применятся после подтверждённой публикации.')); return; } if (['search','share','environment'].includes(a.outcome)) { box.append(node('p', (actor(a.actor_id)?.name || 'Существо') + ': ' + (a.outcome === 'search' ? 'Поиск' : (a.outcome === 'share' ? 'Передача сведений' : 'Воздействие на окружение')) + '. Сведения изменятся после подтверждённой публикации.')); return; } box.append(node('p', a.item ? ('Предмет #' + a.item.item_id + ' · ' + (a.item.operation === 'consume' ? 'использование' : 'смена оружия') + ' · 1 AP, ' + a.item.qty + ' шт.') : ((actor(a.actor_id)?.name || 'Существо') + ': ' + ({hit:'попадание',crit:'критическое попадание',miss:'промах',used:'действие с предметом'}[a.outcome] || a.outcome) + ', урон ' + a.damage + ', P_hit=' + a.probabilities.P_hit + '%, P_crit=' + a.probabilities.P_crit + '%.'))); });
         box.append(node('p', sealView.confirmed ? 'Сводка подтверждена. Общая публикация выключена; тестовая отправка доступна только разрешённому пользователю.' : 'Сводка требует явного подтверждения. Реальные HP/AP не изменены.'));
       }
       if (sealView?.friendly_fire?.required) box.append(node('p','Предупреждение: выбрана атака союзника. Урон не уменьшается автоматически.'));
-      overview();
+      overview();saveStatus();
     }
     async function sealCommand(commandName, preparedRecord) {
       const routes = {'release-prepared':'prepared_release','publish-prepared':'prepared_publish',seal:'seal','cancel-seal':'seal_cancel_tail','confirm-seal':'seal_confirm'};
       if (commandName !== 'release-prepared' && (!model.id || model.dirty)) throw new Error('Сначала сохраните черновик.');
+      if(autosaveBlocked && !model.sealPending)throw new Error('Сначала восстановите серверную версию. Новые броски при конфликте запрещены.');
       if (!model.sealPending) {
         if (commandName === 'cancel-seal' && !window.confirm('Отменить последнее запечатанное действие? История и броски сохранятся, квота не вернётся.')) return;
         const body = commandName === 'release-prepared' ? {session_id:ctx.session_id,encounter_id:ctx.encounter_id,entity_id:preparedRecord.entity_id,prepared_action_id:preparedRecord.prepared_action_id,prepared_version:preparedRecord.prepared_version,expected_version:ctx.session_version,operation_key:crypto.randomUUID().replace(/-/g,'')} : {draft_id:model.id,expected_draft_version:model.version,operation_key:crypto.randomUUID().replace(/-/g,'')};
@@ -369,25 +430,30 @@
         if (pending.command === 'release-prepared') { model.sealPending = null; localSave(); await refresh(); status(operationResult.cost_state === 'settled' ? 'Неиспользованный резерв освобождён. AP и оплаченные стоимости сохранены.' : 'Резерв сохраняется: release не подтверждён, требуется восстановление прав или Inventory.', operationResult.cost_state !== 'settled'); return; }
         if (pending.command === 'publish-prepared') { model.sealPending = null; model.dirty = false; localSave(); const preRound = planning(ctx); if (preRound) { model = new DraftModel(); sealView = null; field('prose').value = ''; part('seal').replaceChildren(); } await refresh(); status(preRound ? 'Подготовка оплачена. AP закреплены в бюджете первого раунда; новый пост не создан.' : 'Подготовка оплачена и зарегистрирована. Ход группы закрыт; новый пост не создан.', false); return; }
         model.sealPending = null; localSave(); saving = false;
-        await restore(true); status('Операция seal сохранена. Реальное боевое состояние не изменено.',false);
+        await restore(true,true); status('Операция seal сохранена. Реальное боевое состояние не изменено.',false);
       } catch(e) {
         if (['ACS_PREPARED_UNSUPPORTED','ACS_BEHAVIOR_UNSUPPORTED','ACS_BEHAVIOR_ACTION_BLOCKED','ACS_BEHAVIOR_TARGET_BLOCKED','ACS_BEHAVIOR_NO_LEGAL_TARGET','ACS_FRIENDLY_FIRE_CONFIRMATION_REQUIRED','ACS_SEAL_UNSUPPORTED','ACS_SEAL_IMMUTABLE','ACS_SEAL_SUMMARY_CHANGED','ACS_SEAL_QUOTA_EXHAUSTED','ACS_DRAFT_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SEAL_TURN_UNAVAILABLE'].includes(e.code)) {
+          if(['ACS_DRAFT_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT'].includes(e.code)){autosaveBlocked=true;saveState='conflict';saveStatus();}
           model.sealPending = null; localSave(); if (['publish-prepared','release-prepared'].includes(pending.command)) await refresh(); await refreshSeal();
         }
         status(e.message + (model.sealPending ? ' Повторите ту же кнопку: ключ и запрос сохранены.' : ' Обновите черновик и проверьте сводку.'),true);
-      } finally { saving = false; overview(); }
+      } finally { saving = false; overview();saveStatus();scheduleSave(); }
     }
     async function save() {
+      if(saving || loading || frozen)return;
+      if(autosaveBlocked && !model.pending)throw new Error('Конфликт другой вкладки. Сначала явно восстановите серверную версию; локальный текст остаётся отдельно.');
+      clearTimeout(autosaveTimer);
       // Technical request bounds only; costs and execution permission remain server-owned.
       if (new TextEncoder().encode(model.prose).length > 65536 || new TextEncoder().encode(JSON.stringify(model.actions)).length > 65536) throw new Error('Черновик превышает технический предел 64 КиБ для текста или действий.');
       const key = model.pending ? model.pending.operation_key : crypto.randomUUID().replace(/-/g, '');
-      const request = model.begin(ctx, key); saving = true; localSave(); overview();
-      try { const receipt = await api('draft_save', request, true); model.ack(receipt); ctx.draft_id = model.id; localSave(); overview(); status('Черновик сохранён. Версия ' + model.version + '.', false); }
+      const request = model.begin(ctx, key); saving = true;saveState='saving';saveStatus(); localSave(); overview();
+      try { const receipt = await api('draft_save', request, true); model.ack(receipt);serverProse=request.prose;autosaveBlocked=recoveredSave || !!observedVersion && observedVersion!==model.version;saveState=recoveredSave?'error':autosaveBlocked?'conflict':model.dirty?'dirty':'saved';try{localStorage.setItem(savedKey(),JSON.stringify({id:model.id,version:model.version}));}catch(_){} ctx.draft_id = model.id; localSave(); overview(); status(recoveredSave?'Прежний запрос подтверждён. Явно восстановите серверный черновик перед продолжением; локальный текст остаётся отдельно.':'Черновик сохранён. Версия ' + model.version + '.', false); }
       catch (e) {
         const conflicts = ['ACS_DRAFT_VERSION_CONFLICT', 'ACS_DRAFT_ALREADY_EXISTS', 'ACS_OPERATION_KEY_CONFLICT'];
+        autosaveBlocked=true;saveState=conflicts.includes(e.code)?'conflict':'error';
         if (conflicts.includes(e.code)) { model.pending = null; localSave(); overview(); status('Конфликт сохранения. Локальный текст оставлен. Восстановите серверную версию отдельной кнопкой или сохраните свой текст перед заменой.', true); }
         else { overview(); status(e.message + ' Исход запроса не подтверждён. Повторите тот же запрос или явно восстановите серверную версию.', true); }
-      } finally { saving = false; overview(); }
+      } finally { saving = false; overview();saveStatus();scheduleSave(); }
     }
     function renderPreview(dto) {
       part('preview').replaceChildren(node('p', dto.label + '. Сценарий: ' + ({ hit: 'попадания без крита', crit: 'критические попадания', miss: 'промахи' }[dto.scenario])));
@@ -415,17 +481,19 @@
         else if (event.target === field('group')) {
           const turn = field('group').value;
           if (!turn || (model.dirty && !window.confirm('Перейти к другой группе и оставить несохранённые изменения? Сохраните черновик перед переходом, если он нужен.'))) { field('group').value = ctx.turn.id; return; }
-          loading = true; overview(); await refresh(turn); model = new DraftModel(); editing = null; field('prose').value = ''; loading = false; invalidate(); actionForm(); overview(); await restore(true);
+          localSave();initialized=false;loading = true; overview(); await refresh(turn); model = new DraftModel();serverProse='';saveState='saved';autosaveBlocked=false;recoveredSave=false;observedVersion=''; editing = null; field('prose').value = ''; loading = false; invalidate(); actionForm(); overview(); await restore(true);if(!model.id && externalProse)externalProse('');initialized=true;localSave();saveStatus();scheduleSave();
         }
-      } catch (e) { loading = false; status(e.message, true); overview(); }
+      } catch (e) { loading = false;initialized=true; status(e.message, true); overview(); }
     });
     field('search').addEventListener('input',renderCatalog);
-    field('prose').addEventListener('input', () => { try { model.text(field('prose').value); invalidate(); overview(); } catch (e) { field('prose').value = model.prose; status(e.message, true); } });
+    field('prose').addEventListener('input', () => { try { setProse(field('prose').value); overview(); } catch (e) { field('prose').value = model.prose; status(e.message, true); } });
     root.addEventListener('click', async event => {
       const button = event.target.closest('button[data-command]'); if (!button || !root.contains(button) || button.disabled) return;
       const cmd = button.dataset.command, index = Number(button.dataset.index);
       try {
-        if (cmd === 'step') goStep(button.dataset.stepGo);
+        if(frozen)throw new Error('Отправка зарегистрирована. Проверяйте прежнюю операцию.');
+        if (cmd === 'restore-local') root.acsBuilder.restoreLocal();
+        else if (cmd === 'step') goStep(button.dataset.stepGo);
         else if (cmd === 'step-back') goStep(step - 1);
         else if (cmd === 'step-next') { if (step === 3) commitAction(); else goStep(step + 1); }
         else if (cmd === 'choose') { actionForm({actor_id:button.dataset.choiceActor,ability_key:button.dataset.choice,targets:[]}); overview(); }
@@ -467,12 +535,16 @@
     window.addEventListener('beforeunload', event => { if (model.dirty || model.pending || model.sealPending) { localSave(); event.preventDefault(); event.returnValue = ''; } });
     (async () => {
       try {
-        let local = null; try { local = JSON.parse(sessionStorage.getItem(storageKey())); } catch (_) {}
-        if (local && Array.isArray(local.actions) && typeof local.prose === 'string') {
-          Object.assign(model, local); field('prose').value = model.prose; actionForm(); overview(); status('Восстановлена локальная копия. Неизвестный запрос повторяйте с прежним ключом.', false); if(model.id) await refreshSeal();
-        } else { actionForm(); overview(); if (ctx.draft_id) await restore(true); }
+        // The server is the only source of restored mechanics and sealed history.
+        let journal=null;try{journal=JSON.parse(sessionStorage.getItem(journalKey()));}catch(_){}
+        actionForm(); overview(); if (ctx.draft_id) await restore(true);
+        if(journal && journal.expires>Date.now() && journal.expires<=Date.now()+lifetime){
+          model.pending=journal.pending||null;model.sealPending=journal.sealPending||null;recoveredSave=!!model.pending;
+          if(model.pending || model.sealPending){autosaveBlocked=true;saveState='error';status('Есть запрос с неизвестным исходом. Повторите прежнее сохранение или seal; новый ключ не создаётся. Локальный текст восстанавливается отдельной кнопкой.',true);}
+        }
+        initialized=true;localSave();overview();saveStatus();root.dispatchEvent(new CustomEvent('acs:builder-ready',{bubbles:true}));
         if (model.actions.length) goStep(4,false); validateSequence();
-      } catch (e) { status(e.message, true); }
+      } catch (e) { status(e.message, true);saveState='error';autosaveBlocked=true;saveStatus(); }
     })();
   }
   function init() { document.querySelectorAll('[data-acs-builder]').forEach(root => { try { mount(root); } catch (_) { const s = root.querySelector('[data-part="status"]'); if (s) s.textContent = 'Не удалось открыть конструктор. Обновите страницу.'; } }); }

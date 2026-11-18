@@ -51,19 +51,45 @@ final class AF_ACS_EditorPublicationController
             'ACS_NATIVE_LIFECYCLE_UNVERIFIED'=>'Порядок обработчиков MyBB не подтверждён. Отправка заблокирована.',
         ];
         if (!isset($messages[$code])) { $code='ACS_EDITOR_UNAVAILABLE'; }
-        return ['ok'=>false,'error'=>['code'=>$code,'message'=>$messages[$code]??'Запрос не подтверждён. Текст и sealed-действия сохранены. Проверьте статус; не отправляйте новый пост вслепую.']];
+        $category=match($code){'ACS_VERSION_CONFLICT','ACS_CONFIRMATION_REQUIRED','ACS_EDITOR_FROZEN_PROSE_CHANGED'=>'STATE_CONFLICT','ACS_EDITOR_TEST_DISABLED'=>'PERMISSION_DENIED','ACS_MYBB_CORE_UNVERIFIED','ACS_NATIVE_LIFECYCLE_UNVERIFIED'=>'DEPENDENCY_ERROR','ACS_EDITOR_UNAVAILABLE'=>'INTERNAL_ERROR',default=>'VALIDATION_ERROR'};
+        $id=bin2hex(random_bytes(16));
+        if(function_exists('af_store_addon_lifecycle_diagnostic')){try{af_store_addon_lifecycle_diagnostic('advancedcombatsystem','editor_publication','request',new RuntimeException($code.' [error_id='.$id.']'));}catch(Throwable $ignored){}}
+        return ['ok'=>false,'error'=>['code'=>$code,'category'=>$category,'error_id'=>$id,'message'=>$messages[$code]??'Запрос не подтверждён. Текст и sealed-действия сохранены. Проверьте статус; не отправляйте новый пост вслепую.']];
     }
     public static function decorate(string &$page): void
     {
         global $mybb;
-        if (!AF_ACS_PublicationTestGate::allowed() || !defined('THIS_SCRIPT') || !in_array(THIS_SCRIPT,['newreply.php','showthread.php'],true)
-            || $mybb->get_input('acs_draft')==='' || str_contains($page,'data-acs-publication-config')) { return; }
+        if (!defined('THIS_SCRIPT') || !in_array(THIS_SCRIPT,['newreply.php','showthread.php'],true)
+            || ($mybb->get_input('acs_draft')==='' && $mybb->get_input('acs_builder')==='') || str_contains($page,'data-acs-publication-config')) { return; }
         if (!function_exists('af_frontend_asset_allowed') || !af_frontend_asset_allowed('advancedcombatsystem','publication',null,['has_acs_publication'=>true])) { return; }
-        $config=['author_uid'=>(string)(int)$mybb->user['uid'],'draft_id'=>$mybb->get_input('acs_draft'),'tid'=>$mybb->get_input('tid'),'endpoint'=>'newreply.php',
-            'draft_endpoint'=>'xmlhttp.php?action=af_addon_api&addon=advancedcombatsystem&op=draft_save','post_key'=>$mybb->post_code];
+        $builderHtml='';$authorized=false;$draftId=$mybb->get_input('acs_draft');
+        if($draftId!=='' && !str_contains($page,'data-acs-builder>')) {
+            try {
+                global $db;
+                require_once __DIR__.'/BuilderController.php';
+                $repo=new AF_ACS_EncounterRepository($db);$access=new AF_ACS_SessionAccess;
+                $draft=$repo->draft(AF_ACS_Repository::integer($draftId),$access->uid());
+                if(!$draft) return;
+                $view=(new AF_ACS_SessionService($repo,$access))->view($draft['session_id']);
+                if($view['session']['tid']!==$mybb->get_input('tid')) return;
+                $authorized=true;
+                if(in_array($draft['status'],['draft','sealed'],true)) {
+                    $context=(new AF_ACS_BuilderService($repo,$access))->context($draft['session_id'],$draft['encounter_id'],$draft['turn_id']);
+                    if((string)$context['draft_id']!==$draftId) return;
+                    $builderHtml=AF_ACS_BuilderController::renderBuilder($draft['session_id'],$view['session']['tid'],null,$context);
+                }
+            } catch(Throwable $error) {
+                if(!$authorized) return;
+                $failure=self::failure($error);$builderHtml='<p role="status">'.htmlspecialchars_uni('Конструктор недоступен. Сохраните текст и обратитесь к GM. error_id='.$failure['error']['error_id']).'</p>';
+            }
+        }
+        if($draftId==='' && !str_contains($page,'data-acs-builder>')) return;
+        if(!headers_sent())header('Cache-Control: private, no-store');
+        $config=['author_uid'=>(string)(int)$mybb->user['uid'],'draft_id'=>$draftId,'tid'=>$mybb->get_input('tid'),'endpoint'=>'newreply.php',
+            'can_publish'=>AF_ACS_PublicationTestGate::allowed(),'post_key'=>$mybb->post_code];
         $json=json_encode($config,JSON_THROW_ON_ERROR|JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT|JSON_UNESCAPED_UNICODE);
         $base=htmlspecialchars_uni(rtrim((string)$mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/');
-        $html='<link rel="stylesheet" href="'.$base.'publication.css?v=1"><script type="application/json" data-acs-publication-config>'.$json.'</script><script defer src="'.$base.'publication.js?v=1"></script>';
+        $html=$builderHtml.'<link rel="stylesheet" href="'.$base.'publication.css?v=1113"><script type="application/json" data-acs-publication-config>'.$json.'</script><script defer src="'.$base.'publication.js?v=1113"></script>';
         $pos=strripos($page,'</body>');$page=$pos===false?$page.$html:substr_replace($page,$html,$pos,0);
     }
 }

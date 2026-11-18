@@ -64,7 +64,9 @@ final class AF_ACS_ApiController
                 'ACS_SEAL_TURN_UNAVAILABLE'=>'Нужен открытый pending-ход без паузы.',
                 'ACS_SEAL_PIN_CHANGED'=>'Закреплённая версия определения изменилась. Броски сохранены; новый roll не выполняется.',
                 default=>$message};
-            $result=['ok'=>false,'error'=>['code'=>$code,'message'=>$message]];if($code==='ACS_PREPARED_UNSUPPORTED')$result['error']['status']='UNSUPPORTED';if(str_starts_with($code,'ACS_BEHAVIOR_'))$result['error']['status']=$code==='ACS_BEHAVIOR_UNSUPPORTED'?'UNSUPPORTED':'BLOCKED';
+            $errorId=bin2hex(random_bytes(16));$category=$conflict?'STATE_CONFLICT':($code==='ACS_DRAFT_INPUT_INVALID'||$code==='ACS_REQUEST_TOO_LARGE'?'VALIDATION_ERROR':($code==='ACS_DISABLED'||$code==='ACS_SCHEMA_NOT_READY'||str_ends_with($code,'_UNSUPPORTED')?'DEPENDENCY_ERROR':'PERMISSION_DENIED'));
+            if(function_exists('af_store_addon_lifecycle_diagnostic')){try{af_store_addon_lifecycle_diagnostic('advancedcombatsystem','draft_seal','request',new RuntimeException($code.' [error_id='.$errorId.']'));}catch(Throwable $ignored){}}
+            $result=['ok'=>false,'error'=>['code'=>$code,'category'=>$category,'error_id'=>$errorId,'message'=>$message]];if($code==='ACS_PREPARED_UNSUPPORTED')$result['error']['status']='UNSUPPORTED';if(str_starts_with($code,'ACS_BEHAVIOR_'))$result['error']['status']=$code==='ACS_BEHAVIOR_UNSUPPORTED'?'UNSUPPORTED':'BLOCKED';
         }
         echo json_encode($result,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);exit;
     }
