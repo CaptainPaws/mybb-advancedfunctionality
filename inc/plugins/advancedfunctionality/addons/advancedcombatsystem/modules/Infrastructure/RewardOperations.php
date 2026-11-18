@@ -29,7 +29,11 @@ trait AF_ACS_RewardOperations
             }
             if($this->sql('UPDATE '.$this->table('operations').' SET status=?,operation_version=operation_version+1,result_json=?,updated_at=? WHERE operation_key=? AND operation_version=?',[$status,self::json($result),time(),$op['operation_key'],$expected])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
             if($this->sql('UPDATE '.$this->table('rewards').' SET status=?,reward_version=reward_version+1 WHERE id=? AND reward_version=? AND status=?',[$rewardStatus,$id,$r['reward_version'],$r['status']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
-            $this->rewardAudit($s,$op['operation_key'],$id,$status,(string)((int)$expected+1),$result);return $this->get($op['operation_key']);
+            $this->rewardAudit($s,$op['operation_key'],$id,$status,(string)((int)$expected+1),$result);
+            if($status==='committed'){
+                $notice=self::json(['session_id'=>$sid,'reward_id'=>$id]);$key='alerts:reward:'.$id;
+                $this->sql('INSERT INTO '.$this->table('outbox').' (message_key,submission_id,kind,payload_hash,payload_json,status,available_at,created_at) VALUES (?,?,?,?,?,?,?,?)',[$key,$key,'alerts.source',hash('sha256',$notice),$notice,'pending',time(),time()]);
+            }return $this->get($op['operation_key']);
         });
     }
     private function rewardAudit(array $s,string $key,string $id,string $status,string $version,array $evidence):void

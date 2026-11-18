@@ -635,6 +635,9 @@ function af_advancedalertsandmentions_install(): void
     af_aam_cleanup_legacy_types();
     af_aam_install_task_file();
 
+    require_once __DIR__.'/combat_delivery.php';
+    af_aam_install_combat_delivery();
+
     // таск автоочистки по неактивности
     require_once MYBB_ROOT . 'inc/functions_task.php';
     $existingTask = $db->fetch_field(

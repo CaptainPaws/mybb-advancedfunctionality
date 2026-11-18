@@ -66,6 +66,10 @@ trait AF_ACS_LootIssuePersistence
         $pending=$this->sql('SELECT id FROM '.$this->table('loot_entries')." WHERE pool_id=? AND status<>'issued' LIMIT 1",[$e['pool_id']])['rows'];
         self::integer($saved['pool']['pool_version'],'18446744073709551614');
         $this->sql('UPDATE '.$this->table('loot_pools').' SET pool_version=pool_version+1'.($pending?'':",status='issued'").' WHERE id=?',[$e['pool_id']]);
+        if($status==='issued'){
+            $notice=self::json(['session_id'=>$session['id'],'encounter_id'=>$eid,'loot_entry_id'=>$id]);$key='alerts:loot:'.$id.':'.$e['allocation_version'];
+            $this->sql('INSERT INTO '.$this->table('outbox').' (message_key,submission_id,kind,payload_hash,payload_json,status,available_at,created_at) VALUES (?,?,?,?,?,?,?,?)',[$key,$key,'alerts.source',hash('sha256',$notice),$notice,'pending',time(),time()]);
+        }
         $session['_command_result']=['encounter_id'=>$eid,'issue'=>['entry_id'=>$id,'allocation_version'=>$e['allocation_version'],'recipient_uid'=>$e['recipient_uid'],'operation_key'=>$row['operation_key'],'payload_hash'=>$saved['intent']['payload_hash'],'owner_receipt'=>$receipt,'status'=>$status]];return $this->issueSequence($session,$eid);
     }
     public function lootIssueRawItem(string $key):array
