@@ -35,17 +35,19 @@ class AF_Admin_Advancedcombatsystem
 
         if ($section === 'publication') { require_once __DIR__.'/modules/Administration/PublicationDiagnostics.php'; AF_ACS_PublicationDiagnostics::render(); return; }
 
-        if($section==='sessions') {require_once __DIR__.'/modules/Presentation/Sessions.php';try {AF_ACS_SessionsPage::render(true);}catch(Throwable $error){echo '<p>Сессии ACS недоступны. Проверьте установку в разделе «Основные».</p>';}return;}
+        require_once __DIR__.'/modules/Administration/AcpSections.php';
+        if ($section === 'sessions') { AF_ACS_AcpSections::sessions(); return; }
         if ($mybb->request_method === 'post') {
             $auth->requirePermission('admin.schema.manage');
             verify_post_check($mybb->get_input('my_post_key'));
             try {
                 if ($section !== 'main') { throw new RuntimeException('ACS_UNKNOWN_COMMAND'); }
                 $command = $mybb->get_input('acs_command');
-                if ($command === 'install') { af_advancedcombatsystem_install(); }
-                elseif ($command === 'upgrade') { af_advancedcombatsystem_upgrade(); }
-                elseif ($command === 'uninstall') { af_advancedcombatsystem_uninstall($mybb->get_input('acs_confirmation')); }
+                if ($command === 'install') { $success = af_advancedcombatsystem_install(); }
+                elseif ($command === 'upgrade') { $success = af_advancedcombatsystem_upgrade(); }
+                elseif ($command === 'uninstall') { $success = af_advancedcombatsystem_uninstall($mybb->get_input('acs_confirmation')); }
                 else { throw new RuntimeException('ACS_UNKNOWN_COMMAND'); }
+                if (!$success) { throw new RuntimeException('ACS_LIFECYCLE_FAILED'); }
                 echo '<p>'.self::esc($lang->af_advancedcombatsystem_success).'</p>';
             } catch (Throwable $error) {
                 $safe = preg_match('/\AACS_[A-Z_]+(?: \[error_id=[a-f0-9]{32}\])?\z/D', $error->getMessage()) ? $error->getMessage() : 'ACS_DATABASE_ERROR';
@@ -57,11 +59,11 @@ class AF_Admin_Advancedcombatsystem
         if ($section === 'diagnostics') {
             $auth->requirePermission('admin.diagnostics.view');
             self::schema($diagnostics->schema());
-            self::errors($diagnostics->recentErrors());
-            self::engineVersions();
-            require_once __DIR__.'/modules/Administration/EffectsDiagnostics.php';
-            AF_ACS_EffectsDiagnostics::render();
-            self::integrations($diagnostics);
+            self::readiness($diagnostics);
+            self::errors(AF_ACS_AcpSections::errors($diagnostics));
+            AF_ACS_AcpSections::inspect();
+            if ($mybb->get_input('acs_engine_versions') === '1') { self::engineVersions(); }
+            echo '<p><a href="'.self::esc(AF_ACS_AcpSections::url('diagnostics', ['acs_engine_versions'=>'1'])).'">Загрузить версии механических компонентов (без исполнения)</a> · <a href="'.self::esc(AF_ACS_AcpSections::url('integrations')).'">Dependency readiness и blocked capabilities</a></p>';
             return;
         }
         $table = new Table;
@@ -73,6 +75,7 @@ class AF_Admin_Advancedcombatsystem
         $table->output(self::esc($lang->af_advancedcombatsystem_name));
         echo '<p>'.self::esc($lang->af_advancedcombatsystem_notice).'</p>';
         self::summary($diagnostics->schema());
+        AF_ACS_AcpSections::settings();
         self::commands();
     }
 
@@ -149,13 +152,17 @@ class AF_Admin_Advancedcombatsystem
         global $lang;
         (new AF_ACS_AuthorizationService)->requirePermission('admin.permissions.view');
         echo '<p>'.self::esc($lang->af_advancedcombatsystem_permissions_note).'</p>';
+        echo '<p>Матрица только для чтения. Право AF ACP не заменяет native доступ, session GM, согласие владельца и назначение контроллера. Журнал, неизменяемость, server validation и идемпотентность обязательны; RESERVED_DENY не редактируется.</p>';
         $table = new Table;
         foreach (['permission', 'scope', 'policy'] as $key) { $label = 'af_advancedcombatsystem_'.$key; $table->construct_header(self::esc($lang->$label)); }
+        $table->construct_header('Условие доступа');
         foreach (AF_ACS_AuthorizationService::matrix() as $permission => $entry) {
             foreach ([$permission, $entry['scope'], $entry['policy']] as $value) { $table->construct_cell(self::esc($value)); }
+            $table->construct_cell(self::esc(AF_ACS_AcpSections::policyDescription($entry['policy'])));
             $table->construct_row();
         }
         $table->output(self::esc($lang->af_advancedcombatsystem_permissions));
+        echo '<p>Owner — владелец сессии; GM — назначенный ведущий; assistant_gm — помощник без автоматического полного GM-доступа; player — участник; observer — наблюдатель. Роли проверяются вместе с конкретной серверной политикой, сроком назначения и native доступом.</p>';
         echo '<p>'.self::esc($lang->af_advancedcombatsystem_role).': '.self::esc(implode(', ', array_map(fn($role) => $role->value, AF_ACS_Role::cases()))).'</p>';
     }
 
@@ -171,6 +178,19 @@ class AF_Admin_Advancedcombatsystem
             $table->construct_row();
         }
         $table->output(self::esc($lang->af_advancedcombatsystem_diagnostics));
+    }
+
+    private static function readiness(AF_ACS_Diagnostics $diagnostics): void
+    {
+        $table = new Table;
+        foreach (['Capability', 'Состояние / уровень', 'Причина / действие'] as $label) { $table->construct_header(self::esc($label)); }
+        foreach ($diagnostics->capabilities() as $row) {
+            $table->construct_cell(self::esc($row['capability']));
+            $table->construct_cell(self::esc($row['readiness'].' / '.$row['verification_level']).'<br>'.self::esc('Installed acceptance: '.$row['installed_acceptance']));
+            $table->construct_cell(self::esc(($row['reason'] ?? '—').' / '.$row['remediation']));
+            $table->construct_row();
+        }
+        $table->output('Dependency readiness · без owner-команд');
     }
 
     private static function integrations(AF_ACS_Diagnostics $diagnostics): void
