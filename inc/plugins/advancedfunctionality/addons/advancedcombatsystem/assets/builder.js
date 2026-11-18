@@ -25,11 +25,14 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = { DraftModel, planning, canEdit, availableAP };
   if (typeof document === 'undefined') return;
 
+  let builderInstance = 0;
   function mount(root) {
     if (root.dataset.acsMounted) return;
     root.dataset.acsMounted = '1';
+    const targetGroup = 'acs-builder-target-' + (++builderInstance);
     const config = JSON.parse(root.querySelector('[data-acs-builder-config]').textContent);
     let ctx = config.context, model = new DraftModel(), editing = null, loading = false, saving = false, previewBusy = false, epoch = 0, sealView = null, editable = canEdit(ctx);
+    let step = 1, pickedTargets = [], lastFormActor = '', lastFormChoice = '', validation = null, validationTimer = null, validationSerial = 0;
     const field = key => root.querySelector('[data-field="' + key + '"]');
     const part = key => root.querySelector('[data-part="' + key + '"]');
     const command = key => root.querySelector('[data-command="' + key + '"]');
@@ -38,7 +41,7 @@
     const statuses = { pending: 'Ожидает действий', resolved: 'Завершён', passed: 'Пропущен', forfeited: 'Исключён' };
     const storageKey = () => ['acs-draft', ctx.author_uid, ctx.session_id, ctx.encounter_id, ctx.turn.id].join(':');
     function localSave() { try { if (model.dirty || model.pending || model.sealPending) sessionStorage.setItem(storageKey(), JSON.stringify(model)); else sessionStorage.removeItem(storageKey()); } catch (_) { /* Server save remains usable when browser storage is unavailable. */ } }
-    function invalidate() { part('preview').replaceChildren(); epoch++; localSave(); }
+    function invalidate(checkSequence = false) { part('preview').replaceChildren(); epoch++; localSave(); if (checkSequence) validateSequence(); }
     function options(select, rows, chosen, placeholder) {
       select.replaceChildren(); const empty = node('option', placeholder || 'Выберите'); empty.value = ''; select.append(empty);
       rows.forEach(row => { const o = node('option', row.label || row.name); o.value = row.id || row.key; o.disabled = row.supported === false; if (o.disabled && row.reason) o.textContent += ' — ' + row.reason; o.selected = o.value === chosen; if(['objects','cooperation','spatial','cover'].includes(row.category)) { let group = select.querySelector('optgroup[data-category="' + row.category + '"]'); if (!group) { group = node('optgroup'); group.label = row.category === 'cover' ? 'Укрытия' : row.category === 'spatial' ? 'Перемещение и контакт' : (row.category === 'cooperation' ? 'Совместные действия' : 'Взаимодействия с объектами'); group.dataset.category = row.category; select.append(group); } group.append(o); } else select.append(o); });
@@ -70,36 +73,154 @@
         }
       });
     }
+    const selectedChoice = () => (actor(field('actor').value)?.choices || []).find(c => c.key === field('ability').value);
+    const categoryLabels = {attack:'Атака',abilities:'Способности',items:'Предметы',equipment:'Экипировка',tactics:'Тактика',special:'Особые'};
+    const costText = costs => (costs || []).map(c => c.amount + ' ' + (c.kind === 'ap' ? 'AP' : (c.resource || (c.kind === 'item' ? 'шт.' : 'ресурса')))).join(', ') || 'Затраты не определены';
+    function targetsValid() {
+      const c = selectedChoice(), count = c?.target_count || {min:1,max:1};
+      return !!c?.supported && pickedTargets.length >= count.min && pickedTargets.length <= count.max && new Set(pickedTargets).size === pickedTargets.length && pickedTargets.every(id => (c.target_ids || []).includes(id));
+    }
+    function renderActor() {
+      const box = part('actor-details'), performer = actor(field('actor').value); box.replaceChildren();
+      if (!performer) { box.append(node('p','Выберите разрешённого исполнителя своей группы.')); return; }
+      const kinds = {character:'Персонаж',pet:'Питомец',summon:'Призыв',npc:'NPC',monster:'Монстр'};
+      box.append(node('p',performer.name + ' · ' + (kinds[performer.kind] || 'Исполнитель') + ' · общий AP группы: ' + availableAP(ctx,performer.id)));
+      const state = performer.state || {};
+      box.append(node('p',state.hp ? 'HP: ' + state.hp.current + ' / ' + state.hp.maximum : 'Сведения о здоровье и ресурсах ограничены сервером.'));
+      Object.entries(state.resources || {}).forEach(([key,value]) => box.append(node('p',key + ': ' + value.current + ' / ' + value.maximum)));
+      (state.statuses || []).forEach(s => box.append(node('p','Статус: ' + s.label + ' × ' + s.stacks + ' · осталось ' + s.remaining + ' ' + ({round:'раундов',own_turn:'собственных ходов',target_turn:'ходов цели'}[s.unit] || 'единиц времени'))));
+      if (state.notice) box.append(node('p',state.notice));
+      if (performer.supported !== false) box.append(node('p',planning(ctx) ? 'Доступна предраундовая подготовка по серверному контракту.' : 'Исполнитель доступен для подготовки действий. Допустимость всей последовательности проверит сервер.'));
+      if (performer.reason) box.append(node('p',performer.reason));
+      if (performer.catalog_notice) box.append(node('p',performer.catalog_notice));
+    }
+    function renderCatalog() {
+      const box = part('catalog'), active = document.activeElement;
+      const focus = box.contains(active) ? [active.dataset.choiceActor,active.dataset.choice] : null;
+      box.replaceChildren();
+      const search = field('search').value.trim().toLocaleLowerCase(), category = field('category').value, filterActor = field('catalog-actor').value;
+      let shown = false;
+      ctx.actors.filter(a => !filterActor || a.id === filterActor).forEach(performer => (performer.choices || []).filter(c => !c.sealed_only).forEach(c => {
+        const supported = c.supported && performer.supported !== false;
+        if (category && c.catalog_category !== category || field('available-only').checked && !supported || search && !(c.label + ' ' + (c.description || '') + ' ' + performer.name).toLocaleLowerCase().includes(search)) return;
+        shown = true; const card = node('article'); card.className = 'acs-action-card';
+        const chosen = field('actor').value === performer.id && field('ability').value === c.key;
+        card.classList.toggle('is-selected',chosen);
+        card.append(node('h5',c.label),node('p',performer.name + ' · ' + (categoryLabels[c.catalog_category] || 'Способности')));
+        card.append(node('p',c.description || 'Описание не задано.'),node('p',costText(c.costs)),node('p',c.cooldown_text || 'Сведения о кулдауне не предоставлены.'));
+        (c.prepared_item_costs || []).forEach(cost => card.append(node('p','Дополнительно: ' + cost.qty + ' шт. · ' + cost.key + ' · ' + cost.timing)));
+        if ((c.requirements || []).length) c.requirements.forEach(text => card.append(node('p',text))); else card.append(node('p','Условия действия и последовательности проверит сервер.'));
+        if (!supported) card.append(node('p',performer.supported === false ? performer.reason : c.reason || 'Действие недоступно по текущему серверному контракту.'));
+        const button = node('button',chosen ? 'Выбрано' : 'Выбрать действие'); button.type = 'button'; button.dataset.command = 'choose'; button.dataset.choice = c.key; button.dataset.choiceActor = performer.id;
+        button.setAttribute('aria-pressed',String(chosen)); button.disabled = !supported || !editable || loading || saving || !!model.pending || !!model.sealPending; card.append(button); box.append(card);
+        if (focus && focus[0] === performer.id && focus[1] === c.key) button.focus({preventScroll:true});
+      }));
+      if (!shown) box.append(node('p','Нет известных действий по выбранным фильтрам. Измените фильтры или исполнителя.'));
+    }
+    function renderTargets() {
+      const box = part('target-options'), order = part('target-order'), c = selectedChoice(), active = document.activeElement;
+      const focus = box.contains(active) ? active.dataset.targetId : null, orderFocus = order.contains(active) ? [active.dataset.command,active.dataset.index] : null;
+      box.replaceChildren(); order.replaceChildren(); part('target-help').textContent = c?.target_help || 'Сначала выберите действие.';
+      const rows = ctx.targets.filter(t => (c?.target_ids || []).includes(t.id));
+      const locked = loading || saving || !editable || !!model.pending || !!model.sealPending || !c?.supported;
+      rows.forEach(t => {
+        const label = node('label'), input = node('input'); input.type = c.target_mode === 'multiple' ? 'checkbox' : 'radio'; input.name = targetGroup; input.dataset.targetId = t.id;
+        input.checked = pickedTargets.includes(t.id); input.disabled = locked; label.append(input,node('span',t.name)); box.append(label);
+        if (focus === t.id) input.focus({preventScroll:true});
+      });
+      if (!rows.length) box.append(node('p','Для этого действия нет разрешённых целей в текущем контексте.'));
+      const stale = pickedTargets.some(id => !(c?.target_ids || []).includes(id));
+      if (stale) order.append(node('li','Выбор целей больше не соответствует текущим серверным сведениям. Сбросьте выбор и назначьте цели заново.'));
+      else pickedTargets.forEach((id,index) => {
+        const target = rows.find(t => t.id === id); if (!target) return;
+        const li = node('li',target.name);
+        if (c.target_mode === 'multiple') [['target-up','Выше'],['target-down','Ниже'],['target-remove','Убрать']].forEach(([cmd,text]) => {
+          const button = node('button',text); button.type = 'button'; button.dataset.command = cmd; button.dataset.index = String(index);
+          button.disabled = locked || cmd === 'target-up' && index === 0 || cmd === 'target-down' && index === pickedTargets.length - 1; button.setAttribute('aria-label',text + ': ' + target.name); li.append(button);
+        }); order.append(li);
+      });
+      if (orderFocus) { const button = Array.from(order.querySelectorAll('button')).find(b => b.dataset.command === orderFocus[0] && b.dataset.index === orderFocus[1] && !b.disabled); if (button) button.focus({preventScroll:true}); }
+      command('clear-targets').disabled = locked || !pickedTargets.length;
+    }
+    function renderWizard() {
+      root.querySelectorAll('[data-step]').forEach(panel => { panel.hidden = Number(panel.dataset.step) !== step; });
+      root.querySelectorAll('[data-step-go]').forEach(button => { if (Number(button.dataset.stepGo) === step) button.setAttribute('aria-current','step'); else button.removeAttribute('aria-current'); });
+      part('step-status').textContent = 'Шаг ' + step + ' из 4';
+      command('step-back').disabled = step === 1;
+      const next = command('step-next'); next.hidden = step === 4; next.textContent = step === 3 ? (editing === null ? 'Добавить и далее' : 'Применить и далее') : 'Далее';
+      next.disabled = step === 1 ? !actor(field('actor').value) : step === 2 ? !selectedChoice()?.supported || actor(field('actor').value)?.supported === false : command('add').disabled;
+    }
+    function goStep(value,focus = true) {
+      step = Math.max(1,Math.min(4,Number(value) || 1)); renderWizard();
+      if (focus) root.querySelector('[data-step="' + step + '"] [data-step-heading]').focus();
+    }
+    function validationStamp() { return JSON.stringify([ctx.session_id,ctx.encounter_id,ctx.turn.id,ctx.scope_token,field('scenario').value,model.sealedCount,model.actions]); }
+    function currentValidation() { return validation?.stamp === validationStamp() ? validation : null; }
+    function renderValidation() {
+      const box = part('sequence-validation'); box.replaceChildren(); const current = currentValidation();
+      let text = !model.actions.length ? 'Добавьте действия в последовательность.' : planning(ctx) ? 'До первого раунда доступна отдельная подготовка одного действия. Обычная проверка последовательности недоступна.' : model.sealedCount ? 'Запечатанный префикс фиксирован. Следующее запечатывание проверит допустимость всей последовательности на сервере.' : current?.state === 'pending' || current?.state === 'waiting' ? 'Сервер проверяет порядок, цели и виртуальные затраты…' : current?.state === 'valid' ? current.data.label : current?.message || 'Последовательность ещё не проверена сервером.';
+      box.append(node('p',text)); box.classList.toggle('acs-error',current?.state === 'invalid');
+      if (current?.state === 'valid' && current.data.friendly_fire?.required) box.append(node('p','Предупреждение сервера: возможен дружественный огонь. Перед seal потребуется отдельное подтверждение.'));
+      command('validate').disabled = !editable || ctx.encounter_status !== 'active' || planning(ctx) || !!model.sealedCount || !model.actions.length || loading || saving || !!model.pending || !!model.sealPending || current?.state === 'pending';
+    }
+    function validateSequence(immediate = false) {
+      if (validationTimer) clearTimeout(validationTimer);
+      const ticket = ++validationSerial, stamp = validationStamp(); validation = null;
+      if (!model.actions.length || planning(ctx) || !editable || ctx.encounter_status !== 'active' || model.sealedCount || loading || saving || model.pending || model.sealPending) { renderValidation(); return; }
+      validation = {stamp,state:'waiting'}; renderValidation();
+      const run = async () => {
+        if (ticket !== validationSerial || stamp !== validationStamp()) return;
+        validation = {stamp,state:'pending'}; overview();
+        try { const data = await api('builder_validate',model.preview(ctx,field('scenario').value),true); if (ticket === validationSerial && stamp === validationStamp()) { if (!data.valid || !Array.isArray(data.actions) || data.actions.length !== model.actions.length || data.scope_token !== ctx.scope_token) throw new Error('Серверная проверка не подтверждена. Обновите сведения и повторите проверку.'); validation = {stamp,state:'valid',data}; } }
+        catch (error) { if (ticket === validationSerial && stamp === validationStamp()) validation = {stamp,state:'invalid',message:error.message}; }
+        if (ticket === validationSerial) overview();
+      };
+      if (immediate) return run();
+      validationTimer = window.setTimeout(run,350);
+    }
     function actionForm(chosen) {
       knowledge();
-      const a = chosen?.actor_id || field('actor').value;
-      options(field('actor'), ctx.actors, a);
-      options(field('ability'), (actor(a)?.choices || []).filter(c => !c.sealed_only), chosen?.ability_key || field('ability').value, 'Выберите способность, предмет или взаимодействие');
-      options(field('target'), ctx.targets.filter(t => { const c = (actor(a)?.choices || []).find(c => c.key === field('ability').value), p = c?.target_policy || {kind:c?.item_action || c?.spawn_action ? 'self_only':'hostile_only'}, rel = t.relationships?.[a]; return t.actors.includes(a) && (!c?.legal_targets || c.legal_targets.includes(t.id)) && (p.kind === 'object_only' && t.kind === 'object' || p.kind === 'any_entity' || p.kind === 'self_only' && t.id === a || p.kind === 'hostile_only' && rel === 'hostile' || p.kind === 'allied_only' && ['self','allied'].includes(rel) || p.kind === 'custom' && p.relationships.includes(rel) && p.entity_kinds.includes(t.kind)); }), chosen?.targets?.[0] || field('target').value, 'Выберите разрешённую цель');
+      const requestedActor = chosen?.actor_id ?? field('actor').value, requestedChoice = chosen?.ability_key ?? field('ability').value;
+      options(field('actor'),ctx.actors.map(a => ({...a,supported:true})),requestedActor);
+      const performer = actor(field('actor').value);
+      options(field('ability'),(performer?.choices || []).filter(c => !c.sealed_only),requestedChoice,'Выберите действие');
+      const changed = lastFormActor !== field('actor').value || lastFormChoice !== field('ability').value;
+      if (chosen?.targets) pickedTargets = copy(chosen.targets); else if (changed) pickedTargets = [];
+      lastFormActor = field('actor').value; lastFormChoice = field('ability').value;
+      const c = selectedChoice();
+      if (c?.target_mode === 'self' && c.supported && !pickedTargets.length && c.target_ids.length === 1) pickedTargets = [...c.target_ids];
+      options(field('target'),ctx.targets.filter(t => (c?.target_ids || []).includes(t.id)),pickedTargets[0] || '','Выберите цель');
+      options(field('catalog-actor'),ctx.actors.map(a => ({...a,supported:true})),field('catalog-actor').value,'Все разрешённые исполнители');
       info();
       if (chosen?.parameters?.prepared_items) chosen.parameters.prepared_items.forEach(s => { const select = root.querySelector('[data-prepared-cost="' + s.cost_index + '"]'); if (select) select.value = s.inventory_item_id; });
     }
     function info() {
-      const choices = actor(field('actor').value)?.choices || [];
-      const a = choices.find(x => x.key === field('ability').value);
-      const performer = actor(field('actor').value);
-      part('action-info').textContent = performer?.supported === false ? performer.reason : a?.supported ? 'Стоимость: ' + a.ap_cost + ' AP из общего бюджета группы.' : (!choices.length ? (actor(field('actor').value)?.catalog_notice || 'Нет поддержанных закреплённых способностей. Обычная атака без утверждённого определения не подставляется.') : (a?.reason || 'Выберите поддержанную способность. Недоступные определения показаны с причиной.'));
-      const params = part('parameters'), previous = {}; params.querySelectorAll('[data-prepared-cost]').forEach(s => { previous[s.dataset.preparedCost] = s.value; });
-      params.replaceChildren();
-      (a?.prepared_item_costs || []).forEach(c => { const label = node('label', c.key + ' · ' + c.qty + ' шт. · ' + c.timing); const select = node('select'); select.dataset.preparedCost = String(c.cost_index); options(select, c.options.map(o => ({id:o.inventory_item_id,label:o.label})), previous[c.cost_index] || '', 'Выберите конкретный предмет'); select.disabled = !editable || loading || !!model.sealPending; label.append(select); params.append(label); });
-      if (!(a?.prepared_item_costs || []).length) params.textContent = 'Параметры способности закреплены сервером.';
-      if (a?.prepared_action) part('action-info').textContent += (a.prepared_action.start_execution ? ' Условие: запуск столкновения из засады.' : ' Условие: исполнитель выбран целью действия.') + ' Срок: до следующего собственного хода.';
-      if (a?.supported && a.object_interaction) part('action-info').textContent += ' ' + (a.costs || []).filter(c => c.kind === 'resource').map(c => c.amount + ' ' + c.resource).join(', ');
-      if (!ctx.targets.length) part('action-info').textContent += ' Нет разрешённых целей в текущей области видимости. Мастерские данные не открываются игроку автоматически.';
-      command('add').disabled = loading || (!!model.pending || !!model.sealPending) || !editable || (planning(ctx) && model.actions.length > 0 && editing === null) || performer?.supported === false || !a?.supported || !field('target').value;
+      const a = selectedChoice(), performer = actor(field('actor').value), choices = performer?.choices || [];
+      part('action-info').textContent = performer?.supported === false ? performer.reason : a ? (a.label + ' · ' + (a.supported ? costText(a.costs) : a.reason || 'Действие недоступно.')) : !choices.length ? (performer?.catalog_notice || 'Каталог исполнителя недоступен. Базовая атака без закреплённого определения не подставляется.') : 'Выберите карточку действия.';
+      const params = part('parameters'), focusedCost = params.contains(document.activeElement) ? document.activeElement.dataset.preparedCost : null, previous = {}; params.querySelectorAll('[data-prepared-cost]').forEach(s => { previous[s.dataset.preparedCost] = s.value; }); params.replaceChildren();
+      (a?.prepared_item_costs || []).forEach(c => { const label = node('label',c.key + ' · ' + c.qty + ' шт. · ' + c.timing), select = node('select'); select.dataset.preparedCost = String(c.cost_index); options(select,c.options.map(o => ({id:o.inventory_item_id,label:o.label})),previous[c.cost_index] || '','Выберите конкретный предмет'); select.disabled = !editable || loading || !!model.pending || !!model.sealPending; label.append(select); params.append(label); });
+      if (focusedCost !== null) { const input = Array.from(params.querySelectorAll('[data-prepared-cost]')).find(s => s.dataset.preparedCost === focusedCost); if (input) input.focus({preventScroll:true}); }
+      if (!(a?.prepared_item_costs || []).length) params.textContent = 'Параметры действия закреплены сервером.';
+      if (a?.prepared_action) part('action-info').textContent += (a.prepared_action.start_execution ? ' Подготовка с запуском из засады.' : ' Подготовка: исполнитель выбран целью действия.') + ' Срок — до следующего собственного хода.';
+      command('add').disabled = loading || saving || !!model.pending || !!model.sealPending || !editable || planning(ctx) && model.actions.length > 0 && editing === null || performer?.supported === false || !targetsValid();
+      renderActor(); renderCatalog(); renderTargets(); renderWizard();
+    }
+    function commitAction() {
+      if (!targetsValid() || actor(field('actor').value)?.supported === false) throw new Error('Выберите исполнителя, действие и цели из текущего серверного списка.');
+      if (editing === null && model.actions.length >= (ctx.sequence_limit || 20)) throw new Error('Достигнут серверный предел действий для этой последовательности.');
+      const a = {actor_id:field('actor').value,ability_key:field('ability').value,targets:copy(pickedTargets),parameters:editing === null ? [] : copy(model.actions[editing].parameters || [])};
+      if ((ability(a)?.prepared_item_costs || []).length) { a.parameters = {prepared_items:Array.from(part('parameters').querySelectorAll('[data-prepared-cost]')).map(s => ({cost_index:Number(s.dataset.preparedCost),inventory_item_id:s.value}))}; if (a.parameters.prepared_items.some(s => !s.inventory_item_id)) throw new Error('Выберите предмет для каждой стоимости.'); }
+      if (editing === null) model.add(a); else model.update(editing,a);
+      editing = null; invalidate(true); overview(); goStep(4); status('Последовательность изменена. Сервер проверит порядок и виртуальные затраты; затем сохраните черновик.',false);
     }
     function queue() {
+      const active = document.activeElement, focus = part('queue').contains(active) ? [active.dataset.command,active.dataset.index] : null;
       part('queue').replaceChildren(); let sum = 0, known = true;
       model.actions.forEach((a, i) => {
-        const li = node('li'), ab = ability(a), target = ctx.targets.find(t => t.id === a.targets[0]);
-        li.append(node('p', (actor(a.actor_id)?.name || 'Недоступное существо') + ' → ' + (ab?.label || 'Недоступная способность') + ' → ' + (target?.name || 'Цель недоступна')));
-        li.append(node('p', ab?.supported ? 'Стоимость: ' + ab.ap_cost + ' AP' : 'Предпросмотр заблокирован: источник способности недоступен.'));
-        if (ab?.supported) sum += ab.ap_cost; else known = false;
+        const li = node('li'), ab = ability(a), targetNames = a.targets.map(id => ctx.targets.find(t => t.id === id)?.name || 'Цель недоступна'), checkedCosts = currentValidation()?.state === 'valid' ? currentValidation().data.actions[i]?.costs : null;
+        li.append(node('p', (actor(a.actor_id)?.name || 'Недоступное существо') + ' → ' + (ab?.label || 'Недоступная способность') + ' → ' + targetNames.join(' → ')));
+        li.append(node('p', checkedCosts ? 'Проверено сервером: ' + costText(checkedCosts) : ab?.supported ? 'Заявленные затраты: ' + costText(ab.costs) : 'Источник действия недоступен. Обновите сведения и проверьте последовательность.'));
+        if (checkedCosts) sum += checkedCosts.filter(c => c.kind === 'ap').reduce((n,c) => n + c.amount,0); else if (ab?.supported && Number.isFinite(ab.ap_cost)) sum += ab.ap_cost; else known = false;
         const itemParameters = a.parameters?.prepared_items;
         if (itemParameters) itemParameters.forEach(s => li.append(node('p', 'Стоимость #' + s.cost_index + ' · предмет #' + s.inventory_item_id)));
         const params = a.parameters && Object.keys(a.parameters).length && !itemParameters;
@@ -110,15 +231,19 @@
         }); part('queue').append(li);
       });
       if (!model.actions.length) part('queue').append(node('li', 'Пока нет подготовленных действий.'));
-      const total = node('p', known ? 'Планируемая стоимость: ' + sum + ' / ' + budget() + ' доступных AP группы. AP пока не списываются.' : 'Общая стоимость не определена: проверьте источники действий.');
+      const total = node('p', known ? (currentValidation()?.state === 'valid' ? 'Проверенная сервером стоимость: ' : 'Заявленная стоимость: ') + sum + ' / ' + budget() + ' доступных AP группы. AP пока не списываются.' : 'Общая стоимость не определена: проверьте источники действий.');
       if (known && sum > budget()) total.className = 'acs-error'; part('queue-total').replaceChildren(total);
+      if (focus) { const button = Array.from(part('queue').querySelectorAll('button')).find(b => b.dataset.command === focus[0] && b.dataset.index === focus[1] && !b.disabled); if (button) button.focus({preventScroll:true}); }
+      renderValidation();
       command('preview').disabled = planning(ctx) || loading || previewBusy || !model.actions.length || !known || !editable || (!planning(ctx) && ctx.encounter_status !== 'active') || !ctx.targets.length || model.sealedCount > 0;
     }
     function overview() {
       part('overview').replaceChildren(); const line = node('div'); line.className = 'acs-summary';
       if (planning(ctx)) { line.append(node('span', 'Подготовка до первого раунда · один исполнитель и одна фиксированная цель на подготовку.')); line.append(node('span', 'Доступно выбранной группе: ' + budget() + ' AP. Подтверждение запишет commitment первого раунда.')); }
       else ['Раунд: ' + ctx.round, 'Группа: ' + ctx.turn.group_id, 'AP: ' + ctx.turn.ap + ' / ' + ctx.turn.maximum_ap, 'Ход: ' + (statuses[ctx.turn.status] || 'Недоступен'), ctx.encounter_status === 'paused' ? 'Столкновение на паузе' : 'Столкновение активно', 'Черновик: ' + (model.id ? '#' + model.id + ', версия ' + model.version : 'новый') + (model.dirty ? ' — не сохранён' : '')].forEach(t => line.append(node('span', t)));
-      part('overview').append(line);if (!planning(ctx)) part('overview').append(node('p', 'Участники группы: ' + (ctx.turn.members || []).map(m => m.name).join(', ')));
+      part('overview').append(line);
+      if (editing !== null) part('overview').append(node('p','Редактируется действие ' + (editing + 1) + '. Примените изменение или отмените редактирование на шаге «Цели».'));
+      if (!planning(ctx)) part('overview').append(node('p', 'Участники группы: ' + (ctx.turn.members || []).map(m => m.name).join(', ')));
       if (planning(ctx)) ctx.actors.forEach(a => part('overview').append(node('p', a.name + ' · группа #' + a.group_id + ' · оплачено ' + a.pre_round_ap_commitment + ' AP · остаток ' + a.available_ap)));
       const details = part('group-details');
       if (details) {
@@ -149,7 +274,7 @@
       const locked = loading || saving || !!model.pending || !editable || (!planning(ctx) && ctx.encounter_status !== 'active') || model.dirty || editing !== null;
       const remaining = planning(ctx) ? (sealView ? Math.min(budget(), ctx.turn.maximum_ap - sealView.quota_used) : budget()) : (sealView ? sealView.quota_budget - sealView.quota_used : ctx.turn.ap);
       const newCost = model.actions.slice(model.sealedCount).reduce((n, a) => n + (ability(a)?.ap_cost || 0), 0);
-      command('seal').disabled = locked || !ctx.targets.length || model.actions.length <= model.sealedCount || newCost > remaining;
+      command('seal').disabled = locked || !ctx.targets.length || model.actions.length <= model.sealedCount || newCost > remaining || (!planning(ctx) && model.sealedCount === 0 && currentValidation()?.state !== 'valid');
       command('cancel-seal').disabled = locked || !model.sealedCount;
       command('publish-prepared').disabled = locked || !sealView?.confirmed || !sealView?.summary?.actions?.[0]?.prepared_action;
       command('confirm-seal').disabled = locked || model.actions.length !== model.sealedCount || !sealView?.confirmable || sealView?.blocked || sealView?.confirmed;
@@ -184,7 +309,8 @@
       if (post) values.set('my_post_key', config.post_key);
       const url = config.endpoint + '&op=' + encodeURIComponent(op);
       const response = await fetch(post ? url : url + '&' + values, { method: post ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', ...(post ? { body: values } : {}) });
-      const result = await response.json();
+      let result;
+      try { result = await response.json(); } catch (_) { throw new Error('Сервер не подтвердил ответ. Локальные действия и текст сохранены; для неизвестной операции повторяйте прежний запрос.'); }
       if (!result.ok) { const e = new Error(result.error?.message || 'Запрос не выполнен.'); e.code = result.error?.code; throw e; }
       return result.data;
     }
@@ -203,7 +329,7 @@
       model.restore(dto); editable = !!dto.editable; field('prose').value = model.prose; editing = null; invalidate(); actionForm(); overview();
       status(dto.dependency_changed ? 'Черновик восстановлен. Зависимости изменились — нужен новый условный предпросмотр.' : 'Черновик восстановлен с сервера.', false);
       await refreshSeal();
-      } finally { loading = false; overview(); }
+      } finally { loading = false; overview(); validateSequence(); }
     }
     async function refreshSeal() {
       if (!model.id) return;
@@ -281,10 +407,11 @@
     }
     root.addEventListener('change', async event => {
       try {
-        if (event.target === field('actor')) { actionForm({ actor_id: field('actor').value, ability_key: '', targets: [] }); overview(); }
+        if (event.target === field('actor')) { field('catalog-actor').value = field('actor').value; actionForm({ actor_id: field('actor').value, ability_key: '', targets: [] }); overview(); }
         else if (event.target === field('ability')) actionForm();
-        else if (event.target === field('target')) info();
-        else if (event.target === field('scenario')) { invalidate(); }
+        else if (event.target.matches('[data-target-id]')) { const id = event.target.dataset.targetId; if (selectedChoice()?.target_mode === 'multiple') pickedTargets = event.target.checked ? [...pickedTargets.filter(t => t !== id),id] : pickedTargets.filter(t => t !== id); else pickedTargets = [id]; field('target').value = pickedTargets[0] || ''; info(); }
+        else if ([field('category'),field('catalog-actor'),field('available-only')].includes(event.target)) renderCatalog();
+        else if (event.target === field('scenario')) { invalidate(true); overview(); }
         else if (event.target === field('group')) {
           const turn = field('group').value;
           if (!turn || (model.dirty && !window.confirm('Перейти к другой группе и оставить несохранённые изменения? Сохраните черновик перед переходом, если он нужен.'))) { field('group').value = ctx.turn.id; return; }
@@ -292,24 +419,41 @@
         }
       } catch (e) { loading = false; status(e.message, true); overview(); }
     });
+    field('search').addEventListener('input',renderCatalog);
     field('prose').addEventListener('input', () => { try { model.text(field('prose').value); invalidate(); overview(); } catch (e) { field('prose').value = model.prose; status(e.message, true); } });
     root.addEventListener('click', async event => {
       const button = event.target.closest('button[data-command]'); if (!button || !root.contains(button) || button.disabled) return;
       const cmd = button.dataset.command, index = Number(button.dataset.index);
       try {
-        if (cmd === 'add') {
-          const a = { actor_id: field('actor').value, ability_key: field('ability').value, targets: [field('target').value], parameters: editing === null ? [] : copy(model.actions[editing].parameters || []) };
-          if ((ability(a)?.prepared_item_costs || []).length) { a.parameters = {prepared_items:Array.from(part('parameters').querySelectorAll('[data-prepared-cost]')).map(s => ({cost_index:Number(s.dataset.preparedCost),inventory_item_id:s.value}))}; if (a.parameters.prepared_items.some(s => !s.inventory_item_id)) throw new Error('Выберите предмет для каждой стоимости.'); }
-          if (!ability(a)?.supported || !ctx.targets.some(t => t.id === a.targets[0] && t.actors.includes(a.actor_id))) throw new Error('Выберите разрешённые существо, способность и цель.');
-          if (planning(ctx) && editing === null && model.actions.length) throw new Error('Предраундовая подготовка содержит одно действие.');
-          if (editing === null) model.add(a); else model.update(editing, a); editing = null; invalidate(); overview(); status('Последовательность изменена. Сохраните черновик.', false);
-        } else if (cmd === 'remove' || cmd === 'up' || cmd === 'down') { if (cmd === 'remove') model.remove(index); else model.move(index, cmd === 'up' ? -1 : 1); editing = null; invalidate(); overview(); }
-        else if (cmd === 'edit') { editing = index; actionForm(model.actions[index]); overview(); field('actor').focus(); }
-        else if (cmd === 'cancel-edit') { editing = null; overview(); }
-        else if (cmd === 'clear-parameters') { if (window.confirm('Удалить сохранённые неподдерживаемые параметры этого действия?')) { model.update(index, { ...model.actions[index], parameters: [] }); invalidate(); overview(); } }
+        if (cmd === 'step') goStep(button.dataset.stepGo);
+        else if (cmd === 'step-back') goStep(step - 1);
+        else if (cmd === 'step-next') { if (step === 3) commitAction(); else goStep(step + 1); }
+        else if (cmd === 'choose') { actionForm({actor_id:button.dataset.choiceActor,ability_key:button.dataset.choice,targets:[]}); overview(); }
+        else if (cmd === 'clear-targets') { pickedTargets = []; field('target').value = ''; info(); }
+        else if (cmd === 'target-up' || cmd === 'target-down' || cmd === 'target-remove') {
+          let nextIndex = index;
+          if (cmd === 'target-remove') { pickedTargets.splice(index,1); nextIndex = Math.min(index,pickedTargets.length - 1); }
+          else { const to = index + (cmd === 'target-up' ? -1 : 1); if (to >= 0 && to < pickedTargets.length) { [pickedTargets[index],pickedTargets[to]] = [pickedTargets[to],pickedTargets[index]]; nextIndex = to; } }
+          field('target').value = pickedTargets[0] || ''; info();
+          const nextButton = Array.from(part('target-order').querySelectorAll('button')).find(b => b.dataset.command === 'target-remove' && Number(b.dataset.index) === nextIndex && !b.disabled);
+          if (nextButton) nextButton.focus({preventScroll:true}); else root.querySelector('[data-step="3"] [data-step-heading]').focus({preventScroll:true});
+        }
+        else if (cmd === 'add') commitAction();
+        else if (cmd === 'add-another') { editing = null; overview(); goStep(1); }
+        else if (cmd === 'validate') await validateSequence(true);
+        else if (cmd === 'remove' || cmd === 'up' || cmd === 'down') {
+          if (cmd === 'remove') model.remove(index); else model.move(index,cmd === 'up' ? -1 : 1);
+          editing = null; invalidate(true); overview();
+          const nextIndex = cmd === 'remove' ? Math.min(index,model.actions.length - 1) : index + (cmd === 'up' ? -1 : 1);
+          const nextButton = Array.from(part('queue').querySelectorAll('button')).find(b => b.dataset.command === 'edit' && Number(b.dataset.index) === nextIndex && !b.disabled);
+          if (nextButton) nextButton.focus({preventScroll:true}); else root.querySelector('[data-step="4"] [data-step-heading]').focus({preventScroll:true});
+        }
+        else if (cmd === 'edit') { editing = index; actionForm(model.actions[index]); overview(); goStep(1); }
+        else if (cmd === 'cancel-edit') { editing = null; overview(); goStep(4); }
+        else if (cmd === 'clear-parameters') { if (window.confirm('Удалить сохранённые неподдерживаемые параметры этого действия?')) { model.update(index,{...model.actions[index],parameters:[]}); editing = null; invalidate(true); overview(); } }
         else if (cmd === 'save') await save();
         else if (cmd === 'restore') await restore(false);
-        else if (cmd === 'refresh') { await refresh(); invalidate(); status('Сведения обновлены. Локальные действия и текст сохранены.', false); }
+        else if (cmd === 'refresh') { await refresh(); invalidate(true); status('Сведения обновлены. Локальные действия и текст сохранены.', false); }
         else if (cmd === 'preview') await preview();
         else if (cmd === 'release-prepared') await sealCommand(cmd, (ctx.prepared_actions || []).find(p => p.prepared_action_id === button.dataset.preparedId));
         else if (['seal','cancel-seal','confirm-seal','publish-prepared'].includes(cmd)) await sealCommand(cmd);
@@ -327,6 +471,7 @@
         if (local && Array.isArray(local.actions) && typeof local.prose === 'string') {
           Object.assign(model, local); field('prose').value = model.prose; actionForm(); overview(); status('Восстановлена локальная копия. Неизвестный запрос повторяйте с прежним ключом.', false); if(model.id) await refreshSeal();
         } else { actionForm(); overview(); if (ctx.draft_id) await restore(true); }
+        if (model.actions.length) goStep(4,false); validateSequence();
       } catch (e) { status(e.message, true); }
     })();
   }
