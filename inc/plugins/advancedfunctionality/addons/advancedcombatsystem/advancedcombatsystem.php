@@ -178,6 +178,9 @@ function af_advancedcombatsystem_session_settings(): void
 /** Existing AF router; safe errors, native session access, no mutation on GET. */
 function af_advancedcombatsystem_xmlhttp(): void
 {
+    require_once __DIR__.'/modules/Presentation/SafeError.php';
+    if(($GLOBALS['mybb']->get_input('op')??'')!=='archive_export')ob_start([AF_ACS_SafeError::class,'normalize']);
+    if($GLOBALS['mybb']->get_input('op')==='versions'){require_once __DIR__.'/modules/Presentation/VersionController.php';AF_ACS_VersionController::dispatch();}
     global $mybb;
     if(in_array($mybb->get_input('op'),['alerts_status','alerts_retry'],true)){require_once __DIR__.'/modules/Presentation/NotificationController.php';AF_ACS_NotificationController::dispatch();}
     if(in_array($mybb->get_input('op'),['statistics_sync','statistics_profile','statistics_status','statistics_recover'],true)){require_once __DIR__.'/modules/Presentation/StatisticsController.php';AF_ACS_StatisticsController::dispatch();}

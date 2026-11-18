@@ -2,8 +2,10 @@
 if(!defined('IN_MYBB')){die('No direct access');}
 require_once __DIR__.'/../Application/QueryService.php';
 require_once __DIR__.'/../Application/BuilderService.php';
+require_once __DIR__.'/SafeError.php';
+require_once __DIR__.'/RuntimeAssets.php';
 
-/** Read-only conditional preview; errors deliberately bypass the command diagnostic SQL writer. */
+/** Conditional preview remains read-only; safe failures use bounded diagnostic metadata. */
 final class AF_ACS_BuilderController
 {
     private static function service():AF_ACS_QueryService
@@ -13,14 +15,7 @@ final class AF_ACS_BuilderController
     }
     private static function error(Throwable $e):array
     {
-        $code=$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage();
-        if(!preg_match('/\A(?:ACS_[A-Z_]+|[a-z][a-z0-9_]{1,95})\z/D',$code))$code='preview_unavailable';
-        $message=match($code){'preview_version_conflict','ACS_VERSION_CONFLICT'=>'Состояние изменилось. Обновите панель и выберите действие заново.',
-            'preview_target_forbidden','ACS_GM_REQUIRED','ACS_SESSION_UNAVAILABLE','ACS_AP_ACCESS_DENIED','ACS_CSRF_REQUIRED','ACS_POST_REQUIRED'=>'Нет доступа к этому предпросмотру или запрос не подтверждён.',
-            'effects_cost_unaffordable'=>'Недостаточно AP или ресурсов.', 'resolver_scenario_impossible'=>'Выбранный условный исход невозможен при текущих вероятностях.',
-            'preview_turn_unavailable'=>'Нужен открытый pending-ход с уже выполненной границей начала.',
-            default=>'Расчёт заблокирован: данные или контракт механики пока не поддерживаются. Код: '.$code};
-        return ['ok'=>false,'error'=>['code'=>$code,'message'=>$message,'error_id'=>bin2hex(random_bytes(16))],'persistent'=>false];
+        return ['ok'=>false,'error'=>AF_ACS_SafeError::from($e,'builder_preview')];
     }
     private static function input():array
     {
@@ -54,7 +49,7 @@ final class AF_ACS_BuilderController
                 $input['actions']=json_decode($raw,true,32,JSON_THROW_ON_ERROR);$data=$mybb->get_input('op')==='builder_validate'?$service->validate($input):$service->preview($input);
             }
             $response=['ok'=>true,'data'=>$data];
-        }catch(Throwable $e){http_response_code(422);$code=($e->getMessage()==='ACS_PREPARED_UNSUPPORTED'||str_starts_with($e->getMessage(),'ACS_BEHAVIOR_'))?$e->getMessage():'builder_unavailable';$response=['ok'=>false,'error'=>['code'=>$code,'message'=>AF_ACS_BuilderService::message($e)]];if($code==='ACS_PREPARED_UNSUPPORTED')$response['error']['status']='UNSUPPORTED';if(str_starts_with($code,'ACS_BEHAVIOR_'))$response['error']['status']=$code==='ACS_BEHAVIOR_UNSUPPORTED'?'UNSUPPORTED':'BLOCKED';}
+        }catch(Throwable $e){http_response_code(422);$response=['ok'=>false,'error'=>AF_ACS_SafeError::from($e,'builder')];}
         echo json_encode($response,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE);exit;
     }
     /** Explicit ATF navigation or an authenticated native-form context; never client-supplied context metadata. */
@@ -81,7 +76,8 @@ final class AF_ACS_BuilderController
             $config=['test_publication_allowed'=>AF_ACS_PublicationTestGate::allowed(),'context'=>$context,'post_key'=>$mybb->post_code,'endpoint'=>'xmlhttp.php?action=af_addon_api&addon=advancedcombatsystem'];
             $json=json_encode($config,JSON_THROW_ON_ERROR|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_UNESCAPED_UNICODE);
             $base=self::esc(rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/');
-            return '<link rel="stylesheet" href="'.$base.'builder.css?v=1113"><section class="af-acs-builder" aria-label="Подготовка боевого хода" data-acs-builder>
+            AF_ACS_Context::mark(AF_ACS_Context::INTERACTIVE);
+            return af_advancedcombatsystem_runtime_script().'<link rel="stylesheet" href="'.$base.'builder.css?v=1132"><section class="af-acs-builder" aria-label="Подготовка боевого хода" data-acs-builder>
 <h3>Подготовка хода ACS</h3><p><a href="misc.php?action=acs_loot&amp;session_id='.self::esc($sid).'&amp;encounter_id='.self::esc($context['encounter_id']).'">Добыча и заявки группы</a></p>
 <p class="acs-notice">Выберите исполнителя, действие и цели, затем соберите последовательность. Выбор и проверка не запечатывают действия и не расходуют реальные HP/AP. Общая боевая публикация выключена.</p>
 <p data-part="save-status" role="status" aria-live="polite">Сохранено</p><button type="button" data-command="restore-local" hidden>Восстановить локальный текст (до 24 часов)</button><div data-part="status" role="status" aria-live="polite"></div><div data-part="overview"></div><label>Группа<select data-field="group"></select></label>
@@ -93,8 +89,8 @@ final class AF_ACS_BuilderController
 <details open><summary>Текст и серверный черновик</summary><label>Литературный черновик (BBCode)<textarea data-field="prose" data-af-ae-skip="1" rows="5" maxlength="65536"></textarea></label><div class="acs-controls"><button type="button" data-command="save">Сохранить черновик</button><button type="button" data-command="restore">Восстановить серверный черновик</button><button type="button" data-command="refresh">Обновить сведения</button></div></details>
 <details><summary>Запечатывание и подтверждение</summary><p>Это отдельная явная операция. Запечатывание фиксирует серверные значения и расходует квоту подготовки, но не реальные AP/HP. Отмена квоту не возвращает.</p><div class="acs-controls"><button type="button" data-command="seal">Запечатать действия</button><button type="button" data-command="cancel-seal">Отменить последнее запечатанное действие</button><button type="button" data-command="seal-refresh">Пересчитать сводку на прежних бросках</button><button type="button" data-command="confirm-seal">Подтвердить сводку</button><button type="button" data-command="publish-prepared" disabled>Оплатить и опубликовать подготовку</button></div><div data-part="seal" aria-live="polite"></div><p><button type="button" data-command="compose" disabled>Продолжить в редакторе</button><button type="button" data-command="compose-quick" disabled>Использовать быстрый ответ</button> Общая публикация выключена; тестовый доступ ограничен сервером.</p></details>
 <details><summary>Условный предпросмотр</summary><label>Сценарий для последовательности<select data-field="scenario"><option value="hit">Если все попадания без крита</option><option value="crit">Если все попадания критические</option><option value="miss">Если все промахи</option></select></label><button type="button" data-command="preview">Рассчитать последовательность без бросков</button><div data-part="preview" aria-live="polite"></div></details></section>
-<div class="acs-step-controls"><button type="button" data-command="step-back">Назад</button><span data-part="step-status" aria-live="polite"></span><button type="button" data-command="step-next">Далее</button></div><noscript>Для пошагового конструктора нужен JavaScript. Никакие действия автоматически не запечатываются.</noscript><script type="application/json" data-acs-builder-config>'.$json.'</script></section><script defer src="'.$base.'builder.js?v=1113"></script>';
-        }catch(Throwable $e){return '<p class="af-acs">'.self::esc(AF_ACS_BuilderService::message($e)).'</p>';}
+<div class="acs-step-controls"><button type="button" data-command="step-back">Назад</button><span data-part="step-status" aria-live="polite"></span><button type="button" data-command="step-next">Далее</button></div><noscript>Для пошагового конструктора нужен JavaScript. Никакие действия автоматически не запечатываются.</noscript><script type="application/json" data-acs-builder-config>'.$json.'</script></section><script defer src="'.$base.'builder.js?v=1132"></script>';
+        }catch(Throwable $e){$failure=AF_ACS_SafeError::from($e,'builder_render');return '<p class="af-acs" role="alert">'.self::esc($failure['message'].' · error_id='.$failure['error_id']).'</p>';}
     }
     private static function esc(mixed $s):string{return htmlspecialchars_uni((string)$s);}
     public static function render(string $sid,string $eid,string $tid,?AF_ACS_QueryService $query=null):void

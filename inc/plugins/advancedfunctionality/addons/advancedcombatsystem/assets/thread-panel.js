@@ -12,6 +12,15 @@
         var side = panel.querySelector('[data-acs-side]');
         var group = panel.querySelector('[data-acs-group]');
         var frame = 0;
+        var notice = document.createElement('p'); notice.setAttribute('role','status');
+        var watcher = panel.dataset.acsSession && window.AFACSRuntime?.watch(panel, function () {
+            return {session_id:panel.dataset.acsSession,tid:panel.dataset.acsTid};
+        }, function () {
+            notice.replaceChildren(document.createTextNode('Состояние боя изменилось. Показанные сведения требуют обновления. '));
+            var link=document.createElement('a');link.href=window.location.href;link.textContent='Обновить страницу после сохранения текста';notice.append(link);
+        }, function (error) {notice.textContent=error.message || 'Обновление недоступно. Сохраните текст перед обновлением страницы.';});
+        if(panel.dataset.acsSession)details.append(notice);
+
         // The same details DOM keeps filter values, focus targets and participant state.
         details.open = !mobile.matches;
         compact.hidden = false;
@@ -40,6 +49,7 @@
             if (!frame) frame = window.requestAnimationFrame(geometry);
         }
         function expand() {
+            watcher?.check('panel-open').catch(function () {});
             details.open = true;
             if (!mobile.matches) {
                 panel.scrollIntoView({block: 'start'});
@@ -52,7 +62,8 @@
         panel.addEventListener('keydown', function (event) {
             if (event.key === 'Escape' && details.open) { details.open = false; open.focus({preventScroll: true}); schedule(); }
         });
-        details.addEventListener('toggle', schedule);
+        details.addEventListener('toggle', function () {schedule();if(details.open)watcher?.check('panel-open').catch(function () {});});
+        if(panel.dataset.acsSession){if(watcher)watcher.check('panel-open').catch(function () {});else notice.textContent='Проверка обновлений недоступна. Сохраните текст перед обновлением страницы.';}
         function filter() {
             if (!side || !group) return;
             var any = false;

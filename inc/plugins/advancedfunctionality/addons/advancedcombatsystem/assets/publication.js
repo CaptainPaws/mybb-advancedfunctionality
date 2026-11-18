@@ -116,7 +116,7 @@
       const body=new URLSearchParams(values);body.set('acs_mode','combat');body.set('acs_operation',op);body.set('tid',config.tid);if(method==='POST')body.set('my_post_key',config.post_key);
       const response=await fetch(config.endpoint+(method==='GET'?'?'+body:''),{method,credentials:'same-origin',cache:'no-store',...(method==='POST'?{body}:{})});
       let result;try{result=await response.json();}catch(_){throw new Error('Ответ сервера не подтверждён. Выполните проверку прежней операции.');}
-      if(!result.ok){const e=new Error((result.error?.message || 'Запрос не подтверждён.')+(result.error?.error_id?' · error_id='+result.error.error_id:''));e.code=result.error?.code;throw e;}return result.data;
+      if(!result.ok){const e=new Error((result.error?.message || 'Запрос не подтверждён.')+(result.error?.error_id?' · error_id='+result.error.error_id:''));e.code=result.error?.code;e.category=result.error?.category;e.error_id=result.error?.error_id;throw e;}return result.data;
     }
     function noAttachments() {
       for(const input of form.querySelectorAll('input[type="file"]'))if(input.files?.length)throw new Error('Вложения в боевом режиме пока не поддерживаются. Уберите файлы; текст и действия сохранятся.');
@@ -128,6 +128,7 @@
       busy=true;ack.checked=false;report('Сохранение текста и проверка подтверждённой сводки…');
       try {
         if(!model.pendingPrepare){
+          await bridge.revalidate();
           bridge.prose(read());await bridge.save();draftId=bridge.state().id;refresh();
           draft=await request('compose',{acs_draft_id:draftId},'GET');
           if(draft.operation){operation(draft.operation);return;}
@@ -151,7 +152,10 @@
       if(busy)return;
       if(!config.can_publish || !model.canSend() || !ack.checked || !ready)throw new Error('Подготовьте и явно подтвердите отправку. При неизвестном исходе проверяйте прежнюю операцию.');
       if(read()!==frozenProse)throw new Error('Текст зарегистрированной отправки отличается. Сохраните новый текст отдельно и проверьте прежнюю операцию; новый пост не отправлен.');
-      noAttachments();busy=true;persist();refresh();report('Отправка выполняется… Ожидается подтверждение сервером.');
+      noAttachments();
+      busy=true;refresh();
+      try{if(!uncertain())await bridge.revalidate();}catch(e){busy=false;refresh();throw e;}
+      persist();refresh();report('Отправка выполняется… Ожидается подтверждение сервером.');
       try {
         existingEditor(ta)?.updateOriginal?.();const body=new URLSearchParams();for(const [name,value] of new FormData(form))if(typeof value==='string')body.append(name,value);
         body.set('action','acs_publication');body.set('acs_submission_id',model.submission);body.set('message',frozenProse);if(quick)body.set('method','quickreply');
@@ -191,12 +195,13 @@
     ta.addEventListener('input',changed);ta.addEventListener('compositionstart',()=>{if(builder)builder.dispatchEvent(new Event('acs:compositionstart'));});ta.addEventListener('compositionend',()=>{if(builder)builder.dispatchEvent(new Event('acs:compositionend'));changed();});
     // Fallback for an editor initialized by another deferred script; no polling, init or remount.
     form.addEventListener('focusin',bindEditor);
+    document.addEventListener('acs:version-changed',event=>{if(!event.target.matches('[data-acs-builder]'))return;ack.checked=false;report('Состояние боя изменилось. Текст сохранён; проверьте сводку и явно подтвердите отправку заново. При неизвестном исходе — только проверка прежней операции.');});
     mode.addEventListener('change',()=>{changed();refresh();});
     const sendButton=b=>!b || b.name==='submit' || b.id==='quick_reply_submit';
     document.addEventListener('submit',e=>{if(e.target!==form || mode.value!=='combat')return;e.preventDefault();e.stopImmediatePropagation();if(!sendButton(e.submitter)){report('Предпросмотр и черновики MyBB не отправляют боевой пост.');return;}send().catch(e=>report(e.message));},true);
     document.addEventListener('click',e=>{const b=e.target.closest('button,input[type="submit"]');if(!b || (b.form||b.closest('form'))!==form || mode.value!=='combat' || (b.type!=='submit' && b.id!=='quick_reply_submit'))return;e.preventDefault();e.stopImmediatePropagation();if(!sendButton(b)){report('Эта команда не отправляет боевой пост. Текст и действия сохранены.');return;}send().catch(e=>report(e.message));},true);
     window.addEventListener('beforeunload',()=>{changed();persist();});
-    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){changed();persist();}});
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){changed();persist();}else if(mode.value==='combat' && model.submission && !busy){checkStatus().catch(e=>report(e.message));}});
     refresh();
   }
   function init(){for(const tag of document.querySelectorAll('[data-acs-publication-config]')){try{mount(JSON.parse(tag.textContent));}catch(_){/* Native narrative form remains available; no editor is replaced. */}}}
