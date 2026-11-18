@@ -21,7 +21,11 @@ final class AF_ACS_BuilderService
     {
         $code=$e instanceof AF_ACS_FormulaError?$e->diagnosticCode:$e->getMessage();
         return match($code){
+            'ACS_DISABLED'=>'Боевая система отключена. Локальный черновик не отправлен.',
+            'ACS_CSRF_REQUIRED','ACS_POST_REQUIRED'=>'Запрос не подтверждён текущей сессией. Обновите страницу; локальный черновик сохранён.',
+            'effects_resource_invalid'=>'У исполнителя нет подтверждённого ресурса, необходимого для этой последовательности.',
             'ACS_PREPARED_UNSUPPORTED'=>'UNSUPPORTED: контракт подготовки пока не поддерживается.',
+            'ACS_FORM_REQUIREMENT_UNAVAILABLE'=>'Текущая форма не соответствует требованиям действия.',
             'ACS_COVER_BLOCKED'=>'Цель или действие сейчас недоступны.',
             'ACS_COVER_UNSUPPORTED'=>'UNSUPPORTED: контракт окружения недоступен.',
             'ACS_COVER_VERSION_CONFLICT'=>'Зависимости окружения изменились. Броски сохранены.',
@@ -51,7 +55,10 @@ final class AF_ACS_BuilderService
             'builder_version_conflict','preview_version_conflict'=>'Состояние изменилось. Обновите сведения конструктора и повторите предпросмотр.',
             'resolver_scenario_impossible'=>'Этот условный сценарий невозможен при текущих вероятностях. Выберите другой сценарий.',
             'preview_target_forbidden','ACS_DRAFT_UNAVAILABLE','ACS_GM_REQUIRED','ACS_SESSION_UNAVAILABLE'=>'Нет разрешённого доступа к выбранной группе или цели.',
-            'builder_input_invalid'=>'Некорректная последовательность действий.',
+            'builder_input_invalid'=>'Некорректная последовательность действий или превышен предел 20 действий для расчёта.',
+            'resolver_target_count_invalid','preview_target_count_unsupported'=>'Выберите число целей, разрешённое серверным контрактом действия.',
+            'ACS_DELEGATION_ACTION_DENIED'=>'Нет действующего разрешения на это действие исполнителя.',
+            'ACS_ITEM_TARGET_UNSUPPORTED','ACS_SPAWN_TARGET_UNSUPPORTED'=>'Это действие разрешено только с серверной привязкой цели к исполнителю.',
             'ACS_FRIENDLY_FIRE_CONFIRMATION_REQUIRED'=>'Перед seal подтвердите предупреждение об уроне союзнику.',
             'ACS_BEHAVIOR_ACTION_BLOCKED'=>'Активное ограничение поведения запрещает это действие.',
             'ACS_BEHAVIOR_TARGET_BLOCKED'=>'Активное ограничение поведения запрещает выбранную цель.',
@@ -74,6 +81,57 @@ final class AF_ACS_BuilderService
             default=>'Данные или механика пока не поддерживаются. Проверьте источник способности, начало хода и доступность интеграций.'
         };
     }
+    /** Presentation DTO only for actors already admitted by builderScope. */
+    private function actorPresentation(string $sid,string $eid,string $id,bool $gm,array $instances): array
+    {
+        $row=$this->repo->entity($sid,$id);if(!$row)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
+        $exact=$gm||(string)($row['group_owner']??'')===$this->access->uid();
+        $state=['hp'=>null,'resources'=>[],'statuses'=>[]];
+        if(!$exact)return $state;
+        $state['hp']=['current'=>$row['hp'],'maximum'=>$row['hp_max']];
+        try{$state['resources']=$this->repo->statusResources($id,$row)['values'];}catch(Throwable $error){return ['hp'=>null,'resources'=>[],'statuses'=>[],'notice'=>'Текущие ресурсы не подтверждены. Обновите сведения исполнителя.'];}
+        foreach($instances as $effect)if($effect['status']==='active'&&$effect['target_entity_id']===$id&&($effect['spec']['scope']!=='combat'||$effect['encounter_id']===$eid))$state['statuses'][]=['label'=>$effect['spec']['effect_key'],'stacks'=>$effect['stacks'],'remaining'=>$effect['remaining_duration'],'unit'=>$effect['duration_unit']];
+        return $state;
+    }
+    /** Server owns category, selection mode and the per-action visible target intersection. */
+    private function catalogPresentation(array &$actors,array $targets,string $sid): void
+    {
+        foreach($actors as &$actor){
+            $cooldowns=[];foreach($this->repo->allCooldowns($sid,$actor['id']) as $row)if((int)$row['remaining_turns']>0)$cooldowns[$row['ability_key']]=max($cooldowns[$row['ability_key']]??0,(int)$row['remaining_turns']);
+            foreach($actor['choices'] as &$choice){
+                $choice['catalog_category']??=!empty($choice['item_action'])?(str_starts_with($choice['key'],'item:consume:')?'items':'equipment'):(array_intersect(array_keys($choice),['spatial_action','participation_action','object_interaction','awareness_action'])||in_array($choice['category']??'', ['objects','cooperation','spatial','cover'],true)?'tactics':(!empty($choice['prepared_action'])||!empty($choice['spawn_action'])?'special':'abilities'));
+                $choice['description']??=match($choice['catalog_category']){'items'=>'Использовать выбранный предмет.','equipment'=>'Взять или сменить разрешённое оружие.','tactics'=>'Взаимодействие, перемещение или действие в текущем столкновении.','special'=>'Подготовка или особое действие исполнителя.',default=>'Способность исполнителя.'};
+                $choice['costs']??=isset($choice['ap_cost'])?[['kind'=>'ap','amount'=>$choice['ap_cost']]]:[];
+                $choice['costs']=array_map(static fn($cost)=>array_intersect_key($cost,['kind'=>true,'resource'=>true,'amount'=>true]),$choice['costs']);
+                $choice['requirements']??=[];$choice['cooldown_text']??='Без указанного кулдауна.';
+                if(isset($cooldowns[$choice['key']])){$choice['cooldown_text']=($actor['control']['via']??'')==='temporary_control'?'Дополнительные сведения ограничены сервером.':'Осталось собственных ходов: '.$cooldowns[$choice['key']];$choice['supported']=false;$choice['reason']='Способность восстанавливается. Дождитесь завершения кулдауна.';}
+                if(($actor['supported']??true)===false&&empty($choice['sealed_only'])){$choice['supported']=false;$choice['reason']=$actor['reason']??'Исполнитель сейчас недоступен.';}
+                $self=($choice['target_policy']['kind']??null)==='self_only'||($choice['target']??null)==='self';
+                $choice['target_mode']=isset($choice['target_count'])?'multiple':($self?'self':'single');
+                $choice['target_count']=$choice['target_mode']==='multiple'?$choice['target_count']:['min'=>1,'max'=>1];
+                $ids=[];
+                foreach($targets as $target){
+                    if(!in_array($actor['id'],$target['actors']??[],true))continue;
+                    if(isset($choice['legal_targets'])&&!in_array($target['id'],$choice['legal_targets'],true))continue;
+                    $policy=$choice['target_policy']??['kind'=>$self?'self_only':'hostile_only'];
+                    if(AF_ACS_Control::allowed($policy,$target['relationships'][$actor['id']]??($target['id']===$actor['id']?'self':'neutral'),$target['kind']))$ids[]=$target['id'];
+                }
+                $choice['target_ids']=$ids;$choice['legal_targets']=$ids;
+                $choice['target_help']=$choice['target_mode']==='multiple'?'Выберите от '.$choice['target_count']['min'].' до '.$choice['target_count']['max'].' целей. Порядок выбора сохраняется.':($self?'Цель этого действия — исполнитель. Массовые эффекты обрабатываются по правилам действия.':'Выберите одну разрешённую цель.');
+                if(empty($choice['sealed_only'])&&($choice['supported']??false)&&count($ids)<$choice['target_count']['min']){$choice['supported']=false;$choice['reason']='Сейчас нет достаточного числа разрешённых целей. Обновите сведения или выберите другое действие.';}
+                if(!$choice['supported'])$choice['target_ids']=$choice['legal_targets']=[];
+            }unset($choice);
+        }unset($actor);
+    }
+    /** Same existing ordered preview; return only validation/costs, no rolls or extra state. */
+    public function validate(array $input): array
+    {
+        $this->access->csrf();
+        if((string)($input['turn_id']??'')==='0')throw new RuntimeException('ACS_PREPARED_UNSUPPORTED');
+        $result=$this->preview($input);
+        return ['valid'=>true,'conditional'=>true,'label'=>'Последовательность проверена сервером для выбранного условного сценария. Запечатывание повторно проверит фактические условия.','scope_token'=>$result['scope_token'],'actions'=>array_map(static fn($row)=>['actor_id'=>$row['actor_id'],'costs'=>$row['costs']],$result['actions']),'friendly_fire'=>$result['friendly_fire']];
+    }
+
     public function context(string $sid,string $eid,?string $selected=null):array
     {
         $sid=AF_ACS_Repository::integer($sid);$eid=AF_ACS_Repository::integer($eid);$q=new AF_ACS_QueryService($this->repo,$this->access);$scope=$q->builderScope($sid,$eid);
@@ -119,7 +177,7 @@ final class AF_ACS_BuilderService
                 $mechanicalKey=preg_match('/\Agranted:([1-9][0-9]*)\z/D',$choice['key'],$g)?($behavior[$g[1]]['grant']['binding']['ability']['source_ref']['key']??$choice['key']):$choice['key'];
                 if(!empty($choice['participation_action']))foreach($choiceCandidates as &$candidate)$candidate['active']=true;unset($candidate);
                 $r=AF_ACS_Behavior::evaluate($behavior,$a['id'],$mechanicalKey,$category,$choiceCandidates,$choice['target_policy']??['kind'=>$category==='ordinary'?'hostile_only':'self_only'],$world+['minimum_targets'=>$choice['target_count']['min']??1]);
-                $choice['legal_targets']=$r['legal_targets'];$choice['behavior_status']=$r['status'];if($r['status']!=='READY'){$choice['supported']=false;$choice['reason']=self::message(new RuntimeException($r['code']));}
+                $choice['legal_targets']=isset($choice['legal_targets'])?array_values(array_intersect($choice['legal_targets'],$r['legal_targets'])):$r['legal_targets'];$choice['behavior_status']=$r['status'];if($r['status']!=='READY'){$choice['supported']=false;$choice['reason']=self::message(new RuntimeException($r['code']));}
             }unset($choice);
         }unset($a);
         foreach($scope['targets'] as $target){$rels=[];foreach($chosen['members'] as $member)$rels[$member['id']]=$member['id']===$target['id']?'self':($member['side_id']===$target['side_id']?'allied':($relations[$member['side_id']][$target['side_id']]??'neutral'));
@@ -134,14 +192,16 @@ final class AF_ACS_BuilderService
             $ready=$grant!==null&&$scope['encounter']['status']==='active'&&$chosen['status']==='pending'&&($member['active']??false)&&$individual&&$individual['start_done']==='1'&&$individual['end_done']==='0'&&AF_ACS_Effects::ordinaryActionAllowed(['summons'=>$summons,'status_instances'=>$behavior],$a['id']);
             $a['kind']=$member['kind'];$a['supported']=(bool)$ready;$a['availability']=$scope['encounter']['status']==='paused'?'encounter_paused':($ready?'ready':($grant===null?'permission_changed':($chosen['status']!=='pending'?'turn_closed':(!($member['active']??false)?'entity_inactive':(($individual['start_done']??'0')!=='1'?'start_required':'status_blocked')))));
             $a['reason']=match($a['availability']){'ready'=>'','encounter_paused'=>'Столкновение приостановлено.','permission_changed'=>'Разрешение управления изменилось. Обновите панель.','turn_closed'=>'Групповой ход закрыт. Новый ход не создаётся.','entity_inactive'=>'Существо не может выполнять обычное действие.','start_required'=>'Не выполнена граница начала индивидуального хода.',default=>'Обычные действия существа ограничены текущим состоянием.'};
+            $a['state']=$this->actorPresentation($sid,$eid,$a['id'],$scope['gm'],$behavior);
             $a['advanced_state']=AF_ACS_EffectSummary::actor($behavior,$a['id'],$eid,array_column(array_filter($a['choices'],static fn($c)=>!empty($c['supported'])),'key'));
             $a['control']=$grant?['mode'=>$grant['mode'],'via'=>isset($grant['control_overlay'])?'temporary_control':(isset($grant['delegation_id'])?'delegation':(isset($grant['source_control_proof'])?'source':'assignment')),'assignment_version'=>(string)$grant['assignment_version']]+(isset($grant['delegation_version'])?['delegation_version'=>(string)$grant['delegation_version']]:[]):['via'=>'unavailable'];
         }unset($a);
         foreach($scope['actors'] as $id=>$member){$id=(string)$id;if($member['group_id']!==$chosen['group_id']||$member['kind']!=='summon'||!isset($summons[$id]))continue;
             $v=$summons[$id];$summonRows[]=['entity_id'=>$id,'name'=>$member['name'],'status'=>$v['pending_independent']?'pending_independent':$v['status'],'remaining'=>$v['remaining'],'duration_unit'=>$v['unit'],'admission'=>isset($individuals[$id])?'current_roster':'next_round'];
         }
+        $this->catalogPresentation($actors,$targets,$sid);
         $token=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'session'=>$scope['session']['session_version'],'encounter'=>$scope['encounter']['encounter_version'],'round'=>$scope['round']['round_version'],'turns'=>$versions,'selected'=>$selected,'audience'=>$scope['audience_stamp']]));
-        return ['session_version'=>$scope['session']['session_version'],'session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>(string)$scope['round']['round_number'],'encounter_status'=>$scope['encounter']['status'],'turns'=>$turns,'turn'=>$chosen,'actors'=>$actors,'targets'=>$targets,'cover'=>(new AF_ACS_CoverService($this->repo,$this->access))->view($sid,$eid,array_column($actors,'id')),'spatial'=>(new AF_ACS_SpatialService($this->repo,$this->access))->view($sid,$eid),'known_subjects'=>$scope['known_subjects'],'objectives'=>(new AF_ACS_CooperationService($this->repo,$this->access))->progress($sid,$eid,array_column($actors,'id')),'prepared_actions'=>$this->preparedView($sid,$eid,$actors),'summons'=>$summonRows,'can_manage'=>$scope['gm'],'scope_token'=>$token,'draft_id'=>$draft,'preview_scope'=>$scope['gm']?'gm':'own_draft_only','publication_enabled'=>false];
+        return ['session_version'=>$scope['session']['session_version'],'session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>(string)$scope['round']['round_number'],'encounter_status'=>$scope['encounter']['status'],'turns'=>$turns,'turn'=>$chosen,'actors'=>$actors,'targets'=>$targets,'cover'=>(new AF_ACS_CoverService($this->repo,$this->access))->view($sid,$eid,array_column($actors,'id')),'spatial'=>(new AF_ACS_SpatialService($this->repo,$this->access))->view($sid,$eid),'known_subjects'=>$scope['known_subjects'],'objectives'=>(new AF_ACS_CooperationService($this->repo,$this->access))->progress($sid,$eid,array_column($actors,'id')),'prepared_actions'=>$this->preparedView($sid,$eid,$actors),'summons'=>$summonRows,'can_manage'=>$scope['gm'],'scope_token'=>$token,'draft_id'=>$draft,'sequence_limit'=>20,'preview_scope'=>$scope['gm']?'gm':'own_draft_only','publication_enabled'=>false];
     }
     /** Planning admission only: the zero scope key is not a persisted turn identity. */
     private function preRoundContext(array $scope,?string $selected):array
@@ -153,12 +213,15 @@ final class AF_ACS_BuilderService
             $choices=array_values(array_filter($q->builderCatalog($sid,$actor['id']),static fn($c)=>($c['prepared_action']['pre_round']??null)===['schema'=>'ic-acs.pre-round-preparation.v1','allowed'=>true]));
             foreach($choices as &$c)try{$c['prepared_item_costs']=(new AF_ACS_PreparedItemService($this->repo,$this->access))->catalog($sid,$actor['id'],$c['prepared_action']);}catch(Throwable $e){$c['supported']=false;$c['reason']=self::message($e);}unset($c);
             $commitment=$paid[$actor['group_id']]??0;$budget=$this->repo->preRoundBudget($sid,$actor['group_id']);
-            $actors[]=$actor+['choices'=>$choices,'supported'=>$actor['active'],'catalog_notice'=>'','pre_round_ap_commitment'=>$commitment,'available_ap'=>AF_ACS_Clock::availableAP($budget,0,$commitment),'maximum_ap'=>$budget,'advanced_state'=>AF_ACS_EffectSummary::actor($instances,$actor['id'],$eid,array_column(array_filter($choices,static fn($c)=>!empty($c['supported'])),'key'))];
+            $actors[]=$actor+['choices'=>$choices,'supported'=>$actor['active'],'catalog_notice'=>'','pre_round_ap_commitment'=>$commitment,'available_ap'=>AF_ACS_Clock::availableAP($budget,0,$commitment),'maximum_ap'=>$budget,'state'=>$this->actorPresentation($sid,$eid,$actor['id'],$scope['gm'],$instances),'advanced_state'=>AF_ACS_EffectSummary::actor($instances,$actor['id'],$eid,array_column(array_filter($choices,static fn($c)=>!empty($c['supported'])),'key'))];
         }
         if(!$actors)throw new RuntimeException('ACS_DRAFT_UNAVAILABLE');
-        $targets=[];foreach($scope['targets'] as $t)$targets[]=$t+['actors'=>$t['known_to']];
+        $pairs=[];foreach($this->repo->allRelations($eid) as $r){$pairs[$r['side_a']][$r['side_b']]=$r['relationship'];$pairs[$r['side_b']][$r['side_a']]=$r['relationship'];}
+        $targets=[];foreach($scope['targets'] as $t){$rels=[];foreach($actors as $a)$rels[$a['id']]=$a['id']===$t['id']?'self':($a['side_id']===$t['side_id']?'allied':($pairs[$a['side_id']][$t['side_id']]??'neutral'));$targets[]=$t+['actors'=>$t['known_to'],'relationships'=>array_intersect_key($rels,array_fill_keys($t['known_to'],true))];}
+
+        $this->catalogPresentation($actors,$targets,$sid);
         $token=hash('sha256',AF_ACS_Repository::json(['schema_version'=>1,'mode'=>'pre_round','session'=>$scope['session']['session_version'],'encounter'=>$scope['encounter']['encounter_version'],'audience'=>$scope['audience_stamp'],'actors'=>$actors]));
-        return ['draft_id'=>$this->repo->builderDraft($sid,'0',$this->access->uid(),$eid),'mode'=>'pre_round','session_version'=>$scope['session']['session_version'],'session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>null,'encounter_status'=>'preparation','turn'=>['id'=>'0','status'=>'preparation','ap'=>$actors[0]['maximum_ap'],'maximum_ap'=>$actors[0]['maximum_ap']],'turns'=>[],'actors'=>$actors,'targets'=>$targets,'can_manage'=>$scope['gm'],'scope_token'=>$token,'publication_enabled'=>false,'prepared_actions'=>$this->preparedView($sid,$eid,$actors)];
+        return ['draft_id'=>$this->repo->builderDraft($sid,'0',$this->access->uid(),$eid),'mode'=>'pre_round','sequence_limit'=>1,'session_version'=>$scope['session']['session_version'],'session_id'=>$sid,'encounter_id'=>$eid,'tid'=>$scope['session']['tid'],'author_uid'=>$this->access->uid(),'round'=>null,'encounter_status'=>'preparation','turn'=>['id'=>'0','status'=>'preparation','ap'=>$actors[0]['maximum_ap'],'maximum_ap'=>$actors[0]['maximum_ap']],'turns'=>[],'actors'=>$actors,'targets'=>$targets,'can_manage'=>$scope['gm'],'scope_token'=>$token,'publication_enabled'=>false,'prepared_actions'=>$this->preparedView($sid,$eid,$actors)];
     }
     private function preparedView(string $sid,string $eid,array $actors):array
     {
@@ -241,7 +304,7 @@ final class AF_ACS_BuilderService
                 $bindings=(new AF_ACS_PreparedItemService($this->repo,$this->access))->bindings($sid,$actor,$p['context']['abilities'][$actor][$action['ability_key']]['prepared_action'],$action['parameters']??[],$sealedDraft,$actionIndex);
                 if($bindings){$definitions[$actionIndex]=$dto;$definitions[$actionIndex]['prepared_items']=$bindings;$p['versions']['prepared_items']=$bindings;}
             }
-            if(($p['choices'][$action['ability_key']]['supported']??false)!==true)throw new RuntimeException('builder_parameters_unsupported');
+            if(($p['choices'][$action['ability_key']]['supported']??false)!==true){$reason=$p['choices'][$action['ability_key']]['reason']??'';throw new RuntimeException(is_string($reason)&&preg_match('/\A(?:ACS_[A-Z_]+|[a-z][a-z0-9_]{1,95})\z/D',$reason)?$reason:'builder_parameters_unsupported');}
             if($context===null)$context=$p['context'];else foreach(['entities','groups'] as $f)$context['state'][$f]=array_replace($context['state'][$f],$p['context']['state'][$f]);
             if(isset($p['context']['state']['participants']))$context['state']['participants']=array_replace($context['state']['participants']??[],$p['context']['state']['participants']);
             $context['participation_visible']=array_replace($context['participation_visible']??[],$p['context']['participation_visible']??[]);
