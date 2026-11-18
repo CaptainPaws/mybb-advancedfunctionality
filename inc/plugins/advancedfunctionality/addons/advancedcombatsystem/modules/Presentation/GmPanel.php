@@ -110,6 +110,7 @@ final class AF_ACS_GmPanel
         if($s['status']!=='active'){echo '<p>Операции столкновения заблокированы состоянием сессии. Переоткрытие — отдельная разрешённая команда.</p>';return;}
         try{$state=$service->resolution($s['id'],$e['id']);}catch(Throwable $error){$failure=af_advancedcombatsystem_session_failure($error);echo '<p role="alert">BLOCKED: состояние исхода не подтверждено. Проверьте текущие session GM права, версии и диагностику. error_id='.self::esc($failure['error_id']).'</p>';return;}
         if($state['confirmed'])echo '<p>Исход подтверждён и сохранён. Старые события не редактируются; награды и добыча используют отдельные разрешённые операции.</p>';
+        echo '<p><a href="misc.php?action=acs_loot&amp;session_id='.self::esc($s['id']).'&amp;encounter_id='.self::esc($e['id']).'">Завершение, добыча и награды</a></p>';
         $pending=$state['pending'];
         if(!$pending){echo '<p>Серверного кандидата исхода нет. Принудительно выбрать победителя или завершить бой в обход end-condition контракта нельзя.</p>';return;}
         echo '<h3>Ожидание подтверждения исхода</h3><p>Сохранённое решение #'.self::esc($pending['resolution_id']).'; условие '.self::esc($pending['condition']).'.</p>';
