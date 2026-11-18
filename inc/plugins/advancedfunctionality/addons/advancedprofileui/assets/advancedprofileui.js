@@ -261,6 +261,31 @@
       }
     }
 
+    // Combat forms and keyset links stay inside the existing lazy panel.
+    function navigateCombat(event, targetUrl) {
+      var panel = root.querySelector('[data-panel="combat"]');
+      if (!panel) return;
+      var url = new URL(targetUrl, window.location.href);
+      if (url.origin !== window.location.origin || url.searchParams.get('af_profile_tab') !== 'combat') return;
+      event.preventDefault();
+      if (panel.getAttribute('data-lazy-state') === 'loading') return;
+      panel.setAttribute('data-lazy-url', url.href);
+      panel.removeAttribute('data-lazy-state');
+      loadLazyPanel(panel);
+    }
+    root.addEventListener('submit', function (event) {
+      var form = event.target.closest('[data-af-acs-profile-filter]');
+      if (!form || !form.closest('[data-panel="combat"]')) return;
+      var url = new URL(form.action, window.location.href);
+      url.search = new URLSearchParams(new FormData(form)).toString();
+      navigateCombat(event, url.href);
+    });
+    root.addEventListener('click', function (event) {
+      var link = event.target.closest('a[data-af-acs-profile-page]');
+      if (!link || !link.closest('[data-panel="combat"]') || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      navigateCombat(event, link.href);
+    });
+
     async function loadLazyPanel(panel) {
       var url = panel.getAttribute('data-lazy-url');
       if (!url || panel.getAttribute('data-lazy-state') === 'loaded' || panel.getAttribute('data-lazy-state') === 'loading') return;
@@ -276,12 +301,20 @@
         panel.innerHTML = html;
         for (var asset of payload.assets || []) await loadProfileAsset(asset);
         panel.setAttribute('data-lazy-state', 'loaded');
+        if (panel.getAttribute('data-panel') === 'combat') {
+          var heading = panel.querySelector('h2');
+          if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus({ preventScroll: true }); }
+        }
         if (typeof window.AFAdvancedInventoryInit === 'function') window.AFAdvancedInventoryInit(panel);
         document.dispatchEvent(new CustomEvent('af:profile-tab-loaded', { detail: { panel: panel, tab: panel.getAttribute('data-panel') } }));
         activateRequestedSheetSection(panel);
       } catch (error) {
         panel.setAttribute('data-lazy-state', 'error');
-        panel.innerHTML = '<div class="af-apui-empty">Не удалось загрузить содержимое вкладки.</div>';
+        panel.innerHTML = '<div class="af-apui-empty" role="alert">Не удалось загрузить содержимое вкладки.</div>';
+        if (panel.getAttribute('data-panel') === 'combat') {
+          var retry = document.createElement('a'); retry.href = url; retry.textContent = 'Повторить загрузку';
+          retry.setAttribute('data-af-acs-profile-page', ''); panel.appendChild(retry);
+        }
         if (window.console && typeof window.console.error === 'function') console.error('[AdvancedProfileUI] lazy tab failed', error);
       } finally {
         panel.removeAttribute('aria-busy');

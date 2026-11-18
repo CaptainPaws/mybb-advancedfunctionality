@@ -4,7 +4,7 @@ require_once __DIR__.'/RewardService.php';
 final class AF_ACS_AchievementService
 {
     private AF_ACS_EncounterRepository $repo;
-    public function __construct(object $database,private AF_ACS_SessionAccess $access){$this->repo=new AF_ACS_EncounterRepository($database);}
+    public function __construct(private object $database,private AF_ACS_SessionAccess $access){$this->repo=new AF_ACS_EncounterRepository($database);}
     private function authorize(string $sid,bool $gm=false,bool $review=false):array
     {
         if(!af_is_addon_enabled('advancedcombatsystem')||!empty($GLOBALS['af_acs_deactivated']))throw new RuntimeException('ACS_DISABLED');
@@ -56,4 +56,41 @@ final class AF_ACS_AchievementService
         }
         return ['achievements'=>$out];
     }
+    /** Narrows the existing member/GM progress policy to one profile; no public account bypass. */
+    public function profile(string $owner,string $cursor=''):array
+    {
+        global $mybb;
+        require_once __DIR__.'/ArchiveService.php';
+        if(!af_is_addon_enabled('advancedcombatsystem')||!empty($GLOBALS['af_acs_deactivated']))throw new RuntimeException('ACS_DISABLED');
+        $owner=AF_ACS_Repository::integer($owner,'4294967295');$after='0';
+        $secret=(string)($mybb->settings['af_acs_archive_cursor_key']??'');
+        $bind=hash('sha256',AF_ACS_Repository::json(['scope'=>'profile-achievements-v1','owner'=>$owner,'viewer'=>$this->access->uid()]));
+        if($cursor!==''){$v=AF_ACS_Archive::openCursor($cursor,$secret);if(($v['bind']??null)!==$bind)throw new RuntimeException('ACS_ARCHIVE_CURSOR_INVALID');$after=AF_ACS_Repository::integer($v['after']??null,zero:true);}
+        $rows=$this->repo->achievementProfileRows($owner,$this->access->uid(),$after);$out=[];$processed=0;
+        $archive=new AF_ACS_ArchiveService($this->database,$this->access);$checked=[];
+        foreach($rows as $row){
+            if($processed===100||count($out)===20)break;$processed++;$after=(string)$row['id'];
+            $r=$this->repo->achievementProgress($after);$p=$r['progress'];
+            if((string)($p['recipient_uid']??'')!==$owner)throw new RuntimeException('ACS_ACHIEVEMENT_INTEGRITY');
+            if($this->access->uid()===$owner&&($r['visibility']!=='visible'&&($r['visibility']!=='hidden_until_unlocked'||$p['awards']<1)))continue;
+            $origins=$this->repo->achievementProfileOrigins($after);if(!$origins||count($origins)>200)continue;$allowed=true;
+            foreach($origins as $origin)try{
+                $identity=$origin['session_id'].':'.$origin['encounter_id'];
+                if(isset($checked[$identity])){if(!$checked[$identity]){$allowed=false;break;}continue;}
+                $checked[$identity]=false;
+                $this->authorize((string)$origin['session_id'],$this->access->uid()!==$owner);
+                $page=$archive->page((string)$origin['session_id'],(string)$origin['encounter_id'],[],limit:1,ordinaryExport:true);
+                if($page['encounter_status']!=='completed'||$page['visibility']!=='reveal_all'){$allowed=false;break;}
+                $checked[$identity]=true;
+            }catch(Throwable){$allowed=false;break;}
+            if(!$allowed)continue;
+            $pin=null;foreach($p['pins'] as $candidate)if($candidate['snapshot_id']===$r['definition_snapshot_id'])$pin=$candidate;
+            if(!$pin)throw new RuntimeException('ACS_ACHIEVEMENT_INTEGRITY');
+            $d=$this->repo->achievementDefinitionPin($pin['session_id'],$pin['snapshot_id'],$pin['hash'])['definition'];
+            $out[]=['name'=>$d['name'],'subject_kind'=>$r['subject_kind'],'subject_key'=>$r['subject_key'],'progress'=>$p['review_count'],'unlocked'=>$p['awards']>0];
+        }
+        $more=$processed<count($rows);
+        return ['achievements'=>$out,'next_cursor'=>$more?AF_ACS_Archive::cursor(['bind'=>$bind,'after'=>$after],$secret):null];
+    }
+
 }

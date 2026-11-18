@@ -656,7 +656,7 @@ function af_apui_render_atf_profile_navigation(array $context): string
         $active = !$items;
         $items[] = '<a class="atf-profile-nav__item' . ($active ? ' is-active' : '') . '" href="#af-tab-'
             . htmlspecialchars_uni((string)$key) . '" data-tab="' . htmlspecialchars_uni((string)$key)
-            . '" aria-selected="' . ($active ? 'true' : 'false') . '">' . $labels[$key] . '</a>';
+            . '" role="tab" aria-controls="af-apui-tab-' . htmlspecialchars_uni((string)$key) . '" aria-selected="' . ($active ? 'true' : 'false') . '">' . $labels[$key] . '</a>';
     }
     return $items ? '<nav class="atf-profile-nav" data-af-apui-tabs-nav="1" role="tablist" aria-label="Профиль">' . implode('', $items) . '</nav>' : '';
 }

@@ -22,7 +22,7 @@ final class AF_ACS_StatisticsController
                 $data=$op==='statistics_status'?$service->status($r['session_id'],$r['encounter_id']):$service->recover($r['session_id'],$r['encounter_id']);
             }elseif($op==='statistics_profile'){
                 if($mybb->request_method!=='get'||!isset($r['owner_uid'])||empty($mybb->usergroup['canviewprofiles'])||empty($mybb->usergroup['canview']))throw new RuntimeException('ACS_STATISTICS_ACCESS_DENIED');
-                $uid=$r['owner_uid'];unset($r['owner_uid']);$data=$service->profile($uid,$r);
+                $uid=$r['owner_uid'];$cursor=$r['cursor']??'';unset($r['owner_uid'],$r['cursor']);$data=$service->profile($uid,$r,$cursor);
             }else throw new RuntimeException('ACS_STATISTICS_INPUT_INVALID');
             $response=['ok'=>true,'data'=>$data];
         }catch(Throwable $e){http_response_code(409);$response=['ok'=>false,'error'=>['code'=>preg_match('/\AACS_(?:STATISTICS_[A-Z_]+|GM_REQUIRED|POST_REQUIRED|CSRF_REQUIRED)\z/D',$e->getMessage())?$e->getMessage():'ACS_STATISTICS_UNAVAILABLE']];}

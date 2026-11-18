@@ -33,3 +33,16 @@
     .af-acs-completion input:not([type="checkbox"]):not([type="hidden"]), .af-acs-completion select { width: 100%; }
     .af-acs-completion ul { padding-inline-start: 1.25rem; }
 }
+
+/* Explicit archive route only; no journal runtime is loaded on ordinary threads. */
+.af-acs-archive { min-width: 0; overflow-wrap: anywhere; }
+.af-acs-archive nav, .af-acs-archive form { display: flex; flex-wrap: wrap; gap: .75rem; margin-block: 1rem; }
+.af-acs-archive label { display: flex; flex-direction: column; min-width: 0; }
+.af-acs-archive input, .af-acs-archive select, .af-acs-archive button { max-width: 100%; box-sizing: border-box; }
+.af-acs-archive article { margin-block: 1rem; border-block-end: 1px solid currentColor; padding-block-end: .75rem; }
+.af-acs-archive details { margin-block: .5rem; }
+.af-acs-archive summary { cursor: pointer; }
+.af-acs-archive dd { margin-inline-start: 1rem; }
+.af-acs-archive [aria-current="page"] { font-weight: bold; }
+.af-acs-archive :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+@media (max-width:600px) { .af-acs-archive form { flex-direction: column; } .af-acs-archive input, .af-acs-archive select { width: 100%; } }
