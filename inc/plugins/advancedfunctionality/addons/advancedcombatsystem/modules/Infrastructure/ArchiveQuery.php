@@ -49,6 +49,10 @@ final class AF_ACS_ArchiveQuery extends AF_ACS_Repository
         $rows=$this->sql('SELECT DISTINCT fid,tid FROM '.$this->table('post_links').' WHERE session_id=?'.($eid===null?'':' AND encounter_id=?').' LIMIT 201',$eid===null?[$sid]:[$sid,$eid])['rows'];
         if(count($rows)>200)throw new RuntimeException('ACS_ARCHIVE_EXPORT_LIMIT');return $rows;
     }
+    public function rosterRows(string $sid,string $eid,string $after):array
+    {
+        return $this->sql('SELECT p.id,p.entity_id,p.side_id,p.participation,e.name,e.kind FROM '.$this->table('participants').' p JOIN '.$this->table('entities').' e ON e.id=p.entity_id WHERE e.session_id=? AND p.encounter_id=? AND p.id>? ORDER BY p.id LIMIT 21',[$sid,$eid,$after])['rows'];
+    }
     public function manifestRows(string $sid,string $eid,string $section,string $after):array
     {
         $suffix=' AND id>? ORDER BY id LIMIT 21';

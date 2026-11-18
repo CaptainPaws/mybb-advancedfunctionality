@@ -45,7 +45,7 @@ final class AF_ACS_StatisticsService
         return $result+['publication'=>($pending||$this->stats->pending($eid))?'pending':'delivered'];
     }
     /** IC-PROFILE v1. All filters and totals operate AFTER encounter authorization. No writes. */
-    public function profile(string $owner,array $filters=[]):array
+    public function profile(string $owner,array $filters=[],string $cursor=''):array
     {
         $owner=AF_ACS_Repository::integer($owner,'4294967295');
         if(array_diff(array_keys($filters),['entity','control_group','kind','category','event_type']))throw new RuntimeException('ACS_STATISTICS_INPUT_INVALID');
@@ -54,6 +54,10 @@ final class AF_ACS_StatisticsService
         if(isset($filters['category'])&&!in_array($filters['category'],AF_ACS_Statistics::METRICS,true))throw new RuntimeException('ACS_STATISTICS_INPUT_INVALID');
         if(isset($filters['event_type'])&&!in_array($filters['event_type'],['combat.resolved','clock.status_tick','encounter.prepared_register','encounter.ambush_start'],true))throw new RuntimeException('ACS_STATISTICS_INPUT_INVALID');
         foreach(['entity','control_group'] as $k)if(isset($filters[$k]))AF_ACS_Repository::integer($filters[$k]);
+        global $mybb;
+        $secret=(string)($mybb->settings['af_acs_archive_cursor_key']??'');$historyAfter='0';
+        $bind=hash('sha256',AF_ACS_Repository::json(['scope'=>'profile-history-v1','owner'=>$owner,'viewer'=>$this->access->uid(),'filters'=>$filters]));
+        if($cursor!==''){$position=AF_ACS_Archive::openCursor($cursor,$secret);if(($position['bind']??null)!==$bind)throw new RuntimeException('ACS_ARCHIVE_CURSOR_INVALID');$historyAfter=AF_ACS_Repository::integer($position['after']??null,zero:true);}
         $archive=new AF_ACS_ArchiveService($this->database,$this->access);$totals=[];$history=[];$choices=['entity'=>[],'control_group'=>[]];$after='0';$scanned=0;
         do{
             $rows=$this->stats->profileCandidates($owner,$after);
@@ -82,13 +86,18 @@ final class AF_ACS_StatisticsService
                     if(isset($filters['entity'])&&($kind==='control_group'||$id!==$filters['entity']))continue;
                     if(isset($filters['control_group'])&&($kind!=='control_group'||$id!==$filters['control_group']))continue;
                     $metrics=isset($filters['event_type'])?($subject['event_aggregates'][$filters['event_type']]??AF_ACS_Statistics::zero()):$subject['metrics'];if(isset($filters['category']))$metrics=array_intersect_key($metrics,[$filters['category']=>true]);
-                    $subjects[]=['subject_kind'=>$kind,'subject_key'=>$id,'metrics'=>$metrics,'event_aggregates'=>$subject['event_aggregates']??[]];$totals[$kind]??=AF_ACS_Statistics::zero();
+                    $subjects[]=['subject_kind'=>$kind,'subject_key'=>$id,'metrics'=>$metrics,'event_aggregates'=>$subject['event_aggregates']??[]];$totals[$kind]??=isset($filters['category'])?[$filters['category']=>0]:AF_ACS_Statistics::zero();
                     foreach($metrics as $k=>$n){$sum=$totals[$kind][$k]+$n;if(!is_int($sum)||$sum>9007199254740991)throw new RuntimeException('ACS_STATISTICS_OVERFLOW');$totals[$kind][$k]=$sum;}
                 }
-                if($subjects)$history[]=['encounter_id'=>$eid,'aggregate_version'=>(string)$row['aggregate_version'],'visibility'=>$row['visibility'],'subjects'=>$subjects,'archive_url'=>'misc.php?action=acs_archive&session_id='.$sid.'&encounter_id='.$eid];
+                $later=strlen($eid)>strlen($historyAfter)||strlen($eid)===strlen($historyAfter)&&strcmp($eid,$historyAfter)>0;
+                if($subjects&&$later&&count($history)<21)$history[]=['encounter_id'=>$eid,'aggregate_version'=>(string)$row['aggregate_version'],'visibility'=>$row['visibility'],'subjects'=>$subjects,'archive_url'=>'misc.php?action=acs_archive&session_id='.$sid.'&encounter_id='.$eid];
             }
         }while(count($rows)===101);
         foreach($choices as &$values)$values=array_values($values);unset($values);
-        return ['schema_version'=>1,'read_only'=>true,'owner_uid'=>$owner,'totals_by_subject_kind'=>$totals,'completed_encounters'=>$history,'event_categories'=>AF_ACS_Statistics::METRICS,'filters'=>$choices];
+        // Totals remain complete within the existing fail-closed 1000-source bound.
+        // Only the authorized history window is serialized; cursors never reveal skipped ids.
+        $more=count($history)>20;$history=array_slice($history,0,20);
+        $next=$more?AF_ACS_Archive::cursor(['bind'=>$bind,'after'=>end($history)['encounter_id']],$secret):null;
+        return ['next_cursor'=>$next,'totals_scope'=>'all_authorized_completed','schema_version'=>1,'read_only'=>true,'owner_uid'=>$owner,'totals_by_subject_kind'=>$totals,'completed_encounters'=>$history,'event_categories'=>AF_ACS_Statistics::METRICS,'filters'=>$choices];
     }
 }

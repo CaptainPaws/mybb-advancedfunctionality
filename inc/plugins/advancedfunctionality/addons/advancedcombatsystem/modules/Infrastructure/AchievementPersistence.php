@@ -4,6 +4,22 @@ require_once __DIR__.'/AchievementSources.php';
 trait AF_ACS_AchievementPersistence
 {
     use AF_ACS_AchievementSources;
+    public function achievementProfileRows(string $owner,string $viewer,string $after):array
+    {
+        $parameters=[$after,$owner];
+        if($owner===$viewer){
+            $scope=" AND (p.visibility='visible' OR (p.visibility='hidden_until_unlocked' AND JSON_EXTRACT(p.progress_json,'$.awards')>0))";
+        }else{
+            // Candidate narrowing only; the service repeats native/current GM checks per origin.
+            $scope=' AND EXISTS (SELECT 1 FROM '.$this->table('achievement_events').' a WHERE a.progress_id=p.id) AND NOT EXISTS (SELECT 1 FROM '.$this->table('achievement_events').' a JOIN '.$this->table('sessions').' s ON s.id=a.session_id WHERE a.progress_id=p.id AND NOT EXISTS (SELECT 1 FROM '.$this->table('session_roles')." sr WHERE sr.session_id=a.session_id AND sr.uid=? AND (sr.expires_at IS NULL OR sr.expires_at>?) AND (sr.role='gm' OR (sr.role='owner' AND s.owner_uid=sr.uid))))";
+            $parameters[]=$viewer;$parameters[]=time();
+        }
+        return $this->sql('SELECT p.id FROM '.$this->table('achievement_progress')." p WHERE p.id>? AND JSON_UNQUOTE(JSON_EXTRACT(p.progress_json,'$.recipient_uid'))=?".$scope.' ORDER BY p.id LIMIT 101',$parameters)['rows'];
+    }
+    public function achievementProfileOrigins(string $id):array
+    {
+        return $this->sql('SELECT DISTINCT session_id,encounter_id FROM '.$this->table('achievement_events').' WHERE progress_id=? ORDER BY session_id,encounter_id LIMIT 201',[$id])['rows'];
+    }
     public function achievementReplay(string $sid,string $eid,string $evaluation):?array
     {return $this->rewardCommandReceipt($sid,$eid,'achievement.evaluate','$.evaluation_key',$evaluation)['result']??null;}
     public function evaluateAchievement(array $s,string $eid,string $key,string $sourceId,callable $progressAccess):array

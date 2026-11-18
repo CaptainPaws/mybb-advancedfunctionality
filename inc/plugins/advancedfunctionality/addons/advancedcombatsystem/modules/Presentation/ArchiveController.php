@@ -7,10 +7,11 @@ final class AF_ACS_ArchiveController
     {
         if($op==='archive_policy'){if($method!=='post')throw new RuntimeException('ACS_POST_REQUIRED');return $service->policy($r);}
         if($method!=='get')throw new RuntimeException('ACS_ARCHIVE_INPUT_INVALID');
-        $fields=['session_id','encounter_id','cursor','round','actor','entity','control_group','category','event_type','pid','search',...($op==='archive_export'?['format','extended']:[]),...($op==='archive_manifest'?['section','after']:[])];
+        $fields=['session_id','encounter_id','cursor','round','actor','entity','control_group','category','event_type','pid','search',...($op==='archive_export'?['format','extended']:[]),...($op==='archive_manifest'?['section','after']:[]),...($op==='archive_roster'?['after']:[])];
         if(array_diff(array_keys($r),$fields)||!isset($r['session_id'],$r['encounter_id']))throw new RuntimeException('ACS_ARCHIVE_INPUT_INVALID');foreach($r as $v)if(!is_string($v))throw new RuntimeException('ACS_ARCHIVE_INPUT_INVALID');
         $sid=AF_ACS_Repository::integer($r['session_id']);$eid=AF_ACS_Repository::integer($r['encounter_id']);$f=array_intersect_key($r,array_flip(['round','actor','entity','control_group','category','event_type','pid','search']));
         if($op==='archive_export'){if(!in_array($r['extended']??'0',['0','1'],true))throw new RuntimeException('ACS_ARCHIVE_INPUT_INVALID');return $service->export($sid,$eid,$f,$r['cursor']??'',$r['format']??'json',($r['extended']??'0')==='1');}
+        if($op==='archive_roster')return $service->roster($sid,$eid,$r['after']??'0');
         if($op==='archive_manifest')return $service->manifest($sid,$eid,$r['section']??'snapshots',$r['after']??'0');
         if($op!=='archive_events')throw new RuntimeException('ACS_ARCHIVE_INPUT_INVALID');return $service->page($sid,$eid,$f,$r['cursor']??'');
     }

@@ -79,8 +79,10 @@ final class AF_ACS_ArchiveService
             if(count($rows)<100&&count($events)<$limit&&$scanned<200){$exhausted=true;break;}
         }
         $next=$exhausted?null:AF_ACS_Archive::cursor(['bind'=>$bind,'upper'=>$upper,'last'=>$last],$key);
+        $outcome=$this->repo->confirmedOutcome($sid,$eid);$summary=null;
+        if($outcome&&($c['gm']||$c['policy']['mode']!=='keep_hidden'))$summary=$c['full']?$outcome['outcome']:['kind'=>$outcome['outcome']['kind']];
         if($this->context($sid,$eid)['stamp']!==$c['stamp'])throw new RuntimeException('ACS_ARCHIVE_ACCESS_CHANGED');
-        return ['schema_version'=>1,'session_id'=>$sid,'encounter_id'=>$eid,'encounter_status'=>$c['e']['status'],'visibility'=>$c['policy']['mode'],'policy_version'=>$c['policy']['policy_version'],'can_manage'=>$c['gm'],'identity_filters'=>$c['full'],'can_export_extended'=>$c['gm']&&$this->access->archiveExtended($c['s']['tid']),'management'=>$c['gm']?['expected_version'=>$c['s']['session_version'],'encounter_version'=>$c['e']['encounter_version'],'expected_policy_version'=>$c['policy']['policy_version']]:null,'events'=>$events,'next_cursor'=>$next];
+        return ['outcome'=>$summary,'schema_version'=>1,'session_id'=>$sid,'encounter_id'=>$eid,'encounter_status'=>$c['e']['status'],'visibility'=>$c['policy']['mode'],'policy_version'=>$c['policy']['policy_version'],'can_manage'=>$c['gm'],'identity_filters'=>$c['full'],'can_export_extended'=>$c['gm']&&$this->access->archiveExtended($c['s']['tid']),'management'=>$c['gm']?['expected_version'=>$c['s']['session_version'],'encounter_version'=>$c['e']['encounter_version'],'expected_policy_version'=>$c['policy']['policy_version']]:null,'events'=>$events,'next_cursor'=>$next];
     }
     public function export(string $sid,string $eid,array $filters=[],string $cursor='',string $format='json',bool $extended=false):array
     {
@@ -91,6 +93,15 @@ final class AF_ACS_ArchiveService
         if(strlen($bytes)>8388608)throw new RuntimeException('ACS_ARCHIVE_EXPORT_LIMIT');
         if($this->context($sid,$eid)['stamp']!==$c['stamp']||$extended&&!$this->access->archiveExtended($c['s']['tid']))throw new RuntimeException('ACS_ARCHIVE_ACCESS_CHANGED');
         return ['content_type'=>$format==='json'?'application/json; charset=UTF-8':'text/csv; charset=UTF-8','filename'=>'acs-archive-'.$eid.'.'.$format,'body'=>$bytes,'next_cursor'=>$page['next_cursor']];
+    }
+    /** Current roster labels only. Historical mechanics remain in immutable journal records. */
+    public function roster(string $sid,string $eid,string $after='0'):array
+    {
+        $c=$this->context($sid,$eid);if(!$c['gm'])throw new RuntimeException('ACS_ARCHIVE_ACCESS_DENIED');
+        $rows=$this->query->rosterRows($sid,$eid,AF_ACS_Repository::integer($after,zero:true));$more=count($rows)>20;
+        if($more)array_pop($rows);
+        if($this->context($sid,$eid)['stamp']!==$c['stamp'])throw new RuntimeException('ACS_ARCHIVE_ACCESS_CHANGED');
+        return ['scope'=>'current_encounter_roster','items'=>$rows,'next_after'=>$more?(string)end($rows)['id']:null];
     }
     public function manifest(string $sid,string $eid,string $section,string $after='0'):array
     {

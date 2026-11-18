@@ -3454,3 +3454,13 @@ body.af-apui-member-profile-page > [data-af-element-effect][data-af-effect-ready
 .af-apui-extra-group .af-apui-native-action-group { display: flex; align-items: flex-start; gap: 8px; flex: 1 1 220px; min-width: 0; }
 .af-apui-native-action-group > i { flex: 0 0 16px; margin-top: 10px; color: var(--af-element-accent, inherit); }
 .af-apui-native-action-group > div { min-width: 0; }
+
+/* ACS combat tab: ordinary profile initialization still uses a cheap lazy shell. */
+.af-apui-combat { min-width: 0; overflow-wrap: anywhere; }
+.af-apui-combat nav, .af-apui-combat form { display: flex; flex-wrap: wrap; gap: .75rem; margin-block: 1rem; }
+.af-apui-combat label { display: flex; flex-direction: column; min-width: 0; }
+.af-apui-combat select, .af-apui-combat button { box-sizing: border-box; max-width: 100%; }
+.af-apui-combat details, .af-apui-combat article { margin-block: .75rem; }
+.af-apui-combat [aria-current="page"] { font-weight: bold; }
+.af-apui-combat :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+@media (max-width:600px) { .af-apui-combat form { flex-direction: column; } .af-apui-combat select { width: 100%; } }

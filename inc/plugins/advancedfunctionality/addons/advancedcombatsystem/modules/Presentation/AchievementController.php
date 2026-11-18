@@ -5,7 +5,14 @@ final class AF_ACS_AchievementController
 {
     public static function handle(object $database,AF_ACS_SessionAccess $access,string $op,array $r,string $method):array
     {
-        $read=in_array($op,['achievement_status','correction_status'],true);if($method!==($read?'get':'post'))throw new RuntimeException('ACS_POST_REQUIRED');
+        $read=in_array($op,['achievement_status','achievement_profile','correction_status'],true);if($method!==($read?'get':'post'))throw new RuntimeException('ACS_POST_REQUIRED');
+        if($op==='achievement_profile'){
+            global $mybb;
+            if(empty($mybb->usergroup['canviewprofiles'])||empty($mybb->usergroup['canview']))throw new RuntimeException('ACS_GM_REQUIRED');
+            if(array_diff(array_keys($r),['owner_uid','cursor'])||!isset($r['owner_uid']))throw new RuntimeException('ACS_ACHIEVEMENT_INPUT_INVALID');
+            foreach($r as $v)if(!is_string($v))throw new RuntimeException('ACS_ACHIEVEMENT_INPUT_INVALID');
+            return (new AF_ACS_AchievementService($database,$access))->profile($r['owner_uid'],$r['cursor']??'');
+        }
         if($op==='achievement_status'){
             if(array_diff(array_keys($r),['session_id','after'])||!isset($r['session_id']))throw new RuntimeException('ACS_ACHIEVEMENT_INPUT_INVALID');foreach($r as $v)if(!is_string($v))throw new RuntimeException('ACS_ACHIEVEMENT_INPUT_INVALID');
             return (new AF_ACS_AchievementService($database,$access))->view($r['session_id'],$r['after']??'0');
