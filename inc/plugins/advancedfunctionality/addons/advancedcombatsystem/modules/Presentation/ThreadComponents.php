@@ -24,6 +24,10 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
         $access=new AF_ACS_SessionAccess;
         // Do not trust the request TID, context UID (thread author), or Appearance masks.
         $access->thread((string)$tid);
+        if($mybb->get_input('acs_setup')==='1'){
+            if(!headers_sent())header('Cache-Control: private, no-store');
+            require_once __DIR__.'/Encounters.php';$body=AF_ACS_GmPanel::setup((string)$tid,$mybb->get_input('acs_session'));return $rendered[$tid]=af_advancedcombatsystem_presentation_css('has_acs_panel').$body;
+        }
         $link=$db->write_link??null;
         if(!$link instanceof mysqli||!preg_match('/\A[A-Za-z0-9_]*\z/D',TABLE_PREFIX))throw new RuntimeException('ACS_PANEL_STORAGE_UNAVAILABLE');
         $builder=$mybb->get_input('acs_builder');$gm=$mybb->get_input('acs_session');
@@ -49,7 +53,7 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
             if(!$statement->execute()||!($result=$statement->get_result()))throw new RuntimeException('ACS_PANEL_DISCOVERY_FAILED');
             $chosen=$result->fetch_assoc()?:null;$statement->close();$statement=null;
         }
-        if(!$sessions&&$chosen===null)return '';
+        if(!$sessions&&$chosen===null)return $access->canCreate()?'<p><a href="showthread.php?tid='.htmlspecialchars_uni((string)$tid).'&amp;acs_setup=1">Создать столкновение ACS</a></p>':'';
         $authorized=true;
         if(!headers_sent())header('Cache-Control: private, no-store');
         require_once __DIR__.'/ThreadPanel.php';
@@ -63,18 +67,19 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
         }
         $sid=(string)$chosen['id'];
         $canNotify=$chosen['role']==='gm'||$chosen['role']==='owner'&&(string)$chosen['owner_uid']===(string)$uid;
+        $gmHtml='';if($builder===''&&$gm===$sid&&$canNotify){try{require_once __DIR__.'/Encounters.php';$gmHtml=AF_ACS_EncountersPage::render($sid,(string)$tid);}catch(Throwable $error){$errorId=af_advancedcombatsystem_panel_failure('ACS_PANEL_TOOL_FAILED','gm');$gmHtml='<p role="alert">Панель GM временно недоступна. Проверьте диагностику. error_id='.htmlspecialchars_uni($errorId).'</p>';}}
         $phase='view';
         require_once __DIR__.'/../Infrastructure/ThreadPanelQuery.php';
         $panel=(new AF_ACS_ThreadPanelQuery($db))->current($sid,(string)$tid);
         $html=AF_ACS_ThreadPanel::render($panel,(string)$tid);
-        if($canNotify)$html.='<p><a href="misc.php?action=acs_recovery&amp;session_id='.htmlspecialchars_uni($sid).'">Восстановление публикаций</a></p>';
+        if($canNotify)$html.='<p><a href="showthread.php?tid='.htmlspecialchars_uni((string)$tid).'&amp;acs_session='.htmlspecialchars_uni($sid).'&amp;acs_tab=overview">Панель GM и переходы сессии</a></p>';
         $phase='assets';
         $html=af_advancedcombatsystem_presentation_css('has_acs_panel').$choice.$html.af_advancedcombatsystem_panel_script();
         if($canNotify)foreach($GLOBALS['af_acs_panel_asset_failures']??[] as $failure)$html.='<p role="status">'.htmlspecialchars_uni('Ассеты ACS недоступны. Проверьте настройки ассетов AF и диагностику ACP. '.$failure).'</p>';
         // A failed explicit tool must not discard the already-rendered read-only panel.
         try{
             if($builder===$sid){require_once __DIR__.'/BuilderController.php';$html.=AF_ACS_BuilderController::renderBuilder($sid,(string)$tid);}
-            if($builder===''&&$gm===$sid&&$panel['can_manage']){require_once __DIR__.'/Encounters.php';$html.=AF_ACS_EncountersPage::render($sid,(string)$tid);}
+            $html.=$gmHtml;
         }catch(Throwable $error){
             $id=af_advancedcombatsystem_panel_failure('ACS_PANEL_TOOL_FAILED','tools');
             $html.='<p role="status">'.htmlspecialchars_uni($canNotify?'Инструмент ACS недоступен. Проверьте диагностику ACP. error_id='.$id:'Инструмент ACS временно недоступен. Обратитесь к GM.').'</p>';
@@ -137,7 +142,7 @@ function af_advancedcombatsystem_presentation_css(string $fact): string
         if($fact==='has_acs_panel')af_advancedcombatsystem_panel_failure('ACS_PANEL_ASSET_DENIED','css');
         return '';
     }
-    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/presentation.css?v=1114';
+    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/presentation.css?v=1115';
     return '<link rel="stylesheet" href="'.htmlspecialchars_uni($url).'">';
 }
 

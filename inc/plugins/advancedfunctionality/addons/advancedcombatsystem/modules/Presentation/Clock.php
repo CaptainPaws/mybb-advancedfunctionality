@@ -1,5 +1,6 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
+require_once __DIR__.'/GmIntent.php';
 
 /** Minimal native forms/metadata; no action builder, JSON editor or automatic polling. */
 final class AF_ACS_ClockPage
@@ -10,6 +11,7 @@ final class AF_ACS_ClockPage
         global $mybb;
         echo '<form method="post" action="'.self::esc($url).'">';
         $fields+=['acs_encounter_op'=>'clock_'.$op,'session_id'=>$view['session']['id'],'tid'=>$view['session']['tid'],'encounter_id'=>$view['encounter']['id'],'encounter_version'=>$view['encounter']['encounter_version'],'expected_version'=>$view['session']['session_version'],'operation_key'=>bin2hex(random_bytes(16)),'my_post_key'=>$mybb->post_code];
+        if($op!=='rest_full')echo AF_ACS_GmIntent::checkbox('clock_'.$op);
         foreach($fields as $k=>$v)echo '<input type="hidden" name="'.self::esc($k).'" value="'.self::esc($v).'">';
         echo '<label>Причина <input name="reason" maxlength="1000" required></label>';
     }

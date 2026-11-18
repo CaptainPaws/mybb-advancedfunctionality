@@ -46,7 +46,7 @@
             if (op === 'ambush_status') { url.searchParams.set('op', op); Object.entries(input).forEach(([k, v]) => url.searchParams.set(k, v)); }
             else { options.method = 'POST'; options.body = new URLSearchParams({...input, op, my_post_key: config.post_key}); }
             const response = await fetch(url, options), result = await response.json();
-            if (!result.ok) { const error = new Error(result.error?.message || 'Результат не подтверждён.'); error.code = result.error?.code; throw error; }
+            if (!result.ok) { const error = new Error((result.error?.message || 'Результат не подтверждён.')+(result.error?.error_id?' · error_id='+result.error.error_id:'')); error.code = result.error?.code; throw error; }
             return result.data;
         };
         root.addEventListener('click', async event => {
@@ -55,6 +55,7 @@
             try {
                 if (op === 'status') apply(await request('ambush_status', {session_id: dto.session_id, encounter_id: dto.encounter_id}));
                 else {
+                    if(!window.confirm(op==='ready'?'Подтвердить готовность засады? Это закрепит подготовку, но ещё не запускает раунд.':'Подтвердить запуск или продолжение прежней засады? Сервер может исполнить оплаченные подготовки и создать первый roster. При неизвестном исходе используется только прежний ключ.'))return;
                     if (op !== 'resume') {
                         if (pending || !storageOK) throw new Error('Сначала проверьте прежний результат.');
                         const reason = root.querySelector('[data-field="reason"]').value.trim();
