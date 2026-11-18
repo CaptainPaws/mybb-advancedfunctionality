@@ -1,6 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) {die('No direct access');}
 require_once __DIR__.'/../Application/ArchiveService.php';
+require_once __DIR__.'/SafeError.php';
 final class AF_ACS_ArchiveController
 {
     public static function handle(AF_ACS_ArchiveService $service,string $op,array $r,string $method):array
@@ -26,7 +27,7 @@ final class AF_ACS_ArchiveController
             header('Content-Type: application/json; charset=UTF-8');$response=['ok'=>true,'data'=>$data];
         }catch(Throwable $e){
             $code=preg_match('/\AACS_ARCHIVE_[A-Z_]+\z/D',$e->getMessage())||in_array($e->getMessage(),['ACS_GM_REQUIRED','ACS_POST_REQUIRED','ACS_CSRF_REQUIRED','ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT'],true)?$e->getMessage():'ACS_ARCHIVE_UNAVAILABLE';
-            http_response_code(in_array($code,['ACS_ARCHIVE_ACCESS_DENIED','ACS_ARCHIVE_NATIVE_DENIED','ACS_ARCHIVE_EXPORT_DENIED','ACS_GM_REQUIRED','ACS_POST_REQUIRED','ACS_CSRF_REQUIRED'],true)?403:409);header('Content-Type: application/json; charset=UTF-8');$response=['ok'=>false,'error'=>['code'=>$code]];
+            http_response_code(in_array($code,['ACS_ARCHIVE_ACCESS_DENIED','ACS_ARCHIVE_NATIVE_DENIED','ACS_ARCHIVE_EXPORT_DENIED','ACS_GM_REQUIRED','ACS_POST_REQUIRED','ACS_CSRF_REQUIRED'],true)?403:409);header('Content-Type: application/json; charset=UTF-8');$response=['ok'=>false,'error'=>AF_ACS_SafeError::from($e,'archive')];
         }echo json_encode($response,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);exit;
     }
 }

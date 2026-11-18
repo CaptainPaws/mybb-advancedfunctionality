@@ -40,6 +40,23 @@
     const node = (tag, text) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = String(text); return n; };
     const status = (text, error) => { part('status').textContent = text; part('status').classList.toggle('acs-error', !!error); };
     const statuses = { pending: 'Ожидает действий', resolved: 'Завершён', passed: 'Пропущен', forfeited: 'Исключён' };
+    let versionsDirty=false,versionBusy=false;
+    const versions = window.AFACSRuntime?.watch(root, () => ({session_id:ctx.session_id,encounter_id:ctx.encounter_id,tid:ctx.tid,...(model.id?{draft_id:model.id}:{})}), data => {
+      versionsDirty=true; invalidate();
+      if(sealView)sealView.confirmed=false;
+      if(model.id && data.versions.draft_version!==null && data.versions.draft_version!==model.version){autosaveBlocked=true;saveState='conflict';}
+      root.dispatchEvent(new CustomEvent('acs:version-changed',{bubbles:true}));
+      saveStatus();status('Состояние боя изменилось. Текст и действия сохранены. Перед следующей операцией будут обновлены разрешённые сведения.',true);overview();
+    }, e => status(e.message || 'Обновление недоступно. Текст и действия сохранены.',true));
+    async function ensureCurrent(reason) {
+      if(versionBusy)throw new Error('Проверка состояния уже выполняется. Дождитесь её ответа; текст и действия сохранены.');
+      if(!versions)throw new Error('Компонент обновления ACS недоступен. Текст и действия сохранены; проверьте разрешение assets.');
+      versionBusy=true;try{
+      await versions.check(reason);
+      if(versionsDirty){await refresh();versionsDirty=false;invalidate();
+        throw new Error('Состояние боя изменилось. Проверьте исполнителей, цели и расходы и подтвердите результат заново. Текст и последовательность сохранены.');}
+      }finally{versionBusy=false;}
+    }
     const storageKey = () => ['acs-draft', ctx.author_uid, ctx.session_id, ctx.encounter_id, ctx.turn.id].join(':');
     const backupKey = () => storageKey() + ':prose-v2';
     const journalKey = () => storageKey() + ':requests-v2';
@@ -84,6 +101,7 @@
       prose:setProse,
       restoreLocal:()=>{if(frozen || loading)return;const value=backup();if(value && window.confirm('Заменить литературный текст локальной копией? Действия и броски не восстанавливаются из браузера.')){setProse(value.prose);if(externalProse)externalProse(value.prose);overview();}},
       attach: writer => {externalProse=writer;field('prose').closest('label').hidden=true;},
+      revalidate:async () => {await ensureCurrent('publication');return root.acsBuilder.state();},
       save: async () => {if(!initialized || loading || saving || model.sealPending || autosaveBlocked)throw new Error('Сохранение заблокировано. Проверьте прежний запрос или конфликт версий.');if(model.dirty || model.pending)await save();if(model.dirty || model.pending)throw new Error('Черновик не подтверждён сервером.');return root.acsBuilder.state();},
       freeze: value => {if(frozen===!!value)return;frozen=!!value;clearTimeout(autosaveTimer);overview();if(!frozen)scheduleSave();},
       restoreText: value => {setProse(value);if(externalProse)externalProse(model.prose);}
@@ -93,6 +111,8 @@
       if(event.key===savedKey() && model.id)try {const other=JSON.parse(event.newValue);if(other.id===model.id && other.version!==model.version){observedVersion=other.version;autosaveBlocked=true;clearTimeout(autosaveTimer);saveState='conflict';saveStatus();status('Другая вкладка сохранила новую версию. Ваш текст сохранён отдельно; восстановите серверный черновик явно.',true);}}catch(_){}
     });
     document.addEventListener('visibilitychange',localSave);
+    root.dispatchEvent(new CustomEvent('acs:open'));
+
     root.addEventListener('acs:compositionstart',()=>{composing=true;clearTimeout(autosaveTimer);});
     root.addEventListener('acs:compositionend',()=>{composing=false;scheduleSave();});
     field('prose').addEventListener('compositionstart',()=>{composing=true;clearTimeout(autosaveTimer);});
@@ -368,7 +388,7 @@
       const response = await fetch(post ? url : url + '&' + values, { method: post ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', ...(post ? { body: values } : {}) });
       let result;
       try { result = await response.json(); } catch (_) { throw new Error('Сервер не подтвердил ответ. Локальные действия и текст сохранены; для неизвестной операции повторяйте прежний запрос.'); }
-      if (!result.ok) { const e = new Error((result.error?.message || 'Запрос не выполнен.')+(result.error?.error_id?' · error_id='+result.error.error_id:'')); e.code = result.error?.code; throw e; }
+      if (!result.ok) { const e = new Error((result.error?.message || 'Запрос не выполнен.')+(result.error?.error_id?' · error_id='+result.error.error_id:'')); e.code = result.error?.code;e.category=result.error?.category;e.error_id=result.error?.error_id; throw e; }
       return result.data;
     }
     async function refresh(turnId) {
@@ -413,6 +433,7 @@
       overview();saveStatus();
     }
     async function sealCommand(commandName, preparedRecord) {
+      if(!model.sealPending)await ensureCurrent('before-seal');
       const routes = {'release-prepared':'prepared_release','publish-prepared':'prepared_publish',seal:'seal','cancel-seal':'seal_cancel_tail','confirm-seal':'seal_confirm'};
       if (commandName !== 'release-prepared' && (!model.id || model.dirty)) throw new Error('Сначала сохраните черновик.');
       if(autosaveBlocked && !model.sealPending)throw new Error('Сначала восстановите серверную версию. Новые броски при конфликте запрещены.');
@@ -426,7 +447,7 @@
       }
       const pending = copy(model.sealPending); saving = true; localSave(); overview();
       try {
-        const operationResult = await api(routes[pending.command], pending.body, true);
+        const operationResult = await api(routes[pending.command], pending.body, true); versions?.reset();
         if (pending.command === 'release-prepared') { model.sealPending = null; localSave(); await refresh(); status(operationResult.cost_state === 'settled' ? 'Неиспользованный резерв освобождён. AP и оплаченные стоимости сохранены.' : 'Резерв сохраняется: release не подтверждён, требуется восстановление прав или Inventory.', operationResult.cost_state !== 'settled'); return; }
         if (pending.command === 'publish-prepared') { model.sealPending = null; model.dirty = false; localSave(); const preRound = planning(ctx); if (preRound) { model = new DraftModel(); sealView = null; field('prose').value = ''; part('seal').replaceChildren(); } await refresh(); status(preRound ? 'Подготовка оплачена. AP закреплены в бюджете первого раунда; новый пост не создан.' : 'Подготовка оплачена и зарегистрирована. Ход группы закрыт; новый пост не создан.', false); return; }
         model.sealPending = null; localSave(); saving = false;
@@ -447,7 +468,7 @@
       if (new TextEncoder().encode(model.prose).length > 65536 || new TextEncoder().encode(JSON.stringify(model.actions)).length > 65536) throw new Error('Черновик превышает технический предел 64 КиБ для текста или действий.');
       const key = model.pending ? model.pending.operation_key : crypto.randomUUID().replace(/-/g, '');
       const request = model.begin(ctx, key); saving = true;saveState='saving';saveStatus(); localSave(); overview();
-      try { const receipt = await api('draft_save', request, true); model.ack(receipt);serverProse=request.prose;autosaveBlocked=recoveredSave || !!observedVersion && observedVersion!==model.version;saveState=recoveredSave?'error':autosaveBlocked?'conflict':model.dirty?'dirty':'saved';try{localStorage.setItem(savedKey(),JSON.stringify({id:model.id,version:model.version}));}catch(_){} ctx.draft_id = model.id; localSave(); overview(); status(recoveredSave?'Прежний запрос подтверждён. Явно восстановите серверный черновик перед продолжением; локальный текст остаётся отдельно.':'Черновик сохранён. Версия ' + model.version + '.', false); }
+      try { const receipt = await api('draft_save', request, true); model.ack(receipt);versions?.reset();serverProse=request.prose;autosaveBlocked=recoveredSave || !!observedVersion && observedVersion!==model.version;saveState=recoveredSave?'error':autosaveBlocked?'conflict':model.dirty?'dirty':'saved';try{localStorage.setItem(savedKey(),JSON.stringify({id:model.id,version:model.version}));}catch(_){} ctx.draft_id = model.id; localSave(); overview(); status(recoveredSave?'Прежний запрос подтверждён. Явно восстановите серверный черновик перед продолжением; локальный текст остаётся отдельно.':'Черновик сохранён. Версия ' + model.version + '.', false); }
       catch (e) {
         const conflicts = ['ACS_DRAFT_VERSION_CONFLICT', 'ACS_DRAFT_ALREADY_EXISTS', 'ACS_OPERATION_KEY_CONFLICT'];
         autosaveBlocked=true;saveState=conflicts.includes(e.code)?'conflict':'error';
@@ -466,6 +487,7 @@
       Object.entries(dto.virtual_groups).forEach(([id, g]) => part('preview').append(node('p', 'Группа ' + id + ': виртуальные AP ' + g.ap.current + ' / ' + g.ap.maximum)));
     }
     async function preview() {
+      await ensureCurrent('before-preview');
       const revision = model.revision, snapshotEpoch = epoch; previewBusy = true; overview(); status('Рассчитывается условная последовательность без бросков…', false);
       try { const dto = await api('builder_preview', model.preview(ctx, field('scenario').value), true); if (revision === model.revision && snapshotEpoch === epoch) { renderPreview(dto); status('Условный расчёт готов. Реальные HP/AP не изменены.', false); } }
       catch (e) { if (revision === model.revision && snapshotEpoch === epoch) { part('preview').replaceChildren(node('p', e.message)); status(e.message, true); } }

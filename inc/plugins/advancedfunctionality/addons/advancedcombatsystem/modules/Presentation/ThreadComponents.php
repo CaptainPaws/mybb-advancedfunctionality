@@ -25,8 +25,9 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
         // Do not trust the request TID, context UID (thread author), or Appearance masks.
         $access->thread((string)$tid);
         if($mybb->get_input('acs_setup')==='1'){
+            if(!$access->canCreate())return ''; // Reject an unpermitted wizard before loading the GM stack.
             if(!headers_sent())header('Cache-Control: private, no-store');
-            require_once __DIR__.'/Encounters.php';$body=AF_ACS_GmPanel::setup((string)$tid,$mybb->get_input('acs_session'));return $rendered[$tid]=af_advancedcombatsystem_presentation_css('has_acs_panel').$body;
+            require_once __DIR__.'/Encounters.php';$body=AF_ACS_GmPanel::setup((string)$tid,$mybb->get_input('acs_session'));AF_ACS_Context::mark(AF_ACS_Context::INTERACTIVE);return $rendered[$tid]=af_advancedcombatsystem_presentation_css('has_acs_panel').$body;
         }
         $link=$db->write_link??null;
         if(!$link instanceof mysqli||!preg_match('/\A[A-Za-z0-9_]*\z/D',TABLE_PREFIX))throw new RuntimeException('ACS_PANEL_STORAGE_UNAVAILABLE');
@@ -67,10 +68,11 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
         }
         $sid=(string)$chosen['id'];
         $canNotify=$chosen['role']==='gm'||$chosen['role']==='owner'&&(string)$chosen['owner_uid']===(string)$uid;
-        $gmHtml='';if($builder===''&&$gm===$sid&&$canNotify){try{require_once __DIR__.'/Encounters.php';$gmHtml=AF_ACS_EncountersPage::render($sid,(string)$tid);}catch(Throwable $error){$errorId=af_advancedcombatsystem_panel_failure('ACS_PANEL_TOOL_FAILED','gm');$gmHtml='<p role="alert">Панель GM временно недоступна. Проверьте диагностику. error_id='.htmlspecialchars_uni($errorId).'</p>';}}
+        $gmHtml='';if($builder===''&&$gm===$sid&&$canNotify){try{require_once __DIR__.'/Encounters.php';$gmHtml=AF_ACS_EncountersPage::render($sid,(string)$tid);AF_ACS_Context::mark(AF_ACS_Context::INTERACTIVE);}catch(Throwable $error){$errorId=af_advancedcombatsystem_panel_failure('ACS_PANEL_TOOL_FAILED','gm');$gmHtml='<p role="alert">Панель GM временно недоступна. Проверьте диагностику. error_id='.htmlspecialchars_uni($errorId).'</p>';}}
         $phase='view';
         require_once __DIR__.'/../Infrastructure/ThreadPanelQuery.php';
         $panel=(new AF_ACS_ThreadPanelQuery($db))->current($sid,(string)$tid);
+        AF_ACS_Context::mark(AF_ACS_Context::VIEW);
         $html=AF_ACS_ThreadPanel::render($panel,(string)$tid);
         if($canNotify)$html.='<p><a href="showthread.php?tid='.htmlspecialchars_uni((string)$tid).'&amp;acs_session='.htmlspecialchars_uni($sid).'&amp;acs_tab=overview">Панель GM и переходы сессии</a></p>';
         $phase='assets';
@@ -155,6 +157,7 @@ function af_advancedcombatsystem_panel_script(): string
     if(!function_exists('af_frontend_asset_allowed')||!af_frontend_asset_allowed('advancedcombatsystem','thread_panel',null,['has_acs_panel'=>true])){
         af_advancedcombatsystem_panel_failure('ACS_PANEL_ASSET_DENIED','javascript');return '';
     }
-    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/thread-panel.js?v=1111b';
-    return '<script defer src="'.htmlspecialchars_uni($url).'"></script>';
+    require_once __DIR__.'/RuntimeAssets.php';$runtime=af_advancedcombatsystem_runtime_script();
+    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/thread-panel.js?v=1132';
+    return $runtime.'<script defer src="'.htmlspecialchars_uni($url).'"></script>';
 }

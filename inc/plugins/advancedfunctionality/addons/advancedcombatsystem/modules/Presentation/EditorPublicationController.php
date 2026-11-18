@@ -36,25 +36,10 @@ final class AF_ACS_EditorPublicationController
             'quick_reply'=>$mybb->get_input('method')==='quickreply',
         ]);
     }
-    public static function failure(Throwable $error): array
+    public static function failure(Throwable $error):array
     {
-        $code=$error->getMessage();
-        $messages=[
-            'ACS_EDITOR_TEST_DISABLED'=>'Боевая публикация недоступна в этой конфигурации.',
-            'ACS_MYBB_ATTACHMENTS_UNSUPPORTED'=>'Вложения в боевом режиме пока не поддерживаются. Уберите файлы; текст и действия сохранены.',
-            'ACS_MYBB_BRANCH_UNSUPPORTED'=>'Черновики MyBB, предпросмотр, вложения и инструменты модерации не отправляют боевой пост.',
-            'ACS_EDITOR_SAVE_REQUIRED'=>'Сначала сохраните этот литературный текст в серверном черновике.',
-            'ACS_EDITOR_FROZEN_PROSE_CHANGED'=>'Текст этой отправки уже зафиксирован. Локальный текст сохранён; проверьте статус прежней отправки.',
-            'ACS_CONFIRMATION_REQUIRED'=>'Обновите и подтвердите сводку в конструкторе на прежних бросках.',
-            'ACS_VERSION_CONFLICT'=>'Операция изменилась. Проверьте её статус с прежним submission_id.',
-            'ACS_MYBB_CORE_UNVERIFIED'=>'Установленный MyBB не прошёл проверку публикационного пути. Отправка заблокирована.',
-            'ACS_NATIVE_LIFECYCLE_UNVERIFIED'=>'Порядок обработчиков MyBB не подтверждён. Отправка заблокирована.',
-        ];
-        if (!isset($messages[$code])) { $code='ACS_EDITOR_UNAVAILABLE'; }
-        $category=match($code){'ACS_VERSION_CONFLICT','ACS_CONFIRMATION_REQUIRED','ACS_EDITOR_FROZEN_PROSE_CHANGED'=>'STATE_CONFLICT','ACS_EDITOR_TEST_DISABLED'=>'PERMISSION_DENIED','ACS_MYBB_CORE_UNVERIFIED','ACS_NATIVE_LIFECYCLE_UNVERIFIED'=>'DEPENDENCY_ERROR','ACS_EDITOR_UNAVAILABLE'=>'INTERNAL_ERROR',default=>'VALIDATION_ERROR'};
-        $id=bin2hex(random_bytes(16));
-        if(function_exists('af_store_addon_lifecycle_diagnostic')){try{af_store_addon_lifecycle_diagnostic('advancedcombatsystem','editor_publication','request',new RuntimeException($code.' [error_id='.$id.']'));}catch(Throwable $ignored){}}
-        return ['ok'=>false,'error'=>['code'=>$code,'category'=>$category,'error_id'=>$id,'message'=>$messages[$code]??'Запрос не подтверждён. Текст и sealed-действия сохранены. Проверьте статус; не отправляйте новый пост вслепую.']];
+        require_once __DIR__.'/SafeError.php';
+        return ['ok'=>false,'error'=>AF_ACS_SafeError::from($error,'publication')];
     }
     public static function decorate(string &$page): void
     {
@@ -89,7 +74,7 @@ final class AF_ACS_EditorPublicationController
             'can_publish'=>AF_ACS_PublicationTestGate::allowed(),'post_key'=>$mybb->post_code];
         $json=json_encode($config,JSON_THROW_ON_ERROR|JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT|JSON_UNESCAPED_UNICODE);
         $base=htmlspecialchars_uni(rtrim((string)$mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/');
-        $html=$builderHtml.'<link rel="stylesheet" href="'.$base.'publication.css?v=1113"><script type="application/json" data-acs-publication-config>'.$json.'</script><script defer src="'.$base.'publication.js?v=1113"></script>';
+        $html=$builderHtml.'<link rel="stylesheet" href="'.$base.'publication.css?v=1113"><script type="application/json" data-acs-publication-config>'.$json.'</script><script defer src="'.$base.'publication.js?v=1132"></script>';
         $pos=strripos($page,'</body>');$page=$pos===false?$page.$html:substr_replace($page,$html,$pos,0);
     }
 }

@@ -23,7 +23,7 @@ final class AF_ACS_ThreadPanel
     {
         $esc=self::esc(...);$sid=$v['session_id'];$id='acs-panel-'.$sid;
         $summary=['active'=>'Сессия ACS активна','pending_close'=>'Сессия ACS ожидает закрытия','closed'=>'Сессия ACS закрыта','archived'=>'Сессия ACS в архиве'][$v['session_status']]??'Сессия ACS';
-        $html='<section class="af-acs-panel" data-acs-panel id="'.$esc($id).'"><div class="af-acs-panel__anchor"></div><div class="af-acs-panel__compact" hidden><button type="button" data-acs-open aria-controls="'.$esc($id).'-body">'.$esc($summary).' · Открыть панель</button></div><details class="af-acs-panel__details" open><summary>'.$esc($summary).'</summary><div id="'.$esc($id).'-body" class="af-acs-panel__body"><button type="button" data-acs-close hidden>Свернуть</button><p>Столкновение ещё не создано.</p>';
+        $html='<section class="af-acs-panel" data-acs-panel data-acs-session="'.$esc($sid).'" data-acs-tid="'.$esc($tid).'" id="'.$esc($id).'"><div class="af-acs-panel__anchor"></div><div class="af-acs-panel__compact" hidden><button type="button" data-acs-open aria-controls="'.$esc($id).'-body">'.$esc($summary).' · Открыть панель</button></div><details class="af-acs-panel__details" open><summary>'.$esc($summary).'</summary><div id="'.$esc($id).'-body" class="af-acs-panel__body"><button type="button" data-acs-close hidden>Свернуть</button><p>Столкновение ещё не создано.</p>';
         if($v['can_manage'])$html.='<p><a href="'.$esc('showthread.php?tid='.$tid.'&acs_session='.$sid).'">Создать столкновение / Панель GM</a></p>';
         else $html.='<p>Подготовкой столкновения управляет GM сессии.</p>';
         return $html.'</div></details></section>';
@@ -39,7 +39,7 @@ final class AF_ACS_ThreadPanel
         $summary=$esc($v['title']).' · '.$esc($state).' · Раунд '.$esc($v['round']);
         foreach($v['groups'] as $g)if($g['own']&&$g['ap']!==null)$summary.=' · AP '.$esc($g['ap'][0]).' / '.$esc($g['ap'][1]);
         ob_start();
-        echo '<section class="af-acs-panel" data-acs-panel id="'.$id.'"><div class="af-acs-panel__anchor"></div><div class="af-acs-panel__compact" hidden><button type="button" data-acs-open aria-controls="'.$id.'-body">'.$summary.' · Открыть панель</button></div><details class="af-acs-panel__details" open><summary>'.$summary.'</summary><div id="'.$id.'-body" class="af-acs-panel__body"><button type="button" data-acs-close hidden>Свернуть</button>';
+        echo '<section class="af-acs-panel" data-acs-panel data-acs-session="'.$esc($sid).'" data-acs-tid="'.$esc($tid).'" data-acs-encounter="'.$esc($eid).'" id="'.$id.'"><div class="af-acs-panel__anchor"></div><div class="af-acs-panel__compact" hidden><button type="button" data-acs-open aria-controls="'.$id.'-body">'.$summary.' · Открыть панель</button></div><details class="af-acs-panel__details" open><summary>'.$summary.'</summary><div id="'.$id.'-body" class="af-acs-panel__body"><button type="button" data-acs-close hidden>Свернуть</button>';
         echo '<p>Порядок ходов свободный. Ниже показаны ходы доступных вам групп.</p><nav aria-label="Действия столкновения">';
         $base='showthread.php?tid='.$tid;
         if($v['can_build'])echo '<a href="'.$esc($base.'&acs_builder='.$sid).'">Открыть конструктор</a> ';

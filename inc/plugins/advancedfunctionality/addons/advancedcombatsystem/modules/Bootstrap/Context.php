@@ -8,8 +8,11 @@ final class AF_ACS_Context
 {
     public const INACTIVE = 'inactive';
     public const VIEW = 'view';
-    // Reserved vocabulary only; no request can enter interactive in stage 1.
     public const INTERACTIVE = 'interactive';
+
+    private static string $surface=self::INACTIVE;
+    public static function mark(string $surface):void
+    {if(in_array($surface,[self::VIEW,self::INTERACTIVE],true)&&self::$surface!==self::INTERACTIVE)self::$surface=$surface;}
 
     /**
      * The AF ACP and explicit session page are read views.
@@ -32,8 +35,8 @@ final class AF_ACS_Context
             return self::VIEW;
         }
 
-        if(defined('THIS_SCRIPT') && THIS_SCRIPT==='showthread.php' && ($mybb->get_input('acs_session')!==''||$mybb->get_input('acs_builder')!==''))return self::VIEW;
-        if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_sessions')return self::VIEW;
+        if(self::$surface!==self::INACTIVE)return self::$surface;
+        if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && in_array($mybb->get_input('action'),['acs_sessions','acs_archive','acs_loot','acs_recovery'],true))return self::VIEW;
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='xmlhttp.php' && $mybb->get_input('action')==='af_addon_api' && $mybb->get_input('addon')==='advancedcombatsystem')return self::VIEW;
         return self::INACTIVE;
     }
