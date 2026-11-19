@@ -502,13 +502,28 @@
           return html;
         };
         let state = [];
+        let changed = false;
+        let activeDialog = null;
+        const dirtyRows = new WeakSet();
+        const originalRows = new WeakMap();
+        const limitMessage = document.createElement("p");
+        limitMessage.setAttribute("role", "status");
+        wrap.append(limitMessage);
         try {
           const parsed = JSON.parse(String(hidden.value || "[]"));
-          if (Array.isArray(parsed)) {
-            state = parsed.map((row) => row?.ability_source ? row : createAbility(row)).slice(0, maxItems);
-          }
-        } catch (e) {
-          state = [];
+          const rows = Array.isArray(parsed) ? parsed : (parsed.items || parsed.abilities || Object.values(parsed));
+          if (Array.isArray(rows)) state = rows.filter((row) => row && typeof row === "object")
+            .map((row) => {
+              const ability = row.ability_source ? row : createAbility(row);
+              originalRows.set(ability, row);
+              return ability;
+            });
+        } catch (error) {
+          // Preserve the original field value until the user explicitly changes it.
+        }
+        function markChanged(ability) {
+          changed = true;
+          if (ability) dirtyRows.add(ability);
         }
 
         function getAbilityDescriptionValue(row) {
@@ -572,12 +587,18 @@
 
         function syncStateFromDom() {
           AF_ATF.qsa(".af-atf-ability-item", list).forEach((row, index) => {
-            if (!state[index].ability_source) state[index] = collectAbilityFromRow(row, index);
+            const ability = state[index];
+            if (!ability || ability.ability_source) return;
+            if (getAbilityDescriptionValue(row) !== ability.ability_description) markChanged(ability);
+            if (dirtyRows.has(ability)) collectAbilityFromRow(row, index);
           });
         }
 
         function sync() {
-          hidden.value = JSON.stringify(state.slice(0, maxItems));
+          if (changed) hidden.value = JSON.stringify(state.map((ability) =>
+            dirtyRows.has(ability) ? ability : (originalRows.get(ability) || ability)));
+          limitMessage.textContent = state.length >= maxItems
+            ? "Можно сохранить до " + maxItems + " способностей. Удалите запись, чтобы добавить другую." : "";
           addBtn.disabled = state.length >= maxItems;
           if (kbBtn) kbBtn.disabled = state.length >= maxItems;
         }
@@ -600,7 +621,9 @@
               remove.className = "button";
               remove.textContent = "Удалить";
               remove.addEventListener("click", () => {
-                state.splice(index, 1);
+                syncStateFromDom();
+              markChanged();
+              state.splice(index, 1);
                 delete kbNotices[key];
                 render();
               });
@@ -634,7 +657,7 @@
                 </label>
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Иконка</span>
-                  <input type="url" class="textbox text_input af-atf-input af-atf-ability-icon-url" placeholder="https://..." value="${AF_ATF.escapeAttr(ability.icon)}" />
+                  <input type="text" inputmode="url" class="textbox text_input af-atf-input af-atf-ability-icon-url" placeholder="https://..." value="${AF_ATF.escapeAttr(ability.icon)}" />
                 </label>
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Тип</span>
@@ -706,35 +729,41 @@
                   <label data-for="resource">Ресурс<select class="select af-atf-effect-resource">${renderSelectOptions("resource", effect.resource_key)}</select></label>
                   <label data-for="notes" style="display:none">Примечание<textarea class="textbox af-atf-effect-notes">${AF_ATF.escapeAttr(effect.notes)}</textarea></label>
                   `;
-                const collectEffect = () => {
+                const collectEffect = (event) => {
+                  if (event) markChanged(ability);
                   effect.effect_type = AF_ATF.qs('.af-atf-effect-type', effectRow).value;
                   const map = {value:'value', formula:'formula_profile', target:'target', 'damage-type':'damage_type', 'damage-element':'damage_element', duration:'duration_value', status:'status_key', stat:'stat_key', operation:'operation', resource:'resource_key', notes:'notes'};
                   Object.keys(map).forEach((suffix) => { const input = AF_ATF.qs('.af-atf-effect-' + suffix, effectRow); if (input) effect[map[suffix]] = input.value; });
                   const damageElement = AF_ATF.qs('.af-atf-effect-damage-element', effectRow);
                   if (!damageElement.value) delete effect.damage_element;
                   const needsElement = effect.effect_type === 'damage' && effect.damage_type === 'elemental';
-                  damageElement.required = needsElement;
+                  damageElement.required = needsElement && dirtyRows.has(ability);
                   const damageError = needsElement && !damageElement.value ? 'Выберите стихию урона. Направление магии не определяет её автоматически.' : '';
-                  damageElement.setCustomValidity(damageError);
+                  damageElement.setCustomValidity(dirtyRows.has(ability) ? damageError : "");
                   AF_ATF.qs('.af-atf-damage-error', effectRow).textContent = damageError;
                   const unit = AF_ATF.qs('.af-atf-effect-duration-unit', effectRow).value;
                   if (unit !== '' || Object.prototype.hasOwnProperty.call(effect, 'duration_unit')) effect.duration_unit = unit;
                   const relevant = {damage:['value','formula','target','damage_type','element'], heal:['value','formula','target'], shield:['value','formula','target','duration'], status:['status','target','duration'], control:['status','target','duration'], stat_modifier:['stat','operation','value','target','duration'], resource:['resource','operation','value','target']};
                   const valueLabels = {damage:'Значение урона',heal:'Значение лечения',shield:'Прочность щита',stat_modifier:'Величина модификатора',resource:'Изменение ресурса'};
                   const valueLabel = AF_ATF.qs('.af-atf-effect-value-label', effectRow); if (valueLabel) valueLabel.textContent = valueLabels[effect.effect_type] || 'Значение';
-                  AF_ATF.qsa('[data-for]', effectRow).forEach((field) => { field.style.display = (relevant[effect.effect_type] || []).includes(field.dataset.for) ? '' : 'none'; });
+                  AF_ATF.qsa('[data-for]', effectRow).forEach((field) => {
+                    const visible = (relevant[effect.effect_type] || []).includes(field.dataset.for);
+                    field.style.display = visible ? '' : 'none';
+                    AF_ATF.qsa('input,select,textarea', field).forEach((control) => { control.disabled = !visible; });
+                  });
                   state[index] = ability;
                   sync();
                 };
                 AF_ATF.qsa('input,select,textarea', effectRow).forEach((el) => { el.addEventListener('input', collectEffect); el.addEventListener('change', collectEffect); });
-                AF_ATF.qs('.af-atf-effect-remove', effectRow).addEventListener('click', () => { ability.effects.splice(effectIndex, 1); state[index] = ability; renderEffects(); sync(); });
+                AF_ATF.qs('.af-atf-effect-remove', effectRow).addEventListener('click', () => { markChanged(ability); ability.effects.splice(effectIndex, 1); state[index] = ability; renderEffects(); sync(); });
                 effectsList.appendChild(effectRow); collectEffect();
               });
             };
-            AF_ATF.qs('.af-atf-effect-add', row).addEventListener('click', () => { ability.effects.push(createAbility({effects:[{}]}).effects[0]); state[index] = ability; renderEffects(); sync(); });
+            AF_ATF.qs('.af-atf-effect-add', row).addEventListener('click', () => { markChanged(ability); ability.effects.push(createAbility({effects:[{}]}).effects[0]); state[index] = ability; renderEffects(); sync(); });
             renderEffects();
 
             const setValue = () => {
+              markChanged(ability);
               state[index] = collectAbilityFromRow(row, index);
               const input = AF_ATF.qs('.af-atf-ability-damage-element', row);
               if (!input.value) delete state[index].damage_element;
@@ -751,7 +780,9 @@
             });
 
             AF_ATF.qs(".af-atf-ability-remove", row).addEventListener("click", () => {
-              state.splice(index, 1);
+              syncStateFromDom();
+                markChanged();
+                state.splice(index, 1);
               render();
               sync();
             });
@@ -762,10 +793,12 @@
         }
 
         function openCatalog() {
+          if (activeDialog) return;
+          if (state.length >= maxItems) { sync(); return; }
           const dialog = document.createElement("dialog");
-          dialog.className = "af-atf-kb-modal";
+          dialog.className = "af-atf-kb-ability-dialog";
           dialog.setAttribute("aria-label", "Каталог способностей KB");
-          const form = wrap.closest("form");
+          const form = hidden.form;
           const context = JSON.parse(wrap.dataset.kbContext || "{}");
           dialog.innerHTML = `
             <div class="af-atf-kb-modal-title">Каталог способностей KB</div>
@@ -827,16 +860,16 @@
 
           function addAbility(item, custom) {
             syncStateFromDom();
-            if (state.length >= maxItems) return;
+            if (state.length >= maxItems) { status.textContent = "Достигнут предел способностей."; return; }
             const order = state.length + 1;
             if (!custom && state.some((entry) => entry.ability_source === "arpg_ability" && entry.ability_kb_key === item.kb_key)) return;
             state.push(custom
               ? createAbility({ title: item.title, description: item.description, sortorder: order, slot_index: order })
               : { ability_source: "arpg_ability", ability_kb_key: item.kb_key, catalog_definition_id: item.definition_id,
                   title: item.title, description: item.description, kb_url: item.url, sortorder: order, slot_index: order });
-            dialog.close();
+            markChanged();
             render();
-            list.lastElementChild?.querySelector("input, button")?.focus();
+            closeCatalog();
           }
 
           async function load(page = 1) {
@@ -909,19 +942,38 @@
             load();
           });
           filters.addEventListener("change", () => load());
-          const onContextChange = (event) => {
-            if (Object.values(context).flat().some((id) => event.target.name === "af_tf[" + id + "]")) load();
-          };
-          form?.addEventListener("change", onContextChange);
-          dialog.querySelector(".af-atf-kb-modal-close").addEventListener("click", () => dialog.close());
-          dialog.addEventListener("close", () => {
+          function cleanup() {
+            if (activeDialog !== dialog) return;
+            activeDialog = null;
             request?.abort();
-            form?.removeEventListener("change", onContextChange);
             dialog.remove();
-          }, { once: true });
+            (kbBtn.disabled ? list.lastElementChild?.querySelector("button") : kbBtn)?.focus({ preventScroll: true });
+          }
+          function closeCatalog() {
+            if (dialog.open) dialog.close();
+            cleanup();
+          }
+          dialog.querySelector(".af-atf-kb-modal-close").addEventListener("click", closeCatalog);
+          dialog.addEventListener("cancel", (event) => {
+            event.preventDefault();
+            closeCatalog();
+          });
+          dialog.addEventListener("close", () => cleanup(), { once: true });
+          dialog.addEventListener("click", (event) => {
+            if (event.target !== dialog) return;
+            const bounds = dialog.getBoundingClientRect();
+            if (event.clientX < bounds.left || event.clientX > bounds.right
+                || event.clientY < bounds.top || event.clientY > bounds.bottom) closeCatalog();
+          });
+          activeDialog = dialog;
           document.body.append(dialog);
-          window.AFModalHost?.mount(dialog);
-          dialog.showModal();
+          try {
+            dialog.showModal();
+          } catch (error) {
+            cleanup();
+            limitMessage.textContent = "Не удалось открыть каталог в этом браузере.";
+            return;
+          }
           load();
         }
 
@@ -929,24 +981,25 @@
 
         addBtn.addEventListener("click", () => {
           if (state.length >= maxItems) return;
+          syncStateFromDom();
+          markChanged();
           state.push(createAbility({ sortorder: state.length + 1, slot_index: state.length + 1 }));
           render();
           sync();
         });
 
-        const form = wrap.closest("form");
+        const form = hidden.form;
         if (form && !form.__afAtfAbilitiesSubmitSync) {
           form.__afAtfAbilitiesSubmitSync = true;
-          form.addEventListener("submit", () => {
-            AF_ATF.qsa(".af-atf-abilities", form).forEach((block) => {
-              if (typeof block.__afAtfSyncStateFromDom === "function") {
-                block.__afAtfSyncStateFromDom();
-              }
-              if (typeof block.__afAtfSyncHidden === "function") {
-                block.__afAtfSyncHidden();
-              }
+          form.addEventListener("submit", (event) => {
+            if (event.target !== form) return;
+            Array.from(form.elements).forEach((field) => {
+              if (!field.matches(".af-atf-abilities-hidden")) return;
+              const block = field.closest(".af-atf-abilities");
+              block?.__afAtfSyncStateFromDom?.();
+              block?.__afAtfSyncHidden?.();
             });
-          });
+          }, true);
         }
 
         wrap.__afAtfSyncStateFromDom = syncStateFromDom;

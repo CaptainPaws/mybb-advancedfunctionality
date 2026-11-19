@@ -542,6 +542,7 @@
   padding: 20px;
 }
 
+.af-atf-kb-ability-dialog,
 .af-atf-kb-modal {
   background: #141414;
   color: inherit;
@@ -1148,7 +1149,15 @@ body.af-atf-kb-catalog-modal-open {
 .af-atf-display[data-af-element-effect-active] { position: relative; isolation: isolate; }
 .af-atf-display > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
 
-.af-atf-kb-modal::backdrop {
+html:has(dialog.af-atf-kb-ability-dialog[open]) {
+  overflow: hidden;
+}
+
+dialog.af-atf-kb-ability-dialog:not([open]) {
+  display: none;
+}
+
+.af-atf-kb-ability-dialog::backdrop {
   background: rgba(0, 0, 0, .55);
 }
 
