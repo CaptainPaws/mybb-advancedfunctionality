@@ -162,11 +162,14 @@ function af_advancedcombatsystem_encounters(): AF_ACS_EncounterService
 
 function af_advancedcombatsystem_sessions_page(): void
 {
-    global $header,$headerinclude,$footer;
     require_once __DIR__.'/modules/Presentation/Sessions.php';
-    ob_start();try {AF_ACS_SessionsPage::render(false);}catch(Throwable $error){echo '<p>Сессии ACS недоступны.</p>';}$body=ob_get_clean();
-    header('Cache-Control: no-store');
-    output_page('<html><head><title>Сессии ACS</title>'.$headerinclude.'</head><body>'.$header.'<main class="af-acs">'.$body.'</main>'.$footer.'</body></html>');exit;
+    require_once __DIR__.'/modules/Presentation/StandalonePage.php';
+    add_breadcrumb('Сессии ACS','misc.php?action=acs_sessions');
+    $assets='';
+    ob_start();
+    try { AF_ACS_SessionsPage::render(false,$assets); }
+    catch (Throwable $error) { echo '<p role="alert">Сессии ACS недоступны.</p>'; }
+    AF_ACS_StandalonePage::output('Сессии ACS',ob_get_clean(),$assets);
 }
 function af_advancedcombatsystem_session_settings(): void
 {
@@ -359,36 +362,43 @@ function af_advancedcombatsystem_session_failure(Throwable $error): array
 /** Explicit native misc page; no recovery commands are executed from a postbit renderer. */
 function af_advancedcombatsystem_recovery_page(): void
 {
-    global $mybb,$header,$headerinclude,$footer;
+    global $mybb;
     require_once __DIR__.'/modules/Presentation/RecoveryPage.php';
     require_once __DIR__.'/modules/Presentation/ThreadComponents.php';
     try {$body=AF_ACS_RecoveryPage::render($mybb->get_input('session_id'));}
-    catch(Throwable $error){http_response_code(403);$body='<p>Восстановление недоступно. Нужны текущие права мастера этой сессии и доступ к теме.</p>';}
-    header('Cache-Control: private, no-store');
-    output_page('<html><head><title>ACS · Восстановление</title>'.$headerinclude.af_advancedcombatsystem_presentation_css('has_acs_recovery').'</head><body>'.$header.'<main>'.$body.'</main>'.$footer.'</body></html>');exit;
+    catch(Throwable $error){http_response_code(403);$body='<p role="alert">Восстановление недоступно. Нужны текущие права мастера этой сессии и доступ к теме.</p>';}
+    require_once __DIR__.'/modules/Presentation/StandalonePage.php';
+    add_breadcrumb('Сессии ACS','misc.php?action=acs_sessions');
+    add_breadcrumb('Восстановление ACS');
+    AF_ACS_StandalonePage::output('Восстановление ACS',$body,af_advancedcombatsystem_presentation_css('has_acs_recovery'));
 }
 
 /** Explicit loot navigation only; normal thread requests do not load the allocation stack. */
 function af_advancedcombatsystem_loot_page():void
 {
-    global $mybb,$header,$headerinclude,$footer;
+    global $mybb;
     require_once __DIR__.'/modules/Presentation/LootAllocationPage.php';
     require_once __DIR__.'/modules/Presentation/ThreadComponents.php';
     try{$body=AF_ACS_LootAllocationPage::render($mybb->get_input('session_id'),$mybb->get_input('encounter_id'));}
-    catch(Throwable $error){$failure=af_advancedcombatsystem_session_failure($error);http_response_code(403);$body='<p>Завершение и награды недоступны. Проверьте текущие права сессии и доступ к теме. error_id='.htmlspecialchars_uni($failure['error_id']).'</p>';}
-    header('Cache-Control: private, no-store');
-    output_page('<html><head><title>ACS · Завершение и награды</title>'.$headerinclude.af_advancedcombatsystem_presentation_css('has_acs_completion').'</head><body>'.$header.'<main>'.$body.'</main>'.$footer.'</body></html>');exit;
+    catch(Throwable $error){$failure=af_advancedcombatsystem_session_failure($error);http_response_code(403);$body='<p role="alert">Завершение и награды недоступны. Проверьте текущие права сессии и доступ к теме. error_id='.htmlspecialchars_uni($failure['error_id']).'</p>';}
+    require_once __DIR__.'/modules/Presentation/StandalonePage.php';
+    add_breadcrumb('Сессии ACS','misc.php?action=acs_sessions');
+    add_breadcrumb('Добыча и награды ACS');
+    AF_ACS_StandalonePage::output('Добыча и награды ACS',$body,af_advancedcombatsystem_presentation_css('has_acs_completion'));
 }
 
 function af_advancedcombatsystem_archive_page():void
 {
-    global $mybb,$db,$header,$headerinclude,$footer;require_once __DIR__.'/modules/Presentation/ArchivePage.php';
+    global $mybb,$db;require_once __DIR__.'/modules/Presentation/ArchivePage.php';
     require_once __DIR__.'/modules/Presentation/ThreadComponents.php';
     try{$service=new AF_ACS_ArchiveService($db,new AF_ACS_SessionAccess);
         if($mybb->request_method==='post'){$r=$_POST;foreach(['action','my_post_key'] as $k)unset($r[$k]);$service->policy($r);$params=['session_id'=>$r['session_id'],'encounter_id'=>$r['encounter_id']];}
         else $params=array_map(static fn($v)=>is_string($v)?$v:'',$_GET);
         $body=AF_ACS_ArchivePage::render($service,$params);
     }
-    catch(Throwable){http_response_code(403);$body='<p>Архив недоступен. Проверьте права и параметры фильтра.</p>';}
-    header('Cache-Control: private, no-store');output_page('<html><head><title>ACS · Архив</title>'.$headerinclude.af_advancedcombatsystem_presentation_css('has_acs_archive').'</head><body>'.$header.'<main>'.$body.'</main>'.$footer.'</body></html>');exit;
+    catch(Throwable){http_response_code(403);$body='<p role="alert">Архив недоступен. Проверьте права и параметры фильтра.</p>';}
+    require_once __DIR__.'/modules/Presentation/StandalonePage.php';
+    add_breadcrumb('Сессии ACS','misc.php?action=acs_sessions');
+    add_breadcrumb('Боевой архив ACS');
+    AF_ACS_StandalonePage::output('Боевой архив ACS',$body,af_advancedcombatsystem_presentation_css('has_acs_archive'));
 }
