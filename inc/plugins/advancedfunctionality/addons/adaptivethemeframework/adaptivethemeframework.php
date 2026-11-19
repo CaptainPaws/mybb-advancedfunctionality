@@ -1559,11 +1559,17 @@ function af_adaptivethemeframework_compose_postbit(array &$post): void
         $post['af_atf_meta_line'] = '<div class="atf-post__meta-line">'
             . '<span class="atf-post__permalink">' . (string)($post['posturl'] ?? '') . '</span>'
             . '<time class="post_date atf-post__date"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> ' . (string)($post['postdate'] ?? '') . '</time>'
-            . '<span class="atf-post__char-count" title="символов в посте" data-af-title="символов в посте"><i class="fa-solid fa-file-lines" aria-hidden="true"></i><span class="atf-post__char-count-value">'
-            . $post['af_post_char_count_formatted'] . '</span><span class="atf-post__char-count-label">символов</span></span>'
-            . '<div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">'
-            . (string)($post['af_atf_slots']['post.actions'] ?? '') . '</div></div>';
+            . af_adaptivethemeframework_post_meta_actions($post['af_post_char_count_formatted'], (string)($post['af_atf_slots']['post.actions'] ?? ''))
+            . '</div>';
     }
+}
+
+function af_adaptivethemeframework_post_meta_actions(string $count, string $actions, string $permalink = ''): string
+{
+    return '<span class="atf-post__char-count" title="символов в посте" data-af-title="символов в посте">'
+        .'<i class="fa-solid fa-file-lines" aria-hidden="true"></i><span class="atf-post__char-count-value">'
+        .$count.'</span><span class="atf-post__char-count-label">символов</span></span>'.$permalink
+        .($actions !== '' || $permalink === '' ? '<div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">'.$actions.'</div>' : '');
 }
 
 /** Register MyBB-owned thread data which a future showthread layout composes. */
@@ -1719,8 +1725,8 @@ function af_adaptivethemeframework_select_first_post_template(array &$post): voi
     $fallback = $GLOBALS['af_atf_first_post_fields'][$tid] ?? null;
     if (!empty($mybb->dev_mode) || !$tid || !$pid || (int)($thread['firstpost'] ?? 0) !== $pid || (int)($post['tid'] ?? 0) !== $tid
         || empty($fallback['compact']) || $fallback['pid'] !== $pid || ($post['message'] ?? '') !== $fallback['fallback']
-        || (int)($post['visible'] ?? 0) !== 1 || !empty($post['attachments']) || !empty($post['attachmentcount'])
-        || !empty($post['signature']) || !empty($post['subject_extra'])
+        || (int)($thread['visible'] ?? 0) !== 1 || (int)($post['visible'] ?? 0) !== 1 || !empty($post['attachments']) || !empty($post['attachmentcount'])
+        || !empty($post['subject_extra'])
         || !empty($post['af_atf_slots']['post.before_body']) || !empty($post['af_atf_slots']['post.after_body'])
         || in_array((string)($post['uid'] ?? 0), explode(',', (string)($mybb->user['ignorelist'] ?? '')), true)
         || !af_adaptivethemeframework_has_thread_fields_slot()) {
@@ -1733,7 +1739,9 @@ function af_adaptivethemeframework_select_first_post_template(array &$post): voi
     $compact = @file_get_contents(__DIR__.'/templates/postbit_structured_first.html');
     if (!is_string($source) || $source === '' || !is_string($compact) || $compact === '') { return; }
     $classic = $name === 'postbit_classic' ? @file_get_contents(__DIR__.'/templates/postbit_classic.html') : false;
-    $normalize = static fn(string $html): string => trim(str_replace("\r\n", "\n", $html));
+    $normalize = static fn(string $html): string => trim((string)preg_replace(
+        '~<!--[^{}]*?-->~s', '', str_replace("\r\n", "\n", $html)
+    ));
     if (!is_string($classic) || $normalize($source) !== $normalize($classic)) {
         $master = $db->simple_select('templates', 'template', "title='".$name."' AND sid=-2", ['limit'=>1]);
         $stock = $db->fetch_field($master, 'template');
@@ -1753,14 +1761,26 @@ function af_adaptivethemeframework_select_first_post_template(array &$post): voi
 
     $inlineCheck = (string)($post['inlinecheck'] ?? '');
     $modbit = (string)($post['modbit'] ?? '');
+    // The compact shell has no visual postbit; keep native DOM targets in
+    // the hero alongside their controls, in the same anchor/root order.
+    $service = strtr($compact, [
+        "{\$post['pid']}" => (string)$pid,
+        "{\$post['uid']}" => (string)(int)($post['uid'] ?? 0),
+        "{\$post['iplogged']}" => (string)($post['iplogged'] ?? ''),
+        "{\$post['editedmsg']}" => (string)($post['editedmsg'] ?? ''),
+        "{\$post['poststatus']}" => (string)($post['poststatus'] ?? ''),
+        "{\$post['input_editreason']}" => (string)($post['input_editreason'] ?? ''),
+    ]);
     $GLOBALS['af_atf_first_post_render']['header'] = [
         'date' => (string)($post['postdate'] ?? ''),
         'dateline' => (int)($post['dateline'] ?? 0),
-        'controls' => $inlineCheck.($modbit !== $inlineCheck ? $modbit : '')
-            .(string)($post['af_atf_slots']['post.actions'] ?? ''),
+        'inline' => $inlineCheck.($modbit !== $inlineCheck ? $modbit : ''),
+        'actions' => (string)($post['af_atf_slots']['post.actions'] ?? ''),
+        'signature' => (string)($post['signature'] ?? ''),
+        'service' => $service,
     ];
     $GLOBALS['af_atf_first_post_template'] = ['name'=>$name, 'source'=>$source];
-    $templates->cache[$name] = $compact;
+    $templates->cache[$name] = '';
 }
 
 /** Compose the thread owner's identity independently of the visible replies and their masks. */
@@ -1783,14 +1803,21 @@ function af_adaptivethemeframework_thread_author(array $thread, ?array $firstPos
     $url = $pid > 0 ? get_post_link($pid, (int)$thread['tid']).'#pid'.$pid : '';
     $created = $firstPost['dateline'] ?? (int)($thread['dateline'] ?? 0);
     $date = $firstPost['date'] ?? my_date('relative', $created);
-    $controls = $firstPost['controls'] ?? '';
-    return '<div class="post_head atf-post__topbar atf-thread__author">'
+    $permalink = $url !== '' ? '<a class="atf-thread__original" href="'.$url.'" title="Первое сообщение" aria-label="Первое сообщение">#1</a>' : '';
+    $left = '<div class="atf-thread__author-identity">'
         .'<div class="atf-thread__author-avatar">'.$avatar['af_atf_primary_avatar'].'</div>'
         .'<span class="atf-thread__author-name">'.$identity.'</span>'
-        .'<time class="atf-thread__author-date" datetime="'.gmdate('c', $created).'">'.$date.'</time>'
-        .($url !== '' ? '<a class="atf-thread__original" href="'.$url.'" title="Первое сообщение" aria-label="Первое сообщение">#1</a>' : '')
-        .($controls !== '' ? '<div class="atf-thread__author-actions atf-post__management postbit_buttons" aria-label="Действия с первым сообщением">'.$controls.'</div>' : '')
-        .'</div>';
+        .'<time class="atf-thread__author-date" datetime="'.gmdate('c', $created).'">'.$date.'</time></div>';
+    // The verified placeholder has no visible characters of its own.
+    $right = $firstPost === null ? $permalink : af_adaptivethemeframework_post_meta_actions(
+        '0', $firstPost['actions'], $permalink.$firstPost['inline']
+    );
+    $signature = trim((string)($firstPost['signature'] ?? ''));
+    return '<div class="post_head atf-post__topbar atf-thread__author">'.$left
+        .'<div class="atf-thread__author-meta">'.$right.'</div></div>'
+        .($firstPost['service'] ?? '')
+        .($signature !== '' ? '<details class="atf-thread__author-signature"><summary>Подпись автора</summary>'.$signature.'</details>' : '');
+
 }
 
 /** Compose the showthread shell after core has prepared all native values. */
@@ -1839,7 +1866,7 @@ function af_adaptivethemeframework_compose_showthread(): void
     if ($fieldBlock !== '' && af_adaptivethemeframework_has_thread_fields_slot() && str_contains($atf_thread_fields, $fieldBlock)) {
         $atf_thread_fields .= af_adaptivethemeframework_thread_author($thread, $first['header'] ?? null);
         $fallbackHtml = '<!--af-atf-first-post-'.$pid.'-->'.$fieldBlock;
-        if ($fallback !== null && $fallback['pid'] === $pid && $fallback['fallback'] === $fallbackHtml) {
+        if (empty($first['header']) && $fallback !== null && $fallback['pid'] === $pid && $fallback['fallback'] === $fallbackHtml) {
             // Only deduplicate the marked fields when the full postbit was retained.
             $posts = str_replace($fallbackHtml, '', (string)$posts);
             $context['posts_html'] = $posts;

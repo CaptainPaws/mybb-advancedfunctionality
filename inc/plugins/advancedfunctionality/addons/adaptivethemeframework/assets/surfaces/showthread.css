@@ -792,31 +792,28 @@ body.atf-active .atf-thread__author-name {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-body.atf-active .atf-thread__original {
-  margin-inline-start: auto;
-}
-body.atf-active .atf-thread__author .atf-thread__author-actions {
+body.atf-active .atf-thread__author {
   --atf-post-accent: var(--af-element-accent, var(--atf-neutral-accent));
   --atf-post-accent-soft: color-mix(in srgb, var(--atf-post-accent) 18%, transparent);
-  float: none;
+}
+body.atf-active .atf-thread__author :is(.atf-thread__author-identity, .atf-thread__author-meta) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--atf-space-2);
+  gap: var(--atf-space-2) var(--atf-space-3);
   min-width: 0;
 }
-body.atf-active .atf-thread #posts > .atf-structured-first {
+body.atf-active .atf-thread__author-meta { margin-inline-start: auto; }
+body.atf-active .atf-thread__author-meta .atf-post__management { flex-wrap: wrap; float: none; }
+body.atf-active .atf-thread__header .atf-structured-first {
   display: contents;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  box-shadow: none;
 }
-body.atf-active .atf-thread .atf-structured-first::before,
-body.atf-active .atf-thread .atf-structured-first::after { content: none; }
+body.atf-active .atf-thread__header .atf-structured-first::before,
+body.atf-active .atf-thread__header .atf-structured-first::after { content: none; }
 body.atf-active .atf-thread .atf-structured-first__body:empty,
 body.atf-active .atf-thread .atf-structured-first__meta:not(:has(> :not(:empty))) {
   display: none;
+}
+@media (max-width: 40rem) {
+  body.atf-active .atf-thread__author-meta { width: 100%; margin-inline-start: 0; }
 }
