@@ -229,6 +229,7 @@ function af_adaptivethemeframework_init(): void
             $plugins->add_hook('postbit', 'af_adaptivethemeframework_restore_first_post_template', 1);
             $plugins->add_hook('postbit', 'af_adaptivethemeframework_select_first_post_template', PHP_INT_MAX);
             $plugins->add_hook('showthread_linear', 'af_adaptivethemeframework_restore_first_post_template', 1);
+            $plugins->add_hook('showthread_linear', 'af_adaptivethemeframework_pin_first_post', 10);
             $plugins->add_hook('showthread_threaded', 'af_adaptivethemeframework_restore_first_post_template', 1);
         }
         $plugins->add_hook('postbit', 'af_adaptivethemeframework_compose_postbit', 1000);
@@ -1722,8 +1723,12 @@ function af_adaptivethemeframework_select_first_post_template(array &$post): voi
     global $thread, $fid, $mybb, $templates, $db;
     $tid = (int)($thread['tid'] ?? 0);
     $pid = (int)($post['pid'] ?? 0);
+    if (!$tid || !$pid || (int)($thread['firstpost'] ?? 0) !== $pid || (int)($post['tid'] ?? 0) !== $tid) {
+        return;
+    }
+    $GLOBALS['af_atf_rendered_first_post_pid'] = $pid;
     $fallback = $GLOBALS['af_atf_first_post_fields'][$tid] ?? null;
-    if (!empty($mybb->dev_mode) || !$tid || !$pid || (int)($thread['firstpost'] ?? 0) !== $pid || (int)($post['tid'] ?? 0) !== $tid
+    if (!empty($mybb->dev_mode)
         || empty($fallback['compact']) || $fallback['pid'] !== $pid || ($post['message'] ?? '') !== $fallback['fallback']
         || (int)($thread['visible'] ?? 0) !== 1 || (int)($post['visible'] ?? 0) !== 1 || !empty($post['attachments']) || !empty($post['attachmentcount'])
         || !empty($post['subject_extra'])
@@ -1782,6 +1787,74 @@ function af_adaptivethemeframework_select_first_post_template(array &$post): voi
     ];
     $GLOBALS['af_atf_first_post_template'] = ['name'=>$name, 'source'=>$source];
     $templates->cache[$name] = '';
+}
+
+/** Render the first post separately after MyBB has rendered the linear page. */
+function af_adaptivethemeframework_pin_first_post(): void
+{
+    global $db, $mybb, $thread, $fid, $page, $posts, $visibleonly_p;
+    global $attachcache, $postcounter, $altbg, $hascustomtitle;
+
+    if ((string)($mybb->settings['af_atf_pin_first_post'] ?? '0') !== '1'
+        || !af_adaptivethemeframework_presentation_is_active() || (int)$page <= 1) {
+        return;
+    }
+
+    $tid = (int)$thread['tid'];
+    $firstPid = (int)$thread['firstpost'];
+    if ($firstPid <= 0 || $firstPid === ($GLOBALS['af_atf_rendered_first_post_pid'] ?? 0)) {
+        return;
+    }
+
+    if (isset($GLOBALS['af_adaptivethemeframework_components']['advancedthreadfields::showthread_fields'])
+        && af_atf_build_display_block_for_tid_fid($tid, (int)$fid) !== '') {
+        return;
+    }
+
+    // Showthread has applied forum/thread access and built this viewer's post
+    // visibility predicate. Give build_postbit the same row shape as core.
+    $query = $db->query("
+        SELECT u.*, u.username AS userusername, p.*, f.*, r.reporters, eu.username AS editusername
+        FROM ".TABLE_PREFIX."posts p
+        LEFT JOIN ".TABLE_PREFIX."reportedcontent r ON (r.id=p.pid AND r.type='post' AND r.reportstatus != 1)
+        LEFT JOIN ".TABLE_PREFIX."users u ON (u.uid=p.uid)
+        LEFT JOIN ".TABLE_PREFIX."userfields f ON (f.ufid=u.uid)
+        LEFT JOIN ".TABLE_PREFIX."users eu ON (eu.uid=p.edituid)
+        WHERE p.pid={$firstPid} AND p.tid={$tid} AND p.fid=".(int)$fid." {$visibleonly_p}
+    ");
+    $firstPost = $db->fetch_array($query);
+    if (!$firstPost) {
+        return;
+    }
+    if ((int)$thread['visible'] === 0) {
+        $firstPost['visible'] = 0;
+    }
+
+    // Core displays only the deletion notice in this case. Skip attachment
+    // loading, while letting the native renderer choose the notice template.
+    $canRenderBody = (int)$firstPost['visible'] !== -1 || is_moderator($fid, 'canviewdeleted');
+    $savedAttachcache = $attachcache;
+    if ($canRenderBody && (($mybb->settings['enableattachments'] == 1 && $thread['attachmentcount'] > 0)
+        || is_moderator($fid, 'caneditposts'))) {
+        $query = $db->simple_select('attachments', '*', "pid={$firstPid}");
+        while ($attachment = $db->fetch_array($query)) {
+            $attachcache[$firstPid][$attachment['aid']] = $attachment;
+        }
+    }
+
+    // Core derives its post number (and first-post permissions) from these
+    // globals. Retain the inline moderation count for the displayed checkbox.
+    [$savedPage, $savedCounter, $savedAltbg, $savedCustomTitle] = [$page, $postcounter, $altbg, $hascustomtitle];
+    $page = 1;
+    $postcounter = 0;
+    $altbg = '';
+    try {
+        $posts = build_postbit($firstPost) . $posts;
+    } finally {
+        [$page, $postcounter, $altbg, $hascustomtitle] = [$savedPage, $savedCounter, $savedAltbg, $savedCustomTitle];
+        $attachcache = $savedAttachcache;
+        af_adaptivethemeframework_restore_first_post_template();
+    }
 }
 
 /** Compose the thread owner's identity independently of the visible replies and their masks. */

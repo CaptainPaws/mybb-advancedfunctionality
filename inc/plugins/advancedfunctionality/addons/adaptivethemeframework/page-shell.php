@@ -50,6 +50,10 @@ function af_adaptivethemeframework_ensure_page_settings(): void
         $value = $existing ? (string)$existing['value'] : (string)$default;
         af_ensure_setting($group, $key, $title, "{$min}–{$max}px. narrow < mobile < tablet. Некорректный порядок возвращает breakpoints к 480/768/1024px.", 'numeric', $value, 10 + array_search($key, array_keys(af_adaptivethemeframework_page_setting_definitions()), true));
     }
+    $pinFirstPost = $db->fetch_field($db->simple_select('settings', 'value', "name='af_atf_pin_first_post'", ['limit' => 1]), 'value');
+    af_ensure_setting($group, 'af_atf_pin_first_post', 'Закреплять первый пост на всех страницах темы',
+        'Показывает первое сообщение над ответами на последующих страницах обычной темы.', 'yesno',
+        (string)$pinFirstPost === '1' ? '1' : '0', 16);
     if (function_exists('rebuild_settings')) rebuild_settings();
 }
 
