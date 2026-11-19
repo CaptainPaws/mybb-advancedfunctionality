@@ -765,3 +765,56 @@ body.atf-active .atf-thread__moderation--managed .atf-thread-mod-actions button:
 @media (max-width: 40rem) {
   body.atf-active .atf-thread__moderation.atf-thread__moderation--managed { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Thread identity and the native controls for a structured first post. */
+body.atf-active .atf-thread__header .atf-thread__author {
+  position: static;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--atf-space-2) var(--atf-space-3);
+  min-height: 0;
+  margin-block-start: var(--atf-space-3);
+  padding: var(--atf-space-2) var(--atf-space-3);
+  border-inline-start: 2px solid var(--af-element-accent, var(--atf-neutral-accent));
+}
+body.atf-active .atf-thread__author-avatar {
+  flex: 0 0 36px;
+}
+body.atf-active .atf-thread__author-avatar img {
+  display: block;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+body.atf-active .atf-thread__author-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+body.atf-active .atf-thread__original {
+  margin-inline-start: auto;
+}
+body.atf-active .atf-thread .atf-post[data-atf-structured-first="1"] > .atf-post__layout {
+  display: block;
+}
+body.atf-active .atf-thread [data-atf-structured-first="1"] > .atf-post__topbar > :not(.atf-post__topbar-leading),
+body.atf-active .atf-thread [data-atf-structured-first="1"] .atf-post__sidebar,
+body.atf-active .atf-thread [data-atf-structured-first="1"] .atf-post__char-count,
+body.atf-active .atf-thread [data-atf-structured-first="1"] .atf-post__message:has(> .atf-post__message-body:empty),
+body.atf-active .atf-thread [data-atf-structured-first="1"] .atf-post__footer {
+  display: none;
+}
+body.atf-active .atf-thread .atf-post[data-atf-structured-first="1"] > .atf-post__topbar {
+  position: static;
+  display: flex;
+  padding: var(--atf-space-2);
+}
+body.atf-active .atf-thread .atf-post[data-atf-structured-first="1"] > .atf-post__topbar:not(:has(.atf-post__moderation input)) {
+  display: none;
+}
+
+body.atf-active .atf-thread .post[data-atf-structured-first="1"]:not(.atf-post) > .post_author,
+body.atf-active .atf-thread .post[data-atf-structured-first="1"]:not(.atf-post) > .post_content > .post_body:empty {
+  display: none;
+}

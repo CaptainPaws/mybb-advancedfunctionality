@@ -1688,10 +1688,38 @@ function af_adaptivethemeframework_thread_tool(string $html, string $path): stri
     }, $html);
 }
 
+/** Compose the thread owner's identity independently of the visible replies and their masks. */
+function af_adaptivethemeframework_thread_author(array $thread): string
+{
+    $uid = (int)($thread['uid'] ?? 0);
+    $user = $uid > 0 ? get_user($uid) : [];
+    $name = htmlspecialchars_uni((string)($user['username'] ?? $thread['username'] ?? ''));
+    $identity = $user ? build_profile_link($name, $uid) : $name;
+    $avatar = ['uid' => $uid, 'username' => (string)($user['username'] ?? ''), 'af_atf_primary_avatar' => ''];
+    if ($user && function_exists('af_aa_studio_postbit_avatar')) {
+        af_aa_studio_postbit_avatar($avatar);
+    }
+    if ($avatar['af_atf_primary_avatar'] === '') {
+        $image = $user ? format_avatar($user['avatar'] ?? '', $user['avatardimensions'] ?? '', '36x36') : [];
+        $src = $image['image'] ?? htmlspecialchars_uni(af_adaptivethemeframework_default_avatar_url());
+        $avatar['af_atf_primary_avatar'] = '<img src="'.$src.'" alt="" width="36" height="36" loading="lazy">';
+    }
+    $pid = (int)($thread['firstpost'] ?? 0);
+    $url = $pid > 0 ? get_post_link($pid, (int)$thread['tid']).'#pid'.$pid : '';
+    $created = (int)($thread['dateline'] ?? 0);
+    $date = my_date('relative', $created);
+    return '<div class="post_head atf-post__topbar atf-thread__author">'
+        .'<div class="atf-thread__author-avatar">'.$avatar['af_atf_primary_avatar'].'</div>'
+        .'<span class="atf-thread__author-name">'.$identity.'</span>'
+        .'<time class="atf-thread__author-date" datetime="'.gmdate('c', $created).'">'.$date.'</time>'
+        .($url !== '' ? '<a class="atf-thread__original" href="'.$url.'">Первое сообщение</a>' : '')
+        .'</div>';
+}
+
 /** Compose the showthread shell after core has prepared all native values. */
 function af_adaptivethemeframework_compose_showthread(): void
 {
-    global $thread, $fid, $header, $posts, $quickreply, $moderationoptions, $pollbox,
+    global $thread, $fid, $header, $posts, $quickreply, $moderationoptions, $pollbox, $templates,
            $multipage, $printthread, $sendthread, $addremovesubscription, $addpoll, $usersbrowsing;
     global $atf_thread_breadcrumbs, $atf_thread_meta, $atf_thread_fields,
            $atf_thread_before_posts, $atf_thread_after_posts;
@@ -1723,6 +1751,28 @@ function af_adaptivethemeframework_compose_showthread(): void
     $atf_thread_breadcrumbs = af_adaptivethemeframework_render_slot('thread.breadcrumbs', $context);
     $atf_thread_meta = af_adaptivethemeframework_render_slot('thread.meta', $context);
     $atf_thread_fields = af_adaptivethemeframework_render_slot('thread.atf_fields', $context);
+    $tid = (int)$context['tid'];
+    $pid = (int)($thread['firstpost'] ?? 0);
+    $fallback = $GLOBALS['af_atf_first_post_fields'][$tid] ?? null;
+    $fieldBlock = function_exists('af_atf_build_display_block_for_tid_fid') && $atf_thread_fields !== ''
+        ? af_atf_build_display_block_for_tid_fid($tid, (int)$fid) : '';
+    $hasFieldsSlot = $fieldBlock !== '' && preg_match('~>\s*\{\$atf_thread_fields\}\s*<~',
+        preg_replace('~<!--.*?-->~s', '', $templates->get('showthread', 0)));
+    if ($hasFieldsSlot && str_contains($atf_thread_fields, $fieldBlock)) {
+        $atf_thread_fields .= af_adaptivethemeframework_thread_author($thread);
+        $fallbackHtml = '<!--af-atf-first-post-'.$pid.'-->'.$fieldBlock;
+        if ($fallback !== null && $fallback['pid'] === $pid && $fallback['fallback'] === $fallbackHtml) {
+            $posts = str_replace($fallbackHtml, '', (string)$posts, $removed);
+            if ($removed > 0 && $fallback['compact']) {
+                // Keep both native postbit layouts, their controls and their anchors.
+                $posts = preg_replace('~(<(?:article|div) class="post(?: |")[^>]*\bid="post_'.$pid.'")~',
+                    '$1 data-atf-structured-first="1"', $posts, 1) ?? $posts;
+                $posts = preg_replace('~(<div class="post_body scaleimages" id="pid_'.$pid.'">)\s+(</div>)~',
+                    '$1$2', $posts, 1) ?? $posts;
+            }
+            $context['posts_html'] = $posts;
+        }
+    }
     $atf_thread_before_posts = af_adaptivethemeframework_render_slot('thread.before_posts', $context);
     $atf_thread_after_posts = af_adaptivethemeframework_render_slot('thread.after_posts', $context);
 }

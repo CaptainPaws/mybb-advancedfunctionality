@@ -2391,6 +2391,7 @@ function af_atf_build_preview_block_from_post(int $fid): string
         return '';
     }
 
+    $wikiHeader = '';
     $block = '';
     eval("\$block = \"".$templates->get('af_atf_display_block')."\";");
 
@@ -7036,8 +7037,12 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
     if ($wikiTitle === '' && $wikiElement === '' && empty($wikiInfoboxRows) && empty($wikiMainSections)) {
         return $GLOBALS['af_atf_display_block_cache'][$cacheKey] = '';
     }
-    if ($wikiTitle === '') {
-        $wikiTitle = htmlspecialchars_uni('Анкета персонажа');
+    $wikiHeader = '';
+    if ($wikiTitle !== '' || $wikiElement !== '') {
+        $wikiHeader = '<header class="af-atf-wiki__header"><div class="af-atf-wiki__heading">'
+            . $wikiElement
+            . ($wikiTitle !== '' ? '<h1 class="af-atf-wiki__title">'.$wikiTitle.'</h1>' : '')
+            . '</div></header>';
     }
     $wikiInfoboxBody = implode('', $wikiInfoboxRows);
     $wikiInfobox = $wikiInfoboxBody !== ''
@@ -7058,22 +7063,10 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
 
 function af_atf_message_is_effectively_empty(string $htmlMessage): bool
 {
-    $s = $htmlMessage;
-
-    // Убираем наиболее частые “пустые” штуки после парсинга
-    $s = str_ireplace(
-        ['<br />', '<br>', '<br/>', '&nbsp;', '&#160;'],
-        '',
-        $s
-    );
-
-    // Убираем наши “невидимые” символы + zero-width
-    $s = str_replace(["\u{200B}", "\u{3164}", "\u{2800}"], '', $s);
-
-    // Убираем теги
-    $s = trim(strip_tags($s));
-
-    return ($s === '');
+    // Strip only known empty markup; images, embeds and other HTML are content.
+    $text = preg_replace('~<br\s*/?>|</?p>|&nbsp;|&#160;|&#x0*a0;~i', '', $htmlMessage);
+    $text = str_replace(["\u{00A0}", "\u{200B}", "\u{3164}", "\u{2800}"], '', $text);
+    return trim($text) === '';
 }
 
 function af_atf_postbit(&$post): void
@@ -7092,15 +7085,15 @@ function af_atf_postbit(&$post): void
         return;
     }
 
-    // Встраиваем ТОЛЬКО в первый пост темы
-    if (!af_atf_is_first_post_context($post, $pid)) {
+    $tid = (int)($post['tid'] ?? 0);
+    $fid = (int)($post['fid'] ?? 0);
+    if ($tid <= 0 || $fid <= 0) {
         return;
     }
 
-    $tid = (int)($post['tid'] ?? 0);
-    $fid = (int)($post['fid'] ?? 0);
-
-    if ($tid <= 0 || $fid <= 0) {
+    $thread = $GLOBALS['thread'] ?? [];
+    $firstPid = (int)($thread['tid'] ?? 0) === $tid ? (int)($thread['firstpost'] ?? 0) : 0;
+    if ($firstPid > 0 ? $pid !== $firstPid : !af_atf_is_first_post_context($post, $pid)) {
         return;
     }
 
@@ -7114,15 +7107,17 @@ function af_atf_postbit(&$post): void
     $GLOBALS['af_atf_has_frontend_component'] = true;
 
     $cur = isset($post['message']) && is_string($post['message']) ? $post['message'] : '';
-
-    // Если пост по сути пустой (твой placeholder) — ЗАМЕНЯЕМ сообщение на поля
-    if (af_atf_message_is_effectively_empty($cur)) {
-        $post['message'] = $block;
-        return;
+    $placeholder = af_atf_message_is_effectively_empty($cur);
+    if (af_atf_theme_is_active()) {
+        // showthread_end runs after build_postbit(). Keep the fallback until
+        // the template and the actual slot output have both been confirmed.
+        $marker = '<!--af-atf-first-post-'.$pid.'-->';
+        $compact = $placeholder && empty($post['attachments']) && empty($post['attachmentcount'])
+            && (int)($post['visible'] ?? 0) === 1;
+        $block = $marker.$block;
+        $GLOBALS['af_atf_first_post_fields'][$tid] = ['pid' => $pid, 'fallback' => $block, 'compact' => $compact];
     }
-
-    // Если вдруг в первом посте всё же есть текст — не уничтожаем его, а добавляем поля сверху
-    $post['message'] = $block . "\n" . $cur;
+    $post['message'] = $placeholder ? $block : $block."\n".$cur;
 }
 
 /* -------------------- SETTINGS -------------------- */
