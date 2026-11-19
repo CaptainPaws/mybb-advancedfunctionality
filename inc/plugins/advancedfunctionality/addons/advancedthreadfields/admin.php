@@ -280,6 +280,7 @@ class AF_Admin_Advancedthreadfields
         $isEdit = $gid > 0;
 
         $group = [
+            'acs_enabled' => 0,
             'title'       => '',
             'description' => '',
             'forums'      => '',
@@ -326,6 +327,7 @@ class AF_Admin_Advancedthreadfields
                 $forums = $forumsCsv; // может быть пусто => All
             }
 
+            $acsEnabled = $mybb->get_input('acs_enabled') === '1' ? 1 : 0;
             $archiveFid = max(0, (int)$mybb->get_input('archive_fid'));
             $active = (int)$mybb->get_input('active');
             $mechanicMode = trim((string)$mybb->get_input('character_mechanic_mode'));
@@ -343,6 +345,7 @@ class AF_Admin_Advancedthreadfields
                 flash_message('Title is required', 'error');
             } else {
                 $data = [
+                    'acs_enabled' => $acsEnabled,
                     'title'       => $db->escape_string($title),
                     'description' => $db->escape_string($description),
                     'forums'      => $db->escape_string($forums),
@@ -373,6 +376,7 @@ class AF_Admin_Advancedthreadfields
             }
 
             $group = array_merge($group, [
+                'acs_enabled' => $acsEnabled,
                 'title' => $title,
                 'description' => $description,
                 'forums' => $forums,
@@ -436,6 +440,8 @@ class AF_Admin_Advancedthreadfields
         }
 
         self::row($table, 'Forums', $forumsFieldHtml . $forumsHelp);
+        self::row($table, 'Разрешить боевые сессии ACS', $form->generate_yes_no_radio('acs_enabled', (int)$group['acs_enabled'])
+            . '<p>Действует только в явно выбранных форумах и их дочерних форумах. All не включает ACS. Права ACS проверяются отдельно.</p>');
         self::row($table, 'ID форума архива', $form->generate_numeric_field('archive_fid', (int)$group['archive_fid'], ['min' => 0])
             . '<div style="margin-top:6px;font-size:12px;opacity:.85;">Архив только этой Group; 0 использует legacy global setting.</div>');
         self::row(

@@ -23,6 +23,8 @@ require_once dirname(__DIR__) . '/adaptivethemeframework/ownership.php';
 define('AF_ATF_ID', 'advancedthreadfields');
 define('AF_ATF_TABLE_FIELDS', 'af_atf_fields');
 define('AF_ATF_TABLE_VALUES', 'af_atf_values');
+require_once __DIR__.'/acs-thread.php';
+
 define('AF_ATF_TABLE_GROUPS', 'af_atf_groups');
 define('AF_ATF_TABLE_PREFILL', 'af_atf_prefill_tokens');
 
@@ -162,6 +164,7 @@ function af_advancedthreadfields_install(): void
               `title` VARCHAR(255) NOT NULL,
               `description` TEXT NOT NULL,
               `forums` TEXT NOT NULL,
+              `acs_enabled` TINYINT(1) NOT NULL DEFAULT 0,
               `archive_fid` INT UNSIGNED NOT NULL DEFAULT 0,
               `character_mechanic_mode` VARCHAR(16) NOT NULL DEFAULT 'auto',
               `catalog_characters_url` VARCHAR(500) NOT NULL DEFAULT '',
@@ -230,6 +233,7 @@ function af_advancedthreadfields_install(): void
         ");
     }
 
+    af_atf_acs_install();
     af_atf_db_ensure_prefill_table();
     af_atf_ensure_settings();
     af_atf_install_templates();
@@ -271,6 +275,7 @@ function af_advancedthreadfields_activate(): void
 
     af_atf_ensure_settings();
     af_atf_db_ensure_group_columns();
+    af_atf_acs_install();
     af_atf_db_ensure_prefill_table();
     af_atf_install_templates();
 
@@ -478,6 +483,9 @@ function af_advancedthreadfields_init(): void
     $plugins->add_hook('editpost_do_editpost_start', 'af_atf_editpost_do_start');
 
     // финальная страховка сохранения (когда tid уже точно есть)
+    $plugins->add_hook('datahandler_post_insert_thread', 'af_atf_acs_claim_thread', 1);
+    $plugins->add_hook('datahandler_post_insert_thread_end', 'af_atf_acs_bind_thread');
+    $plugins->add_hook('newthread_do_newthread_end', 'af_atf_acs_finish_thread', 100);
     $plugins->add_hook('newthread_do_newthread_end', 'af_atf_newthread_do_end');
     $plugins->add_hook('editpost_do_editpost_end', 'af_atf_editpost_do_end');
 
@@ -1157,6 +1165,7 @@ function af_atf_db_ensure_group_columns(): void
     }
 
     $cols = [
+        'acs_enabled' => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `acs_enabled` TINYINT(1) NOT NULL DEFAULT 0",
         'archive_fid'             => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `archive_fid` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `forums`",
         'character_mechanic_mode' => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `character_mechanic_mode` VARCHAR(16) NOT NULL DEFAULT 'auto' AFTER `archive_fid`",
         'catalog_characters_url'   => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `catalog_characters_url` VARCHAR(500) NOT NULL DEFAULT '' AFTER `forums`",
@@ -1182,6 +1191,7 @@ function af_atf_group_cache_select_fields(): array
 
     // Новые колонки из Prompt 2 — могут ещё отсутствовать на старой БД
     $optional = [
+        'acs_enabled',
         'archive_fid',
         'character_mechanic_mode',
         'catalog_characters_url',
@@ -2125,6 +2135,7 @@ function af_atf_rebuild_cache(bool $force = false): void
             }
 
             $groups[$gid] = [
+                'acs_enabled' => (int)($g['acs_enabled'] ?? 0),
                 'gid'            => $gid,
                 'title'          => (string)($g['title'] ?? ''),
                 'forums_raw'     => $forumsRaw,
@@ -2858,6 +2869,7 @@ function af_atf_newthread_start(): void
 
     // чтобы при POST/preview/ошибках поля не стирались
     af_atf_prepare_input_block($fidI, 0, false);
+    $GLOBALS['af_atf_input_html'] .= af_atf_acs_mode_input($fidI);
 
     // Сбрасываем на всякий случай (чтоб не "прилипало" между запросами)
     $GLOBALS['af_atf_preview_html'] = '';
@@ -4877,6 +4889,7 @@ function af_atf_newthread_do_start(): void
     }
 
     // чтобы при preview/ошибках поля НЕ СТИРАЛИСЬ — готовим блок из POST
+    af_atf_acs_validate_mode($fidI);
     af_atf_prepare_input_block($fidI, 0, false);
 
     // страховка пустого message

@@ -7,6 +7,7 @@ function af_advancedcombatsystem_register_thread_component(): void
     $registered=true;
     if(!function_exists('af_adaptivethemeframework_register_component')){af_advancedcombatsystem_panel_failure('ACS_PANEL_ATF_UNAVAILABLE','registration');return;}
     af_adaptivethemeframework_register_component(['owner'=>'advancedcombatsystem','key'=>'combat_result','slot'=>'post.before_body','renderer'=>'af_advancedcombatsystem_combat_card']);
+    af_adaptivethemeframework_register_component(['owner'=>'advancedcombatsystem','key'=>'atf_episode_status','slot'=>'thread.meta','renderer'=>'af_advancedcombatsystem_atf_status']);
     if(!af_adaptivethemeframework_register_component(['owner'=>'advancedcombatsystem','key'=>'session_link','slot'=>'thread.before_posts','renderer'=>'af_advancedcombatsystem_thread_session_link']))af_advancedcombatsystem_panel_failure('ACS_PANEL_REGISTRATION_FAILED','registration');
 }
 /** Native showthread context. Membership discovery stays lightweight; no encounter is created on GET. */
@@ -25,7 +26,7 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
         // Do not trust the request TID, context UID (thread author), or Appearance masks.
         $access->thread((string)$tid);
         if($mybb->get_input('acs_setup')==='1'){
-            if(!$access->canCreate())return ''; // Reject an unpermitted wizard before loading the GM stack.
+            if($mybb->get_input('acs_session')==='' && !$access->canCreate())return ''; // A persisted GM can configure an existing session.
             if(!headers_sent())header('Cache-Control: private, no-store');
             require_once __DIR__.'/Encounters.php';$body=AF_ACS_GmPanel::setup((string)$tid,$mybb->get_input('acs_session'));AF_ACS_Context::mark(AF_ACS_Context::INTERACTIVE);return $rendered[$tid]=af_advancedcombatsystem_presentation_css('has_acs_panel').$body;
         }

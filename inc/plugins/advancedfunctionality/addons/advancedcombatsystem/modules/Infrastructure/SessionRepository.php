@@ -22,6 +22,26 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
     {
         $row=parent::session($sessionId);return $row?$this->sessionRow($row):null;
     }
+    public function hasTopicSession(string $tid): bool
+    {
+        return (bool)$this->sql('SELECT id FROM '.$this->table('sessions').' WHERE tid=? LIMIT 1', [$tid])['rows'];
+    }
+
+    public function atfTopicStatus(string $tid, string $uid): ?array
+    {
+        $session = $this->sql('SELECT s.id,s.owner_uid,MAX(r.role=?) AS is_gm,MAX(r.role=?) AS is_owner FROM '.$this->table('sessions').' s
+            JOIN '.$this->table('session_roles').' r ON r.session_id=s.id
+            WHERE s.tid=? AND r.uid=? AND r.role IN (?,?,?,?,?) AND (r.expires_at IS NULL OR r.expires_at>?)
+            GROUP BY s.id,s.owner_uid ORDER BY is_gm DESC,(is_owner AND s.owner_uid=?) DESC,s.id LIMIT 1',
+            ['gm','owner',$tid,$uid,'owner','gm','assistant_gm','player','observer',time(),$uid])['rows'][0] ?? null;
+        if ($session === null) { return null; }
+        $encounter = $this->sql('SELECT status FROM '.$this->table('encounters')." WHERE session_id=?
+            ORDER BY CASE WHEN status IN ('active','paused','pending_resolution') THEN 0 WHEN status IN ('preparation','ambush_ready') THEN 1 ELSE 2 END,id DESC LIMIT 1",
+            [$session['id']])['rows'][0] ?? null;
+        return ['id'=>$session['id'], 'encounter_status'=>$encounter['status'] ?? null,
+            'can_manage'=>(bool)$session['is_gm'] || ((bool)$session['is_owner'] && (string)$session['owner_uid'] === $uid)];
+    }
+
     public function roles(string $id, string $uid): array
     {
         return $this->sql('SELECT uid,role,expires_at FROM '.$this->table('session_roles').' WHERE session_id=? AND uid=? AND (expires_at IS NULL OR expires_at>?)', [self::integer($id),self::integer($uid,'4294967295'),time()])['rows'];

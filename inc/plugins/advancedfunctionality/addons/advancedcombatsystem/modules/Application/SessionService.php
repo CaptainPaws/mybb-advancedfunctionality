@@ -41,7 +41,7 @@ final class AF_ACS_SessionService
         return ['items'=>$visible,'next_after'=>count($rows)===100?(string)end($rows)['id']:null];
     }
     /** No actor_uid, global permission, owner role or config accepted from client. */
-    public function command(string $operation,array $input): array
+    public function command(string $operation,array $input,bool $firstForTopic=false): array
     {
         $this->access->csrf();$actor=$this->access->uid();
         if($operation==='reopen_session')$operation='reopen'; // A1.40 public command; one canonical receipt/event identity.
@@ -74,8 +74,13 @@ final class AF_ACS_SessionService
                     if($operation==='transfer_owner')(new AF_ACS_AuthorizationService)->requirePermission('session.owner.transfer',(string)$session['id']);
                 }
             },
-            function(?array $session) use($operation,$request) {
-                if($operation==='create')return $this->repository->insertSession($request['tid'],$request['owner_uid'],$this->access->defaults());
+            function(?array $session) use($operation,$request,$firstForTopic) {
+                if ($operation === 'create') {
+                    if ($firstForTopic && $this->repository->hasTopicSession($request['tid'])) {
+                        throw new RuntimeException('ACS_ATF_SESSION_EXISTS');
+                    }
+                    return $this->repository->insertSession($request['tid'],$request['owner_uid'],$this->access->defaults());
+                }
                 if (in_array($operation,['request_close','close','reopen','archive'],true)) return $this->repository->lifecycle($session,$operation);
                 $id=(string)$session['id'];$uid=$request['uid'];$this->access->user($uid);
                 if($operation==='transfer_owner') {
