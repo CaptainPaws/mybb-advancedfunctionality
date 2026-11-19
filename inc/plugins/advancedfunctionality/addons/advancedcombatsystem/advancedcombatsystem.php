@@ -31,6 +31,10 @@ function af_advancedcombatsystem_init(): string
             require_once __DIR__.'/modules/Presentation/ThreadComponents.php';
             $plugins->add_hook('global_end','af_advancedcombatsystem_register_thread_component');
         }
+        if (defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_modal') {
+            require_once __DIR__.'/modules/Presentation/ModalWorkflow.php';
+            $plugins->add_hook('misc_start', 'af_advancedcombatsystem_modal_dispatch');
+        }
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_loot')$plugins->add_hook('misc_start','af_advancedcombatsystem_loot_page');
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_archive')$plugins->add_hook('misc_start','af_advancedcombatsystem_archive_page');
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='misc.php' && $mybb->get_input('action')==='acs_recovery')$plugins->add_hook('misc_start','af_advancedcombatsystem_recovery_page');

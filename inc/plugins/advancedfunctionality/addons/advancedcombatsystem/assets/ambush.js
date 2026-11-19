@@ -1,7 +1,8 @@
 (() => {
     'use strict';
+    if (window.AFACSAmbush) return;
     const labels = {preparation: 'Подготовка', ambush_ready: 'Готовность засады', encounter_start: 'Запуск', ambush_resolution: 'Разрешение', active: 'Активный первый раунд', start_confirmed: 'Старт подтверждён', recovery_required: 'Требуется восстановление'};
-    document.querySelectorAll('[data-acs-ambush]').forEach(root => {
+    function mount(root) {
         if (root.dataset.initialized) return;
         root.dataset.initialized = '1';
         const config = JSON.parse(root.querySelector('[data-acs-ambush-config]').textContent);
@@ -51,7 +52,7 @@
         };
         root.addEventListener('click', async event => {
             const target = event.target.closest('button[data-op]'); if (!target || busy || target.disabled) return;
-            const op = target.dataset.op; busy = true; render();
+            const op = target.dataset.op; busy = true; root.setAttribute('data-acs-busy',''); render();
             try {
                 if (op === 'status') apply(await request('ambush_status', {session_id: dto.session_id, encounter_id: dto.encounter_id}));
                 else {
@@ -64,13 +65,21 @@
                         persist({op: `ambush_${op}`, input: {session_id: dto.session_id, encounter_id: dto.encounter_id, expected_version: dto.expected_version, encounter_version: dto.encounter_version, operation_key: key, reason}});
                     }
                     apply(await request(pending.op, pending.input));
+                    root.dispatchEvent(new CustomEvent('acs:committed', {
+                        bubbles: true, detail: {tid: dto.tid, sid: dto.session_id}
+                    }));
                 }
             } catch (error) { checked = false; if (pending && ['ACS_VERSION_CONFLICT', 'ACS_CSRF_REQUIRED', 'ACS_POST_REQUIRED', 'ACS_AMBUSH_INPUT_INVALID', 'ACS_PREPARED_UNSUPPORTED'].includes(error.code)) { try { persist({...pending, rejected: true}); } catch (_) { storageOK = false; } } notice(`${error.message} Проверьте результат запуска; прежний ключ сохранён. Не отправляйте новую операцию вслепую.`); }
-            finally { busy = false; render(); }
+            finally { busy = false; root.removeAttribute('data-acs-busy'); render(); }
         });
         render();
         if (!storageOK) notice('Хранилище вкладки недоступно. Управление заблокировано, проверка результата доступна.');
         else if (pending || dto.start_operation_id) { notice('Сохранён прежний запуск. Проверьте результат до дальнейших действий.'); }
         else apply(dto);
-    });
+    }
+    function init(container = document) {
+        container.querySelectorAll('[data-acs-ambush]').forEach(mount);
+    }
+    window.AFACSAmbush = {init};
+    init();
 })();

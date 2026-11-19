@@ -24,7 +24,7 @@ final class AF_ACS_EncountersPage
         echo '<select name="'.self::esc($field).'" required><option value="">Выберите сторону</option>';
         foreach($sides as $side)echo '<option value="'.self::esc($side['id']).'">'.self::esc($side['name']).'</option>';echo '</select>';
     }
-    public static function render(string $sid,string $tid,?AF_ACS_EncounterService $service=null): string
+    public static function render(string $sid,string $tid,?AF_ACS_EncounterService $service=null, array &$outcome=[]): string
     {
         global $mybb;
         $service??=af_advancedcombatsystem_encounters();
@@ -33,8 +33,8 @@ final class AF_ACS_EncountersPage
         $session=$service->context($sid,$tid);
         $eid=$mybb->get_input('acs_encounter');$tab=$mybb->get_input('acs_tab')?:'overview';
         $tabs=['overview'=>'Обзор','participants'=>'Участники','rounds'=>'Раунды','events'=>'События','management'=>'Управление'];
-        $setup=$mybb->get_input('acs_setup')==='1';$step=max(2,min(6,(int)($mybb->get_input('gm_step')?:2)));
-        if($setup)$tab=[2=>'overview',3=>'participants',4=>'overview',5=>'overview',6=>'rounds'][$step];
+        $setup=$mybb->get_input('acs_setup')==='1'||$mybb->get_input('gm_step')!=='';$step=max(1,min(6,(int)($mybb->get_input('gm_step')?:2)));
+        if($setup)$tab=[1=>'overview',2=>'overview',3=>'participants',4=>'overview',5=>'overview',6=>'rounds'][$step];
         if(!isset($tabs[$tab]))$tab='overview';
         $base='showthread.php?tid='.$tid.'&acs_session='.$sid;$notice='';$readiness=null;$commandBlocked=false;
         if($mybb->request_method==='post' && $mybb->get_input('acs_encounter_op')!=='') {
@@ -44,46 +44,83 @@ final class AF_ACS_EncountersPage
                 if($eid!=='' && $mybb->get_input('encounter_id')!=='' && $mybb->get_input('encounter_id')!==$eid)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
                 $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid','mode','uids','assignment_version','visibility_scope','participant_version','presence_template','relation_version','round_id','entity_turn_id','control_group_id','confirm_full','confirm','deadline_mode','seconds','turn_id','turn_version','effect_order','kind','source_key','initial_hp','owner_uid','role','resolution_id','outcome'] as $field)$input[$field]=$mybb->get_input($field);
                 $op=$mybb->get_input('acs_encounter_op');
+                $committed=['committed'=>true,'sid'=>$sid];
                 AF_ACS_GmIntent::requireConfirmation(str_starts_with($op,'session_')?substr($op,8):$op);
                 if(str_starts_with($op,'session_')){
-                    $serviceSession=af_advancedcombatsystem_sessions();$result=$serviceSession->command(substr($op,8),$input);$notice='<p role="status">Переход сессии подтверждён сервером.</p>';$session=$service->context($sid,$tid);$list=$service->list($sid,tid:$tid);
+                    $serviceSession=af_advancedcombatsystem_sessions();$result=$serviceSession->command(substr($op,8),$input);$outcome=$committed;$notice='<p role="status">Переход сессии подтверждён сервером.</p>';$session=$service->context($sid,$tid);$list=$service->list($sid,tid:$tid);
                 }elseif($op==='entity_request'){
                     $entityOp=$mybb->get_input('op');if(!in_array($entityOp,['entity_validate','entity_register'],true))throw new RuntimeException('ACS_DRAFT_INPUT_INVALID');
-                    $entities=af_advancedcombatsystem_entities();if($entityOp==='entity_validate'){$check=$entities->validate($sid,$input);if(!$check['ready'])throw new AF_ACS_RegistrationBlocked($check['diagnostics']);$notice='<p role="status">Источник проверен. Регистрация требует отдельного подтверждения; источник будет проверен повторно.</p>';}else{$entities->register($input);$notice='<p role="status">Существо зарегистрировано. Добавьте его в состав столкновения отдельной командой.</p>';}
+                    $entities=af_advancedcombatsystem_entities();if($entityOp==='entity_validate'){$check=$entities->validate($sid,$input);if(!$check['ready'])throw new AF_ACS_RegistrationBlocked($check['diagnostics']);$notice='<p role="status">Источник проверен. Регистрация требует отдельного подтверждения; источник будет проверен повторно.</p>';}else{$entities->register($input);$outcome=$committed;$notice='<p role="status">Существо зарегистрировано. Добавьте его в состав столкновения отдельной командой.</p>';}
                     $session=$service->context($sid,$tid);
                 }elseif($op==='delegation_request'){
                     $delegationOp=$mybb->get_input('op');if(!in_array($delegationOp,['delegation_grant','delegation_revoke'],true))throw new RuntimeException('ACS_DELEGATION_UNAVAILABLE');AF_ACS_GmIntent::requireConfirmation($delegationOp);
                     $request=[];foreach(['session_id','expected_version','operation_key','reason','owner_uid','delegate_uid','entity_ids','control_group_id','permitted_actions','valid_from','valid_until','duration_seconds','delegation_id','delegation_version'] as $f)if(array_key_exists($f,$_POST))$request[$f]=in_array($f,['entity_ids','permitted_actions'],true)?$_POST[$f]:$mybb->get_input($f);
-                    $service->delegations()->command(substr($delegationOp,11),$request);$session=$service->context($sid,$tid);$notice='<p role="status">Делегирование подтверждено сервером.</p>';
+                    $service->delegations()->command(substr($delegationOp,11),$request);$outcome=$committed;$session=$service->context($sid,$tid);$notice='<p role="status">Делегирование подтверждено сервером.</p>';
                 }elseif(in_array($op,['end_conditions_set','outcome_confirm','outcome_continue'],true)){
-                    require_once __DIR__.'/EndConditionController.php';$request=[];foreach(['session_id','encounter_id','expected_version','encounter_version','reason','operation_key',...($op==='end_conditions_set'?[]:['resolution_id']),...($op==='outcome_confirm'?['outcome']:[])] as $f)$request[$f]=$mybb->get_input($f);if($op==='end_conditions_set'){$conditions=[];if($mybb->get_input('gm_last_side')==='1')$conditions[]='last_active_side';if($mybb->get_input('gm_no_sides')==='1')$conditions[]='no_active_sides';$mutual=match($mybb->get_input('gm_mutual')){'draw'=>['draw'],'inconclusive'=>['inconclusive'],'both'=>['draw','inconclusive'],default=>throw new RuntimeException('ACS_END_INPUT_INVALID')};$request['end_conditions']=json_encode(['schema'=>'ic-acs.end-conditions.v1','conditions'=>$conditions,'allow_continuation'=>$mybb->get_input('gm_continue')==='1','mutual_outcomes'=>$mutual],JSON_THROW_ON_ERROR);}AF_ACS_EndConditionController::handle($service,$op,$request,'post');$session=$service->context($sid,$tid);$notice=$op==='end_conditions_set'?'<p role="status">Условия завершения сохранены в снимке. Бой не запущен.</p>':'<p role="status">Решение исхода подтверждено. Сессия не закрывается автоматически.</p>';
+                    require_once __DIR__.'/EndConditionController.php';$request=[];foreach(['session_id','encounter_id','expected_version','encounter_version','reason','operation_key',...($op==='end_conditions_set'?[]:['resolution_id']),...($op==='outcome_confirm'?['outcome']:[])] as $f)$request[$f]=$mybb->get_input($f);if($op==='end_conditions_set'){$conditions=[];if($mybb->get_input('gm_last_side')==='1')$conditions[]='last_active_side';if($mybb->get_input('gm_no_sides')==='1')$conditions[]='no_active_sides';$mutual=match($mybb->get_input('gm_mutual')){'draw'=>['draw'],'inconclusive'=>['inconclusive'],'both'=>['draw','inconclusive'],default=>throw new RuntimeException('ACS_END_INPUT_INVALID')};$request['end_conditions']=json_encode(['schema'=>'ic-acs.end-conditions.v1','conditions'=>$conditions,'allow_continuation'=>$mybb->get_input('gm_continue')==='1','mutual_outcomes'=>$mutual],JSON_THROW_ON_ERROR);}AF_ACS_EndConditionController::handle($service,$op,$request,'post');$outcome=$committed;$session=$service->context($sid,$tid);$notice=$op==='end_conditions_set'?'<p role="status">Условия завершения сохранены в снимке. Бой не запущен.</p>':'<p role="status">Решение исхода подтверждено. Сессия не закрывается автоматически.</p>';
                 }elseif($op==='readiness') {
                     (new AF_ACS_SessionAccess)->csrf();$eid=$input['encounter_id'];$readiness=$service->readiness($sid,$eid);
                     $notice='<p>'.($readiness['preparation_ready']?'Подготовка проверена.':'Подготовка содержит блокировки.').' Для запуска первого раунда откройте вкладку «Раунды».</p>';
                     foreach($readiness['diagnostics'] as $issue)$notice.='<p>'.self::esc(self::issue($issue['code'])).(isset($issue['entity_id'])?' · существо #'.self::esc($issue['entity_id']):'').'</p>';
                 } else {
-                    if($op==='cover_assignment'){$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','cover_entity_id','protected_entity_id','expected_assignment_version','status','operation_key','reason'] as $field)$r[$field]=$mybb->get_input($field);$result=$service->cover()->command($r);}elseif(str_starts_with($op,'spatial_')){$spatialOp=substr($op,8);$extra=match($spatialOp){'configure'=>['kb_key'],'connection'=>['from','to','status'],'position'=>['entity_id','zone_id','visibility'],'zone'=>['zone_id','visibility'],'engagement'=>['entity_id','target_id','status'],default=>throw new RuntimeException('ACS_SPATIAL_UNSUPPORTED')};$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','expected_spatial_version','operation_key','reason',...$extra] as $field)$r[$field]=$mybb->get_input($field);$result=$service->spatial()->command($spatialOp,$r);}else $result=str_starts_with($op,'manage_')?$service->rounds()->command(substr($op,7),$input):(str_starts_with($op,'clock_')?$service->clock()->command(substr($op,6),$input):$service->command($op,$input));$eid=$result['encounter_id']??$eid;$notice='<p>Изменение сохранено.</p>';
+                    if($op==='cover_assignment'){$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','cover_entity_id','protected_entity_id','expected_assignment_version','status','operation_key','reason'] as $field)$r[$field]=$mybb->get_input($field);$result=$service->cover()->command($r);}elseif(str_starts_with($op,'spatial_')){$spatialOp=substr($op,8);$extra=match($spatialOp){'configure'=>['kb_key'],'connection'=>['from','to','status'],'position'=>['entity_id','zone_id','visibility'],'zone'=>['zone_id','visibility'],'engagement'=>['entity_id','target_id','status'],default=>throw new RuntimeException('ACS_SPATIAL_UNSUPPORTED')};$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','expected_spatial_version','operation_key','reason',...$extra] as $field)$r[$field]=$mybb->get_input($field);$result=$service->spatial()->command($spatialOp,$r);}else $result=str_starts_with($op,'manage_')?$service->rounds()->command(substr($op,7),$input):(str_starts_with($op,'clock_')?$service->clock()->command(substr($op,6),$input):$service->command($op,$input));$eid=$result['encounter_id']??$eid;$outcome=$committed+['eid'=>$eid];$notice='<p>Изменение сохранено.</p>';
                     $session=$service->context($sid,$tid);$list=$service->list($sid,tid:$tid);
                 }
             } catch(Throwable $error) {
-                $failure=af_advancedcombatsystem_session_failure($error);$commandBlocked=in_array($failure['category'],['RECOVERY_REQUIRED','INTERNAL_ERROR'],true);
-                $notice='<p class="error" role="alert">'.($error->getMessage()==='ACS_UI_CONFIRMATION_REQUIRED'?'Требуется явное подтверждение последствий. ':($error->getMessage()==='ACS_RECOVERY_REQUIRED'?'RECOVERY_REQUIRED: проверьте прежнюю операцию. ':'Команда не подтверждена. Проверьте права, BLOCKED-причины и версии. ')).'Не повторяйте неизвестный исход с новым ключом. error_id='.self::esc($failure['error_id']).'</p>';
-                foreach($failure['diagnostics']??[] as $issue)$notice.='<p>'.self::esc($issue['message']).'</p>';
+                $failure=af_advancedcombatsystem_session_failure($error);$commandBlocked=!str_contains($error->getMessage(),'VERSION_CONFLICT') && in_array($failure['category'],['RECOVERY_REQUIRED','INTERNAL_ERROR'],true);
+                if (!empty($outcome['committed'])) {
+                    return '<p role="status">Команда подтверждена. <a href="'.self::esc($base).'">Перечитать состояние</a>.</p>';
+                }
+                $outcome=['error'=>true,'uncertain'=>$commandBlocked];
+                $notice='<p class="error" role="alert">'.(str_contains($error->getMessage(),'VERSION_CONFLICT')?'Состояние изменилось. Обновите текущий шаг и проверьте введённые данные. ':($error->getMessage()==='ACS_UI_CONFIRMATION_REQUIRED'?'Требуется явное подтверждение последствий. ':($error->getMessage()==='ACS_RECOVERY_REQUIRED'?'RECOVERY_REQUIRED: проверьте прежнюю операцию. ':'Команда не подтверждена. Проверьте права, BLOCKED-причины и версии. '))).'Не повторяйте неизвестный исход с новым ключом. error_id='.self::esc($failure['error_id']).'</p>';
+                foreach($failure['diagnostics']??[] as $issue)$notice.='<p class="error">'.self::esc($issue['message']).'</p>';
             }
         }
         ob_start();
         try {
             echo '<section class="af-acs af-acs-gm"><h2>ACS · Панель GM</h2>'.$notice;
             if($commandBlocked){echo '<p>Новые команды временно не предлагаются. <a href="'.self::esc($base.'&acs_tab=overview').'">Перечитать состояние без повторного POST</a>. Для восстановления используйте прежнюю операцию и диагностику; не создавайте другой ключ.</p></section>';return ob_get_clean();}
-            echo '<p><a href="'.self::esc('showthread.php?tid='.$tid.'&acs_panel_session='.$sid.'#acs-thread-panel').'">К панели темы</a> · <a href="'.self::esc($base.'&acs_setup=1&gm_step=2').'">Мастер создания столкновения</a></p>';
-            if($setup)AF_ACS_GmPanel::wizard($base,$sid,$eid,$step,$tid);
-            echo '<ul>';
-            foreach($list['items'] as $row){$config=json_decode($row['config_json'],true);echo '<li><a href="'.self::esc($base.'&acs_encounter='.$row['id'].($setup?'&acs_setup=1&gm_step='.$step:'')).'">'.self::esc($config['title']??('Столкновение #'.$row['id'])).'</a> · '.self::esc(self::state($row['status'])).'</li>';}
-            echo '</ul>';
-            if($list['next_after']!==null)echo '<a href="'.self::esc($base.'&encounter_after='.$list['next_after']).'">Следующие столкновения</a>';
+            echo '<p><a href="'.self::esc('showthread.php?tid='.$tid.'&acs_panel_session='.$sid.'#acs-thread-panel').'">К панели темы</a> · <a href="'.self::esc($base.($eid!==''?'&acs_encounter='.$eid:'').'&acs_setup=1&gm_step=2').'">Мастер создания столкновения</a></p>';
+            if($setup) {
+                AF_ACS_GmPanel::wizard($base,$eid,$step);
+                [$heading,$hint]=[
+                    1=>['Сессия','Проверьте привязку сессии к теме.'],
+                    2=>['Столкновение','Выберите столкновение или создайте его, затем проверьте настройки.'],
+                    3=>['Участники','Зарегистрируйте существ, назначьте стороны и состав.'],
+                    4=>['Проверка','Проверьте готовность сохранённой подготовки.'],
+                    5=>['Предпросмотр','Сверьте текущий состав перед запуском.'],
+                    6=>['Запуск','Проверьте состояние раунда. Запуск требует отдельного подтверждения.'],
+                ][$step];
+                echo '<h3>'.self::esc($heading).'</h3><p>'.self::esc($hint).'</p>';
+                if($step===1) {
+                    $sessionView=af_advancedcombatsystem_sessions()->view($sid,true);
+                    echo '<p>Сессия #'.self::esc($sid).' · '.self::esc(AF_ACS_GmPanel::state($session['status'])).'</p>';
+                    AF_ACS_GmPanel::obligations($sessionView);
+                    AF_ACS_GmPanel::recovery($sid,$base,$sessionView['can_audit']);
+                    AF_ACS_GmPanel::sessionControls($sessionView,$base.'&acs_setup=1&gm_step=1'.($eid!==''?'&acs_encounter='.$eid:''));
+                    self::wizardNavigation($base,$eid,$step);
+                    echo '</section>';
+                    return ob_get_clean();
+                }
+            }
+            if ($setup && $step===2 && $eid!=='') {
+                echo '<p><a href="'.self::esc($base.'&acs_setup=1&gm_step=2').'">Создать другое столкновение</a></p>';
+            }
+            if (!$setup || $step===2) {
+                echo '<ul>';
+                foreach($list['items'] as $row){$config=json_decode($row['config_json'],true);echo '<li><a href="'.self::esc($base.'&acs_encounter='.$row['id'].($setup?'&acs_setup=1&gm_step='.$step:'')).'">'.self::esc($config['title']??('Столкновение #'.$row['id'])).'</a> · '.self::esc(self::state($row['status'])).'</li>';}
+                echo '</ul>';
+                if($list['next_after']!==null)echo '<a href="'.self::esc($base.($setup?'&acs_setup=1&gm_step=2':'').'&encounter_after='.$list['next_after']).'">Следующие столкновения</a>';
+            }
             if($eid==='') {
-                if($session['status']==='active') {self::form($base.($setup?'&acs_setup=1&gm_step=2':''),'create',$session);echo '<h3>Новое столкновение</h3><label>Название <input name="name" maxlength="191" required></label><p>Настройки подготовки будут закреплены отдельным снимком. Пока панель и сведения доступны только мастерам.</p>';self::submit('Создать столкновение');}
-                $sessionView=af_advancedcombatsystem_sessions()->view($sid,true);AF_ACS_GmPanel::obligations($sessionView);echo '<details><summary>Управление сессией без столкновения</summary>';AF_ACS_GmPanel::sessionControls($sessionView,$base);echo '</details>';AF_ACS_GmPanel::recovery($sid,$base,$sessionView['can_audit']);
+                if($session['status']==='active' && (!$setup || $step===2)) {self::form($base.($setup?'&acs_setup=1&gm_step=2':''),'create',$session);echo '<h3>Новое столкновение</h3><label>Название <input name="name" maxlength="191" required></label><p>Настройки подготовки будут закреплены отдельным снимком. Пока панель и сведения доступны только мастерам.</p>';self::submit('Создать столкновение');}
+                if (!$setup) {
+                    $sessionView=af_advancedcombatsystem_sessions()->view($sid,true);AF_ACS_GmPanel::obligations($sessionView);echo '<details><summary>Управление сессией без столкновения</summary>';AF_ACS_GmPanel::sessionControls($sessionView,$base);echo '</details>';AF_ACS_GmPanel::recovery($sid,$base,$sessionView['can_audit']);
+                }
+                if ($setup) {
+                    if ($step>2) echo '<p>Сначала выберите или создайте столкновение на шаге «Столкновение».</p>';
+                    self::wizardNavigation($base,$eid,$step);
+                }
                 echo '</section>';return ob_get_clean();
             }
             $view=$service->view($sid,$eid,$tid,$mybb->get_input('participant_after')?:'0',$mybb->get_input('side_after')?:'0',$mybb->get_input('relation_after')?:'0');$encounter=$view['encounter'];echo '<p><a href="misc.php?action=acs_archive&amp;session_id='.self::esc($sid).'&amp;encounter_id='.self::esc($eid).'">Боевой архив</a></p>';echo '<p><a href="misc.php?action=acs_loot&amp;session_id='.self::esc($sid).'&amp;encounter_id='.self::esc($eid).'">Распределение добычи</a></p>';$url=$base.'&acs_encounter='.$eid.'&acs_tab='.$tab.($setup?'&acs_setup=1&gm_step='.$step:'');
@@ -186,9 +223,23 @@ final class AF_ACS_EncountersPage
                 AF_ACS_GmPanel::recovery($sid,$url,$sessionView['can_audit']);
                 require_once __DIR__.'/Clock.php';AF_ACS_ClockPage::rest($view,$url,$service->clock());
             }
-            if($setup){echo '<nav aria-label="Шаги мастера">';if($step>2)echo '<a href="'.self::esc($base.'&acs_encounter='.$eid.'&acs_setup=1&gm_step='.($step-1)).'">Назад</a> ';if($step<6)echo '<a href="'.self::esc($base.'&acs_encounter='.$eid.'&acs_setup=1&gm_step='.($step+1)).'">Далее</a>';echo '</nav>';}
+            if ($setup) self::wizardNavigation($base,$eid,$step);
             echo '</section>';return ob_get_clean();
-        } catch(Throwable $error) {ob_end_clean();throw $error;}
+        } catch(Throwable $error) {
+            ob_end_clean();
+            if (!empty($outcome['committed'])) {
+                return '<p role="status">Команда подтверждена. <a href="'.self::esc($base).'">Перечитать состояние</a>.</p>';
+            }
+            throw $error;
+        }
+    }
+    private static function wizardNavigation(string $base,string $eid,int $step): void
+    {
+        $url=$base.($eid!==''?'&acs_encounter='.$eid:'').'&acs_setup=1&gm_step=';
+        echo '<nav aria-label="Переход между шагами">';
+        if ($step>1) echo '<a href="'.self::esc($url.($step-1)).'">Назад</a>';
+        if ($step<6 && ($step===1 || $eid!=='')) echo '<a href="'.self::esc($url.($step+1)).'">Далее</a>';
+        echo '</nav>';
     }
     private static function state(string $state): string {return ['preparation'=>'Подготовка','active'=>'Активно','ambush_ready'=>'Засада подготовлена','paused'=>'Пауза','completed'=>'Завершено','pending_resolution'=>'Ожидание исхода','encounter_start'=>'Запуск','ambush_resolution'=>'Разрешение засады'][$state]??'Состояние недоступно';}
     private static function event(string $event): string {return ['encounter.pause'=>'Пауза','encounter.resume'=>'Возобновление','encounter.gm_skip'=>'Ручной пропуск','encounter.gm_forfeit'=>'Закрытие выбывшей группы','encounter.deadline_set'=>'Настройка дедлайнов','encounter.extend_deadline'=>'Продление дедлайна','encounter.deadline_process'=>'Обработка дедлайна','encounter.round_next'=>'Следующий раунд','encounter.round_start'=>'Запущен первый раунд','encounter.create'=>'Создано столкновение','encounter.side_create'=>'Добавлена сторона','encounter.relation_set'=>'Изменены отношения сторон','encounter.participant_add'=>'Добавлен участник','encounter.participant_side'=>'Изменена сторона участника','encounter.side_change'=>'Изменена текущая сторона','encounter.participant_visibility'=>'Изменена доступность цели','encounter.controller_set'=>'Изменён режим / список управляющих','encounter.controller_assign'=>'Назначен управляющий'][$event]??'Запись журнала';}

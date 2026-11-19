@@ -39,14 +39,16 @@ function af_advancedcombatsystem_thread_entry(array $context): array
 function af_advancedcombatsystem_thread_button(string $url, string $label): string
 {
     $label = htmlspecialchars_uni($label);
-    return '<a class="atf-button atf-button--secondary atf-thread__reply-action" href="'.htmlspecialchars_uni($url)
+    $builder = str_contains($url, 'acs_builder=');
+    $modal = str_contains($url, 'acs_setup=1') || str_contains($url, 'acs_session=');
+    return '<a '.($builder ? 'data-acs-modal="builder" ' : ($modal ? 'data-acs-modal="gm" ' : '')).'class="atf-button atf-button--secondary atf-thread__reply-action" href="'.htmlspecialchars_uni($url)
         .'" aria-label="'.$label.'" title="'.$label.'">'
         .'<svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
         .'<path d="m13.5 10.5 6-6H22V7l-6 6M2 22l5-5m-2-2 4 4m1.5-5.5L4 7V4h3l11.5 11.5M22 22l-5-5m2-2-4 4"/></svg></a>';
 }
 
 /** Native showthread context. Creation is available only for a confirmed combat topic. */
-function af_advancedcombatsystem_render_thread_entry(array $context, string &$toolbar): string
+function af_advancedcombatsystem_render_thread_entry(array $context, string &$toolbar, string $surface = 'thread', array &$outcome = []): string
 {
     global $mybb,$db;
     $uid=(int)($mybb->user['uid']??0);$tid=(int)($context['tid']??0);
@@ -67,11 +69,12 @@ function af_advancedcombatsystem_render_thread_entry(array $context, string &$to
             && function_exists('af_atf_acs_has_topic_intent') && af_atf_acs_has_topic_intent($tid));
         $builder=$mybb->get_input('acs_builder');
         $gm=$mybb->get_input('acs_session');
-        $setup=$mybb->get_input('acs_setup')==='1';
+        $setup=$mybb->get_input('acs_setup')==='1' || $mybb->get_input('gm_step')!=='';
         $selected=$setup?$gm:($builder!==''?$builder:($gm!==''?$gm:$mybb->get_input('acs_panel_session')));
         $validSelection=$selected===''||preg_match('/\A[1-9][0-9]{0,19}\z/D',$selected);
         // Historical sessions need an explicit ID. An old topic alone grants no creation path.
         if (!$combat && ($mode!==null || $selected==='' || !$validSelection)) return '';
+        $fragment = $surface !== 'thread';
         $base='showthread.php?tid='.$tid;
         $setupUrl=$base.'&acs_setup=1&acs_atf_setup=1#acs-thread-panel';
         $link=$db->write_link??null;
@@ -106,14 +109,17 @@ function af_advancedcombatsystem_render_thread_entry(array $context, string &$to
                 || !af_advancedcombatsystem_atf_can_create($fid) || $repo->hasTopicSession((string)$tid)) return '';
             if (!headers_sent()) header('Cache-Control: private, no-store');
             if (!$setup) {
+                if ($fragment) return '';
                 $toolbar=af_advancedcombatsystem_thread_button($setupUrl,'Настроить бой');
-                return '';
+                require_once __DIR__.'/ThreadPanel.php';
+                return af_advancedcombatsystem_presentation_css('has_acs_panel').af_advancedcombatsystem_panel_script()
+                    .AF_ACS_ThreadPanel::missing($setupUrl);
             }
             require_once __DIR__.'/Encounters.php';
-            $body=AF_ACS_GmPanel::setup((string)$tid);
+            $body=AF_ACS_GmPanel::setup((string)$tid,$outcome);
             $toolbar=af_advancedcombatsystem_thread_button('#acs-thread-panel','Настроить бой');
             AF_ACS_Context::mark(AF_ACS_Context::INTERACTIVE);
-            return af_advancedcombatsystem_presentation_css('has_acs_panel').$body;
+            return ($fragment ? '' : af_advancedcombatsystem_gm_css()).$body;
         }
         $authorized=true;
         if(!headers_sent())header('Cache-Control: private, no-store');
@@ -123,41 +129,59 @@ function af_advancedcombatsystem_render_thread_entry(array $context, string &$to
         if ($setup && $gm==='' && $chosen!==null && !empty($chosen['can_manage'])) {
             $url=$base.'&acs_session='.$chosen['id'].'&acs_setup=1#acs-thread-panel';
             $toolbar=af_advancedcombatsystem_thread_button($url,'Настроить бой');
-            return '<p role="status"><a href="'.htmlspecialchars_uni($url).'">Открыть существующую сессию</a></p>';
+            if ($surface==='gm') {
+                require_once __DIR__.'/Encounters.php';
+                if ($mybb->request_method==='post') {
+                    // The creation service still checks the original per-actor receipt and key.
+                    return AF_ACS_GmPanel::setup((string)$tid,$outcome);
+                }
+                $mybb->input['gm_step']='1';
+                return AF_ACS_EncountersPage::render((string)$chosen['id'],(string)$tid,outcome:$outcome);
+            }
+            return '<p role="status"><a data-acs-modal="gm" href="'.htmlspecialchars_uni($url).'">Открыть существующую сессию</a></p>';
         }
         if($chosen)$sessions[(string)$chosen['id']]=$chosen;
         $choice=AF_ACS_ThreadPanel::sessions($sessions,(string)$tid,$chosen?(string)$chosen['id']:null,$next,$after);
         if($chosen===null){
+            if ($fragment) return '';
             if ($setup && $gm!=='') return '';
             $toolbar=af_advancedcombatsystem_thread_button('#acs-thread-panel','Панель боя');
             $notice=$selected!==''?'Выбранная сессия недоступна. Выберите доступную сессию.':'Выберите сессию ACS для этой темы.';
-            return af_advancedcombatsystem_presentation_css('has_acs_panel').'<aside class="af-acs-panel">'.htmlspecialchars_uni($notice).$choice.'</aside>';
+            return af_advancedcombatsystem_presentation_css('has_acs_panel').'<aside class="af-acs-combat-bar">'.htmlspecialchars_uni($notice).$choice.'</aside>';
         }
         $sid=(string)$chosen['id'];
         $canNotify=(bool)$chosen['can_manage'];
         if ($gm===$sid && ($setup || $builder==='') && $canNotify) {
             $phase='gm';
             require_once __DIR__.'/Encounters.php';
-            $body=AF_ACS_EncountersPage::render($sid,(string)$tid);
+            $body=AF_ACS_EncountersPage::render($sid,(string)$tid,outcome:$outcome);
             if ($combat) $toolbar=af_advancedcombatsystem_thread_button('#acs-thread-panel','Панель боя');
             AF_ACS_Context::mark(AF_ACS_Context::INTERACTIVE);
-            return af_advancedcombatsystem_presentation_css('has_acs_panel').$body;
+            return ($fragment ? '' : af_advancedcombatsystem_gm_css()).$body;
         }
-        if ($setup) return '';
+        if ($surface==='gm' || $setup) return '';
+        if ($surface==='builder') {
+            require_once __DIR__.'/BuilderController.php';
+            return AF_ACS_BuilderController::renderBuilder($sid,(string)$tid);
+        }
         $phase='view';
         require_once __DIR__.'/../Infrastructure/ThreadPanelQuery.php';
         $panel=(new AF_ACS_ThreadPanelQuery($db))->current($sid,(string)$tid);
         $hasEncounter=$panel['encounter_id']!==null;
         if ($combat) {
             $toolbar=$hasEncounter || !$canNotify || !$panel['can_manage']
-                ? af_advancedcombatsystem_thread_button('#acs-thread-panel','Панель боя')
+                ? af_advancedcombatsystem_thread_button(
+                    $canNotify ? AF_ACS_ThreadPanel::gmUrl($panel,(string)$tid)
+                        : (AF_ACS_ThreadPanel::builderUrl($panel,(string)$tid) ?? '#acs-thread-panel'),
+                    'Панель боя')
                 : af_advancedcombatsystem_thread_button($base.'&acs_session='.$sid.'&acs_setup=1#acs-thread-panel','Настроить бой');
         }
         AF_ACS_Context::mark(AF_ACS_Context::VIEW);
         $html=AF_ACS_ThreadPanel::render($panel,(string)$tid,$canNotify);
+        if ($surface==='bar') return $html;
         $phase='assets';
         $html=af_advancedcombatsystem_presentation_css('has_acs_panel').$choice.$html;
-        if ($hasEncounter) $html.=af_advancedcombatsystem_panel_script();
+        if ($builder==='' && $mybb->get_input('acs_draft')==='' && ($canNotify || AF_ACS_ThreadPanel::builderUrl($panel,(string)$tid)!==null)) $html.=af_advancedcombatsystem_panel_script();
         if($canNotify)foreach($GLOBALS['af_acs_panel_asset_failures']??[] as $failure)$html.='<p role="status">'.htmlspecialchars_uni('Ассеты ACS недоступны. Проверьте настройки ассетов AF и диагностику ACP. '.$failure).'</p>';
         // A failed explicit tool must not discard the already-rendered read-only panel.
         try{
@@ -168,6 +192,7 @@ function af_advancedcombatsystem_render_thread_entry(array $context, string &$to
         }
         return $html;
     }catch(Throwable $error){
+        if ($surface!=='thread') throw $error;
         if(in_array($error->getMessage(),['ACS_THREAD_UNAVAILABLE','ACS_LOGIN_REQUIRED','ACS_SESSION_UNAVAILABLE'],true))return '';
         $code=match($phase){'discovery'=>'ACS_PANEL_DISCOVERY_FAILED','assets'=>'ACS_PANEL_ASSET_FAILED','gm'=>'ACS_PANEL_TOOL_FAILED',default=>'ACS_PANEL_VIEW_FAILED'};
         // Preserve only machine codes; SQL/errors containing arbitrary text are never retained.
@@ -224,7 +249,7 @@ function af_advancedcombatsystem_presentation_css(string $fact): string
         if($fact==='has_acs_panel')af_advancedcombatsystem_panel_failure('ACS_PANEL_ASSET_DENIED','css');
         return '';
     }
-    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/presentation.css?v=1122';
+    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/presentation.css?v=1200';
     return '<link rel="stylesheet" href="'.htmlspecialchars_uni($url).'">';
 }
 
@@ -237,7 +262,14 @@ function af_advancedcombatsystem_panel_script(): string
     if(!function_exists('af_frontend_asset_allowed')||!af_frontend_asset_allowed('advancedcombatsystem','thread_panel',null,['has_acs_panel'=>true])){
         af_advancedcombatsystem_panel_failure('ACS_PANEL_ASSET_DENIED','javascript');return '';
     }
-    require_once __DIR__.'/RuntimeAssets.php';$runtime=af_advancedcombatsystem_runtime_script();
-    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/thread-panel.js?v=1133';
-    return $runtime.'<script defer src="'.htmlspecialchars_uni($url).'"></script>';
+    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/thread-panel.js?v=1200';
+    return '<script defer src="'.htmlspecialchars_uni($url).'"></script>';
+}
+
+function af_advancedcombatsystem_gm_css(): string
+{
+    global $mybb;
+    if (!function_exists('af_frontend_asset_allowed') || !af_frontend_asset_allowed('advancedcombatsystem','presentation',null,['has_acs_panel'=>true])) return '';
+    $url = rtrim($mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/modal-gm.css?v=1200';
+    return '<link rel="stylesheet" href="'.htmlspecialchars_uni($url).'">';
 }

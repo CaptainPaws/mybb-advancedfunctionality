@@ -25,10 +25,14 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = { DraftModel, planning, canEdit, availableAP };
   if (typeof document === 'undefined') return;
 
+  if (window.AFACSBuilder) return;
+  const mounts = new WeakMap();
   let builderInstance = 0;
   function mount(root) {
     if (root.dataset.acsMounted) return;
     root.dataset.acsMounted = '1';
+    const lifecycle = new AbortController();
+    const listener = {signal: lifecycle.signal};
     const targetGroup = 'acs-builder-target-' + (++builderInstance);
     const config = JSON.parse(root.querySelector('[data-acs-builder-config]').textContent);
     let ctx = config.context, model = new DraftModel(), editing = null, loading = false, saving = false, previewBusy = false, epoch = 0, sealView = null, editable = canEdit(ctx);
@@ -48,6 +52,18 @@
       root.dispatchEvent(new CustomEvent('acs:version-changed',{bubbles:true}));
       saveStatus();status('Состояние боя изменилось. Текст и действия сохранены. Перед следующей операцией будут обновлены разрешённые сведения.',true);overview();
     }, e => status(e.message || 'Обновление недоступно. Текст и действия сохранены.',true));
+    mounts.set(root, () => {
+      localSave();
+      lifecycle.abort();
+      versions?.dispose();
+      clearTimeout(autosaveTimer);
+      clearTimeout(validationTimer);
+      delete root.acsBuilder;
+      delete root.dataset.acsMounted;
+    });
+    function notifyCommit() {
+      root.dispatchEvent(new CustomEvent('acs:committed', {bubbles: true, detail: {tid: ctx.tid, sid: ctx.session_id}}));
+    }
     async function ensureCurrent(reason) {
       if(versionBusy)throw new Error('Проверка состояния уже выполняется. Дождитесь её ответа; текст и действия сохранены.');
       if(!versions)throw new Error('Компонент обновления ACS недоступен. Текст и действия сохранены; проверьте разрешение assets.');
@@ -85,7 +101,7 @@
     }
     function scheduleSave() {
       clearTimeout(autosaveTimer);
-      if (!initialized || composing || frozen || autosaveBlocked || !editable || model.pending || model.sealPending || !model.dirty) return;
+      if (lifecycle.signal.aborted || !initialized || composing || frozen || autosaveBlocked || !editable || model.pending || model.sealPending || !model.dirty) return;
       saveState = 'dirty'; saveStatus();
       autosaveTimer = setTimeout(() => { if (!loading && !saving && editing === null && !frozen) save().catch(e => {saveState='error';autosaveBlocked=true;saveStatus();status(e.message,true);}); else scheduleSave(); }, 1200);
     }
@@ -109,8 +125,8 @@
     function invalidate(checkSequence = false) { if(checkSequence && sealView)sealView.confirmed=false;part('preview').replaceChildren(); epoch++; localSave(); if (model.dirty && !['saving','error','conflict'].includes(saveState))saveState='dirty';saveStatus();scheduleSave(); if (checkSequence) validateSequence(); }
     window.addEventListener('storage', event => {
       if(event.key===savedKey() && model.id)try {const other=JSON.parse(event.newValue);if(other.id===model.id && other.version!==model.version){observedVersion=other.version;autosaveBlocked=true;clearTimeout(autosaveTimer);saveState='conflict';saveStatus();status('Другая вкладка сохранила новую версию. Ваш текст сохранён отдельно; восстановите серверный черновик явно.',true);}}catch(_){}
-    });
-    document.addEventListener('visibilitychange',localSave);
+    }, listener);
+    document.addEventListener('visibilitychange',localSave,listener);
     root.dispatchEvent(new CustomEvent('acs:open'));
 
     root.addEventListener('acs:compositionstart',()=>{composing=true;clearTimeout(autosaveTimer);});
@@ -385,7 +401,7 @@
       const values = new URLSearchParams(body);
       if (post) values.set('my_post_key', config.post_key);
       const url = config.endpoint + '&op=' + encodeURIComponent(op);
-      const response = await fetch(post ? url : url + '&' + values, { method: post ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', ...(post ? { body: values } : {}) });
+      const response = await fetch(post ? url : url + '&' + values, { method: post ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', signal: lifecycle.signal, ...(post ? { body: values } : {}) });
       let result;
       try { result = await response.json(); } catch (_) { throw new Error('Сервер не подтвердил ответ. Локальные действия и текст сохранены; для неизвестной операции повторяйте прежний запрос.'); }
       if (!result.ok) { const e = new Error((result.error?.message || 'Запрос не выполнен.')+(result.error?.error_id?' · error_id='+result.error.error_id:'')); e.code = result.error?.code;e.category=result.error?.category;e.error_id=result.error?.error_id; throw e; }
@@ -448,6 +464,7 @@
       const pending = copy(model.sealPending); saving = true; localSave(); overview();
       try {
         const operationResult = await api(routes[pending.command], pending.body, true); versions?.reset();
+        if (['release-prepared','publish-prepared'].includes(pending.command)) notifyCommit();
         if (pending.command === 'release-prepared') { model.sealPending = null; localSave(); await refresh(); status(operationResult.cost_state === 'settled' ? 'Неиспользованный резерв освобождён. AP и оплаченные стоимости сохранены.' : 'Резерв сохраняется: release не подтверждён, требуется восстановление прав или Inventory.', operationResult.cost_state !== 'settled'); return; }
         if (pending.command === 'publish-prepared') { model.sealPending = null; model.dirty = false; localSave(); const preRound = planning(ctx); if (preRound) { model = new DraftModel(); sealView = null; field('prose').value = ''; part('seal').replaceChildren(); } await refresh(); status(preRound ? 'Подготовка оплачена. AP закреплены в бюджете первого раунда; новый пост не создан.' : 'Подготовка оплачена и зарегистрирована. Ход группы закрыт; новый пост не создан.', false); return; }
         model.sealPending = null; localSave(); saving = false;
@@ -554,7 +571,7 @@
         }
       } catch (e) { status(e.message, true); }
     });
-    window.addEventListener('beforeunload', event => { if (model.dirty || model.pending || model.sealPending) { localSave(); event.preventDefault(); event.returnValue = ''; } });
+    window.addEventListener('beforeunload', event => { if (model.dirty || model.pending || model.sealPending) { localSave(); event.preventDefault(); event.returnValue = ''; } }, listener);
     (async () => {
       try {
         // The server is the only source of restored mechanics and sealed history.
@@ -569,6 +586,12 @@
       } catch (e) { status(e.message, true);saveState='error';autosaveBlocked=true;saveStatus(); }
     })();
   }
-  function init() { document.querySelectorAll('[data-acs-builder]').forEach(root => { try { mount(root); } catch (_) { const s = root.querySelector('[data-part="status"]'); if (s) s.textContent = 'Не удалось открыть конструктор. Обновите страницу.'; } }); }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true }); else init();
+  function init(container = document) { container.querySelectorAll('[data-acs-builder]').forEach(root => { try { mount(root); } catch (_) { const s = root.querySelector('[data-part="status"]'); if (s) s.textContent = 'Не удалось открыть конструктор. Обновите страницу.'; } }); }
+  function unmount(root) {
+    mounts.get(root)?.();
+    mounts.delete(root);
+  }
+  window.AFACSBuilder = {init, unmount};
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init(), { once: true });
+  else init();
 })();

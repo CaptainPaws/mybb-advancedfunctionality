@@ -36,3 +36,11 @@
 .af-acs-builder summary{cursor:pointer;font-weight:600;padding:.4rem}
 .af-acs-builder [data-step-heading]{scroll-margin-block-start:1rem}
 @media(max-width:48rem){.af-acs-builder{padding:.75rem}.af-acs-builder .acs-catalog,.af-acs-builder .acs-targets,.af-acs-builder .acs-catalog-filters{grid-template-columns:minmax(0,1fr)}.af-acs-builder .acs-step-controls button{flex:1 1 auto}.af-acs-builder .acs-step-controls [data-part=step-status]{flex-basis:100%;text-align:center;order:-1}.af-acs-builder [data-part=queue] button,.af-acs-builder [data-part=target-order] button{min-height:2.75rem}}
+
+.af-acs-builder{color-scheme:dark;background:var(--atf-color-surface-raised,#172435);border-color:var(--atf-color-border,#536473)}
+.af-acs-builder :is(button,select,textarea,input:not([type=checkbox]):not([type=radio])){
+  border:1px solid var(--atf-color-border,#536473);border-radius:var(--atf-radius-md,.5rem);
+  background:var(--atf-color-surface,#142133);color:var(--atf-color-text,#dbe5ee)
+}
+.af-acs-builder :is(select,textarea){padding:.45rem}
+.af-acs-builder button:not(:disabled):hover{filter:brightness(1.2)}
