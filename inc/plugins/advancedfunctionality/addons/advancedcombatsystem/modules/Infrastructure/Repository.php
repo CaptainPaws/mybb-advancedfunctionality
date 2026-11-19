@@ -79,24 +79,8 @@ class AF_ACS_Repository
         if (!af_is_addon_enabled('advancedcombatsystem') || !empty($GLOBALS['af_acs_deactivated'])) {
             throw new RuntimeException('ACS_DISABLED');
         }
-        $rows = $this->sql('SELECT version,status,step,checksum FROM '.$this->table('schema_migrations'))['rows'];
-        $known = [];
-        $names = [];
-        foreach (['001_foundation','002_entities','003_encounters','004_round_roster','005_clock_resources','006_drafts','007_sealed_actions','008_publication_journal','009_combat_commit','010_status_instances','011_reaction_registry','012_barrier_pools','013_equipment','014_custody','015_delegations','016_environment_objects','017_awareness','018_cooperation','019_spatial','020_cover','021_prepared_actions','022_pre_round_commitments','023_encounter_resolutions','024_loot_pools','025_loot_claims','026_rewards','027_achievements_reviews','028_archive_policies','029_statistics'] as $version) {
-            $file = __DIR__.'/../../migrations/'.$version.'.php';
-            $migration = require $file;
-            $known[$version] = ['checksum'=>hash_file('sha256',$file),'steps'=>count($migration['tables'])];
-            foreach (array_keys($migration['tables']) as $name) $names[]=$this->prefix.'af_acs_'.$name;
-        }
-        if (count($rows)!==count($known)) throw new RuntimeException('ACS_SCHEMA_NOT_READY');
-        foreach ($rows as $row) {
-            $expected=$known[$row['version']]??null;
-            if (!$expected || $row['status']!=='completed' || (int)$row['step']!==$expected['steps']
-                || !hash_equals($expected['checksum'],$row['checksum'])) throw new RuntimeException('ACS_SCHEMA_NOT_READY');
-        }
-        $placeholders=implode(',',array_fill(0,count($names),'?'));
-        $count=$this->sql('SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('.$placeholders.') AND ENGINE=? AND TABLE_COLLATION=? AND ROW_FORMAT=?',[...$names,'InnoDB','utf8mb4_unicode_ci','Dynamic'])['rows'][0]['n'];
-        if ((int)$count!==count($names)) throw new RuntimeException('ACS_SCHEMA_NOT_TRANSACTIONAL');
+        require_once __DIR__.'/../Administration/Migrations.php';
+        (new AF_ACS_Migrations($this->connection))->assertWritableSchema();
     }
 
     /** Conservative session-wide barrier until publication dependencies can be narrowed safely. */
@@ -288,7 +272,7 @@ class AF_ACS_Repository
     /** Diagnostics deliberately accept no arbitrary SQL, stack trace or payload. */
     public function recordDiagnostic(string $requestId, string $category, string $operation, string $phase): string
     {
-        if (!in_array($category, ['VALIDATION_ERROR', 'STATE_CONFLICT', 'PERMISSION_DENIED', 'DEPENDENCY_ERROR', 'INTERNAL_ERROR', 'RECOVERY_REQUIRED'], true)) { throw new InvalidArgumentException('ACS_INVALID_CATEGORY'); }
+        if (!in_array($category, ['VALIDATION_ERROR', 'STATE_CONFLICT', 'PERMISSION_DENIED', 'DEPENDENCY_ERROR', 'INTERNAL_ERROR', 'RECOVERY_REQUIRED', 'MAINTENANCE'], true)) { throw new InvalidArgumentException('ACS_INVALID_CATEGORY'); }
         $id = bin2hex(random_bytes(16));
         $this->transactions->run(function () use ($id, $requestId, $category, $operation, $phase) {
             $this->sql('INSERT INTO '.$this->table('diagnostics').' (error_id,request_id,category,operation,phase,created_at,details_json) VALUES (?,?,?,?,?,?,?)', [$id, self::key($requestId, 96), $category, self::key($operation, 64), self::key($phase, 64), time(), self::json(['schema_version' => 1, 'code' => $category])]);
@@ -306,7 +290,7 @@ class AF_ACS_Repository
             foreach (['error_id', 'operation', 'phase'] as $field) {
                 if (!preg_match('/\A[a-z0-9:_.-]{1,64}\z/D', $row[$field])) { $row[$field] = 'redacted'; }
             }
-            if (!in_array($row['category'], ['VALIDATION_ERROR', 'STATE_CONFLICT', 'PERMISSION_DENIED', 'DEPENDENCY_ERROR', 'INTERNAL_ERROR', 'RECOVERY_REQUIRED'], true)) { $row['category'] = 'INTERNAL_ERROR'; }
+            if (!in_array($row['category'], ['VALIDATION_ERROR', 'STATE_CONFLICT', 'PERMISSION_DENIED', 'DEPENDENCY_ERROR', 'INTERNAL_ERROR', 'RECOVERY_REQUIRED', 'MAINTENANCE'], true)) { $row['category'] = 'INTERNAL_ERROR'; }
         }
         return $rows;
     }

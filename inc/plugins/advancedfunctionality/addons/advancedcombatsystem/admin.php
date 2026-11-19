@@ -45,6 +45,7 @@ class AF_Admin_Advancedcombatsystem
                 $command = $mybb->get_input('acs_command');
                 if ($command === 'install') { $success = af_advancedcombatsystem_install(); }
                 elseif ($command === 'upgrade') { $success = af_advancedcombatsystem_upgrade(); }
+                elseif ($command === 'confirm_redeploy') { $success = af_advancedcombatsystem_confirm_redeploy($mybb->get_input('acs_redeploy_evidence')); }
                 elseif ($command === 'uninstall') { $success = af_advancedcombatsystem_uninstall($mybb->get_input('acs_confirmation')); }
                 else { throw new RuntimeException('ACS_UNKNOWN_COMMAND'); }
                 if (!$success) { throw new RuntimeException('ACS_LIFECYCLE_FAILED'); }
@@ -74,9 +75,10 @@ class AF_Admin_Advancedcombatsystem
         $table->construct_row();
         $table->output(self::esc($lang->af_advancedcombatsystem_name));
         echo '<p>'.self::esc($lang->af_advancedcombatsystem_notice).'</p>';
-        self::summary($diagnostics->schema());
+        $state = $diagnostics->schema();
+        self::summary($state);
         AF_ACS_AcpSections::settings();
-        self::commands();
+        self::commands($state, $auth);
     }
 
     /** Compact general view; detailed ledger belongs only to Diagnostics. */
@@ -87,12 +89,37 @@ class AF_Admin_Advancedcombatsystem
         $table->construct_header('Проверка');$table->construct_header('Состояние');
         foreach([
             'Схема ACS'=>($state['schema_version']??'Не установлена').' / требуется '.($state['required_version']??'Не зарегистрирована'),
-            'Миграции'=>'Завершено: '.$completed.'; записей ledger: '.count($state['migrations']).'. '.($state['ready']?'Проверка целостности: READY.':'Проверка целостности: BLOCKED.'),
-            'Блокирующие ошибки схемы'=>$state['ready']?'Не обнаружены при read-only проверке.':($state['error']??'ACS_SCHEMA_NOT_READY'),
+            'Миграции'=>'Завершено: '.$completed.'; записей ledger: '.count($state['migrations']).'.',
+            ...self::migrationDetails($state),
             'Боевая публикация'=>'BLOCKED / publication_enabled=false. Installed acceptance: NOT_VERIFIED. IC-MYBB-1 и отдельное решение администратора обязательны.',
         ] as $name=>$value){$table->construct_cell(self::esc($name));$table->construct_cell(self::esc($value));$table->construct_row();}
         $table->output('Состояние ACS');
         echo '<p><a href="index.php?module=advancedfunctionality&amp;af_view=advancedcombatsystem&amp;acs_section=diagnostics">Диагностика: ledger, ошибки и версии</a> · <a href="index.php?module=advancedfunctionality&amp;af_view=advancedcombatsystem&amp;acs_section=publication">Совместимость публикации</a></p>';
+    }
+
+    private static function migrationDetails(array $state): array
+    {
+        $recommendation = match ($state['error']) {
+            null => 'Схема готова к штатной активации.',
+            'ACS_NOT_INSTALLED' => 'Выполните штатную установку ACS.',
+            'ACS_MIGRATION_CHECKSUM_CONFIRMATION_REQUIRED' => 'Сверка исходников подтвердила замену LF ↔ CRLF. Подтвердите развёртывание в разделе «Основные», затем повторите активацию.',
+            'ACS_MIGRATION_CHECKSUM_UNVERIFIED' => 'Разверните проверенный комплект файлов с контрольными суммами из исходной поставки. Структура БД сама по себе не подтверждает совместимость PHP.',
+            'ACS_MIGRATION_CHECKSUM_WITH_PENDING' => 'Восстановите исходные файлы и завершите миграции через штатное обновление.',
+            'ACS_MIGRATION_INCOMPLETE' => 'Проверьте прерванную установку. Для известного журнала и исходных файлов используйте штатное обновление.',
+            'ACS_UNKNOWN_MIGRATION' => 'Разверните полный выпуск, которому принадлежит журнал миграций.',
+            'ACS_MIGRATION_FILE_UNAVAILABLE', 'ACS_MIGRATION_FILE_INVALID', 'ACS_MIGRATION_FILE_CHANGED' => 'Повторно загрузите полный проверенный комплект ACS.',
+            'ACS_MIGRATION_OBLIGATIONS_UNRESOLVED' => 'Восстановите исходные файлы и проверьте незавершённые или повреждённые обязательства штатными средствами ACS.',
+            default => 'Передайте владельцу проекта код ошибки и место несоответствия для сверки схемы, журнала или окружения.',
+        };
+        $location = implode(' / ', array_filter([$state['version'], $state['object']]));
+        return [
+            'Состояние миграций' => $state['status'].($state['error'] ? ' / '.$state['error'] : ''),
+            'Структура схемы' => $state['structure'].($location ? ' / '.$location : ''),
+            'Изменившиеся checksum' => $state['checksum_versions']
+                ? implode(', ', $state['checksum_versions']).($state['confirmed'] ? ' (развёртывание подтверждено)' : '')
+                : '—',
+            'Рекомендация' => $recommendation,
+        ];
     }
 
     private static function engineVersions(): void
@@ -119,10 +146,14 @@ class AF_Admin_Advancedcombatsystem
         $table = new Table;
         $table->construct_header(self::esc($lang->af_advancedcombatsystem_schema));
         $table->construct_header(self::esc($lang->af_advancedcombatsystem_compatibility));
-        $table->construct_cell(self::esc($state['schema_version'] ?? $lang->af_advancedcombatsystem_unavailable));
+        $table->construct_cell(self::esc(($state['schema_version'] ?? $lang->af_advancedcombatsystem_unavailable)
+            .' / '.($state['required_version'] ?? $lang->af_advancedcombatsystem_unavailable)));
         $table->construct_cell(self::esc($state['error'] ?? implode(' / ', $state['database'] ?? [])));
         $table->construct_row();
         $table->output('AdvancedCombatSystem');
+        foreach (self::migrationDetails($state) as $label => $value) {
+            echo '<p><strong>'.self::esc($label).'</strong> '.self::esc($value).'</p>';
+        }
         echo '<p>'.self::esc($lang->af_advancedcombatsystem_migrations).'</p><ul>';
         foreach ($state['migrations'] as $migration) {
             echo '<li>'.self::esc($migration['version'].' / '.$migration['status'].' / '.$migration['step'].' / '.($migration['error_id'] ?? '—')).'</li>';
@@ -130,10 +161,17 @@ class AF_Admin_Advancedcombatsystem
         echo '</ul>';
     }
 
-    private static function commands(): void
+    private static function commands(array $state, AF_ACS_AuthorizationService $auth): void
     {
         global $lang, $mybb;
         $url = 'index.php?module=advancedfunctionality&amp;af_view=advancedcombatsystem&amp;acs_section=main';
+        if ($state['confirmation'] !== null && $auth->decision('admin.schema.manage')['allowed'] && $auth->decision('admin.lifecycle')['allowed']) {
+            echo '<form method="post" action="'.$url.'">'
+                .'<input type="hidden" name="my_post_key" value="'.self::esc($mybb->post_code).'">'
+                .'<input type="hidden" name="acs_command" value="confirm_redeploy">'
+                .'<input type="hidden" name="acs_redeploy_evidence" value="'.self::esc($state['confirmation']).'">'
+                .'<button type="submit" class="submit_button">Подтвердить повторное развёртывание ACS</button></form>';
+        }
         foreach (['install', 'upgrade', 'uninstall'] as $command) {
             $label = 'af_advancedcombatsystem_'.$command;
             echo '<form method="post" action="'.$url.'">'
