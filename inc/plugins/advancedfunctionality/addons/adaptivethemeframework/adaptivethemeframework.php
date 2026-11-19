@@ -1564,12 +1564,12 @@ function af_adaptivethemeframework_compose_postbit(array &$post): void
     }
 }
 
-function af_adaptivethemeframework_post_meta_actions(string $count, string $actions, string $permalink = ''): string
+function af_adaptivethemeframework_post_meta_actions(?string $count, string $actions): string
 {
-    return '<span class="atf-post__char-count" title="символов в посте" data-af-title="символов в посте">'
+    return ($count === null ? '' : '<span class="atf-post__char-count" title="символов в посте" data-af-title="символов в посте">'
         .'<i class="fa-solid fa-file-lines" aria-hidden="true"></i><span class="atf-post__char-count-value">'
-        .$count.'</span><span class="atf-post__char-count-label">символов</span></span>'.$permalink
-        .($actions !== '' || $permalink === '' ? '<div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">'.$actions.'</div>' : '');
+        .$count.'</span><span class="atf-post__char-count-label">символов</span></span>')
+        .'<div class="atf-post__management postbit_buttons" aria-label="Управление сообщением">'.$actions.'</div>';
 }
 
 /** Register MyBB-owned thread data which a future showthread layout composes. */
@@ -1776,7 +1776,8 @@ function af_adaptivethemeframework_select_first_post_template(array &$post): voi
         'dateline' => (int)($post['dateline'] ?? 0),
         'inline' => $inlineCheck.($modbit !== $inlineCheck ? $modbit : ''),
         'actions' => (string)($post['af_atf_slots']['post.actions'] ?? ''),
-        'signature' => (string)($post['signature'] ?? ''),
+        'count' => function_exists('af_atf_get_thread_display_char_count')
+            ? af_atf_get_thread_display_char_count($tid, (int)$fid) : null,
         'service' => $service,
     ];
     $GLOBALS['af_atf_first_post_template'] = ['name'=>$name, 'source'=>$source];
@@ -1804,20 +1805,24 @@ function af_adaptivethemeframework_thread_author(array $thread, ?array $firstPos
     $created = $firstPost['dateline'] ?? (int)($thread['dateline'] ?? 0);
     $date = $firstPost['date'] ?? my_date('relative', $created);
     $permalink = $url !== '' ? '<a class="atf-thread__original" href="'.$url.'" title="Первое сообщение" aria-label="Первое сообщение">#1</a>' : '';
-    $left = '<div class="atf-thread__author-identity">'
-        .'<div class="atf-thread__author-avatar">'.$avatar['af_atf_primary_avatar'].'</div>'
-        .'<span class="atf-thread__author-name">'.$identity.'</span>'
-        .'<time class="atf-thread__author-date" datetime="'.gmdate('c', $created).'">'.$date.'</time></div>';
-    // The verified placeholder has no visible characters of its own.
-    $right = $firstPost === null ? $permalink : af_adaptivethemeframework_post_meta_actions(
-        '0', $firstPost['actions'], $permalink.$firstPost['inline']
-    );
-    $signature = trim((string)($firstPost['signature'] ?? ''));
-    return '<div class="post_head atf-post__topbar atf-thread__author">'.$left
-        .'<div class="atf-thread__author-meta">'.$right.'</div></div>'
-        .($firstPost['service'] ?? '')
-        .($signature !== '' ? '<details class="atf-thread__author-signature"><summary>Подпись автора</summary>'.$signature.'</details>' : '');
+    $identityHtml = '<div class="atf-thread__author-avatar">'.$avatar['af_atf_primary_avatar'].'</div>'
+        .'<span class="atf-thread__author-name">'.$identity.'</span>';
+    if ($firstPost === null) {
+        return '<div class="post_head atf-post__topbar atf-thread__author"><div class="atf-thread__author-identity">'
+            .$identityHtml.'<time class="atf-thread__author-date" datetime="'.gmdate('c', $created).'">'.$date.'</time></div>'
+            .'<div class="atf-thread__author-original">'.$permalink.'</div></div>';
+    }
 
+    $count = $firstPost['count'];
+    $formatted = $count === null ? null : (function_exists('my_number_format')
+        ? (string)my_number_format($count) : number_format($count, 0, '.', ' '));
+    return '<div class="atf-thread__author atf-thread__author-meta atf-post__meta-line">'
+        .'<div class="atf-thread__author-identity">'.$identityHtml.'</div>'
+        .$firstPost['inline'].'<span class="atf-post__permalink">'.$permalink.'</span>'
+        .'<time class="post_date atf-post__date" datetime="'.gmdate('c', $created).'">'
+        .'<i class="fa-solid fa-calendar-days" aria-hidden="true"></i> '.$date.'</time>'
+        .af_adaptivethemeframework_post_meta_actions($formatted, $firstPost['actions'])
+        .'</div>'.$firstPost['service'];
 }
 
 /** Compose the showthread shell after core has prepared all native values. */

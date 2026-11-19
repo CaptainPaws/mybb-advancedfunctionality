@@ -767,7 +767,7 @@ body.atf-active .atf-thread__moderation--managed .atf-thread-mod-actions button:
 }
 
 /* Thread identity and the native controls for a structured first post. */
-body.atf-active .atf-thread__header .atf-thread__author {
+body.atf-active .atf-thread__header .atf-thread__author:not(.atf-thread__author-meta) {
   position: static;
   display: flex;
   align-items: center;
@@ -796,15 +796,24 @@ body.atf-active .atf-thread__author {
   --atf-post-accent: var(--af-element-accent, var(--atf-neutral-accent));
   --atf-post-accent-soft: color-mix(in srgb, var(--atf-post-accent) 18%, transparent);
 }
-body.atf-active .atf-thread__author :is(.atf-thread__author-identity, .atf-thread__author-meta) {
+body.atf-active .atf-thread__author .atf-thread__author-identity {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--atf-space-2) var(--atf-space-3);
   min-width: 0;
 }
-body.atf-active .atf-thread__author-meta { margin-inline-start: auto; }
-body.atf-active .atf-thread__author-meta .atf-post__management { flex-wrap: wrap; float: none; }
+body.atf-active .atf-thread__author-original { margin-inline-start: auto; }
+body.atf-active .atf-thread__header .atf-thread__author-meta {
+  left: auto;
+  width: 100%;
+  margin: var(--atf-space-3) 0 0;
+  padding-block: var(--atf-space-2);
+  justify-content: flex-start;
+  text-align: start;
+  overflow: visible;
+}
+body.atf-active .atf-thread__author-meta > .atf-post__management { flex-wrap: wrap; float: none; }
 body.atf-active .atf-thread__header .atf-structured-first {
   display: contents;
 }
@@ -815,5 +824,6 @@ body.atf-active .atf-thread .atf-structured-first__meta:not(:has(> :not(:empty))
   display: none;
 }
 @media (max-width: 40rem) {
-  body.atf-active .atf-thread__author-meta { width: 100%; margin-inline-start: 0; }
+  body.atf-active .atf-thread__author-original { width: 100%; margin-inline-start: 0; }
+  body.atf-active .atf-thread__author-meta > .atf-post__management { flex-basis: 100%; margin-inline-start: 0; justify-content: flex-start; }
 }

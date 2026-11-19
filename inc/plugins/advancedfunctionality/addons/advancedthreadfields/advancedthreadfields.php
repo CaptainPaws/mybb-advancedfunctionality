@@ -6956,6 +6956,68 @@ function af_atf_resolve_element_theme_key(string $value): string
     return function_exists('af_elementtheme_resolve_key') ? af_elementtheme_resolve_key($value) : '';
 }
 
+/** Count text from the value fragments emitted by the thread field renderer. */
+function af_atf_get_thread_display_char_count(int $tid, int $fid): ?int
+{
+    $values = $GLOBALS['af_atf_display_text_values'][$tid . ':' . $fid] ?? [];
+    $parts = [];
+    foreach ($values as $html) {
+        if (!str_contains($html, '<')) {
+            $parts[] = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            continue;
+        }
+        if (!class_exists(DOMDocument::class)) {
+            return null;
+        }
+
+        $document = new DOMDocument();
+        if (!$document->loadHTML('<!doctype html><html><head><meta charset="UTF-8"></head><body>'
+            . $html . '</body></html>', LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING)) {
+            return null;
+        }
+        $body = $document->getElementsByTagName('body')->item(0);
+        if ($body === null) {
+            return null;
+        }
+        $parts[] = af_atf_display_node_text($body);
+    }
+
+    $text = preg_replace('~[\s\p{Z}\x{200B}\x{FEFF}]+~u', ' ', implode(' ', $parts));
+    if ($text === null || trim($text) === '') {
+        return null;
+    }
+    return preg_match_all('~.~us', trim($text)) ?: null;
+}
+
+function af_atf_display_node_text(DOMNode $node): string
+{
+    if ($node instanceof DOMText) {
+        return $node->data;
+    }
+    if (!$node instanceof DOMElement) {
+        return '';
+    }
+    $tag = $node->tagName;
+    $class = preg_split('~\s+~', $node->getAttribute('class'));
+    if (in_array($tag, ['script', 'style', 'template', 'noscript', 'iframe', 'object', 'svg', 'input'], true)
+        || $node->hasAttribute('hidden') || $node->getAttribute('aria-hidden') === 'true'
+        || preg_match('~(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\b~i', $node->getAttribute('style'))
+        || array_intersect($class, [
+            'af-ability-meta', 'af-atf-abilities-display-title', 'af-atf-ability-display-name-muted',
+            'af-atf-character-stats-display-title', 'af-atf-character-stats-display-label',
+            'af-atf-pointbuy-group-title', 'af-atf-pointbuy-display-label',
+        ])) {
+        return '';
+    }
+
+    $text = '';
+    foreach ($node->childNodes as $child) {
+        $text .= af_atf_display_node_text($child);
+    }
+    return in_array($tag, ['article', 'blockquote', 'br', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'hr', 'li', 'p', 'pre', 'section', 'td', 'th'], true) ? ' ' . $text . ' ' : $text;
+}
+
 function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
 {
     global $templates;
@@ -7018,6 +7080,7 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
     $wikiElement = '';
     $wikiInfoboxRows = [];
     $wikiMainSections = [];
+    $displayValues = [];
 
     // The active field registry is already in ATF sortorder. Never reorder here.
     foreach ($fields as $f) {
@@ -7050,6 +7113,9 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
             continue;
         }
         $fieldClass = 'af-atf-field af-atf-field-'.$nameClass;
+        if ($area !== 'header' || $fieldName !== 'character_element') {
+            $displayValues[] = $valueHtml;
+        }
         if ($area === 'header') {
             if ($fieldName === 'character_name' && $wikiTitle === '') {
                 $wikiTitle = $valueHtml;
@@ -7115,6 +7181,13 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
     if ($elementThemeKey !== '') {
         $elementAttribute = ' data-element-surface="application" data-element="'.htmlspecialchars_uni($elementThemeKey).'"';
         $block = preg_replace('~(<div\\b[^>]*\\bclass="[^"]*\\baf-atf-display\\b[^"]*")~i', '$1'.$elementAttribute, $block, 1) ?? $block;
+    }
+
+    // A custom template can omit any of these regions. Count only when the
+    // renderer can verify that every populated region reached the card.
+    if (str_contains($block, $wikiHeader) && str_contains($block, $wikiInfobox)
+        && str_contains($block, $wikiContent)) {
+        $GLOBALS['af_atf_display_text_values'][$cacheKey] = $displayValues;
     }
 
     // Обёртка именно “внутри поста”, чтобы можно было отдельно стилизовать
