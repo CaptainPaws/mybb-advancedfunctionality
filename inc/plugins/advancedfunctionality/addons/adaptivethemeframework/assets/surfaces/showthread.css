@@ -795,26 +795,28 @@ body.atf-active .atf-thread__author-name {
 body.atf-active .atf-thread__original {
   margin-inline-start: auto;
 }
-body.atf-active .atf-thread .atf-post[data-atf-structured-first="1"] > .atf-post__layout {
-  display: block;
-}
-body.atf-active .atf-thread [data-atf-structured-first="1"] > .atf-post__topbar > :not(.atf-post__topbar-leading),
-body.atf-active .atf-thread [data-atf-structured-first="1"] .atf-post__sidebar,
-body.atf-active .atf-thread [data-atf-structured-first="1"] .atf-post__char-count,
-body.atf-active .atf-thread [data-atf-structured-first="1"] .atf-post__message:has(> .atf-post__message-body:empty),
-body.atf-active .atf-thread [data-atf-structured-first="1"] .atf-post__footer {
-  display: none;
-}
-body.atf-active .atf-thread .atf-post[data-atf-structured-first="1"] > .atf-post__topbar {
-  position: static;
+body.atf-active .atf-thread__author .atf-thread__author-actions {
+  --atf-post-accent: var(--af-element-accent, var(--atf-neutral-accent));
+  --atf-post-accent-soft: color-mix(in srgb, var(--atf-post-accent) 18%, transparent);
+  float: none;
   display: flex;
-  padding: var(--atf-space-2);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--atf-space-2);
+  min-width: 0;
 }
-body.atf-active .atf-thread .atf-post[data-atf-structured-first="1"] > .atf-post__topbar:not(:has(.atf-post__moderation input)) {
-  display: none;
+body.atf-active .atf-thread #posts > .atf-structured-first {
+  display: contents;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
 }
-
-body.atf-active .atf-thread .post[data-atf-structured-first="1"]:not(.atf-post) > .post_author,
-body.atf-active .atf-thread .post[data-atf-structured-first="1"]:not(.atf-post) > .post_content > .post_body:empty {
+body.atf-active .atf-thread .atf-structured-first::before,
+body.atf-active .atf-thread .atf-structured-first::after { content: none; }
+body.atf-active .atf-thread .atf-structured-first__body:empty,
+body.atf-active .atf-thread .atf-structured-first__meta:not(:has(> :not(:empty))) {
   display: none;
 }
