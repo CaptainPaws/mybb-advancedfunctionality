@@ -45,7 +45,7 @@ final class AF_ACS_SessionsPage
         if($sid!=='') {
             try {
                 $view=$service->view($sid,true);$session=$view['session'];
-                echo '<h2>Сессия #'.self::esc($session['id']).'</h2><p>Тема: <a href="'.($admin?'../':'').'showthread.php?tid='.self::esc($session['tid']).'">#'.self::esc($session['tid']).'</a> · Владелец UID '.self::esc($session['owner_uid']).' · '.self::esc($session['status']).' · Версия '.self::esc($session['session_version']).'</p>';
+                echo '<h2>Сессия #'.self::esc($session['id']).'</h2><p>Тема: <a href="'.($admin?'../':'').'showthread.php?tid='.self::esc($session['tid']).'&amp;acs_panel_session='.self::esc($session['id']).'#acs-thread-panel">#'.self::esc($session['tid']).'</a> · Владелец UID '.self::esc($session['owner_uid']).' · '.self::esc($session['status']).' · Версия '.self::esc($session['session_version']).'</p>';
                 echo '<ul>';foreach($view['members'] as $member)echo '<li>UID '.self::esc($member['uid']).' — '.self::esc(self::roles()[$member['role']]??$member['role']).'</li>';echo '</ul>';
                 if($view['can_manage']) {
                     foreach(['set_role'=>'Назначить / изменить роль','remove_member'=>'Удалить участника'] as $op=>$label) {

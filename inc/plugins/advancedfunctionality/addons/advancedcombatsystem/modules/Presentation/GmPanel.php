@@ -18,52 +18,43 @@ final class AF_ACS_GmPanel
     }
     public static function submit(string $label):void
     {echo '<label>Причина <input name="reason" maxlength="1000" required></label><button type="submit">'.self::esc($label).'</button></form>';}
-    public static function setup(string $tid,string $sid=''):string
+    public static function setup(string $tid): string
     {
         global $mybb;
-        $access=new AF_ACS_SessionAccess;$service=af_advancedcombatsystem_sessions();$notice='';$creationBlocked=false;
-        if($sid!=='')return AF_ACS_EncountersPage::render($sid,$tid);
-        $thread = $access->thread($tid);
-        $fid = (int)$thread['fid'];
-        $atfForum = function_exists('af_atf_acs_forum_enabled') && af_atf_acs_forum_enabled($fid);
-        $atfSetup = $atfForum || $mybb->get_input('acs_atf_setup') === '1'
-            || (function_exists('af_atf_acs_pending_for_actor') && af_atf_acs_pending_for_actor((int)$tid, (int)$access->uid()));
-        $atfCanCreate = $atfForum && (int)$thread['visible'] === 1 && af_advancedcombatsystem_atf_can_create($fid);
-        if($mybb->request_method==='post' && $mybb->get_input('acs_encounter_op')==='session_create'){
-            try{
-                if($mybb->get_input('tid')!==$tid || !$access->canCreate())throw new RuntimeException('ACS_GM_REQUIRED');
-                $input=[];foreach(['operation_key','reason','tid','owner_uid'] as $key)$input[$key]=$mybb->get_input($key);
-                $result=$atfSetup ? af_advancedcombatsystem_atf_create($tid) : $service->command('create',$input);
-                $mybb->input['acs_encounter_op']='';$mybb->input['acs_session']=$result['session_id'];$mybb->input['gm_step']='2';
-                return '<p role="status">Сессия создана. Настройте столкновение.</p>'.AF_ACS_EncountersPage::render($result['session_id'],$tid);
-            }catch(Throwable $error){if(isset($result['session_id']))return '<p role="status">Сессия создана, но панель недоступна. <a href="'.self::esc('showthread.php?tid='.$tid.'&acs_session='.$result['session_id'].'&acs_setup=1&gm_step=2').'">Открыть созданную сессию</a>. Не создавайте её повторно.</p>';$failure=af_advancedcombatsystem_session_failure($error);$creationBlocked=in_array($failure['category'],['RECOVERY_REQUIRED','INTERNAL_ERROR'],true);$notice='<p role="alert">Создание не подтверждено. При неизвестном ответе повторяйте прежнюю форму/ключ. error_id='.self::esc($failure['error_id']).'</p>';}
-        }
-        ob_start();try{echo '<section class="af-acs-gm"><h2>Мастер столкновения · 1. Сессия</h2>'.$notice;
-        $list=$service->list($mybb->get_input('after')?:'0',$tid);echo '<ul>';
-        foreach($list['items'] as $item){$s=$item['session'];try{af_advancedcombatsystem_encounters()->context($s['id'],$tid);}catch(Throwable){continue;}echo '<li><a href="'.self::esc('showthread.php?tid='.$tid.'&acs_session='.$s['id'].'&acs_setup=1&gm_step=2').'">Сессия #'.self::esc($s['id']).' · '.self::esc(self::state($s['status'])).'</a></li>';}echo '</ul>';
-        if($list['next_after']!==null)echo '<a href="'.self::esc('showthread.php?tid='.$tid.'&acs_setup=1&after='.$list['next_after']).'">Следующие сессии</a>';
-        if ($atfSetup) {
-            global $db;
-            $repo = new AF_ACS_SessionRepository($db);
-            if ($atfCanCreate && !$repo->hasTopicSession($tid)) {
-                echo '<form method="post" action="'.self::esc('showthread.php?tid='.$tid.'&acs_setup=1&acs_atf_setup=1').'">';
-                self::fields(['acs_encounter_op'=>'session_create','tid'=>$tid,'my_post_key'=>$mybb->post_code]);
-                echo '<p>Сессия будет привязана к текущей теме. Повтор использует прежний ключ.</p><button type="submit">Подтвердить создание сессии</button></form>';
-            } elseif (!$atfCanCreate) {
-                echo '<p>Создание сессии через ATF недоступно по текущим правам или настройкам форума.</p>';
+        $notice = '';
+        if ($mybb->request_method === 'post' && $mybb->get_input('acs_encounter_op') === 'session_create') {
+            try {
+                if ($mybb->get_input('tid') !== $tid) throw new RuntimeException('ACS_THREAD_UNAVAILABLE');
+                $result = af_advancedcombatsystem_atf_create($tid);
+                $mybb->input['acs_encounter_op'] = '';
+                $mybb->input['acs_session'] = $result['session_id'];
+                $mybb->input['gm_step'] = '2';
+                return '<p role="status">Сессия создана. Настройте столкновение.</p>'
+                    .AF_ACS_EncountersPage::render($result['session_id'],$tid);
+            } catch (Throwable $error) {
+                if (isset($result['session_id'])) {
+                    $url = 'showthread.php?tid='.$tid.'&acs_session='.$result['session_id'].'&acs_setup=1&gm_step=2#acs-thread-panel';
+                    return '<p role="status">Сессия создана. <a href="'.self::esc($url).'">Открыть созданную сессию</a>.</p>';
+                }
+                $failure = af_advancedcombatsystem_session_failure($error);
+                $notice = '<p role="alert">Создание не подтверждено. При неизвестном ответе повторяйте прежнюю форму/ключ. error_id='.self::esc($failure['error_id']).'</p>';
             }
-        } elseif ($access->canCreate() && !$creationBlocked) {
-            echo '<form method="post" action="'.self::esc('showthread.php?tid='.$tid.'&acs_setup=1').'">';
-            self::fields(['acs_encounter_op'=>'session_create','tid'=>$tid,'owner_uid'=>$access->uid(),'my_post_key'=>$mybb->post_code,'operation_key'=>bin2hex(random_bytes(16))]);
-            echo '<p>Новая сессия будет привязана к этой теме; владелец — текущий пользователь. Чужие игровые источники не получают новых разрешений.</p>';self::submit('Создать сессию');
         }
-        echo '<p>Выбор и создание сессии не запускают бой.</p></section>';return ob_get_clean();}catch(Throwable $error){ob_end_clean();throw $error;}
+
+        ob_start();
+        echo '<section class="af-acs-gm"><h2>Мастер столкновения · 1. Сессия</h2>'.$notice;
+        echo '<form method="post" action="'.self::esc('showthread.php?tid='.$tid.'&acs_setup=1&acs_atf_setup=1#acs-thread-panel').'">';
+        self::fields(['acs_encounter_op'=>'session_create','tid'=>$tid,'my_post_key'=>$mybb->post_code]);
+        echo '<p>Сессия будет привязана к текущей теме. Повтор использует прежний ключ.</p>';
+        echo '<button type="submit">Подтвердить создание сессии</button></form></section>';
+        return ob_get_clean();
     }
+
     public static function wizard(string $base,string $sid,string $eid,int $step,string $tid):void
     {
         $labels=['Сессия','Столкновение','Участники','Проверка','Предпросмотр состава','Запуск'];
         echo '<nav aria-label="Мастер создания столкновения"><ol class="af-acs-gm__steps">';
-        foreach($labels as $i=>$label){$n=$i+1;$url=$n===1?'showthread.php?'.http_build_query(['tid'=>$tid,'acs_setup'=>1]):$base.($eid!==''?'&acs_encounter='.$eid:'').'&acs_setup=1&gm_step='.$n;
+        foreach($labels as $i=>$label){$n=$i+1;$url=$n===1?'showthread.php?'.http_build_query(['tid'=>$tid,'acs_panel_session'=>$sid]).'#acs-thread-panel':$base.($eid!==''?'&acs_encounter='.$eid:'').'&acs_setup=1&gm_step='.$n;
             echo '<li><a href="'.self::esc($url).'"'.($n===$step?' aria-current="step"':'').'>'.$n.'. '.self::esc($label).'</a></li>';}
         echo '</ol></nav><p>Каждое изменение сохраняется отдельной командой. Переход между шагами не выполняет регистрацию, запуск или повтор механики.</p>';
     }

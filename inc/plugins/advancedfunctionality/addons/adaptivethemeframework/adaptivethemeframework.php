@@ -22,7 +22,7 @@ define('AF_ADAPTIVETHEMEFRAMEWORK_ID', 'adaptivethemeframework');
 define('AF_ADAPTIVETHEMEFRAMEWORK_BASE', AF_ADDONS . AF_ADAPTIVETHEMEFRAMEWORK_ID . '/');
 define('AF_ADAPTIVETHEMEFRAMEWORK_TEMPLATE_TABLE_NAME', 'af_adaptivethemeframework_template_ownership');
 define('AF_PRESENTATION_PREFERENCES_TABLE_NAME', 'af_presentation_preferences');
-define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.32.12');
+define('AF_ADAPTIVETHEMEFRAMEWORK_VERSION', '0.32.13');
 
 /** Load activation compatibility callbacks declared by enabled AF addons. */
 function af_adaptivethemeframework_discover_compatibility_providers(): void
@@ -1904,7 +1904,7 @@ function af_adaptivethemeframework_compose_showthread(): void
     global $thread, $fid, $header, $posts, $quickreply, $moderationoptions, $pollbox,
            $multipage, $printthread, $sendthread, $addremovesubscription, $addpoll, $usersbrowsing;
     global $atf_thread_breadcrumbs, $atf_thread_meta, $atf_thread_fields,
-           $atf_thread_before_posts, $atf_thread_after_posts;
+           $atf_thread_before_posts, $atf_thread_after_posts, $atf_thread_toolbar_actions, $atf_thread_before_quick_reply;
 
     if (!is_array($thread)) {
         return;
@@ -1952,6 +1952,8 @@ function af_adaptivethemeframework_compose_showthread(): void
     }
     $atf_thread_before_posts = af_adaptivethemeframework_render_slot('thread.before_posts', $context);
     $atf_thread_after_posts = af_adaptivethemeframework_render_slot('thread.after_posts', $context);
+    $atf_thread_before_quick_reply = af_adaptivethemeframework_render_slot('thread.before_quick_reply', $context);
+    $atf_thread_toolbar_actions = af_adaptivethemeframework_render_slot('thread.toolbar_actions', $context);
 }
 
 /** Remove the table cell owned by a stock child template, retaining its body. */
@@ -2593,7 +2595,8 @@ function af_adaptivethemeframework_slots(): array
         'post.author.rail', 'post.author.plaque', 'post.author.character', 'post.author.character_name',
         'post.post_counter', 'post.before_body', 'post.after_body', 'post.actions',
         'thread.breadcrumbs', 'thread.meta', 'thread.atf_fields',
-        'thread.before_posts', 'thread.after_posts', 'forum.lastposter_avatar',
+        'thread.before_posts', 'thread.after_posts', 'thread.before_quick_reply', 'thread.toolbar_actions',
+        'forum.lastposter_avatar',
         'thread.lastposter_avatar', 'thread.meta_chips',
         'modcp.global_navigation', 'modcp.local_navigation',
         'modcp.before_content', 'modcp.after_content', 'modcp.notice', 'modcp.actions',
