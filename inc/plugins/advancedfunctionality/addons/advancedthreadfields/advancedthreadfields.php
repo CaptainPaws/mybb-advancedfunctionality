@@ -1088,7 +1088,9 @@ function af_atf_kb_origin_variants_endpoint(): void
         return;
     }
 
-    $rows = function_exists('af_kb_get_origin_variants') ? af_kb_get_origin_variants($originKey, true) : [];
+    $rows = function_exists('af_kb_get_origin_variants') && af_atf_kb_get_entry('arpg_origin', $originKey)
+        ? af_kb_get_origin_variants($originKey, true)
+        : [];
     $items = [];
     foreach ($rows as $row) {
         $entry = is_array($row['variant'] ?? null) ? $row['variant'] : [];
@@ -3675,21 +3677,15 @@ function af_atf_build_input_html(array $field, string $value): string
     };
 
     if ($fieldName === 'character_origin_variant') {
-        $originKey = '';
-        $contextFields = (array)($GLOBALS['af_atf_context_fields'] ?? []);
+        $contextFields = array_column((array)($GLOBALS['af_atf_context_fields'] ?? []), 'fieldid', 'name');
         $contextValues = (array)($GLOBALS['af_atf_context_values'] ?? []);
-        foreach ($contextFields as $contextField) {
-            $contextName = (string)($contextField['name'] ?? '');
-            if ($contextName === 'character_origin' || ($originKey === '' && $contextName === 'character_race')) {
-                $originKey = trim((string)($contextValues[(int)($contextField['fieldid'] ?? 0)] ?? ''));
-                if ($contextName === 'character_origin' && $originKey !== '') {
-                    break;
-                }
-            }
-        }
+        $originKey = af_atf_effective_origin_key([
+            'character_origin' => $contextValues[$contextFields['character_origin'] ?? 0] ?? '',
+            'character_race' => $contextValues[$contextFields['character_race'] ?? 0] ?? '',
+        ]);
 
         $list = [];
-        if ($originKey !== '' && function_exists('af_kb_get_origin_variants')) {
+        if (function_exists('af_kb_get_origin_variants') && af_atf_kb_get_entry('arpg_origin', $originKey)) {
             foreach (af_kb_get_origin_variants($originKey, true) as $relation) {
                 $entry = is_array($relation['variant'] ?? null) ? $relation['variant'] : [];
                 if (!empty($entry['key'])) {
@@ -3700,13 +3696,13 @@ function af_atf_build_input_html(array $field, string $value): string
                 }
             }
         }
-        // Keep the submitted/prefilled key in the select until the dependent
-        // endpoint validates it. Clearing it here loses valid values when the
-        // origin field is rendered later or a legacy registry orders it after
-        // the variant.
+        $selected = in_array($value, array_column($list, 'key'), true) ? $value : '';
         $base = rtrim((string)$mybb->settings['bburl'], '/');
-        $html = '<div class="af-atf-origin-variant" data-endpoint="' . htmlspecialchars_uni($base . '/misc.php?action=af_atf_kb_origin_variants') . '" data-selected="' . $safeValue . '">';
-        $html .= $renderKbSelect($nameAttr, $value, $list);
+        $html = '<div class="af-atf-origin-variant" data-origin="' . htmlspecialchars_uni($originKey) . '"'
+            . ' data-origin-field="' . (int)($contextFields['character_origin'] ?? 0) . '"'
+            . ' data-race-field="' . (int)($contextFields['character_race'] ?? 0) . '"'
+            . ' data-endpoint="' . htmlspecialchars_uni($base . '/misc.php?action=af_atf_kb_origin_variants') . '">';
+        $html .= $renderKbSelect($nameAttr, $selected, $list);
         $html .= '</div>';
         return $html;
     }
@@ -5590,6 +5586,24 @@ function af_atf_handle_application_archive_move(array $args): void
     af_atf_archive_linked_canon_application($tid);
 }
 
+function af_atf_effective_origin_key(array $values): string
+{
+    $origin = $values['character_origin'] ?? '';
+    $race = $values['character_race'] ?? '';
+    $origin = is_scalar($origin) ? strtolower(trim((string)$origin)) : '';
+    return $origin !== '' ? $origin : (is_scalar($race) ? strtolower(trim((string)$race)) : '');
+}
+
+function af_atf_origin_variant_matches(string $originKey, string $variantKey): bool
+{
+    if ($originKey === '' || $variantKey === '' || !function_exists('af_kb_get_origin_parent_for_variant')
+        || !af_atf_kb_get_entry('arpg_origin_variant', $variantKey)) {
+        return false;
+    }
+    $parent = af_kb_get_origin_parent_for_variant($variantKey, true);
+    return ($parent['origin']['key'] ?? '') === $originKey;
+}
+
 function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [], array $context = []): array
 {
     global $db;
@@ -5619,6 +5633,11 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         return $result;
     }
 
+    if (!function_exists('af_kb_get_origin_parent_for_variant')) {
+        $result['reason'] = 'kb_origin_relations_unavailable';
+        return $result;
+    }
+
     $entryLink = [];
     if (function_exists('af_charactersheets_get_accept_row')) {
         $accept = af_charactersheets_get_accept_row($tid);
@@ -5634,6 +5653,7 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         }
     }
 
+    $formFields = array_column(af_atf_get_fields_for_forum((int)($thread['fid'] ?? 0)), 'fieldid', 'name');
     $isCanon = false;
     if (!empty($entryLink['id'])) {
         $decoded = function_exists('af_charactersheets_extract_character_contract_payload')
@@ -5652,7 +5672,7 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
             $result['reason'] = (string)($validation['reason'] ?? 'source_kb_invalid');
             return $result; // Never fall through into the original-character CREATE path.
         }
-        return af_atf_bridge_sync_existing_canon($tid, $thread, $index, (array)$validation['entry'], $context);
+        return af_atf_bridge_sync_existing_canon($tid, $thread, $index, (array)$validation['entry'], $formFields);
     }
 
     if (!function_exists('af_charactersheets_pick_field_value')) {
@@ -5681,8 +5701,8 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         'character_element' => af_charactersheets_pick_field_value($index, ['character_element', 'element']),
         'character_gen' => af_charactersheets_pick_field_value($index, ['character_gen', 'character_gender', 'gender']),
         'character_race' => af_charactersheets_pick_field_value($index, ['character_race', 'race']),
-        'character_origin' => af_charactersheets_pick_field_value($index, ['character_origin', 'character_race', 'race']),
-        'character_origin_variant' => af_charactersheets_pick_field_value($index, ['character_origin_variant', 'origin_variant']),
+        'character_origin' => af_charactersheets_pick_field_value($index, ['character_origin', 'character_race', 'race'], false),
+        'character_origin_variant' => af_charactersheets_pick_field_value($index, isset($formFields['character_origin_variant']) ? ['character_origin_variant'] : ['character_origin_variant', 'origin_variant'], false),
         'character_class' => af_charactersheets_pick_field_value($index, ['character_class', 'character_archetype', 'archetype', 'class']),
         'character_archetype' => af_charactersheets_pick_field_value($index, ['character_archetype', 'character_class', 'archetype', 'class']),
         'character_faction' => af_charactersheets_pick_field_value($index, ['character_faction', 'faction']),
@@ -5690,6 +5710,9 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         'character_weapon' => af_charactersheets_pick_field_value($index, ['character_weapon', 'character_weapon_type', 'weapon_type'], false),
         'weapon_type' => af_charactersheets_pick_field_value($index, ['weapon_type', 'character_weapon', 'character_weapon_type'], false),
     ];
+    if (!af_atf_origin_variant_matches(af_atf_effective_origin_key($profile), $profile['character_origin_variant'])) {
+        $profile['character_origin_variant'] = '';
+    }
     $profile += af_atf_bridge_collect_character_profile_extras($index, array_keys($profile));
     $abilities = af_atf_bridge_extract_oc_abilities($index);
 
@@ -5801,7 +5824,7 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
     return $result;
 }
 
-function af_atf_bridge_sync_existing_canon(int $tid, array $thread, array $index, array $entry, array $context): array
+function af_atf_bridge_sync_existing_canon(int $tid, array $thread, array $index, array $entry, array $formFields): array
 {
     global $db;
     $entryId = (int)($entry['id'] ?? 0);
@@ -5812,8 +5835,23 @@ function af_atf_bridge_sync_existing_canon(int $tid, array $thread, array $index
     $oldProfile = (array)($rules['character_profile'] ?? []);
     $profile = $oldProfile;
     foreach (function_exists('af_kb_character_profile_field_contract') ? af_kb_character_profile_field_contract() : [] as $field => $unused) {
+        if ($field === 'character_origin_variant') continue;
         $value = af_charactersheets_pick_field_value($index, [$field], false);
         if ($value !== '') $profile[$field] = $value;
+    }
+    $formOrigin = af_charactersheets_pick_field_value($index, ['character_origin', 'character_race'], false);
+    if ($formOrigin !== '') {
+        $profile['character_origin'] = $formOrigin;
+    }
+    $originKey = af_atf_effective_origin_key($profile);
+    // ATF deletes empty value rows. The forum field definition establishes
+    // ownership even when CharacterSheets has no value to index.
+    if (isset($formFields['character_origin_variant'])) {
+        $profile['character_origin_variant'] = af_charactersheets_pick_field_value($index, ['character_origin_variant'], false);
+    }
+    if ((isset($formFields['character_origin_variant']) || $originKey !== af_atf_effective_origin_key($oldProfile))
+        && !af_atf_origin_variant_matches($originKey, (string)($profile['character_origin_variant'] ?? ''))) {
+        $profile['character_origin_variant'] = '';
     }
     // Canonical identity is not an applicant-owned value.
     $profile['category'] = 'canons';
@@ -6137,15 +6175,34 @@ function af_atf_dh_validate(&$ph): void
         $value = $effectiveValues[(int)$incomingField['fieldid']] ?? '';
         $incomingByName[(string)$incomingField['name']] = is_scalar($value) ? trim((string)$value) : '';
     }
+    $originKey = af_atf_effective_origin_key($incomingByName);
+    $fieldIds = array_column($fields, 'fieldid', 'name');
+    $storedOrigin = af_atf_effective_origin_key([
+        'character_origin' => $stored[$fieldIds['character_origin'] ?? 0] ?? '',
+        'character_race' => $stored[$fieldIds['character_race'] ?? 0] ?? '',
+    ]);
+    $originChanged = $isEdit && $originKey !== $storedOrigin;
     foreach ($fields as $f) {
         $fieldid = (int)$f['fieldid'];
-        if ($isEdit && !array_key_exists($fieldid, $incoming)) continue;
+        $fieldName = (string)($f['name'] ?? '');
+        $storedVariant = $fieldName === 'character_origin_variant' ? (string)($stored[$fieldid] ?? '') : '';
+        if ($isEdit && !array_key_exists($fieldid, $incoming)) {
+            // Partial edits ordinarily preserve absent fields. An origin
+            // change can invalidate a stored dependent field even then.
+            if ($originChanged && $storedVariant !== '') {
+                if (!function_exists('af_kb_get_origin_parent_for_variant')) {
+                    $ph->set_error('Не удалось проверить разновидность происхождения в KB. Повторите сохранение позже.');
+                } elseif (!af_atf_origin_variant_matches($originKey, $storedVariant)) {
+                    $clean[$fieldid] = '';
+                }
+            }
+            continue;
+        }
         $raw = $incoming[$fieldid] ?? '';
         if (!is_string($raw) && !is_int($raw)) {
             $ph->set_error('Некорректное значение поля «'.htmlspecialchars_uni((string)$f['title']).'».');
             continue;
         }
-        $fieldName = (string)($f['name'] ?? '');
 
         // checkbox special
         if ((string)$f['type'] === 'checkbox') {
@@ -6318,6 +6375,26 @@ function af_atf_dh_validate(&$ph): void
             continue;
         }
 
+        if ($fieldName === 'character_origin_variant') {
+            $value = trim((string)$raw);
+            if ($value !== '' && !preg_match('/^[a-z0-9_-]{2,64}$/i', $value)) {
+                $ph->set_error('invalid_field_'.$fieldid);
+                continue;
+            }
+            if ($value !== '' && !af_atf_origin_variant_matches($originKey, $value)) {
+                // Only the already stored variant can be discarded during
+                // a parent change. A different unrelated key is invalid.
+                if (!$originChanged || $value !== $storedVariant
+                    || !function_exists('af_kb_get_origin_parent_for_variant')) {
+                    $ph->set_error('invalid_field_'.$fieldid);
+                    continue;
+                }
+                $value = '';
+            }
+            $clean[$fieldid] = $value;
+            continue;
+        }
+
         if ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
             $val = is_string($raw) ? trim($raw) : '';
             if ((int)$f['required'] === 1 && $val === '') {
@@ -6327,20 +6404,6 @@ function af_atf_dh_validate(&$ph): void
             if ($val !== '' && !preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
                 $ph->set_error('invalid_field_'.$fieldid);
                 continue;
-            }
-            if ($fieldName === 'character_origin_variant' && $val !== '') {
-                $originKey = (string)($incomingByName['character_origin'] ?? '');
-                if ($originKey === '') {
-                    $originKey = (string)($incomingByName['character_race'] ?? '');
-                }
-                $parent = function_exists('af_kb_get_origin_parent_for_variant')
-                    ? af_kb_get_origin_parent_for_variant($val, true)
-                    : null;
-                if ($originKey === '' || (string)(($parent['origin'] ?? [])['key'] ?? '') !== $originKey) {
-                    $ph->set_error('invalid_field_'.$fieldid);
-                    $clean[$fieldid] = '';
-                    continue;
-                }
             }
             $clean[$fieldid] = $val;
             continue;

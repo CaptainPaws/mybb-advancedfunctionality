@@ -395,17 +395,24 @@
       const wrap = AF_ATF.qs(".af-atf-origin-variant");
       if (!wrap) return;
       const variantSelect = AF_ATF.qs("select", wrap);
-      const originWrap = AF_ATF.qs("[data-character-field='character_origin']")
-        || AF_ATF.qs("[data-character-field='character_race']");
-      const originSelect = originWrap ? AF_ATF.qs("select", originWrap) : null;
-      const container = wrap.closest(".af-atf-character-top-grid-item, .atf-compose__atf-grid > .af-atf-form-field") || wrap.closest("tr");
-      const endpoint = String(wrap.getAttribute("data-endpoint") || "");
-      if (!variantSelect || !originSelect || !endpoint) return;
+      const form = variantSelect?.form;
+      if (!form) return;
+      const originField = form.elements.namedItem(`af_tf[${wrap.dataset.originField}]`);
+      const raceField = form.elements.namedItem(`af_tf[${wrap.dataset.raceField}]`);
+      const container = wrap.closest(".af-atf-character-top-grid-item, .atf-compose__atf-grid > .af-atf-form-field, tr") || wrap;
+      const endpoint = wrap.dataset.endpoint;
+      if (!endpoint) return;
 
+      const getOrigin = () => {
+        const origin = String(originField?.value || "").trim();
+        const race = String(raceField?.value || "").trim();
+        return (origin || race).toLowerCase();
+      };
+      let currentOrigin;
       let requestId = 0;
+      // Hide the row while keeping the empty select in the form payload.
       const setVisible = (visible) => {
-        if (container) container.style.display = visible ? "" : "none";
-        variantSelect.disabled = !visible;
+        container.style.display = visible ? "" : "none";
       };
       const replaceOptions = (items, selected) => {
         variantSelect.innerHTML = '<option value=""></option>';
@@ -423,28 +430,35 @@
         setVisible(variantSelect.options.length > 1);
       };
 
-      const load = async (preserveCurrent) => {
+      const load = async () => {
+        const origin = getOrigin();
+        if (currentOrigin === origin) return;
+        const initial = currentOrigin === undefined && wrap.dataset.origin === origin;
+        currentOrigin = origin;
         const currentRequest = ++requestId;
-        const origin = String(originSelect.value || "").trim();
-        const selected = preserveCurrent ? String(variantSelect.value || "") : "";
-        replaceOptions([], "");
+        if (initial) {
+          // The server already checked the initial selection against this origin.
+          setVisible(variantSelect.options.length > 1);
+        } else {
+          replaceOptions([], "");
+        }
         if (!origin) return;
         try {
           const url = new URL(endpoint, window.location.origin);
           url.searchParams.set("origin", origin);
           const response = await fetch(url.toString(), { credentials: "same-origin" });
           const data = await response.json();
-          if (currentRequest !== requestId || !data || data.ok !== 1) return;
-          replaceOptions(data.items, selected);
+          if (currentRequest !== requestId || data?.ok !== 1 || data.origin !== origin) return;
+          replaceOptions(data.items, variantSelect.value);
         } catch (e) {
-          if (currentRequest === requestId) replaceOptions([], "");
+          // Keep the server-verified initial options, or the empty selection
+          // already applied when the origin changed.
         }
       };
 
-      originSelect.addEventListener("change", () => load(false));
-      // Validate and restore the server-prefilled variant only after Origin is
-      // known and its dependent option set has been loaded.
-      load(true);
+      originField?.addEventListener("change", load);
+      raceField?.addEventListener("change", load);
+      load();
     },
 
     initCharacterMechanic() {
