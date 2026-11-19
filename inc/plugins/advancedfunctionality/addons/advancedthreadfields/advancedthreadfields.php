@@ -2793,7 +2793,12 @@ function af_atf_hide_structured_message_editor(string &$page): void
 {
     $page = preg_replace_callback(
         '~<textarea\b(?=[^>]*\sname=(["\'])message\1)(?=[^>]*\sid=(["\'])message\2)[^>]*>~i',
-        static fn(array $match): string => substr($match[0], 0, -1).' data-af-atf-message="1" data-af-ae-skip="1">',
+        static function (array $match): string {
+            // Keep the source as a successful form control. The structured POST
+            // path supplies the native message before MyBB validates it.
+            $tag = preg_replace('~\srequired(?:\s*=\s*(?:"[^"]*"|\x27[^\x27]*\x27|[^\s>]+))?(?=\s|>)~i', '', $match[0]);
+            return substr($tag ?? $match[0], 0, -1).' data-af-atf-message="1" data-af-ae-skip="1">';
+        },
         $page,
         1,
         $count
@@ -3847,7 +3852,7 @@ function af_atf_build_input_html(array $field, string $value): string
                 $html .= '<label class="af-atf-character-stats-item">'
                     . '<span class="af-atf-character-stats-label">' . $label . '</span>'
                     . '<span class="af-atf-character-stats-control">'
-                    . '<input type="number" step="0.01" class="textbox text_input af-atf-character-stats-input" data-key="' . htmlspecialchars_uni($key) . '" value="' . htmlspecialchars_uni($val) . '" />'
+                    . '<input type="number" step="any" class="textbox text_input af-atf-character-stats-input" data-key="' . htmlspecialchars_uni($key) . '" value="' . htmlspecialchars_uni($val) . '" />'
                     . $suffix
                     . '</span>'
                     . '</label>';
@@ -4948,6 +4953,7 @@ function af_atf_editpost_do_start(): void
     $formPresent = $mybb->get_input('af_atf_form_present') === '1';
     if ($formPresent || (!empty($ctx['is_first']) && array_intersect_key($posted,
         array_column(af_atf_get_fields_for_forum((int)$ctx['fid']), null, 'fieldid')))) {
+        if (!headers_sent()) header('X-AF-ATF-Edit: post-received');
         $GLOBALS['af_atf_edit_save_route'] = [
             'pid_resolved'=>!empty($ctx['tid']), 'tid_resolved'=>(int)$ctx['tid'] > 0, 'fid_resolved'=>(int)$ctx['fid'] > 0,
             'validated'=>false, 'writer_reached'=>false, 'write_completed'=>false, 'verified'=>false,
@@ -5973,7 +5979,12 @@ function af_atf_editpost_do_end(): void
 {
     global $lang;
     $route = $GLOBALS['af_atf_edit_save_route'] ?? null;
-    if (!$route || !empty($route['verified'])) return;
+    if (!$route) return;
+    if (!empty($route['verified'])) {
+        if (!headers_sent()) header('X-AF-ATF-Edit: persistence-confirmed');
+        return;
+    }
+    if (!headers_sent()) header('X-AF-ATF-Edit: persistence-failed');
 
     $id = bin2hex(random_bytes(8));
     $flags = array_intersect_key($route, array_flip(['pid_resolved','tid_resolved','fid_resolved',
@@ -6337,7 +6348,11 @@ function af_atf_dh_validate(&$ph): void
         if (isset($GLOBALS['af_atf_edit_save_route'])) $GLOBALS['af_atf_edit_save_route']['validated'] = true;
         if (!$clean && !$ph->get_errors() && $mybb->get_input('af_atf_form_present') === '1') {
             $ph->set_error('Поля анкеты не поступили на сервер. Откройте форму редактирования заново.');
+            if (!headers_sent()) header('X-AF-ATF-Edit: validation-failed');
             return;
+        }
+        if ($ph->get_errors() && isset($GLOBALS['af_atf_edit_save_route']) && !headers_sent()) {
+            header('X-AF-ATF-Edit: validation-failed');
         }
         $GLOBALS['af_atf_validated_edit'] = [
             'handler'=>$ph, 'pid'=>$pidCandidate, 'tid'=>$storedTid, 'fid'=>$forumId, 'values'=>$clean,

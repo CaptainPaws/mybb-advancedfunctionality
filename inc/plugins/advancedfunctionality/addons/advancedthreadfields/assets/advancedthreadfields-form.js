@@ -42,6 +42,100 @@
       if (field) field.style.setProperty("display", "none", "important");
     },
 
+    initEditSubmitFeedback() {
+      const marker = AF_ATF.qs('input[name="af_atf_form_present"]');
+      const form = AF_ATF.qs('form#editpost') || marker?.form;
+      if (!marker || !form || !AF_ATF.qs('input[name="action"][value="do_editpost"]', form)) return;
+      const button = AF_ATF.qs('input[type="submit"][name="submitbutton"]', form);
+      const notice = document.createElement("p");
+      notice.className = "af-atf-submit-notice";
+      notice.setAttribute("role", "alert");
+      notice.hidden = true;
+      if (button) button.before(notice);
+      else form.prepend(notice);
+
+      function show(state, message = "") {
+        form.dataset.afAtfSubmitState = state;
+        notice.hidden = !message;
+        notice.textContent = message;
+      }
+
+      const controls = AF_ATF.qsa('[name^="af_tf["]');
+      const ownsFields = () => marker.form === form && controls.length > 0
+        && controls.every((control) => control.form === form);
+      if (!ownsFields() || (button && button.form !== form)) {
+        show("form-ownership-error", "Форма редактирования не содержит всех полей анкеты. Обновите страницу.");
+      }
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        if (target !== button && !(target instanceof HTMLInputElement && target.name === "submitbutton"
+            && (target.form === form || !target.form))) return;
+        if (target.form !== form || !ownsFields()) {
+          event.preventDefault();
+          show("form-ownership-error", "Форма редактирования не содержит всех полей анкеты. Обновите страницу.");
+          return;
+        }
+        // A script can cancel the click before the browser validates or emits submit.
+        setTimeout(() => {
+          if (event.defaultPrevented && form.dataset.afAtfSubmitState === "submit-clicked") {
+            show("js-submit-blocked", "Скрипт страницы остановил отправку анкеты. Повторите попытку.");
+          }
+        }, 0);
+        show("submit-clicked");
+      }, true);
+
+      let firstInvalid = null;
+      form.addEventListener("invalid", (event) => {
+        if (firstInvalid) return;
+        firstInvalid = event.target;
+        const control = firstInvalid;
+        const label = control.labels?.[0]?.textContent.trim()
+          || control.closest(".af-atf-form-field")?.querySelector(".af-atf-field-label")?.textContent.trim();
+        show("html-validation-blocked", (label ? label + ". " : "") + (control.validationMessage || "Проверьте значение поля."));
+        control.classList.add("af-atf-submit-invalid");
+        control.addEventListener("input", () => control.classList.remove("af-atf-submit-invalid"), { once: true });
+        setTimeout(() => {
+          firstInvalid = null;
+          if (!control.getClientRects().length) return;
+          control.scrollIntoView({ block: "center" });
+          control.focus({ preventScroll: true });
+        }, 0);
+      }, true);
+
+      form.addEventListener("submit", (event) => {
+        if (event.target !== form) return;
+        if (!ownsFields()) {
+          event.preventDefault();
+          show("form-ownership-error", "Форма редактирования не содержит всех полей анкеты. Обновите страницу.");
+          return;
+        }
+        show("submit-event");
+        setTimeout(() => {
+          if (event.defaultPrevented) show("js-submit-blocked", "Скрипт страницы остановил отправку анкеты. Повторите попытку.");
+          else show("submit-accepted");
+        }, 0);
+      }, true);
+    },
+
+    // Existing numeric values may predate the editor's constraints. Restore
+    // those constraints as soon as this specific control is edited.
+    allowStoredAbilityNumbers(row) {
+      AF_ATF.qsa('input[type="number"]', row).forEach((input) => {
+        const validity = input.validity;
+        if (!validity.rangeUnderflow && !validity.rangeOverflow && !validity.stepMismatch) return;
+        const attributes = ["min", "max", "step"].map((name) => [name, input.getAttribute(name)]);
+        input.removeAttribute("min");
+        input.removeAttribute("max");
+        input.step = "any";
+        input.addEventListener("input", () => {
+          attributes.forEach(([name, value]) => {
+            if (value === null) input.removeAttribute(name);
+            else input.setAttribute(name, value);
+          });
+        }, { once: true });
+      });
+    },
+
     // --- 2) userchips init ---
     initUserChipsAll() {
       const blocks = AF_ATF.qsa(".af-atf-userchips");
@@ -709,6 +803,7 @@
               </label>
             `;
 
+            if (!dirtyRows.has(ability)) AF_ATF.allowStoredAbilityNumbers(row);
             const effectsList = AF_ATF.qs(".af-atf-effects-list", row);
             const renderEffects = () => {
               effectsList.innerHTML = "";
@@ -756,6 +851,7 @@
                 };
                 AF_ATF.qsa('input,select,textarea', effectRow).forEach((el) => { el.addEventListener('input', collectEffect); el.addEventListener('change', collectEffect); });
                 AF_ATF.qs('.af-atf-effect-remove', effectRow).addEventListener('click', () => { markChanged(ability); ability.effects.splice(effectIndex, 1); state[index] = ability; renderEffects(); sync(); });
+                if (!dirtyRows.has(ability)) AF_ATF.allowStoredAbilityNumbers(effectRow);
                 effectsList.appendChild(effectRow); collectEffect();
               });
             };
@@ -1355,6 +1451,7 @@
 
   function boot() {
     AF_ATF.applyHideEditor();
+    AF_ATF.initEditSubmitFeedback();
     AF_ATF.initUserChipsAll();
     AF_ATF.initKbSelects();
     AF_ATF.initKbCatalogCtaModal();
