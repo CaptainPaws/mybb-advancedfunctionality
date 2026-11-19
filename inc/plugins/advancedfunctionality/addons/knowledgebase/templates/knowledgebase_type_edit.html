@@ -27,8 +27,10 @@
                 <label>{$lang->af_kb_sortorder}</label>
                 <input type="text" name="sortorder" value="{$kb_type_sortorder}" />
                 <div class="af-kb-inline">
-                    <label>{$lang->af_kb_active}</label>
-                    <input type="checkbox" name="active" value="1" {$kb_type_active_checked} />
+                    <label><input type="checkbox" name="active" value="1" {$kb_type_active_checked} /> {$lang->af_kb_type_functional_active}</label>
+                    <small>{$lang->af_kb_type_functional_active_help}</small>
+                    <label><input type="checkbox" name="show_in_catalog" value="1" {$kb_type_catalog_checked} /> {$lang->af_kb_type_catalog_visible}</label>
+                    <small>{$lang->af_kb_type_catalog_visible_help}</small>
                 </div>
             </div>
         </div>

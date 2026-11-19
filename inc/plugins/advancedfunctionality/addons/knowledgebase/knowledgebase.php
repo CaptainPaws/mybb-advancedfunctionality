@@ -1561,6 +1561,7 @@ CREATE TABLE {TABLE_PREFIX}af_kb_types (
   bg_url VARCHAR(255) NOT NULL DEFAULT '',
   bg_tab_url VARCHAR(255) NOT NULL DEFAULT '',
   sortorder INT NOT NULL DEFAULT 0,
+  show_in_catalog TINYINT(1) NOT NULL DEFAULT 1,
   active TINYINT(1) NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 SQL;
@@ -2065,6 +2066,11 @@ function af_kb_ensure_schema(): void
             $db->add_column('af_kb_types', 'ui_schema_json', "MEDIUMTEXT NOT NULL");
             $db->write_query("UPDATE ".TABLE_PREFIX."af_kb_types SET ui_schema_json='{}' WHERE ui_schema_json=''");
         }
+        if (!$db->field_exists('show_in_catalog', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'show_in_catalog', 'TINYINT(1) NOT NULL DEFAULT 1');
+            $serviceKeys = af_kb_catalog_service_keys_sql();
+            $db->update_query('af_kb_types', ['show_in_catalog' => 0], "type IN ({$serviceKeys}) OR type_key IN ({$serviceKeys})");
+        }
         if (!$db->field_exists('is_active', 'af_kb_types')) {
             $db->add_column('af_kb_types', 'is_active', "TINYINT(1) NOT NULL DEFAULT 1");
             $db->write_query("UPDATE ".TABLE_PREFIX."af_kb_types SET is_active=active");
@@ -2417,6 +2423,7 @@ function af_kb_seed_arpg_types(): void
                 'desc_en' => '',
                 'rules_schema' => $db->escape_string((string)($defaultRow['rules_schema'] ?? AF_KB_ARPG_META_SCHEMA)),
                 'ui_schema_json' => $db->escape_string((string)($defaultRow['ui_schema_json'] ?? '{}')),
+                'show_in_catalog' => in_array($typeKey, af_kb_arpg_internal_types(), true) ? 0 : 1,
                 'active' => (int)($defaultRow['is_active'] ?? 1),
                 'is_active' => (int)($defaultRow['is_active'] ?? 1),
                 'sortorder' => 100 + $idx,
@@ -9266,11 +9273,11 @@ function af_kb_get_entry_ui(array $entry): array
     ];
 }
 
-function af_kb_get_entry_summary(string $type, string $key): array
+function af_kb_get_entry_summary(string $type, string $key, bool $http = false): array
 {
     $type = af_kb_resolve_requested_type($type);
     static $cache = [];
-    $cacheKey = $type . ':' . $key;
+    $cacheKey = ($http ? 'http:' : '') . $type . ':' . $key;
     if (isset($cache[$cacheKey])) {
         return $cache[$cacheKey];
     }
@@ -9283,7 +9290,7 @@ function af_kb_get_entry_summary(string $type, string $key): array
     }
 
     $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', $where, ['limit' => 1]));
-    if (!$entry) {
+    if (!$entry || ($http && !af_kb_http_entry_visible($entry, 'catalog', af_kb_can_edit()))) {
         $cache[$cacheKey] = [];
         return [];
     }
@@ -9534,8 +9541,8 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                     // until the user chooses a type or searches.
                     $endpointTag = '<script>window.afKbEndpoints=' . json_encode([
                         'get' => af_kb_url(['action' => 'kb_get']),
-                        'list' => af_kb_url(['action' => 'kb_list']),
-                        'types' => af_kb_url(['action' => 'kb_types']),
+                        'list' => af_kb_url(['action' => 'kb_list', 'manage' => af_kb_can_edit() ? 1 : 0]),
+                        'types' => af_kb_url(['action' => 'kb_types', 'manage' => af_kb_can_edit() ? 1 : 0]),
                         'children' => af_kb_url(['action' => 'kb_children']),
                         'json_list' => af_kb_url(['action' => 'kb_json_list']),
                     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';window.afKbInsertMechanic='
@@ -9732,7 +9739,8 @@ function af_kb_parse_message_end(&$message, &$options = null): void
             $type = strtolower($matches[1]);
             $key  = strtolower($matches[2]);
 
-            $summary = af_kb_get_entry_summary($type, $key);
+            $summary = af_kb_get_entry_summary($type, $key, true);
+            if (!$summary) return $matches[0];
             $title   = $summary['title'] ?? ($type . ':' . $key);
 
             $iconHtml = af_kb_build_icon_html($summary['icon_url'] ?? '', $summary['icon_class'] ?? '');
@@ -10002,6 +10010,39 @@ function af_kb_is_internal_service_type(string $typeKey, ?string $mechanicKey = 
     }
 
     return in_array($typeKey, af_kb_arpg_internal_types(), true);
+}
+
+/** Catalog discovery excludes service types regardless of the editor's mechanic selection. */
+function af_kb_catalog_service_keys_sql(): string
+{
+    global $db;
+    return "'" . implode("','", array_map([$db, 'escape_string'], af_kb_arpg_internal_types())) . "'";
+}
+
+function af_kb_catalog_type_visibility_where(): string
+{
+    global $db;
+    $keys = af_kb_catalog_service_keys_sql();
+    // Releases that have not reactivated KB can still read the old schema.
+    $visibility = $db->field_exists('show_in_catalog', 'af_kb_types') ? ' AND show_in_catalog=1' : '';
+    return "active=1{$visibility} AND COALESCE(type,'') NOT IN ({$keys}) AND COALESCE(type_key,'') NOT IN ({$keys})";
+}
+
+function af_kb_catalog_type_is_public(?array $row): bool
+{
+    $internal = af_kb_arpg_internal_types();
+    return !empty($row['active']) && (int)($row['show_in_catalog'] ?? 1) === 1
+        && !in_array($row['type'] ?? '', $internal, true)
+        && !in_array($row['type_key'] ?? '', $internal, true);
+}
+
+/** HTTP read policy only. Trusted PHP consumers retain their own checks. */
+function af_kb_http_entry_visible(array $entry, string $context, bool $canEdit, ?array $typeRow = null): bool
+{
+    if ($canEdit) return true;
+    return !empty($entry['active'])
+        && af_kb_catalog_type_is_public($typeRow ?? af_kb_find_type_row((string)$entry['type']))
+        && af_kb_entry_visible_in_context($entry, $context, false);
 }
 
 function af_kb_resolve_entry_visibility(array $entry): array
@@ -11778,7 +11819,7 @@ function af_kb_handle_entry_modal(): void
     }
 
     $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', 'id=' . $id, ['limit' => 1]));
-    if (!$entry) {
+    if (!$entry || !af_kb_http_entry_visible($entry, 'catalog', af_kb_can_edit())) {
         error($lang->af_kb_not_found ?? 'Not found');
     }
 
@@ -13008,7 +13049,7 @@ function af_kb_handle_view(): void
         }
 
         $activeMechanicKey = af_kb_get_catalog_active_mechanic_key();
-        $typesWhere = "active=1 AND type NOT IN ('" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "','" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "')";
+        $typesWhere = af_kb_catalog_type_visibility_where() . " AND type NOT IN ('" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "','" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "')";
         // Keep the Character type operational and directly addressable while
         // removing only its category card from the ordinary public catalog.
         if (!af_kb_can_edit()) {
@@ -13119,16 +13160,17 @@ function af_kb_handle_view(): void
         exit;
     }
 
-    if ($key === '' && $type === 'arpg_ability' && !($mybb->get_input('manage') === '1' && af_kb_can_edit())) {
+    $typeRow = af_kb_find_type_row($type);
+    if (!$typeRow || (!af_kb_can_edit() && !af_kb_catalog_type_is_public($typeRow))) {
+        error($lang->af_kb_not_found ?? 'Not found');
+    }
+
+    if ($key === '' && $type === 'arpg_ability' && af_kb_catalog_type_is_public($typeRow)
+        && !($mybb->get_input('manage') === '1' && af_kb_can_edit())) {
         af_kb_render_ability_catalog();
     }
 
     if ($key === '') {
-        $requestedMechanic = af_kb_get_type_mechanic_key($type);
-        if (!af_kb_can_edit() && af_kb_is_internal_service_type($type, $requestedMechanic)) {
-            error($lang->af_kb_not_found ?? 'Not found');
-        }
-
         $escapedType = $db->escape_string($type);
         $where = "e.type='{$escapedType}'";
         if ($type === 'arpg_element' && af_kb_arpg_element_lookup('air')) $where .= " AND e.`key`<>'wind'";
@@ -13251,7 +13293,6 @@ function af_kb_handle_view(): void
             $total = (int)($totalRow['cnt'] ?? 0);
         }
 
-        $typeRow = af_kb_find_type_row($type);
         $typeTitle = $type;
         $typeDesc = '';
         if ($typeRow) {
@@ -13399,11 +13440,6 @@ function af_kb_handle_view(): void
         exit;
     }
 
-    $typeRow = af_kb_find_type_row($type);
-    if (!$typeRow) {
-        error($lang->af_kb_not_found ?? 'Not found');
-    }
-
     $escapedType = $db->escape_string($type);
     $escapedKey = $db->escape_string($key);
     $where = "type='{$escapedType}' AND `key`='{$escapedKey}'";
@@ -13415,7 +13451,7 @@ function af_kb_handle_view(): void
     if (!$entry) {
         error($lang->af_kb_not_found ?? 'Not found');
     }
-    if (!af_kb_entry_visible_in_context($entry, 'catalog', af_kb_can_edit())) {
+    if (!af_kb_http_entry_visible($entry, 'catalog', af_kb_can_edit(), $typeRow)) {
         error($lang->af_kb_not_found ?? 'Not found');
     }
 
@@ -13513,6 +13549,7 @@ function af_kb_handle_view(): void
                     ['limit' => 1]
                 )
             );
+            if (!af_kb_can_edit() && (!$target || !af_kb_http_entry_visible($target, 'catalog', false))) continue;
             if ($target) {
                 $toTitle = af_kb_pick_text($target, 'title');
                 if ($toTitle === '') {
@@ -14740,6 +14777,10 @@ function af_kb_handle_type_edit(): void
         $sortorder = (int)$mybb->get_input('sortorder', MyBB::INPUT_INT);
         $active = (int)$mybb->get_input('active', MyBB::INPUT_INT) ? 1 : 0;
 
+        if (!$db->field_exists('show_in_catalog', 'af_kb_types')) {
+            $errors[] = $lang->af_kb_type_visibility_schema ?? 'Update the Knowledge Base schema by reactivating the addon.';
+        }
+
         if (!$errors) {
             $existingType = $db->fetch_array(
                 $db->simple_select('af_kb_types', '*', "type='".$db->escape_string($type)."'", ['limit' => 1])
@@ -14775,6 +14816,8 @@ function af_kb_handle_type_edit(): void
 
                 'sortorder'      => $sortorder,
                 'active'         => $active,
+                'is_active'      => $active,
+                'show_in_catalog'=> (int)$mybb->get_input('show_in_catalog', MyBB::INPUT_INT) === 1 ? 1 : 0,
             ];
 
             if ($typeRow) {
@@ -14849,6 +14892,7 @@ function af_kb_handle_type_edit(): void
 
     $kb_type_sortorder = (int)$typeRow['sortorder'];
     $kb_type_active_checked = !empty($typeRow['active']) ? 'checked="checked"' : '';
+    $kb_type_catalog_checked = !empty($typeRow['show_in_catalog'] ?? !in_array($type, af_kb_arpg_internal_types(), true)) ? 'checked="checked"' : '';
     $kb_type_readonly = $isEditing ? 'readonly="readonly"' : '';
     $kb_help_link = af_kb_can_edit()
         ? '<a class="af-kb-help-link" href="misc.php?action=kb_help" title="'.htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help').'"><i class="fa-regular fa-circle-question"></i></a>'
@@ -15113,7 +15157,7 @@ function af_kb_handle_json_get(): void
     if (!$entry) {
         af_kb_render_json_error($lang->af_kb_not_found ?? 'Not found', 404);
     }
-    if (!af_kb_entry_visible_in_context($entry, 'catalog', af_kb_can_edit())) {
+    if (!af_kb_http_entry_visible($entry, 'catalog', af_kb_can_edit())) {
         af_kb_render_json_error($lang->af_kb_not_found ?? 'Not found', 404);
     }
 
@@ -15201,7 +15245,7 @@ function af_kb_handle_json_list(): void
 {
     global $mybb, $db, $lang;
 
-    if (!af_kb_can_view() && (int)($mybb->user['uid'] ?? 0) === 0) {
+    if (!af_kb_can_view()) {
         af_kb_render_json_error($lang->af_kb_no_access ?? 'No access', 403);
     }
 
@@ -15211,8 +15255,9 @@ function af_kb_handle_json_list(): void
     }
 
     $query = trim((string)$mybb->get_input('q'));
-    $typeMechanic = af_kb_get_type_mechanic_key($type);
-    if (!af_kb_can_edit() && af_kb_is_internal_service_type($type, $typeMechanic)) {
+    $manage = af_kb_can_edit() && $mybb->get_input('manage') === '1';
+    $typeRow = af_kb_find_type_row($type);
+    if (!$manage && !af_kb_catalog_type_is_public($typeRow)) {
         af_kb_send_json(['success' => true, 'items' => []]);
     }
 
@@ -15220,7 +15265,7 @@ function af_kb_handle_json_list(): void
     $isAjax = (int)$mybb->get_input('ajax', MyBB::INPUT_INT) === 1;
     $where = "type='".$db->escape_string($type)."'";
     if ($type === 'arpg_element' && af_kb_arpg_element_lookup('air')) $where .= " AND `key`<>'wind'";
-    if (!af_kb_can_edit()) {
+    if (!$manage) {
         $where .= ' AND active=1';
     }
     if ($query !== '') {
@@ -15232,7 +15277,7 @@ function af_kb_handle_json_list(): void
     $items = [];
     $q = $db->simple_select('af_kb_entries', '*', $where, ['order_by' => 'sortorder, title_ru, title_en', 'order_dir' => 'ASC']);
     while ($row = $db->fetch_array($q)) {
-        if (!af_kb_entry_visible_in_context($row, $query !== '' ? 'search' : 'catalog', af_kb_can_edit())) {
+        if (!af_kb_entry_visible_in_context($row, $query !== '' ? 'search' : 'catalog', $manage)) {
             continue;
         }
         $entryUi = af_kb_get_entry_ui($row);
@@ -15254,13 +15299,13 @@ function af_kb_handle_json_types(): void
 {
     global $mybb, $db, $lang;
 
-    if (!af_kb_can_view() && (int)($mybb->user['uid'] ?? 0) === 0) {
+    if (!af_kb_can_view()) {
         af_kb_render_json_error($lang->af_kb_no_access ?? 'No access', 403);
     }
 
-    $where = af_kb_can_edit()
-        ? "type NOT IN ('" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "','" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "')"
-        : "active=1 AND type NOT IN ('" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "','" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "')";
+    $manage = af_kb_can_edit() && $mybb->get_input('manage') === '1';
+    $where = "type NOT IN ('" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "','" . $db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT) . "')";
+    if (!$manage) $where .= ' AND ' . af_kb_catalog_type_visibility_where();
 
     $items = [];
     $seenTypes = [];
@@ -15314,6 +15359,12 @@ function af_kb_handle_json_children(): void
         af_kb_render_json_error('Missing parameters', 400);
     }
 
+    $canEdit = af_kb_can_edit();
+    $source = af_kb_arpg_acs_lookup($fromType, $fromKey);
+    if (!$source || !af_kb_http_entry_visible($source, 'catalog', $canEdit)) {
+        af_kb_send_json(['items' => []]);
+    }
+
     $items = [];
     $rq = $db->simple_select(
         'af_kb_relations',
@@ -15322,7 +15373,6 @@ function af_kb_handle_json_children(): void
         ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']
     );
     while ($row = $db->fetch_array($rq)) {
-        $title = $row['to_key'];
         $target = $db->fetch_array(
             $db->simple_select(
                 'af_kb_entries',
@@ -15331,12 +15381,8 @@ function af_kb_handle_json_children(): void
                 ['limit' => 1]
             )
         );
-        if ($target) {
-            $title = af_kb_pick_text($target, 'title');
-            if ($title === '') {
-                $title = $target['key'];
-            }
-        }
+        if (!$target || !af_kb_http_entry_visible($target, 'catalog', $canEdit)) continue;
+        $title = af_kb_pick_text($target, 'title') ?: $target['key'];
         $items[] = [
             'to_type' => $row['to_type'],
             'to_key'  => $row['to_key'],
@@ -15381,13 +15427,18 @@ function af_kb_handle_json_race_variants(): void
         af_kb_render_json_error('Invalid race key', 400);
     }
 
-    $activeOnly = (int)$mybb->get_input('include_inactive', MyBB::INPUT_INT) !== 1;
+    $canEdit = af_kb_can_edit();
+    $race = af_kb_arpg_acs_lookup(AF_KB_TYPE_RACE, $raceKey);
+    if (!$race || !af_kb_http_entry_visible($race, 'catalog', $canEdit)) {
+        af_kb_render_json_error($lang->af_kb_not_found ?? 'Not found', 404);
+    }
+    $activeOnly = !$canEdit || (int)$mybb->get_input('include_inactive', MyBB::INPUT_INT) !== 1;
     $links = af_kb_get_race_variants($raceKey, $activeOnly);
 
     $items = [];
     foreach ($links as $link) {
         $entry = is_array($link['variant'] ?? null) ? $link['variant'] : [];
-        if (empty($entry)) {
+        if (empty($entry) || !af_kb_http_entry_visible($entry + ['type'=>AF_KB_TYPE_RACE_VARIANT], 'catalog', $canEdit)) {
             continue;
         }
 
