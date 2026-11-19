@@ -3,7 +3,7 @@
 return [
     'id'        => 'advancedjsbandle',
     'name'      => 'JS Bundle',
-    'version'   => '1.0.3',
+    'version'   => '1.0.4',
     'author'      => 'CaptainPaws',
     'website'     => 'https://github.com/CaptainPaws',
     'bootstrap' => 'advancedjsbandle.php',
@@ -26,6 +26,7 @@ return [
             'quote-avatars.js' => ['mode' => 'contextual', 'routes' => [['script' => 'showthread.php'], ['script' => 'newreply.php'], ['script' => 'newthread.php'], ['script' => 'editpost.php'], ['script' => 'private.php', 'action' => 'read'], ['script' => 'private.php', 'action' => 'send']]],
         ],
     ],
+    // MyBB Theme attachments must match the contextual resource routes above.
     'theme_stylesheets' => [
         [
             'id' => 'advancedjsbandle_scroll_buttons',
@@ -38,28 +39,39 @@ return [
             'id' => 'advancedjsbandle_af_quickquote',
             'file' => 'assets/af_quickquote.css',
             'stylesheet_name' => 'af_advancedjsbandle_af_quickquote.css',
-            'attach' => [['file' => 'global'], ['file' => 'showthread.php'], ['file' => 'forumdisplay.php']],
+            'attach' => [['file' => 'showthread.php'], ['file' => 'forumdisplay.php']],
             'enabled_setting' => 'af_advancedjsbandle_enabled',
         ],
         [
             'id' => 'advancedjsbandle_fimp',
             'file' => 'assets/fimp.css',
             'stylesheet_name' => 'af_advancedjsbandle_fimp.css',
-            'attach' => [['file' => 'global'], ['file' => 'showthread.php'], ['file' => 'forumdisplay.php']],
+            'attach' => [['file' => 'showthread.php'], ['file' => 'forumdisplay.php']],
             'enabled_setting' => 'af_advancedjsbandle_enabled',
         ],
         [
             'id' => 'advancedjsbandle_postbit_fa_icons',
             'file' => 'assets/postbit-fa-icons.css',
             'stylesheet_name' => 'af_advancedjsbandle_postbit_fa_icons.css',
-            'attach' => [['file' => 'global'], ['file' => 'showthread.php'], ['file' => 'forumdisplay.php'], ['file' => 'private.php']],
+            'attach' => [
+                ['file' => 'showthread.php'],
+                ['file' => 'forumdisplay.php'],
+                ['file' => 'private.php', 'action' => 'read'],
+            ],
             'enabled_setting' => 'af_advancedjsbandle_enabled',
         ],
         [
             'id' => 'advancedjsbandle_quote_avatars',
             'file' => 'assets/quote-avatars.css',
             'stylesheet_name' => 'af_advancedjsbandle_quote_avatars.css',
-            'attach' => [['file' => 'global'], ['file' => 'showthread.php'], ['file' => 'private.php']],
+            'attach' => [
+                ['file' => 'showthread.php'],
+                ['file' => 'newreply.php'],
+                ['file' => 'newthread.php'],
+                ['file' => 'editpost.php'],
+                ['file' => 'private.php', 'action' => 'read'],
+                ['file' => 'private.php', 'action' => 'send'],
+            ],
             'enabled_setting' => 'af_advancedjsbandle_enabled',
         ],
     ],
