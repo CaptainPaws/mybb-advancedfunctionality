@@ -304,7 +304,7 @@
       const originWrap = AF_ATF.qs("[data-character-field='character_origin']")
         || AF_ATF.qs("[data-character-field='character_race']");
       const originSelect = originWrap ? AF_ATF.qs("select", originWrap) : null;
-      const container = wrap.closest(".af-atf-character-top-grid-item") || wrap.closest("tr");
+      const container = wrap.closest(".af-atf-character-top-grid-item, .atf-compose__atf-grid > .af-atf-form-field") || wrap.closest("tr");
       const endpoint = String(wrap.getAttribute("data-endpoint") || "");
       if (!variantSelect || !originSelect || !endpoint) return;
 
@@ -397,7 +397,7 @@
 
         AF_ATF.qsa(".af-atf-kb-dynamic").forEach((wrap) => {
           const scope = String(wrap.getAttribute("data-mechanic-scope") || "").trim();
-          const row = wrap.closest("tr");
+          const row = wrap.closest(".af-atf-character-top-grid-item, .atf-compose__atf-grid > .af-atf-form-field") || wrap.closest("tr");
           const shouldShow = !scope || scope === activeMode;
           if (row) {
             row.style.display = shouldShow ? "" : "none";

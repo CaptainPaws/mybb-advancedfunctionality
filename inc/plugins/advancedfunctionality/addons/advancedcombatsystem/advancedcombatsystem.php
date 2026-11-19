@@ -24,7 +24,7 @@ function af_advancedcombatsystem_init(): string
             if (THIS_SCRIPT==='newreply.php') { $plugins->add_hook('global_end','af_advancedcombatsystem_reply_entry',PHP_INT_MAX); }
             $plugins->add_hook('pre_output_page','af_advancedcombatsystem_reply_decorate',20);
         }
-        if (defined('THIS_SCRIPT') && in_array(THIS_SCRIPT, ['newthread.php', 'showthread.php'], true)) {
+        if (defined('THIS_SCRIPT') && in_array(THIS_SCRIPT, ['newthread.php', 'editpost.php', 'showthread.php'], true)) {
             require_once __DIR__.'/modules/Presentation/AtfThreadCreation.php';
         }
         if(defined('THIS_SCRIPT') && THIS_SCRIPT==='showthread.php' && !empty($mybb->user['uid'])) {

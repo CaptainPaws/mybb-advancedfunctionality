@@ -409,3 +409,44 @@ body.atf-active .atf-compose input[type="file"]::file-selector-button {
   font: inherit;
   cursor: pointer;
 }
+
+body.atf-active .atf-compose__section > .atf-compose__section-title { margin-block-end: var(--atf-space-2); }
+body.atf-active .atf-compose__atf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  align-items: start;
+  gap: var(--atf-space-3);
+}
+body.atf-active .atf-compose__field--wide { grid-column: 1 / -1; min-width: 0; }
+body.atf-active .atf-compose__atf-grid > .af-atf-form-field { margin: 0; min-width: 0; }
+body.atf-active .atf-compose :is(.af-atf-field-control, .af-atf-editor, .af-ae-shell, .sceditor-container) { min-width: 0; max-width: 100%; }
+body.atf-active .atf-compose :is(.af-atf-editor, .af-ae-shell, .af-atf-field-control textarea) { width: 100%; }
+body.atf-active .atf-compose :is(.af-atf-field-control, .af-aa-thread-preset-row) :is(input[type="text"], input[type="url"], select) {
+  width: 100%;
+  min-width: 0;
+  height: var(--atf-control-height);
+  padding: var(--atf-space-2);
+  color: var(--atf-color-text);
+  background: var(--atf-color-surface);
+  border: var(--atf-control-border-width) solid var(--atf-color-border);
+  border-radius: var(--atf-radius-md);
+}
+body.atf-active .atf-compose .af-atf-userchips-dd { max-width: 100%; background: var(--atf-color-surface); }
+body.atf-active .atf-compose__episode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--atf-space-2) var(--atf-space-4);
+  min-width: 0;
+  margin: 0;
+  padding: var(--atf-space-2);
+  border: var(--atf-control-border-width) solid var(--atf-color-border);
+  border-radius: var(--atf-radius-md);
+}
+body.atf-active .atf-compose__episode label { display: flex; align-items: center; gap: var(--atf-space-2); }
+body.atf-active .atf-compose__message-section:has(textarea[data-af-atf-message="1"]) { display: none; }
+@media (max-width: 38rem) {
+  body.atf-active .atf-compose__atf-grid { grid-template-columns: minmax(0, 1fr); }
+}
+body.atf-active .atf-compose :is(.af-atf-field-control, .af-aa-thread-preset-row) :is(input, select, textarea):focus-visible {
+  border-color: var(--atf-color-accent);
+}

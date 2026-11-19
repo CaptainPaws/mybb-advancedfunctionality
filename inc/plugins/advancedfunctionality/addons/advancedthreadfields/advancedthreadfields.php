@@ -488,6 +488,7 @@ function af_advancedthreadfields_init(): void
     $plugins->add_hook('newthread_do_newthread_end', 'af_atf_acs_finish_thread', 100);
     $plugins->add_hook('newthread_do_newthread_end', 'af_atf_newthread_do_end');
     $plugins->add_hook('editpost_do_editpost_end', 'af_atf_editpost_do_end');
+    $plugins->add_hook('editpost_do_editpost_end', 'af_atf_acs_finish_edit', 100);
 
     // Валидация/сохранение: DataHandler
     $plugins->add_hook('datahandler_post_validate', 'af_atf_dh_validate');
@@ -530,6 +531,7 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
 
     $hasComponent = !empty($GLOBALS['af_atf_has_frontend_component'])
         || !empty($GLOBALS['af_atf_input_html'])
+        || !empty($GLOBALS['af_atf_episode_html'])
         || !empty($GLOBALS['af_atf_showthread_block'])
         || !empty($GLOBALS['af_atf_forum_catalog_cta_html']);
     if (function_exists('af_frontend_asset_allowed')
@@ -588,37 +590,20 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         }
     }
 
-    /* -------------------- 2) RUNTIME INSERT -------------------- */
-
-    if ((defined('THIS_SCRIPT') && (THIS_SCRIPT === 'newthread.php' || THIS_SCRIPT === 'editpost.php'))
-        && !empty($GLOBALS['af_atf_input_html'])
-        && strpos($page, AF_ATF_TPL_MARK_INPUT) === false
-    ) {
-        $insert = "\n" . AF_ATF_TPL_MARK_INPUT . "\n" . $GLOBALS['af_atf_input_html'] . "\n";
-
-        $count = 0;
-        $page2 = @preg_replace(
-            '~(<input\b[^>]*\bname=(["\'])subject\2[^>]*>\s*</td>)~is',
-            '$1' . $insert,
-            $page,
-            1,
-            $count
-        );
-
-        if ($count > 0 && is_string($page2)) {
-            $page = $page2;
+    if (defined('THIS_SCRIPT') && in_array(THIS_SCRIPT, ['newthread.php', 'editpost.php'], true)) {
+        $episode = (string)($GLOBALS['af_atf_episode_html'] ?? '');
+        $fields = (string)($GLOBALS['af_atf_input_html'] ?? '');
+        $fields = $fields !== '' ? AF_ATF_TPL_MARK_INPUT.$fields : '';
+        if (str_contains($page, '<!--AF_COMPOSE_FIELDS-->')) {
+            $page = str_replace(['<!--AF_COMPOSE_EPISODE-->', '<!--AF_COMPOSE_FIELDS-->'], [$episode, $fields], $page);
+        } elseif (str_contains($page, 'atf-compose__field--editor')) {
+            $page = preg_replace_callback('~<div class="atf-compose__field atf-compose__field--editor">~',
+                static fn(array $m): string => '<!--AF_COMPOSE_PRESET-->'.$episode.$fields.$m[0], $page, 1) ?? $page;
         } else {
-            $count = 0;
-            $page2 = @preg_replace(
-                '~(<input\b[^>]*\bname=(["\'])subject\2[^>]*>)~is',
-                '$1' . $insert,
-                $page,
-                1,
-                $count
-            );
-            if ($count > 0 && is_string($page2)) {
-                $page = $page2;
-            }
+            $episode = $episode !== '' ? '<tr><td colspan="2">'.$episode.'</td></tr>' : '';
+            $insert = $episode.(str_contains($page, AF_ATF_TPL_MARK_INPUT) ? '' : $fields);
+            $page = preg_replace_callback('~(<input\b[^>]*\bname=(["\'])subject\2[^>]*>.*?</tr>)~is',
+                static fn(array $m): string => $m[0].$insert, $page, 1) ?? $page;
         }
     }
 
@@ -1856,7 +1841,8 @@ function af_atf_get_groups_cached(): array
     global $cache;
 
     $c = $cache->read('af_atf_fields');
-    if (!is_array($c) || !isset($c['groups']) || !is_array($c['groups'])) {
+    if (!is_array($c) || !isset($c['groups']) || !is_array($c['groups'])
+        || array_filter($c['groups'], static fn($group): bool => !is_array($group) || !array_key_exists('acs_enabled', $group))) {
         af_atf_rebuild_cache(true);
         $c = $cache->read('af_atf_fields');
     }
@@ -2869,7 +2855,7 @@ function af_atf_newthread_start(): void
 
     // чтобы при POST/preview/ошибках поля не стирались
     af_atf_prepare_input_block($fidI, 0, false);
-    $GLOBALS['af_atf_input_html'] .= af_atf_acs_mode_input($fidI);
+    $GLOBALS['af_atf_episode_html'] = af_atf_acs_mode_input($fidI);
 
     // Сбрасываем на всякий случай (чтоб не "прилипало" между запросами)
     $GLOBALS['af_atf_preview_html'] = '';
@@ -2921,6 +2907,7 @@ function af_atf_editpost_start(): void
     if ($tidI > 0) { $tid = $tidI; }
 
     af_atf_prepare_input_block($fidI, $tidI, true);
+    $GLOBALS['af_atf_episode_html'] = af_atf_acs_mode_input($fidI, $tidI);
 
     // Сбрасываем на всякий случай
     $GLOBALS['af_atf_preview_html'] = '';
@@ -3435,6 +3422,9 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
         return '';
     }
 
+    $route = defined('THIS_SCRIPT') ? basename(THIS_SCRIPT, '.php') : '';
+    $compose = in_array($route, ['newthread', 'editpost'], true)
+        && str_contains($templates->get($route, 0), 'atf-compose__field--editor');
     af_atf_preload_field_kb_entries($fields, $valuesByFieldId);
     $rows = '';
     $hasCharacterContract = false;
@@ -3448,7 +3438,8 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
     if ($hasCharacterContract) {
         $fid = (int)($GLOBALS['af_atf_context_fid'] ?? 0);
         $activeMechanic = af_atf_character_resolve_active_mechanic($fid, $fields, $valuesByFieldId);
-        $rows .= '<tr class="af-atf-character-mechanic-row" style="display:none;"><td colspan="2"><input type="hidden" class="af-atf-character-mechanic" value="' . htmlspecialchars_uni($activeMechanic) . '" /></td></tr>';
+        $mechanicInput = '<input type="hidden" class="af-atf-character-mechanic" value="'.htmlspecialchars_uni($activeMechanic).'">';
+        $rows .= $compose ? $mechanicInput : '<tr hidden><td colspan="2">'.$mechanicInput.'</td></tr>';
     }
 
     $characterTopFieldNames = [
@@ -3518,7 +3509,8 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
                 . '</div>';
         }
         $gridHtml .= '</div>';
-        $rows .= '<tr class="af-atf-character-top-grid-row"><td class="trow2" colspan="2">' . $gridHtml . '</td></tr>';
+        $rows .= $compose ? '<div class="atf-compose__field--wide">'.$gridHtml.'</div>'
+            : '<tr class="af-atf-character-top-grid-row"><td class="trow2" colspan="2">'.$gridHtml.'</td></tr>';
     }
 
     foreach ($fields as $f) {
@@ -3543,11 +3535,24 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
         $fieldSectionClass = in_array((string)$f['type'], ['textarea', 'abilities', 'character_abilities'], true)
             || strpos($input, 'af-atf-abilities') !== false
             ? ' af-atf-form-section' : '';
+        if ($compose) {
+            $labelId = 'af-atf-field-label-'.$fieldid;
+            $wide = $fieldSectionClass !== '' ? ' atf-compose__field--wide' : '';
+            $rows .= '<section class="atf-compose__field af-atf-form-field'.$fieldSectionClass.$wide.'" role="group" aria-labelledby="'.$labelId.'">'
+                .'<div class="af-atf-field-label" id="'.$labelId.'">'.$title.$requiredMark.'</div>'
+                .($desc !== '' ? '<div class="af-atf-field-help">'.$desc.'</div>' : '')
+                .'<div class="af-atf-field-control">'.$input.'</div></section>';
+            continue;
+        }
         $row = '';
         eval("\$row = \"".$templates->get('af_atf_input_row')."\";");
         $rows .= $row;
     }
 
+    if ($compose) {
+        return '<section class="atf-compose__section"><h2 class="atf-compose__section-title">Дополнительные поля</h2>'
+            .'<div class="atf-compose__atf-grid">'.$rows.'</div></section>';
+    }
     $out = '';
     eval("\$out = \"".$templates->get('af_atf_input_block')."\";");
     return $out;
@@ -4911,6 +4916,7 @@ function af_atf_editpost_do_start(): void
     }
 
     $ctx = af_atf_get_post_context_by_pid($pidI);
+    af_atf_acs_validate_edit($ctx);
     if (empty($ctx['is_first'])) {
         return;
     }

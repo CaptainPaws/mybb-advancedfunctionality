@@ -28,25 +28,99 @@ function af_atf_acs_forum_enabled(int $fid): bool
     return false;
 }
 
-function af_atf_acs_available(int $fid): bool
+function af_atf_acs_blocker(int $fid, bool $editing = false): ?string
 {
     global $db;
-    return af_atf_acs_forum_enabled($fid) && $db->table_exists(AF_ATF_ACS_INTENTS)
-        && function_exists('af_advancedcombatsystem_atf_can_create')
-        && af_advancedcombatsystem_atf_can_create($fid);
+    if (!af_atf_acs_forum_enabled($fid)) { return 'scope'; }
+    if (!af_is_addon_enabled('advancedcombatsystem')) { return 'disabled'; }
+    if (!$editing && !$db->table_exists(AF_ATF_ACS_INTENTS)) { return 'storage'; }
+    if (!function_exists('af_advancedcombatsystem_atf_create_blocker')) { return 'bootstrap'; }
+    return af_advancedcombatsystem_atf_create_blocker($fid);
 }
 
-function af_atf_acs_mode_input(int $fid): string
+function af_atf_acs_available(int $fid): bool
+{
+    return af_atf_acs_blocker($fid) === null;
+}
+
+function af_atf_acs_mode_input(int $fid, int $tid = 0): string
 {
     global $mybb;
-    if (!af_atf_acs_available($fid)) { return ''; }
+    $blocker = af_atf_acs_blocker($fid, $tid > 0);
+    if ($tid > 0 && function_exists('af_advancedcombatsystem_atf_edit_state')) {
+        try {
+            $state = af_advancedcombatsystem_atf_edit_state($tid);
+            if (!empty($state['existing'])) {
+                $session = $state['session'];
+                $url = 'showthread.php?tid='.$tid.'&acs_setup=1&acs_atf_setup=1';
+                if (!empty($session['id'])) { $url .= '&acs_session='.$session['id'].'&gm_step=2'; }
+                $status = match ($session['encounter_status'] ?? null) {
+                    'active' => 'Столкновение активно.',
+                    'paused' => 'Столкновение приостановлено.',
+                    'pending_resolution' => 'Столкновение ожидает завершения.',
+                    'completed' => 'Столкновение завершено.',
+                    null => $session ? 'Столкновение ещё не настроено.' : '',
+                    default => 'Столкновение настраивается.',
+                };
+                return '<div class="atf-compose__field"><strong>Тип эпизода · Боевой эпизод (ACS)</strong>'
+                    .'<p>Сессия уже создана. '.$status.' Закрытие и архивирование выполняются в ACS. Сохранение темы сохраняет сессию и историю.</p>'
+                    .(!empty($session['can_manage']) ? '<a href="'.htmlspecialchars_uni($url).'">Настроить бой</a>' : '').'</div>';
+            }
+            if ($blocker === null && empty($state['visible'])) { $blocker = 'visibility'; }
+        } catch (Throwable $error) {
+            if ($blocker === null) { $blocker = 'schema'; }
+        }
+    }
+    if ($blocker === 'scope') { return ''; }
+    if ($blocker !== null) {
+        $reason = match ($blocker) {
+            'permission' => 'Для боевого эпизода нужна группа с правом создания сессий ACS.',
+            'native' => 'Для боевого эпизода нужны права MyBB на создание и просмотр тем.',
+            'storage' => 'Боевой режим недоступен до обновления хранилища намерений ATF.',
+            'disabled' => 'Боевой режим недоступен, пока ACS отключён.',
+            'visibility' => 'Включение ACS доступно после публикации темы.',
+            default => 'Боевой режим временно недоступен. Проверьте установку ACS.',
+        };
+        return '<p class="atf-compose__hint">'.htmlspecialchars_uni($reason).'</p>';
+    }
     $mode = $mybb->request_method === 'post' && $mybb->get_input('acs_mode') === 'combat';
-    $token = $mybb->request_method === 'post' ? $mybb->get_input('acs_intent') : '';
-    if (!preg_match('/\A[a-f0-9]{32}\z/D', $token)) { $token = bin2hex(random_bytes(16)); }
-    return '<fieldset class="af-atf-form-field"><legend>Тип эпизода</legend>'
+    $hidden = '';
+    if ($tid === 0) {
+        $token = $mybb->request_method === 'post' ? $mybb->get_input('acs_intent') : '';
+        if (!preg_match('/\A[a-f0-9]{32}\z/D', $token)) { $token = bin2hex(random_bytes(16)); }
+        $hidden = '<input type="hidden" name="acs_intent" value="'.$token.'">';
+    }
+    return '<fieldset class="atf-compose__episode"><legend>Тип эпизода</legend>'
         .'<label><input type="radio" name="acs_mode" value="normal"'.(!$mode ? ' checked' : '').'> Обычный эпизод</label> '
         .'<label><input type="radio" name="acs_mode" value="combat"'.($mode ? ' checked' : '').'> Боевой эпизод (ACS)</label>'
-        .'<input type="hidden" name="acs_intent" value="'.$token.'"></fieldset>';
+        .$hidden.'</fieldset>';
+}
+
+function af_atf_acs_validate_edit(array $context): void
+{
+    global $mybb;
+    $mode = $mybb->get_input('acs_mode');
+    if ($mode === '' || $mode === 'normal') { return; }
+    if ($mode !== 'combat' || empty($context['is_first'])
+        || af_atf_acs_blocker((int)$context['fid'], true) !== null) {
+        error('Боевой эпизод ACS недоступен для этого форума или пользователя.');
+    }
+    try { $state = af_advancedcombatsystem_atf_edit_state((int)$context['tid']); }
+    catch (Throwable $error) { $state = null; }
+    if (empty($state['visible'])) { error('Включение ACS доступно только в опубликованной теме.'); }
+    if (!af_atf_is_preview_request() && empty($state['existing'])) {
+        $GLOBALS['af_atf_acs_edit_tid'] = (int)$context['tid'];
+    }
+}
+
+function af_atf_acs_finish_edit(): void
+{
+    global $tid, $lang;
+    if ((int)$tid <= 0 || (int)$tid !== ($GLOBALS['af_atf_acs_edit_tid'] ?? null)) { return; }
+    try { af_advancedcombatsystem_atf_create((string)$tid); }
+    catch (Throwable $error) {
+        $lang->redirect_postedited .= ' Создание сессии ACS не подтверждено. Откройте настройку боя в сохранённой теме.';
+    }
 }
 
 function af_atf_acs_intent(string $token): ?array
