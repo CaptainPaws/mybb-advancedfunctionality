@@ -13,6 +13,7 @@ define('AF_KB_BASE', AF_ADDONS . AF_KB_ID . '/');
 define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
 define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
 require_once AF_KB_BASE . 'modules/arpg_elements.php';
+require_once AF_KB_BASE . 'modules/arpg_ability_catalog.php';
 require_once AF_KB_BASE . 'modules/arpg_editor.php';
 require_once AF_KB_BASE . 'modules/arpg_bestiary.php';
 define('AF_KB_MARK', '<!--af_kb_assets-->');
@@ -7254,6 +7255,10 @@ function af_kb_validate_arpg_entry_by_type(string $type, array $payload, array &
     af_kb_arpg_validate_math_fields((array)($payload['rules'] ?? []), $errors);
     af_kb_arpg_validate_element_fields((array)($payload['rules'] ?? []), $errors);
     af_kb_arpg_validate_status_fields((array)($payload['rules'] ?? []), $errors);
+    if ($type === 'arpg_ability' && array_key_exists('ability_catalog', $payload['rules'])
+        && !af_kb_ability_catalog_metadata_valid($payload['rules']['ability_catalog'])) {
+        $errors[] = 'Invalid rules.ability_catalog metadata (expected version 1).';
+    }
 
     if ($isService) {
         $payload['rules']['type_profile'] = 'service_mechanics';
@@ -11268,7 +11273,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_race_variants', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save', 'kb_debug_entry_cats', 'kb_character_apply', 'kb_character_reserve', 'kb_character_extend', 'kb_character_status_save'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_ability_catalog', 'kb_children', 'kb_race_variants', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save', 'kb_debug_entry_cats', 'kb_character_apply', 'kb_character_reserve', 'kb_character_extend', 'kb_character_status_save'], true)) {
         return;
     }
 
@@ -11318,6 +11323,9 @@ function af_kb_dispatch(): void
     }
     if ($action === 'kb_list') {
         af_kb_handle_json_list();
+    }
+    if ($action === 'kb_ability_catalog') {
+        af_kb_handle_ability_catalog_json();
     }
     if ($action === 'kb_types') {
         af_kb_handle_json_types();
@@ -12207,7 +12215,7 @@ function af_kb_render_character_status_link(array $availability, bool $isRu, str
     return $name !== '' ? '<span class="af-kb-status-link af-kb-status-link--' . htmlspecialchars_uni($context) . '" data-character-status="' . htmlspecialchars_uni($status) . '">' . htmlspecialchars_uni($isRu ? 'Придержал: ' : 'Reserved by: ') . htmlspecialchars_uni($name) . '</span>' : '';
 }
 
-function af_kb_catalog_entry_card(array $entry, array $typeRow): string
+function af_kb_catalog_entry_card(array $entry, array $typeRow, array $labels = [], string $linkLabel = ''): string
 {
     global $lang;
 
@@ -12275,7 +12283,7 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
             $meta[] = htmlspecialchars_uni($itemKind);
         }
         $typeTitle = trim((string)af_kb_pick_text($typeRow, 'title'));
-        if ($typeTitle !== '') {
+        if ($typeTitle !== '' && !$labels) {
             $meta[] = htmlspecialchars_uni($typeTitle);
         }
     }
@@ -12283,6 +12291,9 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
     $url = defined('MYBB_ROOT')
         ? af_kb_url(['type' => (string)$entry['type'], 'key' => (string)$entry['key']])
         : 'misc.php?action=kb&type=' . rawurlencode((string)$entry['type']) . '&key=' . rawurlencode((string)$entry['key']);
+    foreach ($labels as $label) {
+        $meta[] = htmlspecialchars_uni($label);
+    }
     $kb_entry_url = htmlspecialchars_uni($url);
     $kb_character_title = htmlspecialchars_uni($title);
     $englishName = $isCharacter ? trim((string)($profile['character_name'] ?? '')) : '';
@@ -12324,7 +12335,7 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
         $kb_category_entry_short = $kb_character_short;
         $kb_category_entry_url = $kb_entry_url;
         $kb_category_entry_label = htmlspecialchars_uni(
-            $lang->af_kb_catalog_article ?? (af_kb_is_ru() ? 'Статья' : 'Article')
+            $linkLabel !== '' ? $linkLabel : ($lang->af_kb_catalog_article ?? (af_kb_is_ru() ? 'Статья' : 'Article'))
         );
 
         eval("\$card = \"" . af_kb_get_template('knowledgebase_list_category_entry') . "\";");
@@ -13089,6 +13100,10 @@ function af_kb_handle_view(): void
         exit;
     }
 
+    if ($key === '' && $type === 'arpg_ability' && !($mybb->get_input('manage') === '1' && af_kb_can_edit())) {
+        af_kb_render_ability_catalog();
+    }
+
     if ($key === '') {
         $requestedMechanic = af_kb_get_type_mechanic_key($type);
         if (!af_kb_can_edit() && af_kb_is_internal_service_type($type, $requestedMechanic)) {
@@ -13255,6 +13270,10 @@ function af_kb_handle_view(): void
         $kb_entries_class = '';
         $kb_categories_tree = $catTopTabsHtml ?? '';
         $kb_categories_tree_sidebar = $catSidebarTreeHtml;
+        if ($type === 'arpg_ability' && $mybb->get_input('manage') === '1') {
+            $kb_categories_tree = str_replace('&cat=', '&manage=1&cat=', $kb_categories_tree);
+            $kb_categories_tree_sidebar = str_replace('&cat=', '&manage=1&cat=', $kb_categories_tree_sidebar);
+        }
         $kb_categories_enabled = af_kb_categories_enabled() ? '1' : '0';
         $uiPositionRaw = (string)af_kb_get_setting('af_kb_categories_ui_position', af_kb_get_setting('af_kb_categories_ui', 'sidebar'));
         $kb_ui_position = $uiPositionRaw === 'top' ? 'top' : 'sidebar';
@@ -13275,6 +13294,11 @@ function af_kb_handle_view(): void
             ? af_kb_render_character_filters($characterFilters, $characterOptionSets, $query)
             : '';
         $paginationUrl = defined('AF_CHARACTERS_PAGE_ALIAS') ? 'characters.php?' : 'misc.php?action=kb&type=' . urlencode($type);
+        $kb_category_search_extra = '';
+        if ($type === 'arpg_ability' && $mybb->get_input('manage') === '1') {
+            $paginationUrl .= '&manage=1';
+            $kb_category_search_extra = '<input type="hidden" name="manage" value="1" />';
+        }
         if ($query !== '') {
             $paginationUrl .= '&q=' . urlencode($query);
         }
