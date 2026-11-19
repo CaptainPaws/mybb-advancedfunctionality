@@ -44,7 +44,7 @@ final class AF_ACS_ArchivePage
         $f=array_filter(array_intersect_key($r,array_flip(['round','actor','entity','control_group','category','event_type','pid','search'])),static fn($v)=>$v!=='');
         $p=$service->page($sid,$eid,$f,$r['cursor']??'');$base=['action'=>'acs_archive','session_id'=>$sid,'encounter_id'=>$eid];
         $section=$r['archive_section']??'journal';if(!in_array($section,['journal','participants','rewards','loot','obligations'],true))$section='journal';
-        $html='<section class="af-acs af-acs-archive"><h1>Боевой журнал и архив</h1><p>Столкновение #'.self::esc($eid).' · '.self::esc($p['encounter_status']).'</p>';
+        $html='<section class="af-acs af-acs-archive"><h2>Боевой журнал и архив</h2><p>Столкновение #'.self::esc($eid).' · '.self::esc($p['encounter_status']).'</p>';
         if($p['outcome'])$html.='<p>Подтверждённый итог: '.self::esc(self::label($p['outcome']['kind'])).(isset($p['outcome']['winner_side_id'])?' · сторона #'.self::esc($p['outcome']['winner_side_id']):'').'</p>';
         else $html.='<p>Разрешённый подтверждённый итог не предоставлен. Отсутствие данных не означает отсутствие боя.</p>';
         $html.='<nav aria-label="Разделы архива">';$sections=['journal'=>'История'];if($p['can_manage'])$sections['participants']='Участники';if($p['can_export_extended'])$sections+=['rewards'=>'Награды','loot'=>'Добыча','obligations'=>'Обязательства'];

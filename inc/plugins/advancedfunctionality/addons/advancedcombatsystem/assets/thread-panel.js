@@ -131,6 +131,10 @@
             pending = null;
             rejectedForm = null;
             if (result.bar) setBar(result.bar);
+            if (result.session_id) {
+                const sessionRefresh = document.querySelector('[data-acs-session-refresh]');
+                if (sessionRefresh && sessionRefresh.dataset.acsSessionRefresh === result.session_id) sessionRefresh.hidden = false;
+            }
             if (result.session_id && !url.searchParams.get('acs_session')) {
                 url.searchParams.set('acs_session', result.session_id);
                 url.searchParams.set('gm_step', '2');
