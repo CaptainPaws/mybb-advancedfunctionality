@@ -24,14 +24,17 @@ class AF_Admin_Advancedcombatsystem
         require_once __DIR__.'/modules/Administration/Diagnostics.php';
         $diagnostics = new AF_ACS_Diagnostics;
         $sections = ['main', 'permissions', 'sessions', 'diagnostics', 'integrations', 'publication'];
+        if ($auth->decision('admin.schema.manage')['allowed']) $sections[] = 'testpack';
         $section = $mybb->get_input('acs_section');
         if (!in_array($section, $sections, true)) { $section = 'main'; }
         $tabs = [];
         foreach ($sections as $key) {
             $label = 'af_advancedcombatsystem_'.$key;
-            $tabs[$key] = ['title' => $key === 'publication' ? 'Публикация' : $lang->$label, 'link' => 'index.php?module=advancedfunctionality&af_view=advancedcombatsystem&acs_section='.$key];
+            $tabs[$key] = ['title' => match ($key) {'publication'=>'Публикация', 'testpack'=>'Тестовый комплект', default=>$lang->$label}, 'link' => 'index.php?module=advancedfunctionality&af_view=advancedcombatsystem&acs_section='.$key];
         }
         if (isset($page) && method_exists($page, 'output_nav_tabs')) { $page->output_nav_tabs($tabs, $section); }
+
+        if ($section === 'testpack') { require_once __DIR__.'/modules/Administration/Testpack.php'; AF_ACS_Testpack::render($auth); return; }
 
         if ($section === 'publication') { require_once __DIR__.'/modules/Administration/PublicationDiagnostics.php'; AF_ACS_PublicationDiagnostics::render(); return; }
 

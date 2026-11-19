@@ -199,7 +199,7 @@ function af_kb_ability_catalog_project(array $row, array $registry): ?array
         return null;
     }
 
-    $metadata = $rules['ability_catalog'] ?? null;
+    $metadata = $rules['ability_catalog'] ?? $meta['ability_catalog'] ?? null;
     $metadata = af_kb_ability_catalog_metadata_valid($metadata) ? $metadata : [];
     $options = $registry['options'];
     $weapons = array_values(array_intersect($metadata['weapons'] ?? [], array_keys($options['weapon'])));
@@ -344,7 +344,7 @@ function af_kb_arpg_character_ability_profile(array $ability, string $path, arra
     }
     $profile = af_kb_arpg_acs_ability($source['rules'], $path, $diagnostics);
     $profile['references']['ability_kb_key'] = ['kind' => 'arpg_ability', 'key' => $key, 'resolved' => true,
-        'entry_id' => $row['id'], 'fingerprint' => $source['fingerprint'], 'definition_version' => $version];
+        'entry_id' => $row['id'], 'entry_key' => $key, 'fingerprint' => $source['fingerprint'], 'definition_version' => $version];
     return $profile;
 }
 

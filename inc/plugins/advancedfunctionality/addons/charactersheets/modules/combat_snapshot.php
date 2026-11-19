@@ -364,15 +364,14 @@ function af_cs_snapshot_capture_refs(array $value, array &$readSet, array &$issu
             }
         }
     } elseif (!empty($value['resolved']) && isset($value['entry_id'],$value['fingerprint'])) {
-        $id = (int)$value['entry_id']; $identity = 'entry:'.$id;
+        $id = (int)$value['entry_id']; $identity = 'entry:'.$id.':'.($value['key'] ?? '').':'.$value['fingerprint'];
         if (!isset($seen[$identity])) {
             $seen[$identity] = true;
             $rows = af_cs_snapshot_select('af_kb_entries','id='.$id,$readSet);
             if (count($rows) !== 1 || !af_kb_entry_visible_in_context($rows[0],'entry',af_kb_can_edit())
                 || (($value['kind'] ?? '') === 'arpg_ability' && !af_kb_ability_catalog_public_row($rows[0]))) af_cs_snapshot_issue($issues,'definition_access_denied','references');
             else {
-                $source = af_kb_arpg_acs_source($rows[0],$issues);
-                if ($source['fingerprint'] !== $value['fingerprint']) af_cs_snapshot_issue($issues,'source_changed_during_read','references');
+                if (!af_kb_arpg_acs_reference_matches_row($value,$rows[0],$issues)) af_cs_snapshot_issue($issues,'source_changed_during_read','references');
             }
         }
     }
