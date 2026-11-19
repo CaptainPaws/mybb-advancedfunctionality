@@ -169,6 +169,25 @@ final class AF_ACS_AuthorizationService
         return in_array($permission, [1, '1', true], true);
     }
 
+    /** Only session creation may use verified administrator authority outside ACP. */
+    public function administratorCanCreateSession(): bool
+    {
+        global $mybb;
+        $uid = (int)($mybb->user['uid'] ?? 0);
+        if ($uid <= 0 || empty($mybb->usergroup['cancp'])) { return false; }
+        if (defined('IN_ADMINCP') && IN_ADMINCP) { return $this->afAdministrator(); }
+        if (function_exists('is_super_admin') && is_super_admin($uid)) { return true; }
+
+        if (!function_exists('get_admin_permissions')) {
+            $adminDir = (string)($mybb->config['admin_dir'] ?? 'admin');
+            $native = MYBB_ROOT.rtrim($adminDir, '/').'/inc/functions.php';
+            if (!is_readable($native)) { return false; }
+            require_once $native;
+        }
+        $permissions = get_admin_permissions($uid);
+        return in_array($permissions['advancedfunctionality']['index'] ?? null, [1, '1', true], true);
+    }
+
     /** The role argument is never a grant; session permissions resolve persisted membership. */
     public function decision(string $permission, ?string $sessionId = null, ?AF_ACS_Role $role = null): array
     {

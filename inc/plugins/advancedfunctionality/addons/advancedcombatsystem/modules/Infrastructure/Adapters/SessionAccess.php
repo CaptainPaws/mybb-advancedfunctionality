@@ -14,7 +14,8 @@ class AF_ACS_SessionAccess
     public function canCreate(): bool
     {
         global $mybb;
-        if($this->administrator())return true;
+        if ((int)($mybb->user['uid'] ?? 0) <= 0 || (isset($mybb->usergroup['canview']) && !$mybb->usergroup['canview'])) { return false; }
+        if ((new AF_ACS_AuthorizationService)->administratorCanCreateSession()) { return true; }
         $groups=array_map('trim',explode(',',(string)($mybb->settings['af_acs_session_gm_groups']??'')));
         $actorGroups=explode(',',(string)($mybb->user['additionalgroups']??''));$actorGroups[]=(string)($mybb->user['usergroup']??'');
         return (bool)array_intersect(array_filter($groups,static fn($g)=>preg_match('/\A[0-9]+\z/D',$g)&&((int)$g)>0),$actorGroups);
