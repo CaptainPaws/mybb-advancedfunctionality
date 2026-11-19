@@ -14,6 +14,9 @@ final class AF_ACS_EncounterService
         $roles=array_column($this->repository->roles($sid,$this->access->uid()),'role');
         if(!$this->access->administrator() && !(in_array('gm',$roles,true) || (in_array('owner',$roles,true) && $session['owner_uid']===$this->access->uid())))throw new RuntimeException('ACS_GM_REQUIRED');
         if($tid!==null && $session['tid']!==$tid)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
+        if (($this->repository->episodeMode($session['tid'])['mode'] ?? null) === 'normal') {
+            throw new RuntimeException('ACS_EPISODE_NORMAL');
+        }
         if($write && $session['status']!=='active')throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
         return $session;
     }
