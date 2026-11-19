@@ -43,7 +43,11 @@ class AF_Admin_KnowledgeBase
 
         // POST
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            verify_post_check((string)($_POST['my_post_key'] ?? ''));
+            if (!verify_post_check((string)($_POST['my_post_key'] ?? ''), true)) {
+                flash_message('Недействительный ключ подтверждения.', 'error');
+                admin_redirect(self::baseUrl('types'));
+                return;
+            }
 
             if ($do === 'type_new' || $do === 'type_edit') {
                 self::saveType(); // redirect+exit
@@ -98,6 +102,7 @@ class AF_Admin_KnowledgeBase
                 'rules_schema' => 'af_kb.rules.v1',
                 'ui_schema_json' => '{}',
                 'is_active' => 1,
+                'show_in_catalog' => 1,
                 'sortorder' => 0
             ];
 
@@ -105,6 +110,8 @@ class AF_Admin_KnowledgeBase
                 $found = $db->fetch_array($db->simple_select('af_kb_types', '*', 'id='.$id, ['limit'=>1]));
                 if ($found) {
                     $row = array_merge($row, $found);
+                    $row['show_in_catalog'] = $found['show_in_catalog']
+                        ?? (in_array($found['type'], af_kb_arpg_internal_types(), true) ? 0 : 1);
                     if (empty($row['type_key'])) {
                         $row['type_key'] = (string)($row['type'] ?? '');
                     }
@@ -124,7 +131,8 @@ class AF_Admin_KnowledgeBase
             echo '<p>title_en: <input type="text" name="title_en" value="'.htmlspecialchars_uni((string)$row['title_en']).'" required /></p>';
             echo '<p>rules_schema: <input type="text" name="rules_schema" value="'.htmlspecialchars_uni((string)$row['rules_schema']).'" /></p>';
             echo '<p>sortorder: <input type="number" name="sortorder" value="'.(int)$row['sortorder'].'" /></p>';
-            echo '<p>active: <input type="checkbox" name="is_active" value="1" '.(!empty($row['is_active']) ? 'checked' : '').' /></p>';
+            echo '<p><label><input type="checkbox" name="is_active" value="1" '.(!empty($row['active'] ?? $row['is_active']) ? 'checked' : '').' /> Тип активен</label><br>Определяет функциональную доступность типа и его записей для интеграций.</p>';
+            echo '<p><label><input type="checkbox" name="show_in_catalog" value="1" '.(!empty($row['show_in_catalog']) ? 'checked' : '').' /> Показывать в каталоге KB</label><br>Управляет публичным каталогом. Служебные типы доступны редакторам по действующим правам.</p>';
 
             echo '<p>desc_ru:<br><textarea name="desc_ru" rows="3" style="width:100%;">'.htmlspecialchars_uni((string)$row['desc_ru']).'</textarea></p>';
             echo '<p>desc_en:<br><textarea name="desc_en" rows="3" style="width:100%;">'.htmlspecialchars_uni((string)$row['desc_en']).'</textarea></p>';
@@ -141,7 +149,7 @@ class AF_Admin_KnowledgeBase
         echo '<p><a class="button" href="'.htmlspecialchars_uni(self::baseUrl('type_new')).'">Добавить тип</a></p>';
 
         echo '<table class="table">';
-        echo '<tr><th>type_key</th><th>RU</th><th>EN</th><th>schema</th><th>active</th><th>sort</th><th></th></tr>';
+        echo '<tr><th>type_key</th><th>RU</th><th>EN</th><th>schema</th><th>Тип активен</th><th>В каталоге</th><th>sort</th><th></th></tr>';
 
         $q = $db->simple_select('af_kb_types', '*', '', ['order_by' => 'sortorder, type_key, type']);
         while ($row = $db->fetch_array($q)) {
@@ -158,7 +166,9 @@ class AF_Admin_KnowledgeBase
             echo '<td>'.htmlspecialchars_uni((string)$row['title_ru']).'</td>';
             echo '<td>'.htmlspecialchars_uni((string)$row['title_en']).'</td>';
             echo '<td>'.htmlspecialchars_uni((string)($row['rules_schema'] ?: 'af_kb.rules.v1')).'</td>';
-            echo '<td>'.(!empty($row['is_active']) ? '1' : '0').'</td>';
+            echo '<td>'.(!empty($row['active']) ? 'Да' : 'Нет').'</td>';
+            $internal = in_array($key, af_kb_arpg_internal_types(), true) || in_array($row['type'], af_kb_arpg_internal_types(), true);
+            echo '<td>'.($internal ? 'Нет (служебный)' : (!empty($row['show_in_catalog'] ?? 1) ? 'Да' : 'Нет')).'</td>';
             echo '<td>'.(int)$row['sortorder'].'</td>';
             echo '<td><a href="'.htmlspecialchars_uni($editUrl).'">edit</a> | <a href="'.htmlspecialchars_uni($delUrl).'">delete</a></td>';
             echo '</tr>';
@@ -260,16 +270,26 @@ class AF_Admin_KnowledgeBase
             exit;
         }
 
+        if (!$db->field_exists('show_in_catalog', 'af_kb_types')) {
+            flash_message('Обновите схему Knowledge Base через штатную активацию аддона.', 'error');
+            admin_redirect(self::baseUrl('types'));
+            return;
+        }
+
+        $existing = $id > 0
+            ? $db->fetch_array($db->simple_select('af_kb_types', 'mechanic_key', 'id='.$id, ['limit'=>1]))
+            : [];
         $data = [
             'type' => $db->escape_string($key),
             'type_key' => $db->escape_string($key),
-            'mechanic_key' => $db->escape_string(af_kb_get_default_mechanic_mode()),
+            'mechanic_key' => $db->escape_string((string)($existing['mechanic_key'] ?? af_kb_get_default_mechanic_mode())),
             'title_ru' => $db->escape_string((string)($_POST['title_ru'] ?? '')),
             'title_en' => $db->escape_string((string)($_POST['title_en'] ?? '')),
             'desc_ru' => $db->escape_string((string)($_POST['desc_ru'] ?? '')),
             'desc_en' => $db->escape_string((string)($_POST['desc_en'] ?? '')),
             'rules_schema' => $db->escape_string((string)($_POST['rules_schema'] ?? 'af_kb.rules.v1')),
             'ui_schema_json' => $db->escape_string($schema),
+            'show_in_catalog' => empty($_POST['show_in_catalog']) ? 0 : 1,
             'is_active' => !empty($_POST['is_active']) ? 1 : 0,
             'active' => !empty($_POST['is_active']) ? 1 : 0,
             'sortorder' => (int)($_POST['sortorder'] ?? 0),

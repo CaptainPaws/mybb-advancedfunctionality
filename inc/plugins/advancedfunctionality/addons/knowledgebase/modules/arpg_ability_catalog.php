@@ -578,7 +578,7 @@ function af_kb_handle_ability_catalog_json(): void
         af_kb_render_json_error('No access', 403);
     }
     $type = af_kb_find_type_row('arpg_ability');
-    if (empty($type['active'])) {
+    if (!af_kb_catalog_type_is_public($type)) {
         af_kb_render_json_error('Ability catalog unavailable', 404);
     }
 
@@ -603,7 +603,7 @@ function af_kb_render_ability_catalog(): void
     global $mybb, $lang, $headerinclude, $header, $footer;
 
     $typeRow = af_kb_find_type_row('arpg_ability');
-    if (empty($typeRow['active'])) {
+    if (!af_kb_catalog_type_is_public($typeRow)) {
         error($lang->af_kb_not_found ?? 'Not found');
     }
     $ru = af_kb_is_ru();
