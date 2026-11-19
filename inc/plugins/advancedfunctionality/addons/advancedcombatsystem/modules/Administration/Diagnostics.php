@@ -48,9 +48,9 @@ final class AF_ACS_Diagnostics
         try { require_once __DIR__.'/Migrations.php'; $state=af_advancedcombatsystem_migrations()->status(); }
         catch (Throwable $error) { $state=['schema_version'=>null,'migrations'=>[],'error'=>'ACS_DATABASE_UNAVAILABLE','database'=>null,
             'status'=>'RECOVERY_REQUIRED','structure'=>'NOT_CHECKED','version'=>null,'object'=>null,
-            'checksum_versions'=>[],'confirmation'=>null,'confirmed'=>false]; }
+            'checksum_differences'=>[]]; }
         $state['required_version']=class_exists('AF_ACS_Migrations',false)?AF_ACS_Migrations::VERSION:null;
-        $state['ready']=$state['required_version']!==null && $state['error']===null && $state['schema_version']===$state['required_version'];
+        $state['ready']=$state['status']==='READY';
         return $state;
     }
 
@@ -67,7 +67,7 @@ final class AF_ACS_Diagnostics
             'core.facilities'=>['IC-CORE','advancedfunctionality',[$core=>['af_discover_addons','af_is_addon_enabled','advancedfunctionality_bootstrap_addons','af_xmlhttp_call_addon','af_xmlhttp_router','af_frontend_asset_allowed']],[],
                 'Стандартный AF bootstrap и ACP router','CORE_INTERFACE_UNAVAILABLE','Восстановите штатный AF bootstrap и ACP router.'],
             'core.schema'=>['IC-CORE','advancedcombatsystem',[],[__DIR__.'/Migrations.php'=>['AF_ACS_Migrations::status','AF_ACS_Migrations::assertInstalled']],
-                'MigrationManager: ledger, checksums, таблицы, колонки и индексы','SCHEMA_NOT_READY','Откройте диагностику схемы; исправьте указанную причину и отдельно запустите штатное обновление. Данные сохраняются.'],
+                'MigrationManager: история, декларативный DDL, таблицы, колонки и индексы','SCHEMA_NOT_READY','Откройте диагностику схемы; исправьте указанную причину и отдельно запустите штатное обновление. Данные сохраняются.'],
             'kb.definition_reader'=>['IC-KB','knowledgebase',[$base.'knowledgebase/knowledgebase.php'=>['af_kb_arpg_read_definition','af_kb_arpg_normalize_entry']],[$adapters.'KnowledgeBaseAdapter.php'=>['AF_ACS_KnowledgeBaseAdapter::readDefinition']],
                 'Разрешённое определение и versioned references; только поддерживаемые схемы','INSTALLED_KB_ACCEPTANCE_REQUIRED','Выберите один KB key и проверьте источник без записи; ошибки исправляются через владельца KB.'],
             'kb.combat_snapshot'=>['IC-KB','knowledgebase',[$base.'knowledgebase/knowledgebase.php'=>['af_kb_arpg_read_definition']],[$adapters.'RegistrationSource.php'=>['AF_ACS_RegistrationSource::read','AF_ACS_RegistrationSource::definitions'],$acs.'Infrastructure/SnapshotStore.php'=>['AF_ACS_SnapshotStore::append']],

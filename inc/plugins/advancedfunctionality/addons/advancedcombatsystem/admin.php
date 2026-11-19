@@ -45,7 +45,6 @@ class AF_Admin_Advancedcombatsystem
                 $command = $mybb->get_input('acs_command');
                 if ($command === 'install') { $success = af_advancedcombatsystem_install(); }
                 elseif ($command === 'upgrade') { $success = af_advancedcombatsystem_upgrade(); }
-                elseif ($command === 'confirm_redeploy') { $success = af_advancedcombatsystem_confirm_redeploy($mybb->get_input('acs_redeploy_evidence')); }
                 elseif ($command === 'uninstall') { $success = af_advancedcombatsystem_uninstall($mybb->get_input('acs_confirmation')); }
                 else { throw new RuntimeException('ACS_UNKNOWN_COMMAND'); }
                 if (!$success) { throw new RuntimeException('ACS_LIFECYCLE_FAILED'); }
@@ -78,7 +77,7 @@ class AF_Admin_Advancedcombatsystem
         $state = $diagnostics->schema();
         self::summary($state);
         AF_ACS_AcpSections::settings();
-        self::commands($state, $auth);
+        self::commands();
     }
 
     /** Compact general view; detailed ledger belongs only to Diagnostics. */
@@ -102,21 +101,19 @@ class AF_Admin_Advancedcombatsystem
         $recommendation = match ($state['error']) {
             null => 'Схема готова к штатной активации.',
             'ACS_NOT_INSTALLED' => 'Выполните штатную установку ACS.',
-            'ACS_MIGRATION_CHECKSUM_CONFIRMATION_REQUIRED' => 'Сверка исходников подтвердила замену LF ↔ CRLF. Подтвердите развёртывание в разделе «Основные», затем повторите активацию.',
-            'ACS_MIGRATION_CHECKSUM_UNVERIFIED' => 'Разверните проверенный комплект файлов с контрольными суммами из исходной поставки. Структура БД сама по себе не подтверждает совместимость PHP.',
-            'ACS_MIGRATION_CHECKSUM_WITH_PENDING' => 'Восстановите исходные файлы и завершите миграции через штатное обновление.',
+            'ACS_MIGRATION_PENDING_CHECKSUM_MISMATCH' => 'Проверьте версию пакета, которым была начата незавершённая миграция, перед штатным обновлением.',
+            'ACS_MIGRATION_DECLARATION_UNSUPPORTED', 'ACS_MIGRATION_VERSION_MISMATCH', 'ACS_MIGRATION_STEP_CONTRACT_MISMATCH', 'ACS_MIGRATION_DDL_UNSUPPORTED' => 'Проверьте указанное определение миграции в полном выпуске ACS.',
             'ACS_MIGRATION_INCOMPLETE' => 'Проверьте прерванную установку. Для известного журнала и исходных файлов используйте штатное обновление.',
             'ACS_UNKNOWN_MIGRATION' => 'Разверните полный выпуск, которому принадлежит журнал миграций.',
-            'ACS_MIGRATION_FILE_UNAVAILABLE', 'ACS_MIGRATION_FILE_INVALID', 'ACS_MIGRATION_FILE_CHANGED' => 'Повторно загрузите полный проверенный комплект ACS.',
-            'ACS_MIGRATION_OBLIGATIONS_UNRESOLVED' => 'Восстановите исходные файлы и проверьте незавершённые или повреждённые обязательства штатными средствами ACS.',
+            'ACS_MIGRATION_FILE_UNAVAILABLE', 'ACS_MIGRATION_FILE_INVALID' => 'Повторно загрузите полный проверенный комплект ACS.',
             default => 'Передайте владельцу проекта код ошибки и место несоответствия для сверки схемы, журнала или окружения.',
         };
         $location = implode(' / ', array_filter([$state['version'], $state['object']]));
         return [
             'Состояние миграций' => $state['status'].($state['error'] ? ' / '.$state['error'] : ''),
             'Структура схемы' => $state['structure'].($location ? ' / '.$location : ''),
-            'Изменившиеся checksum' => $state['checksum_versions']
-                ? implode(', ', $state['checksum_versions']).($state['confirmed'] ? ' (развёртывание подтверждено)' : '')
+            'Изменившиеся checksum' => $state['checksum_differences']
+                ? implode(', ', array_keys($state['checksum_differences'])).($state['ready'] ? ' (структура совместима)' : '')
                 : '—',
             'Рекомендация' => $recommendation,
         ];
@@ -161,17 +158,10 @@ class AF_Admin_Advancedcombatsystem
         echo '</ul>';
     }
 
-    private static function commands(array $state, AF_ACS_AuthorizationService $auth): void
+    private static function commands(): void
     {
         global $lang, $mybb;
         $url = 'index.php?module=advancedfunctionality&amp;af_view=advancedcombatsystem&amp;acs_section=main';
-        if ($state['confirmation'] !== null && $auth->decision('admin.schema.manage')['allowed'] && $auth->decision('admin.lifecycle')['allowed']) {
-            echo '<form method="post" action="'.$url.'">'
-                .'<input type="hidden" name="my_post_key" value="'.self::esc($mybb->post_code).'">'
-                .'<input type="hidden" name="acs_command" value="confirm_redeploy">'
-                .'<input type="hidden" name="acs_redeploy_evidence" value="'.self::esc($state['confirmation']).'">'
-                .'<button type="submit" class="submit_button">Подтвердить повторное развёртывание ACS</button></form>';
-        }
         foreach (['install', 'upgrade', 'uninstall'] as $command) {
             $label = 'af_advancedcombatsystem_'.$command;
             echo '<form method="post" action="'.$url.'">'

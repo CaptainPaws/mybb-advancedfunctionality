@@ -48,7 +48,7 @@ function af_advancedcombatsystem_is_installed(): bool
 {
     try {
         $state = af_advancedcombatsystem_migrations()->status();
-        return $state['error'] === null && $state['schema_version'] === AF_ACS_Migrations::VERSION;
+        return $state['status'] === 'READY';
     } catch (Throwable $error) { return false; }
 }
 
@@ -90,7 +90,7 @@ function af_advancedcombatsystem_install(): bool
 function af_advancedcombatsystem_activate(): bool
 {
     return af_advancedcombatsystem_lifecycle('activate', static function () {
-        af_advancedcombatsystem_migrations()->assertInstalled();
+        af_advancedcombatsystem_migrations()->activate();
         unset($GLOBALS['af_acs_deactivated']);
         // Passive lifecycle observers only; combat publication remains disabled. AF owns enabled.
     });
@@ -111,15 +111,6 @@ function af_advancedcombatsystem_upgrade(): bool
         af_advancedcombatsystem_session_settings();
         require_once __DIR__.'/modules/Administration/NotificationTask.php';
         af_advancedcombatsystem_install_notification_task();
-    });
-}
-
-function af_advancedcombatsystem_confirm_redeploy(string $confirmation): bool
-{
-    return af_advancedcombatsystem_lifecycle('confirm_redeploy', static function () use ($confirmation) {
-        global $mybb;
-        (new AF_ACS_AuthorizationService)->requirePermission('admin.schema.manage');
-        af_advancedcombatsystem_migrations()->confirmRedeploy($confirmation, (int)$mybb->user['uid']);
     });
 }
 
