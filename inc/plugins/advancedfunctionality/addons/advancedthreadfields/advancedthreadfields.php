@@ -531,7 +531,7 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
     }
 
     $hasComponent = !empty($GLOBALS['af_atf_has_frontend_component'])
-        || !empty($GLOBALS['af_atf_input_html'])
+        || !empty($GLOBALS['af_atf_prepared_input_html'])
         || !empty($GLOBALS['af_atf_episode_html'])
         || !empty($GLOBALS['af_atf_showthread_block'])
         || !empty($GLOBALS['af_atf_forum_catalog_cta_html']);
@@ -592,24 +592,12 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
     }
 
     if (defined('THIS_SCRIPT') && in_array(THIS_SCRIPT, ['newthread.php', 'editpost.php'], true)) {
-        $episode = (string)($GLOBALS['af_atf_episode_html'] ?? '');
-        $fields = (string)($GLOBALS['af_atf_input_html'] ?? '');
-        $fields = $fields !== '' ? AF_ATF_TPL_MARK_INPUT.$fields : '';
-        if (str_contains($page, '<!--AF_COMPOSE_FIELDS-->')) {
-            $page = str_replace(['<!--AF_COMPOSE_EPISODE-->', '<!--AF_COMPOSE_FIELDS-->'], [$episode, $fields], $page);
-        } elseif (str_contains($page, 'atf-compose__field--editor')) {
-            $page = preg_replace_callback('~<div class="atf-compose__field atf-compose__field--editor">~',
-                static fn(array $m): string => '<!--AF_COMPOSE_PRESET-->'.$episode.$fields.$m[0], $page, 1) ?? $page;
-        } else {
-            $episode = $episode !== '' ? '<tr><td colspan="2">'.$episode.'</td></tr>' : '';
-            $insert = $episode.(str_contains($page, AF_ATF_TPL_MARK_INPUT) ? '' : $fields);
-            $page = preg_replace_callback('~(<input\b[^>]*\bname=(["\'])subject\2[^>]*>.*?</tr>)~is',
-                static fn(array $m): string => $m[0].$insert, $page, 1) ?? $page;
+        $fields = (string)($GLOBALS['af_atf_prepared_input_html'] ?? '');
+        af_atf_insert_compose_fields($page, $fields, (string)($GLOBALS['af_atf_episode_html'] ?? ''));
+        if ($fields !== '' && af_atf_has_structured_message_form() && str_contains($page, '<!--AF_ATF_FIELDS_RENDERED-->')
+            && !str_contains($page, 'data-af-atf-message="1"')) {
+            af_atf_hide_structured_message_editor($page);
         }
-    }
-
-    if (af_atf_has_structured_message_form() && str_contains($page, AF_ATF_TPL_MARK_INPUT)) {
-        af_atf_hide_structured_message_editor($page);
     }
 
     if (!af_atf_template_is_atf_owned('showthread')
@@ -2266,15 +2254,23 @@ function af_atf_get_post_context_by_pid(int $pid): array
 }
 
 
-function af_atf_collect_posted_values(array $fields): array
+function af_atf_read_posted_fields(array $fields): array
 {
     global $mybb;
-
     $incoming = $mybb->get_input('af_tf', MyBB::INPUT_ARRAY);
-    if (!is_array($incoming)) {
-        $incoming = [];
+    $checkboxes = $mybb->get_input('af_atf_checkbox_present', MyBB::INPUT_ARRAY);
+    foreach ($fields as $field) {
+        $id = (int)$field['fieldid'];
+        if ($field['type'] === 'checkbox' && ($checkboxes[$id] ?? null) === '1' && !array_key_exists($id, $incoming)) {
+            $incoming[$id] = '0';
+        }
     }
+    return $incoming;
+}
 
+function af_atf_collect_posted_values(array $fields): array
+{
+    $incoming = af_atf_read_posted_fields($fields);
     $values = [];
     foreach ($fields as $field) {
         $id = (int)$field['fieldid'];
@@ -2377,7 +2373,11 @@ function af_atf_build_preview_block_from_post(int $fid): string
 
 function af_atf_prepare_input_block(int $fid, int $tid = 0, bool $isEdit = false): void
 {
-    global $mybb, $af_atf_input_html;
+    global $mybb, $af_atf_input_html, $af_atf_prepared_input_html;
+
+    // Historical templates may still interpolate this variable beside the
+    // composer slot. They must never emit a second set of successful controls.
+    $af_atf_input_html = '';
 
     $fid = (int)$fid;
     $tid = (int)$tid;
@@ -2388,7 +2388,7 @@ function af_atf_prepare_input_block(int $fid, int $tid = 0, bool $isEdit = false
     $GLOBALS['af_atf_hide_editor'] = !empty($fields);
 
     if (empty($fields)) {
-        $af_atf_input_html = '';
+        $af_atf_prepared_input_html = '';
         return;
     }
 
@@ -2421,14 +2421,14 @@ function af_atf_prepare_input_block(int $fid, int $tid = 0, bool $isEdit = false
 
     $GLOBALS['af_atf_context_fields'] = $fields;
     $GLOBALS['af_atf_context_values'] = $values;
-    $af_atf_input_html = af_atf_render_inputs($fields, $values);
-    if ($af_atf_input_html !== '') {
-        if ($isEdit) $af_atf_input_html .= '<input type="hidden" name="af_atf_form_present" value="1" />';
+    $af_atf_prepared_input_html = af_atf_render_inputs($fields, $values);
+    if ($af_atf_prepared_input_html !== '') {
+        if ($isEdit) $af_atf_prepared_input_html .= '<input type="hidden" name="af_atf_form_present" value="1" />';
         $GLOBALS['af_atf_has_frontend_component'] = true;
     }
     $prefillToken = trim((string)$mybb->get_input('af_atf_prefill_token'));
     if (!$isEdit && preg_match('~^[a-f0-9]{16,128}$~i', $prefillToken)) {
-        $af_atf_input_html .= '<input type="hidden" name="af_atf_prefill_token" value="'
+        $af_atf_prepared_input_html .= '<input type="hidden" name="af_atf_prefill_token" value="'
             . htmlspecialchars_uni($prefillToken) . '" />';
     }
 }
@@ -2775,10 +2775,54 @@ function af_atf_get_archive_display_fields(array $values): array
 }
 
 /* -------------------- INPUT RENDER (newthread/editpost) -------------------- */
+/** One runtime owner for both the composer slot and stock MyBB forms. */
+function af_atf_insert_compose_fields(string &$page, string $fields, string $episode): void
+{
+    $rendered = '<!--AF_ATF_FIELDS_RENDERED-->';
+    if (($fields === '' && $episode === '') || str_contains($page, $rendered)) return;
+
+    $action = THIS_SCRIPT === 'editpost.php' ? 'do_editpost' : 'do_newthread';
+    $inserted = false;
+    $page = preg_replace_callback('~(<form\b[^>]*>)(.*?)(</form\s*>)~is',
+        static function (array $match) use ($action, $fields, $episode, $rendered, &$inserted): string {
+            $body = $match[2];
+            if ($inserted || !preg_match('~<input\b(?=[^>]*\sname=(["\x27])action\1)(?=[^>]*\svalue=(["\x27])'.$action.'\2)[^>]*>~i', $body)) {
+                return $match[0];
+            }
+            $inserted = true;
+            $body = str_replace(AF_ATF_TPL_MARK_INPUT, '', $body);
+            $content = $rendered.$fields;
+            $slot = '<!--AF_COMPOSE_FIELDS-->';
+            $episodeSlot = '<!--AF_COMPOSE_EPISODE-->';
+            $position = strpos($body, $slot);
+            if ($position !== false) {
+                if (str_contains($body, $episodeSlot)) {
+                    $body = substr_replace($body, $content, $position, strlen($slot));
+                    $body = preg_replace_callback('~'.preg_quote($episodeSlot, '~').'~', static fn(): string => $episode, $body, 1) ?? $body;
+                } else {
+                    $body = substr_replace($body, $episode.$content, $position, strlen($slot));
+                }
+                $body = str_replace([$slot, $episodeSlot], '', $body);
+            } else {
+                $editor = '<div class="atf-compose__field atf-compose__field--editor">';
+                $position = strpos($body, $editor);
+                if ($position !== false) {
+                    $body = substr_replace($body, $episode.$content, $position, 0);
+                } else {
+                    $rows = ($episode === '' ? '' : '<tr><td colspan="2">'.$episode.'</td></tr>').$content;
+                    $body = preg_replace_callback('~(<input\b[^>]*\sname=(["\x27])subject\2[^>]*>.*?</tr>)~is',
+                        static fn(array $row): string => $row[0].$rows, $body, 1, $count) ?? $body;
+                    if (!$count) $body .= '<table><tbody>'.$rows.'</tbody></table>';
+                }
+            }
+            return $match[1].$body.$match[3];
+        }, $page) ?? $page;
+}
+
 function af_atf_has_structured_message_form(): bool
 {
     return defined('THIS_SCRIPT') && in_array(THIS_SCRIPT, ['newthread.php', 'editpost.php'], true)
-        && !empty($GLOBALS['af_atf_hide_editor']) && !empty($GLOBALS['af_atf_input_html']);
+        && !empty($GLOBALS['af_atf_hide_editor']) && !empty($GLOBALS['af_atf_prepared_input_html']);
 }
 
 /** Suppress the native SCEditor bootstrap while retaining its source textarea. */
@@ -2854,7 +2898,7 @@ function af_atf_newthread_start(): void
 
 function af_atf_editpost_start(): void
 {
-    global $fid, $tid, $pid, $post, $thread, $mybb, $af_atf_input_html;
+    global $fid, $tid, $pid, $post, $thread, $mybb, $af_atf_input_html, $af_atf_prepared_input_html;
 
     $pidI = (int)($pid ?? 0);
     if ($pidI <= 0 && isset($mybb) && is_object($mybb)) {
@@ -2863,7 +2907,7 @@ function af_atf_editpost_start(): void
 
     // если pid не получили — ничего не делаем
     if ($pidI <= 0) {
-        $af_atf_input_html = '';
+        $af_atf_input_html = $af_atf_prepared_input_html = '';
         $GLOBALS['af_atf_hide_editor'] = false;
         $GLOBALS['af_atf_preview_html'] = '';
         return;
@@ -2873,7 +2917,7 @@ function af_atf_editpost_start(): void
     $ctx = af_atf_get_post_context_by_pid($pidI);
 
     if (empty($ctx['is_first'])) {
-        $af_atf_input_html = '';
+        $af_atf_input_html = $af_atf_prepared_input_html = '';
         $GLOBALS['af_atf_hide_editor'] = false;
         $GLOBALS['af_atf_preview_html'] = '';
         return;
@@ -4001,7 +4045,7 @@ function af_atf_build_input_html(array $field, string $value): string
 
         case 'checkbox': {
             $chk = ((string)$value === '1') ? ' checked="checked"' : '';
-            return '<input type="hidden" name="'.$nameAttr.'" value="0" />'
+            return '<input type="hidden" name="af_atf_checkbox_present['.$fieldid.']" value="1" />'
                 .'<label><input type="checkbox" name="'.$nameAttr.'" value="1"'.$chk.' /> </label>';
         }
 
@@ -4949,11 +4993,10 @@ function af_atf_editpost_do_start(): void
     }
 
     $ctx = af_atf_get_post_context_by_pid($pidI);
-    $posted = $mybb->get_input('af_tf', MyBB::INPUT_ARRAY);
+    $fields = !empty($ctx['is_first']) ? af_atf_get_fields_for_forum((int)$ctx['fid']) : [];
+    $posted = af_atf_read_posted_fields($fields);
     $formPresent = $mybb->get_input('af_atf_form_present') === '1';
-    if ($formPresent || (!empty($ctx['is_first']) && array_intersect_key($posted,
-        array_column(af_atf_get_fields_for_forum((int)$ctx['fid']), null, 'fieldid')))) {
-        if (!headers_sent()) header('X-AF-ATF-Edit: post-received');
+    if ($formPresent || array_intersect_key($posted, array_column($fields, null, 'fieldid'))) {
         $GLOBALS['af_atf_edit_save_route'] = [
             'pid_resolved'=>!empty($ctx['tid']), 'tid_resolved'=>(int)$ctx['tid'] > 0, 'fid_resolved'=>(int)$ctx['fid'] > 0,
             'validated'=>false, 'writer_reached'=>false, 'write_completed'=>false, 'verified'=>false,
@@ -6080,10 +6123,7 @@ function af_atf_dh_validate(&$ph): void
     }
 
     // --- 2) ВАЛИДАЦИЯ/СБОР ATF ПОЛЕЙ ---
-    $incoming = $mybb->get_input('af_tf', MyBB::INPUT_ARRAY);
-    if (!is_array($incoming)) {
-        $incoming = [];
-    }
+    $incoming = af_atf_read_posted_fields($fields);
 
     $clean = [];
     $stored = $isEdit ? af_atf_get_values_by_tid($storedTid) : [];
