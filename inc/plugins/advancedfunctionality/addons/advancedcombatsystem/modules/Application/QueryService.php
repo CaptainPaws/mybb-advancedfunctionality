@@ -40,6 +40,7 @@ final class AF_ACS_QueryService
     {
         if(!af_is_addon_enabled('knowledgebase'))self::fail('preview_dependency_unavailable');
         $sessionView=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);
+        if (($this->repo->episodeMode($sessionView['session']['tid'])['mode'] ?? null) === 'normal') { self::fail('ACS_EPISODE_NORMAL'); }
         $encounter=$this->repo->encounter($sid,$eid);if(!$encounter)self::fail('preview_target_forbidden');
         $view=['session'=>$sessionView['session'],'encounter'=>$encounter];$gm=$sessionView['can_manage'];
         if($view['session']['status']!=='active'||!in_array($view['encounter']['status'],$encounterStart?['ambush_ready']:['active','preparation'],true))self::fail('preview_encounter_not_active');
@@ -185,6 +186,7 @@ final class AF_ACS_QueryService
     public function builderScope(string $sid,string $eid):array
     {
         $view=(new AF_ACS_SessionService($this->repo,$this->access))->view($sid);
+        if (($this->repo->episodeMode($view['session']['tid'])['mode'] ?? null) === 'normal') { self::fail('ACS_EPISODE_NORMAL'); }
         if(!$view['can_register_own'])self::fail('preview_target_forbidden');
         $encounter=$this->repo->encounter($sid,$eid);
         if(!$encounter||!in_array($encounter['status'],['active','paused','preparation'],true))self::fail('preview_encounter_not_active');

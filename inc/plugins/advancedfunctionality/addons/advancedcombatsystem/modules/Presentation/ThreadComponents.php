@@ -25,6 +25,14 @@ function af_advancedcombatsystem_thread_session_link(array $context): string
         $access=new AF_ACS_SessionAccess;
         // Do not trust the request TID, context UID (thread author), or Appearance masks.
         $access->thread((string)$tid);
+        require_once __DIR__.'/../Infrastructure/EpisodeModeRepository.php';
+        $repo = new AF_ACS_EpisodeModeRepository($db);
+        $savedMode = $repo->episodeMode((string)$tid);
+        if (($savedMode['mode'] ?? null) === 'normal'
+            || ($savedMode === null && function_exists('af_atf_acs_forum_enabled')
+                && af_atf_acs_forum_enabled((int)($context['fid'] ?? 0)) && $repo->modeState((string)$tid)['mode'] === 'normal')) {
+            return '';
+        }
         if($mybb->get_input('acs_setup')==='1'){
             if($mybb->get_input('acs_session')==='' && !$access->canCreate())return ''; // A persisted GM can configure an existing session.
             if(!headers_sent())header('Cache-Control: private, no-store');
