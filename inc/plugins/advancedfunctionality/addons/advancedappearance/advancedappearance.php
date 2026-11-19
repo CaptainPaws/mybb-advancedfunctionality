@@ -815,6 +815,13 @@ function af_aa_build_thread_preset_select_html(int $uid, int $selectedPresetId):
         $options[] = '<option value="' . (int)$presetId . '"' . $selected . '>' . htmlspecialchars_uni((string)($preset['title'] ?? ('Preset #' . $presetId))) . '</option>';
     }
 
+    global $templates;
+    $route = defined('THIS_SCRIPT') ? basename(THIS_SCRIPT, '.php') : '';
+    if (in_array($route, ['newthread', 'editpost'], true) && str_contains($templates->get($route, 0), 'atf-compose__field--editor')) {
+        return '<div class="atf-compose__field af-aa-thread-preset-row"><label class="atf-compose__label" for="af-aa-thread-preset">Пресет темы</label>'
+            .'<select id="af-aa-thread-preset" name="'.htmlspecialchars_uni(af_aa_thread_selector_field_name()).'" class="select">'.implode('', $options).'</select>'
+            .'<small>Доступны купленные пресеты оформления темы.</small></div>';
+    }
     return '<tr class="af-aa-thread-preset-row">'
         . '<td class="trow2"><strong>Пресет темы</strong><br /><span class="smalltext">Выбери оформление этой темы. Доступны только купленные пресеты темы.</span></td>'
         . '<td class="trow2"><select name="' . htmlspecialchars_uni(af_aa_thread_selector_field_name()) . '" class="select">' . implode('', $options) . '</select></td>'
@@ -842,6 +849,14 @@ function af_aa_inject_thread_preset_field(string $page): string
 
     if (strpos($page, 'af-aa-thread-preset-row') !== false) {
         return $page;
+    }
+
+    if (str_contains($page, '<!--AF_COMPOSE_PRESET-->')) {
+        return str_replace('<!--AF_COMPOSE_PRESET-->', $html, $page);
+    }
+    if (str_starts_with($html, '<div ')) {
+        return preg_replace_callback('~<div class="atf-compose__field atf-compose__field--editor">~',
+            static fn(array $match): string => $html.$match[0], $page, 1) ?? $page;
     }
 
     $formPattern = '~<form\b[^>]*>.*?</form>~is';

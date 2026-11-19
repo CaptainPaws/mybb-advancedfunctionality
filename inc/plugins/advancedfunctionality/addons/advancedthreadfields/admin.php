@@ -328,6 +328,7 @@ class AF_Admin_Advancedthreadfields
             }
 
             $acsEnabled = $mybb->get_input('acs_enabled') === '1' ? 1 : 0;
+            if ($acsEnabled && function_exists('af_atf_acs_install')) { af_atf_acs_install(); }
             $archiveFid = max(0, (int)$mybb->get_input('archive_fid'));
             $active = (int)$mybb->get_input('active');
             $mechanicMode = trim((string)$mybb->get_input('character_mechanic_mode'));

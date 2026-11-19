@@ -10,17 +10,36 @@ function af_advancedcombatsystem_atf_access(): AF_ACS_SessionAccess
 
 function af_advancedcombatsystem_atf_can_create(int $fid): bool
 {
+    return af_advancedcombatsystem_atf_create_blocker($fid) === null;
+}
+
+function af_advancedcombatsystem_atf_create_blocker(int $fid): ?string
+{
     global $mybb;
-    if (!af_is_addon_enabled('advancedcombatsystem') || !empty($GLOBALS['af_acs_deactivated']) || empty($mybb->user['uid'])) { return false; }
+    if (!af_is_addon_enabled('advancedcombatsystem') || !empty($GLOBALS['af_acs_deactivated'])) { return 'disabled'; }
+    if (empty($mybb->user['uid'])) { return 'permission'; }
     try {
         $access = af_advancedcombatsystem_atf_access();
         $permissions = forum_permissions($fid, (int)$access->uid());
         $forum = get_forum($fid);
-        return $forum && $forum['type'] === 'f' && !empty($forum['open'])
-            && !empty($permissions['canview']) && !empty($permissions['canviewthreads'])
-            && !empty($permissions['canpostthreads']) && empty($mybb->user['suspendposting'])
-            && $access->canCreate() && af_advancedcombatsystem_is_installed();
-    } catch (Throwable $error) { return false; }
+        if (!$forum || $forum['type'] !== 'f' || empty($forum['open']) || !empty($forum['linkto'])
+            || empty($permissions['canview']) || empty($permissions['canviewthreads'])
+            || empty($permissions['canpostthreads']) || !empty($mybb->user['suspendposting'])) { return 'native'; }
+        if (!$access->canCreate()) { return 'permission'; }
+        return af_advancedcombatsystem_is_installed() ? null : 'schema';
+    } catch (Throwable $error) { return 'schema'; }
+}
+
+function af_advancedcombatsystem_atf_edit_state(int $tid): ?array
+{
+    global $db;
+    if (!af_is_addon_enabled('advancedcombatsystem')) { return null; }
+    $access = af_advancedcombatsystem_atf_access();
+    $thread = $access->thread((string)$tid);
+    require_once __DIR__.'/../Infrastructure/SessionRepository.php';
+    $repo = new AF_ACS_SessionRepository($db);
+    $state = $repo->atfTopicStatus((string)$tid, $access->uid());
+    return ['existing'=>$state !== null || $repo->hasTopicSession((string)$tid), 'session'=>$state, 'visible'=>(int)$thread['visible'] === 1];
 }
 
 function af_advancedcombatsystem_atf_can_open(int $tid): bool
