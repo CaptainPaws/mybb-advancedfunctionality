@@ -310,7 +310,9 @@ function af_cs_snapshot_read(array $sheet, array $context): array
         af_kb_arpg_bestiary_ability_pin($ability,'character_abilities.'.$index,$issues);
         $abilityDto = af_kb_arpg_normalize_entry($linked[0],(int)$index);
         $issues = array_merge($issues,$abilityDto['diagnostics']);
-        $abilities[] = ['index'=>$index,'version'=>$abilityDto['definition_version'],'definition'=>$abilityDto['normalized']['ability_profile'] ?? null,
+        $profile = $abilityDto['normalized']['ability_profile'] ?? null;
+        $reference = ($ability['ability_source'] ?? '') === 'arpg_ability' ? ($profile['references']['ability_kb_key'] ?? null) : null;
+        $abilities[] = ['index'=>$index,'version'=>$reference['definition_version'] ?? $abilityDto['definition_version'],'definition'=>$profile,
             'modifiers_in_character_total'=>false];
     }
     $classification = af_kb_arpg_element_damage($rules,'character',$issues);
@@ -366,7 +368,8 @@ function af_cs_snapshot_capture_refs(array $value, array &$readSet, array &$issu
         if (!isset($seen[$identity])) {
             $seen[$identity] = true;
             $rows = af_cs_snapshot_select('af_kb_entries','id='.$id,$readSet);
-            if (count($rows) !== 1 || !af_kb_entry_visible_in_context($rows[0],'entry',af_kb_can_edit())) af_cs_snapshot_issue($issues,'definition_access_denied','references');
+            if (count($rows) !== 1 || !af_kb_entry_visible_in_context($rows[0],'entry',af_kb_can_edit())
+                || (($value['kind'] ?? '') === 'arpg_ability' && !af_kb_ability_catalog_public_row($rows[0]))) af_cs_snapshot_issue($issues,'definition_access_denied','references');
             else {
                 $source = af_kb_arpg_acs_source($rows[0],$issues);
                 if ($source['fingerprint'] !== $value['fingerprint']) af_cs_snapshot_issue($issues,'source_changed_during_read','references');

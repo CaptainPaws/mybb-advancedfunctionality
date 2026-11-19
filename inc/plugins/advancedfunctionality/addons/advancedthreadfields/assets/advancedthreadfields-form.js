@@ -469,6 +469,8 @@
         const optionsScript = AF_ATF.qs(".af-atf-abilities-options", wrap);
         const list = AF_ATF.qs(".af-atf-abilities-list", wrap);
         const addBtn = AF_ATF.qs(".af-atf-abilities-add", wrap);
+        const kbBtn = AF_ATF.qs(".af-atf-abilities-kb", wrap);
+        const kbNotices = JSON.parse(wrap.dataset.kbNotices || "{}");
         const maxItems = parseInt(wrap.getAttribute("data-max-items") || "8", 10) || 8;
         if (!hidden || !list || !addBtn) return;
         let selectOptions = {};
@@ -503,7 +505,7 @@
         try {
           const parsed = JSON.parse(String(hidden.value || "[]"));
           if (Array.isArray(parsed)) {
-            state = parsed.map((row) => createAbility(row)).slice(0, maxItems);
+            state = parsed.map((row) => row?.ability_source ? row : createAbility(row)).slice(0, maxItems);
           }
         } catch (e) {
           state = [];
@@ -570,13 +572,14 @@
 
         function syncStateFromDom() {
           AF_ATF.qsa(".af-atf-ability-item", list).forEach((row, index) => {
-            state[index] = collectAbilityFromRow(row, index);
+            if (!state[index].ability_source) state[index] = collectAbilityFromRow(row, index);
           });
         }
 
         function sync() {
           hidden.value = JSON.stringify(state.slice(0, maxItems));
           addBtn.disabled = state.length >= maxItems;
+          if (kbBtn) kbBtn.disabled = state.length >= maxItems;
         }
 
         function render() {
@@ -584,6 +587,41 @@
           state.forEach((ability, index) => {
             const row = document.createElement("div");
             row.className = "af-atf-ability-item";
+            if (ability.ability_source) {
+              const key = ability.ability_kb_key;
+              const title = document.createElement("strong");
+              title.textContent = "Способность #" + (index + 1) + " · KB · " + (ability.title || key);
+              const notice = document.createElement("p");
+              notice.textContent = kbNotices[key] || "Доступность в бою проверяет ACS.";
+              const description = document.createElement("p");
+              description.textContent = ability.description || "";
+              const remove = document.createElement("button");
+              remove.type = "button";
+              remove.className = "button";
+              remove.textContent = "Удалить";
+              remove.addEventListener("click", () => {
+                state.splice(index, 1);
+                delete kbNotices[key];
+                render();
+              });
+              row.append(title, notice, description);
+              if (wrap.dataset.kbCatalog && /^[a-z0-9_-]{2,64}$/.test(key)) {
+                const url = new URL(wrap.dataset.kbCatalog, location.href);
+                if (url.searchParams.has("action") && url.pathname.endsWith("/misc.php")) url.searchParams.set("action", "kb");
+                else url.searchParams.delete("action");
+                url.searchParams.set("type", "arpg_ability");
+                url.searchParams.set("key", key);
+                const link = document.createElement("a");
+                link.href = url;
+                link.target = "_blank";
+                link.rel = "noopener";
+                link.textContent = "Открыть в KB";
+                row.append(link, " ");
+              }
+              row.append(remove);
+              list.appendChild(row);
+              return;
+            }
             row.innerHTML = `
               <div class="af-atf-ability-header">
                 <strong>Способность #${index + 1}</strong>
@@ -723,6 +761,172 @@
           sync();
         }
 
+        function openCatalog() {
+          const dialog = document.createElement("dialog");
+          dialog.className = "af-atf-kb-modal";
+          dialog.setAttribute("aria-label", "Каталог способностей KB");
+          const form = wrap.closest("form");
+          const context = JSON.parse(wrap.dataset.kbContext || "{}");
+          dialog.innerHTML = `
+            <div class="af-atf-kb-modal-title">Каталог способностей KB</div>
+            <button type="button" class="button af-atf-kb-modal-close">Закрыть</button>
+            <form class="af-atf-kb-modal-body">
+              <label>Поиск по названию <input type="search" name="q" maxlength="100" class="textbox"></label>
+              <label>Применимость <select name="compatibility">
+                <option value="compatible">Подходят</option>
+                <option value="needs_review">Требуют уточнения условий</option>
+                <option value="incompatible">Несовместимые</option>
+                <option value="">Все</option>
+              </select></label>
+              <div class="af-atf-kb-ability-filters"></div>
+              <button type="submit" class="button">Применить</button>
+            </form>
+            <p role="status" aria-live="polite"></p>
+            <div class="af-atf-kb-modal-body af-atf-kb-ability-results"></div>
+            <div class="af-atf-kb-ability-pages"></div>`;
+          const filters = dialog.querySelector("form");
+          const options = dialog.querySelector(".af-atf-kb-ability-filters");
+          const results = dialog.querySelector(".af-atf-kb-ability-results");
+          const pages = dialog.querySelector(".af-atf-kb-ability-pages");
+          const status = dialog.querySelector("[role=status]");
+          const labels = {
+            ability_type: "Тип способности", damage_type: "Урон", element: "Стихия",
+            direction: "Направление", distance: "Дистанция", weapon: "Оружие",
+            purpose: "Назначение", sort: "Сортировка"
+          };
+          const statuses = {
+            compatible: "Подходит", needs_review: "Требует уточнения условий",
+            incompatible: "Несовместима с выбранными параметрами"
+          };
+          let request;
+          let registry;
+          const button = (text, action) => {
+            const el = document.createElement("button");
+            el.type = "button";
+            el.className = "button";
+            el.textContent = text;
+            el.addEventListener("click", action);
+            return el;
+          };
+
+          function setOptions(available) {
+            registry = available;
+            for (const [name, title] of Object.entries(labels)) {
+              const label = document.createElement("label");
+              label.textContent = title + " ";
+              const select = document.createElement("select");
+              select.name = name;
+              select.add(new Option(name === "sort" ? "По названию" : "Все", ""));
+              for (const [key, text] of Object.entries(available[name] || {})) {
+                if (name !== "sort" || key !== "title") select.add(new Option(text, key));
+              }
+              label.append(select);
+              options.append(label);
+            }
+          }
+
+          function addAbility(item, custom) {
+            syncStateFromDom();
+            if (state.length >= maxItems) return;
+            const order = state.length + 1;
+            if (!custom && state.some((entry) => entry.ability_source === "arpg_ability" && entry.ability_kb_key === item.kb_key)) return;
+            state.push(custom
+              ? createAbility({ title: item.title, description: item.description, sortorder: order, slot_index: order })
+              : { ability_source: "arpg_ability", ability_kb_key: item.kb_key, catalog_definition_id: item.definition_id,
+                  title: item.title, description: item.description, kb_url: item.url, sortorder: order, slot_index: order });
+            dialog.close();
+            render();
+            list.lastElementChild?.querySelector("input, button")?.focus();
+          }
+
+          async function load(page = 1) {
+            if (request) request.abort();
+            const controller = new AbortController();
+            request = controller;
+            const url = new URL(wrap.dataset.kbCatalog, location.href);
+            for (const [key, value] of new FormData(filters)) {
+              if (value) url.searchParams.set(key, value);
+            }
+            for (const [facet, ids] of Object.entries(context)) {
+              const value = ids.map((id) => form?.elements.namedItem("af_tf[" + id + "]")?.value?.trim()).find(Boolean);
+              if (!value) continue;
+              const key = facet === "element" && value === "wind" ? "air" : value;
+              if (registry && !registry[facet]?.[key] && !(facet === "element" && registry.direction?.[key])) continue;
+              url.searchParams.set("context_" + facet, key);
+            }
+            url.searchParams.set("independent_context", "1");
+            url.searchParams.set("options", registry ? "0" : "1");
+            url.searchParams.set("page", String(page));
+            url.searchParams.set("per_page", "8");
+            results.replaceChildren();
+            pages.replaceChildren();
+            status.textContent = "Загрузка…";
+            try {
+              const response = await fetch(url, { signal: controller.signal, credentials: "same-origin" });
+              if (!response.ok) throw new Error("Catalog request failed");
+              const payload = await response.json();
+              if (controller.signal.aborted) return;
+              if (!payload.success) throw new Error("Catalog request failed");
+              if (!registry) setOptions(payload.options || {});
+              status.textContent = payload.total
+                ? "Найдено: " + payload.total + " · Страница " + payload.page + " из " + payload.pages
+                : "По выбранным условиям ничего не найдено. Измените фильтр применимости, чтобы посмотреть остальные способности.";
+              for (const item of payload.items) {
+                const card = document.createElement("article");
+                card.className = "af-atf-ability-item";
+                const link = document.createElement("a");
+                link.href = item.url;
+                link.target = "_blank";
+                link.rel = "noopener";
+                link.textContent = item.title;
+                const meta = document.createElement("p");
+                meta.textContent = [statuses[item.compatibility], ...item.element.map((key) => registry.element[key]),
+                  ...item.direction.map((key) => registry.direction[key]),
+                  ...item.applicability.weapons.map((key) => registry.weapon[key]),
+                  registry.distance[item.applicability.distance]].filter(Boolean).join(" · ");
+                const description = document.createElement("p");
+                description.textContent = item.description;
+                card.append(link, meta, description);
+                if (item.compatibility !== "incompatible") {
+                  const pick = button(item.compatibility === "compatible" ? "Выбрать" : "Добавить для проверки", () => addAbility(item, false));
+                  pick.disabled = state.length >= maxItems || state.some((entry) => entry.ability_source === "arpg_ability" && entry.ability_kb_key === item.kb_key);
+                  card.append(pick);
+                }
+                const custom = button("Использовать как основу", () => addAbility(item, true));
+                custom.disabled = state.length >= maxItems;
+                card.append(custom);
+                results.append(card);
+              }
+              if (payload.page > 1) pages.append(button("Назад", () => load(payload.page - 1)));
+              if (payload.page < payload.pages) pages.append(button("Далее", () => load(payload.page + 1)));
+            } catch (error) {
+              if (!controller.signal.aborted) status.textContent = "Не удалось загрузить каталог. Повторите поиск.";
+            }
+          }
+
+          filters.addEventListener("submit", (event) => {
+            event.preventDefault();
+            load();
+          });
+          filters.addEventListener("change", () => load());
+          const onContextChange = (event) => {
+            if (Object.values(context).flat().some((id) => event.target.name === "af_tf[" + id + "]")) load();
+          };
+          form?.addEventListener("change", onContextChange);
+          dialog.querySelector(".af-atf-kb-modal-close").addEventListener("click", () => dialog.close());
+          dialog.addEventListener("close", () => {
+            request?.abort();
+            form?.removeEventListener("change", onContextChange);
+            dialog.remove();
+          }, { once: true });
+          document.body.append(dialog);
+          window.AFModalHost?.mount(dialog);
+          dialog.showModal();
+          load();
+        }
+
+        kbBtn?.addEventListener("click", openCatalog);
+
         addBtn.addEventListener("click", () => {
           if (state.length >= maxItems) return;
           state.push(createAbility({ sortorder: state.length + 1, slot_index: state.length + 1 }));
@@ -748,9 +952,6 @@
         wrap.__afAtfSyncStateFromDom = syncStateFromDom;
         wrap.__afAtfSyncHidden = sync;
 
-        if (!state.length) {
-          state.push(createAbility({ sortorder: 1, slot_index: 1 }));
-        }
         render();
       });
     },

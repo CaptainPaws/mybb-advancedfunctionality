@@ -232,7 +232,7 @@ final class AF_ACS_KnowledgeBaseAdapter
                     foreach (is_array($rules['character_abilities'] ?? null) ? $rules['character_abilities'] : [] as $index=>$ability) {
                         if (!is_array($ability)) { AF_ACS_CapabilityValidator::issue($issues,'expected_ability_object','character_abilities'); continue; }
                         af_kb_arpg_bestiary_ability_pin($ability,'character_abilities.'.$index,$issues);
-                        $dto['normalized']['ability_profiles'][] = af_kb_arpg_acs_ability($ability,'character_abilities.'.$index,$issues);
+                        $dto['normalized']['ability_profiles'][] = af_kb_arpg_character_ability_profile($ability,'character_abilities.'.$index,$issues);
                     }
                 }
             }

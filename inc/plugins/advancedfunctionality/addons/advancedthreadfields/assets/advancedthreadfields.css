@@ -1147,3 +1147,18 @@ body.af-atf-kb-catalog-modal-open {
 /* Surface-owned full background: the layer sits above root paint, below content. */
 .af-atf-display[data-af-element-effect-active] { position: relative; isolation: isolate; }
 .af-atf-display > [data-af-element-effect] { position: absolute; inset: 0; z-index: -1; }
+
+.af-atf-kb-modal::backdrop {
+  background: rgba(0, 0, 0, .55);
+}
+
+.af-atf-kb-ability-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: .5rem;
+}
+
+.af-atf-kb-ability-filters label {
+  display: grid;
+  min-width: 0;
+}

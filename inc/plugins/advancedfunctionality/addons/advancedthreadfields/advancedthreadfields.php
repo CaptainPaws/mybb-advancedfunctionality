@@ -22,6 +22,7 @@ require_once dirname(__DIR__) . '/adaptivethemeframework/ownership.php';
 
 define('AF_ATF_ID', 'advancedthreadfields');
 define('AF_ATF_TABLE_FIELDS', 'af_atf_fields');
+require_once __DIR__ . '/modules/kb_abilities.php';
 define('AF_ATF_TABLE_VALUES', 'af_atf_values');
 require_once __DIR__.'/acs-thread.php';
 
@@ -3832,11 +3833,22 @@ function af_atf_build_input_html(array $field, string $value): string
             $abilitySelects = af_atf_get_character_ability_select_payload();
             $optionsJson = json_encode($abilitySelects, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
             $optionsJson = str_replace('</', '<\/', $optionsJson);
-            return '<div class="af-atf-abilities" data-max-items="8">'
+            $catalogUrl = af_atf_kb_ability_enabled() ? af_kb_url(['action' => 'kb_ability_catalog']) : '';
+            $contextFields = af_atf_kb_ability_context_fields($GLOBALS['af_atf_context_fields'] ?? []);
+            $notices = [];
+            foreach ((array)json_decode(af_atf_normalize_character_abilities_json($value), true) as $ability) {
+                if (($ability['ability_source'] ?? '') === 'arpg_ability') {
+                    $notices[$ability['ability_kb_key']] = af_atf_kb_ability_saved_notice($ability);
+                }
+            }
+            return '<div class="af-atf-abilities" data-max-items="8" data-kb-catalog="' . htmlspecialchars_uni($catalogUrl)
+                . '" data-kb-context="' . htmlspecialchars_uni(json_encode($contextFields) ?: '{}')
+                . '" data-kb-notices="' . htmlspecialchars_uni(json_encode((object)$notices, JSON_UNESCAPED_UNICODE) ?: '{}') . '">'
                 . '<input type="hidden" class="af-atf-abilities-hidden" name="' . $nameAttr . '" value="' . $safeValue . '" />'
                 . '<script type="application/json" class="af-atf-abilities-options">' . $optionsJson . '</script>'
                 . '<div class="af-atf-abilities-list"></div>'
-                . '<button type="button" class="button af-atf-abilities-add">+ добавить способность</button>'
+                . '<button type="button" class="button af-atf-abilities-add">Создать свою</button>'
+                . ($catalogUrl !== '' ? ' <button type="button" class="button af-atf-abilities-kb">Выбрать из KB</button>' : '')
                 . '</div>';
         }
 
@@ -4647,6 +4659,9 @@ function af_atf_character_pick_ability_description(array $row): string
 
 function af_atf_normalize_character_ability_row(array $row, int $fallbackSortorder = 0): array
 {
+    if (array_key_exists('ability_source', $row)) {
+        return af_atf_kb_ability_row($row, $fallbackSortorder);
+    }
     $name = trim((string)($row['title'] ?? $row['ability_name'] ?? $row['name'] ?? ''));
     $type = trim((string)($row['type'] ?? $row['ability_type'] ?? 'active'));
     $abilityDescription = af_atf_character_pick_ability_description($row);
@@ -4834,6 +4849,11 @@ function af_atf_normalize_character_abilities_json(string $raw): string
             continue;
         }
         $normalized = af_atf_normalize_character_ability_row($row, count($out) + 1);
+        if (array_key_exists('ability_source', $normalized)) {
+            $out[] = $normalized;
+            if (count($out) >= 8) break;
+            continue;
+        }
         if (
             $normalized['title'] === ''
             && $normalized['description'] === ''
@@ -5009,6 +5029,10 @@ function af_atf_newthread_do_end(): void
             $val = af_atf_normalize_character_stats_json($val);
         } elseif ($type === 'character_abilities') {
             $val = af_atf_normalize_character_abilities_json($val);
+            // The DataHandler has already validated and saved server-owned KB pins.
+            if (af_atf_kb_ability_has_links((array)json_decode($val, true))) {
+                continue;
+            }
         } elseif ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
             if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
                 $val = '';
@@ -6006,6 +6030,10 @@ function af_atf_editpost_do_end(): void
             $val = af_atf_normalize_character_stats_json($val);
         } elseif ($type === 'character_abilities') {
             $val = af_atf_normalize_character_abilities_json($val);
+            // The DataHandler has already validated and saved server-owned KB pins.
+            if (af_atf_kb_ability_has_links((array)json_decode($val, true))) {
+                continue;
+            }
         } elseif ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
             if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
                 $val = '';
@@ -6250,6 +6278,19 @@ function af_atf_dh_validate(&$ph): void
 
         if ($type === 'character_abilities') {
             $val = af_atf_normalize_character_abilities_json(is_string($raw) ? $raw : '');
+            $abilities = (array)json_decode($val, true);
+            if (af_atf_kb_ability_has_links($abilities)) {
+                $stored = [];
+                if ($isEdit) {
+                    $postContext = af_atf_get_post_context_by_pid($pidCandidate);
+                    $stored = af_atf_get_values_by_tid((int)($postContext['tid'] ?? 0));
+                }
+                $old = (array)json_decode(af_atf_normalize_character_abilities_json((string)($stored[$fieldid] ?? '')), true);
+                $errors = [];
+                $abilities = af_atf_kb_ability_validate($abilities, $old, $fields, $incoming, $errors);
+                foreach (array_unique($errors) as $error) $ph->set_error($error);
+                $val = json_encode($abilities, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]';
+            }
             if (function_exists('af_kb_arpg_validate_element_fields')) {
                 $elementErrors = [];
                 af_kb_arpg_validate_element_fields(['character_abilities'=>(array)json_decode($val, true)], $elementErrors);
