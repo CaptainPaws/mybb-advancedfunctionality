@@ -1777,7 +1777,11 @@
   }
 
   function bindSubmitSync(form, ta) {
-    if (!form || !ta) return;
+    if (!form || !ta || ta.getAttribute('data-af-atf-message') === '1') return;
+
+    function ownsMessage() {
+      return ta.form === form && ta.getAttribute('data-af-atf-message') !== '1';
+    }
 
     var key = '__afAeSubmitBound_' + (ta.name || ta.id || 'message');
     if (form[key]) return;
@@ -1835,6 +1839,7 @@
     }
 
     form.addEventListener('submit', function (e) {
+      if (!ownsMessage()) return;
       var state = syncNow();
       var editorText = String(state.editorText || '').trim();
       var textareaText = String(state.textareaText || '').trim();
@@ -1864,6 +1869,7 @@
     }, true);
 
     form.addEventListener('click', function (e) {
+      if (!ownsMessage()) return;
       try {
         var t = e.target;
         if (!t) return;

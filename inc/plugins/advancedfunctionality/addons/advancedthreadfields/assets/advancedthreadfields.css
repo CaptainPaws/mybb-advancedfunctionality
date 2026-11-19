@@ -1171,3 +1171,12 @@ dialog.af-atf-kb-ability-dialog:not([open]) {
   display: grid;
   min-width: 0;
 }
+
+.af-atf-submit-invalid {
+  outline: 2px solid #b54545;
+  outline-offset: 2px;
+}
+
+.af-atf-submit-notice {
+  flex-basis: 100%;
+}
