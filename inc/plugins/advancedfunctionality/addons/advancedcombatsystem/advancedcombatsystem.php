@@ -166,14 +166,19 @@ function af_advancedcombatsystem_sessions_page(): void
 }
 function af_advancedcombatsystem_session_settings(): void
 {
-    af_ensure_settinggroup('af_acs_sessions','ACS: Сессии','Права создания и значения только для новых сессий.');
-    af_ensure_setting('af_acs_sessions','af_acs_session_gm_groups','Группы мастеров ACS','ID групп через запятую. Пусто: создание только через права ACP AF.','text','',1);
-    af_ensure_setting('af_acs_sessions','af_acs_default_member_role','Роль новых участников','Значение копируется в конфигурацию новой сессии. Старые сессии не изменяются.',"select\nobserver=Наблюдатель\nplayer=Игрок",'observer',2);
     global $db;
-    foreach(['af_acs_archive_cursor_key'=>['Ключ курсоров архива','Серверный секрет. Не публиковать; смена инвалидирует прежние курсоры.',bin2hex(random_bytes(32))],
-        'af_acs_archive_export_groups'=>['Расширенный экспорт ACS','Отдельное право: группы через запятую. Также нужны session GM и native доступ. Пусто — запрещено.','']] as $name=>[$title,$description,$default]){
-        $old=$db->fetch_array($db->simple_select('settings','value',"name='".$db->escape_string($name)."'",['limit'=>1]));
-        af_ensure_setting('af_acs_sessions',$name,$title,$description,'text',$old?(string)$old['value']:$default,3);
+    $group = 'af_acs_sessions';
+    af_ensure_settinggroup($group, 'ACS: Сессии', 'Права создания сессий и расширенного экспорта.');
+    $definitions = [
+        'af_acs_session_gm_groups' => ['Группы мастеров ACS', 'Пусто: создание доступно подтверждённым администраторам.', 'text', '', 1],
+        'af_acs_default_member_role' => ['Роль новых участников', 'Применяется только к новым сессиям.', "select\nobserver=Наблюдатель\nplayer=Игрок", 'observer', 2],
+        'af_acs_archive_cursor_key' => ['Ключ курсоров архива', 'Серверный секрет. Смена инвалидирует прежние курсоры.', 'text', null, 3],
+        'af_acs_archive_export_groups' => ['Расширенный экспорт ACS', 'Требуются права session GM и native доступ. Пусто — запрещено.', 'text', '', 4],
+    ];
+    foreach ($definitions as $name => [$title, $description, $type, $default, $order]) {
+        $found = $db->simple_select('settings', 'sid', "name='".$db->escape_string($name)."'", ['limit'=>1]);
+        if ($db->fetch_field($found, 'sid')) { continue; }
+        af_ensure_setting($group, $name, $title, $description, $type, $default ?? bin2hex(random_bytes(32)), $order);
     }
     af_rebuild_and_reload_settings();
 }

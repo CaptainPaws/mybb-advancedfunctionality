@@ -34,20 +34,118 @@ final class AF_ACS_AcpSections
             'NATIVE_SESSION_GM_CLOSED'=>'Native доступ и GM закрытой сессии; остальные guards сохраняются.',
         ][$policy]??'Точный серверный контракт; дополнительные guards не отменяются.';
     }
-    public static function settings():void
+    private const EDITABLE_SETTINGS = ['af_acs_session_gm_groups', 'af_acs_default_member_role', 'af_acs_archive_export_groups'];
+
+    private static function settingRows(): array
     {
-        global $db,$mybb;
-        echo '<h3>Поддерживаемые глобальные настройки</h3><p>ACS не имеет переключателей отключения журнала, неизменяемости, проверок и идемпотентности. Publication_enabled остаётся false.</p>';
-        $settings=[
-            'af_acs_session_gm_groups'=>['Кто может создавать сессии','ID групп через запятую; пусто — только право AF ACP. Не назначает GM существующих сессий.'],
-            'af_acs_default_member_role'=>['Роль по умолчанию для новой сессии','Только observer/player. Копируется SessionAccess::defaults при создании; старые session/encounter configs не изменяются.'],
-            'af_acs_archive_export_groups'=>['Расширенный экспорт','Отдельный allowlist групп. Дополнительно нужны текущий session GM и native доступ; пусто — запрет.'],
-        ];$table=new Table;foreach(['Параметр','Текущее значение','Область действия'] as $label)$table->construct_header($label);
-        foreach($settings as $key=>[$label,$description]){$table->construct_cell(self::esc($label));$table->construct_cell(self::esc($mybb->settings[$key]??'NOT_VERIFIED: настройка не установлена'));$table->construct_cell(self::esc($description));$table->construct_row();}$table->output('Настройки ACS');
-        $group=$db->fetch_array($db->write_query("SELECT gid FROM ".TABLE_PREFIX."settinggroups WHERE name='af_acs_sessions' LIMIT 1"));
-        if($group)echo '<p><a href="index.php?module=config-settings&amp;action=change&amp;gid='.(int)$group['gid'].'">Изменить через штатный редактор настроек MyBB</a>. Редактор сохраняет свои права, CSRF и admin audit; право AF ACP не обходит право config-settings.</p>';
-        else echo '<p>Группа настроек не установлена. Открытие страницы ничего не создаёт; установка/обновление — отдельная явная операция.</p>';
-        echo '<p>Секрет archive cursor в этой сводке не отображается. Его изменение в штатном редакторе инвалидирует старые курсоры и version tokens; не используйте ротацию как способ исправления игровых данных.</p><p><a href="index.php?module=advancedfunctionality">Включение/отключение аддона — через существующий AF lifecycle</a>. Оно не включает боевую публикацию.</p>';
+        global $db;
+        $names = [...self::EDITABLE_SETTINGS, 'af_acs_archive_cursor_key'];
+        $query = $db->write_query('SELECT sid,name,value FROM '.TABLE_PREFIX."settings WHERE name IN ('".implode("','", $names)."')");
+        $rows = [];
+        while ($row = $db->fetch_array($query)) {
+            if (isset($rows[$row['name']])) { throw new RuntimeException('ACS_SETTINGS_DUPLICATE'); }
+            $rows[$row['name']] = $row;
+        }
+        return $rows;
+    }
+
+    private static function settingGroups(): array
+    {
+        global $db;
+        $groups = [];
+        $query = $db->write_query('SELECT gid,title FROM '.TABLE_PREFIX.'usergroups ORDER BY title,gid');
+        while ($row = $db->fetch_array($query)) { $groups[(int)$row['gid']] = $row['title']; }
+        return $groups;
+    }
+
+    private static function groupSetting(string $name, array $groups): string
+    {
+        global $mybb;
+        $input = $mybb->input[$name] ?? [];
+        if (!is_array($input) || count($input) > count($groups)) { throw new RuntimeException('ACS_SETTINGS_INVALID_GROUP'); }
+        $selected = [];
+        foreach ($input as $id) {
+            if ((!is_string($id) && !is_int($id)) || !preg_match('/\A[1-9][0-9]*\z/D', (string)$id)
+                || !array_key_exists((string)$id, $groups)) {
+                throw new RuntimeException('ACS_SETTINGS_INVALID_GROUP');
+            }
+            $selected[(int)$id] = (int)$id;
+        }
+        sort($selected, SORT_NUMERIC);
+        return implode(',', $selected);
+    }
+
+    /** Called only through the ACP dispatcher after schema-management permission and CSRF. */
+    public static function saveSettings(): void
+    {
+        global $db, $mybb;
+        $rows = self::settingRows();
+        $groups = self::settingGroups();
+        $role = $mybb->get_input('af_acs_default_member_role');
+        if (!in_array($role, ['observer', 'player'], true)) { throw new RuntimeException('ACS_SETTINGS_INVALID_ROLE'); }
+        $values = [
+            'af_acs_session_gm_groups'=>self::groupSetting('af_acs_session_gm_groups', $groups),
+            'af_acs_default_member_role'=>$role,
+            'af_acs_archive_export_groups'=>self::groupSetting('af_acs_archive_export_groups', $groups),
+        ];
+        $cases = $ids = [];
+        foreach ($values as $name => $value) {
+            if (!isset($rows[$name])) { throw new RuntimeException('ACS_SETTINGS_NOT_INITIALIZED'); }
+            $sid = (int)$rows[$name]['sid'];
+            $ids[] = $sid;
+            $cases[] = "WHEN $sid THEN '".$db->escape_string($value)."'";
+        }
+        // One native settings-table update after all inputs have been verified.
+        if (!$db->write_query('UPDATE '.TABLE_PREFIX.'settings SET value=CASE sid '.implode(' ', $cases)
+            .' END WHERE sid IN ('.implode(',', $ids).')', true)) {
+            throw new RuntimeException('ACS_SETTINGS_SAVE_FAILED');
+        }
+        af_rebuild_and_reload_settings();
+        if (function_exists('log_admin_action')) { log_admin_action('acs_save_settings', implode(', ', array_keys($values))); }
+    }
+
+    public static function settings(): void
+    {
+        global $mybb;
+        echo '<h3>Поддерживаемые глобальные настройки</h3>';
+        try { $rows = self::settingRows(); }
+        catch (Throwable $error) {
+            echo '<p class="error">Не удалось прочитать настройки ACS. Проверьте диагностику установленных настроек.</p>';
+            return;
+        }
+        $form = '<form method="post" action="'.self::esc(self::url('main')).'">'
+            .self::hidden(['my_post_key'=>$mybb->post_code]);
+        $missing = array_diff(self::EDITABLE_SETTINGS, array_keys($rows));
+        if ($missing || !isset($rows['af_acs_archive_cursor_key'])) {
+            echo $form.self::hidden(['acs_command'=>'initialize_settings'])
+                .'<p>Некоторые настройки ACS отсутствуют. Восстановление добавит недостающие значения.</p>'
+                .'<button type="submit" class="submit_button">Восстановить настройки ACS</button></form>';
+        }
+        if ($missing) { return; }
+
+        $groups = self::settingGroups();
+        echo $form.self::hidden(['acs_command'=>'save_settings']);
+        $table = new Table;
+        foreach (['Параметр', 'Значение', 'Область действия'] as $label) { $table->construct_header($label); }
+        foreach ([
+            'af_acs_session_gm_groups'=>['Кто может создавать боевые сессии ACS', 'Пустой выбор оставляет право у подтверждённых администраторов.'],
+            'af_acs_default_member_role'=>['Роль участника по умолчанию', 'Применяется к новым сессиям.'],
+            'af_acs_archive_export_groups'=>['Кто может использовать расширенный экспорт', 'Сохраняются требования текущей роли GM, доступа к теме и политики экспорта. Пустой выбор запрещает экспорт.'],
+        ] as $name => [$label, $help]) {
+            $value = $rows[$name]['value'];
+            $control = '<select id="'.$name.'" name="'.$name.($name === 'af_acs_default_member_role' ? '">' : '[]" multiple size="7">');
+            $options = $name === 'af_acs_default_member_role' ? ['observer'=>'Наблюдатель', 'player'=>'Игрок'] : $groups;
+            $selected = $name === 'af_acs_default_member_role' ? [$value] : array_map('trim', explode(',', $value));
+            foreach ($options as $key => $title) {
+                $control .= '<option value="'.self::esc($key).'"'.(in_array((string)$key, $selected, true) ? ' selected' : '').'>'.self::esc($title).'</option>';
+            }
+            $table->construct_cell('<label for="'.$name.'">'.self::esc($label).'</label>');
+            $table->construct_cell($control.'</select>');
+            $table->construct_cell(self::esc($help));
+            $table->construct_row();
+        }
+        $table->output('Настройки ACS');
+        echo '<p><button type="submit" class="submit_button">Сохранить настройки</button></p></form>';
     }
     public static function sessions():void
     {

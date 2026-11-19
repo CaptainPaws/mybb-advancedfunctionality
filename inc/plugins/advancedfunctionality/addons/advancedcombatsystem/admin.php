@@ -43,15 +43,29 @@ class AF_Admin_Advancedcombatsystem
             try {
                 if ($section !== 'main') { throw new RuntimeException('ACS_UNKNOWN_COMMAND'); }
                 $command = $mybb->get_input('acs_command');
-                if ($command === 'install') { $success = af_advancedcombatsystem_install(); }
+                if ($command === 'save_settings') {
+                    AF_ACS_AcpSections::saveSettings();
+                    $success = true;
+                } elseif ($command === 'initialize_settings') {
+                    af_advancedcombatsystem_migrations()->assertInstalled();
+                    af_advancedcombatsystem_session_settings();
+                    if (function_exists('log_admin_action')) { log_admin_action('acs_initialize_settings'); }
+                    $success = true;
+                } elseif ($command === 'install') { $success = af_advancedcombatsystem_install(); }
                 elseif ($command === 'upgrade') { $success = af_advancedcombatsystem_upgrade(); }
                 elseif ($command === 'uninstall') { $success = af_advancedcombatsystem_uninstall($mybb->get_input('acs_confirmation')); }
                 else { throw new RuntimeException('ACS_UNKNOWN_COMMAND'); }
                 if (!$success) { throw new RuntimeException('ACS_LIFECYCLE_FAILED'); }
-                echo '<p>'.self::esc($lang->af_advancedcombatsystem_success).'</p>';
+                echo '<p>'.self::esc($command === 'save_settings' ? 'Настройки ACS сохранены.' : $lang->af_advancedcombatsystem_success).'</p>';
             } catch (Throwable $error) {
                 $safe = preg_match('/\AACS_[A-Z_]+(?: \[error_id=[a-f0-9]{32}\])?\z/D', $error->getMessage()) ? $error->getMessage() : 'ACS_DATABASE_ERROR';
-                echo '<div class="error">'.self::esc($safe).'</div>';
+                $message = match ($safe) {
+                    'ACS_SETTINGS_INVALID_GROUP' => 'Выберите существующие группы MyBB.',
+                    'ACS_SETTINGS_INVALID_ROLE' => 'Выберите роль «Наблюдатель» или «Игрок».',
+                    'ACS_SETTINGS_NOT_INITIALIZED' => 'Сначала восстановите отсутствующие настройки ACS.',
+                    default => $safe,
+                };
+                echo '<div class="error">'.self::esc($message).'</div>';
             }
         }
         if ($section === 'permissions') { self::permissions(); return; }

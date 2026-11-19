@@ -74,7 +74,7 @@ function af_atf_acs_mode_input(int $fid, int $tid = 0): string
     if ($blocker === 'scope') { return ''; }
     if ($blocker !== null) {
         $reason = match ($blocker) {
-            'permission' => 'Для боевого эпизода нужна группа с правом создания сессий ACS.',
+            'permission' => 'У вашей учётной записи нет права создавать сессии ACS. Обратитесь к администратору форума.',
             'native' => 'Для боевого эпизода нужны права MyBB на создание и просмотр тем.',
             'storage' => 'Боевой режим недоступен до обновления хранилища намерений ATF.',
             'disabled' => 'Боевой режим недоступен, пока ACS отключён.',
