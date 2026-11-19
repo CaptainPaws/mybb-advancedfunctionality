@@ -1,27 +1,51 @@
 <?php
 if (!defined('IN_MYBB') || !defined('IN_ADMINCP') || !IN_ADMINCP) { die('No direct access'); }
 
-require_once __DIR__.'/TestpackDefinitions.php';
-
 final class AF_ACS_Testpack
 {
     private const LEDGER_TYPE = 'acs_testpack';
-    private const TABLES = ['af_kb_entries','af_kb_blocks','af_kb_log','af_shop_shops','af_shop_categories','af_shop_slots'];
+    private const COLUMNS = [
+        'af_kb_entries'=>'id type key title_ru title_en short_ru short_en body_ru body_en tech_ru tech_en data_json meta_json item_kind active updated_at',
+        'af_kb_blocks'=>'id entry_id block_key content_ru content_en data_json sortorder',
+        'af_kb_log'=>'id uid action type key diff_json dateline',
+        'af_shop_shops'=>'shop_id code title_ru enabled settings_json',
+        'af_shop_categories'=>'cat_id shop_id title description enabled',
+        'af_shop_slots'=>'slot_id shop_id cat_id source_type source_ref_id kb_type kb_id kb_key price currency stock enabled sortorder',
+    ];
 
     private static function esc(string $value): string { return htmlspecialchars_uni($value); }
+
+    /** MyBB's normal SQL error path exits, so use its quiet query mode here. */
+    private static function query(string $sql, string $code = 'ACS_TESTPACK_DATABASE_ERROR')
+    {
+        global $db;
+        try {
+            $result = $db->write_query($sql, 1);
+        } catch (mysqli_sql_exception $error) {
+            throw new RuntimeException($code, 0, $error);
+        }
+        if ($result === false) throw new RuntimeException($code);
+        return $result;
+    }
 
     private static function row(string $table, string $where): ?array
     {
         global $db;
-        return $db->fetch_array($db->simple_select($table,'*',$where,['limit'=>1])) ?: null;
+        return $db->fetch_array(self::query('SELECT * FROM `'.TABLE_PREFIX.$table.'` WHERE '.$where.' LIMIT 1')) ?: null;
     }
 
     private static function insert(string $table, array $row): int
     {
         global $db;
-        $id = (int)$db->insert_query($table, array_map(
-            static fn($value) => is_string($value) ? $db->escape_string($value) : $value, $row));
-        if ($id < 1) throw new RuntimeException('ACS_TESTPACK_WRITE_FAILED');
+        // Fields and table are installer constants or from the checked Shop source projection.
+        $columns = explode(' ', self::COLUMNS[$table]);
+        if (array_diff(array_keys($row), $columns)) throw new RuntimeException('ACS_TESTPACK_SCHEMA_INVALID:'.$table);
+        $values = array_map(static fn($value): string => is_int($value)
+            ? (string)$value : "'".$db->escape_string($value)."'", $row);
+        self::query('INSERT INTO `'.TABLE_PREFIX.$table.'` (`'.implode('`,`', array_keys($row))
+            .'`) VALUES ('.implode(',', $values).')','ACS_TESTPACK_WRITE_FAILED:'.$table);
+        $id = (int)$db->insert_id();
+        if ($id < 1) throw new RuntimeException('ACS_TESTPACK_INSERT_ID_MISSING:'.$table);
         return $id;
     }
 
@@ -36,50 +60,104 @@ final class AF_ACS_Testpack
         return $ledger;
     }
 
-    private static function prerequisites(): array
+    /** Load owner APIs only on this ACP route. Failed checks carry safe reason codes. */
+    private static function prerequisites(array &$checks): void
     {
         global $db, $mybb;
-        $checks = [];
         foreach (['knowledgebase','advancedshop','advancedinventory','charactersheets','advancedcombatsystem','balance'] as $addon) {
-            $checks[$addon] = af_is_addon_enabled($addon);
+            $checks[$addon] = af_is_addon_enabled($addon) ? '' : 'ADDON_DISABLED';
         }
-        foreach (self::TABLES as $table) $checks[$table] = $db->table_exists($table);
-        $checks['inventory_storage'] = $db->table_exists('af_advinv_items') && $db->table_exists('af_advinv_equipped');
-        $checks['character_sheets_storage'] = $db->table_exists('af_cs_sheets');
-        $checks['kb_setting'] = !empty($mybb->settings['af_knowledgebase_enabled']);
-        $checks['shop_setting'] = !empty($mybb->settings['af_advancedshop_enabled']);
-        $checks['credits_storage'] = $db->table_exists('af_balance') && $db->table_exists('af_balance_tx');
-        $checks['mysql_writer'] = isset($db->read_link, $db->write_link);
+        $writer = isset($db->read_link, $db->write_link) && $db->write_link instanceof mysqli;
+        $checks['MySQL writer'] = $writer ? '' : 'MYSQL_WRITER_UNAVAILABLE';
+        if ($writer) {
+            foreach (self::COLUMNS + ['af_kb_types'=>'id type type_key mechanic_key is_active active sortorder title_ru title_en'] as $table => $columns) {
+                if (!$db->table_exists($table)) {
+                    $checks[$table] = 'TABLE_MISSING';
+                    continue;
+                }
+                $name = TABLE_PREFIX.$table;
+                $result = self::query('SHOW COLUMNS FROM `'.$name.'`');
+                $actual = [];
+                while ($column = $db->fetch_array($result)) $actual[] = $column['Field'];
+                $missing = array_diff(explode(' ', $columns), $actual);
+                $checks[$table] = $missing ? 'COLUMNS_MISSING: '.implode(', ', $missing) : '';
+                if (isset(self::COLUMNS[$table])) {
+                    $safe = $db->escape_string($name);
+                    $result = self::query("SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='{$safe}'");
+                    if (strcasecmp((string)$db->fetch_field($result,'ENGINE'),'InnoDB') !== 0) {
+                        $checks[$table] = ltrim($checks[$table].' INNODB_REQUIRED');
+                    }
+                }
+            }
+            foreach (['af_kb_entries'=>['type','key'], 'af_shop_shops'=>['code']] as $table => $identity) {
+                if ($checks[$table] !== '') continue;
+                $indexes = [];
+                $result = self::query('SHOW INDEX FROM `'.TABLE_PREFIX.$table.'`');
+                while ($index = $db->fetch_array($result)) {
+                    if ((int)$index['Non_unique'] === 0) {
+                        $indexes[$index['Key_name']][(int)$index['Seq_in_index']] = $index['Sub_part'] === null ? $index['Column_name'] : null;
+                    }
+                }
+                $unique = false;
+                foreach ($indexes as $columns) {
+                    ksort($columns);
+                    if (array_values($columns) === $identity) $unique = true;
+                }
+                if (!$unique) $checks[$table] = 'UNIQUE_IDENTITY_MISSING';
+            }
+            foreach (['af_advinv_items','af_advinv_equipped','af_cs_sheets','af_balance','af_balance_tx'] as $table) {
+                $checks[$table] = $db->table_exists($table) ? '' : 'TABLE_MISSING';
+            }
+        }
+        $checks['Настройка KB'] = !empty($mybb->settings['af_knowledgebase_enabled']) ? '' : 'KB_SETTING_DISABLED';
+        $checks['Настройка Shop'] = (int)($mybb->settings['af_advancedshop_enabled'] ?? 1) === 1 ? '' : 'SHOP_SETTING_DISABLED';
         try {
+            require_once __DIR__.'/../../advancedcombatsystem.php';
             af_advancedcombatsystem_migrations()->assertInstalled();
-            $checks['acs_schema'] = true;
+            $checks['Схема ACS'] = '';
         } catch (Throwable $error) {
-            $checks['acs_schema'] = false;
+            $checks['Схема ACS'] = 'ACS_SCHEMA_UNAVAILABLE: '.self::safeCode($error);
         }
-        if ($checks['knowledgebase'] && $checks['af_kb_entries'] && $db->table_exists('af_kb_types')) {
-            require_once AF_ADDONS.'knowledgebase/knowledgebase.php';
-            foreach (['arpg_origin','arpg_archetype','arpg_ability','arpg_bestiary','arpg_item','arpg_mechanics','arpg_element'] as $type) {
-                $checks[$type] = !empty(af_kb_find_type_row($type)['active']);
-            }
-            $fire = af_kb_arpg_read_element('fire');
-            $checks['arpg_element:fire'] = $fire['supported'] && ($fire['root_element'] ?? null) === 'fire';
-        } else {
-            $checks['arpg_types'] = false;
-        }
-        if (!in_array(false, $checks, true)) {
-            require_once AF_ADDONS.'advancedshop/advancedshop.php';
-            require_once AF_ADDONS.'advancedinventory/advancedinventory.php';
-            require_once AF_ADDONS.'charactersheets/modules/combat_snapshot.php';
-            $checks['inventory_contract'] = function_exists('af_inv_candidate_slots_for_item') && function_exists('af_inv_add_item');
-            $checks['character_source'] = function_exists('af_charactersheets_prepare_combat_snapshot');
-            // Check actual table engines, including old installations.
-            foreach (self::TABLES as $table) {
-                $name = $db->escape_string(TABLE_PREFIX.$table);
-                $result = $db->write_query("SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='{$name}'");
-                $checks['InnoDB:'.$table] = strcasecmp((string)$db->fetch_field($result,'ENGINE'),'InnoDB') === 0;
+        if ($checks['knowledgebase'] === '') {
+            @require_once AF_ADDONS.'knowledgebase/knowledgebase.php';
+            $checks['Контракт KB'] = self::missingFunctions([
+                'af_kb_arpg_primary_elements','af_kb_arpg_character_stat_registry','af_kb_find_type_row',
+                'af_kb_arpg_read_element','af_kb_arpg_envelope_defaults','af_kb_default_type_profile_payload_arpg',
+                'af_kb_validate_arpg_entry_by_type','af_kb_arpg_public_mechanics_errors',
+                'af_kb_arpg_service_mechanics_errors','af_kb_arpg_prepare_bestiary_ability_ref',
+                'af_kb_ability_catalog_metadata_valid','af_kb_arpg_acs_lookup','af_kb_url',
+            ]);
+            if ($checks['Контракт KB'] === '' && ($checks['af_kb_types'] ?? null) === ''
+                && ($checks['af_kb_entries'] ?? null) === '') {
+                foreach (['arpg_origin','arpg_archetype','arpg_ability','arpg_bestiary','arpg_item','arpg_mechanics','arpg_element'] as $type) {
+                    $checks[$type] = !empty(af_kb_find_type_row($type)['active']) ? '' : 'KB_TYPE_MISSING_OR_INACTIVE';
+                }
+                $fire = af_kb_arpg_read_element('fire');
+                $checks['arpg_element:fire'] = $fire['supported'] && ($fire['root_element'] ?? null) === 'fire'
+                    ? '' : 'KB_FIRE_UNAVAILABLE';
             }
         }
-        return $checks;
+        if ($checks['advancedshop'] === '') {
+            @require_once AF_ADDONS.'advancedshop/advancedshop.php';
+            $checks['Контракт Shop'] = self::missingFunctions([
+                'af_advancedshop_slot_payload_from_source','af_advancedshop_assert_source_matches_shop',
+                'af_advancedshop_money_to_minor','af_advancedshop_url','mb_strtolower',
+            ]);
+        }
+        if ($checks['advancedinventory'] === '') {
+            @require_once AF_ADDONS.'advancedinventory/advancedinventory.php';
+            $checks['Контракт Inventory'] = self::missingFunctions(['af_inv_candidate_slots_for_item','af_inv_add_item']);
+        }
+        if ($checks['charactersheets'] === '') {
+            @require_once AF_ADDONS.'charactersheets/modules/combat_snapshot.php';
+            $checks['Источник CharacterSheets'] = self::missingFunctions(['af_charactersheets_prepare_combat_snapshot']);
+        }
+    }
+
+    private static function missingFunctions(array $names): string
+    {
+        $missing = array_filter($names, static fn(string $name): bool => !function_exists($name));
+        return $missing ? 'API_MISSING: '.implode(', ', $missing) : '';
     }
 
     private static function validate(string $type, array $rules): array
@@ -134,16 +212,19 @@ final class AF_ACS_Testpack
         global $db;
         $prefix = $db->escape_string(TABLE_PREFIX);
         $lock = "CONCAT('acs_testpack_', LEFT(SHA2(CONCAT(DATABASE(), ':', '{$prefix}'), 256), 32))";
-        $result = $db->write_query("SELECT GET_LOCK({$lock}, 5) AS acquired");
+        $result = self::query("SELECT GET_LOCK({$lock}, 5) AS acquired");
         if ((int)$db->fetch_field($result,'acquired') !== 1) throw new RuntimeException('ACS_TESTPACK_BUSY');
         $readLink = $db->read_link;
         $db->read_link = $db->write_link; // Owner API reads must see uncommitted rows on this connection.
         try {
             if (self::ledger() !== null) return false;
-            $db->write_query('START TRANSACTION');
+            self::query('START TRANSACTION');
             try {
                 foreach ($entries as $key => $entry) {
-                    if (af_kb_arpg_acs_lookup($entry['type'],$key)) throw new RuntimeException('ACS_TESTPACK_FOREIGN_KEY:'.$entry['type'].':'.$key);
+                    $type = $entry['type'];
+                    if (self::row('af_kb_entries',"type='{$type}' AND `key`='{$key}'")) {
+                        throw new RuntimeException('ACS_TESTPACK_FOREIGN_KEY:'.$type.':'.$key);
+                    }
                 }
                 $code = AF_ACS_TestpackDefinitions::SHOP;
                 if (self::row('af_shop_shops',"code='{$code}'")) throw new RuntimeException('ACS_TESTPACK_FOREIGN_KEY:'.$code);
@@ -169,15 +250,15 @@ final class AF_ACS_Testpack
                     'diff_json'=>json_encode(['version'=>1,'kb'=>$ids,'shop'=>$shopId,
                         'category'=>[AF_ACS_TestpackDefinitions::CATEGORY=>$categoryId],'slots'=>$slots],JSON_THROW_ON_ERROR),
                 ]);
-                $db->write_query('COMMIT');
+                self::query('COMMIT');
             } catch (Throwable $error) {
-                $db->write_query('ROLLBACK');
+                $db->write_query('ROLLBACK', 1);
                 throw $error;
             }
             return true;
         } finally {
             $db->read_link = $readLink;
-            $db->write_query("SELECT RELEASE_LOCK({$lock})");
+            $db->write_query("SELECT RELEASE_LOCK({$lock})", 1);
         }
     }
 
@@ -295,43 +376,89 @@ final class AF_ACS_Testpack
     {
         global $mybb;
         $auth->requirePermission('admin.schema.manage');
-        $uid = (int)$mybb->user['uid'];
-        $entries = AF_ACS_TestpackDefinitions::entries();
-        $checks = self::prerequisites();
-        echo '<h2>Установить тестовый комплект ACS</h2><p>Будут добавлены определения KB и отдельный магазин. Покупка и экипировка выполняются вручную.</p><ul>';
-        foreach ($checks as $name => $ready) echo '<li>'.self::esc($name).' — '.($ready ? 'доступно' : 'недоступно').'</li>';
-        echo '</ul><details><summary>Состав комплекта</summary><ul>';
-        foreach ($entries as $key => $entry) {
-            echo '<li>'.self::esc($entry['title'].' · '.$entry['type'].' / '.$key)
-                .($entry['price'] > 0 ? ' · '.$entry['price'].' credits' : '').'</li>';
-        }
-        echo '</ul><p>Магазин «ACS — Испытательный арсенал», одна категория, девять товаров.</p></details>';
-        $ready = !in_array(false,$checks,true);
+        echo '<h2>Тестовый комплект ACS</h2><p>Установить тестовый комплект ACS</p>'
+            .'<p>После подтверждения будут добавлены определения KB и отдельный магазин.</p>';
+
+        $checks = [];
+        $entries = [];
+        $failure = '';
+        $stage = 'ACS_TESTPACK_BOOTSTRAP_ERROR';
         try {
+            self::prerequisites($checks);
+            $stage = 'ACS_TESTPACK_DEFINITIONS_ERROR';
+            @require_once __DIR__.'/TestpackDefinitions.php';
+            if (($checks['Контракт KB'] ?? null) === '') {
+                $elements = af_kb_arpg_primary_elements();
+                if (count($elements) !== 17) throw new RuntimeException('ACS_TESTPACK_ELEMENT_REGISTRY_INVALID');
+                $entries = AF_ACS_TestpackDefinitions::entries(af_kb_arpg_character_stat_registry(), $elements);
+                if (!$entries) throw new RuntimeException('ACS_TESTPACK_DEFINITIONS_EMPTY');
+            }
+        } catch (Throwable $error) {
+            $failure = $error instanceof Error ? $stage : self::safeCode($error);
+        }
+        $ready = $failure === '' && $entries && !array_filter($checks);
+        echo '<h3>Зависимости</h3><table class="general"><thead><tr><th>Компонент</th><th>Состояние</th></tr></thead><tbody>';
+        foreach ($checks as $name => $reason) {
+            echo '<tr><td>'.self::esc($name).'</td><td>'.($reason === '' ? 'Доступно' : self::esc($reason)).'</td></tr>';
+        }
+        echo '</tbody></table>';
+        if ($entries) {
+            echo '<details open><summary>Состав комплекта</summary><ul>';
+            foreach ($entries as $key => $entry) {
+                echo '<li>'.self::esc($entry['title'].' · '.$entry['type'].' / '.$key)
+                    .($entry['price'] > 0 ? ' · '.$entry['price'].' credits' : '').'</li>';
+            }
+            echo '</ul><p>Магазин «ACS — Испытательный арсенал», одна категория, девять товаров.</p></details>';
+        } else {
+            echo '<p>Список записей недоступен. Проверьте контракт KB и диагностику ниже.</p>';
+        }
+
+        $ledger = null;
+        $created = false;
+        $uid = (int)$mybb->user['uid'];
+        try {
+            if (($checks['af_kb_log'] ?? null) === '') $ledger = self::ledger();
             if ($mybb->request_method === 'post') {
-                verify_post_check($mybb->get_input('my_post_key'));
+                if (!verify_post_check($mybb->get_input('my_post_key'), true)) {
+                    throw new RuntimeException('ACS_TESTPACK_CSRF_INVALID');
+                }
                 if ($mybb->get_input('acs_command') !== 'install_testpack' || $mybb->get_input('acs_confirm') !== '1') {
                     throw new RuntimeException('ACS_TESTPACK_CONFIRMATION_REQUIRED');
                 }
-                if (!$ready) throw new RuntimeException('ACS_TESTPACK_DEPENDENCY_UNAVAILABLE');
-                if (self::install($entries,$uid)) {
-                    if (function_exists('log_admin_action')) log_admin_action('acs_install_testpack',AF_ACS_TestpackDefinitions::SHOP);
-                    echo '<p>Тестовый комплект установлен.</p>';
+                if ($ledger === null) {
+                    if (!$ready) throw new RuntimeException('ACS_TESTPACK_DEPENDENCY_UNAVAILABLE');
+                    $created = self::install($entries,$uid);
+                    $ledger = self::ledger();
+                    if ($ledger === null) throw new RuntimeException('ACS_TESTPACK_PROVENANCE_INVALID');
+                    if ($created && function_exists('log_admin_action')) {
+                        log_admin_action('acs_install_testpack',AF_ACS_TestpackDefinitions::SHOP);
+                    }
                 }
             }
-            $ledger = !empty($checks['af_kb_log']) ? self::ledger() : null;
-            if ($ledger) {
-                echo '<p>Тестовый комплект уже установлен.</p>';
-                if ($ready) self::readiness($entries,$ledger,$uid);
-            } elseif ($ready) {
-                echo '<form method="post" action="index.php?module=advancedfunctionality&amp;af_view=advancedcombatsystem&amp;acs_section=testpack">'
-                    .'<input type="hidden" name="my_post_key" value="'.self::esc($mybb->post_code).'">'
-                    .'<input type="hidden" name="acs_command" value="install_testpack">'
-                    .'<label><input type="checkbox" name="acs_confirm" value="1" required> Подтверждаю создание перечисленных записей.</label> '
-                    .'<button type="submit" class="submit_button">Установить тестовый комплект ACS</button></form>';
-            }
         } catch (Throwable $error) {
-            echo '<p class="error">'.self::esc(self::safeCode($error)).'</p>';
+            if ($failure === '') $failure = self::safeCode($error);
+        }
+
+        $state = $failure !== '' || (!$ready && !$ledger) ? 'ошибка' : ($ledger ? 'установлен' : 'не установлен');
+        echo '<p><strong>Статус: '.$state.'</strong></p>';
+        if ($failure !== '' || !$ready) {
+            echo '<p class="error">'.self::esc($failure ?: 'ACS_TESTPACK_DEPENDENCY_UNAVAILABLE').'</p>';
+        }
+        if ($ledger) {
+            echo $created ? '<p>Тестовый комплект установлен.</p>' : '<p>Тестовый комплект уже установлен.</p>';
+            if ($ready) {
+                try {
+                    self::readiness($entries,$ledger,$uid);
+                } catch (Throwable $error) {
+                    echo '<p class="error">Ошибка проверки: '.self::esc(self::safeCode($error)).'</p>';
+                }
+            }
+        } elseif ($ready) {
+            echo '<form method="post" action="index.php?module=advancedfunctionality&amp;af_view=advancedcombatsystem&amp;acs_section=testpack">'
+                .'<input type="hidden" name="my_post_key" value="'.self::esc($mybb->post_code).'">'
+                .'<input type="hidden" name="acs_command" value="install_testpack">'
+                .'<label><input type="checkbox" name="acs_confirm" value="1" required> Подтверждаю создание перечисленных записей.</label> '
+                .'<button type="submit" class="submit_button">Установить тестовый комплект ACS</button></form>';
         }
         echo '<p>Порядок подготовки персонажа и боя приведён в <a href="https://github.com/CaptainPaws/mybb-advancedfunctionality/blob/main/docs/design/acs/ACS_TESTPACK_01_MANUAL_SETUP.md">инструкции ручной приёмки</a>.</p>';
     }
