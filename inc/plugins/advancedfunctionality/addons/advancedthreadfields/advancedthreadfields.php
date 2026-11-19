@@ -2258,24 +2258,11 @@ function af_atf_get_post_context_by_pid(int $pid): array
         return ['pid' => 0, 'tid' => 0, 'fid' => 0, 'is_first' => false];
     }
 
-    $q = $db->simple_select('posts', 'pid,tid,fid', "pid={$pid}", ['limit' => 1]);
-    $row = $db->fetch_array($q);
-
-    if (!is_array($row) || empty($row)) {
-        return ['pid' => $pid, 'tid' => 0, 'fid' => 0, 'is_first' => false];
-    }
-
-    $tid = (int)($row['tid'] ?? 0);
-    $fid = (int)($row['fid'] ?? 0);
-
-    $isFirst = false;
-    if ($tid > 0) {
-        $q2 = $db->simple_select('threads', 'firstpost', "tid={$tid}", ['limit' => 1]);
-        $first = (int)$db->fetch_field($q2, 'firstpost');
-        $isFirst = ($first > 0 && $first === $pid);
-    }
-
-    return ['pid' => $pid, 'tid' => $tid, 'fid' => $fid, 'is_first' => $isFirst];
+    $q = $db->write_query('SELECT p.pid,p.tid,t.fid,t.firstpost FROM '.TABLE_PREFIX.'posts p JOIN '
+        .TABLE_PREFIX."threads t ON t.tid=p.tid WHERE p.pid={$pid} LIMIT 1", true);
+    $row = $q ? $db->fetch_array($q) : null;
+    return ['pid'=>$pid, 'tid'=>(int)($row['tid'] ?? 0), 'fid'=>(int)($row['fid'] ?? 0),
+        'is_first'=>(int)($row['firstpost'] ?? 0) === $pid];
 }
 
 
@@ -2289,26 +2276,11 @@ function af_atf_collect_posted_values(array $fields): array
     }
 
     $values = [];
-    foreach ($fields as $f) {
-        $fieldid = (int)$f['fieldid'];
-        if ($fieldid <= 0) {
-            continue;
-        }
-
-        $raw = $incoming[$fieldid] ?? null;
-
-        // checkbox: если чекбокс не отмечен — ключа может не быть вообще
-        if ((string)$f['type'] === 'checkbox') {
-            $values[$fieldid] = ($raw === '1' || $raw === 1) ? '1' : '';
-            continue;
-        }
-
-        // обычные поля
-        if (is_array($raw)) {
-            $values[$fieldid] = '';
-        } else {
-            $values[$fieldid] = is_string($raw) ? $raw : (string)$raw;
-        }
+    foreach ($fields as $field) {
+        $id = (int)$field['fieldid'];
+        if ($id <= 0 || !array_key_exists($id, $incoming)) continue;
+        $raw = $incoming[$id];
+        if (is_string($raw) || is_int($raw)) $values[$id] = (string)$raw;
     }
 
     return $values;
@@ -2444,24 +2416,14 @@ function af_atf_prepare_input_block(int $fid, int $tid = 0, bool $isEdit = false
 
     // 2) если это edit и POST пустой (первый заход на страницу редактирования) — берём из БД
     if ($isEdit && $tid > 0) {
-        $stored = af_atf_get_values_by_tid($tid);
-        if (!$isPost || empty($values)) {
-            $values = $stored;
-        } else {
-            $posted = $mybb->get_input('af_tf', MyBB::INPUT_ARRAY);
-            foreach ($fields as $field) {
-                $id = (int)$field['fieldid'];
-                if ($field['type'] === 'character_abilities' && !array_key_exists($id, $posted)) {
-                    $values[$id] = $stored[$id] ?? '';
-                }
-            }
-        }
+        $values += af_atf_get_values_by_tid($tid);
     }
 
     $GLOBALS['af_atf_context_fields'] = $fields;
     $GLOBALS['af_atf_context_values'] = $values;
     $af_atf_input_html = af_atf_render_inputs($fields, $values);
     if ($af_atf_input_html !== '') {
+        if ($isEdit) $af_atf_input_html .= '<input type="hidden" name="af_atf_form_present" value="1" />';
         $GLOBALS['af_atf_has_frontend_component'] = true;
     }
     $prefillToken = trim((string)$mybb->get_input('af_atf_prefill_token'));
@@ -4034,7 +3996,8 @@ function af_atf_build_input_html(array $field, string $value): string
 
         case 'checkbox': {
             $chk = ((string)$value === '1') ? ' checked="checked"' : '';
-            return '<label><input type="checkbox" name="'.$nameAttr.'" value="1"'.$chk.' /> </label>';
+            return '<input type="hidden" name="'.$nameAttr.'" value="0" />'
+                .'<label><input type="checkbox" name="'.$nameAttr.'" value="1"'.$chk.' /> </label>';
         }
 
         case 'url':
@@ -4468,38 +4431,72 @@ function af_atf_get_values_by_tid(int $tid): array
     }
 
     $vals = [];
-    $q = $db->simple_select(AF_ATF_TABLE_VALUES, 'fieldid,value', "tid=".(int)$tid);
+    $q = $db->write_query('SELECT fieldid,value FROM ' . TABLE_PREFIX . AF_ATF_TABLE_VALUES . ' WHERE tid=' . $tid);
     while ($row = $db->fetch_array($q)) {
         $vals[(int)$row['fieldid']] = (string)$row['value'];
     }
     return $vals;
 }
 
-function af_atf_save_values(int $tid, array $fieldValues): void
+function af_atf_save_values(int $tid, array $fieldValues, bool $verify = false): void
 {
     global $db;
 
     if ($tid <= 0 || !$db->table_exists(AF_ATF_TABLE_VALUES)) {
+        if ($verify) throw new RuntimeException('ATF_VALUES_UNAVAILABLE');
         return;
     }
 
-    foreach ($fieldValues as $fieldid => $value) {
-        $fieldid = (int)$fieldid;
-        if ($fieldid <= 0) {
-            continue;
-        }
-
+    $table = "`".TABLE_PREFIX.AF_ATF_TABLE_VALUES."`";
+    $empty = $rows = $expected = [];
+    foreach ($fieldValues as $fieldId => $value) {
+        $fieldId = (int)$fieldId;
+        if ($fieldId <= 0) continue;
         $value = is_string($value) ? trim($value) : '';
+        $expected[$fieldId] = $value;
         if ($value === '') {
-            $db->delete_query(AF_ATF_TABLE_VALUES, "tid=".(int)$tid." AND fieldid=".(int)$fieldid);
-            continue;
+            $empty[] = $fieldId;
+        } else {
+            $rows[] = "({$tid},{$fieldId},'".$db->escape_string($value)."')";
         }
+    }
+    if (!$expected) return;
 
-        $db->write_query("
-            INSERT INTO `".TABLE_PREFIX.AF_ATF_TABLE_VALUES."` (tid, fieldid, value)
-            VALUES (".(int)$tid.", ".(int)$fieldid.", '".$db->escape_string($value)."')
-            ON DUPLICATE KEY UPDATE value=VALUES(value)
-        ");
+    if ($verify && !$db->write_query('START TRANSACTION', true)) {
+        throw new RuntimeException('ATF_TRANSACTION_UNAVAILABLE');
+    }
+    try {
+        if ($empty && !$db->write_query("DELETE FROM {$table} WHERE tid={$tid} AND fieldid IN (".implode(',', $empty).')', $verify)) {
+            throw new RuntimeException('ATF_DELETE_FAILED');
+        }
+        if ($rows && !$db->write_query("INSERT INTO {$table} (tid,fieldid,value) VALUES ".implode(',', $rows)
+            .' ON DUPLICATE KEY UPDATE value=VALUES(value)', $verify)) {
+            throw new RuntimeException('ATF_WRITE_FAILED');
+        }
+        if ($verify) {
+            if (isset($GLOBALS['af_atf_edit_save_route'])) $GLOBALS['af_atf_edit_save_route']['write_completed'] = true;
+            // This read must use the writer, even on a replicated installation.
+            $query = $db->write_query("SELECT fieldid,value FROM {$table} WHERE tid={$tid} AND fieldid IN ("
+                .implode(',', array_keys($expected)).')', true);
+            if (!$query) throw new RuntimeException('ATF_READBACK_FAILED');
+            $actual = [];
+            while ($row = $db->fetch_array($query)) $actual[(int)$row['fieldid']] = (string)$row['value'];
+            foreach ($expected as $fieldId => $value) {
+                if (($value === '' && isset($actual[$fieldId])) || ($value !== '' && ($actual[$fieldId] ?? null) !== $value)) {
+                    throw new RuntimeException('ATF_READBACK_MISMATCH');
+                }
+            }
+            if (!$db->write_query('COMMIT', true)) throw new RuntimeException('ATF_COMMIT_FAILED');
+        }
+    } catch (Throwable $error) {
+        if ($verify) $db->write_query('ROLLBACK', true);
+        throw $error;
+    }
+
+    foreach (['af_atf_display_block_cache','af_atf_display_text_values'] as $cacheName) {
+        foreach (array_keys($GLOBALS[$cacheName] ?? []) as $key) {
+            if (str_starts_with((string)$key, $tid.':')) unset($GLOBALS[$cacheName][$key]);
+        }
     }
 }
 
@@ -4947,6 +4944,15 @@ function af_atf_editpost_do_start(): void
     }
 
     $ctx = af_atf_get_post_context_by_pid($pidI);
+    $posted = $mybb->get_input('af_tf', MyBB::INPUT_ARRAY);
+    $formPresent = $mybb->get_input('af_atf_form_present') === '1';
+    if ($formPresent || (!empty($ctx['is_first']) && array_intersect_key($posted,
+        array_column(af_atf_get_fields_for_forum((int)$ctx['fid']), null, 'fieldid')))) {
+        $GLOBALS['af_atf_edit_save_route'] = [
+            'pid_resolved'=>!empty($ctx['tid']), 'tid_resolved'=>(int)$ctx['tid'] > 0, 'fid_resolved'=>(int)$ctx['fid'] > 0,
+            'validated'=>false, 'writer_reached'=>false, 'write_completed'=>false, 'verified'=>false,
+        ];
+    }
     af_atf_acs_validate_edit($ctx);
     if (empty($ctx['is_first'])) {
         return;
@@ -5965,121 +5971,16 @@ function af_atf_bridge_extract_oc_stats(array $index): array
 
 function af_atf_editpost_do_end(): void
 {
-    global $mybb, $fid, $tid, $pid, $post, $thread;
+    global $lang;
+    $route = $GLOBALS['af_atf_edit_save_route'] ?? null;
+    if (!$route || !empty($route['verified'])) return;
 
-    $pidI = (int)($pid ?? 0);
-    if (!af_atf_is_first_post_context(is_array($post) ? $post : [], $pidI)) {
-        return;
-    }
-
-    // fid может быть пустым
-    $fidI = 0;
-    if (!empty($fid)) {
-        $fidI = (int)$fid;
-    } elseif (is_array($post) && !empty($post['fid'])) {
-        $fidI = (int)$post['fid'];
-    } elseif (is_array($thread) && !empty($thread['fid'])) {
-        $fidI = (int)$thread['fid'];
-    }
-
-    $tidI = (int)($tid ?? 0);
-    if ($fidI <= 0 || $tidI <= 0) {
-        return;
-    }
-
-    if (!empty($GLOBALS['af_atf_datahandler_saved'][$tidI])) {
-        return;
-    }
-
-    $fields = af_atf_get_fields_for_forum($fidI);
-    if (empty($fields)) {
-        return;
-    }
-
-    $values = af_atf_collect_posted_values($fields);
-    $GLOBALS['af_atf_context_fid'] = $fidI;
-    $GLOBALS['af_atf_context_fields'] = $fields;
-    $GLOBALS['af_atf_context_values'] = $values;
-
-    $activeMechanic = af_atf_character_active_mechanic();
-    foreach ($fields as $f) {
-        $fieldid = (int)$f['fieldid'];
-        if ($fieldid <= 0) {
-            continue;
-        }
-
-        $val = isset($values[$fieldid]) ? (string)$values[$fieldid] : '';
-        $val = trim($val);
-
-        $maxlen = (int)$f['maxlen'];
-        if ($maxlen > 0 && my_strlen($val) > $maxlen) {
-            $val = my_substr($val, 0, $maxlen);
-        }
-
-        $type = (string)$f['type'];
-        $fieldName = (string)($f['name'] ?? '');
-        if ($activeMechanic === 'dnd' && ($fieldName === 'character_element' || $fieldName === 'character_faction' || $fieldName === 'character_accuracy')) {
-            $values[$fieldid] = '';
-            continue;
-        }
-
-        if ($type === 'kb_race' || $type === 'kb_class' || $type === 'kb_theme') {
-            if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
-                $val = '';
-            } elseif ($val !== '') {
-                $kbTypeMap = ['kb_race' => 'race', 'kb_class' => 'class', 'kb_theme' => 'theme'];
-                $kbType = $kbTypeMap[$type] ?? '';
-                if ($kbType === '') {
-                    $val = '';
-                    $values[$fieldid] = $val;
-                    continue;
-                }
-                $list = af_atf_kb_get_list_by_type($kbType);
-                $known = [];
-                foreach ($list as $item) {
-                    $known[(string)($item['key'] ?? '')] = true;
-                }
-                $opts = af_atf_parse_options((string)$f['options']);
-                if (empty($known[$val]) && !array_key_exists($val, $opts)) {
-                    $val = '';
-                }
-            }
-        } elseif ($type === 'sf_attributes_pointbuy') {
-            $settings = af_atf_sf_pointbuy_get_settings();
-            $errorKey = null;
-            $normalized = af_atf_sf_pointbuy_normalize($val, $settings, $errorKey);
-            $val = !empty($normalized['ok']) ? (string)$normalized['json'] : '';
-        } elseif ($type === 'character_stats') {
-            $val = af_atf_normalize_character_stats_json($val);
-        } elseif ($type === 'character_abilities') {
-            if (!array_key_exists($fieldid, $mybb->get_input('af_tf', MyBB::INPUT_ARRAY))) {
-                unset($values[$fieldid]);
-                continue;
-            }
-            $val = af_atf_normalize_character_abilities_json($val);
-            // The DataHandler has already validated and saved server-owned KB pins.
-            if (af_atf_kb_ability_has_links((array)json_decode($val, true))) {
-                continue;
-            }
-        } elseif ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
-            if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
-                $val = '';
-            }
-        }
-
-        if (($type === 'select' || $type === 'radio') && $val !== '') {
-            $opts = af_atf_parse_options((string)$f['options']);
-            if (!array_key_exists($val, $opts)) {
-                $val = '';
-            }
-        }
-
-        $values[$fieldid] = $val;
-    }
-
-    af_atf_save_values($tidI, $values);
+    $id = bin2hex(random_bytes(8));
+    $flags = array_intersect_key($route, array_flip(['pid_resolved','tid_resolved','fid_resolved',
+        'validated','writer_reached','write_completed','verified','reason']));
+    error_log('ATF edit save error_id='.$id.' route='.json_encode($flags));
+    $lang->redirect_postedited = 'Сообщение обновлено. Сохранение полей анкеты не подтверждено. Код диагностики: '.$id.'.';
 }
-
 
 function af_atf_normalize_regex(string $rx): string
 {
@@ -6174,17 +6075,25 @@ function af_atf_dh_validate(&$ph): void
     }
 
     $clean = [];
+    $stored = $isEdit ? af_atf_get_values_by_tid($storedTid) : [];
+    $effectiveValues = $incoming + $stored;
     $GLOBALS['af_atf_context_fid'] = $forumId;
     $GLOBALS['af_atf_context_fields'] = $fields;
-    $GLOBALS['af_atf_context_values'] = is_array($incoming) ? $incoming : [];
+    $GLOBALS['af_atf_context_values'] = $effectiveValues;
     $activeMechanic = af_atf_character_active_mechanic();
     $incomingByName = [];
     foreach ($fields as $incomingField) {
-        $incomingByName[(string)($incomingField['name'] ?? '')] = trim((string)($incoming[(int)($incomingField['fieldid'] ?? 0)] ?? ''));
+        $value = $effectiveValues[(int)$incomingField['fieldid']] ?? '';
+        $incomingByName[(string)$incomingField['name']] = is_scalar($value) ? trim((string)$value) : '';
     }
     foreach ($fields as $f) {
         $fieldid = (int)$f['fieldid'];
+        if ($isEdit && !array_key_exists($fieldid, $incoming)) continue;
         $raw = $incoming[$fieldid] ?? '';
+        if (!is_string($raw) && !is_int($raw)) {
+            $ph->set_error('Некорректное значение поля «'.htmlspecialchars_uni((string)$f['title']).'».');
+            continue;
+        }
         $fieldName = (string)($f['name'] ?? '');
 
         // checkbox special
@@ -6300,10 +6209,6 @@ function af_atf_dh_validate(&$ph): void
         }
 
         if ($type === 'character_abilities') {
-            if ($isEdit && !array_key_exists($fieldid, $incoming)) {
-                continue; // A partial edit must never clear saved abilities.
-            }
-            $stored = $storedTid > 0 ? af_atf_get_values_by_tid($storedTid) : [];
             $storedRaw = (string)($stored[$fieldid] ?? '');
             $decoded = is_string($raw) ? json_decode($raw, true) : null;
             if ($raw !== '' && !is_array($decoded)) {
@@ -6321,7 +6226,7 @@ function af_atf_dh_validate(&$ph): void
             if (af_atf_kb_ability_has_links($abilities)) {
                 $errors = [];
                 try {
-                    $abilities = af_atf_kb_ability_validate($abilities, $old, $fields, $incoming, $errors);
+                    $abilities = af_atf_kb_ability_validate($abilities, $old, $fields, $effectiveValues, $errors);
                 } catch (Throwable $error) {
                     $errorId = bin2hex(random_bytes(8));
                     error_log('ATF ability validation error_id='.$errorId.' type='.get_class($error));
@@ -6428,6 +6333,17 @@ function af_atf_dh_validate(&$ph): void
         $clean[$fieldid] = $val;
     }
 
+    if ($isEdit) {
+        if (isset($GLOBALS['af_atf_edit_save_route'])) $GLOBALS['af_atf_edit_save_route']['validated'] = true;
+        if (!$clean && !$ph->get_errors() && $mybb->get_input('af_atf_form_present') === '1') {
+            $ph->set_error('Поля анкеты не поступили на сервер. Откройте форму редактирования заново.');
+            return;
+        }
+        $GLOBALS['af_atf_validated_edit'] = [
+            'handler'=>$ph, 'pid'=>$pidCandidate, 'tid'=>$storedTid, 'fid'=>$forumId, 'values'=>$clean,
+        ];
+        return;
+    }
     $ph->data['af_atf_values'] = $clean;
 }
 
@@ -6453,29 +6369,30 @@ function af_atf_dh_insert_thread(&$ph): void
 
 function af_atf_dh_update_post(&$ph): void
 {
-    if (empty($ph->data['tid']) || empty($ph->data['af_atf_values']) || !is_array($ph->data['af_atf_values'])) {
-        return;
+    global $pid;
+    $pending = $GLOBALS['af_atf_validated_edit'] ?? null;
+    if (!$pending || $pending['handler'] !== $ph || $ph->get_errors()) return;
+    unset($GLOBALS['af_atf_validated_edit']);
+    if (isset($GLOBALS['af_atf_edit_save_route'])) $GLOBALS['af_atf_edit_save_route']['writer_reached'] = true;
+
+    $context = af_atf_get_post_context_by_pid((int)($ph->data['pid'] ?? $pid ?? $pending['pid']));
+    if (!$context['is_first'] || $context['pid'] !== $pending['pid']
+        || $context['tid'] !== $pending['tid'] || $context['fid'] !== $pending['fid']) return;
+
+    try {
+        af_atf_save_values($context['tid'], $pending['values'], true);
+        if (isset($GLOBALS['af_atf_edit_save_route'])) {
+            $GLOBALS['af_atf_edit_save_route']['write_completed'] = true;
+            $GLOBALS['af_atf_edit_save_route']['verified'] = true;
+        }
+    } catch (Throwable $error) {
+        // Native editpost has already saved the post. Its end hook reports the ATF failure.
+        if (isset($GLOBALS['af_atf_edit_save_route'])) {
+            $code = $error->getMessage();
+            $GLOBALS['af_atf_edit_save_route']['reason'] = preg_match('/\AATF_[A-Z_]+\z/D', $code) ? $code : 'ATF_STORAGE_ERROR';
+        }
     }
-
-    global $post, $pid;
-
-    $pidCandidate = 0;
-    if (!empty($ph->data['pid'])) {
-        $pidCandidate = (int)$ph->data['pid'];
-    } elseif (!empty($pid)) {
-        $pidCandidate = (int)$pid;
-    }
-
-    // только если редактируется первый пост
-    if (!af_atf_is_first_post_context(is_array($post) ? $post : [], $pidCandidate)) {
-        return;
-    }
-
-    $tid = (int)$ph->data['tid'];
-    af_atf_save_values($tid, $ph->data['af_atf_values']);
-    $GLOBALS['af_atf_datahandler_saved'][$tid] = true;
 }
-
 
 /* -------------------- DISPLAY: showthread/forumdisplay -------------------- */
 
