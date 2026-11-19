@@ -9,7 +9,12 @@ final class AF_ACS_AcpSections
     public static function url(string $section,array $args=[]):string{return 'index.php?'.http_build_query(['module'=>'advancedfunctionality','af_view'=>'advancedcombatsystem','acs_section'=>$section]+$args);}
     private static function hidden(array $args):string{$html='';foreach($args as $key=>$value)$html.='<input type="hidden" name="'.self::esc($key).'" value="'.self::esc($value).'">';return $html;}
     private static function filters(string $section):string{return '<form method="get" action="index.php">'.self::hidden(['module'=>'advancedfunctionality','af_view'=>'advancedcombatsystem','acs_section'=>$section]);}
-    private static function failure(Throwable $e):void{$error=AF_ACS_SafeError::from($e,'acp_inspect');echo '<p class="error">'.self::esc('Проверка ACP недоступна. Проверьте ввод, доступ к теме и состояние схемы. error_id='.$error['error_id']).'</p>';}
+    private static function failure(Throwable $e, string $operation = 'acp_inspect'): void
+    {
+        $error = AF_ACS_SafeError::from($e, $operation);
+        echo '<p class="error">'.self::esc('Проверка ACP недоступна. Проверьте ввод, доступ к теме и состояние схемы. '
+            .$error['code'].' · error_id='.$error['error_id']).'</p>';
+    }
     public static function policyDescription(string $policy):string
     {
         return [
@@ -61,7 +66,7 @@ final class AF_ACS_AcpSections
             $table->output('До 50 разрешённых записей на странице');if(!$data['items'])echo '<p>На этой странице доступных записей нет.</p>';
             if($data['next_cursor']!==null){$args=['acs_cursor'=>$data['next_cursor']];foreach($filters as $k=>$v)$args['acs_filter_'.$k]=$v;echo '<p><a href="'.self::esc(self::url('sessions',$args)).'">Следующая страница</a></p>';}
             echo '<p>Native доступ проверяется для каждой темы; global ACP не делает администратора session GM. Числа скрытых/пропущенных сессий не выводятся.</p>';
-        }catch(Throwable $e){self::failure($e);}
+        }catch(Throwable $e){self::failure($e, 'acp_sessions');}
     }
     public static function inspect():void
     {
