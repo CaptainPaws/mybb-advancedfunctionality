@@ -9,11 +9,13 @@ require_once __DIR__.'/SpatialPersistence.php';
 require_once __DIR__.'/CoverPersistence.php';
 require_once __DIR__.'/AwarenessPersistence.php';
 require_once __DIR__.'/SpawnPersistence.php';
+require_once __DIR__.'/EpisodeModePersistence.php';
 
 /** Internal persistence API. No endpoint; authorization belongs to callers. */
 class AF_ACS_Repository
 {
     use AF_ACS_CoverPersistence, AF_ACS_SpatialPersistence, AF_ACS_CooperationPersistence, AF_ACS_SummonPersistence, AF_ACS_ObjectPersistence, AF_ACS_AwarenessPersistence, AF_ACS_SpawnPersistence;
+    use AF_ACS_EpisodeModePersistence;
     protected mysqli $connection;
     protected AF_ACS_TransactionManager $transactions;
     protected string $prefix;
@@ -204,6 +206,7 @@ class AF_ACS_Repository
         $sessionId = self::integer($sessionId);
         $row = $this->sql('SELECT * FROM '.$this->table('sessions').' WHERE id=? FOR UPDATE', [$sessionId])['rows'][0] ?? null;
         if (!$row) { throw new RuntimeException('ACS_SESSION_NOT_FOUND'); }
+        $this->assertEpisodeCombat((string)$row['tid']);
         self::integer($row['session_version']);
         self::integer($row['next_sequence']);
         return $row;

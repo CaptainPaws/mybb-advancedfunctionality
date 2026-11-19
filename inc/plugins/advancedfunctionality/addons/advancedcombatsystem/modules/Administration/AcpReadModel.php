@@ -32,7 +32,7 @@ final class AF_ACS_AcpReadModel extends AF_ACS_Repository
                 }
             }
             if($native[$tid]===null)continue;
-            $row['subject']=$native[$tid]['subject'];$row['can_gm']=AF_ACS_AuthorizationService::sessionGm($row,$roles[$sid]??[],$uid);$out[]=$row;
+            $row['episode_mode']=$this->episodeMode($tid)['mode'] ?? 'combat';$row['subject']=$native[$tid]['subject'];$row['can_gm']=AF_ACS_AuthorizationService::sessionGm($row,$roles[$sid]??[],$uid);$out[]=$row;
         }
         return ['items'=>$out,'next_cursor'=>$more?AF_ACS_Archive::cursor(['bind'=>$bind,'after'=>(string)end($rows)['id']],$secret):null];
     }

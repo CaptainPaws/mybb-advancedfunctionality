@@ -122,6 +122,16 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
                 if($old['status']!=='committed')throw new RuntimeException('ACS_RECOVERY_REQUIRED');
                 return json_decode($old['result_json'],true,512,JSON_THROW_ON_ERROR);
             }
+            if ($kind === 'session.create') {
+                $this->assertEpisodeCombat($request['tid']);
+                if ($this->episodeMode($request['tid']) === null && function_exists('af_atf_acs_forum_enabled')) {
+                    $thread = $this->sql('SELECT fid FROM `'.$this->prefix.'threads` WHERE tid=?', [$request['tid']])['rows'][0] ?? null;
+                    if ($thread && af_atf_acs_forum_enabled((int)$thread['fid']) && !$this->hasTopicSession($request['tid'])
+                        && !af_atf_acs_has_topic_intent((int)$request['tid'])) {
+                        throw new RuntimeException('ACS_EPISODE_NORMAL');
+                    }
+                }
+            }
             // Source-level replay before CAS/RNG. Only server code may supply this read callback.
             if($existingResult!==null && ($saved=$existingResult($session))!==null)return $saved;
             if ($session && !in_array($kind,['session.request_close','session.close','session.reopen','session.archive','delegation.revoke','encounter.side_change','encounter.relation_set','encounter.controller_set'],true)) { $this->assertNoPendingPublication((string)$session['id']); }
