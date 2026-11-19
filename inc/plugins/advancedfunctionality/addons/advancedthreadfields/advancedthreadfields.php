@@ -493,8 +493,8 @@ function af_advancedthreadfields_init(): void
 
     // Валидация/сохранение: DataHandler
     $plugins->add_hook('datahandler_post_validate', 'af_atf_dh_validate');
-    $plugins->add_hook('datahandler_post_insert_thread', 'af_atf_dh_insert_thread');
-    $plugins->add_hook('datahandler_post_update', 'af_atf_dh_update_post');
+    $plugins->add_hook('datahandler_post_insert_thread_end', 'af_atf_dh_insert_thread', 5);
+    $plugins->add_hook('datahandler_post_update_end', 'af_atf_dh_update_post', 5);
     // Валидация/сохранение в MyBB 1.8.40
     $plugins->add_hook('datahandler_post_validate_post', 'af_atf_dh_validate');
     $plugins->add_hook('datahandler_post_validate_thread', 'af_atf_dh_validate');
@@ -2443,8 +2443,19 @@ function af_atf_prepare_input_block(int $fid, int $tid = 0, bool $isEdit = false
     }
 
     // 2) если это edit и POST пустой (первый заход на страницу редактирования) — берём из БД
-    if ($isEdit && empty($values) && $tid > 0) {
-        $values = af_atf_get_values_by_tid($tid);
+    if ($isEdit && $tid > 0) {
+        $stored = af_atf_get_values_by_tid($tid);
+        if (!$isPost || empty($values)) {
+            $values = $stored;
+        } else {
+            $posted = $mybb->get_input('af_tf', MyBB::INPUT_ARRAY);
+            foreach ($fields as $field) {
+                $id = (int)$field['fieldid'];
+                if ($field['type'] === 'character_abilities' && !array_key_exists($id, $posted)) {
+                    $values[$id] = $stored[$id] ?? '';
+                }
+            }
+        }
     }
 
     $GLOBALS['af_atf_context_fields'] = $fields;
@@ -4966,6 +4977,10 @@ function af_atf_newthread_do_end(): void
         return;
     }
 
+    if (!empty($GLOBALS['af_atf_datahandler_saved'][$tidI])) {
+        return;
+    }
+
     $fields = af_atf_get_fields_for_forum($fidI);
     if (empty($fields)) {
         return;
@@ -5028,6 +5043,10 @@ function af_atf_newthread_do_end(): void
         } elseif ($type === 'character_stats') {
             $val = af_atf_normalize_character_stats_json($val);
         } elseif ($type === 'character_abilities') {
+            if (!array_key_exists($fieldid, $mybb->get_input('af_tf', MyBB::INPUT_ARRAY))) {
+                unset($values[$fieldid]);
+                continue;
+            }
             $val = af_atf_normalize_character_abilities_json($val);
             // The DataHandler has already validated and saved server-owned KB pins.
             if (af_atf_kb_ability_has_links((array)json_decode($val, true))) {
@@ -5946,7 +5965,7 @@ function af_atf_bridge_extract_oc_stats(array $index): array
 
 function af_atf_editpost_do_end(): void
 {
-    global $fid, $tid, $pid, $post, $thread;
+    global $mybb, $fid, $tid, $pid, $post, $thread;
 
     $pidI = (int)($pid ?? 0);
     if (!af_atf_is_first_post_context(is_array($post) ? $post : [], $pidI)) {
@@ -5965,6 +5984,10 @@ function af_atf_editpost_do_end(): void
 
     $tidI = (int)($tid ?? 0);
     if ($fidI <= 0 || $tidI <= 0) {
+        return;
+    }
+
+    if (!empty($GLOBALS['af_atf_datahandler_saved'][$tidI])) {
         return;
     }
 
@@ -6029,6 +6052,10 @@ function af_atf_editpost_do_end(): void
         } elseif ($type === 'character_stats') {
             $val = af_atf_normalize_character_stats_json($val);
         } elseif ($type === 'character_abilities') {
+            if (!array_key_exists($fieldid, $mybb->get_input('af_tf', MyBB::INPUT_ARRAY))) {
+                unset($values[$fieldid]);
+                continue;
+            }
             $val = af_atf_normalize_character_abilities_json($val);
             // The DataHandler has already validated and saved server-owned KB pins.
             if (af_atf_kb_ability_has_links((array)json_decode($val, true))) {
@@ -6107,18 +6134,14 @@ function af_atf_dh_validate(&$ph): void
         $forumId = (int)$fid;
     }
 
-    // При редактировании — только если редактируем ПЕРВЫЙ пост темы
+    $storedTid = 0;
+    // editpost's submission data does not carry fid. Resolve it from the stored post.
     if ($isEdit) {
-        $pidCandidate = 0;
-        if (!empty($ph->data['pid'])) {
-            $pidCandidate = (int)$ph->data['pid'];
-        } elseif (!empty($pid)) {
-            $pidCandidate = (int)$pid;
-        }
-
-        if (!af_atf_is_first_post_context(is_array($post) ? $post : [], $pidCandidate)) {
-            return;
-        }
+        $pidCandidate = (int)($ph->data['pid'] ?? $pid ?? 0);
+        $postContext = af_atf_get_post_context_by_pid($pidCandidate);
+        if (empty($postContext['is_first'])) return;
+        $storedTid = (int)$postContext['tid'];
+        $forumId = (int)$postContext['fid'];
     }
 
     $fields = af_atf_get_fields_for_forum($forumId);
@@ -6277,28 +6300,48 @@ function af_atf_dh_validate(&$ph): void
         }
 
         if ($type === 'character_abilities') {
-            $val = af_atf_normalize_character_abilities_json(is_string($raw) ? $raw : '');
+            if ($isEdit && !array_key_exists($fieldid, $incoming)) {
+                continue; // A partial edit must never clear saved abilities.
+            }
+            $stored = $storedTid > 0 ? af_atf_get_values_by_tid($storedTid) : [];
+            $storedRaw = (string)($stored[$fieldid] ?? '');
+            $decoded = is_string($raw) ? json_decode($raw, true) : null;
+            if ($raw !== '' && !is_array($decoded)) {
+                $ph->set_error('Не удалось прочитать список способностей. Проверьте поле «Способности».');
+                continue;
+            }
+            $rows = $decoded['items'] ?? $decoded['abilities'] ?? $decoded ?? [];
+            if (!is_array($rows) || count($rows) > 8) {
+                $ph->set_error('В анкете можно сохранить не более 8 способностей.');
+                continue;
+            }
+            $val = af_atf_normalize_character_abilities_json($raw);
             $abilities = (array)json_decode($val, true);
+            $old = (array)json_decode(af_atf_normalize_character_abilities_json($storedRaw), true);
             if (af_atf_kb_ability_has_links($abilities)) {
-                $stored = [];
-                if ($isEdit) {
-                    $postContext = af_atf_get_post_context_by_pid($pidCandidate);
-                    $stored = af_atf_get_values_by_tid((int)($postContext['tid'] ?? 0));
-                }
-                $old = (array)json_decode(af_atf_normalize_character_abilities_json((string)($stored[$fieldid] ?? '')), true);
                 $errors = [];
-                $abilities = af_atf_kb_ability_validate($abilities, $old, $fields, $incoming, $errors);
+                try {
+                    $abilities = af_atf_kb_ability_validate($abilities, $old, $fields, $incoming, $errors);
+                } catch (Throwable $error) {
+                    $errorId = bin2hex(random_bytes(8));
+                    error_log('ATF ability validation error_id='.$errorId.' type='.get_class($error));
+                    $errors[] = 'Не удалось проверить ссылку на способность KB. Повторите сохранение или передайте администратору код '.$errorId.'.';
+                }
                 foreach (array_unique($errors) as $error) $ph->set_error($error);
                 $val = json_encode($abilities, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]';
             }
-            if (function_exists('af_kb_arpg_validate_element_fields')) {
+            // Saved custom definitions can predate the current element requirements.
+            // Revalidate only rows whose mechanics or content the user changed.
+            $custom = array_values(array_filter($abilities, static fn(array $ability): bool =>
+                !array_key_exists('ability_source', $ability) && !in_array($ability, $old, true)));
+            if ($custom && function_exists('af_kb_arpg_validate_element_fields')) {
                 $elementErrors = [];
-                af_kb_arpg_validate_element_fields(['character_abilities'=>(array)json_decode($val, true)], $elementErrors);
+                af_kb_arpg_validate_element_fields(['character_abilities'=>$custom], $elementErrors);
                 foreach (array_unique($elementErrors) as $code) $ph->set_error(af_kb_arpg_element_error_message($code));
             }
-            foreach ((array)json_decode($val, true) as $ability) {
-                if (is_array($ability) && array_key_exists('action_cost', $ability) && $ability['action_cost'] !== '' && (!is_scalar($ability['action_cost']) || is_bool($ability['action_cost']) || !is_numeric($ability['action_cost']) || !is_finite((float)$ability['action_cost']) || (float)$ability['action_cost'] < 0)) {
-                    $ph->set_error('invalid_field_'.$fieldid);
+            foreach ($custom as $ability) {
+                if (array_key_exists('action_cost', $ability) && $ability['action_cost'] !== '' && (!is_scalar($ability['action_cost']) || is_bool($ability['action_cost']) || !is_numeric($ability['action_cost']) || !is_finite((float)$ability['action_cost']) || (float)$ability['action_cost'] < 0)) {
+                    $ph->set_error('Стоимость способности в очках действий должна быть неотрицательным числом.');
                 }
             }
             if ((int)$f['required'] === 1 && $val === '[]') {
@@ -6390,14 +6433,7 @@ function af_atf_dh_validate(&$ph): void
 
 function af_atf_dh_insert_thread(&$ph): void
 {
-    $tid = 0;
-    if (!empty($ph->data['tid'])) {
-        $tid = (int)$ph->data['tid'];
-    } elseif (property_exists($ph, 'tid') && !empty($ph->tid)) {
-        $tid = (int)$ph->tid;
-    } elseif (method_exists($ph, 'get_thread_id')) {
-        $tid = (int)$ph->get_thread_id();
-    }
+    $tid = (int)($ph->return_values['tid'] ?? 0);
 
     // This hook runs only after ThreadDataHandler assigned the real tid. Persist
     // server-owned prefill metadata independently of ordinary ATF field values.
@@ -6412,6 +6448,7 @@ function af_atf_dh_insert_thread(&$ph): void
     }
 
     af_atf_save_values($tid, $ph->data['af_atf_values']);
+    $GLOBALS['af_atf_datahandler_saved'][$tid] = true;
 }
 
 function af_atf_dh_update_post(&$ph): void
@@ -6436,6 +6473,7 @@ function af_atf_dh_update_post(&$ph): void
 
     $tid = (int)$ph->data['tid'];
     af_atf_save_values($tid, $ph->data['af_atf_values']);
+    $GLOBALS['af_atf_datahandler_saved'][$tid] = true;
 }
 
 
