@@ -7125,6 +7125,7 @@ function af_atf_message_is_effectively_empty(string $htmlMessage): bool
 {
     // Strip only known empty markup; images, embeds and other HTML are content.
     $text = preg_replace('~<br\s*/?>|</?p>|&nbsp;|&#160;|&#x0*a0;~i', '', $htmlMessage);
+    $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     $text = str_replace(["\u{00A0}", "\u{200B}", "\u{3164}", "\u{2800}"], '', $text);
     return trim($text) === '';
 }
