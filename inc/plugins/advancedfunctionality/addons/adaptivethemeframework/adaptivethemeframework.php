@@ -225,6 +225,12 @@ function af_adaptivethemeframework_init(): void
         foreach (['postbit', 'postbit_prev', 'postbit_pm'] as $hook) {
             $plugins->add_hook($hook, 'af_adaptivethemeframework_preload_postbit_data', 5);
         }
+        if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'showthread.php') {
+            $plugins->add_hook('postbit', 'af_adaptivethemeframework_restore_first_post_template', 1);
+            $plugins->add_hook('postbit', 'af_adaptivethemeframework_select_first_post_template', PHP_INT_MAX);
+            $plugins->add_hook('showthread_linear', 'af_adaptivethemeframework_restore_first_post_template', 1);
+            $plugins->add_hook('showthread_threaded', 'af_adaptivethemeframework_restore_first_post_template', 1);
+        }
         $plugins->add_hook('postbit', 'af_adaptivethemeframework_compose_postbit', 1000);
         $plugins->add_hook('postbit_prev', 'af_adaptivethemeframework_compose_postbit', 1000);
         $plugins->add_hook('postbit_pm', 'af_adaptivethemeframework_compose_postbit', 1000);
@@ -1688,8 +1694,77 @@ function af_adaptivethemeframework_thread_tool(string $html, string $path): stri
     }, $html);
 }
 
+/** A request-local template selection, restored before the next native postbit. */
+function af_adaptivethemeframework_restore_first_post_template(): void
+{
+    global $templates;
+    $saved = $GLOBALS['af_atf_first_post_template'] ?? null;
+    if ($saved === null) { return; }
+    $templates->cache[$saved['name']] = $saved['source'];
+    unset($GLOBALS['af_atf_first_post_template']);
+}
+
+function af_adaptivethemeframework_has_thread_fields_slot(): bool
+{
+    global $templates;
+    $source = preg_replace('~<!--.*?-->~s', '', (string)$templates->get('showthread', 0, 0));
+    return preg_match('~>\s*\{\$atf_thread_fields\}\s*<~', (string)$source) === 1;
+}
+
+function af_adaptivethemeframework_select_first_post_template(array &$post): void
+{
+    global $thread, $fid, $mybb, $templates, $db;
+    $tid = (int)($thread['tid'] ?? 0);
+    $pid = (int)($post['pid'] ?? 0);
+    $fallback = $GLOBALS['af_atf_first_post_fields'][$tid] ?? null;
+    if (!empty($mybb->dev_mode) || !$tid || !$pid || (int)($thread['firstpost'] ?? 0) !== $pid || (int)($post['tid'] ?? 0) !== $tid
+        || empty($fallback['compact']) || $fallback['pid'] !== $pid || ($post['message'] ?? '') !== $fallback['fallback']
+        || (int)($post['visible'] ?? 0) !== 1 || !empty($post['attachments']) || !empty($post['attachmentcount'])
+        || !empty($post['signature']) || !empty($post['subject_extra'])
+        || !empty($post['af_atf_slots']['post.before_body']) || !empty($post['af_atf_slots']['post.after_body'])
+        || in_array((string)($post['uid'] ?? 0), explode(',', (string)($mybb->user['ignorelist'] ?? '')), true)
+        || !af_adaptivethemeframework_has_thread_fields_slot()) {
+        return;
+    }
+
+    // MyBB evaluates one of these two templates immediately after postbit.
+    $name = ($mybb->settings['postlayout'] ?? '') === 'classic' ? 'postbit_classic' : 'postbit';
+    $source = $templates->get($name, 0, 0);
+    $compact = @file_get_contents(__DIR__.'/templates/postbit_structured_first.html');
+    if (!is_string($source) || $source === '' || !is_string($compact) || $compact === '') { return; }
+    $classic = $name === 'postbit_classic' ? @file_get_contents(__DIR__.'/templates/postbit_classic.html') : false;
+    $normalize = static fn(string $html): string => trim(str_replace("\r\n", "\n", $html));
+    if (!is_string($classic) || $normalize($source) !== $normalize($classic)) {
+        $master = $db->simple_select('templates', 'template', "title='".$name."' AND sid=-2", ['limit'=>1]);
+        $stock = $db->fetch_field($master, 'template');
+        if (!is_string($stock) || $normalize($source) !== $normalize($stock)) { return; }
+    }
+
+    // The stock fields provider needs only TID/FID. Keep the normal late
+    // render when an extension may need the populated showthread context.
+    $providers = array_filter($GLOBALS['af_adaptivethemeframework_components'] ?? [],
+        static fn(array $component): bool => $component['slot'] === 'thread.atf_fields');
+    if (array_keys($providers) !== ['advancedthreadfields::showthread_fields']) { return; }
+    $fields = af_adaptivethemeframework_render_slot('thread.atf_fields',
+        af_adaptivethemeframework_showthread_context($thread, (int)$fid));
+    $fieldBlock = af_atf_build_display_block_for_tid_fid($tid, (int)$fid);
+    $GLOBALS['af_atf_first_post_render'] = ['tid'=>$tid, 'fields'=>$fields, 'header'=>null];
+    if ($fieldBlock === '' || !str_contains($fields, $fieldBlock)) { return; }
+
+    $inlineCheck = (string)($post['inlinecheck'] ?? '');
+    $modbit = (string)($post['modbit'] ?? '');
+    $GLOBALS['af_atf_first_post_render']['header'] = [
+        'date' => (string)($post['postdate'] ?? ''),
+        'dateline' => (int)($post['dateline'] ?? 0),
+        'controls' => $inlineCheck.($modbit !== $inlineCheck ? $modbit : '')
+            .(string)($post['af_atf_slots']['post.actions'] ?? ''),
+    ];
+    $GLOBALS['af_atf_first_post_template'] = ['name'=>$name, 'source'=>$source];
+    $templates->cache[$name] = $compact;
+}
+
 /** Compose the thread owner's identity independently of the visible replies and their masks. */
-function af_adaptivethemeframework_thread_author(array $thread): string
+function af_adaptivethemeframework_thread_author(array $thread, ?array $firstPost = null): string
 {
     $uid = (int)($thread['uid'] ?? 0);
     $user = $uid > 0 ? get_user($uid) : [];
@@ -1706,20 +1781,22 @@ function af_adaptivethemeframework_thread_author(array $thread): string
     }
     $pid = (int)($thread['firstpost'] ?? 0);
     $url = $pid > 0 ? get_post_link($pid, (int)$thread['tid']).'#pid'.$pid : '';
-    $created = (int)($thread['dateline'] ?? 0);
-    $date = my_date('relative', $created);
+    $created = $firstPost['dateline'] ?? (int)($thread['dateline'] ?? 0);
+    $date = $firstPost['date'] ?? my_date('relative', $created);
+    $controls = $firstPost['controls'] ?? '';
     return '<div class="post_head atf-post__topbar atf-thread__author">'
         .'<div class="atf-thread__author-avatar">'.$avatar['af_atf_primary_avatar'].'</div>'
         .'<span class="atf-thread__author-name">'.$identity.'</span>'
         .'<time class="atf-thread__author-date" datetime="'.gmdate('c', $created).'">'.$date.'</time>'
-        .($url !== '' ? '<a class="atf-thread__original" href="'.$url.'">Первое сообщение</a>' : '')
+        .($url !== '' ? '<a class="atf-thread__original" href="'.$url.'" title="Первое сообщение" aria-label="Первое сообщение">#1</a>' : '')
+        .($controls !== '' ? '<div class="atf-thread__author-actions atf-post__management postbit_buttons" aria-label="Действия с первым сообщением">'.$controls.'</div>' : '')
         .'</div>';
 }
 
 /** Compose the showthread shell after core has prepared all native values. */
 function af_adaptivethemeframework_compose_showthread(): void
 {
-    global $thread, $fid, $header, $posts, $quickreply, $moderationoptions, $pollbox, $templates,
+    global $thread, $fid, $header, $posts, $quickreply, $moderationoptions, $pollbox,
            $multipage, $printthread, $sendthread, $addremovesubscription, $addpoll, $usersbrowsing;
     global $atf_thread_breadcrumbs, $atf_thread_meta, $atf_thread_fields,
            $atf_thread_before_posts, $atf_thread_after_posts;
@@ -1750,26 +1827,21 @@ function af_adaptivethemeframework_compose_showthread(): void
 
     $atf_thread_breadcrumbs = af_adaptivethemeframework_render_slot('thread.breadcrumbs', $context);
     $atf_thread_meta = af_adaptivethemeframework_render_slot('thread.meta', $context);
-    $atf_thread_fields = af_adaptivethemeframework_render_slot('thread.atf_fields', $context);
+    af_adaptivethemeframework_restore_first_post_template();
     $tid = (int)$context['tid'];
+    $first = $GLOBALS['af_atf_first_post_render'] ?? [];
+    $first = ($first['tid'] ?? null) === $tid ? $first : [];
+    $atf_thread_fields = $first['fields'] ?? af_adaptivethemeframework_render_slot('thread.atf_fields', $context);
     $pid = (int)($thread['firstpost'] ?? 0);
     $fallback = $GLOBALS['af_atf_first_post_fields'][$tid] ?? null;
     $fieldBlock = function_exists('af_atf_build_display_block_for_tid_fid') && $atf_thread_fields !== ''
         ? af_atf_build_display_block_for_tid_fid($tid, (int)$fid) : '';
-    $hasFieldsSlot = $fieldBlock !== '' && preg_match('~>\s*\{\$atf_thread_fields\}\s*<~',
-        preg_replace('~<!--.*?-->~s', '', $templates->get('showthread', 0)));
-    if ($hasFieldsSlot && str_contains($atf_thread_fields, $fieldBlock)) {
-        $atf_thread_fields .= af_adaptivethemeframework_thread_author($thread);
+    if ($fieldBlock !== '' && af_adaptivethemeframework_has_thread_fields_slot() && str_contains($atf_thread_fields, $fieldBlock)) {
+        $atf_thread_fields .= af_adaptivethemeframework_thread_author($thread, $first['header'] ?? null);
         $fallbackHtml = '<!--af-atf-first-post-'.$pid.'-->'.$fieldBlock;
         if ($fallback !== null && $fallback['pid'] === $pid && $fallback['fallback'] === $fallbackHtml) {
-            $posts = str_replace($fallbackHtml, '', (string)$posts, $removed);
-            if ($removed > 0 && $fallback['compact']) {
-                // Keep both native postbit layouts, their controls and their anchors.
-                $posts = preg_replace('~(<(?:article|div) class="post(?: |")[^>]*\bid="post_'.$pid.'")~',
-                    '$1 data-atf-structured-first="1"', $posts, 1) ?? $posts;
-                $posts = preg_replace('~(<div class="post_body scaleimages" id="pid_'.$pid.'">)\s+(</div>)~',
-                    '$1$2', $posts, 1) ?? $posts;
-            }
+            // Only deduplicate the marked fields when the full postbit was retained.
+            $posts = str_replace($fallbackHtml, '', (string)$posts);
             $context['posts_html'] = $posts;
         }
     }
