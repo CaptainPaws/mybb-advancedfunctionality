@@ -19,19 +19,29 @@ final class AF_ACS_ThreadPanel
         return $html;
     }
 
-    private static function emptySession(array $v,string $tid): string
+    private static function emptySession(array $v, string $tid, bool $canOpenGm): string
     {
-        $esc=self::esc(...);$sid=$v['session_id'];$id='acs-panel-'.$sid;
-        $summary=['active'=>'Сессия ACS активна','pending_close'=>'Сессия ACS ожидает закрытия','closed'=>'Сессия ACS закрыта','archived'=>'Сессия ACS в архиве'][$v['session_status']]??'Сессия ACS';
-        $html='<section class="af-acs-panel" data-acs-panel data-acs-session="'.$esc($sid).'" data-acs-tid="'.$esc($tid).'" id="'.$esc($id).'"><div class="af-acs-panel__anchor"></div><div class="af-acs-panel__compact" hidden><button type="button" data-acs-open aria-controls="'.$esc($id).'-body">'.$esc($summary).' · Открыть панель</button></div><details class="af-acs-panel__details" open><summary>'.$esc($summary).'</summary><div id="'.$esc($id).'-body" class="af-acs-panel__body"><button type="button" data-acs-close hidden>Свернуть</button><p>Столкновение ещё не создано.</p>';
-        if($v['can_manage'])$html.='<p><a href="'.$esc('showthread.php?tid='.$tid.'&acs_session='.$sid).'">Создать столкновение / Панель GM</a></p>';
-        else $html.='<p>Подготовкой столкновения управляет GM сессии.</p>';
-        return $html.'</div></details></section>';
+        $status = match ($v['session_status']) {
+            'active' => 'Подготовка боя',
+            'pending_close' => 'Сессия ACS ожидает закрытия',
+            'closed' => 'Сессия ACS закрыта',
+            'archived' => 'Сессия ACS в архиве',
+            default => 'Сессия ACS',
+        };
+        $html = '<section class="af-acs-panel af-acs-panel__status"><p role="status"><strong>'
+            .self::esc($status).'</strong> · Столкновение ещё не создано.</p>';
+        if ($canOpenGm) {
+            $url = 'showthread.php?tid='.$tid.'&acs_session='.$v['session_id'];
+            $html .= $v['can_manage']
+                ? '<p><a href="'.self::esc($url.'&acs_setup=1#acs-thread-panel').'">Настроить бой</a></p>'
+                : '<p><a href="'.self::esc($url).'">Управление сессией</a></p>';
+        }
+        return $html.'</section>';
     }
 
-    public static function render(array $v,string $tid): string
+    public static function render(array $v, string $tid, bool $canOpenGm): string
     {
-        if($v['encounter_id']===null)return self::emptySession($v,$tid);
+        if ($v['encounter_id']===null) return self::emptySession($v,$tid,$canOpenGm);
         $esc=self::esc(...);$sid=$v['session_id'];$eid=$v['encounter_id'];$id='acs-panel-'.$sid;
         $state=['preparation'=>'Подготовка','ambush_ready'=>'Подготовка','active'=>'Активно','paused'=>'Пауза','pending_resolution'=>'Ожидание результата','completed'=>'Завершено'][$v['status']]??'Состояние недоступно';
         $turns=['pending'=>'Ожидает хода','resolved'=>'Ход завершён','passed'=>'Ход пропущен','forfeited'=>'Ход закрыт'];
@@ -39,12 +49,13 @@ final class AF_ACS_ThreadPanel
         $summary=$esc($v['title']).' · '.$esc($state).' · Раунд '.$esc($v['round']);
         foreach($v['groups'] as $g)if($g['own']&&$g['ap']!==null)$summary.=' · AP '.$esc($g['ap'][0]).' / '.$esc($g['ap'][1]);
         ob_start();
-        echo '<section class="af-acs-panel" data-acs-panel data-acs-session="'.$esc($sid).'" data-acs-tid="'.$esc($tid).'" data-acs-encounter="'.$esc($eid).'" id="'.$id.'"><div class="af-acs-panel__anchor"></div><div class="af-acs-panel__compact" hidden><button type="button" data-acs-open aria-controls="'.$id.'-body">'.$summary.' · Открыть панель</button></div><details class="af-acs-panel__details" open><summary>'.$summary.'</summary><div id="'.$id.'-body" class="af-acs-panel__body"><button type="button" data-acs-close hidden>Свернуть</button>';
+        echo '<section class="af-acs-panel" data-acs-panel data-acs-session="'.$esc($sid).'" data-acs-tid="'.$esc($tid).'" data-acs-encounter="'.$esc($eid).'" id="'.$id.'"><details class="af-acs-panel__details" open><summary>'.$summary.'</summary><div class="af-acs-panel__body">';
         echo '<p>Порядок ходов свободный. Ниже показаны ходы доступных вам групп.</p><nav aria-label="Действия столкновения">';
         $base='showthread.php?tid='.$tid;
         if($v['can_build'])echo '<a href="'.$esc($base.'&acs_builder='.$sid).'">Открыть конструктор</a> ';
         echo '<a href="misc.php?action=acs_archive&amp;session_id='.$esc($sid).'&amp;encounter_id='.$esc($eid).'">Журнал</a> <a href="misc.php?action=acs_loot&amp;session_id='.$esc($sid).'&amp;encounter_id='.$esc($eid).'">Добыча</a> ';
-        if($v['can_manage'])echo '<a href="'.$esc($base.'&acs_session='.$sid.'&acs_encounter='.$eid).'">Панель GM</a>';
+        if($canOpenGm)echo ' <a href="'.$esc($base.'&acs_session='.$sid.'&acs_tab=overview').'">Управление сессией</a>';
+        if($canOpenGm && $v['can_manage'])echo ' <a href="'.$esc($base.'&acs_session='.$sid.'&acs_encounter='.$eid).'">Панель GM</a>';
         echo '</nav><div class="af-acs-panel__filters" hidden><label>Сторона <select data-acs-side><option value="">Все доступные</option>';
         foreach($v['sides'] as $key=>$name)echo '<option value="'.$esc($key).'">'.$esc($name).'</option>';
         echo '</select></label><label>Группа <select data-acs-group><option value="">Все доступные</option>';

@@ -590,6 +590,18 @@ body.atf-active .atf-thread-browsers {
   }
 }
 
+body.atf-active .atf-thread__reply:has(> .atf-thread__reply-action) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--atf-space-2);
+}
+body.atf-active .atf-thread__reply > .atf-thread__reply-action {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding-inline: .5rem;
+}
+
 /* Both native New Reply links keep MyBB permissions, href and hide/show state. */
 body.atf-active .atf-thread .atf-thread__reply > a.new_reply_button {
   display: inline-flex;

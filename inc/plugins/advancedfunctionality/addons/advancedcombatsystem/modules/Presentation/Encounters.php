@@ -75,7 +75,7 @@ final class AF_ACS_EncountersPage
         try {
             echo '<section class="af-acs af-acs-gm"><h2>ACS · Панель GM</h2>'.$notice;
             if($commandBlocked){echo '<p>Новые команды временно не предлагаются. <a href="'.self::esc($base.'&acs_tab=overview').'">Перечитать состояние без повторного POST</a>. Для восстановления используйте прежнюю операцию и диагностику; не создавайте другой ключ.</p></section>';return ob_get_clean();}
-            echo '<p><a href="'.self::esc('showthread.php?tid='.$tid.'&acs_setup=1').'">Выбрать / создать сессию</a> · <a href="'.self::esc($base.'&acs_setup=1&gm_step=2').'">Мастер создания столкновения</a></p>';
+            echo '<p><a href="'.self::esc('showthread.php?tid='.$tid.'&acs_panel_session='.$sid.'#acs-thread-panel').'">К панели темы</a> · <a href="'.self::esc($base.'&acs_setup=1&gm_step=2').'">Мастер создания столкновения</a></p>';
             if($setup)AF_ACS_GmPanel::wizard($base,$sid,$eid,$step,$tid);
             echo '<ul>';
             foreach($list['items'] as $row){$config=json_decode($row['config_json'],true);echo '<li><a href="'.self::esc($base.'&acs_encounter='.$row['id'].($setup?'&acs_setup=1&gm_step='.$step:'')).'">'.self::esc($config['title']??('Столкновение #'.$row['id'])).'</a> · '.self::esc(self::state($row['status'])).'</li>';}
