@@ -34,9 +34,28 @@ final class AF_ACS_SafeError
             'ACS_DRAFT_INPUT_INVALID','ACS_REQUEST_TOO_LARGE','builder_input_invalid','preview_input_invalid','ACS_VERSIONS_INPUT_INVALID','ACS_RATE_LIMIT'=>[$candidate,'VALIDATION_ERROR','Запрос не прошёл проверку формата или лимита. Исправьте ввод; сохранённые данные не удаляются.'],
             default=>['ACS_REQUEST_UNAVAILABLE','INTERNAL_ERROR','Не удалось подтвердить результат запроса. Текст и действия сохранены. Проверьте прежнюю операцию и передайте error_id GM.'],
         };
+        if ($operation === 'acp_sessions') {
+            [$code, $category] = match ($candidate) {
+                'ACS_INVALID_INTEGER', 'ACS_INTEGER_RANGE', 'ACS_INVALID_KEY' => [$candidate, 'VALIDATION_ERROR'],
+                'ACS_DATABASE_ERROR', 'ACS_ARCHIVE_CURSOR_UNAVAILABLE' => [$candidate, 'DEPENDENCY_ERROR'],
+                default => [$code, $category],
+            };
+        }
         $id=$errorId!==null&&preg_match('/\A[a-f0-9]{32}\z/D',$errorId)?$errorId:bin2hex(random_bytes(16));
         if(self::$logged===null){
-            try{global $db;require_once __DIR__.'/../Infrastructure/Repository.php';$op=preg_match('/\A[a-zA-Z0-9_.:-]{1,64}\z/D',$operation)?$operation:'api';self::$logged=(new AF_ACS_Repository($db))->recordDiagnostic($id,$category,$op,preg_match('/\A[A-Za-z_]{1,64}\z/D',$candidate)?$candidate:'api_response');$id=self::$logged;}catch(Throwable){}
+            try {
+                global $db;
+                require_once __DIR__.'/../Infrastructure/Repository.php';
+                $op = preg_match('/\A[a-zA-Z0-9_.:-]{1,64}\z/D', $operation) ? $operation : 'api';
+                $phase = preg_match('/\A[A-Za-z_]{1,64}\z/D', $candidate) ? $candidate : 'api_response';
+                if ($operation === 'acp_sessions') { $phase = strtolower($phase); }
+                self::$logged = (new AF_ACS_Repository($db))->recordDiagnostic($id, $category, $op, $phase);
+                $id = self::$logged;
+            } catch (Throwable) {
+                if ($operation === 'acp_sessions') {
+                    error_log('ACS acp_sessions '.$code.' error_id='.$id);
+                }
+            }
         }
         $dto=['code'=>$code,'category'=>$category,'message'=>$message,'error_id'=>$id];
         if(in_array($code,['ACS_PREPARED_UNSUPPORTED','ACS_SEAL_UNSUPPORTED','ACS_BEHAVIOR_UNSUPPORTED'],true))$dto['status']='UNSUPPORTED';

@@ -14,7 +14,7 @@ final class AF_ACS_AcpReadModel extends AF_ACS_Repository
         foreach(['session_id'=>'id','tid'=>'tid','owner_uid'=>'owner_uid'] as $key=>$column)if(($filters[$key]??'')!==''){$where[]='s.'.$column.'=?';$values[]=self::integer($filters[$key]);}
         if(($filters['status']??'')!==''){if(!in_array($filters['status'],['active','pending_close','closed','archived'],true))throw new RuntimeException('ACS_INVALID_KEY');$where[]='s.status=?';$values[]=$filters['status'];}
         global $mybb;$access=new AF_ACS_SessionAccess;$uid=$access->uid();$secret=(string)($mybb->settings['af_acs_archive_cursor_key']??'');
-        $bind=hash('sha256',self::json(['scope'=>'acp-sessions-v1','uid'=>$uid,'filters'=>$filters]));$after='0';
+        $bind=hash('sha256',self::json(['schema_version'=>1,'scope'=>'acp-sessions-v1','uid'=>$uid,'filters'=>$filters]));$after='0';
         if($cursor!==''){$v=AF_ACS_Archive::openCursor($cursor,$secret);if(($v['bind']??null)!==$bind)throw new RuntimeException('ACS_ARCHIVE_CURSOR_INVALID');$after=self::integer($v['after']??null,zero:true);}
         $where[]='s.id>?';$values[]=$after;
         $rows=$this->sql('SELECT s.id,s.tid,s.owner_uid,s.status,s.session_version,s.created_at,s.updated_at FROM '.$this->table('sessions').' s WHERE '.implode(' AND ',$where).' ORDER BY s.id LIMIT 51',$values)['rows'];
@@ -23,7 +23,14 @@ final class AF_ACS_AcpReadModel extends AF_ACS_Repository
             foreach($this->sql('SELECT session_id,uid,role,expires_at FROM '.$this->table('session_roles').' WHERE session_id IN ('.$marks.') AND uid=? AND (expires_at IS NULL OR expires_at>?)',[...$ids,$uid,time()])['rows'] as $role)$roles[(string)$role['session_id']][]=$role;
         }
         foreach($rows as $row){$sid=(string)$row['id'];$tid=(string)$row['tid'];
-            if(!array_key_exists($tid,$native))try{$native[$tid]=$access->thread($tid);}catch(Throwable){$native[$tid]=null;}
+            if (!array_key_exists($tid, $native)) {
+                try {
+                    $native[$tid] = $access->thread($tid);
+                } catch (RuntimeException $error) {
+                    if ($error->getMessage() !== 'ACS_THREAD_UNAVAILABLE') { throw $error; }
+                    $native[$tid] = null;
+                }
+            }
             if($native[$tid]===null)continue;
             $row['subject']=$native[$tid]['subject'];$row['can_gm']=AF_ACS_AuthorizationService::sessionGm($row,$roles[$sid]??[],$uid);$out[]=$row;
         }
