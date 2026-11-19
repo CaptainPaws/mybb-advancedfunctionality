@@ -2375,6 +2375,11 @@ function af_advancedshop_detect_inventory_target_from_kb_meta(array $meta): arra
         $subtype = $kind;
     }
 
+    if ($kbType === 'arpg_item' && $kind === 'accessory') {
+        $slot = 'equipment';
+        $subtype = 'gear';
+    }
+
     if ($kind === 'weapon') {
         $slot = 'equipment';
         $subtype = 'weapon';

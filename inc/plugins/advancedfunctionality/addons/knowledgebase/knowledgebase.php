@@ -8673,6 +8673,25 @@ function af_kb_arpg_acs_reference(string $kind, $key, string $path, array &$diag
     return $reference;
 }
 
+/** Typed service pins identify the selected entry inside the service envelope. */
+function af_kb_arpg_acs_reference_matches_row(array $reference, array $row, array &$issues): bool
+{
+    $source = af_kb_arpg_acs_source($row, $issues);
+    $kind = $reference['kind'] ?? '';
+    if (!in_array($kind, ['status_def', 'trigger_template'], true)
+        || ($reference['definition']['schema'] ?? null) !== 'af_kb.arpg.mechanic.v1') {
+        return $source['fingerprint'] === ($reference['fingerprint'] ?? null);
+    }
+    $rules = $source['rules'];
+    if (($rules['service_kind'] ?? null) !== $kind || empty($row['active'])) return false;
+    $definitions = !empty($rules['entries']) ? $rules['entries'] : [$rules];
+    $matches = array_values(array_filter($definitions, static fn($entry): bool => is_array($entry)
+        && ($entry['key'] ?? null) === ($reference['key'] ?? null)
+        && (!isset($entry['active']) || !empty($entry['active']))
+        && (!isset($entry['is_active']) || !empty($entry['is_active']))));
+    return count($matches) === 1 && af_kb_arpg_acs_fingerprint($matches[0]) === ($reference['fingerprint'] ?? null);
+}
+
 /** Aliases preserve original keys and report ambiguity instead of choosing silently. */
 function af_kb_arpg_acs_aliases(array $row, array $aliases, string $path, array &$diagnostics): array
 {

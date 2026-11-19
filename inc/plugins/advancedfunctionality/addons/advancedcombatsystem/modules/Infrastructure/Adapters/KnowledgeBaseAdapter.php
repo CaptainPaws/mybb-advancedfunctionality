@@ -156,13 +156,12 @@ final class AF_ACS_KnowledgeBaseAdapter
             }
         } elseif (!empty($value['resolved']) && isset($value['entry_key'],$value['kind'],$value['fingerprint'])) {
             $type = in_array($value['kind'],['arpg_ability','arpg_item','arpg_bestiary'],true) ? $value['kind'] : 'arpg_mechanics';
-            $index = $type.':'.$value['entry_key'];
+            $index = $type.':'.$value['entry_key'].':'.($value['key'] ?? '').':'.$value['fingerprint'];
             if (!isset($seen[$index])) {
                 $seen[$index] = true;
                 $entry = af_kb_arpg_acs_lookup($type,(string)$value['entry_key']);
                 if (!$entry || !$this->visible($entry,$actorUid)) return false;
-                $source = af_kb_arpg_acs_source($entry,$issues);
-                if ($source['fingerprint'] !== $value['fingerprint']) AF_ACS_CapabilityValidator::issue($issues,'source_changed_during_read','references');
+                if (!af_kb_arpg_acs_reference_matches_row($value,$entry,$issues)) AF_ACS_CapabilityValidator::issue($issues,'source_changed_during_read','references');
             }
         }
         foreach ($value as $key=>$child) {
