@@ -18,7 +18,7 @@ final class AF_ACS_GmPanel
     }
     public static function submit(string $label):void
     {echo '<label>Причина <input name="reason" maxlength="1000" required></label><button type="submit">'.self::esc($label).'</button></form>';}
-    public static function setup(string $tid): string
+    public static function setup(string $tid, array &$outcome = []): string
     {
         global $mybb;
         $notice = '';
@@ -26,6 +26,7 @@ final class AF_ACS_GmPanel
             try {
                 if ($mybb->get_input('tid') !== $tid) throw new RuntimeException('ACS_THREAD_UNAVAILABLE');
                 $result = af_advancedcombatsystem_atf_create($tid);
+                $outcome=['committed'=>true,'sid'=>$result['session_id']];
                 $mybb->input['acs_encounter_op'] = '';
                 $mybb->input['acs_session'] = $result['session_id'];
                 $mybb->input['gm_step'] = '2';
@@ -37,6 +38,7 @@ final class AF_ACS_GmPanel
                     return '<p role="status">Сессия создана. <a href="'.self::esc($url).'">Открыть созданную сессию</a>.</p>';
                 }
                 $failure = af_advancedcombatsystem_session_failure($error);
+                $outcome=['error'=>true,'uncertain'=>in_array($failure['category'],['RECOVERY_REQUIRED','INTERNAL_ERROR'],true)];
                 $notice = '<p role="alert">Создание не подтверждено. При неизвестном ответе повторяйте прежнюю форму/ключ. error_id='.self::esc($failure['error_id']).'</p>';
             }
         }
@@ -44,17 +46,17 @@ final class AF_ACS_GmPanel
         ob_start();
         echo '<section class="af-acs-gm"><h2>Мастер столкновения · 1. Сессия</h2>'.$notice;
         echo '<form method="post" action="'.self::esc('showthread.php?tid='.$tid.'&acs_setup=1&acs_atf_setup=1#acs-thread-panel').'">';
-        self::fields(['acs_encounter_op'=>'session_create','tid'=>$tid,'my_post_key'=>$mybb->post_code]);
+        self::fields(['acs_encounter_op'=>'session_create','operation_key'=>'atf-thread-create-'.$tid,'tid'=>$tid,'my_post_key'=>$mybb->post_code]);
         echo '<p>Сессия будет привязана к текущей теме. Повтор использует прежний ключ.</p>';
         echo '<button type="submit">Подтвердить создание сессии</button></form></section>';
         return ob_get_clean();
     }
 
-    public static function wizard(string $base,string $sid,string $eid,int $step,string $tid):void
+    public static function wizard(string $base,string $eid,int $step):void
     {
         $labels=['Сессия','Столкновение','Участники','Проверка','Предпросмотр состава','Запуск'];
         echo '<nav aria-label="Мастер создания столкновения"><ol class="af-acs-gm__steps">';
-        foreach($labels as $i=>$label){$n=$i+1;$url=$n===1?'showthread.php?'.http_build_query(['tid'=>$tid,'acs_panel_session'=>$sid]).'#acs-thread-panel':$base.($eid!==''?'&acs_encounter='.$eid:'').'&acs_setup=1&gm_step='.$n;
+        foreach($labels as $i=>$label){$n=$i+1;$url=$n===1?$base.($eid!==''?'&acs_encounter='.$eid:'').'&acs_setup=1&gm_step=1':$base.($eid!==''?'&acs_encounter='.$eid:'').'&acs_setup=1&gm_step='.$n;
             echo '<li><a href="'.self::esc($url).'"'.($n===$step?' aria-current="step"':'').'>'.$n.'. '.self::esc($label).'</a></li>';}
         echo '</ol></nav><p>Каждое изменение сохраняется отдельной командой. Переход между шагами не выполняет регистрацию, запуск или повтор механики.</p>';
     }

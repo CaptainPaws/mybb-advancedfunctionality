@@ -1,0 +1,13 @@
+.af-acs-gm{max-width:100%;min-width:0;overflow-wrap:anywhere;margin:1rem 0}.af-acs-gm *{box-sizing:border-box;min-width:0}.af-acs-gm nav,.af-acs-gm__steps{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}.af-acs-gm nav a{display:inline-block;padding:.5rem}.af-acs-gm [aria-current]{font-weight:700;text-decoration:underline}.af-acs-gm__steps{padding-inline-start:1.5rem}.af-acs-gm form{max-width:100%;padding:.65rem 0;margin:.5rem 0}.af-acs-gm label{display:block;margin:.4rem 0}.af-acs-gm input,.af-acs-gm select,.af-acs-gm button,.af-acs-gm textarea{font:inherit;max-width:100%}.af-acs-gm input:not([type=checkbox]),.af-acs-gm select,.af-acs-gm button{min-height:2.5rem}.af-acs-gm table{width:100%;table-layout:fixed;border-collapse:collapse}.af-acs-gm th,.af-acs-gm td{padding:.4rem;vertical-align:top;overflow-wrap:anywhere}.af-acs-gm__warning{font-weight:600}.af-acs-gm :focus-visible{outline:2px solid currentColor;outline-offset:2px}@media(max-width:48rem){.af-acs-gm th,.af-acs-gm td{padding:.2rem;font-size:.9em}.af-acs-gm button{white-space:normal}.af-acs-gm nav{gap:.15rem}}
+.af-acs-gm__steps{list-style:none;padding-inline-start:0}
+.af-acs-gm{color-scheme:dark}
+.af-acs-gm form{display:grid;gap:.55rem;padding:.75rem;border:1px solid var(--atf-color-border,#536473);border-radius:var(--atf-radius-md,.5rem);background:var(--atf-color-surface-raised,#172435)}
+.af-acs-gm form>button{justify-self:start}
+.af-acs-gm label{display:grid;gap:.25rem}
+.af-acs-gm :is(input:not([type=checkbox]):not([type=radio]),select,textarea,button){padding:.4rem .6rem;font:inherit;color:var(--atf-color-text,#dbe5ee);background:var(--atf-color-surface,#142133);border:1px solid var(--atf-color-border,#536473);border-radius:var(--atf-radius-md,.5rem)}
+.af-acs-gm button:not(:disabled):hover{filter:brightness(1.2)}
+.af-acs-gm button:disabled{opacity:.55}
+.af-acs-gm select[multiple]{min-height:6rem}
+.af-acs-gm nav a{border:1px solid var(--atf-color-border,#536473);border-radius:var(--atf-radius-md,.5rem)}
+.af-acs-gm nav a[aria-current]{background:var(--atf-color-surface-raised,#172435)}
+.af-acs-gm [role=alert]{padding:.75rem;border-inline-start:3px solid var(--atf-color-danger,#df776f)}
