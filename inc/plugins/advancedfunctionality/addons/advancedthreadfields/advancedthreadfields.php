@@ -470,6 +470,8 @@ function af_advancedthreadfields_init(): void
     // Ввод/формы
     $plugins->add_hook('newthread_start', 'af_atf_newthread_start');
     $plugins->add_hook('editpost_start', 'af_atf_editpost_start');
+    $plugins->add_hook('newthread_end', 'af_atf_disable_native_message_editor');
+    $plugins->add_hook('editpost_end', 'af_atf_disable_native_message_editor');
 
     // Сабмит (чтобы гарантировать непустой message даже без JS)
     $plugins->add_hook('newthread_do_newthread_start', 'af_atf_newthread_do_start');
@@ -560,9 +562,6 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         $js = $jsRel !== '' ? $base.'/'.$jsRel.'?v='.$assetVersion : '';
 
         $extra = '';
-        if (!empty($GLOBALS['af_atf_hide_editor'])) {
-            $extra .= "\n<meta name=\"af-atf-hide-editor\" content=\"1\" />\n";
-        }
         if ($jsRel === AF_ATF_ASSET_FORM_JS) {
             $extra .= "\n<meta name=\"af-atf-kb-endpoint\" content=\"{$base}/misc.php?action=af_kb_get\" />\n";
         }
@@ -613,6 +612,10 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
                 $page = $page2;
             }
         }
+    }
+
+    if (af_atf_has_structured_message_form() && str_contains($page, AF_ATF_TPL_MARK_INPUT)) {
+        af_atf_hide_structured_message_editor($page);
     }
 
     if (!af_atf_template_is_atf_owned('showthread')
@@ -2801,6 +2804,44 @@ function af_atf_get_archive_display_fields(array $values): array
 }
 
 /* -------------------- INPUT RENDER (newthread/editpost) -------------------- */
+function af_atf_has_structured_message_form(): bool
+{
+    return defined('THIS_SCRIPT') && in_array(THIS_SCRIPT, ['newthread.php', 'editpost.php'], true)
+        && !empty($GLOBALS['af_atf_hide_editor']) && !empty($GLOBALS['af_atf_input_html']);
+}
+
+/** Suppress the native SCEditor bootstrap while retaining its source textarea. */
+function af_atf_disable_native_message_editor(): void
+{
+    if (af_atf_has_structured_message_form()) {
+        $GLOBALS['codebuttons'] = '';
+    }
+}
+
+function af_atf_hide_structured_message_editor(string &$page): void
+{
+    $page = preg_replace_callback(
+        '~<textarea\b(?=[^>]*\sname=(["\'])message\1)(?=[^>]*\sid=(["\'])message\2)[^>]*>~i',
+        static fn(array $match): string => substr($match[0], 0, -1).' data-af-atf-message="1" data-af-ae-skip="1">',
+        $page,
+        1,
+        $count
+    ) ?? $page;
+    if ($count === 0) {
+        return;
+    }
+
+    // Deliver the rule in the response head, before either editor can mount.
+    $headMarkup = '<meta name="af-atf-hide-editor" content="1"><style>'
+        .'textarea[data-af-atf-message="1"]{display:none!important}'
+        .'.atf-compose__field--editor:has(textarea[data-af-atf-message="1"]){display:none!important}'
+        .'tr:has(textarea[data-af-atf-message="1"]):not(:has(tr textarea[data-af-atf-message="1"],'
+        .'.atf-compose__field--editor textarea[data-af-atf-message="1"])){display:none!important}'
+        .'</style>';
+    $head = stripos($page, '</head>');
+    $page = $head === false ? $headMarkup.$page : substr_replace($page, $headMarkup, $head, 0);
+}
+
 function af_atf_newthread_start(): void
 {
     global $fid, $mybb;

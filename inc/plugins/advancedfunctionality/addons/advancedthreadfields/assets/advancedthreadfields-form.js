@@ -33,28 +33,13 @@
       return "/misc.php?action=af_kb_get";
     },
 
-    // --- 1) hide editor if meta flag present (НЕ трогаем остальное) ---
+    // Fallback for browsers without :has() and custom message wrappers.
     applyHideEditor() {
-      const meta = document.querySelector('meta[name="af-atf-hide-editor"][content="1"]');
-      if (!meta) return;
+      const textarea = document.querySelector('textarea[data-af-atf-message="1"]');
+      if (!textarea) return;
 
-      const ta = document.querySelector('textarea[name="message"]');
-      if (!ta) return;
-
-      // MyBB: чаще всего textarea лежит в <tr> таблицы
-      const tr = ta.closest("tr");
-      if (tr) {
-        tr.style.display = "none";
-      } else {
-        // запасной вариант
-        ta.style.display = "none";
-      }
-
-      // иногда рядом есть “toolbar”/контейнеры — прячем ближайшее окружение аккуратно
-      const editorWrap = ta.closest(".sceditor-container") || ta.closest(".editor") || ta.closest(".message") || null;
-      if (editorWrap) {
-        editorWrap.style.display = "none";
-      }
+      const field = textarea.closest(".atf-compose__field--editor") || textarea.closest("tr");
+      if (field) field.style.setProperty("display", "none", "important");
     },
 
     // --- 2) userchips init ---
