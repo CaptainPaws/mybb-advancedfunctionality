@@ -6,7 +6,7 @@ final class AF_ACS_TestpackDefinitions
     public const SHOP = 'acs_test_arsenal';
     public const CATEGORY = 'acs_test_gear';
 
-    public static function entries(): array
+    public static function entries(array $statRegistry, array $primaryElements): array
     {
         $entries = [];
         $add = static function (string $key, string $type, string $title, string $description, array $rules, array $catalog = [], int $price = 0) use (&$entries): void {
@@ -83,11 +83,11 @@ final class AF_ACS_TestpackDefinitions
             'shadow_beast'=>['Теневой зверь', 42, 3, 115, 95, 0, ['beast_claw']],
         ] as $key => [$title,$hp,$def,$speed,$accuracy,$fireRes,$abilities]) {
             $res = [];
-            foreach (array_keys(af_kb_arpg_primary_elements()) as $element) {
+            foreach (array_keys($primaryElements) as $element) {
                 $res[] = ['damage_type'=>'elemental','scope'=>'elemental','unit'=>'RES','damage_element'=>$element,
                     'value'=>$element === 'fire' ? $fireRes : 0];
             }
-            $stats = array_fill_keys(af_kb_arpg_character_stat_keys(), 0);
+            $stats = array_fill_keys(array_keys($statRegistry), 0);
             $stats = array_replace($stats, ['hp'=>$hp,'atk'=>8,'def'=>$def,'speed'=>$speed,'accuracy'=>$accuracy,'crit_dmg'=>50]);
             $add($key,'arpg_bestiary',$title,'Противник для короткого учебного столкновения.',[
                 'family'=>'training','archetype'=>'melee','faction'=>'test_arsenal','rank'=>'normal',
