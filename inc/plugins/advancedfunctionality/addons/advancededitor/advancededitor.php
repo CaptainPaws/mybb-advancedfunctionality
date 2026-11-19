@@ -894,7 +894,7 @@ function af_advancededitor_build_css_tag_for_asset(string $assetUrl, string $bbu
 function af_advancededitor_response_facts(string $page): array
 {
     $hasSignature=af_advancededitor_is_signature_page() && !empty($GLOBALS['mybb']->settings['sigmycode']) && (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']signature["\'])(?![^>]*\b(?:hidden|data-af-ae-skip)\b)[^>]*>~i',$page);
-    $hasMessage = (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']message["\'])[^>]*>~i', $page);
+    $hasMessage = (bool)preg_match('~<textarea\b(?=[^>]*\bname=["\']message["\'])(?![^>]*\sdata-af-atf-message=["\']1["\'])[^>]*>~i', $page);
     $hasKbEditor = (bool)preg_match('~<textarea\b(?=[^>]*\bclass=["\'][^"\']*\baf-kb-editor\b)[^>]*>~i', $page);
     $hasAtfEditor = (bool)preg_match('~<textarea\b(?=[^>]*\bclass=["\'][^"\']*\baf-atf-bbcode-editor\b)[^>]*>~i', $page);
     $hasPostContent = (defined('THIS_SCRIPT') && THIS_SCRIPT === 'showthread.php')
