@@ -114,6 +114,15 @@ function af_advancedcombatsystem_upgrade(): bool
     });
 }
 
+function af_advancedcombatsystem_confirm_redeploy(string $confirmation): bool
+{
+    return af_advancedcombatsystem_lifecycle('confirm_redeploy', static function () use ($confirmation) {
+        global $mybb;
+        (new AF_ACS_AuthorizationService)->requirePermission('admin.schema.manage');
+        af_advancedcombatsystem_migrations()->confirmRedeploy($confirmation, (int)$mybb->user['uid']);
+    });
+}
+
 function af_advancedcombatsystem_uninstall(string $confirmation = ''): bool
 {
     return af_advancedcombatsystem_lifecycle('uninstall', static function () use ($confirmation) {

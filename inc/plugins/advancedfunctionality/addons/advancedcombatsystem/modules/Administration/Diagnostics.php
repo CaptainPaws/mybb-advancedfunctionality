@@ -46,8 +46,9 @@ final class AF_ACS_Diagnostics
     {
         (new AF_ACS_AuthorizationService)->requirePermission('admin.diagnostics.view');
         try { require_once __DIR__.'/Migrations.php'; $state=af_advancedcombatsystem_migrations()->status(); }
-        catch (Throwable $error) { $state=['schema_version'=>null,'migrations'=>[],'error'=>'ACS_DATABASE_UNAVAILABLE','database'=>null]; }
-        // status() already verifies the entire registered ledger/checksums and exact schema readback.
+        catch (Throwable $error) { $state=['schema_version'=>null,'migrations'=>[],'error'=>'ACS_DATABASE_UNAVAILABLE','database'=>null,
+            'status'=>'RECOVERY_REQUIRED','structure'=>'NOT_CHECKED','version'=>null,'object'=>null,
+            'checksum_versions'=>[],'confirmation'=>null,'confirmed'=>false]; }
         $state['required_version']=class_exists('AF_ACS_Migrations',false)?AF_ACS_Migrations::VERSION:null;
         $state['ready']=$state['required_version']!==null && $state['error']===null && $state['schema_version']===$state['required_version'];
         return $state;
