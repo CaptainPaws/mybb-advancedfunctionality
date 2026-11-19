@@ -8887,7 +8887,7 @@ function af_kb_arpg_normalize_entry(array $entry, ?int $abilityIndex = null): ar
         if ($abilityIndex === null || $abilityIndex < 0 || !is_array($abilities) || !isset($abilities[$abilityIndex]) || !is_array($abilities[$abilityIndex])) {
             af_kb_arpg_acs_diagnostic($diagnostics, 'character_ability_missing', 'character_abilities');
         } else {
-            $normalized['ability_profile'] = af_kb_arpg_acs_ability($abilities[$abilityIndex], 'character_abilities.' . $abilityIndex, $diagnostics);
+            $normalized['ability_profile'] = af_kb_arpg_character_ability_profile($abilities[$abilityIndex], 'character_abilities.' . $abilityIndex, $diagnostics);
         }
     } elseif ($abilityIndex !== null) {
         af_kb_arpg_acs_diagnostic($diagnostics, 'unexpected_ability_index', 'source.ability_index');

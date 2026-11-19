@@ -301,6 +301,53 @@ function af_kb_ability_catalog_project(array $row, array $registry): ?array
     ];
 }
 
+function af_kb_ability_catalog_definition_id(array $row): string
+{
+    return substr(af_kb_arpg_acs_fingerprint(array_intersect_key($row, array_flip([
+        'data_json', 'meta_json', 'title_ru', 'title_en', 'short_ru', 'short_en', 'body_ru', 'body_en',
+    ]))), strlen('sha256:'));
+}
+
+function af_kb_ability_catalog_public_row(?array $row): bool
+{
+    return $row !== null && (int)$row['active'] === 1
+        && af_kb_ability_catalog_visible(af_kb_decode_json($row['meta_json']))
+        && af_kb_ability_catalog_visible(af_kb_decode_json($row['data_json']))
+        && !empty(af_kb_find_type_row('arpg_ability')['active']);
+}
+
+/** Resolve a pinned character link. An unavailable or changed definition fails closed. */
+function af_kb_arpg_character_ability_profile(array $ability, string $path, array &$diagnostics): array
+{
+    if (($ability['ability_source'] ?? null) !== 'arpg_ability') {
+        return af_kb_arpg_acs_ability($ability, $path, $diagnostics);
+    }
+    $key = $ability['ability_kb_key'] ?? '';
+    $row = is_string($key) && preg_match(AF_KB_KEY_PATTERN, $key) ? af_kb_arpg_acs_lookup('arpg_ability', $key) : null;
+    if (!af_kb_ability_catalog_public_row($row)) {
+        af_kb_arpg_acs_diagnostic($diagnostics, 'ability_definition_unavailable', $path);
+        return [];
+    }
+    $source = af_kb_arpg_acs_source($row, $diagnostics);
+    $version = ['revision' => $row['revision'] ?? $source['rules']['revision'] ?? null,
+        'declared_version' => $source['rules']['version'] ?? null, 'fingerprint' => $source['fingerprint']];
+    if (!is_array($ability['ability_definition_version'] ?? null)
+        || af_kb_arpg_acs_fingerprint($ability['ability_definition_version']) !== af_kb_arpg_acs_fingerprint($version)
+        || ($ability['ability_fingerprint'] ?? null) !== $source['fingerprint'] || !$source['fingerprint']) {
+        af_kb_arpg_acs_diagnostic($diagnostics, 'ability_version_pin_mismatch', $path);
+        return [];
+    }
+    if (($source['rules']['schema'] ?? null) !== AF_KB_ARPG_RULES_SCHEMA
+        || ($source['rules']['type_profile'] ?? null) !== 'ability') {
+        af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_rules_schema', $path);
+        return [];
+    }
+    $profile = af_kb_arpg_acs_ability($source['rules'], $path, $diagnostics);
+    $profile['references']['ability_kb_key'] = ['kind' => 'arpg_ability', 'key' => $key, 'resolved' => true,
+        'entry_id' => $row['id'], 'fingerprint' => $source['fingerprint'], 'definition_version' => $version];
+    return $profile;
+}
+
 function af_kb_ability_catalog_weapon_types(string $weapon, array $registry): array
 {
     return $registry['weapon_groups'][$weapon] ?? [$weapon];
@@ -409,10 +456,17 @@ function af_kb_ability_catalog_input(array $registry, bool $api): array
         if ($facet === 'element') {
             $value = af_kb_arpg_canonical_element_key($value);
         }
-        if ($value !== '' && !isset($registry['options'][$facet][$value])) {
-            af_kb_render_json_error('Invalid context_' . $facet, 400);
+        if ($facet === 'element' && isset($registry['directions'][$value])) {
+            $context['direction'] = $value;
+            $value = $registry['directions'][$value]['root'];
         }
-        $context[$facet] = $value !== '' ? $value : ($filters[$facet] ?? '');
+        if ($value !== '' && !isset($registry['options'][$facet][$value])) {
+            if (!$api || $mybb->get_input('independent_context') !== '1') {
+                af_kb_render_json_error('Invalid context_' . $facet, 400);
+            }
+            $value = '';
+        }
+        $context[$facet] = $value !== '' ? $value : ($context[$facet] ?? (($api && $mybb->get_input('independent_context') === '1') ? '' : ($filters[$facet] ?? '')));
     }
     $query = trim($mybb->get_input('q'));
     if (my_strlen($query) > 100) {
@@ -425,7 +479,7 @@ function af_kb_ability_catalog_input(array $registry, bool $api): array
  * Scan only the indexed active ability subset in keyset batches. Keep sort keys
  * and IDs until the page is known, then load presentation data for that page.
  */
-function af_kb_ability_catalog_page(array $registry, array $filters, array $context, string $query, int $page, int $perPage): array
+function af_kb_ability_catalog_page(array $registry, array $filters, array $context, string $query, int $page, int $perPage, string $status = ''): array
 {
     global $db;
 
@@ -448,7 +502,8 @@ function af_kb_ability_catalog_page(array $registry, array $filters, array $cont
             $lastSort = (int)$row['sortorder'];
             $cursor = " AND (sortorder>{$lastSort} OR sortorder={$lastSort} AND id>{$lastId})";
             $ability = af_kb_ability_catalog_project($row, $registry);
-            if ($ability === null || !af_kb_ability_catalog_matches($ability, $filters, $registry)) {
+            if ($ability === null || !af_kb_ability_catalog_matches($ability, $filters, $registry)
+                || ($status !== '' && af_kb_ability_catalog_status($ability['applicability'], $context, $registry) !== $status)) {
                 continue;
             }
             $label = '';
@@ -460,13 +515,18 @@ function af_kb_ability_catalog_page(array $registry, array $filters, array $cont
             } elseif ($sort === 'type') {
                 $label = $registry['options']['ability_type'][$ability['type']] ?? $ability['type'];
             }
-            $matches[$lastId] = [$label, af_kb_pick_text($row, 'title') ?: $row['key']];
+            $preference = 0;
+            if ($status === 'compatible' && !isset($filters['sort'])) {
+                if (in_array($context['element'] ?? '', $ability['element'], true)) --$preference;
+                if (in_array($context['direction'] ?? '', $ability['direction'], true)) --$preference;
+            }
+            $matches[$lastId] = [$preference, $label, af_kb_pick_text($row, 'title') ?: $row['key']];
         }
         $db->free_result($batch);
     } while ($read === 200);
 
     uasort($matches, static function (array $left, array $right): int {
-        return strnatcasecmp($left[0], $right[0]) ?: strnatcasecmp($left[1], $right[1]);
+        return ($left[0] <=> $right[0]) ?: strnatcasecmp($left[1], $right[1]) ?: strnatcasecmp($left[2], $right[2]);
     });
     $total = count($matches);
     $pages = max(1, (int)ceil($total / $perPage));
@@ -475,11 +535,12 @@ function af_kb_ability_catalog_page(array $registry, array $filters, array $cont
     $items = $rows = [];
     if ($ids) {
         $result = $db->simple_select('af_kb_entries',
-            'id,type,`key`,title_ru,title_en,short_ru,short_en,active,meta_json,data_json,icon_url,icon_class,banner_url,bg_url',
+            'id,type,`key`,title_ru,title_en,short_ru,short_en,body_ru,body_en,active,meta_json,data_json,icon_url,icon_class,banner_url,bg_url',
             $where . ' AND id IN (' . implode(',', $ids) . ')');
         while ($row = $db->fetch_array($result)) {
             $ability = af_kb_ability_catalog_project($row, $registry);
-            if ($ability === null || !af_kb_ability_catalog_matches($ability, $filters, $registry)) {
+            if ($ability === null || !af_kb_ability_catalog_matches($ability, $filters, $registry)
+                || ($status !== '' && af_kb_ability_catalog_status($ability['applicability'], $context, $registry) !== $status)) {
                 continue;
             }
             $id = (int)$row['id'];
@@ -489,7 +550,7 @@ function af_kb_ability_catalog_page(array $registry, array $filters, array $cont
                 'title' => af_kb_pick_text($row, 'title') ?: $row['key'],
                 'description' => af_kb_pick_text($row, 'short'),
                 'icon' => ['url' => af_kb_sanitize_url($ui['icon_url']), 'class' => af_kb_sanitize_icon_class($ui['icon_class'])],
-                'definition_id' => hash('sha256', $row['data_json'] . "\0" . $row['meta_json']),
+                'definition_id' => af_kb_ability_catalog_definition_id($row),
                 'url' => af_kb_url(['type' => 'arpg_ability', 'key' => $row['key']]),
                 'compatibility' => af_kb_ability_catalog_status($ability['applicability'], $context, $registry),
             ]);
@@ -524,8 +585,15 @@ function af_kb_handle_ability_catalog_json(): void
     $registry = af_kb_ability_catalog_registry();
     [$filters, $context, $query] = af_kb_ability_catalog_input($registry, true);
     $perPage = (int)$mybb->get_input('per_page', MyBB::INPUT_INT);
+    $status = $mybb->get_input('compatibility');
+    if (!in_array($status, ['', 'compatible', 'needs_review', 'incompatible'], true)) {
+        af_kb_render_json_error('Invalid compatibility', 400);
+    }
     $page = af_kb_ability_catalog_page($registry, $filters, $context, $query,
-        (int)$mybb->get_input('page', MyBB::INPUT_INT), min(50, $perPage > 0 ? $perPage : AF_KB_PERPAGE));
+        (int)$mybb->get_input('page', MyBB::INPUT_INT), min(50, $perPage > 0 ? $perPage : AF_KB_PERPAGE), $status);
+    if ($mybb->get_input('options') === '1') {
+        $page['options'] = $registry['options'];
+    }
     unset($page['rows']);
     af_kb_send_json(['success' => true] + $page);
 }
