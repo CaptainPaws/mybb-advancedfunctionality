@@ -29,23 +29,36 @@ function af_charactersheets_prepare_combat_snapshot(int $sheetId, int $actorUid,
     require_once AF_ADDONS . 'knowledgebase/knowledgebase.php';
     if (!is_object($db) || !$db->table_exists(AF_CS_SHEETS_TABLE)) return $denied;
     $sheet = $db->fetch_array($db->simple_select(AF_CS_SHEETS_TABLE, '*', 'id='.$sheetId, ['limit'=>1]));
-    if (!is_array($sheet) || !af_charactersheets_user_can_edit_sheet($sheet, $mybb->user) || !af_kb_can_view()) return $denied;
-    $tid = (int)($sheet['tid'] ?? 0);
-    $thread = $db->fetch_array($db->simple_select('threads', '*', 'tid='.$tid, ['limit'=>1]));
-    if (!is_array($thread) || !function_exists('forum_permissions') || !function_exists('get_forum')) return $denied;
-    $fid = (int)$thread['fid'];
-    $permissions = forum_permissions($fid);
-    $forum = get_forum($fid);
-    // Password-protected forums need a separately verified owner contract; no bypass.
-    if (!$forum || empty($permissions['canview']) || empty($permissions['canviewthreads']) || !empty($forum['password'])
-        || (int)($thread['visible'] ?? 0) !== 1
-        || (!empty($permissions['canonlyviewownthreads']) && (int)$thread['uid'] !== $actorUid)) return $denied;
+    if (!is_array($sheet) || !af_cs_snapshot_source_thread($sheet, $actorUid)) return $denied;
     try {
         return af_cs_snapshot_read($sheet, $context);
     } catch (Throwable $error) {
         return ['schema_version'=>1,'contract_id'=>'IC-CS.combat-preparation.v1','ready'=>false,
             'diagnostics'=>[['code'=>'source_read_failed','path'=>'sources','severity'=>'error']]];
     }
+}
+
+/** Shared authorization for registration choices and snapshot preparation. */
+function af_cs_snapshot_source_thread(array $sheet, int $actorUid, ?string &$reason = null): array
+{
+    global $db, $mybb;
+    $reason = 'access_denied';
+    if (!af_charactersheets_user_can_edit_sheet($sheet, $mybb->user) || !af_kb_can_view()) return [];
+    $tid = (int)($sheet['tid'] ?? 0);
+    $thread = $db->fetch_array($db->simple_select('threads', '*', 'tid='.$tid, ['limit'=>1]));
+    if (!is_array($thread)) {
+        $reason = 'sheet_topic_missing';
+        return [];
+    }
+    if (!function_exists('forum_permissions') || !function_exists('get_forum')) return [];
+    $fid = (int)$thread['fid'];
+    $permissions = forum_permissions($fid);
+    $forum = get_forum($fid);
+    // Password-protected forums need a separately verified owner contract; no bypass.
+    if (!$forum || empty($permissions['canview']) || empty($permissions['canviewthreads']) || !empty($forum['password'])
+        || (int)($thread['visible'] ?? 0) !== 1
+        || (!empty($permissions['canonlyviewownthreads']) && (int)$thread['uid'] !== $actorUid)) return [];
+    return $thread;
 }
 
 /** Read set includes exact SQL predicates and captured rows for optimistic readback. */

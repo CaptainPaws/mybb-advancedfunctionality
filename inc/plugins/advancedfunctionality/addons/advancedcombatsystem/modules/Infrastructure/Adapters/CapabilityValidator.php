@@ -36,6 +36,15 @@ final class AF_ACS_CapabilityValidator
     }
 
     /** Every stat has one canonical identity; missing and zero remain distinct. */
+    public static function safeDiagnostics(array $issues): array
+    {
+        return array_map(static fn($issue) => [
+            'code'=>preg_match('/\A[a-z0-9_]{1,96}\z/D',(string)($issue['code']??'')) ? $issue['code'] : 'snapshot_source_unavailable',
+            'path'=>preg_match('/\A[a-zA-Z0-9_.]{1,191}\z/D',(string)($issue['path']??'')) ? $issue['path'] : 'source',
+            'severity'=>($issue['severity']??'')==='warning' ? 'warning' : 'error',
+        ], $issues);
+    }
+
     public static function stats(array $stats, array &$issues): void
     {
         foreach (af_kb_arpg_character_stat_registry() as $key=>$entry) {

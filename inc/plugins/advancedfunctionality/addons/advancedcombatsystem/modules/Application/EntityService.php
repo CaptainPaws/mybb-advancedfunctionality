@@ -39,9 +39,9 @@ final class AF_ACS_EntityService
         if(!hash_equals($row['content_hash'],hash('sha256',$row['payload_json'])))throw new RuntimeException('ACS_SNAPSHOT_HASH_MISMATCH');
         return json_decode($row['payload_json'],true,64,JSON_THROW_ON_ERROR);
     }
-    public function choices(string $sid,string $kind,int $after=0): array
+    public function choices(string $sid,string $kind,int $after=0,string $slug=''): array
     {
-        $this->kind($kind);$this->access($sid,$kind,true);return $this->source->choices($kind,(int)$this->access->uid(),$after);
+        $this->kind($kind);$this->access($sid,$kind,true);return $this->source->choices($kind,(int)$this->access->uid(),$after,$slug);
     }
     private function kind(string $kind): void
     {
@@ -96,23 +96,32 @@ final class AF_ACS_EntityService
             $snapshot['equipment_snapshot']=(new AF_ACS_EquipmentAdapter())->prepare($dto,$reader->read($actor,$actor),$sid,$actor);
         }
         AF_ACS_Repository::json($snapshot);
+        $preparationFingerprint=af_kb_arpg_acs_fingerprint($snapshot);
         $name=trim((string)($input['name']??''));if($name==='')$name=$isCharacter?'Персонаж · лист #'.$key:'Бестиарий · '.$key;
         if(mb_strlen($name)>191)throw new RuntimeException('ACS_INVALID_TEXT');
         return ['kind'=>$kind,'owner_uid'=>$isOwned?$this->access->uid():null,'controller_uid'=>$this->access->uid(),
             'sheet_id'=>$isCharacter?$key:null,'source'=>['source_system'=>$kind==='pet'?'permanent_pet':($isCharacter?'charactersheets':'knowledgebase'),'source_key'=>$key,'contract_id'=>$kind==='pet'?'ic-acs.permanent-pet.v1':($isCharacter?'ic-cs.combat-preparation.v1':'ic-kb.read.v1'),'contract_version'=>'1'],
-            'source_fingerprint'=>$fingerprint,'snapshot'=>$snapshot,'stats'=>$stats,'hp'=>$current,'hp_max'=>$hpMax,
+            'source_fingerprint'=>$fingerprint,'preparation_fingerprint'=>$preparationFingerprint,'snapshot'=>$snapshot,'stats'=>$stats,'hp'=>$current,'hp_max'=>$hpMax,
             'resources'=>['hp'=>['current'=>$current,'maximum'=>$hpMax,'is_integer'=>true]],'name'=>$name];
     }
     /** Explicit POST preview returns diagnostics only; never exposes another owner's DTO. */
     public function validate(string $sid,array $input): array
     {
         $this->access->csrf();
-        try{$registration=$this->prepare($sid,$input);return ['ready'=>true,'diagnostics'=>[],'source_fingerprint'=>$registration['source_fingerprint']];}
-        catch(AF_ACS_RegistrationBlocked $e){return ['ready'=>false,'diagnostics'=>$this->safeDiagnostics($e->diagnostics)];}
-    }
-    private function safeDiagnostics(array $issues): array
-    {
-        return array_map(static fn($i)=>['code'=>preg_match('/\A[a-z0-9_]{1,96}\z/D',(string)($i['code']??''))?$i['code']:'snapshot_source_unavailable','path'=>preg_match('/\A[a-zA-Z0-9_.]{1,191}\z/D',(string)($i['path']??''))?$i['path']:'source','severity'=>($i['severity']??'')==='warning'?'warning':'error'],array_slice($issues,0,32));
+        try{$registration=$this->prepare($sid,$input);return ['ready'=>true,'diagnostics'=>[],'source_fingerprint'=>$registration['source_fingerprint'],'preparation_fingerprint'=>$registration['preparation_fingerprint']];}
+        catch (AF_ACS_RegistrationBlocked $e) {return ['ready'=>false,'diagnostics'=>AF_ACS_CapabilityValidator::safeDiagnostics($e->diagnostics)];}
+        catch (RuntimeException $e) {
+            $path=match($e->getMessage()) {
+                'ACS_HP_RANGE','ACS_HP_INTEGER_REQUIRED'=>'initial_hp',
+                'ACS_DEFINITION_VERSION_CONFLICT','ACS_DEFINITION_LIMIT'=>'abilities',
+                'ACS_EQUIPMENT_SOURCE_UNAVAILABLE','ACS_EQUIPMENT_ACCESS_DENIED','ACS_EQUIPMENT_BINDING_INVALID',
+                'ACS_EQUIPMENT_DEFINITION_UNAVAILABLE','ACS_EQUIPMENT_SLOT_INVALID','ACS_EQUIPMENT_COSMETIC_SOURCE',
+                'ACS_EQUIPMENT_PROVENANCE_BLOCKED','ACS_EQUIPMENT_SOURCE_CHANGED','ACS_EQUIPMENT_RESERVATION_INVALID'=>'equipment',
+                default=>null,
+            };
+            if ($path===null) throw $e;
+            return ['ready'=>false,'diagnostics'=>[['code'=>strtolower(substr($e->getMessage(),4)),'path'=>$path,'severity'=>'error']]];
+        }
     }
     public function register(array $input): array
     {
@@ -122,8 +131,19 @@ final class AF_ACS_EntityService
         $reason=trim((string)($input['reason']??''));if($reason==='' || mb_strlen($reason)>1000)throw new RuntimeException('ACS_REASON_REQUIRED');
         // Hash original intent, not the mutable live definition: a committed retry never rereads KB/CS.
         $request=['schema_version'=>1,'actor_uid'=>$actor,'session_id'=>$sid,'expected_version'=>AF_ACS_Repository::integer($input['expected_version']??null),'kind'=>$kind,'source_key'=>(string)($input['source_key']??''),'name'=>(string)($input['name']??''),'initial_hp'=>(string)($input['initial_hp']??''),'reason'=>$reason];
+        $checked=(string)($input['preparation_fingerprint']??'');
+        if ($checked!=='') {
+            if (!AF_ACS_CapabilityValidator::fingerprint($checked)) throw new RuntimeException('ACS_DEFINITION_VERSION_CONFLICT');
+            $request['preparation_fingerprint']=$checked;
+        }
         return $this->repository->command('session:'.$actor.':'.$key,'entity.register',$request,
             function($session)use($sid,$kind){$this->access($sid,$kind,true);},
-            function($session)use($sid,$input){return $this->repository->register($session,$this->prepare($sid,$input,true));});
+            function($session)use($sid,$input,$checked){
+                $registration=$this->prepare($sid,$input,true);
+                if ($checked!=='' && !hash_equals($checked,$registration['preparation_fingerprint'])) {
+                    throw new RuntimeException('ACS_DEFINITION_VERSION_CONFLICT');
+                }
+                return $this->repository->register($session,$registration);
+            });
     }
 }

@@ -52,18 +52,19 @@ final class AF_ACS_SessionsPage
         $access=new AF_ACS_SessionAccess;
         $url=$admin?'index.php?module=advancedfunctionality&af_view=advancedcombatsystem&acs_section=sessions':'misc.php?action=acs_sessions';
         $sid=$mybb->get_input('session_id');
-        $notice='';
+        $notice='';$sourceCheck=[];
         $operation='';
         if ($mybb->request_method==='post') {
             $operation=$mybb->get_input('op');
             try {
-                $notice=self::post($service,$operation,$sid);
+                $notice=self::post($service,$operation,$sid,$sourceCheck);
             } catch (Throwable $error) {
                 $failure=af_advancedcombatsystem_session_failure($error);
                 $notice='<div class="af-acs-standalone__notice error" role="alert"><p>'.self::esc($failure['message'])
                     .' Код обращения: '.self::esc($failure['error_id']).'</p>';
-                foreach ($failure['diagnostics']??[] as $issue) {
-                    $notice.='<p>'.self::esc($issue['message']).' ('.self::esc($issue['code']).' · '.self::esc($issue['path']??'source').')</p>';
+                if (!empty($failure['diagnostics'])) {
+                    require_once __DIR__.'/Entities.php';
+                    $notice.=AF_ACS_EntitiesPage::diagnostics($failure['diagnostics']);
                 }
                 $notice.='</div>';
             }
@@ -142,7 +143,7 @@ final class AF_ACS_SessionsPage
                     break;
                 case 'entities':
                     require_once __DIR__.'/Entities.php';
-                    AF_ACS_EntitiesPage::render($sid,$view,$tabUrl);
+                    AF_ACS_EntitiesPage::render($sid,$view,$tabUrl,check:$sourceCheck);
                     break;
                 case 'delegations':
                     require_once __DIR__.'/Delegations.php';
@@ -166,17 +167,17 @@ final class AF_ACS_SessionsPage
     private static function defaultTab(string $operation): string
     {
         global $mybb;
-        if (str_starts_with($operation,'entity_') || $mybb->get_input('entity_after')!=='' || $mybb->get_input('source_after')!=='' || $mybb->get_input('kind')!=='') return 'entities';
+        if (str_starts_with($operation,'entity_') || $mybb->get_input('entity_after')!=='' || $mybb->get_input('source_after')!=='' || $mybb->get_input('source_slug')!=='' || $mybb->get_input('kind')!=='') return 'entities';
         if (str_starts_with($operation,'delegation_') || $mybb->get_input('delegation_after')!=='') return 'delegations';
         if (in_array($operation,['set_role','remove_member','transfer_owner'],true)) return 'members';
         return isset(self::OPERATIONS[$operation])?'management':'overview';
     }
 
-    private static function post(AF_ACS_SessionService $service,string $operation,string &$sid): string
+    private static function post(AF_ACS_SessionService $service,string $operation,string &$sid,array &$sourceCheck): string
     {
         global $mybb;
         $input=[];
-        foreach (['operation_key','reason','tid','owner_uid','session_id','expected_version','uid','role','kind','source_key','name','initial_hp'] as $key) {
+        foreach (['operation_key','reason','tid','owner_uid','session_id','expected_version','uid','role','kind','source_key','name','initial_hp','preparation_fingerprint'] as $key) {
             $input[$key]=$mybb->get_input($key);
         }
         AF_ACS_GmIntent::requireConfirmation($operation);
@@ -191,9 +192,11 @@ final class AF_ACS_SessionsPage
             return '<p class="af-acs-standalone__notice" role="status">Делегирование обновлено.</p>';
         }
         if ($operation==='entity_validate') {
-            $validation=af_advancedcombatsystem_entities()->validate($input['session_id'],$input);
-            if (!$validation['ready']) throw new AF_ACS_RegistrationBlocked($validation['diagnostics']);
-            return '<p class="af-acs-standalone__notice" role="status">Источник готов к регистрации. При добавлении сервер проверит его повторно.</p>';
+            $sourceCheck=af_advancedcombatsystem_entities()->validate($input['session_id'],$input)+$input;
+            return '';
+        }
+        if ($operation==='entity_register' && $input['preparation_fingerprint']==='') {
+            throw new RuntimeException('ACS_SOURCE_CHECK_REQUIRED');
         }
         $result=$operation==='entity_register'?af_advancedcombatsystem_entities()->register($input):$service->command($operation,$input);
         $sid=$result['session_id'];
