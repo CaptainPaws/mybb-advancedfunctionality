@@ -95,7 +95,9 @@ function af_atf_kb_ability_validate(array $rows, array $stored, array $fields, a
         }
         $seen[$key] = true;
         $old = $previous[$key] ?? null;
-        if ($old && $old['catalog_definition_id'] === $row['catalog_definition_id']) {
+        if ($old && $old['catalog_definition_id'] === $row['catalog_definition_id']
+            && preg_match('/\Asha256:[a-f0-9]{64}\z/D', $old['ability_fingerprint'])
+            && ($old['ability_definition_version']['fingerprint'] ?? null) === $old['ability_fingerprint']) {
             $row = af_atf_kb_ability_row($old, $index + 1);
             continue;
         }

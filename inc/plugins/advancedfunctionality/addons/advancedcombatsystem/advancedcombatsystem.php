@@ -345,6 +345,8 @@ function af_acs_registration_diagnostic_groups(array $issues): array
         'permanent_pet_source_unavailable'=>'Плагин постоянных питомцев ещё не подключён.',
         'source_changed_during_read'=>'Источник изменился во время проверки. Проверьте его повторно.',
         'status_resistance_alias_conflict'=>'Конфликт значений сопротивления статусам.',
+        'duration_unit_missing'=>'В определении способности или эффекта KB укажите единицу для заданной длительности или кулдауна.',
+        'ability_version_pin_mismatch'=>'Версия способности KB изменилась. Выберите её заново в анкете и синхронизируйте запись.',
         'equipment_provenance_incomplete'=>'Не подтверждено происхождение бонусов экипировки.',
         'bestiary_modifier_provenance_unavailable'=>'Шаблон содержит модификаторы без подтверждённого итогового расчёта.',
         'resource_semantics_unverified'=>'Для дополнительных ресурсов отсутствует подтверждённый контракт.',
@@ -369,7 +371,7 @@ function af_acs_registration_diagnostic_groups(array $issues): array
         $message=$messages[$code]??'Проверьте указанный источник данных.';
         $stat=$stats[$path]??null;
         if ($stat && in_array($code,['required_stat_missing','required_stat_missing_or_invalid','invalid_stat_value'],true)) {
-            [$object,$label,$field]=$stat;
+            [$object,$label]=$stat;
             if ($code==='required_stat_missing_or_invalid') {
                 if (isset($knownStatIssues[$object]['required_stat_missing'])) $code='required_stat_missing';
                 elseif (isset($knownStatIssues[$object]['invalid_stat_value'])) $code='invalid_stat_value';
@@ -380,7 +382,7 @@ function af_acs_registration_diagnostic_groups(array $issues): array
                 'invalid_stat_value'=>'Недопустимое значение характеристики '.$label.'.',
                 default=>'Проверьте наличие и значение характеристики '.$label.'.',
             };
-            if ($object==='accuracy') $message.=' Укажите точность в анкете и синхронизируйте её либо проверьте character_stats.'.$field.' в KB.';
+            if ($object==='accuracy') $message.=' Проверьте базовую точность происхождения и архетипа в KB.';
         } elseif ($code==='required_resistance_missing') {
             $object='resistances';
         }
