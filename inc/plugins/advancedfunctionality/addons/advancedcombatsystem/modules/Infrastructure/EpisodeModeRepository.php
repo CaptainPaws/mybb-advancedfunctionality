@@ -69,7 +69,7 @@ final class AF_ACS_EpisodeModeRepository extends AF_ACS_SessionRepository
         // A positive list keeps unknown receipts, resource costs and any
         // future mechanical operation out of the reversible path.
         $safe = ['session.create','session.set_role','session.remove_member','session.transfer_owner',
-            'entity.register','encounter.create','encounter.side_create','encounter.relation_set',
+            'entity.register','encounter.create','encounter.side_create','encounter.side_rename','encounter.side_delete','encounter.relation_set',
             'encounter.participant_add','encounter.participant_side','encounter.participant_visibility',
             'encounter.controller_assign','encounter.controller_set','encounter.end_conditions_set','encounter.participation_set'];
         $marks = implode(',', array_fill(0, count($safe), '?'));

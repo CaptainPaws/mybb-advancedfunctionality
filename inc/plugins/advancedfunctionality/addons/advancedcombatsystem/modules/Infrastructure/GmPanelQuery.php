@@ -6,6 +6,14 @@ require_once __DIR__.'/../Domain/Clock.php';
 /** Read-only inspection of the selected page of participants. No owner calculator or writer. */
 final class AF_ACS_GmPanelQuery extends AF_ACS_Repository
 {
+    public function occupiedSides(string $sid,string $eid,string $tid): array
+    {
+        (new AF_ACS_EncounterService(new AF_ACS_EncounterRepository($this->connection),new AF_ACS_SessionAccess))->context($sid,$tid);
+        return array_column($this->sql('SELECT DISTINCT p.side_id FROM '.$this->table('participants').' p JOIN '
+            .$this->table('encounters').' e ON e.id=p.encounter_id WHERE e.session_id=? AND e.id=? AND p.side_id IS NOT NULL',
+            [$sid,$eid])['rows'],'side_id');
+    }
+
     public function inspection(string $sid,string $eid,string $tid,array $ids,bool $presentation=false):array
     {
         (new AF_ACS_EncounterService(new AF_ACS_EncounterRepository($this->connection),new AF_ACS_SessionAccess))->context($sid,$tid);

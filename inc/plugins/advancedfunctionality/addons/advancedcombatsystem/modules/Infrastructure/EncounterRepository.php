@@ -201,11 +201,48 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
         $this->sql('UPDATE '.$this->table('encounters').' SET next_event_sequence=next_event_sequence+1 WHERE id=?',[$id]);
         return $session;
     }
+    public static function trimSideName(string $name): string
+    {
+        return preg_replace('/\A\s+|\s+\z/u','',$name)??$name;
+    }
+
+    private function changeSide(string $eid,string $op,array $request): array
+    {
+        // The command already holds the session and encounter locks.
+        $sideId=$request['side_id'];
+        $sides=$this->table('sides');
+        $side=$this->sql('SELECT name,side_version FROM '.$sides.' WHERE encounter_id=? AND id=? FOR UPDATE',[$eid,$sideId])['rows'][0]??null;
+        if (!$side) throw new RuntimeException('ACS_SIDE_UNAVAILABLE');
+        $result=['side_id'=>$sideId,'previous_name'=>$side['name']];
+
+        if ($op==='side_rename') {
+            $name=$request['name'];
+            $key=mb_convert_case($name,MB_CASE_FOLD,'UTF-8');
+            foreach ($this->allSides($eid) as $other) {
+                if ($other['id']!==$sideId && mb_convert_case(self::trimSideName($other['name']),MB_CASE_FOLD,'UTF-8')===$key) {
+                    throw new RuntimeException('ACS_SIDE_NAME_DUPLICATE');
+                }
+            }
+            self::integer($side['side_version'],'18446744073709551614');
+            $this->sql('UPDATE '.$sides.' SET name=?,side_version=side_version+1 WHERE encounter_id=? AND id=?',[$name,$eid,$sideId]);
+            return $result+['name'=>$name];
+        }
+
+        if ($this->sql('SELECT id FROM '.$this->table('participants').' WHERE encounter_id=? AND side_id=? LIMIT 1 FOR UPDATE',[$eid,$sideId])['rows']) {
+            throw new RuntimeException('ACS_SIDE_HAS_PARTICIPANTS');
+        }
+        $relations=$this->sql('DELETE FROM '.$this->table('side_relationships').' WHERE encounter_id=? AND (side_a=? OR side_b=?)',[$eid,$sideId,$sideId]);
+        $this->sql('DELETE FROM '.$sides.' WHERE encounter_id=? AND id=?',[$eid,$sideId]);
+        return $result+['deleted_relationships'=>$relations['affected']];
+    }
+
     public function change(array $session,array $encounter,string $op,array $request): array
     {
         $this->commandWrite();$id=$encounter['id'];$result=[];
         if($op==='side_create') {
             $result['side_id']=$this->sql('INSERT INTO '.$this->table('sides').' (encounter_id,name,side_version,policy_json) VALUES (?,?,1,?)',[$id,self::text($request['name'],191),self::json(['schema_version'=>1])])['id'];
+        } elseif (in_array($op,['side_rename','side_delete'],true)) {
+            $result=$this->changeSide($id,$op,$request);
         } elseif($op==='relation_set') {
             $a=$request['side_a'];$b=$request['side_b'];
             if(strlen($a)>strlen($b) || (strlen($a)===strlen($b) && strcmp($a,$b)>0))[$a,$b]=[$b,$a];
