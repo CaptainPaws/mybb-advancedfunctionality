@@ -11,3 +11,13 @@
 .af-acs-gm nav a{border:1px solid var(--atf-color-border,#536473);border-radius:var(--atf-radius-md,.5rem)}
 .af-acs-gm nav a[aria-current]{background:var(--atf-color-surface-raised,#172435)}
 .af-acs-gm [role=alert]{padding:.75rem;border-inline-start:3px solid var(--atf-color-danger,#df776f)}
+
+.af-acs-gm__composition{display:grid;gap:1rem;align-items:start}
+.af-acs-gm__picker{min-width:0;max-height:min(65vh,36rem);overflow:auto;overscroll-behavior:contain;padding:.75rem;border:1px solid var(--atf-color-border,#536473);border-radius:var(--atf-radius-md,.5rem);background:var(--atf-color-surface-raised,#172435)}
+.af-acs-gm__picker h4{margin-top:0}
+.af-acs-gm__picker pre{white-space:pre-wrap}
+@media(min-width:56rem){
+    .af-acs-gm__composition--picker{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+    .af-acs-gm__composition--picker > div{grid-column:1;grid-row:1}
+    .af-acs-gm__picker{grid-column:2;grid-row:1}
+}

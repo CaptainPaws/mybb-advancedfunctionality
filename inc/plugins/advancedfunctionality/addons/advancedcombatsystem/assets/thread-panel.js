@@ -107,6 +107,7 @@
         refreshButton.disabled = true;
         showError(body ? 'Сохранение…' : 'Загрузка…', false);
         const scroll = content.scrollTop;
+        const pickerScroll = content.querySelector('.af-acs-gm__picker')?.scrollTop ?? 0;
         let confirmed = false;
         try {
             const response = await fetch(fragmentUrl(url, tool), {
@@ -137,10 +138,12 @@
             }
             if (result.session_id && !url.searchParams.get('acs_session')) {
                 url.searchParams.set('acs_session', result.session_id);
-                url.searchParams.set('gm_step', '2');
+                url.searchParams.set('gm_stage', 'settings');
             }
             if (result.encounter_id) url.searchParams.set('acs_encounter', result.encounter_id);
             const fragment = parse(result.html);
+            const resume = tool === 'gm' ? fragment.querySelector('[data-acs-gm-resume]')?.dataset.acsGmResume : null;
+            if (resume) url = nativeUrl(resume) ?? url;
             await prepare(fragment);
             if (!dialog?.open || controller.signal.aborted) return;
             const keepScroll = body || !focus || restore;
@@ -150,11 +153,18 @@
             window.AFACSBuilder?.init(content);
             window.AFACSAmbush?.init(content);
             content.scrollTop = keepScroll ? scroll : 0;
+            const picker = content.querySelector('.af-acs-gm__picker');
+            const sourceResult = body ? picker?.querySelector('[data-acs-source-result]') : null;
+            if (picker && body) picker.scrollTop = pickerScroll;
+            if (sourceResult) {
+                const offset = sourceResult.getBoundingClientRect().top - picker.getBoundingClientRect().top;
+                if (offset < 0 || offset > picker.clientHeight - 48) picker.scrollTop += offset;
+            }
             current = url;
             activeTool = tool;
             dialog.querySelector('[data-fallback]').href = url.href;
             showError('', false);
-            if (focus) content.focus({preventScroll: true});
+            if (focus) (sourceResult ?? content).focus({preventScroll: true});
         } catch (_) {
             if (!dialog?.open) return;
             if (body && !confirmed) {
