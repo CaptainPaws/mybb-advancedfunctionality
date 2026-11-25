@@ -431,8 +431,6 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'targeting' => 'single_enemy',
             'range' => 0,
             'cast_time' => 0,
-            'cooldown' => 0,
-            'duration' => 0,
             'max_charges' => 1,
             'level_cap' => 20,
             'resources' => [],
@@ -954,7 +952,7 @@ function af_kb_default_arpg_type_definitions(): array
             'arpg_element' => ['rules.family', 'rules.counter_element', 'rules.description_text'],
             'arpg_faction' => ['rules.standing_model', 'rules.vendor_access_text', 'rules.story_flags_text', 'rules.description_text'],
             'arpg_lore' => ['rules.linked_entities_text', 'rules.timeline_text', 'rules.source_text'],
-            'arpg_ability' => ['rules.type', 'rules.subtype', 'rules.slot', 'rules.damage_type', 'rules.targeting', 'rules.range', 'rules.cast_time', 'rules.cooldown', 'rules.duration', 'rules.max_charges', 'rules.level_cap', 'rules.resources', 'rules.effects', 'rules.modifiers', 'rules.triggers', 'rules.conditions', 'rules.stacking', 'rules.upgrade_requirements'],
+            'arpg_ability' => ['rules.type', 'rules.subtype', 'rules.slot', 'rules.damage_type', 'rules.targeting', 'rules.range', 'rules.cast_time', 'rules.max_charges', 'rules.level_cap', 'rules.resources', 'rules.effects', 'rules.modifiers', 'rules.triggers', 'rules.conditions', 'rules.stacking', 'rules.upgrade_requirements'],
             'arpg_talent' => ['rules.tree', 'rules.tier', 'rules.rank', 'rules.slot_type', 'rules.node_label', 'rules.rank_weight', 'rules.socket_cost', 'rules.effects', 'rules.passive_effects', 'rules.modifiers', 'rules.grants', 'rules.requirements', 'rules.mutual_exclusives'],
             'arpg_item' => ['rules.item_kind', 'rules.equip_slot', 'rules.rarity', 'rules.subtype', 'rules.level_min', 'rules.level_max', 'rules.progression_stage', 'rules.level_cap', 'rules.base_stats', 'rules.modifiers', 'rules.effects', 'rules.passive_effects', 'rules.triggers', 'rules.grants', 'rules.upgrade_steps'],
             'arpg_bestiary' => ['rules.family', 'rules.archetype', 'rules.faction', 'rules.rank', 'rules.threat_tier', 'rules.level', 'rules.combat_stats.hp', 'rules.combat_stats.atk', 'rules.combat_stats.def', 'rules.combat_stats.speed', 'rules.combat_stats.crit_rate', 'rules.combat_stats.crit_dmg', 'rules.combat_stats.element_damage_bonus', 'rules.combat_stats.mastery', 'rules.combat_stats.healing_bonus', 'rules.combat_stats.shield_strength', 'rules.combat_stats.status_hit', 'rules.combat_stats.luck', 'rules.resists', 'rules.weaknesses', 'rules.ability_keys', 'rules.loot'],
@@ -1036,8 +1034,10 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.targeting', 'type' => 'string', 'required' => true, 'default' => 'single_enemy'],
                 ['path' => 'rules.range', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.cast_time', 'type' => 'number', 'required' => true, 'default' => 0],
-                ['path' => 'rules.cooldown', 'type' => 'number', 'required' => true, 'default' => 0],
-                ['path' => 'rules.duration', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.cooldown_value', 'type' => 'number', 'required' => false],
+                ['path' => 'rules.cooldown_unit', 'type' => 'select', 'required' => false, 'options' => ['own_turn','target_turn','round']],
+                ['path' => 'rules.duration_value', 'type' => 'number', 'required' => false],
+                ['path' => 'rules.duration_unit', 'type' => 'select', 'required' => false, 'options' => ['own_turn','target_turn','round']],
                 ['path' => 'rules.max_charges', 'type' => 'number', 'required' => true, 'default' => 1],
                 ['path' => 'rules.level_cap', 'type' => 'number', 'required' => true, 'default' => 20],
                 ['path' => 'rules.resources', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
@@ -6925,7 +6925,7 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
         'archetype' => ['rules.type_profile', 'rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_rate_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.status_hit_base', 'rules.luck_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.slot_rules_text', 'rules.description_notes'],
         'faction' => ['rules.type_profile', 'rules.standing_model', 'rules.vendor_access_text', 'rules.story_flags_text', 'rules.description_text'],
         'lore' => ['rules.type_profile', 'rules.linked_entities_text', 'rules.timeline_text', 'rules.source_text'],
-        'ability' => ['rules.type_profile', 'rules.type', 'rules.subtype', 'rules.slot', 'rules.damage_type', 'rules.targeting', 'rules.range', 'rules.cast_time', 'rules.cooldown', 'rules.duration', 'rules.max_charges', 'rules.level_cap', 'rules.resources', 'rules.effects', 'rules.modifiers', 'rules.triggers', 'rules.conditions', 'rules.stacking', 'rules.upgrade_requirements'],
+        'ability' => ['rules.type_profile', 'rules.type', 'rules.subtype', 'rules.slot', 'rules.damage_type', 'rules.targeting', 'rules.range', 'rules.cast_time', 'rules.max_charges', 'rules.level_cap', 'rules.resources', 'rules.effects', 'rules.modifiers', 'rules.triggers', 'rules.conditions', 'rules.stacking', 'rules.upgrade_requirements'],
         'talent' => ['rules.type_profile', 'rules.tree', 'rules.tier', 'rules.rank', 'rules.slot_type', 'rules.node_label', 'rules.rank_weight', 'rules.socket_cost', 'rules.effects', 'rules.passive_effects', 'rules.modifiers', 'rules.grants', 'rules.requirements', 'rules.mutual_exclusives'],
         'item' => ['rules.type_profile', 'rules.item_kind', 'rules.equip_slot', 'rules.rarity', 'rules.subtype', 'rules.level_min', 'rules.level_max', 'rules.progression_stage', 'rules.level_cap', 'rules.base_stats', 'rules.modifiers', 'rules.effects', 'rules.passive_effects', 'rules.triggers', 'rules.grants', 'rules.upgrade_steps'],
         'bestiary' => ['rules.type_profile', 'rules.family', 'rules.archetype', 'rules.faction', 'rules.rank', 'rules.threat_tier', 'rules.level', 'rules.combat_stats.hp', 'rules.combat_stats.atk', 'rules.combat_stats.def', 'rules.combat_stats.speed', 'rules.combat_stats.crit_rate', 'rules.combat_stats.crit_dmg', 'rules.combat_stats.element_damage_bonus', 'rules.combat_stats.mastery', 'rules.combat_stats.healing_bonus', 'rules.combat_stats.shield_strength', 'rules.combat_stats.status_hit', 'rules.combat_stats.luck', 'rules.resists', 'rules.weaknesses', 'rules.ability_keys', 'rules.loot'],
@@ -6968,11 +6968,15 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
             }
         }
 
-        foreach (['range', 'cast_time', 'cooldown', 'duration', 'max_charges', 'level_cap'] as $requiredNumberKey) {
+        foreach (['range', 'cast_time', 'max_charges', 'level_cap'] as $requiredNumberKey) {
             if (!is_numeric($payload['rules'][$requiredNumberKey] ?? null)) {
                 $errors[] = 'ARPG ability requires numeric "rules.' . $requiredNumberKey . '".';
             }
         }
+
+        $timingIssues = [];
+        af_kb_arpg_acs_ability_timing(af_kb_arpg_omit_empty_ability_timing($payload['rules']), 'rules', $timingIssues);
+        foreach ($timingIssues as $issue) $errors[] = $issue['path'].': '.$issue['code'];
 
         foreach (['resources', 'effects', 'modifiers', 'triggers', 'conditions', 'stacking', 'upgrade_requirements'] as $arrKey) {
             if (!is_array($payload['rules'][$arrKey] ?? null)) {
@@ -7263,6 +7267,12 @@ function af_kb_validate_arpg_entry_by_type(string $type, array $payload, array &
 
     $isService = !empty($typeDef['service']);
     $payload = af_kb_validate_arpg_envelope($type, $payload, $isService, $errors);
+    if ($type === 'arpg_ability') {
+        $payload['rules'] = af_kb_arpg_omit_empty_ability_timing($payload['rules']);
+        foreach (is_array($payload['rules']['effects'] ?? null) ? $payload['rules']['effects'] : [] as $index=>$effect) {
+            if (is_array($effect)) $payload['rules']['effects'][$index] = af_kb_arpg_omit_empty_ability_timing($effect);
+        }
+    }
     af_kb_arpg_validate_math_fields((array)($payload['rules'] ?? []), $errors);
     af_kb_arpg_validate_element_fields((array)($payload['rules'] ?? []), $errors);
     af_kb_arpg_validate_status_fields((array)($payload['rules'] ?? []), $errors);
@@ -8761,9 +8771,41 @@ function af_kb_arpg_acs_modifiers(array $rules, string $path, array &$diagnostic
 }
 
 /** Shared path for KB abilities, inline character abilities and bestiary objects. */
+/** Remove the legacy editor's bare zero, which represented an absent timer. */
+function af_kb_arpg_omit_empty_ability_timing(array $rules): array
+{
+    foreach (['cooldown','duration'] as $key) {
+        if (($rules[$key.'_unit'] ?? '') === '') {
+            unset($rules[$key.'_unit']);
+            if (($rules[$key.'_value'] ?? '') === '') unset($rules[$key.'_value']);
+        }
+        $value = $rules[$key] ?? null;
+        if (!isset($rules[$key.'_value']) && empty($rules[$key.'_unit'])
+            && ($value === null || $value === '' || (is_numeric($value) && (float)$value === 0.0))) {
+            unset($rules[$key]);
+        }
+    }
+    return $rules;
+}
+
+function af_kb_arpg_acs_ability_timing(array $ability, string $path, array &$diagnostics): void
+{
+    foreach (['cooldown','duration'] as $field) {
+        $value = $ability[$field.'_value'] ?? $ability[$field] ?? null;
+        $unit = $ability[$field.'_unit'] ?? '';
+        if ($value !== null && $value !== '') {
+            if (!is_numeric($value) || !is_finite((float)$value) || (float)$value < 0) af_kb_arpg_acs_diagnostic($diagnostics, 'invalid_number', $path.'.'.$field.'_value');
+            if ($unit === '') af_kb_arpg_acs_diagnostic($diagnostics, 'duration_unit_missing', $path.'.'.$field.'_unit');
+        } elseif ($unit !== '') {
+            af_kb_arpg_acs_diagnostic($diagnostics, 'required_field_missing', $path.'.'.$field.'_value');
+        }
+        if ($unit !== '' && !in_array($unit, ['own_turn','target_turn','round'], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_duration_unit', $path.'.'.$field.'_unit');
+    }
+}
+
 function af_kb_arpg_acs_ability(array $ability, string $path, array &$diagnostics): array
 {
-    $ability = af_kb_arpg_acs_aliases($ability, ['target' => 'targeting', 'duration_value' => 'duration'], $path, $diagnostics);
+    $ability = af_kb_arpg_acs_aliases(af_kb_arpg_omit_empty_ability_timing($ability), ['target' => 'targeting', 'duration_value' => 'duration', 'cooldown_value' => 'cooldown'], $path, $diagnostics);
     af_kb_arpg_acs_modifiers($ability, $path, $diagnostics);
     af_kb_arpg_acs_numeric($ability, ['cooldown', 'cooldown_value', 'cost_value', 'duration_value', 'damage_value', 'heal_value', 'shield_value'], $path, $diagnostics);
     $references = [];
@@ -8771,11 +8813,7 @@ function af_kb_arpg_acs_ability(array $ability, string $path, array &$diagnostic
         if (isset($ability[$field]) && $ability[$field] !== '') $references[$field] = af_kb_arpg_acs_reference($kind, $ability[$field], $path . '.' . $field, $diagnostics);
     }
     if (!empty($ability['math_modifiers'])) $references['math_modifiers'] = af_kb_arpg_math_modifier_references($ability, $path, $diagnostics);
-    foreach (['cooldown_value' => 'cooldown_unit', 'duration_value' => 'duration_unit'] as $value => $unit) {
-        if (isset($ability[$value]) && $ability[$value] !== '' && (!isset($ability[$unit]) || $ability[$unit] === '')) af_kb_arpg_acs_diagnostic($diagnostics, 'duration_unit_missing', $path . '.' . $unit);
-        if (isset($ability[$unit]) && $ability[$unit] !== '' && !in_array($ability[$unit], ['own_turn', 'target_turn', 'round'], true)) af_kb_arpg_acs_diagnostic($diagnostics, 'unsupported_duration_unit', $path . '.' . $unit);
-    }
-    if (isset($ability['cooldown']) && $ability['cooldown'] !== '' && !isset($ability['cooldown_value']) && empty($ability['cooldown_unit'])) af_kb_arpg_acs_diagnostic($diagnostics, 'duration_unit_missing', $path . '.cooldown_unit');
+    af_kb_arpg_acs_ability_timing($ability, $path, $diagnostics);
     if (isset($ability['cost_value']) && $ability['cost_value'] !== '' && empty($ability['cost_resource'])) af_kb_arpg_acs_diagnostic($diagnostics, 'required_field_missing', $path . '.cost_resource');
     $effects = [];
     if (isset($ability['effects']) && !is_array($ability['effects'])) af_kb_arpg_acs_diagnostic($diagnostics, 'expected_array', $path . '.effects');
@@ -8796,7 +8834,7 @@ function af_kb_arpg_acs_ability(array $ability, string $path, array &$diagnostic
             af_kb_arpg_acs_diagnostic($diagnostics, 'empty_effect', $effectPath, 'warning');
             continue;
         }
-        $effect = af_kb_arpg_acs_aliases($original, ['effect_type' => 'kind', 'target' => 'targeting', 'duration_value' => 'duration'], $effectPath, $diagnostics);
+        $effect = af_kb_arpg_acs_aliases(af_kb_arpg_omit_empty_ability_timing($original), ['effect_type' => 'kind', 'target' => 'targeting', 'duration_value' => 'duration'], $effectPath, $diagnostics);
         $inherited = [];
         foreach (['formula_profile', 'target', 'damage_type'] as $field) {
             if ((!array_key_exists($field, $effect) || $effect[$field] === '') && array_key_exists($field, $ability)) {
@@ -8882,7 +8920,6 @@ function af_kb_arpg_normalize_entry(array $entry, ?int $abilityIndex = null): ar
     $type = $entry['type'] ?? '';
     $normalized = ['definition' => $rules];
     $accuracyPath = match ($type) {
-        'character' => ($rules['character_meta']['mechanic'] ?? null) === 'arpg' ? 'character_stats.character_accuracy' : null,
         'arpg_origin', 'arpg_archetype' => 'accuracy_base',
         'arpg_bestiary' => 'combat_stats.accuracy',
         default => null,
@@ -8981,8 +9018,6 @@ function af_kb_arpg_normalize_entry(array $entry, ?int $abilityIndex = null): ar
     $key = $entry['key'] ?? null;
     if (in_array($type, ['arpg_origin','arpg_archetype'], true)) {
         $normalized['status_resistance_base'] = af_kb_arpg_status_resistance($rules, 'definition', $diagnostics, 'status_resistance_base', 'status_resist_base');
-    } elseif ($type === 'character' && ($rules['character_meta']['mechanic'] ?? null) === 'arpg') {
-        $normalized['status_resistance'] = af_kb_arpg_status_resistance((array)($rules['character_stats'] ?? []), 'character_stats', $diagnostics, 'character_status_resistance', 'character_status_resist');
     }
     $normalized = af_kb_arpg_project_stat_identifiers($normalized);
     return ['schema' => AF_KB_ARPG_SHEET_NORMALIZED_SCHEMA,

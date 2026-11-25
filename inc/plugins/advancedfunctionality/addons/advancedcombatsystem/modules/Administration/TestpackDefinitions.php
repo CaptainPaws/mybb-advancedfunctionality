@@ -15,11 +15,12 @@ final class AF_ACS_TestpackDefinitions
         $add('origin', 'arpg_origin', 'Огненный авангард', 'Учебное происхождение для приёмки ACS.', [
             'size'=>'medium', 'creature_type'=>'humanoid', 'hp_base'=>100, 'attack_power_base'=>10,
             'defense_base'=>5, 'movement_speed'=>100, 'accuracy_base'=>90, 'crit_damage_base'=>50, 'status_resist_base'=>0,
+            'resistances'=>array_fill_keys(array_keys($primaryElements), 0),
             'racial_traits_text'=>'Гуманоид среднего размера, обученный держать строй.',
             'starting_notes'=>'Выберите основную стихию Огонь в анкете.',
         ]);
         $add('archetype', 'arpg_archetype', 'Пламенный воитель', 'Воитель первой линии с двуручным оружием.', [
-            'base_defense_bonus'=>0, 'defense_base'=>2, 'attack_power_base'=>2, 'accuracy_base'=>0,
+            'base_defense_bonus'=>0, 'defense_base'=>2, 'attack_power_base'=>2, 'accuracy_base'=>0, 'status_resist_base'=>0,
             'slot_rules_text'=>'Двуручное оружие, физические и огненные атаки, защитные реакции.',
         ]);
 

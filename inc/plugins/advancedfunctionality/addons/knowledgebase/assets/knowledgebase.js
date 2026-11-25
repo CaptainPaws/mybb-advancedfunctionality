@@ -1048,7 +1048,7 @@
         }
 
         var arpgLabels = {"type":"Тип способности","subtype":"Подтип","slot":"Слот способности","damage_type":"Тип урона","targeting":"Цель","range":"Дальность","cast_time":"Время применения","cooldown":"Кулдаун","duration":"Длительность","max_charges":"Количество зарядов","level_cap":"Максимальный уровень","kind":"Тип эффекта","value":"Величина","value_mode":"Способ расчёта","hit_count":"Количество попаданий","status_key":"Статус","notes":"Примечание","op":"Действие","resource_key":"Ресурс","per":"Период расходования","formula_ref":"Формула расчёта","active":"Активная","passive":"Пассивная","ultimate":"Ультимативная","physical":"Физический","elemental":"Стихийный","true":"Истинный","healing":"Лечение","hybrid":"Смешанный","damage":"Урон","heal":"Лечение","shield":"Щит","barrier":"Барьер","status":"Статус","proc":"Срабатывание","self":"На себя","single_enemy":"Один противник","single_ally":"Один союзник","line":"Линия","cone":"Конус","aoe_ground":"Область на земле","aoe_around_self":"Область вокруг себя","global":"Все цели","custom":"Особый вариант","flat":"Фиксированное значение","percent":"Проценты","cast":"Применение","spend":"Потратить","gain":"Получить","drain":"Отнять","restore":"Восстановить","resource_spend":"Расход ресурса","resource_gain":"Получение ресурса","resource_drain":"Отнятие ресурса","resource_restore":"Восстановление ресурса","resources":"Ресурсы","effects":"Эффекты","modifiers":"Модификаторы","triggers":"Срабатывания","conditions":"Условия","stacking":"Накопление эффектов","upgrade_requirements":"Требования улучшения","grants":"Предоставляемые возможности","default":"Новая запись","basic":"Базовый слот","skill_1":"Первый навык","skill_2":"Второй навык","skill_3":"Третий навык","support":"Поддержка","aura":"Аура","toggle":"Переключаемая","summon":"Призыв","reaction":"Реакция","movement":"Перемещение","own_turn":"Собственные ходы","target_turn":"Ходы цели","round":"Раунды","Resources":"Ресурсы"};
-        Object.assign(arpgLabels,{stat_key:'Характеристика',mode:'Операция',condition_text:'Условие',event:'Событие',action_text:'Действие',condition_type:'Вид условия',stack_key:'Группа накопления',max_stacks:'Максимум уровней эффекта',policy:'Правило накопления',level:'Уровень',required_item_key:'Требуемый предмет',required_qty:'Количество предметов',required_currency_key:'Требуемая валюта',required_currency_qty:'Количество валюты',grant_type:'Вид возможности',value_num:'Числовая величина',tag:'Метка',ability_unlock:'Доступ к способности',item_unlock:'Доступ к предмету',resource_bonus:'Бонус ресурса',passive_flag:'Пассивная возможность',duration_unit:'Единица длительности',sortorder:'Порядок',ability_name:'Название способности',ability_description:'Описание способности',ability_kb_key:'Способность из Базы знаний',slot_index:'Номер слота',icon_url:'Ссылка на иконку',icon_class:'Класс иконки',multiplier:'Множитель',override:'Заменить значение',normal:'Обычный',elite:'Элитный',champion:'Чемпион',boss:'Босс',world_boss:'Мировой босс',raid_boss:'Рейдовый босс'});
+        Object.assign(arpgLabels,{multiple:'Несколько целей',all_allies:'Все союзники',stat_key:'Характеристика',mode:'Операция',condition_text:'Условие',event:'Событие',action_text:'Действие',condition_type:'Вид условия',stack_key:'Группа накопления',max_stacks:'Максимум уровней эффекта',policy:'Правило накопления',level:'Уровень',required_item_key:'Требуемый предмет',required_qty:'Количество предметов',required_currency_key:'Требуемая валюта',required_currency_qty:'Количество валюты',grant_type:'Вид возможности',value_num:'Числовая величина',tag:'Метка',ability_unlock:'Доступ к способности',item_unlock:'Доступ к предмету',resource_bonus:'Бонус ресурса',passive_flag:'Пассивная возможность',duration_unit:'Единица длительности',sortorder:'Порядок',ability_name:'Название способности',ability_description:'Описание способности',ability_kb_key:'Способность из Базы знаний',slot_index:'Номер слота',icon_url:'Ссылка на иконку',icon_class:'Класс иконки',multiplier:'Множитель',override:'Заменить значение',normal:'Обычный',elite:'Элитный',champion:'Чемпион',boss:'Босс',world_boss:'Мировой босс',raid_boss:'Рейдовый босс'});
         (typeSchema.primary_element_options || []).forEach(function (option) { arpgLabels[option.value] = option.label; });
         Object.assign(arpgLabels,{wind:'Воздух (старый ключ)',electric:'Электрический',dark:'Тёмный (старый ключ)',fire:'Огонь',water:'Вода',air:'Воздух',earth:'Земля',ice:'Лёд',lightning:'Молния',nature:'Природа',light:'Свет',shadow:'Тьма',death:'Смерть',life:'Жизнь',chaos:'Хаос',mind:'Разум',abyss:'Бездна',gravity:'Гравитация',astral:'Астрал',space:'Пространство'});
         Object.assign(arpgLabels,{family:'Семейство',archetype:'Архетип',faction:'Фракция',rank:'Ранг',threat_tier:'Уровень угрозы',level:'Уровень','Bestiary core':'Основные параметры монстра','Combat stats':'Боевые характеристики','combat_stats.hp':'Здоровье (HP)','combat_stats.atk':'Атака','combat_stats.def':'Защита','combat_stats.speed':'Скорость','combat_stats.crit_rate':'Шанс критического удара','combat_stats.crit_dmg':'Критический урон','combat_stats.element_damage_bonus':'Бонус стихийного урона','combat_stats.mastery':'Мастерство','combat_stats.healing_bonus':'Бонус лечения','combat_stats.shield_strength':'Прочность щита','combat_stats.status_hit':'Попадание статусом','combat_stats.luck':'Удача',weaknesses:'Уязвимости',loot:'Добыча',loot_key:'Запись добычи',qty_min:'Минимальное количество',qty_max:'Максимальное количество',chance:'Шанс, %',item:'Предмет',currency:'Валюта',material:'Материал',reward:'Награда'});
@@ -1459,20 +1459,18 @@
                     rules = payload.rules;
                 }
 
-                if (typeof rules.service_kind !== 'string') rules.service_kind = '';
-                if (entityType === 'service_mechanics' && serviceKinds.indexOf(rules.service_kind) === -1) {
-                    rules.service_kind = serviceKinds[0];
+                if (entityType === 'service_mechanics') {
+                    if (serviceKinds.indexOf(rules.service_kind) === -1) rules.service_kind = serviceKinds[0];
+                    rules.visibility = ensureObject(rules, 'visibility');
+                    if (typeof rules.visibility.catalog !== 'boolean') rules.visibility.catalog = false;
+                    if (typeof rules.visibility.search !== 'boolean') rules.visibility.search = false;
+                    if (typeof rules.visibility.internal !== 'boolean') rules.visibility.internal = true;
                 }
-
-                rules.visibility = ensureObject(rules, 'visibility');
-                if (typeof rules.visibility.catalog !== 'boolean') rules.visibility.catalog = false;
-                if (typeof rules.visibility.search !== 'boolean') rules.visibility.search = false;
-                if (typeof rules.visibility.internal !== 'boolean') rules.visibility.internal = false;
 
                 // Страховка для arpg_item: эти поля должны существовать в payload даже до первого input/change.
                 if (entityType === 'item') {
                     if (typeof rules.item_kind !== 'string' || !rules.item_kind) rules.item_kind = 'weapon';
-                    if (typeof rules.equip_slot !== 'string' || !rules.equip_slot) rules.equip_slot = 'weapon_one_hand';
+                    if (typeof rules.equip_slot !== 'string') rules.equip_slot = rules.item_kind === 'weapon' ? 'weapon_one_hand' : '';
                     if (typeof rules.rarity !== 'string' || !rules.rarity) rules.rarity = 'common';
                     if (typeof rules.subtype !== 'string') rules.subtype = '';
                     if (typeof rules.progression_stage !== 'string' || !rules.progression_stage) rules.progression_stage = 'base';
@@ -1498,7 +1496,7 @@
                 abilitySubtype: ['', 'active', 'passive', 'ultimate', 'support', 'aura', 'toggle', 'summon', 'reaction', 'movement'],
                 abilitySlot: ['', 'basic', 'skill_1', 'skill_2', 'skill_3', 'support', 'ultimate', 'passive', 'custom'],
                 damageType: ['', 'physical', 'elemental', 'healing', 'hybrid', 'fire', 'ice', 'water', 'electric', 'wind', 'earth', 'nature', 'light', 'dark', 'void', 'quantum', 'imaginary', 'aether', 'anomaly', 'ether', 'fusion', 'glacio', 'aero', 'havoc', 'spectro', 'dendro', 'pyro', 'hydro', 'electro', 'cryo', 'anemo', 'geo', 'lightning', 'poison', 'acid', 'bleed', 'arcane', 'holy', 'shadow', 'slash', 'pierce', 'blunt', 'true', 'kinetic', 'custom'],
-                targeting: ['', 'self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom'],
+                targeting: ['', 'self', 'single_enemy', 'single_ally', 'multiple', 'all_allies', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom'],
                 rarity: ['', 'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic', 'set', 'unique', 'custom'],
                 itemKind: ['', 'weapon', 'armor', 'accessory', 'artifact', 'consumable', 'material', 'quest', 'custom'],
                 equipSlot: ['', 'weapon_one_hand', 'weapon_two_hand', 'weapon_catalyst', 'weapon_ranged', 'weapon_polearm', 'head', 'chest', 'legs', 'hands', 'feet', 'ring', 'amulet', 'trinket', 'custom'],
@@ -1677,7 +1675,12 @@
                         card.textContent='Сохранённое значение: ' + String(row);
                     } else {
                         var grid=document.createElement('div'); grid.className='af-kb-row';
-                        columns.forEach(function (column) {grid.appendChild(fieldCell(row,column,syncToRaw));});
+                        columns.forEach(function (column) {
+                            var field = column.alias && !Object.prototype.hasOwnProperty.call(row, column.key)
+                                && Object.prototype.hasOwnProperty.call(row, column.alias)
+                                ? Object.assign({}, column, {key:column.alias}) : column;
+                            grid.appendChild(fieldCell(row,field,syncToRaw));
+                        });
                         if (key === 'character_abilities') renderVisualMechanics(grid,row,false);
                         card.appendChild(grid);
                     }
@@ -2184,8 +2187,10 @@
                     { key: 'targeting', label: 'targeting', type: 'select', options: enums.targeting, default: 'single_enemy' },
                     { key: 'range', label: 'Дальность / Range', type: 'number', default: 0 },
                     { key: 'cast_time', label: 'cast_time', type: 'number', default: 0 },
-                    { key: 'cooldown', label: 'cooldown', type: 'number', default: 0 },
-                    { key: 'duration', label: 'duration', type: 'number', default: 0 },
+                    { key: payload.rules.cooldown_value != null || payload.rules.cooldown == null ? 'cooldown_value' : 'cooldown', label: 'Кулдаун', type: 'number', optional: true },
+                    { key: 'cooldown_unit', label: 'Единица кулдауна', type: 'select', options: ['', 'own_turn', 'target_turn', 'round'], optional: true },
+                    { key: payload.rules.duration_value != null || payload.rules.duration == null ? 'duration_value' : 'duration', label: 'Длительность', type: 'number', optional: true },
+                    { key: 'duration_unit', label: 'Единица длительности', type: 'select', options: ['', 'own_turn', 'target_turn', 'round'], optional: true },
                     { key: 'max_charges', label: 'max_charges', type: 'number', default: 1 },
                     { key: 'level_cap', label: 'level_cap', type: 'number', default: 20 }
                 ], 'Основные параметры способности');
@@ -2208,24 +2213,28 @@
                 renderSeededArrayEditor(rulesRoot, 'effects', 'effects', [
                     { key: 'damage_element', label: 'Основная стихия урона', type: 'select', options: primaryElementOptions, optional: true },
                     { key: 'magic_direction_ref', label: 'Направление магии', type: 'picker', source: 'magic_direction' },
-                    { key: 'kind', label: 'Тип эффекта', default: 'damage' },
+                    { key: 'effect_type', alias: 'kind', label: 'Тип эффекта', optional: true },
                     { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
                     { key: 'targeting', label: 'targeting', type: 'select', options: enums.targeting, default: 'single_enemy' },
-                    { key: 'value_mode', label: 'value_mode', default: 'flat' },
-                    { key: 'value', label: 'value', type: 'number', default: 0 },
+                    { key: 'value_mode', label: 'value_mode', optional: true },
+                    { key: 'value', label: 'value', type: 'number', optional: true },
                     { key: 'formula_ref', label: 'Формула расчёта', type: 'picker', source: 'formula_def' },
-                    { key: 'duration', label: 'duration', type: 'number', default: 0 },
+                    { key: 'duration_value', alias: 'duration', label: 'duration', type: 'number', optional: true },
                     { key: 'duration_unit', label: 'duration_unit', type: 'select', options: ['', 'own_turn', 'target_turn', 'round'], optional: true },
-                    { key: 'hit_count', label: 'hit_count', type: 'number', default: 1 },
-                    { key: 'status_key', label: 'status_key', default: '' },
-                    { key: 'notes', label: 'notes', default: '' }
+                    { key: 'hit_count', label: 'hit_count', type: 'number', optional: true },
+                    { key: 'status_key', label: 'status_key', optional: true },
+                    { key: 'notes', label: 'notes', optional: true },
+                    { key: 'mass', label: 'Массовый эффект', type: 'json', optional: true },
+                    { key: 'scope', label: 'Область барьера', type: 'select', options: ['', 'per_target', 'shared_pool'], optional: true },
+                    { key: 'absorbs', label: 'Типы поглощаемого урона', type: 'json', optional: true },
+                    { key: 'base_chance', label: 'Базовый шанс статуса', type: 'number', optional: true },
+                    { key: 'polarity', label: 'Полярность статуса', optional: true },
+                    { key: 'trigger', label: 'Момент срабатывания', optional: true }
                 ], [
-                    { key: 'damage', label: 'damage', seed: { kind: 'damage', damage_type: 'physical', targeting: 'single_enemy', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } },
-                    { key: 'heal', label: 'heal', seed: { kind: 'heal', damage_type: '', targeting: 'single_ally', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } },
-                    { key: 'shield', label: 'shield', seed: { kind: 'shield', damage_type: '', targeting: 'single_ally', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } },
-                    { key: 'barrier', label: 'barrier', seed: { kind: 'barrier', damage_type: '', targeting: 'single_ally', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } },
-                    { key: 'status', label: 'status', seed: { kind: 'status', damage_type: '', targeting: 'single_enemy', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } },
-                    { key: 'proc', label: 'proc', seed: { kind: 'proc', damage_type: '', targeting: 'single_enemy', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } }
+                    { key: 'damage', label: 'damage', seed: { effect_type: 'damage', damage_type: 'physical', target: 'single_enemy', value: 0 } },
+                    { key: 'heal', label: 'heal', seed: { effect_type: 'heal', target: 'single_ally', value: 0 } },
+                    { key: 'shield', label: 'shield', seed: { effect_type: 'shield', target: 'single_ally', value: 0 } },
+                    { key: 'status', label: 'status', seed: { effect_type: 'status', target: 'single_enemy' } }
                 ]);
 
                 var rowSchemas = {
@@ -2316,6 +2325,11 @@
                     { key: 'level_cap', label: 'level_cap', type: 'number', default: 100 }
                 ], 'Item core');
 
+                if (payload.rules.item && typeof payload.rules.item === 'object' && !Array.isArray(payload.rules.item)) {
+                    var inventory = createSection(rulesRoot, 'Правила инвентаря');
+                    inventory.appendChild(fieldCell(payload.rules.item,{key:'equip',label:'Экипировка (JSON)',type:'json',optional:true},syncToRaw));
+                    inventory.appendChild(fieldCell(payload.rules.item,{key:'on_use',label:'Применение (JSON)',type:'json',optional:true},syncToRaw));
+                }
                 var itemKind = String(payload.rules.item_kind || 'weapon');
 
                 if (itemKind === 'weapon') {
@@ -2585,7 +2599,7 @@
                             } else {
                                 if (!source || typeof source !== 'object')source=[];
                                 var row={scope:'elemental',unit:'RES',value:number};
-                                if(Array.isArray(source)){row.element=option.value;source.push(row);}else source[option.value]=row;
+                                if(Array.isArray(source)){row.damage_type='elemental';row.damage_element=option.value;source.push(row);}else source[option.value]=row;
                             }
                             payload.rules.resists=source;syncToRaw();
                         });

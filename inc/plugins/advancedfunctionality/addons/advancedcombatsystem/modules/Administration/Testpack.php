@@ -28,10 +28,10 @@ final class AF_ACS_Testpack
         return $result;
     }
 
-    private static function row(string $table, string $where): ?array
+    private static function row(string $table, string $where, string $suffix = ''): ?array
     {
         global $db;
-        return $db->fetch_array(self::query('SELECT * FROM `'.TABLE_PREFIX.$table.'` WHERE '.$where.' LIMIT 1')) ?: null;
+        return $db->fetch_array(self::query('SELECT * FROM `'.TABLE_PREFIX.$table.'` WHERE '.$where.' LIMIT 1'.$suffix)) ?: null;
     }
 
     private static function insert(string $table, array $row): int
@@ -274,6 +274,205 @@ final class AF_ACS_Testpack
         return preg_match('/\A(?:ACS_TESTPACK_[A-Z_]+(?::[a-z0-9_]+){0,2}|[a-z][a-z0-9_]{3,100})\z/D',$code) ? $code : 'ACS_TESTPACK_CHECK_FAILED';
     }
 
+    /** Preserve JSON object/list types and untouched fields in each stored projection. */
+    private static function patchJson(mixed $original, mixed $before, mixed $after): mixed
+    {
+        if ($before === $after) return $original;
+        if (!is_array($before) || !is_array($after)) return $after;
+        $values = (array)$original;
+        foreach (array_diff_key($before,$after) as $key=>$ignored) unset($values[$key]);
+        foreach ($after as $key=>$value) {
+            $values[$key] = array_key_exists($key,$before)
+                ? self::patchJson($values[$key] ?? null,$before[$key],$value) : $value;
+        }
+        return is_object($original) ? (object)$values : $values;
+    }
+
+    /** The installation ledger establishes ownership. Custom mechanics remain as stored. */
+    private static function repairPlan(array $entries, array $ledger, bool $lock = false): array
+    {
+        global $db;
+        $plan = $pins = [];
+        $suffix = $lock ? ' FOR UPDATE' : '';
+        foreach ($entries as $key => $entry) {
+            $type = $entry['type'];
+            $id = (int)($ledger['kb'][$key] ?? 0);
+            $plan[$key] = ['id'=>$id, 'type'=>$type, 'changes'=>[], 'manual'=>[], 'problem'=>'', 'writes'=>[]];
+            $item = &$plan[$key];
+            $row = self::row('af_kb_entries', "id={$id} AND type='{$type}' AND `key`='{$key}'",$suffix);
+            if (!$row || !$row['active']) {
+                $item['problem'] = 'Запись отсутствует, заменена или отключена.';
+                unset($item);
+                continue;
+            }
+            $issues = [];
+            $source = af_kb_arpg_acs_source($row,$issues);
+            $old = $source['rules'];
+            $data = json_decode($row['data_json']);
+            $meta = json_decode($row['meta_json']);
+            $blockRows = self::query('SELECT id,data_json FROM `'.TABLE_PREFIX."af_kb_blocks` WHERE entry_id={$id} AND block_key='data' ORDER BY id LIMIT 2".$suffix);
+            $block = $db->fetch_array($blockRows);
+            if ($issues || !is_object($data->rules ?? null) || !is_object($meta->rules ?? null)
+                || !$block || $db->fetch_array($blockRows) || ($old['schema'] ?? null) !== AF_KB_ARPG_RULES_SCHEMA) {
+                $item['problem'] = 'Проверьте проекции KB и блок данных отдельно.';
+                unset($item);
+                continue;
+            }
+            $blockData = json_decode($block['data_json']);
+            if (!is_object($blockData->rules ?? null)
+                || af_kb_arpg_acs_fingerprint($blockData->rules) !== $source['fingerprint']) {
+                $item['problem'] = 'Блок данных отличается от механической записи. Нужна отдельная сверка в KB.';
+                unset($item);
+                continue;
+            }
+            $new = $old;
+            if ($type === 'arpg_ability') {
+                $new = af_kb_arpg_omit_empty_ability_timing($old);
+                // Old public ability forms also materialized empty service-only settings.
+                if (($new['service_kind'] ?? null) === '') unset($new['service_kind']);
+                $visibility = $new['visibility'] ?? null;
+                if (is_array($visibility) && count($visibility) === 3
+                    && ($visibility['catalog'] ?? null) === false && ($visibility['search'] ?? null) === false
+                    && ($visibility['internal'] ?? null) === false) unset($new['visibility']);
+                foreach (($old['effects'] ?? []) as $index=>$effect) {
+                    if (is_array($effect)) $new['effects'][$index] = af_kb_arpg_omit_empty_ability_timing($effect);
+                }
+            }
+            if ($type === 'arpg_archetype') {
+                if (!array_key_exists('accuracy_base',$old)) $new['accuracy_base'] = $entry['rules']['accuracy_base'];
+                if (!array_key_exists('status_resist_base',$old) && !array_key_exists('status_resistance_base',$old)) {
+                    $new['status_resist_base'] = $entry['rules']['status_resist_base'];
+                }
+            }
+            if ($type === 'arpg_origin' && !array_key_exists('resistances',$old) && !array_key_exists('resists',$old)) {
+                $new['resistances'] = $entry['rules']['resistances'];
+            }
+            if ($type === 'arpg_bestiary') {
+                $expectedKeys = array_column($entry['rules']['ability_keys'],'_editor_ability_key');
+                foreach (array_diff_key($expectedKeys,(array)($old['ability_keys'] ?? [])) as $index=>$abilityKey) {
+                    $item['manual']['ability_keys.'.$index] = ['stored'=>null,'template'=>$abilityKey];
+                }
+                foreach (($old['ability_keys'] ?? []) as $index=>$ref) {
+                    $abilityKey = is_array($ref) ? ($ref['ability_kb_key'] ?? null) : null;
+                    if ($abilityKey !== ($expectedKeys[$index] ?? null)) {
+                        $item['manual']['ability_keys.'.$index] = ['stored'=>$ref,'template'=>$expectedKeys[$index] ?? null];
+                        continue;
+                    }
+                    if (!isset($pins[$abilityKey])) continue;
+                    [$from,$to] = $pins[$abilityKey];
+                    if (isset($ref['ability_definition_version'],$ref['ability_fingerprint'])
+                        && af_kb_arpg_acs_fingerprint($ref['ability_definition_version']) === af_kb_arpg_acs_fingerprint($from)
+                        && $ref['ability_fingerprint'] === $from['fingerprint']) {
+                        $new['ability_keys'][$index]['ability_definition_version'] = $to;
+                        $new['ability_keys'][$index]['ability_fingerprint'] = $to['fingerprint'];
+                    } else {
+                        $item['manual']['ability_keys.'.$index] = ['stored'=>$ref,'template_pin'=>$from,'review'=>'Проверьте закреплённую версию в KB.'];
+                    }
+                }
+            }
+            $template = $entry['rules'];
+            if ($type === 'arpg_bestiary') unset($template['ability_keys']); // Compared by key and pin above.
+            [$expected,$errors] = self::validate($type,$template);
+            if ($errors) throw new RuntimeException('ACS_TESTPACK_KB_INVALID:'.$key);
+            foreach (array_unique(array_merge(array_keys($old),array_keys($expected['rules']))) as $field) {
+                if ($field !== 'ability_keys' && af_kb_arpg_acs_fingerprint($new[$field] ?? null)
+                    !== af_kb_arpg_acs_fingerprint($expected['rules'][$field] ?? null)) {
+                    $item['manual'][$field] = ['stored'=>$old[$field] ?? null,'template'=>$expected['rules'][$field] ?? null];
+                }
+            }
+            foreach (['title_ru'=>'title','short_ru'=>'description','body_ru'=>'description'] as $column=>$field) {
+                if ($row[$column] !== $entry[$field]) $item['manual'][$column] = ['stored'=>$row[$column],'template'=>$entry[$field]];
+            }
+            if ($new !== $old) {
+                [, $errors] = self::validate($type,$new);
+                if ($errors) {
+                    $item['problem'] = implode('; ', $errors);
+                    unset($item);
+                    continue;
+                }
+                foreach (array_unique(array_merge(array_keys($old),array_keys($new))) as $field) {
+                    if (($old[$field] ?? null) !== ($new[$field] ?? null) || array_key_exists($field,$old) !== array_key_exists($field,$new)) {
+                        $item['changes'][$field] = ['before'=>$old[$field] ?? null,'after'=>$new[$field] ?? null];
+                    }
+                }
+                $data->rules = self::patchJson($data->rules,$old,$new);
+                if (($meta->rules->schema ?? null) === AF_KB_ARPG_META_SCHEMA && is_object($meta->rules->rules ?? null)) {
+                    $meta->rules->rules = self::patchJson($meta->rules->rules,$old,$new);
+                } else {
+                    $meta->rules = self::patchJson($meta->rules,$old,$new);
+                }
+                $blockData->rules = self::patchJson($blockData->rules,$old,$new);
+                $item['writes'] = ['data'=>$data,'meta'=>$meta,'block'=>$blockData,'block_id'=>(int)$block['id'],
+                    'expected'=>af_kb_arpg_acs_fingerprint([$row['data_json'],$row['meta_json'],$block['data_json']])];
+                if ($type === 'arpg_ability') {
+                    $version = ['revision'=>$row['revision'] ?? $old['revision'] ?? null,
+                        'declared_version'=>$old['version'] ?? null,'fingerprint'=>$source['fingerprint']];
+                    $pins[$key] = [$version,array_replace($version,['fingerprint'=>af_kb_arpg_acs_fingerprint($data->rules)])];
+                }
+            }
+            unset($item);
+        }
+        return $plan;
+    }
+
+    private static function repair(array $entries, string $expected, int $uid): int
+    {
+        global $db;
+        self::query('START TRANSACTION');
+        try {
+            $ledger = self::ledger();
+            if ($ledger === null) throw new RuntimeException('ACS_TESTPACK_PROVENANCE_INVALID');
+            $plan = self::repairPlan($entries,$ledger,true);
+            if (!hash_equals(af_kb_arpg_acs_fingerprint($plan),$expected)) throw new RuntimeException('ACS_TESTPACK_PREVIEW_CHANGED');
+            $count = 0;
+            foreach ($plan as $key=>$item) {
+                if (!$item['writes']) continue;
+                $write = $item['writes'];
+                $quote = static fn(object $value): string => "'".$db->escape_string(json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION))."'";
+                self::query('UPDATE `'.TABLE_PREFIX.'af_kb_entries` SET data_json='.$quote($write['data'])
+                    .',meta_json='.$quote($write['meta']).',updated_at='.TIME_NOW.' WHERE id='.$item['id']);
+                self::query('UPDATE `'.TABLE_PREFIX.'af_kb_blocks` SET data_json='.$quote($write['block']).' WHERE id='.$write['block_id']);
+                self::insert('af_kb_log',['uid'=>$uid,'action'=>'update','type'=>$item['type'],'key'=>$key,
+                    'diff_json'=>json_encode(['provenance'=>self::LEDGER_TYPE,'repair'=>'ACS-TESTPACK-02',
+                        'id'=>$item['id'],'changes'=>$item['changes']],JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),'dateline'=>TIME_NOW]);
+                ++$count;
+            }
+            self::query('COMMIT');
+            return $count;
+        } catch (Throwable $error) {
+            self::query('ROLLBACK');
+            throw $error;
+        }
+    }
+
+    private static function renderRepair(array $plan): void
+    {
+        global $mybb;
+        echo '<h3>Обновить механические определения тестового комплекта</h3>'
+            .'<p>Для каждого совпавшего ID журнала показаны безопасные изменения и поля для отдельной проверки в редакторе KB.</p><ul>';
+        $hasWrites = false;
+        foreach ($plan as $key=>$item) {
+            echo '<li><code>'.self::esc($key).'</code> · ID '.$item['id'];
+            if ($item['problem'] !== '') echo ' · '.self::esc($item['problem']);
+            if ($item['manual']) {
+                echo '<details><summary>Отличия для отдельной проверки в KB</summary><pre>'
+                    .self::esc(json_encode($item['manual'],JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)).'</pre></details>';
+            }
+            if ($item['changes']) {
+                $hasWrites = true;
+                echo '<details><summary>Безопасные изменения</summary><pre>'.self::esc(json_encode($item['changes'],JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)).'</pre></details>';
+            } elseif (!$item['manual'] && $item['problem'] === '') echo ' · Актуально';
+            echo '</li>';
+        }
+        echo '</ul>';
+        if (!$hasWrites) return;
+        echo '<form method="post"><input type="hidden" name="my_post_key" value="'.self::esc($mybb->post_code).'">'
+            .'<input type="hidden" name="acs_command" value="repair_testpack">'
+            .'<input type="hidden" name="acs_repair_preview" value="'.self::esc(af_kb_arpg_acs_fingerprint($plan)).'">'
+            .'<label><input type="checkbox" name="acs_confirm" value="1" required> Подтверждаю показанные безопасные изменения.</label> '
+            .'<button type="submit" class="submit_button">Обновить механические определения тестового комплекта</button></form>';
+    }
+
     private static function abilityCodes(string $key, int $uid): array
     {
         $adapter = new AF_ACS_KnowledgeBaseAdapter;
@@ -322,6 +521,8 @@ final class AF_ACS_Testpack
                     foreach ($errors as $error) $codes[] = 'kb_validation: '.$error;
                     if (!$codes && $type === 'arpg_ability') {
                         $codes = self::abilityCodes($key,$uid);
+                    } elseif (!$codes && in_array($type,['arpg_origin','arpg_archetype'],true)) {
+                        $codes = self::codes(af_kb_arpg_normalize_entry($row)['diagnostics']);
                     } elseif (!$codes && $type === 'arpg_bestiary') {
                         $registration = new AF_ACS_RegistrationSource;
                         $dto = $registration->read('monster',$key,$uid);
@@ -397,6 +598,9 @@ final class AF_ACS_Testpack
             $failure = $error instanceof Error ? $stage : self::safeCode($error);
         }
         $ready = $failure === '' && $entries && !array_filter($checks);
+        $repairReady = $failure === '' && $entries && !array_filter(array_intersect_key($checks,array_flip([
+            'knowledgebase','MySQL writer','af_kb_entries','af_kb_blocks','af_kb_log','af_kb_types','Контракт KB','Настройка KB',
+        ])));
         echo '<h3>Зависимости</h3><table class="general"><thead><tr><th>Компонент</th><th>Состояние</th></tr></thead><tbody>';
         foreach ($checks as $name => $reason) {
             echo '<tr><td>'.self::esc($name).'</td><td>'.($reason === '' ? 'Доступно' : self::esc($reason)).'</td></tr>';
@@ -415,6 +619,7 @@ final class AF_ACS_Testpack
 
         $ledger = null;
         $created = false;
+        $repaired = null;
         $uid = (int)$mybb->user['uid'];
         try {
             if (($checks['af_kb_log'] ?? null) === '') $ledger = self::ledger();
@@ -422,10 +627,14 @@ final class AF_ACS_Testpack
                 if (!verify_post_check($mybb->get_input('my_post_key'), true)) {
                     throw new RuntimeException('ACS_TESTPACK_CSRF_INVALID');
                 }
-                if ($mybb->get_input('acs_command') !== 'install_testpack' || $mybb->get_input('acs_confirm') !== '1') {
+                $command = $mybb->get_input('acs_command');
+                if (!in_array($command,['install_testpack','repair_testpack'],true) || $mybb->get_input('acs_confirm') !== '1') {
                     throw new RuntimeException('ACS_TESTPACK_CONFIRMATION_REQUIRED');
                 }
-                if ($ledger === null) {
+                if ($command === 'repair_testpack') {
+                    if (!$ledger || !$repairReady) throw new RuntimeException('ACS_TESTPACK_DEPENDENCY_UNAVAILABLE');
+                    $repaired = self::repair($entries,$mybb->get_input('acs_repair_preview'),$uid);
+                } elseif ($ledger === null) {
                     if (!$ready) throw new RuntimeException('ACS_TESTPACK_DEPENDENCY_UNAVAILABLE');
                     $created = self::install($entries,$uid);
                     $ledger = self::ledger();
@@ -446,9 +655,11 @@ final class AF_ACS_Testpack
         }
         if ($ledger) {
             echo $created ? '<p>Тестовый комплект установлен.</p>' : '<p>Тестовый комплект уже установлен.</p>';
-            if ($ready) {
+            if ($repairReady || $ready) {
                 try {
-                    self::readiness($entries,$ledger,$uid);
+                    if ($repaired !== null) echo '<p role="status">Обновлено определений: '.(int)$repaired.'.</p>';
+                    if ($repairReady) self::renderRepair(self::repairPlan($entries,$ledger));
+                    if ($ready) self::readiness($entries,$ledger,$uid);
                 } catch (Throwable $error) {
                     echo '<p class="error">Ошибка проверки: '.self::esc(self::safeCode($error)).'</p>';
                 }
