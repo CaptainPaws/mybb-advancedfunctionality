@@ -279,7 +279,7 @@ function af_advancedcombatsystem_xmlhttp(): void
         }
         elseif(in_array($op,['entity_list','entity_snapshot','entity_register','entity_validate'],true)) {
             $entities=af_advancedcombatsystem_entities();$sid=$mybb->get_input('session_id');
-            $input=[];foreach(['session_id','expected_version','operation_key','reason','kind','source_key','name','initial_hp'] as $field)$input[$field]=$mybb->get_input($field);
+            $input=[];foreach(['session_id','expected_version','operation_key','reason','kind','source_key','name','initial_hp','preparation_fingerprint'] as $field)$input[$field]=$mybb->get_input($field);
             $data=match($op) {
                 'entity_list'=>$entities->list($sid,$mybb->get_input('after')?:'0'),
                 'entity_snapshot'=>$entities->snapshot($sid,$mybb->get_input('entity_id')),
@@ -304,40 +304,117 @@ function af_advancedcombatsystem_xmlhttp(): void
     header('Content-Type: application/json; charset=UTF-8');header('Cache-Control: no-store');
     echo json_encode($response,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE);exit;
 }
+function af_acs_registration_diagnostic_groups(array $issues): array
+{
+    $messages=[
+        'access_denied'=>'Недоступен по правам. Проверьте доступ к теме анкеты и Knowledge Base.',
+        'definition_access_denied'=>'Недоступен по правам. Нет доступа к определению KB.',
+        'registration_ownership_required'=>'Регистрация разрешена только владельцу листа.',
+        'sheet_lookup_invalid'=>'Введите точный slug из ссылки на лист, например thread-52.',
+        'sheet_lookup_unavailable'=>'Среди ваших листов нет указанного slug. Проверьте, создан ли лист для этой темы и под каким аккаунтом.',
+        'sheet_lookup_other_topic'=>'Среди ваших листов нет указанного slug. Лист этого аккаунта привязан к другой теме. Проверьте связь анкеты в CharacterSheets.',
+        'sheet_topic_missing'=>'Тема-источник отсутствует. Проверьте привязку листа в CharacterSheets.',
+        'character_rules_invalid'=>'Правила связанной записи KB некорректны. Проверьте JSON определения.',
+        'sheet_topic_mismatch'=>'Slug листа и TID анкеты расходятся. Проверьте привязку листа в CharacterSheets.',
+        'explicit_character_link_missing'=>'У темы нет явной связи с персонажем KB. Проверьте принятие анкеты и синхронизацию в CharacterWorkflow.',
+        'character_definition_missing'=>'Связанная запись персонажа отсутствует или отключена. Проверьте связь с KB.',
+        'character_owner_link_mismatch'=>'Владелец или тема в записи KB не совпадают с листом. Проверьте привязку в CharacterWorkflow.',
+        'dependency_unavailable'=>'Проверьте состояние необходимых аддонов и их таблиц.',
+        'arpg_contract_required'=>'Связанный персонаж KB должен использовать контракт ARPG.',
+        'initial_hp_required'=>'Укажите начальное HP в форме регистрации.',
+        'hp_range'=>'Проверьте максимальное HP источника и начальное HP в форме.',
+        'hp_integer_required'=>'Начальное и максимальное HP должны быть целыми числами.',
+        'definition_version_conflict'=>'Сверьте закреплённые версии способностей с определениями в KB.',
+        'definition_limit'=>'Превышен предел связанных определений способностей.',
+        'equipment_access_denied'=>'Недоступен по правам. Инвентарь может читать только его владелец.',
+        'equipment_source_unavailable'=>'Проверьте доступность AdvancedInventory.',
+        'equipment_source_changed'=>'Экипировка изменилась во время проверки. Повторите её.',
+        'equipment_binding_invalid'=>'Проверьте предметы и их экипированные слоты в AdvancedInventory.',
+        'equipment_definition_unavailable'=>'Проверьте определения экипированных предметов в KB.',
+        'equipment_provenance_blocked'=>'Не подтверждено включение экипированного предмета в характеристики листа.',
+        'element_resistance_value_invalid'=>'Проверьте числовое значение сопротивления в правилах KB.',
+        'element_resistance_scope_invalid'=>'Для стихийного сопротивления укажите scope=elemental.',
+        'element_resistance_unit_invalid'=>'Для стихийного сопротивления укажите unit=RES.',
+        'element_resistance_alias_collision'=>'Уберите дублирующие ключи одного элемента в сопротивлениях KB.',
+
+        'permanent_pet_source_unavailable'=>'Плагин постоянных питомцев ещё не подключён.',
+        'source_changed_during_read'=>'Источник изменился во время проверки. Проверьте его повторно.',
+        'status_resistance_alias_conflict'=>'Конфликт значений сопротивления статусам.',
+        'equipment_provenance_incomplete'=>'Не подтверждено происхождение бонусов экипировки.',
+        'bestiary_modifier_provenance_unavailable'=>'Шаблон содержит модификаторы без подтверждённого итогового расчёта.',
+        'resource_semantics_unverified'=>'Для дополнительных ресурсов отсутствует подтверждённый контракт.',
+    ];
+    $stats=[];
+    foreach (function_exists('af_kb_arpg_character_stat_registry') ? af_kb_arpg_character_stat_registry() : [] as $key=>$stat) {
+        $canonical=$stat['acs_key']??$key;
+        foreach ([$canonical,$stat['vm_field'],'characteristics.'.$canonical,'character_stats.'.$stat['vm_field']] as $path) {
+            $stats[$path]=[$canonical,$stat['label'],$stat['vm_field']];
+        }
+    }
+    $groups=[];
+    $knownStatIssues=[];
+    foreach ($issues as $issue) {
+        $stat=$stats[$issue['path']]??null;
+        if ($stat && in_array($issue['code'],['required_stat_missing','invalid_stat_value'],true)) {
+            $knownStatIssues[$stat[0]][$issue['code']]=true;
+        }
+    }
+    foreach ($issues as $issue) {
+        $code=$issue['code'];$path=$issue['path'];$object=$path;
+        $message=$messages[$code]??'Проверьте указанный источник данных.';
+        $stat=$stats[$path]??null;
+        if ($stat && in_array($code,['required_stat_missing','required_stat_missing_or_invalid','invalid_stat_value'],true)) {
+            [$object,$label,$field]=$stat;
+            if ($code==='required_stat_missing_or_invalid') {
+                if (isset($knownStatIssues[$object]['required_stat_missing'])) $code='required_stat_missing';
+                elseif (isset($knownStatIssues[$object]['invalid_stat_value'])) $code='invalid_stat_value';
+            }
+            $label=$object==='accuracy'?'Точность (Accuracy)':$label;
+            $message=match($code) {
+                'required_stat_missing'=>'Не заполнена характеристика '.$label.'.',
+                'invalid_stat_value'=>'Недопустимое значение характеристики '.$label.'.',
+                default=>'Проверьте наличие и значение характеристики '.$label.'.',
+            };
+            if ($object==='accuracy') $message.=' Укажите точность в анкете и синхронизируйте её либо проверьте character_stats.'.$field.' в KB.';
+        } elseif ($code==='required_resistance_missing') {
+            $object='resistances';
+        }
+        $id=$code.':'.$object;
+        $groups[$id]??=['code'=>$code,'path'=>$object,'message'=>$message,'paths'=>[]];
+        $groups[$id]['paths'][$path]=$path;
+    }
+    foreach ($groups as &$group) {
+        $group['paths']=array_values($group['paths']);
+        if ($group['code']==='required_resistance_missing') {
+            $group['message']='Не заполнены сопротивления основным стихиям ('.count($group['paths']).' из 17). '
+                .'Проверьте resistances в правилах связанной записи KB.';
+        }
+    }
+    unset($group);
+    return array_values($groups);
+}
+
 function af_advancedcombatsystem_session_failure(Throwable $error): array
 {
     global $db;
     if($error instanceof AF_ACS_RegistrationBlocked) {
         $id=bin2hex(random_bytes(16));
-        $known=['required_stat_missing'=>'Заполните обязательную характеристику.',
-            'required_resistance_missing'=>'Заполните сопротивления всем 17 основным стихиям.',
-            'initial_hp_required'=>'Укажите начальное HP экземпляра. Источник не хранит текущее HP.',
-            'permanent_pet_source_unavailable'=>'Плагин постоянных питомцев ещё не подключён.',
-            'registration_ownership_required'=>'Регистрация разрешена только подтверждённому владельцу.',
-            'status_resistance_alias_conflict'=>'Конфликт значений сопротивления статусам.',
-            'equipment_provenance_incomplete'=>'Не подтверждено происхождение бонусов экипировки.',
-            'bestiary_modifier_provenance_unavailable'=>'Шаблон содержит модификаторы без подтверждённого итогового расчёта.',
-            'resource_semantics_unverified'=>'Для дополнительных ресурсов пока отсутствует подтверждённый контракт.'];
-        $diagnostics=[];
-        foreach(array_slice($error->diagnostics,0,32) as $issue) {
-            $code=(string)($issue['code']??'snapshot_source_unavailable');
-            if(!preg_match('/\A[a-z0-9_]{1,96}\z/D',$code))$code='snapshot_source_unavailable';
-            $path=(string)($issue['path']??'source');
-            if(!preg_match('/\A[a-zA-Z0-9_.]{1,191}\z/D',$path))$path='source';
-            $message=$known[$code]??'Источник не готов: проверьте обязательные данные, версии и доступ.';
-            if($code==='required_stat_missing' && str_contains($path,'accuracy'))$message='Заполните характеристику «Точность» в источнике.';
-            $diagnostics[]=['code'=>$code,'path'=>$path,'message'=>$message];
-        }
-        return ['category'=>'VALIDATION_ERROR','request_id'=>$id,'error_id'=>$id,'message'=>'Регистрация заблокирована: источник не прошёл проверку.','diagnostics'=>$diagnostics];
+        $diagnostics=AF_ACS_CapabilityValidator::safeDiagnostics($error->diagnostics);
+        return ['category'=>'VALIDATION_ERROR','request_id'=>$id,'error_id'=>$id,'message'=>'Регистрация заблокирована.',
+            'diagnostics'=>$diagnostics,'diagnostic_groups'=>af_acs_registration_diagnostic_groups($diagnostics)];
     }
     $category=match($error->getMessage()) {
         'ACS_CUSTODY_VERSION_CONFLICT','ACS_CUSTODY_ALREADY_HELD','ACS_CUSTODY_NOT_HELD','ACS_CUSTODY_SLOT_CONFLICT','ACS_CUSTODY_ITEM_UNAVAILABLE','ACS_CUSTODY_SOURCE_CHANGED','ACS_CUSTODY_RESERVATION_CONFLICT','ACS_CUSTODY_OBLIGATIONS_BLOCKED','ACS_CUSTODY_SESSION_UNAVAILABLE','ACS_CUSTODY_ENTITY_UNAVAILABLE','ACS_ROUND_STATE_CONFLICT','ACS_ROUND_OBLIGATIONS_BLOCKED','ACS_OBLIGATIONS_SCHEMA_UNVERIFIED','ACS_PENDING_TURNS_REMAIN','ACS_FORFEIT_EXCEPTION_UNAVAILABLE','ACS_CLOCK_BOUNDARY_STATE','ACS_CLOCK_DEPENDENCY_BLOCKED','ACS_COMBAT_RESET_REQUIRED','ACS_COOLDOWN_SOURCE_UNAVAILABLE','ACS_COOLDOWN_UNCONFIRMED','ACS_RESOURCE_STATE_CONFLICT','ACS_REST_COMBAT_ACTIVE','ACS_REST_LIMIT','ACS_REST_WINDOW_UNAVAILABLE','ACS_REST_POLICY_UNAVAILABLE','ACS_AP_STATE_INVALID','ACS_FIRST_ROUND_EXISTS','ACS_ROSTER_BLOCKED','ACS_ROSTER_INVALID','ACS_TURN_STATE_INVALID','ACS_ENCOUNTER_TRANSITION_BLOCKED','ACS_PARTICIPANT_EXISTS','ACS_ENTITY_UNAVAILABLE','ACS_CONTROL_INVALID','ACS_SNAPSHOT_INVALID','ACS_ENTITY_ALREADY_REGISTERED','ACS_DEFINITION_VERSION_CONFLICT','ACS_VERSION_CONFLICT','ACS_OPERATION_KEY_CONFLICT','ACS_SESSION_OBLIGATIONS_BLOCKED','ACS_SESSION_TRANSITION_BLOCKED'=>'STATE_CONFLICT',
         'ACS_INVENTORY_RECOVERY_PERMISSION_DENIED','ACS_CUSTODY_PERMISSION_DENIED','ACS_AP_ACCESS_DENIED','ACS_GM_REQUIRED','ACS_ENCOUNTER_UNAVAILABLE','ACS_REGISTRATION_DENIED','ACS_SESSION_UNAVAILABLE','ACS_THREAD_UNAVAILABLE','ACS_CREATE_DENIED','ACS_ROLE_ESCALATION_DENIED','ACS_ADMIN_PERMISSION_REQUIRED','ACS_LOGIN_REQUIRED','ACS_CSRF_REQUIRED'=>'PERMISSION_DENIED',
-        'ACS_UI_CONFIRMATION_REQUIRED','ACS_CUSTODY_INPUT_INVALID','ACS_CUSTODY_STACK_UNSUPPORTED','ACS_CUSTODY_ITEM_UNSUPPORTED','ACS_CUSTODY_PINNED_EQUIPMENT_REQUIRED','ACS_CUSTODY_TEMPORARY_USE_UNSUPPORTED','ACS_DEADLINE_POLICY_INVALID','ACS_DEADLINE_DISABLED','ACS_DEADLINE_AUTOMATIC_DISABLED','ACS_DEADLINE_NOT_DUE','ACS_DEADLINE_RANGE','ACS_ROUND_OPERATION_UNAVAILABLE','ACS_ROUND_CONFIRMATION_REQUIRED','ACS_REST_CONFIRMATION_REQUIRED','ACS_REST_NO_TARGETS','ACS_CLOCK_OPERATION_UNAVAILABLE','ACS_RELATION_INVALID','ACS_SIDE_UNAVAILABLE','ACS_INVALID_JSON','ACS_JSON_TOO_LARGE','ACS_INVALID_KEY','ACS_ENTITY_KIND_INVALID','ACS_SOURCE_REQUIRED','ACS_HP_INTEGER_REQUIRED','ACS_HP_RANGE','ACS_DEFINITION_LIMIT','ACS_INVALID_TEXT','ACS_REASON_REQUIRED','ACS_ROLE_INVALID','ACS_INVALID_INTEGER','ACS_INTEGER_RANGE','ACS_OPERATION_KEY_REQUIRED','ACS_POST_REQUIRED','ACS_REQUEST_TOO_LARGE','ACS_RATE_LIMIT','ACS_OWNER_PROTECTED','ACS_OWNER_UNCHANGED','ACS_USER_UNAVAILABLE'=>'VALIDATION_ERROR',
+        'ACS_UI_CONFIRMATION_REQUIRED','ACS_CUSTODY_INPUT_INVALID','ACS_CUSTODY_STACK_UNSUPPORTED','ACS_CUSTODY_ITEM_UNSUPPORTED','ACS_CUSTODY_PINNED_EQUIPMENT_REQUIRED','ACS_CUSTODY_TEMPORARY_USE_UNSUPPORTED','ACS_DEADLINE_POLICY_INVALID','ACS_DEADLINE_DISABLED','ACS_DEADLINE_AUTOMATIC_DISABLED','ACS_DEADLINE_NOT_DUE','ACS_DEADLINE_RANGE','ACS_ROUND_OPERATION_UNAVAILABLE','ACS_ROUND_CONFIRMATION_REQUIRED','ACS_REST_CONFIRMATION_REQUIRED','ACS_REST_NO_TARGETS','ACS_CLOCK_OPERATION_UNAVAILABLE','ACS_RELATION_INVALID','ACS_SIDE_UNAVAILABLE','ACS_INVALID_JSON','ACS_JSON_TOO_LARGE','ACS_INVALID_KEY','ACS_ENTITY_KIND_INVALID','ACS_SOURCE_REQUIRED','ACS_SOURCE_CHECK_REQUIRED','ACS_HP_INTEGER_REQUIRED','ACS_HP_RANGE','ACS_DEFINITION_LIMIT','ACS_INVALID_TEXT','ACS_REASON_REQUIRED','ACS_ROLE_INVALID','ACS_INVALID_INTEGER','ACS_INTEGER_RANGE','ACS_OPERATION_KEY_REQUIRED','ACS_POST_REQUIRED','ACS_REQUEST_TOO_LARGE','ACS_RATE_LIMIT','ACS_OWNER_PROTECTED','ACS_OWNER_UNCHANGED','ACS_USER_UNAVAILABLE'=>'VALIDATION_ERROR',
         'ACS_INVENTORY_RECOVERY_REQUIRED','ACS_INVENTORY_OPERATION_INTEGRITY','ACS_COMMIT_UNKNOWN','ACS_ROLLBACK_UNKNOWN','ACS_RECOVERY_REQUIRED'=>'RECOVERY_REQUIRED',
         default=>'INTERNAL_ERROR',
     };
     $publicMessage=match($error->getMessage()) {
+        'ACS_SOURCE_CHECK_REQUIRED'=>'Проверьте источник перед подтверждением регистрации.',
+        'ACS_HP_INTEGER_REQUIRED'=>'Начальное и максимальное HP должны быть целыми числами.',
+        'ACS_HP_RANGE'=>'Проверьте максимальное HP источника и начальное HP в форме.',
+        'ACS_DEFINITION_VERSION_CONFLICT'=>'Данные источника изменились или версии определений расходятся. Повторите проверку источника.',
         'ACS_INVENTORY_RECOVERY_REQUIRED'=>'Предметная операция ожидает lookup прежнего исхода. Не создавайте новый ключ.',
         'ACS_SESSION_OBLIGATIONS_BLOCKED','ACS_ROUND_OBLIGATIONS_BLOCKED','ACS_OBLIGATIONS_SCHEMA_UNVERIFIED'=>'Операция заблокирована незавершёнными или неподтверждёнными обязательствами. Черновики и sealed данные сохранены.',
         'ACS_PENDING_TURNS_REMAIN'=>'Сначала закройте все допустимые pending ходы и их границы.',

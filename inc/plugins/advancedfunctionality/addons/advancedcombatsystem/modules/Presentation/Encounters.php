@@ -36,21 +36,30 @@ final class AF_ACS_EncountersPage
         $setup=$mybb->get_input('acs_setup')==='1'||$mybb->get_input('gm_step')!=='';$step=max(1,min(6,(int)($mybb->get_input('gm_step')?:2)));
         if($setup)$tab=[1=>'overview',2=>'overview',3=>'participants',4=>'overview',5=>'overview',6=>'rounds'][$step];
         if(!isset($tabs[$tab]))$tab='overview';
-        $base='showthread.php?tid='.$tid.'&acs_session='.$sid;$notice='';$readiness=null;$commandBlocked=false;
+        $base='showthread.php?tid='.$tid.'&acs_session='.$sid;$notice='';$readiness=null;$commandBlocked=false;$sourceCheck=[];
         if($mybb->request_method==='post' && $mybb->get_input('acs_encounter_op')!=='') {
+            $op=$mybb->get_input('acs_encounter_op');
+            $input=[];
             try {
                 // The posted session may not redirect a command to another thread/scope.
                 if($mybb->get_input('session_id')!==$sid || $mybb->get_input('tid')!==$tid)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
                 if($eid!=='' && $mybb->get_input('encounter_id')!=='' && $mybb->get_input('encounter_id')!==$eid)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
-                $input=[];foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid','mode','uids','assignment_version','visibility_scope','participant_version','presence_template','relation_version','round_id','entity_turn_id','control_group_id','confirm_full','confirm','deadline_mode','seconds','turn_id','turn_version','effect_order','kind','source_key','initial_hp','owner_uid','role','resolution_id','outcome'] as $field)$input[$field]=$mybb->get_input($field);
-                $op=$mybb->get_input('acs_encounter_op');
+                foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid','mode','uids','assignment_version','visibility_scope','participant_version','presence_template','relation_version','round_id','entity_turn_id','control_group_id','confirm_full','confirm','deadline_mode','seconds','turn_id','turn_version','effect_order','kind','source_key','initial_hp','preparation_fingerprint','owner_uid','role','resolution_id','outcome'] as $field)$input[$field]=$mybb->get_input($field);
                 $committed=['committed'=>true,'sid'=>$sid];
                 AF_ACS_GmIntent::requireConfirmation(str_starts_with($op,'session_')?substr($op,8):$op);
                 if(str_starts_with($op,'session_')){
                     $serviceSession=af_advancedcombatsystem_sessions();$result=$serviceSession->command(substr($op,8),$input);$outcome=$committed;$notice='<p role="status">Переход сессии подтверждён сервером.</p>';$session=$service->context($sid,$tid);$list=$service->list($sid,tid:$tid);
                 }elseif($op==='entity_request'){
                     $entityOp=$mybb->get_input('op');if(!in_array($entityOp,['entity_validate','entity_register'],true))throw new RuntimeException('ACS_DRAFT_INPUT_INVALID');
-                    $entities=af_advancedcombatsystem_entities();if($entityOp==='entity_validate'){$check=$entities->validate($sid,$input);if(!$check['ready'])throw new AF_ACS_RegistrationBlocked($check['diagnostics']);$notice='<p role="status">Источник проверен. Регистрация требует отдельного подтверждения; источник будет проверен повторно.</p>';}else{$entities->register($input);$outcome=$committed;$notice='<p role="status">Существо зарегистрировано. Добавьте его в состав столкновения отдельной командой.</p>';}
+                    $entities=af_advancedcombatsystem_entities();
+                    if ($entityOp==='entity_validate') {
+                        $sourceCheck=$entities->validate($sid,$input)+$input;
+                    } else {
+                        if ($input['preparation_fingerprint']==='') throw new RuntimeException('ACS_SOURCE_CHECK_REQUIRED');
+                        $entities->register($input);
+                        $outcome=$committed;
+                        $notice='<p role="status">Существо зарегистрировано. Добавьте его в состав столкновения отдельной командой.</p>';
+                    }
                     $session=$service->context($sid,$tid);
                 }elseif($op==='delegation_request'){
                     $delegationOp=$mybb->get_input('op');if(!in_array($delegationOp,['delegation_grant','delegation_revoke'],true))throw new RuntimeException('ACS_DELEGATION_UNAVAILABLE');AF_ACS_GmIntent::requireConfirmation($delegationOp);
@@ -71,9 +80,21 @@ final class AF_ACS_EncountersPage
                 if (!empty($outcome['committed'])) {
                     return '<p role="status">Команда подтверждена. <a href="'.self::esc($base).'">Перечитать состояние</a>.</p>';
                 }
-                $outcome=['error'=>true,'uncertain'=>$commandBlocked];
-                $notice='<p class="error" role="alert">'.(str_contains($error->getMessage(),'VERSION_CONFLICT')?'Состояние изменилось. Обновите текущий шаг и проверьте введённые данные. ':($error->getMessage()==='ACS_UI_CONFIRMATION_REQUIRED'?'Требуется явное подтверждение последствий. ':($error->getMessage()==='ACS_RECOVERY_REQUIRED'?'RECOVERY_REQUIRED: проверьте прежнюю операцию. ':'Команда не подтверждена. Проверьте права, BLOCKED-причины и версии. '))).'Не повторяйте неизвестный исход с новым ключом. error_id='.self::esc($failure['error_id']).'</p>';
-                foreach($failure['diagnostics']??[] as $issue)$notice.='<p class="error">'.self::esc($issue['message']).'</p>';
+                if ($op==='entity_request' && ($error instanceof AF_ACS_RegistrationBlocked
+                    || in_array($error->getMessage(),['ACS_SOURCE_CHECK_REQUIRED','ACS_DEFINITION_VERSION_CONFLICT','ACS_HP_RANGE','ACS_HP_INTEGER_REQUIRED'],true))) {
+                    // Render the current form again so the modal discards a stale confirmation.
+                    $sourceCheck=['ready'=>false,'diagnostics'=>$failure['diagnostics']??[],'message'=>$failure['message']
+                        .' Код обращения: '.$failure['error_id']]+$input;
+                    $outcome=[];
+                    $notice='';
+                } else {
+                    $outcome=['error'=>true,'uncertain'=>$commandBlocked];
+                    $notice='<p class="error" role="alert">'.(str_contains($error->getMessage(),'VERSION_CONFLICT')?'Состояние изменилось. Обновите текущий шаг и проверьте введённые данные. ':($error->getMessage()==='ACS_UI_CONFIRMATION_REQUIRED'?'Требуется явное подтверждение последствий. ':($error->getMessage()==='ACS_RECOVERY_REQUIRED'?'RECOVERY_REQUIRED: проверьте прежнюю операцию. ':'Команда не подтверждена. Проверьте права, BLOCKED-причины и версии. '))).'Не повторяйте неизвестный исход с новым ключом. error_id='.self::esc($failure['error_id']).'</p>';
+                    if (!empty($failure['diagnostics'])) {
+                        require_once __DIR__.'/Entities.php';
+                        $notice.=AF_ACS_EntitiesPage::diagnostics($failure['diagnostics']);
+                    }
+                }
             }
         }
         ob_start();
@@ -216,7 +237,7 @@ final class AF_ACS_EncountersPage
                     foreach(['gm'=>'Только GM','participants'=>'Участники сессии'] as $scope=>$label)echo '<option value="'.$scope.'"'.(($visibility['scope']??'gm')===$scope?' selected':'').'>'.$label.'</option>';echo '</select>';self::submit('Сохранить доступность цели');
                 }
             }
-            if($tab==='participants'){require_once __DIR__.'/Entities.php';AF_ACS_EntitiesPage::render($sid,af_advancedcombatsystem_sessions()->view($sid),$url,null,true);require_once __DIR__.'/Delegations.php';AF_ACS_DelegationsPage::render($sid,$url,$service->delegations(),true);}
+            if($tab==='participants'){require_once __DIR__.'/Entities.php';AF_ACS_EntitiesPage::render($sid,af_advancedcombatsystem_sessions()->view($sid),$url,null,true,$sourceCheck);require_once __DIR__.'/Delegations.php';AF_ACS_DelegationsPage::render($sid,$url,$service->delegations(),true);}
             if($tab==='management'&&in_array($encounter['status'],['active','paused'],true)){require_once __DIR__.'/Spatial.php';AF_ACS_SpatialPage::render($view,$url,$service->spatial());require_once __DIR__.'/Cover.php';AF_ACS_CoverPage::render($view,$url,$service->cover());}
             if($tab==='management') {
                 AF_ACS_GmPanel::settings($view,$url);AF_ACS_GmPanel::ending($service,$view,$url);$sessionView=af_advancedcombatsystem_sessions()->view($sid,true);AF_ACS_GmPanel::obligations($sessionView);AF_ACS_GmPanel::sessionControls($sessionView,$url);
