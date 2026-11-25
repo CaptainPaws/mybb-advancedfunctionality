@@ -236,7 +236,13 @@ final class AF_ACS_GmPanel
         foreach ($people as $person) $bySide[$person['side_id']][]=$person;
         $playerCount=count(array_filter($people,static fn($row)=>$row['kind']==='character'));
         $opponentCount=count(array_filter($people,static fn($row)=>in_array($row['kind'],['npc','monster'],true)));
-        $health=array_column((new AF_ACS_GmPanelQuery($db))->inspection($sid,$encounter['id'],$session['tid'],array_column($people,'entity_id'),true),null,'entity_id');
+        $canManageSides=$editable && $sessionView['can_audit']
+            && $encounter['round_number']==='0' && $encounter['start_operation_id']===null;
+        $sideAfter=$mybb->get_input('side_after');
+        $sideActionUrl=$sideAfter===''?$url:$url.'&side_after='.rawurlencode($sideAfter);
+        $query=new AF_ACS_GmPanelQuery($db);
+        $occupiedSides=$canManageSides?array_fill_keys($query->occupiedSides($sid,$encounter['id'],$session['tid']),true):[];
+        $health=array_column($query->inspection($sid,$encounter['id'],$session['tid'],array_column($people,'entity_id'),true),null,'entity_id');
         $selectedSide=$mybb->get_input('gm_side');
         $sideQuery=isset(array_column($view['sides'],'name','id')[$selectedSide])?'&gm_side='.rawurlencode($selectedSide):'';
         $pickerUrl=$url.'&gm_picker=1&kind='.$kind.$sideQuery;
@@ -268,9 +274,10 @@ final class AF_ACS_GmPanel
         foreach ($view['sides'] as $side) {
             $members=$bySide[$side['id']]??[];
             echo '<details class="af-acs-gm__side" open><summary><strong>'.self::esc($side['name']).'</strong><span class="af-acs-gm__pill">'.count($members).'</span></summary>';
-            if (!$members) echo '<p>Участников пока нет.</p>';
+            if (!$members) echo isset($occupiedSides[$side['id']])?'<p>Участники на другой странице состава.</p>':'<p>Участников пока нет.</p>';
             foreach ($members as $person) self::rosterCard($person,$health[$person['entity_id']]??[],true,$url,$view,$editable,$checked);
             if ($editable) echo '<div class="af-acs-gm__side-actions"><a class="atf-button" href="'.self::esc($url.'&gm_picker=1&kind='.$kind.'&gm_side='.$side['id']).'">Добавить</a><a class="atf-button" href="'.self::esc($url.'&gm_relations=1').'">Отношения</a></div>';
+            if ($canManageSides) self::sideActions($view,$sideActionUrl,$side,isset($occupiedSides[$side['id']]));
             echo '</details>';
         }
         if (!$view['sides']) echo '<p>Создайте стороны столкновения, например «Игроки» и «Враги».</p>';
@@ -361,6 +368,24 @@ final class AF_ACS_GmPanel
             echo '<p class="af-acs-gm__muted">Изменение порядка и удаление недоступны при подготовке.</p></details>';
         }
         echo '</article>';
+    }
+
+    private static function sideActions(array $view,string $url,array $side,bool $occupied): void
+    {
+        echo '<details class="af-acs-gm__side-tools"><summary>Действия</summary><details><summary>Переименовать</summary>';
+        self::form($url,'side_rename',$view['session'],$view['encounter']);
+        self::fields(['side_id'=>$side['id']]);
+        echo '<label>Название стороны <input name="name" maxlength="191" value="'.self::esc($side['name']).'" required></label>';
+        self::submit('Переименовать');
+        echo '</details><details><summary>Удалить</summary>';
+        if ($occupied) {
+            echo '<p>Сначала переместите всех участников этой стороны через «Настроить» в составе столкновения.</p>';
+        } else {
+            self::form($url,'side_delete',$view['session'],$view['encounter']);
+            self::fields(['side_id'=>$side['id']]);
+            self::submit('Удалить сторону');
+        }
+        echo '</details></details>';
     }
 
     private static function sideSettings(array $view,string $url): void

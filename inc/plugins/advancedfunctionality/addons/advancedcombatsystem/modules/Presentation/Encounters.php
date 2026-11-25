@@ -59,6 +59,8 @@ final class AF_ACS_EncountersPage
                     $session=$service->context($sid,$tid);$list=$service->list($sid,tid:$tid);
                     if ($op==='create') {
                         $notice='<p role="status">Столкновение создано. Сохраните условия завершения или перейдите к составу.</p>';
+                    } elseif ($op==='side_rename' || $op==='side_delete') {
+                        $notice='<p role="status">'.($op==='side_rename'?'Сторона переименована.':'Сторона удалена.').'</p>';
                     } elseif ($op==='participant_add') {
                         $notice='<p role="status">Существо добавлено в столкновение.</p>';
                     } elseif ($op==='round_start') {
@@ -76,6 +78,16 @@ final class AF_ACS_EncountersPage
                     $session=$service->context($sid,$tid);
                     $outcome=[];
                     $notice='<p role="alert">Запуск не подтверждён. Состояние подготовки обновлено. Код обращения: '.self::esc($failure['error_id']).'</p>';
+                } elseif (in_array($op,['side_rename','side_delete'],true) && ($message=match($error->getMessage()) {
+                    'ACS_SIDE_HAS_PARTICIPANTS'=>'Сначала переместите всех участников этой стороны через «Настроить» в составе столкновения.',
+                    'ACS_SIDE_NAME_DUPLICATE'=>'Сторона с таким названием уже существует.',
+                    'ACS_INVALID_TEXT'=>'Проверьте название стороны и причину. Название должно содержать от 1 до 191 символа без управляющих символов.',
+                    'ACS_SIDE_UNAVAILABLE'=>'Сторона больше недоступна в этом столкновении.',
+                    'ACS_ENCOUNTER_TRANSITION_BLOCKED'=>'Переименование и удаление сторон доступны только до запуска столкновения.',
+                    default=>null,
+                })!==null) {
+                    $outcome=['error'=>true];
+                    $notice='<p class="error" role="alert">'.self::esc($message).' Код обращения: '.self::esc($failure['error_id']).'</p>';
                 } elseif ($op==='entity_request' && ($error instanceof AF_ACS_RegistrationBlocked
                     || in_array($error->getMessage(),['ACS_SOURCE_CHECK_REQUIRED','ACS_DEFINITION_VERSION_CONFLICT','ACS_HP_RANGE','ACS_HP_INTEGER_REQUIRED'],true))) {
                     // Render the current form again so the modal discards a stale confirmation.
@@ -225,6 +237,6 @@ final class AF_ACS_EncountersPage
         }
     }
     private static function state(string $state): string {return ['preparation'=>'Подготовка','active'=>'Активно','ambush_ready'=>'Засада подготовлена','paused'=>'Пауза','completed'=>'Завершено','pending_resolution'=>'Ожидание исхода','encounter_start'=>'Запуск','ambush_resolution'=>'Разрешение засады'][$state]??'Состояние недоступно';}
-    private static function event(string $event): string {return ['encounter.pause'=>'Пауза','encounter.resume'=>'Возобновление','encounter.gm_skip'=>'Ручной пропуск','encounter.gm_forfeit'=>'Закрытие выбывшей группы','encounter.deadline_set'=>'Настройка дедлайнов','encounter.extend_deadline'=>'Продление дедлайна','encounter.deadline_process'=>'Обработка дедлайна','encounter.round_next'=>'Следующий раунд','encounter.round_start'=>'Запущен первый раунд','encounter.create'=>'Создано столкновение','encounter.side_create'=>'Добавлена сторона','encounter.relation_set'=>'Изменены отношения сторон','encounter.participant_add'=>'Добавлен участник','encounter.participant_side'=>'Изменена сторона участника','encounter.side_change'=>'Изменена текущая сторона','encounter.participant_visibility'=>'Изменена доступность цели','encounter.controller_set'=>'Изменён режим / список управляющих','encounter.controller_assign'=>'Назначен управляющий'][$event]??'Запись журнала';}
+    private static function event(string $event): string {return ['encounter.pause'=>'Пауза','encounter.resume'=>'Возобновление','encounter.gm_skip'=>'Ручной пропуск','encounter.gm_forfeit'=>'Закрытие выбывшей группы','encounter.deadline_set'=>'Настройка дедлайнов','encounter.extend_deadline'=>'Продление дедлайна','encounter.deadline_process'=>'Обработка дедлайна','encounter.round_next'=>'Следующий раунд','encounter.round_start'=>'Запущен первый раунд','encounter.create'=>'Создано столкновение','encounter.side_create'=>'Добавлена сторона','encounter.side_rename'=>'Сторона переименована','encounter.side_delete'=>'Сторона удалена','encounter.relation_set'=>'Изменены отношения сторон','encounter.participant_add'=>'Добавлен участник','encounter.participant_side'=>'Изменена сторона участника','encounter.side_change'=>'Изменена текущая сторона','encounter.participant_visibility'=>'Изменена доступность цели','encounter.controller_set'=>'Изменён режим / список управляющих','encounter.controller_assign'=>'Назначен управляющий'][$event]??'Запись журнала';}
     public static function issue(string $code): string {return ['cooldown_source_unavailable'=>'Кулдаун не имеет подтверждённого источника/версии.','round_boundary_contract_unavailable'=>'Активные слои или настройки AP требуют ещё не подключённого обработчика границ.','participants_missing'=>'Добавьте хотя бы одного участника.','side_relationship_missing'=>'Явно задайте отношения используемых сторон.','ACS_CONTROL_INVALID'=>'Проверьте владельца, управляющего и группу существа.','ACS_SIDE_UNAVAILABLE'=>'Участнику нужна допустимая сторона.','ACS_ENTITY_UNAVAILABLE'=>'Существо недоступно либо занято другим столкновением.','ACS_SNAPSHOT_HASH_MISMATCH'=>'Нарушена целостность сохранённого снимка.','ACS_SNAPSHOT_INVALID'=>'Сохранённый снимок несовместим или неполон.','ACS_DEPENDENCY_UNAVAILABLE'=>'Обязательная зависимость отключена.','preparation_required'=>'Нужны активная сессия и состояние подготовки.','config_snapshot_invalid'=>'Снимок конфигурации не прошёл проверку.'][$code]??'Участник не прошёл серверную проверку.';}
 }

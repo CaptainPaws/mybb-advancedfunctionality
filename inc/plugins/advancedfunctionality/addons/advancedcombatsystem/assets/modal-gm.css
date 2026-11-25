@@ -98,6 +98,8 @@
 .af-acs-gm__summary p,.af-acs-gm__side > p {font-size:.86rem;margin:.55rem}
 .af-acs-gm__side-actions {padding:.4rem .5rem .55rem}
 .af-acs-gm__side-actions .atf-button {flex:1;text-align:center}
+.af-acs-gm__side-tools {margin:.25rem .5rem .5rem;font-size:.85rem}
+.af-acs-gm__side-tools summary {padding:.35rem .5rem}
 .af-acs-gm__entity {
     display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.55rem;
     padding:.62rem;margin-block-end:.55rem;border:1px solid var(--acs-line);border-radius:.7rem;background:var(--acs-raised);

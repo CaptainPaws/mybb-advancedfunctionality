@@ -228,7 +228,7 @@ final class AF_ACS_EncounterService
     public function command(string $op,array $input): array
     {
         $this->access->csrf();$sid=AF_ACS_Repository::integer($input['session_id']??null);
-        if(!in_array($op,['create','side_create','relation_set','participant_add','participant_side','participant_visibility','controller_assign','controller_set','round_start','partial_withdraw','rejoin_encounter','side_change','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release'],true))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
+        if(!in_array($op,['create','side_create','side_rename','side_delete','relation_set','participant_add','participant_side','participant_visibility','controller_assign','controller_set','round_start','partial_withdraw','rejoin_encounter','side_change','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release'],true))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
         $key=(string)($input['operation_key']??'');if(!preg_match('/\A[a-z0-9][a-z0-9_.-]{15,95}\z/D',$key))throw new RuntimeException('ACS_OPERATION_KEY_REQUIRED');
         $request=['schema_version'=>1,'session_id'=>$sid,'actor_uid'=>$this->access->uid(),'expected_version'=>AF_ACS_Repository::integer($input['expected_version']??null),'reason'=>self::text($input['reason']??null,1000)];
         if(isset($input['tid']) && $input['tid']!=='')$request['tid']=AF_ACS_Repository::integer($input['tid'],'4294967295');
@@ -241,8 +241,15 @@ final class AF_ACS_EncounterService
         else {
             $request['encounter_id']=AF_ACS_Repository::integer($input['encounter_id']??null);
             $request['encounter_version']=AF_ACS_Repository::integer($input['encounter_version']??null,'18446744073709551614');
-            foreach(match($op){'relation_set'=>['side_a','side_b'],'participant_add','participant_side','side_change'=>['entity_id','side_id'],'controller_assign'=>['entity_id','uid'],'controller_set','participant_visibility','partial_withdraw','rejoin_encounter','release'=>['entity_id'],default=>[]} as $field)$request[$field]=AF_ACS_Repository::integer($input[$field]??null,$field==='uid'?'4294967295':'18446744073709551615');
+            foreach(match($op){'relation_set'=>['side_a','side_b'],'side_rename','side_delete'=>['side_id'],'participant_add','participant_side','side_change'=>['entity_id','side_id'],'controller_assign'=>['entity_id','uid'],'controller_set','participant_visibility','partial_withdraw','rejoin_encounter','release'=>['entity_id'],default=>[]} as $field)$request[$field]=AF_ACS_Repository::integer($input[$field]??null,$field==='uid'?'4294967295':'18446744073709551615');
             if($op==='side_create')$request['name']=self::text($input['name']??null,191);
+            if ($op==='side_rename') {
+                $name=$input['name']??null;
+                if (!is_string($name) || !mb_check_encoding($name,'UTF-8') || preg_match('/\p{Cc}/u',$name)) {
+                    throw new RuntimeException('ACS_INVALID_TEXT');
+                }
+                $request['name']=self::text(AF_ACS_EncounterRepository::trimSideName($name),191);
+            }
             if($op==='relation_set'){$relation=(string)($input['relationship']??'');if(!in_array($relation,['allied','neutral','hostile'],true)||$request['side_a']===$request['side_b'])throw new RuntimeException('ACS_RELATION_INVALID');$request['relationship']=$relation;}
         }
         if($op==='participation_set')$request['participation_policy']=AF_ACS_Participation::policy($input['participation_policy']??null);
@@ -269,7 +276,7 @@ final class AF_ACS_EncounterService
             sort($request['uids'],SORT_STRING);
         }
         return $this->repository->command('session:'.$request['actor_uid'].':'.$key,'encounter.'.$op,$request,
-            function($session)use($sid,$request,$op){$this->authorize($sid,true,$request['tid']??null);if(in_array($op,['end_conditions_set','outcome_confirm','outcome_continue','participation_set','release','rejoin_encounter'],true)&&!AF_ACS_AuthorizationService::sessionGm($session,$this->repository->roles($sid,$this->access->uid()),$this->access->uid()))throw new RuntimeException('ACS_GM_REQUIRED');},
+            function($session)use($sid,$request,$op){$this->authorize($sid,true,$request['tid']??null);if(in_array($op,['side_rename','side_delete','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release','rejoin_encounter'],true)&&!AF_ACS_AuthorizationService::sessionGm($session,$this->repository->roles($sid,$this->access->uid()),$this->access->uid()))throw new RuntimeException('ACS_GM_REQUIRED');},
             function($session)use($sid,$request,$op,$presence) {
                 if($op==='create')return $this->repository->createEncounter($session,$request['name'],['schema_version'=>1,'defaults_version'=>'acs-preparation-1','visibility'=>'hidden']+($presence?['presence_policy'=>$presence]:[]));
                 $encounter=$this->repository->encounter($sid,$request['encounter_id'],true);
@@ -287,6 +294,10 @@ final class AF_ACS_EncounterService
                     return $this->repository->returnParticipation($session,$encounter,$op,$request);
                 }
                 if($op==='partial_withdraw'&&$participationConfigured)throw new RuntimeException('ACS_PARTICIPATION_PAID_ACTION_REQUIRED');
+                if (in_array($op,['side_rename','side_delete'],true)
+                    && ($encounter['status']!=='preparation' || $encounter['round_number']!=='0' || $encounter['start_operation_id']!==null)) {
+                    throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
+                }
                 if($op==='round_start' && ($encounter['status']!=='preparation' || $this->repository->firstRound($encounter['id'])))throw new RuntimeException('ACS_FIRST_ROUND_EXISTS');
                 if($encounter['status']!=='preparation' && !($encounter['status']==='active' && $op==='participant_add') && !(in_array($encounter['status'],['active','paused'],true) && in_array($op,['controller_set','participant_visibility','partial_withdraw','rejoin_encounter','side_change','relation_set'],true)))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
                 if($encounter['encounter_version']!==$request['encounter_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');
