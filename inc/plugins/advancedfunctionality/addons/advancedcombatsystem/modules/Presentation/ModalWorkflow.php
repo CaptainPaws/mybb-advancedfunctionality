@@ -30,7 +30,7 @@ final class AF_ACS_ModalWorkflow
             }
 
             // Scope and navigation come exclusively from the fragment URL.
-            foreach (['tid','acs_session','acs_builder','acs_setup','acs_panel_session','acs_encounter','gm_step',
+            foreach (['tid','acs_session','acs_builder','acs_setup','acs_panel_session','acs_encounter','gm_step','gm_stage','gm_picker',
                 'acs_tab','acs_atf_setup','acs_sessions_after'] as $field) {
                 $mybb->input[$field] = is_string($_GET[$field] ?? null) ? $_GET[$field] : '';
             }
@@ -39,7 +39,7 @@ final class AF_ACS_ModalWorkflow
                 throw new RuntimeException('ACS_MODAL_REQUEST_INVALID');
             }
             if ($surface!=='gm') {
-                $mybb->input['acs_setup']=$mybb->input['acs_session']=$mybb->input['gm_step']='';
+                $mybb->input['acs_setup']=$mybb->input['acs_session']=$mybb->input['gm_step']=$mybb->input['gm_stage']=$mybb->input['gm_picker']='';
             }
             if ($surface!=='builder') $mybb->input['acs_builder']='';
             if ($surface!=='bar') $mybb->input['acs_panel_session']='';
@@ -76,7 +76,7 @@ final class AF_ACS_ModalWorkflow
                 // A committed command stays confirmed even if the optional projection fails.
                 try {
                     $mybb->request_method='get';
-                    $mybb->input['acs_setup']=$mybb->input['acs_session']=$mybb->input['gm_step']='';
+                    $mybb->input['acs_setup']=$mybb->input['acs_session']=$mybb->input['gm_step']=$mybb->input['gm_stage']=$mybb->input['gm_picker']='';
                     $mybb->input['acs_panel_session']=$sid;
                     $bar=af_advancedcombatsystem_render_thread_entry(['tid'=>(int)$tid],$toolbar,'bar');
                     if ($bar!=='') $response['bar']=$bar;

@@ -135,7 +135,7 @@ function af_advancedcombatsystem_render_thread_entry(array $context, string &$to
                     // The creation service still checks the original per-actor receipt and key.
                     return AF_ACS_GmPanel::setup((string)$tid,$outcome);
                 }
-                $mybb->input['gm_step']='1';
+                $mybb->input['gm_stage']='settings';
                 return AF_ACS_EncountersPage::render((string)$chosen['id'],(string)$tid,outcome:$outcome);
             }
             return '<p role="status"><a data-acs-modal="gm" href="'.htmlspecialchars_uni($url).'">Открыть существующую сессию</a></p>';
@@ -262,7 +262,7 @@ function af_advancedcombatsystem_panel_script(): string
     if(!function_exists('af_frontend_asset_allowed')||!af_frontend_asset_allowed('advancedcombatsystem','thread_panel',null,['has_acs_panel'=>true])){
         af_advancedcombatsystem_panel_failure('ACS_PANEL_ASSET_DENIED','javascript');return '';
     }
-    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/thread-panel.js?v=1300';
+    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/thread-panel.js?v=1301';
     return '<script defer src="'.htmlspecialchars_uni($url).'"></script>';
 }
 
@@ -270,6 +270,6 @@ function af_advancedcombatsystem_gm_css(): string
 {
     global $mybb;
     if (!function_exists('af_frontend_asset_allowed') || !af_frontend_asset_allowed('advancedcombatsystem','presentation',null,['has_acs_panel'=>true])) return '';
-    $url = rtrim($mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/modal-gm.css?v=1200';
+    $url = rtrim($mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/modal-gm.css?v=1201';
     return '<link rel="stylesheet" href="'.htmlspecialchars_uni($url).'">';
 }

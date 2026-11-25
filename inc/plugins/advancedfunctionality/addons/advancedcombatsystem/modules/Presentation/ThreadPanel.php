@@ -23,7 +23,7 @@ final class AF_ACS_ThreadPanel
     {
         $url='showthread.php?tid='.$tid.'&acs_session='.$view['session_id'].'&acs_setup=1';
         if ($view['encounter_id']!==null) $url.='&acs_encounter='.$view['encounter_id'];
-        return $url.'&gm_step='.($view['encounter_id']!==null ? '1' : '2').'#acs-thread-panel';
+        return $url.'&gm_stage=settings#acs-thread-panel';
     }
 
     public static function builderUrl(array $view,string $tid): ?string
