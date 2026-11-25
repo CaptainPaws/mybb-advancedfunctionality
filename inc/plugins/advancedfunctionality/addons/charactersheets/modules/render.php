@@ -1597,7 +1597,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         unset($row);
     }
     foreach ($resistanceRows as $element=>$row) {
-        $stats_panel[] = ['label'=>af_kb_arpg_primary_elements()[$element]['ru'].' · RES',
+        $stats_panel[] = ['element'=>$element, 'label'=>af_kb_arpg_primary_elements()[$element]['ru'],
             'value'=>$resistanceIssues ? '—' : $row['value'],
             'sources'=>$resistanceIssues ? ['Проверьте определения RES в KB'] : array_values(array_unique(array_map(
                 static fn($entry) => $entry['source']==='kb:character-res-baseline-v1' ? 'Базовое значение KB' : $entry['source'],
@@ -1707,18 +1707,42 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
 
 function af_charactersheets_arpg_render_stats_panel_html(array $stats): string
 {
-    if (!$stats) {
-        return '<div class="af-cs-muted">Нет характеристик</div>';
-    }
+    global $templates;
 
-    $html = '';
+    $sheet_arpg_stats_panel_html = $sheet_arpg_resistances_html = '';
+    $sheet_arpg_resistance_count = 0;
     foreach ($stats as $row) {
-        $html .= '<div class="af-cs-arpg-stat-row">'
-            . '<span class="af-cs-arpg-stat-label">' . htmlspecialchars_uni((string)($row['label'] ?? '—')) . '</span>'
-            . '<strong class="af-cs-arpg-stat-value">' . htmlspecialchars_uni((string)($row['value'] ?? '—')) . '</strong>'
-            . (!empty($row['sources']) ? '<small class="af-cs-muted">' . htmlspecialchars_uni(implode(', ', $row['sources'])) . '</small>' : '')
-            . '</div>';
+        $label = htmlspecialchars_uni((string)($row['label'] ?? '—'));
+        $value = htmlspecialchars_uni((string)($row['value'] ?? '—'));
+        $help = '';
+        if (!empty($row['sources'])) {
+            $sources = array_map('htmlspecialchars_uni', $row['sources']);
+            $help = ' <span class="af-cs-arpg-stat-help"><button type="button" class="af-cs-arpg-stat-help__button"'
+                . ' aria-label="Источники расчёта: '.$label.'" aria-expanded="false" data-afcs-stat-help>'
+                . '<span aria-hidden="true">?</span></button>'
+                . '<span class="af-cs-arpg-stat-help__popup" hidden>'.implode('<br>', $sources).'</span></span>';
+        }
+
+        $rowHtml = '<div class="af-cs-arpg-stat-row"><span class="af-cs-arpg-stat-label">'.$label.$help
+            .'</span><strong class="af-cs-arpg-stat-value">'.$value.'</strong></div>';
+        if (isset($row['element'])) {
+            $sheet_arpg_resistances_html .= $rowHtml;
+            ++$sheet_arpg_resistance_count;
+        } else {
+            $sheet_arpg_stats_panel_html .= $rowHtml;
+        }
     }
+    if ($sheet_arpg_stats_panel_html === '') {
+        $sheet_arpg_stats_panel_html = '<div class="af-cs-muted">Нет характеристик</div>';
+    }
+    // Both the full page and the main-tab fragment use this template.
+    $sheet_arpg_resistance_block_html = '';
+    if ($sheet_arpg_resistance_count > 0) {
+        $sheet_arpg_resistance_block_html = '<details class="af-cs-arpg-resistances">'
+            . '<summary>Стихийные сопротивления · '.$sheet_arpg_resistance_count.'</summary>'
+            . '<div class="af-cs-arpg-stats-grid">'.$sheet_arpg_resistances_html.'</div></details>';
+    }
+    eval("\$html = \"" . $templates->get('charactersheet_arpg_stats_panel') . "\";");
     return $html;
 }
 
@@ -2409,7 +2433,6 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     $sheet_arpg_wallet_credits = '0';
     $sheet_arpg_wallet_tokens = '0';
     $sheet_arpg_wallet_symbol = '♦';
-    $sheet_arpg_stats_panel_html = '<div class="af-cs-muted">Нет характеристик</div>';
     $sheet_arpg_main_info_html = '<div class="af-cs-arpg-placeholder">Базовая информация персонажа будет выведена здесь.</div>';
     $sheet_arpg_description_block_html = '<section class="af-cs-arpg-panel"><h2>Описание персонажа</h2><div class="af-cs-muted">Нет описания</div></section>';
     $sheet_arpg_identity_block_html = '';
@@ -2438,11 +2461,10 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
         $sheet_arpg_wallet_credits = htmlspecialchars_uni((string)($sheet_arpg_vm['wallet']['credits'] ?? $sheet_arpg_wallet_credits));
         $sheet_arpg_wallet_tokens = htmlspecialchars_uni((string)($sheet_arpg_vm['wallet']['ability_tokens'] ?? $sheet_arpg_wallet_tokens));
         $sheet_arpg_wallet_symbol = htmlspecialchars_uni((string)($sheet_arpg_vm['wallet']['ability_symbol'] ?? $sheet_arpg_wallet_symbol));
-        $sheet_arpg_stats_panel_html = af_charactersheets_arpg_render_stats_panel_html((array)($sheet_arpg_vm['stats_panel'] ?? []));
+        $sheet_arpg_stats_block_html = af_charactersheets_arpg_render_stats_panel_html((array)($sheet_arpg_vm['stats_panel'] ?? []));
         $sheet_arpg_main_info_html = af_charactersheets_arpg_render_main_info_html($sheet_arpg_vm);
         $sheet_arpg_description_block_html = af_charactersheets_arpg_render_description_html($sheet_arpg_vm);
         eval("\$sheet_arpg_identity_block_html = \"" . $templates->get('charactersheet_arpg_identity') . "\";");
-        eval("\$sheet_arpg_stats_block_html = \"" . $templates->get('charactersheet_arpg_stats_panel') . "\";");
     }
 
     $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n";

@@ -411,6 +411,67 @@
       });
     })();
 
+    (function initStatHelp() {
+      var active = null;
+      var pinned = false;
+      var nextId = 0;
+
+      function close() {
+        if (!active) return;
+        active.setAttribute('aria-expanded', 'false');
+        active.removeAttribute('aria-describedby');
+        active.nextElementSibling.hidden = true;
+        active = null;
+        pinned = false;
+      }
+
+      function show(button, keepOpen) {
+        if (active !== button) close();
+        active = button;
+        pinned = keepOpen;
+        var popup = button.nextElementSibling;
+        if (!popup.id) popup.id = 'af-cs-stat-source-' + (++nextId);
+        button.setAttribute('aria-controls', popup.id);
+        button.setAttribute('aria-describedby', popup.id);
+        button.setAttribute('aria-expanded', 'true');
+        popup.hidden = false;
+      }
+
+      document.addEventListener('pointerover', function (event) {
+        if (active && !active.isConnected) close();
+        if (event.pointerType !== 'mouse' || pinned) return;
+        var button = event.target.closest('[data-afcs-stat-help]');
+        if (button && button !== active && !button.contains(event.relatedTarget)) show(button, false);
+      });
+
+      document.addEventListener('pointerout', function (event) {
+        if (event.pointerType !== 'mouse' || !active || pinned) return;
+        var row = active.closest('.af-cs-arpg-stat-row');
+        if (row.contains(event.target) && !row.contains(event.relatedTarget)) close();
+      });
+
+      document.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-afcs-stat-help]');
+        if (button) {
+          if (active === button && pinned) close();
+          else show(button, true);
+        } else if (active && !active.parentElement.contains(event.target)) {
+          close();
+        }
+      });
+
+      document.addEventListener('focusout', function (event) {
+        if (active && event.target === active) close();
+      });
+
+      document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape' || !active || !active.isConnected) return;
+        close();
+        event.preventDefault();
+        event.stopPropagation();
+      }, true);
+    })();
+
     (function initSheet() {
       var sheet = document.querySelector('[data-afcs-sheet]');
       if (!sheet) return;
