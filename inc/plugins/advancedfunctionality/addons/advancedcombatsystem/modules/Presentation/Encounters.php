@@ -21,6 +21,7 @@ final class AF_ACS_EncountersPage
         $base='showthread.php?tid='.$tid.'&acs_session='.$sid;$notice='';$readiness=null;$commandBlocked=false;$sourceCheck=[];$registered='';
         if($mybb->request_method==='post' && $mybb->get_input('acs_encounter_op')!=='') {
             $op=$mybb->get_input('acs_encounter_op');
+            $sourcePreview=$op==='entity_request' && $mybb->get_input('op')==='entity_validate';
             $input=[];
             try {
                 // The posted session may not redirect a command to another thread/scope.
@@ -42,8 +43,8 @@ final class AF_ACS_EncountersPage
                         $registered=(string)$result['entity_id'];
                         $outcome=$committed;
                         $notice='<p role="status">Существо зарегистрировано. Теперь его можно добавить в столкновение.</p>';
+                        $session=$service->context($sid,$tid);
                     }
-                    $session=$service->context($sid,$tid);
                 }elseif($op==='delegation_request'){
                     $delegationOp=$mybb->get_input('op');if(!in_array($delegationOp,['delegation_grant','delegation_revoke'],true))throw new RuntimeException('ACS_DELEGATION_UNAVAILABLE');AF_ACS_GmIntent::requireConfirmation($delegationOp);
                     $request=[];foreach(['session_id','expected_version','operation_key','reason','owner_uid','delegate_uid','entity_ids','control_group_id','permitted_actions','valid_from','valid_until','duration_seconds','delegation_id','delegation_version'] as $f)if(array_key_exists($f,$_POST))$request[$f]=in_array($f,['entity_ids','permitted_actions'],true)?$_POST[$f]:$mybb->get_input($f);
@@ -68,11 +69,19 @@ final class AF_ACS_EncountersPage
                     }
                 }
             } catch(Throwable $error) {
-                $failure=af_advancedcombatsystem_session_failure($error);$commandBlocked=!str_contains($error->getMessage(),'VERSION_CONFLICT') && in_array($failure['category'],['RECOVERY_REQUIRED','INTERNAL_ERROR'],true);
-                if (!empty($outcome['committed'])) {
-                    return '<p role="status">Команда подтверждена. <a href="'.self::esc($base).'">Перечитать состояние</a>.</p>';
+                if (!$sourcePreview) {
+                    $failure=af_advancedcombatsystem_session_failure($error);
+                    $commandBlocked=!str_contains($error->getMessage(),'VERSION_CONFLICT') && in_array($failure['category'],['RECOVERY_REQUIRED','INTERNAL_ERROR'],true);
                 }
-                if ($setup && $op==='round_start' && in_array($error->getMessage(),[
+                if ($sourcePreview) {
+                    $sourceCheck=$error->getMessage()==='ACS_ENCOUNTER_UNAVAILABLE'
+                        ? ['ready'=>false,'status'=>'denied','diagnostics'=>[],'message'=>'Источник недоступен для текущей темы или столкновения.']
+                        : af_advancedcombatsystem_source_check_error($error,$input?'preview_dispatch':'preview_scope');
+                    $sourceCheck+=$input;
+                    if (!$input) $notice='<p role="alert">'.self::esc($sourceCheck['message']).'</p>';
+                } elseif (!empty($outcome['committed'])) {
+                    return '<p role="status">Команда подтверждена. <a href="'.self::esc($base).'">Перечитать состояние</a>.</p>';
+                } elseif ($setup && $op==='round_start' && in_array($error->getMessage(),[
                     'ACS_ROSTER_BLOCKED','ACS_VERSION_CONFLICT','ACS_FIRST_ROUND_EXISTS','ACS_ENCOUNTER_TRANSITION_BLOCKED',
                 ],true)) {
                     $session=$service->context($sid,$tid);
@@ -104,6 +113,10 @@ final class AF_ACS_EncountersPage
                     }
                 }
             }
+        }
+        if (isset($sourcePreview) && $sourcePreview) {
+            $outcome=['source_status'=>$sourceCheck['status']];
+            if (isset($sourceCheck['error_id'])) $outcome['error_id']=$sourceCheck['error_id'];
         }
         ob_start();
         try {

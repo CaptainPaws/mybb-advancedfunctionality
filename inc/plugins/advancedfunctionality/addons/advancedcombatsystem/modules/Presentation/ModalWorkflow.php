@@ -18,8 +18,9 @@ final class AF_ACS_ModalWorkflow
         header('Cache-Control: private, no-store');
         header('X-Content-Type-Options: nosniff');
 
+        $method = $mybb->request_method;
+        $sourcePreview=$method==='post' && $mybb->get_input('acs_encounter_op')==='entity_request' && $mybb->get_input('op')==='entity_validate';
         try {
-            $method = $mybb->request_method;
             $surface = $_GET['acs_surface'] ?? '';
             $tid = $_GET['tid'] ?? '';
             if (!is_string($tid) || !preg_match('/\A[1-9][0-9]{0,9}\z/D',$tid)
@@ -53,7 +54,7 @@ final class AF_ACS_ModalWorkflow
                 $postedEncounter=$_POST['encounter_id']??'';
                 if ($operation==='' || ($sid==='' && $operation!=='session_create')
                     || ($postedEncounter!=='' && $postedEncounter!==$mybb->get_input('acs_encounter')) || ($_POST['tid'] ?? null)!==$tid
-                    || !preg_match('/\A[a-z0-9][a-z0-9_.-]{15,95}\z/D',$key)
+                    || (!$sourcePreview && !preg_match('/\A[a-z0-9][a-z0-9_.-]{15,95}\z/D',$key))
                     || ($operation==='session_create' && $mybb->get_input('acs_session')===''
                         && $key!=='atf-thread-create-'.$tid)) {
                     throw new RuntimeException('ACS_MODAL_REQUEST_INVALID');
@@ -66,6 +67,8 @@ final class AF_ACS_ModalWorkflow
             if ($html==='') throw new RuntimeException('ACS_SESSION_UNAVAILABLE');
             if ($surface==='gm') $html=af_advancedcombatsystem_gm_css().$html;
             $response=['ok'=>empty($outcome['error']),'html'=>$html];
+            if (isset($outcome['source_status'])) $response['source_status']=$outcome['source_status'];
+            if (isset($outcome['error_id'])) $response['error_id']=$outcome['error_id'];
             if (!empty($outcome['uncertain'])) $response['uncertain']=true;
             if (!$response['ok']) http_response_code(409);
 
@@ -90,7 +93,16 @@ final class AF_ACS_ModalWorkflow
             $response=['ok'=>false,'message'=>$known
                 ? 'Инструмент ACS недоступен. Проверьте права, сессию и актуальность страницы.'
                 : 'Ответ ACS не подтверждён. Перед новым действием проверьте результат прежнего запроса.'];
-            if (!$known) {
+            if ($sourcePreview) {
+                if ($known) {
+                    $response['source_status']=$error->getMessage()==='ACS_MODAL_REQUEST_INVALID'?'blocked':'denied';
+                } else {
+                    $failure=af_advancedcombatsystem_source_check_error($error,'preview_modal');
+                    $response['source_status']=$failure['status'];
+                    $response['error_id']=$failure['error_id'];
+                    $response['message']=$failure['message'];
+                }
+            } elseif (!$known) {
                 $id=af_advancedcombatsystem_panel_failure('ACS_PANEL_TOOL_FAILED','modal');
                 $response['message'].=' error_id='.$id;
                 $response['uncertain']=$method==='post';

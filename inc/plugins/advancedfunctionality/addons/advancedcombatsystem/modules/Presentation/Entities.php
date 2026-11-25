@@ -48,8 +48,13 @@ final class AF_ACS_EntitiesPage
                 .'<button type="submit" aria-label="Найти"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i></button></form>';
         }
         $choices=$service->choices($sid,$kind,$after,$slug);
-        $selected=$mybb->get_input('source_key');
+        $selected=$check['source_key']??$mybb->get_input('source_key');
         $options=$choices['items']??[];
+        if ($check && !in_array($selected,array_column($options,'key'),true)) {
+            $message=$check['message']??'Выбранный источник больше недоступен в текущем списке. Выберите источник для повторной проверки.';
+            echo '<p role="alert">'.self::esc($message).'</p>';
+            echo self::diagnostics($check['diagnostics']??[],!$picker);
+        }
         if (!$options) {
             $reason=$choices['reason']??'';
             if ($reason!=='') echo self::diagnostics([['code'=>$reason,'path'=>'source']], !$picker);
@@ -77,7 +82,7 @@ final class AF_ACS_EntitiesPage
             $selectable=false;
             if ($options && (!$picker || (($options[0]['state']??'unchecked')==='unchecked' && empty($check['ready'])))) {
                 echo '<form method="post" action="'.self::esc($url).'">';
-                self::hidden($formFields+['operation_key'=>bin2hex(random_bytes(16))]);
+                self::hidden($formFields+['op'=>'entity_validate']);
                 if ($picker) {
                     self::hidden(['source_key'=>$options[0]['key']]);
                     $selectable=true;
@@ -98,7 +103,7 @@ final class AF_ACS_EntitiesPage
                     .'<label>Начальное HP <input name="initial_hp" type="number" min="0" max="9007199254740991" step="1" value="'.self::esc($mybb->get_input('initial_hp')).'"></label>'
                     .'<p>Укажите начальное HP, если источник не хранит текущее HP.</p>'
                     .'<label>Причина регистрации <input name="reason" maxlength="1000" value="'.self::esc($mybb->get_input('reason')).'"></label>'
-                    .'<button name="op" value="entity_validate" type="submit"'.(!$selectable?' disabled':'').'>Проверить источник</button></form>';
+                    .'<button type="submit"'.(!$selectable?' disabled':'').'>Проверить источник</button></form>';
 
             }
             foreach ($options as $choice) {
@@ -110,7 +115,12 @@ final class AF_ACS_EntitiesPage
                 $denied=(bool)array_intersect($codes,['access_denied','definition_access_denied','registration_ownership_required','equipment_access_denied']);
                 $ready=$checked && !empty($check['ready']) && $state==='unchecked';
                 $message=$checked?($check['message']??''):'';
-                $status=$ready?'Готов к регистрации':($denied?'Недоступен по правам':(($issues || $message!=='')?'Требует исправлений':'Требуется проверка'));
+                $status=match($checked?($check['status']??null):null) {
+                    'error'=>'Ошибка проверки',
+                    'denied'=>'Недоступен по правам',
+                    'blocked'=>'Требует исправлений',
+                    default=>$ready?'Готов к регистрации':($denied?'Недоступен по правам':(($issues || $message!=='')?'Требует исправлений':'Требуется проверка')),
+                };
                 echo '<div class="atf-card"'.($picker && $checked?' data-acs-source-result tabindex="-1"':'').'><strong>'.self::esc($choice['label']).'</strong> · '.self::esc($status);
                 if (!empty($choice['owner_name'])) echo ' · '.self::esc($choice['owner_name']);
                 if (isset($choice['sheet_id'])) echo ' <small>Лист #'.self::esc($choice['sheet_id']).'</small>';

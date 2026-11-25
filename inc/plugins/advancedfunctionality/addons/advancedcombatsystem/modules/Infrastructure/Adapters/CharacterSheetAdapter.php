@@ -28,6 +28,11 @@ final class AF_ACS_CharacterSheetAdapter
             // fingerprint remains the owner-issued snapshot hash, not a hash of this envelope.
             return $snapshot;
         } catch (Throwable $error) {
+            if (is_callable($context['on_source_error'] ?? null)) {
+                // The owner API can reject a stale grant before its snapshot read starts.
+                // Let the preview service classify that rejection using the original exception.
+                throw $error;
+            }
             return ['ready'=>false,'diagnostics'=>[['code'=>'source_read_failed','path'=>'snapshot','severity'=>'error']]];
         }
     }

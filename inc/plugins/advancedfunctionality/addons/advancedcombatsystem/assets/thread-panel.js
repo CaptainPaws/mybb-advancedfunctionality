@@ -98,6 +98,7 @@
             showError('Сначала проверьте исход прежней команды. Повтор отправляет тот же запрос с тем же ключом.', true);
             return;
         }
+        const sourcePreview = body?.get('acs_encounter_op') === 'entity_request' && body.get('op') === 'entity_validate';
         const controller = new AbortController();
         flight = {controller, post: !!body};
         const timeout = setTimeout(() => controller.abort(), 25000);
@@ -105,7 +106,7 @@
         closeButton.disabled = !!body;
         retryButton.disabled = true;
         refreshButton.disabled = true;
-        showError(body ? 'Сохранение…' : 'Загрузка…', false);
+        showError(sourcePreview ? 'Проверка источника…' : (body ? 'Сохранение…' : 'Загрузка…'), false);
         const scroll = content.scrollTop;
         const previousColumns = Array.from(content.querySelectorAll('.af-acs-gm__column-body'), column => column.scrollTop);
         const sameRoster = tool === 'gm' && current?.searchParams.get('gm_stage') === 'roster'
@@ -127,7 +128,7 @@
                 const details = Array.from(parse(result.html).querySelectorAll('[role="alert"], .error'));
                 const message = result.message || details.map(node => node.textContent.trim()).join(' ')
                     || 'Команда недоступна. Проверьте данные и обновите шаг.';
-                pending = body && result.uncertain ? {url, tool, body} : null;
+                pending = body && !sourcePreview && result.uncertain ? {url, tool, body} : null;
                 showError(message, !!pending);
                 return;
             }
@@ -176,7 +177,9 @@
             if (focus) (sourceResult ?? sideSettings ?? content).focus({preventScroll: true});
         } catch (_) {
             if (!dialog?.open) return;
-            if (body && !confirmed) {
+            if (sourcePreview) {
+                showError('Не удалось получить результат проверки источника. Повторите проверку.', false);
+            } else if (body && !confirmed) {
                 pending = {url, tool, body};
                 showError('Ответ не подтверждён. Можно явно повторить прежний запрос с тем же ключом.', true);
             } else {

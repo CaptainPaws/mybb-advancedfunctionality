@@ -39,6 +39,7 @@ function af_charactersheets_prepare_combat_snapshot(int $sheetId, int $actorUid,
     try {
         return af_cs_snapshot_read($sheet, $context, $grant);
     } catch (Throwable $error) {
+        if (is_callable($context['on_source_error'] ?? null)) $context['on_source_error']($error,'character_snapshot');
         return ['schema_version'=>1,'contract_id'=>'IC-CS.combat-preparation.v1','ready'=>false,
             'diagnostics'=>[['code'=>'source_read_failed','path'=>'sources','severity'=>'error']]];
     }
