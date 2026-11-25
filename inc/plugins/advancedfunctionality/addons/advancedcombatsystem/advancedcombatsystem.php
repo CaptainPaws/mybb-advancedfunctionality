@@ -307,6 +307,14 @@ function af_advancedcombatsystem_xmlhttp(): void
 function af_acs_registration_diagnostic_groups(array $issues): array
 {
     $messages=[
+        'source_required'=>'Выберите источник для проверки.',
+        'invalid_integer'=>'Некорректный идентификатор источника или начальное HP.',
+        'integer_range'=>'Идентификатор источника или начальное HP вне допустимого диапазона.',
+        'invalid_text'=>'Проверьте длину имени экземпляра.',
+        'json_too_large'=>'Данные источника превышают допустимый размер снимка.',
+        'inv_source_changed'=>'Инвентарь изменился во время проверки. Повторите проверку.',
+        'inv_version_conflict'=>'Версия инвентаря изменилась. Повторите проверку.',
+        'inv_incomplete_snapshot'=>'Не удалось получить полный состав инвентаря. Повторите проверку.',
         'access_denied'=>'Недоступен по правам. Проверьте доступ к теме анкеты и Knowledge Base.',
         'definition_access_denied'=>'Недоступен по правам. Нет доступа к определению KB.',
         'registration_ownership_required'=>'Регистрация разрешена только владельцу листа.',
@@ -431,6 +439,17 @@ function af_acs_registration_diagnostic_groups(array $issues): array
     }
     unset($group);
     return array_values($groups);
+}
+
+/** Source preview telemetry stays in the server log and carries no source payload. */
+function af_advancedcombatsystem_source_check_error(Throwable $error,string $phase): array
+{
+    $id=bin2hex(random_bytes(16));
+    $code=preg_match('/\A(?:ACS|INV)_[A-Z0-9_]{1,90}\z/D',$error->getMessage()) ? $error->getMessage() : 'UNEXPECTED_EXCEPTION';
+    error_log(sprintf('ACS entity_validate error_id=%s phase=%s exception=%s code=%s native_code=%d location=%s:%d',
+        $id,$phase,get_class($error),$code,(int)$error->getCode(),basename($error->getFile()),$error->getLine()));
+    return ['ready'=>false,'status'=>'error','diagnostics'=>[],'error_id'=>$id,
+        'message'=>'Не удалось проверить источник персонажа. Код обращения: '.$id];
 }
 
 function af_advancedcombatsystem_session_failure(Throwable $error): array

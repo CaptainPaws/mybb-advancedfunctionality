@@ -50,16 +50,20 @@ final class AF_ACS_EntityService
     {
         if(!in_array($kind,['character','pet','npc','monster'],true))throw new RuntimeException('ACS_ENTITY_KIND_INVALID');
     }
-    private function prepare(string $sid,array $input,bool $write=false): array
+    private function prepare(string $sid,array $input,bool $write=false,?string &$phase=null,?callable $onSourceError=null): array
     {
+        $phase='access';
         $kind=(string)($input['kind']??'');$this->kind($kind);$view=$this->access($sid,$kind,true);
         $key=(string)($input['source_key']??'');
         if($key==='' || strlen($key)>191)throw new RuntimeException('ACS_SOURCE_REQUIRED');
         $actor=(int)$this->access->uid();
+        $phase='character_grant';
         $grant=$kind==='character' && $view['can_register_characters'] ? $this->source->characterGrant($sid,$key,$actor) : null;
         $owner=$grant?->ownerUid??$actor;
-        $dto=$this->source->read($kind,$key,$actor,$grant);
+        $phase='source_read';
+        $dto=$this->source->read($kind,$key,$actor,$grant,onError:$onSourceError);
         if(empty($dto['ready']))throw new AF_ACS_RegistrationBlocked($dto['diagnostics']??[['code'=>'snapshot_source_unavailable','path'=>'source','severity'=>'error']]);
+        $phase='source_validation';
         $issues=[];$stats=(array)($dto['characteristics']??[]);
         AF_ACS_CapabilityValidator::stats($stats,$issues);
         AF_ACS_CapabilityValidator::resistances((array)($dto['resistances']??[]),$issues);
@@ -71,6 +75,7 @@ final class AF_ACS_EntityService
         // SQL hp/hp_max are integers. Do not silently round a source value.
         if(!is_numeric($hpMax) || (float)$hpMax>9007199254740991 || (float)$hpMax!==floor((float)$hpMax))throw new RuntimeException('ACS_HP_INTEGER_REQUIRED');
         $hpMax=sprintf('%.0f',(float)$hpMax);
+        $phase='initial_hp';
         $current=$dto['resources']['hp']['current']??null;
         if($current===null) {
             $initial=$input['initial_hp']??null;
@@ -86,22 +91,27 @@ final class AF_ACS_EntityService
         $isCharacter=$kind==='character';$isOwned=in_array($kind,['character','pet'],true);
         $fingerprint=$isOwned?($dto['identity']['source_fingerprint']??null):($dto['definition_version']['fingerprint']??null);
         if(!AF_ACS_CapabilityValidator::fingerprint($fingerprint))throw new RuntimeException('ACS_DEFINITION_VERSION_CONFLICT');
+        $phase='ability_definitions';
         $definitions=$this->source->definitions($dto,(int)$this->access->uid());
         $snapshot=['schema_version'=>1,'contract_id'=>'IC-ACS.entity-registration.v1','contract_version'=>'1',
             'numeric_policy'=>'binary64-half_up-v1','engine_version'=>'acs-registration-1','source_snapshot'=>$dto,
             'pinned_abilities'=>$definitions,'initial_resources'=>['hp'=>['current'=>$current,'maximum'=>$hpMax,'source'=>($dto['resources']['hp']['current']??null)===null?'explicit_registration_input':'owner_contract']],
             'equipment_policy'=>'already_included_do_not_reapply'];
         if ($isCharacter) {
+            $phase='inventory_read';
             require_once __DIR__.'/../Infrastructure/Adapters/EquipmentAdapter.php';
             require_once __DIR__.'/../../../advancedinventory/modules/InventoryRead.php';
             global $db;
             $this->repository->assertReadConnection($db);
             $reader=new AF_ADVINV_InventoryRead($db,grant:$grant);
             if ($write) $reader->fence($owner,$actor);
-            $snapshot['equipment_snapshot']=(new AF_ACS_EquipmentAdapter())->prepare($dto,$reader->read($owner,$actor),$sid,$actor,$grant);
+            $inventory=$reader->read($owner,$actor);
+            $phase='equipment_projection';
+            $snapshot['equipment_snapshot']=(new AF_ACS_EquipmentAdapter())->prepare($dto,$inventory,$sid,$actor,$grant);
             if ($grant) $snapshot['registration_context']=['actor_uid'=>$actor,'owner_uid'=>$owner,'session_id'=>$sid,
                 'sheet_id'=>$grant->sheetId,'source_tid'=>$grant->sourceTid];
         }
+        $phase='snapshot_serialization';
         AF_ACS_Repository::json($snapshot);
         $preparationFingerprint=af_kb_arpg_acs_fingerprint($snapshot);
         $name=trim((string)($input['name']??''));if($name==='')$name=$isCharacter?'Персонаж · лист #'.$key:'Бестиарий · '.$key;
@@ -119,20 +129,45 @@ final class AF_ACS_EntityService
     /** Explicit POST preview returns diagnostics only; never exposes another owner's DTO. */
     public function validate(string $sid,array $input): array
     {
-        $this->access->csrf();
-        try{$registration=$this->prepare($sid,$input);return ['ready'=>true,'diagnostics'=>[],'source_fingerprint'=>$registration['source_fingerprint'],'preparation_fingerprint'=>$registration['preparation_fingerprint']];}
-        catch (AF_ACS_RegistrationBlocked $e) {return ['ready'=>false,'diagnostics'=>AF_ACS_CapabilityValidator::safeDiagnostics($e->diagnostics)];}
-        catch (RuntimeException $e) {
-            $path=in_array($e->getMessage(),self::CHARACTER_SOURCE_ERRORS,true) ? 'source' : match($e->getMessage()) {
+        $phase='csrf';
+        $sourceFailure=null;
+        try {
+            $this->access->csrf();
+            $registration=$this->prepare($sid,$input,phase:$phase,onSourceError:static function (Throwable $error,string $point) use (&$sourceFailure): void {
+                $sourceFailure??=af_advancedcombatsystem_source_check_error($error,$point);
+            });
+            return ['ready'=>true,'status'=>'ready','diagnostics'=>[],
+                'source_fingerprint'=>$registration['source_fingerprint'],'preparation_fingerprint'=>$registration['preparation_fingerprint']];
+        } catch (AF_ACS_RegistrationBlocked $error) {
+            if ($sourceFailure!==null) return $sourceFailure;
+            $diagnostics=AF_ACS_CapabilityValidator::safeDiagnostics($error->diagnostics);
+            $codes=array_column($diagnostics,'code');
+            if (in_array('source_read_failed',$codes,true)) return af_advancedcombatsystem_source_check_error($error,$phase);
+            $denied=(bool)array_intersect($codes,['access_denied','definition_access_denied','registration_ownership_required','equipment_access_denied']);
+            return ['ready'=>false,'status'=>$denied?'denied':'blocked','diagnostics'=>$diagnostics];
+        } catch (Throwable $error) {
+            $code=$error->getMessage();
+            $denied=in_array($code,['ACS_LOGIN_REQUIRED','ACS_CSRF_REQUIRED','ACS_GM_REQUIRED','ACS_REGISTRATION_DENIED','ACS_SESSION_UNAVAILABLE',
+                'ACS_THREAD_UNAVAILABLE','ACS_USER_UNAVAILABLE','ACS_CHARACTER_SOURCE_UNAVAILABLE','ACS_CHARACTER_TOPIC_UNAVAILABLE',
+                'ACS_EQUIPMENT_ACCESS_DENIED','INV_ACCESS_DENIED'],true);
+            $path=match($code) {
+                'ACS_INVALID_INTEGER','ACS_INTEGER_RANGE'=>$phase==='initial_hp'?'initial_hp':'source',
                 'ACS_HP_RANGE','ACS_HP_INTEGER_REQUIRED'=>'initial_hp',
-                'ACS_DEFINITION_VERSION_CONFLICT','ACS_DEFINITION_LIMIT'=>'abilities',
+                'ACS_DEFINITION_VERSION_CONFLICT'=>$phase==='ability_definitions'?'abilities':'source',
+                'ACS_DEFINITION_LIMIT'=>'abilities',
                 'ACS_EQUIPMENT_SOURCE_UNAVAILABLE','ACS_EQUIPMENT_ACCESS_DENIED','ACS_EQUIPMENT_BINDING_INVALID',
                 'ACS_EQUIPMENT_DEFINITION_UNAVAILABLE','ACS_EQUIPMENT_SLOT_INVALID','ACS_EQUIPMENT_COSMETIC_SOURCE',
-                'ACS_EQUIPMENT_PROVENANCE_BLOCKED','ACS_EQUIPMENT_SOURCE_CHANGED','ACS_EQUIPMENT_RESERVATION_INVALID'=>'equipment',
-                default=>null,
+                'ACS_EQUIPMENT_PROVENANCE_BLOCKED','ACS_EQUIPMENT_SOURCE_CHANGED','ACS_EQUIPMENT_RESERVATION_INVALID',
+                'INV_ACCESS_DENIED','INV_SOURCE_CHANGED','INV_VERSION_CONFLICT','INV_INCOMPLETE_SNAPSHOT'=>'equipment',
+                'ACS_SOURCE_REQUIRED','ACS_ENTITY_KIND_INVALID','ACS_INVALID_TEXT','ACS_JSON_TOO_LARGE',
+                'ACS_DEPENDENCY_UNAVAILABLE','ACS_SESSION_TRANSITION_BLOCKED','ACS_POST_REQUIRED'=>'source',
+                default=>$denied || in_array($code,self::CHARACTER_SOURCE_ERRORS,true)?'source':null,
             };
-            if ($path===null) throw $e;
-            return ['ready'=>false,'diagnostics'=>[['code'=>strtolower(substr($e->getMessage(),4)),'path'=>$path,'severity'=>'error']]];
+            if ($path===null) return af_advancedcombatsystem_source_check_error($error,$phase);
+            $result=['ready'=>false,'status'=>$denied?'denied':'blocked',
+                'diagnostics'=>[['code'=>strtolower(str_starts_with($code,'ACS_')?substr($code,4):$code),'path'=>$path,'severity'=>'error']]];
+            if ($denied) $result['message']='Источник недоступен по правам. Проверьте доступ к листу и текущей сессии.';
+            return $result;
         }
     }
     public function register(array $input): array

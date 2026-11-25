@@ -9,7 +9,7 @@ require_once __DIR__.'/PermanentPetSource.php';
 class AF_ACS_RegistrationSource
 {
     public function __construct(private ?AF_ACS_PermanentPetSource $pets=null) {}
-    public function read(string $kind,string $key,int $actor,?AF_ACS_CharacterRegistrationGrant $grant=null): array
+    public function read(string $kind,string $key,int $actor,?AF_ACS_CharacterRegistrationGrant $grant=null,?callable $onError=null): array
     {
         if ($kind==='pet') {
             if(!$this->pets)return $this->blocked('permanent_pet_source_unavailable');
@@ -35,7 +35,7 @@ class AF_ACS_RegistrationSource
                 if (!$sheet) return $this->blocked('registration_ownership_required');
                 if (!$this->sheetMatchesSlug($sheet)) return $this->blocked('sheet_topic_mismatch');
             }
-            $dto=(new AF_ACS_CharacterSheetAdapter)->createSnapshot($sheetId,$actor,grant:$grant);
+            $dto=(new AF_ACS_CharacterSheetAdapter)->createSnapshot($sheetId,$actor,$onError===null?[]:['on_source_error'=>$onError],$grant);
             if (isset($dto['identity']) && (($dto['identity']['owner_uid']??null)!==($grant?->ownerUid??$actor)
                 || ($grant && ($dto['identity']['tid']??null)!==$grant->sourceTid))) return $this->blocked('registration_ownership_required');
             return $dto;
