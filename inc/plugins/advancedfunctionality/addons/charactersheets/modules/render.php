@@ -1077,6 +1077,24 @@ function af_charactersheets_arpg_resolve_kb_entry_flexible(string $type, string 
     return ['entry' => [], 'resolved_key' => '', 'resolved_by' => 'not_found'];
 }
 
+function af_charactersheets_arpg_resolve_stat_definition(string $type, string $key, bool $linked): array
+{
+    global $db;
+    if (!$linked || !function_exists('af_kb_arpg_acs_source')) {
+        $selection = af_charactersheets_arpg_resolve_kb_entry_flexible($type,$key);
+        return $selection + ['rules'=>af_charactersheets_arpg_extract_entry_rules($selection['entry'])];
+    }
+    $missing = ['entry'=>[],'resolved_key'=>'','resolved_by'=>'not_found','rules'=>[]];
+    $where = af_charactersheets_arpg_definition_where($type,$key);
+    if ($where === null) return $missing;
+    $row = $db->fetch_array($db->simple_select('af_kb_entries','*',$where,['limit'=>1]));
+    if (!$row || empty($row['active']) || !af_kb_entry_visible_in_context($row,'entry',af_kb_can_edit())) return $missing;
+    $issues = [];
+    $source = af_kb_arpg_acs_source($row,$issues);
+    if ($issues || ($source['rules']['schema'] ?? null) !== AF_KB_ARPG_RULES_SCHEMA) return $missing;
+    return ['entry'=>$row,'resolved_key'=>(string)$row['key'],'resolved_by'=>'direct.key','rules'=>$source['rules']];
+}
+
 function af_charactersheets_arpg_merge_rule_collections(array $initial, array $ruleSources): array
 {
     $merged = $initial;
@@ -1352,14 +1370,31 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $rank = trim((string)($character_profile['character_rank'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['rank', 'character_rank']))));
     $path = trim((string)($character_profile['character_path'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['path', 'character_path']))));
     $level = (int)($sheet_view['level'] ?? 1);
-    $rawOrigin = trim((string)($character_profile['character_origin'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_origin', 'character_race', 'race']))));
-    $rawOriginVariant = trim((string)($character_profile['character_origin_variant'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_origin_variant', 'origin_variant']))));
-    $rawArchetype = trim((string)($character_profile['character_archetype'] ?? $character_profile['character_class'] ?? ($has_kb_character ? '' : af_charactersheets_pick_field_value($atf_index, ['character_archetype', 'character_class', 'archetype', 'class']))));
+    $sourceRules = [];
+    if ($has_kb_character && function_exists('af_kb_arpg_acs_source')) {
+        $sourceIssues = [];
+        $sourceRules = af_kb_arpg_acs_source($character_source['entry'],$sourceIssues)['rules'];
+        if ($sourceIssues) $sourceRules = [];
+    }
+    $statProfile = is_array($sourceRules['character_profile'] ?? null) ? $sourceRules['character_profile'] : [];
+    if ($has_kb_character && !function_exists('af_kb_arpg_acs_source')) $statProfile = $character_profile;
+    [$rawOrigin,$rawOriginVariant,$rawArchetype] = $has_kb_character ? array_map(
+        static fn($value) => is_string($value) ? $value : '',
+        [
+            af_charactersheets_arpg_profile_choice($statProfile,'character_origin','character_race'),
+            af_charactersheets_arpg_profile_choice($statProfile,'character_origin_variant'),
+            af_charactersheets_arpg_profile_choice($statProfile,'character_archetype','character_class'),
+        ]
+    ) : [
+        af_charactersheets_pick_field_value($atf_index, ['character_origin','character_race','race']),
+        af_charactersheets_pick_field_value($atf_index, ['character_origin_variant','origin_variant']),
+        af_charactersheets_pick_field_value($atf_index, ['character_archetype','character_class','archetype','class']),
+    ];
 
-    $originResolved = af_charactersheets_arpg_resolve_kb_entry_flexible('arpg_origin', $rawOrigin);
-    $originRules = af_charactersheets_arpg_extract_entry_rules((array)($originResolved['entry'] ?? []));
-    $originVariantResolved = af_charactersheets_arpg_resolve_kb_entry_flexible('arpg_origin_variant', $rawOriginVariant);
-    $originVariantRules = af_charactersheets_arpg_extract_entry_rules((array)($originVariantResolved['entry'] ?? []));
+    $originResolved = af_charactersheets_arpg_resolve_stat_definition('arpg_origin', $rawOrigin, $has_kb_character);
+    $originRules = $originResolved['rules'];
+    $originVariantResolved = af_charactersheets_arpg_resolve_stat_definition('arpg_origin_variant', $rawOriginVariant, $has_kb_character);
+    $originVariantRules = $originVariantResolved['rules'];
     if ($rawOriginVariant !== '' && function_exists('af_kb_get_origin_parent_for_variant')) {
         $variantParent = af_kb_get_origin_parent_for_variant((string)($originVariantResolved['resolved_key'] ?? ''), true);
         if ((string)(($variantParent['origin'] ?? [])['key'] ?? '') !== (string)($originResolved['resolved_key'] ?? '')) {
@@ -1367,18 +1402,19 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
             $originVariantRules = [];
         }
     }
-    $archetypeResolved = af_charactersheets_arpg_resolve_kb_entry_flexible('arpg_archetype', $rawArchetype);
-    $archetypeRules = af_charactersheets_arpg_extract_entry_rules((array)($archetypeResolved['entry'] ?? []));
+    $archetypeResolved = af_charactersheets_arpg_resolve_stat_definition('arpg_archetype', $rawArchetype, $has_kb_character);
+    $archetypeRules = $archetypeResolved['rules'];
     $equipmentRuleSources = af_charactersheets_arpg_collect_equipment_rule_sources($build, $uid);
     $talentRuleSources = af_charactersheets_arpg_collect_talent_rule_sources($build, $uid);
-    $sourceRules = $has_kb_character && function_exists('kb_parse_rules') ? kb_parse_rules($character_source['entry']) : [];
     $manualStats = (array)($sourceRules['character_stats'] ?? []);
-    $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level, $originVariantRules);
     if (function_exists('af_kb_build_arpg_character_stats_from_sources')) {
-        $character_stats = af_kb_build_arpg_character_stats_from_sources(
+        $projection = af_charactersheets_arpg_base_projection(
             ['character_level'=>$level], $manualStats, $originRules, $originVariantRules, $archetypeRules
         );
+        $computedKbStats = $projection['computed'];
+        $character_stats = $projection['stats'];
     } else {
+        $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level, $originVariantRules);
         $character_stats = af_charactersheets_arpg_merge_runtime_stats($character_stats, $computedKbStats);
     }
 
@@ -1386,6 +1422,12 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $character_stats = af_charactersheets_arpg_apply_equipment_rules($character_stats, $equipmentRuleSources);
     $equippedStats = $character_stats;
     $character_stats = af_charactersheets_arpg_apply_equipment_rules($character_stats, $talentRuleSources);
+    // A modifier alone cannot stand in for a missing base source in ACS.
+    if (isset($projection)) {
+        foreach (['character_accuracy','character_status_resist'] as $field) {
+            if (!array_key_exists($field,$baseStats)) unset($character_stats[$field]);
+        }
+    }
     $statSources = [];
     if (function_exists('af_kb_build_arpg_character_stats_from_sources')) {
         $profile = ['character_level'=>$level];
@@ -1542,7 +1584,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         ['label' => 'Бонус лечения', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_healing_bonus', $sheet_view, ['character_computed_state.resources.healing_bonus'])],
         ['label' => 'Бонус щита', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_shield_strength', $sheet_view, ['character_computed_state.resources.shield_strength', 'mechanics.shield_bonus'])],
         ['label' => 'Шанс наложения статуса', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_status_hit', $sheet_view, ['character_computed_state.resources.status_hit'])],
-        ['label' => 'Сопротивление статусам', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_status_resist', $sheet_view, ['character_computed_state.resources.status_resist'])],
+        ['label' => 'Сопротивление статусам', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_status_resist', [], [])],
         ['label' => 'Удача', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_luck', $sheet_view, ['character_computed_state.resources.luck'])],
     ];
 

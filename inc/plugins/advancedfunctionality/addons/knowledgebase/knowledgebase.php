@@ -8775,6 +8775,12 @@ function af_kb_arpg_acs_modifiers(array $rules, string $path, array &$diagnostic
 function af_kb_arpg_omit_empty_ability_timing(array $rules): array
 {
     foreach (['cooldown','duration'] as $key) {
+        foreach ([$key,$key.'_value',$key.'_unit'] as $field) {
+            if (array_key_exists($field,$rules)
+                && ($rules[$field] === null || (is_string($rules[$field]) && trim($rules[$field]) === ''))) {
+                unset($rules[$field]);
+            }
+        }
         if (($rules[$key.'_unit'] ?? '') === '') {
             unset($rules[$key.'_unit']);
             if (($rules[$key.'_value'] ?? '') === '') unset($rules[$key.'_value']);

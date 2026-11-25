@@ -38,11 +38,23 @@ final class AF_ACS_CapabilityValidator
     /** Every stat has one canonical identity; missing and zero remain distinct. */
     public static function safeDiagnostics(array $issues): array
     {
-        return array_map(static fn($issue) => [
-            'code'=>preg_match('/\A[a-z0-9_]{1,96}\z/D',(string)($issue['code']??'')) ? $issue['code'] : 'snapshot_source_unavailable',
-            'path'=>preg_match('/\A[a-zA-Z0-9_.]{1,191}\z/D',(string)($issue['path']??'')) ? $issue['path'] : 'source',
-            'severity'=>($issue['severity']??'')==='warning' ? 'warning' : 'error',
-        ], $issues);
+        return array_map(static function ($issue): array {
+            $safe = [
+                'code'=>preg_match('/\A[a-z0-9_]{1,96}\z/D',(string)($issue['code']??'')) ? $issue['code'] : 'snapshot_source_unavailable',
+                'path'=>preg_match('/\A[a-zA-Z0-9_.]{1,191}\z/D',(string)($issue['path']??'')) ? $issue['path'] : 'source',
+                'severity'=>($issue['severity']??'')==='warning' ? 'warning' : 'error',
+            ];
+            if (str_starts_with($safe['path'],'character_abilities.')) {
+                $ability = $issue['ability'] ?? null;
+                if (is_string($ability) && preg_match('//u',$ability)) {
+                    $safe['ability'] = mb_substr(trim(preg_replace('/\p{Cc}+/u',' ',strip_tags($ability))),0,120,'UTF-8');
+                }
+                if (is_string($issue['reference'] ?? null) && preg_match('/\A[a-z0-9_.:-]{1,128}\z/D',$issue['reference'])) {
+                    $safe['reference'] = $issue['reference'];
+                }
+            }
+            return $safe;
+        }, $issues);
     }
 
     public static function stats(array $stats, array &$issues): void
