@@ -1371,29 +1371,67 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $archetypeRules = af_charactersheets_arpg_extract_entry_rules((array)($archetypeResolved['entry'] ?? []));
     $equipmentRuleSources = af_charactersheets_arpg_collect_equipment_rule_sources($build, $uid);
     $talentRuleSources = af_charactersheets_arpg_collect_talent_rule_sources($build, $uid);
-    if (!$has_kb_character) {
-        $rawAccuracy = $atf_index['character_accuracy']['value'] ?? null;
-        if ($rawAccuracy === null && isset($atf_index['character_stats'])) {
-            $rawStats = af_charactersheets_json_decode((string)($atf_index['character_stats']['value'] ?? '{}'));
-            $rawAccuracy = $rawStats['character_accuracy'] ?? null;
+    $sourceRules = $has_kb_character && function_exists('kb_parse_rules') ? kb_parse_rules($character_source['entry']) : [];
+    $manualStats = (array)($sourceRules['character_stats'] ?? []);
+    $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level, $originVariantRules);
+    if (function_exists('af_kb_build_arpg_character_stats_from_sources')) {
+        $character_stats = af_kb_build_arpg_character_stats_from_sources(
+            ['character_level'=>$level], $manualStats, $originRules, $originVariantRules, $archetypeRules
+        );
+    } else {
+        $character_stats = af_charactersheets_arpg_merge_runtime_stats($character_stats, $computedKbStats);
+    }
+
+    $baseStats = $character_stats;
+    $character_stats = af_charactersheets_arpg_apply_equipment_rules($character_stats, $equipmentRuleSources);
+    $equippedStats = $character_stats;
+    $character_stats = af_charactersheets_arpg_apply_equipment_rules($character_stats, $talentRuleSources);
+    $statSources = [];
+    if (function_exists('af_kb_build_arpg_character_stats_from_sources')) {
+        $profile = ['character_level'=>$level];
+        foreach ([
+            'Происхождение'=>[$originRules, [], []],
+            'Разновидность'=>[[], $originVariantRules, []],
+            'Архетип'=>[[], [], $archetypeRules],
+        ] as $label=>$definitions) {
+            $contribution = af_kb_build_arpg_character_stats_from_sources($profile, [], ...$definitions);
+            $sourceDefinition = $definitions[0]+$definitions[1]+$definitions[2];
+            foreach ($contribution as $field=>$value) {
+                $explicitStatus = $field==='character_status_resist'
+                    && (isset($sourceDefinition['status_resistance_base']) || isset($sourceDefinition['status_resist_base']));
+                if ($value != 0 || $field==='character_accuracy' || $explicitStatus) $statSources[$field][] = $label;
+            }
         }
-        if (is_numeric($rawAccuracy) && is_finite((float)$rawAccuracy) && (float)$rawAccuracy >= 0) {
-            $character_stats['character_accuracy'] = (float)$rawAccuracy;
+        foreach ($character_stats as $field=>$value) {
+            if ($field === 'character_accuracy' && is_numeric($manualStats[$field] ?? null)) {
+                $statSources[$field] = ['Корректировка персонажа в KB'];
+            } elseif (($computedKbStats[$field] ?? null) !== ($baseStats[$field] ?? null)) {
+                $statSources[$field][] = 'Корректировка персонажа в KB';
+            }
+            if (($equippedStats[$field] ?? null) !== ($baseStats[$field] ?? null)) $statSources[$field][] = 'Экипировка';
+            if ($value !== ($equippedStats[$field] ?? null)) $statSources[$field][] = 'Таланты';
         }
     }
-    $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level, $originVariantRules);
-    $character_stats = af_charactersheets_arpg_merge_runtime_stats($character_stats, $computedKbStats);
-    // Canonical character payloads may already contain non-zero base totals.
-    // Apply live equipment afterwards so those payload values cannot mask item
-    // modifiers and Inventory changes are reflected without rewriting build_json.
-    $character_stats = af_charactersheets_arpg_apply_equipment_rules($character_stats, $equipmentRuleSources);
-    $character_stats = af_charactersheets_arpg_apply_equipment_rules($character_stats, $talentRuleSources);
     $ruleCollections = af_charactersheets_arpg_merge_rule_collections(
-        ['resources' => $resources, 'resistances' => $resistances],
-        array_merge([$originRules, $originVariantRules, $archetypeRules], $equipmentRuleSources, $talentRuleSources)
+        ['resources' => $resources],
+        array_map(static fn($rules) => array_diff_key($rules, ['resistances'=>true,'resists'=>true]),
+            array_merge([$originRules, $originVariantRules, $archetypeRules], $equipmentRuleSources, $talentRuleSources))
     );
     $resources = (array)($ruleCollections['resources'] ?? []);
-    $resistances = (array)($ruleCollections['resistances'] ?? []);
+    $resistanceRows = $resistanceIssues = [];
+    if (function_exists('af_kb_arpg_character_resistances')) {
+        $resistanceSources = [
+            ['id'=>'Персонаж в KB','rules'=>$sourceRules],
+            ['id'=>'Происхождение','rules'=>$originRules],
+            ['id'=>'Разновидность','rules'=>$originVariantRules],
+            ['id'=>'Архетип','rules'=>$archetypeRules],
+        ];
+        foreach ($equipmentRuleSources as $itemRules) $resistanceSources[] = ['id'=>'Экипировка','rules'=>$itemRules];
+        foreach ($talentRuleSources as $talentRules) $resistanceSources[] = ['id'=>'Таланты','rules'=>$talentRules];
+        $resistanceRows = af_kb_arpg_character_resistances($resistanceSources,$resistanceIssues);
+        $resistances = array_map(static fn($row) => $row['value'], $resistanceRows);
+    }
+    $ruleCollections['resistances'] = $resistances;
 
     $chips = [];
     $chips[] = '<span class="af-cs-arpg-chip">Lv. ' . htmlspecialchars_uni((string)$level) . '</span>';
@@ -1508,6 +1546,23 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         ['label' => 'Удача', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_luck', $sheet_view, ['character_computed_state.resources.luck'])],
     ];
 
+    if (function_exists('af_kb_arpg_character_stat_registry')) {
+        $fieldsByLabel = array_column(af_kb_arpg_character_stat_registry(),'vm_field','label');
+        foreach ($stats_panel as &$row) {
+            $field = $fieldsByLabel[$row['label']] ?? null;
+            $row['sources'] = $statSources[$field ?? ''] ?? ($field && array_key_exists($field,$baseStats) ? ['Расчёт по KB'] : []);
+        }
+        unset($row);
+    }
+    foreach ($resistanceRows as $element=>$row) {
+        $stats_panel[] = ['label'=>af_kb_arpg_primary_elements()[$element]['ru'].' · RES',
+            'value'=>$resistanceIssues ? '—' : $row['value'],
+            'sources'=>$resistanceIssues ? ['Проверьте определения RES в KB'] : array_values(array_unique(array_map(
+                static fn($entry) => $entry['source']==='kb:character-res-baseline-v1' ? 'Базовое значение KB' : $entry['source'],
+                $row['provenance']
+            )))];
+    }
+
     $arpgStatsTrace = [
         'origin_raw' => $rawOrigin,
         'archetype_raw' => $rawArchetype,
@@ -1619,6 +1674,7 @@ function af_charactersheets_arpg_render_stats_panel_html(array $stats): string
         $html .= '<div class="af-cs-arpg-stat-row">'
             . '<span class="af-cs-arpg-stat-label">' . htmlspecialchars_uni((string)($row['label'] ?? '—')) . '</span>'
             . '<strong class="af-cs-arpg-stat-value">' . htmlspecialchars_uni((string)($row['value'] ?? '—')) . '</strong>'
+            . (!empty($row['sources']) ? '<small class="af-cs-muted">' . htmlspecialchars_uni(implode(', ', $row['sources'])) . '</small>' : '')
             . '</div>';
     }
     return $html;

@@ -17,6 +17,69 @@ function af_kb_arpg_primary_elements(): array
     ];
 }
 
+/** Versioned KB baseline for player characters, keyed by the primary registry. */
+function af_kb_arpg_character_resistance_baseline(): array
+{
+    return array_fill_keys(array_keys(af_kb_arpg_primary_elements()), 0);
+}
+
+/** Combine only explicit RES sources. Weaknesses and immunities have separate contracts. */
+function af_kb_arpg_character_resistances(array $sources, array &$diagnostics): array
+{
+    $totals = [];
+    foreach (af_kb_arpg_character_resistance_baseline() as $key => $value) {
+        $totals[$key] = ['value'=>$value, 'provenance'=>[
+            ['source'=>'kb:character-res-baseline-v1','element'=>$key,'value'=>$value],
+        ]];
+    }
+    foreach ($sources as $source) {
+        if (!empty($source['rules']['resistances']) && !empty($source['rules']['resists'])) {
+            af_kb_arpg_acs_diagnostic($diagnostics,'element_resistance_alias_collision',$source['id'].'.resistances');
+            continue;
+        }
+        foreach (['resistances','resists'] as $bucket) {
+            if (!array_key_exists($bucket, $source['rules'])) continue;
+            $values = $source['rules'][$bucket];
+            $path = $source['id'].'.'.$bucket;
+            if (is_array($values)) {
+                foreach ($values as $key => $value) {
+                    if (is_string($key) && !is_array($value)) {
+                        $values[$key] = ['scope'=>'elemental','unit'=>'RES','damage_element'=>$key,'value'=>$value];
+                    }
+                }
+            }
+            $issues = [];
+            $rows = af_kb_arpg_acs_resistances($values,$path,$issues);
+            foreach ($rows as $row) {
+                $key = $row['canonical_element'];
+                $params = $row['parameters'];
+                if (!isset($totals[$key ?? '']) || ($params['scope'] ?? null) !== 'elemental'
+                    || $row['unit'] !== 'RES' || !is_numeric($params['value'] ?? null)
+                    || !is_finite((float)$params['value']) || (float)$params['value'] < 0
+                    || !empty($params['condition_text']) || isset($params['condition_ref']) || isset($params['magic_direction_ref'])
+                    || (isset($params['damage_type']) && $params['damage_type'] !== 'elemental')) {
+                    af_kb_arpg_acs_diagnostic($issues,'element_resistance_source_invalid',$path.'.'.$row['source_index']);
+                }
+            }
+            $diagnostics = array_merge($diagnostics,$issues);
+            if (array_filter($issues, static fn($issue) => $issue['severity'] === 'error')) continue;
+            foreach ($rows as $row) {
+                $key = $row['canonical_element'];
+                $value = (float)$row['parameters']['value'];
+                $total = $totals[$key]['value'] + $value;
+                if (!is_finite($total)) {
+                    af_kb_arpg_acs_diagnostic($diagnostics,'element_resistance_value_invalid',$path.'.'.$row['source_index']);
+                    continue;
+                }
+                $totals[$key]['value'] = $total;
+                $totals[$key]['provenance'][] = ['source'=>$source['id'], 'version'=>$source['version'] ?? null,
+                    'bucket'=>$bucket, 'index'=>$row['source_index'], 'value'=>$value];
+            }
+        }
+    }
+    return $totals;
+}
+
 function af_kb_arpg_canonical_element_key(string $key): string
 {
     return $key === 'wind' ? 'air' : $key;

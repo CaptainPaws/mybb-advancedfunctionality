@@ -19,7 +19,7 @@ final class AF_ACS_TestpackDefinitions
             'starting_notes'=>'Выберите основную стихию Огонь в анкете.',
         ]);
         $add('archetype', 'arpg_archetype', 'Пламенный воитель', 'Воитель первой линии с двуручным оружием.', [
-            'base_defense_bonus'=>0, 'defense_base'=>2, 'attack_power_base'=>2,
+            'base_defense_bonus'=>0, 'defense_base'=>2, 'attack_power_base'=>2, 'accuracy_base'=>0,
             'slot_rules_text'=>'Двуручное оружие, физические и огненные атаки, защитные реакции.',
         ]);
 
