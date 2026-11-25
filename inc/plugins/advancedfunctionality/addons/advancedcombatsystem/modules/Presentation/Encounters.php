@@ -95,7 +95,7 @@ final class AF_ACS_EncountersPage
         }
         ob_start();
         try {
-            echo '<section class="af-acs af-acs-gm"><h2>ACS · Панель GM</h2>'.$notice;
+            echo '<section class="af-acs af-acs-gm'.($setup?' af-acs-gm--wizard':'').'">'.(!$setup?'<h2>ACS · Панель GM</h2>':'').$notice;
             if($commandBlocked){echo '<p>Новые команды временно не предлагаются. <a href="'.self::esc($base.'&acs_tab=overview').'">Перечитать состояние без повторного POST</a>. Для восстановления используйте прежнюю операцию и диагностику; не создавайте другой ключ.</p></section>';return ob_get_clean();}
             if ($setup) {
                 AF_ACS_GmPanel::preparation($service,$session,$list,$base,$eid,$stage,$sourceCheck,$registered);

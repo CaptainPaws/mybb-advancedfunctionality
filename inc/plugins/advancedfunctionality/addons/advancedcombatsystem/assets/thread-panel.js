@@ -107,7 +107,10 @@
         refreshButton.disabled = true;
         showError(body ? 'Сохранение…' : 'Загрузка…', false);
         const scroll = content.scrollTop;
-        const pickerScroll = content.querySelector('.af-acs-gm__picker')?.scrollTop ?? 0;
+        const previousColumns = Array.from(content.querySelectorAll('.af-acs-gm__column-body'), column => column.scrollTop);
+        const sameRoster = tool === 'gm' && current?.searchParams.get('gm_stage') === 'roster'
+            && url.searchParams.get('gm_stage') === 'roster'
+            && current.searchParams.get('acs_encounter') === url.searchParams.get('acs_encounter');
         let confirmed = false;
         try {
             const response = await fetch(fragmentUrl(url, tool), {
@@ -153,18 +156,24 @@
             window.AFACSBuilder?.init(content);
             window.AFACSAmbush?.init(content);
             content.scrollTop = keepScroll ? scroll : 0;
-            const picker = content.querySelector('.af-acs-gm__picker');
+            setDialogMode(tool);
+            const columns = Array.from(content.querySelectorAll('.af-acs-gm__column-body'));
+            if (sameRoster) {
+                columns.slice(0, body ? 3 : 2).forEach((column, index) => { column.scrollTop = previousColumns[index] ?? 0; });
+            }
+            const picker = content.querySelector('.af-acs-gm__picker .af-acs-gm__column-body');
             const sourceResult = body ? picker?.querySelector('[data-acs-source-result]') : null;
-            if (picker && body) picker.scrollTop = pickerScroll;
             if (sourceResult) {
                 const offset = sourceResult.getBoundingClientRect().top - picker.getBoundingClientRect().top;
                 if (offset < 0 || offset > picker.clientHeight - 48) picker.scrollTop += offset;
             }
+            const sideSettings = columns[0]?.querySelector('[data-acs-side-settings]');
+            if (sideSettings) columns[0].scrollTop += sideSettings.getBoundingClientRect().top - columns[0].getBoundingClientRect().top;
             current = url;
             activeTool = tool;
             dialog.querySelector('[data-fallback]').href = url.href;
             showError('', false);
-            if (focus) (sourceResult ?? content).focus({preventScroll: true});
+            if (focus) (sourceResult ?? sideSettings ?? content).focus({preventScroll: true});
         } catch (_) {
             if (!dialog?.open) return;
             if (body && !confirmed) {
@@ -228,14 +237,22 @@
         return !state?.dirty || window.confirm('Действия ещё не сохранены на сервере. Закрыть конструктор?');
     }
 
+    function setDialogMode(tool) {
+        const gm = tool === 'gm';
+        dialog.classList.toggle('af-acs-modal--gm', gm);
+        dialog.querySelectorAll('[data-gm-header]').forEach(part => { part.hidden = !gm; });
+        dialog.querySelector('[data-default-close]').hidden = gm;
+    }
+
     function makeDialog(link, url, tool) {
         const host = window.AFModalHost?.get();
         if (!host) return false;
         dialog = document.createElement('dialog');
-        dialog.className = 'af-acs-modal';
+        dialog.className = 'af-acs-modal' + (tool === 'gm' ? ' af-acs-modal--gm' : '');
         dialog.setAttribute('aria-labelledby', 'af-acs-modal-title');
-        dialog.innerHTML = '<header><h2 id="af-acs-modal-title">Панель ACS</h2>'
-            + '<button type="button" class="atf-button atf-button--secondary" data-close>Закрыть</button></header>'
+        dialog.innerHTML = '<header class="af-acs-modal__header"><span class="af-acs-modal__emblem" aria-hidden="true" data-gm-header hidden><i class="fa-solid fa-khanda"></i></span>'
+            + '<div><h2 id="af-acs-modal-title">Панель ACS</h2><p class="af-acs-modal__subtitle" data-gm-header hidden>Управление боевой сессией</p></div>'
+            + '<button type="button" class="atf-button atf-button--secondary atf-modal-close" aria-label="Закрыть панель ACS" data-close><i class="fa-solid fa-xmark" aria-hidden="true" data-gm-header hidden></i><span data-default-close>Закрыть</span></button></header>'
             + '<div class="af-acs-modal__feedback"><p role="status"></p>'
             + '<button type="button" class="atf-button atf-button--secondary" data-retry hidden>Повторить прежний запрос</button>'
             + '<button type="button" class="atf-button atf-button--secondary" data-refresh hidden>Обновить шаг</button>'
@@ -247,6 +264,7 @@
         refreshButton = dialog.querySelector('[data-refresh]');
         dialog.querySelector('[data-fallback]').href = url.href;
         opener = link;
+        setDialogMode(tool);
         host.append(dialog);
         dialog.showModal();
         closeButton.addEventListener('click', () => { if (canLeave()) dialog.close(); });

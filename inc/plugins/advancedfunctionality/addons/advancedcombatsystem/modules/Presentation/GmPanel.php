@@ -10,9 +10,9 @@ final class AF_ACS_GmPanel
     {return ['active'=>'Активно','preparation'=>'Подготовка','ambush_ready'=>'Готовность засады','pending_resolution'=>'Ожидание исхода','completed'=>'Завершено','paused'=>'Пауза','pending_close'=>'Подготовлено закрытие','closed'=>'Закрыто','archived'=>'Архив','engaged'=>'В составе','surrendered'=>'Сдался','escaped'=>'Покинул бой','withdrawn'=>'Выведен','captured'=>'Пленён','despawned'=>'Призыв завершён','incapacitated'=>'Недееспособен','dead'=>'Мёртв','exclusive'=>'Один управляющий','shared'=>'Совместное управление','gm_pool'=>'Мастера сессии'][$v]??$v;}
     public static function fields(array $fields):void
     {foreach($fields as $key=>$value)echo '<input type="hidden" name="'.self::esc($key).'" value="'.self::esc($value).'">';}
-    public static function form(string $url,string $op,array $s,?array $e=null):void
+    public static function form(string $url,string $op,array $s,?array $e=null,string $id=''):void
     {
-        global $mybb;echo '<form method="post" action="'.self::esc($url).'">';
+        global $mybb;echo '<form method="post" action="'.self::esc($url).'"'.($id!==''?' id="'.self::esc($id).'"':'').'>';
         self::fields(['acs_encounter_op'=>$op,'session_id'=>$s['id'],'tid'=>$s['tid'],'expected_version'=>$s['session_version'],'operation_key'=>bin2hex(random_bytes(16)),'my_post_key'=>$mybb->post_code]+($e?['encounter_id'=>$e['id'],'encounter_version'=>$e['encounter_version']]:[]));
         echo AF_ACS_GmIntent::checkbox(str_starts_with($op,'session_')?substr($op,8):$op);
     }
@@ -80,25 +80,36 @@ final class AF_ACS_GmPanel
         $sid=$session['id'];
         if ($eid==='') $stage='settings';
         $url=self::stepUrl($base,$eid,$stage);
+        $view=$eid!==''?$service->view($sid,$eid,$session['tid'],$mybb->get_input('participant_after')?:'0',
+            $mybb->get_input('side_after')?:'0',$mybb->get_input('relation_after')?:'0'):[];
+        $encounter=$view['encounter']??[];
+        echo '<header class="af-acs-gm__statusbar"><h2>ACS · Панель GM</h2><div class="af-acs-gm__pills">';
+        echo '<span class="af-acs-gm__pill">Сессия #'.self::esc($sid).'</span>';
+        if ($encounter) {
+            echo '<span class="af-acs-gm__pill">Столкновение #'.self::esc($eid).'</span><span class="af-acs-gm__pill">'.self::esc(self::state($encounter['status'])).'</span>';
+        }
+        echo '<span class="af-acs-gm__pill'.($session['status']==='active'?' af-acs-gm__pill--active':'').'">'.self::esc(self::state($session['status'])).'</span></div></header>';
         $steps=array_keys(self::STEPS);
         $index=array_search($stage,$steps,true);
         $resume=$url;
-        if ($stage==='roster' && $registered==='' && $mybb->get_input('gm_picker')==='1') {
+        if ($stage==='roster' && $mybb->get_input('gm_picker')==='1') {
             $resume.='&gm_picker=1&kind='.rawurlencode($mybb->get_input('kind'));
-            foreach (['source_key','source_slug','source_after'] as $field) {
+            foreach (['source_key','source_slug','source_after','gm_side'] as $field) {
                 $value=$mybb->get_input($field);
-                if ($value!=='') $resume.='&'.$field.'='.rawurlencode($value);
+                if ($value!=='' && ($registered==='' || $field==='gm_side')) $resume.='&'.$field.'='.rawurlencode($value);
             }
         }
         $resumeAttr=$registered!=='' || $sourceCheck!==[] ? ' data-acs-gm-resume="'.self::esc($resume).'"' : '';
         echo '<nav aria-label="Шаги подготовки"'.$resumeAttr.'><ol class="af-acs-gm__steps">';
+        $icons=['settings'=>'fa-gear','roster'=>'fa-users','check'=>'fa-shield','start'=>'fa-play'];
         foreach (self::STEPS as $key=>$label) {
             echo '<li>';
             if ($eid==='' && $key!=='settings') echo self::esc($label);
-            else echo '<a href="'.self::esc(self::stepUrl($base,$eid,$key)).'"'.($key===$stage?' aria-current="step"':'').'>'.self::esc($label).'</a>';
+            else echo '<a href="'.self::esc(self::stepUrl($base,$eid,$key)).'"'.($key===$stage?' aria-current="step"':'').'><i class="fa-solid '.$icons[$key].'" aria-hidden="true"></i> '.self::esc($label).'</a>';
             echo '</li>';
         }
-        echo '</ol></nav><h3>'.self::esc(self::STEPS[$stage]).'</h3>';
+        echo '</ol></nav>';
+        if ($stage!=='roster') echo '<div class="af-acs-gm__stage"><h3>'.self::esc(self::STEPS[$stage]).'</h3>';
 
         if ($eid==='') {
             if ($session['status']==='active') {
@@ -109,10 +120,8 @@ final class AF_ACS_GmPanel
                 echo '<p>Создание доступно в активной сессии.</p>';
             }
         } else {
-            $view=$service->view($sid,$eid,$session['tid'],$mybb->get_input('participant_after')?:'0',$mybb->get_input('side_after')?:'0',$mybb->get_input('relation_after')?:'0');
-            $encounter=$view['encounter'];
             $config=json_decode($encounter['config_json'],true,64,JSON_THROW_ON_ERROR);
-            echo '<p><strong>'.self::esc($config['title']).'</strong> · '.self::esc(self::state($encounter['status'])).'</p>';
+            if ($stage!=='roster') echo '<p><strong>'.self::esc($config['title']).'</strong></p>';
             switch ($stage) {
                 case 'settings':
                     self::settings($view,$url,true);
@@ -138,13 +147,16 @@ final class AF_ACS_GmPanel
                     }
                     break;
             }
-            echo '<nav aria-label="Переход между шагами">';
-            if ($index>0) echo '<a href="'.self::esc(self::stepUrl($base,$eid,$steps[$index-1])).'">Назад</a>';
-            if ($index<count($steps)-1) echo '<a href="'.self::esc(self::stepUrl($base,$eid,$steps[$index+1])).'">Далее</a>';
-            echo '</nav>';
+            if ($stage!=='roster') {
+                echo '<nav aria-label="Переход между шагами">';
+                if ($index>0) echo '<a href="'.self::esc(self::stepUrl($base,$eid,$steps[$index-1])).'">Назад</a>';
+                if ($index<count($steps)-1) echo '<a href="'.self::esc(self::stepUrl($base,$eid,$steps[$index+1])).'">Далее</a>';
+                echo '</nav>';
+            }
         }
+        if ($stage!=='roster') echo '</div>';
 
-        echo '<details><summary>Расширенные настройки и диагностика</summary>';
+        echo '<details class="af-acs-gm__advanced"><summary>Расширенные настройки и диагностика</summary>';
         echo '<p>Сессия #'.self::esc($sid).' · версия '.self::esc($session['session_version']).'</p>';
         if ($eid!=='') {
             echo '<p>Столкновение #'.self::esc($eid).' · версия '.self::esc($encounter['encounter_version']).'</p>';
@@ -207,110 +219,183 @@ final class AF_ACS_GmPanel
 
     private static function composition(AF_ACS_EncounterService $service,array $view,string $url,array $sourceCheck,string $registered): void
     {
-        global $mybb;
-        $session=$view['session'];$encounter=$view['encounter'];
-        $sessionView=af_advancedcombatsystem_sessions()->view($session['id']);
+        global $mybb,$db;
+        require_once __DIR__.'/Entities.php';
+        require_once __DIR__.'/../Infrastructure/GmPanelQuery.php';
+        $session=$view['session'];$encounter=$view['encounter'];$sid=$session['id'];
+        $sessionView=af_advancedcombatsystem_sessions()->view($sid);
         $editable=$session['status']==='active' && $encounter['status']==='preparation';
-        $allowed=array_merge($sessionView['can_register_own'] || $sessionView['can_register_characters']?['character']:[],$sessionView['can_manage']?['npc','monster']:[]);
+        $characters=$sessionView['can_register_own'] || $sessionView['can_register_characters'];
+        $bestiary=$sessionView['can_manage'];
         $kind=$mybb->get_input('kind');
-        $picker=$editable && $registered==='' && $mybb->get_input('gm_picker')==='1' && in_array($kind,$allowed,true);
-        echo '<div class="af-acs-gm__composition'.($picker?' af-acs-gm__composition--picker':'').'">';
-        if ($picker) {
-            $pickerUrl=$url.'&gm_picker=1&kind='.rawurlencode($kind);
-            echo '<aside class="af-acs-gm__picker" aria-labelledby="af-acs-gm-picker-title"><h4 id="af-acs-gm-picker-title">'.($kind==='character'?'Выбор персонажа':'Выбор NPC или монстра').'</h4>';
-            echo '<nav aria-label="Источник существа">';
-            if ($kind!=='character') {
-                foreach (['npc'=>'NPC','monster'=>'Монстр'] as $type=>$label) {
-                    echo '<a href="'.self::esc($url.'&gm_picker=1&kind='.$type).'"'.($kind===$type?' aria-current="page"':'').'>'.$label.'</a>';
-                }
-            }
-            echo '<a href="'.self::esc($url).'">Закрыть выбор</a></nav>';
-            require_once __DIR__.'/Entities.php';
-            AF_ACS_EntitiesPage::render($session['id'],$sessionView,$pickerUrl,null,true,$sourceCheck,true);
-            echo '</aside>';
+        if (!in_array($kind,array_merge($characters?['character']:[],$bestiary?['npc','monster']:[],['recent']),true)) {
+            $kind=$characters?'character':($bestiary?'npc':'recent');
         }
-        echo '<div>';
+        $people=$view['participants'];
+        $bySide=[];
+        foreach ($people as $person) $bySide[$person['side_id']][]=$person;
+        $playerCount=count(array_filter($people,static fn($row)=>$row['kind']==='character'));
+        $opponentCount=count(array_filter($people,static fn($row)=>in_array($row['kind'],['npc','monster'],true)));
+        $health=array_column((new AF_ACS_GmPanelQuery($db))->inspection($sid,$encounter['id'],$session['tid'],array_column($people,'entity_id'),true),null,'entity_id');
+        $selectedSide=$mybb->get_input('gm_side');
+        $sideQuery=isset(array_column($view['sides'],'name','id')[$selectedSide])?'&gm_side='.rawurlencode($selectedSide):'';
+        $pickerUrl=$url.'&gm_picker=1&kind='.$kind.$sideQuery;
+        $inRoster=array_fill_keys(array_column($people,'entity_id'),true);
+        $candidates=[];
+        if ($editable && $view['sides'] && $kind==='recent' && $registered==='') {
+            $candidates=$service->candidates($sid,$mybb->get_input('candidate_after')?:'0',$kind==='recent');
+        }
+        $available=array_filter($candidates,static fn($entity)=>!isset($inRoster[$entity['id']]));
+        $recentId=$mybb->get_input('gm_entity');
+        $recentSelection=array_column($available,null,'id')[$recentId]??null;
+        $canSave=$editable && $view['sides'] && ($registered!=='' || $recentSelection!==null);
+        $pageLabel=count($people)===100 || $mybb->get_input('participant_after')!==''?' на странице':'';
+        $readinessUrl=$pickerUrl;
+        foreach (['source_key','source_slug','source_after','gm_entity','candidate_after'] as $field) {
+            $value=$mybb->get_input($field);
+            if ($value!=='') $readinessUrl.='&'.$field.'='.rawurlencode($value);
+        }
+
+        $checked=false;
+        if ($mybb->get_input('gm_readiness')==='1' && $editable) {
+            $readiness=$service->readiness($sid,$encounter['id']);
+            $checked=$readiness['can_start'];
+            self::readiness($readiness,$view);
+        }
+
+        echo '<div class="af-acs-gm__composition">';
+        echo '<section class="af-acs-gm__column"><h4><i class="fa-solid fa-users" aria-hidden="true"></i> Стороны</h4><div class="af-acs-gm__column-body">';
+        foreach ($view['sides'] as $side) {
+            $members=$bySide[$side['id']]??[];
+            echo '<details class="af-acs-gm__side" open><summary><strong>'.self::esc($side['name']).'</strong><span class="af-acs-gm__pill">'.count($members).'</span></summary>';
+            if (!$members) echo '<p>Участников пока нет.</p>';
+            foreach ($members as $person) self::rosterCard($person,$health[$person['entity_id']]??[],true,$url,$view,$editable,$checked);
+            if ($editable) echo '<div class="af-acs-gm__side-actions"><a class="atf-button" href="'.self::esc($url.'&gm_picker=1&kind='.$kind.'&gm_side='.$side['id']).'">Добавить</a><a class="atf-button" href="'.self::esc($url.'&gm_relations=1').'">Отношения</a></div>';
+            echo '</details>';
+        }
+        if (!$view['sides']) echo '<p>Создайте стороны столкновения, например «Игроки» и «Враги».</p>';
+        if ($editable) self::sideSettings($view,$url);
+        echo '<div class="af-acs-gm__summary"><strong>Сводка по составу</strong><p>Участников'.$pageLabel.': '.count($people).' · Игроков: '.$playerCount.' · NPC/монстров: '.$opponentCount.'</p></div>';
+        echo '</div></section>';
+
+        echo '<section class="af-acs-gm__column"><h4><i class="fa-solid fa-layer-group" aria-hidden="true"></i> Состав столкновения</h4><div class="af-acs-gm__column-body">';
+        echo '<p>Участники текущего столкновения'.$pageLabel.' ('.count($people).')</p>';
+        if (!$people) echo '<p>Добавьте зарегистрированных существ на стороны столкновения.</p>';
+        foreach ($people as $person) self::rosterCard($person,$health[$person['entity_id']]??[],false,$url,$view,$editable,$checked);
+        if (count($people)===100) echo '<a href="'.self::esc($url.'&participant_after='.end($people)['id']).'">Следующие участники</a>';
+        echo '</div></section>';
+
+        echo '<section class="af-acs-gm__column af-acs-gm__picker" aria-labelledby="af-acs-gm-picker-title"><h4 id="af-acs-gm-picker-title"><i class="fa-solid fa-plus" aria-hidden="true"></i> Добавить в состав</h4><div class="af-acs-gm__column-body">';
         if ($editable) {
-            echo '<nav aria-label="Регистрация существ">';
-            if (in_array('character',$allowed,true)) echo '<a href="'.self::esc($url.'&gm_picker=1&kind=character').'">Добавить персонажа</a>';
-            else echo '<span>Для выбора персонажа нужны права мастера или право зарегистрировать собственный лист.</span>';
-            if (in_array('npc',$allowed,true)) echo '<a href="'.self::esc($url.'&gm_picker=1&kind=npc').'">Добавить NPC или монстра</a>';
+            echo '<nav aria-label="Источники состава" class="af-acs-gm__sources">';
+            foreach (array_filter(['character'=>$characters?'Персонажи':'','npc'=>$bestiary?'NPC/Монстры':'','recent'=>'Недавние']) as $type=>$label) {
+                $active=$kind===$type || ($type==='npc' && $kind==='monster');
+                echo '<a href="'.self::esc($url.'&gm_picker=1&kind='.$type.$sideQuery).'"'.($active?' aria-current="page"':'').'>'.self::esc($label).'</a>';
+            }
             echo '</nav>';
-        } else echo '<p>Состав подготовки можно менять до запуска в активной сессии.</p>';
-
-        if ($editable && $registered!=='') {
-            if ($view['sides']) self::assignment($session,$encounter,$view['sides'],$url,$registered);
-            else echo '<p>Существо зарегистрировано. Создайте сторону, затем добавьте его в состав.</p>';
-        }
-        self::participants($view,$url);
-        echo '<h4>Зарегистрированные существа</h4>';
-        $list=af_advancedcombatsystem_entities()->list($session['id'],$mybb->get_input('entity_after')?:'0');
-        if (!$list['items']) echo '<p>Существ пока нет.</p>';
-        else {
-            $types=['character'=>'Персонаж','pet'=>'Питомец','npc'=>'NPC','monster'=>'Монстр','summon'=>'Призванное существо'];
-            echo '<ul>';
-            foreach ($list['items'] as $entity) {
-                echo '<li>'.self::esc($entity['name']).' · '.self::esc($types[$entity['kind']]??'Существо').'</li>';
-            }
-            echo '</ul>';
-            if ($list['next_after']!==null) echo '<a href="'.self::esc($url.'&entity_after='.$list['next_after']).'">Следующие существа</a>';
-        }
-
-        if ($editable) {
-            self::form($url,'side_create',$session,$encounter);
-            echo '<label>Название стороны <input name="name" maxlength="191" required></label>';
-            self::submit('Добавить сторону');
-            if (!$view['sides']) echo '<p>Создайте сторону, чтобы добавить в неё существо.</p>';
-            else {
-                echo '<p>Стороны: '.self::esc(implode(', ',array_column($view['sides'],'name'))).'</p>';
-                $inRoster=array_fill_keys(array_column($view['participants'],'entity_id'),true);
-                $candidates=$service->candidates($session['id'],$mybb->get_input('candidate_after')?:'0');
-                $available=array_filter($candidates,static fn($entity)=>!isset($inRoster[$entity['id']]) && (string)$entity['id']!==$registered);
-                if ($available) self::assignment($session,$encounter,$view['sides'],$url,'',$available);
-                if (count($candidates)===100) echo '<a href="'.self::esc($url.'&candidate_after='.end($candidates)['id']).'">Следующие существа для добавления</a>';
-                if ($view['participants']) {
-                    self::form($url,'participant_side',$session,$encounter);
-                    echo '<label>Участник <select name="entity_id" required><option value="">Выберите участника</option>';
-                    foreach ($view['participants'] as $row) echo '<option value="'.self::esc($row['entity_id']).'">'.self::esc($row['name']).'</option>';
-                    echo '</select></label><label>Новая сторона ';
-                    self::sides($view['sides'],'side_id');echo '</label>';
-                    self::submit('Изменить сторону');
-                }
-                if (count($view['sides'])>1) {
-                    self::form($url,'relation_set',$session,$encounter);
-                    echo '<label>Первая сторона ';self::sides($view['sides'],'side_a');echo '</label><label>Вторая сторона ';
-                    self::sides($view['sides'],'side_b');
-                    echo '</label><label>Отношение <select name="relationship" required><option value="">Выберите отношение</option><option value="hostile">Враждебные</option><option value="allied">Союзники</option><option value="neutral">Нейтральные</option></select></label>';
-                    self::submit('Сохранить отношение');
-                    $names=array_column($view['sides'],'name','id');
-                    if ($view['relationships']) {
-                        echo '<ul>';
-                        foreach ($view['relationships'] as $row) {
-                            echo '<li>'.self::esc($names[$row['side_a']]??'Другая сторона').' / '.self::esc($names[$row['side_b']]??'Другая сторона').' · '.self::esc(['hostile'=>'Враждебные','allied'=>'Союзники','neutral'=>'Нейтральные'][$row['relationship']]??'Не определено').'</li>';
-                        }
-                        echo '</ul>';
+            if ($registered!=='') {
+                if ($view['sides']) self::assignment($session,$encounter,$view['sides'],$pickerUrl,$registered,$selectedSide);
+                else echo '<p>Существо зарегистрировано. Создайте сторону и найдите его в «Недавних».</p>';
+            } elseif ($kind==='recent') {
+                if ($recentSelection) self::assignment($session,$encounter,$view['sides'],$pickerUrl,(string)$recentSelection['id'],$selectedSide,(string)$recentSelection['name']);
+                if (!$available) echo '<p>Нет зарегистрированных существ для добавления на текущей странице.</p>';
+                else {
+                    $cursor=$mybb->get_input('candidate_after');
+                    $recentUrl=$pickerUrl.($cursor!==''?'&candidate_after='.rawurlencode($cursor):'');
+                    echo '<div class="af-acs-gm__results">';
+                    foreach ($available as $candidate) {
+                        echo '<article class="af-acs-gm__entity af-acs-gm__entity--result">'.AF_ACS_EntitiesPage::portrait((int)($candidate['owner_uid']??0))
+                            .'<div class="af-acs-gm__entity-label"><strong>'.self::esc($candidate['name']).'</strong><small>'.self::esc(AF_ACS_EntitiesPage::kindLabel($candidate['kind'])).'</small></div>'
+                            .'<a class="atf-button" href="'.self::esc($recentUrl.'&gm_entity='.$candidate['id']).'">Добавить</a></article>';
                     }
+                    echo '</div>';
                 }
-                if (count($view['sides'])===100) echo '<a href="'.self::esc($url.'&side_after='.end($view['sides'])['id']).'">Следующие стороны</a>';
-                if (count($view['relationships'])===100) echo '<a href="'.self::esc($url.'&relation_after='.end($view['relationships'])['id']).'">Следующие отношения</a>';
+                if (count($candidates)===20) echo '<a href="'.self::esc($pickerUrl.'&candidate_after='.end($candidates)['id']).'">Предыдущие регистрации</a>';
+            } else {
+                if ($kind==='character' && $sessionView['can_register_characters']) echo '<p>Можно добавить доступный лист участника форума.</p>';
+                if ($kind!=='character') {
+                    echo '<nav aria-label="Тип существа">';
+                    foreach (['npc'=>'NPC','monster'=>'Монстр'] as $type=>$label) {
+                        echo '<a href="'.self::esc($url.'&gm_picker=1&kind='.$type.$sideQuery).'"'.($type===$kind?' aria-current="page"':'').'>'.$label.'</a>';
+                    }
+                    echo '</nav>';
+                }
+                AF_ACS_EntitiesPage::render($sid,$sessionView,$pickerUrl,null,true,$sourceCheck,true,$kind);
             }
+        } else {
+            echo '<p>Добавление в состав подготовки доступно до запуска в активной сессии.</p>';
         }
-        echo '</div></div>';
+        echo '</div></section></div>';
+
+        $checkUrl=preg_replace('/gm_stage=roster$/','gm_stage=check',$url);
+        echo '<nav class="af-acs-gm__actions" aria-label="Действия состава">';
+        if ($editable) echo '<a class="atf-button" href="'.self::esc($readinessUrl.'&gm_readiness=1').'"><i class="fa-solid fa-shield" aria-hidden="true"></i> Проверить готовность</a>';
+        echo '<button class="atf-button" type="submit" form="af-acs-gm-assignment"'.($canSave?'':' disabled title="Выберите зарегистрированное существо и сторону"').'><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Сохранить состав</button>';
+        echo '<a class="atf-button atf-button--primary af-acs-gm__next" href="'.self::esc($checkUrl).'">Далее: Проверка</a></nav>';
     }
 
-    private static function assignment(array $session,array $encounter,array $sides,string $url,string $registered='',array $candidates=[]): void
+    private static function rosterCard(array $person,array $health,bool $compact,string $url,array $view,bool $editable,bool $checked): void
     {
-        self::form($url,'participant_add',$session,$encounter);
-        if ($registered!=='') {
-            self::fields(['entity_id'=>$registered]);
-            echo '<p>Выберите сторону для только что зарегистрированного существа. Для персонажа игрока владельцу требуется игровая роль в сессии. Роли доступны в расширенных настройках.</p>';
-        } else {
-            echo '<label>Зарегистрированное существо <select name="entity_id" required><option value="">Выберите существо</option>';
-            foreach ($candidates as $candidate) echo '<option value="'.self::esc($candidate['id']).'">'.self::esc($candidate['name']).'</option>';
-            echo '</select></label>';
+        $kind=AF_ACS_EntitiesPage::kindLabel($person['kind']);
+        $portrait=AF_ACS_EntitiesPage::portrait((int)($person['owner_uid']??0),(string)($health['portrait']??''));
+        $source=$person['kind']==='character'?'Лист персонажа':(in_array($person['kind'],['npc','monster'],true)?'Бестиарий':'Сессия');
+        $valid=$health && $health['snapshot_valid'];
+        $available=$valid && $person['life_state']==='active' && $person['participation']==='engaged';
+        $ready=$available && $checked;
+        $status=$ready?'Готов':($available?'Ожидает проверки':(!$valid?'Проверьте снимок':self::state($person['participation']==='engaged'?$person['life_state']:$person['participation'])));
+        echo '<article class="af-acs-gm__entity'.($compact?' af-acs-gm__entity--compact':'').'">'.$portrait.'<div class="af-acs-gm__entity-label"><strong>'.self::esc($person['name']).'</strong><small>'.self::esc($kind.' · '.$source).'</small></div>';
+        if ($compact) {
+            echo '<div><small>HP '.self::esc($health['hp']??'—').' / '.self::esc($health['hp_max']??'—').'</small><small>AP '.self::esc($health['ap']??'—').'</small></div>';
         }
-        echo '<label>Сторона ';
-        self::sides($sides,'side_id');echo '</label>';
+        echo '<span class="af-acs-gm__status'.($ready?' af-acs-gm__status--ready':'').'">'.self::esc($status).'</span>';
+        if ($editable && !$compact) {
+            echo '<div class="af-acs-gm__entity-actions"><button type="button" disabled title="Порядок задаёт ACS" aria-label="Изменить порядок"><i class="fa-solid fa-sort" aria-hidden="true"></i></button>'
+                .'<button type="button" disabled title="Удаление при подготовке недоступно" aria-label="Удалить из состава"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></div>';
+            echo '<details class="af-acs-gm__entity-tools"><summary><i class="fa-solid fa-pen" aria-hidden="true"></i> Настроить</summary>';
+            self::form($url,'participant_side',$view['session'],$view['encounter']);
+            self::fields(['entity_id'=>$person['entity_id']]);
+            echo '<label>Сторона ';
+            self::sides($view['sides'],'side_id',(string)$person['side_id']);
+            echo '</label>';
+            self::submit('Сохранить сторону');
+            echo '<p class="af-acs-gm__muted">Изменение порядка и удаление недоступны при подготовке.</p></details>';
+        }
+        echo '</article>';
+    }
+
+    private static function sideSettings(array $view,string $url): void
+    {
+        global $mybb;
+        $session=$view['session'];$encounter=$view['encounter'];$sides=$view['sides'];
+        echo '<details><summary>Создать сторону</summary>';
+        self::form($url,'side_create',$session,$encounter);
+        echo '<label>Название стороны <input name="name" maxlength="191" required></label>';
+        self::submit('Добавить сторону');
+        echo '</details><details'.($mybb->get_input('gm_relations')==='1'?' open data-acs-side-settings tabindex="-1"':'').'><summary>Отношения сторон</summary>';
+        if (count($sides)<2) echo '<p>Сначала создайте две стороны.</p>';
+        else {
+            self::form($url.'&gm_relations=1','relation_set',$session,$encounter);
+            echo '<label>Первая сторона ';self::sides($sides,'side_a');echo '</label><label>Вторая сторона ';
+            self::sides($sides,'side_b');
+            echo '</label><label>Отношение <select name="relationship" required><option value="">Выберите отношение</option><option value="hostile">Враждебные</option><option value="allied">Союзники</option><option value="neutral">Нейтральные</option></select></label>';
+            self::submit('Сохранить отношение');
+            $names=array_column($sides,'name','id');
+            foreach ($view['relationships'] as $row) {
+                echo '<p>'.self::esc(($names[$row['side_a']]??'Другая сторона').' / '.($names[$row['side_b']]??'Другая сторона')).' · '.self::esc(['hostile'=>'Враждебные','allied'=>'Союзники','neutral'=>'Нейтральные'][$row['relationship']]??'Не определено').'</p>';
+            }
+        }
+        echo '</details>';
+        if (count($sides)===100) echo '<a href="'.self::esc($url.'&side_after='.end($sides)['id']).'">Следующие стороны</a>';
+        if (count($view['relationships'])===100) echo '<a href="'.self::esc($url.'&relation_after='.end($view['relationships'])['id']).'">Следующие отношения</a>';
+    }
+
+    private static function assignment(array $session,array $encounter,array $sides,string $url,string $entityId,string $selectedSide='',string $name=''): void
+    {
+        self::form($url,'participant_add',$session,$encounter,'af-acs-gm-assignment');
+        self::fields(['entity_id'=>$entityId]);
+        if ($name!=='') echo '<strong>'.self::esc($name).'</strong>';
+        echo '<p>Выберите сторону. Для персонажа игрока владельцу нужна игровая роль в сессии.</p><label>Сторона ';
+        self::sides($sides,'side_id',$selectedSide);echo '</label>';
         self::submit('Добавить в столкновение');
     }
 
