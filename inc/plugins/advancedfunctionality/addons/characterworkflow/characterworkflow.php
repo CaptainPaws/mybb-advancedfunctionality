@@ -873,9 +873,21 @@ function af_cwf_bind_kb_entry(int $tid, int $entryId, int $actorUid = 0): void
 
 function af_cwf_bind_sheet(int $tid, int $sheetId, string $sheetSlug, int $actorUid = 0): void
 {
-    $current = af_cwf_get_row($tid);
-    if ((int)($current['sheet_id'] ?? 0) > 0 && (int)($current['sheet_id'] ?? 0) !== $sheetId) {
+    if (!function_exists('af_charactersheets_get_sheet_by_id')) {
         return;
+    }
+    $sheet = af_charactersheets_get_sheet_by_id($sheetId);
+    if ((int)($sheet['tid'] ?? 0) !== $tid || (string)($sheet['slug'] ?? '') !== $sheetSlug) {
+        return;
+    }
+    unset($GLOBALS['af_cwf_rows'][$tid]);
+    $current = af_cwf_get_row($tid);
+    $previousId = (int)($current['sheet_id'] ?? 0);
+    if ($previousId > 0 && $previousId !== $sheetId) {
+        $previous = af_charactersheets_get_sheet_by_id($previousId);
+        if ((int)($previous['tid'] ?? 0) === $tid) {
+            return;
+        }
     }
     $update = [
         'sheet_id' => $sheetId > 0 ? $sheetId : null,

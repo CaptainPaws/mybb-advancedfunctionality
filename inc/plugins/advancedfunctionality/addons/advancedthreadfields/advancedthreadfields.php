@@ -5212,10 +5212,7 @@ function af_atf_handle_character_kb_bridge_action(bool $syncOnly): void
         $workflow = function_exists('af_cwf_get_row') ? af_cwf_get_row($tid) : [];
         $workflowState = (string)($workflow['state'] ?? '');
         $shouldCreate = !empty($accept['accepted']) || in_array($workflowState, ['approved', 'transferred', 'accepted'], true);
-        $sheet = af_charactersheets_refresh_sheet_from_kb($tid, (int)($thread['uid'] ?? 0), $shouldCreate);
-        if (!empty($sheet['id']) && function_exists('af_cwf_bind_sheet')) {
-            af_cwf_bind_sheet($tid, (int)$sheet['id'], (string)($sheet['slug'] ?? ''), (int)($mybb->user['uid'] ?? 0));
-        }
+        af_charactersheets_refresh_sheet_from_kb($tid, (int)($thread['uid'] ?? 0), $shouldCreate, (int)($mybb->user['uid'] ?? 0));
     }
     $entryUrl = $showThreadUrl;
     if ($entryId > 0 && function_exists('af_charactersheets_build_kb_entry_url')) {

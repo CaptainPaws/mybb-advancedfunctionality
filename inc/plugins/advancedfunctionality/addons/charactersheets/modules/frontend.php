@@ -92,31 +92,15 @@ function af_charactersheets_is_in_accepted_forum(int $fid): bool
 
 function af_charactersheets_resolve_existing_sheet_for_thread(int $tid, int $uid, array $acceptRow = []): array
 {
-    if ($tid > 0) {
-        $sheet = af_charactersheets_get_sheet_by_tid($tid);
-        if (!empty($sheet['id'])) {
-            return $sheet;
-        }
+    if ($tid <= 0) {
+        return [];
     }
 
-    $acceptSlug = trim((string)($acceptRow['sheet_slug'] ?? ''));
-    if ($acceptSlug !== '') {
-        $sheet = af_charactersheets_get_sheet_by_slug($acceptSlug);
-        if (!empty($sheet['id'])) {
-            return $sheet;
-        }
+    $sheet = af_charactersheets_get_sheet_by_tid($tid);
+    if (!$sheet && !empty($acceptRow['sheet_slug'])) {
+        $sheet = af_charactersheets_get_sheet_by_slug((string)$acceptRow['sheet_slug']);
     }
-
-    // Для тредовой анкеты не считаем лист по uid "дубликатом":
-    // у одного пользователя может быть несколько персонажей.
-    if ($uid > 0 && $tid <= 0) {
-        $sheet = af_charactersheets_get_sheet_by_uid($uid);
-        if (!empty($sheet['id'])) {
-            return $sheet;
-        }
-    }
-
-    return [];
+    return (int)($sheet['tid'] ?? 0) === $tid ? $sheet : [];
 }
 
 function af_charactersheets_showthread_start_impl(): void
@@ -190,7 +174,7 @@ function af_charactersheets_showthread_start_impl(): void
             $buttons[] = $kbButton;
         }
     }
-    if ($canCreateSheet) {
+    if ($canCreateSheet && empty($sheetExists)) {
         $buttons[] = '<a class="atf-button atf-button--secondary af-cs-workflow-button af-cs-workflow-button--sheet" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($sheetUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_create_sheet_button ?? 'Создать лист персонажа') . '</span></a>';
     }
 

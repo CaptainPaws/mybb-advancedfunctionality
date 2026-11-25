@@ -86,7 +86,7 @@ function af_charactersheets_json_encode(array $data): string
 }
 
 /** Project only stable KB selectors into sheet base_json; runtime build/progress stay untouched. */
-function af_charactersheets_refresh_sheet_from_kb(int $tid, int $uid = 0, bool $createIfMissing = false): array
+function af_charactersheets_refresh_sheet_from_kb(int $tid, int $uid = 0, bool $createIfMissing = false, int $actorUid = 0): array
 {
     global $db;
 
@@ -99,16 +99,27 @@ function af_charactersheets_refresh_sheet_from_kb(int $tid, int $uid = 0, bool $
     }
 
     $sheet = af_charactersheets_get_sheet_by_tid($tid);
-    if (empty($sheet) && $createIfMissing) {
-        $thread = (array)$db->fetch_array($db->simple_select('threads', '*', 'tid=' . $tid, ['limit' => 1]));
+    if ($sheet || $createIfMissing) {
         if ($uid <= 0) {
-            $uid = (int)($thread['uid'] ?? ($acceptRow['uid'] ?? 0));
+            $thread = $db->fetch_array($db->simple_select('threads', 'uid', 'tid=' . $tid, ['limit' => 1]));
+            $uid = (int)($thread['uid'] ?? 0);
         }
-        $slug = trim((string)($acceptRow['sheet_slug'] ?? ''));
-        if ($slug === '') {
-            $slug = af_charactersheets_slugify((string)($thread['subject'] ?? ''), $tid);
+        try {
+            if ($createIfMissing) {
+                $sheet = af_charactersheets_ensure_sheet($tid, $uid, af_charactersheets_expected_sheet_slug($tid, $acceptRow), $actorUid);
+            } elseif ($sheet) {
+                // A read/refresh of an existing row must never recreate one
+                // deleted while waiting for the topic lock.
+                $sheet = af_charactersheets_with_sheet_lock($tid, static function () use ($tid, $uid, $actorUid): array {
+                    $existing = af_charactersheets_find_sheet_for_creation($tid, $uid, '');
+                    if ($existing) af_charactersheets_bind_topic_sheet($existing, $actorUid);
+                    return $existing;
+                });
+            }
+        } catch (RuntimeException $error) {
+            af_charactersheets_log('Sheet binding during KB sync blocked', ['tid' => $tid, 'code' => $error->getMessage()]);
+            return [];
         }
-        $sheet = af_charactersheets_ensure_sheet($tid, $uid, $slug);
     }
     if (empty($sheet['id'])) {
         return [];
@@ -151,59 +162,118 @@ function af_charactersheets_get_sheet_by_id(int $sheet_id): array
 
 
 
-function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): array
+/** Serialize sheet lifecycle writes for one topic on the authoritative MyBB connection. */
+function af_charactersheets_with_sheet_lock(int $tid, callable $operation): mixed
 {
-    global $db, $mybb;
+    global $db;
 
-    if (!$db->table_exists(AF_CS_SHEETS_TABLE)) {
+    $scope = $db->escape_string(TABLE_PREFIX . 'cs-sheet:' . $tid);
+    $lock = "SHA2(CONCAT(DATABASE(), ':', '{$scope}'), 256)";
+    $query = $db->write_query("SELECT GET_LOCK({$lock}, 5) AS acquired", true);
+    if (!$query || (int)$db->fetch_field($query, 'acquired') !== 1) {
+        throw new RuntimeException('sheet_busy');
+    }
+    try {
+        return $operation();
+    } finally {
+        $db->write_query("SELECT RELEASE_LOCK({$lock})", true);
+    }
+}
+
+/** TID is the identity. Slug can recover only a row for that exact topic. */
+function af_charactersheets_find_sheet_for_creation(int $tid, int $uid, string $slug): array
+{
+    global $db;
+
+    $table = TABLE_PREFIX . AF_CS_SHEETS_TABLE;
+    $query = $db->write_query("SELECT * FROM `{$table}` WHERE tid={$tid} ORDER BY id LIMIT 1");
+    $sheet = (array)$db->fetch_array($query);
+    if (!$sheet && $slug !== '') {
+        $escaped = $db->escape_string($slug);
+        $sheet = (array)$db->fetch_array($db->write_query("SELECT * FROM `{$table}` WHERE slug='{$escaped}' LIMIT 1"));
+        if ($sheet && (int)$sheet['tid'] !== $tid) {
+            throw new RuntimeException('sheet_slug_conflict');
+        }
+    }
+    if ($sheet && (int)$sheet['uid'] !== $uid) {
+        throw new RuntimeException('sheet_owner_conflict');
+    }
+    return $sheet;
+}
+
+function af_charactersheets_expected_sheet_slug(int $tid, array $acceptRow): string
+{
+    return trim((string)($acceptRow['sheet_slug'] ?? '')) ?: 'thread-' . $tid;
+}
+
+function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug, int $actorUid = 0): array
+{
+    global $db;
+
+    if ($tid <= 0 || $uid <= 0 || !$db->table_exists(AF_CS_SHEETS_TABLE)) {
         return [];
     }
-
-    $tid = (int)$tid;
-    $uid = (int)$uid;
     $slug = trim($slug);
-    $hasUid = ($uid > 0);
 
-    $existing = [];
-    if ($tid > 0) {
-        $existing = af_charactersheets_get_sheet_by_tid($tid);
-    }
-    if (empty($existing) && $slug !== '') {
-        $existing = af_charactersheets_get_sheet_by_slug($slug);
-    }
-
-    // ВАЖНО:
-    // В текущей схеме таблицы uid уникален, поэтому uid обязан участвовать
-    // в duplicate guard всегда, иначе INSERT падает на Duplicate entry по uid.
-    if (empty($existing) && $hasUid) {
-        $existing = af_charactersheets_get_sheet_by_uid($uid);
-    }
-
-    if (!empty($existing)) {
-        $updates = [];
-
-        if ($slug !== '' && (string)($existing['slug'] ?? '') !== $slug) {
-            $updates['slug'] = $slug;
+    return af_charactersheets_with_sheet_lock($tid, static function () use ($db, $tid, $uid, $slug, $actorUid): array {
+        $thread = $db->fetch_array($db->write_query('SELECT uid FROM `' . TABLE_PREFIX . 'threads` WHERE tid=' . $tid . ' LIMIT 1'));
+        if ((int)($thread['uid'] ?? 0) !== $uid) {
+            throw new RuntimeException('sheet_thread_owner_invalid');
         }
-        if ($tid > 0 && (int)($existing['tid'] ?? 0) !== $tid) {
-            $updates['tid'] = $tid;
+        $accept = af_charactersheets_get_accept_row($tid);
+        if ((int)($accept['uid'] ?? 0) > 0 && (int)$accept['uid'] !== $uid) {
+            throw new RuntimeException('sheet_owner_conflict');
         }
-        if ($hasUid && (int)($existing['uid'] ?? 0) !== $uid) {
-            $updates['uid'] = $uid;
+        $sheet = af_charactersheets_find_sheet_for_creation($tid, $uid, $slug);
+        if (!$sheet) {
+            if (!preg_match('/^[a-z0-9][a-z0-9-]{0,119}$/iD', $slug)) {
+                throw new RuntimeException('sheet_slug_invalid');
+            }
+            $sheet = af_charactersheets_insert_topic_sheet($tid, $uid, $slug);
         }
+        if ($sheet) af_charactersheets_bind_topic_sheet($sheet, $actorUid);
+        return $sheet;
+    });
+}
 
-        if ($updates) {
-            $updates['updated_at'] = TIME_NOW;
-            $db->update_query(
-                AF_CS_SHEETS_TABLE,
-                af_charactersheets_db_escape_array($updates),
-                'id=' . (int)$existing['id']
-            );
-            $existing = af_charactersheets_get_sheet_by_id((int)$existing['id']);
-        }
+/** Update only the binding for a verified topic sheet while holding its lock. */
+function af_charactersheets_bind_topic_sheet(array $sheet, int $actorUid): void
+{
+    global $db;
 
-        return $existing;
+    $tid = (int)$sheet['tid'];
+    $uid = (int)$sheet['uid'];
+    $accept = af_charactersheets_get_accept_row($tid);
+    if ((int)($accept['uid'] ?? 0) > 0 && (int)$accept['uid'] !== $uid) {
+        throw new RuntimeException('sheet_owner_conflict');
     }
+    $update = ['uid' => $uid, 'sheet_slug' => (string)$sheet['slug'], 'sheet_created' => 1];
+    if (empty($accept['kb_entry_id']) && function_exists('af_charactersheets_resolve_character_kb_entry')) {
+        $source = af_charactersheets_resolve_character_kb_entry($tid, $uid, $accept);
+        if (!empty($source['entry']['id'])) {
+            $update['kb_entry_id'] = (int)$source['entry']['id'];
+        }
+    }
+    if ($accept) {
+        // Preserve any KB link that appeared since this request read the row.
+        $entryId = (int)($update['kb_entry_id'] ?? 0);
+        unset($update['kb_entry_id']);
+        $db->update_query(AF_CS_TABLE, af_charactersheets_db_escape_array($update), 'tid=' . $tid);
+        if ($entryId > 0) {
+            $db->update_query(AF_CS_TABLE, ['kb_entry_id' => $entryId], 'tid=' . $tid . ' AND (kb_entry_id IS NULL OR kb_entry_id=0)');
+        }
+    } else {
+        af_charactersheets_upsert_accept_row($tid, $update);
+    }
+    if (function_exists('af_cwf_bind_sheet')) {
+        af_cwf_bind_sheet($tid, (int)$sheet['id'], (string)$sheet['slug'], $actorUid);
+    }
+}
+
+/** Called under the topic lock. A different topic may still race for the same slug. */
+function af_charactersheets_insert_topic_sheet(int $tid, int $uid, string $slug): array
+{
+    global $db;
 
     $base = [
         'race_key' => '',
@@ -245,7 +315,7 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
     ];
 
     $row = [
-        'uid' => $hasUid ? $uid : 0,
+        'uid' => $uid,
         'tid' => $tid,
         'slug' => $slug,
         'base_json' => $db->escape_string(af_charactersheets_json_encode($base)),
@@ -254,102 +324,26 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
         'updated_at' => TIME_NOW,
     ];
 
+    $fields = '`' . implode('`,`', array_keys($row)) . '`';
+    $values = implode(',', array_map(static fn($value): string => "'" . $value . "'", $row));
+    $table = TABLE_PREFIX . AF_CS_SHEETS_TABLE;
     try {
-        $id = (int)$db->insert_query(AF_CS_SHEETS_TABLE, $row);
-    } catch (Throwable $e) {
-        // Защита от гонки / повторного создания в рамках текущей UNIQUE-схемы по uid.
-        $fallback = [];
-
-        if ($tid > 0) {
-            $fallback = af_charactersheets_get_sheet_by_tid($tid);
-        }
-        if (empty($fallback) && $slug !== '') {
-            $fallback = af_charactersheets_get_sheet_by_slug($slug);
-        }
-        if (empty($fallback) && $hasUid) {
-            $fallback = af_charactersheets_get_sheet_by_uid($uid);
-        }
-
-        if (!empty($fallback)) {
-            $updates = [];
-
-            if ($slug !== '' && (string)($fallback['slug'] ?? '') !== $slug) {
-                $updates['slug'] = $slug;
-            }
-            if ($tid > 0 && (int)($fallback['tid'] ?? 0) !== $tid) {
-                $updates['tid'] = $tid;
-            }
-            if ($hasUid && (int)($fallback['uid'] ?? 0) !== $uid) {
-                $updates['uid'] = $uid;
-            }
-
-            if ($updates) {
-                $updates['updated_at'] = TIME_NOW;
-                $db->update_query(
-                    AF_CS_SHEETS_TABLE,
-                    af_charactersheets_db_escape_array($updates),
-                    'id=' . (int)$fallback['id']
-                );
-                $fallback = af_charactersheets_get_sheet_by_id((int)$fallback['id']);
-            }
-
-            return $fallback;
-        }
-
-        throw $e;
+        $inserted = $db->write_query("INSERT INTO `{$table}` ({$fields}) VALUES ({$values})", true);
+        $errorCode = $inserted ? 0 : (int)$db->error_number();
+    } catch (mysqli_sql_exception $error) {
+        $errorCode = (int)$error->getCode();
     }
 
-    if ($id <= 0) {
-        return [];
+    if ($errorCode === 1062) {
+        // Retry the identity checks on the writer. A unique slug may now
+        // belong to another topic, while an old unique UID grants no identity.
+        $sheet = af_charactersheets_find_sheet_for_creation($tid, $uid, $slug);
+        if ($sheet) return $sheet;
     }
-
-    return af_charactersheets_get_sheet_by_id($id);
-}
-
-
-function af_charactersheets_recover_sheet_for_accept_row(array $accept_row): array
-{
-    $tid = (int)($accept_row['tid'] ?? 0);
-    $uid = (int)($accept_row['uid'] ?? 0);
-    $slug = trim((string)($accept_row['sheet_slug'] ?? ''));
-
-    $sheet = [];
-    if ($tid > 0) {
-        $sheet = af_charactersheets_get_sheet_by_tid($tid);
+    if (empty($inserted)) {
+        throw new RuntimeException('sheet_insert_failed');
     }
-    if (empty($sheet) && $slug !== '') {
-        $sheet = af_charactersheets_get_sheet_by_slug($slug);
-    }
-
-    if (!empty($sheet['id'])) {
-        return $sheet;
-    }
-
-    if ($slug === '' || $tid <= 0) {
-        return [];
-    }
-
-    try {
-        $sheet = af_charactersheets_ensure_sheet($tid, $uid, $slug);
-    } catch (Throwable $e) {
-        af_charactersheets_log('Sheet recovery failed', [
-            'tid' => $tid,
-            'uid' => $uid,
-            'slug' => $slug,
-            'error' => $e->getMessage(),
-        ]);
-        return [];
-    }
-
-    if (!empty($sheet['id'])) {
-        af_charactersheets_upsert_accept_row($tid, [
-            'uid' => $uid,
-            'sheet_slug' => (string)($sheet['slug'] ?? $slug),
-            'sheet_created' => 1,
-        ]);
-    }
-
-    return $sheet;
+    return af_charactersheets_find_sheet_for_creation($tid, $uid, $slug);
 }
 
 function af_charactersheets_update_sheet_json(int $sheet_id, array $base, array $build, array $progress): void
@@ -390,6 +384,26 @@ function af_charactersheets_delete_sheet(int $sheet_id, array $actor, string $re
     }
 
     $tid = (int)($sheet['tid'] ?? 0);
+    try {
+        return af_charactersheets_with_sheet_lock($tid, static function () use ($db, $sheet_id, $sheet, $actor, $reason): bool {
+            $fresh = $db->fetch_array($db->write_query('SELECT * FROM `' . TABLE_PREFIX . AF_CS_SHEETS_TABLE . '` WHERE id=' . $sheet_id));
+            if (!$fresh || (int)$fresh['tid'] !== (int)$sheet['tid'] || (int)$fresh['uid'] !== (int)$sheet['uid']
+                || !af_charactersheets_user_can_delete_sheet($fresh, $actor)) {
+                return false;
+            }
+            return af_charactersheets_delete_sheet_locked($fresh, $actor, $reason);
+        });
+    } catch (RuntimeException $error) {
+        af_charactersheets_log('Sheet deletion blocked', ['sheet_id' => $sheet_id, 'code' => $error->getMessage()]);
+        return false;
+    }
+}
+
+function af_charactersheets_delete_sheet_locked(array $sheet, array $actor, string $reason): bool
+{
+    global $db;
+    $sheet_id = (int)$sheet['id'];
+    $tid = (int)($sheet['tid'] ?? 0);
     $uid = (int)($sheet['uid'] ?? 0);
     $slug = (string)($sheet['slug'] ?? '');
 
@@ -407,7 +421,7 @@ function af_charactersheets_delete_sheet(int $sheet_id, array $actor, string $re
             $db->update_query(AF_CS_TABLE, [
                 'sheet_slug' => null,
                 'sheet_created' => 0,
-            ], 'tid=' . $tid);
+            ], 'tid=' . $tid . " AND sheet_slug='" . $db->escape_string($slug) . "'");
         } elseif ($slug !== '') {
             $db->update_query(AF_CS_TABLE, [
                 'sheet_slug' => null,
@@ -421,7 +435,8 @@ function af_charactersheets_delete_sheet(int $sheet_id, array $actor, string $re
             'sheet_id' => null,
             'sheet_slug' => null,
             'updated_at' => TIME_NOW,
-        ], 'tid=' . $tid);
+        ], 'tid=' . $tid . ' AND sheet_id=' . $sheet_id);
+        unset($GLOBALS['af_cwf_rows'][$tid]);
     }
 
     af_charactersheets_log('Sheet deleted', [

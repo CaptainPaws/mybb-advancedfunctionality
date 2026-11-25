@@ -2081,9 +2081,9 @@ function af_charactersheets_build_sheet_inner_html(string $slug, string $only_ta
     $atf_fields = af_charactersheets_get_atf_fields($tid);
     $atf_index = af_charactersheets_index_fields($atf_fields);
 
-    $sheet = af_charactersheets_get_sheet_by_slug($slug);
-    if (empty($sheet)) {
-        $sheet = af_charactersheets_recover_sheet_for_accept_row($accept_row);
+    $sheet = af_charactersheets_resolve_existing_sheet_for_thread($tid, $uid, $accept_row);
+    if (strcasecmp((string)($sheet['slug'] ?? ''), $slug) !== 0 || ($uid > 0 && (int)($sheet['uid'] ?? 0) !== $uid)) {
+        $sheet = [];
     }
     if (empty($sheet)) {
         return '<div class="af-cs-page"><div class="af-cs-muted">Лист не найден. Запись анкеты помечена для восстановления: откройте тему анкеты и повторно создайте лист.</div></div>';
@@ -4581,11 +4581,8 @@ function af_charactersheets_render_catalog_page(): void
         $tid = (int)($row['tid'] ?? 0);
         $slug = (string)($row['sheet_slug'] ?? '');
 
-        $sheet = af_charactersheets_get_sheet_by_slug($slug);
-        if (empty($sheet)) {
-            $sheet = af_charactersheets_recover_sheet_for_accept_row($row);
-        }
-        if (empty($sheet['id'])) {
+        $sheet = af_charactersheets_resolve_existing_sheet_for_thread($tid, (int)$row['uid'], $row);
+        if (empty($sheet['id']) || strcasecmp((string)$sheet['slug'], $slug) !== 0 || (int)$sheet['uid'] !== (int)$row['uid']) {
             continue;
         }
 
