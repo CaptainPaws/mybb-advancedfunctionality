@@ -7,7 +7,7 @@ final class AF_ADVINV_InventoryRead
 {
     private mysqli $link;
     private AF_ADVINV_OwnerAccess $access;
-    public function __construct(private object $database, ?AF_ADVINV_OwnerAccess $access=null)
+    public function __construct(private object $database, ?AF_ADVINV_OwnerAccess $access=null, private ?AF_ACS_CharacterRegistrationGrant $grant=null)
     {
         $this->link=$database instanceof mysqli?$database:($database->write_link??throw new RuntimeException('INV_MYSQLI_REQUIRED'));
         if (isset($database->read_link) && $database->read_link!==$this->link) throw new RuntimeException('INV_AUTHORITATIVE_READ_REQUIRED');
@@ -17,6 +17,10 @@ final class AF_ADVINV_InventoryRead
     private function authorize(int $uid,int $actor): void
     {
         if ($uid<1 || $actor!==$this->access->uid() || !function_exists('af_is_addon_enabled') || !af_is_addon_enabled('advancedinventory')) throw new RuntimeException('INV_ACCESS_DENIED');
+        if ($this->grant) {
+            $this->grant->assertRead($uid,$actor);
+            return;
+        }
         $this->access->authorize('lookup',$uid,['system'=>'inventory','context_key'=>'owner:'.$uid],'inventory-owner-v1',false);
     }
     /** Registration-only metadata fence; caller owns an existing SQL write transaction. */

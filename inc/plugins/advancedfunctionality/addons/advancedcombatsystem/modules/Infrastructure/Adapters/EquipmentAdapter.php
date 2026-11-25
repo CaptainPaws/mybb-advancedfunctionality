@@ -5,14 +5,19 @@ require_once __DIR__.'/../../Domain/Equipment.php';
 /** Explicit server-only projection. Does not call a renderer, calculator, consume or reserve. */
 final class AF_ACS_EquipmentAdapter
 {
-    public function prepare(array $cs,object $inventory,string $sessionId,int $actor): array
+    public function prepare(array $cs,object $inventory,string $sessionId,int $actor,?AF_ACS_CharacterRegistrationGrant $grant=null): array
     {
         global $mybb;
-        if ($actor<1 || $actor!==(int)($mybb->user['uid']??0) || ($cs['identity']['owner_uid']??null)!==$actor
+        if ($actor<1 || $actor!==(int)($mybb->user['uid']??0) || ($cs['identity']['owner_uid']??null)!==($grant?->ownerUid??$actor)
             || ($cs['ready']??null)!==true || ($cs['equipment_policy']??null)!=='already_included_do_not_reapply'
             || !function_exists('af_cs_snapshot_definition') || !function_exists('af_inv_candidate_slots_for_item')) throw new RuntimeException('ACS_EQUIPMENT_SOURCE_UNAVAILABLE');
         $source=$inventory->serverData();$uid=$source['owner_uid'];
-        if ($uid!==$actor) throw new RuntimeException('ACS_EQUIPMENT_ACCESS_DENIED');
+        if ($grant) {
+            if ($grant->sessionId!==$sessionId || $grant->sheetId!==($cs['identity']['sheet_id']??null)
+                || $grant->sourceTid!==($cs['identity']['tid']??null)) throw new RuntimeException('ACS_EQUIPMENT_ACCESS_DENIED');
+            $grant->assertRead((int)$uid,$actor);
+        }
+        if ($uid!==($grant?->ownerUid??$actor)) throw new RuntimeException('ACS_EQUIPMENT_ACCESS_DENIED');
         $items=[];foreach ($source['items'] as $item) $items[(int)$item['id']]=$item;
         $baseline=[];foreach ($cs['equipment'] as $item) $baseline[$item['item_id']]=$item;
         $bindings=[];

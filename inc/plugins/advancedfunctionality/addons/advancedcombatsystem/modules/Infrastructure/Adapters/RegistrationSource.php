@@ -1,6 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/CharacterSheetAdapter.php';
+require_once __DIR__.'/CharacterRegistrationGrant.php';
 require_once __DIR__.'/KnowledgeBaseAdapter.php';
 require_once __DIR__.'/PermanentPetSource.php';
 
@@ -8,7 +9,7 @@ require_once __DIR__.'/PermanentPetSource.php';
 class AF_ACS_RegistrationSource
 {
     public function __construct(private ?AF_ACS_PermanentPetSource $pets=null) {}
-    public function read(string $kind,string $key,int $actor): array
+    public function read(string $kind,string $key,int $actor,?AF_ACS_CharacterRegistrationGrant $grant=null): array
     {
         if ($kind==='pet') {
             if(!$this->pets)return $this->blocked('permanent_pet_source_unavailable');
@@ -26,11 +27,17 @@ class AF_ACS_RegistrationSource
         }
         if ($kind==='character') {
             $sheetId=(int)AF_ACS_Repository::integer($key,'2147483647');
-            $sheet=$this->ownedSheet('id='.$sheetId,$actor);
-            if (!$sheet) return $this->blocked('registration_ownership_required');
-            if (!$this->sheetMatchesSlug($sheet)) return $this->blocked('sheet_topic_mismatch');
-            $dto=(new AF_ACS_CharacterSheetAdapter)->createSnapshot($sheetId,$actor);
-            if (isset($dto['identity']) && ($dto['identity']['owner_uid']??null)!==$actor) return $this->blocked('registration_ownership_required');
+            if ($grant) {
+                if ($grant->sheetId!==$sheetId) return $this->blocked('registration_ownership_required');
+                $grant->assertRead($grant->ownerUid,$actor);
+            } else {
+                $sheet=$this->ownedSheet('id='.$sheetId,$actor);
+                if (!$sheet) return $this->blocked('registration_ownership_required');
+                if (!$this->sheetMatchesSlug($sheet)) return $this->blocked('sheet_topic_mismatch');
+            }
+            $dto=(new AF_ACS_CharacterSheetAdapter)->createSnapshot($sheetId,$actor,grant:$grant);
+            if (isset($dto['identity']) && (($dto['identity']['owner_uid']??null)!==($grant?->ownerUid??$actor)
+                || ($grant && ($dto['identity']['tid']??null)!==$grant->sourceTid))) return $this->blocked('registration_ownership_required');
             return $dto;
         }
         $dto=(new AF_ACS_KnowledgeBaseAdapter)->readDefinition('arpg_bestiary',$key,$actor);
@@ -75,6 +82,29 @@ class AF_ACS_RegistrationSource
         }
         return $definitions;
     }
+    public function characterGrant(string $sid,string $key,int $actor): ?AF_ACS_CharacterRegistrationGrant
+    {
+        global $db;
+        AF_ACS_CharacterRegistrationGrant::assertGm($sid,$actor);
+        $sheetId=(int)AF_ACS_Repository::integer($key,'2147483647');
+        if (!af_is_addon_enabled('charactersheets') || !af_is_addon_enabled('knowledgebase')
+            || !$db->table_exists('af_cs_sheets') || !$db->table_exists('af_kb_entries')) {
+            throw new RuntimeException('ACS_DEPENDENCY_UNAVAILABLE');
+        }
+        $sheet=$db->fetch_array($db->simple_select('af_cs_sheets','*','id='.$sheetId,['limit'=>1]));
+        if (!$sheet) throw new RuntimeException('ACS_CHARACTER_SOURCE_UNAVAILABLE');
+        if ((int)$sheet['uid']===$actor) return null;
+        $this->loadCharacterSources();
+        return AF_ACS_CharacterRegistrationGrant::forSheet($sid,$actor,$sheet);
+    }
+
+    private function loadCharacterSources(): void
+    {
+        require_once AF_ADDONS.'charactersheets/charactersheets.php';
+        af_charactersheets_require_modules(['combat_snapshot','frontend']);
+        require_once AF_ADDONS.'knowledgebase/knowledgebase.php';
+    }
+
     private function ownedSheet(string $predicate,int $actor): array
     {
         global $db,$mybb;
@@ -88,48 +118,127 @@ class AF_ACS_RegistrationSource
         return !preg_match('/^thread-(\d+)$/D',(string)$sheet['slug'],$match) || (int)$match[1]===(int)$sheet['tid'];
     }
 
-    private function characterChoice(array $sheet,int $actor): array
+    private function characterChoice(array $sheet,int $actor,?string $gmSession=null): array
     {
-        require_once AF_ADDONS.'charactersheets/charactersheets.php';
-        af_charactersheets_require_modules(['combat_snapshot','frontend']);
-        require_once AF_ADDONS.'knowledgebase/knowledgebase.php';
+        $this->loadCharacterSources();
+        $owner=(int)$sheet['uid'];
         $choice=['key'=>(string)$sheet['id'],'label'=>'Лист '.(string)$sheet['slug'],'sheet_id'=>(int)$sheet['id']];
-        if (!$this->sheetMatchesSlug($sheet)) return $choice+['state'=>'sheet_topic_mismatch'];
-        $thread=af_cs_snapshot_source_thread($sheet,$actor,$reason);
-        if (!$thread) return $choice+['state'=>$reason];
+        if ($gmSession!==null && $owner!==$actor) {
+            try {
+                $thread=(new AF_ACS_SessionAccess())->thread((string)$sheet['tid']);
+            } catch (RuntimeException) {
+                return [];
+            }
+            if ((int)$thread['visible']!==1 || !af_kb_can_view()) return [];
+        } else {
+            $thread=af_cs_snapshot_source_thread($sheet,$actor,$reason);
+            if (!$thread) return $gmSession!==null?[]:$choice+['state'=>$reason];
+        }
         $tid=(int)$sheet['tid'];
         $choice['label']=(string)$thread['subject'];
         $choice['thread_id']=$tid;
-        $choice['sheet_url']=af_charactersheets_url(['slug'=>$sheet['slug']]);
-        if ((int)$thread['firstpost']>0) $choice['application_url']='editpost.php?pid='.(int)$thread['firstpost'];
+        $crossOwner=$gmSession!==null && $owner!==$actor;
+        if (!$crossOwner) $choice['sheet_url']=af_charactersheets_url(['slug'=>$sheet['slug']]);
+        if ($owner===$actor && (int)$thread['firstpost']>0) $choice['application_url']='editpost.php?pid='.(int)$thread['firstpost'];
         $accept=af_charactersheets_get_accept_row($tid);
         $entryId=(int)($accept['kb_entry_id']??0);
-        if ($entryId<=0) return $choice+['state'=>'explicit_character_link_missing'];
         global $db;
-        $entry=$db->fetch_array($db->simple_select('af_kb_entries','*',"id=".$entryId." AND type='character' AND active=1",['limit'=>1]));
+        $entry=$entryId>0 ? $db->fetch_array($db->simple_select('af_kb_entries','*',"id=".$entryId." AND type='character' AND active=1",['limit'=>1])) : [];
+        if ($entry && !af_kb_entry_visible_in_context($entry,'entry',af_kb_can_edit())) {
+            return $crossOwner?[]:$choice+['state'=>'definition_access_denied'];
+        }
+        if (!$this->sheetMatchesSlug($sheet)) {
+            unset($choice['sheet_url']);
+            return $choice+['state'=>'sheet_topic_mismatch'];
+        }
+        if ($crossOwner && (empty($accept['accepted']) || (int)$accept['uid']!==$owner
+            || (string)$accept['sheet_slug']!==(string)$sheet['slug'])) return $choice+['state'=>'character_accept_link_invalid'];
+        if ($entryId<=0) return $choice+['state'=>'explicit_character_link_missing'];
         if (!$entry) return $choice+['state'=>'character_definition_missing'];
-        if (!af_kb_entry_visible_in_context($entry,'entry',af_kb_can_edit())) return $choice+['state'=>'definition_access_denied'];
         $issues=[];
         $payload=af_kb_arpg_acs_source($entry,$issues)['rules'];
         if (array_filter($issues,static fn($issue)=>($issue['severity']??'error')==='error')) {
             return $choice+['state'=>'character_rules_invalid','diagnostics'=>AF_ACS_CapabilityValidator::safeDiagnostics($issues)];
         }
         $meta=$payload['character_meta']??[];
-        if ((int)($meta['source_tid']??0)!==$tid || (int)($meta['availability']['owner_uid']??0)!==$actor) {
+        if ((int)($meta['source_tid']??0)!==$tid || (int)($meta['availability']['owner_uid']??0)!==$owner) {
             return $choice+['state'=>'character_owner_link_mismatch'];
         }
         $profile=$payload['character_profile']??[];
         $choice['label']=trim((string)($profile['character_name_ru']??'')) ?: (trim((string)($profile['character_name']??'')) ?: (af_kb_pick_text($entry,'title') ?: $choice['label']));
         $choice['kb_url']=af_kb_url(['type'=>'character','key'=>$entry['key']]);
-        if (af_kb_can_edit()) $choice['kb_edit_url']=af_kb_url(['action'=>'kb_edit','type'=>'character','key'=>$entry['key']]);
+        $choice['owner_name']=(string)(get_user($owner)['username']??'');
+        if ($crossOwner) {
+            try {
+                AF_ACS_CharacterRegistrationGrant::forSheet($gmSession,$actor,$sheet);
+            } catch (RuntimeException $error) {
+                return $choice+['state'=>strtolower(substr($error->getMessage(),4))];
+            }
+        }
+        if ($owner===$actor && af_kb_can_edit()) $choice['kb_edit_url']=af_kb_url(['action'=>'kb_edit','type'=>'character','key'=>$entry['key']]);
         if (($payload['schema']??null)!==AF_KB_CHARACTER_SCHEMA || ($meta['mechanic']??null)!=='arpg') {
             return $choice+['state'=>'arpg_contract_required'];
         }
         return $choice+['state'=>'unchecked'];
     }
 
+    private function gmChoices(string $sid,int $actor,int $after,string $search): array
+    {
+        global $db;
+        AF_ACS_CharacterRegistrationGrant::assertGm($sid,$actor);
+        if (!$db->table_exists('af_charactersheets_accept')) return ['items'=>[],'reason'=>'dependency_unavailable'];
+        $search=trim($search);
+        if (mb_strlen($search)>191) return ['items'=>[],'reason'=>'sheet_lookup_invalid'];
+        $filter='';
+        $exact=false;
+        if (preg_match('/^thread-\d+$/iD',$search)) {
+            $filter=" AND s.slug='".$db->escape_string($search)."'";
+            $exact=true;
+        } elseif (preg_match('/^(?:(tid|id):)?([1-9]\d{0,9})$/iD',$search,$match)) {
+            $id=(int)$match[2];
+            $filter=match(strtolower($match[1]??'')) {
+                'tid'=>' AND s.tid='.$id,
+                'id'=>' AND s.id='.$id,
+                default=>' AND (s.id='.$id.' OR s.tid='.$id.')',
+            };
+            $exact=true;
+        } elseif ($search!=='') {
+            $value=$db->escape_string($search);
+            $filter=" AND (s.slug='{$value}' OR LOCATE('{$value}',u.username)>0 OR LOCATE('{$value}',t.subject)>0
+                OR LOCATE('{$value}',k.title_ru)>0 OR LOCATE('{$value}',k.title_en)>0
+                OR LOCATE('{$value}',CASE WHEN JSON_VALID(k.data_json) THEN
+                    CONCAT_WS(' ',JSON_UNQUOTE(JSON_EXTRACT(k.data_json,'$.character_profile.character_name_ru')),
+                        JSON_UNQUOTE(JSON_EXTRACT(k.data_json,'$.character_profile.character_name'))) END)>0
+                OR LOCATE('{$value}',CASE WHEN JSON_VALID(k.meta_json) THEN
+                    CONCAT_WS(' ',JSON_UNQUOTE(JSON_EXTRACT(k.meta_json,'$.rules.character_profile.character_name_ru')),
+                        JSON_UNQUOTE(JSON_EXTRACT(k.meta_json,'$.rules.character_profile.character_name'))) END)>0)";
+
+        }
+        $items=[];
+        $cursor=max(0,$after);
+        do {
+            // The joined search uses only native labels; publication and source permissions are checked before projection.
+            $query=$db->query("SELECT s.* FROM ".TABLE_PREFIX."af_cs_sheets s
+                JOIN ".TABLE_PREFIX."threads t ON t.tid=s.tid AND t.visible=1
+                JOIN ".TABLE_PREFIX."users u ON u.uid=s.uid
+                LEFT JOIN ".TABLE_PREFIX."af_charactersheets_accept a ON a.tid=s.tid
+                LEFT JOIN ".TABLE_PREFIX."af_kb_entries k ON k.id=a.kb_entry_id AND k.type='character' AND k.active=1
+                WHERE s.id>".$cursor.$filter." ORDER BY s.id LIMIT 50");
+            $scanned=0;
+            while ($row=$db->fetch_array($query)) {
+                ++$scanned;
+                $cursor=(int)$row['id'];
+                $choice=$this->characterChoice($row,$actor,$sid);
+                if (!$choice) continue;
+                if (count($items)===20) return ['items'=>$items,'next_after'=>(int)end($items)['key']];
+                $items[]=$choice;
+            }
+        } while ($scanned===50);
+        return ['items'=>$items,'next_after'=>null,'reason'=>$exact && !$items?'gm_sheet_lookup_unavailable':''];
+    }
+
     /** Paginated candidates; selecting one still runs owner API authorization/validation. */
-    public function choices(string $kind,int $actor,int $after=0,string $slug=''): array
+    public function choices(string $kind,int $actor,int $after=0,string $slug='',?string $gmSession=null): array
     {
         global $db;
         if($kind==='pet')return $this->pets?$this->pets->choices($actor,$after):['items'=>[],'next_after'=>null];
@@ -138,6 +247,7 @@ class AF_ACS_RegistrationSource
                 || !af_is_addon_enabled('knowledgebase') || !$db->table_exists('af_kb_entries')) {
                 return ['items'=>[],'reason'=>'dependency_unavailable'];
             }
+            if ($gmSession!==null) return $this->gmChoices($gmSession,$actor,$after,$slug);
             if ($slug!=='') {
                 if (!preg_match('/^[a-zA-Z0-9_-]{1,191}$/D',$slug)) return ['items'=>[],'reason'=>'sheet_lookup_invalid'];
                 $row=$this->ownedSheet("slug='".$db->escape_string($slug)."'",$actor);

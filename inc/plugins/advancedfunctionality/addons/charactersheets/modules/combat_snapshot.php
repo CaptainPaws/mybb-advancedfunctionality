@@ -13,7 +13,7 @@ function af_cs_snapshot_number($value): bool
 }
 
 /** Authenticated actor comes from MyBB, never context/uid claims. No data on refusal. */
-function af_charactersheets_prepare_combat_snapshot(int $sheetId, int $actorUid, array $context = []): array
+function af_charactersheets_prepare_combat_snapshot(int $sheetId, int $actorUid, array $context = [], ?AF_ACS_CharacterRegistrationGrant $grant = null): array
 {
     global $mybb, $db;
     $denied = ['schema_version'=>1, 'contract_id'=>'IC-CS.combat-preparation.v1', 'ready'=>false,
@@ -29,9 +29,15 @@ function af_charactersheets_prepare_combat_snapshot(int $sheetId, int $actorUid,
     require_once AF_ADDONS . 'knowledgebase/knowledgebase.php';
     if (!is_object($db) || !$db->table_exists(AF_CS_SHEETS_TABLE)) return $denied;
     $sheet = $db->fetch_array($db->simple_select(AF_CS_SHEETS_TABLE, '*', 'id='.$sheetId, ['limit'=>1]));
-    if (!is_array($sheet) || !af_cs_snapshot_source_thread($sheet, $actorUid)) return $denied;
+    if (!is_array($sheet)) return $denied;
+    if ($grant) {
+        if ($grant->sheetId!==$sheetId || $grant->sourceTid!==(int)$sheet['tid']) return $denied;
+        $grant->assertRead((int)$sheet['uid'],$actorUid);
+    } elseif (!af_cs_snapshot_source_thread($sheet, $actorUid)) {
+        return $denied;
+    }
     try {
-        return af_cs_snapshot_read($sheet, $context);
+        return af_cs_snapshot_read($sheet, $context, $grant);
     } catch (Throwable $error) {
         return ['schema_version'=>1,'contract_id'=>'IC-CS.combat-preparation.v1','ready'=>false,
             'diagnostics'=>[['code'=>'source_read_failed','path'=>'sources','severity'=>'error']]];
@@ -139,7 +145,7 @@ function af_cs_snapshot_apply(array $stats, array $source, array &$breakdown, ar
 }
 
 /** Internal owner implementation: caller must pass the authenticated permission boundary. */
-function af_cs_snapshot_read(array $sheet, array $context): array
+function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegistrationGrant $grant=null): array
 {
     global $db;
     $issues = $readSet = $definitions = $breakdown = [];
@@ -152,6 +158,10 @@ function af_cs_snapshot_read(array $sheet, array $context): array
     af_cs_snapshot_select('threads', 'tid='.$tid, $readSet);
     $accept = af_cs_snapshot_select(AF_CS_TABLE, 'tid='.$tid, $readSet);
     if (count($accept) !== 1 || (int)($accept[0]['kb_entry_id'] ?? 0) <= 0) return $failure('explicit_character_link_missing');
+    if ($grant && (empty($accept[0]['accepted']) || (int)$accept[0]['uid']!==$uid
+        || (string)$accept[0]['sheet_slug']!==(string)$sheet['slug'])) {
+        return $failure('character_accept_link_invalid');
+    }
     $linked = af_cs_snapshot_select('af_kb_entries', 'id='.(int)$accept[0]['kb_entry_id'], $readSet);
     if (count($linked) !== 1 || ($linked[0]['type'] ?? '') !== 'character' || empty($linked[0]['active'])) return $failure('character_definition_missing');
     if (!af_kb_entry_visible_in_context($linked[0], 'entry', af_kb_can_edit())) return $failure('definition_access_denied');

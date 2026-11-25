@@ -237,8 +237,8 @@ function af_charactersheets_handle_thread_move_for_acceptance(array $args): void
 }
 
 /** Server-only preparation API. No endpoint or persistent snapshot is created. */
-function af_charactersheets_create_combat_snapshot(int $sheetId, int $actorUid, array $context = []): array
+function af_charactersheets_create_combat_snapshot(int $sheetId, int $actorUid, array $context = [], ?AF_ACS_CharacterRegistrationGrant $grant = null): array
 {
     af_charactersheets_require_modules(['combat_snapshot']);
-    return af_charactersheets_prepare_combat_snapshot($sheetId, $actorUid, $context);
+    return af_charactersheets_prepare_combat_snapshot($sheetId, $actorUid, $context, $grant);
 }
