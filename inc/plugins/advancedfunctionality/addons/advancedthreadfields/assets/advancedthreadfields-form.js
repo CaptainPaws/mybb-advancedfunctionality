@@ -579,6 +579,9 @@
         const addBtn = AF_ATF.qs(".af-atf-abilities-add", wrap);
         const kbBtn = AF_ATF.qs(".af-atf-abilities-kb", wrap);
         const kbNotices = JSON.parse(wrap.dataset.kbNotices || "{}");
+        const arpgDrafts = Object.prototype.hasOwnProperty.call(wrap.dataset, "acsDraftNotices");
+        const draftNotices = JSON.parse(wrap.dataset.acsDraftNotices || "{}");
+        const savedDraftReasons = new WeakMap();
         const maxItems = parseInt(wrap.getAttribute("data-max-items") || "8", 10) || 8;
         if (!hidden || !list || !addBtn) return;
         let selectOptions = {};
@@ -621,9 +624,10 @@
           const parsed = JSON.parse(String(hidden.value || "[]"));
           const rows = Array.isArray(parsed) ? parsed : (parsed.items || parsed.abilities || Object.values(parsed));
           if (Array.isArray(rows)) state = rows.filter((row) => row && typeof row === "object")
-            .map((row) => {
+            .map((row, index) => {
               const ability = row.ability_source ? row : createAbility(row);
               originalRows.set(ability, row);
+              savedDraftReasons.set(ability, draftNotices[index] || []);
               return ability;
             });
         } catch (error) {
@@ -846,9 +850,9 @@
                   const damageElement = AF_ATF.qs('.af-atf-effect-damage-element', effectRow);
                   if (!damageElement.value) delete effect.damage_element;
                   const needsElement = effect.effect_type === 'damage' && effect.damage_type === 'elemental';
-                  damageElement.required = needsElement && dirtyRows.has(ability);
+                  damageElement.required = !arpgDrafts && needsElement && dirtyRows.has(ability);
                   const damageError = needsElement && !damageElement.value ? 'Выберите стихию урона. Направление магии не определяет её автоматически.' : '';
-                  damageElement.setCustomValidity(dirtyRows.has(ability) ? damageError : "");
+                  damageElement.setCustomValidity(!arpgDrafts && dirtyRows.has(ability) ? damageError : "");
                   AF_ATF.qs('.af-atf-damage-error', effectRow).textContent = damageError;
                   const unit = AF_ATF.qs('.af-atf-effect-duration-unit', effectRow).value;
                   if (unit !== '' || Object.prototype.hasOwnProperty.call(effect, 'duration_unit')) effect.duration_unit = unit;
@@ -877,9 +881,10 @@
               state[index] = collectAbilityFromRow(row, index);
               const input = AF_ATF.qs('.af-atf-ability-damage-element', row);
               if (!input.value) delete state[index].damage_element;
-              input.required = state[index].damage_type === 'elemental';
-              const message = input.required && !input.value ? 'Выберите стихию урона.' : '';
-              input.setCustomValidity(message);
+              const needsElement = state[index].damage_type === 'elemental';
+              input.required = !arpgDrafts && needsElement;
+              const message = needsElement && !input.value ? 'Выберите стихию урона.' : '';
+              input.setCustomValidity(arpgDrafts ? '' : message);
               AF_ATF.qs('.af-atf-ability-damage-error', row).textContent = message;
               sync();
             };
@@ -896,6 +901,22 @@
               render();
               sync();
             });
+
+            if (arpgDrafts) {
+              const status = document.createElement("p");
+              const reasons = savedDraftReasons.get(ability) || [];
+              const updateStatus = () => {
+                status.textContent = !originalRows.has(ability) || dirtyRows.has(ability)
+                  ? "Сохраните способность, чтобы обновить диагностику ACS."
+                  : reasons.length ? "Требует настройки для ACS. " + reasons.join(" ")
+                    : "Готовность к бою проверяется при регистрации в ACS.";
+              };
+              row.prepend(status);
+              row.addEventListener("input", updateStatus);
+              row.addEventListener("change", updateStatus);
+              row.addEventListener("click", updateStatus);
+              updateStatus();
+            }
 
             list.appendChild(row);
           });

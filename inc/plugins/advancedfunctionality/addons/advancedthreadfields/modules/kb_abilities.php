@@ -58,7 +58,7 @@ function af_atf_kb_ability_has_links(array $rows): bool
 function af_atf_kb_ability_row(array $row, int $order): array
 {
     $result = ['ability_source' => is_string($row['ability_source']) ? $row['ability_source'] : '',
-        'sortorder' => $order, 'slot_index' => $order];
+        'sortorder' => $order, 'slot_index' => max(1,(int)($row['slot_index'] ?? $order))];
     foreach (['ability_kb_key', 'catalog_definition_id', 'ability_fingerprint', 'title', 'type', 'description', 'icon', 'kb_url'] as $field) {
         $result[$field] = is_string($row[$field] ?? null) ? my_substr($row[$field], 0, $field === 'description' ? 5000 : 512) : '';
     }
@@ -135,6 +135,7 @@ function af_atf_kb_ability_validate(array $rows, array $stored, array $fields, a
             'ability_definition_version' => ['revision' => $entry['revision'] ?? $source['rules']['revision'] ?? null,
                 'declared_version' => $source['rules']['version'] ?? null, 'fingerprint' => $source['fingerprint']],
             'ability_fingerprint' => $source['fingerprint'],
+            'slot_index' => $old['slot_index'] ?? $index + 1,
         ], $index + 1);
     }
     unset($row);

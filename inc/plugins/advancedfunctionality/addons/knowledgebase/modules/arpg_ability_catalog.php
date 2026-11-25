@@ -320,7 +320,15 @@ function af_kb_ability_catalog_public_row(?array $row): bool
 function af_kb_arpg_character_ability_profile(array $ability, string $path, array &$diagnostics): array
 {
     if (($ability['ability_source'] ?? null) !== 'arpg_ability') {
-        return af_kb_arpg_acs_ability($ability, $path, $diagnostics);
+        $profile = af_kb_arpg_acs_ability($ability, $path, $diagnostics);
+        if (($ability['ability_kb_key'] ?? $ability['ability_key'] ?? '') === '') {
+            if (!$profile['effects']) af_kb_arpg_acs_diagnostic($diagnostics, 'custom_ability_effects_missing', $path.'.effects');
+            if (($profile['parameters']['target'] ?? '') === '') af_kb_arpg_acs_diagnostic($diagnostics, 'custom_ability_target_missing', $path.'.target');
+            if (($ability['cost_resource'] ?? '') !== '' && ($ability['cost_value'] ?? '') === '') {
+                af_kb_arpg_acs_diagnostic($diagnostics, 'required_field_missing', $path.'.cost_value');
+            }
+        }
+        return $profile;
     }
     $key = $ability['ability_kb_key'] ?? '';
     $row = is_string($key) && preg_match(AF_KB_KEY_PATTERN, $key) ? af_kb_arpg_acs_lookup('arpg_ability', $key) : null;
