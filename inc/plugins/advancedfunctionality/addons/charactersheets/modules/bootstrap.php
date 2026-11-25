@@ -811,68 +811,39 @@ function af_charactersheets_handle_create_sheet_action(): void
     }
 
     $acceptRow = af_charactersheets_get_accept_row($tid);
-    if (function_exists('af_cwf_can_create_sheet') && !af_cwf_can_create_sheet($tid, $thread, $acceptRow)) {
-        $msg = $lang->af_charactersheets_sheet_create_exists ?? 'Лист персонажа уже существует.';
-        redirect('showthread.php?tid=' . $tid, $msg);
+    $existing = af_charactersheets_resolve_existing_sheet_for_thread($tid, (int)$thread['uid'], $acceptRow);
+    if (!$existing && !function_exists('af_cwf_can_create_sheet')) {
+        redirect('showthread.php?tid=' . $tid, 'Создание листа недоступно: обработчик CharacterWorkflow не загружен.');
     }
-    $uid = (int)($thread['uid'] ?? 0);
-    $characterSource = af_charactersheets_resolve_character_kb_entry($tid, $uid, $acceptRow);
-    $sourceUid = (int)(($characterSource['payload'] ?? [])['meta']['source_uid'] ?? 0);
-    if ($uid <= 0 && $sourceUid > 0) {
-        $uid = $sourceUid;
-    }
-    if ($uid <= 0) {
-        $uid = (int)($acceptRow['uid'] ?? 0);
-    }
-
-    $entryId = (int)(($characterSource['entry'] ?? [])['id'] ?? 0);
-    $acceptUpdate = [
-        'uid' => $uid,
-    ];
-    if ($entryId > 0) {
-        $acceptUpdate['kb_entry_id'] = $entryId;
-    }
-
-    $existing = af_charactersheets_get_sheet_by_tid($tid);
-    if (!empty($existing['id'])) {
-        $slug = (string)($existing['slug'] ?? '');
-        if ($slug !== '') {
-            af_charactersheets_upsert_accept_row($tid, $acceptUpdate + [
-                'sheet_slug' => $slug,
-                'sheet_created' => 1,
-            ]);
+    if (!$existing && !af_cwf_can_create_sheet($tid, $thread, $acceptRow)) {
+        // A parallel request may have completed after the first lookup.
+        $existing = af_charactersheets_resolve_existing_sheet_for_thread($tid, (int)$thread['uid'], $acceptRow);
+        if (!$existing) {
+            redirect('showthread.php?tid=' . $tid, 'Создание листа недоступно: форум анкеты не разрешён настройками CharacterWorkflow.');
         }
-        $msg = $lang->af_charactersheets_sheet_create_exists ?? 'Лист персонажа уже существует.';
-        $sheetUrl = af_charactersheets_build_sheet_url($slug, $tid);
-        redirect($sheetUrl, $msg);
     }
 
-    $thread['uid'] = $uid;
-    $sheet = af_charactersheets_autocreate_sheet($tid, $thread);
-    $sheetId = (int)($sheet['id'] ?? 0);
-    $sheetSlug = (string)($sheet['slug'] ?? '');
-    if ($sheetId <= 0 && $sheetSlug === '') {
-        $msg = $lang->af_charactersheets_sheet_create_error ?? 'Не удалось создать лист персонажа.';
-        redirect('showthread.php?tid=' . $tid, $msg);
+    try {
+        $sheet = af_charactersheets_autocreate_sheet($tid, $thread, (int)($mybb->user['uid'] ?? 0));
+    } catch (RuntimeException $error) {
+        $message = match ($error->getMessage()) {
+            'sheet_slug_conflict' => 'Адрес листа уже занят листом другой темы. Обратитесь к администратору для проверки привязки.',
+            'sheet_owner_conflict', 'sheet_thread_owner_invalid' => 'Владелец листа или анкеты не совпадает с владельцем темы. Проверьте привязку.',
+            'sheet_busy' => 'Лист сейчас обновляется. Повторите запрос позже.',
+            'sheet_slug_invalid' => 'Сохранённый адрес листа некорректен. Проверьте привязку анкеты.',
+            default => $lang->af_charactersheets_sheet_create_error ?? 'Не удалось создать лист персонажа.',
+        };
+        af_charactersheets_log('Sheet creation blocked', ['tid' => $tid, 'code' => $error->getMessage()]);
+        redirect('showthread.php?tid=' . $tid, $message);
+    }
+    if (empty($sheet['id']) || empty($sheet['slug'])) {
+        redirect('showthread.php?tid=' . $tid, $lang->af_charactersheets_sheet_create_error ?? 'Не удалось создать лист персонажа.');
     }
 
-    if ($sheetSlug === '' && $sheetId > 0) {
-        $existingById = af_charactersheets_get_sheet_by_id($sheetId);
-        $sheetSlug = (string)($existingById['slug'] ?? '');
-    }
-    if ($sheetSlug !== '') {
-        af_charactersheets_upsert_accept_row($tid, $acceptUpdate + [
-            'sheet_slug' => $sheetSlug,
-            'sheet_created' => 1,
-        ]);
-    }
-    if (function_exists('af_cwf_bind_sheet')) {
-        af_cwf_bind_sheet($tid, $sheetId, $sheetSlug, (int)($mybb->user['uid'] ?? 0));
-    }
-
-    $msg = $lang->af_charactersheets_sheet_create_done ?? 'Лист персонажа создан.';
-    $sheetUrl = af_charactersheets_build_sheet_url($sheetSlug, $tid);
-    redirect($sheetUrl, $msg);
+    $message = $existing
+        ? ($lang->af_charactersheets_sheet_create_exists ?? 'Лист персонажа уже существует.')
+        : ($lang->af_charactersheets_sheet_create_done ?? 'Лист персонажа создан.');
+    redirect(af_charactersheets_build_sheet_url((string)$sheet['slug'], $tid), $message);
 }
 
 function af_charactersheets_build_kb_entry_url(int $entryId, int $tid): string
@@ -927,7 +898,7 @@ function af_charactersheets_build_accept_message(array $thread): string
         $sheet_slug = (string)$row['sheet_slug'];
     } else {
         // если ещё нет — ожидаемо, но мы всё равно подставим будущий
-        $sheet_slug = af_charactersheets_slugify((string)($thread['subject'] ?? ''), $tid);
+        $sheet_slug = 'thread-' . $tid;
     }
     $sheet_url = af_charactersheets_make_absolute_url(af_charactersheets_url(['slug' => $sheet_slug]));
 
@@ -950,60 +921,12 @@ function af_charactersheets_build_accept_message(array $thread): string
     return $rendered;
 }
 
-function af_charactersheets_autocreate_sheet(int $tid, array $thread): array
+function af_charactersheets_autocreate_sheet(int $tid, array $thread, int $actorUid = 0): array
 {
-    $row = af_charactersheets_get_accept_row($tid);
-
-    // Если лист уже был создан ранее — не трогаем, просто возвращаем
-    if (!empty($row['sheet_created']) && !empty($row['sheet_slug'])) {
-        $existing = af_charactersheets_get_sheet_by_slug((string)$row['sheet_slug']);
-        if (!empty($existing)) {
-            return $existing;
-        }
-    }
-
-    // Если slug уже есть, даже без sheet_created — считаем, что это наш стабильный slug
-    if (!empty($row['sheet_slug'])) {
-        $slug = (string)$row['sheet_slug'];
-        $sheet = af_charactersheets_ensure_sheet($tid, (int)($thread['uid'] ?? 0), $slug);
-        if (!empty($sheet['id'])) {
-            af_charactersheets_upsert_accept_row($tid, [
-                'uid' => (int)($thread['uid'] ?? 0),
-                'sheet_slug' => $slug,
-                'sheet_created' => 1,
-            ]);
-            return $sheet;
-        }
-
-        af_charactersheets_upsert_accept_row($tid, [
-            'uid' => (int)($thread['uid'] ?? 0),
-            'sheet_slug' => $slug,
-            'sheet_created' => 0,
-        ]);
-
-        return ['slug' => $slug];
-    }
-
-    $slug = af_charactersheets_slugify((string)($thread['subject'] ?? ''), $tid);
-
-    $sheet = af_charactersheets_ensure_sheet($tid, (int)($thread['uid'] ?? 0), $slug);
-    if (!empty($sheet['id'])) {
-        af_charactersheets_upsert_accept_row($tid, [
-            'uid' => (int)($thread['uid'] ?? 0),
-            'sheet_slug' => $slug,
-            'sheet_created' => 1,
-        ]);
-
-        return $sheet;
-    }
-
-    af_charactersheets_upsert_accept_row($tid, [
-        'uid' => (int)($thread['uid'] ?? 0),
-        'sheet_slug' => $slug,
-        'sheet_created' => 0,
-    ]);
-
-    return ['slug' => $slug];
+    $accept = af_charactersheets_get_accept_row($tid);
+    return af_charactersheets_ensure_sheet(
+        $tid, (int)($thread['uid'] ?? 0), af_charactersheets_expected_sheet_slug($tid, $accept), $actorUid
+    );
 }
 
 function af_charactersheets_handle_thread_move_for_acceptance_impl(array $args): void
@@ -1416,7 +1339,7 @@ function af_charactersheets_ensure_schema(): void
               progress_json MEDIUMTEXT NOT NULL,
               updated_at INT UNSIGNED NOT NULL DEFAULT 0,
               PRIMARY KEY (id),
-              UNIQUE KEY uid (uid),
+              KEY uid (uid),
               UNIQUE KEY slug (slug),
               KEY tid (tid)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
