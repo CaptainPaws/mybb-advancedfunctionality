@@ -10,7 +10,7 @@ final class AF_ACS_SessionService
     {
         $session=$this->repository->session(AF_ACS_Repository::integer($id));
         $this->authorize($session,false);$gm=$this->lifecycleGm($session);
-        return ['session'=>$session,'members'=>$this->repository->members($id),'can_manage'=>$this->canManage($session),'can_audit'=>$gm,'can_request_close'=>$session['status']==='active'&&$gm,'can_close'=>$session['status']==='pending_close'&&$gm,'can_archive'=>$session['status']==='closed'&&$gm,'can_reopen'=>$session['status']==='closed'&&$gm,'outstanding_obligations'=>$withObligations&&$gm?$this->repository->obligations($id):null,'can_register_own'=>$session['status']==='active' && (bool)array_intersect(array_column($this->repository->roles($id,$this->access->uid()),'role'),['owner','gm','assistant_gm','player'])];
+        return ['session'=>$session,'members'=>$this->repository->members($id),'can_manage'=>$this->canManage($session),'can_audit'=>$gm,'can_register_characters'=>$session['status']==='active' && $gm,'can_request_close'=>$session['status']==='active'&&$gm,'can_close'=>$session['status']==='pending_close'&&$gm,'can_archive'=>$session['status']==='closed'&&$gm,'can_reopen'=>$session['status']==='closed'&&$gm,'outstanding_obligations'=>$withObligations&&$gm?$this->repository->obligations($id):null,'can_register_own'=>$session['status']==='active' && (bool)array_intersect(array_column($this->repository->roles($id,$this->access->uid()),'role'),['owner','gm','assistant_gm','player'])];
     }
     private function lifecycleGm(array $session): bool
     {

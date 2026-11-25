@@ -5,7 +5,7 @@ require_once __DIR__.'/CapabilityValidator.php';
 /** Preparation only: no SnapshotStore/session/entity or public endpoint. */
 final class AF_ACS_CharacterSheetAdapter
 {
-    public function createSnapshot(int $sheetId, int $actorUid, array $context = []): array
+    public function createSnapshot(int $sheetId, int $actorUid, array $context = [], ?AF_ACS_CharacterRegistrationGrant $grant = null): array
     {
         global $mybb;
         if ($actorUid <= 0 || $actorUid !== (int)($mybb->user['uid'] ?? 0)) {
@@ -18,7 +18,7 @@ final class AF_ACS_CharacterSheetAdapter
         try {
             require_once AF_ADDONS . 'charactersheets/charactersheets.php';
             if (!function_exists('af_charactersheets_create_combat_snapshot')) return ['ready'=>false,'diagnostics'=>[['code'=>'unsupported_character_contract','path'=>'CharacterSheets','severity'=>'error']]];
-            $snapshot = af_charactersheets_create_combat_snapshot($sheetId,$actorUid,$context);
+            $snapshot = af_charactersheets_create_combat_snapshot($sheetId,$actorUid,$context,$grant);
             if (!isset($snapshot['identity'])) return $snapshot; // Preserve the owner's minimal denial response.
             $validation = AF_ACS_CapabilityValidator::character($snapshot);
             $snapshot['ready'] = $validation['ready'];

@@ -211,7 +211,7 @@ final class AF_ACS_GmPanel
         $session=$view['session'];$encounter=$view['encounter'];
         $sessionView=af_advancedcombatsystem_sessions()->view($session['id']);
         $editable=$session['status']==='active' && $encounter['status']==='preparation';
-        $allowed=array_merge($sessionView['can_register_own']?['character']:[],$sessionView['can_manage']?['npc','monster']:[]);
+        $allowed=array_merge($sessionView['can_register_own'] || $sessionView['can_register_characters']?['character']:[],$sessionView['can_manage']?['npc','monster']:[]);
         $kind=$mybb->get_input('kind');
         $picker=$editable && $registered==='' && $mybb->get_input('gm_picker')==='1' && in_array($kind,$allowed,true);
         echo '<div class="af-acs-gm__composition'.($picker?' af-acs-gm__composition--picker':'').'">';
@@ -233,7 +233,7 @@ final class AF_ACS_GmPanel
         if ($editable) {
             echo '<nav aria-label="Регистрация существ">';
             if (in_array('character',$allowed,true)) echo '<a href="'.self::esc($url.'&gm_picker=1&kind=character').'">Добавить персонажа</a>';
-            else echo '<span>Регистрация персонажа доступна владельцу листа с правом регистрации в сессии.</span>';
+            else echo '<span>Для выбора персонажа нужны права мастера или право зарегистрировать собственный лист.</span>';
             if (in_array('npc',$allowed,true)) echo '<a href="'.self::esc($url.'&gm_picker=1&kind=npc').'">Добавить NPC или монстра</a>';
             echo '</nav>';
         } else echo '<p>Состав подготовки можно менять до запуска в активной сессии.</p>';
@@ -303,7 +303,7 @@ final class AF_ACS_GmPanel
         self::form($url,'participant_add',$session,$encounter);
         if ($registered!=='') {
             self::fields(['entity_id'=>$registered]);
-            echo '<p>Выберите сторону для только что зарегистрированного существа.</p>';
+            echo '<p>Выберите сторону для только что зарегистрированного существа. Для персонажа игрока владельцу требуется игровая роль в сессии. Роли доступны в расширенных настройках.</p>';
         } else {
             echo '<label>Зарегистрированное существо <select name="entity_id" required><option value="">Выберите существо</option>';
             foreach ($candidates as $candidate) echo '<option value="'.self::esc($candidate['id']).'">'.self::esc($candidate['name']).'</option>';

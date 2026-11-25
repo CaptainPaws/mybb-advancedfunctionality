@@ -22,9 +22,10 @@ final class AF_ACS_EntitiesPage
             if($list['next_after']!==null)echo '<a href="'.self::esc($url.($embedded?'&session_id='.$sid:'').'&entity_after='.$list['next_after']).'">Следующие существа</a>';
         }
         $own=$view['can_register_own'];
-        if(!$own && !$view['can_manage'])return;
+        $gmCharacters=!empty($view['can_register_characters']);
+        if(!$own && !$view['can_manage'] && !$gmCharacters)return;
         if($view['session']['status']!=='active')return;
-        $allowedKinds=array_merge($own?['character','pet']:[],$view['can_manage']?['npc','monster']:[]);
+        $allowedKinds=array_merge($own || $gmCharacters?['character']:[],$own?['pet']:[],$view['can_manage']?['npc','monster']:[]);
         $kind=$mybb->get_input('kind');if(!in_array($kind,$allowedKinds,true))$kind=$allowedKinds[0];
         if (!$picker && !$embedded) echo '<details class="af-acs-standalone__disclosure"'.($mybb->get_input('kind')!==''?' open':'').'><summary>Добавить существо</summary>';
         elseif (!$picker) echo '<h3>Добавить существо</h3>';
@@ -42,8 +43,9 @@ final class AF_ACS_EntitiesPage
         if ($kind==='character') {
             echo '<form method="get" action="'.self::esc(strtok($url,'?')).'">';
             self::hidden($query+['session_id'=>$sid,'kind'=>'character']);
-            echo '<label>Slug листа <input name="source_slug" maxlength="191" placeholder="thread-52" value="'.self::esc($slug).'"></label>'
-                .'<button type="submit">Найти свой лист</button></form>';
+            $label=$gmCharacters?'Имя персонажа, игрок, slug или ID':'Slug своего листа';
+            echo '<label>'.self::esc($label).' <input name="source_slug" maxlength="191" placeholder="'.($gmCharacters?'thread-52, tid:52 или id:32':'thread-52').'" value="'.self::esc($slug).'"></label>'
+                .'<button type="submit">Найти персонажа</button></form>';
         }
         $choices=$service->choices($sid,$kind,$after,$slug);
         $selected=$mybb->get_input('source_key');
@@ -51,7 +53,7 @@ final class AF_ACS_EntitiesPage
         if (!$options) {
             $reason=$choices['reason']??'';
             if ($reason!=='') echo self::diagnostics([['code'=>$reason,'path'=>'source']]);
-            else echo '<p>Нет доступных источников на этой странице. Для персонажа нужен собственный лист; для NPC и монстра — запись бестиария KB.</p>';
+            else echo '<p>Нет доступных источников по этому запросу.</p>';
         } else {
             if ($selected==='' && count($options)===1) $selected=$options[0]['key'];
             $formFields=($embedded?['acs_encounter_op'=>'entity_request','tid'=>$view['session']['tid']]:[])+[
@@ -66,7 +68,9 @@ final class AF_ACS_EntitiesPage
                 $allowed=($choice['state']??'unchecked')==='unchecked';
                 $selectable=$selectable||$allowed;
                 echo '<option value="'.self::esc($choice['key']).'"'.($choice['key']===$selected?' selected':'').(!$allowed?' disabled':'').'>'
-                    .self::esc($choice['label']).'</option>';
+                    .self::esc($choice['label'].(empty($choice['owner_name'])?'':' · '.$choice['owner_name'])
+                        .(isset($choice['thread_id'])?' · тема #'.$choice['thread_id']:''))
+                    .(!$allowed?' · Недоступен':'').'</option>';
             }
             echo '</select></label><label>Имя экземпляра <input name="name" maxlength="191" value="'.self::esc($mybb->get_input('name')).'"></label>'
                 .'<label>Начальное HP <input name="initial_hp" type="number" min="0" max="9007199254740991" step="1" value="'.self::esc($mybb->get_input('initial_hp')).'"></label>'
@@ -86,6 +90,7 @@ final class AF_ACS_EntitiesPage
                 $message=$checked?($check['message']??''):'';
                 $status=$ready?'Готов к регистрации':($denied?'Недоступен по правам':(($issues || $message!=='')?'Требует исправлений':'Требуется проверка'));
                 echo '<div class="atf-card"'.($picker && $checked?' data-acs-source-result tabindex="-1"':'').'><strong>'.self::esc($choice['label']).'</strong> · '.self::esc($status);
+                if (!empty($choice['owner_name'])) echo ' · '.self::esc($choice['owner_name']);
                 if (isset($choice['sheet_id'])) echo ' <small>Лист #'.self::esc($choice['sheet_id']).'</small>';
                 if (isset($choice['sheet_url'])) echo ' · <a href="'.self::esc(self::forumUrl($choice['sheet_url'])).'">Лист персонажа</a>';
                 if (isset($choice['thread_id'])) echo ' · <a href="'.self::esc(self::forumUrl('showthread.php?tid='.$choice['thread_id'])).'">Тема #'.self::esc($choice['thread_id']).'</a>';
@@ -110,7 +115,7 @@ final class AF_ACS_EntitiesPage
                 echo '</div>';
             }
         }
-        if(($choices['next_after']??null)!==null)echo '<a href="'.self::esc($url.($embedded?'&session_id='.$sid:'').($picker?'':'&kind='.$kind).'&source_after='.$choices['next_after']).'">Следующие источники</a>';
+        if(($choices['next_after']??null)!==null)echo '<a href="'.self::esc($url.($embedded?'&session_id='.$sid:'').($picker?'':'&kind='.$kind).'&source_after='.$choices['next_after'].($slug!==''?'&source_slug='.rawurlencode($slug):'')).'">Следующие источники</a>';
         if (!$embedded) echo '</details>';
     }
     private static function forumUrl(string $path): string
