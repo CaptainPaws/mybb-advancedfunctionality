@@ -345,6 +345,8 @@ function af_acs_registration_diagnostic_groups(array $issues): array
         'permanent_pet_source_unavailable'=>'Плагин постоянных питомцев ещё не подключён.',
         'source_changed_during_read'=>'Источник изменился во время проверки. Проверьте его повторно.',
         'status_resistance_alias_conflict'=>'Конфликт значений сопротивления статусам.',
+        'custom_ability_effects_missing'=>'Требует настройки для ACS. Добавьте эффект собственной способности.',
+        'custom_ability_target_missing'=>'Требует настройки для ACS. Выберите цель собственной способности.',
         'duration_unit_missing'=>'Для указанного времени нужна поддерживаемая единица.',
         'unsupported_duration_unit'=>'Единица времени не поддерживается.',
         'formula_binding_missing'=>'У профиля формулы отсутствует ссылка на определение формулы.',

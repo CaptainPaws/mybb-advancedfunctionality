@@ -23,6 +23,7 @@ require_once dirname(__DIR__) . '/adaptivethemeframework/ownership.php';
 define('AF_ATF_ID', 'advancedthreadfields');
 define('AF_ATF_TABLE_FIELDS', 'af_atf_fields');
 require_once __DIR__ . '/modules/kb_abilities.php';
+require_once __DIR__ . '/modules/custom_abilities.php';
 define('AF_ATF_TABLE_VALUES', 'af_atf_values');
 require_once __DIR__.'/acs-thread.php';
 
@@ -3848,25 +3849,34 @@ function af_atf_build_input_html(array $field, string $value): string
         }
 
         case 'character_abilities': {
+            $arpg = af_atf_character_active_mechanic() === 'arpg';
             $abilitySelects = af_atf_get_character_ability_select_payload();
+            if ($arpg) $abilitySelects = af_atf_custom_ability_options($abilitySelects);
             $optionsJson = json_encode($abilitySelects, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
             $optionsJson = str_replace('</', '<\/', $optionsJson);
             $catalogUrl = af_atf_kb_ability_enabled() ? af_kb_url(['action' => 'kb_ability_catalog']) : '';
             $contextFields = af_atf_kb_ability_context_fields($GLOBALS['af_atf_context_fields'] ?? []);
-            $notices = [];
-            foreach ((array)json_decode(af_atf_normalize_character_abilities_json($value), true) as $ability) {
+            $notices = $draftNotices = [];
+            $decodedAbilities = (array)json_decode($value, true);
+            $abilityRows = $decodedAbilities['items'] ?? $decodedAbilities['abilities'] ?? $decodedAbilities;
+            $abilityRows = is_array($abilityRows) ? array_values(array_filter($abilityRows,'is_array')) : [];
+            foreach (array_slice($abilityRows,0,8) as $index=>$ability) {
                 if (($ability['ability_source'] ?? '') === 'arpg_ability') {
+                    $ability = af_atf_kb_ability_row($ability,1);
                     $notices[$ability['ability_kb_key']] = af_atf_kb_ability_saved_notice($ability);
+                } elseif ($arpg && !array_key_exists('ability_source',$ability)) {
+                    $draftNotices[$index] = af_atf_custom_ability_readiness(af_atf_normalize_character_ability_row($ability));
                 }
             }
             return '<div class="af-atf-abilities" data-max-items="8" data-kb-catalog="' . htmlspecialchars_uni($catalogUrl)
                 . '" data-kb-context="' . htmlspecialchars_uni(json_encode($contextFields) ?: '{}')
-                . '" data-kb-notices="' . htmlspecialchars_uni(json_encode((object)$notices, JSON_UNESCAPED_UNICODE) ?: '{}') . '">'
+                . '" data-kb-notices="' . htmlspecialchars_uni(json_encode((object)$notices, JSON_UNESCAPED_UNICODE) ?: '{}')
+                . ($arpg ? '" data-acs-draft-notices="' . htmlspecialchars_uni(json_encode((object)$draftNotices, JSON_UNESCAPED_UNICODE) ?: '{}') : '')
+                . '">'
                 . '<input type="hidden" class="af-atf-abilities-hidden" name="' . $nameAttr . '" value="' . $safeValue . '" />'
                 . '<script type="application/json" class="af-atf-abilities-options">' . $optionsJson . '</script>'
                 . '<div class="af-atf-abilities-list"></div>'
-                . '<button type="button" class="button af-atf-abilities-add"'
-                . (af_atf_character_active_mechanic() === 'arpg' ? ' hidden' : '') . '>Создать свою</button>'
+                . '<button type="button" class="button af-atf-abilities-add">Создать свою</button>'
                 . ($catalogUrl !== '' ? ' <button type="button" class="button af-atf-abilities-kb">Выбрать из KB</button>' : '')
                 . '</div>';
         }
@@ -5116,8 +5126,9 @@ function af_atf_newthread_do_end(): void
                 continue;
             }
             $val = af_atf_normalize_character_abilities_json($val);
-            // The DataHandler has already validated and saved server-owned KB pins.
-            if (af_atf_kb_ability_has_links((array)json_decode($val, true))) {
+            // ARPG drafts and server-owned KB pins use only the validated DataHandler writer.
+            if ($activeMechanic === 'arpg' || af_atf_kb_ability_has_links((array)json_decode($val, true))) {
+                unset($values[$fieldid]);
                 continue;
             }
         } elseif ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
@@ -5816,7 +5827,7 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
             $tracked = array_fill_keys((array)($previousMeta['atf_ability_fingerprints'] ?? []), true);
             $independent = array_values(array_filter((array)($previous['character_abilities'] ?? []),
                 static fn($row) => !isset($tracked[af_kb_arpg_acs_fingerprint($row)])));
-            $independentKeys = array_fill_keys(array_column($independent, 'ability_kb_key'), true);
+            $independentKeys = array_fill_keys(array_filter(array_column($independent, 'ability_kb_key'), static fn($key) => is_string($key) && $key !== ''), true);
             $independentFingerprints = array_fill_keys(array_map('af_kb_arpg_acs_fingerprint', $independent), true);
             $selected = array_values(array_filter($abilities, static fn($row) =>
                 !isset($independentKeys[$row['ability_kb_key'] ?? ''])
@@ -6381,6 +6392,20 @@ function af_atf_dh_validate(&$ph): void
                 $ph->set_error('В анкете можно сохранить не более 8 способностей.');
                 continue;
             }
+            if ($activeMechanic === 'arpg') {
+                $oldRows = (array)json_decode($storedRaw,true);
+                $oldRows = (array)($oldRows['items'] ?? $oldRows['abilities'] ?? $oldRows);
+                $badShape = false;
+                foreach (array_values($rows) as $index=>$row) {
+                    if (is_array($row) && (array_key_exists('ability_source',$row) || in_array($row,$oldRows,true))) continue;
+                    $errors = is_array($row) ? af_atf_custom_ability_shape_errors($row) : ['Запись должна быть объектом.'];
+                    foreach ($errors as $message) {
+                        $badShape = true;
+                        $ph->set_error('Способность №'.($index+1).'. '.$message);
+                    }
+                }
+                if ($badShape) continue;
+            }
             $val = af_atf_normalize_character_abilities_json($raw);
             $abilities = (array)json_decode($val, true);
             $old = (array)json_decode(af_atf_normalize_character_abilities_json($storedRaw), true);
@@ -6398,20 +6423,29 @@ function af_atf_dh_validate(&$ph): void
             }
             // Saved custom definitions can predate the current element requirements.
             // Revalidate only rows whose mechanics or content the user changed.
-            $custom = array_values(array_filter($abilities, static fn(array $ability): bool =>
-                !array_key_exists('ability_source', $ability) && !in_array($ability, $old, true)));
-            if ($custom && $activeMechanic === 'arpg') {
-                $ph->set_error('Для ARPG выберите готовые способности из KB.');
-                continue;
-            }
-            if ($custom && function_exists('af_kb_arpg_validate_element_fields')) {
-                $elementErrors = [];
-                af_kb_arpg_validate_element_fields(['character_abilities'=>$custom], $elementErrors);
-                foreach (array_unique($elementErrors) as $code) $ph->set_error(af_kb_arpg_element_error_message($code));
-            }
-            foreach ($custom as $ability) {
-                if (array_key_exists('action_cost', $ability) && $ability['action_cost'] !== '' && (!is_scalar($ability['action_cost']) || is_bool($ability['action_cost']) || !is_numeric($ability['action_cost']) || !is_finite((float)$ability['action_cost']) || (float)$ability['action_cost'] < 0)) {
-                    $ph->set_error('Стоимость способности в очках действий должна быть неотрицательным числом.');
+            if ($activeMechanic === 'arpg') {
+                $oldCustom = array_map(static fn(array $ability): array => array_diff_key($ability,['sortorder'=>true]), $old);
+                $options = af_atf_custom_ability_options(af_atf_get_character_ability_select_payload());
+                foreach ($abilities as $index=>$ability) {
+                    if (array_key_exists('ability_source',$ability)
+                        || in_array(array_diff_key($ability,['sortorder'=>true]),$oldCustom,true)) continue;
+                    $name = $ability['title'] !== '' ? '«'.$ability['title'].'»' : '№'.($index+1);
+                    foreach (af_atf_custom_ability_errors($ability,$options) as $message) {
+                        $ph->set_error('Способность '.htmlspecialchars_uni($name).'. '.$message);
+                    }
+                }
+            } else {
+                $custom = array_values(array_filter($abilities, static fn(array $ability): bool =>
+                    !array_key_exists('ability_source', $ability) && !in_array($ability, $old, true)));
+                if ($custom && function_exists('af_kb_arpg_validate_element_fields')) {
+                    $elementErrors = [];
+                    af_kb_arpg_validate_element_fields(['character_abilities'=>$custom], $elementErrors);
+                    foreach (array_unique($elementErrors) as $code) $ph->set_error(af_kb_arpg_element_error_message($code));
+                }
+                foreach ($custom as $ability) {
+                    if (array_key_exists('action_cost', $ability) && $ability['action_cost'] !== '' && (!is_scalar($ability['action_cost']) || is_bool($ability['action_cost']) || !is_numeric($ability['action_cost']) || !is_finite((float)$ability['action_cost']) || (float)$ability['action_cost'] < 0)) {
+                        $ph->set_error('Стоимость способности в очках действий должна быть неотрицательным числом.');
+                    }
                 }
             }
             if ((int)$f['required'] === 1 && $val === '[]') {
