@@ -167,6 +167,7 @@ class AF_ACS_RegistrationSource
         $profile=$payload['character_profile']??[];
         $choice['label']=trim((string)($profile['character_name_ru']??'')) ?: (trim((string)($profile['character_name']??'')) ?: (af_kb_pick_text($entry,'title') ?: $choice['label']));
         $choice['kb_url']=af_kb_url(['type'=>'character','key'=>$entry['key']]);
+        $choice['owner_uid']=$owner;
         $choice['owner_name']=(string)(get_user($owner)['username']??'');
         if ($crossOwner) {
             try {
@@ -267,12 +268,18 @@ class AF_ACS_RegistrationSource
         }
         $table=$kind==='character'?'af_cs_sheets':'af_kb_entries';
         $where=$kind==='character'?'uid='.$actor:'type=\'arpg_bestiary\' AND active=1';
-        $query=$db->simple_select($table,'*',$where.' AND id>'.max(0,$after),['order_by'=>'id','order_dir'=>'ASC','limit'=>50]);$result=[];$cursor=null;
+        if ($kind!=='character' && $slug!=='') {
+            if (mb_strlen($slug)>191) return ['items'=>[],'reason'=>'sheet_lookup_invalid'];
+            $value=$db->escape_string($slug);
+            $where.=" AND (`key`='{$value}' OR LOCATE('{$value}',title_ru)>0 OR LOCATE('{$value}',title_en)>0)";
+        }
+        $query=$db->simple_select($table,'*',$where.' AND id>'.max(0,$after),['order_by'=>'id','order_dir'=>'ASC','limit'=>50]);$result=[];$cursor=null;$scanned=0;
         while($row=$db->fetch_array($query)) {
+            ++$scanned;
             $cursor=(int)$row['id'];
             if($kind==='character')$result[]=$this->characterChoice($row,$actor);
-            elseif(af_kb_entry_visible_in_context($row,'entry',af_kb_can_edit()))$result[]=['key'=>$row['key'],'label'=>af_kb_pick_text($row,'title')?:$row['key']];
+            elseif(af_kb_entry_visible_in_context($row,'entry',af_kb_can_edit()))$result[]=['key'=>$row['key'],'label'=>af_kb_pick_text($row,'title')?:$row['key'],'portrait'=>(string)($row['icon_url']??'')];
         }
-        return ['items'=>$result,'next_after'=>$cursor];
+        return ['items'=>$result,'next_after'=>$scanned===50?$cursor:null];
     }
 }

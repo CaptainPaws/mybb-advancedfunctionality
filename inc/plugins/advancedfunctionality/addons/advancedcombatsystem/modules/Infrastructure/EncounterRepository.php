@@ -177,9 +177,14 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     {
         return array_map(fn($r)=>['uid'=>(string)$r['uid'],'role'=>$r['role']],$this->sql('SELECT uid,role FROM '.$this->table('session_roles')." WHERE session_id=? AND role IN ('owner','gm') AND (expires_at IS NULL OR expires_at>?) ORDER BY uid LIMIT 201",[$sid,time()])['rows']);
     }
-    public function candidatesForEncounter(string $sid,string $after): array
+    public function candidatesForEncounter(string $sid,string $after,bool $recent=false): array
     {
-        return array_map(fn($r)=>$this->ids($r,['id','control_group_id']),$this->sql('SELECT id,name,kind,control_group_id FROM '.$this->table('entities').' WHERE session_id=? AND id>? ORDER BY id LIMIT 100',[$sid,self::integer($after,zero:true)])['rows']);
+        $cursor=self::integer($after,zero:true);
+        $where=$recent ? ($cursor==='0'?'':' AND id<?') : ' AND id>?';
+        $order=$recent?' DESC LIMIT 20':' ASC LIMIT 100';
+        $params=$where!==''?[$sid,$cursor]:[$sid];
+        return array_map(fn($row)=>$this->ids($row,['id','control_group_id']),
+            $this->sql('SELECT id,name,kind,control_group_id'.($recent?',owner_uid':'').' FROM '.$this->table('entities').' WHERE session_id=?'.$where.' ORDER BY id'.$order,$params)['rows']);
     }
     public function events(string $sid,string $eid,string $after='0'): array
     {

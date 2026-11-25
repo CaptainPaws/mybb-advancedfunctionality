@@ -4,7 +4,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 final class AF_ACS_EntitiesPage
 {
     private static function esc(mixed $value): string {return htmlspecialchars_uni((string)$value);}
-    public static function render(string $sid,array $view,string $url,?AF_ACS_EntityService $service=null,bool $embedded=false,array $check=[],bool $picker=false): void
+    public static function render(string $sid,array $view,string $url,?AF_ACS_EntityService $service=null,bool $embedded=false,array $check=[],bool $picker=false,string $pickerKind=''): void
     {
         global $mybb;
         $service??=af_advancedcombatsystem_entities();
@@ -26,7 +26,7 @@ final class AF_ACS_EntitiesPage
         if(!$own && !$view['can_manage'] && !$gmCharacters)return;
         if($view['session']['status']!=='active')return;
         $allowedKinds=array_merge($own || $gmCharacters?['character']:[],$own?['pet']:[],$view['can_manage']?['npc','monster']:[]);
-        $kind=$mybb->get_input('kind');if(!in_array($kind,$allowedKinds,true))$kind=$allowedKinds[0];
+        $kind=$pickerKind!==''?$pickerKind:$mybb->get_input('kind');if(!in_array($kind,$allowedKinds,true))$kind=$allowedKinds[0];
         if (!$picker && !$embedded) echo '<details class="af-acs-standalone__disclosure"'.($mybb->get_input('kind')!==''?' open':'').'><summary>Добавить существо</summary>';
         elseif (!$picker) echo '<h3>Добавить существо</h3>';
         parse_str((string)parse_url($url,PHP_URL_QUERY),$query);
@@ -38,50 +38,72 @@ final class AF_ACS_EntitiesPage
             echo '</select></label><button type="submit">Показать источники</button></form>';
         }
         if($kind==='pet') {echo '<p>Плагин постоянных питомцев ещё не подключён. Связь с владельцем и общая группа управления предусмотрены; регистрация станет доступна после подключения проверенного источника.</p>';if(!$embedded)echo '</details>';return;}
-        $slug=$kind==='character'?$mybb->get_input('source_slug'):'';
+        $slug=trim($mybb->get_input('source_slug'));
         $after=max(0,(int)$mybb->get_input('source_after'));
-        if ($kind==='character') {
-            echo '<form method="get" action="'.self::esc(strtok($url,'?')).'">';
-            self::hidden($query+['session_id'=>$sid,'kind'=>'character']);
-            $label=$gmCharacters?'Имя персонажа, игрок, slug или ID':'Slug своего листа';
-            echo '<label>'.self::esc($label).' <input name="source_slug" maxlength="191" placeholder="'.($gmCharacters?'thread-52, tid:52 или id:32':'thread-52').'" value="'.self::esc($slug).'"></label>'
-                .'<button type="submit">Найти персонажа</button></form>';
+        if ($kind==='character' || $picker) {
+            echo '<form method="get" class="af-acs-gm__search" action="'.self::esc(strtok($url,'?')).'">';
+            self::hidden($query+['session_id'=>$sid,'kind'=>$kind]);
+            $placeholder=$kind==='character'?($gmCharacters?'Найти персонажа или лист':'Slug своего листа'):'Найти существо в бестиарии';
+            echo '<input type="search" name="source_slug" maxlength="191" aria-label="'.self::esc($placeholder).'" placeholder="'.self::esc($placeholder).'" value="'.self::esc($slug).'">'
+                .'<button type="submit" aria-label="Найти"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i></button></form>';
         }
         $choices=$service->choices($sid,$kind,$after,$slug);
         $selected=$mybb->get_input('source_key');
         $options=$choices['items']??[];
         if (!$options) {
             $reason=$choices['reason']??'';
-            if ($reason!=='') echo self::diagnostics([['code'=>$reason,'path'=>'source']]);
+            if ($reason!=='') echo self::diagnostics([['code'=>$reason,'path'=>'source']], !$picker);
             else echo '<p>Нет доступных источников по этому запросу.</p>';
         } else {
-            if ($selected==='' && count($options)===1) $selected=$options[0]['key'];
+            $results='';
+            if ($picker) {
+                $resultsUrl=$url.($slug!==''?'&source_slug='.rawurlencode($slug):'').($after>0?'&source_after='.$after:'');
+                $results='<div class="af-acs-gm__results">';
+                foreach ($options as $choice) {
+                    $label=isset($choice['sheet_id'])?'Лист #'.$choice['sheet_id']:'Бестиарий · '.self::kindLabel($kind);
+                    if (!empty($choice['owner_name'])) $label.=' · '.$choice['owner_name'];
+                    $results.='<article class="af-acs-gm__entity af-acs-gm__entity--result">'.self::portrait((int)($choice['owner_uid']??0),(string)($choice['portrait']??''))
+                        .'<div class="af-acs-gm__entity-label"><strong>'.self::esc($choice['label']).'</strong><small>'.self::esc($label).'</small></div>'
+                        .'<a class="atf-button" href="'.self::esc($resultsUrl.'&source_key='.rawurlencode($choice['key'])).'">'.(($choice['state']??'unchecked')==='unchecked'?'Добавить':'Причина').'</a></article>';
+                }
+                $results.='</div>';
+                $options=array_values(array_filter($options,static fn($choice)=>$choice['key']===$selected));
+            }
+            if (!$picker && $selected==='' && count($options)===1) $selected=$options[0]['key'];
             $formFields=($embedded?['acs_encounter_op'=>'entity_request','tid'=>$view['session']['tid']]:[])+[
                 'session_id'=>$sid,'expected_version'=>$view['session']['session_version'],'kind'=>$kind,
                 'my_post_key'=>$mybb->post_code,'source_slug'=>$slug,'source_after'=>$after,
             ];
             $selectable=false;
-            echo '<form method="post" action="'.self::esc($url).'">';
-            self::hidden($formFields+['operation_key'=>bin2hex(random_bytes(16))]);
-            echo '<label>Источник <select name="source_key" required><option value="">Выберите источник</option>';
-            foreach ($options as $choice) {
-                $allowed=($choice['state']??'unchecked')==='unchecked';
-                $selectable=$selectable||$allowed;
-                echo '<option value="'.self::esc($choice['key']).'"'.($choice['key']===$selected?' selected':'').(!$allowed?' disabled':'').'>'
-                    .self::esc($choice['label'].(empty($choice['owner_name'])?'':' · '.$choice['owner_name'])
-                        .(isset($choice['thread_id'])?' · тема #'.$choice['thread_id']:''))
-                    .(!$allowed?' · Недоступен':'').'</option>';
-            }
-            echo '</select></label><label>Имя экземпляра <input name="name" maxlength="191" value="'.self::esc($mybb->get_input('name')).'"></label>'
-                .'<label>Начальное HP <input name="initial_hp" type="number" min="0" max="9007199254740991" step="1" value="'.self::esc($mybb->get_input('initial_hp')).'"></label>'
-                .'<p>Укажите начальное HP, если источник не хранит текущее HP.</p>'
-                .'<label>Причина регистрации <input name="reason" maxlength="1000" value="'.self::esc($mybb->get_input('reason')).'"></label>'
-                .'<button name="op" value="entity_validate" type="submit"'.(!$selectable?' disabled':'').'>Проверить источник</button></form>';
+            if ($options && (!$picker || (($options[0]['state']??'unchecked')==='unchecked' && empty($check['ready'])))) {
+                echo '<form method="post" action="'.self::esc($url).'">';
+                self::hidden($formFields+['operation_key'=>bin2hex(random_bytes(16))]);
+                if ($picker) {
+                    self::hidden(['source_key'=>$options[0]['key']]);
+                    $selectable=true;
+                    echo '<strong>'.self::esc($options[0]['label']).'</strong>';
+                } else {
+                    echo '<label>Источник <select name="source_key" required><option value="">Выберите источник</option>';
+                    foreach ($options as $choice) {
+                        $allowed=($choice['state']??'unchecked')==='unchecked';
+                        $selectable=$selectable||$allowed;
+                        echo '<option value="'.self::esc($choice['key']).'"'.($choice['key']===$selected?' selected':'').(!$allowed?' disabled':'').'>'
+                            .self::esc($choice['label'].(empty($choice['owner_name'])?'':' · '.$choice['owner_name'])
+                                .(isset($choice['thread_id'])?' · тема #'.$choice['thread_id']:''))
+                            .(!$allowed?' · Недоступен':'').'</option>';
+                    }
+                    echo '</select></label>';
+                }
+                echo '<label>Имя экземпляра <input name="name" maxlength="191" value="'.self::esc($mybb->get_input('name')).'"></label>'
+                    .'<label>Начальное HP <input name="initial_hp" type="number" min="0" max="9007199254740991" step="1" value="'.self::esc($mybb->get_input('initial_hp')).'"></label>'
+                    .'<p>Укажите начальное HP, если источник не хранит текущее HP.</p>'
+                    .'<label>Причина регистрации <input name="reason" maxlength="1000" value="'.self::esc($mybb->get_input('reason')).'"></label>'
+                    .'<button name="op" value="entity_validate" type="submit"'.(!$selectable?' disabled':'').'>Проверить источник</button></form>';
 
+            }
             foreach ($options as $choice) {
                 $checked=($check['source_key']??null)===$choice['key'];
                 $state=$choice['state']??'unchecked';
-                if ($picker && $choice['key']!==$selected && !$checked && $state==='unchecked') continue;
                 $issues=$checked?($check['diagnostics']??[]):[];
                 if (!$issues && $state!=='unchecked') $issues=array_merge([['code'=>$state,'path'=>'source']],$choice['diagnostics']??[]);
                 $codes=array_column($issues,'code');
@@ -96,7 +118,7 @@ final class AF_ACS_EntitiesPage
                 if (isset($choice['thread_id'])) echo ' · <a href="'.self::esc(self::forumUrl('showthread.php?tid='.$choice['thread_id'])).'">Тема #'.self::esc($choice['thread_id']).'</a>';
                 if ($message!=='') echo '<p role="alert">'.self::esc($message).'</p>';
                 if ($issues) {
-                    echo self::diagnostics($issues);
+                    echo self::diagnostics($issues, !$picker);
                     if (isset($choice['application_url'])) echo ' <a href="'.self::esc(self::forumUrl($choice['application_url'])).'">Редактировать анкету</a>';
                     if (isset($choice['kb_url'])) echo ' <a href="'.self::esc(self::forumUrl($choice['kb_edit_url']??$choice['kb_url'])).'">'.(isset($choice['kb_edit_url'])?'Редактировать запись KB':'Открыть запись KB').'</a>';
                     if (!empty($view['can_audit'])) {
@@ -114,10 +136,25 @@ final class AF_ACS_EntitiesPage
                 }
                 echo '</div>';
             }
+            echo $results;
         }
         if(($choices['next_after']??null)!==null)echo '<a href="'.self::esc($url.($embedded?'&session_id='.$sid:'').($picker?'':'&kind='.$kind).'&source_after='.$choices['next_after'].($slug!==''?'&source_slug='.rawurlencode($slug):'')).'">Следующие источники</a>';
         if (!$embedded) echo '</details>';
     }
+    public static function kindLabel(string $kind): string
+    {
+        return ['character'=>'Игрок','npc'=>'NPC','monster'=>'Монстр','pet'=>'Питомец','summon'=>'Призыв'][$kind]??'Существо';
+    }
+
+    public static function portrait(int $uid,string $image=''): string
+    {
+        if ($image==='' && $uid>0) $image=(string)(get_user($uid)['avatar']??'');
+        if (preg_match('~^(https?://|(?:\./)?(?:uploads|images)/)[^\x00-\x20]+$~iD',$image)) {
+            return '<img class="af-acs-gm__portrait" src="'.self::esc($image).'" alt="" loading="lazy" decoding="async">';
+        }
+        return '<span class="af-acs-gm__portrait" aria-hidden="true"><i class="fa-solid '.($uid>0?'fa-user':'fa-dragon').'"></i></span>';
+    }
+
     private static function forumUrl(string $path): string
     {
         global $mybb;
@@ -129,12 +166,12 @@ final class AF_ACS_EntitiesPage
         foreach ($fields as $key=>$value) echo '<input type="hidden" name="'.self::esc($key).'" value="'.self::esc($value).'">';
     }
 
-    public static function diagnostics(array $issues): string
+    public static function diagnostics(array $issues,bool $technical=true): string
     {
         if (!$issues) return '';
         $html='<ul>';
         foreach (af_acs_registration_diagnostic_groups($issues) as $group) {
-            $html.='<li>'.self::esc($group['message']).' <small>'.self::esc($group['code'].' · '.implode(', ',$group['paths'])).'</small></li>';
+            $html.='<li>'.self::esc($group['message']).($technical?' <small>'.self::esc($group['code'].' · '.implode(', ',$group['paths'])).'</small>':'').'</li>';
         }
         return $html.'</ul>';
     }

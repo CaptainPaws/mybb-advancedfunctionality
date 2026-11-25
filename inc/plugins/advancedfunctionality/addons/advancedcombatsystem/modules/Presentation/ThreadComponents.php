@@ -262,7 +262,7 @@ function af_advancedcombatsystem_panel_script(): string
     if(!function_exists('af_frontend_asset_allowed')||!af_frontend_asset_allowed('advancedcombatsystem','thread_panel',null,['has_acs_panel'=>true])){
         af_advancedcombatsystem_panel_failure('ACS_PANEL_ASSET_DENIED','javascript');return '';
     }
-    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/thread-panel.js?v=1301';
+    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/thread-panel.js?v=1302';
     return '<script defer src="'.htmlspecialchars_uni($url).'"></script>';
 }
 
@@ -270,6 +270,6 @@ function af_advancedcombatsystem_gm_css(): string
 {
     global $mybb;
     if (!function_exists('af_frontend_asset_allowed') || !af_frontend_asset_allowed('advancedcombatsystem','presentation',null,['has_acs_panel'=>true])) return '';
-    $url = rtrim($mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/modal-gm.css?v=1201';
+    $url = rtrim($mybb->settings['bburl'],'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/modal-gm.css?v=1202';
     return '<link rel="stylesheet" href="'.htmlspecialchars_uni($url).'">';
 }

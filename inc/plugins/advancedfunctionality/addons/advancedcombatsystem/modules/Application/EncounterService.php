@@ -80,9 +80,9 @@ final class AF_ACS_EncounterService
             AF_ACS_Control::overlay([$row],$row['target_entity_id'],$eid);$out[]=['effect_id'=>$row['id'],'entity_id'=>$row['target_entity_id'],'controller_uid'=>$row['control_overlay']['controller_uid'],'remaining_duration'=>$row['remaining_duration'],'unit'=>$row['duration_unit'],'version'=>$row['version']];
         }return $out;
     }
-    public function candidates(string $sid,string $after='0'): array
+    public function candidates(string $sid,string $after='0',bool $recent=false): array
     {
-        $this->authorize($sid);return $this->repository->candidatesForEncounter($sid,$after);
+        $this->authorize($sid);return $this->repository->candidatesForEncounter($sid,$after,$recent);
     }
     private static function text(mixed $value,int $limit): string
     {
