@@ -362,6 +362,8 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'healing_bonus_base' => 0,
             'shield_bonus_base' => 0,
             'status_hit_base' => 0,
+            'status_resist_base' => 0,
+            'accuracy_base' => 0,
             'luck_base' => 0,
             'hp_per_level' => 0,
             'defense_per_level' => 0,
@@ -393,6 +395,8 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'healing_bonus_base' => 0,
             'shield_bonus_base' => 0,
             'status_hit_base' => 0,
+            'status_resist_base' => 0,
+            'accuracy_base' => 0,
             'luck_base' => 0,
             'hp_per_level' => 0,
             'defense_per_level' => 0,
@@ -12013,7 +12017,7 @@ function af_kb_build_arpg_character_stats_from_sources(array $profile, array $ma
             'character_healing_received_bonus' => ['healing_received_bonus_base'],
             'character_luck' => ['luck_base'],
             'character_status_hit' => ['status_hit_base'],
-            'character_status_resist' => ['status_resist_base'],
+            'character_status_resist' => ['status_resistance_base', 'status_resist_base'],
         ];
         $growthMap = [
             'character_hp' => ['hp_per_level'],
@@ -12057,7 +12061,7 @@ function af_kb_build_arpg_character_stats_from_sources(array $profile, array $ma
         'character_status_resist' => $buildValue('character_status_resist'),
     ];
 
-    foreach ([$originRules, $archetypeRules] as $accuracyRules) {
+    foreach ([$originRules, $originVariantRules, $archetypeRules] as $accuracyRules) {
         if (is_numeric($accuracyRules['accuracy_base'] ?? null)) {
             $stats['character_accuracy'] = ($stats['character_accuracy'] ?? 0) + (float)$accuracyRules['accuracy_base'];
         }
@@ -12079,7 +12083,7 @@ function af_kb_build_arpg_character_stats_from_sources(array $profile, array $ma
         'character_accuracy' => ['character_accuracy', 'accuracy'],
         'character_luck' => ['character_luck', 'luck'],
         'character_status_hit' => ['character_status_hit', 'status_hit'],
-        'character_status_resist' => ['character_status_resist', 'status_resist'],
+        'character_status_resist' => ['character_status_resistance', 'character_status_resist', 'status_resist'],
     ];
 
     foreach ($manualMap as $target => $aliases) {
@@ -14530,6 +14534,10 @@ function af_kb_handle_edit(): void
     $typeSchema = af_kb_get_type_schema($entry['type'], $kb_mechanic_raw);
     // Catalog enumeration belongs only to this authorized edit form, never schema reads.
     if ($kb_mechanic_raw === 'arpg' && af_kb_can_edit()) $typeSchema['editor_choices'] = af_kb_arpg_editor_choices();
+    $typeSchema['new_definition'] = empty($entry['id']);
+    if (in_array($entry['type'], ['arpg_origin','arpg_origin_variant','arpg_archetype'], true)) {
+        $typeSchema['character_resistance_baseline'] = af_kb_arpg_character_resistance_baseline();
+    }
     if ((string)($entry['type'] ?? '') === 'character') {
         $typeSchema = af_kb_strip_character_stats_from_schema($typeSchema);
     }

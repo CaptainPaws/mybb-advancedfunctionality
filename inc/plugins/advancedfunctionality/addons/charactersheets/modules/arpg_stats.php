@@ -113,6 +113,13 @@ function af_charactersheets_arpg_apply_equipment_rules(array $stats, array $rule
 
 function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $archetypeRules, int $level, array $originVariantRules = [], array $equipmentRuleSources = []): array
 {
+    if (function_exists('af_kb_build_arpg_character_stats_from_sources')) {
+        $stats = af_kb_build_arpg_character_stats_from_sources(
+            ['character_level'=>$level], [], $originRules, $originVariantRules, $archetypeRules
+        );
+        return af_charactersheets_arpg_apply_equipment_rules($stats, $equipmentRuleSources);
+    }
+
     $lvlScale = max(0, $level - 1);
     // Direct variant fields are retained as a legacy compatibility input. New
     // variants use rules.modifiers, so the two representations are never

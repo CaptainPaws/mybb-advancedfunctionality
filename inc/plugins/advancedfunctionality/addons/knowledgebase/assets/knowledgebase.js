@@ -1414,10 +1414,6 @@
                 }
 
                 if (normalizeArpgEntityType(type) === 'bestiary' && defaults.rules) defaults.rules.combat_stats = {};
-                if (defaults.rules && ['origin','archetype'].indexOf(normalizeArpgEntityType(type)) !== -1) {
-                    delete defaults.rules.status_resist_base;
-                    delete defaults.rules.status_resistance_base;
-                }
                 return defaults;
             }
 
@@ -1431,6 +1427,10 @@
 
             function ensureRoot() {
                 var rootDefaults = getRootDefaults();
+
+                if (payload.schema === 'af_kb.arpg.rules.v1' && !payload.rules) {
+                    payload = {rules: payload};
+                }
 
                 payload = deepMergeDefaults(payload, rootDefaults);
 
@@ -1787,6 +1787,12 @@
                     });
 
                     cell.appendChild(input);
+                    if (def.help) {
+                        var hint = document.createElement('div');
+                        hint.className = 'af-kb-help';
+                        hint.textContent = def.help;
+                        cell.appendChild(hint);
+                    }
                     grid.appendChild(cell);
                 });
 
@@ -1896,79 +1902,160 @@
                 redraw();
             }
 
+            function renderCharacterResistances() {
+                var elements = typeSchema.primary_element_options || [];
+                var baseline = typeSchema.character_resistance_baseline || {};
+                var section = createSection(rulesRoot, 'Стихийные сопротивления (RES)',
+                    'Значения прибавляются к базовому набору KB. Пустое поле оставляет вклад определения незаданным.');
+                var grid = document.createElement('div');
+                grid.className = 'af-kb-row';
+                section.appendChild(grid);
+
+                function bucketName() {
+                    return payload.rules.resistances == null && payload.rules.resists != null ? 'resists' : 'resistances';
+                }
+
+                function findElement(rows, key) {
+                    if (!rows || typeof rows !== 'object') return undefined;
+                    return Object.keys(rows).find(function (index) {
+                        var row = rows[index];
+                        var element = row && typeof row === 'object' ? (row.damage_element || row.element || row.legacy_key) : null;
+                        element = element || (!Array.isArray(rows) ? index : '');
+                        return (element === 'wind' ? 'air' : element) === key;
+                    });
+                }
+
+                elements.forEach(function (element) {
+                    var key = element.value;
+                    if (!Object.prototype.hasOwnProperty.call(baseline, key)) return;
+                    var bucket = bucketName();
+                    if (typeSchema.new_definition && payload.rules[bucket] == null) payload.rules[bucket] = {};
+                    var rows = payload.rules[bucket];
+                    var index = findElement(rows, key);
+                    if (index === undefined && typeSchema.new_definition && rows && typeof rows === 'object') {
+                        if (Array.isArray(rows)) {
+                            index = rows.length;
+                            rows.push({scope:'elemental', unit:'RES', damage_element:key, value:baseline[key]});
+                        } else {
+                            rows[key] = baseline[key];
+                            index = key;
+                        }
+                    }
+                    var row = index === undefined ? null : rows[index];
+                    var value = row && typeof row === 'object' ? row.value : row;
+                    var label = document.createElement('label');
+                    label.textContent = element.label;
+                    var input = document.createElement('input');
+                    input.type = 'number';
+                    input.min = '0';
+                    input.step = 'any';
+                    input.placeholder = String(baseline[key]);
+                    input.value = value == null ? '' : String(value);
+                    label.appendChild(input);
+                    grid.appendChild(label);
+                    bindFieldSync(input, function () {
+                        var currentBucket = bucketName();
+                        var current = payload.rules[currentBucket];
+                        if (current == null) current = payload.rules[currentBucket] = {};
+                        if (typeof current !== 'object') return;
+                        var existingIndex = findElement(current, key);
+                        if (input.value === '') {
+                            if (existingIndex === undefined) return;
+                            if (Array.isArray(current)) current.splice(Number(existingIndex), 1);
+                            else delete current[existingIndex];
+                            syncToRaw();
+                            return;
+                        }
+                        var number = input.valueAsNumber;
+                        if (!Number.isFinite(number) || number < 0) return;
+                        if (existingIndex !== undefined) {
+                            if (current[existingIndex] && typeof current[existingIndex] === 'object') current[existingIndex].value = number;
+                            else current[existingIndex] = number;
+                        } else if (Array.isArray(current)) {
+                            current.push({scope:'elemental', unit:'RES', damage_element:key, value:number});
+                        } else {
+                            current[key] = number;
+                        }
+                        syncToRaw();
+                    });
+                });
+            }
+
             function renderSimpleRules() {
                 renderRuleFields(rulesRoot, [{ key: 'type_profile', label: 'type_profile', default: entityType }], 'Rule fields');
 
                 if (entityType === 'origin') {
                     renderRuleFields(rulesRoot, [
-                        { key: 'size', label: 'size', default: 'medium' },
-                        { key: 'creature_type', label: 'creature_type', default: 'humanoid' },
-                        { key: 'movement_speed', label: 'movement_speed', type: 'number', default: 100 },
-                        { key: 'hp_base', label: 'hp_base', type: 'number', default: 100 },
-                        { key: 'defense_base', label: 'defense_base', type: 'number', default: 5 },
-                        { key: 'attack_power_base', label: 'attack_power_base', type: 'number', default: 10 },
-                        { key: 'crit_rate_base', label: 'crit_rate_base', type: 'number', default: 0 },
-                        { key: 'crit_damage_base', label: 'crit_damage_base', type: 'number', default: 0 },
-                        { key: 'elemental_mastery_base', label: 'elemental_mastery_base', type: 'number', default: 0 },
-                        { key: 'elemental_damage_bonus_base', label: 'elemental_damage_bonus_base', type: 'number', default: 0 },
-                        { key: 'healing_bonus_base', label: 'healing_bonus_base', type: 'number', default: 0 },
-                        { key: 'shield_bonus_base', label: 'shield_bonus_base', type: 'number', default: 0 },
-                        { key: 'status_hit_base', label: 'status_hit_base', type: 'number', default: 0 },
-                        { key: Object.prototype.hasOwnProperty.call(payload.rules, 'status_resistance_base') ? 'status_resistance_base' : 'status_resist_base', label: 'Сопротивление статусам', type: 'number', optional: true, min: 0 },
-                        { key: 'accuracy_base', label: 'Точность (Accuracy)', type: 'number', optional: true, min: 0 },
-                        { key: 'luck_base', label: 'luck_base', type: 'number', default: 0 },
-                        { key: 'hp_per_level', label: 'hp_per_level', type: 'number', default: 0 },
-                        { key: 'defense_per_level', label: 'defense_per_level', type: 'number', default: 0 },
-                        { key: 'attack_power_per_level', label: 'attack_power_per_level', type: 'number', default: 0 },
-                        { key: 'elemental_mastery_per_level', label: 'elemental_mastery_per_level', type: 'number', default: 0 },
-                        { key: 'racial_bonuses_text', label: 'racial_bonuses_text', default: '' },
-                        { key: 'racial_traits_text', label: 'racial_traits_text', default: '' },
-                        { key: 'starting_notes', label: 'starting_notes', default: '' }
-                    ], 'Origin core');
+                        { key: 'size', label: 'Размер', default: 'medium' },
+                        { key: 'creature_type', label: 'Тип существа', default: 'humanoid' },
+                        { key: 'movement_speed', label: 'Скорость перемещения', type: 'number', default: 100 },
+                        { key: 'hp_base', label: 'Базовое здоровье', type: 'number', default: 100 },
+                        { key: 'defense_base', label: 'Базовая защита', type: 'number', default: 5 },
+                        { key: 'attack_power_base', label: 'Базовая сила атаки', type: 'number', default: 10 },
+                        { key: 'crit_rate_base', label: 'Шанс критического удара', type: 'number', default: 0 },
+                        { key: 'crit_damage_base', label: 'Критический урон', type: 'number', default: 0 },
+                        { key: 'elemental_mastery_base', label: 'Мастерство стихий', type: 'number', default: 0 },
+                        { key: 'elemental_damage_bonus_base', label: 'Бонус стихийного урона', type: 'number', default: 0 },
+                        { key: 'healing_bonus_base', label: 'Бонус лечения', type: 'number', default: 0 },
+                        { key: 'shield_bonus_base', label: 'Бонус щита', type: 'number', default: 0 },
+                        { key: 'status_hit_base', label: 'Шанс наложения статуса', type: 'number', default: 0 },
+                        { key: Object.prototype.hasOwnProperty.call(payload.rules, 'status_resistance_base') ? 'status_resistance_base' : 'status_resist_base', label: 'Сопротивление статусам', type: 'number', optional: !typeSchema.new_definition, default: typeSchema.new_definition ? 0 : '', min: 0 },
+                        { key: 'accuracy_base', label: 'Точность (Accuracy)', type: 'number', optional: !typeSchema.new_definition, default: typeSchema.new_definition ? 0 : '', min: 0, help: 'Прибавляется к базовой точности из других определений KB.' },
+                        { key: 'luck_base', label: 'Удача', type: 'number', default: 0 },
+                        { key: 'hp_per_level', label: 'Здоровье за уровень', type: 'number', default: 0 },
+                        { key: 'defense_per_level', label: 'Защита за уровень', type: 'number', default: 0 },
+                        { key: 'attack_power_per_level', label: 'Сила атаки за уровень', type: 'number', default: 0 },
+                        { key: 'elemental_mastery_per_level', label: 'Мастерство стихий за уровень', type: 'number', default: 0 },
+                        { key: 'racial_bonuses_text', label: 'Описание бонусов происхождения', default: '' },
+                        { key: 'racial_traits_text', label: 'Особенности происхождения', default: '' },
+                        { key: 'starting_notes', label: 'Начальные условия', default: '' }
+                    ], 'Механика происхождения');
                 }
 
                 if (entityType === 'origin_variant') {
                     payload.rules.inherits_from_origin = true;
-                    createSection(rulesRoot, 'Origin relation', 'This variant inherits its selected parent Origin.');
+                    createSection(rulesRoot, 'Разновидность происхождения', 'Наследует параметры выбранного происхождения. Изменения применяются поверх них.');
 
                     // Options are supplied by the server from the mechanical fields
                     // in the ARPG Origin schema. Other/legacy modifier objects remain
                     // untouched in the same ordered array.
-                    renderSeededArrayEditor(rulesRoot, 'Variant modifiers', 'modifiers', [
+                    renderSeededArrayEditor(rulesRoot, 'Модификаторы разновидности', 'modifiers', [
                         { key: 'stat_key', label: 'Stat', type: 'select', options: modifierStatOptions, default: modifierStatOptions.length ? modifierStatOptions[0].value : '' },
                         { key: 'mode', label: 'Operation', type: 'select', options: modifierOperations, default: modifierOperations[0] || 'flat' },
                         { key: 'value', label: 'Value', type: 'number', default: 0 },
                         { key: 'notes', label: 'Notes', default: '' }
                     ], [
-                        { key: 'add', label: '+ Add modifier', seed: { stat_key: modifierStatOptions.length ? modifierStatOptions[0].value : '', mode: modifierOperations[0] || 'flat', value: 0, notes: '' } }
+                        { key: 'add', label: 'Добавить модификатор', seed: { stat_key: modifierStatOptions.length ? modifierStatOptions[0].value : '', mode: modifierOperations[0] || 'flat', value: 0, notes: '' } }
                     ]);
                 }
 
                 if (entityType === 'archetype') {
                     renderRuleFields(rulesRoot, [
-                        { key: 'base_damage_bonus', label: 'base_damage_bonus', type: 'number', default: 0 },
-                        { key: 'base_defense_bonus', label: 'base_defense_bonus', type: 'number', default: 0 },
-                        { key: 'hp_base', label: 'hp_base', type: 'number', default: 0 },
-                        { key: 'defense_base', label: 'defense_base', type: 'number', default: 0 },
-                        { key: 'attack_power_base', label: 'attack_power_base', type: 'number', default: 0 },
-                        { key: 'crit_rate_base', label: 'crit_rate_base', type: 'number', default: 0 },
-                        { key: 'crit_damage_base', label: 'crit_damage_base', type: 'number', default: 0 },
-                        { key: 'elemental_mastery_base', label: 'elemental_mastery_base', type: 'number', default: 0 },
-                        { key: 'elemental_damage_bonus_base', label: 'elemental_damage_bonus_base', type: 'number', default: 0 },
-                        { key: 'healing_bonus_base', label: 'healing_bonus_base', type: 'number', default: 0 },
-                        { key: 'shield_bonus_base', label: 'shield_bonus_base', type: 'number', default: 0 },
-                        { key: 'status_hit_base', label: 'status_hit_base', type: 'number', default: 0 },
-                        { key: Object.prototype.hasOwnProperty.call(payload.rules, 'status_resistance_base') ? 'status_resistance_base' : 'status_resist_base', label: 'Сопротивление статусам', type: 'number', optional: true, min: 0 },
-                        { key: 'accuracy_base', label: 'Точность (Accuracy)', type: 'number', optional: true, min: 0 },
-                        { key: 'luck_base', label: 'luck_base', type: 'number', default: 0 },
-                        { key: 'hp_per_level', label: 'hp_per_level', type: 'number', default: 0 },
-                        { key: 'defense_per_level', label: 'defense_per_level', type: 'number', default: 0 },
-                        { key: 'attack_power_per_level', label: 'attack_power_per_level', type: 'number', default: 0 },
-                        { key: 'elemental_mastery_per_level', label: 'elemental_mastery_per_level', type: 'number', default: 0 },
-                        { key: 'slot_rules_text', label: 'slot_rules_text', default: '' },
-                        { key: 'description_notes', label: 'description_notes', default: '' }
-                    ], 'Archetype core');
+                        { key: 'base_damage_bonus', label: 'Дополнительная сила атаки', type: 'number', default: 0 },
+                        { key: 'base_defense_bonus', label: 'Дополнительная защита', type: 'number', default: 0 },
+                        { key: 'hp_base', label: 'Базовое здоровье', type: 'number', default: 0 },
+                        { key: 'defense_base', label: 'Базовая защита', type: 'number', default: 0 },
+                        { key: 'attack_power_base', label: 'Базовая сила атаки', type: 'number', default: 0 },
+                        { key: 'crit_rate_base', label: 'Шанс критического удара', type: 'number', default: 0 },
+                        { key: 'crit_damage_base', label: 'Критический урон', type: 'number', default: 0 },
+                        { key: 'elemental_mastery_base', label: 'Мастерство стихий', type: 'number', default: 0 },
+                        { key: 'elemental_damage_bonus_base', label: 'Бонус стихийного урона', type: 'number', default: 0 },
+                        { key: 'healing_bonus_base', label: 'Бонус лечения', type: 'number', default: 0 },
+                        { key: 'shield_bonus_base', label: 'Бонус щита', type: 'number', default: 0 },
+                        { key: 'status_hit_base', label: 'Шанс наложения статуса', type: 'number', default: 0 },
+                        { key: Object.prototype.hasOwnProperty.call(payload.rules, 'status_resistance_base') ? 'status_resistance_base' : 'status_resist_base', label: 'Сопротивление статусам', type: 'number', optional: !typeSchema.new_definition, default: typeSchema.new_definition ? 0 : '', min: 0 },
+                        { key: 'accuracy_base', label: 'Точность (Accuracy)', type: 'number', optional: !typeSchema.new_definition, default: typeSchema.new_definition ? 0 : '', min: 0, help: 'Прибавляется к базовой точности из других определений KB.' },
+                        { key: 'luck_base', label: 'Удача', type: 'number', default: 0 },
+                        { key: 'hp_per_level', label: 'Здоровье за уровень', type: 'number', default: 0 },
+                        { key: 'defense_per_level', label: 'Защита за уровень', type: 'number', default: 0 },
+                        { key: 'attack_power_per_level', label: 'Сила атаки за уровень', type: 'number', default: 0 },
+                        { key: 'elemental_mastery_per_level', label: 'Мастерство стихий за уровень', type: 'number', default: 0 },
+                        { key: 'slot_rules_text', label: 'Правила слотов', default: '' },
+                        { key: 'description_notes', label: 'Примечания', default: '' }
+                    ], 'Механика архетипа');
                 }
+
+                if (['origin','origin_variant','archetype'].indexOf(entityType) !== -1) renderCharacterResistances();
 
                 if (entityType === 'faction') {
                     renderRuleFields(rulesRoot, [

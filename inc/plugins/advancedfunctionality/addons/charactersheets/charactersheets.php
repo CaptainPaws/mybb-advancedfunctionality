@@ -45,7 +45,7 @@ function af_charactersheets_require_modules(array $modules): void
         'sheets_crud' => ['metadata', 'attributes', 'bootstrap'],
         'calculator' => ['attributes', 'experience', 'sheets_crud'],
         'render' => ['calculator', 'postbit'],
-        'combat_snapshot' => ['permissions', 'metadata', 'arpg_stats'],
+        'combat_snapshot' => ['permissions', 'metadata', 'arpg_stats', 'experience'],
         'ajax' => ['render'],
         'acp_skills' => ['attributes', 'bootstrap'],
     ];

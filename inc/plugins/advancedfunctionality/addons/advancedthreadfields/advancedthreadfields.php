@@ -1576,7 +1576,6 @@ function af_atf_seed_character_contract_fields(): void
         ['name' => 'character_elemental_mastery', 'title' => 'Elemental mastery', 'type' => 'number', 'sortorder' => 260, 'maxlen' => 11],
         ['name' => 'character_healing_bonus', 'title' => 'Healing bonus', 'type' => 'number', 'sortorder' => 270, 'maxlen' => 11],
         ['name' => 'character_shield_strength', 'title' => 'Shield strength', 'type' => 'number', 'sortorder' => 280, 'maxlen' => 11],
-        ['name' => 'character_accuracy', 'title' => 'Точность (Accuracy)', 'type' => 'number', 'sortorder' => 285, 'maxlen' => 32],
         ['name' => 'character_luck', 'title' => 'Luck', 'type' => 'number', 'sortorder' => 290, 'maxlen' => 11],
         ['name' => 'character_abil', 'title' => 'Abilities', 'type' => 'character_abilities', 'sortorder' => 300, 'maxlen' => 0],
     ];
@@ -3080,8 +3079,8 @@ function af_atf_character_infer_mechanic(array $fields, array $valuesByFieldId):
         return 'arpg';
     }
 
-    $race = (string)($valueByName['character_race'] ?? '');
-    $class = (string)($valueByName['character_class'] ?? '');
+    $race = (string)(($valueByName['character_origin'] ?? '') ?: ($valueByName['character_race'] ?? ''));
+    $class = (string)(($valueByName['character_archetype'] ?? '') ?: ($valueByName['character_class'] ?? ''));
     if ($race !== '' && !empty(af_atf_kb_get_entry('arpg_origin', $race))) {
         return 'arpg';
     }
@@ -3539,6 +3538,7 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
     }
 
     foreach ($fields as $f) {
+        if (($activeMechanic ?? '') === 'arpg' && af_atf_arpg_combat_input($f)) continue;
         if (($activeMechanic ?? '') === 'dnd' && ($f['name'] ?? '') === 'character_accuracy') continue;
         $fieldid = (int)$f['fieldid'];
         if (isset($skipFieldIds[$fieldid])) {
@@ -3865,7 +3865,8 @@ function af_atf_build_input_html(array $field, string $value): string
                 . '<input type="hidden" class="af-atf-abilities-hidden" name="' . $nameAttr . '" value="' . $safeValue . '" />'
                 . '<script type="application/json" class="af-atf-abilities-options">' . $optionsJson . '</script>'
                 . '<div class="af-atf-abilities-list"></div>'
-                . '<button type="button" class="button af-atf-abilities-add">Создать свою</button>'
+                . '<button type="button" class="button af-atf-abilities-add"'
+                . (af_atf_character_active_mechanic() === 'arpg' ? ' hidden' : '') . '>Создать свою</button>'
                 . ($catalogUrl !== '' ? ' <button type="button" class="button af-atf-abilities-kb">Выбрать из KB</button>' : '')
                 . '</div>';
         }
@@ -4582,6 +4583,17 @@ function af_atf_character_active_mechanic(): string
     return af_atf_character_resolve_active_mechanic($fid, $fields, $values);
 }
 
+function af_atf_arpg_combat_input(array $field): bool
+{
+    $name = $field['name'] ?? '';
+    return ($field['type'] ?? '') === 'character_stats' || in_array($name, array_merge(
+        af_atf_character_stats_field_keys(),
+        ['character_stats','character_speed','character_crit_rate','character_status_hit','character_status_resist',
+            'character_status_resistance','character_resists','character_resistances','character_level','character_resources',
+            'character_modifiers','character_weaknesses','character_immunities']
+    ), true);
+}
+
 function af_atf_character_stats_field_keys(): array
 {
     return [
@@ -5047,6 +5059,11 @@ function af_atf_newthread_do_end(): void
     foreach ($fields as $f) {
         $fieldid = (int)$f['fieldid'];
         if ($fieldid <= 0) {
+            continue;
+        }
+
+        if ($activeMechanic === 'arpg' && af_atf_arpg_combat_input($f)) {
+            unset($values[$fieldid]);
             continue;
         }
 
@@ -5712,6 +5729,7 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
     }
     $profile += af_atf_bridge_collect_character_profile_extras($index, array_keys($profile));
     $abilities = af_atf_bridge_extract_oc_abilities($index);
+    $abilityFingerprints = array_map('af_kb_arpg_acs_fingerprint', $abilities);
 
     $rules = [
         'schema' => 'af_kb.character.contract.v1',
@@ -5726,6 +5744,7 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
             'source' => 'af_atf_bridge',
             'mechanic' => 'arpg',
             'sync_source' => (string)($context['source'] ?? 'unknown'),
+            'atf_ability_fingerprints' => $abilityFingerprints,
             'accepted_by_uid' => (int)($context['accepted_by_uid'] ?? 0),
             'source_tid' => (int)$tid,
             'source_uid' => (int)($thread['uid'] ?? 0),
@@ -5747,14 +5766,6 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         ],
     ];
 
-    $rules = af_atf_bridge_sync_accuracy($rules, $index);
-
-    $rulesJson = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($rulesJson) || $rulesJson === '') {
-        $result['reason'] = 'rules_encode_failed';
-        return $result;
-    }
-
     $existing = $entryLink;
     if (!$existing) {
         $existing = $db->fetch_array(
@@ -5771,18 +5782,73 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         return $result;
     }
 
+    $metaEnvelope = $existing ? json_decode((string)($existing['meta_json'] ?? '{}'), true) : [];
+    if (!is_array($metaEnvelope)) $metaEnvelope = [];
+    if ($existing) {
+        $sourceIssues = [];
+        $previous = af_kb_arpg_acs_source($existing, $sourceIssues)['rules'];
+        if (!$previous || array_filter($sourceIssues, static fn($issue) => $issue['severity'] === 'error')
+            || (isset($previous['schema']) && $previous['schema'] !== $rules['schema'])) {
+            $result['reason'] = 'existing_character_contract_invalid';
+            return $result;
+        }
+        $previousProfile = (array)($previous['character_profile'] ?? []);
+        // Empty optional fields can be cleared only where the forum owns the field.
+        $fieldAliases = af_kb_character_profile_field_contract();
+        $fieldAliases['character_archetype'] = $fieldAliases['character_class'];
+        $fieldAliases['character_race'] = ['character_race','race'];
+        $fieldAliases['weapon_type'] = $fieldAliases['character_weapon'];
+        foreach ($profile as $key => $value) {
+            if ($value === '' && !array_intersect($fieldAliases[$key] ?? [$key], array_keys($formFields))) unset($profile[$key]);
+        }
+        $profile = array_replace($previousProfile, $profile);
+        if (!af_atf_origin_variant_matches(af_atf_effective_origin_key($profile), (string)($profile['character_origin_variant'] ?? ''))) {
+            $profile['character_origin_variant'] = '';
+        }
+        $newMeta = $rules['character_meta'];
+        $previousMeta = (array)($previous['character_meta'] ?? []);
+        $rules = $previous + $rules;
+        $rules['character_profile'] = $profile;
+        $abilityFields = ['character_abilities','character_abil','character_ability','abilities','arpg_abilities','character_skills'];
+        $rules['character_meta'] = array_replace_recursive($newMeta, $previousMeta);
+        foreach (['sync_source','synced_at'] as $key) $rules['character_meta'][$key] = $newMeta[$key];
+        if (array_intersect($abilityFields, array_keys($formFields))) {
+            $tracked = array_fill_keys((array)($previousMeta['atf_ability_fingerprints'] ?? []), true);
+            $independent = array_values(array_filter((array)($previous['character_abilities'] ?? []),
+                static fn($row) => !isset($tracked[af_kb_arpg_acs_fingerprint($row)])));
+            $independentKeys = array_fill_keys(array_column($independent, 'ability_kb_key'), true);
+            $independentFingerprints = array_fill_keys(array_map('af_kb_arpg_acs_fingerprint', $independent), true);
+            $selected = array_values(array_filter($abilities, static fn($row) =>
+                !isset($independentKeys[$row['ability_kb_key'] ?? ''])
+                && !isset($independentFingerprints[af_kb_arpg_acs_fingerprint($row)])));
+            $rules['character_abilities'] = array_merge($selected, $independent);
+            if (count($rules['character_abilities']) > 8) {
+                $result['reason'] = 'character_ability_slots_full';
+                return $result;
+            }
+            $rules['character_meta']['atf_ability_fingerprints'] = array_map('af_kb_arpg_acs_fingerprint', $selected);
+        }
+    }
+    $metaEnvelope['rules'] = $rules;
+    $rulesJson = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
+    $metaJson = json_encode($metaEnvelope, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
+    if (!is_string($rulesJson) || !is_string($metaJson)) {
+        $result['reason'] = 'rules_encode_failed';
+        return $result;
+    }
+
     $entryPayload = [
         'type' => 'character',
         'key' => $entryKey,
         'title_ru' => $titleRu,
         'title_en' => $titleEn,
-        'short_ru' => (string)$profile['character_app'],
-        'short_en' => (string)$profile['character_app'],
+        'short_ru' => (string)($profile['character_app'] ?? ''),
+        'short_en' => (string)($profile['character_app'] ?? ''),
         'body_ru' => '',
         'body_en' => '',
         'tech_ru' => '{}',
         'tech_en' => '{}',
-        'meta_json' => json_encode(['rules' => $rules], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+        'meta_json' => $metaJson,
         'data_json' => $rulesJson,
         'icon_class' => '',
         'icon_url' => '',
@@ -5795,7 +5861,18 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
     ];
 
     if ($existing && !empty($existing['id'])) {
-        $db->update_query('af_kb_entries', af_atf_bridge_db_escape_array($entryPayload), 'id=' . (int)$existing['id']);
+        $updated = array_intersect_key($entryPayload, array_flip(['title_ru','title_en','short_ru','short_en','meta_json','data_json','updated_at']));
+        $where = 'id=' . (int)$existing['id'];
+        foreach (['meta_json','data_json'] as $column) {
+            $current = $existing[$column] ?? null;
+            $where .= $current === null ? " AND $column IS NULL"
+                : " AND BINARY $column='" . $db->escape_string((string)$current) . "'";
+        }
+        $db->update_query('af_kb_entries', af_atf_bridge_db_escape_array($updated), $where);
+        if (!$db->affected_rows() && !$db->fetch_array($db->simple_select('af_kb_entries', 'id', $where, ['limit'=>1]))) {
+            $result['reason'] = 'character_changed_during_sync';
+            return $result;
+        }
         $entryId = (int)$existing['id'];
         $result['mode'] = 'update';
     } else {
@@ -5862,7 +5939,6 @@ function af_atf_bridge_sync_existing_canon(int $tid, array $thread, array $index
             'created_at' => TIME_NOW,
         ];
     }
-    $rules = af_atf_bridge_sync_accuracy($rules, $index);
     $rules['character_profile'] = $profile;
     $rules['character_abilities'] = $abilities;
     $rules['character_meta'] = $characterMeta;
@@ -5992,7 +6068,7 @@ function af_atf_bridge_collect_character_profile_extras(array $index, array $kno
         if ($fieldName === '' || !preg_match('~^character_[a-z0-9_]+$~', $fieldName)) {
             continue;
         }
-        if (isset($known[$fieldName]) || isset($excluded[$fieldName])) {
+        if (isset($known[$fieldName]) || isset($excluded[$fieldName]) || af_atf_arpg_combat_input(['name'=>$fieldName])) {
             continue;
         }
 
@@ -6005,27 +6081,6 @@ function af_atf_bridge_collect_character_profile_extras(array $index, array $kno
     }
 
     return $extras;
-}
-
-/** Transfer only the explicitly stored base Accuracy, never a computed/equipment total. */
-function af_atf_bridge_sync_accuracy(array $rules, array $index): array
-{
-    $present = isset($index['character_accuracy']);
-    $raw = $present ? ($index['character_accuracy']['value'] ?? '') : null;
-    if (!$present && isset($index['character_stats'])) {
-        $stats = json_decode((string)($index['character_stats']['value'] ?? '{}'), true);
-        $present = true;
-        $raw = is_array($stats) ? ($stats['character_accuracy'] ?? null) : null;
-    }
-    if (!$present) return $rules;
-    unset($rules['character_stats']['character_accuracy']);
-    if (is_scalar($raw) && !is_bool($raw) && trim((string)$raw) !== '') {
-        $raw = str_replace(',', '.', trim((string)$raw));
-        if (is_numeric($raw) && is_finite((float)$raw) && (float)$raw >= 0) {
-            $rules['character_stats']['character_accuracy'] = (float)$raw;
-        }
-    }
-    return $rules;
 }
 
 function af_atf_bridge_extract_oc_stats(array $index): array
@@ -6182,6 +6237,7 @@ function af_atf_dh_validate(&$ph): void
     foreach ($fields as $f) {
         $fieldid = (int)$f['fieldid'];
         $fieldName = (string)($f['name'] ?? '');
+        if ($activeMechanic === 'arpg' && af_atf_arpg_combat_input($f)) continue;
         $storedVariant = $fieldName === 'character_origin_variant' ? (string)($stored[$fieldid] ?? '') : '';
         if ($isEdit && !array_key_exists($fieldid, $incoming)) {
             // Partial edits ordinarily preserve absent fields. An origin
@@ -6344,6 +6400,10 @@ function af_atf_dh_validate(&$ph): void
             // Revalidate only rows whose mechanics or content the user changed.
             $custom = array_values(array_filter($abilities, static fn(array $ability): bool =>
                 !array_key_exists('ability_source', $ability) && !in_array($ability, $old, true)));
+            if ($custom && $activeMechanic === 'arpg') {
+                $ph->set_error('Для ARPG выберите готовые способности из KB.');
+                continue;
+            }
             if ($custom && function_exists('af_kb_arpg_validate_element_fields')) {
                 $elementErrors = [];
                 af_kb_arpg_validate_element_fields(['character_abilities'=>$custom], $elementErrors);

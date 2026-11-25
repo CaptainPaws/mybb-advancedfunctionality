@@ -190,7 +190,10 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
     $originRules = $archetypeRules = $variantRules = [];
     foreach (['origin'=>['arpg_origin','character_origin'], 'archetype'=>['arpg_archetype','character_archetype'], 'origin_variant'=>['arpg_origin_variant','character_origin_variant']] as $kind=>[$type,$field]) {
         $key = $profile[$field] ?? ($kind === 'archetype' ? ($profile['character_class'] ?? '') : ($kind === 'origin' ? ($profile['character_race'] ?? '') : ''));
-        if ($key === '') continue;
+        if ($key === '') {
+            if ($kind !== 'origin_variant') af_cs_snapshot_issue($issues,'definition_key_invalid',$field);
+            continue;
+        }
         if (!is_string($key)) { af_cs_snapshot_issue($issues,'definition_key_invalid',$field); continue; }
         $definition = af_cs_snapshot_definition($type,$key,$readSet,$issues);
         if (!$definition) continue;
@@ -205,7 +208,9 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
         if ($kind === 'origin_variant') foreach (($sourceRules['modifiers'] ?? []) as $modifier) {
             if (af_kb_arpg_validate_origin_variant_modifier($modifier) || !is_finite((float)($modifier['value'] ?? 0)) || !empty($modifier['condition_text'])) af_cs_snapshot_issue($issues,'modifier_unsupported',$kind.'.modifiers');
         }
-        if (array_key_exists('status_resistance_base',$sourceRules)) af_cs_snapshot_issue($issues,'canonical_base_requires_view_alignment',$kind.'.status_resistance_base');
+        if (array_key_exists('status_resistance_base',$sourceRules) || array_key_exists('status_resist_base',$sourceRules)) {
+            af_kb_arpg_status_resistance($sourceRules,$kind,$issues,'status_resistance_base','status_resist_base');
+        }
         if ($kind === 'origin') $originRules = $sourceRules;
         elseif ($kind === 'archetype') $archetypeRules = $sourceRules;
         else $variantRules = $sourceRules;
@@ -217,7 +222,19 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
         $parent = af_kb_get_origin_parent_for_variant($definitions['origin_variant']['key'], true);
         if (($parent['origin']['key'] ?? null) !== ($definitions['origin']['key'] ?? null)) af_cs_snapshot_issue($issues,'origin_variant_parent_mismatch','origin_variant');
     }
-    $level = $profile['character_level'] ?? $profile['level'] ?? 1;
+    $progress = json_decode((string)($sheet['progress_json'] ?? '{}'), true);
+    if (!is_array($progress)) return $failure('progress_invalid');
+    $exp = $progress['exp'] ?? null;
+    $levelSource = $exp === null ? 'character.profile' : 'sheet.progress';
+    if (function_exists('af_balance_get') && defined('AF_BALANCE_TABLE') && $db->table_exists(AF_BALANCE_TABLE)) {
+        $balance = af_cs_snapshot_select(AF_BALANCE_TABLE, 'uid='.$uid, $readSet);
+        $exp = ((int)($balance[0]['exp'] ?? 0)) / AF_BALANCE_EXP_SCALE;
+        $levelSource = 'balance.exp';
+    }
+    if ($exp !== null && (!is_numeric($exp) || !is_finite((float)$exp))) return $failure('progress_invalid');
+    $level = $exp === null ? ($profile['character_level'] ?? $profile['level'] ?? 1)
+        : af_charactersheets_compute_level((float)$exp)['level'];
+    $profile['character_level'] = $level;
     if (!is_numeric($level) || (float)$level < 1 || (float)$level > PHP_INT_MAX || (float)$level !== floor((float)$level)) return $failure('level_invalid');
     if (array_filter($issues,static fn($i) => in_array($i['code'],['invalid_stat_value','modifier_unsupported'],true))) return ['schema_version'=>1,'contract_id'=>'IC-CS.combat-preparation.v1','ready'=>false,'diagnostics'=>$issues];
     $computed = af_kb_build_arpg_character_stats_from_sources($profile,[],$originRules,$variantRules,$archetypeRules);
@@ -229,7 +246,11 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
         $baseField = $key === 'speed' ? 'movement_speed' : ($originDefinitions[$key]['origin_field'] ?? null);
         $baseSources = $key === 'speed' ? [$originRules,$variantRules] : [$originRules,$variantRules,$archetypeRules];
         $provided[$field] = array_key_exists($field,$rawStats);
+        if ($key === 'accuracy' && array_key_exists($field,$computed)) $provided[$field] = true;
         foreach ($baseSources as $sourceRules) {
+            if ($key === 'status_resist' && array_key_exists('status_resistance_base',$sourceRules)) {
+                $provided[$field] = true; // The alias pair was validated on the captured definition.
+            }
             if ($baseField !== null && array_key_exists($baseField,$sourceRules)) {
                 if (!af_cs_snapshot_number($sourceRules[$baseField])) af_cs_snapshot_issue($issues,'invalid_stat_value',$baseField);
                 else $provided[$field] = true;
@@ -253,7 +274,6 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
             af_cs_snapshot_issue($issues,'required_stat_missing',$field);
         }
         if (array_key_exists($field,$rawStats) && !af_cs_snapshot_number($rawStats[$field])) af_cs_snapshot_issue($issues,'invalid_stat_value',$field);
-        if ($key === 'accuracy' && isset($variantRules['accuracy_base'])) af_cs_snapshot_issue($issues,'legacy_variant_accuracy_projection_unverified',$field);
         $breakdown[] = ['source_id'=>'character:'.$linked[0]['key'],'source_type'=>'base_stats','stat_key'=>$entry['acs_key'] ?? $key,
             'operation'=>$key === 'accuracy' ? 'base_total' : 'manual_addition','value'=>$rawStats[$field] ?? ($key === 'status_resist' ? ($status['value'] ?? null) : null),
             'included_in_total'=>array_key_exists($field,$rawStats) || ($key === 'status_resist' && $status['available']),
@@ -261,8 +281,14 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
             'computed_candidate'=>$computed[$field] ?? null];
     }
     $baseStats = $stats;
+    $status['kb_sources'] = [];
     foreach ($definitions as $kind=>$definition) {
         $candidate = af_kb_build_arpg_character_stats_from_sources($profile,[],$kind === 'origin' ? $originRules : [],$kind === 'origin_variant' ? $variantRules : [],$kind === 'archetype' ? $archetypeRules : []);
+        $statusBase = array_intersect_key($definition['rules'], ['status_resistance_base'=>true,'status_resist_base'=>true]);
+        if ($statusBase || ($candidate['character_status_resist'] ?? 0) != 0) {
+            $status['kb_sources'][] = ['source'=>$definition['type'].':'.$definition['key'],'version'=>$definition['version'],
+                'base_fields'=>$statusBase,'contribution'=>$candidate['character_status_resist']];
+        }
         $breakdown[] = ['source_id'=>$definition['type'].':'.$definition['key'],'source_type'=>$kind,'source_version'=>$definition['version'],
             'operation'=>'kb_base_and_growth','contributions'=>$candidate,'included_in_total'=>true,'accuracy_included_in_total'=>!array_key_exists('character_accuracy',$rawStats)];
     }
@@ -275,6 +301,10 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
     $inventory = af_cs_snapshot_select('af_advinv_items','uid='.$uid.' AND ('.$itemPredicate.')',$readSet);
     $items = []; foreach ($inventory as $item) $items[(int)$item['id']] = $item;
     usort($equipped, static fn($a,$b) => strcmp((string)$a['equip_slot'],(string)$b['equip_slot']));
+    $resistanceSources = [['id'=>'character:'.$linked[0]['key'],'version'=>$raw['fingerprint'],'rules'=>$rules]];
+    foreach ($definitions as $definition) {
+        $resistanceSources[] = ['id'=>$definition['type'].':'.$definition['key'],'version'=>$definition['version'],'rules'=>$definition['rules']];
+    }
     $equipment = []; $equipmentDefinitions = []; $seen = []; $weapons = 0;
     foreach ($equipped as $binding) {
         $id = (int)($binding['item_id'] ?? 0); $slot = (string)($binding['equip_slot'] ?? '');
@@ -290,6 +320,7 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
         $equipmentDefinitions[] = $definition;
         if (!in_array($item['subtype'] ?? '', ['weapon','armor','ammo','gear','artifact'], true)) af_cs_snapshot_issue($issues,'equipment_subtype_unverified','equipment.'.$id);
         $source = ['id'=>'inventory:'.$id,'kind'=>'equipment','version'=>$definition['version'], 'rules'=>$definition['rules']];
+        $resistanceSources[] = $source;
         $equipment[] = ['item_id'=>$id,'slot'=>$slot,'binding'=>$binding,'instance_fingerprint'=>af_kb_arpg_acs_fingerprint($item),
             'kb_ref'=>['type'=>$definition['type'],'key'=>$definition['key'],'version'=>$definition['version']],'included_in_total'=>true];
         $stats = af_cs_snapshot_apply($stats,$source,$breakdown,$issues);
@@ -311,7 +342,9 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
         $talentDefinitions[] = $definition;
         $talents[] = ['slot'=>$slot,'key'=>$key,'version'=>$definition['version'],'ownership_item_ids'=>array_values(array_map(static fn($row) => (int)$row['id'],$owned)),
             'ownership_fingerprints'=>array_values(array_map('af_kb_arpg_acs_fingerprint',$owned))];
-        $stats = af_cs_snapshot_apply($stats,['id'=>'talent:'.$key,'kind'=>'talents','version'=>$definition['version'],'rules'=>$definition['rules']],$breakdown,$issues);
+        $source = ['id'=>'talent:'.$key,'kind'=>'talents','version'=>$definition['version'],'rules'=>$definition['rules']];
+        $resistanceSources[] = $source;
+        $stats = af_cs_snapshot_apply($stats,$source,$breakdown,$issues);
     }
     $characteristics = $base = [];
     foreach (af_kb_arpg_character_stat_registry() as $key=>$entry) {
@@ -320,12 +353,10 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
         if (array_key_exists($field,$stats) && af_cs_snapshot_number($stats[$field])) $characteristics[$canonical] = $stats[$field];
         else af_cs_snapshot_issue($issues,'required_stat_missing_or_invalid',$canonical);
     }
-    $resRows = af_kb_arpg_acs_resistances($rules['resistances'] ?? [],'resistances',$issues);
-    $resistances = af_kb_arpg_bestiary_resistances($resRows,$issues);
-    // Other source RES/resource contributions require their own explicit inclusion proof.
     foreach (array_merge(array_values($definitions), $equipmentDefinitions, $talentDefinitions) as $definition) {
-        foreach (['resists','resistances','resources'] as $field) if (!empty($definition['rules'][$field])) af_cs_snapshot_issue($issues,'resource_resistance_inclusion_unverified',$field);
+        if (!empty($definition['rules']['resources'])) af_cs_snapshot_issue($issues,'resource_resistance_inclusion_unverified','resources');
     }
+    $resistances = af_kb_arpg_character_resistances($resistanceSources,$issues);
     $abilities = [];
     if (isset($rules['character_abilities']) && !is_array($rules['character_abilities'])) af_cs_snapshot_issue($issues,'ability_list_invalid','abilities');
     foreach (is_array($rules['character_abilities'] ?? null) ? $rules['character_abilities'] : [] as $index=>$ability) {
@@ -357,12 +388,13 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
         $rows = af_cs_snapshot_select($read['table'],$read['where'],$check);
         if (af_kb_arpg_acs_fingerprint($rows) !== $read['hash']) af_cs_snapshot_issue($issues,'source_changed_during_read','sources');
     }
+    $status['total'] = $characteristics['status_resistance'] ?? null;
     $result = ['schema_version'=>1,'contract_id'=>'IC-CS.combat-preparation.v1','builder_version'=>'cs-readonly-1',
         'numeric_policy'=>'binary64-half_up-v1','calculation_policy'=>'cs-arpg-legacy-additive-v1','engine_version'=>null,
         'element_registry_version'=>'primary-elements-17-v1','element_alias_policy'=>'wind-air-v1',
         'identity'=>['sheet_id'=>$sheetId,'owner_uid'=>$uid,'tid'=>$tid,'source_type'=>'character', 'kb_key'=>$linked[0]['key'],
             'source_fingerprint'=>$raw['fingerprint'],'definition_version'=>['schema'=>$rules['schema'],'revision'=>$linked[0]['revision'] ?? $rules['revision'] ?? null,'declared_version'=>$rules['version'] ?? null,'fingerprint'=>$raw['fingerprint']],'sheet_fingerprint'=>af_kb_arpg_acs_fingerprint($sheet)],
-        'stat_provenance'=>['status_resistance'=>$status],'base_characteristics'=>$base,'characteristics'=>$characteristics,'resources'=>$resources,'resistances'=>$resistances,
+        'stat_provenance'=>['status_resistance'=>$status,'level'=>['value'=>$level,'source'=>$levelSource]],'base_characteristics'=>$base,'characteristics'=>$characteristics,'resources'=>$resources,'resistances'=>$resistances,
         'classification'=>$classification,'abilities'=>$abilities,'equipment'=>$equipment,'talents'=>$talents,
         'sources'=>array_map(static fn($d) => array_diff_key($d,['entry'=>true]),array_merge(array_values($definitions),$equipmentDefinitions,$talentDefinitions)),'source_breakdown'=>$breakdown,'equipment_policy'=>'already_included_do_not_reapply',
         'read_set'=>$readSet,'diagnostics'=>$issues,'persistent'=>false,'executable'=>false];
