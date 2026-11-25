@@ -345,7 +345,14 @@ function af_acs_registration_diagnostic_groups(array $issues): array
         'permanent_pet_source_unavailable'=>'Плагин постоянных питомцев ещё не подключён.',
         'source_changed_during_read'=>'Источник изменился во время проверки. Проверьте его повторно.',
         'status_resistance_alias_conflict'=>'Конфликт значений сопротивления статусам.',
-        'duration_unit_missing'=>'В определении способности или эффекта KB укажите единицу для заданной длительности или кулдауна.',
+        'duration_unit_missing'=>'Для указанного времени нужна поддерживаемая единица.',
+        'unsupported_duration_unit'=>'Единица времени не поддерживается.',
+        'formula_binding_missing'=>'У профиля формулы отсутствует ссылка на определение формулы.',
+        'invalid_formula_contract'=>'Определение формулы не прошло проверку структуры KB.',
+        'formula_version_mismatch'=>'Версия формулы расходится с версией, указанной в профиле.',
+        'invalid_number'=>'Значение должно быть конечным числом.',
+        'alias_conflict'=>'В сохранённых полях одного параметра указаны разные значения.',
+        'reference_unresolved'=>'Ссылка ведёт на недоступное или отсутствующее определение KB.',
         'ability_version_pin_mismatch'=>'Версия способности KB изменилась. Выберите её заново в анкете и синхронизируйте запись.',
         'equipment_provenance_incomplete'=>'Не подтверждено происхождение бонусов экипировки.',
         'bestiary_modifier_provenance_unavailable'=>'Шаблон содержит модификаторы без подтверждённого итогового расчёта.',
@@ -358,6 +365,9 @@ function af_acs_registration_diagnostic_groups(array $issues): array
             $stats[$path]=[$canonical,$stat['label'],$stat['vm_field']];
         }
     }
+    if (isset($stats['character_status_resist'])) {
+        $stats['character_status_resistance']=$stats['character_stats.character_status_resistance']=$stats['character_status_resist'];
+    }
     $groups=[];
     $knownStatIssues=[];
     foreach ($issues as $issue) {
@@ -367,7 +377,7 @@ function af_acs_registration_diagnostic_groups(array $issues): array
         }
     }
     foreach ($issues as $issue) {
-        $code=$issue['code'];$path=$issue['path'];$object=$path;
+        $rawCode=$issue['code'];$code=$rawCode;$path=$issue['path'];$object=$path;
         $message=$messages[$code]??'Проверьте указанный источник данных.';
         $stat=$stats[$path]??null;
         if ($stat && in_array($code,['required_stat_missing','required_stat_missing_or_invalid','invalid_stat_value'],true)) {
@@ -382,16 +392,36 @@ function af_acs_registration_diagnostic_groups(array $issues): array
                 'invalid_stat_value'=>'Недопустимое значение характеристики '.$label.'.',
                 default=>'Проверьте наличие и значение характеристики '.$label.'.',
             };
-            if ($object==='accuracy') $message.=' Проверьте базовую точность происхождения и архетипа в KB.';
+            if ($object==='accuracy') $message='Не удалось подтвердить расчёт Точности. Проверьте базовую точность выбранных определений и разрешённую корректировку персонажа в KB.';
         } elseif ($code==='required_resistance_missing') {
             $object='resistances';
         }
+        if (preg_match('/\A(character_abilities\.(\d+))(?:\.|$)/',$path,$match)) {
+            $ability = $issue['ability'] ?? '';
+            $label = $ability !== '' ? '«'.$ability.'»' : 'Способность №'.((int)$match[2]+1);
+            if (in_array($code,['invalid_number','duration_unit_missing','unsupported_duration_unit'],true)
+                && preg_match('/\.(duration|cooldown)(?:_value|_unit)?$/D',$path,$time)) {
+                $object = preg_replace('/_(?:value|unit)$/D','',$path);
+                $code = 'invalid_ability_timing';
+                $message = $time[1]==='duration' ? 'Некорректная длительность. Проверьте число и единицу времени.'
+                    : 'Некорректный кулдаун. Проверьте число и единицу времени.';
+            } elseif ($code==='reference_unresolved' && str_ends_with($path,'.cost_resource')) {
+                $message = 'Ресурс стоимости способности не найден в KB.';
+            } elseif (in_array($code,['formula_binding_missing','reference_unresolved'],true)
+                && preg_match('/\.(formula_profile|formula_ref)(?:\.|$)/',$path,$formula)) {
+                $message = 'Не найдена формула способности. Проверьте определение и его привязку в KB.';
+                if (!empty($issue['reference'])) $object=$match[1].'.'.$formula[1].'.'.$issue['reference'];
+            }
+            $message=$label.' · '.$message;
+        }
         $id=$code.':'.$object;
-        $groups[$id]??=['code'=>$code,'path'=>$object,'message'=>$message,'paths'=>[]];
+        $groups[$id]??=['code'=>$code,'path'=>$object,'message'=>$message,'paths'=>[],'technical'=>[]];
         $groups[$id]['paths'][$path]=$path;
+        $groups[$id]['technical'][$rawCode.':'.$path]=['code'=>$rawCode,'path'=>$path];
     }
     foreach ($groups as &$group) {
         $group['paths']=array_values($group['paths']);
+        $group['technical']=array_values($group['technical']);
         if ($group['code']==='required_resistance_missing') {
             $group['message']='Не заполнены сопротивления основным стихиям ('.count($group['paths']).' из 17). '
                 .'Проверьте resistances в правилах связанной записи KB.';

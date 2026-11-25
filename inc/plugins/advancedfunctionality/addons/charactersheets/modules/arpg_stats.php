@@ -2,6 +2,42 @@
 /** Pure shared ARPG arithmetic; no loading, queries, hooks or synchronization. */
 if (!defined('IN_MYBB')) { die('No direct access'); }
 
+/** Both consumers calculate from the KB inputs, before modifiers from Inventory. */
+function af_charactersheets_arpg_base_projection(array $profile, array $manual, array $origin, array $variant, array $archetype): array
+{
+    $computed = af_kb_build_arpg_character_stats_from_sources($profile, [], $origin, $variant, $archetype);
+    $stats = af_kb_build_arpg_character_stats_from_sources($profile, $manual, $origin, $variant, $archetype);
+    $issues = [];
+    $status = af_kb_arpg_status_resistance($manual, 'character_stats', $issues, 'character_status_resistance', 'character_status_resist');
+    $statusExplicit = array_key_exists('character_status_resistance', $manual) || array_key_exists('character_status_resist', $manual);
+    $hasStatusBase = false;
+    foreach ([$origin, $variant, $archetype] as $source) {
+        if (array_key_exists('status_resistance_base', $source) || array_key_exists('status_resist_base', $source)) $hasStatusBase = true;
+    }
+    if (!$status['available'] && ($statusExplicit || !$hasStatusBase)) {
+        unset($stats['character_status_resist']);
+    } elseif (!$statusExplicit) {
+        $issues = [];
+    }
+    return ['computed'=>$computed, 'stats'=>$stats, 'status'=>$status, 'status_issues'=>$issues];
+}
+
+/** Empty canonical choices may use their older profile fields. */
+function af_charactersheets_arpg_profile_choice(array $profile, string $field, ?string $legacy = null): mixed
+{
+    $value = $profile[$field] ?? '';
+    if (is_string($value) && trim($value) === '' && $legacy !== null) $value = $profile[$legacy] ?? '';
+    return is_string($value) ? trim($value) : $value;
+}
+
+/** Typed lookup shared by the linked sheet and the snapshot read set. */
+function af_charactersheets_arpg_definition_where(string $type, string $key): ?string
+{
+    global $db;
+    if (!preg_match(AF_KB_KEY_PATTERN,$key)) return null;
+    return "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."'";
+}
+
 function af_charactersheets_arpg_merge_runtime_stats(array $characterStats, array $computedKbStats): array
 {
     $merged = $characterStats;

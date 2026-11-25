@@ -82,11 +82,10 @@ function af_cs_snapshot_select(string $table, string $where, array &$readSet): a
 
 function af_cs_snapshot_definition(string $type, string $key, array &$readSet, array &$issues): ?array
 {
-    global $db;
-    if (!preg_match(AF_KB_KEY_PATTERN, $key)) {
+    $where = af_charactersheets_arpg_definition_where($type,$key);
+    if ($where === null) {
         af_cs_snapshot_issue($issues, 'definition_key_invalid', $type); return null;
     }
-    $where = "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."'";
     $rows = af_cs_snapshot_select('af_kb_entries', $where, $readSet);
     if (count($rows) !== 1 || empty($rows[0]['active'])) {
         af_cs_snapshot_issue($issues, 'definition_missing_or_ambiguous', $type); return null;
@@ -189,7 +188,9 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
     }
     $originRules = $archetypeRules = $variantRules = [];
     foreach (['origin'=>['arpg_origin','character_origin'], 'archetype'=>['arpg_archetype','character_archetype'], 'origin_variant'=>['arpg_origin_variant','character_origin_variant']] as $kind=>[$type,$field]) {
-        $key = $profile[$field] ?? ($kind === 'archetype' ? ($profile['character_class'] ?? '') : ($kind === 'origin' ? ($profile['character_race'] ?? '') : ''));
+        $key = af_charactersheets_arpg_profile_choice($profile,$field,match($kind) {
+            'archetype'=>'character_class', 'origin'=>'character_race', default=>null,
+        });
         if ($key === '') {
             if ($kind !== 'origin_variant') af_cs_snapshot_issue($issues,'definition_key_invalid',$field);
             continue;
@@ -237,8 +238,9 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
     $profile['character_level'] = $level;
     if (!is_numeric($level) || (float)$level < 1 || (float)$level > PHP_INT_MAX || (float)$level !== floor((float)$level)) return $failure('level_invalid');
     if (array_filter($issues,static fn($i) => in_array($i['code'],['invalid_stat_value','modifier_unsupported'],true))) return ['schema_version'=>1,'contract_id'=>'IC-CS.combat-preparation.v1','ready'=>false,'diagnostics'=>$issues];
-    $computed = af_kb_build_arpg_character_stats_from_sources($profile,[],$originRules,$variantRules,$archetypeRules);
-    $stats = af_kb_build_arpg_character_stats_from_sources($profile,$rawStats,$originRules,$variantRules,$archetypeRules);
+    $projection = af_charactersheets_arpg_base_projection($profile,$rawStats,$originRules,$variantRules,$archetypeRules);
+    $computed = $projection['computed'];
+    $stats = $projection['stats'];
     $provided = [];
     $originDefinitions = af_kb_arpg_origin_modifier_stat_definitions();
     foreach (af_kb_arpg_character_stat_registry() as $key=>$entry) {
@@ -257,15 +259,9 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
             }
         }
     }
-    $statusIssues = [];
-    $status = af_kb_arpg_status_resistance($rawStats,'character_stats',$statusIssues,'character_status_resistance','character_status_resist');
-    if ($status['available']) {
-        $stats['character_status_resist'] = ($computed['character_status_resist'] ?? 0) + (float)$status['value'];
-        $provided['character_status_resist'] = true;
-    } elseif (!$provided['character_status_resist'] || array_key_exists('character_status_resist',$rawStats) || array_key_exists('character_status_resistance',$rawStats)) {
-        unset($stats['character_status_resist']);
-        $issues = array_merge($issues,$statusIssues);
-    }
+    $status = $projection['status'];
+    $provided['character_status_resist'] = array_key_exists('character_status_resist',$stats);
+    $issues = array_merge($issues,$projection['status_issues']);
     foreach (af_kb_arpg_character_stat_registry() as $key=>$entry) {
         $field = $entry['vm_field'];
         // No default zero from a helper qualifies as an explicit source value.
@@ -361,10 +357,31 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
     if (isset($rules['character_abilities']) && !is_array($rules['character_abilities'])) af_cs_snapshot_issue($issues,'ability_list_invalid','abilities');
     foreach (is_array($rules['character_abilities'] ?? null) ? $rules['character_abilities'] : [] as $index=>$ability) {
         if (!is_array($ability)) { af_cs_snapshot_issue($issues,'ability_invalid','abilities'); continue; }
-        af_kb_arpg_bestiary_ability_pin($ability,'character_abilities.'.$index,$issues);
+        $abilityIssues = [];
+        if (($ability['ability_source'] ?? '') !== 'arpg_ability') {
+            af_kb_arpg_bestiary_ability_pin($ability,'character_abilities.'.$index,$abilityIssues);
+        }
         $abilityDto = af_kb_arpg_normalize_entry($linked[0],(int)$index);
-        $issues = array_merge($issues,$abilityDto['diagnostics']);
         $profile = $abilityDto['normalized']['ability_profile'] ?? null;
+        foreach (array_merge($abilityIssues,$abilityDto['diagnostics']) as $issue) {
+            $path = 'character_abilities.'.$index;
+            if ($issue['path'] === $path || str_starts_with($issue['path'],$path.'.')) {
+                $label = $profile['parameters']['name'] ?? $profile['parameters']['title'] ?? $ability['title'] ?? $ability['ability_name'] ?? $ability['name'] ?? $ability['ability_kb_key'] ?? '';
+                if (is_string($label)) $issue['ability'] = $label;
+                if (preg_match('/\.(formula_profile|formula_ref|cost_resource)(?:\.|$)/',$issue['path'],$field)) {
+                    $params = $profile['parameters'] ?? $ability;
+                    if (preg_match('/\.effects\.(\d+)\./',$issue['path'],$effect)) {
+                        $params = $ability['effects'][(int)$effect[1]] ?? [];
+                        foreach ($profile['effects'] ?? [] as $row) {
+                            if ((string)$row['source_index'] === $effect[1]) $params = $row['parameters'];
+                        }
+                        if (!isset($params[$field[1]])) $params = $profile['parameters'] ?? $ability;
+                    }
+                    if (is_string($params[$field[1]] ?? null)) $issue['reference'] = $params[$field[1]];
+                }
+            }
+            $issues[] = $issue;
+        }
         $reference = ($ability['ability_source'] ?? '') === 'arpg_ability' ? ($profile['references']['ability_kb_key'] ?? null) : null;
         $abilities[] = ['index'=>$index,'version'=>$reference['definition_version'] ?? $abilityDto['definition_version'],'definition'=>$profile,
             'modifiers_in_character_total'=>false];

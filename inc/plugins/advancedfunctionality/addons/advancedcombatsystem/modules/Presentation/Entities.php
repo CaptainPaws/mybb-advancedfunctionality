@@ -171,7 +171,13 @@ final class AF_ACS_EntitiesPage
         if (!$issues) return '';
         $html='<ul>';
         foreach (af_acs_registration_diagnostic_groups($issues) as $group) {
-            $html.='<li>'.self::esc($group['message']).($technical?' <small>'.self::esc($group['code'].' · '.implode(', ',$group['paths'])).'</small>':'').'</li>';
+            $html.='<li>'.self::esc($group['message']);
+            if ($technical) {
+                $html.='<details><summary>Технические сведения</summary><ul>';
+                foreach ($group['technical'] as $issue) $html.='<li><code>'.self::esc($issue['code'].' · '.$issue['path']).'</code></li>';
+                $html.='</ul></details>';
+            }
+            $html.='</li>';
         }
         return $html.'</ul>';
     }
