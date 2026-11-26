@@ -1,0 +1,29 @@
+/* Shared by the combat bar and the GM picker. Each preset supplies a fixed RGB accent. */
+.af-acs-accent--neutral   { --acs-side-rgb: 169 183 204; }
+.af-acs-accent--fire      { --acs-side-rgb: 255 114 91; }
+.af-acs-accent--water     { --acs-side-rgb: 78 195 244; }
+.af-acs-accent--air       { --acs-side-rgb: 132 222 211; }
+.af-acs-accent--earth     { --acs-side-rgb: 199 154 103; }
+.af-acs-accent--ice       { --acs-side-rgb: 176 232 255; }
+.af-acs-accent--lightning { --acs-side-rgb: 114 151 255; }
+.af-acs-accent--nature    { --acs-side-rgb: 116 203 132; }
+.af-acs-accent--light     { --acs-side-rgb: 246 216 127; }
+.af-acs-accent--dark      { --acs-side-rgb: 164 132 220; }
+.af-acs-accent--necrotic  { --acs-side-rgb: 176 193 112; }
+.af-acs-accent--life      { --acs-side-rgb: 115 235 178; }
+.af-acs-accent--blood     { --acs-side-rgb: 224 79 120; }
+.af-acs-accent--chaos     { --acs-side-rgb: 236 128 221; }
+.af-acs-accent--mental    { --acs-side-rgb: 246 163 139; }
+.af-acs-accent--abyss     { --acs-side-rgb: 125 99 202; }
+.af-acs-accent--gravity   { --acs-side-rgb: 159 155 191; }
+.af-acs-accent--astral    { --acs-side-rgb: 210 180 247; }
+.af-acs-accent--space     { --acs-side-rgb: 112 173 222; }
+
+.af-acs-combat-bar__side,
+.af-acs-side-palette label {
+  --acs-side-color: rgb(var(--acs-side-rgb));
+  --acs-side-edge: rgb(var(--acs-side-rgb) / .74);
+  --acs-side-glow: rgb(var(--acs-side-rgb) / .36);
+  --acs-side-heading: rgb(var(--acs-side-rgb) / .19);
+  --acs-side-tint: rgb(var(--acs-side-rgb) / .075);
+}

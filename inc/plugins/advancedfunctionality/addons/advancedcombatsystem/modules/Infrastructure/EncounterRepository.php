@@ -1,6 +1,7 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/SessionRepository.php';
+require_once __DIR__.'/../Domain/SideAccent.php';
 require_once __DIR__.'/DelegationPersistence.php';
 require_once __DIR__.'/ObjectCommands.php';
 require_once __DIR__.'/../Application/AuthorizationService.php';
@@ -216,9 +217,25 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
         // The command already holds the session and encounter locks.
         $sideId=$request['side_id'];
         $sides=$this->table('sides');
-        $side=$this->sql('SELECT name,side_version FROM '.$sides.' WHERE encounter_id=? AND id=? FOR UPDATE',[$eid,$sideId])['rows'][0]??null;
+        $side=$this->sql('SELECT name,side_version,policy_json FROM '.$sides.' WHERE encounter_id=? AND id=? FOR UPDATE',[$eid,$sideId])['rows'][0]??null;
         if (!$side) throw new RuntimeException('ACS_SIDE_UNAVAILABLE');
         $result=['side_id'=>$sideId,'previous_name'=>$side['name']];
+
+        if ($op==='side_accent') {
+            $policy=json_decode($side['policy_json'],false,32);
+            if (!$policy instanceof stdClass || ($policy->schema_version??null)!==1
+                || (property_exists($policy,'presentation') && !$policy->presentation instanceof stdClass)) {
+                throw new RuntimeException('ACS_SIDE_POLICY_INVALID');
+            }
+            $previous=AF_ACS_SideAccent::fromPolicy($side['policy_json']);
+            $policy->presentation??=new stdClass;
+            $policy->presentation->accent=$request['accent'];
+            if ($this->sql('UPDATE '.$sides.' SET policy_json=?,side_version=side_version+1 WHERE encounter_id=? AND id=? AND side_version=?',
+                [json_encode($policy,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_PRESERVE_ZERO_FRACTION),$eid,$sideId,$request['side_version']])['affected']!==1) {
+                throw new RuntimeException('ACS_VERSION_CONFLICT');
+            }
+            return $result+['previous_accent'=>$previous,'accent'=>$request['accent']];
+        }
 
         if ($op==='side_rename') {
             $name=$request['name'];
@@ -282,8 +299,14 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     {
         $this->commandWrite();$id=$encounter['id'];$result=[];
         if($op==='side_create') {
-            $result['side_id']=$this->sql('INSERT INTO '.$this->table('sides').' (encounter_id,name,side_version,policy_json) VALUES (?,?,1,?)',[$id,self::text($request['name'],191),self::json(['schema_version'=>1])])['id'];
-        } elseif (in_array($op,['side_rename','side_delete'],true)) {
+            $policy=['schema_version'=>1];
+            if (isset($request['accent'])) {
+                $policy['presentation']=['accent'=>$request['accent']];
+                $result['accent']=$request['accent'];
+            }
+            $result['side_id']=$this->sql('INSERT INTO '.$this->table('sides').' (encounter_id,name,side_version,policy_json) VALUES (?,?,1,?)',
+                [$id,self::text($request['name'],191),self::json($policy)])['id'];
+        } elseif (in_array($op,['side_rename','side_accent','side_delete'],true)) {
             $result=$this->changeSide($id,$op,$request);
         } elseif($op==='relation_set') {
             $a=$request['side_a'];$b=$request['side_b'];
