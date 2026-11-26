@@ -41,6 +41,13 @@ class AF_ACS_Repository
         if ($link!==$this->connection) throw new RuntimeException('ACS_AUTHORITATIVE_CONNECTION_REQUIRED');
     }
 
+    /** Run a cross-addon read on the same connection with ACS session settings. */
+    public function withReadConnection(object $database, callable $read): mixed
+    {
+        $this->assertReadConnection($database);
+        return AF_ACS_TransactionManager::databaseSettings($this->connection, $read);
+    }
+
     protected function table(string $name): string
     {
         if (!in_array($name, ['statistics', 'statistics_consumers', 'statistics_receipts', 'archive_policies', 'achievement_progress', 'achievement_events', 'correction_reviews', 'rewards', 'loot_claims', 'loot_pools', 'loot_entries', 'encounter_resolutions', 'pre_round_commitments', 'prepared_actions', 'prepared_executions', 'schema_migrations', 'sessions', 'session_roles', 'snapshots', 'operations', 'events', 'event_details', 'diagnostics', 'control_groups', 'entities', 'entity_states', 'resources', 'controllers', 'encounters', 'sides', 'side_relationships', 'participants', 'rounds', 'turns', 'entity_turns', 'cooldowns', 'drafts', 'sealed_actions', 'rolls', 'submissions', 'publication_audit', 'post_links', 'combat_results', 'combat_receipts', 'outbox', 'effects', 'reactions', 'barrier_pools', 'barrier_targets', 'equipment', 'custody', 'delegations', 'objects', 'awareness', 'objectives', 'contributions', 'cover_assignments', 'zones', 'zone_connections', 'positions', 'engagements'], true)) {
@@ -273,28 +280,48 @@ class AF_ACS_Repository
     }
 
     /** Diagnostics deliberately accept no arbitrary SQL, stack trace or payload. */
-    public function recordDiagnostic(string $requestId, string $category, string $operation, string $phase): string
+    public function recordDiagnostic(string $requestId, string $category, string $operation, string $phase, ?string $code = null, ?string $component = null): string
     {
         if (!in_array($category, ['VALIDATION_ERROR', 'STATE_CONFLICT', 'PERMISSION_DENIED', 'DEPENDENCY_ERROR', 'INTERNAL_ERROR', 'RECOVERY_REQUIRED', 'MAINTENANCE'], true)) { throw new InvalidArgumentException('ACS_INVALID_CATEGORY'); }
+        $details = ['schema_version' => 1, 'code' => self::diagnosticCode($code) ?? $category];
+        if (self::diagnosticComponent($component) !== null) $details['component'] = $component;
         $id = bin2hex(random_bytes(16));
-        $this->transactions->run(function () use ($id, $requestId, $category, $operation, $phase) {
-            $this->sql('INSERT INTO '.$this->table('diagnostics').' (error_id,request_id,category,operation,phase,created_at,details_json) VALUES (?,?,?,?,?,?,?)', [$id, self::key($requestId, 96), $category, self::key($operation, 64), self::key($phase, 64), time(), self::json(['schema_version' => 1, 'code' => $category])]);
+        $this->transactions->run(function () use ($id, $requestId, $category, $operation, $phase, $details) {
+            $this->sql('INSERT INTO '.$this->table('diagnostics').' (error_id,request_id,category,operation,phase,created_at,details_json) VALUES (?,?,?,?,?,?,?)', [$id, self::key($requestId, 96), $category, self::key($operation, 64), self::key($phase, 64), time(), self::json($details)]);
         });
         return $id;
     }
 
-    /** ACP-only, bounded metadata projection: never select details_json. */
-    public function recentDiagnostics(): array
+    private static function diagnosticCode(?string $code): ?string
+    {
+        return $code !== null && preg_match('/\A(?:(?:ACS|INV)_[A-Z0-9_]{1,90}|UNEXPECTED_EXCEPTION)\z/D', $code) ? $code : null;
+    }
+
+    private static function diagnosticComponent(?string $component): ?string
+    {
+        return $component !== null && preg_match('/\A[a-z][a-z0-9_.]{0,63}\z/D', $component) ? $component : null;
+    }
+
+    /** ACP-only, bounded projection of safe diagnostic metadata. */
+    public function recentDiagnostics(string $id = ''): array
     {
         require_once __DIR__.'/../Application/AuthorizationService.php';
         (new AF_ACS_AuthorizationService)->requirePermission('admin.diagnostics.view');
-        $rows = $this->sql('SELECT error_id,category,operation,phase,created_at FROM '.$this->table('diagnostics').' ORDER BY created_at DESC,error_id DESC LIMIT 20')['rows'];
+        if ($id !== '' && !preg_match('/\A[a-f0-9]{32}\z/D', $id)) throw new RuntimeException('ACS_INVALID_KEY');
+        $rows = $this->sql("SELECT error_id,category,operation,phase,created_at,
+            CASE WHEN JSON_VALID(details_json) THEN JSON_UNQUOTE(JSON_EXTRACT(details_json,'$.code')) END AS code,
+            CASE WHEN JSON_VALID(details_json) THEN JSON_UNQUOTE(JSON_EXTRACT(details_json,'$.component')) END AS component
+            FROM ".$this->table('diagnostics').($id !== '' ? ' WHERE error_id=?' : '')
+            .' ORDER BY created_at DESC,error_id DESC LIMIT 20', $id !== '' ? [$id] : [])['rows'];
         foreach ($rows as &$row) {
             foreach (['error_id', 'operation', 'phase'] as $field) {
-                if (!preg_match('/\A[a-z0-9:_.-]{1,64}\z/D', $row[$field])) { $row[$field] = 'redacted'; }
+                if (!preg_match('/\A[a-z0-9:_.-]{1,64}\z/D', $row[$field])) $row[$field] = 'redacted';
             }
-            if (!in_array($row['category'], ['VALIDATION_ERROR', 'STATE_CONFLICT', 'PERMISSION_DENIED', 'DEPENDENCY_ERROR', 'INTERNAL_ERROR', 'RECOVERY_REQUIRED', 'MAINTENANCE'], true)) { $row['category'] = 'INTERNAL_ERROR'; }
+            if (!in_array($row['category'], ['VALIDATION_ERROR', 'STATE_CONFLICT', 'PERMISSION_DENIED', 'DEPENDENCY_ERROR', 'INTERNAL_ERROR', 'RECOVERY_REQUIRED', 'MAINTENANCE'], true)) $row['category'] = 'INTERNAL_ERROR';
+            $row['code'] = self::diagnosticCode($row['code']) ?? $row['category'];
+            $row['component'] = self::diagnosticComponent($row['component']);
         }
+        unset($row);
         return $rows;
     }
 }

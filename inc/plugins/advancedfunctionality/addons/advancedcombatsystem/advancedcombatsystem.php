@@ -447,13 +447,14 @@ function af_advancedcombatsystem_source_check_error(Throwable $error,string $pha
 {
     global $db;
     $id=bin2hex(random_bytes(16));
+    $code=preg_match('/\A(?:ACS|INV)_[A-Z0-9_]{1,90}\z/D',$error->getMessage()) ? $error->getMessage() : 'UNEXPECTED_EXCEPTION';
+    $component=$error instanceof AF_ADVINV_StorageException ? $error->component : null;
     try {
         require_once __DIR__.'/modules/Infrastructure/Repository.php';
-        $id=(new AF_ACS_Repository($db))->recordDiagnostic($id,'INTERNAL_ERROR',$operation,$phase);
+        $id=(new AF_ACS_Repository($db))->recordDiagnostic($id,'INTERNAL_ERROR',$operation,$phase,$code,$component);
     } catch (Throwable $diagnosticError) {
         // The server log still carries the incident ID if ACP storage is unavailable.
     }
-    $code=preg_match('/\A(?:ACS|INV)_[A-Z0-9_]{1,90}\z/D',$error->getMessage()) ? $error->getMessage() : 'UNEXPECTED_EXCEPTION';
     error_log(sprintf('ACS %s error_id=%s phase=%s exception=%s code=%s native_code=%d location=%s:%d',
         $operation,$id,$phase,get_class($error),$code,(int)$error->getCode(),basename($error->getFile()),$error->getLine()));
     return ['ready'=>false,'status'=>'error','diagnostics'=>[],'error_id'=>$id,

@@ -219,7 +219,8 @@ class AF_Admin_Advancedcombatsystem
         $table = new Table;
         foreach (['error_id', 'category', 'operation / phase', 'UTC epoch / code'] as $label) { $table->construct_header(self::esc($label)); }
         foreach ($rows as $row) {
-            foreach ([$row['error_id'], $row['category'], $row['operation'].' / '.$row['phase'], $row['created_at'].' / '.($row['code'] ?? '')] as $value) { $table->construct_cell(self::esc($value)); }
+            $step = $row['phase'].(empty($row['component']) ? '' : ' / '.$row['component']);
+            foreach ([$row['error_id'], $row['category'], $row['operation'].' / '.$step, $row['created_at'].' / '.($row['code'] ?? '')] as $value) { $table->construct_cell(self::esc($value)); }
             $table->construct_row();
         }
         $table->output(self::esc($lang->af_advancedcombatsystem_diagnostics));
