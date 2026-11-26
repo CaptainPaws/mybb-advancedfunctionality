@@ -178,6 +178,34 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     {
         return array_map(fn($r)=>['uid'=>(string)$r['uid'],'role'=>$r['role']],$this->sql('SELECT uid,role FROM '.$this->table('session_roles')." WHERE session_id=? AND role IN ('owner','gm') AND (expires_at IS NULL OR expires_at>?) ORDER BY uid LIMIT 201",[$sid,time()])['rows']);
     }
+    /** Narrow projection of the already frozen current round. */
+    public function currentRosterTurns(array $encounter): array
+    {
+        return array_column($this->sql('SELECT m.entity_id,t.id AS turn_id,t.turn_version,t.status,r.status AS round_status FROM '
+            .$this->table('rounds').' r JOIN '.$this->table('turns').' t ON t.round_id=r.id JOIN '
+            .$this->table('entity_turns').' m ON m.turn_id=t.id WHERE r.encounter_id=? AND r.round_number=?',
+            [$encounter['id'],$encounter['round_number']])['rows'],null,'entity_id');
+    }
+
+    public function assertRosterPublicationSettled(string $sid): void
+    {
+        $this->assertNoPendingPublication($sid);
+    }
+
+    public function legacyPresencePolicy(array $encounter): array
+    {
+        $config=$this->configSnapshot($encounter['session_id'],$encounter['config_snapshot_id']);
+        if (!$config || !hash_equals($config['content_hash'],hash('sha256',$config['payload_json']))) {
+            throw new RuntimeException('ACS_SNAPSHOT_HASH_MISMATCH');
+        }
+        $pinned=json_decode($config['payload_json'],true,64,JSON_THROW_ON_ERROR)['config']??null;
+        if ($pinned!==json_decode($encounter['config_json'],true,64,JSON_THROW_ON_ERROR)) {
+            throw new RuntimeException('ACS_SNAPSHOT_INVALID');
+        }
+        AF_ACS_Spawn::presencePolicy($pinned['presence_policy']??[]);
+        return $pinned['presence_policy'];
+    }
+
     public function candidateSummary(string $sid,string $id): ?array
     {
         return $this->sql('SELECT id,name,kind,owner_uid FROM '.$this->table('entities')
@@ -329,18 +357,14 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
             $this->sql('UPDATE '.$this->table('participants').' SET side_id=?,participant_version=participant_version+1 WHERE encounter_id=? AND entity_id=?',[$request['side_id'],$id,$request['entity_id']]);
             $result['participant_version']=(string)$this->sql('SELECT participant_version FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=?',[$id,$request['entity_id']])['rows'][0]['participant_version'];
         } elseif(in_array($op,['partial_withdraw','rejoin_encounter'],true)) {
-            $config=$this->configSnapshot($session['id'],$encounter['config_snapshot_id']);
-            if(!$config||!hash_equals($config['content_hash'],hash('sha256',$config['payload_json'])))throw new RuntimeException('ACS_SNAPSHOT_HASH_MISMATCH');
-            $pinned=json_decode($config['payload_json'],true,64,JSON_THROW_ON_ERROR)['config']??null;
-            if($pinned!==json_decode($encounter['config_json'],true,64,JSON_THROW_ON_ERROR))throw new RuntimeException('ACS_SNAPSHOT_INVALID');
-            AF_ACS_Spawn::presencePolicy($pinned['presence_policy']??[]);
+            $presence=$this->legacyPresencePolicy($encounter);
             $entity=$this->entity($session['id'],$request['entity_id']);$participant=$this->sql('SELECT * FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=? FOR UPDATE',[$id,$request['entity_id']])['rows'][0]??null;
             $rejoin=$op==='rejoin_encounter';
             if(!$entity||!$participant||!in_array($entity['kind'],['character','pet','npc','monster','summon'],true)||$entity['life_state']!=='active'||$participant['participation']!==($rejoin?'withdrawn':'engaged'))throw new RuntimeException('ACS_PRESENCE_STATE_CONFLICT');
             if($entity['kind']==='summon'&&($this->summonProjection($session['id'],$id)[$entity['id']]['status']??null)!=='active')throw new RuntimeException('ACS_PRESENCE_STATE_CONFLICT');
             $this->assertNoObligations($session['id'],$id);
             if($this->sql('UPDATE '.$this->table('participants').' SET participation=?,participant_version=participant_version+1 WHERE id=? AND participant_version=?',[$rejoin?'engaged':'withdrawn',$participant['id'],$request['participant_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
-            $result=['entity_id'=>$entity['id'],'participation'=>$rejoin?'engaged':'withdrawn','policy_snapshot_id'=>$encounter['config_snapshot_id'],'policy_source'=>$pinned['presence_policy']['source'],'policy_version'=>$pinned['presence_policy']['definition_version']];
+            $result=['entity_id'=>$entity['id'],'participation'=>$rejoin?'engaged':'withdrawn','policy_snapshot_id'=>$encounter['config_snapshot_id'],'policy_source'=>$presence['source'],'policy_version'=>$presence['definition_version']];
         } elseif($op==='participant_visibility') {
             $row=$this->sql('SELECT participant_version,visibility_json FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=? FOR UPDATE',[$id,$request['entity_id']])['rows'][0]??null;
             if(!$row || (string)$row['participant_version']!==$request['participant_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');

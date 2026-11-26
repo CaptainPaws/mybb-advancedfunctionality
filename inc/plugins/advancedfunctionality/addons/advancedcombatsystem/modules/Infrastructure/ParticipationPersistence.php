@@ -20,6 +20,12 @@ trait AF_ACS_ParticipationPersistence
         if($this->sql('UPDATE '.$this->table('encounters').' SET config_json=?,config_snapshot_id=?,encounter_version=encounter_version+1,next_event_sequence=next_event_sequence+1 WHERE id=? AND encounter_version=?',[self::json($config),$pin,$enc['id'],$enc['encounter_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
         $session['_command_result']=['encounter_id'=>$enc['id'],'encounter_sequence'=>$enc['next_event_sequence'],'encounter_version'=>$this->encounter($session['id'],$enc['id'])['encounter_version'],'snapshot_id'=>$pin];return $session;
     }
+    public function assertRejoinLocation(array $enc,array $policy,string $entityId): void
+    {
+        $state=['spatial'=>$this->spatialProjection($enc['session_id'],$enc['id']),
+            'objects'=>$this->objectProjection($enc['session_id'],$enc['id'])];
+        AF_ACS_Participation::spatial($state,$policy,$entityId);
+    }
     public function returnParticipation(array $session,array $enc,string $op,array $request):array
     {
         $this->commandWrite();$policy=$this->participationPolicy($enc);
@@ -28,7 +34,7 @@ trait AF_ACS_ParticipationPersistence
         if($p['life_state']==='dead'||($op==='rejoin_encounter'&&($p['life_state']!=='active'||!in_array($p['participation'],$policy['rejoin_from'],true)))||($op==='release'&&$p['participation']!=='captured'))throw new RuntimeException('ACS_PARTICIPATION_STATE_CONFLICT');
         if($p['kind']==='summon'&&($this->summonProjection($session['id'],$enc['id'])[$request['entity_id']]['status']??null)!=='active')throw new RuntimeException('ACS_PARTICIPATION_STATE_CONFLICT');
         foreach(['encounter_version','next_event_sequence'] as $field)self::integer($enc[$field],'18446744073709551614');self::integer($p['participant_version'],'18446744073709551614');
-        if($op==='rejoin_encounter'){$spatialState=['spatial'=>$this->spatialProjection($session['id'],$enc['id']),'objects'=>$this->objectProjection($session['id'],$enc['id'])];AF_ACS_Participation::spatial($spatialState,$policy,$request['entity_id']);}
+        if ($op==='rejoin_encounter') $this->assertRejoinLocation($enc,$policy,$request['entity_id']);
         $this->assertNoObligations($session['id'],$enc['id']);$to=$op==='release'?$policy['release_to']:'engaged';
         if($this->sql('UPDATE '.$this->table('participants').' SET participation=?,participant_version=participant_version+1 WHERE id=? AND participant_version=?',[$to,$p['id'],$p['participant_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');
         if($this->sql('UPDATE '.$this->table('encounters').' SET encounter_version=encounter_version+1,next_event_sequence=next_event_sequence+1 WHERE id=? AND encounter_version=?',[$enc['id'],$enc['encounter_version']])['affected']!==1)throw new RuntimeException('ACS_VERSION_CONFLICT');

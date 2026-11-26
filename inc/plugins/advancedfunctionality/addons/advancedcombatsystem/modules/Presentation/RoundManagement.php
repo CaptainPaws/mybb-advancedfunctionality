@@ -17,6 +17,13 @@ final class AF_ACS_RoundManagementPage
     {
         echo '<label>Причина <input name="reason" maxlength="1000" required></label><label><input name="confirm" value="1" type="checkbox" required> Подтверждаю операцию</label><button type="submit">'.self::esc($label).'</button></form>';
     }
+    public static function skipForm(string $url,array $view,array $turn): void
+    {
+        self::form($url,'gm_skip',$view,['turn_id'=>$turn['turn_id']??$turn['id'],'turn_version'=>$turn['turn_version']]);
+        echo '<p>Ход закрывается для всей группы управления, включая других существ этой группы.</p>';
+        self::submit('Пропустить текущий ход группы');
+    }
+
     public static function render(array $view,array $roundView,string $url,AF_ACS_RoundManagementService $service): void
     {
         global $mybb;
@@ -39,7 +46,7 @@ final class AF_ACS_RoundManagementPage
             if($turn['status']!=='pending')continue;
             $fields=['turn_id'=>$turn['id'],'turn_version'=>$turn['turn_version']];
             if($state==='active') {
-                self::form($url,'gm_skip',$view,$fields);self::submit('Пропустить ход группы');
+                self::skipForm($url,$view,$turn);
                 self::form($url,'gm_forfeit',$view,$fields);echo '<p>Только если все существа группы подтверждённо выбыли. Недееспособность сама по себе не закрывает ход.</p>';self::submit('Закрыть выбывшую группу');
                 if(in_array($data['policy']['mode'],['notify','timeout_pass'],true) && $remaining!==null && $remaining==='0') {self::form($url,'deadline_process',$view,$fields);self::submit('Обработать наступивший дедлайн');}
             }

@@ -242,11 +242,15 @@ final class AF_ACS_GmPanel
         $session=$view['session'];$encounter=$view['encounter'];$sid=$session['id'];
         $sessionView=af_advancedcombatsystem_sessions()->view($sid);
         $editable=$session['status']==='active' && $encounter['status']==='preparation';
+        $live=in_array($encounter['status'],['active','paused'],true);
+        $controls=$live?$service->activeRosterControls($view):null;
+        $canAdd=$editable || ($live && $controls['reinforcement']===null);
+
         $characters=$sessionView['can_register_own'] || $sessionView['can_register_characters'];
         $bestiary=$sessionView['can_manage'];
         $kind=$mybb->get_input('kind');
         if (!in_array($kind,array_merge($characters?['character']:[],$bestiary?['npc','monster']:[],['recent']),true)) {
-            $kind=$characters?'character':($bestiary?'npc':'recent');
+            $kind=$live?'recent':($characters?'character':($bestiary?'npc':'recent'));
         }
         $people=$view['participants'];
         $bySide=[];
@@ -277,16 +281,16 @@ final class AF_ACS_GmPanel
         $pickerUrl=$url.'&gm_picker=1&kind='.$kind.$sideQuery;
         $inRoster=array_fill_keys(array_column($people,'entity_id'),true);
         $candidates=[];
-        if ($editable && $view['sides'] && $kind==='recent' && $registered==='') {
+        if ($canAdd && $view['sides'] && $kind==='recent' && $registered==='') {
             $candidates=$service->candidates($sid,$mybb->get_input('candidate_after')?:'0',$kind==='recent');
         }
         $available=array_filter($candidates,static fn($entity)=>!isset($inRoster[$entity['id']]));
         $recentId=$mybb->get_input('gm_entity');
         $selectedEntity=$registered!==''?$registered:($kind==='recent'?$recentId:'');
-        $recentSelection=$editable && $selectedEntity!=='' ? $service->assignmentCandidate($sid,$encounter['id'],$selectedEntity) : null;
+        $recentSelection=$canAdd && $selectedEntity!=='' ? $service->assignmentCandidate($sid,$encounter['id'],$selectedEntity) : null;
         $owner=$recentSelection && $recentSelection['kind']==='character' && $recentSelection['owner_uid']!==null
             ? af_advancedcombatsystem_sessions()->memberProfile($sid,(string)$recentSelection['owner_uid']) : null;
-        $canSave=$editable && $view['sides'] && $recentSelection!==null
+        $canSave=$canAdd && $view['sides'] && $recentSelection!==null
             && ($recentSelection['kind']!=='character' || ($owner && self::hasPlayingRole($owner)));
         $readinessUrl=$pickerUrl;
         foreach (['source_key','source_slug','source_after','gm_entity','candidate_after'] as $field) {
@@ -309,23 +313,52 @@ final class AF_ACS_GmPanel
             if (!$members) echo !empty($sideCounts[$side['id']])?'<p>Участники на другой странице состава.</p>':'<p>Участников пока нет.</p>';
             foreach ($members as $person) self::rosterCard($person,$health[$person['entity_id']]??[],true,$url,$view,$editable,$checked);
             if ($editable) echo '<div class="af-acs-gm__side-actions"><a class="atf-button" href="'.self::esc($url.'&gm_picker=1&kind='.$kind.'&gm_side='.$side['id']).'">Добавить</a><a class="atf-button" href="'.self::esc($url.'&gm_relations=1').'">Отношения</a></div>';
+            if ($live && $canAdd) echo '<p><a class="atf-button" href="'.self::esc($url.'&gm_picker=1&kind=recent&gm_side='.$side['id']).'">Добавить подкрепление</a></p>';
             if ($canManageSides) self::sideActions($view,$sideActionUrl,$side,!empty($sideCounts[$side['id']]));
             echo '</details>';
         }
         if (!$view['sides']) echo '<p>Создайте стороны столкновения, например «Игроки» и «Враги».</p>';
         if ($editable) self::sideSettings($view,$url);
+        if ($live && $controls['side_change']===null) self::activeRelations($view,$removeUrl,$url);
         echo '<div class="af-acs-gm__summary"><strong>Сводка по составу</strong><p>Участников: '.$total.' · Игроков: '.$playerCount.' · NPC/монстров: '.$opponentCount.'</p></div>';
         echo '</div></section>';
 
         echo '<section class="af-acs-gm__column"><h4><i class="fa-solid fa-layer-group" aria-hidden="true"></i> Состав столкновения</h4><div class="af-acs-gm__column-body">';
         echo '<p>Участники текущего столкновения ('.$total.')</p>';
         if (!$people) echo '<p>Добавьте зарегистрированных существ на стороны столкновения.</p>';
-        foreach ($people as $person) self::rosterCard($person,$health[$person['entity_id']]??[],false,$url,$view,$editable,$checked,$canRemove,$removeUrl);
+        if ($live) {
+            $sections=['current'=>['Текущие участники',[]],'waiting'=>['Ожидающие вступления',[]],
+                'withdrawn'=>['Временно выведенные',[]],'out'=>['Выбывшие',[]]];
+            foreach ($people as $person) {
+                $entry=$controls['members'][$person['entity_id']];
+                $bucket=match (true) {
+                    $person['life_state']==='dead'=>'out',
+                    $person['participation']==='withdrawn'=>'withdrawn',
+                    $person['participation']!=='engaged'=>'out',
+                    $entry['turn']===null && $person['life_state']==='active'=>'waiting',
+                    default=>'current',
+                };
+                $sections[$bucket][1][]=$person;
+            }
+            foreach ($sections as $bucket=>[$label,$members]) {
+                echo '<h5>'.self::esc($label).'</h5>';
+                if (!$members) echo '<p>На этой странице нет участников.</p>';
+                foreach ($members as $person) {
+                    self::rosterCard($person,$health[$person['entity_id']]??[],false,$removeUrl,$view,false,false,
+                        liveEntry:$controls['members'][$person['entity_id']],canChangeSide:$controls['side_change']===null,waiting:$bucket==='waiting');
+                }
+            }
+        } else {
+            foreach ($people as $person) self::rosterCard($person,$health[$person['entity_id']]??[],false,$url,$view,$editable,$checked,$canRemove,$removeUrl);
+        }
         if (count($people)===100) echo '<a href="'.self::esc($url.'&participant_after='.end($people)['id']).'">Следующие участники</a>';
         echo '</div></section>';
 
-        echo '<section class="af-acs-gm__column af-acs-gm__picker" aria-labelledby="af-acs-gm-picker-title"><h4 id="af-acs-gm-picker-title"><i class="fa-solid fa-plus" aria-hidden="true"></i> Добавить в состав</h4><div class="af-acs-gm__column-body">';
-        if ($editable) {
+        echo '<section class="af-acs-gm__column af-acs-gm__picker" aria-labelledby="af-acs-gm-picker-title"><h4 id="af-acs-gm-picker-title"><i class="fa-solid fa-plus" aria-hidden="true"></i> '
+            .($live?'Добавить подкрепление':'Добавить в состав').'</h4><div class="af-acs-gm__column-body">';
+        if ($canAdd) {
+            if ($live && !$view['sides']) self::rosterBlocked('Назначить подкрепление','ACS_SIDE_UNAVAILABLE');
+            if ($live) echo '<p>Выберите зарегистрированное существо или зарегистрируйте новое. Вступление — со следующего раунда.</p>';
             echo '<nav aria-label="Источники состава" class="af-acs-gm__sources">';
             foreach (array_filter(['character'=>$characters?'Персонажи':'','npc'=>$bestiary?'NPC/Монстры':'','recent'=>'Недавние']) as $type=>$label) {
                 $active=$kind===$type || ($type==='npc' && $kind==='monster');
@@ -337,6 +370,7 @@ final class AF_ACS_GmPanel
                 else echo '<p>Существо зарегистрировано. Откройте «Недавние», чтобы добавить его в состав.</p>';
             } elseif ($kind==='recent') {
                 if ($recentSelection && $view['sides']) self::offerAssignment($view,$pickerUrl,$recentSelection,$owner,$selectedSide);
+                if ($live && $selectedEntity!=='' && !$recentSelection) self::rosterBlocked('Добавить подкрепление','ACS_ENTITY_UNAVAILABLE');
                 if (!$available) echo '<p>Нет зарегистрированных существ для добавления на текущей странице.</p>';
                 else {
                     $cursor=$mybb->get_input('candidate_after');
@@ -362,10 +396,12 @@ final class AF_ACS_GmPanel
                 AF_ACS_EntitiesPage::render($sid,$sessionView,$pickerUrl,null,true,$sourceCheck,true,$kind);
             }
         } else {
-            echo '<p>Добавление в состав подготовки доступно до запуска в активной сессии.</p>';
+            if ($live) self::rosterBlocked('Добавить подкрепление',$controls['reinforcement']);
+            else echo '<p>Добавление в состав подготовки доступно до запуска в активной сессии.</p>';
         }
         echo '</div></section></div>';
 
+        if ($live) return;
         $checkUrl=preg_replace('/gm_stage=roster$/','gm_stage=check',$url);
         echo '<nav class="af-acs-gm__actions" aria-label="Действия состава">';
         if ($editable) echo '<a class="atf-button" href="'.self::esc($readinessUrl.'&gm_readiness=1').'"><i class="fa-solid fa-shield" aria-hidden="true"></i> Проверить готовность</a>';
@@ -373,7 +409,7 @@ final class AF_ACS_GmPanel
         echo '<a class="atf-button atf-button--primary af-acs-gm__next" href="'.self::esc($checkUrl).'">Далее: Проверка</a></nav>';
     }
 
-    private static function rosterCard(array $person,array $health,bool $compact,string $url,array $view,bool $editable,bool $checked,bool $canRemove=false,string $removeUrl=''): void
+    private static function rosterCard(array $person,array $health,bool $compact,string $url,array $view,bool $editable,bool $checked,bool $canRemove=false,string $removeUrl='',?array $liveEntry=null,bool $canChangeSide=false,bool $waiting=false): void
     {
         global $mybb;
         $kind=AF_ACS_EntitiesPage::kindLabel($person['kind']);
@@ -383,11 +419,15 @@ final class AF_ACS_GmPanel
         $available=$valid && $person['life_state']==='active' && $person['participation']==='engaged';
         $ready=$available && $checked;
         $status=$ready?'Готов':($available?'Ожидает проверки':(!$valid?'Проверьте снимок':self::state($person['participation']==='engaged'?$person['life_state']:$person['participation'])));
+        if ($liveEntry!==null) {
+            $status=$waiting?'Со следующего раунда':self::state($person['participation']==='engaged'?$person['life_state']:$person['participation']);
+        }
         echo '<article class="af-acs-gm__entity'.($compact?' af-acs-gm__entity--compact':'').'">'.$portrait.'<div class="af-acs-gm__entity-label"><strong>'.self::esc($person['name']).'</strong><small>'.self::esc($kind.' · '.$source).'</small></div>';
         if ($compact) {
             echo '<div><small>HP '.self::esc($health['hp']??'—').' / '.self::esc($health['hp_max']??'—').'</small><small>AP '.self::esc($health['ap']??'—').'</small></div>';
         }
         echo '<span class="af-acs-gm__status'.($ready?' af-acs-gm__status--ready':'').'">'.self::esc($status).'</span>';
+        if ($liveEntry!==null) self::activeParticipantActions($person,$liveEntry,$view,$url,$canChangeSide);
         if ($editable && !$compact) {
             echo '<div class="af-acs-gm__entity-actions"><button type="button" disabled title="Порядок задаёт ACS" aria-label="Изменить порядок"><i class="fa-solid fa-sort" aria-hidden="true"></i></button>'
                 .($canRemove?'<a class="atf-button" href="'.self::esc($removeUrl.'&gm_remove_participant='.$person['id'])
@@ -411,6 +451,97 @@ final class AF_ACS_GmPanel
             echo '<p class="af-acs-gm__muted">Порядок задаёт ACS.</p></details>';
         }
         echo '</article>';
+    }
+
+    public static function rosterIssue(string $code): ?string
+    {
+        return match ($code) {
+            'ACS_ROSTER_PAUSED'=>'Действие доступно в активном столкновении.',
+            'ACS_SESSION_TRANSITION_BLOCKED'=>'Сессия должна быть активна.',
+            'ACS_ROSTER_NO_TURN'=>'У существа нет хода в текущем раунде.',
+            'ACS_ROSTER_TURN_CLOSED'=>'Ход группы уже закрыт.',
+            'ACS_GM_REQUIRED'=>'Нужны полномочия мастера этой сессии.',
+            'ACS_PRESENCE_POLICY_UNSUPPORTED'=>'В столкновении нет поддерживаемой закреплённой политики вывода и возврата.',
+            'ACS_PARTICIPATION_PAID_ACTION_REQUIRED'=>'Политика требует боевого действия участника для выхода.',
+            'ACS_PARTICIPATION_UNSUPPORTED','ACS_PARTICIPATION_PIN_INVALID','ACS_SNAPSHOT_INVALID','ACS_SNAPSHOT_HASH_MISMATCH'
+                =>'Закреплённая политика или снимок несовместимы.',
+            'ACS_PRESENCE_STATE_CONFLICT','ACS_PARTICIPATION_STATE_CONFLICT'=>'Текущее состояние существа или политика не допускают переход.',
+            'ACS_PARTICIPATION_SPATIAL_UNSUPPORTED','ACS_PARTICIPATION_OBSTACLE_UNSUPPORTED'
+                =>'Условия карты или препятствия блокируют возвращение.',
+            'ACS_ROUND_OBLIGATIONS_BLOCKED','ACS_PUBLICATION_UNRESOLVED'=>'Сначала урегулируйте незавершённые действия и публикации.',
+            'ACS_OBLIGATIONS_SCHEMA_UNVERIFIED','ACS_CLOCK_DEPENDENCY_BLOCKED'=>'ACS не может подтвердить состояние обязательств или границ хода.',
+            'ACS_PARTICIPANT_EXISTS'=>'Существо уже записано в составе.',
+            'ACS_ENTITY_UNAVAILABLE','ACS_PARTICIPANT_UNAVAILABLE','ACS_SIDE_UNAVAILABLE'=>'Существо, запись участия или сторона больше не доступны.',
+            'ACS_ROUND_STATE_CONFLICT','ACS_ENCOUNTER_TRANSITION_BLOCKED'=>'Столкновение или ход больше не допускают это действие.',
+            'ACS_VERSION_CONFLICT'=>'Состояние изменилось. Обновите «Состав» перед повторным подтверждением.',
+            'ACS_UI_CONFIRMATION_REQUIRED','ACS_ROUND_CONFIRMATION_REQUIRED'=>'Подтвердите действие.',
+            default=>null,
+        };
+    }
+
+    private static function rosterBlocked(string $label,string $code): void
+    {
+        echo '<p>'.self::esc($label).' · BLOCKED · '.self::esc(self::rosterIssue($code)??'Сервер не подтвердил доступность действия.')
+            .' <code>'.self::esc($code).'</code></p>';
+    }
+
+    private static function activeParticipantActions(array $person,array $entry,array $view,string $url,bool $canChangeSide): void
+    {
+        $s=$view['session'];$e=$view['encounter'];
+        $fields=['entity_id'=>$person['entity_id'],'participant_version'=>$person['participant_version']];
+        echo '<details class="af-acs-gm__entity-tools"><summary>Управление участием</summary>';
+        if ($entry['skip']!==null) {
+            self::rosterBlocked('Пропустить текущий ход',$entry['skip']);
+        } else {
+            require_once __DIR__.'/RoundManagement.php';
+            AF_ACS_RoundManagementPage::skipForm($url,$view,$entry['turn']);
+        }
+        foreach (['withdraw'=>['partial_withdraw','Временно вывести из боя'],'rejoin'=>['rejoin_encounter','Вернуть в бой']] as $key=>[$op,$label]) {
+            if ($entry[$key]!==null) {
+                self::rosterBlocked($label,$entry[$key]);
+                continue;
+            }
+            self::form($url,$op,$s,$e);
+            self::fields($fields);
+            self::submit($label);
+        }
+        $otherSides=array_filter($view['sides'],static fn(array $side)=>$side['id']!==$person['side_id']);
+        if ($canChangeSide && $person['participation']==='engaged' && $otherSides) {
+            self::form($url,'side_change',$s,$e);
+            self::fields($fields);
+            echo '<label>Новая сторона ';
+            self::sides($otherSides,'side_id');
+            echo '</label>';
+            self::submit('Изменить сторону');
+        } else {
+            echo '<p>Изменить сторону · BLOCKED · Нужны активная сессия, участник в составе и другая доступная сторона.</p>';
+        }
+        if ($person['participation']==='engaged' && $person['life_state']!=='dead') {
+            echo '<p>Покинул столкновение · BLOCKED · Окончательный выход оформляется разрешённым боевым переходом участника. У мастера нет отдельной команды выхода.</p>';
+        }
+        echo '</details>';
+    }
+
+    private static function activeRelations(array $view,string $actionUrl,string $url): void
+    {
+        $labels=['allied'=>'Союзники','neutral'=>'Нейтральные','hostile'=>'Враждебные'];
+        $names=array_column($view['sides'],'name','id');
+        echo '<details><summary>Отношения сторон</summary>';
+        if (!$view['relationships']) echo '<p>Нет сохранённых отношений на этой странице.</p>';
+        foreach ($view['relationships'] as $relation) {
+            self::form($actionUrl,'relation_set',$view['session'],$view['encounter']);
+            self::fields(array_intersect_key($relation,array_flip(['side_a','side_b','relation_version'])));
+            echo '<label>'.self::esc(($names[$relation['side_a']]??'Сторона #'.$relation['side_a'])
+                .' / '.($names[$relation['side_b']]??'Сторона #'.$relation['side_b'])).' <select name="relationship">';
+            foreach ($labels as $value=>$label) {
+                echo '<option value="'.$value.'"'.($value===$relation['relationship']?' selected':'').'>'.$label.'</option>';
+            }
+            echo '</select></label>';
+            self::submit('Изменить отношение');
+        }
+        if (count($view['relationships'])===100) echo '<p><a href="'.self::esc($url.'&relation_after='.end($view['relationships'])['id']).'">Следующие отношения</a></p>';
+        echo '</details>';
+        if (count($view['sides'])===100) echo '<p><a href="'.self::esc($url.'&side_after='.end($view['sides'])['id']).'">Следующие стороны</a></p>';
     }
 
     public static function sideAccentPicker(string $selected=AF_ACS_SideAccent::DEFAULT): void
@@ -524,7 +655,10 @@ final class AF_ACS_GmPanel
         if ($name!=='') echo '<strong>'.self::esc($name).'</strong>';
         echo '<label>Сторона ';
         self::sides($sides,'side_id',$selectedSide);echo '</label>';
-        self::submit('Добавить в столкновение');
+        if ($encounter['status']==='active') {
+            echo '<label><input type="checkbox" name="acs_confirm" value="1" required> Подтверждаю вступление со следующего раунда</label>';
+        }
+        self::submit($encounter['status']==='active'?'Добавить подкрепление':'Добавить в столкновение');
     }
 
     public static function overview(array $sessionView,array $view,string $url):void
