@@ -38,12 +38,7 @@ final class AF_ACS_AcpReadModel extends AF_ACS_Repository
     }
     public function errors(string $id=''):array
     {
-        (new AF_ACS_AuthorizationService)->requirePermission('admin.diagnostics.view');
-        if($id!==''&&!preg_match('/\A[a-f0-9]{32}\z/D',$id))throw new RuntimeException('ACS_INVALID_KEY');
-        $rows=$this->sql('SELECT error_id,category,operation,phase,created_at FROM '.$this->table('diagnostics').($id!==''?' WHERE error_id=?':'').' ORDER BY created_at DESC,error_id DESC LIMIT 20',$id!==''?[$id]:[])['rows'];
-        foreach($rows as &$row){foreach(['error_id','operation','phase'] as $key)if(!preg_match('/\A[A-Za-z0-9:_.-]{1,64}\z/D',$row[$key]))$row[$key]='redacted';
-            if(!in_array($row['category'],['VALIDATION_ERROR','STATE_CONFLICT','PERMISSION_DENIED','DEPENDENCY_ERROR','INTERNAL_ERROR','RECOVERY_REQUIRED'],true))$row['category']='INTERNAL_ERROR';
-        }unset($row);return $rows;
+        return $this->recentDiagnostics($id);
     }
     public function inspect(string $sid,string $key='',string $after=''):array
     {

@@ -143,10 +143,15 @@ final class AF_ACS_EntityService
             require_once __DIR__.'/../Infrastructure/Adapters/EquipmentAdapter.php';
             require_once __DIR__.'/../../../advancedinventory/modules/InventoryRead.php';
             global $db;
-            $this->repository->assertReadConnection($db);
-            $reader=new AF_ADVINV_InventoryRead($db,grant:$grant);
-            if ($write) $reader->fence($owner,$actor);
-            $inventory=$reader->read($owner,$actor);
+            $inventory=$this->repository->withReadConnection($db,static function () use ($db,$grant,$owner,$actor,$write) {
+                try {
+                    $reader=new AF_ADVINV_InventoryRead($db,grant:$grant);
+                    if ($write) $reader->fence($owner,$actor);
+                    return $reader->read($owner,$actor);
+                } catch (mysqli_sql_exception $error) {
+                    throw new RuntimeException('INV_READ_FAILED',(int)$error->getCode(),$error);
+                }
+            });
             $phase='equipment_projection';
             $snapshot['equipment_snapshot']=(new AF_ACS_EquipmentAdapter())->prepare($dto,$inventory,$sid,$actor,$grant);
             if ($grant) $snapshot['registration_context']=['actor_uid'=>$actor,'owner_uid'=>$owner,'session_id'=>$sid,
