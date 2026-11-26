@@ -41,10 +41,10 @@ function af_advancedcombatsystem_thread_button(string $url, string $label): stri
     $label = htmlspecialchars_uni($label);
     $builder = str_contains($url, 'acs_builder=');
     $modal = str_contains($url, 'acs_setup=1') || str_contains($url, 'acs_session=');
+    require_once __DIR__.'/ThreadPanel.php';
     return '<a '.($builder ? 'data-acs-modal="builder" ' : ($modal ? 'data-acs-modal="gm" ' : '')).'class="atf-button atf-button--secondary atf-thread__reply-action" href="'.htmlspecialchars_uni($url)
         .'" aria-label="'.$label.'" title="'.$label.'">'
-        .'<svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-        .'<path d="m13.5 10.5 6-6H22V7l-6 6M2 22l5-5m-2-2 4 4m1.5-5.5L4 7V4h3l11.5 11.5M22 22l-5-5m2-2-4 4"/></svg></a>';
+        .AF_ACS_ThreadPanel::swords().'</a>';
 }
 
 /** Native showthread context. Creation is available only for a confirmed combat topic. */
@@ -181,7 +181,10 @@ function af_advancedcombatsystem_render_thread_entry(array $context, string &$to
         if ($surface==='bar') return $html;
         $phase='assets';
         $html=af_advancedcombatsystem_presentation_css('has_acs_panel').$choice.$html;
-        if ($builder==='' && $mybb->get_input('acs_draft')==='' && ($canNotify || AF_ACS_ThreadPanel::builderUrl($panel,(string)$tid)!==null)) $html.=af_advancedcombatsystem_panel_script();
+        if ($builder==='' && $mybb->get_input('acs_draft')===''
+            && ($canNotify || !empty($panel['can_view_roster']) || AF_ACS_ThreadPanel::builderUrl($panel,(string)$tid)!==null)) {
+            $html.=af_advancedcombatsystem_panel_script();
+        }
         if($canNotify)foreach($GLOBALS['af_acs_panel_asset_failures']??[] as $failure)$html.='<p role="status">'.htmlspecialchars_uni('Ассеты ACS недоступны. Проверьте настройки ассетов AF и диагностику ACP. '.$failure).'</p>';
         // A failed explicit tool must not discard the already-rendered read-only panel.
         try{
@@ -249,7 +252,7 @@ function af_advancedcombatsystem_presentation_css(string $fact): string
         if($fact==='has_acs_panel')af_advancedcombatsystem_panel_failure('ACS_PANEL_ASSET_DENIED','css');
         return '';
     }
-    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/presentation.css?v=1200';
+    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/presentation.css?v=1201';
     return '<link rel="stylesheet" href="'.htmlspecialchars_uni($url).'">';
 }
 
@@ -262,7 +265,7 @@ function af_advancedcombatsystem_panel_script(): string
     if(!function_exists('af_frontend_asset_allowed')||!af_frontend_asset_allowed('advancedcombatsystem','thread_panel',null,['has_acs_panel'=>true])){
         af_advancedcombatsystem_panel_failure('ACS_PANEL_ASSET_DENIED','javascript');return '';
     }
-    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/thread-panel.js?v=1302';
+    $sent=true;$url=rtrim((string)($mybb->settings['bburl']??''),'/').'/inc/plugins/advancedfunctionality/addons/advancedcombatsystem/assets/thread-panel.js?v=1303';
     return '<script defer src="'.htmlspecialchars_uni($url).'"></script>';
 }
 

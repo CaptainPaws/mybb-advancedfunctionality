@@ -1,7 +1,50 @@
 (function () {
     'use strict';
-    if (!window.HTMLDialogElement?.prototype.showModal || window.AFACSModalLauncher) return;
+    if (window.AFACSModalLauncher) return;
     window.AFACSModalLauncher = true;
+
+    const railSelector = '[data-acs-rail]';
+    function updateRail(rail) {
+        const carousel = rail.closest('[data-acs-carousel]');
+        const distance = Math.abs(rail.scrollLeft);
+        carousel.querySelector('[data-acs-step="-1"]').disabled = distance <= 1;
+        carousel.querySelector('[data-acs-step="1"]').disabled = distance >= rail.scrollWidth - rail.clientWidth - 1;
+    }
+
+    const railSizes = new ResizeObserver(entries => {
+        entries.forEach(({target}) => updateRail(target));
+    });
+
+    function mountRails(root) {
+        root.querySelectorAll(railSelector).forEach(rail => {
+            rail.closest('[data-acs-carousel]').classList.add('is-enhanced');
+            railSizes.observe(rail);
+            updateRail(rail);
+        });
+        root.querySelectorAll('.af-acs-combat-bar__avatar img').forEach(image => {
+            if (image.complete && !image.naturalWidth) image.remove();
+        });
+    }
+
+    document.addEventListener('error', event => {
+        if (event.target.matches?.('.af-acs-combat-bar__avatar img')) event.target.remove();
+    }, true);
+    document.addEventListener('scroll', event => {
+        if (event.target.matches?.(railSelector)) updateRail(event.target);
+    }, true);
+    document.addEventListener('click', event => {
+        const button = event.target.closest('[data-acs-step]');
+        if (!button || button.disabled) return;
+        const rail = button.closest('[data-acs-carousel]').querySelector(railSelector);
+        const direction = getComputedStyle(rail).direction === 'rtl' ? -1 : 1;
+        rail.scrollBy({
+            left: direction * Number(button.dataset.acsStep) * rail.clientWidth,
+            behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'
+        });
+    });
+    mountRails(document);
+
+    if (!window.HTMLDialogElement?.prototype.showModal) return;
 
     const script = new URL(document.currentScript.src);
     const base = new URL('./', script);
@@ -72,7 +115,9 @@
         const old = document.querySelector('#acs-thread-panel .af-acs-combat-bar');
         const fresh = parse(html).querySelector('.af-acs-combat-bar');
         if (!old || !fresh) return;
+        old.querySelectorAll(railSelector).forEach(rail => railSizes.unobserve(rail));
         old.replaceWith(fresh);
+        mountRails(fresh);
         const newAction = fresh.querySelector('[data-acs-modal]');
         const toolbar = document.querySelector('.atf-thread__toolbar [data-acs-modal]');
         if (toolbar && newAction) {
