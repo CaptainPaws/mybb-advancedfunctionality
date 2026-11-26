@@ -429,7 +429,9 @@ final class AF_ADVINV_OwnerProtocol
         foreach ($critical as $table=>$columns) {
             foreach ($columns as $column=>$type) {
                 $meta = $this->one('SELECT COLUMN_TYPE,COLLATION_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?', [$this->prefix.'af_advinv_'.$table,$column]);
-                if (!$meta || $meta['COLUMN_TYPE'] !== $type || ($column === 'operation_key' && $meta['COLLATION_NAME'] !== 'ascii_bin')) throw new RuntimeException('INV_SCHEMA_NOT_READY');
+                // MariaDB reports integer display widths that MySQL 8 can omit.
+                $actual = preg_replace('/\A(int|bigint)\([0-9]+\)(?= unsigned\z|\z)/D', '$1', $meta['COLUMN_TYPE'] ?? '');
+                if ($actual !== $type || ($column === 'operation_key' && $meta['COLLATION_NAME'] !== 'ascii_bin')) throw new RuntimeException('INV_SCHEMA_NOT_READY');
             }
         }
         foreach (['items'=>['PRIMARY'=>['id']], 'equipped'=>['PRIMARY'=>['uid','equip_slot']], 'support_slots'=>['PRIMARY'=>['uid','slot_code']], 'owner_state'=>['PRIMARY'=>['uid']], 'external_operations'=>['PRIMARY'=>['operation_key']], 'reservations'=>['PRIMARY'=>['id'],'reservation_once'=>['operation_key'],'item_active'=>['item_id','status']]] as $table=>$required) {

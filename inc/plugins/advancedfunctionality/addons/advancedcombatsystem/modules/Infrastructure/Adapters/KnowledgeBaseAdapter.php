@@ -170,7 +170,7 @@ final class AF_ACS_KnowledgeBaseAdapter
         return true;
     }
 
-    public function readDefinition(string $type, string $key, int $actorUid, ?int $abilityIndex = null): array
+    public function readDefinition(string $type, string $key, int $actorUid, ?int $abilityIndex = null, bool $reportUnexpected = false): array
     {
         try {
             if (!$this->available($actorUid)) return $this->failure('access_denied');
@@ -260,7 +260,10 @@ final class AF_ACS_KnowledgeBaseAdapter
             return ['schema_version'=>1,'contract_id'=>'IC-KB.read.v1','adapter_version'=>'acs-kb-adapter-1',
                 'ready'=>$ready,'readiness_scope'=>$type === 'character' ? 'definition_inputs_not_calculated_snapshot' : 'selected_definition','executable'=>false,'persistent'=>false,'source'=>$dto['source'],'definition_version'=>$dto['definition_version'],
                 'data'=>$dto['normalized'],'diagnostics'=>$issues,'capabilities'=>$capabilities];
-        } catch (Throwable $error) { return $this->failure('source_read_failed'); }
+        } catch (Throwable $error) {
+            if ($reportUnexpected) throw $error;
+            return $this->failure('source_read_failed');
+        }
     }
 
     /** Registration-time pinning only. Commit/seal must never acquire a live spawn template. */

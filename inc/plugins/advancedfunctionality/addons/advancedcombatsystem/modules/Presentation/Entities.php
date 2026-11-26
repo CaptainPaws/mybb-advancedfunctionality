@@ -69,7 +69,7 @@ final class AF_ACS_EntitiesPage
                     if (!empty($choice['owner_name'])) $label.=' · '.$choice['owner_name'];
                     $results.='<article class="af-acs-gm__entity af-acs-gm__entity--result">'.self::portrait((int)($choice['owner_uid']??0),(string)($choice['portrait']??''))
                         .'<div class="af-acs-gm__entity-label"><strong>'.self::esc($choice['label']).'</strong><small>'.self::esc($label).'</small></div>'
-                        .'<a class="atf-button" href="'.self::esc($resultsUrl.'&source_key='.rawurlencode($choice['key'])).'">'.(($choice['state']??'unchecked')==='unchecked'?'Добавить':'Причина').'</a></article>';
+                        .'<a class="atf-button" href="'.self::esc($resultsUrl.'&source_key='.rawurlencode($choice['key'])).'">'.(($choice['state']??'unchecked')==='unchecked'?'Выбрать':'Причина').'</a></article>';
                 }
                 $results.='</div>';
                 $options=array_values(array_filter($options,static fn($choice)=>$choice['key']===$selected));
@@ -79,6 +79,21 @@ final class AF_ACS_EntitiesPage
                 'session_id'=>$sid,'expected_version'=>$view['session']['session_version'],'kind'=>$kind,
                 'my_post_key'=>$mybb->post_code,'source_slug'=>$slug,'source_after'=>$after,
             ];
+            $characterCard=$picker && $kind==='character' && $options!==[];
+            $prefill=[];
+            $reasonDefault='Добавление персонажа в столкновение';
+            if ($characterCard) {
+                $choice=$options[0];
+                if (($choice['state']??'unchecked')==='unchecked') {
+                    $prefill=$check ?: $service->characterPrefill($sid,$choice['key']);
+                }
+                echo '<div class="atf-card" data-acs-source-card="'.self::esc($choice['key']).'">';
+                echo '<div class="af-acs-gm__entity">'.self::portrait((int)($choice['owner_uid']??0),$choice['portrait']??'')
+                    .'<div class="af-acs-gm__entity-label"><strong>'.self::esc($choice['label']).'</strong>'
+                    .'<small>Владелец: '.self::esc(($choice['owner_name']??'')?:'—').'</small>'
+                    .'<small>Источник: Лист #'.self::esc($choice['sheet_id']).' · Тема #'.self::esc($choice['thread_id']??'—').'</small>'
+                    .'<small>Максимальное HP: '.self::esc($prefill['maximum_hp']??'—').'</small></div></div>';
+            }
             $selectable=false;
             if ($options && (!$picker || (($options[0]['state']??'unchecked')==='unchecked' && empty($check['ready'])))) {
                 echo '<form method="post" action="'.self::esc($url).'">';
@@ -86,7 +101,7 @@ final class AF_ACS_EntitiesPage
                 if ($picker) {
                     self::hidden(['source_key'=>$options[0]['key']]);
                     $selectable=true;
-                    echo '<strong>'.self::esc($options[0]['label']).'</strong>';
+                    if (!$characterCard) echo '<strong>'.self::esc($options[0]['label']).'</strong>';
                 } else {
                     echo '<label>Источник <select name="source_key" required><option value="">Выберите источник</option>';
                     foreach ($options as $choice) {
@@ -99,33 +114,40 @@ final class AF_ACS_EntitiesPage
                     }
                     echo '</select></label>';
                 }
-                echo '<label>Имя экземпляра <input name="name" maxlength="191" value="'.self::esc($mybb->get_input('name')).'"></label>'
-                    .'<label>Начальное HP <input name="initial_hp" type="number" min="0" max="9007199254740991" step="1" value="'.self::esc($mybb->get_input('initial_hp')).'"></label>'
-                    .'<p>Укажите начальное HP, если источник не хранит текущее HP.</p>'
-                    .'<label>Причина регистрации <input name="reason" maxlength="1000" value="'.self::esc($mybb->get_input('reason')).'"></label>'
+                $instanceName=$check['name']??($characterCard?mb_substr($options[0]['label'],0,191):$mybb->get_input('name'));
+                $initialHp=$prefill['source_current_hp']??$check['initial_hp']??$prefill['maximum_hp']??$mybb->get_input('initial_hp');
+                $reason=$check['reason']??($characterCard?$reasonDefault:$mybb->get_input('reason'));
+                echo '<label>Имя экземпляра <input name="name" maxlength="191" value="'.self::esc($instanceName).'"></label>'
+                    .'<label>Начальное HP <input name="initial_hp" type="number" min="0" max="'.self::esc($prefill['maximum_hp']??'9007199254740991').'" step="1" value="'.self::esc($initialHp).'"'.(isset($prefill['source_current_hp'])?' readonly':'').'></label>'
+                    .'<label>Причина регистрации <input name="reason" maxlength="1000" value="'.self::esc($reason).'"></label>'
                     .'<button type="submit"'.(!$selectable?' disabled':'').'>Проверить источник</button></form>';
 
             }
             foreach ($options as $choice) {
                 $checked=($check['source_key']??null)===$choice['key'];
                 $state=$choice['state']??'unchecked';
-                $issues=$checked?($check['diagnostics']??[]):[];
+                $issues=$checked?($check['diagnostics']??[]):($prefill['diagnostics']??[]);
                 if (!$issues && $state!=='unchecked') $issues=array_merge([['code'=>$state,'path'=>'source']],$choice['diagnostics']??[]);
                 $codes=array_column($issues,'code');
                 $denied=(bool)array_intersect($codes,['access_denied','definition_access_denied','registration_ownership_required','equipment_access_denied']);
                 $ready=$checked && !empty($check['ready']) && $state==='unchecked';
-                $message=$checked?($check['message']??''):'';
-                $status=match($checked?($check['status']??null):null) {
+                $message=$checked?($check['message']??''):($prefill['message']??'');
+                $status=match($checked?($check['status']??null):($prefill['status']??null)) {
                     'error'=>'Ошибка проверки',
                     'denied'=>'Недоступен по правам',
                     'blocked'=>'Требует исправлений',
                     default=>$ready?'Готов к регистрации':($denied?'Недоступен по правам':(($issues || $message!=='')?'Требует исправлений':'Требуется проверка')),
                 };
-                echo '<div class="atf-card"'.($picker && $checked?' data-acs-source-result tabindex="-1"':'').'><strong>'.self::esc($choice['label']).'</strong> · '.self::esc($status);
-                if (!empty($choice['owner_name'])) echo ' · '.self::esc($choice['owner_name']);
-                if (isset($choice['sheet_id'])) echo ' <small>Лист #'.self::esc($choice['sheet_id']).'</small>';
-                if (isset($choice['sheet_url'])) echo ' · <a href="'.self::esc(self::forumUrl($choice['sheet_url'])).'">Лист персонажа</a>';
-                if (isset($choice['thread_id'])) echo ' · <a href="'.self::esc(self::forumUrl('showthread.php?tid='.$choice['thread_id'])).'">Тема #'.self::esc($choice['thread_id']).'</a>';
+                echo '<div'.(!$characterCard?' class="atf-card"':'').($picker && $checked?' data-acs-source-result tabindex="-1"':'').'>';
+                if ($characterCard) {
+                    echo '<p>Готовность: '.self::esc($status).'</p>';
+                } else {
+                    echo '<strong>'.self::esc($choice['label']).'</strong> · '.self::esc($status);
+                }
+                if (!$characterCard && !empty($choice['owner_name'])) echo ' · '.self::esc($choice['owner_name']);
+                if (!$characterCard && isset($choice['sheet_id'])) echo ' <small>Лист #'.self::esc($choice['sheet_id']).'</small>';
+                if (!$characterCard && isset($choice['sheet_url'])) echo ' · <a href="'.self::esc(self::forumUrl($choice['sheet_url'])).'">Лист персонажа</a>';
+                if (!$characterCard && isset($choice['thread_id'])) echo ' · <a href="'.self::esc(self::forumUrl('showthread.php?tid='.$choice['thread_id'])).'">Тема #'.self::esc($choice['thread_id']).'</a>';
                 if ($message!=='') echo '<p role="alert">'.self::esc($message).'</p>';
                 if ($issues) {
                     echo self::diagnostics($issues, !$picker);
@@ -138,14 +160,19 @@ final class AF_ACS_EntitiesPage
                 }
                 if ($ready) {
                     echo '<form method="post" action="'.self::esc($url).'">';
-                    self::hidden($formFields+['source_key'=>$choice['key'],'name'=>$check['name']!==''?$check['name']:($kind==='character'?mb_substr($choice['label'],0,191):''),'initial_hp'=>$check['initial_hp'],
+                    self::hidden($formFields+['source_key'=>$choice['key'],'initial_hp'=>$check['initial_hp'],
                         'operation_key'=>bin2hex(random_bytes(16)),'preparation_fingerprint'=>$check['preparation_fingerprint']]);
-                    echo '<p>Подтвердите регистрацию проверенного источника. Сервер перечитает данные.</p>'
-                        .'<label>Причина регистрации <input name="reason" maxlength="1000" required value="'.self::esc($check['reason']).'"></label>'
+                    echo '<p>Начальное HP: '.self::esc($check['initial_hp']).'</p>'
+                        .'<label>Имя экземпляра <input name="name" maxlength="191" value="'.self::esc($check['name']).'"></label>'
+                        .'<label>Причина регистрации <input name="reason" maxlength="1000" required value="'.self::esc($check['reason']!==''?$check['reason']:($characterCard?$reasonDefault:'')).'"></label>'
                         .'<button name="op" value="entity_register" type="submit">Зарегистрировать</button></form>';
+                    if ($characterCard && !isset($check['source_current_hp'])) {
+                        echo '<a href="'.self::esc($resultsUrl.'&source_key='.rawurlencode($choice['key'])).'">Изменить начальное HP</a>';
+                    }
                 }
                 echo '</div>';
             }
+            if ($characterCard) echo '</div>';
             echo $results;
         }
         if(($choices['next_after']??null)!==null)echo '<a href="'.self::esc($url.($embedded?'&session_id='.$sid:'').($picker?'':'&kind='.$kind).'&source_after='.$choices['next_after'].($slug!==''?'&source_slug='.rawurlencode($slug):'')).'">Следующие источники</a>';

@@ -150,6 +150,18 @@
             if (resume) url = nativeUrl(resume) ?? url;
             await prepare(fragment);
             if (!dialog?.open || controller.signal.aborted) return;
+            if (sourcePreview && sameRoster) {
+                const card = content.querySelector('[data-acs-source-card]');
+                const replacement = fragment.querySelector('[data-acs-source-card]');
+                if (card && replacement && card.dataset.acsSourceCard === replacement.dataset.acsSourceCard) {
+                    card.replaceWith(replacement);
+                    current = url;
+                    dialog.querySelector('[data-fallback]').href = url.href;
+                    showError('', false);
+                    if (focus) replacement.querySelector('[data-acs-source-result]')?.focus();
+                    return;
+                }
+            }
             const keepScroll = body || !focus || restore;
             disposeContent();
             content.append(fragment);

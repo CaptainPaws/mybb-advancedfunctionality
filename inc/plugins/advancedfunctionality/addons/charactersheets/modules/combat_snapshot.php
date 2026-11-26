@@ -36,10 +36,11 @@ function af_charactersheets_prepare_combat_snapshot(int $sheetId, int $actorUid,
     } elseif (!af_cs_snapshot_source_thread($sheet, $actorUid)) {
         return $denied;
     }
+    $phase = 'character_identity';
     try {
-        return af_cs_snapshot_read($sheet, $context, $grant);
+        return af_cs_snapshot_read($sheet, $context, $grant, $phase);
     } catch (Throwable $error) {
-        if (is_callable($context['on_source_error'] ?? null)) $context['on_source_error']($error,'character_snapshot');
+        if (is_callable($context['on_source_error'] ?? null)) $context['on_source_error']($error,$phase);
         return ['schema_version'=>1,'contract_id'=>'IC-CS.combat-preparation.v1','ready'=>false,
             'diagnostics'=>[['code'=>'source_read_failed','path'=>'sources','severity'=>'error']]];
     }
@@ -145,7 +146,7 @@ function af_cs_snapshot_apply(array $stats, array $source, array &$breakdown, ar
 }
 
 /** Internal owner implementation: caller must pass the authenticated permission boundary. */
-function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegistrationGrant $grant=null): array
+function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegistrationGrant $grant=null, ?string &$phase=null): array
 {
     global $db;
     $issues = $readSet = $definitions = $breakdown = [];
@@ -171,11 +172,19 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
     if (($rules['schema'] ?? null) !== AF_KB_CHARACTER_SCHEMA || ($meta['mechanic'] ?? null) !== 'arpg') return $failure('arpg_contract_required');
     if ((isset($meta['contract']) && $meta['contract'] !== AF_KB_CHARACTER_SCHEMA) || (isset($meta['contract_version']) && $meta['contract_version'] !== '1.0')) return $failure('character_contract_version_unsupported');
     if ((int)($meta['availability']['owner_uid'] ?? 0) !== $uid || (int)($meta['source_tid'] ?? 0) !== $tid) return $failure('character_owner_link_mismatch');
-    $build = json_decode((string)($sheet['build_json'] ?? '{}'), true, 512, JSON_THROW_ON_ERROR);
+    $phase = 'character_build';
+    $build = json_decode((string)($sheet['build_json'] ?? '{}'), true);
     if (!is_array($build)) return $failure('build_invalid');
     $profile = $rules['character_profile'] ?? [];
     $rawStats = $rules['character_stats'] ?? [];
     if (!is_array($profile) || !is_array($rawStats)) return $failure('character_stats_invalid');
+    $characterName = '';
+    foreach ([$profile['character_name_ru'] ?? null,$profile['character_name'] ?? null,af_kb_pick_text($linked[0],'title')] as $candidate) {
+        if (is_string($candidate) && trim($candidate) !== '') {
+            $characterName = mb_substr(trim($candidate),0,191);
+            break;
+        }
+    }
     foreach (['hp','health','defense','def','attack_power','atk','attack','crit_rate','crit_damage','critical_damage','elemental_mastery','mastery','element_damage_bonus','elemental_damage_bonus','healing_bonus','shield_strength','healing_received_bonus','accuracy','luck','status_hit','status_resist'] as $alias) {
         if (array_key_exists($alias,$rawStats)) af_cs_snapshot_issue($issues,'legacy_stat_alias_untracked','character_stats.'.$alias);
     }
@@ -289,6 +298,7 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
         $breakdown[] = ['source_id'=>$definition['type'].':'.$definition['key'],'source_type'=>$kind,'source_version'=>$definition['version'],
             'operation'=>'kb_base_and_growth','contributions'=>$candidate,'included_in_total'=>true,'accuracy_included_in_total'=>!array_key_exists('character_accuracy',$rawStats)];
     }
+    $phase = 'character_equipment_talents';
     $equipped = af_cs_snapshot_select('af_advinv_equipped','uid='.$uid,$readSet);
     $itemIds = array_values(array_unique(array_map(static fn($b) => max(0,(int)($b['item_id'] ?? 0)), $equipped)));
     $talentRefs = array_values((array)($build['talents']['slots'] ?? []));
@@ -354,6 +364,7 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
         if (!empty($definition['rules']['resources'])) af_cs_snapshot_issue($issues,'resource_resistance_inclusion_unverified','resources');
     }
     $resistances = af_kb_arpg_character_resistances($resistanceSources,$issues);
+    $phase = 'character_abilities';
     $abilities = [];
     if (isset($rules['character_abilities']) && !is_array($rules['character_abilities'])) af_cs_snapshot_issue($issues,'ability_list_invalid','abilities');
     foreach (is_array($rules['character_abilities'] ?? null) ? $rules['character_abilities'] : [] as $index=>$ability) {
@@ -400,6 +411,7 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
     if (array_filter($issues,static fn($i) => $i['code'] === 'definition_access_denied')) return ['schema_version'=>1,'contract_id'=>'IC-CS.combat-preparation.v1','ready'=>false,'diagnostics'=>[['code'=>'definition_access_denied','path'=>'references','severity'=>'error']]];
     $resources = ['hp'=>['maximum'=>$characteristics['hp'] ?? null, 'current'=>null],'source_declared'=>$rules['resources'] ?? []];
     af_cs_snapshot_issue($issues,'current_resources_not_owned_by_contract','resources','warning');
+    $phase = 'character_fingerprint';
     // Re-read every captured source; no transaction/DDL and no persistent state changes.
     foreach ($readSet as $read) {
         $check = [];
@@ -410,7 +422,7 @@ function af_cs_snapshot_read(array $sheet, array $context, ?AF_ACS_CharacterRegi
     $result = ['schema_version'=>1,'contract_id'=>'IC-CS.combat-preparation.v1','builder_version'=>'cs-readonly-1',
         'numeric_policy'=>'binary64-half_up-v1','calculation_policy'=>'cs-arpg-legacy-additive-v1','engine_version'=>null,
         'element_registry_version'=>'primary-elements-17-v1','element_alias_policy'=>'wind-air-v1',
-        'identity'=>['sheet_id'=>$sheetId,'owner_uid'=>$uid,'tid'=>$tid,'source_type'=>'character', 'kb_key'=>$linked[0]['key'],
+        'identity'=>['sheet_id'=>$sheetId,'owner_uid'=>$uid,'tid'=>$tid,'source_type'=>'character','character_name'=>$characterName,'kb_key'=>$linked[0]['key'],
             'source_fingerprint'=>$raw['fingerprint'],'definition_version'=>['schema'=>$rules['schema'],'revision'=>$linked[0]['revision'] ?? $rules['revision'] ?? null,'declared_version'=>$rules['version'] ?? null,'fingerprint'=>$raw['fingerprint']],'sheet_fingerprint'=>af_kb_arpg_acs_fingerprint($sheet)],
         'stat_provenance'=>['status_resistance'=>$status,'level'=>['value'=>$level,'source'=>$levelSource]],'base_characteristics'=>$base,'characteristics'=>$characteristics,'resources'=>$resources,'resistances'=>$resistances,
         'classification'=>$classification,'abilities'=>$abilities,'equipment'=>$equipment,'talents'=>$talents,
