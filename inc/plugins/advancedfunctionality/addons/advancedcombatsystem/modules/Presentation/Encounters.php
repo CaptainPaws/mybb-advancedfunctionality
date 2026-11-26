@@ -26,6 +26,7 @@ final class AF_ACS_EncountersPage
             $characterRegistration=$op==='entity_request' && $mybb->get_input('op')==='entity_register' && $mybb->get_input('kind')==='character';
             $registrationPhase=$characterRegistration?'registration_scope':null;
             $assignmentPhase=$op==='participant_add'?'participant_scope':null;
+            $rolePhase=$op==='session_set_role'?'role_form':null;
             try {
                 // The posted session may not redirect a command to another thread/scope.
                 if($mybb->get_input('session_id')!==$sid || $mybb->get_input('tid')!==$tid)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
@@ -34,7 +35,11 @@ final class AF_ACS_EncountersPage
                 $committed=['committed'=>true,'sid'=>$sid];
                 AF_ACS_GmIntent::requireConfirmation(str_starts_with($op,'session_')?substr($op,8):$op);
                 if(str_starts_with($op,'session_')){
-                    $serviceSession=af_advancedcombatsystem_sessions();$result=$serviceSession->command(substr($op,8),$input);$outcome=$committed;$notice='<p role="status">Переход сессии подтверждён сервером.</p>';$session=$service->context($sid,$tid);$list=$service->list($sid,tid:$tid);
+                    $serviceSession=af_advancedcombatsystem_sessions();
+                    $result=$serviceSession->command(substr($op,8),$input,phase:$rolePhase);
+                    $outcome=$committed;
+                    $notice='<p role="status">'.($op==='session_set_role'?'Роль участника сохранена.':'Переход сессии подтверждён сервером.').'</p>';
+                    $session=$service->context($sid,$tid);$list=$service->list($sid,tid:$tid);
                 }elseif($op==='entity_request'){
                     $entityOp=$mybb->get_input('op');if(!in_array($entityOp,['entity_validate','entity_register'],true))throw new RuntimeException('ACS_DRAFT_INPUT_INVALID');
                     $entities=af_advancedcombatsystem_entities();
@@ -72,7 +77,10 @@ final class AF_ACS_EncountersPage
                     }
                 }
             } catch(Throwable $error) {
-                if (!$sourcePreview) {
+                if ($rolePhase!==null && empty($outcome['committed'])) {
+                    $failure=self::roleAssignmentFailure($error,$rolePhase);
+                    $commandBlocked=$failure['uncertain'];
+                } elseif (!$sourcePreview && empty($outcome['committed'])) {
                     $failure=$op==='participant_add'
                         ? af_advancedcombatsystem_session_failure($error,$assignmentPhase,'participant_add')
                         : af_advancedcombatsystem_session_failure($error,$characterRegistration?$registrationPhase:null);
@@ -86,6 +94,9 @@ final class AF_ACS_EncountersPage
                     if (!$input) $notice='<p role="alert">'.self::esc($sourceCheck['message']).'</p>';
                 } elseif (!empty($outcome['committed'])) {
                     return '<p role="status">Команда подтверждена. <a href="'.self::esc($base).'">Перечитать состояние</a>.</p>';
+                } elseif ($rolePhase!==null) {
+                    $outcome=['error'=>true,'uncertain'=>$commandBlocked,'error_id'=>$failure['error_id']];
+                    $notice='<p role="alert">'.self::esc($failure['message']).'</p>';
                 } elseif ($setup && $op==='round_start' && in_array($error->getMessage(),[
                     'ACS_ROSTER_BLOCKED','ACS_VERSION_CONFLICT','ACS_FIRST_ROUND_EXISTS','ACS_ENCOUNTER_TRANSITION_BLOCKED',
                 ],true)) {
@@ -274,6 +285,40 @@ final class AF_ACS_EncountersPage
             throw $error;
         }
     }
+    public static function roleAssignmentFailure(Throwable $error,string $phase): array
+    {
+        $code=$error->getMessage();
+        $message=match($code) {
+            'ACS_SESSION_NOT_FOUND'=>'Сессия не найдена.',
+            'ACS_GM_REQUIRED','ACS_SESSION_UNAVAILABLE','ACS_LOGIN_REQUIRED'=>'Недостаточно прав мастера для назначения роли в этой сессии.',
+            'ACS_USER_UNAVAILABLE'=>'Выбранный пользователь не найден.',
+            'ACS_THREAD_UNAVAILABLE'=>$phase==='role_topic_access'
+                ? 'Пользователь не имеет доступа к теме сессии.' : 'Тема сессии недоступна.',
+            'ACS_VERSION_CONFLICT'=>'Версия сессии изменилась. Обновите панель перед назначением роли.',
+            'ACS_ROLE_INVALID','ACS_ROLE_ESCALATION_DENIED','ACS_OWNER_PROTECTED'=>'Роль недоступна для назначения.',
+            'ACS_ROLE_AMBIGUOUS'=>'У пользователя несколько записей ролей. Нужна проверка администратором.',
+            'ACS_UI_CONFIRMATION_REQUIRED'=>'Подтвердите изменение роли.',
+            'ACS_REASON_REQUIRED'=>'Укажите причину изменения роли.',
+            'ACS_CSRF_REQUIRED'=>'Проверка защиты запроса не прошла. Обновите панель.',
+            'ACS_ENCOUNTER_UNAVAILABLE','ACS_MODAL_REQUEST_INVALID','ACS_OPERATION_KEY_REQUIRED',
+            'ACS_INVALID_INTEGER','ACS_INTEGER_RANGE'=>'Форма назначения роли недействительна. Откройте её заново.',
+            'ACS_SESSION_TRANSITION_BLOCKED'=>'Роль можно назначить только в активной сессии.',
+            'ACS_RATE_LIMIT','ACS_MAINTENANCE_BUSY'=>'Команда временно недоступна. Повторите позже.',
+            'ACS_PUBLICATION_UNRESOLVED'=>'Сначала завершите восстановление публикации в этой сессии.',
+            'ACS_OPERATION_KEY_CONFLICT'=>'Ключ уже относится к другому запросу. Проверьте прежнюю операцию.',
+            default=>null,
+        };
+        $failure=af_advancedcombatsystem_session_failure($error,$phase,'session.set_role');
+        $uncertain=$message===null && ($failure['category']==='RECOVERY_REQUIRED'
+            || in_array($code,['ACS_LOCK_RELEASE_UNKNOWN','ACS_DB_SESSION_RESTORE_FAILED','ACS_TRANSACTION_ERROR','ACS_DB_SESSION_SETTINGS_FAILED'],true)
+            || $phase==='role_commit' || $phase==='role_modal');
+        return ['error_id'=>$failure['error_id'],'uncertain'=>$uncertain,
+            'message'=>($message??($uncertain
+                ? 'Результат назначения роли неизвестен. Проверьте прежнюю операцию и используйте тот же ключ.'
+                : 'Назначение роли прервано. Обратитесь к администратору для проверки диагностики.'))
+                .' Код обращения: '.$failure['error_id']];
+    }
+
     private static function assignmentError(string $code,?string $phase): ?string
     {
         return match($code) {

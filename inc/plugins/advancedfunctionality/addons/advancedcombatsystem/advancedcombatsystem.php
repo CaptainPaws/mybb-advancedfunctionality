@@ -522,6 +522,17 @@ function af_advancedcombatsystem_session_failure(Throwable $error,?string $regis
         $code=preg_match('/\A(?:ACS|INV)_[A-Z0-9_]{1,90}\z/D',$error->getMessage()) ? $error->getMessage() : 'UNEXPECTED_EXCEPTION';
         $component=$error instanceof AF_ADVINV_StorageException ? $error->component : match($registrationPhase) {
             'inventory.fence','inventory.read','entity.persist'=>$registrationPhase,
+            'role_assign'=>'session_roles.assign',
+            'role_notification'=>'outbox.alerts_source',
+            'role_audit'=>'session.audit',
+            'role_commit'=>'transaction.commit',
+            'role_transaction'=>'transaction.begin',
+            'role_topic_access'=>'session.target_access',
+            'role_form','role_modal'=>'gm.role_request',
+            'role_input'=>'session.role_input',
+            'role_authorize'=>'session.authorization',
+            'role_guard'=>'session.version_guard',
+            'role_user'=>'session.target_user',
             default=>null,
         };
         try {
