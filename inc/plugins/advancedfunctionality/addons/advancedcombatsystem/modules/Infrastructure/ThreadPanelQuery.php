@@ -2,6 +2,7 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/../Application/SessionService.php';
 require_once __DIR__.'/BestiaryPortraits.php';
+require_once __DIR__.'/../Domain/SideAccent.php';
 
 /** Read-only showthread projection. No resolver execution, clock boundaries or raw state DTO. */
 final class AF_ACS_ThreadPanelQuery extends AF_ACS_Repository
@@ -22,7 +23,7 @@ final class AF_ACS_ThreadPanelQuery extends AF_ACS_Repository
 
         // Apply audience rules before exposing metadata or resolving portraits.
         $rows=$this->sql('SELECT e.id,e.name,e.kind,g.owner_uid,e.control_group_id,'
-            .'p.side_id,side.name AS side_name,p.participation,s.hp,s.hp_max,u.avatar FROM '.$this->table('participants').' p JOIN '
+            .'p.side_id,side.name AS side_name,side.policy_json AS side_policy,p.participation,s.hp,s.hp_max,u.avatar FROM '.$this->table('participants').' p JOIN '
             .$this->table('entities').' e ON e.id=p.entity_id JOIN '.$this->table('control_groups').' g ON g.id=e.control_group_id'
             .' JOIN '.$this->table('entity_states').' s ON s.entity_id=e.id LEFT JOIN '.$this->table('sides').' side'
             .' ON side.id=p.side_id AND side.encounter_id=p.encounter_id LEFT JOIN `'.TABLE_PREFIX."users` u ON u.uid=e.owner_uid AND e.kind='character'"
@@ -31,18 +32,20 @@ final class AF_ACS_ThreadPanelQuery extends AF_ACS_Repository
         $needAudience=!$gm&&(bool)array_filter($rows,static fn($r)=>(string)$r['owner_uid']!==$uid);
         if($needAudience)$repo->cacheThreadPanelReads($sid);
         $audience=$needAudience?new AF_ACS_AudienceService($repo,$access,$sid,$eid):null;
-        $groups=[];$portraitIds=[];
+        $groups=[];$portraitIds=[];$sideAccents=[];
         foreach($rows as $r){
             $id=(string)$r['id'];$own=(string)$r['owner_uid']===$uid;
             if(!$gm&&!$own&&($audience->knowledge('entity',$id)['level']!=='identified'||!$audience->canTarget($id)))continue;
             $exact=$gm||$own;
             // Awareness grants identity, not numeric state, portraits or group/side membership.
             $gid=$exact?(string)$r['control_group_id']:'visible-'.$id;
+            $sideId=$exact?$r['side_id']:null;
+            if ($sideId!==null) $sideAccents[$sideId]??=AF_ACS_SideAccent::fromPolicy($r['side_policy']);
             $groups[$gid]??=['own'=>$own,'ap'=>null,'members'=>[]];
             $groups[$gid]['members'][$id]=[
                 'id'=>$id,'name'=>$exact?$r['name']:$audience->name($id,$r['name']),
-                'kind'=>$exact?$r['kind']:null,'side_id'=>$exact?$r['side_id']:null,
-                'side_name'=>$exact?$r['side_name']:null,'participation'=>$exact?$r['participation']:null,
+                'kind'=>$exact?$r['kind']:null,'side_id'=>$sideId,
+                'side_name'=>$exact?$r['side_name']:null,'side_accent'=>$sideAccents[$sideId]??null,'participation'=>$exact?$r['participation']:null,
                 'avatar'=>$exact?(string)$r['avatar']:'','hp'=>$exact?[(string)$r['hp'],(string)$r['hp_max']]:null,
                 'round_member'=>false,
             ];

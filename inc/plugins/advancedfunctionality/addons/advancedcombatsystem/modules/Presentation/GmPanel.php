@@ -1,6 +1,7 @@
 <?php
 if(!defined('IN_MYBB')){die('No direct access');}
 require_once __DIR__.'/GmIntent.php';
+require_once __DIR__.'/../Domain/SideAccent.php';
 
 /** Composes existing services/forms, with no new command backend or mechanical authority. */
 final class AF_ACS_GmPanel
@@ -412,6 +413,16 @@ final class AF_ACS_GmPanel
         echo '</article>';
     }
 
+    public static function sideAccentPicker(string $selected=AF_ACS_SideAccent::DEFAULT): void
+    {
+        echo '<fieldset class="af-acs-side-palette"><legend>Цветовой акцент</legend>';
+        foreach (AF_ACS_SideAccent::OPTIONS as $accent=>$label) {
+            echo '<label class="af-acs-accent--'.$accent.'"><input type="radio" name="side_accent" value="'.$accent.'"'
+                .($selected===$accent?' checked':'').' required><span>'.self::esc($label).'</span></label>';
+        }
+        echo '</fieldset>';
+    }
+
     private static function sideActions(array $view,string $url,array $side,bool $occupied): void
     {
         echo '<details class="af-acs-gm__side-tools"><summary>Действия</summary><details><summary>Переименовать</summary>';
@@ -419,6 +430,11 @@ final class AF_ACS_GmPanel
         self::fields(['side_id'=>$side['id']]);
         echo '<label>Название стороны <input name="name" maxlength="191" value="'.self::esc($side['name']).'" required></label>';
         self::submit('Переименовать');
+        echo '</details><details><summary>Изменить оформление</summary>';
+        self::form($url,'side_accent',$view['session'],$view['encounter']);
+        self::fields(['side_id'=>$side['id'],'side_version'=>$side['side_version']]);
+        self::sideAccentPicker(AF_ACS_SideAccent::fromPolicy($side['policy_json']));
+        self::submit('Сохранить оформление');
         echo '</details><details><summary>Удалить</summary>';
         if ($occupied) {
             echo '<p>Сначала переместите всех участников этой стороны через «Настроить» в составе столкновения.</p>';
@@ -437,6 +453,7 @@ final class AF_ACS_GmPanel
         echo '<details><summary>Создать сторону</summary>';
         self::form($url,'side_create',$session,$encounter);
         echo '<label>Название стороны <input name="name" maxlength="191" required></label>';
+        self::sideAccentPicker();
         self::submit('Добавить сторону');
         echo '</details><details'.($mybb->get_input('gm_relations')==='1'?' open data-acs-side-settings tabindex="-1"':'').'><summary>Отношения сторон</summary>';
         if (count($sides)<2) echo '<p>Сначала создайте две стороны.</p>';

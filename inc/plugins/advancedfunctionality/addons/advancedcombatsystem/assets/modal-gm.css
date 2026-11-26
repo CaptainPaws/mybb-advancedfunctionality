@@ -1,3 +1,5 @@
+@import url("side-accents.css?v=1");
+
 .af-acs-gm{max-width:100%;min-width:0;overflow-wrap:anywhere;margin:1rem 0}.af-acs-gm *{box-sizing:border-box;min-width:0}.af-acs-gm nav,.af-acs-gm__steps{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}.af-acs-gm nav a{display:inline-block;padding:.5rem}.af-acs-gm [aria-current]{font-weight:700;text-decoration:underline}.af-acs-gm__steps{padding-inline-start:1.5rem}.af-acs-gm form{max-width:100%;padding:.65rem 0;margin:.5rem 0}.af-acs-gm label{display:block;margin:.4rem 0}.af-acs-gm input,.af-acs-gm select,.af-acs-gm button,.af-acs-gm textarea{font:inherit;max-width:100%}.af-acs-gm input:not([type=checkbox]),.af-acs-gm select,.af-acs-gm button{min-height:2.5rem}.af-acs-gm table{width:100%;table-layout:fixed;border-collapse:collapse}.af-acs-gm th,.af-acs-gm td{padding:.4rem;vertical-align:top;overflow-wrap:anywhere}.af-acs-gm__warning{font-weight:600}.af-acs-gm :focus-visible{outline:2px solid currentColor;outline-offset:2px}@media(max-width:48rem){.af-acs-gm th,.af-acs-gm td{padding:.2rem;font-size:.9em}.af-acs-gm button{white-space:normal}.af-acs-gm nav{gap:.15rem}}
 .af-acs-gm__steps{list-style:none;padding-inline-start:0}
 .af-acs-gm{color-scheme:dark}
@@ -163,3 +165,45 @@
 .af-acs-gm__members .af-acs-gm__search input {width: 100%;}
 .af-acs-gm__members .atf-button,
 .af-acs-gm__members button {min-height: 2.25rem;}
+
+.af-acs-gm .af-acs-side-palette {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7.5rem), 1fr));
+  gap: .35rem;
+  margin: .45rem 0;
+  padding: .45rem;
+  border: 1px solid var(--atf-color-border, #526279);
+  border-radius: .35rem;
+}
+.af-acs-gm .af-acs-side-palette label {
+  display: flex;
+  gap: .25rem;
+  align-items: center;
+  min-height: 1.85rem;
+  padding: .17rem .25rem;
+  background: linear-gradient(var(--acs-side-tint), var(--acs-side-tint)), #0b1420;
+  border: 1px solid transparent;
+  border-radius: .28rem;
+  color: #eef1f6;
+  cursor: pointer;
+  font-size: .82rem;
+}
+.af-acs-side-palette label span::before {
+  content: "";
+  display: inline-block;
+  inline-size: .55rem;
+  aspect-ratio: 1;
+  margin-inline-end: .28rem;
+  border-radius: 50%;
+  background: var(--acs-side-color);
+}
+.af-acs-gm .af-acs-side-palette label:has(input:checked) {
+  color: var(--acs-side-color);
+  background: linear-gradient(var(--acs-side-heading), var(--acs-side-tint)), #0b1420;
+  border-color: var(--acs-side-edge);
+  box-shadow: inset 0 0 .35rem var(--acs-side-glow), 0 0 .27rem var(--acs-side-glow);
+}
+.af-acs-gm .af-acs-side-palette label:focus-within {
+  outline: 2px solid var(--atf-color-text, #eef1f6);
+  outline-offset: 1px;
+}

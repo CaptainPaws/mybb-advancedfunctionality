@@ -1,5 +1,6 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
+require_once __DIR__.'/../Domain/SideAccent.php';
 
 final class AF_ACS_ThreadPanel
 {
@@ -44,10 +45,11 @@ final class AF_ACS_ThreadPanel
             .'<path d="m13.5 10.5 6-6H22V7l-6 6M2 22l5-5m-2-2 4 4m1.5-5.5L4 7V4h3l11.5 11.5M22 22l-5-5m2-2-4 4"/></svg>';
     }
 
-    private static function action(string $url,string $label,string $tool): string
+    private static function action(string $url,string $label,string $tool,bool $gear=false): string
     {
-        return '<a class="atf-button atf-button--secondary af-acs-combat-bar__action af-acs-combat-bar__action--'.$tool
-            .'" data-acs-modal="'.$tool.'" href="'.self::esc($url).'">'.self::swords().self::esc($label).'</a>';
+        return '<a class="af-acs-combat-bar__action af-acs-combat-bar__action--'.$tool
+            .'" data-acs-modal="'.$tool.'" href="'.self::esc($url).'">'
+            .($gear?self::icon('gear'):self::swords()).'<span>'.self::esc($label).'</span></a>';
     }
 
     private static function frame(): string
@@ -125,23 +127,19 @@ final class AF_ACS_ThreadPanel
             foreach ($group['members'] as $member) {
                 $key=$member['side_id']===null?'unassigned':'side-'.$member['side_id'];
                 $sides[$key]['name']=$member['side_name']??'Без стороны';
+                $sides[$key]['accent']=$member['side_accent']??AF_ACS_SideAccent::DEFAULT;
                 $member['ap']=$member['round_member']?$group['ap']:null;
                 $sides[$key]['members'][]=$member;
                 ++$total;
             }
         }
         if (!$total) return '<p class="af-acs-combat-bar__empty">Нет участников</p>';
-        uasort($sides,static function (array $a,array $b): int {
-            $order=['Игроки'=>0,'Враги'=>1,'Без стороны'=>3];
-            return ($order[$a['name']]??2)<=>($order[$b['name']]??2);
-        });
         $html='<div class="af-acs-combat-bar__roster"><h3>'.self::icon('users').' Состав столкновения ('.$total.')</h3>'
             .'<div class="af-acs-combat-bar__sides">';
         foreach ($sides as $side) {
             $name=$side['name'];
-            $variant=match($name){'Игроки'=>'players','Враги'=>'enemies',default=>'neutral'};
-            $html.='<section class="af-acs-combat-bar__side af-acs-combat-bar__side--'.$variant.'"><h4>'
-                .self::icon($variant==='enemies'?'skull':'users').' '.self::esc($name).' ('.count($side['members']).')</h4>'
+            $html.='<section class="af-acs-combat-bar__side af-acs-accent--'.$side['accent'].'"><h4>'
+                .self::icon('users').' '.self::esc($name).' ('.count($side['members']).')</h4>'
                 .'<div class="af-acs-combat-bar__carousel" data-acs-carousel>'
                 .'<button type="button" data-acs-step="-1" aria-label="Предыдущие участники: '.self::esc($name).'" disabled>'
                 .self::icon('chevron-left').'</button>'
@@ -186,7 +184,7 @@ final class AF_ACS_ThreadPanel
         $actions='';
         if ($canOpenGm) $actions.=self::action(self::gmUrl($view,$tid),$eid===null?'Настроить бой':'Управление боем','gm');
         $builder=self::builderUrl($view,$tid);
-        if ($builder!==null) $actions.=self::action($builder,'Конструктор действий','builder');
+        if ($builder!==null) $actions.=self::action($builder,'Конструктор действий','builder',$roster);
         if ($actions!=='') $html.='<nav class="af-acs-combat-bar__actions" aria-label="Действия ACS">'.$actions.'</nav>';
         return $html.'</section>';
     }
