@@ -153,3 +153,13 @@
         var(--atf-color-surface,#111d30);
 }
 .af-acs-gm--wizard .af-acs-gm__steps i {color:var(--acs-accent);margin-inline-end:.25rem}
+
+.af-acs-gm__member-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    gap: .5rem;
+}
+.af-acs-gm__members .af-acs-gm__search label {flex: 1; min-width: 0;}
+.af-acs-gm__members .af-acs-gm__search input {width: 100%;}
+.af-acs-gm__members .atf-button,
+.af-acs-gm__members button {min-height: 2.25rem;}

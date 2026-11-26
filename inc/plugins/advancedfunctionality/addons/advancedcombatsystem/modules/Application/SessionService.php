@@ -12,6 +12,71 @@ final class AF_ACS_SessionService
         $this->authorize($session,false);$gm=$this->lifecycleGm($session);
         return ['session'=>$session,'members'=>$this->repository->members($id),'can_manage'=>$this->canManage($session),'can_audit'=>$gm,'can_register_characters'=>$session['status']==='active' && $gm,'can_request_close'=>$session['status']==='active'&&$gm,'can_close'=>$session['status']==='pending_close'&&$gm,'can_archive'=>$session['status']==='closed'&&$gm,'can_reopen'=>$session['status']==='closed'&&$gm,'outstanding_obligations'=>$withObligations&&$gm?$this->repository->obligations($id):null,'can_register_own'=>$session['status']==='active' && (bool)array_intersect(array_column($this->repository->roles($id,$this->access->uid()),'role'),['owner','gm','assistant_gm','player'])];
     }
+    public const PLAYING_ROLES = ['owner','gm','assistant_gm','player'];
+
+    /** Minimal public profile and the active roles, scoped to the authorized session. */
+    public function memberProfile(string $sid,string $uid): ?array
+    {
+        $session=$this->repository->session(AF_ACS_Repository::integer($sid));
+        $this->authorize($session,false);
+        $uid=AF_ACS_Repository::integer($uid,'4294967295');
+        return $this->publicMember($uid,array_column($this->repository->roles($sid,$uid),'role'),
+            $session,$this->canManage($session),$this->canManagePrivilegedRoles($session));
+    }
+
+    public function listedMemberProfiles(array $view): array
+    {
+        $roles=[];
+        $now=time();
+        foreach ($view['members'] as $row) {
+            if ($row['expires_at']===null || (int)$row['expires_at']>$now) $roles[$row['uid']][]=$row['role'];
+        }
+        $profiles=[];
+        $privileged=$this->canManagePrivilegedRoles($view['session']);
+        foreach ($roles as $uid=>$active) {
+            $profile=$this->publicMember((string)$uid,$active,$view['session'],$view['can_manage'],$privileged);
+            if ($profile!==null) $profiles[]=$profile;
+        }
+        return $profiles;
+    }
+
+    private function canManagePrivilegedRoles(array $session): bool
+    {
+        $actor=$this->access->uid();
+        return $this->access->administrator() || (string)$session['owner_uid']===$actor
+            && in_array('owner',array_column($this->repository->roles((string)$session['id'],$actor),'role'),true);
+    }
+
+    private function publicMember(string $uid,array $roles,array $session,bool $canManage,bool $privileged): ?array
+    {
+        $user=get_user((int)$uid);
+        if (!$user) return null;
+        $editable=$canManage && $uid!==(string)$session['owner_uid']
+            && ($privileged || !array_intersect($roles,['gm','assistant_gm']));
+        return ['uid'=>$uid,'username'=>$user['username'],'roles'=>$roles,'editable'=>$editable,'privileged'=>$privileged];
+    }
+
+    public function searchMembers(string $sid,string $query): array
+    {
+        $session=$this->repository->session(AF_ACS_Repository::integer($sid));
+        $this->authorize($session,true);
+        $query=ltrim(trim($query),'#');
+        if ($query==='' || mb_strlen($query)>80 || !mb_check_encoding($query,'UTF-8')) return [];
+        $results=[];
+        $privileged=$this->canManagePrivilegedRoles($session);
+        foreach ($this->repository->memberSearch($query) as $uid) {
+            try {
+                $this->access->thread((string)$session['tid'],(string)$uid);
+            } catch (RuntimeException $error) {
+                if ($error->getMessage()!=='ACS_THREAD_UNAVAILABLE') throw $error;
+                continue;
+            }
+            $profile=$this->publicMember((string)$uid,array_column($this->repository->roles($sid,(string)$uid),'role'),$session,true,$privileged);
+            if ($profile!==null) $results[]=$profile;
+        }
+        return $results;
+    }
+
     private function lifecycleGm(array $session): bool
     {
         return AF_ACS_AuthorizationService::sessionGm($session,$this->repository->roles($session['id'],$this->access->uid()),$this->access->uid());

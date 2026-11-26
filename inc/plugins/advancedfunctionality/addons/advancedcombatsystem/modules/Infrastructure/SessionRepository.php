@@ -51,6 +51,21 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
         $rows=$this->sql('SELECT uid,role,role_version,expires_at FROM '.$this->table('session_roles').' WHERE session_id=? ORDER BY uid,role LIMIT 201',[self::integer($id)])['rows'];
         foreach($rows as &$row) {foreach(['uid','role_version','expires_at'] as $field)if($row[$field]!==null)$row[$field]=(string)$row[$field];}unset($row);return $rows;
     }
+    public function memberSearch(string $query): array
+    {
+        if (preg_match('/\A[0-9]{1,10}\z/D',$query)) {
+            $where='uid=? OR LOCATE(?,username)>0';
+            $order='(uid=?) DESC,username,uid';
+            $params=[$query,$query,$query];
+        } else {
+            $where='LOCATE(?,username)>0';
+            $order='username,uid';
+            $params=[$query];
+        }
+        return array_column($this->sql('SELECT uid FROM `'.$this->prefix.'users` WHERE '.$where
+            .' ORDER BY '.$order.' LIMIT 20',$params)['rows'],'uid');
+    }
+
     /** Access candidates only: application must check native topic permissions too. */
     public function candidates(string $uid, bool $administrator, string $after = '0', ?string $tid = null): array
     {

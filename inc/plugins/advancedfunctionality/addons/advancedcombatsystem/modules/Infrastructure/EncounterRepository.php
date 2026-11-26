@@ -177,6 +177,11 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
     {
         return array_map(fn($r)=>['uid'=>(string)$r['uid'],'role'=>$r['role']],$this->sql('SELECT uid,role FROM '.$this->table('session_roles')." WHERE session_id=? AND role IN ('owner','gm') AND (expires_at IS NULL OR expires_at>?) ORDER BY uid LIMIT 201",[$sid,time()])['rows']);
     }
+    public function candidateSummary(string $sid,string $id): ?array
+    {
+        return $this->sql('SELECT id,name,kind,owner_uid FROM '.$this->table('entities')
+            .' WHERE session_id=? AND id=?',[$sid,self::integer($id)])['rows'][0]??null;
+    }
     public function candidatesForEncounter(string $sid,string $after,bool $recent=false): array
     {
         $cursor=self::integer($after,zero:true);
