@@ -59,6 +59,17 @@ function af_advancedcombatsystem_is_installed(): bool
     } catch (Throwable $error) { return false; }
 }
 
+/** A failed schema probe is not evidence of a fresh installation. */
+function af_advancedcombatsystem_needs_install(): bool
+{
+    try {
+        return af_advancedcombatsystem_migrations()->status()['error'] === 'ACS_NOT_INSTALLED';
+    } catch (Throwable $error) {
+        // The activation path reports connection and probe failures with their context.
+        return false;
+    }
+}
+
 /** Same AF/MyBB ACP authorization boundary and CSRF token; no public endpoint. */
 function af_advancedcombatsystem_lifecycle(string $operation, callable $command): bool
 {
@@ -69,17 +80,38 @@ function af_advancedcombatsystem_lifecycle(string $operation, callable $command)
     require_once __DIR__.'/modules/Application/AuthorizationService.php';
     (new AF_ACS_AuthorizationService)->requirePermission('admin.lifecycle');
     verify_post_check($mybb->get_input('my_post_key'));
+    require_once __DIR__.'/modules/Administration/LifecycleFailure.php';
+    $phase = 'environment';
     try {
         // Turning ACS off must remain possible even with broken dependencies.
         if ($operation !== 'deactivate' && (PHP_VERSION_ID < 80400 || PHP_INT_SIZE !== 8 || !extension_loaded('mysqli') || !extension_loaded('mbstring')
             || (int)$mybb->version_code < 1840 || (int)$mybb->version_code >= 1900)) { throw new RuntimeException('ACS_ENVIRONMENT_INCOMPATIBLE'); }
+        $phase = $operation === 'activate' ? 'open_repository' : 'lifecycle_command';
         $command();
         af_clear_addon_lifecycle_diagnostic('advancedcombatsystem');
         return true;
     } catch (Throwable $error) {
-        $safe = preg_match('/\AACS_[A-Z_]+(?: \[error_id=[a-f0-9]{32}\])?\z/D', $error->getMessage()) ? $error->getMessage() : 'ACS_DATABASE_ERROR';
-        $failure = new RuntimeException($safe);
-        af_store_addon_lifecycle_diagnostic('advancedcombatsystem', $operation, 'acs_lifecycle', $failure);
+        $context = [];
+        if ($error instanceof AF_ACS_LifecycleFailure) {
+            $phase = $error->phase;
+            $context = $error->schema;
+        }
+        if (preg_match('/\A(ACS_[A-Z0-9_]{1,90}) \[error_id=([a-f0-9]{32})\]\z/D', $error->getMessage(), $match)) {
+            [, $code, $errorId] = $match;
+        } else {
+            $code = AF_ACS_LifecycleFailure::safeCode($error);
+            $errorId = bin2hex(random_bytes(16));
+        }
+        if ($code === 'ACS_LIFECYCLE_UNEXPECTED') {
+            error_log('ACS lifecycle '.$operation.' phase='.$phase.' category='.$code.' error_id='.$errorId);
+        }
+        $failure = new RuntimeException($code);
+        af_store_addon_lifecycle_diagnostic('advancedcombatsystem', $operation, $phase, $failure, [
+            'schema_status' => $context['status'] ?? 'NOT_CHECKED',
+            'migration' => $context['version'] ?? null,
+            'object' => $context['object'] ?? null,
+            'error_id' => $errorId,
+        ]);
         throw $failure;
     }
 }

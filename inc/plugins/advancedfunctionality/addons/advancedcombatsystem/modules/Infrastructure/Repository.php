@@ -31,7 +31,10 @@ class AF_ACS_Repository
         if (!preg_match('/\A[A-Za-z0-9_]*\z/D', $this->prefix) || strlen($this->prefix.'af_acs_schema_migrations') > 64) {
             throw new RuntimeException('ACS_INVALID_TABLE_PREFIX');
         }
-        $databaseName = $this->sql('SELECT DATABASE() AS db')['rows'][0]['db'];
+        $databaseName = $this->sql('SELECT DATABASE() AS db')['rows'][0]['db'] ?? null;
+        if (!is_string($databaseName) || $databaseName === '') {
+            throw new RuntimeException('ACS_DB_SCHEMA_NOT_SELECTED');
+        }
         $this->transactions = new AF_ACS_TransactionManager($link, 'acs:'.substr(hash('sha256', $databaseName.':'.$this->prefix), 0, 56));
     }
 
@@ -67,13 +70,18 @@ class AF_ACS_Repository
         $statement = null;
         try {
             $statement = $this->connection->prepare($sql);
-            if (!$statement) { throw new RuntimeException('ACS_DATABASE_ERROR'); }
+            if (!$statement) { throw new RuntimeException('ACS_DATABASE_ERROR', $this->connection->errno); }
             if ($parameters) {
                 $parameters = array_map(static fn($v) => $v === null ? null : (string)$v, $parameters);
-                $statement->bind_param(str_repeat('s', count($parameters)), ...$parameters);
+                if (!$statement->bind_param(str_repeat('s', count($parameters)), ...$parameters)) {
+                    throw new RuntimeException('ACS_DATABASE_ERROR', $statement->errno);
+                }
             }
-            if (!$statement->execute()) { throw new RuntimeException('ACS_DATABASE_ERROR'); }
+            if (!$statement->execute()) { throw new RuntimeException('ACS_DATABASE_ERROR', $statement->errno); }
             $result = $statement->get_result();
+            if ($result === false && $statement->field_count > 0) {
+                throw new RuntimeException('ACS_DATABASE_ERROR', $statement->errno);
+            }
             return ['rows' => $result ? $result->fetch_all(MYSQLI_ASSOC) : [], 'affected' => $statement->affected_rows, 'id' => (string)$statement->insert_id];
         } catch (mysqli_sql_exception $error) {
             // No query, connection information or data in public exceptions.
