@@ -2,6 +2,7 @@
 
 if (!defined('IN_MYBB')) { die('No direct access'); }
 require_once __DIR__.'/../Infrastructure/Repository.php';
+require_once __DIR__.'/LifecycleFailure.php';
 
 final class AF_ACS_Migrations extends AF_ACS_Repository
 {
@@ -205,7 +206,7 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
     }
 
     /** Batch metadata readback so lifecycle and gameplay can use the same strict check. */
-    private function metadata(?string $name = null): array
+    private function metadata(?string $name = null, ?string &$phase = null): array
     {
         $prefix = $this->prefix.'af_acs_';
         $scope = ' WHERE TABLE_SCHEMA=DATABASE() AND '.($name === null ? 'LEFT(TABLE_NAME,?)=?' : 'TABLE_NAME=?');
@@ -219,6 +220,7 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
         ];
         $metadata = [];
         foreach ($queries as $kind => [$fields, $source, $suffix]) {
+            $phase = 'metadata_'.$kind;
             foreach ($this->sql('SELECT '.$fields.' FROM information_schema.'.$source.$scope.$suffix, $args)['rows'] as $row) {
                 $metadata[substr($row['TABLE_NAME'], strlen($prefix))][$kind][] = $row;
             }
@@ -313,11 +315,13 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
     {
         $result = ['schema_version' => null, 'migrations' => [], 'error' => null, 'database' => null,
             'status' => 'RECOVERY_REQUIRED', 'structure' => 'NOT_CHECKED', 'version' => null,
-            'object' => null, 'checksum_differences' => []];
+            'object' => null, 'checksum_differences' => [], 'phase' => 'database_environment'];
         try {
             $result['database'] = $this->environment();
+            $result['phase'] = 'migration_registry';
             $registry ??= $this->registry($result['version'], $result['object']);
-            $metadata = $this->metadata();
+            $metadata = $this->metadata(null, $result['phase']);
+            $result['phase'] = 'verify_journal';
             if (!isset($metadata['schema_migrations']['table'])) {
                 if ($metadata) {
                     $result['version'] = $registry[0]['version'];
@@ -330,16 +334,19 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
             $result['object'] = 'schema_migrations';
             $result['version'] = $registry[0]['version'];
             $this->verify('schema_migrations', $registry[0]['schema']['schema_migrations'], $metadata);
-            $result['object'] = null;
+            $result['phase'] = 'read_journal';
             $result['migrations'] = $journal = $this->rows();
+            $result['object'] = null;
             $known = array_column($registry, null, 'version');
             $rows = array_column($journal, null, 'version');
             foreach (array_keys($known) as $version) {
                 if (($rows[$version]['status'] ?? '') !== 'completed') { break; }
                 $result['schema_version'] = $version;
             }
+            $result['phase'] = 'validate_journal';
             $this->validateJournal($registry, $journal, $result['version']);
             $result['checksum_differences'] = $this->checksumDifferences($known, $rows);
+            $result['phase'] = 'verify_schema';
             $pending = null;
             foreach ($known as $version => $migration) {
                 $row = $rows[$version] ?? null;
@@ -367,14 +374,16 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
             $result['structure'] = $pending === null ? 'VERIFIED' : 'PARTIAL';
             // Only a recorded, unfinished migration still depends on the exact source used to begin it.
             if ($pending !== null) {
+                $result['phase'] = 'require_ready';
                 if (isset($result['checksum_differences'][$pending])) {
                     throw new RuntimeException('ACS_MIGRATION_PENDING_CHECKSUM_MISMATCH');
                 }
                 throw new RuntimeException('ACS_MIGRATION_INCOMPLETE');
             }
             $result['status'] = 'READY';
+            $result['phase'] = null;
         } catch (Throwable $error) {
-            $result['error'] = self::safeCode($error);
+            $result['error'] = AF_ACS_LifecycleFailure::safeCode($error);
             if (str_starts_with($result['error'], 'ACS_SCHEMA_')) {
                 $result['status'] = 'SCHEMA_DRIFT';
                 $result['structure'] = 'FAILED';
@@ -390,13 +399,15 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
     }
 
     /** Called only by ordinary lifecycle operations under the maintenance lock. */
-    private function recordChecksumDifferences(array $differences): void
+    private function recordChecksumDifferences(array $differences, ?string &$phase = null): void
     {
         if (!$differences) { return; }
         $details = self::json(['schema_version' => 1, 'code' => 'ACS_MIGRATION_CHECKSUM_DRIFT', 'differences' => $differences]);
         $id = hash('sha256', $details);
         $table = $this->table('diagnostics');
+        $phase = 'checksum_diagnostic_lookup';
         if ($this->sql('SELECT 1 FROM '.$table.' WHERE error_id=?', [$id])['rows']) { return; }
+        $phase = 'checksum_diagnostic_insert';
         $this->sql('INSERT INTO '.$table.' (error_id,request_id,category,operation,phase,created_at,details_json) VALUES (?,?,?,?,?,?,?)',
             [$id, 'redeploy:'.$id, 'MAINTENANCE', 'migration_redeploy', 'schema_verified', time(), $details]);
     }
@@ -404,11 +415,6 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
     public function assertWritableSchema(): void
     {
         $this->assertInstalled();
-    }
-
-    private static function safeCode(Throwable $error): string
-    {
-        return preg_match('/\AACS_[A-Z_]+\z/D', $error->getMessage()) ? $error->getMessage() : 'ACS_DATABASE_ERROR';
     }
 
     public function assertInstalled(): void
@@ -423,11 +429,36 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
 
     public function activate(): void
     {
-        $this->transactions->exclusive(function () {
-            $state = $this->status();
-            $this->requireReady($state);
-            $this->recordChecksumDifferences($state['checksum_differences']);
-        });
+        $state = [];
+        $phase = 'maintenance_lock';
+        try {
+            $this->transactions->exclusive(function () use (&$state, &$phase) {
+                $phase = 'schema_status';
+                $state = $this->status();
+                $phase = $state['phase'] ?? 'require_ready';
+                $this->requireReady($state);
+                $phase = 'record_checksum_differences';
+                $this->recordChecksumDifferences($state['checksum_differences'], $phase);
+                $phase = 'maintenance_finalize';
+            });
+        } catch (Throwable $error) {
+            $phase = match ($error->getMessage()) {
+                'ACS_DB_SESSION_UNAVAILABLE', 'ACS_DB_SESSION_SETTINGS_FAILED', 'ACS_DB_UTF8MB4_UNAVAILABLE' =>
+                    $state ? $phase : 'connection_settings',
+                'ACS_DB_SESSION_RESTORE_FAILED' => 'restore_connection_settings',
+                'ACS_LOCK_RELEASE_UNKNOWN' => 'release_maintenance_lock',
+                'ACS_AMBIENT_TRANSACTION' => 'check_transaction_boundary',
+                default => $phase,
+            };
+            $schema = array_intersect_key($state, array_flip(['status', 'version', 'object']));
+            if (in_array($phase, ['record_checksum_differences', 'checksum_diagnostic_lookup', 'checksum_diagnostic_insert'], true)) {
+                $schema['object'] = 'diagnostics';
+                if (count($state['checksum_differences']) === 1) {
+                    $schema['version'] = array_key_first($state['checksum_differences']);
+                }
+            }
+            throw new AF_ACS_LifecycleFailure($error, $phase, $schema);
+        }
     }
 
     public function run(): void
@@ -483,10 +514,10 @@ final class AF_ACS_Migrations extends AF_ACS_Repository
                     $this->sql('UPDATE '.$this->table('schema_migrations').' SET status=?,error_id=?,updated_at=? WHERE version=?', ['failed', $errorId, time(), $version]);
                     if ($this->exists('diagnostics')) {
                         $this->verify('diagnostics', $first['schema']['diagnostics']);
-                        $this->sql('INSERT INTO '.$this->table('diagnostics').' (error_id,request_id,category,operation,phase,created_at,details_json) VALUES (?,?,?,?,?,?,?)', [$errorId, 'migration:'.$errorId, 'DEPENDENCY_ERROR', 'migration', 'ddl_readback', time(), self::json(['schema_version' => 1, 'code' => self::safeCode($error)])]);
+                        $this->sql('INSERT INTO '.$this->table('diagnostics').' (error_id,request_id,category,operation,phase,created_at,details_json) VALUES (?,?,?,?,?,?,?)', [$errorId, 'migration:'.$errorId, 'DEPENDENCY_ERROR', 'migration', 'ddl_readback', time(), self::json(['schema_version' => 1, 'code' => AF_ACS_LifecycleFailure::safeCode($error)])]);
                     }
                     // Keep all created objects/data. Never pretend DDL rolled back.
-                    throw new RuntimeException(self::safeCode($error).' [error_id='.$errorId.']');
+                    throw new RuntimeException(AF_ACS_LifecycleFailure::safeCode($error).' [error_id='.$errorId.']');
                 }
             }
             $state = $this->inspectStatus($registry);

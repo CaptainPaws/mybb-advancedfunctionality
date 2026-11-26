@@ -300,7 +300,7 @@ function af_front_output_template_string(string $pageTitle, string $templateStri
 
 
 /** Store a body-free lifecycle failure that survives the ACP redirect. */
-function af_store_addon_lifecycle_diagnostic(string $addon, string $operation, string $stage, Throwable $error): array
+function af_store_addon_lifecycle_diagnostic(string $addon, string $operation, string $stage, Throwable $error, array $context = []): array
 {
     $safeMessage = str_replace(["\r", "\n"], ' ', $error->getMessage());
     $safeMessage = (string)preg_replace('~\b(password|passwd|pwd)\s*[=:]\s*[^\s;,]+~i', '$1=[redacted]', $safeMessage);
@@ -313,6 +313,18 @@ function af_store_addon_lifecycle_diagnostic(string $addon, string $operation, s
         'template_sid' => preg_match('~\[sid=(-?\d+)\]~', $stage, $match) ? (int)$match[1] : null,
         'recorded_at' => defined('TIME_NOW') ? TIME_NOW : time(),
     ];
+    if ($diagnostic['addon'] === 'advancedcombatsystem') {
+        foreach ([
+            'schema_status' => '/\A[A-Z_]{1,40}\z/D',
+            'migration' => '/\A[0-9]{3}_[a-z0-9_]{1,60}\z/D',
+            'object' => '/\A[a-zA-Z0-9_]{1,64}\z/D',
+            'error_id' => '/\A[a-f0-9]{32}\z/D',
+        ] as $field => $pattern) {
+            if (is_string($context[$field] ?? null) && preg_match($pattern, $context[$field])) {
+                $diagnostic[$field] = $context[$field];
+            }
+        }
+    }
     $path = AF_CACHE.'lifecycle_'.$diagnostic['addon'].'.json';
     @file_put_contents($path, json_encode($diagnostic, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), LOCK_EX);
     return $diagnostic;
@@ -338,6 +350,16 @@ function af_format_addon_lifecycle_diagnostic(array $diagnostic): string
     $name = ['adaptivethemeframework' => 'ATF', 'advancedcombatsystem' => 'AdvancedCombatSystem'][$addon] ?? $addon;
     $operation = (string)($diagnostic['operation'] ?? 'enable');
     $action = in_array($operation, ['enable', 'activate'], true) ? 'activation' : $operation;
+    if ($addon === 'advancedcombatsystem' && isset($diagnostic['error_id'])) {
+        $message = $name.' lifecycle failed; operation: '.$operation
+            .'; phase: '.($diagnostic['stage'] ?? 'unknown')
+            .'; code: '.($diagnostic['message'] ?? 'unknown')
+            .'; schema: '.($diagnostic['schema_status'] ?? 'NOT_CHECKED');
+        foreach (['migration', 'object', 'error_id'] as $field) {
+            if (isset($diagnostic[$field])) $message .= '; '.$field.': '.$diagnostic[$field];
+        }
+        return $message;
+    }
     return $name.' '.$action.' failed; stage: '.($diagnostic['stage'] ?? 'unknown')
         .'; exception: '.($diagnostic['exception'] ?? 'unknown')
         .'; message: '.($diagnostic['message'] ?? 'unknown');
@@ -1236,7 +1258,7 @@ class AF_Admin
         if ($id === 'advancedcombatsystem') {
             // ACS owns separate, resumable install and non-destructive activate.
             // Other addons retain their existing lifecycle contract.
-            if (!af_advancedcombatsystem_is_installed()) {
+            if (af_advancedcombatsystem_needs_install()) {
                 af_advancedcombatsystem_install();
             }
             if (af_advancedcombatsystem_activate() !== true) { return false; }

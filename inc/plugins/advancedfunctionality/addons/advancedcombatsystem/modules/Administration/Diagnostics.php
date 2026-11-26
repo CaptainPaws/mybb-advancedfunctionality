@@ -46,9 +46,12 @@ final class AF_ACS_Diagnostics
     {
         (new AF_ACS_AuthorizationService)->requirePermission('admin.diagnostics.view');
         try { require_once __DIR__.'/Migrations.php'; $state=af_advancedcombatsystem_migrations()->status(); }
-        catch (Throwable $error) { $state=['schema_version'=>null,'migrations'=>[],'error'=>'ACS_DATABASE_UNAVAILABLE','database'=>null,
-            'status'=>'RECOVERY_REQUIRED','structure'=>'NOT_CHECKED','version'=>null,'object'=>null,
-            'checksum_differences'=>[]]; }
+        catch (Throwable $error) {
+            require_once __DIR__.'/LifecycleFailure.php';
+            $state=['schema_version'=>null,'migrations'=>[],'error'=>AF_ACS_LifecycleFailure::safeCode($error),'database'=>null,
+                'status'=>'RECOVERY_REQUIRED','structure'=>'NOT_CHECKED','version'=>null,'object'=>null,
+                'checksum_differences'=>[]];
+        }
         $state['required_version']=class_exists('AF_ACS_Migrations',false)?AF_ACS_Migrations::VERSION:null;
         $state['ready']=$state['status']==='READY';
         return $state;
@@ -192,8 +195,15 @@ final class AF_ACS_Diagnostics
         $last = function_exists('af_read_addon_lifecycle_diagnostic') ? af_read_addon_lifecycle_diagnostic('advancedcombatsystem') : null;
         $code = $last['message'] ?? '';
         // Lifecycle files may contain older messages. Never expose raw text.
-        if (is_string($code) && preg_match('/\AACS_[A-Z_]+(?: \[error_id=[a-f0-9]{32}\])?\z/D', $code)) {
-            $rows[] = ['error_id' => 'lifecycle', 'category' => 'LIFECYCLE', 'operation' => 'lifecycle', 'phase' => 'acs_lifecycle', 'created_at' => (int)($last['recorded_at'] ?? 0), 'code' => $code];
+        if (is_string($code) && preg_match('/\AACS_[A-Z0-9_]{1,90}(?: \[error_id=[a-f0-9]{32}\])?\z/D', $code)) {
+            $id = $last['error_id'] ?? '';
+            $operation = $last['operation'] ?? '';
+            $phase = $last['stage'] ?? '';
+            $rows[] = ['error_id' => is_string($id) && preg_match('/\A[a-f0-9]{32}\z/D', $id) ? $id : 'lifecycle',
+                'category' => 'LIFECYCLE',
+                'operation' => in_array($operation, ['install','activate','deactivate','upgrade','uninstall'], true) ? $operation : 'lifecycle',
+                'phase' => is_string($phase) && preg_match('/\A[a-z_]{1,64}\z/D', $phase) ? $phase : 'acs_lifecycle',
+                'created_at' => (int)($last['recorded_at'] ?? 0), 'code' => $code];
         }
         return $rows;
     }
