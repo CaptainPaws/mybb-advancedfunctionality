@@ -80,19 +80,20 @@ final class AF_ACS_EntityService
     }
 
     /** Only the selected source is read. The card receives no combat snapshot or private source data. */
-    public function characterPrefill(string $sid,string $key): array
+    public function sourcePrefill(string $sid,string $kind,string $key): array
     {
         $phase='access';
         $failure=null;
         try {
-            [$dto]=$this->registrationSource($sid,'character',$key,$phase,static function (Throwable $error,string $point) use (&$failure): void {
+            $onError=$kind==='character' ? static function (Throwable $error,string $point) use (&$failure): void {
                 $failure=af_advancedcombatsystem_source_check_error($error,$point,'entity_prefill');
-            });
+            } : null;
+            [$dto]=$this->registrationSource($sid,$kind,$key,$phase,$onError);
             if ($failure!==null) return $failure;
             if (!isset($dto['characteristics']['hp'])) return [];
             return self::sourceHp($dto);
         } catch (Throwable $error) {
-            return $this->validationFailure($error,$phase,'entity_prefill');
+            return $this->validationFailure($error,$phase,$kind==='character'?'entity_prefill':null);
         }
     }
 
@@ -102,7 +103,7 @@ final class AF_ACS_EntityService
         $phase='access';
         [$dto,$grant,$actor]=$this->registrationSource($sid,$kind,$key,$phase,$onSourceError);
         $owner=$grant?->ownerUid??$actor;
-        if ($prefill!==null && $kind==='character' && isset($dto['characteristics']['hp'])) {
+        if ($prefill!==null && $kind!=='pet' && isset($dto['characteristics']['hp'])) {
             try {
                 $prefill=self::sourceHp($dto);
             } catch (RuntimeException $error) {
@@ -203,7 +204,7 @@ final class AF_ACS_EntityService
         }
     }
 
-    private function validationFailure(Throwable $error,string $phase,string $operation='entity_validate'): array
+    private function validationFailure(Throwable $error,string $phase,?string $operation='entity_validate'): array
     {
         $code=$error->getMessage();
         $denied=in_array($code,['ACS_LOGIN_REQUIRED','ACS_CSRF_REQUIRED','ACS_GM_REQUIRED','ACS_REGISTRATION_DENIED','ACS_SESSION_UNAVAILABLE',
@@ -222,7 +223,11 @@ final class AF_ACS_EntityService
             'ACS_DEPENDENCY_UNAVAILABLE','ACS_SESSION_TRANSITION_BLOCKED','ACS_POST_REQUIRED'=>'source',
             default=>$denied || in_array($code,self::CHARACTER_SOURCE_ERRORS,true)?'source':null,
         };
-        if ($path===null) return af_advancedcombatsystem_source_check_error($error,$phase,$operation);
+        if ($path===null) {
+            if ($operation===null) return ['ready'=>false,'status'=>'error','diagnostics'=>[],
+                'message'=>'Не удалось предзаполнить данные. Выполните проверку источника.'];
+            return af_advancedcombatsystem_source_check_error($error,$phase,$operation);
+        }
         if ($code==='ACS_DEFINITION_VERSION_CONFLICT' && $phase==='ability_definitions') {
             return ['ready'=>false,'status'=>'blocked','diagnostics'=>[
                 ['code'=>'ability_version_pin_mismatch','path'=>'abilities','severity'=>'error'],
