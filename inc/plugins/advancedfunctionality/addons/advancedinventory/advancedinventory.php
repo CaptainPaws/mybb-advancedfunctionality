@@ -30,7 +30,13 @@ function af_advancedinventory_init(): void
 
 function af_advinv_run_customization_subtype_migration(): void
 {
-    if (af_advinv_reservation_writers_enabled()) return;
+    try {
+        if (af_advinv_reservation_writers_enabled()) return;
+    } catch (RuntimeException $error) {
+        // A partial owner deployment still blocks writers, while ACP can resume setup.
+        if ($error->getMessage() !== 'INV_SCHEMA_NOT_READY') throw $error;
+        return;
+    }
     global $db;
 
     static $done = false;
@@ -91,14 +97,8 @@ function af_advancedinventory_install(): void
     af_advinv_normalize_customization_items_in_db();
 
     if (!$db->table_exists('af_advinv_equipped')) {
-        $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_advinv_equipped (
-            uid INT UNSIGNED NOT NULL,
-            equip_slot VARCHAR(64) NOT NULL,
-            item_id INT UNSIGNED NOT NULL,
-            updated_at INT UNSIGNED NOT NULL,
-            PRIMARY KEY (uid, equip_slot),
-            KEY uid_item (uid, item_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        require_once __DIR__.'/modules/OwnerSchema.php';
+        $db->write_query(AF_ADVINV_OwnerSchema::baseStatements(TABLE_PREFIX)['equipped']);
     }
 
     af_advancedinventory_templates_install_or_update();
@@ -822,26 +822,8 @@ function af_advancedinventory_upgrade_schema(): void
     af_advinv_debug_log('schema_check_start', ['table' => TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS]);
 
     if (!$db->table_exists(AF_ADVINV_TABLE_ITEMS)) {
-        $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " (
-            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            uid INT UNSIGNED NOT NULL,
-            entity VARCHAR(32) NOT NULL DEFAULT 'equipment',
-            slot VARCHAR(32) NOT NULL DEFAULT 'stash',
-            subtype VARCHAR(32) NOT NULL DEFAULT '',
-            kb_type VARCHAR(32) NOT NULL DEFAULT '',
-            kb_key VARCHAR(64) NOT NULL DEFAULT '',
-            title VARCHAR(255) NOT NULL DEFAULT '',
-            icon VARCHAR(255) NOT NULL DEFAULT '',
-            qty INT NOT NULL DEFAULT 1,
-            meta_json MEDIUMTEXT NULL,
-            created_at INT UNSIGNED NOT NULL,
-            updated_at INT UNSIGNED NOT NULL,
-            KEY uid_entity (uid, entity),
-            KEY uid_entity_subtype (uid, entity, subtype),
-            KEY uid_slot (uid, slot),
-            KEY uid_slot_subtype (uid, slot, subtype),
-            KEY uid_kb (uid, kb_type, kb_key)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        require_once __DIR__.'/modules/OwnerSchema.php';
+        $db->write_query(AF_ADVINV_OwnerSchema::baseStatements(TABLE_PREFIX)['items']);
         af_advinv_debug_log('schema_upgrade_done', ['added_cols' => ['__table_created__'], 'added_keys' => ['uid_entity', 'uid_entity_subtype', 'uid_slot', 'uid_slot_subtype', 'uid_kb']]);
         af_advancedinventory_log_schema_columns();
     } else {
@@ -908,17 +890,8 @@ function af_advancedinventory_upgrade_schema(): void
     }
 
     if (!$db->table_exists('af_advinv_support_slots')) {
-        $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_advinv_support_slots (
-            uid INT UNSIGNED NOT NULL,
-            slot_code VARCHAR(64) NOT NULL,
-            item_id BIGINT UNSIGNED NOT NULL,
-            sortorder INT NOT NULL DEFAULT 0,
-            created_at BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            updated_at BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            PRIMARY KEY (uid, slot_code),
-            KEY uid_item (uid, item_id),
-            KEY uid_sortorder (uid, sortorder)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        require_once __DIR__.'/modules/OwnerSchema.php';
+        $db->write_query(AF_ADVINV_OwnerSchema::baseStatements(TABLE_PREFIX)['support_slots']);
     }
 
     af_advinv_entities_upgrade_schema();

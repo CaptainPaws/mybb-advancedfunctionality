@@ -457,8 +457,10 @@ function af_advancedcombatsystem_source_check_error(Throwable $error,string $pha
     }
     error_log(sprintf('ACS %s error_id=%s phase=%s exception=%s code=%s native_code=%d location=%s:%d',
         $operation,$id,$phase,get_class($error),$code,(int)$error->getCode(),basename($error->getFile()),$error->getLine()));
-    return ['ready'=>false,'status'=>'error','diagnostics'=>[],'error_id'=>$id,
-        'message'=>'Не удалось проверить источник персонажа. Код обращения: '.$id];
+    $schemaBlocked=$code==='INV_SCHEMA_NOT_READY';
+    return ['ready'=>false,'status'=>'error','diagnostics'=>[],'error_id'=>$id,'inventory_schema_blocked'=>$schemaBlocked,
+        'message'=>($schemaBlocked ? 'Схема AdvancedInventory не подготовлена для ACS. Обратитесь к администратору'
+            : 'Не удалось проверить источник персонажа').'. Код обращения: '.$id];
 }
 
 function af_advancedcombatsystem_session_failure(Throwable $error): array

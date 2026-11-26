@@ -149,6 +149,7 @@ final class AF_ACS_EntitiesPage
                 if (!$characterCard && isset($choice['sheet_url'])) echo ' · <a href="'.self::esc(self::forumUrl($choice['sheet_url'])).'">Лист персонажа</a>';
                 if (!$characterCard && isset($choice['thread_id'])) echo ' · <a href="'.self::esc(self::forumUrl('showthread.php?tid='.$choice['thread_id'])).'">Тема #'.self::esc($choice['thread_id']).'</a>';
                 if ($message!=='') echo '<p role="alert">'.self::esc($message).'</p>';
+                if ($checked && !empty($check['inventory_schema_blocked'])) self::inventorySchemaLinks($check['error_id']);
                 if ($issues) {
                     echo self::diagnostics($issues, !$picker);
                     if (isset($choice['application_url'])) echo ' <a href="'.self::esc(self::forumUrl($choice['application_url'])).'">Редактировать анкету</a>';
@@ -178,6 +179,16 @@ final class AF_ACS_EntitiesPage
         if(($choices['next_after']??null)!==null)echo '<a href="'.self::esc($url.($embedded?'&session_id='.$sid:'').($picker?'':'&kind='.$kind).'&source_after='.$choices['next_after'].($slug!==''?'&source_slug='.rawurlencode($slug):'')).'">Следующие источники</a>';
         if (!$embedded) echo '</details>';
     }
+    private static function inventorySchemaLinks(string $id): void
+    {
+        global $mybb;
+        if (!(new AF_ACS_AuthorizationService())->administratorCanCreateSession()) return;
+        $directory=trim((string)($mybb->config['admin_dir']??'admin'),'/');
+        $base=rtrim((string)$mybb->settings['bburl'],'/').'/'.rawurlencode($directory).'/index.php?module=advancedfunctionality';
+        echo '<p><a href="'.self::esc($base.'&af_view=advancedcombatsystem&acs_section=diagnostics&acs_error_id='.$id).'">Диагностика ACS</a> · '
+            .'<a href="'.self::esc($base.'&af_view=advancedinventory&do=acs_schema').'">Подготовка схемы AdvancedInventory</a></p>';
+    }
+
     public static function kindLabel(string $kind): string
     {
         return ['character'=>'Игрок','npc'=>'NPC','monster'=>'Монстр','pet'=>'Питомец','summon'=>'Призыв'][$kind]??'Существо';

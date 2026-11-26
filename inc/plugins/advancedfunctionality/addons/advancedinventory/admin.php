@@ -52,6 +52,10 @@ class AF_Admin_Advancedinventory
     {
         global $mybb;
         $view = trim((string)$mybb->get_input('do'));
+        if ($view === 'acs_schema') {
+            require_once __DIR__.'/modules/OwnerSchemaAdmin.php';
+            return AF_ADVINV_OwnerSchemaAdmin::render(self::baseUrl('acs_schema'));
+        }
         if ($view === 'shop_map') {
             return self::render_shop_map();
         }
