@@ -27,6 +27,19 @@ final class AF_ACS_EncountersPage
             $registrationPhase=$characterRegistration?'registration_scope':null;
             $assignmentPhase=$op==='participant_add'?'participant_scope':null;
             $rolePhase=$op==='session_set_role'?'role_form':null;
+            $lifecycleOperation=match($op) {
+                'session_request_close'=>'session.request_close',
+                'session_close'=>'session.close',
+                'session_archive'=>'session.archive',
+                'session_reopen_session'=>'session.reopen',
+                'outcome_confirm'=>'encounter.outcome_confirm',
+                'outcome_continue'=>'encounter.outcome_continue',
+                'manage_pause'=>'encounter.pause',
+                'manage_resume'=>'encounter.resume',
+                default=>null,
+            };
+            $lifecyclePhase=$lifecycleOperation===null?null:'lifecycle_form';
+
             try {
                 // The posted session may not redirect a command to another thread/scope.
                 if($mybb->get_input('session_id')!==$sid || $mybb->get_input('tid')!==$tid)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
@@ -38,9 +51,17 @@ final class AF_ACS_EncountersPage
                 AF_ACS_GmIntent::requireConfirmation(str_starts_with($op,'session_')?substr($op,8):$op);
                 if(str_starts_with($op,'session_')){
                     $serviceSession=af_advancedcombatsystem_sessions();
-                    $result=$serviceSession->command(substr($op,8),$input,phase:$rolePhase);
+                    $sessionPhase=&$rolePhase;
+                    if ($lifecyclePhase!==null) $sessionPhase=&$lifecyclePhase;
+                    $result=$serviceSession->command(substr($op,8),$input,phase:$sessionPhase);
                     $outcome=$committed;
-                    $notice='<p role="status">'.($op==='session_set_role'?'Роль участника сохранена.':'Переход сессии подтверждён сервером.').'</p>';
+                    $notice='<p role="status">'.match($op) {
+                        'session_set_role'=>'Роль участника сохранена.',
+                        'session_request_close'=>'Закрытие подготовлено. Подтвердите закрытие боевой сессии.',
+                        'session_close'=>'Боевая сессия закрыта. История сохранена.',
+                        'session_archive'=>'Боевая сессия архивирована.',
+                        default=>'Переход сессии подтверждён сервером.',
+                    }.'</p>';
                     $session=$service->context($sid,$tid);$list=$service->list($sid,tid:$tid);
                 }elseif($op==='entity_request'){
                     $entityOp=$mybb->get_input('op');if(!in_array($entityOp,['entity_validate','entity_register'],true))throw new RuntimeException('ACS_DRAFT_INPUT_INVALID');
@@ -60,13 +81,13 @@ final class AF_ACS_EncountersPage
                     $request=[];foreach(['session_id','expected_version','operation_key','reason','owner_uid','delegate_uid','entity_ids','control_group_id','permitted_actions','valid_from','valid_until','duration_seconds','delegation_id','delegation_version'] as $f)if(array_key_exists($f,$_POST))$request[$f]=in_array($f,['entity_ids','permitted_actions'],true)?$_POST[$f]:$mybb->get_input($f);
                     $service->delegations()->command(substr($delegationOp,11),$request);$outcome=$committed;$session=$service->context($sid,$tid);$notice='<p role="status">Делегирование подтверждено сервером.</p>';
                 }elseif(in_array($op,['end_conditions_set','outcome_confirm','outcome_continue'],true)){
-                    require_once __DIR__.'/EndConditionController.php';$request=[];foreach(['session_id','encounter_id','expected_version','encounter_version','reason','operation_key',...($op==='end_conditions_set'?[]:['resolution_id']),...($op==='outcome_confirm'?['outcome']:[])] as $f)$request[$f]=$mybb->get_input($f);if($op==='end_conditions_set'){$conditions=[];if($mybb->get_input('gm_last_side')==='1')$conditions[]='last_active_side';if($mybb->get_input('gm_no_sides')==='1')$conditions[]='no_active_sides';$mutual=match($mybb->get_input('gm_mutual')){'draw'=>['draw'],'inconclusive'=>['inconclusive'],'both'=>['draw','inconclusive'],default=>throw new RuntimeException('ACS_END_INPUT_INVALID')};$request['end_conditions']=json_encode(['schema'=>'ic-acs.end-conditions.v1','conditions'=>$conditions,'allow_continuation'=>$mybb->get_input('gm_continue')==='1','mutual_outcomes'=>$mutual],JSON_THROW_ON_ERROR);}AF_ACS_EndConditionController::handle($service,$op,$request,'post');$outcome=$committed;$session=$service->context($sid,$tid);$notice=$op==='end_conditions_set'?'<p role="status">Условия завершения сохранены в снимке. Бой не запущен.</p>':'<p role="status">Решение исхода подтверждено. Сессия не закрывается автоматически.</p>';
+                    require_once __DIR__.'/EndConditionController.php';$request=[];foreach(['session_id','encounter_id','expected_version','encounter_version','reason','operation_key',...($op==='end_conditions_set'?[]:['resolution_id']),...($op==='outcome_confirm'?['outcome']:[])] as $f)$request[$f]=$mybb->get_input($f);if($op==='end_conditions_set'){$conditions=[];if($mybb->get_input('gm_last_side')==='1')$conditions[]='last_active_side';if($mybb->get_input('gm_no_sides')==='1')$conditions[]='no_active_sides';$mutual=match($mybb->get_input('gm_mutual')){'draw'=>['draw'],'inconclusive'=>['inconclusive'],'both'=>['draw','inconclusive'],default=>throw new RuntimeException('ACS_END_INPUT_INVALID')};$request['end_conditions']=json_encode(['schema'=>'ic-acs.end-conditions.v1','conditions'=>$conditions,'allow_continuation'=>$mybb->get_input('gm_continue')==='1','mutual_outcomes'=>$mutual],JSON_THROW_ON_ERROR);}AF_ACS_EndConditionController::handle($service,$op,$request,'post',$lifecyclePhase);$outcome=$committed;$session=$service->context($sid,$tid);$notice=$op==='end_conditions_set'?'<p role="status">Условия завершения сохранены в снимке. Бой не запущен.</p>':($op==='outcome_continue'?'<p role="status">Бой продолжен по разрешённой политике.</p>':'<p role="status">Исход подтверждён. Закрытие сессии выполняется отдельно.</p>');
                 }elseif($op==='readiness') {
                     (new AF_ACS_SessionAccess)->csrf();$eid=$input['encounter_id'];$readiness=$service->readiness($sid,$eid);
                     $notice='<p>'.($readiness['preparation_ready']?'Подготовка проверена.':'Подготовка содержит блокировки.').' Для запуска первого раунда откройте вкладку «Раунды».</p>';
                     foreach($readiness['diagnostics'] as $issue)$notice.='<p>'.self::esc(self::issue($issue['code'])).(isset($issue['entity_id'])?' · существо #'.self::esc($issue['entity_id']):'').'</p>';
                 } else {
-                    if($op==='cover_assignment'){$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','cover_entity_id','protected_entity_id','expected_assignment_version','status','operation_key','reason'] as $field)$r[$field]=$mybb->get_input($field);$result=$service->cover()->command($r);}elseif(str_starts_with($op,'spatial_')){$spatialOp=substr($op,8);$extra=match($spatialOp){'configure'=>['kb_key'],'connection'=>['from','to','status'],'position'=>['entity_id','zone_id','visibility'],'zone'=>['zone_id','visibility'],'engagement'=>['entity_id','target_id','status'],default=>throw new RuntimeException('ACS_SPATIAL_UNSUPPORTED')};$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','expected_spatial_version','operation_key','reason',...$extra] as $field)$r[$field]=$mybb->get_input($field);$result=$service->spatial()->command($spatialOp,$r);}else $result=str_starts_with($op,'manage_')?$service->rounds()->command(substr($op,7),$input):(str_starts_with($op,'clock_')?$service->clock()->command(substr($op,6),$input):$service->command($op,$input,$assignmentPhase));$eid=$result['encounter_id']??$eid;$outcome=$committed+['eid'=>$eid];$notice='<p>Изменение сохранено.</p>';
+                    if($op==='cover_assignment'){$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','cover_entity_id','protected_entity_id','expected_assignment_version','status','operation_key','reason'] as $field)$r[$field]=$mybb->get_input($field);$result=$service->cover()->command($r);}elseif(str_starts_with($op,'spatial_')){$spatialOp=substr($op,8);$extra=match($spatialOp){'configure'=>['kb_key'],'connection'=>['from','to','status'],'position'=>['entity_id','zone_id','visibility'],'zone'=>['zone_id','visibility'],'engagement'=>['entity_id','target_id','status'],default=>throw new RuntimeException('ACS_SPATIAL_UNSUPPORTED')};$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','expected_spatial_version','operation_key','reason',...$extra] as $field)$r[$field]=$mybb->get_input($field);$result=$service->spatial()->command($spatialOp,$r);}else $result=str_starts_with($op,'manage_')?$service->rounds()->command(substr($op,7),$input,$lifecyclePhase):(str_starts_with($op,'clock_')?$service->clock()->command(substr($op,6),$input):$service->command($op,$input,$assignmentPhase));$eid=$result['encounter_id']??$eid;$outcome=$committed+['eid'=>$eid];$notice='<p>Изменение сохранено.</p>';
                     $session=$service->context($sid,$tid);$list=$service->list($sid,tid:$tid);
                     if ($op==='create') {
                         $notice='<p role="status">Столкновение создано. Сохраните условия завершения или перейдите к составу.</p>';
@@ -89,11 +110,16 @@ final class AF_ACS_EncountersPage
                             'side_change'=>'Сторона участника изменена.',
                             'relation_set'=>'Отношение сторон сохранено.',
                         }.'</p>';
+                    } elseif ($op==='manage_pause' || $op==='manage_resume') {
+                        $notice='<p role="status">'.($op==='manage_pause'?'Столкновение поставлено на паузу.':'Столкновение возобновлено.').'</p>';
                     } elseif ($op==='round_start') {
                         $notice='<p role="status">Бой запущен. Первый раунд открыт.</p>';
                     }
                 }
             } catch(Throwable $error) {
+                if ($lifecycleOperation!==null && empty($outcome['committed'])) {
+                    return self::lifecycleFailure($error,$lifecycleOperation,$lifecyclePhase,$base,$sid,$outcome);
+                }
                 if ($rolePhase!==null && empty($outcome['committed'])) {
                     $failure=self::roleAssignmentFailure($error,$rolePhase);
                     $commandBlocked=$failure['uncertain'];
@@ -216,18 +242,24 @@ final class AF_ACS_EncountersPage
             if($list['next_after']!==null)echo '<a href="'.self::esc($base.'&encounter_after='.$list['next_after']).'">Следующие столкновения</a>';
             if($eid==='') {
                 if($session['status']==='active') {AF_ACS_GmPanel::form($base,'create',$session);echo '<label>Название <input name="name" maxlength="191" required></label>';AF_ACS_GmPanel::submit('Создать столкновение');}
+                AF_ACS_LifecyclePanel::render($service,$session,null,$base,$base);
                 echo '<details><summary>Расширенные настройки и диагностика</summary>';
-                $sessionView=af_advancedcombatsystem_sessions()->view($sid,true);
-                AF_ACS_GmPanel::sessionControls($sessionView,$base);
+                $sessionView=af_advancedcombatsystem_sessions()->view($sid);
+                AF_ACS_GmPanel::transferOwner($sessionView,$base);
                 AF_ACS_GmPanel::recovery($sid,$base,$sessionView['can_audit']);
                 echo '</details>';
                 echo '</section>';return ob_get_clean();
             }
             $view=$service->view($sid,$eid,$tid,$mybb->get_input('participant_after')?:'0',$mybb->get_input('side_after')?:'0',$mybb->get_input('relation_after')?:'0');$encounter=$view['encounter'];echo '<p><a href="misc.php?action=acs_archive&amp;session_id='.self::esc($sid).'&amp;encounter_id='.self::esc($eid).'">Боевой архив</a></p>';echo '<p><a href="misc.php?action=acs_loot&amp;session_id='.self::esc($sid).'&amp;encounter_id='.self::esc($eid).'">Распределение добычи</a></p>';$url=$base.'&acs_encounter='.$eid.'&acs_tab='.$tab;
             echo '<nav aria-label="Панель GM">';foreach($tabs as $key=>$name)echo '<a href="'.self::esc($base.'&acs_encounter='.$eid.'&acs_tab='.$key).'"'.($tab===$key?' aria-current="page"':'').'>'.self::esc($name).'</a> ';echo '</nav>';
+            if (in_array($tab,['overview','management'],true)) {
+                $finish=$mybb->get_input('gm_finish')==='1';
+                AF_ACS_LifecyclePanel::render($service,$session,$view,$url,$base,$finish);
+                if ($finish) {echo '</section>';return ob_get_clean();}
+            }
             if($tab==='overview') {
                 $config=json_decode($encounter['config_json'],true);echo '<h3>'.self::esc($config['title']).'</h3><p>'.self::esc(self::state($encounter['status'])).' · версия '.self::esc($encounter['encounter_version']).'</p><p>Завершение столкновения и переходы сессии — отдельные подтверждаемые операции.</p>';
-                AF_ACS_GmPanel::overview(af_advancedcombatsystem_sessions()->view($sid,true),$view,$url);
+                AF_ACS_GmPanel::overview(af_advancedcombatsystem_sessions()->view($sid),$view,$url);
                 AF_ACS_GmPanel::inspection($view);
             } elseif($tab==='rounds') {
                 if(in_array($encounter['status'],['preparation','ambush_ready'],true)||$encounter['start_operation_id']!==null){try{require_once __DIR__.'/Ambush.php';echo AF_ACS_AmbushPage::render($sid,$eid,$tid);}catch(Throwable $error){$failure=af_advancedcombatsystem_session_failure($error);echo '<p role="alert">BLOCKED: состояние засады недоступно. Не создавайте новый запуск вместо прежнего. error_id='.self::esc($failure['error_id']).'</p>';}}
@@ -311,7 +343,7 @@ final class AF_ACS_EncountersPage
             if($tab==='participants'){require_once __DIR__.'/Entities.php';AF_ACS_EntitiesPage::render($sid,af_advancedcombatsystem_sessions()->view($sid),$url,null,true,$sourceCheck);require_once __DIR__.'/Delegations.php';AF_ACS_DelegationsPage::render($sid,$url,$service->delegations(),true);}
             if($tab==='management'&&in_array($encounter['status'],['active','paused'],true)){require_once __DIR__.'/Spatial.php';AF_ACS_SpatialPage::render($view,$url,$service->spatial());require_once __DIR__.'/Cover.php';AF_ACS_CoverPage::render($view,$url,$service->cover());}
             if($tab==='management') {
-                AF_ACS_GmPanel::settings($view,$url);AF_ACS_GmPanel::ending($service,$view,$url);$sessionView=af_advancedcombatsystem_sessions()->view($sid,true);AF_ACS_GmPanel::obligations($sessionView);AF_ACS_GmPanel::sessionControls($sessionView,$url);
+                AF_ACS_GmPanel::settings($view,$url);$sessionView=af_advancedcombatsystem_sessions()->view($sid);AF_ACS_GmPanel::transferOwner($sessionView,$url);
                 AF_ACS_GmPanel::recovery($sid,$url,$sessionView['can_audit']);
                 require_once __DIR__.'/Clock.php';AF_ACS_ClockPage::rest($view,$url,$service->clock());
             }
@@ -324,6 +356,37 @@ final class AF_ACS_EncountersPage
             throw $error;
         }
     }
+    private static function lifecycleFailure(Throwable $error,string $operation,string $phase,string $base,string $sid,array &$outcome): string
+    {
+        $code=AF_ACS_LifecyclePanel::code($error);
+        $failure=af_advancedcombatsystem_session_failure($error,$phase,$operation);
+        $message=match($code) {
+            'ACS_SESSION_OBLIGATIONS_BLOCKED'=>'Закрытие или архивирование заблокировано обязательствами из серверной сводки.',
+            'ACS_PUBLICATION_UNRESOLVED'=>'Сначала проверьте незавершённую публикацию в восстановлении.',
+            'ACS_SESSION_TRANSITION_BLOCKED'=>'Состояние сессии не допускает этот переход.',
+            'ACS_ENCOUNTER_TRANSITION_BLOCKED','ACS_ROUND_STATE_CONFLICT'=>'Состояние столкновения или раунда не допускает этот переход.',
+            'ACS_VERSION_CONFLICT','ACS_END_STATE_CONFLICT'=>'Данные изменились. Перечитайте состояние и проверьте доступное решение.',
+            'ACS_END_OUTCOME_DENIED','ACS_END_CONTINUATION_DENIED'=>'Сохранённая политика не разрешает выбранное решение.',
+            'ACS_END_POLICY_PIN_INVALID','ACS_END_RECEIPT_INVALID'=>'Не подтверждена целостность сохранённого исхода или снимка. Проверьте диагностику.',
+            'ACS_SESSION_UNAVAILABLE','ACS_ENCOUNTER_UNAVAILABLE','ACS_GM_REQUIRED'=>'Недостаточно прав или объект недоступен в текущей теме.',
+            'ACS_UI_CONFIRMATION_REQUIRED','ACS_ROUND_CONFIRMATION_REQUIRED'=>'Подтвердите операцию.',
+            'ACS_REASON_REQUIRED','ACS_INVALID_TEXT'=>'Укажите допустимую причину.',
+            'ACS_OPERATION_KEY_CONFLICT'=>'Ключ уже относится к другой операции. Проверьте прежний запрос.',
+            'ACS_RECOVERY_REQUIRED','ACS_COMMIT_UNKNOWN','ACS_ROLLBACK_UNKNOWN'=>'Проверьте исход прежней операции через восстановление.',
+            'ACS_MAINTENANCE_BUSY','ACS_RATE_LIMIT'=>'Операция временно недоступна.',
+            default=>'Операция не подтверждена. Проверьте сохранённое состояние и диагностику.',
+        };
+        $uncertain=$failure['category']==='RECOVERY_REQUIRED'
+            || in_array($code,['ACS_LOCK_RELEASE_UNKNOWN','ACS_DB_SESSION_RESTORE_FAILED'],true)
+            || ($phase==='lifecycle_commit' && $failure['category']==='INTERNAL_ERROR');
+        $id=$failure['error_id'];
+        $outcome=['error'=>true,'uncertain'=>$uncertain,'error_id'=>$id];
+        $detail='Операция: '.$operation.' · Фаза: '.$phase.' · Код: '.$code.' · error_id='.$id;
+        return '<p role="alert">'.self::esc($message.' '.$detail.($uncertain?' Не создавайте новый ключ.':'')).'</p>'
+            .'<p><a href="'.self::esc($base).'">Перечитать состояние</a> · <a href="'
+            .self::esc(AF_ACS_LifecyclePanel::recoveryUrl($sid)).'">Открыть восстановление</a></p>';
+    }
+
     public static function roleAssignmentFailure(Throwable $error,string $phase): array
     {
         $code=$error->getMessage();

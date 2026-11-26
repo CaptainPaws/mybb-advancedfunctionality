@@ -33,7 +33,7 @@ final class AF_ACS_ModalWorkflow
 
             // Scope and navigation come exclusively from the fragment URL.
             foreach (['tid','acs_session','acs_builder','acs_setup','acs_panel_session','acs_encounter','gm_step','gm_stage','gm_picker',
-                'acs_tab','acs_atf_setup','acs_sessions_after'] as $field) {
+                'acs_tab','acs_atf_setup','acs_sessions_after','gm_finish'] as $field) {
                 $mybb->input[$field] = is_string($_GET[$field] ?? null) ? $_GET[$field] : '';
             }
             if (($surface==='bar' && $mybb->get_input('acs_panel_session')==='')

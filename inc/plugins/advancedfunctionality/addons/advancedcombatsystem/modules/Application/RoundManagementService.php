@@ -28,8 +28,9 @@ final class AF_ACS_RoundManagementService
             'scheduler'=>['status'=>'BLOCKED','reason'=>'ACS system-authority scheduler не подключён. Обработка только явным авторизованным POST.'],
             'notification_delivery'=>['status'=>'BLOCKED','contract'=>'IC-AAM','stage'=>'11']];
     }
-    public function command(string $op,array $input): array
+    public function command(string $op,array $input,?string &$phase=null): array
     {
+        if ($phase!==null) $phase='lifecycle_input';
         $this->access->csrf();$sid=AF_ACS_Repository::integer($input['session_id']??null);$eid=AF_ACS_Repository::integer($input['encounter_id']??null);
         $session=$this->context($sid);$encounter=$this->repository->encounter($sid,$eid);
         if(!$encounter || $session['status']!=='active')throw new RuntimeException('ACS_ROUND_STATE_CONFLICT');
@@ -60,9 +61,11 @@ final class AF_ACS_RoundManagementService
         $prior=$this->repository->replayRoundCommand('session:'.$request['actor_uid'].':'.$key,'encounter.'.$op,$request);
         if($prior)return isset($prior['boundary_key'])?($this->repository->boundary($prior['boundary_key'],$sid)??throw new RuntimeException('ACS_RECOVERY_REQUIRED')):$prior;
         if($canonical && ($old=$this->repository->boundary($canonical,$sid)))return $old;
+        if ($phase!==null) $phase='lifecycle_transaction';
         $result=$this->repository->command('session:'.$request['actor_uid'].':'.$key,'encounter.'.$op,$request,
             function($s)use($sid){$this->context($sid);if($s['status']!=='active')throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');},
-            function($s)use($op,$request,$sid,$eid) {
+            function($s)use($op,$request,$sid,$eid,&$phase) {
+                if ($phase!==null) $phase='lifecycle_round';
                 $e=$this->repository->encounter($sid,$eid,true);if(!$e || $e['encounter_version']!==$request['encounter_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');$now=($this->now)();
                 if($op==='pause' || $op==='resume')return $this->repository->pauseResume($s,$e,$op==='resume',$now);
                 if($op==='deadline_set'){if($request['policy']['mode']!=='off')AF_ACS_Clock::deadlineAfter($now,$request['policy']['seconds']);return $this->repository->setDeadlines($s,$e,$request['policy'],$now);}
@@ -85,7 +88,7 @@ final class AF_ACS_RoundManagementService
                     if($policy['mode']==='notify')return $this->repository->recordDeadlineNotice($s,$e,$t,$request['actor_uid']);
                 }
                 return $this->repository->closeTurn($s,$e,$t,$op==='gm_forfeit'?'forfeited':'passed',$request['actor_uid']);
-            });
+            },phase:$phase);
         $canonical??=$result['boundary_key']??null;
         return $canonical?($this->repository->boundary($canonical,$sid)??throw new RuntimeException('ACS_RECOVERY_REQUIRED')):$result;
     }

@@ -1,6 +1,7 @@
 <?php
 if(!defined('IN_MYBB')){die('No direct access');}
 require_once __DIR__.'/GmIntent.php';
+require_once __DIR__.'/LifecyclePanel.php';
 require_once __DIR__.'/../Domain/SideAccent.php';
 
 /** Composes existing services/forms, with no new command backend or mechanical authority. */
@@ -90,6 +91,11 @@ final class AF_ACS_GmPanel
             echo '<span class="af-acs-gm__pill">Столкновение #'.self::esc($eid).'</span><span class="af-acs-gm__pill">'.self::esc(self::state($encounter['status'])).'</span>';
         }
         echo '<span class="af-acs-gm__pill'.($session['status']==='active'?' af-acs-gm__pill--active':'').'">'.self::esc(self::state($session['status'])).'</span></div></header>';
+        if ($stage==='settings') {
+            $finish=$encounter && $mybb->get_input('gm_finish')==='1';
+            AF_ACS_LifecyclePanel::render($service,$session,$view?:null,$url,$base,(bool)$finish);
+            if ($finish) return;
+        }
         $steps=array_keys(self::STEPS);
         $index=array_search($stage,$steps,true);
         $resume=$url;
@@ -191,8 +197,8 @@ final class AF_ACS_GmPanel
         if ($eid!=='') echo '<a href="'.self::esc(self::stepUrl($base,'','settings')).'">Создать другое столкновение</a>';
         echo '</details>';
         if ($stage==='settings') {
-            echo '<details class="af-acs-gm__advanced"><summary>Дополнительные действия</summary>';
-            self::sessionControls($sessionView,$url);
+            echo '<details class="af-acs-gm__advanced"'.($mybb->get_input('gm_recovery')==='1'?' open':'').'><summary>Дополнительные действия</summary>';
+            self::transferOwner($sessionView,$url);
             self::recovery($sid,$url,$sessionView['can_audit']);
             echo '</details>';
         }
@@ -667,15 +673,7 @@ final class AF_ACS_GmPanel
         echo '<h3>Сессия #'.self::esc($s['id']).' · столкновение #'.self::esc($e['id']).'</h3><p>Сессия: '.self::esc(self::state($s['status'])).' · версия '.self::esc($s['session_version']).'. Столкновение: '.self::esc(self::state($e['status'])).' · версия '.self::esc($e['encounter_version']).'.</p><p>Обычный просмотр не проверяет все внешние источники и не исполняет границы. Готовность проверяется отдельной командой и повторно при запуске.</p>';
         if($e['status']==='preparation'){self::form($url,'readiness',$s,$e);echo '<button>Проверить готовность подготовки</button></form>';}else echo '<p>Столкновение уже вышло из подготовки. Текущий roster, AP и сроки — на вкладке «Раунды».</p>';
         echo '<details><summary>Роли участников сессии</summary><ul>';foreach($sessionView['members'] as $member)echo '<li>UID '.self::esc($member['uid']).' · '.self::esc(['owner'=>'Владелец','gm'=>'Мастер','assistant_gm'=>'Помощник','player'=>'Игрок','observer'=>'Наблюдатель'][$member['role']]??$member['role']).'</li>';echo '</ul></details>';
-        self::obligations($sessionView);
         echo '<p>В текущей странице участников: '.count($view['participants']).'. Полный состав доступен с пагинацией на вкладке «Участники».</p>';
-    }
-    public static function obligations(array $view):void
-    {
-        $data=$view['outstanding_obligations']??null;if($data===null){echo '<p>Обязательства: подробности недоступны по текущим правам.</p>';return;}
-        echo '<h3>Обязательства сессии</h3><ul>';
-        foreach(['confirmed_completed'=>'Подтверждены','pending'=>'Ожидают','recovery_required'=>'Требуют восстановления','explicitly_blocked'=>'Блокируют'] as $key=>$label)echo '<li>'.self::esc($label).': '.count($data[$key]).'</li>';
-        echo '</ul><p>Pending не означает отказ. Recovery требует проверки прежней операции; закрытие сохраняет обязательства.</p>';
     }
     public static function inspection(array $view):void
     {
@@ -749,7 +747,7 @@ final class AF_ACS_GmPanel
         echo '</article>';
     }
 
-    public static function sessionControls(array $v,string $url):void
+    public static function transferOwner(array $v,string $url):void
     {
         $s=$v['session'];
         if ($s['status']==='active' && (new AF_ACS_SessionAccess())->administrator()) {
@@ -757,7 +755,6 @@ final class AF_ACS_GmPanel
             echo '<label>UID нового владельца <input name="uid" type="number" min="1" required></label>';
             self::submit('Передать владение сессией');
         }
-        foreach(['request_close'=>'Подготовить закрытие сессии','close'=>'Закрыть сессию','archive'=>'Архивировать сессию','reopen_session'=>'Переоткрыть сессию'] as $op=>$label)if(!empty($v['can_'.($op==='reopen_session'?'reopen':$op)])){self::form($url,'session_'.$op,$s);self::submit($label);}
     }
     public static function settings(array $view,string $url,bool $compact=false):void
     {
@@ -778,19 +775,5 @@ final class AF_ACS_GmPanel
         global $mybb;if(!$allowed){echo '<p>BLOCKED: восстановление требует текущих session GM прав.</p>';return;}
         echo '<p><a href="'.self::esc($url.'&gm_recovery=1').'">Открыть восстановление прежних операций</a></p>';
         if($mybb->get_input('gm_recovery')==='1')try{require_once __DIR__.'/RecoveryPage.php';echo AF_ACS_RecoveryPage::render($sid,$url.'&gm_recovery=1');}catch(Throwable $error){$failure=af_advancedcombatsystem_session_failure($error);echo '<p role="alert">BLOCKED: проверка прежнего состояния недоступна. Не создавайте новую операцию. error_id='.self::esc($failure['error_id']).'</p>';}
-    }
-    public static function ending(AF_ACS_EncounterService $service,array $view,string $url):void
-    {
-        $s=$view['session'];$e=$view['encounter'];
-        if($s['status']!=='active'){echo '<p>Операции столкновения заблокированы состоянием сессии. Переоткрытие — отдельная разрешённая команда.</p>';return;}
-        try{$state=$service->resolution($s['id'],$e['id']);}catch(Throwable $error){$failure=af_advancedcombatsystem_session_failure($error);echo '<p role="alert">BLOCKED: состояние исхода не подтверждено. Проверьте текущие session GM права, версии и диагностику. error_id='.self::esc($failure['error_id']).'</p>';return;}
-        if($state['confirmed'])echo '<p>Исход подтверждён и сохранён. Старые события не редактируются; награды и добыча используют отдельные разрешённые операции.</p>';
-        echo '<p><a href="misc.php?action=acs_loot&amp;session_id='.self::esc($s['id']).'&amp;encounter_id='.self::esc($e['id']).'">Завершение, добыча и награды</a></p>';
-        $pending=$state['pending'];
-        if(!$pending){echo '<p>Серверного кандидата исхода нет. Принудительно выбрать победителя или завершить бой в обход end-condition контракта нельзя.</p>';return;}
-        echo '<h3>Ожидание подтверждения исхода</h3><p>Сохранённое решение #'.self::esc($pending['resolution_id']).'; условие '.self::esc($pending['condition']).'.</p>';
-        self::form($url,'outcome_confirm',$s,$e);self::fields(['resolution_id'=>$pending['resolution_id']]);echo '<label>Разрешённый сервером исход <select name="outcome">';
-        foreach($pending['outcomes'] as $outcome)echo '<option value="'.self::esc($outcome).'">'.self::esc(['victory'=>'Победа','draw'=>'Ничья','inconclusive'=>'Без окончательного исхода','defeat'=>'Поражение','escape'=>'Выход из боя'][$outcome]??$outcome).'</option>';echo '</select></label>';self::submit('Подтвердить исход столкновения');
-        if($pending['allow_continuation']){self::form($url,'outcome_continue',$s,$e);self::fields(['resolution_id'=>$pending['resolution_id']]);self::submit('Продолжить по разрешённой политике');}
     }
 }
