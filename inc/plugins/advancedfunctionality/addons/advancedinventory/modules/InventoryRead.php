@@ -31,13 +31,27 @@ final class AF_ADVINV_InventoryRead
         try { $this->rows('SET TRANSACTION ISOLATION LEVEL READ COMMITTED'); }
         catch (mysqli_sql_exception $e) {
             if ((int)$e->getCode()!==1568) throw $e;
-            // Only owner revision metadata is initialized; never alter item qty or bindings.
-            $this->rows('INSERT INTO `'.TABLE_PREFIX.'af_advinv_owner_state` (uid,inventory_version) VALUES (?,1) ON DUPLICATE KEY UPDATE uid=uid',[$uid]);
-            $this->rows('SELECT uid FROM `'.TABLE_PREFIX.'af_advinv_owner_state` WHERE uid=? FOR UPDATE',[$uid]);
+            $this->lockOwnerVersion($uid);
             return;
         }
         throw new RuntimeException('INV_TRANSACTION_REQUIRED');
     }
+    /** Character registration joins the proven ACS transaction on this exact connection. */
+    public function fenceForAcsRegistration(int $uid,int $actor): void
+    {
+        AF_ACS_TransactionManager::assertOwnedConnection($this->link);
+        $this->authorize($uid,$actor);
+        $this->lockOwnerVersion($uid);
+    }
+
+    private function lockOwnerVersion(int $uid): void
+    {
+        // Only owner revision metadata is initialized; item quantities and bindings are untouched.
+        $table='`'.TABLE_PREFIX.'af_advinv_owner_state`';
+        $this->rows('INSERT INTO '.$table.' (uid,inventory_version) VALUES (?,1) ON DUPLICATE KEY UPDATE uid=uid',[$uid]);
+        $this->rows('SELECT uid FROM '.$table.' WHERE uid=? FOR UPDATE',[$uid]);
+    }
+
     public function version(int $uid,int $actor): int
     {
         $this->authorize($uid,$actor);

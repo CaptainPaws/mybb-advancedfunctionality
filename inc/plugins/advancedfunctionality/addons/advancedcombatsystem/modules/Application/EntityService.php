@@ -144,10 +144,14 @@ final class AF_ACS_EntityService
             require_once __DIR__.'/../Infrastructure/Adapters/EquipmentAdapter.php';
             require_once __DIR__.'/../../../advancedinventory/modules/InventoryRead.php';
             global $db;
-            $inventory=$this->repository->withReadConnection($db,static function () use ($db,$grant,$owner,$actor,$write) {
+            $inventory=$this->repository->withReadConnection($db,static function () use ($db,$grant,$owner,$actor,$write,&$phase) {
                 try {
                     $reader=new AF_ADVINV_InventoryRead($db,grant:$grant);
-                    if ($write) $reader->fence($owner,$actor);
+                    if ($write) {
+                        $phase='inventory.fence';
+                        $reader->fenceForAcsRegistration($owner,$actor);
+                        $phase='inventory.read';
+                    }
                     return $reader->read($owner,$actor);
                 } catch (mysqli_sql_exception $error) {
                     throw new RuntimeException('INV_READ_FAILED',(int)$error->getCode(),$error);
@@ -238,8 +242,9 @@ final class AF_ACS_EntityService
         if ($denied) $result['message']='Источник недоступен по правам. Проверьте доступ к листу и текущей сессии.';
         return $result;
     }
-    public function register(array $input): array
+    public function register(array $input,?string &$phase=null): array
     {
+        $phase='registration_input';
         $this->access->csrf();$actor=$this->access->uid();$sid=AF_ACS_Repository::integer($input['session_id']??null);
         $kind=(string)($input['kind']??'');$this->kind($kind);
         $key=(string)($input['operation_key']??'');if(!preg_match('/\A[a-z0-9][a-z0-9_.-]{15,95}\z/D',$key))throw new RuntimeException('ACS_OPERATION_KEY_REQUIRED');
@@ -251,21 +256,26 @@ final class AF_ACS_EntityService
             if (!AF_ACS_CapabilityValidator::fingerprint($checked)) throw new RuntimeException('ACS_DEFINITION_VERSION_CONFLICT');
             $request['preparation_fingerprint']=$checked;
         }
+        $phase='registration_command';
         return $this->repository->command('session:'.$actor.':'.$key,'entity.register',$request,
             function($session)use($sid,$kind){$this->access($sid,$kind,true);},
-            function($session)use($sid,$input,$checked){
+            function($session)use($sid,$input,$checked,&$phase){
                 try {
-                    $registration=$this->prepare($sid,$input,true);
+                    $registration=$this->prepare($sid,$input,true,phase:$phase);
                 } catch (RuntimeException $error) {
                     if (!in_array($error->getMessage(),self::CHARACTER_SOURCE_ERRORS,true)) throw $error;
                     throw new AF_ACS_RegistrationBlocked([['code'=>strtolower(substr($error->getMessage(),4)),
                         'path'=>'source','severity'=>'error']]);
                 }
+                $phase='registration_fingerprint';
                 if (isset($registration['snapshot']['registration_context']) && $checked==='') throw new RuntimeException('ACS_SOURCE_CHECK_REQUIRED');
                 if ($checked!=='' && !hash_equals($checked,$registration['preparation_fingerprint'])) {
                     throw new RuntimeException('ACS_DEFINITION_VERSION_CONFLICT');
                 }
-                return $this->repository->register($session,$registration);
+                $phase='entity.persist';
+                $result=$this->repository->register($session,$registration);
+                $phase='registration_finalize';
+                return $result;
             });
     }
 }

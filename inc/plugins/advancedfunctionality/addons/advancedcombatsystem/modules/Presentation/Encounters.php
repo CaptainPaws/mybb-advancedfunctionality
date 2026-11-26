@@ -23,6 +23,8 @@ final class AF_ACS_EncountersPage
             $op=$mybb->get_input('acs_encounter_op');
             $sourcePreview=$op==='entity_request' && $mybb->get_input('op')==='entity_validate';
             $input=[];
+            $characterRegistration=$op==='entity_request' && $mybb->get_input('op')==='entity_register' && $mybb->get_input('kind')==='character';
+            $registrationPhase=$characterRegistration?'registration_scope':null;
             try {
                 // The posted session may not redirect a command to another thread/scope.
                 if($mybb->get_input('session_id')!==$sid || $mybb->get_input('tid')!==$tid)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
@@ -39,10 +41,10 @@ final class AF_ACS_EncountersPage
                         $sourceCheck=$entities->validate($sid,$input)+$input;
                     } else {
                         if ($input['preparation_fingerprint']==='') throw new RuntimeException('ACS_SOURCE_CHECK_REQUIRED');
-                        $result=$entities->register($input);
+                        $result=$entities->register($input,$registrationPhase);
                         $registered=(string)$result['entity_id'];
                         $outcome=$committed;
-                        $notice='<p role="status">Существо зарегистрировано. Теперь его можно добавить в столкновение.</p>';
+                        $notice='<p role="status">'.($characterRegistration?'Персонаж зарегистрирован.':'Существо зарегистрировано.').' Теперь его можно добавить в столкновение.</p>';
                         $session=$service->context($sid,$tid);
                     }
                 }elseif($op==='delegation_request'){
@@ -70,7 +72,7 @@ final class AF_ACS_EncountersPage
                 }
             } catch(Throwable $error) {
                 if (!$sourcePreview) {
-                    $failure=af_advancedcombatsystem_session_failure($error);
+                    $failure=af_advancedcombatsystem_session_failure($error,$characterRegistration?$registrationPhase:null);
                     $commandBlocked=!str_contains($error->getMessage(),'VERSION_CONFLICT') && in_array($failure['category'],['RECOVERY_REQUIRED','INTERNAL_ERROR'],true);
                 }
                 if ($sourcePreview) {
@@ -104,6 +106,22 @@ final class AF_ACS_EncountersPage
                         .' Код обращения: '.$failure['error_id']]+$input;
                     $outcome=[];
                     $notice='';
+                } elseif ($characterRegistration) {
+                    $code=$error->getMessage();
+                    $uncertain=$failure['category']==='RECOVERY_REQUIRED'
+                        || in_array($code,['ACS_LOCK_RELEASE_UNKNOWN','ACS_DB_SESSION_RESTORE_FAILED','ACS_TRANSACTION_ERROR','ACS_DB_SESSION_SETTINGS_FAILED'],true)
+                        || ($registrationPhase==='registration_finalize' && $failure['category']==='INTERNAL_ERROR');
+                    $commandBlocked=$uncertain;
+                    $outcome=['error'=>true,'uncertain'=>$uncertain];
+                    $message=match(true) {
+                        $uncertain=>'Исход регистрации не подтверждён. Проверьте прежнюю операцию и используйте её ключ.',
+                        $code==='ACS_OPERATION_KEY_CONFLICT'=>'Ключ регистрации относится к другому запросу. Проверьте прежнюю операцию.',
+                        $code==='ACS_ENTITY_ALREADY_REGISTERED'=>'Персонаж уже зарегистрирован в этой сессии.',
+                        $failure['category']==='STATE_CONFLICT'=>'Состояние изменилось. Обновите панель и повторите проверку источника.',
+                        $failure['category']==='INTERNAL_ERROR'=>'Регистрация прервана. Перед повторной попыткой проверьте диагностику ACS.',
+                        default=>$failure['message'],
+                    };
+                    $notice='<p class="error" role="alert">'.self::esc($message).' Код обращения: '.self::esc($failure['error_id']).'</p>';
                 } else {
                     $outcome=['error'=>true,'uncertain'=>$commandBlocked];
                     $notice='<p class="error" role="alert">'.(str_contains($error->getMessage(),'VERSION_CONFLICT')?'Состояние изменилось. Обновите текущий шаг и проверьте введённые данные. ':($error->getMessage()==='ACS_UI_CONFIRMATION_REQUIRED'?'Требуется явное подтверждение последствий. ':($error->getMessage()==='ACS_RECOVERY_REQUIRED'?'RECOVERY_REQUIRED: проверьте прежнюю операцию. ':'Команда не подтверждена. Проверьте права, BLOCKED-причины и версии. '))).'Не повторяйте неизвестный исход с новым ключом. error_id='.self::esc($failure['error_id']).'</p>';
