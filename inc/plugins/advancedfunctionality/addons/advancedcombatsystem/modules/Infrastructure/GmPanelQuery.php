@@ -2,10 +2,13 @@
 if(!defined('IN_MYBB')){die('No direct access');}
 require_once __DIR__.'/../Application/EncounterService.php';
 require_once __DIR__.'/../Domain/Clock.php';
+require_once __DIR__.'/BestiaryPortraits.php';
 
 /** Read-only inspection of the selected page of participants. No owner calculator or writer. */
 final class AF_ACS_GmPanelQuery extends AF_ACS_Repository
 {
+    use AF_ACS_BestiaryPortraits;
+
     public function rosterCounts(string $sid,string $eid,string $tid): array
     {
         (new AF_ACS_EncounterService(new AF_ACS_EncounterRepository($this->connection),new AF_ACS_SessionAccess))->context($sid,$tid);
@@ -42,20 +45,8 @@ final class AF_ACS_GmPanelQuery extends AF_ACS_Repository
             foreach ($out as &$row) $row['ap']=$ap[$row['group_id']]??null;
             unset($row);
 
-            global $db;
-            if (af_is_addon_enabled('knowledgebase') && $db->table_exists('af_kb_entries')) {
-                require_once AF_ADDONS.'knowledgebase/knowledgebase.php';
-                if (af_kb_can_view()) {
-                    $portraits=$this->sql('SELECT e.id AS entity_id,k.* FROM '.$this->table('entities').' e JOIN `'.TABLE_PREFIX.'af_kb_entries` k'
-                        ." ON k.type='arpg_bestiary' AND k.active=1 AND k.`key`=JSON_UNQUOTE(JSON_EXTRACT(e.definition_json,'$.source.source_key'))"
-                        ." WHERE e.session_id=? AND e.kind IN ('npc','monster') AND e.id IN (".implode(',',array_fill(0,count($out),'?')).')',
-                        [$sid,...array_keys($out)])['rows'];
-                    foreach ($portraits as $portrait) {
-                        if (af_kb_entry_visible_in_context($portrait,'entry',af_kb_can_edit())) {
-                            $out[(string)$portrait['entity_id']]['portrait']=(string)$portrait['icon_url'];
-                        }
-                    }
-                }
+            foreach ($this->bestiaryPortraits($sid,array_keys($out)) as $id=>$portrait) {
+                $out[$id]['portrait']=$portrait;
             }
         }
         return array_values($out);
