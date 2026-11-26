@@ -241,6 +241,43 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
         return $result+['deleted_relationships'=>$relations['affected']];
     }
 
+    public function assertParticipantRemovalOpen(array $encounter): void
+    {
+        $sid=$encounter['session_id'];$eid=$encounter['id'];
+        if ($encounter['status']!=='preparation' || $encounter['round_number']!=='0' || $encounter['start_operation_id']!==null
+            || $this->sql('SELECT id FROM '.$this->table('rounds').' WHERE encounter_id=? LIMIT 1',[$eid])['rows']
+            || $this->sql('SELECT operation_key FROM '.$this->table('operations')
+                ." WHERE session_id=? AND encounter_id=? AND status='committed' AND kind IN ('encounter.round_start','encounter.ambush_start','encounter.start_intent') LIMIT 1",
+                [$sid,$eid])['rows']) {
+            throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
+        }
+        $this->assertNoObligations($sid,$eid);
+        if ($this->sql('SELECT id FROM '.$this->table('pre_round_commitments')
+            .' WHERE session_id=? AND encounter_id=? AND applied_round_id IS NULL LIMIT 1',[$sid,$eid])['rows']
+            || $this->sql('SELECT id FROM '.$this->table('prepared_actions')
+                ." WHERE session_id=? AND encounter_id=? AND status='active' LIMIT 1",[$sid,$eid])['rows']) {
+            throw new RuntimeException('ACS_ROUND_OBLIGATIONS_BLOCKED');
+        }
+    }
+
+    private function removeParticipant(array $encounter,array $request): array
+    {
+        $this->assertParticipantRemovalOpen($encounter);
+        $participants=$this->table('participants');
+        $row=$this->sql('SELECT p.id,p.side_id,p.participant_version FROM '.$participants.' p JOIN '
+            .$this->table('entities').' e ON e.id=p.entity_id AND e.session_id=?'
+            .' WHERE p.encounter_id=? AND p.id=? AND p.entity_id=? FOR UPDATE',
+            [$encounter['session_id'],$encounter['id'],$request['participant_id'],$request['entity_id']])['rows'][0]??null;
+        if (!$row) throw new RuntimeException('ACS_PARTICIPANT_UNAVAILABLE');
+        if ($this->sql('DELETE FROM '.$participants.' WHERE encounter_id=? AND id=? AND entity_id=? AND participant_version=?',
+            [$encounter['id'],$request['participant_id'],$request['entity_id'],$request['participant_version']])['affected']!==1) {
+            throw new RuntimeException('ACS_VERSION_CONFLICT');
+        }
+        return ['participant_id'=>(string)$row['id'],'entity_id'=>$request['entity_id'],
+            'previous_side_id'=>$row['side_id']===null?null:(string)$row['side_id'],
+            'previous_participant_version'=>(string)$row['participant_version']];
+    }
+
     public function change(array $session,array $encounter,string $op,array $request): array
     {
         $this->commandWrite();$id=$encounter['id'];$result=[];
@@ -260,6 +297,8 @@ final class AF_ACS_EncounterRepository extends AF_ACS_SessionRepository
         } elseif($op==='participant_add') {
             if($this->sql('SELECT id FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=?',[$id,$request['entity_id']])['rows'])throw new RuntimeException('ACS_PARTICIPANT_EXISTS');
             $result['participant_id']=$this->sql('INSERT INTO '.$this->table('participants').' (encounter_id,entity_id,side_id,participation,registered_sequence,participant_version,visibility_json) VALUES (?,?,?,?,?,1,?)',[$id,$request['entity_id'],$request['side_id'],'engaged',$encounter['next_event_sequence'],self::json(['schema_version'=>1,'scope'=>'gm'])])['id'];
+        } elseif ($op==='participant_remove') {
+            $result=$this->removeParticipant($encounter,$request);
         } elseif(in_array($op,['participant_side','side_change'],true)) {
             $row=$this->sql('SELECT participant_version,side_id,participation FROM '.$this->table('participants').' WHERE encounter_id=? AND entity_id=? FOR UPDATE',[$id,$request['entity_id']])['rows'][0]??null;
             if(!$row)throw new RuntimeException('ACS_PARTICIPANT_UNAVAILABLE');if($op==='side_change'&&$row['participation']!=='engaged')throw new RuntimeException('ACS_PARTICIPANT_UNAVAILABLE');if($op==='side_change'&&(string)$row['participant_version']!==$request['participant_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');self::integer($row['participant_version'],'18446744073709551614');

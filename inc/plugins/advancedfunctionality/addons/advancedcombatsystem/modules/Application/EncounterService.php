@@ -61,6 +61,23 @@ final class AF_ACS_EncounterService
         return ['session'=>$session,'encounter'=>$encounter,'sides'=>$this->repository->sides($eid,$sideAfter),'relationships'=>$this->repository->relations($eid,$relationAfter),
             'participants'=>$this->repository->participants($eid,$after),'controllers'=>$this->repository->masters($sid)];
     }
+    public function participantRemovalAvailable(string $sid,string $eid): bool
+    {
+        $session=$this->authorize($sid);
+        if ($session['status']!=='active'
+            || !AF_ACS_AuthorizationService::sessionGm($session,$this->repository->roles($sid,$this->access->uid()),$this->access->uid())) return false;
+        $encounter=$this->repository->encounter($sid,$eid);
+        if (!$encounter) return false;
+        try {
+            $this->repository->assertParticipantRemovalOpen($encounter);
+            return true;
+        } catch (RuntimeException $error) {
+            if (in_array($error->getMessage(),['ACS_ENCOUNTER_TRANSITION_BLOCKED','ACS_ROUND_OBLIGATIONS_BLOCKED',
+                'ACS_OBLIGATIONS_SCHEMA_UNVERIFIED','ACS_CLOCK_DEPENDENCY_BLOCKED'],true)) return false;
+            throw $error;
+        }
+    }
+
     public function resolution(string $sid,string $eid):array
     {
         $sid=AF_ACS_Repository::integer($sid);$eid=AF_ACS_Repository::integer($eid);$session=$this->authorize($sid);
@@ -252,7 +269,7 @@ final class AF_ACS_EncounterService
     {
         $phase='participant_input';
         $this->access->csrf();$sid=AF_ACS_Repository::integer($input['session_id']??null);
-        if(!in_array($op,['create','side_create','side_rename','side_delete','relation_set','participant_add','participant_side','participant_visibility','controller_assign','controller_set','round_start','partial_withdraw','rejoin_encounter','side_change','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release'],true))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
+        if(!in_array($op,['create','side_create','side_rename','side_delete','relation_set','participant_add','participant_remove','participant_side','participant_visibility','controller_assign','controller_set','round_start','partial_withdraw','rejoin_encounter','side_change','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release'],true))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
         $key=(string)($input['operation_key']??'');if(!preg_match('/\A[a-z0-9][a-z0-9_.-]{15,95}\z/D',$key))throw new RuntimeException('ACS_OPERATION_KEY_REQUIRED');
         $request=['schema_version'=>1,'session_id'=>$sid,'actor_uid'=>$this->access->uid(),'expected_version'=>AF_ACS_Repository::integer($input['expected_version']??null),'reason'=>self::text($input['reason']??null,1000)];
         if(isset($input['tid']) && $input['tid']!=='')$request['tid']=AF_ACS_Repository::integer($input['tid'],'4294967295');
@@ -265,7 +282,7 @@ final class AF_ACS_EncounterService
         else {
             $request['encounter_id']=AF_ACS_Repository::integer($input['encounter_id']??null);
             $request['encounter_version']=AF_ACS_Repository::integer($input['encounter_version']??null,'18446744073709551614');
-            foreach(match($op){'relation_set'=>['side_a','side_b'],'side_rename','side_delete'=>['side_id'],'participant_add','participant_side','side_change'=>['entity_id','side_id'],'controller_assign'=>['entity_id','uid'],'controller_set','participant_visibility','partial_withdraw','rejoin_encounter','release'=>['entity_id'],default=>[]} as $field)$request[$field]=AF_ACS_Repository::integer($input[$field]??null,$field==='uid'?'4294967295':'18446744073709551615');
+            foreach(match($op){'relation_set'=>['side_a','side_b'],'side_rename','side_delete'=>['side_id'],'participant_add','participant_side','side_change'=>['entity_id','side_id'],'controller_assign'=>['entity_id','uid'],'participant_remove'=>['entity_id','participant_id'],'controller_set','participant_visibility','partial_withdraw','rejoin_encounter','release'=>['entity_id'],default=>[]} as $field)$request[$field]=AF_ACS_Repository::integer($input[$field]??null,$field==='uid'?'4294967295':'18446744073709551615');
             if($op==='side_create')$request['name']=self::text($input['name']??null,191);
             if ($op==='side_rename') {
                 $name=$input['name']??null;
@@ -285,7 +302,8 @@ final class AF_ACS_EncounterService
         }
         if($op==='side_change'){$request['participant_version']=AF_ACS_Repository::integer($input['participant_version']??null,'18446744073709551614');$request['event_identity']='session:'.$request['actor_uid'].':'.$key;}
         if($op==='relation_set'&&isset($input['relation_version'])&&$input['relation_version']!=='')$request['relation_version']=AF_ACS_Repository::integer($input['relation_version'],'18446744073709551614',true);
-        if(in_array($op,['partial_withdraw','rejoin_encounter','release'],true))$request['participant_version']=AF_ACS_Repository::integer($input['participant_version']??null,'18446744073709551614');
+        if ($op==='participant_remove' && ($input['acs_confirm']??null)!=='1') throw new RuntimeException('ACS_UI_CONFIRMATION_REQUIRED');
+        if(in_array($op,['participant_remove','partial_withdraw','rejoin_encounter','release'],true))$request['participant_version']=AF_ACS_Repository::integer($input['participant_version']??null,'18446744073709551614');
         if($op==='participant_visibility'){
             $request['visibility_scope']=(string)($input['visibility_scope']??'');$request['participant_version']=AF_ACS_Repository::integer($input['participant_version']??null,'18446744073709551614');
             if(!in_array($request['visibility_scope'],['gm','participants'],true))throw new RuntimeException('ACS_PARTICIPANT_UNAVAILABLE');
@@ -301,7 +319,7 @@ final class AF_ACS_EncounterService
         }
         $phase='participant_session';
         return $this->repository->command('session:'.$request['actor_uid'].':'.$key,'encounter.'.$op,$request,
-            function($session)use($sid,$request,$op){$this->authorize($sid,true,$request['tid']??null);if(in_array($op,['side_rename','side_delete','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release','rejoin_encounter'],true)&&!AF_ACS_AuthorizationService::sessionGm($session,$this->repository->roles($sid,$this->access->uid()),$this->access->uid()))throw new RuntimeException('ACS_GM_REQUIRED');},
+            function($session)use($sid,$request,$op){$this->authorize($sid,true,$request['tid']??null);if(in_array($op,['side_rename','side_delete','participant_remove','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release','rejoin_encounter'],true)&&!AF_ACS_AuthorizationService::sessionGm($session,$this->repository->roles($sid,$this->access->uid()),$this->access->uid()))throw new RuntimeException('ACS_GM_REQUIRED');},
             function($session)use($sid,$request,$op,$presence,&$phase) {
                 $phase='participant_encounter';
                 if($op==='create')return $this->repository->createEncounter($session,$request['name'],['schema_version'=>1,'defaults_version'=>'acs-preparation-1','visibility'=>'hidden']+($presence?['presence_policy'=>$presence]:[]));
