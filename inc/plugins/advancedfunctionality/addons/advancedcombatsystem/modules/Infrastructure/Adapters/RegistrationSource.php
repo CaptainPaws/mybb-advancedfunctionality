@@ -61,7 +61,7 @@ class AF_ACS_RegistrationSource
         return ['ready'=>false,'diagnostics'=>[['code'=>$code,'path'=>'source','severity'=>'error']]];
     }
     /** Capture referenced abilities, not merely a key pointing at tomorrow's definition. */
-    public function definitions(array $snapshot,int $actor): array
+    public function definitions(array $snapshot,int $actor,bool $registrationDiagnostics=false): array
     {
         $definitions=[];$queue=[$snapshot];$seen=[];
         while($queue) {
@@ -72,9 +72,13 @@ class AF_ACS_RegistrationSource
                 if(!isset($seen[$key])) {
                     if(count($seen)>=128)throw new RuntimeException('ACS_DEFINITION_LIMIT');
                     $seen[$key]=$hash;
-                    $dto=(new AF_ACS_KnowledgeBaseAdapter)->readDefinition('arpg_ability',$key,$actor);
-                    if(empty($dto['ready']) || ($dto['definition_version']['fingerprint']??null)!==$hash)throw new RuntimeException('ACS_DEFINITION_VERSION_CONFLICT');
-                    $dto=(new AF_ACS_KnowledgeBaseAdapter)->pinSpawnTemplates($dto,$actor);
+                    $adapter=new AF_ACS_KnowledgeBaseAdapter();
+                    $dto=$adapter->readDefinition('arpg_ability',$key,$actor,reportUnexpected:$registrationDiagnostics);
+                    $actual=$dto['definition_version']['fingerprint']??null;
+                    if ($actual!==null && $actual!==$hash) throw new RuntimeException('ACS_DEFINITION_VERSION_CONFLICT');
+                    if (empty($dto['ready']) && $registrationDiagnostics) throw new AF_ACS_RegistrationBlocked($dto['diagnostics']);
+                    if (empty($dto['ready']) || $actual!==$hash) throw new RuntimeException('ACS_DEFINITION_VERSION_CONFLICT');
+                    $dto=$adapter->pinSpawnTemplates($dto,$actor);
                     $definitions[$key]=$dto;$queue[]=$dto;
                 }
             }
@@ -166,6 +170,7 @@ class AF_ACS_RegistrationSource
         }
         $profile=$payload['character_profile']??[];
         $choice['label']=trim((string)($profile['character_name_ru']??'')) ?: (trim((string)($profile['character_name']??'')) ?: (af_kb_pick_text($entry,'title') ?: $choice['label']));
+        $choice['portrait']=is_string($profile['character_pic']??null)?trim($profile['character_pic']):'';
         $choice['kb_url']=af_kb_url(['type'=>'character','key'=>$entry['key']]);
         $choice['owner_uid']=$owner;
         $choice['owner_name']=(string)(get_user($owner)['username']??'');

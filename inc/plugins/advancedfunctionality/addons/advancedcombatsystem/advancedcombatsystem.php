@@ -363,6 +363,7 @@ function af_acs_registration_diagnostic_groups(array $issues): array
         'invalid_number'=>'Значение должно быть конечным числом.',
         'alias_conflict'=>'В сохранённых полях одного параметра указаны разные значения.',
         'reference_unresolved'=>'Ссылка ведёт на недоступное или отсутствующее определение KB.',
+        'build_invalid'=>'Не удалось прочитать сохранённые настройки листа. Проверьте лист в CharacterSheets.',
         'ability_version_pin_mismatch'=>'Версия способности KB изменилась. Выберите её заново в анкете и синхронизируйте запись.',
         'equipment_provenance_incomplete'=>'Не подтверждено происхождение бонусов экипировки.',
         'bestiary_modifier_provenance_unavailable'=>'Шаблон содержит модификаторы без подтверждённого итогового расчёта.',
@@ -441,13 +442,20 @@ function af_acs_registration_diagnostic_groups(array $issues): array
     return array_values($groups);
 }
 
-/** Source preview telemetry stays in the server log and carries no source payload. */
-function af_advancedcombatsystem_source_check_error(Throwable $error,string $phase): array
+/** Source preview telemetry reuses the ACP diagnostic journal and carries no source payload. */
+function af_advancedcombatsystem_source_check_error(Throwable $error,string $phase,string $operation='entity_validate'): array
 {
+    global $db;
     $id=bin2hex(random_bytes(16));
+    try {
+        require_once __DIR__.'/modules/Infrastructure/Repository.php';
+        $id=(new AF_ACS_Repository($db))->recordDiagnostic($id,'INTERNAL_ERROR',$operation,$phase);
+    } catch (Throwable $diagnosticError) {
+        // The server log still carries the incident ID if ACP storage is unavailable.
+    }
     $code=preg_match('/\A(?:ACS|INV)_[A-Z0-9_]{1,90}\z/D',$error->getMessage()) ? $error->getMessage() : 'UNEXPECTED_EXCEPTION';
-    error_log(sprintf('ACS entity_validate error_id=%s phase=%s exception=%s code=%s native_code=%d location=%s:%d',
-        $id,$phase,get_class($error),$code,(int)$error->getCode(),basename($error->getFile()),$error->getLine()));
+    error_log(sprintf('ACS %s error_id=%s phase=%s exception=%s code=%s native_code=%d location=%s:%d',
+        $operation,$id,$phase,get_class($error),$code,(int)$error->getCode(),basename($error->getFile()),$error->getLine()));
     return ['ready'=>false,'status'=>'error','diagnostics'=>[],'error_id'=>$id,
         'message'=>'Не удалось проверить источник персонажа. Код обращения: '.$id];
 }
