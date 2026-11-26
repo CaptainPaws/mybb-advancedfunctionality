@@ -425,33 +425,72 @@ final class AF_ADVINV_OwnerProtocol
 
     private function schema(): void
     {
-        foreach (['items','equipped','support_slots','owner_state','external_operations','reservations'] as $table) {
-            $row = $this->one('SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?', [$this->prefix.'af_advinv_'.$table]);
-            if (!$row || $row['ENGINE'] !== 'InnoDB') throw new AF_ADVINV_StorageException('table.'.$table);
+        foreach ($this->storageStatus() as $table) {
+            if ($table['issues']) throw new AF_ADVINV_StorageException($table['issues'][0]);
         }
+    }
+
+    /** Shared contract for the runtime guard and the ACP preview. */
+    public function storageStatus(bool $includeGrantLedger = false): array
+    {
         $critical = [
             'items'=>['id'=>'int unsigned','uid'=>'int unsigned','qty'=>'int'],
             'owner_state'=>['uid'=>'int unsigned','inventory_version'=>'bigint unsigned'],
             'external_operations'=>['operation_key'=>'varchar(191)','intent_json'=>'longtext','result_json'=>'longtext','result_hash'=>'char(64)'],
             'reservations'=>['id'=>'bigint unsigned','item_id'=>'int unsigned','initial_qty'=>'int unsigned','remaining_qty'=>'int unsigned','reservation_version'=>'bigint unsigned'],
         ];
-        foreach ($critical as $table=>$columns) {
-            foreach ($columns as $column=>$type) {
-                $meta = $this->one('SELECT COLUMN_TYPE,COLLATION_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?', [$this->prefix.'af_advinv_'.$table,$column]);
-                // MariaDB reports integer display widths that MySQL 8 can omit.
-                $actual = preg_replace('/\A(int|bigint)\([0-9]+\)(?= unsigned\z|\z)/D', '$1', $meta['COLUMN_TYPE'] ?? '');
-                if ($actual !== $type || ($column === 'operation_key' && $meta['COLLATION_NAME'] !== 'ascii_bin')) throw new AF_ADVINV_StorageException('column.'.$table.'.'.$column);
-            }
+        $required = [
+            'items'=>['PRIMARY'=>['id']], 'equipped'=>['PRIMARY'=>['uid','equip_slot']],
+            'support_slots'=>['PRIMARY'=>['uid','slot_code']], 'owner_state'=>['PRIMARY'=>['uid']],
+            'external_operations'=>['PRIMARY'=>['operation_key']],
+            'reservations'=>['PRIMARY'=>['id'],'reservation_once'=>['operation_key'],'item_active'=>['item_id','status']],
+        ];
+        if ($includeGrantLedger) {
+            $critical['equipped'] = ['uid'=>'int unsigned','equip_slot'=>'varchar(64)','item_id'=>'int unsigned','updated_at'=>'int unsigned'];
+            $critical['support_slots'] = ['uid'=>'int unsigned','slot_code'=>'varchar(64)','item_id'=>'bigint unsigned',
+                'sortorder'=>'int','created_at'=>'bigint unsigned','updated_at'=>'bigint unsigned'];
+            $critical['external_operations'] += ['payload_hash'=>'char(64)','operation_type'=>'varchar(16)','actor_uid'=>'int unsigned',
+                'context_system'=>'varchar(16)','context_key'=>'varchar(191)','owner_uid'=>'int unsigned','item_id'=>'int unsigned',
+                'status'=>'varchar(16)','external_ref'=>'varchar(191)','created_at'=>'bigint unsigned','updated_at'=>'bigint unsigned'];
+            $critical['reservations'] += ['operation_key'=>'varchar(191)','owner_uid'=>'int unsigned','context_system'=>'varchar(16)',
+                'context_key'=>'varchar(191)','status'=>'varchar(16)','prepared_binding_json'=>'longtext','prepared_binding_hash'=>'char(64)',
+                'created_at'=>'bigint unsigned','updated_at'=>'bigint unsigned'];
+            $critical['grant_sources'] = ['source_system'=>'varchar(16)','source_key'=>'varbinary(191)',
+                'recipient_uid'=>'int unsigned','operation_key'=>'varchar(191)','payload_hash'=>'char(64)',
+                'result_json'=>'longtext','result_hash'=>'char(64)'];
+            $required['grant_sources'] = ['PRIMARY'=>['source_system','source_key'],'source_operation'=>['operation_key']];
         }
-        foreach (['items'=>['PRIMARY'=>['id']], 'equipped'=>['PRIMARY'=>['uid','equip_slot']], 'support_slots'=>['PRIMARY'=>['uid','slot_code']], 'owner_state'=>['PRIMARY'=>['uid']], 'external_operations'=>['PRIMARY'=>['operation_key']], 'reservations'=>['PRIMARY'=>['id'],'reservation_once'=>['operation_key'],'item_active'=>['item_id','status']]] as $table=>$required) {
-            $indexes = [];
-            $unique = [];
-            foreach ($this->sql('SHOW INDEX FROM '.$this->table($table))['rows'] as $index) {
-                $indexes[$index['Key_name']][] = $index['Column_name'];
-                $unique[$index['Key_name']] = (int)$index['Non_unique'] === 0;
+        $result = [];
+        foreach ($required as $table => $indexContract) {
+            $name = $this->prefix.'af_advinv_'.$table;
+            $row = $this->one('SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?', [$name]);
+            $engine = $row['ENGINE'] ?? null;
+            $issues = $engine === 'InnoDB' ? [] : ['table.'.$table];
+            $columns = array_fill_keys(array_keys($critical[$table] ?? []), false);
+            $indexes = array_fill_keys(array_keys($indexContract), false);
+            if ($row && $engine !== null) {
+                foreach ($critical[$table] ?? [] as $column => $type) {
+                    $meta = $this->one('SELECT COLUMN_TYPE,COLLATION_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?', [$name,$column]);
+                    $actual = preg_replace('/\A(int|bigint)\([0-9]+\)(?= unsigned\z|\z)/D', '$1', $meta['COLUMN_TYPE'] ?? '');
+                    $columns[$column] = $actual === $type && ($column !== 'operation_key' || $meta['COLLATION_NAME'] === 'ascii_bin');
+                    if (!$columns[$column]) $issues[] = 'column.'.$table.'.'.$column;
+                }
+                $actualIndexes = $unique = [];
+                foreach ($this->sql('SHOW INDEX FROM '.$this->table($table))['rows'] as $index) {
+                    $key = $index['Key_name'];
+                    $actualIndexes[$key][(int)$index['Seq_in_index']] = $index['Column_name'];
+                    $unique[$key] = (int)$index['Non_unique'] === 0;
+                }
+                foreach ($indexContract as $key => $expected) {
+                    $parts = $actualIndexes[$key] ?? [];
+                    ksort($parts);
+                    $indexes[$key] = array_values($parts) === $expected && ($key === 'item_active' || $unique[$key]);
+                    if (!$indexes[$key]) $issues[] = 'index.'.$table.'.'.strtolower($key);
+                }
             }
-            foreach ($required as $name=>$columns) if (($indexes[$name] ?? null) !== $columns || ($name !== 'item_active' && !$unique[$name])) throw new AF_ADVINV_StorageException('index.'.$table.'.'.strtolower($name));
+            $result[$table] = ['name'=>$name,'exists'=>$row!==null,'engine'=>$engine,'columns'=>$columns,'indexes'=>$indexes,'issues'=>$issues];
         }
+        return $result;
     }
 
     private function table(string $name): string { return '`'.$this->prefix.'af_advinv_'.$name.'`'; }

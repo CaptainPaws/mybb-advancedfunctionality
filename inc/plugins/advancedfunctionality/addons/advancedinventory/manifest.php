@@ -74,6 +74,7 @@ return [
         'title' => 'Advanced Inventory',
         'controller' => 'admin.php',
         'menu' => [
+            ['title' => 'Подготовка схемы для ACS', 'do' => 'acs_schema'],
             [
                 'title' => 'Inventory categories',
                 'do' => 'entities',
