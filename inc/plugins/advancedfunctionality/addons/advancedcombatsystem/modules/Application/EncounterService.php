@@ -61,6 +61,81 @@ final class AF_ACS_EncounterService
         return ['session'=>$session,'encounter'=>$encounter,'sides'=>$this->repository->sides($eid,$sideAfter),'relationships'=>$this->repository->relations($eid,$relationAfter),
             'participants'=>$this->repository->participants($eid,$after),'controllers'=>$this->repository->masters($sid)];
     }
+    /** Read-only availability hints. Commands repeat every precondition under their locks. */
+    public function activeRosterControls(array $view): array
+    {
+        $enc=$view['encounter'];$sid=$view['session']['id'];$eid=$enc['id'];
+        $session=$this->authorize($sid,tid:$view['session']['tid']);
+        $turns=$this->repository->currentRosterTurns($enc);
+        $sessionBlock=$session['status']==='active'?null:'ACS_SESSION_TRANSITION_BLOCKED';
+        $publication=$sessionBlock??self::rosterBlock(fn()=>$this->repository->assertRosterPublicationSettled($sid));
+        $config=json_decode($enc['config_json'],true,64,JSON_THROW_ON_ERROR);
+        $usesParticipation=isset($config['participation_policy']);
+        $policy=null;
+        $presence=$sessionBlock??self::rosterBlock(function () use ($enc,$usesParticipation,&$policy) {
+            if ($usesParticipation) $policy=$this->repository->participationPolicy($enc);
+            else $this->repository->legacyPresencePolicy($enc);
+        });
+        $gm=AF_ACS_AuthorizationService::sessionGm($session,$this->repository->roles($sid,$this->access->uid()),$this->access->uid());
+        $obligations=$publication??self::rosterBlock(fn()=>$this->repository->assertNoObligations($sid,$eid));
+        $turnBlocks=[];$controls=[];$summons=null;
+        foreach ($view['participants'] as $person) {
+            $id=$person['entity_id'];$turn=$turns[$id]??null;
+            $state=$person['participation'];$life=$person['life_state'];
+            $eligible=$life==='active' && in_array($person['kind'],['character','pet','npc','monster','summon'],true);
+            $skip=$publication;
+            if ($skip===null) {
+                $skip=match (true) {
+                    $enc['status']!=='active'=>'ACS_ROSTER_PAUSED',
+                    $turn===null=>'ACS_ROSTER_NO_TURN',
+                    $turn['round_status']!=='open' || $turn['status']!=='pending'=>'ACS_ROSTER_TURN_CLOSED',
+                    default=>null,
+                };
+                if ($skip===null && $obligations==='ACS_ROUND_OBLIGATIONS_BLOCKED') {
+                    // A blocker belonging to another turn need not prevent this group's pass.
+                    $key=$turn['turn_id'];
+                    if (!array_key_exists($key,$turnBlocks)) {
+                        $turnBlocks[$key]=self::rosterBlock(fn()=>$this->repository->assertNoObligations($sid,$eid,(string)$key));
+                    }
+                    $skip=$turnBlocks[$key];
+                } elseif ($skip===null) {
+                    $skip=$obligations;
+                }
+            }
+            $withdraw=$publication??($usesParticipation?'ACS_PARTICIPATION_PAID_ACTION_REQUIRED':$presence);
+            $rejoin=$publication??($gm?$presence:'ACS_GM_REQUIRED');
+            $withdraw??=($eligible && $state==='engaged'?null:'ACS_PRESENCE_STATE_CONFLICT');
+            $rejoin??=($eligible && in_array($state,$policy['rejoin_from']??['withdrawn'],true)?null:'ACS_PARTICIPATION_STATE_CONFLICT');
+            if (($withdraw===null || $rejoin===null) && $person['kind']==='summon') {
+                $summons??=$this->repository->summonProjection($sid,$eid);
+                if (($summons[$id]['status']??null)!=='active') {
+                    $withdraw??='ACS_PRESENCE_STATE_CONFLICT';
+                    $rejoin??='ACS_PRESENCE_STATE_CONFLICT';
+                }
+            }
+            if ($rejoin===null && $usesParticipation) {
+                $rejoin=self::rosterBlock(fn()=>$this->repository->assertRejoinLocation($enc,$policy,$id));
+            }
+            $withdraw??=$obligations;
+            $rejoin??=$obligations;
+            $controls[$id]=['turn'=>$turn,'skip'=>$skip,'withdraw'=>$withdraw,'rejoin'=>$rejoin];
+        }
+        return ['members'=>$controls,'reinforcement'=>$publication??($enc['status']==='active'?null:'ACS_ROSTER_PAUSED'),
+            'side_change'=>$sessionBlock];
+    }
+
+    private static function rosterBlock(callable $check): ?string
+    {
+        try {
+            $check();
+            return null;
+        } catch (DomainException|RuntimeException $error) {
+            $code=$error->getMessage();
+            if (!preg_match('/\AACS_[A-Z0-9_]{1,90}\z/D',$code)) throw $error;
+            return $code;
+        }
+    }
+
     public function participantRemovalAvailable(string $sid,string $eid): bool
     {
         $session=$this->authorize($sid);
@@ -326,10 +401,11 @@ final class AF_ACS_EncounterService
             if(count(array_unique($request['uids']))!==count($request['uids']) || $request['mode']==='exclusive' && count($uids)>1 || $request['mode']==='gm_pool' && $uids)throw new RuntimeException('ACS_CONTROL_INVALID');
             sort($request['uids'],SORT_STRING);
         }
+        $confirmed=($input['acs_confirm']??null)==='1';
         $phase='participant_session';
         return $this->repository->command('session:'.$request['actor_uid'].':'.$key,'encounter.'.$op,$request,
             function($session)use($sid,$request,$op){$this->authorize($sid,true,$request['tid']??null);if(in_array($op,['side_rename','side_accent','side_delete','participant_remove','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release','rejoin_encounter'],true)&&!AF_ACS_AuthorizationService::sessionGm($session,$this->repository->roles($sid,$this->access->uid()),$this->access->uid()))throw new RuntimeException('ACS_GM_REQUIRED');},
-            function($session)use($sid,$request,$op,$presence,&$phase) {
+            function($session)use($sid,$request,$op,$presence,$confirmed,&$phase) {
                 $phase='participant_encounter';
                 if($op==='create')return $this->repository->createEncounter($session,$request['name'],['schema_version'=>1,'defaults_version'=>'acs-preparation-1','visibility'=>'hidden']+($presence?['presence_policy'=>$presence]:[]));
                 $encounter=$this->repository->encounter($sid,$request['encounter_id'],true);
@@ -350,6 +426,9 @@ final class AF_ACS_EncounterService
                 if (in_array($op,['side_rename','side_accent','side_delete'],true)
                     && ($encounter['status']!=='preparation' || $encounter['round_number']!=='0' || $encounter['start_operation_id']!==null)) {
                     throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
+                }
+                if ($op==='participant_add' && $encounter['status']==='active' && !$confirmed) {
+                    throw new RuntimeException('ACS_UI_CONFIRMATION_REQUIRED');
                 }
                 if($op==='round_start' && ($encounter['status']!=='preparation' || $this->repository->firstRound($encounter['id'])))throw new RuntimeException('ACS_FIRST_ROUND_EXISTS');
                 if($encounter['status']!=='preparation' && !($encounter['status']==='active' && $op==='participant_add') && !(in_array($encounter['status'],['active','paused'],true) && in_array($op,['controller_set','participant_visibility','partial_withdraw','rejoin_encounter','side_change','relation_set'],true)))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');

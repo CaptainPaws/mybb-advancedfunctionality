@@ -78,7 +78,17 @@ final class AF_ACS_EncountersPage
                         $recent=AF_ACS_GmPanel::stepUrl($base,$eid,'roster').'&gm_picker=1&kind=recent&gm_entity='.rawurlencode($result['entity_id']);
                         $notice='<p role="status">Существо убрано из состава. <a href="'.self::esc($recent).'">Открыть в «Недавних»</a>.</p>';
                     } elseif ($op==='participant_add') {
-                        $notice='<p role="status">Существо добавлено в столкновение.</p>';
+                        $notice='<p role="status">'.(($result['admission']??null)==='next_round'
+                            ? 'Существо добавлено. Вступит в бой со следующего раунда.'
+                            : 'Существо добавлено в столкновение.').'</p>';
+                    } elseif (in_array($op,['manage_gm_skip','partial_withdraw','rejoin_encounter','side_change','relation_set'],true)) {
+                        $notice='<p role="status">'.match($op) {
+                            'manage_gm_skip'=>'Текущий ход группы пропущен.',
+                            'partial_withdraw'=>'Участник временно выведен из боя.',
+                            'rejoin_encounter'=>'Участие восстановлено. Состояние хода и AP сохранено.',
+                            'side_change'=>'Сторона участника изменена.',
+                            'relation_set'=>'Отношение сторон сохранено.',
+                        }.'</p>';
                     } elseif ($op==='round_start') {
                         $notice='<p role="status">Бой запущен. Первый раунд открыт.</p>';
                     }
@@ -130,6 +140,12 @@ final class AF_ACS_EncountersPage
                 })!==null) {
                     $outcome=['error'=>true];
                     $notice='<p class="error" role="alert">'.self::esc($message).' Код обращения: '.self::esc($failure['error_id']).'</p>';
+                } elseif ((in_array($op,['manage_gm_skip','partial_withdraw','rejoin_encounter','side_change','relation_set'],true)
+                    || ($op==='participant_add' && $error->getMessage()==='ACS_UI_CONFIRMATION_REQUIRED'))
+                    && ($message=AF_ACS_GmPanel::rosterIssue($error->getMessage()))!==null) {
+                    $commandBlocked=false;
+                    $outcome=['error'=>true];
+                    $notice='<p role="alert">BLOCKED · '.self::esc($message).' <code>'.self::esc($error->getMessage()).'</code> · '.self::esc($failure['error_id']).'</p>';
                 } elseif ($op==='participant_remove' && ($message=match($error->getMessage()) {
                     'ACS_ENCOUNTER_TRANSITION_BLOCKED'=>'Убрать участника можно только до запуска боя.',
                     'ACS_PARTICIPANT_UNAVAILABLE'=>'Участник больше недоступен в этом столкновении.',
@@ -251,14 +267,7 @@ final class AF_ACS_EncountersPage
                 if(count($events)===100)echo '<a href="'.self::esc($url.'&event_after='.end($events)['id']).'">Следующие события</a>';
             }
             if($tab==='participants' && $session['status']==='active' && $encounter['status']==='active') {
-                echo '<h3>Добавить участника для следующего раунда</h3><p>Текущий roster неизменяем. Добавление не создаёт новый turn или EntityTurn в текущем раунде и не выдаёт AP.</p>';
-                if($view['sides']) {
-                    AF_ACS_GmPanel::form($url,'participant_add',$session,$encounter);echo '<select name="entity_id" required><option value="">Выберите существо</option>';
-                    $candidates=$service->candidates($sid,$mybb->get_input('candidate_after')?:'0');
-                    foreach($candidates as $candidate)echo '<option value="'.self::esc($candidate['id']).'">#'.self::esc($candidate['id']).' '.self::esc($candidate['name']).'</option>';
-                    echo '</select>';AF_ACS_GmPanel::sides($view['sides'],'side_id');AF_ACS_GmPanel::submit('Добавить для следующего раунда');
-                    if(count($candidates)===100)echo '<a href="'.self::esc($url.'&candidate_after='.end($candidates)['id']).'">Следующие существа</a>';
-                }
+                echo '<p><a href="'.self::esc(AF_ACS_GmPanel::stepUrl($base,$eid,'roster').'&gm_picker=1&kind=recent').'">Добавить подкрепление</a></p>';
             } elseif($tab==='participants' && $session['status']==='active' && $encounter['status']==='preparation') {
                 AF_ACS_GmPanel::form($url,'side_create',$session,$encounter);echo '<h3>Стороны</h3><label>Название стороны <input name="name" maxlength="191" required></label>';AF_ACS_GmPanel::sideAccentPicker();AF_ACS_GmPanel::submit('Добавить сторону');
                 if($view['sides']) {
@@ -374,6 +383,6 @@ final class AF_ACS_EncountersPage
     }
 
     private static function state(string $state): string {return ['preparation'=>'Подготовка','active'=>'Активно','ambush_ready'=>'Засада подготовлена','paused'=>'Пауза','completed'=>'Завершено','pending_resolution'=>'Ожидание исхода','encounter_start'=>'Запуск','ambush_resolution'=>'Разрешение засады'][$state]??'Состояние недоступно';}
-    private static function event(string $event): string {return ['encounter.pause'=>'Пауза','encounter.resume'=>'Возобновление','encounter.gm_skip'=>'Ручной пропуск','encounter.gm_forfeit'=>'Закрытие выбывшей группы','encounter.deadline_set'=>'Настройка дедлайнов','encounter.extend_deadline'=>'Продление дедлайна','encounter.deadline_process'=>'Обработка дедлайна','encounter.round_next'=>'Следующий раунд','encounter.round_start'=>'Запущен первый раунд','encounter.create'=>'Создано столкновение','encounter.side_create'=>'Добавлена сторона','encounter.side_rename'=>'Сторона переименована','encounter.side_accent'=>'Изменено оформление стороны','encounter.side_delete'=>'Сторона удалена','encounter.relation_set'=>'Изменены отношения сторон','encounter.participant_add'=>'Добавлен участник','encounter.participant_remove'=>'Участник убран из состава','encounter.participant_side'=>'Изменена сторона участника','encounter.side_change'=>'Изменена текущая сторона','encounter.participant_visibility'=>'Изменена доступность цели','encounter.controller_set'=>'Изменён режим / список управляющих','encounter.controller_assign'=>'Назначен управляющий'][$event]??'Запись журнала';}
+    private static function event(string $event): string {return ['encounter.pause'=>'Пауза','encounter.resume'=>'Возобновление','encounter.gm_skip'=>'Ручной пропуск','encounter.gm_forfeit'=>'Закрытие выбывшей группы','encounter.deadline_set'=>'Настройка дедлайнов','encounter.extend_deadline'=>'Продление дедлайна','encounter.deadline_process'=>'Обработка дедлайна','encounter.round_next'=>'Следующий раунд','encounter.round_start'=>'Запущен первый раунд','encounter.create'=>'Создано столкновение','encounter.side_create'=>'Добавлена сторона','encounter.side_rename'=>'Сторона переименована','encounter.side_accent'=>'Изменено оформление стороны','encounter.side_delete'=>'Сторона удалена','encounter.relation_set'=>'Изменены отношения сторон','encounter.participant_add'=>'Добавлен участник','encounter.participant_remove'=>'Участник убран из состава','encounter.partial_withdraw'=>'Участник временно выведен','encounter.rejoin_encounter'=>'Участник возвращён','encounter.participant_side'=>'Изменена сторона участника','encounter.side_change'=>'Изменена текущая сторона','encounter.participant_visibility'=>'Изменена доступность цели','encounter.controller_set'=>'Изменён режим / список управляющих','encounter.controller_assign'=>'Назначен управляющий'][$event]??'Запись журнала';}
     public static function issue(string $code): string {return ['ACS_CHARACTER_OWNER_ROLE_REQUIRED'=>'Владелец персонажа не имеет игровой роли в сессии.','cooldown_source_unavailable'=>'Кулдаун не имеет подтверждённого источника/версии.','round_boundary_contract_unavailable'=>'Активные слои или настройки AP требуют ещё не подключённого обработчика границ.','participants_missing'=>'Добавьте хотя бы одного участника.','side_relationship_missing'=>'Явно задайте отношения используемых сторон.','ACS_CONTROL_INVALID'=>'Проверьте владельца, управляющего и группу существа.','ACS_SIDE_UNAVAILABLE'=>'Участнику нужна допустимая сторона.','ACS_ENTITY_UNAVAILABLE'=>'Существо недоступно либо занято другим столкновением.','ACS_SNAPSHOT_HASH_MISMATCH'=>'Нарушена целостность сохранённого снимка.','ACS_SNAPSHOT_INVALID'=>'Сохранённый снимок несовместим или неполон.','ACS_DEPENDENCY_UNAVAILABLE'=>'Обязательная зависимость отключена.','preparation_required'=>'Нужны активная сессия и состояние подготовки.','config_snapshot_invalid'=>'Снимок конфигурации не прошёл проверку.'][$code]??'Участник не прошёл серверную проверку.';}
 }
