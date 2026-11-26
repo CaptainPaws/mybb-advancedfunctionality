@@ -5,7 +5,7 @@ require_once __DIR__.'/../Application/EncounterService.php';
 /** Backend-only GM endpoint on the existing AF transport. No client winner authority. */
 final class AF_ACS_EndConditionController
 {
-    public static function handle(AF_ACS_EncounterService $service,string $op,array $input,string $method):array
+    public static function handle(AF_ACS_EncounterService $service,string $op,array $input,string $method,?string &$phase=null):array
     {
         if(!af_is_addon_enabled('advancedcombatsystem')||!empty($GLOBALS['af_acs_deactivated']))throw new RuntimeException('ACS_DISABLED');
         $fields=['session_id','encounter_id'];
@@ -16,7 +16,7 @@ final class AF_ACS_EndConditionController
         if($op==='outcome_status')return $service->resolution($input['session_id'],$input['encounter_id']);
         if($op==='participation_set')$input['participation_policy']=json_decode($input['participation_policy'],true,16,JSON_THROW_ON_ERROR);
         if($op==='end_conditions_set')$input['end_conditions']=json_decode($input['end_conditions'],true,16,JSON_THROW_ON_ERROR);
-        return $service->command($op,$input);
+        return $service->command($op,$input,$phase);
     }
     public static function dispatch():never
     {

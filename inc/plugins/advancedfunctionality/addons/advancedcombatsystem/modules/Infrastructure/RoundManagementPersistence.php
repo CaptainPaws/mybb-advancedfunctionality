@@ -17,6 +17,10 @@ trait AF_ACS_RoundManagementPersistence
         $row=$this->sql('SELECT * FROM '.$this->table('rounds').' WHERE encounter_id=? AND round_number=?',[$encounter['id'],$encounter['round_number']])['rows'][0]??null;
         return $row?$this->ids($row,['id','encounter_id','round_number','round_version','opened_at','closed_at']):null;
     }
+    public function pendingTurnCount(string $roundId): int
+    {
+        return (int)$this->sql('SELECT COUNT(*) AS n FROM '.$this->table('turns')." WHERE round_id=? AND status='pending'",[$roundId])['rows'][0]['n'];
+    }
     public function allRoundTurns(string $round): iterable
     {
         $after='0';do{$rows=$this->roundTurns($round,$after);foreach($rows as $row){$after=$row['id'];yield $row;}}while(count($rows)===100);

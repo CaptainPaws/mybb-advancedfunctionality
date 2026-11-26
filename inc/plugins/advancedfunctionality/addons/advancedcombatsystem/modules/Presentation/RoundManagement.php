@@ -17,6 +17,13 @@ final class AF_ACS_RoundManagementPage
     {
         echo '<label>Причина <input name="reason" maxlength="1000" required></label><label><input name="confirm" value="1" type="checkbox" required> Подтверждаю операцию</label><button type="submit">'.self::esc($label).'</button></form>';
     }
+    public static function pauseResumeForm(string $url,array $view): void
+    {
+        $paused=$view['encounter']['status']==='paused';
+        self::form($url,$paused?'resume':'pause',$view);
+        self::submit($paused?'Продолжить бой':'Пауза');
+    }
+
     public static function skipForm(string $url,array $view,array $turn): void
     {
         self::form($url,'gm_skip',$view,['turn_id'=>$turn['turn_id']??$turn['id'],'turn_version'=>$turn['turn_version']]);
@@ -31,7 +38,7 @@ final class AF_ACS_RoundManagementPage
         echo '<h3>Управление раундом</h3><p>Столкновение: '.($state==='paused'?'Пауза':($state==='active'?'Активно':'Подготовка')).'</p>';
         if($view['session']['status']!=='active')return;
         if(in_array($state,['active','paused'],true)) {
-            self::form($url,$state==='active'?'pause':'resume',$view);self::submit($state==='active'?'Поставить на паузу':'Возобновить');
+            self::pauseResumeForm($url,$view);
         }
         $names=['off'=>'Выключены','notify'=>'Уведомление без пропуска','timeout_pass'=>'Пропуск по истечении срока','gm_skip'=>'Ручной пропуск мастером'];
         echo '<p>Политика дедлайна: '.self::esc($names[$data['policy']['mode']]).'</p>';

@@ -153,6 +153,18 @@ final class AF_ACS_EncounterService
         }
     }
 
+    public function lifecycleOverview(string $sid,string $eid,string $tid): array
+    {
+        $this->authorize($sid,tid:$tid);
+        $encounter=$this->repository->encounter($sid,$eid)??throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
+        $round=$this->repository->currentRound($encounter);
+        $publication=$this->rosterBlock(fn()=>$this->repository->assertRosterPublicationSettled($sid));
+        if ($publication!==null && $publication!=='ACS_PUBLICATION_UNRESOLVED') throw new RuntimeException($publication);
+        return ['encounter_version'=>$encounter['encounter_version'],'round_open'=>($round['status']??null)==='open',
+            'pending_turns'=>$round===null?null:$this->repository->pendingTurnCount($round['id']),
+            'publication_blocked'=>$publication!==null];
+    }
+
     public function resolution(string $sid,string $eid):array
     {
         $sid=AF_ACS_Repository::integer($sid);$eid=AF_ACS_Repository::integer($eid);$session=$this->authorize($sid);
@@ -342,7 +354,8 @@ final class AF_ACS_EncounterService
     }
     public function command(string $op,array $input,?string &$phase=null): array
     {
-        $phase='participant_input';
+        $outcomeCommand=in_array($op,['outcome_confirm','outcome_continue'],true);
+        $phase=$outcomeCommand?'lifecycle_input':'participant_input';
         $this->access->csrf();$sid=AF_ACS_Repository::integer($input['session_id']??null);
         if(!in_array($op,['create','side_create','side_rename','side_accent','side_delete','relation_set','participant_add','participant_remove','participant_side','participant_visibility','controller_assign','controller_set','round_start','partial_withdraw','rejoin_encounter','side_change','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release'],true))throw new RuntimeException('ACS_ENCOUNTER_TRANSITION_BLOCKED');
         $key=(string)($input['operation_key']??'');if(!preg_match('/\A[a-z0-9][a-z0-9_.-]{15,95}\z/D',$key))throw new RuntimeException('ACS_OPERATION_KEY_REQUIRED');
@@ -402,17 +415,20 @@ final class AF_ACS_EncounterService
             sort($request['uids'],SORT_STRING);
         }
         $confirmed=($input['acs_confirm']??null)==='1';
-        $phase='participant_session';
+        $phase=$outcomeCommand?'lifecycle_transaction':'participant_session';
+        $transactionPhase=null;
+        if ($outcomeCommand) $transactionPhase=&$phase;
         return $this->repository->command('session:'.$request['actor_uid'].':'.$key,'encounter.'.$op,$request,
             function($session)use($sid,$request,$op){$this->authorize($sid,true,$request['tid']??null);if(in_array($op,['side_rename','side_accent','side_delete','participant_remove','end_conditions_set','outcome_confirm','outcome_continue','participation_set','release','rejoin_encounter'],true)&&!AF_ACS_AuthorizationService::sessionGm($session,$this->repository->roles($sid,$this->access->uid()),$this->access->uid()))throw new RuntimeException('ACS_GM_REQUIRED');},
-            function($session)use($sid,$request,$op,$presence,$confirmed,&$phase) {
-                $phase='participant_encounter';
+            function($session)use($sid,$request,$op,$presence,$confirmed,$outcomeCommand,&$phase) {
+                $phase=$outcomeCommand?'lifecycle_encounter':'participant_encounter';
                 if($op==='create')return $this->repository->createEncounter($session,$request['name'],['schema_version'=>1,'defaults_version'=>'acs-preparation-1','visibility'=>'hidden']+($presence?['presence_policy'=>$presence]:[]));
                 $encounter=$this->repository->encounter($sid,$request['encounter_id'],true);
                 if(!$encounter)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
                 if(in_array($op,['end_conditions_set','outcome_confirm','outcome_continue'],true)){
                     if($encounter['encounter_version']!==$request['encounter_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');
                     if($op==='end_conditions_set')return $this->repository->configureEndConditions($session,$encounter,$request['end_conditions']);
+                    $phase='lifecycle_outcome_decision';
                     $session['_end_actor']=$request['actor_uid'];return $this->repository->decideEndConditions($session,$encounter,$op,$request);
                 }
                 $participationConfigured=isset(json_decode($encounter['config_json'],true)['participation_policy']);
@@ -466,6 +482,7 @@ final class AF_ACS_EncounterService
                     $change['_previous_assignment_version']=$old;
                 }
                 return $this->repository->change($session,$encounter,$op,$change);
-            },in_array($op,['outcome_confirm','outcome_continue'],true)?fn($s,$event)=>$this->repository->recordEndDecision($s,$event):null);
+            },$outcomeCommand?fn($s,$event)=>$this->repository->recordEndDecision($s,$event):null,
+            phase:$transactionPhase);
     }
 }

@@ -108,7 +108,8 @@ final class AF_ACS_SessionService
     /** No actor_uid, global permission, owner role or config accepted from client. */
     public function command(string $operation,array $input,bool $firstForTopic=false,?string &$phase=null): array
     {
-        if ($phase!==null) $phase='role_input';
+        $lifecycle=in_array($operation,['request_close','close','reopen','reopen_session','archive'],true);
+        if ($phase!==null) $phase=$lifecycle?'lifecycle_input':'role_input';
         $this->access->csrf();$actor=$this->access->uid();
         if($operation==='reopen_session')$operation='reopen'; // A1.40 public command; one canonical receipt/event identity.
         if(!in_array($operation,['create','set_role','remove_member','transfer_owner','request_close','close','reopen','archive'],true))throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
@@ -127,7 +128,7 @@ final class AF_ACS_SessionService
                 if(!$role || $role===AF_ACS_Role::Owner)throw new RuntimeException('ACS_ROLE_INVALID');$request['role']=$role->value;
             }
         }
-        if ($phase!==null) $phase='role_transaction';
+        if ($phase!==null) $phase=$lifecycle?'lifecycle_transaction':'role_transaction';
         return $this->repository->command('session:'.$actor.':'.$key,'session.'.$operation,$request,
             function(?array $session) use($operation,$request,$actor) {
                 if($operation==='create') {
@@ -148,7 +149,7 @@ final class AF_ACS_SessionService
                     }
                     return $this->repository->insertSession($request['tid'],$request['owner_uid'],$this->access->defaults());
                 }
-                if (in_array($operation,['request_close','close','reopen','archive'],true)) return $this->repository->lifecycle($session,$operation);
+                if (in_array($operation,['request_close','close','reopen','archive'],true)) return $this->repository->lifecycle($session,$operation,$phase);
                 $id=(string)$session['id'];$uid=$request['uid'];
                 if ($phase!==null) $phase='role_user';
                 $this->access->user($uid);
