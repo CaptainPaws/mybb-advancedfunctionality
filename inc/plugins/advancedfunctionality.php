@@ -388,9 +388,22 @@ class AF_Admin
                     flash_message($lang->af_addon_enabled, 'success');
                 } else {
                     $diagnostic = af_read_addon_lifecycle_diagnostic($addon);
+                    if ($diagnostic === null && $addon === 'advancedinventory' && isset($error)) {
+                        $diagnostic = ['addon'=>$addon,'operation'=>'enable','stage'=>'enable',
+                            'exception'=>'RuntimeException','message'=>preg_match('/\AINV_[A-Z0-9_]{1,90}\z/D',$error->getMessage())
+                                ? $error->getMessage() : 'INV_LIFECYCLE_FAILED'];
+                    }
                     $message = $diagnostic
                         ? af_format_addon_lifecycle_diagnostic($diagnostic)
                         : 'Addon activation failed without a lifecycle diagnostic.';
+                    if ($addon === 'advancedinventory') {
+                        $message .= match ($diagnostic['message'] ?? '') {
+                            'INV_SCHEMA_NOT_READY' => ' Проверьте ACP → AdvancedInventory → Подготовка схемы для ACS.',
+                            'INV_STORAGE_UPGRADE_REQUIRED', 'INV_MAINTENANCE_REQUIRES_OFFLINE_PROTOCOL',
+                            'INV_LEGACY_IMPORT_REVIEW_REQUIRED' => ' Требуется отдельное обслуживание AdvancedInventory перед включением. Проверьте наличие таблиц и согласуйте миграцию с администратором БД.',
+                            default => '',
+                        };
+                    }
                     flash_message(htmlspecialchars_uni($message), 'error');
                 }
             } elseif ($action === 'disable') {
@@ -1188,6 +1201,23 @@ class AF_Admin
 
     public static function enableAddon(string $id): bool
     {
+        $stage = 'load_addon';
+        if ($id !== 'advancedinventory') return self::enableAddonInternal($id, $stage);
+
+        af_clear_addon_lifecycle_diagnostic($id);
+        try {
+            return self::enableAddonInternal($id, $stage);
+        } catch (Throwable $error) {
+            $code = preg_match('/\AINV_[A-Z0-9_]{1,90}\z/D', $error->getMessage())
+                ? $error->getMessage() : 'INV_LIFECYCLE_FAILED';
+            $failure = new RuntimeException($code);
+            af_store_addon_lifecycle_diagnostic($id, 'enable', $stage, $failure);
+            throw $failure;
+        }
+    }
+
+    private static function enableAddonInternal(string $id, string &$stage): bool
+    {
         $isAtf = $id === 'adaptivethemeframework';
         if ($isAtf) {
             af_clear_addon_lifecycle_diagnostic($id);
@@ -1195,6 +1225,7 @@ class AF_Admin
         }
         $bootstrap = self::addonBootstrap($id);
         if (!$bootstrap || !is_file($bootstrap)) {
+            if ($id === 'advancedinventory') throw new RuntimeException('INV_BOOTSTRAP_UNAVAILABLE');
             if ($isAtf) {
                 af_store_addon_lifecycle_diagnostic($id, 'enable', 'load_addon', new RuntimeException('addon bootstrap was not found'));
             }
@@ -1209,6 +1240,15 @@ class AF_Admin
                 af_advancedcombatsystem_install();
             }
             if (af_advancedcombatsystem_activate() !== true) { return false; }
+        } elseif ($id === 'advancedinventory') {
+            $stage = 'is_installed';
+            if (!af_advancedinventory_is_installed()) {
+                if (af_advinv_reservation_writers_enabled()) throw new RuntimeException('INV_SCHEMA_NOT_READY');
+                $stage = 'install';
+                af_advancedinventory_install();
+            }
+            $stage = 'activate';
+            af_advancedinventory_activate();
         } elseif ($isAtf) {
             $GLOBALS['af_adaptivethemeframework_activation_stage'] = 'is_installed';
             $installedFn = 'af_'.$id.'_is_installed';
@@ -1236,9 +1276,11 @@ class AF_Admin
             if (function_exists($fn)) { $fn(); }
         }
         if ($isAtf) { $GLOBALS['af_adaptivethemeframework_activation_stage'] = 'persist_enabled_setting'; }
+        $stage = 'persist_enabled_setting';
         self::ensureEnabledSetting($id, 1);
         af_rebuild_and_reload_settings();
         if ($isAtf) { $GLOBALS['af_adaptivethemeframework_activation_stage'] = 'sync_theme_stylesheets'; }
+        $stage = 'sync_theme_stylesheets';
         af_sync_theme_stylesheets(false, $id);
         return true;
     }

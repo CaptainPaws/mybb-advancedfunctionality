@@ -22,7 +22,9 @@ af_advancedinventory_init();
 function af_advancedinventory_init(): void
 {
     global $plugins;
-    af_advinv_run_customization_subtype_migration();
+    if (!defined('IN_ADMINCP') && af_is_addon_enabled('advancedinventory')) {
+        af_advinv_run_customization_subtype_migration();
+    }
     $plugins->add_hook('global_start', 'af_advancedinventory_register_routes', 10);
     $plugins->add_hook('misc_start', 'af_advancedinventory_misc_router', 10);
 }
@@ -73,24 +75,8 @@ function af_advancedinventory_register_routes(): void
 function af_advancedinventory_install(): void
 {
     af_advinv_maintenance_gate();
-    global $db, $lang;
-    if (function_exists('af_load_addon_lang')) {
-        af_load_addon_lang('advancedinventory');
-    }
-
-    $gid = af_advancedinventory_ensure_setting_group(
-        $lang->af_advancedinventory_group ?? 'AF: Inventory',
-        $lang->af_advancedinventory_group_desc ?? 'Inventory addon settings.'
-    );
-    af_advancedinventory_ensure_setting('af_advancedinventory_enabled', 'Enable inventory', 'Yes/No', 'yesno', '1', 1, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_view_groups', 'View groups', 'CSV group IDs that may view other inventories', 'text', '2', 2, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_perpage', 'Items per page', 'Per-page limit', 'numeric', '24', 3, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_default_tab', 'Default tab', 'Default tab for inventory page', 'text', 'equipment', 4, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_manage_groups', 'Manage groups', 'CSV group IDs that may open inventories.php and manage inventories', 'text', '3,4,6', 5, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_debug_enabled', 'Enable debug logging', 'Write Advanced Inventory debug events to file', 'yesno', '0', 6, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_debug_max_kb', 'Debug log max size (KB)', 'Rotate debug log when size exceeds this limit. Set 0 to disable rotation.', 'numeric', '512', 7, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_support_slots_json', 'Support slots JSON', 'JSON list of support slot configs: slot_code, title_ru/title_en, sortorder.', 'textarea', '[{"slot_code":"support_1","title_ru":"Быстрый слот 1","title_en":"Support slot 1","sortorder":10},{"slot_code":"support_2","title_ru":"Быстрый слот 2","title_en":"Support slot 2","sortorder":20},{"slot_code":"support_3","title_ru":"Быстрый слот 3","title_en":"Support slot 3","sortorder":30},{"slot_code":"support_4","title_ru":"Быстрый слот 4","title_en":"Support slot 4","sortorder":40}]', 8, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_assets_blacklist', 'Assets blacklist', 'Disable Advanced Inventory JS/CSS on these scripts. One page per line, for example: index.php\nforumdisplay.php\nusercp.php', 'textarea', 'index.php', 9, $gid);
+    global $db;
+    af_advancedinventory_setup_settings(false);
 
     af_advancedinventory_ensure_inventory_storage();
     af_advancedinventory_upgrade_schema();
@@ -113,30 +99,37 @@ function af_advancedinventory_install(): void
 
 function af_advancedinventory_activate(): void
 {
-    af_advinv_maintenance_gate();
+    require_once __DIR__.'/modules/ActivationPreflight.php';
+    $blocker = af_advinv_activation_blocker();
+    if ($blocker !== null) throw new RuntimeException($blocker);
+
+    af_advancedinventory_setup_settings(true);
+    af_advancedinventory_templates_install_or_update();
+    if (!af_advancedinventory_alias_sync()) {
+        af_advancedinventory_alias_sync_notice_on_failure();
+    }
+}
+
+function af_advancedinventory_setup_settings(bool $preserveExisting): void
+{
     global $lang;
     if (function_exists('af_load_addon_lang')) {
         af_load_addon_lang('advancedinventory');
     }
+
     $gid = af_advancedinventory_ensure_setting_group(
         $lang->af_advancedinventory_group ?? 'AF: Inventory',
         $lang->af_advancedinventory_group_desc ?? 'Inventory addon settings.'
     );
-    af_advancedinventory_ensure_setting('af_advancedinventory_debug_enabled', 'Enable debug logging', 'Write Advanced Inventory debug events to file', 'yesno', '0', 6, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_debug_max_kb', 'Debug log max size (KB)', 'Rotate debug log when size exceeds this limit. Set 0 to disable rotation.', 'numeric', '512', 7, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_support_slots_json', 'Support slots JSON', 'JSON list of support slot configs: slot_code, title_ru/title_en, sortorder.', 'textarea', '[{"slot_code":"support_1","title_ru":"Быстрый слот 1","title_en":"Support slot 1","sortorder":10},{"slot_code":"support_2","title_ru":"Быстрый слот 2","title_en":"Support slot 2","sortorder":20},{"slot_code":"support_3","title_ru":"Быстрый слот 3","title_en":"Support slot 3","sortorder":30},{"slot_code":"support_4","title_ru":"Быстрый слот 4","title_en":"Support slot 4","sortorder":40}]', 8, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_assets_blacklist', 'Assets blacklist', 'Disable Advanced Inventory JS/CSS on these scripts. One page per line, for example: index.php\nforumdisplay.php\nusercp.php', 'textarea', 'index.php', 9, $gid);
-
-    af_advancedinventory_upgrade_schema();
-    af_advinv_normalize_customization_items_in_db();
-    af_advancedinventory_templates_install_or_update();
-    af_advancedinventory_ensure_inventory_storage();
-    af_advancedinventory_migrate_from_shop();
-    af_advancedinventory_write_schema_markdown();
-    if (!af_advancedinventory_alias_sync()) {
-        af_advancedinventory_alias_sync_notice_on_failure();
-    }
-    if (function_exists('rebuild_settings')) { rebuild_settings(); }
+    af_advancedinventory_ensure_setting('af_advancedinventory_enabled', 'Enable inventory', 'Yes/No', 'yesno', '0', 1, $gid, $preserveExisting);
+    af_advancedinventory_ensure_setting('af_advancedinventory_view_groups', 'View groups', 'CSV group IDs that may view other inventories', 'text', '2', 2, $gid, $preserveExisting);
+    af_advancedinventory_ensure_setting('af_advancedinventory_perpage', 'Items per page', 'Per-page limit', 'numeric', '24', 3, $gid, $preserveExisting);
+    af_advancedinventory_ensure_setting('af_advancedinventory_default_tab', 'Default tab', 'Default tab for inventory page', 'text', 'equipment', 4, $gid, $preserveExisting);
+    af_advancedinventory_ensure_setting('af_advancedinventory_manage_groups', 'Manage groups', 'CSV group IDs that may open inventories.php and manage inventories', 'text', '3,4,6', 5, $gid, $preserveExisting);
+    af_advancedinventory_ensure_setting('af_advancedinventory_debug_enabled', 'Enable debug logging', 'Write Advanced Inventory debug events to file', 'yesno', '0', 6, $gid, $preserveExisting);
+    af_advancedinventory_ensure_setting('af_advancedinventory_debug_max_kb', 'Debug log max size (KB)', 'Rotate debug log when size exceeds this limit. Set 0 to disable rotation.', 'numeric', '512', 7, $gid, $preserveExisting);
+    af_advancedinventory_ensure_setting('af_advancedinventory_support_slots_json', 'Support slots JSON', 'JSON list of support slot configs: slot_code, title_ru/title_en, sortorder.', 'textarea', '[{"slot_code":"support_1","title_ru":"Быстрый слот 1","title_en":"Support slot 1","sortorder":10},{"slot_code":"support_2","title_ru":"Быстрый слот 2","title_en":"Support slot 2","sortorder":20},{"slot_code":"support_3","title_ru":"Быстрый слот 3","title_en":"Support slot 3","sortorder":30},{"slot_code":"support_4","title_ru":"Быстрый слот 4","title_en":"Support slot 4","sortorder":40}]', 8, $gid, $preserveExisting);
+    af_advancedinventory_ensure_setting('af_advancedinventory_assets_blacklist', 'Assets blacklist', 'Disable Advanced Inventory JS/CSS on these scripts. One page per line, for example: index.php\nforumdisplay.php\nusercp.php', 'textarea', 'index.php', 9, $gid, $preserveExisting);
 }
 
 function af_advancedinventory_write_schema_markdown(): void
@@ -1138,6 +1131,22 @@ function af_advinv_resolve_active_subfilter(string $entity, string $subtype, int
     return 'all';
 }
 
+function af_advinv_customization_migrated_subtype(array $row): string
+{
+    $meta = af_advinv_decode_meta_json((string)($row['meta_json'] ?? ''));
+    $targetKey = '';
+    if (is_array($meta['appearance'] ?? null)) {
+        $targetKey = (string)($meta['appearance']['target_key'] ?? '');
+    }
+    $rawSubtype = $targetKey !== '' ? $targetKey : (string)($row['subtype'] ?? '');
+    $normalizedSubtype = af_advinv_normalize_customization_subtype($rawSubtype);
+    if ($normalizedSubtype === '') {
+        $normalizedSubtype = 'other';
+    }
+
+    return $normalizedSubtype;
+}
+
 function af_advinv_normalize_customization_items_in_db(): void
 {
     af_advinv_maintenance_gate();
@@ -1154,17 +1163,7 @@ function af_advinv_normalize_customization_items_in_db(): void
             continue;
         }
 
-        $meta = af_advinv_decode_meta_json((string)($row['meta_json'] ?? ''));
-        $targetKey = '';
-        if (is_array($meta['appearance'] ?? null)) {
-            $targetKey = (string)($meta['appearance']['target_key'] ?? '');
-        }
-        $rawSubtype = $targetKey !== '' ? $targetKey : (string)($row['subtype'] ?? '');
-        $normalizedSubtype = af_advinv_normalize_customization_subtype($rawSubtype);
-        if ($normalizedSubtype === '') {
-            $normalizedSubtype = 'other';
-        }
-
+        $normalizedSubtype = af_advinv_customization_migrated_subtype($row);
         if ($normalizedSubtype !== (string)($row['subtype'] ?? '')) {
             $db->update_query(AF_ADVINV_TABLE_ITEMS, [
                 'subtype' => $db->escape_string(substr($normalizedSubtype, 0, 32)),
@@ -4857,7 +4856,7 @@ function af_advancedinventory_templates_install_or_update(): void
         $name = basename($file, '.html');
         $template = (string)file_get_contents($file);
         $row = ['title' => $db->escape_string($name), 'template' => $db->escape_string($template), 'sid' => -2, 'version' => '', 'dateline' => TIME_NOW];
-        $tid = (int)$db->fetch_field($db->simple_select('templates', 'tid', "title='" . $db->escape_string($name) . "'", ['limit' => 1]), 'tid');
+        $tid = (int)$db->fetch_field($db->simple_select('templates', 'tid', "sid=-2 AND title='" . $db->escape_string($name) . "'", ['limit' => 1]), 'tid');
         if ($tid > 0) { $db->update_query('templates', $row, 'tid=' . $tid); } else { $db->insert_query('templates', $row); }
     }
 }
@@ -4872,10 +4871,11 @@ function af_advancedinventory_ensure_setting_group(string $title, string $desc):
     return (int)$db->insert_id();
 }
 
-function af_advancedinventory_ensure_setting(string $name, string $title, string $desc, string $code, string $value, int $order, int $gid): void
+function af_advancedinventory_ensure_setting(string $name, string $title, string $desc, string $code, string $value, int $order, int $gid, bool $preserveExisting = false): void
 {
     global $db;
     $sid = (int)$db->fetch_field($db->simple_select('settings', 'sid', "name='" . $db->escape_string($name) . "'", ['limit' => 1]), 'sid');
+    if ($sid > 0 && $preserveExisting) return;
     $row = ['name' => $db->escape_string($name), 'title' => $db->escape_string($title), 'description' => $db->escape_string($desc), 'optionscode' => $db->escape_string($code), 'value' => $db->escape_string($value), 'disporder' => $order, 'gid' => $gid, 'isdefault' => 0];
     if ($sid > 0) { $db->update_query('settings', $row, 'sid=' . $sid); } else { $db->insert_query('settings', $row); }
 }
