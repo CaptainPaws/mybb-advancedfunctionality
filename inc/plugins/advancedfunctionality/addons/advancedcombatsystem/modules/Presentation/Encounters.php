@@ -31,7 +31,7 @@ final class AF_ACS_EncountersPage
                 // The posted session may not redirect a command to another thread/scope.
                 if($mybb->get_input('session_id')!==$sid || $mybb->get_input('tid')!==$tid)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
                 if($eid!=='' && $mybb->get_input('encounter_id')!=='' && $mybb->get_input('encounter_id')!==$eid)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
-                foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid','mode','uids','assignment_version','visibility_scope','participant_version','presence_template','relation_version','round_id','entity_turn_id','control_group_id','confirm_full','confirm','deadline_mode','seconds','turn_id','turn_version','effect_order','kind','source_key','initial_hp','preparation_fingerprint','owner_uid','role','resolution_id','outcome'] as $field)$input[$field]=$mybb->get_input($field);
+                foreach(['session_id','expected_version','encounter_id','encounter_version','operation_key','reason','name','side_a','side_b','relationship','entity_id','side_id','uid','tid','mode','uids','assignment_version','visibility_scope','participant_version','participant_id','acs_confirm','presence_template','relation_version','round_id','entity_turn_id','control_group_id','confirm_full','confirm','deadline_mode','seconds','turn_id','turn_version','effect_order','kind','source_key','initial_hp','preparation_fingerprint','owner_uid','role','resolution_id','outcome'] as $field)$input[$field]=$mybb->get_input($field);
                 $committed=['committed'=>true,'sid'=>$sid];
                 AF_ACS_GmIntent::requireConfirmation(str_starts_with($op,'session_')?substr($op,8):$op);
                 if(str_starts_with($op,'session_')){
@@ -70,6 +70,9 @@ final class AF_ACS_EncountersPage
                         $notice='<p role="status">Столкновение создано. Сохраните условия завершения или перейдите к составу.</p>';
                     } elseif ($op==='side_rename' || $op==='side_delete') {
                         $notice='<p role="status">'.($op==='side_rename'?'Сторона переименована.':'Сторона удалена.').'</p>';
+                    } elseif ($op==='participant_remove') {
+                        $recent=AF_ACS_GmPanel::stepUrl($base,$eid,'roster').'&gm_picker=1&kind=recent&gm_entity='.rawurlencode($result['entity_id']);
+                        $notice='<p role="status">Существо убрано из состава. <a href="'.self::esc($recent).'">Открыть в «Недавних»</a>.</p>';
                     } elseif ($op==='participant_add') {
                         $notice='<p role="status">Существо добавлено в столкновение.</p>';
                     } elseif ($op==='round_start') {
@@ -113,6 +116,19 @@ final class AF_ACS_EncountersPage
                 })!==null) {
                     $outcome=['error'=>true];
                     $notice='<p class="error" role="alert">'.self::esc($message).' Код обращения: '.self::esc($failure['error_id']).'</p>';
+                } elseif ($op==='participant_remove' && ($message=match($error->getMessage()) {
+                    'ACS_ENCOUNTER_TRANSITION_BLOCKED'=>'Убрать участника можно только до запуска боя.',
+                    'ACS_PARTICIPANT_UNAVAILABLE'=>'Участник больше недоступен в этом столкновении.',
+                    'ACS_VERSION_CONFLICT'=>'Состав изменился. Обновите панель перед исключением участника.',
+                    'ACS_ROUND_OBLIGATIONS_BLOCKED','ACS_OBLIGATIONS_SCHEMA_UNVERIFIED','ACS_CLOCK_DEPENDENCY_BLOCKED',
+                    'ACS_PUBLICATION_UNRESOLVED'=>'Сначала урегулируйте незавершённые обязательства столкновения.',
+                    'ACS_GM_REQUIRED','ACS_SESSION_UNAVAILABLE'=>'Для исключения участника нужны действующие права GM.',
+                    'ACS_UI_CONFIRMATION_REQUIRED'=>'Подтвердите исключение участника.',
+                    default=>null,
+                })!==null) {
+                    $commandBlocked=false;
+                    $outcome=['error'=>true];
+                    $notice='<p role="alert">'.self::esc($message).' Код обращения: '.self::esc($failure['error_id']).'</p>';
                 } elseif ($op==='entity_request' && ($error instanceof AF_ACS_RegistrationBlocked
                     || in_array($error->getMessage(),['ACS_SOURCE_CHECK_REQUIRED','ACS_DEFINITION_VERSION_CONFLICT','ACS_HP_RANGE','ACS_HP_INTEGER_REQUIRED'],true))) {
                     // Render the current form again so the modal discards a stale confirmation.
@@ -344,6 +360,6 @@ final class AF_ACS_EncountersPage
     }
 
     private static function state(string $state): string {return ['preparation'=>'Подготовка','active'=>'Активно','ambush_ready'=>'Засада подготовлена','paused'=>'Пауза','completed'=>'Завершено','pending_resolution'=>'Ожидание исхода','encounter_start'=>'Запуск','ambush_resolution'=>'Разрешение засады'][$state]??'Состояние недоступно';}
-    private static function event(string $event): string {return ['encounter.pause'=>'Пауза','encounter.resume'=>'Возобновление','encounter.gm_skip'=>'Ручной пропуск','encounter.gm_forfeit'=>'Закрытие выбывшей группы','encounter.deadline_set'=>'Настройка дедлайнов','encounter.extend_deadline'=>'Продление дедлайна','encounter.deadline_process'=>'Обработка дедлайна','encounter.round_next'=>'Следующий раунд','encounter.round_start'=>'Запущен первый раунд','encounter.create'=>'Создано столкновение','encounter.side_create'=>'Добавлена сторона','encounter.side_rename'=>'Сторона переименована','encounter.side_delete'=>'Сторона удалена','encounter.relation_set'=>'Изменены отношения сторон','encounter.participant_add'=>'Добавлен участник','encounter.participant_side'=>'Изменена сторона участника','encounter.side_change'=>'Изменена текущая сторона','encounter.participant_visibility'=>'Изменена доступность цели','encounter.controller_set'=>'Изменён режим / список управляющих','encounter.controller_assign'=>'Назначен управляющий'][$event]??'Запись журнала';}
+    private static function event(string $event): string {return ['encounter.pause'=>'Пауза','encounter.resume'=>'Возобновление','encounter.gm_skip'=>'Ручной пропуск','encounter.gm_forfeit'=>'Закрытие выбывшей группы','encounter.deadline_set'=>'Настройка дедлайнов','encounter.extend_deadline'=>'Продление дедлайна','encounter.deadline_process'=>'Обработка дедлайна','encounter.round_next'=>'Следующий раунд','encounter.round_start'=>'Запущен первый раунд','encounter.create'=>'Создано столкновение','encounter.side_create'=>'Добавлена сторона','encounter.side_rename'=>'Сторона переименована','encounter.side_delete'=>'Сторона удалена','encounter.relation_set'=>'Изменены отношения сторон','encounter.participant_add'=>'Добавлен участник','encounter.participant_remove'=>'Участник убран из состава','encounter.participant_side'=>'Изменена сторона участника','encounter.side_change'=>'Изменена текущая сторона','encounter.participant_visibility'=>'Изменена доступность цели','encounter.controller_set'=>'Изменён режим / список управляющих','encounter.controller_assign'=>'Назначен управляющий'][$event]??'Запись журнала';}
     public static function issue(string $code): string {return ['ACS_CHARACTER_OWNER_ROLE_REQUIRED'=>'Владелец персонажа не имеет игровой роли в сессии.','cooldown_source_unavailable'=>'Кулдаун не имеет подтверждённого источника/версии.','round_boundary_contract_unavailable'=>'Активные слои или настройки AP требуют ещё не подключённого обработчика границ.','participants_missing'=>'Добавьте хотя бы одного участника.','side_relationship_missing'=>'Явно задайте отношения используемых сторон.','ACS_CONTROL_INVALID'=>'Проверьте владельца, управляющего и группу существа.','ACS_SIDE_UNAVAILABLE'=>'Участнику нужна допустимая сторона.','ACS_ENTITY_UNAVAILABLE'=>'Существо недоступно либо занято другим столкновением.','ACS_SNAPSHOT_HASH_MISMATCH'=>'Нарушена целостность сохранённого снимка.','ACS_SNAPSHOT_INVALID'=>'Сохранённый снимок несовместим или неполон.','ACS_DEPENDENCY_UNAVAILABLE'=>'Обязательная зависимость отключена.','preparation_required'=>'Нужны активная сессия и состояние подготовки.','config_snapshot_invalid'=>'Снимок конфигурации не прошёл проверку.'][$code]??'Участник не прошёл серверную проверку.';}
 }

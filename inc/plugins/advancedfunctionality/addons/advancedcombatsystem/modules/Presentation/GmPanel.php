@@ -250,14 +250,26 @@ final class AF_ACS_GmPanel
         $people=$view['participants'];
         $bySide=[];
         foreach ($people as $person) $bySide[$person['side_id']][]=$person;
-        $playerCount=count(array_filter($people,static fn($row)=>$row['kind']==='character'));
-        $opponentCount=count(array_filter($people,static fn($row)=>in_array($row['kind'],['npc','monster'],true)));
         $canManageSides=$editable && $sessionView['can_audit']
             && $encounter['round_number']==='0' && $encounter['start_operation_id']===null;
+        $canRemove=$canManageSides && $service->participantRemovalAvailable($sid,$encounter['id']);
         $sideAfter=$mybb->get_input('side_after');
         $sideActionUrl=$sideAfter===''?$url:$url.'&side_after='.rawurlencode($sideAfter);
+        $removeUrl=$sideActionUrl;
+        foreach (['participant_after','relation_after'] as $cursor) {
+            $value=$mybb->get_input($cursor);
+            if ($value!=='') $removeUrl.='&'.$cursor.'='.rawurlencode($value);
+        }
         $query=new AF_ACS_GmPanelQuery($db);
-        $occupiedSides=$canManageSides?array_fill_keys($query->occupiedSides($sid,$encounter['id'],$session['tid']),true):[];
+        $sideCounts=[];
+        $total=$playerCount=$opponentCount=0;
+        foreach ($query->rosterCounts($sid,$encounter['id'],$session['tid']) as $count) {
+            $number=(int)$count['total'];
+            $total+=$number;
+            if ($count['kind']==='character') $playerCount+=$number;
+            if (in_array($count['kind'],['npc','monster'],true)) $opponentCount+=$number;
+            if ($count['side_id']!==null) $sideCounts[$count['side_id']]=($sideCounts[$count['side_id']]??0)+$number;
+        }
         $health=array_column($query->inspection($sid,$encounter['id'],$session['tid'],array_column($people,'entity_id'),true),null,'entity_id');
         $selectedSide=$mybb->get_input('gm_side');
         $sideQuery=isset(array_column($view['sides'],'name','id')[$selectedSide])?'&gm_side='.rawurlencode($selectedSide):'';
@@ -275,7 +287,6 @@ final class AF_ACS_GmPanel
             ? af_advancedcombatsystem_sessions()->memberProfile($sid,(string)$recentSelection['owner_uid']) : null;
         $canSave=$editable && $view['sides'] && $recentSelection!==null
             && ($recentSelection['kind']!=='character' || ($owner && self::hasPlayingRole($owner)));
-        $pageLabel=count($people)===100 || $mybb->get_input('participant_after')!==''?' на странице':'';
         $readinessUrl=$pickerUrl;
         foreach (['source_key','source_slug','source_after','gm_entity','candidate_after'] as $field) {
             $value=$mybb->get_input($field);
@@ -293,22 +304,22 @@ final class AF_ACS_GmPanel
         echo '<section class="af-acs-gm__column"><h4><i class="fa-solid fa-users" aria-hidden="true"></i> Стороны</h4><div class="af-acs-gm__column-body">';
         foreach ($view['sides'] as $side) {
             $members=$bySide[$side['id']]??[];
-            echo '<details class="af-acs-gm__side" open><summary><strong>'.self::esc($side['name']).'</strong><span class="af-acs-gm__pill">'.count($members).'</span></summary>';
-            if (!$members) echo isset($occupiedSides[$side['id']])?'<p>Участники на другой странице состава.</p>':'<p>Участников пока нет.</p>';
+            echo '<details class="af-acs-gm__side" open><summary><strong>'.self::esc($side['name']).'</strong><span class="af-acs-gm__pill">'.($sideCounts[$side['id']]??0).'</span></summary>';
+            if (!$members) echo !empty($sideCounts[$side['id']])?'<p>Участники на другой странице состава.</p>':'<p>Участников пока нет.</p>';
             foreach ($members as $person) self::rosterCard($person,$health[$person['entity_id']]??[],true,$url,$view,$editable,$checked);
             if ($editable) echo '<div class="af-acs-gm__side-actions"><a class="atf-button" href="'.self::esc($url.'&gm_picker=1&kind='.$kind.'&gm_side='.$side['id']).'">Добавить</a><a class="atf-button" href="'.self::esc($url.'&gm_relations=1').'">Отношения</a></div>';
-            if ($canManageSides) self::sideActions($view,$sideActionUrl,$side,isset($occupiedSides[$side['id']]));
+            if ($canManageSides) self::sideActions($view,$sideActionUrl,$side,!empty($sideCounts[$side['id']]));
             echo '</details>';
         }
         if (!$view['sides']) echo '<p>Создайте стороны столкновения, например «Игроки» и «Враги».</p>';
         if ($editable) self::sideSettings($view,$url);
-        echo '<div class="af-acs-gm__summary"><strong>Сводка по составу</strong><p>Участников'.$pageLabel.': '.count($people).' · Игроков: '.$playerCount.' · NPC/монстров: '.$opponentCount.'</p></div>';
+        echo '<div class="af-acs-gm__summary"><strong>Сводка по составу</strong><p>Участников: '.$total.' · Игроков: '.$playerCount.' · NPC/монстров: '.$opponentCount.'</p></div>';
         echo '</div></section>';
 
         echo '<section class="af-acs-gm__column"><h4><i class="fa-solid fa-layer-group" aria-hidden="true"></i> Состав столкновения</h4><div class="af-acs-gm__column-body">';
-        echo '<p>Участники текущего столкновения'.$pageLabel.' ('.count($people).')</p>';
+        echo '<p>Участники текущего столкновения ('.$total.')</p>';
         if (!$people) echo '<p>Добавьте зарегистрированных существ на стороны столкновения.</p>';
-        foreach ($people as $person) self::rosterCard($person,$health[$person['entity_id']]??[],false,$url,$view,$editable,$checked);
+        foreach ($people as $person) self::rosterCard($person,$health[$person['entity_id']]??[],false,$url,$view,$editable,$checked,$canRemove,$removeUrl);
         if (count($people)===100) echo '<a href="'.self::esc($url.'&participant_after='.end($people)['id']).'">Следующие участники</a>';
         echo '</div></section>';
 
@@ -361,8 +372,9 @@ final class AF_ACS_GmPanel
         echo '<a class="atf-button atf-button--primary af-acs-gm__next" href="'.self::esc($checkUrl).'">Далее: Проверка</a></nav>';
     }
 
-    private static function rosterCard(array $person,array $health,bool $compact,string $url,array $view,bool $editable,bool $checked): void
+    private static function rosterCard(array $person,array $health,bool $compact,string $url,array $view,bool $editable,bool $checked,bool $canRemove=false,string $removeUrl=''): void
     {
+        global $mybb;
         $kind=AF_ACS_EntitiesPage::kindLabel($person['kind']);
         $portrait=AF_ACS_EntitiesPage::portrait((int)($person['owner_uid']??0),(string)($health['portrait']??''));
         $source=$person['kind']==='character'?'Лист персонажа':(in_array($person['kind'],['npc','monster'],true)?'Бестиарий':'Сессия');
@@ -377,7 +389,17 @@ final class AF_ACS_GmPanel
         echo '<span class="af-acs-gm__status'.($ready?' af-acs-gm__status--ready':'').'">'.self::esc($status).'</span>';
         if ($editable && !$compact) {
             echo '<div class="af-acs-gm__entity-actions"><button type="button" disabled title="Порядок задаёт ACS" aria-label="Изменить порядок"><i class="fa-solid fa-sort" aria-hidden="true"></i></button>'
-                .'<button type="button" disabled title="Удаление при подготовке недоступно" aria-label="Удалить из состава"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></div>';
+                .($canRemove?'<a class="atf-button" href="'.self::esc($removeUrl.'&gm_remove_participant='.$person['id'])
+                    .'" aria-label="Убрать из состава" title="Убрать из состава"><i class="fa-solid fa-trash" aria-hidden="true"></i></a>':'').'</div>';
+            if ($canRemove && $person['id']===$mybb->get_input('gm_remove_participant')) {
+                echo '<section class="af-acs-gm__entity-tools atf-card" aria-label="Убрать из столкновения?"><strong>Убрать из столкновения?</strong>';
+                echo '<p>Участник «'.self::esc($person['name']).'» будет исключён из текущего состава.</p>';
+                echo '<a class="atf-button" href="'.self::esc($removeUrl).'">Отмена</a>';
+                self::form($removeUrl,'participant_remove',$view['session'],$view['encounter']);
+                self::fields(['participant_id'=>$person['id'],'entity_id'=>$person['entity_id'],'participant_version'=>$person['participant_version']]);
+                self::submit('Убрать из состава');
+                echo '</section>';
+            }
             echo '<details class="af-acs-gm__entity-tools"><summary><i class="fa-solid fa-pen" aria-hidden="true"></i> Настроить</summary>';
             self::form($url,'participant_side',$view['session'],$view['encounter']);
             self::fields(['entity_id'=>$person['entity_id']]);
@@ -385,7 +407,7 @@ final class AF_ACS_GmPanel
             self::sides($view['sides'],'side_id',(string)$person['side_id']);
             echo '</label>';
             self::submit('Сохранить сторону');
-            echo '<p class="af-acs-gm__muted">Изменение порядка и удаление недоступны при подготовке.</p></details>';
+            echo '<p class="af-acs-gm__muted">Порядок задаёт ACS.</p></details>';
         }
         echo '</article>';
     }
