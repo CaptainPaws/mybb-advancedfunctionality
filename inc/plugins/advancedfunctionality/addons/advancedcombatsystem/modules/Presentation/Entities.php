@@ -79,19 +79,22 @@ final class AF_ACS_EntitiesPage
                 'session_id'=>$sid,'expected_version'=>$view['session']['session_version'],'kind'=>$kind,
                 'my_post_key'=>$mybb->post_code,'source_slug'=>$slug,'source_after'=>$after,
             ];
-            $characterCard=$picker && $kind==='character' && $options!==[];
+            $sourceCard=$picker && $options!==[];
+            $characterCard=$sourceCard && $kind==='character';
             $prefill=[];
-            $reasonDefault='Добавление персонажа в столкновение';
-            if ($characterCard) {
+            $reasonDefault=$characterCard?'Добавление персонажа в столкновение':'Добавление существа в столкновение';
+            if ($sourceCard) {
                 $choice=$options[0];
                 if (($choice['state']??'unchecked')==='unchecked') {
-                    $prefill=$check ?: $service->characterPrefill($sid,$choice['key']);
+                    $prefill=$check ?: $service->sourcePrefill($sid,$kind,$choice['key']);
                 }
                 echo '<div class="atf-card" data-acs-source-card="'.self::esc($choice['key']).'">';
                 echo '<div class="af-acs-gm__entity">'.self::portrait((int)($choice['owner_uid']??0),$choice['portrait']??'')
                     .'<div class="af-acs-gm__entity-label"><strong>'.self::esc($choice['label']).'</strong>'
-                    .'<small>Владелец: '.self::esc(($choice['owner_name']??'')?:'—').'</small>'
-                    .'<small>Источник: Лист #'.self::esc($choice['sheet_id']).' · Тема #'.self::esc($choice['thread_id']??'—').'</small>'
+                    .($characterCard
+                        ? '<small>Владелец: '.self::esc(($choice['owner_name']??'')?:'—').'</small>'
+                            .'<small>Источник: Лист #'.self::esc($choice['sheet_id']).' · Тема #'.self::esc($choice['thread_id']??'—').'</small>'
+                        : '<small>Источник: Бестиарий KB</small>')
                     .'<small>Максимальное HP: '.self::esc($prefill['maximum_hp']??'—').'</small></div></div>';
             }
             $selectable=false;
@@ -101,7 +104,6 @@ final class AF_ACS_EntitiesPage
                 if ($picker) {
                     self::hidden(['source_key'=>$options[0]['key']]);
                     $selectable=true;
-                    if (!$characterCard) echo '<strong>'.self::esc($options[0]['label']).'</strong>';
                 } else {
                     echo '<label>Источник <select name="source_key" required><option value="">Выберите источник</option>';
                     foreach ($options as $choice) {
@@ -114,9 +116,9 @@ final class AF_ACS_EntitiesPage
                     }
                     echo '</select></label>';
                 }
-                $instanceName=$check['name']??($characterCard?mb_substr($options[0]['label'],0,191):$mybb->get_input('name'));
+                $instanceName=$check['name']??($sourceCard?mb_substr($options[0]['label'],0,191):$mybb->get_input('name'));
                 $initialHp=$prefill['source_current_hp']??$check['initial_hp']??$prefill['maximum_hp']??$mybb->get_input('initial_hp');
-                $reason=$check['reason']??($characterCard?$reasonDefault:$mybb->get_input('reason'));
+                $reason=$check['reason']??($sourceCard?$reasonDefault:$mybb->get_input('reason'));
                 echo '<label>Имя экземпляра <input name="name" maxlength="191" value="'.self::esc($instanceName).'"></label>'
                     .'<label>Начальное HP <input name="initial_hp" type="number" min="0" max="'.self::esc($prefill['maximum_hp']??'9007199254740991').'" step="1" value="'.self::esc($initialHp).'"'.(isset($prefill['source_current_hp'])?' readonly':'').'></label>'
                     .'<label>Причина регистрации <input name="reason" maxlength="1000" value="'.self::esc($reason).'"></label>'
@@ -138,16 +140,16 @@ final class AF_ACS_EntitiesPage
                     'blocked'=>'Требует исправлений',
                     default=>$ready?'Готов к регистрации':($denied?'Недоступен по правам':(($issues || $message!=='')?'Требует исправлений':'Требуется проверка')),
                 };
-                echo '<div'.(!$characterCard?' class="atf-card"':'').($picker && $checked?' data-acs-source-result tabindex="-1"':'').'>';
-                if ($characterCard) {
+                echo '<div'.(!$sourceCard?' class="atf-card"':'').($picker && $checked?' data-acs-source-result tabindex="-1"':'').'>';
+                if ($sourceCard) {
                     echo '<p>Готовность: '.self::esc($status).'</p>';
                 } else {
                     echo '<strong>'.self::esc($choice['label']).'</strong> · '.self::esc($status);
                 }
-                if (!$characterCard && !empty($choice['owner_name'])) echo ' · '.self::esc($choice['owner_name']);
-                if (!$characterCard && isset($choice['sheet_id'])) echo ' <small>Лист #'.self::esc($choice['sheet_id']).'</small>';
-                if (!$characterCard && isset($choice['sheet_url'])) echo ' · <a href="'.self::esc(self::forumUrl($choice['sheet_url'])).'">Лист персонажа</a>';
-                if (!$characterCard && isset($choice['thread_id'])) echo ' · <a href="'.self::esc(self::forumUrl('showthread.php?tid='.$choice['thread_id'])).'">Тема #'.self::esc($choice['thread_id']).'</a>';
+                if (!$sourceCard && !empty($choice['owner_name'])) echo ' · '.self::esc($choice['owner_name']);
+                if (!$sourceCard && isset($choice['sheet_id'])) echo ' <small>Лист #'.self::esc($choice['sheet_id']).'</small>';
+                if (!$sourceCard && isset($choice['sheet_url'])) echo ' · <a href="'.self::esc(self::forumUrl($choice['sheet_url'])).'">Лист персонажа</a>';
+                if (!$sourceCard && isset($choice['thread_id'])) echo ' · <a href="'.self::esc(self::forumUrl('showthread.php?tid='.$choice['thread_id'])).'">Тема #'.self::esc($choice['thread_id']).'</a>';
                 if ($message!=='') echo '<p role="alert">'.self::esc($message).'</p>';
                 if ($checked && !empty($check['inventory_schema_blocked'])) self::inventorySchemaLinks($check['error_id']);
                 if ($issues) {
@@ -165,15 +167,15 @@ final class AF_ACS_EntitiesPage
                         'operation_key'=>bin2hex(random_bytes(16)),'preparation_fingerprint'=>$check['preparation_fingerprint']]);
                     echo '<p>Начальное HP: '.self::esc($check['initial_hp']).'</p>'
                         .'<label>Имя экземпляра <input name="name" maxlength="191" value="'.self::esc($check['name']).'"></label>'
-                        .'<label>Причина регистрации <input name="reason" maxlength="1000" required value="'.self::esc($check['reason']!==''?$check['reason']:($characterCard?$reasonDefault:'')).'"></label>'
+                        .'<label>Причина регистрации <input name="reason" maxlength="1000" required value="'.self::esc($check['reason']!==''?$check['reason']:($sourceCard?$reasonDefault:'')).'"></label>'
                         .'<button name="op" value="entity_register" type="submit">Зарегистрировать</button></form>';
-                    if ($characterCard && !isset($check['source_current_hp'])) {
+                    if ($sourceCard && !isset($check['source_current_hp'])) {
                         echo '<a href="'.self::esc($resultsUrl.'&source_key='.rawurlencode($choice['key'])).'">Изменить начальное HP</a>';
                     }
                 }
                 echo '</div>';
             }
-            if ($characterCard) echo '</div>';
+            if ($sourceCard) echo '</div>';
             echo $results;
         }
         if(($choices['next_after']??null)!==null)echo '<a href="'.self::esc($url.($embedded?'&session_id='.$sid:'').($picker?'':'&kind='.$kind).'&source_after='.$choices['next_after'].($slug!==''?'&source_slug='.rawurlencode($slug):'')).'">Следующие источники</a>';
