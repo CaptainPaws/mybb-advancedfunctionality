@@ -96,6 +96,9 @@ final class AF_ACS_EntitiesPage
                             .'<small>Источник: Лист #'.self::esc($choice['sheet_id']).' · Тема #'.self::esc($choice['thread_id']??'—').'</small>'
                         : '<small>Источник: Бестиарий KB</small>')
                     .'<small>Максимальное HP: '.self::esc($prefill['maximum_hp']??'—').'</small></div></div>';
+                if ($characterCard && !empty($choice['owner_uid'])) {
+                    AF_ACS_GmPanel::ownerStatus(af_advancedcombatsystem_sessions()->memberProfile($sid,(string)$choice['owner_uid']));
+                }
             }
             $selectable=false;
             if ($options && (!$picker || (($options[0]['state']??'unchecked')==='unchecked' && empty($check['ready'])))) {

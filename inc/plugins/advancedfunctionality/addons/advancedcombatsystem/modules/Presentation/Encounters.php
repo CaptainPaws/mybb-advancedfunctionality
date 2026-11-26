@@ -25,6 +25,7 @@ final class AF_ACS_EncountersPage
             $input=[];
             $characterRegistration=$op==='entity_request' && $mybb->get_input('op')==='entity_register' && $mybb->get_input('kind')==='character';
             $registrationPhase=$characterRegistration?'registration_scope':null;
+            $assignmentPhase=$op==='participant_add'?'participant_scope':null;
             try {
                 // The posted session may not redirect a command to another thread/scope.
                 if($mybb->get_input('session_id')!==$sid || $mybb->get_input('tid')!==$tid)throw new RuntimeException('ACS_ENCOUNTER_UNAVAILABLE');
@@ -58,7 +59,7 @@ final class AF_ACS_EncountersPage
                     $notice='<p>'.($readiness['preparation_ready']?'Подготовка проверена.':'Подготовка содержит блокировки.').' Для запуска первого раунда откройте вкладку «Раунды».</p>';
                     foreach($readiness['diagnostics'] as $issue)$notice.='<p>'.self::esc(self::issue($issue['code'])).(isset($issue['entity_id'])?' · существо #'.self::esc($issue['entity_id']):'').'</p>';
                 } else {
-                    if($op==='cover_assignment'){$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','cover_entity_id','protected_entity_id','expected_assignment_version','status','operation_key','reason'] as $field)$r[$field]=$mybb->get_input($field);$result=$service->cover()->command($r);}elseif(str_starts_with($op,'spatial_')){$spatialOp=substr($op,8);$extra=match($spatialOp){'configure'=>['kb_key'],'connection'=>['from','to','status'],'position'=>['entity_id','zone_id','visibility'],'zone'=>['zone_id','visibility'],'engagement'=>['entity_id','target_id','status'],default=>throw new RuntimeException('ACS_SPATIAL_UNSUPPORTED')};$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','expected_spatial_version','operation_key','reason',...$extra] as $field)$r[$field]=$mybb->get_input($field);$result=$service->spatial()->command($spatialOp,$r);}else $result=str_starts_with($op,'manage_')?$service->rounds()->command(substr($op,7),$input):(str_starts_with($op,'clock_')?$service->clock()->command(substr($op,6),$input):$service->command($op,$input));$eid=$result['encounter_id']??$eid;$outcome=$committed+['eid'=>$eid];$notice='<p>Изменение сохранено.</p>';
+                    if($op==='cover_assignment'){$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','cover_entity_id','protected_entity_id','expected_assignment_version','status','operation_key','reason'] as $field)$r[$field]=$mybb->get_input($field);$result=$service->cover()->command($r);}elseif(str_starts_with($op,'spatial_')){$spatialOp=substr($op,8);$extra=match($spatialOp){'configure'=>['kb_key'],'connection'=>['from','to','status'],'position'=>['entity_id','zone_id','visibility'],'zone'=>['zone_id','visibility'],'engagement'=>['entity_id','target_id','status'],default=>throw new RuntimeException('ACS_SPATIAL_UNSUPPORTED')};$r=[];foreach(['session_id','encounter_id','expected_version','expected_encounter_version','expected_spatial_version','operation_key','reason',...$extra] as $field)$r[$field]=$mybb->get_input($field);$result=$service->spatial()->command($spatialOp,$r);}else $result=str_starts_with($op,'manage_')?$service->rounds()->command(substr($op,7),$input):(str_starts_with($op,'clock_')?$service->clock()->command(substr($op,6),$input):$service->command($op,$input,$assignmentPhase));$eid=$result['encounter_id']??$eid;$outcome=$committed+['eid'=>$eid];$notice='<p>Изменение сохранено.</p>';
                     $session=$service->context($sid,$tid);$list=$service->list($sid,tid:$tid);
                     if ($op==='create') {
                         $notice='<p role="status">Столкновение создано. Сохраните условия завершения или перейдите к составу.</p>';
@@ -72,7 +73,9 @@ final class AF_ACS_EncountersPage
                 }
             } catch(Throwable $error) {
                 if (!$sourcePreview) {
-                    $failure=af_advancedcombatsystem_session_failure($error,$characterRegistration?$registrationPhase:null);
+                    $failure=$op==='participant_add'
+                        ? af_advancedcombatsystem_session_failure($error,$assignmentPhase,'participant_add')
+                        : af_advancedcombatsystem_session_failure($error,$characterRegistration?$registrationPhase:null);
                     $commandBlocked=!str_contains($error->getMessage(),'VERSION_CONFLICT') && in_array($failure['category'],['RECOVERY_REQUIRED','INTERNAL_ERROR'],true);
                 }
                 if ($sourcePreview) {
@@ -106,6 +109,10 @@ final class AF_ACS_EncountersPage
                         .' Код обращения: '.$failure['error_id']]+$input;
                     $outcome=[];
                     $notice='';
+                } elseif ($op==='participant_add' && ($message=self::assignmentError($error->getMessage(),$assignmentPhase))!==null) {
+                    $outcome=['error'=>true,'uncertain'=>false];
+                    $commandBlocked=false;
+                    $notice='<p role="alert">'.self::esc($message).' Код обращения: '.self::esc($failure['error_id']).'</p>';
                 } elseif ($characterRegistration) {
                     $code=$error->getMessage();
                     $uncertain=$failure['category']==='RECOVERY_REQUIRED'
@@ -267,7 +274,31 @@ final class AF_ACS_EncountersPage
             throw $error;
         }
     }
+    private static function assignmentError(string $code,?string $phase): ?string
+    {
+        return match($code) {
+            'ACS_CHARACTER_OWNER_ROLE_REQUIRED'=>'Владелец персонажа не имеет игровой роли в сессии.',
+            'ACS_VERSION_CONFLICT'=>match($phase) {
+                'participant_session'=>'Версия сессии изменилась. Обновите панель.',
+                'participant_encounter'=>'Версия столкновения изменилась. Обновите состав.',
+                default=>'Состояние изменилось. Обновите панель.',
+            },
+            'ACS_GM_REQUIRED','ACS_SESSION_UNAVAILABLE'=>'Для добавления нужны действующие права мастера и доступ к сессии.',
+            'ACS_THREAD_UNAVAILABLE'=>$phase==='participant_controller'?'Управляющий не имеет доступа к теме сессии.':'Тема сессии недоступна.',
+            'ACS_USER_UNAVAILABLE'=>'Профиль управляющего недоступен.',
+            'ACS_CONTROL_INVALID'=>'Назначение управляющего или группа существа не прошли проверку.',
+            'ACS_SNAPSHOT_INVALID','ACS_SNAPSHOT_HASH_MISMATCH'=>'Сохранённый боевой снимок существа не прошёл проверку целостности.',
+            'ACS_ENTITY_UNAVAILABLE','ACS_PARTICIPANT_UNAVAILABLE'=>'Существо недоступно или уже занято другим столкновением.',
+            'ACS_PARTICIPANT_EXISTS'=>'Существо уже находится в составе.',
+            'ACS_SIDE_UNAVAILABLE'=>'Выбранная сторона недоступна.',
+            'ACS_EPISODE_NORMAL','ACS_ENCOUNTER_UNAVAILABLE','ACS_ENCOUNTER_TRANSITION_BLOCKED','ACS_SESSION_TRANSITION_BLOCKED'=>'Добавление недоступно в текущем состоянии сессии или столкновения.',
+            'ACS_DEPENDENCY_UNAVAILABLE'=>'Обязательный источник боевых данных недоступен.',
+            'ACS_HP_RANGE'=>'Значения HP сохранённого существа вне допустимого диапазона.',
+            default=>null,
+        };
+    }
+
     private static function state(string $state): string {return ['preparation'=>'Подготовка','active'=>'Активно','ambush_ready'=>'Засада подготовлена','paused'=>'Пауза','completed'=>'Завершено','pending_resolution'=>'Ожидание исхода','encounter_start'=>'Запуск','ambush_resolution'=>'Разрешение засады'][$state]??'Состояние недоступно';}
     private static function event(string $event): string {return ['encounter.pause'=>'Пауза','encounter.resume'=>'Возобновление','encounter.gm_skip'=>'Ручной пропуск','encounter.gm_forfeit'=>'Закрытие выбывшей группы','encounter.deadline_set'=>'Настройка дедлайнов','encounter.extend_deadline'=>'Продление дедлайна','encounter.deadline_process'=>'Обработка дедлайна','encounter.round_next'=>'Следующий раунд','encounter.round_start'=>'Запущен первый раунд','encounter.create'=>'Создано столкновение','encounter.side_create'=>'Добавлена сторона','encounter.side_rename'=>'Сторона переименована','encounter.side_delete'=>'Сторона удалена','encounter.relation_set'=>'Изменены отношения сторон','encounter.participant_add'=>'Добавлен участник','encounter.participant_side'=>'Изменена сторона участника','encounter.side_change'=>'Изменена текущая сторона','encounter.participant_visibility'=>'Изменена доступность цели','encounter.controller_set'=>'Изменён режим / список управляющих','encounter.controller_assign'=>'Назначен управляющий'][$event]??'Запись журнала';}
-    public static function issue(string $code): string {return ['cooldown_source_unavailable'=>'Кулдаун не имеет подтверждённого источника/версии.','round_boundary_contract_unavailable'=>'Активные слои или настройки AP требуют ещё не подключённого обработчика границ.','participants_missing'=>'Добавьте хотя бы одного участника.','side_relationship_missing'=>'Явно задайте отношения используемых сторон.','ACS_CONTROL_INVALID'=>'Проверьте владельца, управляющего и группу существа.','ACS_SIDE_UNAVAILABLE'=>'Участнику нужна допустимая сторона.','ACS_ENTITY_UNAVAILABLE'=>'Существо недоступно либо занято другим столкновением.','ACS_SNAPSHOT_HASH_MISMATCH'=>'Нарушена целостность сохранённого снимка.','ACS_SNAPSHOT_INVALID'=>'Сохранённый снимок несовместим или неполон.','ACS_DEPENDENCY_UNAVAILABLE'=>'Обязательная зависимость отключена.','preparation_required'=>'Нужны активная сессия и состояние подготовки.','config_snapshot_invalid'=>'Снимок конфигурации не прошёл проверку.'][$code]??'Участник не прошёл серверную проверку.';}
+    public static function issue(string $code): string {return ['ACS_CHARACTER_OWNER_ROLE_REQUIRED'=>'Владелец персонажа не имеет игровой роли в сессии.','cooldown_source_unavailable'=>'Кулдаун не имеет подтверждённого источника/версии.','round_boundary_contract_unavailable'=>'Активные слои или настройки AP требуют ещё не подключённого обработчика границ.','participants_missing'=>'Добавьте хотя бы одного участника.','side_relationship_missing'=>'Явно задайте отношения используемых сторон.','ACS_CONTROL_INVALID'=>'Проверьте владельца, управляющего и группу существа.','ACS_SIDE_UNAVAILABLE'=>'Участнику нужна допустимая сторона.','ACS_ENTITY_UNAVAILABLE'=>'Существо недоступно либо занято другим столкновением.','ACS_SNAPSHOT_HASH_MISMATCH'=>'Нарушена целостность сохранённого снимка.','ACS_SNAPSHOT_INVALID'=>'Сохранённый снимок несовместим или неполон.','ACS_DEPENDENCY_UNAVAILABLE'=>'Обязательная зависимость отключена.','preparation_required'=>'Нужны активная сессия и состояние подготовки.','config_snapshot_invalid'=>'Снимок конфигурации не прошёл проверку.'][$code]??'Участник не прошёл серверную проверку.';}
 }

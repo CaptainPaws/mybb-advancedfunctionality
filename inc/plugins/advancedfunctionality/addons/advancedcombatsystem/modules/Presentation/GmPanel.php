@@ -99,6 +99,11 @@ final class AF_ACS_GmPanel
                 if ($value!=='' && ($registered==='' || $field==='gm_side')) $resume.='&'.$field.'='.rawurlencode($value);
             }
         }
+        if ($stage==='roster' && $registered!=='') {
+            $resume=$url.'&gm_picker=1&kind=recent&gm_entity='.rawurlencode($registered);
+            $side=$mybb->get_input('gm_side');
+            if ($side!=='') $resume.='&gm_side='.rawurlencode($side);
+        }
         $resumeAttr=$registered!=='' || $sourceCheck!==[] ? ' data-acs-gm-resume="'.self::esc($resume).'"' : '';
         echo '<nav aria-label="Шаги подготовки"'.$resumeAttr.'><ol class="af-acs-gm__steps">';
         $icons=['settings'=>'fa-gear','roster'=>'fa-users','check'=>'fa-shield','start'=>'fa-play'];
@@ -110,6 +115,11 @@ final class AF_ACS_GmPanel
         }
         echo '</ol></nav>';
         if ($stage!=='roster') echo '<div class="af-acs-gm__stage"><h3>'.self::esc(self::STEPS[$stage]).'</h3>';
+
+        if ($stage==='settings') {
+            $sessionView=af_advancedcombatsystem_sessions()->view($sid);
+            self::sessionMembers($sessionView,$url);
+        }
 
         if ($eid==='') {
             if ($session['status']==='active') {
@@ -179,6 +189,12 @@ final class AF_ACS_GmPanel
         if ($list['next_after']!==null) echo '<a href="'.self::esc($url.'&encounter_after='.$list['next_after']).'">Следующие столкновения</a> · ';
         if ($eid!=='') echo '<a href="'.self::esc(self::stepUrl($base,'','settings')).'">Создать другое столкновение</a>';
         echo '</details>';
+        if ($stage==='settings') {
+            echo '<details class="af-acs-gm__advanced"><summary>Дополнительные действия</summary>';
+            self::sessionControls($sessionView,$url);
+            self::recovery($sid,$url,$sessionView['can_audit']);
+            echo '</details>';
+        }
     }
 
     private static function participants(array $view,string $url): void
@@ -253,8 +269,12 @@ final class AF_ACS_GmPanel
         }
         $available=array_filter($candidates,static fn($entity)=>!isset($inRoster[$entity['id']]));
         $recentId=$mybb->get_input('gm_entity');
-        $recentSelection=array_column($available,null,'id')[$recentId]??null;
-        $canSave=$editable && $view['sides'] && ($registered!=='' || $recentSelection!==null);
+        $selectedEntity=$registered!==''?$registered:($kind==='recent'?$recentId:'');
+        $recentSelection=$editable && $selectedEntity!=='' ? $service->assignmentCandidate($sid,$encounter['id'],$selectedEntity) : null;
+        $owner=$recentSelection && $recentSelection['kind']==='character' && $recentSelection['owner_uid']!==null
+            ? af_advancedcombatsystem_sessions()->memberProfile($sid,(string)$recentSelection['owner_uid']) : null;
+        $canSave=$editable && $view['sides'] && $recentSelection!==null
+            && ($recentSelection['kind']!=='character' || ($owner && self::hasPlayingRole($owner)));
         $pageLabel=count($people)===100 || $mybb->get_input('participant_after')!==''?' на странице':'';
         $readinessUrl=$pickerUrl;
         foreach (['source_key','source_slug','source_after','gm_entity','candidate_after'] as $field) {
@@ -301,10 +321,10 @@ final class AF_ACS_GmPanel
             }
             echo '</nav>';
             if ($registered!=='') {
-                if ($view['sides']) self::assignment($session,$encounter,$view['sides'],$pickerUrl,$registered,$selectedSide);
-                else echo '<p>Существо зарегистрировано. Создайте сторону и найдите его в «Недавних».</p>';
+                if ($view['sides'] && $recentSelection) self::offerAssignment($view,$pickerUrl,$recentSelection,$owner,$selectedSide);
+                else echo '<p>Существо зарегистрировано. Откройте «Недавние», чтобы добавить его в состав.</p>';
             } elseif ($kind==='recent') {
-                if ($recentSelection) self::assignment($session,$encounter,$view['sides'],$pickerUrl,(string)$recentSelection['id'],$selectedSide,(string)$recentSelection['name']);
+                if ($recentSelection && $view['sides']) self::offerAssignment($view,$pickerUrl,$recentSelection,$owner,$selectedSide);
                 if (!$available) echo '<p>Нет зарегистрированных существ для добавления на текущей странице.</p>';
                 else {
                     $cursor=$mybb->get_input('candidate_after');
@@ -414,12 +434,56 @@ final class AF_ACS_GmPanel
         if (count($view['relationships'])===100) echo '<a href="'.self::esc($url.'&relation_after='.end($view['relationships'])['id']).'">Следующие отношения</a>';
     }
 
+    private static function offerAssignment(array $view,string $url,array $entity,?array $owner,string $side): void
+    {
+        $session=$view['session'];
+        if ($entity['kind']==='character') {
+            echo '<h5>'.self::esc($entity['name']).'</h5>';
+            self::ownerStatus($owner);
+            if (!$owner || !self::hasPlayingRole($owner)) {
+                if (!empty($owner['editable'])) {
+                    $return=preg_replace('/([?&])kind=[^&]*/','$1kind=recent',$url).'&gm_entity='.rawurlencode((string)$entity['id']);
+                    echo '<details><summary>Добавить владельца как игрока</summary>';
+                    self::form($return,'session_set_role',$session);
+                    self::fields(['uid'=>$owner['uid'],'role'=>'player']);
+                    self::submit('Добавить владельца как игрока');
+                    echo '</details>';
+                }
+                return;
+            }
+        }
+        self::assignment($session,$view['encounter'],$view['sides'],$url,(string)$entity['id'],$side,$entity['kind']==='character'?'':(string)$entity['name']);
+    }
+
+    private static function hasPlayingRole(array $member): bool
+    {
+        return (bool)array_intersect($member['roles'],AF_ACS_SessionService::PLAYING_ROLES);
+    }
+
+    private const ROLE_LABELS=['owner'=>'Владелец','player'=>'Игрок','observer'=>'Наблюдатель','assistant_gm'=>'Помощник мастера','gm'=>'Мастер'];
+
+    private static function memberStatus(array $member): string
+    {
+        return $member['roles'] ? implode(', ',array_map(static fn($role)=>self::ROLE_LABELS[$role]??$role,$member['roles']))
+            : 'Не участвует в сессии';
+    }
+
+    public static function ownerStatus(?array $member): void
+    {
+        if (!$member) {
+            echo '<p>Профиль владельца недоступен.</p>';
+            return;
+        }
+        echo '<p><strong>'.self::esc($member['username']).'</strong> · '.self::esc(self::memberStatus($member)).'</p>';
+        if (!self::hasPlayingRole($member)) echo '<p>Чтобы персонаж мог участвовать в столкновении, его владельцу требуется игровая роль в этой сессии.</p>';
+    }
+
     private static function assignment(array $session,array $encounter,array $sides,string $url,string $entityId,string $selectedSide='',string $name=''): void
     {
         self::form($url,'participant_add',$session,$encounter,'af-acs-gm-assignment');
         self::fields(['entity_id'=>$entityId]);
         if ($name!=='') echo '<strong>'.self::esc($name).'</strong>';
-        echo '<p>Выберите сторону. Для персонажа игрока владельцу нужна игровая роль в сессии.</p><label>Сторона ';
+        echo '<label>Сторона ';
         self::sides($sides,'side_id',$selectedSide);echo '</label>';
         self::submit('Добавить в столкновение');
     }
@@ -448,13 +512,77 @@ final class AF_ACS_GmPanel
         foreach($rows as $r){echo '<li>Существо #'.self::esc($r['entity_id']).' · группа #'.self::esc($r['group_id']).' · snapshot #'.self::esc($r['snapshot_id']).' · '.($r['snapshot_valid']?'целостность подтверждена':'BLOCKED: hash не совпадает').' · HP '.self::esc($r['hp']).' / '.self::esc($r['hp_max']);foreach($r['resources'] as $resource)if($resource['key']!=='hp')echo ' · '.self::esc($resource['key']).' '.self::esc($resource['current']).' / '.self::esc($resource['maximum']);echo '</li>';}
         echo '</ul><p>Целостность снимка не означает готовность всех owner contracts. Полную готовность и права проверяет отдельная проверка и сервер запуска.</p></details>';
     }
+    private static function sessionMembers(array $view,string $url): void
+    {
+        global $mybb;
+        require_once __DIR__.'/Entities.php';
+        $session=$view['session'];
+        $service=af_advancedcombatsystem_sessions();
+        echo '<section class="atf-card af-acs-gm__members"><h3>Участники сессии</h3>';
+        if ($view['can_manage']) {
+            $query=$mybb->get_input('member_search');
+            parse_str((string)parse_url($url,PHP_URL_QUERY),$scope);
+            echo '<form class="af-acs-gm__search" method="get" action="showthread.php">';
+            self::fields($scope);
+            echo '<label>Никнейм или UID <input type="search" name="member_search" maxlength="80" value="'.self::esc($query).'"></label>'
+                .'<button class="atf-button" type="submit">Найти</button></form>';
+            if ($query!=='') {
+                $results=$service->searchMembers($session['id'],$query);
+                if (!$results) echo '<p>Доступные пользователи не найдены.</p>';
+                $searchUrl=$url.'&member_search='.rawurlencode($query);
+                foreach ($results as $member) {
+                    if ($member['uid']===$mybb->get_input('member_uid')) {
+                        self::memberCard($session,$searchUrl.'&member_uid='.$member['uid'],$member);
+                    } else {
+                        echo '<a class="atf-button" href="'.self::esc($searchUrl.'&member_uid='.$member['uid']).'">'
+                            .self::esc($member['username']).'</a> ';
+                    }
+                }
+            }
+        }
+        echo '<div class="af-acs-gm__member-grid">';
+        foreach ($service->listedMemberProfiles($view) as $member) self::memberCard($session,$url,$member);
+        echo '</div></section>';
+    }
+
+    private static function memberCard(array $session,string $url,array $member): void
+    {
+        echo '<article class="af-acs-gm__entity">'.AF_ACS_EntitiesPage::portrait((int)$member['uid'])
+            .'<div class="af-acs-gm__entity-label"><strong>'.self::esc($member['username']).'</strong>'
+            .'<small>UID '.self::esc($member['uid']).'</small><span>'.self::esc(self::memberStatus($member)).'</span></div>';
+        if ($member['editable']) {
+            $label=$member['roles']?'Изменить роль':'Добавить участника';
+            echo '<div class="af-acs-gm__entity-tools"><details><summary>'.self::esc($label).'</summary>';
+            self::form($url,'session_set_role',$session);
+            self::fields(['uid'=>$member['uid']]);
+            echo '<label>Роль <select name="role">';
+            $current=$member['roles'][0]??'player';
+            foreach (self::ROLE_LABELS as $role=>$text) {
+                if ($role==='owner' || (!$member['privileged'] && in_array($role,['gm','assistant_gm'],true))) continue;
+                echo '<option value="'.$role.'"'.($role===$current?' selected':'').'>'.self::esc($text).'</option>';
+            }
+            echo '</select></label>';
+            self::submit($label);
+            echo '</details>';
+            if ($member['roles']) {
+                echo '<details><summary>Удалить доступ</summary>';
+                self::form($url,'session_remove_member',$session);
+                self::fields(['uid'=>$member['uid']]);
+                self::submit('Удалить доступ');
+                echo '</details>';
+            }
+            echo '</div>';
+        }
+        echo '</article>';
+    }
+
     public static function sessionControls(array $v,string $url):void
     {
         $s=$v['session'];
-        if($v['can_manage'])foreach(['set_role'=>'Изменить роль участника','remove_member'=>'Удалить доступ участника'] as $op=>$label){
-            self::form($url,'session_'.$op,$s);echo '<h4>'.self::esc($label).'</h4><label>UID <input name="uid" type="number" min="1" required></label>';
-            if($op==='set_role'){$default=json_decode($s['config_json'],true)['default_member_role']??'observer';echo '<label>Роль <select name="role">';foreach(['gm'=>'Мастер','assistant_gm'=>'Помощник','player'=>'Игрок','observer'=>'Наблюдатель'] as $key=>$text)echo '<option value="'.$key.'"'.($key===$default?' selected':'').'>'.$text.'</option>';echo '</select></label>';}
-            self::submit($label);
+        if ($s['status']==='active' && (new AF_ACS_SessionAccess())->administrator()) {
+            self::form($url,'session_transfer_owner',$s);
+            echo '<label>UID нового владельца <input name="uid" type="number" min="1" required></label>';
+            self::submit('Передать владение сессией');
         }
         foreach(['request_close'=>'Подготовить закрытие сессии','close'=>'Закрыть сессию','archive'=>'Архивировать сессию','reopen_session'=>'Переоткрыть сессию'] as $op=>$label)if(!empty($v['can_'.($op==='reopen_session'?'reopen':$op)])){self::form($url,'session_'.$op,$s);self::submit($label);}
     }

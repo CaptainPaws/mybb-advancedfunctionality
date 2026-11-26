@@ -463,7 +463,7 @@ function af_advancedcombatsystem_source_check_error(Throwable $error,string $pha
             : 'Не удалось проверить источник персонажа').'. Код обращения: '.$id];
 }
 
-function af_advancedcombatsystem_session_failure(Throwable $error,?string $registrationPhase=null): array
+function af_advancedcombatsystem_session_failure(Throwable $error,?string $registrationPhase=null,string $operation='entity_register'): array
 {
     global $db;
     if($registrationPhase===null && $error instanceof AF_ACS_RegistrationBlocked) {
@@ -503,7 +503,8 @@ function af_advancedcombatsystem_session_failure(Throwable $error,?string $regis
             'INV_SOURCE_CHANGED','INV_VERSION_CONFLICT','ACS_EQUIPMENT_SOURCE_CHANGED','ACS_EQUIPMENT_VERSION_CONFLICT',
             'ACS_EQUIPMENT_ALREADY_INITIALIZED','ACS_GROUP_AMBIGUOUS','ACS_PUBLICATION_UNRESOLVED'=>'STATE_CONFLICT',
             'INV_ACCESS_DENIED','ACS_EQUIPMENT_ACCESS_DENIED'=>'PERMISSION_DENIED',
-            'INV_SCHEMA_NOT_READY'=>'DEPENDENCY_ERROR',
+            'ACS_CHARACTER_OWNER_ROLE_REQUIRED','ACS_CONTROL_INVALID','ACS_SNAPSHOT_HASH_MISMATCH','ACS_PARTICIPANT_UNAVAILABLE'=>'STATE_CONFLICT',
+            'INV_SCHEMA_NOT_READY','ACS_DEPENDENCY_UNAVAILABLE'=>'DEPENDENCY_ERROR',
             default=>$category,
         };
         if ($error->getMessage()==='INV_SCHEMA_NOT_READY') {
@@ -525,9 +526,9 @@ function af_advancedcombatsystem_session_failure(Throwable $error,?string $regis
         };
         try {
             require_once __DIR__.'/modules/Infrastructure/Repository.php';
-            $result['error_id']=(new AF_ACS_Repository($db))->recordDiagnostic($id,$result['category'],'entity_register',$registrationPhase,$code,$component);
+            $result['error_id']=(new AF_ACS_Repository($db))->recordDiagnostic($id,$result['category'],$operation,$registrationPhase,$code,$component);
         } catch (Throwable $diagnosticError) {
-            error_log(sprintf('ACS entity_register error_id=%s phase=%s code=%s',$id,$registrationPhase,$code));
+            error_log(sprintf('ACS %s error_id=%s phase=%s code=%s',$operation,$id,$registrationPhase,$code));
         }
         return $result;
     }
