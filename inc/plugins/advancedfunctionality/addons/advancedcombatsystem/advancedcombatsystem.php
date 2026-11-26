@@ -463,10 +463,10 @@ function af_advancedcombatsystem_source_check_error(Throwable $error,string $pha
             : 'Не удалось проверить источник персонажа').'. Код обращения: '.$id];
 }
 
-function af_advancedcombatsystem_session_failure(Throwable $error): array
+function af_advancedcombatsystem_session_failure(Throwable $error,?string $registrationPhase=null): array
 {
     global $db;
-    if($error instanceof AF_ACS_RegistrationBlocked) {
+    if($registrationPhase===null && $error instanceof AF_ACS_RegistrationBlocked) {
         $id=bin2hex(random_bytes(16));
         $diagnostics=AF_ACS_CapabilityValidator::safeDiagnostics($error->diagnostics);
         return ['category'=>'VALIDATION_ERROR','request_id'=>$id,'error_id'=>$id,'message'=>'Регистрация заблокирована.',
@@ -498,11 +498,46 @@ function af_advancedcombatsystem_session_failure(Throwable $error): array
         'ACS_CLOCK_DEPENDENCY_BLOCKED'=>'Граница требует ещё не подключённого обработчика эффектов.',
         default=>'Сессия или команда недоступна. Проверьте права, поля и версию данных.',
     };
+    if ($registrationPhase!==null) {
+        $category=match($error->getMessage()) {
+            'INV_SOURCE_CHANGED','INV_VERSION_CONFLICT','ACS_EQUIPMENT_SOURCE_CHANGED','ACS_EQUIPMENT_VERSION_CONFLICT',
+            'ACS_EQUIPMENT_ALREADY_INITIALIZED','ACS_GROUP_AMBIGUOUS','ACS_PUBLICATION_UNRESOLVED'=>'STATE_CONFLICT',
+            'INV_ACCESS_DENIED','ACS_EQUIPMENT_ACCESS_DENIED'=>'PERMISSION_DENIED',
+            'INV_SCHEMA_NOT_READY'=>'DEPENDENCY_ERROR',
+            default=>$category,
+        };
+        if ($error->getMessage()==='INV_SCHEMA_NOT_READY') {
+            $publicMessage='Схема AdvancedInventory не подготовлена для ACS. Обратитесь к администратору.';
+        }
+    }
     $id=bin2hex(random_bytes(16));$requestId=$id;
-    try {if(!in_array($category,['INTERNAL_ERROR','RECOVERY_REQUIRED'],true))return ['category'=>$category,'request_id'=>$requestId,'error_id'=>$id,'message'=>$publicMessage];
-        require_once __DIR__.'/modules/Infrastructure/Repository.php';$id=(new AF_ACS_Repository($db))->recordDiagnostic($id,$category,'session_command','validation');}
-    catch(Throwable $diagnosticError) {error_log('ACS session '.$id.' '.$category);}
-    return ['category'=>$category,'request_id'=>$requestId,'error_id'=>$id,'message'=>$publicMessage];
+    $result=['category'=>$category,'request_id'=>$requestId,'error_id'=>$id,'message'=>$publicMessage];
+    if ($registrationPhase!==null && $error instanceof AF_ACS_RegistrationBlocked) {
+        $diagnostics=AF_ACS_CapabilityValidator::safeDiagnostics($error->diagnostics);
+        $result=['category'=>'VALIDATION_ERROR','message'=>'Регистрация заблокирована.','diagnostics'=>$diagnostics,
+            'diagnostic_groups'=>af_acs_registration_diagnostic_groups($diagnostics)]+$result;
+    }
+    if ($registrationPhase!==null) {
+        $code=preg_match('/\A(?:ACS|INV)_[A-Z0-9_]{1,90}\z/D',$error->getMessage()) ? $error->getMessage() : 'UNEXPECTED_EXCEPTION';
+        $component=$error instanceof AF_ADVINV_StorageException ? $error->component : match($registrationPhase) {
+            'inventory.fence','inventory.read','entity.persist'=>$registrationPhase,
+            default=>null,
+        };
+        try {
+            require_once __DIR__.'/modules/Infrastructure/Repository.php';
+            $result['error_id']=(new AF_ACS_Repository($db))->recordDiagnostic($id,$result['category'],'entity_register',$registrationPhase,$code,$component);
+        } catch (Throwable $diagnosticError) {
+            error_log(sprintf('ACS entity_register error_id=%s phase=%s code=%s',$id,$registrationPhase,$code));
+        }
+        return $result;
+    }
+    try {
+        if (in_array($category,['INTERNAL_ERROR','RECOVERY_REQUIRED'],true)) {
+            require_once __DIR__.'/modules/Infrastructure/Repository.php';
+            $result['error_id']=(new AF_ACS_Repository($db))->recordDiagnostic($id,$category,'session_command','validation');
+        }
+    } catch(Throwable $diagnosticError) {error_log('ACS session '.$id.' '.$category);}
+    return $result;
 }
 
 /** Explicit native misc page; no recovery commands are executed from a postbit renderer. */

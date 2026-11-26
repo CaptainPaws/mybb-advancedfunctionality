@@ -123,7 +123,12 @@ final class AF_ACS_TransactionManager
     }
 
     public function assertInternalBoundary():void
-    {if(!isset(self::$ownedTransactions[$this->connection]))throw new RuntimeException('ACS_TRANSACTION_REQUIRED');}
+    {self::assertOwnedConnection($this->connection);}
+
+    public static function assertOwnedConnection(mysqli $connection): void
+    {
+        if (!isset(self::$ownedTransactions[$connection])) throw new RuntimeException('ACS_TRANSACTION_REQUIRED');
+    }
 
     public function run(callable $callback): mixed
     {
