@@ -106,8 +106,9 @@ final class AF_ACS_SessionService
         return ['items'=>$visible,'next_after'=>count($rows)===100?(string)end($rows)['id']:null];
     }
     /** No actor_uid, global permission, owner role or config accepted from client. */
-    public function command(string $operation,array $input,bool $firstForTopic=false): array
+    public function command(string $operation,array $input,bool $firstForTopic=false,?string &$phase=null): array
     {
+        if ($phase!==null) $phase='role_input';
         $this->access->csrf();$actor=$this->access->uid();
         if($operation==='reopen_session')$operation='reopen'; // A1.40 public command; one canonical receipt/event identity.
         if(!in_array($operation,['create','set_role','remove_member','transfer_owner','request_close','close','reopen','archive'],true))throw new RuntimeException('ACS_SESSION_TRANSITION_BLOCKED');
@@ -126,6 +127,7 @@ final class AF_ACS_SessionService
                 if(!$role || $role===AF_ACS_Role::Owner)throw new RuntimeException('ACS_ROLE_INVALID');$request['role']=$role->value;
             }
         }
+        if ($phase!==null) $phase='role_transaction';
         return $this->repository->command('session:'.$actor.':'.$key,'session.'.$operation,$request,
             function(?array $session) use($operation,$request,$actor) {
                 if($operation==='create') {
@@ -139,7 +141,7 @@ final class AF_ACS_SessionService
                     if($operation==='transfer_owner')(new AF_ACS_AuthorizationService)->requirePermission('session.owner.transfer',(string)$session['id']);
                 }
             },
-            function(?array $session) use($operation,$request,$firstForTopic) {
+            function(?array $session) use($operation,$request,$firstForTopic,&$phase) {
                 if ($operation === 'create') {
                     if ($firstForTopic && $this->repository->hasTopicSession($request['tid'])) {
                         throw new RuntimeException('ACS_ATF_SESSION_EXISTS');
@@ -147,7 +149,9 @@ final class AF_ACS_SessionService
                     return $this->repository->insertSession($request['tid'],$request['owner_uid'],$this->access->defaults());
                 }
                 if (in_array($operation,['request_close','close','reopen','archive'],true)) return $this->repository->lifecycle($session,$operation);
-                $id=(string)$session['id'];$uid=$request['uid'];$this->access->user($uid);
+                $id=(string)$session['id'];$uid=$request['uid'];
+                if ($phase!==null) $phase='role_user';
+                $this->access->user($uid);
                 if($operation==='transfer_owner') {
                     if($uid===(string)$session['owner_uid'])throw new RuntimeException('ACS_OWNER_UNCHANGED');
                     $this->access->thread((string)$session['tid'],$uid);
@@ -159,9 +163,14 @@ final class AF_ACS_SessionService
                     $targetRoles=array_column($this->repository->roles($id,$uid),'role');
                     if(!$this->access->administrator() && !in_array('owner',$actorRoles,true) && (array_intersect($targetRoles,['gm','assistant_gm']) || in_array($request['role']??'', ['gm','assistant_gm'],true)))throw new RuntimeException('ACS_ROLE_ESCALATION_DENIED');
                     if($operation==='remove_member')$this->repository->remove($id,$uid);
-                    else {$this->access->thread((string)$session['tid'],$uid);$this->repository->assign($id,$uid,$request['role']);}
+                    else {
+                        if ($phase!==null) $phase='role_topic_access';
+                        $this->access->thread((string)$session['tid'],$uid);
+                        if ($phase!==null) $phase='role_assign';
+                        $this->repository->assign($id,$uid,$request['role']);
+                    }
                 }
                 return $session;
-            });
+            },phase:$phase);
     }
 }

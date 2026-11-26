@@ -20,6 +20,7 @@ final class AF_ACS_ModalWorkflow
 
         $method = $mybb->request_method;
         $sourcePreview=$method==='post' && $mybb->get_input('acs_encounter_op')==='entity_request' && $mybb->get_input('op')==='entity_validate';
+        $roleAssignment=$method==='post' && $mybb->get_input('acs_encounter_op')==='session_set_role';
         try {
             $surface = $_GET['acs_surface'] ?? '';
             $tid = $_GET['tid'] ?? '';
@@ -102,6 +103,10 @@ final class AF_ACS_ModalWorkflow
                     $response['error_id']=$failure['error_id'];
                     $response['message']=$failure['message'];
                 }
+            } elseif ($roleAssignment) {
+                require_once __DIR__.'/Encounters.php';
+                $failure=AF_ACS_EncountersPage::roleAssignmentFailure($error,'role_modal');
+                $response=$failure+$response;
             } elseif (!$known) {
                 $id=af_advancedcombatsystem_panel_failure('ACS_PANEL_TOOL_FAILED','modal');
                 $response['message'].=' error_id='.$id;

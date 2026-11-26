@@ -123,15 +123,17 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
         $session['_command_result']=['status'=>$after,'previous_status'=>$before,'obligations_preserved'=>true,'outstanding_obligations'=>$obligations];return $session;
     }
     /** Internal command boundary; callers supply authorization, never client callbacks. */
-    public function command(string $key, string $kind, array $request, callable $authorize, callable $apply, ?callable $afterEvent=null,?callable $existingResult=null): array
+    public function command(string $key, string $kind, array $request, callable $authorize, callable $apply, ?callable $afterEvent=null,?callable $existingResult=null,?string &$phase=null): array
     {
         $key=self::key($key);$kind=self::key($kind,64);$json=self::json($request);$hash=hash('sha256',$json);
-        return $this->transactions->run(function () use($key,$kind,$request,$json,$hash,$authorize,$apply,$afterEvent,$existingResult) {
+        return $this->transactions->run(function () use($key,$kind,$request,$json,$hash,$authorize,$apply,$afterEvent,$existingResult,&$phase) {
             $this->writable();
             $old=$this->sql('SELECT * FROM '.$this->table('operations').' WHERE operation_key=? FOR UPDATE',[$key])['rows'][0]??null;
             $id=$old ? (string)$old['session_id'] : ($request['session_id']??null);
             $session=$id===null?null:$this->sessionRow($this->lockSession($id));
+            if ($phase!==null) $phase='role_authorize';
             $authorize($session);
+            if ($phase!==null) $phase='role_guard';
             if($old) {
                 if($old['kind']!==$kind || !hash_equals($old['payload_hash'],$hash))throw new RuntimeException('ACS_OPERATION_KEY_CONFLICT');
                 if($old['status']!=='committed')throw new RuntimeException('ACS_RECOVERY_REQUIRED');
@@ -155,6 +157,7 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
             if($session && (string)$session['session_version']!==$request['expected_version'])throw new RuntimeException('ACS_VERSION_CONFLICT');
             $this->inCommand=true;
             try {$session=$apply($session);} finally {$this->inCommand=false;}
+            if ($phase!==null) $phase='role_audit';
             $id=(string)$session['id'];
             $version=self::integer($session['session_version'],'18446744073709551614');
             $sequence=self::integer($session['next_sequence'],'18446744073709551614');
@@ -174,7 +177,8 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
             }
             // Noncritical notification source, committed with its existing immutable command event.
             if(in_array($kind,['encounter.outcome_confirm','encounter.gm_skip','encounter.gm_forfeit','encounter.deadline_process','encounter.pause','encounter.resume','encounter.deadline_set','encounter.extend_deadline','session.close','session.archive','session.reopen','session.set_role','session.remove_member','session.transfer_owner','delegation.grant','delegation.revoke'],true)){
-                $notice=self::json(['session_id'=>$id,'event_id'=>$event]);$noticeKey='alerts:event:'.$event;
+                if ($phase!==null) $phase='role_notification';
+                $notice=self::json(['schema_version'=>1,'session_id'=>$id,'event_id'=>$event]);$noticeKey='alerts:event:'.$event;
                 $this->sql('INSERT INTO '.$this->table('outbox').' (message_key,submission_id,kind,payload_hash,payload_json,status,available_at,created_at) VALUES (?,?,?,?,?,?,?,?)',[$noticeKey,$noticeKey,'alerts.source',hash('sha256',$notice),$notice,'pending',time(),time()]);
             }
             // Durable pointer only. Aggregation/consumer failure cannot undo the confirmed outcome.
@@ -183,6 +187,7 @@ class AF_ACS_SessionRepository extends AF_ACS_Repository
                 $this->sql('INSERT INTO '.$this->table('outbox').' (message_key,submission_id,kind,payload_hash,payload_json,status,available_at,created_at) VALUES (?,?,?,?,?,?,?,?)',
                     ['statistics:refresh:'.$event,'statistics:'.$event,'statistics.refresh',hash('sha256',$message),$message,'pending',time(),time()]);
             }
+            if ($phase!==null) $phase='role_commit';
             return $result;
         });
     }
